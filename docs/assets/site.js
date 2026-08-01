@@ -45,6 +45,7 @@ const NAV_GROUPS = [
       { href: "components.html", label: "Components" },
       { href: "hooks.html", label: "Hooks" },
       { href: "stores.html", label: "Global state" },
+      { href: "forms.html", label: "Forms" },
     ],
   },
   {
@@ -70,6 +71,7 @@ const NAV_GROUPS = [
       { href: "errors.html", label: "Error handling" },
       { href: "typescript.html", label: "TypeScript" },
       { href: "accessibility.html", label: "Accessibility" },
+      { href: "security.html", label: "Security" },
       { href: "deployment.html", label: "Production & deployment" },
       { href: "llm-integration.html", label: "LLM integration" },
     ],
@@ -79,6 +81,7 @@ const NAV_GROUPS = [
     items: [
       { href: "themes.html", label: "Themes & customization" },
       { href: "theme-generator.html", label: "Theme generator" },
+      { href: "brand-themes.html", label: "Brand themes" },
     ],
   },
   {
@@ -93,9 +96,9 @@ const NAV_GROUPS = [
 ];
 
 const PRIMARY_TABS = [
-  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "language-reference.html", "modules.html", "layout.html", "sx.html", "hooks.html", "stores.html", "actions.html", "http.html", "javascript-interactions.html", "side-effects.html", "interop.html", "head.html", "routing.html", "testing.html", "devtools.html", "reactivity.html", "performance.html", "troubleshooting.html", "errors.html", "typescript.html", "accessibility.html", "deployment.html", "llm-integration.html"] },
+  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "language-reference.html", "modules.html", "layout.html", "sx.html", "hooks.html", "stores.html", "forms.html", "actions.html", "http.html", "javascript-interactions.html", "side-effects.html", "interop.html", "head.html", "routing.html", "testing.html", "devtools.html", "reactivity.html", "performance.html", "troubleshooting.html", "errors.html", "typescript.html", "accessibility.html", "security.html", "deployment.html", "llm-integration.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
-  { href: "themes.html",      label: "Themes",     matches: ["themes.html", "theme-generator.html"] },
+  { href: "themes.html",      label: "Themes",     matches: ["themes.html", "theme-generator.html", "brand-themes.html"] },
   { href: "live-demos.html", label: "Demos",       matches: ["live-demos.html"] },
   { href: "playground.html",  label: "Playground", matches: ["playground.html"] },
   { href: "chat-bot.html",    label: "Chat bot",   matches: ["chat-bot.html"] },
@@ -121,9 +124,11 @@ const PAGE_KEYWORDS = {
   "components.html": "props library catalog signatures",
   "hooks.html": "hooks $state $memo usestate usememo custom hook useeffect local state reactive per-instance setvalue setter memoize derived react",
   "stores.html": "store global state management redux zustand pinia jotai recoil mobx shared state actions getters singleton prop drilling slice selector context cart user theme",
+  "forms.html": "forms $form form state validation validate rules required email min max pattern errors touched dirty submit submitting reset field binding two-way input select checkbox radio switch fieldset formsection validationsummary multistepform wizard react hook form formik vee-validate",
   "actions.html": "action assignment http emit assistant-message navigate route js button click",
   "http.html": "http fetch request response query headers body refetch cancel async resource crud rest api network",
   "javascript-interactions.html": "script @js useeffect hooks",
+  "side-effects.html": "side effects $effect dependency array mount unmount every debounce throttle cleanup interval timer polling subscription watcher useeffect lifecycle teardown scheduling",
   "interop.html": "mount webcomponent web component custom element $script $dom interop third-party imperative widget chart map editor monaco stripe mapbox leaflet chartjs echarts d3 tiptap prosemirror video captcha resizeobserver intersectionobserver mutationobserver measure onresize onintersect onmutation data-rui-preserve external script loader sdk lifecycle setup update cleanup",
   "head.html": "head document head $head title meta description canonical open graph og twitter card jsonld json-ld structured data schema.org seo social preview link rel htmlattrs lang dir robots noindex titletemplate ssr crawlable rendertostring sitemap marketing pdp",
   "routing.html": "routes navlink navigate hash router",
@@ -131,6 +136,7 @@ const PAGE_KEYWORDS = {
   "devtools.html": "devtools dev tools inspector debugger state inspector render profiler effect timeline flamegraph commit memoization mount update memoized hook __aktion_devtools_hook__ react devtools vue devtools profiling performance edit state live debug panel",
   "themes.html": "built-in themes light dark corporate soft glass modern tokens custom studio in-script Theme",
   "theme-generator.html": "theme generator builder studio create custom theme colors palette radius typography fonts spacing shadows gradient brand $theme tokens live preview copy generate design system",
+  "brand-themes.html": "brand themes token maps partial theme tokens settheme setresponse css variables rui prefix palette gallery side-by-side comparison brand palette",
   "live-demos.html": "demos catalog showcase mini-apps blocks components",
   "playground.html": "editor preview live",
   "visual-editor.html": "drag drop visual editor canvas inspector palette no-code wysiwyg",
@@ -141,6 +147,7 @@ const PAGE_KEYWORDS = {
   "errors.html": "error handling debugging parse error runtime error render loop guard safety budget error event strict mode dev mode console warning telemetry",
   "typescript.html": "typescript types public api componentspec helpers interceptors host event payloads subpath entry test devtools language vite aktionelement typed wrapper",
   "accessibility.html": "accessibility a11y wcag aria keyboard screen reader focus trap modal toast role status alert navlink aria-current contrast theme",
+  "security.html": "security trust model threat model setglobalaccesspolicy getglobalaccesspolicy global access policy safe all allow-list sandbox untrusted program prompt injection eval function sanitiser sanitizer sanitisehref sanitiseimagesrc sanitisesvgmarkup sanitisecsslength xss shadow dom boundary iframe csp unsafe-eval interceptors ssr rendertostring prototype pollution csv formula injection noopener noreferrer cookies samesite reporting vulnerability",
   "deployment.html": "production deployment ssr hydration serializestate hydratestate csp unsafe-eval integrity subresource cdn caching edge function streaming telemetry error reporting",
   "llm-integration.html": "llm integration openai anthropic openrouter bedrock streaming appendchunk system prompt getsystemprompt chat mode interceptors assistant-message delta protocol",
 };
@@ -371,8 +378,29 @@ function toggleSidebar(force) {
    Right-side "On this page" TOC
    --------------------------------------------------------------------------- */
 
+/**
+ * Slugify `name`, then suffix `-2`, `-3`, … until the result is not already in
+ * `taken`. Registers the winner in `taken` and returns it.
+ *
+ * Needed because distinct names can slugify identically — the component library
+ * ships both `Navbar` (navigation) and `NavBar` (marketing), and a shared `id`
+ * is invalid HTML that silently sends every anchor to whichever came first.
+ */
+function uniqueSlug(name, taken) {
+  const base = slugify(name) || "section";
+  let id = base;
+  for (let n = 2; taken.has(id); n += 1) id = `${base}-${n}`;
+  taken.add(id);
+  return id;
+}
+
 function ensureHeadingId(node) {
-  if (!node.id) node.id = slugify(node.textContent || "");
+  if (!node.id) {
+    const taken = new Set(
+      [...document.querySelectorAll("[id]")].map((el) => el.id).filter(Boolean),
+    );
+    node.id = uniqueSlug(node.textContent || "", taken);
+  }
   return node.id;
 }
 
@@ -729,9 +757,18 @@ async function buildDeepIndex() {
   // 2. Runtime catalogs for the dynamically-rendered pages.
   try {
     const mod = await importLibrary();
+    // Mirror the id components.html ends up with: cards render in library order
+    // and collide-then-suffix the same way, so walking the array in order with
+    // the same helper reproduces those ids exactly (`Navbar` → `#navbar`,
+    // `NavBar` → `#navbar-2`). `Link` is registered twice, so the duplicate is
+    // skipped rather than given a phantom `#link-2` that no card carries.
+    const componentIds = new Set();
+    const seenNames = new Set();
     for (const component of mod?.defaultLibrary?.components ?? []) {
+      if (seenNames.has(component.name)) continue;
+      seenNames.add(component.name);
       entries.push({
-        href: `components.html#${slugify(component.name)}`,
+        href: `components.html#${uniqueSlug(component.name, componentIds)}`,
         title: component.name,
         group: "Components",
         keywords: `component ${component.name} ${component.description || ""}`.toLowerCase(),

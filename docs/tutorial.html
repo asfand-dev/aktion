@@ -596,7 +596,7 @@
             <a class="sq-card" href="routing.html"><i class="fa-solid fa-route"></i><div><b>$router — multi-page apps</b><span>Hash-based routing, params, NavLink. No router library, obviously.</span></div></a>
             <a class="sq-card" href="stores.html"><i class="fa-solid fa-database"></i><div><b>$store — global state + undo/redo</b><span>Persistence to localStorage and time travel. Ctrl+Z as a feature.</span></div></a>
             <a class="sq-card" href="llm-integration.html"><i class="fa-solid fa-robot"></i><div><b>LLM integration</b><span>Stream Aktion straight from a model into live UI. The party trick.</span></div></a>
-            <a class="sq-card" href="components.html"><i class="fa-solid fa-cubes"></i><div><b>All 275 components</b><span>You met maybe 20. The other 255 are waiting. No pressure.</span></div></a>
+            <a class="sq-card" href="components.html"><i class="fa-solid fa-cubes"></i><div><b>All 281 components</b><span>You met maybe 20. The other 261 are waiting. No pressure.</span></div></a>
           </div>
         </div>
       </div>
@@ -1026,7 +1026,7 @@ npm run dev</pre>
         tag: "Chapter 1, in which you render UI from plain text and nobody mentions a bundler.",
         xp: 100, achievement: "Hello, World Domination",
         learn: `
-          <p><strong>Everything in Aktion is a component call.</strong> Components are just functions — <code>Card(…)</code>, <code>Text(…)</code>, <code>Button(…)</code> — and <code>$app(…)</code> mounts the tree. There are 275 of them built in, so you may never write a <code>&lt;div&gt;</code> again.</p>
+          <p><strong>Everything in Aktion is a component call.</strong> Components are just functions — <code>Card(…)</code>, <code>Text(…)</code>, <code>Button(…)</code> — and <code>$app(…)</code> mounts the tree. There are 281 of them built in, so you may never write a <code>&lt;div&gt;</code> again.</p>
           <p>There are <strong>three ways to pass arguments</strong> to a component. Use only <em>one</em> way in each call. <strong>Use any way which suits your needs.</strong></p>
           <pre class="mini-code">// Way 1 — STANDARD: the first argument passed as positional,
 // and the rest of the arguments are passed as a trailing object "{...}".
@@ -1288,11 +1288,11 @@ $repo.refetch() // run it back</pre>
       {
         icon: "fa-swatchbook", title: "Theme Park",
         railSub: "$theme & tokens",
-        tag: "Seven built-in themes, 80+ tokens, and your brand color is now the law.",
+        tag: "Six built-in themes, 113 tokens, and your brand color is now the law.",
         xp: 100, achievement: "Theme Lord",
         learn: `
           <p>Aktion ships <strong>6 themes</strong> — light, dark, corporate, soft, glass, modern — switched with one attribute: <code>&lt;aktion-app theme="modern"&gt;</code>. (This preview follows the docs' theme toggle, try it ↑)</p>
-          <p><strong><code>$theme({…})</code></strong> rebrands from inside the script — override any of the 80+ tokens and every component obeys instantly:</p>
+          <p><strong><code>$theme({…})</code></strong> rebrands from inside the script — override any of the 113 tokens and every component obeys instantly:</p>
           <pre class="mini-code">$theme({
   colors: { primary: "#10b981", accent: "#f59e0b" },
   radius: { md: "14px", button: "12px" },

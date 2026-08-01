@@ -8,7 +8,7 @@ describe("getSignatureHelp", () => {
     const src = 'x = Card([], )';
     const help = getSignatureHelp(src, { line: 1, column: 14 }, defaultLibrary);
     expect(help).not.toBeNull();
-    expect(help?.signatures[0]?.label).toBe("Card(children, variant?)");
+    expect(help?.signatures[0]?.label).toBe("Card(children, variant?, padding?, onClick?, href?)");
     expect(help?.activeParameter).toBe(1);
   });
 

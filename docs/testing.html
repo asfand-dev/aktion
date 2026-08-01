@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
 </head>
 <body data-page="testing">
@@ -122,7 +122,7 @@ it("increments the counter", async () =&gt; {
   const screen = render(`
     $count = 0
     $app(Column([
-      Text(`Count: ${$count}`),
+      Text(\`Count: \${$count}\`),
       Button("Increment", { onClick: () =&gt; $count = $count + 1 })
     ]))
   `);
@@ -143,6 +143,20 @@ it("increments the counter", async () =&gt; {
         Interactions (<code>screen.click</code>, <code>screen.user.*</code>)
         always auto-flush.
       </p>
+      <div class="callout">
+        <p>
+          <strong>Escape backticks inside the program string.</strong> You pass the
+          Aktion program to <code>render()</code> as a JavaScript template literal, so
+          an Aktion template literal <em>nested inside it</em> must escape both the
+          backtick and the interpolation: write
+          <code>Text(\`Count: \${$count}\`)</code>, not
+          <code>Text(`Count: ${$count}`)</code>. Unescaped, the inner backtick closes
+          the outer literal (a <code>SyntaxError</code>) and <code>${$count}</code> is
+          interpolated by <em>JavaScript</em> &mdash; where <code>$count</code> does not
+          exist. If the escaping gets noisy, keep the program in its own
+          <code>.aktion</code> file and <code>render(readFileSync(path, "utf8"))</code>.
+        </p>
+      </div>
 
       <h2 id="queries">Queries</h2>
       <p>
@@ -165,7 +179,7 @@ it("increments the counter", async () =&gt; {
         default; pass <code>{ exact: false }</code> for a substring), a
         <code>RegExp</code>, or a predicate <code>(text, el) =&gt; boolean</code>.
       </p>
-      <h3>Query variants</h3>
+      <h3 id="query-variants">Query variants</h3>
       <p>Every query comes in the familiar six flavours:</p>
       <table class="signature-table">
         <thead><tr><th>Variant</th><th>No match</th><th>1 match</th><th>&gt;1 match</th><th>Async</th></tr></thead>
@@ -184,7 +198,7 @@ it("increments the counter", async () =&gt; {
         <code>findBy*</code> to assert something that appears <em>after</em> an
         effect, timer, or network request resolves.
       </p>
-      <h3>Scoped queries with <code>within</code></h3>
+      <h3 id="scoped-queries-with-within">Scoped queries with <code>within</code></h3>
       <p>
         When a page has several similar regions (cards, rows, list items), scope a
         query to one subtree with <code>within(node)</code>. It returns the same query
@@ -220,7 +234,7 @@ expect(within(row).getByRole("button", { name: "Delete" })).toBeTruthy()</code><
         </tbody>
       </table>
 
-      <h3>Two-way binding</h3>
+      <h3 id="two-way-binding">Two-way binding</h3>
       <p>
         Typing into a bound input writes straight through to the reactive atom
         &mdash; the genuine binding path, not a simulation.
@@ -230,7 +244,7 @@ expect(within(row).getByRole("button", { name: "Delete" })).toBeTruthy()</code><
     $name = ""
     $app(Column([
       Input("Name", { value: $name }),
-      Text(`Hi ${$name}`)
+      Text(\`Hi \${$name}\`)
     ]))
   `);
   await flush();
@@ -262,7 +276,7 @@ const screen = render(`
   $price = 0
   $qty   = 0
   $total = $price * $qty
-  $app(Text(`Total: ${$total}`))
+  $app(Text(\`Total: \${$total}\`))
 `, { state: { price: 10, qty: 3 } });
 
 await flush();
@@ -297,7 +311,7 @@ it("ticks every second", async () =&gt; {
       let id = setInterval(() =&gt; { $now = $now + 1 }, 1000)
       cleanup(() =&gt; clearInterval(id))
     }, ["mount"])
-    $app(Text(`Ticks: ${$now}`))
+    $app(Text(\`Ticks: \${$now}\`))
   `);
   await flush();
 
@@ -321,7 +335,7 @@ it("colours a PriceTag by amount", async () =&gt; {
   const screen = renderComponent(`PriceTag(42)`, {
     setup: `
       function PriceTag(amount) {
-        return Badge(`$${amount}`, { tone: amount &gt; 100 ? "danger" : "success" })
+        return Badge(\`$\${amount}\`, { tone: amount &gt; 100 ? "danger" : "success" })
       }
     `,
   });
@@ -393,7 +407,7 @@ it("loads and renders the user list", async () =&gt; {
     $users = $http({ url: "https://api.example.com/users" })
     $app(Async($users, {
       loading: Text("Loading…"),
-      data:    Text(`${$users.data.length} users`)
+      data:    Text(\`\${$users.data.length} users\`)
     }))
   `, {
     fetch: (url, init) =&gt; json([{ id: 1 }, { id: 2 }]),
@@ -530,7 +544,7 @@ test("renders the headline on the server", () =&gt; {
       </p>
 
       <h2 id="api">API reference</h2>
-      <h3><code>render(program, options?)</code> &amp; <code>renderComponent(expression, options?)</code></h3>
+      <h3 id="renderprogram-options-and-rendercomponentexpression-options"><code>render(program, options?)</code> &amp; <code>renderComponent(expression, options?)</code></h3>
       <table class="signature-table">
         <thead><tr><th>Option</th><th>Type</th><th>Purpose</th></tr></thead>
         <tbody>
@@ -545,7 +559,7 @@ test("renders the headline on the server", () =&gt; {
           <tr><td><code>setup</code> <span class="demo-cheats"><code>(renderComponent only)</code></span></td><td><code>string</code></td><td>DSL statements injected above the <code>$app(expression)</code> line.</td></tr>
         </tbody>
       </table>
-      <h3>The Screen</h3>
+      <h3 id="the-screen">The Screen</h3>
       <table class="signature-table">
         <thead><tr><th>Group</th><th>Members</th></tr></thead>
         <tbody>
@@ -558,7 +572,7 @@ test("renders the headline on the server", () =&gt; {
           <tr><td>Inspect</td><td><code>html</code>, <code>debug</code>, <code>container</code>, <code>shadowRoot</code>, <code>requests</code>.</td></tr>
         </tbody>
       </table>
-      <h3>Module functions</h3>
+      <h3 id="module-functions">Module functions</h3>
       <table class="signature-table">
         <thead><tr><th>Export</th><th>Purpose</th></tr></thead>
         <tbody>
@@ -607,25 +621,25 @@ test("renders the headline on the server", () =&gt; {
       <div class="demo-grid">
         <a class="demo-card" href="hooks.html">
           <span class="demo-tag">Core</span>
-          <h3>Hooks &amp; state</h3>
+          <h3 id="hooks-and-state">Hooks &amp; state</h3>
           <p>The reactive model your tests assert against &mdash; <code>$state</code>, <code>$memo</code>, and per-instance state.</p>
           <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
         <a class="demo-card" href="side-effects.html">
           <span class="demo-tag">Behaviour</span>
-          <h3>Side effects</h3>
+          <h3 id="side-effects">Side effects</h3>
           <p>Effects, timers, and cleanup &mdash; what fake timers and <code>findBy*</code> let you test.</p>
           <span class="demo-arrow">Open the guide &rarr;</span>
         </a>
         <a class="demo-card" href="http.html">
           <span class="demo-tag">Data</span>
-          <h3>HTTP &amp; resources</h3>
+          <h3 id="http-and-resources">HTTP &amp; resources</h3>
           <p>The <code>$http({…})</code> resource bag you mock with the <code>fetch</code> option.</p>
           <span class="demo-arrow">View the guide &rarr;</span>
         </a>
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
 </body>
 </html>

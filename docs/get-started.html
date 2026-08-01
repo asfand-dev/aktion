@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     /* Live layout demo: code on the left, rendered output on the right. */
@@ -54,6 +54,9 @@
     }
     /* Visual filler so structural demos read clearly without real content. */
     .demo-cheats code { white-space: nowrap; }
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
   </style>
 </head>
 <body data-page="get-started">
@@ -96,6 +99,48 @@ npm run dev          # http://localhost:5173</code></pre>
         <code>npx create-aktion</code> work too):
       </p>
 <pre><code>npm create aktion@latest my-app -- --template dashboard</code></pre>
+      <p>
+        The prompts only appear in a TTY. In CI, pass <code>-y</code> so it takes the
+        defaults instead of waiting for input:
+      </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Flag</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>-t</code>, <code>--template &lt;name&gt;</code></td>
+            <td>Template to scaffold. Default <code>empty</code>. <code>--template=&lt;name&gt;</code> also works, and <code>vite-ts</code> is kept as an alias for <code>empty</code>.</td>
+          </tr>
+          <tr>
+            <td><code>--pm &lt;npm&nbsp;|&nbsp;pnpm&nbsp;|&nbsp;yarn&nbsp;|&nbsp;bun&gt;</code></td>
+            <td>Which package manager the printed next&#8209;steps commands use. It changes the instructions, not the scaffold. Detected from <code>npm_config_user_agent</code> when omitted.</td>
+          </tr>
+          <tr>
+            <td><code>-y</code>, <code>--yes</code></td>
+            <td>Skip every prompt and use the defaults. Required in CI and any non&#8209;TTY shell.</td>
+          </tr>
+          <tr>
+            <td><code>-h</code>, <code>--help</code></td>
+            <td>Print the usage block, including the template list.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        The project name becomes a directory, so it is validated rather than
+        normalised. A plain name (<code>my-app</code>) or a nested one
+        (<code>apps/my-app</code>) is fine, but <strong>a name that would write outside
+        the directory you are standing in is refused</strong> rather than cleaned up.
+      </p>
+      <p>
+        Rejected: control characters, a leading <code>-</code> (a downstream tool would
+        read it as a flag), a leading <code>~</code>, an absolute path or Windows drive
+        letter, any <code>..</code> segment, and the Windows reserved device names
+        (<code>con</code>, <code>prn</code>, <code>aux</code>, <code>nul</code>,
+        <code>com1</code>&ndash;<code>com9</code>, <code>lpt1</code>&ndash;<code>lpt9</code>).
+        The target must also be empty apart from a <code>.git</code> directory, so
+        scaffolding never overwrites work in progress.
+      </p>
       <p>Six templates ship today:</p>
       <ul>
         <li><strong>empty</strong> &mdash; a minimal hello-world starter (no tests).</li>
@@ -111,6 +156,37 @@ npm run dev          # http://localhost:5173</code></pre>
         and ships unit tests you run with <code>npm test</code>. Editing any
         <code>.aktion</code> file hot-reloads the UI while preserving live
         <code>$state</code>.
+      </p>
+      <p>Every template is built on the same four files, whichever one you pick:</p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>File</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>vite.config.ts</code></td>
+            <td><code>import aktion from "aktion-runtime/vite"</code> plus <code>plugins: [aktion()]</code>. The plugin links your <code>.aktion</code> graph at build time and drives HMR &mdash; see <a href="modules.html#vite">its options</a>.</td>
+          </tr>
+          <tr>
+            <td><code>index.html</code></td>
+            <td><code>&lt;aktion-app id="app" theme="light"&gt;</code> and a module script pointing at <code>src/main.ts</code>. The <code>&lt;title&gt;</code> is stamped with your project name.</td>
+          </tr>
+          <tr>
+            <td><code>src/main.ts</code></td>
+            <td>Imports <code>aktion-runtime</code> (which registers the element), imports <code>./app.aktion</code> as a compiled program, and calls <code>mountCompiled()</code> on the element.</td>
+          </tr>
+          <tr>
+            <td><code>src/app.aktion</code></td>
+            <td>The entry module &mdash; it owns the rendered root, normally a <code>$app(&hellip;)</code> statement. Richer templates <code>import</code> the rest of the UI from sibling files.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Also generated: a <code>tsconfig.json</code> (ES2022,
+        <code>moduleResolution: "Bundler"</code>, <code>strict</code>),
+        <code>src/env.d.ts</code> so TypeScript knows what a <code>.aktion</code>
+        import is, a <code>.gitignore</code>, and the <code>.vscode/</code> folder
+        described below.
       </p>
 
       <h2 id="editor">Editor support (VS Code &amp; Cursor)</h2>
@@ -179,13 +255,31 @@ $app(Card([
         <div class="lay-demo-preview"></div>
       </div>
       <p>
-        Action bodies are real JavaScript: the full global surface is available
-        (<code>alert</code>, <code>fetch</code>, <code>Math</code>, &hellip;), as are
-        timers like <code>setTimeout</code> and <code>setInterval</code>. For data,
-        reach for the built-in <code>$http(&hellip;)</code> resource &mdash; it tracks
-        loading and error state and exposes an <code>.onDone</code> callback for when a
-        request settles.
+        Action bodies are real JavaScript: by default the full global surface is
+        available (<code>alert</code>, <code>fetch</code>, <code>Math</code>, &hellip;),
+        as are timers like <code>setTimeout</code> and <code>setInterval</code>. For
+        data, reach for the built-in <code>$http(&hellip;)</code> resource &mdash; it
+        tracks loading and error state and exposes an <code>.onDone</code> callback for
+        when a request settles.
       </p>
+      <div class="callout">
+        <h4>How much of this is trusted?</h4>
+        <p>
+          <strong>An Aktion program is code, not data.</strong> Because unshadowed
+          identifiers fall through to the host page&rsquo;s globals, a program is as
+          privileged as a <code>&lt;script&gt;</code> tag you wrote yourself &mdash; so
+          author one exactly as carefully. That is the right default when the program
+          lives in your repo.
+        </p>
+        <p>
+          When it does not &mdash; generated by an LLM, stored per tenant, edited by
+          users &mdash; narrow the surface with
+          <code>setGlobalAccessPolicy("safe")</code> before mounting anything. The
+          library&rsquo;s sanitisers make untrusted <em>data</em> safe to render through
+          a trusted program; they do not contain an untrusted program.
+          <a href="security.html">Security</a> covers both halves.
+        </p>
+      </div>
 
       <h2 id="theming">Theming in one line</h2>
       <p>
@@ -250,13 +344,29 @@ app.removeAttribute("streaming");</code></pre>
         same error banner and <code>error</code> event as parse errors.
       </p>
       <p>
-        Two more attributes are worth knowing up front: <code>theme</code> selects a
-        built-in theme (see <a href="#theming">Theming</a> above), and
+        Three more attributes are worth knowing up front. <code>theme</code> selects a
+        built-in theme (see <a href="#theming">Theming</a> above);
         <code>showerrors</code> renders a developer error banner inside the shadow DOM
-        while you iterate. Other methods on the element include <code>setTheme()</code>,
+        while you iterate; and <code>strict</code> turns on extra development
+        diagnostics &mdash; most usefully a warning when a commit undoes an attribute an
+        event handler wrote straight onto the live DOM.
+      </p>
+      <p>
+        Other methods on the element include <code>setTheme()</code>,
         <code>registerComponents()</code> to extend the library at runtime, and
         <code>getSystemPrompt()</code> to build the prompt that teaches an LLM to emit
-        Aktion.
+        Aktion. <a href="frameworks.html#contract">Frameworks</a> has the full
+        attribute and event reference.
+      </p>
+      <p>
+        If your program is already compiled &mdash; because a bundler ran the
+        <code>.aktion</code> linker, or because you called
+        <code>compileLite()</code> / <code>linkProject()</code> yourself &mdash; mount it
+        with <code>mountCompiled(program)</code> instead of <code>setResponse()</code>.
+        That path skips the parser and takes an optional state snapshot as a second
+        argument, which is how hydration and hot reload preserve live
+        <code>$state</code>. See <a href="modules.html#api">Modules &rarr; Linking from
+        JavaScript</a>.
       </p>
 
       <h2 id="other-installs">Other ways to install Aktion</h2>
@@ -328,7 +438,7 @@ app.removeAttribute("streaming");</code></pre>
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     // Render each .lay-demo code block as a live <aktion-app> beside it.
     import "../dist/aktion.js"; // registers the <aktion-app> custom element

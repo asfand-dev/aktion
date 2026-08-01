@@ -1,4 +1,6 @@
 {
+  // Type-checking only (`npm run typecheck`, chained into `npm run build`);
+  // esbuild does the emit and does not check types.
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -10,6 +12,9 @@
     "noEmit": true,
     "types": ["vscode", "node"],
     "baseUrl": ".",
+    // Prefer the repo's own declarations over the published `aktion-runtime`
+    // devDependency, so a type added to src/language-api.ts is visible here as
+    // soon as the root build regenerates dist/types — no publish round-trip.
     "paths": {
       "aktion-runtime/language": [
         "../../dist/types/language-api.d.ts",

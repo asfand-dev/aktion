@@ -15,9 +15,33 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
-  <link rel="stylesheet" href="assets/chat-bot.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="assets/chat-bot.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* The setup card grows when the notes below are expanded. Without these two
+       rules the flex centring pushes the top of the card off-screen with no way
+       to scroll back to it, because .cb-app is a fixed 100vh box. `safe center`
+       falls back to `start` exactly when the item would overflow. */
+    #cb-setup { overflow-y: auto; align-items: safe center; }
+
+    /* Authored companion notes. Page-scoped, because assets/chat-bot.css
+       styles the app chrome only. Collapsed by default so the setup card
+       stays short on a laptop viewport. */
+    .cb-notes { margin: 20px 0 0; border: 1px solid var(--doc-border); border-radius: var(--doc-radius-md, 10px); background: var(--doc-surface-elev); }
+    .cb-notes > summary { cursor: pointer; padding: 11px 14px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; list-style: none; }
+    .cb-notes > summary::-webkit-details-marker { display: none; }
+    .cb-notes > summary .cb-notes-chevron { margin-left: auto; color: var(--doc-text-muted); font-size: 11px; transition: transform 160ms ease; }
+    .cb-notes[open] > summary .cb-notes-chevron { transform: rotate(180deg); }
+    .cb-notes[open] > summary { border-bottom: 1px solid var(--doc-border); }
+    .cb-notes-body { padding: 4px 14px 14px; font-size: 12.5px; line-height: 1.65; color: var(--doc-text-muted); }
+    .cb-notes-body h3 { margin: 14px 0 4px; font-size: 12.5px; font-weight: 700; color: var(--doc-text); }
+    .cb-notes-body p { margin: 0 0 6px; }
+    .cb-notes-body ul { margin: 0 0 6px; padding-left: 18px; }
+    .cb-notes-body li { margin: 0 0 3px; }
+    .cb-notes-body code { font-family: var(--doc-mono); font-size: 11.5px; background: var(--doc-code-bg-soft); color: var(--doc-text); padding: 1px 5px; border-radius: var(--doc-radius-xs); border: 1px solid var(--doc-border-subtle); overflow-wrap: anywhere; }
+    .cb-notes-body a { color: var(--doc-primary); }
+  </style>
 </head>
 <body data-page="chat-bot">
   <div class="layout" data-wide="true" style="display: block;">
@@ -33,9 +57,9 @@
             <p class="cb-lede">
               This demo streams an LLM's response into
               <code>&lt;aktion-app&gt;</code>. Pick a mode, ask for any
-              UI, and watch a complete interface render in real time. Your key
-              stays in <code>localStorage</code> — it's never sent anywhere
-              except OpenRouter.
+              UI, and watch a complete interface render in real time. There is no
+              backend: this page is static and your browser calls OpenRouter
+              directly with a key you supply.
             </p>
 
             <form id="cb-setup-form" class="cb-form">
@@ -93,6 +117,73 @@
               <li><i class="fa-solid fa-circle-check"></i> Open in playground</li>
               <li><i class="fa-solid fa-circle-check"></i> Export as standalone HTML</li>
             </ul>
+
+            <!-- Single source for the authored explanation of this page. The
+                 mode tab tooltips below are one-line summaries of the same
+                 facts; the language-level guide lives at
+                 llm-integration.html#modes. -->
+            <details class="cb-notes" id="cb-notes">
+              <summary>
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                How this demo works, and what happens to your key
+                <i class="fa-solid fa-chevron-down cb-notes-chevron" aria-hidden="true"></i>
+              </summary>
+              <div class="cb-notes-body">
+                <h3 id="cb-notes-modes">The four modes</h3>
+                <p>
+                  Every mode sends the same generated system prompt with a
+                  different scope. Switch between them with the tabs above the chat.
+                </p>
+                <ul>
+                  <li><strong>Chat &middot; Compact</strong> &mdash; a read-only
+                    reply: layout, text, tables, charts, stats, follow-ups. No
+                    state, actions, or network calls. The cheapest prompt.</li>
+                  <li><strong>Chat &middot; Full</strong> &mdash; the whole
+                    language, so the reply can be interactive: reactive state,
+                    actions, <code>$http</code>, routing.</li>
+                  <li><strong>Website Builder</strong> &mdash; full language, asked
+                    for a navbar above stacked marketing sections rather than a
+                    dashboard shell.</li>
+                  <li><strong>App Builder</strong> &mdash; full language, asked for
+                    an app shell with a sidebar, routes, wired actions, and
+                    realistic seed rows.</li>
+                </ul>
+                <p>
+                  <a href="llm-integration.html#modes">Guide &rarr; Generation
+                  modes</a> gives the exact <code>getSystemPrompt()</code> call and
+                  prompt size behind each one.
+                </p>
+
+                <h3 id="cb-notes-key">Where your key goes</h3>
+                <ul>
+                  <li>Saved in this origin's <code>localStorage</code>, under
+                    <code>aktion.chat.openrouter-key</code>, so a reload keeps you
+                    connected.</li>
+                  <li>Sent as an <code>Authorization</code> header on the only
+                    network request this page makes:
+                    <code>POST https://openrouter.ai/api/v1/chat/completions</code>.
+                    There is no other destination &mdash; there is no server on our
+                    side.</li>
+                  <li><em>Settings &rarr; Reset key</em> deletes it; so does
+                    clearing site data for this origin.</li>
+                  <li><strong>Use a key you can revoke.</strong>
+                    <code>localStorage</code> is not a secret store: any script on
+                    this origin can read it, and it persists until you remove
+                    it.</li>
+                </ul>
+
+                <h3 id="cb-notes-sent">What each request carries</h3>
+                <p>
+                  The active mode's system prompt, your message, the last few turns
+                  (<em>Settings &rarr; History size</em>, five by default), and any
+                  images or PDFs you attach. OpenRouter also receives this page's
+                  URL as <code>HTTP-Referer</code> and
+                  <code>X-Title: Aktion chat bot</code> for traffic attribution.
+                  <em>Export chat</em> writes the transcript, model, theme, and
+                  mode &mdash; never the key.
+                </p>
+              </div>
+            </details>
           </div>
         </section>
 
@@ -104,19 +195,26 @@
           <header class="cb-toolbar" role="banner">
             <div class="cb-toolbar-row cb-toolbar-row--modes">
               <div class="cb-modes" id="cb-modes" role="tablist" aria-label="Generation mode">
-                <button class="cb-mode" data-mode="chat-compact" role="tab" aria-selected="true">
+                <!-- `title` values are one-line summaries of the mode notes in
+                     #cb-notes on the setup card; the full explanation lives
+                     there and in llm-integration.html#modes. -->
+                <button class="cb-mode" data-mode="chat-compact" role="tab" aria-selected="true"
+                        title="Read-only reply — layout, text, tables, charts. No state or actions. Cheapest prompt.">
                   <i class="fa-solid fa-comments"></i>
                   <span class="cb-mode-label">Chat <span class="cb-mode-sub">Compact</span></span>
                 </button>
-                <button class="cb-mode" data-mode="chat-full" role="tab" aria-selected="false">
+                <button class="cb-mode" data-mode="chat-full" role="tab" aria-selected="false"
+                        title="The whole language — reactive state, actions, $http, routing. Interactive replies.">
                   <i class="fa-solid fa-comment-dots"></i>
                   <span class="cb-mode-label">Chat <span class="cb-mode-sub">Full</span></span>
                 </button>
-                <button class="cb-mode" data-mode="website" role="tab" aria-selected="false">
+                <button class="cb-mode" data-mode="website" role="tab" aria-selected="false"
+                        title="Full language, asked for a marketing site: navbar above stacked sections, no app shell.">
                   <i class="fa-solid fa-globe"></i>
                   <span class="cb-mode-label">Website <span class="cb-mode-sub">Builder</span></span>
                 </button>
-                <button class="cb-mode" data-mode="app" role="tab" aria-selected="false">
+                <button class="cb-mode" data-mode="app" role="tab" aria-selected="false"
+                        title="Full language, asked for a product UI: app shell, sidebar, routes, wired actions.">
                   <i class="fa-solid fa-shapes"></i>
                   <span class="cb-mode-label">App <span class="cb-mode-sub">Builder</span></span>
                 </button>
@@ -137,21 +235,12 @@
                   </select>
                 </div>
 
+                <!-- Options are mirrored from #cb-model-suggestions by the
+                     inline script at the end of the document, so the datalist on
+                     the setup card is the single list of suggested models. -->
                 <div class="cb-select-wrap" title="LLM model">
                   <i class="fa-solid fa-microchip" aria-hidden="true"></i>
-                  <select id="cb-model" aria-label="LLM model">
-                    <option value="google/gemini-3-flash-preview">gemini-3-flash-preview</option>
-                    <option value="google/gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
-                    <option value="openai/gpt-5.4-mini">gpt-5.4-mini</option>
-                    <option value="openai/gpt-5.3-codex">gpt-5.3-codex</option>
-                    <option value="anthropic/claude-sonnet-4.6">claude-sonnet-4.6</option>
-                    <option value="qwen/qwen3.6-plus">qwen3.6-plus</option>
-
-                    <option value="google/gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
-                    <option value="tencent/hy3">hy3</option>
-                    <option value="google/gemini-3.6-flash">gemini-3.6-flash</option>
-                    <option value="poolside/laguna-s-2.1">laguna-s-2.1</option>
-                  </select>
+                  <select id="cb-model" aria-label="LLM model"></select>
                 </div>
 
                 <button class="cb-iconbtn" id="cb-new-chat" title="Start a new chat" aria-label="New chat">
@@ -173,7 +262,7 @@
                 <span class="cb-aurora-blob cb-aurora-blob--c"></span>
               </div>
               <span class="cb-welcome-eyebrow"><span class="cb-pulse-dot"></span> Live · streaming · generative UI</span>
-              <h2>What should we <span class="cb-grad-text">build</span> today?</h2>
+              <h2 id="cb-welcome-title">What should we <span class="cb-grad-text">build</span> today?</h2>
               <p>
                 Describe any interface — a dashboard, a marketing site, a full
                 SaaS app — and watch the LLM stream it into a live UI. Click a
@@ -181,7 +270,7 @@
               </p>
               <div class="cb-welcome-stats" aria-hidden="true">
                 <span class="cb-stat"><i class="fa-solid fa-bolt"></i> Realtime stream</span>
-                <span class="cb-stat"><i class="fa-solid fa-shapes"></i> 270+ components</span>
+                <span class="cb-stat"><i class="fa-solid fa-shapes"></i> 281 components</span>
                 <span class="cb-stat"><i class="fa-solid fa-palette"></i> 6 themes</span>
                 <span class="cb-stat"><i class="fa-solid fa-mobile-screen"></i> Responsive preview</span>
               </div>
@@ -241,7 +330,7 @@
       <div class="cb-drawer-backdrop" id="cb-drawer-backdrop" data-open="false"></div>
       <aside class="cb-drawer" id="cb-drawer" data-open="false" aria-hidden="true" aria-label="Settings">
         <header class="cb-drawer-head">
-          <h2><i class="fa-solid fa-sliders"></i> Settings</h2>
+          <h2 id="cb-settings-title"><i class="fa-solid fa-sliders"></i> Settings</h2>
           <button class="cb-iconbtn" id="cb-drawer-close" aria-label="Close settings">
             <i class="fa-solid fa-xmark"></i>
           </button>
@@ -256,11 +345,15 @@
                 <i class="fa-solid fa-eye"></i>
               </button>
             </div>
-            <span class="cb-hint">Stored locally. Clear with <em>Reset</em> below.</span>
+            <span class="cb-hint">
+              Held in <code>localStorage</code> on this origin and sent only to
+              <code>openrouter.ai</code>. <em>Reset key</em> below deletes it.
+            </span>
           </div>
           <div class="cb-field">
             <label for="cb-drawer-model">Default model</label>
             <input id="cb-drawer-model" type="text" list="cb-model-suggestions" />
+            <span class="cb-hint">Any chat-completion model your key has access to.</span>
           </div>
           <div class="cb-field">
             <label for="cb-drawer-history">History size <span id="cb-history-readout" class="cb-history-readout">5 turns</span></label>
@@ -275,6 +368,13 @@
               <i class="fa-solid fa-arrow-rotate-left"></i> Reset key
             </button>
           </div>
+          <div class="cb-field">
+            <span class="cb-hint">
+              What each mode sends to the model, and how to build the same thing
+              yourself:
+              <a href="llm-integration.html#modes">LLM integration &rarr; Generation modes</a>.
+            </span>
+          </div>
         </div>
       </aside>
 
@@ -283,7 +383,32 @@
     </main>
   </div>
 
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <!--
+    Mirror the suggested-model datalist into the toolbar dropdown so the model
+    list is authored exactly once (#cb-model-suggestions). A classic script runs
+    during parsing, i.e. before the deferred modules below hydrate the controls
+    from localStorage, so chat-bot.js still sees a populated dropdown.
+  -->
+  <script>
+    (function () {
+      try {
+        var list = document.getElementById('cb-model-suggestions');
+        var select = document.getElementById('cb-model');
+        if (!list || !select || select.options.length > 0) return;
+        var options = list.getElementsByTagName('option');
+        for (var i = 0; i < options.length; i += 1) {
+          var value = options[i].value;
+          if (!value) continue;
+          // Show the bare model name; keep the vendor-prefixed id as the value.
+          var opt = document.createElement('option');
+          opt.value = value;
+          opt.textContent = value.slice(value.lastIndexOf('/') + 1);
+          select.appendChild(opt);
+        }
+      } catch (_) {}
+    })();
+  </script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module" src="assets/chat-bot.js?v=2026.05.22"></script>
 </body>
 </html>

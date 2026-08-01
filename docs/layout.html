@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Layout · Aktion</title>
-  <meta name="description" content="Build any layout in Aktion with three primitives — Column, Row, and Grid — plus Center, Container, Box, Spacer, and GridItem spans. Recipes for dashboards, sidebars, holy-grail app shells, and centered forms." />
+  <meta name="description" content="Build any layout in Aktion with three primitives — Column, Row, and Grid — plus Center, Container, Box, Spacer, and GridItem spans. Cards and CardSection bands, joined control groups, ScrollArea, Sticky, and how anchored popups escape clipping through the browser top layer. Recipes for dashboards, sidebars, holy-grail app shells, and centered forms." />
   <script>
     (function () {
       try {
@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     /* Live layout demo: code on the left, rendered output on the right. */
@@ -54,6 +54,9 @@
     }
     /* Visual filler so structural demos read clearly without real content. */
     .demo-cheats code { white-space: nowrap; }
+    /* Warning variant of the shared site.css callout. */
+    .callout.warn { background: rgba(245, 158, 11, 0.10); border-color: rgba(245, 158, 11, 0.30); }
+    .callout.warn h4 { color: #b45309; }
   </style>
 </head>
 <body data-page="layout">
@@ -90,6 +93,10 @@
           <tr><td>A 12&#8209;column dashboard with mixed widths</td><td><code>Grid</code> + <code>GridItem(child, { span })</code></td></tr>
           <tr><td>A centered, max&#8209;width reading column</td><td><code>Container([&hellip;], { size })</code></td></tr>
           <tr><td>Direction that flips on mobile vs desktop</td><td><code>Stack([&hellip;], { direction: {base, md} })</code></td></tr>
+          <tr><td>A tinted, full&#8209;bleed band <em>inside</em> a card</td><td><code>CardSection([&hellip;], { tone })</code></td></tr>
+          <tr><td>Buttons that should read as one control</td><td><code>ButtonGroup([&hellip;])</code></td></tr>
+          <tr><td>A long list or log clipped to a scrolling pane</td><td><code>ScrollArea([&hellip;], { maxHeight })</code></td></tr>
+          <tr><td>A menu or popover that must escape a clipping parent</td><td><a href="#floating">nothing &mdash; it is automatic</a></td></tr>
         </tbody>
       </table>
       <p>
@@ -105,6 +112,17 @@
         <code>Column</code> is the workhorse: it is the usual page body and the
         usual card body. Children stretch to the full width; control spacing with
         <code>gap</code> and horizontal placement with <code>align</code>.
+      </p>
+      <p>
+        <code>gap</code> defaults to <code>md</code> and <code>align</code> to
+        <code>stretch</code>. Turn on <code>wrap</code> when the children should flow onto more
+        than one line &mdash; that also unlocks <code>alignContent</code>
+        (<code>start</code>/<code>center</code>/<code>end</code>/<code>between</code>/<code>around</code>/<code>stretch</code>),
+        which distributes the wrapped <em>lines</em> rather than the children.
+      </p>
+      <p>
+        Without <code>wrap</code> there is only one line, so <code>alignContent</code> does
+        nothing at all.
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
@@ -141,6 +159,12 @@
         their content (a search box beside a button)? Wrap it in
         <code>StackItem(child, { grow: 1 })</code>.
       </p>
+      <p>
+        A <code>Row</code> keeps its children as separate controls with a gap between
+        them. When the buttons are meant to read as <em>one</em> control &mdash; a view
+        switcher, a paired action &mdash; reach for
+        <a href="#control-groups"><code>ButtonGroup</code></a> instead.
+      </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$app(Row([
@@ -150,7 +174,7 @@
         <div class="lay-demo-preview"></div>
       </div>
 
-      <h3>Distributing children with <code>justify</code></h3>
+      <h3 id="justify">Distributing children with <code>justify</code></h3>
       <p>
         <code>justify</code> controls spacing along the main axis:
         <code>start</code> (default), <code>center</code>, <code>end</code>,
@@ -179,7 +203,7 @@
         </tbody>
       </table>
 
-      <h3>Auto&#8209;fit &mdash; reflows by itself</h3>
+      <h3 id="grid-autofit">Auto&#8209;fit &mdash; reflows by itself</h3>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$app(Grid([
@@ -191,7 +215,7 @@
         <div class="lay-demo-preview"></div>
       </div>
 
-      <h3>Fixed columns</h3>
+      <h3 id="grid-fixed">Fixed columns</h3>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$app(Grid([
@@ -209,6 +233,16 @@
         (1&ndash;12) or a fraction (<code>"1/2"</code>, <code>"1/3"</code>,
         <code>"3/4"</code>). Any <code>GridItem</code> child turns on the 12&#8209;track
         grid automatically &mdash; this is the canonical sidebar&#8209;plus&#8209;main layout.
+      </p>
+      <p>
+        Three more props round it out: <code>offset</code> (0&ndash;11) leaves empty columns
+        before the item, <code>rowSpan</code> makes one cell tall next to a stack of shorter
+        ones, and <code>spanAt</code> is a responsive span map like
+        <code>{ sm: 12, md: 6, lg: 4 }</code>.
+      </p>
+      <p>
+        With no <code>span</code> at all the item takes a single cell, so wrapping children in
+        <code>GridItem</code> is safe even inside a <code>Grid({ columns: N })</code>.
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
@@ -266,27 +300,245 @@
       <p>
         <code>Container([&hellip;], { size })</code> centers a wide page within a
         comfortable reading width (<code>sm</code>/<code>md</code>/<code>lg</code>/<code>xl</code>/<code>full</code>).
-        <code>Box([&hellip;], { padding, background, border, maxWidth })</code> is a
-        plain spacing/surface wrapper for when a full <code>Card</code> is too heavy.
+        <code>Box([&hellip;], { padding, margin, background, border, radius, maxWidth })</code>
+        is a plain spacing/surface wrapper for when a full <code>Card</code> is too heavy.
         <code>Spacer()</code> flexes to push siblings apart inside a <code>Row</code>;
         with a <code>size</code> it becomes a fixed gap.
+      </p>
+      <p>
+        <code>Box</code>&rsquo;s <code>border</code> is
+        <code>none</code>&nbsp;(default)&nbsp;/&nbsp;<code>subtle</code>&nbsp;/&nbsp;<code>default</code>
+        and its <code>background</code> is one of
+        <code>none&nbsp;&middot;&nbsp;surface&nbsp;&middot;&nbsp;muted&nbsp;&middot;&nbsp;primary&nbsp;&middot;&nbsp;success&nbsp;&middot;&nbsp;warning&nbsp;&middot;&nbsp;danger&nbsp;&middot;&nbsp;info</code>.
+      </p>
+      <p>
+        <code>radius</code>
+        (<code>none&nbsp;&middot;&nbsp;sm&nbsp;&middot;&nbsp;md&nbsp;&middot;&nbsp;lg&nbsp;&middot;&nbsp;pill</code>)
+        rounds the surface <em>independently</em> of the border, so a borderless tinted box can
+        still be rounded. <code>padding</code> and <code>margin</code> both accept a responsive
+        map.
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$app(Column([
   Box([Text("A subtle inset surface — lighter than a Card.")], { padding: "md", background: "muted", border: "subtle" }),
-  Box([Text("Tinted callout-style box.")], { padding: "md", background: "primary" })
+  Box([Text("Tinted, borderless, rounded — radius is independent of border.")], { padding: "md", background: "primary", radius: "lg" })
 ], { gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
 
+      <h2 id="card">Cards, headers &amp; card sections</h2>
+      <p>
+        <code>Card([&hellip;], { variant, padding, onClick?, href? })</code> is the default
+        surface for one chunk of a page. Inner padding defaults to <code>lg</code>; set
+        <code>padding: "none"</code> when the body is a <code>Table</code>, an image, or a list
+        that should meet the card&rsquo;s edges.
+      </p>
+      <p>
+        Pass <code>onClick</code> or <code>href</code> and the whole card becomes a single
+        interactive target. It then renders as a real <code>&lt;button&gt;</code> or
+        <code>&lt;a&gt;</code>, so it is keyboard&#8209;operable without any wrapper of yours.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Piece</th><th>Signature</th><th>Reach for it when&hellip;</th></tr></thead>
+        <tbody>
+          <tr><td><code>CardHeader</code></td><td><code>({ title, eyebrow, subtitle, actions, level })</code></td><td>The card needs a title. <code>eyebrow</code> is the small line <em>above</em> the title (category, kicker); <code>actions</code> pins nodes to the trailing edge of the title row; <code>level</code> (2&ndash;6, default 3) keeps the heading outline sane on a page full of cards.</td></tr>
+          <tr><td><code>CardSection</code></td><td><code>([&hellip;], { tone, align })</code></td><td>One region of the card needs its own semantic tint &mdash; a full&#8209;bleed band with a rule above and below.</td></tr>
+          <tr><td><code>CardFooter</code></td><td><code>([&hellip;], { justify })</code></td><td>The card ends in actions. Trailing&#8209;aligned by default; <code>justify: "between"</code> gives you &ldquo;destructive far left, confirm far right&rdquo;.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>CardSection</code> tones are
+        <code>default&nbsp;&middot;&nbsp;activating&nbsp;&middot;&nbsp;success&nbsp;&middot;&nbsp;warning&nbsp;&middot;&nbsp;critical&nbsp;&middot;&nbsp;neutral&nbsp;&middot;&nbsp;corporate&nbsp;&middot;&nbsp;promoting</code>,
+        and <code>align</code> is <code>left</code>/<code>center</code>/<code>right</code>.
+        Leave the <code>Card</code> on its normal padding &mdash; the band handles its own
+        bleed.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; eyebrow, two tinted bands, split footer</span>
+<pre><code>$app(Card([
+  CardHeader("example.com", { eyebrow: "Hosting", subtitle: "Renews 4 March 2027", actions: [Pill("SSL active", { tone: "success", icon: "lock" })] }),
+  CardSection([Text("Certificate renews in 12 days.")], { tone: "activating" }),
+  CardSection([Text("Payment method expired.")], { tone: "critical" }),
+  CardFooter([Button("Remove", { variant: "ghost" }), Button("Renew", { variant: "primary" })], { justify: "between" })
+]))
+// no padding prop — the Card keeps its default `lg`</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        The tint runs to the card&rsquo;s edges while the band&rsquo;s text stays aligned with
+        the header, because the band bleeds out by exactly the card&rsquo;s padding and then
+        re&#8209;insets its own content by the same amount.
+      </p>
+      <div class="callout warn">
+        <h4>Do not combine <code>CardSection</code> with <code>padding: "none"</code></h4>
+        <p>
+          <strong>The bleed is computed from the card&rsquo;s own padding.</strong> Set the card
+          to <code>padding: "none"</code> and that value is zero, so the band has nothing to
+          bleed out of <em>and</em> no inset of its own &mdash; its text ends up flush against
+          the card&rsquo;s border. Use <code>padding: "none"</code> for a full&#8209;bleed
+          <code>Table</code> or image body, and normal padding when the card holds
+          <code>CardSection</code> bands.
+        </p>
+      </div>
+      <div class="callout">
+        <h4>CardSection, a nested Card, or a Callout?</h4>
+        <p>
+          <strong>A region of the same object &rarr; <code>CardSection</code>.</strong>
+          It is a band inside the card you already have, and it inherits the card&rsquo;s
+          border and corners.
+        </p>
+        <p>
+          A <strong>nested <code>Card</code></strong> says &ldquo;this is a <em>separate</em>
+          object&rdquo; and costs a second border and a second padding box &mdash; right for a
+          list of things, wrong for one region of one thing. A
+          <strong><code>Callout</code></strong> is a standalone bordered notice that works
+          anywhere on the page, card or no card.
+        </p>
+      </div>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; a whole card as one control</span>
+<pre><code>$picked = "nothing yet"
+$app(Column([
+  Grid([
+    Card([Column([CardHeader("Quarterly report"), Text("The whole card is one button.")], { gap: "xs" })], { onClick: () =&gt; $picked = "the report" }),
+    Card([Column([CardHeader("Changelog"), Text("This one renders as a link instead.")], { gap: "xs" })], { href: "#changelog" })
+  ], { columns: 2, gap: "md" }),
+  Text(`You clicked: ${$picked}`, { variant: "small", tone: "muted" })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        <code>onClick</code> renders a <code>&lt;button&gt;</code>; <code>href</code>
+        renders an <code>&lt;a&gt;</code>. Do not put another button or link inside a
+        clickable card &mdash; nested interactive elements are invalid HTML and the
+        inner click also fires the card.
+      </p>
+
+      <h2 id="scroll">ScrollArea &mdash; a bounded scrolling pane</h2>
+      <p>
+        <code>ScrollArea</code> clips a long list, log, or chat transcript into a pane
+        with a clean scrollbar instead of letting it stretch the page. Its two size
+        props are not synonyms &mdash; that is the whole point of having both.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Prop</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>maxHeight</code></td><td>The pane grows with its content <em>up to</em> this cap, then scrolls. Default <code>320px</code>.</td></tr>
+          <tr><td><code>height</code></td><td>A <strong>fixed</strong> box that neither grows nor shrinks with its content &mdash; use it when the pane must not resize as rows arrive.</td></tr>
+          <tr><td><code>direction</code></td><td><code>vertical</code> &middot; <code>horizontal</code> &middot; <code>both</code>.</td></tr>
+          <tr><td><code>stickToBottom</code></td><td>Keeps the newest content in view as it is appended &mdash; until the user scrolls up, which cancels the follow.</td></tr>
+        </tbody>
+      </table>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; fixed box vs. grow&#8209;then&#8209;scroll</span>
+<pre><code>$app(Column([
+  ScrollArea([Column([
+    Text("height: a fixed 120px box — it never grows with its content."),
+    Text("line 2"), Text("line 3"), Text("line 4"), Text("line 5"), Text("line 6")
+  ], { gap: "xs" })], { height: "120px" }),
+  ScrollArea([Column([
+    Text("maxHeight: grows with its content, then scrolls at 120px."),
+    Text("line 2")
+  ], { gap: "xs" })], { maxHeight: "120px" })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        The first pane is 120px tall whether it holds one line or twenty. The second is
+        as tall as its two lines and only starts scrolling once it would exceed 120px.
+      </p>
+      <div class="callout warn">
+        <h4>Upgrading: <code>height</code> changed meaning</h4>
+        <p>
+          <code>height</code> used to be an alias for <code>maxHeight</code>. It is now
+          a prop in its own right, so
+          <code>ScrollArea([&hellip;], { height: "300px" })</code> that used to mean
+          &ldquo;grow up to 300px&rdquo; now means &ldquo;always exactly 300px&rdquo;.
+          Nothing errors &mdash; the pane just stops hugging short content. Rename it to
+          <code>maxHeight</code> to keep the old behaviour.
+        </p>
+      </div>
+
+      <h2 id="control-groups">Joined controls &amp; action rows</h2>
+      <p>
+        A <code>Row</code> of controls and a single composite control are different
+        things. A <code>Row</code> puts a gap between siblings that each stand alone;
+        these three remove the gap and draw one shared shell, so the group reads &mdash;
+        and is announced &mdash; as one control.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Component</th><th>Signature</th><th>What it is, and what to use instead</th></tr></thead>
+        <tbody>
+          <tr><td><code>ButtonGroup</code></td><td><code>(items, { size, fullWidth, ariaLabel })</code></td><td>Buttons joined edge&#8209;to&#8209;edge with shared borders; only the outer corners round. For a single&#8209;select pill track use <code>SegmentedControl</code>; for spaced&#8209;out independent actions use <code>Buttons</code>.</td></tr>
+          <tr><td><code>InputGroup</code></td><td><code>(field, { icon, action, suffix, label, hint, error, required, &hellip; })</code></td><td>One bordered shell and <strong>one</strong> focus ring around a field plus its leading icon and trailing button &mdash; search boxes, password reveal, copy rows, unit suffixes like <code>"GB"</code>.</td></tr>
+          <tr><td><code>ActionStripe</code></td><td><code>(label, { icon, description, value, trailing, href, onClick, target, disabled })</code></td><td>A full&#8209;width clickable row ending in a chevron &mdash; settings screens, product menus, drill&#8209;down lists. Use <code>ListItem</code> for a row that is <em>not</em> a navigation target.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Always give <code>ButtonGroup</code> an <code>ariaLabel</code>: it renders
+        <code>role="group"</code>, and a group with no accessible name is announced as an
+        anonymous one. <code>size</code> and <code>fullWidth</code> apply to every button
+        in the group, so set them on the group rather than on each child.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; one shell, one focus ring, one row per setting</span>
+<pre><code>$q = ""
+$notify = true
+$app(Column([
+  InputGroup(Input({ id: "search", value: $q, placeholder: "example.com" }), {
+    icon: "magnifying-glass",
+    label: "Find a domain",
+    hint: "One shared border, one focus ring.",
+    action: Button("Search", { variant: "primary" })
+  }),
+  ButtonGroup([Button("Day"), Button("Week"), Button("Month")], { size: "sm", ariaLabel: "Time range" }),
+  Card([
+    ActionStripe("Domains", { icon: "globe", description: "3 active", value: "Manage", href: "#domains" }),
+    ActionStripe("Email", { icon: "envelope", description: "12 mailboxes", trailing: Badge("New", { tone: "primary" }) }),
+    ActionStripe("Notifications", { icon: "bell", description: "Weekly digest", trailing: Switch("digest", { value: $notify, onChange: (next) =&gt; $notify = next }) })
+  ], { padding: "none" })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        <code>value</code> is a short trailing string and <code>trailing</code> is a node
+        &mdash; a <code>Switch</code>, <code>Badge</code>, or <code>Avatar</code>. Pick one per
+        row: both render if you pass both. A click on the <code>trailing</code> node does
+        <strong>not</strong> fire the row&rsquo;s own <code>onClick</code>, so flipping the
+        toggle above never navigates.
+      </p>
+      <p>
+        <code>href</code> alone decides the tag: with it the row is an
+        <code>&lt;a&gt;</code>, without it a <code>&lt;button&gt;</code>, and
+        <code>target: "_blank"</code> also sets <code>rel="noopener noreferrer"</code>. That
+        holds even when the row is <code>disabled</code>, because swapping the tag mid&#8209;interaction
+        would destroy focus.
+      </p>
+      <p>
+        Each stripe carries its own padding and a hairline under it, which is why the wrapping
+        <code>Card</code> gets <code>padding: "none"</code> here &mdash; the rows are meant to
+        run to the card&rsquo;s edges, and the last one drops its hairline automatically.
+      </p>
+
       <h2 id="section">Section &mdash; full-width page bands</h2>
       <p>
-        <code>Section([&hellip;], { background, width, title?, subtitle?, eyebrow? })</code>
+        <code>Section([&hellip;], { background, width, padding, align, eyebrow?, title?, subtitle?, actions?, id? })</code>
         is a marketing&#8209;style band: a full&#8209;bleed background with its content
-        centered to a comfortable width. Stack a few to build a landing page.
-        <code>background</code> is one of <code>base</code>/<code>soft</code>/<code>surface</code>/<code>muted</code>/<code>brand</code>.
+        centered to a comfortable width. Stack a few to build a landing page &mdash; it is
+        equally at home on docs and settings pages.
       </p>
+      <table class="signature-table">
+        <thead><tr><th>Prop</th><th>Values</th></tr></thead>
+        <tbody>
+          <tr><td><code>background</code></td><td><code>base</code> &middot; <code>soft</code> &middot; <code>surface</code> &middot; <code>muted</code> &middot; <code>brand</code></td></tr>
+          <tr><td><code>width</code></td><td><code>sm</code> &middot; <code>md</code> &middot; <code>lg</code> &middot; <code>xl</code> &middot; <code>full</code> &mdash; the inner content width, not the band</td></tr>
+          <tr><td><code>padding</code></td><td><code>none</code> &middot; <code>xs</code> &middot; <code>sm</code> &middot; <code>md</code>&nbsp;(default) &middot; <code>lg</code> &middot; <code>xl</code></td></tr>
+          <tr><td><code>align</code></td><td><code>left</code> &middot; <code>center</code> &mdash; centers the generated header only; children keep their own alignment</td></tr>
+          <tr><td><code>actions</code></td><td>Nodes aligned opposite the title, e.g. a &ldquo;See all&rdquo; button</td></tr>
+          <tr><td><code>id</code></td><td>Anchor for in&#8209;page navigation &mdash; pairs with <code>ScrollSpy</code> and <code>TableOfContents</code></td></tr>
+        </tbody>
+      </table>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$app(Column([
@@ -295,61 +547,139 @@
   ], { background: "brand", eyebrow: "New", title: "Ship UIs in one language", subtitle: "A band that spans full width and centers its content." }),
   Section([
     Grid([Card([Text("Fast")]), Card([Text("Reactive")]), Card([Text("Themeable")])], { columns: 3, gap: "md" })
-  ], { background: "soft", title: "Features" })
+  ], { background: "soft", eyebrow: "Why Aktion", title: "Features", actions: [Button("See all", { variant: "ghost" })] })
 ]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
+      <p>
+        Each band paints its background across the full width of its container while the
+        header and children stay inside the centered content column.
+      </p>
 
       <h2 id="split">Split &mdash; two panes</h2>
       <p>
-        <code>Split(left, right, { ratio, divider, stackAt, sticky })</code> places two
-        panes side by side with a <code>ratio</code> (e.g. <code>"1/3"</code>), an
-        optional <code>divider</code> line, a <code>stackAt</code> breakpoint where it
-        collapses to a column, and an optional <code>sticky</code> pane.
+        <code>Split(left, right, { ratio, gap, divider, sticky, stickyOffset, stackAt, reverseOnStack, align })</code>
+        places two panes side by side &mdash; the canonical &ldquo;text + media&rdquo;,
+        &ldquo;code + preview&rdquo;, and &ldquo;content + sidebar&rdquo; section.
+        <code>ratio</code> is a named split (<code>"1/1"</code>, <code>"2/3"</code>,
+        <code>"1/3"</code>&hellip;) or any <code>a/b</code> pair such as
+        <code>"60/40"</code>.
+      </p>
+      <p>
+        <code>sticky: "left" | "right"</code> pins one pane while the other scrolls, and
+        <code>stickyOffset</code> is how far below the viewport top it pins. Set it to your
+        header height &mdash; the default is <code>88px</code>, and too small a value hides the
+        pane underneath a fixed header.
+      </p>
+      <p>
+        <code>stackAt</code> is where the two panes collapse into one column:
+        <code>sm</code>&nbsp;640px, <code>md</code>&nbsp;768px (the default), or
+        <code>lg</code>&nbsp;1024px. <code>reverseOnStack</code> puts the right pane first once
+        stacked &mdash; the usual want for media&#8209;above&#8209;text on mobile.
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$app(Split(
   Column([CardHeader("Docs"), Text("Long-form content on the left.")]),
   Card([CardHeader("On this page"), Text("A sticky aside on the right.")]),
-  { ratio: "2/3", divider: true, stackAt: "md" }
+  { ratio: "2/3", divider: true, stackAt: "md", sticky: "right", stickyOffset: "88px" }
 ))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
+      <p>
+        Below 768px the two panes become one column, and the divider and the sticky pin
+        are both dropped &mdash; pinning inside a single&#8209;column flow would just park
+        the aside on top of the content.
+      </p>
 
       <h2 id="bento">Bento &mdash; named-span grid</h2>
       <p>
-        <code>Bento([&hellip;])</code> of <code>BentoCell(child, { span, rowSpan })</code>
-        builds an editorial &ldquo;bento box&rdquo; grid where cells claim different
-        column/row spans &mdash; ideal for feature showcases.
+        <code>Bento([&hellip;], { columns, gap, rowHeight, dense })</code> of
+        <code>BentoCell(child, { span, rowSpan })</code> builds an editorial &ldquo;bento
+        box&rdquo; grid where cells claim different column and row spans &mdash; the marquee
+        feature&#8209;section layout.
+      </p>
+      <p>
+        <code>span</code> takes a name (<code>tile</code> 1&times;1, <code>wide</code> 2&times;1,
+        <code>tall</code> 1&times;2, <code>hero</code> 2&times;2, <code>full</code> for a whole
+        row), a <code>"CxR"</code> string such as <code>"2x1"</code>, a bare column count, or
+        <code>{ col, row }</code>.
+      </p>
+      <p>
+        Two rules decide whether it looks designed or ragged. <strong>Spans must tile the grid
+        exactly</strong> &mdash; each row&rsquo;s column spans should sum to
+        <code>columns</code>, and row spans should pair up with their neighbours so no track is
+        left dangling.
+      </p>
+      <p>
+        And <strong>set a fixed <code>rowHeight</code></strong> whenever a cell spans rows or
+        holds an image, because the default auto row stretches to the tallest cell. Give one or
+        two cells a big span and keep the rest tiles.
       </p>
       <div class="lay-demo">
-        <span class="lay-demo-label">Live</span>
+        <span class="lay-demo-label">Live &mdash; four cells tiling a 3&#8209;column grid exactly</span>
 <pre><code>$app(Bento([
-  BentoCell(Card([CardHeader("Hero"), Text("Spans two columns")]), { span: 2 }),
-  BentoCell(Card([CardHeader("Tall"), Text("Spans two rows")]), { rowSpan: 2 }),
-  BentoCell(Card([Text("A")])),
-  BentoCell(Card([Text("B")]))
-], { columns: 3}))</code></pre>
+  BentoCell(Card([CardHeader("Hero"), Text("span: \"hero\" — 2 x 2")]), { span: "hero" }),
+  BentoCell(Card([CardHeader("Tall"), Text("span: \"tall\" — 1 x 2")]), { span: "tall" }),
+  BentoCell(Card([CardHeader("Wide"), Text("span: \"wide\" — 2 x 1")]), { span: "wide" }),
+  BentoCell(Card([Text("tile")]))
+], { columns: 3, gap: "md", rowHeight: "150px" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
+      <p>
+        Rows 1&ndash;2 are filled by <code>hero</code> (2 columns) plus <code>tall</code>
+        (1 column); row 3 by <code>wide</code> (2) plus the tile (1). Nothing is left over,
+        which is why the mosaic reads as intentional.
+      </p>
+      <p>
+        The grid collapses to 2 columns below 920px and 1 below 640px, so a
+        <code>rowHeight</code> that suits three columns is usually too short for one. Pass a
+        responsive map like <code>{ base: "220px", md: "150px" }</code> when it matters.
+      </p>
 
       <h2 id="overlay">Overlay &amp; Fragment</h2>
       <p>
-        <code>Overlay(base, [OverlayItem(child, { position })])</code> layers content
-        absolutely over a base node &mdash; badges, ribbons, captions. Positions are
-        named corners/edges (<code>top-right</code>, <code>bottom-left</code>, &hellip;).
-        <code>Fragment([&hellip;])</code> groups siblings <em>without</em> a layout box
-        (<code>display: contents</code>), so a custom component can return several
-        nodes straight into a parent <code>Grid</code> or <code>Row</code>.
+        <code>Overlay(base, [OverlayItem(child, { anchor, offset })])</code> layers content
+        absolutely over a base node &mdash; corner badges, sale ribbons, play buttons over
+        thumbnails, captions.
       </p>
+      <p>
+        <code>anchor</code> names the corner, edge, or centre:
+        <code>top-left</code> &middot; <code>top-right</code> &middot;
+        <code>bottom-left</code> &middot; <code>bottom-right</code> &middot;
+        <code>top</code> &middot; <code>bottom</code> &middot; <code>left</code> &middot;
+        <code>right</code> &middot; <code>center</code>. <code>offset</code> is the inset from
+        that edge as a CSS length (<code>"8px"</code>).
+      </p>
+      <p>
+        <code>Fragment([&hellip;])</code> is the opposite: it groups siblings <em>without</em>
+        adding a layout box at all. The children become direct children of the parent and take
+        part in its flex or grid layout exactly as if you had written them inline.
+      </p>
+      <p>
+        Use it to return several nodes from one component, or to group siblings behind a
+        condition, without a stray wrapper that would break a <code>Grid</code>&rsquo;s spacing.
+      </p>
+      <p>
+        Give a <code>Fragment</code> an <code>sx</code> that needs a box and one host element is
+        created for it (<a href="sx.html#boxless">how that works</a>) &mdash; but reach for a
+        <code>Box</code> when you actually want a box, so the code says so.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>This is not the popup layer.</strong> <code>Overlay</code> positions a
+          badge <em>inside</em> its own base node. Menus, tooltips and dialogs that must
+          escape their container entirely are handled by the
+          <a href="#floating">floating layer</a> &mdash; you do not compose those by hand.
+        </p>
+      </div>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$app(Overlay(
   Card([Image({ src: "https://picsum.photos/400/200", alt: "Cover" })]),
   [
-    OverlayItem(Badge("Sale", { tone: "danger" }), { position: "top-right" }),
-    OverlayItem(Text("Featured", { variant: "small-heavy" }), { position: "bottom-left" })
+    OverlayItem(Badge("Sale", { tone: "danger" }), { anchor: "top-right" }),
+    OverlayItem(Text("Featured", { variant: "small-heavy" }), { anchor: "bottom-left" })
   ]
 ))</code></pre>
         <div class="lay-demo-preview"></div>
@@ -361,7 +691,8 @@
         <strong>bounded</strong>, theme&#8209;safe style intent (not raw CSS). Values are
         token references, enums, or sanitised scalars, so it stays XSS&#8209;safe and
         LLM&#8209;enumerable. <code>sx</code> also accepts responsive maps and
-        interaction states.
+        interaction states. The patterns below are the layout&#8209;relevant subset &mdash;
+        <a href="sx.html">the <code>sx</code> reference</a> documents every key.
       </p>
       <table class="signature-table">
         <thead><tr><th>Pattern</th><th>Meaning</th></tr></thead>
@@ -390,20 +721,195 @@
 
       <h2 id="sticky">Sticky &amp; its stuck state</h2>
       <p>
-        <code>Sticky(child, { top })</code> pins a node as the page scrolls. Once
-        pinned it sets <code>data-stuck="true"</code> on itself, so a CSS hook (a
-        shadow, a hairline) can react to the pinned state &mdash; a common pattern for
-        condensing a header on scroll.
+        <code>Sticky([&hellip;], { side, offset, zIndex })</code> wraps its children in a
+        <code>position: sticky</code> container so they pin to an edge of the nearest
+        scrollable ancestor &mdash; a toolbar above a table, an in&#8209;page nav, a status
+        banner, or a pinned first column in a horizontally scrolling row.
       </p>
+      <table class="signature-table">
+        <thead><tr><th>Prop</th><th>Values</th></tr></thead>
+        <tbody>
+          <tr><td><code>side</code></td><td><code>top</code> &middot; <code>bottom</code> &middot; <code>left</code> &middot; <code>right</code></td></tr>
+          <tr><td><code>offset</code></td><td>CSS length, default <code>0</code> &mdash; how far from that edge it pins</td></tr>
+          <tr><td><code>zIndex</code></td><td>Number, default <code>10</code> &mdash; raise it if the pinned bar is overlapped by later content</td></tr>
+        </tbody>
+      </table>
 <pre><code>Sticky(
   Row([Text("Title", { variant: "large-heavy" }), Spacer(), Button("Action")]),
-  { top: "0" }
+  { side: "top", offset: "0" }
 )
 // while pinned the node carries data-stuck="true"</code></pre>
+      <p>
+        Once pinned the wrapper sets <code>data-stuck="true"</code> on itself, so a CSS
+        hook &mdash; a shadow, a hairline, a condensed height &mdash; can react to the
+        pinned state without any JavaScript of yours.
+      </p>
+<pre><code>/* in your app stylesheet */
+.rui-sticky[data-stuck="true"] { box-shadow: 0 2px 12px rgba(0, 0, 0, .12); }</code></pre>
+      <p>
+        Sticky positioning is relative to the nearest <em>scrolling</em> ancestor, so a
+        <code>Sticky</code> inside a <code>ScrollArea</code> pins to that pane, not to the
+        page.
+      </p>
+
+      <h2 id="floating">Popups, menus &amp; the top layer</h2>
+      <p>
+        An anchored surface &mdash; a <code>Tooltip</code>, a <code>DropdownMenu</code>, a
+        <code>Combobox</code> list &mdash; is not laid out by its parent. A shared floating layer
+        measures each panel against its trigger and promotes it into the browser&rsquo;s
+        <strong>top layer</strong>.
+      </p>
+      <p>
+        That is what lets a panel escape the two things that used to break it: an ancestor that
+        clips overflow, and an ancestor that wins on <code>z-index</code>.
+      </p>
+      <p>
+        There is nothing to opt into. It matters because it makes the obvious composition
+        safe: a row&#8209;actions menu inside a scrolling <code>Table</code>, a filter
+        <code>Popover</code> inside a <code>Modal</code>, a <code>Combobox</code> inside an
+        <code>Accordion</code> item or an <code>InputGroup</code>.
+      </p>
+      <p>
+        Roughly two dozen containers in the stylesheet set a non&#8209;visible
+        <code>overflow</code>, and <code>overflow-x: auto</code> clips vertically as well. So a
+        panel opening downward used to be amputated at the container edge &mdash; and one
+        opening upward was unreachable, because no scrollbar can reveal overflow above the top
+        edge.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; open the menu, then scroll the pane</span>
+<pre><code>$app(ScrollArea([Column([
+  Card([Row([
+    Text("invoice-2401.pdf"),
+    Spacer(),
+    DropdownMenu({
+      trigger: IconButton("ellipsis", { label: "Row actions", variant: "ghost" }),
+      items: [MenuItem("Rename"), MenuItem("Duplicate"), MenuSeparator(), MenuItem("Delete", { variant: "danger" })],
+      align: "end",
+      label: "Row actions"
+    })
+  ])], { padding: "sm" }),
+  Card([Row([
+    Text("invoice-2402.pdf"),
+    Spacer(),
+    Tooltip({ trigger: IconButton("download", { label: "Download", variant: "ghost" }), label: "Download the PDF", side: "left" })
+  ])], { padding: "sm" }),
+  Card([Text("The pane clips at 150px, but the menu does not.")], { padding: "sm" })
+], { gap: "sm" })], { height: "150px" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        The menu paints outside the 150px pane and stays anchored to its trigger as you
+        scroll. The same markup used to clip the menu at the pane&rsquo;s edge, which is why
+        row&#8209;actions menus were a recurring bug rather than a one&#8209;liner.
+      </p>
+
+      <h3 id="floating-components">Which components float</h3>
+      <p>
+        These are the components whose panel is positioned and promoted for you. The
+        placement column lists the props <em>you</em> control; everything else is measured.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Component</th><th>Placement props</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>Tooltip</code></td><td><code>side</code>, <code>align</code>, <code>delay</code></td><td>Centred on the trigger edge by default, and never given an internal scrollbar &mdash; a scrolling hint reads as broken.</td></tr>
+          <tr><td><code>HoverCard</code></td><td><code>side</code>, <code>align</code>, <code>width</code></td><td>A tall card is height&#8209;capped and scrolls internally.</td></tr>
+          <tr><td><code>Popover</code></td><td><code>side</code>, <code>align</code>, <code>width</code></td><td>Click&#8209;triggered; keeps outside&#8209;click and Escape dismissal.</td></tr>
+          <tr><td><code>DropdownMenu</code></td><td><code>side</code>, <code>align</code></td><td>The row&#8209;actions and overflow&#8209;menu workhorse.</td></tr>
+          <tr><td><code>ContextMenu</code></td><td><code>placement</code>, <code>offset</code></td><td>Anchored to the <strong>pointer</strong>, not to an element, so a right&#8209;click near the bottom or right edge still lands fully on screen.</td></tr>
+          <tr><td><code>Combobox</code> &middot; <code>MultiSelect</code></td><td>&mdash;</td><td>Always open below the trigger and match its width, with a 180px floor so a narrow trigger in a table cell still produces a readable list.</td></tr>
+          <tr><td><code>MentionInput</code></td><td>&mdash;</td><td>Suggestions anchor to the whole textarea, not to the caret.</td></tr>
+          <tr><td><code>NotificationBell</code></td><td><code>align</code> (<code>left</code>/<code>right</code>)</td><td>Opens below the bell.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>Select</code> is deliberately absent: it renders a native
+        <code>&lt;select&gt;</code>, so the browser owns its popup and always has.
+      </p>
+
+      <h3 id="floating-placement">Placement, flipping and the height cap</h3>
+      <p>
+        <code>side</code> is the side of the trigger the panel prefers
+        (<code>top</code>&nbsp;/&nbsp;<code>bottom</code>&nbsp;/&nbsp;<code>left</code>&nbsp;/&nbsp;<code>right</code>,
+        default <code>bottom</code>); <code>align</code> is how it lines up along that edge
+        (<code>start</code>&nbsp;/&nbsp;<code>center</code>&nbsp;/&nbsp;<code>end</code>, default
+        <code>start</code>).
+      </p>
+      <p>
+        Both are preferences, not promises: the layer resolves them against the viewport in a
+        fixed order.
+      </p>
+      <ol>
+        <li><strong>Flip the side</strong> &mdash; but only when your side genuinely lacks
+          room <em>and</em> the opposite side has more. Otherwise your choice is kept and
+          the next two steps absorb the overflow, so a panel never bounces between sides on
+          a marginal fit.</li>
+        <li><strong>Align</strong> along the chosen edge.</li>
+        <li><strong>Shift</strong> back inside the viewport, keeping 8px clear of every edge.</li>
+        <li><strong>Cap the height.</strong> A panel taller than the space on the chosen side
+          gets a <code>max-height</code> (never below 96px) and scrolls internally, so the
+          last menu item is always reachable.</li>
+      </ol>
+      <p>
+        The gap between trigger and panel is 6px. Positioning re-runs on scroll (including
+        the scroll of inner containers), on resize, and whenever the panel or its anchor
+        changes size &mdash; filtering a <code>Combobox</code> list down to two rows
+        re&#8209;pins it immediately.
+      </p>
+
+      <h3 id="floating-side-hook">The <code>data-floating-side</code> CSS hook</h3>
+      <p>
+        Once positioned, the panel carries
+        <code>data-floating-side="top|bottom|left|right"</code> &mdash; the side that was
+        <em>actually</em> used, after any flip. Style against it exactly the way you style
+        <a href="#sticky"><code>data-stuck</code></a>: point an arrow, or move a shadow, so
+        the panel still looks right when it flipped out from under your preferred
+        <code>side</code>.
+      </p>
+<pre><code>/* in your app stylesheet */
+.rui-dropdown-menu-content[data-floating-side="top"] { box-shadow: 0 -8px 24px rgba(0, 0, 0, .18); }</code></pre>
+      <p>
+        The attribute is also a contract with the renderer. While it is present, a re-render
+        leaves the panel&rsquo;s <code>style</code> and its <code>popover</code> attribute
+        alone &mdash; which means <strong>an open panel&rsquo;s root cannot be restyled by a
+        commit</strong>. Ownership returns automatically on close, when the layer removes
+        the attribute and restores the style it saved.
+      </p>
+
+      <h3 id="floating-overlays">Full&#8209;screen overlays</h3>
+      <p>
+        <code>Modal</code>, <code>Sheet</code>, <code>BottomSheet</code>,
+        <code>ConfirmDialog</code>, <code>SpeedDial</code> and <code>Confetti</code> use the
+        promotion half of the same layer with no anchoring at all: they place themselves with
+        <code>position: fixed</code> and only need to escape a containing block.
+        <code>CommandPalette</code> and <code>Lightbox</code> promote themselves the same way
+        through their own code path.
+      </p>
+      <p>
+        While one is open the page behind it is scroll&#8209;locked, reference&#8209;counted so
+        nested overlays hand page scrolling back exactly once.
+      </p>
+      <div class="callout warn">
+        <h4>&ldquo;Could not be promoted to the browser top layer&rdquo;</h4>
+        <p>
+          <strong>An ancestor is trapping your overlay.</strong> Where the Popover API is
+          unavailable the layer falls back to plain <code>position: fixed</code>, which any
+          ancestor with a <code>transform</code>, <code>filter</code>,
+          <code>backdrop-filter</code>, <code>perspective</code>, <code>will-change</code>, or
+          <code>contain: paint|layout|strict|content</code> turns into its containing block.
+          The &ldquo;full&#8209;screen&rdquo; scrim then collapses into that element&rsquo;s box.
+        </p>
+        <p>
+          The console warning names the exact ancestor by tag and class. The usual culprit is an
+          <code>animate</code> preset or an <code>sx</code> transform on a wrapper: remove it, or
+          move the overlay out of it. A standalone <code>Toast</code> is not promoted at all, so
+          this applies to it in every browser.
+        </p>
+      </div>
 
       <h2 id="recipes">Recipes for complex layouts</h2>
 
-      <h3>Dashboard &mdash; header, KPI strip, content grid</h3>
+      <h3 id="recipe-dashboard">Dashboard &mdash; header, KPI strip, content grid</h3>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$app(Column([
@@ -421,7 +927,7 @@
         <div class="lay-demo-preview"></div>
       </div>
 
-      <h3>Holy&#8209;grail / app shell &mdash; header, sidebar, content</h3>
+      <h3 id="recipe-app-shell">Holy&#8209;grail / app shell &mdash; header, sidebar, content</h3>
       <p>
         For a real multi&#8209;page app prefer the dedicated
         <code>AppShell(sidebar, content)</code> pattern. To assemble it by hand,
@@ -442,7 +948,7 @@
         <div class="lay-demo-preview"></div>
       </div>
 
-      <h3>Centered auth card</h3>
+      <h3 id="recipe-auth">Centered auth card</h3>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$app(Center([
@@ -474,8 +980,16 @@
           <tr><td>Full-width page band</td><td><code>Section([&hellip;], { background: "soft", title: "&hellip;" })</code></td></tr>
           <tr><td>Two panes (content + aside)</td><td><code>Split(left, right, { ratio: "2/3", divider: true })</code></td></tr>
           <tr><td>Editorial bento grid</td><td><code>Bento([BentoCell(c, { span: 2 }), &hellip;])</code></td></tr>
-          <tr><td>Badge over an image</td><td><code>Overlay(base, [OverlayItem(b, { position: "top-right" })])</code></td></tr>
+          <tr><td>Badge over an image</td><td><code>Overlay(base, [OverlayItem(b, { anchor: "top-right" })])</code></td></tr>
           <tr><td>Group nodes without a box</td><td><code>Fragment([a, b, c])</code></td></tr>
+          <tr><td>Tinted band inside a card</td><td><code>CardSection([&hellip;], { tone: "critical" })</code></td></tr>
+          <tr><td>Full-bleed card body (table, image)</td><td><code>Card([&hellip;], { padding: "none" })</code></td></tr>
+          <tr><td>Whole card as one control</td><td><code>Card([&hellip;], { href: "#/detail" })</code></td></tr>
+          <tr><td>Buttons joined into one control</td><td><code>ButtonGroup([&hellip;], { ariaLabel: "View" })</code></td></tr>
+          <tr><td>Field + icon + trailing button</td><td><code>InputGroup(field, { icon, action })</code></td></tr>
+          <tr><td>Settings / drill-down row</td><td><code>ActionStripe("Domains", { icon, value, href })</code></td></tr>
+          <tr><td>Scrolling log that follows new lines</td><td><code>ScrollArea([&hellip;], { height: "240px", stickToBottom: true })</code></td></tr>
+          <tr><td>Pinned toolbar above a table</td><td><code>Sticky([&hellip;], { side: "top", offset: "0" })</code></td></tr>
           <tr><td>One-off style intent</td><td><code>{ sx: { p: "l", bg: "surface", states: { hover: { scale: 1.03 } } } }</code></td></tr>
         </tbody>
       </table>
@@ -503,7 +1017,7 @@
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     // Render each .lay-demo code block as a live <aktion-app> beside it.
     import "../dist/aktion.js"; // registers the <aktion-app> custom element

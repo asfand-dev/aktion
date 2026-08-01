@@ -1,0 +1,10 @@
+<!--
+  Loaded only when the bundled TextMate plugin is present (see the optional
+  <depends> in plugin.xml). Registers the generated Aktion grammar so `.aktion`
+  files are coloured immediately on open, independently of the language server.
+-->
+<idea-plugin>
+  <extensions defaultExtensionNs="com.intellij">
+    <textmate.bundleProvider implementation="dev.aktion.jetbrains.AktionTextMateBundleProvider"/>
+  </extensions>
+</idea-plugin>

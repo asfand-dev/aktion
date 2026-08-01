@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     /* Live layout demo: code on the left, rendered output on the right. */
@@ -168,34 +168,77 @@
           <strong>Listen for events.</strong> The element emits standard
           bubbling, composed <code>CustomEvent</code>s:
           <code>assistant-message</code> (a follow&#8209;up message, on
-          <code>event.detail.message</code>), <code>route-change</code> (hash
-          route changed, on <code>event.detail</code>), and <code>error</code>
-          (parse failures, on <code>event.detail.errors</code>).
+          <code>event.detail.message</code>), <code>route-change</code> (the route
+          changed &mdash; <code>event.detail</code> is
+          <code>{ path, previousPath, source }</code>), and <code>error</code> &mdash; parse
+          failures, <code>src</code> fetch/link failures, and runtime&#8209;budget
+          aborts, delivered on <code>event.detail.errors</code> as an array of
+          <code>{ line, column, message }</code>. While the <code>streaming</code>
+          attribute is set, <code>error</code> dispatch is deferred, because a
+          half&#8209;received chunk is nearly always mid&#8209;token. A program can also raise
+          its own with <code>$emit("name", detail)</code> &mdash; those are dispatched
+          from the same element, bubbling and composed, so the host listens for them
+          exactly the same way.
         </li>
       </ol>
+      <p>
+        Every event the element dispatches is <code>composed: true</code>, so they cross
+        the shadow boundary and you can listen on any ancestor instead of on the element
+        itself &mdash; useful when a framework owns the element&rsquo;s lifecycle.
+      </p>
       <p>
         Other useful methods on the element: <code>setTheme(name | tokens)</code>,
         <code>registerComponents([&hellip;])</code> to extend the library,
         <code>registerHttpInterceptors({ onRequest, onResponse, onError })</code>
-        for host&#8209;wide auth/logging (calls merge incrementally), and
-        <code>getSystemPrompt()</code> to build the LLM system
-        prompt for the active component set. The observed attributes are
-        <code>response</code>, <code>theme</code>, <code>streaming</code>,
-        <code>showerrors</code>, <code>dir</code>
-        (<code>"ltr"</code>&nbsp;/&nbsp;<code>"rtl"</code>&nbsp;/&nbsp;<code>"auto"</code> &mdash;
-        flips the whole tree for RTL), and <code>scroll-restoration</code>
-        (<code>"auto"</code>&nbsp;/&nbsp;<code>"top"</code> &mdash; restore scroll across
-        in&#8209;app navigation).
+        for host&#8209;wide auth/logging (calls merge incrementally, so passing only
+        <code>{ onRequest }</code> does not clear an existing <code>onResponse</code>),
+        <code>mountCompiled(program, state?)</code> for an already&#8209;linked program,
+        and <code>getSystemPrompt()</code> to build the LLM system prompt for the active
+        component set.
+      </p>
+      <p>
+        Seven attributes are observed, so changing any of them after mount takes effect
+        immediately:
+      </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Attribute</th><th>Values</th><th>Effect</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>response</code></td><td>program text</td><td>The program to render. Mirrored by the <code>response</code> property and <code>setResponse()</code>.</td></tr>
+          <tr><td><code>src</code></td><td>URL or path</td><td>Fetch the entry <code>.aktion</code> file, link its whole import graph, and mount it. Resolved against the document.</td></tr>
+          <tr><td><code>theme</code></td><td><code>light</code>, <code>dark</code>, <code>corporate</code>, <code>soft</code>, <code>glass</code>, <code>modern</code></td><td>Selects a built&#8209;in theme.</td></tr>
+          <tr><td><code>streaming</code></td><td>boolean</td><td>Suppresses the error banner on transient mid&#8209;line parse errors while <code>appendChunk()</code> feeds the element.</td></tr>
+          <tr><td><code>showerrors</code></td><td>boolean</td><td>Renders a developer error banner inside the shadow DOM.</td></tr>
+          <tr><td><code>dir</code></td><td><code>ltr</code>&nbsp;/&nbsp;<code>rtl</code>&nbsp;/&nbsp;<code>auto</code></td><td>Flips the whole rendered tree for right&#8209;to&#8209;left.</td></tr>
+          <tr><td><code>margin</code></td><td>number or CSS length</td><td>Outer spacing around the app shell (<code>margin="12"</code> &rarr; <code>12px</code>; default <code>20px</code>). Set <code>margin="0"</code> to reach the container edges.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Two more attributes are read when they are needed rather than observed, so set
+        them in your markup: <code>scroll-restoration</code>
+        (<code>"auto"</code>&nbsp;/&nbsp;<code>"top"</code> &mdash; manage window scroll
+        across in&#8209;app navigation; absent means no scroll management) and
+        <code>strict</code>, which arms extra development diagnostics.
+      </p>
+      <p>
+        The precedence for the program itself is <code>response</code> (attribute,
+        property, or <code>setResponse()</code>), then <code>src</code>, then the
+        element&rsquo;s own inner text. Fetch and link failures surface through the same
+        error banner and <code>error</code> event as parse errors.
       </p>
       <div class="callout">
         <p>
           <strong>Server&#8209;side rendering.</strong> For SSR/SSG, import
-          <code>renderToString(program, opts)</code> from <code>aktion-runtime</code>
-          to get <code>{ html, state }</code> on the server, embed the markup in your
-          page shell, and serialise <code>state</code> for client hydration. The
-          renderer needs a DOM, so in Node register <code>happy-dom</code> /
-          <code>jsdom</code> on <code>globalThis</code> first. See
-          <a href="performance.html#ssr">Performance &rarr; SSR</a>.
+          <code>renderToString(program, opts)</code> from <code>aktion-runtime</code>.
+          It returns <code>{ html, state, head, headAttrs }</code>: put
+          <code>html</code> in your page shell, <code>head</code> inside
+          <code>&lt;head&gt;</code>, spread <code>headAttrs</code> onto
+          <code>&lt;html&gt;</code>, and serialise <code>state</code> for client
+          hydration. The renderer needs a DOM, so in Node register
+          <code>happy-dom</code> / <code>jsdom</code> on <code>globalThis</code> first.
+          See <a href="performance.html#ssr">Performance &rarr; SSR</a> and
+          <a href="head.html">Head &amp; SEO</a>.
         </p>
       </div>
 
@@ -209,6 +252,71 @@ import "aktion-runtime";
 
 # Or load from the CDN with no build step:
 # &lt;script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"&gt;&lt;/script&gt;</code></pre>
+      <p>
+        The bare specifier is the browser runtime; the package also publishes side
+        entries you may need during integration:
+      </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Entry point</th><th>What it is</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>aktion-runtime</code></td><td>The runtime, the component library, the themes, and <code>&lt;aktion-app&gt;</code>. Import it once in client code.</td></tr>
+          <tr><td><code>aktion-runtime/vite</code></td><td>The Vite/Rollup plugin for <code>.aktion</code> files &mdash; Node only, never in the browser bundle. See <a href="modules.html#vite">Modules &rarr; Building with the Vite plugin</a>.</td></tr>
+          <tr><td><code>aktion-runtime/test</code></td><td><code>render</code>, <code>act</code>, <code>waitFor</code>, <code>axe</code>, &hellip; for component tests. See <a href="testing.html">Testing</a>.</td></tr>
+          <tr><td><code>aktion-runtime/devtools</code></td><td><code>mountDevtools()</code> and the devtools element. See <a href="devtools.html">DevTools</a>.</td></tr>
+          <tr><td><code>aktion-runtime/language</code></td><td>Editor services &mdash; diagnostics, completions, hover, formatting. What the VS Code extension is built on.</td></tr>
+          <tr><td><code>aktion-runtime/aktion-modules</code></td><td>Types only. Reference it so TypeScript knows what <code>import app from "./app.aktion"</code> is.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>aktion-runtime/style.css</code> and the two
+        <code>system_prompt*.txt</code> files are exported too. You rarely need the
+        stylesheet &mdash; the element injects its own into its shadow root.
+      </p>
+
+      <h2 id="trust">Program trust &amp; host globals</h2>
+      <p>
+        Before you wire anything up, decide how much you trust the program text. Inside
+        an Aktion program an unshadowed identifier falls through to the host page&rsquo;s
+        globals, so <strong>a program is as privileged as a
+        <code>&lt;script&gt;</code> tag in your app</strong>.
+      </p>
+      <p>
+        That is the right default when the program ships in your repo. When it arrives
+        from an LLM, a tenant database, or a user-editable template, narrow the surface:
+      </p>
+<pre><code>import { setGlobalAccessPolicy, getGlobalAccessPolicy } from "aktion-runtime";
+
+setGlobalAccessPolicy("safe");            // data, formatting and encoding only
+setGlobalAccessPolicy(["btoa", "URL"]);   // ...or name exactly what you allow
+getGlobalAccessPolicy();                  // → "all" (the default) | "safe" | string[]</code></pre>
+      <p>
+        Two things make the placement matter. It is <strong>process&#8209;global, not
+        per&#8209;<code>&lt;aktion-app&gt;</code></strong> &mdash; one setting governs every
+        program on the page, and the last call wins. And it only affects identifier
+        resolution as a program runs, so it must be in place <strong>before the first
+        mount</strong>.
+      </p>
+      <p>
+        So call it once in your bootstrap module, above the code that renders. Each
+        framework snippet below marks the spot.
+      </p>
+      <div class="callout">
+        <p>
+          <strong><code>"safe"</code> is a narrowing, not a sandbox.</strong> It removes
+          <code>eval</code>, <code>Function</code>, the DOM, bare <code>fetch</code> and
+          storage from a program&rsquo;s reach &mdash; but <code>$http</code> and
+          <code>storage</code> stay available by design, so restrict origins at the host
+          too, with <code>registerHttpInterceptors</code> and a
+          <code>connect-src</code> policy.
+        </p>
+        <p>
+          For genuinely untrusted program text, also host the app in a
+          cross&#8209;origin sandboxed iframe. <a href="security.html">Security</a> has
+          the full allow&#8209;list, what breaks under it, and the residual risks.
+        </p>
+      </div>
 
       <hr />
 
@@ -237,16 +345,29 @@ import "aktion-runtime";
         <code>ref</code> plus a <code>useEffect</code> to push the program in
         with <code>setResponse</code> and to subscribe to events.
       </p>
+      <p>
+        Put <code>setGlobalAccessPolicy</code> in the app entry &mdash; module
+        top&#8209;level, so it runs before React renders anything. It is
+        process&#8209;global, so once here covers every
+        <code>&lt;aktion-app&gt;</code> in the tree; calling it inside a component
+        body or an effect would let the first mount run under the old policy.
+      </p>
+<pre><code>// main.tsx — the app entry
+import { createRoot } from "react-dom/client";
+import { setGlobalAccessPolicy } from "aktion-runtime";
+import App from "./App";
+
+// Once, before the first render. Skip this line to keep the default "all".
+setGlobalAccessPolicy("safe");
+
+createRoot(document.getElementById("root")!).render(&lt;App /&gt;);</code></pre>
 <pre><code>// AktionView.tsx
 import { useEffect, useRef } from "react";
 import "aktion-runtime"; // registers &lt;aktion-app&gt; once
-
-type AktionEl = HTMLElement &amp; {
-  setResponse(text: string): void;
-};
+import type { AktionElement } from "aktion-runtime";
 
 export function AktionView({ program }: { program: string }) {
-  const ref = useRef&lt;AktionEl | null&gt;(null);
+  const ref = useRef&lt;AktionElement | null&gt;(null);
 
   // Push the program in whenever it changes.
   useEffect(() =&gt; {
@@ -266,6 +387,14 @@ export function AktionView({ program }: { program: string }) {
 
   return &lt;aktion-app ref={ref} theme="light" /&gt;;
 }</code></pre>
+      <p>
+        Because <code>setResponse()</code> returns early when the text is unchanged,
+        re&#8209;running that first effect is cheap &mdash; React may invoke it twice in
+        development and the second call is a no&#8209;op. Importing the
+        <code>AktionElement</code> type instead of hand&#8209;rolling
+        <code>HTMLElement &amp; { setResponse(&hellip;) }</code> gets you every method on the
+        element, not just the one you remembered.
+      </p>
       <p>Add the JSX intrinsic type once so TypeScript accepts the tag:</p>
 <pre><code>// aktion.d.ts
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
@@ -295,22 +424,34 @@ declare global {
 import { createApp } from "vue";
 import App from "./App.vue";
 import "aktion-runtime"; // registers &lt;aktion-app&gt; once
+import { setGlobalAccessPolicy } from "aktion-runtime";
+
+// Once, before `app.mount(...)`. Process-global: one call covers every
+// &lt;aktion-app&gt; in the app. Omit it to keep the default "all" policy.
+setGlobalAccessPolicy("safe");
 
 const app = createApp(App);
 // Treat any &lt;aktion-app&gt; tag as a native custom element.
 app.config.compilerOptions.isCustomElement = (tag) =&gt; tag === "aktion-app";
 app.mount("#app");</code></pre>
+      <p>
+        <code>isCustomElement</code> is a compiler option, so it only applies to
+        templates your build compiles. If a template is compiled at runtime, set the
+        same option on the runtime compiler, or Vue logs a
+        &ldquo;failed to resolve component&rdquo; warning and renders nothing.
+      </p>
 <pre><code>&lt;!-- App.vue --&gt;
 &lt;script setup lang="ts"&gt;
 import { ref, onMounted, watch } from "vue";
+import type { AktionElement } from "aktion-runtime";
 
 const program = ref(`$app(Card([CardHeader("Hello from Vue")]))`);
 
-// Simplest case: bind the attribute directly.
+// Simplest case: bind it directly.
 // &lt;aktion-app :response="program" theme="light" /&gt;
 
 // Or use a ref for the imperative API + events:
-const el = ref&lt;(HTMLElement &amp; { setResponse(t: string): void }) | null&gt;(null);
+const el = ref&lt;AktionElement | null&gt;(null);
 onMounted(() =&gt; {
   el.value?.setResponse(program.value);
   el.value?.addEventListener("route-change", (e) =&gt;
@@ -323,6 +464,14 @@ watch(program, (next) =&gt; el.value?.setResponse(next));
 &lt;template&gt;
   &lt;aktion-app ref="el" theme="light" /&gt;
 &lt;/template&gt;</code></pre>
+      <p>
+        <code>:response</code> works either way Vue chooses to write it: the element
+        exposes <code>response</code> as an accessor whose setter forwards to
+        <code>setResponse()</code>, and it also observes the
+        <code>response</code> attribute. Reach for the <code>ref</code> when you need
+        the rest of the API &mdash; <code>appendChunk()</code>,
+        <code>setTheme()</code>, or the events.
+      </p>
       </div>
 
       <div data-fw-panel="svelte">
@@ -332,8 +481,21 @@ watch(program, (next) =&gt; el.value?.setResponse(next));
         step &mdash; just import the bundle and use the tag. Pass the program
         with the <code>response</code> attribute and subscribe to events with
         Svelte's <code>on:</code> directive (it maps straight to
-        <code>addEventListener</code>).
+        <code>addEventListener</code>, which is what you want for hyphenated custom
+        event names).
       </p>
+      <p>
+        Set the access policy in the client entry, not in a component. A component
+        module runs the first time that component is imported, which is not reliably
+        before the first <code>&lt;aktion-app&gt;</code> mounts; the policy is
+        process&#8209;global, so one call in the entry is both sufficient and correctly
+        ordered.
+      </p>
+<pre><code>// src/main.ts — or +layout.ts / hooks.client.ts in SvelteKit
+import { setGlobalAccessPolicy } from "aktion-runtime";
+
+// Once, before any component mounts. Omit to keep the default "all".
+setGlobalAccessPolicy("safe");</code></pre>
 <pre><code>&lt;!-- AktionView.svelte --&gt;
 &lt;script lang="ts"&gt;
   import "aktion-runtime"; // registers &lt;aktion-app&gt; once
@@ -352,9 +514,12 @@ watch(program, (next) =&gt; el.value?.setResponse(next));
   on:route-change={(e) =&gt; console.log(e.detail)}
 /&gt;</code></pre>
       <p>
-        For server&#8209;rendered routes (SvelteKit), guard the import so it
+        Because the tag is a plain custom element, <code>response={program}</code>
+        re&#8209;renders whenever <code>program</code> changes &mdash; no watcher
+        needed. For server&#8209;rendered routes (SvelteKit), guard the import so it
         only runs in the browser, e.g.
-        <code>if (browser) await import("aktion-runtime");</code>.
+        <code>if (browser) await import("aktion-runtime");</code>, since defining a
+        custom element requires <code>customElements</code>.
       </p>
       </div>
 
@@ -366,14 +531,24 @@ watch(program, (next) =&gt; el.value?.setResponse(next));
         once, and bind the program with the <code>[attr.response]</code>
         attribute binding.
       </p>
+      <p>
+        Call <code>setGlobalAccessPolicy</code> in <code>main.ts</code>, above
+        <code>bootstrapApplication</code>. It is process&#8209;global rather than
+        per&#8209;<code>&lt;aktion-app&gt;</code>, so it does not belong in a provider or a
+        component constructor &mdash; there is nothing per&#8209;instance to configure,
+        and a constructor runs too late for the first mount.
+      </p>
 <pre><code>// main.ts
 import "aktion-runtime"; // registers &lt;aktion-app&gt; once
+import { setGlobalAccessPolicy } from "aktion-runtime";
 import { bootstrapApplication } from "@angular/platform-browser";
 import { AppComponent } from "./app/app.component";
 
-bootstrapApplication(AppComponent);
+// Once, before bootstrap. Omit to keep the default "all" policy.
+setGlobalAccessPolicy("safe");
 
-// app.component.ts
+bootstrapApplication(AppComponent);</code></pre>
+<pre><code>// app.component.ts
 import { Component, CUSTOM_ELEMENTS_SCHEMA } from "@angular/core";
 
 @Component({
@@ -383,8 +558,10 @@ import { Component, CUSTOM_ELEMENTS_SCHEMA } from "@angular/core";
   template: `
     &lt;aktion-app
       [attr.response]="program"
-      [attr.theme]="'light'"
-      (assistant-message)="onMessage($event)"&gt;
+      theme="light"
+      (assistant-message)="onMessage($event)"
+      (route-change)="onRoute($event)"
+      (error)="onError($event)"&gt;
     &lt;/aktion-app&gt;
   `,
 })
@@ -394,7 +571,20 @@ export class AppComponent {
   onMessage(event: Event) {
     console.log("follow-up:", (event as CustomEvent).detail.message);
   }
+  onRoute(event: Event) {
+    console.log("route:", (event as CustomEvent).detail);
+  }
+  onError(event: Event) {
+    console.warn("aktion errors:", (event as CustomEvent).detail.errors);
+  }
 }</code></pre>
+      <p>
+        Angular's <code>()</code> syntax binds by event <em>name</em>, so the hyphenated
+        <code>assistant-message</code> and <code>route-change</code> names work
+        unchanged &mdash; do not camel&#8209;case them. Note that <code>(error)</code>
+        also fires for a failed <code>src</code> fetch or link, not only for parse
+        errors, and that a static <code>theme="light"</code> needs no binding at all.
+      </p>
       </div>
 
       <div data-fw-panel="html">
@@ -410,7 +600,10 @@ export class AppComponent {
     &lt;aktion-app theme="light"&gt;&lt;/aktion-app&gt;
 
     &lt;script type="module"&gt;
-      import "https://asfand-dev.github.io/aktion/dist/aktion.js";
+      import { setGlobalAccessPolicy } from "https://asfand-dev.github.io/aktion/dist/aktion.js";
+
+      // Once, before the first setResponse. Omit to keep the default "all".
+      setGlobalAccessPolicy("safe");
 
       const el = document.querySelector("aktion-app");
       el.setResponse(`$app(Card([CardHeader("Hello, world")]))`);
@@ -421,6 +614,12 @@ export class AppComponent {
     &lt;/script&gt;
   &lt;/body&gt;
 &lt;/html&gt;</code></pre>
+      <p>
+        Importing any named export from the bundle registers the element as a side
+        effect, so there is no separate <code>import "&hellip;"</code> line to remember.
+        The policy call goes above <code>setResponse()</code> &mdash; it is
+        process&#8209;global and only affects programs that run after it.
+      </p>
       <p>
         You can also set the program declaratively with the
         <code>response</code> attribute &mdash;
@@ -461,7 +660,7 @@ export class AppComponent {
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     /* Framework tab switcher — shows only the selected framework's panel.
        Honours the URL hash (#vue, #angular, …) and remembers the last choice. */

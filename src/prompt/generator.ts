@@ -21,7 +21,7 @@
  */
 
 import type { ComponentLibrary, ComponentSpec } from "../library/types.js";
-import { findPositionalProp } from "../library/types.js";
+import { findPositionalProp, propExpectsObject } from "../library/types.js";
 
 /* -------------------------------------------------------------------------- */
 /*  Public API                                                                */
@@ -74,8 +74,18 @@ function buildFullPrompt(library: ComponentLibrary, options: PromptOptions): str
   const showState = options.bindings ?? true;
   const showHttp = options.toolCalls ?? true;
 
+  // Section ORDER is a deliberate part of the prompt's design, not an accident of
+  // how the file grew. The component library is ~80% of the characters and is
+  // near-uniform bullet list, so anything placed after it competes with 190k
+  // chars of low-salience text. The cheat-sheet, the common-mistakes table, the
+  // worked examples, and the pre-flight checklist are the four highest-value
+  // pieces, so three of them go BEFORE the dump and the checklist goes last,
+  // where a final instruction lands best.
   const sections: string[] = [];
   sections.push(fullHeader(options.preamble));
+  sections.push(fullHostElement());
+  sections.push(fullCheatSheet());
+  sections.push(fullCommonMistakes());
   sections.push(fullCoreSyntax());
   sections.push(fullJavaScript());
   if (showState) sections.push(fullReactiveState());
@@ -85,15 +95,13 @@ function buildFullPrompt(library: ComponentLibrary, options: PromptOptions): str
   sections.push(fullRouting());
   sections.push(fullGlobals());
   sections.push(fullEmitAndWrappers());
+  sections.push(fullOverlays());
   sections.push(fullEscapeHatches());
   sections.push(fullInteropAndHead());
   sections.push(fullUniversalProps());
   sections.push(fullThemingI18nIcons());
   sections.push(fullUtil());
   sections.push(fullHelpers());
-  sections.push(fullComponentLibrary(library));
-  if (options.inlineMode) sections.push(fullInlineMode());
-  if (options.editMode) sections.push(fullEditMode());
   if (options.tools && options.tools.length > 0) {
     sections.push(toolsListSection(options.tools));
   }
@@ -102,6 +110,9 @@ function buildFullPrompt(library: ComponentLibrary, options: PromptOptions): str
   }
   const examples = options.examples ?? fullDefaultExamples();
   if (examples.length > 0) sections.push(examplesSection("Examples", examples));
+  sections.push(fullComponentLibrary(library));
+  if (options.inlineMode) sections.push(fullInlineMode());
+  if (options.editMode) sections.push(fullEditMode());
   if (options.additionalRules && options.additionalRules.length > 0) {
     sections.push(rulesSection(options.additionalRules));
   }
@@ -144,6 +155,145 @@ function fullHeader(preamble: string | undefined): string {
 Register the UI root with \`$app(...)\` on the first line. Pass it one node (\`$app(Component())\`), an array (\`$app([Component1(), Component2()])\`), or variadic nodes (\`$app(Component1(), Component2())\`). Wrap a dashboard/app in \`AppShell\` (left sidebar + topbar); build a website or marketing page from a top \`Navbar\` + stacked sections — never an \`AppShell\`. References resolve across the whole program, so call \`$app(...)\` first and let the rest stream in below it. There should be only one \`$app(...)\` in the program, as the runtime treats it as the UI root.`;
 }
 
+/**
+ * The host element's attributes. These are set by the PAGE, never by a program,
+ * but a model needs to know they exist: `theme` selects the palette the program
+ * must look right on, and `router-mode` decides whether `route.navigate("/x")`
+ * writes a path or a hash.
+ */
+function fullHostElement(): string {
+  return `## The host element — \`<aktion-app>\`
+
+Set by the HOST PAGE, never from Aktion code. Listed so you know what is configurable and never try to set it yourself.
+
+| Attribute | Values | Effect |
+| --- | --- | --- |
+| \`theme\` | \`light\` \`dark\` \`corporate\` \`soft\` \`glass\` \`modern\` | Base palette. \`$theme({...})\` layers on top of it. A theme selected by name also loads its web fonts. |
+| \`dir\` | \`ltr\` \`rtl\` \`auto\` | Flips the whole tree. Programs need no change. |
+| \`margin\` | \`0\` \`12\` \`1rem\` | Outer gutter (default 20px). |
+| \`scroll-restoration\` | \`auto\` \`top\` | Scroll behaviour on navigation. |
+| \`router-mode\` | \`hash\` (default) \`history\` | Whether \`route.navigate()\` uses clean paths or hashes. |
+| \`router-base\` | e.g. \`/app\` | Path prefix in history mode. |
+| \`streaming\` \`response\` \`src\` | — | How the program text is delivered. |
+| \`showerrors\` | — | Renders the error banner instead of hiding failures. |
+| \`strict\` | — | Dev mode: surfaces silent failures (unknown identifiers, unmatched props) as console warnings. |`;
+}
+
+/**
+ * A compact grammar the model can pattern-match on before reading any prose.
+ * Placed third, right after the header, because the single most useful thing a
+ * prompt can do early is show the shape of every construct in one screen.
+ */
+function fullCheatSheet(): string {
+  return `## Cheat sheet — every construct, one line each
+
+\`\`\`
+$app(Column([header, list]))                      // UI root — EXACTLY ONE per program, first line
+$count = 0                                        // reactive atom (the $ sigil is what makes it reactive)
+label = "Total"                                   // plain binding, evaluated once
+function Card2(t) { return Card([Text(t)]) }      // returns a tree → renders where called
+function save() { $count += 1 }                   // no return → runs for side effects
+$effect(() => { … }, [$count])                    // deps: $atoms and "mount"/"unmount"/"every(N)"/"debounce(N)"/"throttle(N)" ONLY
+$rows = $http({ url: "https://…" })               // bag: .data .loading .error .status .refetch() .onDone
+$me   = $query({ url: "…", key: "me", ttl: 5000 }) // cached + deduplicated read
+$save = $mutation({ url: "…", method: "POST" })   // deferred write — fires on .mutate(overrides?)
+cart  = $store({ items: [], add: (s, x) => { s.items = [...s.items, x] }, persist: "cart", history: true })
+form  = $form({ values: { email: "" }, rules: { email: [$util.rules.required()] }, onSubmit: (v) => … })
+pages = $router({ "/": Home(), "/o/:id": Detail(params.id), default: NotFound() })
+$theme({ colors: { primary: "#0969da" }, radius: { button: "6px" } })   // before $app(...)
+Async($rows, { loading: …, error: …, empty: …, data: … })               // all four states
+Show($cond, { children: A(), fallback: B() })                            // sugar over if/else
+items.map(r => Row([Text(r.name)]))               // value-producing iteration (for/if/switch are STATEMENTS)
+Card([...], { sx: { p: "lg", maxW: "480px" }, animate: "fade-in-up" })   // universal props, every component
+$state(0) $memo(() => v, [d]) $ref(null) $reducer(fn, init) $id("x")     // per-instance hooks
+$util.* $storage.* $console.* $toast.* $dom.*     // the five reserved namespaces
+route.path route.params route.query route.pattern route.navigate(to)     // always in scope, reactive
+\`\`\``;
+}
+
+/**
+ * WRONG → RIGHT pairs. Every code block elsewhere in the prompt shows only
+ * correct code, which is the weakest format for teaching a constraint; a model
+ * needs to see the mistake it is about to make. Ordered by how often each is
+ * actually made — hallucinated component names first, because
+ * `src/tooling/language-service.ts` calls that "the single most common defect in
+ * LLM-authored Aktion".
+ */
+function fullCommonMistakes(): string {
+  return `## Common mistakes — read before writing
+
+\`\`\`
+✗ Alert("Failed", { tone: "danger" })          ✓ Callout("Failed", { tone: "danger" })
+   Alert / Tag / Chip / Panel / Textbox DO NOT EXIST. Every component name must appear
+   verbatim in the Component library section below. An unknown name renders NOTHING,
+   silently — no error. When unsure, pick the nearest listed name.
+
+✗ Column([Header, Body])                        ✓ Column([Header(), Body()])
+   A bare identifier is a value, not a call. Components need ().
+
+✗ Button("Save", "primary")                     ✓ Button("Save", { variant: "primary" })
+   Slot 2 of Button is onClick, not variant. Non-adjacent props go in the trailing object.
+
+✗ Card([x], { p: "md" }, { gap: "sm" })         ✓ Card([x], { p: "md", gap: "sm" })
+   One trailing object per call. Never split named props across two objects.
+
+✗ Column([$count += 1, Text($count)])           ✓ Button("Add", { action: () => { $count += 1 } })
+   State writes belong in handlers and effects, never in render position.
+
+✗ $theme({ colorPrimary: "#09f" })              ✓ $theme({ colors: { primary: "#09f" } })
+   Flat token keys were removed in 0.5 and raise a schema error.
+
+✗ Table([{ name: "Ada", age: 36 }])             ✓ Table([Col("Name", rows.name), Col("Age", rows.age)])
+   Tables are COLUMN-oriented — pluck an array per column.
+
+✗ util.format(n)  /  toast.success("Hi")        ✓ $util.format(n)  /  $toast.success("Hi")
+   $util, $toast and $dom exist ONLY with the sigil. Without it they resolve to nothing.
+
+✗ $toasts = [...$toasts, { msg }]               ✓ $toast.success("Saved")
+   $toast renders its own stacked layer. Never hand-manage a toast array.
+
+✗ Icon("fa-house")  /  Text("🎉 Done")          ✓ Icon("house")  /  Text("Done", { icon: "party-horn" })
+   Font Awesome names carry no fa- prefix, and raw emoji are never acceptable.
+
+✗ $effect(() => { … }, [route.path])            ✓ $effect(() => { … }, [$util.url.path])
+   Effect deps accept $atoms and the string tokens only — route is a parse error.
+
+✗ Stack([...], { direction: "row" })            ✓ Row([...], { gap: "md" })
+   Reserve Stack for a direction that CHANGES across breakpoints.
+\`\`\`
+
+### Confusable names — all of these are real, distinct components
+
+- \`Navbar\` top nav bar for a site · \`NavBar\` marketing-page variant · \`TopBar\` compact strip above scrolling content · \`AppShell\` full sidebar+content product shell.
+- \`Toast\` one transient notice · \`Toasts\` a stack container (usually unnecessary — \`$toast.*\` auto-renders).
+- \`Button\` one control · \`Buttons\` a gapped row · \`ButtonGroup\` buttons joined edge-to-edge · \`SegmentedControl\`/\`ToggleGroup\` a padded track with a selected chip.
+- \`Split\` a two-pane layout primitive · \`SplitView\` master/detail with scrollable panes · \`ResizablePanels\` user-draggable divider.
+- \`Calendar\` scheduling grid · \`CalendarView\` month/week event grid · \`DatePicker\` an input.
+- \`Table\` static columns · \`DataGrid\` sortable/filterable/paged/selectable · \`ComparisonTable\` feature-matrix rows.
+- \`Text\` one string with a type variant · \`TextContent\` a block of prose nodes · \`Prose\` long-form article styling · \`Markdown\` parses markdown source.
+- \`Badge\` solid attention chip ("Recommended") · \`Pill\` soft tinted state label ("SSL active") · \`StatusDot\` inline pip · \`Chip\` does not exist.
+- \`Spinner\` rotating ring · \`LoadingDots\` three-dot pulse · \`Skeleton\` content placeholder · \`LoadingState\` full-card state.`;
+}
+
+/**
+ * The floating/top-layer contract. `src/library/floating.ts` is a shared
+ * positioning engine behind nine components, and the behaviour an author must
+ * know — they are never clipped, they share a side/align vocabulary, they share a
+ * dismissal contract — was only discoverable by reading nine separate component
+ * descriptions.
+ */
+function fullOverlays(): string {
+  return `## Overlays & floating layers
+
+\`Modal\`, \`Drawer\`, \`Sheet\`, \`BottomSheet\`, \`ConfirmDialog\`, \`Tooltip\`, \`HoverCard\`, \`Popover\`, \`DropdownMenu\`, \`ContextMenu\`, \`CommandPalette\` and \`Lightbox\` all render through one shared positioning engine:
+
+- **Never clipped.** They render in the browser's top layer, so no \`overflow: hidden\` and no transformed ancestor can cut them off. You do not need to hoist them out of a Card or use \`Portal\`.
+- **Shared placement vocabulary.** \`side: "top"|"bottom"|"left"|"right"\` × \`align: "start"|"center"|"end"\` gives 12 placements, and they flip automatically when there is not enough room.
+- **Shared dismissal contract.** Escape, an outside click, and the × control all close them; focus moves in on open and is restored on close.
+- **Controlled or uncontrolled.** Bind \`open\` to a \`$variable\` and handle \`onOpenChange\` to drive one yourself. A \`Modal\` given a literal \`open: true\` MUST also get \`onRequestClose\`, or the user cannot dismiss it.
+- **Stacking** is token-driven — \`sx: { zIndex: "dropdown" | "sticky" | "modal" | "toast" }\` — so a custom overlay layers correctly against the built-ins.`;
+}
+
 function fullCoreSyntax(): string {
   return `## Core syntax
 
@@ -178,9 +328,15 @@ Row([Card1(), Card2()], { gap: "md" })
 Mind the signature order with all-positional calls: \`Button("Save", "primary")\` puts \`"primary"\` in the second slot (\`onClick\`), NOT \`variant\` — prefer the trailing object for non-adjacent props. A lone object argument to a component whose positional prop is itself object-typed is that prop's payload, not named props. Any call also accepts \`{ key: ... }\` to pin per-instance state across reorders.
 
 ### Reserved top-level names
-- \`$app(...)\` — registers the UI root (REQUIRED).
-- \`$theme({...})\` — optional brand override (written as a bare statement).
-- \`route\` — the reactive router handle (\`route.path\`, \`route.params\`, \`route.navigate("/x")\`); never declare it yourself.`;
+Never declare or shadow any of these.
+- \`$app(...)\` — registers the UI root (REQUIRED, and exactly ONE per program).
+- \`$theme({...})\` — optional brand override (written as a bare statement, before \`$app\`).
+- \`route\` — the reactive router handle (\`route.path\`, \`route.params\`, \`route.query\`, \`route.pattern\`, \`route.navigate("/x")\`).
+- \`$util\`, \`$storage\`, \`$console\`, \`$toast\`, \`$dom\` — the five runtime namespaces.
+- \`params\` — the captured path segments, in scope inside a \`$router\` arm.
+- \`outlet\` — the matched child, in scope inside a nested route's \`layout\`.
+- \`slots\` — the named-props bag, in scope inside a component body.
+- \`cleanup(fn)\` — registers an effect teardown, in scope inside \`$effect\`.`;
 }
 
 function fullJavaScript(): string {
@@ -479,7 +635,8 @@ pages = $router({
   "/docs/*":     Docs({ rest: params._ }),
   default:       NotFound()
 })
-$app(AppShell(MainSidebar(), pages))   // app/dashboard shell
+nav = Sidebar([SidebarSection("Main", [SidebarItem("Dashboard", { to: "/", icon: "gauge" }), SidebarItem("Orders", { to: "/orders", icon: "receipt", badge: "12" })])], { brand: "Acme", tagline: "Ops console" })
+$app(AppShell(nav, pages))             // app/dashboard shell — Sidebar is a real component, build it
 \`\`\`
 
 - **Pick the shell for the surface.** \`AppShell(Sidebar(...), pages)\` for an app/dashboard (left sidebar + optional topbar); a top \`Navbar(...)\` above the pages inside a \`Column\` for a website / marketing / docs layout (no sidebar) — never wrap a website in \`AppShell\`. The router result is just a node, so it drops into either.
@@ -492,7 +649,7 @@ $app(AppShell(MainSidebar(), pages))   // app/dashboard shell
 \`\`\`
 pages = $router({
   "/app": {
-    layout: AppShell(MainSidebar(), outlet),     // \`outlet\` = the matched child
+    layout: AppShell(nav, outlet),               // \`outlet\` = the matched child; \`nav\` from above
     routes: {
       "/":            Dashboard(),
       "/orders/:id":  OrderDetail({ id: params.id }),
@@ -512,9 +669,11 @@ activeTab = $util.url.query.tab ?? "overview"
 }
 
 function fullGlobals(): string {
-  return `## Built-in globals — \`storage\`, \`console\` & \`$toast\`
+  return `## Runtime namespaces — \`$util\`, \`$storage\`, \`$console\`, \`$toast\`, \`$dom\`
 
-Always in scope, lowercase, no imports.
+Five reserved namespaces, always in scope, no imports. **All five carry the \`$\` sigil.** The sigil is REQUIRED for \`$util\`, \`$toast\` and \`$dom\` — bare \`util.format(...)\` / \`toast.success(...)\` / \`dom.measure(...)\` resolve to nothing and fail silently. \`$storage\` and \`$console\` additionally accept the bare spelling for backwards compatibility, but use the sigil everywhere for consistency. These names are reserved: you cannot shadow them.
+
+\`$storage.set/get/remove/clear\` target localStorage; the same four methods also exist on \`$storage.local\`, \`$storage.session\` and \`$storage.cookies\`.
 
 \`\`\`
 $storage.set("name", "John");  $name = $storage.get("name");  $storage.remove("name")
@@ -620,7 +779,24 @@ function fullThemingI18nIcons(): string {
   return `## Theming, i18n & icons
 
 ### \`$theme({ ... })\`
-A bare \`$theme({...})\` statement (near the top) brands the response. Only the **structured form** is accepted — top-level keys must be a token group (\`colors\`, \`radius\`, \`font\`, \`spacing\`, \`shadows\`, \`gradients\`, \`zIndex\`, \`motion\`, \`fonts\`, \`icons\`) or a metadata key (\`name\`, \`direction\`). Flat-shape keys like \`$theme({ colorPrimary: ... })\` raise a schema error; unknown keys inside a group are silently ignored. **Every token value is a string.** Omit the whole call to inherit the host theme. \`zIndex\` layer tokens (\`{ modal: 2000, toast: 2100, … }\`) feed \`sx.zIndex\`; \`motion\` (\`{ fast, base, slow, ease }\`) → \`--rui-motion-*\`. Gradients accept color-stop arrays (\`gradients: { brand: ["#6366f1", "#ec4899"] }\`) and are referenced as \`gradient.brand\` in \`sx\`/\`GradientText\`. Custom icons register inline SVG by name (\`icons: { logo: "<path …/>" }\`) and are then usable anywhere a Font Awesome name is — \`Icon("logo")\`. Load web fonts with \`fonts: { import: ["Inter:400,700", "JetBrains Mono"] }\` (Google Fonts shorthand) alongside the \`font.family\` token.
+A bare \`$theme({...})\` statement (before \`$app\`) brands the response. Omit it entirely to inherit the host theme.
+
+**Shape rules.** Only the structured form is accepted: every top-level key must be one of the ten token groups below, or a metadata key (\`name\`, \`direction\`). Flat keys like \`$theme({ colorPrimary: … })\` raise a schema error — the flat shape was removed in 0.5. Unknown keys INSIDE a group are silently ignored, so typos there fail quietly: check names before you ship.
+
+| Group | Value type | Notes |
+| --- | --- | --- |
+| \`colors\` | CSS colour string | \`{ primary, primaryHover, accent, bg, surface, text, textMuted, border, success, warning, danger, info, … }\` |
+| \`radius\` | CSS length string | \`{ xs, sm, md, lg, pill, button, input }\` |
+| \`spacing\` | CSS length string | \`{ xs, s, m, l, xl }\` |
+| \`shadows\` | CSS box-shadow string | \`{ sm, md, lg }\` |
+| \`font\` | CSS string | \`{ family, familyHeading, familyMono, sizeBase, weightHeading, … }\` |
+| \`fonts\` | \`{ import: string[] }\` | Google-Fonts shorthand: \`fonts: { import: ["Inter:400,700", "JetBrains Mono"] }\` |
+| \`gradients\` | string **or** string[] of stops | \`gradients: { brand: ["#6366f1", "#ec4899"] }\`; use as \`gradient.brand\` in \`sx\` / \`GradientText\` |
+| \`zIndex\` | **number** | Layer tokens \`{ dropdown, sticky, modal, toast }\` — these feed \`sx.zIndex\` |
+| \`motion\` | CSS duration / easing string | \`{ fast, base, slow, ease }\` → \`--rui-motion-*\` |
+| \`icons\` | inline SVG markup string | \`icons: { logo: "<path …/>" }\`, then usable anywhere a Font Awesome name is: \`Icon("logo")\` |
+
+Note that \`zIndex\` values are numbers and \`gradients\` accepts an array — do not quote them.
 
 Core group keys (all optional):
 - \`name?: string\` — selects a built-in theme as the base palette (\`"dark"\`, \`"light"\`, \`"modern"\`, \`"corporate"\`, \`"soft"\`, \`"glass"\`; unknown names are ignored).
@@ -655,7 +831,7 @@ Set \`dir="rtl"\` / \`"ltr"\` / \`"auto"\` on the host \`<aktion-app>\` element 
 ### Accessibility primitives
 - \`VisuallyHidden(child)\` — hides content visually, keeps it in the a11y tree.
 - \`SkipLink({ to: "#main", label: "Skip to content" })\` — first tab stop for keyboard users.
-- \`LiveRegion(Text($status), { mode: "polite" })\` — announces dynamic changes (\`"polite"\` queues; \`"assertive"\` interrupts).
+- \`LiveRegion($status, { politeness: "polite" })\` — announces dynamic changes (\`"polite"\` queues; \`"assertive"\` interrupts). The first argument is a plain string, not a component.
 - \`FocusTrap(child, { active: $isOpen })\` — Tab cycles within the subtree; required for dialogs.
 - Pass \`aria: { label, labelledBy, describedBy, ... }\` to any component via the universal props channel.
 
@@ -671,7 +847,7 @@ EVERY component accepts a universal style/behaviour channel as named props, in a
 - **\`sx: { … }\`** — token-aware inline styling. Keys (all optional):
   - Spacing (\`none|3xs|2xs|xs|sm|md|lg|xl|2xl|3xl|auto\` (\`none\` = 0), the \`safe\`/\`safe-top\`/\`safe-right\`/\`safe-bottom\`/\`safe-left\` notch insets, or a CSS length): \`p px py pt pr pb pl\`, \`m mx my mt mr mb ml\`, \`gap\`. \`px\`/\`mx\` are logical (\`padding-inline\`) and \`ps pe ms me\` set the inline start/end sides, so RTL apps mirror automatically.
   - Sizing (\`full|half|screen|dvh|min|max|fit|auto\` or length): \`w h minW maxW minH maxH\`.
-  - Color (token \`surface|bg|text|text-muted|primary|accent|success|warning|danger|border\`, a gradient ref \`gradient.brand|accent|warm|cool|success|danger\`, or a raw color): \`bg color borderColor\`.
+  - Color (token \`surface|surface-muted|bg|bg-subtle|text|text-muted|muted|primary|primary-hover|primary-text|accent|success|warning|danger|border|border-subtle\`, a gradient ref \`gradient.brand|accent|warm|cool|success|danger\`, or a raw color): \`bg color borderColor\`.
   - Surface: \`border: none|subtle|strong|<color>\`, \`radius: xs|sm|md|lg|pill|full\`, \`shadow: sm|md|lg|none\`, \`opacity\`, \`backdrop: "blur"\`, \`bgImage\` (http(s)/relative/data:image only) + \`bgOverlay\` (color or \`gradient.*\` wash over the image), \`bgSize: cover|contain\`.
   - Typography: \`fontSize: xs|sm|base|lg|xl|2xl|3xl|4xl\` (or a length), \`weight: 100…900|bold|normal\`, \`textDecoration: underline|line-through|none\`, \`textAlign\`.
   - Flex/grid: \`display direction align justify wrap grow shrink basis columns\`.
@@ -680,11 +856,11 @@ EVERY component accepts a universal style/behaviour channel as named props, in a
   - Responsive: any value may be \`{ base, sm, md, lg, xl }\` (resolves to \`base\`).
 - **\`animate: "fade-up"\`** (or \`{ preset, delay?, duration?, repeat? }\`) — entrance/loop motion. Presets: \`fade fade-up/down/left/right zoom slide-up/down/left/right pulse float shimmer bounce spin ping wiggle\`. Auto-respects \`prefers-reduced-motion\`.
 - **\`id\` / \`anchor\`** — set the element id (smooth-scroll targets).
-- **\`className\` / \`style\`** — extra classes / a sanitised inline style string.
-- **\`aria: {…}\` / \`data: {…}\` / \`tooltip\` / \`hidden\`** — accessibility & metadata passthrough.
+- **\`className\` / \`class\` / \`style\`** — extra classes (either spelling) / a sanitised inline style string.
+- **\`aria: {…}\` / \`data: {…}\` / \`dataAttrs: {…}\` / \`role\` / \`tooltip\` / \`hidden\`** — accessibility & metadata passthrough. \`role\` overrides the component's own ARIA role. Use \`dataAttrs\` instead of \`data\` on the components that declare a \`data\` prop of their own (\`LineChart\`, \`JsonTree\`, \`Async\`, \`Draggable\`, \`Lottie\`, \`QRCode\`) — there, \`data:\` is the component's prop and the universal channel is otherwise unreachable.
 
 \`\`\`
-Card([Text("Lift on hover")], { sx: { p: "l", radius: "lg", bg: "surface", shadow: "md", hover: { lift: true } } })
+Card([Text("Lift on hover")], { sx: { p: "lg", radius: "lg", bg: "surface", shadow: "md", hover: { lift: true } } })
 Badge("Live", { tone: "success", animate: "pulse" })
 Display(["Build in ", GradientText("record time")], { size: "hero", align: "center", animate: "fade-up" })
 \`\`\``;
@@ -742,6 +918,27 @@ $app(Column([
 \`\`\``;
 }
 
+/**
+ * NOTE ON DELIBERATE DUPLICATION.
+ *
+ * This section, `fullEmitAndWrappers`, `fullEscapeHatches`, `fullInteropAndHead`
+ * and the a11y bullets in `fullThemingI18nIcons` hand-write signatures for ~27
+ * components that the generated dump also covers in full. That duplication is
+ * kept ON PURPOSE: each of these sections carries *guidance* the spec cannot
+ * express — when to reach for `OnClick` instead of `Button`, that the escape
+ * hatches are a last resort, that `Mount` is for libraries owning their own DOM —
+ * and it sits where the model reads it, ~150k characters before the dump.
+ *
+ * The real hazard was that a hand-written signature could drift from the spec, as
+ * `VirtualList({ key, render })` once did. That is now closed by
+ * `tests/prompt-signature-integrity.test.ts`, which checks bullet-list signatures
+ * as well as table rows — 137 signatures rather than the 15 it used to cover.
+ *
+ * If you find yourself adding MORE prose signatures here, prefer putting the
+ * guidance in `componentGroups[].notes` (src/library/index.ts) instead: the group
+ * loop emits those automatically, so they reach this prompt AND the agent skill
+ * from one source.
+ */
 function fullHelpers(): string {
   return `## Standard helper components
 
@@ -753,11 +950,11 @@ function fullHelpers(): string {
 | \`Redirect(path)\` | Navigate and unmount the rest of the subtree. |
 | \`Lazy(loader, { fallback?, children })\` | Defer rendering until the async \`loader\` resolves; show \`fallback\` while pending. |
 | \`ErrorBoundary(children, { fallback?, onError? })\` | Catch render errors thrown by descendants. |
-| \`VirtualList(items, { key, render })\` | Virtualised 1-D list — preferred for >100 rows. |
-| \`VirtualGrid(items, { columns, rowHeight, render })\` | Virtualised 2-D grid — only visible rows mount; essential for tables/grids >100 rows. |
+| \`VirtualList(items, { itemHeight?, renderItem? })\` | Virtualised 1-D list — preferred for >100 rows. |
+| \`VirtualGrid(items, { columns?, itemHeight?, gap?, height? })\` | Virtualised 2-D grid — only visible rows mount; essential for tables/grids >100 rows. |
 | \`VisuallyHidden(child)\` | Hides content visually but keeps it in the accessibility tree (extra context for screen readers). |
 | \`SkipLink({ to, label })\` | "Skip to main content" link that appears on focus — the first tab stop for keyboard users. |
-| \`LiveRegion(child, { mode? })\` | \`aria-live\` region (\`mode: "polite"\` default or \`"assertive"\`). Announces dynamic changes to screen readers. |
+| \`LiveRegion(text, { politeness?, visible? })\` | \`aria-live\` region (\`politeness: "polite"\` default or \`"assertive"\`). Announces dynamic changes to screen readers. Takes a plain STRING, not a node. |
 | \`FocusTrap(child, { active })\` | Cycles Tab within its subtree and autofocuses the first control — required for accessible dialogs. |
 | \`Fragment(children)\` | Groups siblings without a layout box (\`display:contents\`) so a component can return several nodes into a parent Grid/Stack. |
 | \`Transition(child, { show, preset, duration? })\` | Enter/exit transition — keeps child mounted through exit animation; reduced-motion safe. |
@@ -769,10 +966,25 @@ function fullComponentLibrary(library: ComponentLibrary): string {
   const byName = new Map(library.components.map((c) => [c.name, c]));
   const lines: string[] = [];
   lines.push("## Component library");
-  lines.push("Use only these components. Each signature lists props in declaration order; optional props end with `?`. The prop tagged `(positional)` is the canonical positional slot. Canonical call: pass it bare and put every other prop in a trailing `{ prop: value }` object. Also valid: all-positional in the listed order (the first positional fills the `(positional)` slot, the rest fill the remaining slots top-to-bottom), or a single `{ prop: value }` object naming every prop.");
+  lines.push("Use ONLY these components. A PascalCase call that does not appear verbatim below renders NOTHING, silently — if you are unsure, pick the nearest listed name rather than inventing one.");
+  lines.push("");
+  lines.push("Each signature lists props in declaration order; optional props end with `?`. The prop tagged `(positional)` is the canonical positional slot. Canonical call: pass it bare and put every other prop in a trailing `{ prop: value }` object. Also valid: all-positional in the listed order (the first positional fills the `(positional)` slot, the rest fill the remaining slots top-to-bottom), or a single `{ prop: value }` object naming every prop. `(positional, object payload)` means the positional prop is itself object-typed, so a lone object argument is that prop's value — not a named-props bag.");
+  lines.push("Props marked `[also: …]` accept those spellings as synonyms for the same slot (`tone`/`variant`/`status`, `children`/`child`, `onClick`/`action`); the signature shows the canonical name.");
   lines.push("");
   for (const group of groups) {
     lines.push(`### ${group.name}`);
+    // Emit the library's own authoring notes BEFORE the signatures. These are the
+    // pick-the-right-component decisions — "THREE primitives cover almost
+    // everything: Column / Row / Grid", "use LineChart for trends, BarChart for
+    // comparisons", "build columns using array pluck" — and they are exactly what
+    // a model gets wrong. `defaultLibrary` authors 150 of them across the 17
+    // groups; before this loop read `group.notes`, 144 never reached the prompt
+    // at all and the remaining 6 survived only because they had been hand-copied
+    // into prose sections elsewhere.
+    for (const note of group.notes ?? []) {
+      lines.push(note.startsWith("-") ? note : `- ${note}`);
+    }
+    if (group.notes?.length) lines.push("");
     for (const name of group.components) {
       const spec = byName.get(name);
       if (spec) lines.push(formatComponentSignature(spec));
@@ -812,9 +1024,23 @@ References resolve across the whole top-level scope, not source order — undefi
 3. State uses \`$name = ...\`; writes happen only in handlers/effects, never in render position.
 4. \`$http({...})\` uses an absolute URL and exposes \`.data\` / \`.error\` / \`.loading\` / \`.refetch()\`; \`$router({...})\` arms use \`:\` and \`default\`; effects are \`$effect(() => {...}, [deps])\`.
 5. Build a complete surface — \`PageHeader\`, multi-section layout, wired buttons, 5–20 rows of realistic seed data — not a lone Card. Lay out with \`Column\` / \`Row\` / \`Grid\`; use responsive maps (\`{ base: 1, md: 2 }\`) where they help.
-6. Tables are column-oriented (\`Table([Col("Label", arr)])\`, cells may be components via \`rows.map(r => Badge(r.status))\`); charts take numeric arrays (\`PieChart(rows.label, rows.value)\`); icons are Font Awesome names; \`storage\` / \`console\` are lowercase; \`route\` is reserved.`;
+6. Tables are column-oriented (\`Table([Col("Label", arr)])\`, cells may be components via \`rows.map(r => Badge(r.status))\`); charts take numeric arrays (\`PieChart(rows.label, rows.value)\`); icons are Font Awesome names; the five runtime namespaces carry the \`$\` sigil (\`$util\`, \`$storage\`, \`$console\`, \`$toast\`, \`$dom\`); \`route\` is reserved.`;
 }
 
+/**
+ * Worked examples.
+ *
+ * Hand-authored rather than seeded from `getSnippets()` on purpose: snippet
+ * templates carry `${1:placeholder}` editor markers, which would teach a model
+ * syntax that is not Aktion. Every program below is validated against the real
+ * component library by `tests/prompt-examples-validate.test.ts`, so an example
+ * can never drift into demonstrating a prop that no longer exists — which is
+ * exactly how the prompt came to ship a call to a non-existent `MainSidebar`.
+ *
+ * The set covers the constructs that previously had NO example at all: an app
+ * shell with nested routing, a marketing page (Navbar, not AppShell), a managed
+ * form with a deferred write, and a persisted store with undo/redo plus polling.
+ */
 function fullDefaultExamples(): string[] {
   return [
     `// Tasks dashboard — $http, Async, an action, multi-section layout
@@ -840,6 +1066,159 @@ $app(Column([
     data:    Column($tasks.data.map(t => row(t)), { gap: "sm" })
   })
 ], { gap: "lg" }))`,
+    `// App shell + nested routing — the canonical product-surface shape
+nav = Sidebar([
+  SidebarSection("Workspace", [
+    SidebarItem("Dashboard", { to: "/", icon: "gauge", active: true }),
+    SidebarItem("Orders", { to: "/orders", icon: "receipt", badge: "12" }),
+  ]),
+  SidebarSection("Admin", [SidebarItem("Team", { to: "/team", icon: "users" })]),
+], { brand: "Acme", tagline: "Ops console" })
+
+function Dashboard() {
+  return Column([
+    PageHeader("Dashboard", { subtitle: "Everything at a glance" }),
+    Stats([
+      StatCard("Open", { value: "12", trend: "up", delta: "+3" }),
+      StatCard("Shipped", { value: "340", trend: "up", delta: "+18" }),
+      StatCard("Refunds", { value: "4", tone: "warning" }),
+    ], { layout: "grid" }),
+    Card([SectionHeader("Recent activity"), Timeline([
+      TimelineItem("Order #1204 shipped", { time: "2h ago", icon: "truck", tone: "success" }),
+      TimelineItem("Refund issued", { time: "5h ago", icon: "rotate-left", tone: "warning" }),
+    ])]),
+  ], { gap: "lg" })
+}
+
+function Orders() {
+  return Column([
+    PageHeader("Orders", { breadcrumbs: ["Home", "Orders"] }),
+    Card([
+      Toolbar({ searchable: true, searchPlaceholder: "Search orders…" }),
+      Table([Col("Order", ["#1204", "#1203"]), Col("Status", ["Shipped", "Paid"])], { density: "compact" }),
+    ]),
+  ], { gap: "lg" })
+}
+
+function OrderDetail(id) {
+  return Column([
+    PageHeader(\`Order \${id}\`, { breadcrumbs: ["Home", "Orders", id] }),
+    Card([SectionHeader("Summary"), DescriptionList([
+      DescriptionItem("Status", Pill("Shipped", { tone: "success" })),
+      DescriptionItem("Total", "$248.00"),
+    ])]),
+  ], { gap: "lg" })
+}
+
+pages = $router({
+  "/": Dashboard(),
+  "/orders": Orders(),
+  "/orders/:id": OrderDetail(params.id),
+  default: EmptyState("Page not found", { icon: "compass" }),
+})
+
+$app(AppShell(nav, [pages], { collapsible: true }))`,
+    `// Marketing page — Navbar + stacked Sections, NEVER an AppShell
+$app(Column([
+  Navbar({
+    brand: "Acme",
+    items: [NavbarItem("Features"), NavbarItem("Pricing"), NavbarItem("Docs")],
+    actions: [Button("Start free", { variant: "primary" })],
+    sticky: true,
+  }),
+  Hero("Ship your interface in an afternoon", {
+    eyebrow: "New in 2.0",
+    subtitle: "One component, every framework.",
+    primary: Button("Start free", { variant: "primary", icon: "rocket" }),
+    secondary: Button("Read the docs", { variant: "secondary" }),
+    highlights: ["No build step", "6 themes", "Zero dependencies"],
+  }),
+  Container(Column([
+    Section([SectionHeader("Why teams switch", { eyebrow: "Features" }), FeatureGrid([
+      FeatureItem("Fast", { description: "Streams as it renders.", icon: "bolt" }),
+      FeatureItem("Safe", { description: "Unknown props are errors.", icon: "shield-check" }),
+      FeatureItem("Themeable", { description: "86 tokens, six themes.", icon: "palette" }),
+    ])]),
+    Section([SectionHeader("Pricing", { eyebrow: "Plans" }), PricingTable([
+      PricingCard("Solo", { price: "$0", period: "forever", features: ["1 project"], action: Button("Start", { variant: "secondary" }) }),
+      PricingCard("Team", { price: "$29", period: "per month", features: ["Unlimited projects", "Priority support"], action: Button("Choose Team", { variant: "primary" }), featured: true }),
+    ])]),
+  ], { gap: "2xl" }), { size: "lg" }),
+  Banner("Ready when you are", { message: "Scaffold in one command.", tone: "primary", action: Button("npm create aktion", { variant: "primary", icon: "terminal" }) }),
+  Footer("Acme", { tagline: "Interfaces, faster.", columns: [FooterColumn("Product", { links: [Link("Features"), Link("Pricing")] })] }),
+], { gap: "none" }))`,
+    `// Managed form + deferred write — $form({...}) validates, $mutation({...}) persists
+$saved = null
+
+function onSubmit(values) {
+  $create.mutate({ body: values })
+}
+
+$create = $mutation({ url: "https://api.example.com/customers", method: "POST" })
+$create.onDone = () => { $saved = "Customer created"; signup.reset() }
+
+signup = $form({
+  values: { name: "", email: "", plan: "team" },
+  rules: {
+    name: [$util.rules.required()],
+    email: [$util.rules.required(), $util.rules.email()],
+  },
+  onSubmit: onSubmit,
+})
+
+$app(Container(Column([
+  PageHeader("New customer"),
+  Show($saved, { children: Callout("Saved", { tone: "success", description: $saved, compact: true }) }),
+  Card([
+    SectionHeader("Details"),
+    ValidationSummary(signup.errors),
+    FormSection("About", [
+      FormControl("Name", Input("name", { value: signup.values.name, error: signup.errors.name, onBlur: () => signup.touch("name") })),
+      FormControl("Email", Input("email", { type: "email", value: signup.values.email, error: signup.errors.email })),
+    ]),
+    FormSection("Plan", [FormControl("Plan", SegmentedControl(["solo", "team", "enterprise"], { value: signup.values.plan }))]),
+    Buttons([
+      Button("Create", { variant: "primary", loading: $create.loading, disabled: signup.submitting, action: () => signup.handleSubmit() }),
+      Button("Cancel", { variant: "ghost" }),
+    ]),
+  ]),
+], { gap: "lg" }), { size: "sm" }))`,
+    `// Persisted store with undo/redo + a polling effect
+board = $store({
+  persist: "board-state",
+  history: true,
+  columns: ["Todo", "Doing", "Done"],
+  cards: [],
+  add: (s, title) => { s.cards = [...s.cards, { title, column: "Todo" }] },
+})
+
+$draft = ""
+$health = $http({ url: "https://api.example.com/health" })
+
+$effect(() => { $health.refetch() }, ["every(15000)"])
+
+function addCard() {
+  if ($draft.length > 0) { board.add($draft); $draft = ""; $toast.success("Card added") }
+}
+
+$app(Column([
+  PageHeader("Board", {
+    status: StatusDot("Live", { tone: "success", pulse: true }),
+    actions: [
+      Button("Undo", { icon: "rotate-left", variant: "ghost", disabled: !board.canUndo, action: () => board.undo() }),
+      Button("Redo", { icon: "rotate-right", variant: "ghost", disabled: !board.canRedo, action: () => board.redo() }),
+    ],
+  }),
+  Card([
+    SectionHeader("Add a card"),
+    InputGroup(Input("draft", { value: $draft, placeholder: "What needs doing?" }), { action: Button("Add", { variant: "primary", action: addCard }) }),
+  ]),
+  KanbanBoard([
+    KanbanColumn("Todo", { items: board.cards.map(c => KanbanCard(c.title)) }),
+    KanbanColumn("Doing", { items: [], tone: "primary" }),
+    KanbanColumn("Done", { items: [], tone: "success" }),
+  ]),
+], { gap: "lg" }))`,
   ];
 }
 
@@ -848,36 +1227,64 @@ $app(Column([
 /*  CHAT mode — read-only UI rendering                                        */
 /* -------------------------------------------------------------------------- */
 
-const CHAT_COMPONENT_ALLOWLIST: ReadonlyArray<string> = [
-  // Layout
-  "Column", "Row", "Center", "Stack", "StackItem", "Grid", "GridItem", "Box", "Container", "Spacer",
-  "Card", "CardHeader", "CardFooter", "Separator",
-  "Tabs", "TabItem", "Accordion", "AccordionItem", "Steps",
-  "AspectRatio",
-  // Content
-  "Text", "Markdown", "Quote", "Callout", "CodeBlock", "Image",
-  "Link", "Badge", "BadgeList", "Icon", "Kbd", "Spinner", "Skeleton",
-  // Data presentation (read-only)
-  "Table", "Col", "List", "ListItem", "StatCard", "Stats", "Sparkline",
-  "Tile", "Progress", "ProgressRing", "DescriptionList", "DescriptionItem",
-  "StatusDot", "Tree", "TreeNode",
-  // Charts (read-only)
-  "BarChart", "LineChart", "PieChart", "RadarChart", "ScatterChart",
-  "Histogram", "Heatmap", "Gauge", "Series",
-  // Feedback / media (display)
-  "Avatar", "AvatarGroup", "PersonChip", "Rating", "ChatBubble",
-  "Banner", "Notification",
-  // Patterns (display)
-  "Hero", "PageHeader", "SectionHeader", "EmptyState",
-  "Timeline", "TimelineItem", "ActivityLog",
-  "FeatureGrid", "FeatureItem",
-  "Testimonial", "ProfileCard", "Comment",
-  "MediaCard",
-  "LoadingState", "ErrorState", "SuccessState",
-  "DiffViewer", "JsonTree",
-  // Chat
-  "SectionBlock", "ListBlock", "FollowUpBlock", "FollowUpItem",
-];
+/**
+ * Chat mode ships a READ-ONLY subset: a chat reply renders once and has no
+ * session to drive, so forms, editors, routers, and imperative interop have no
+ * meaning there.
+ *
+ * This is expressed as a DENYLIST over the library's own groups rather than an
+ * allowlist of names, because an allowlist fails in the silent direction. The
+ * previous 86-name allowlist had not tracked two waves of component additions,
+ * so roughly 80 legitimately read-only display components — `Section`,
+ * `Heading`, `Pill`, `Metric`, `PricingTable`, `CodeWindow`, `Prose`,
+ * `ComparisonTable`, … — were unreachable in chat mode, which pushed the model
+ * toward stitching `Card` + `Text` by hand. With a denylist, a newly added
+ * display component is available by default and only an explicitly interactive
+ * one has to be named.
+ */
+const CHAT_EXCLUDED_GROUPS: ReadonlySet<string> = new Set([
+  "Forms",
+  "Editors & overlays",
+  "App shell",
+  "Routing",
+  "Helpers",
+  "Behaviour wrappers",
+  "Interop",
+  "Escape hatches",
+]);
+
+/**
+ * Interactive stragglers inside the groups we otherwise keep. Each one either
+ * needs a live session (overlays, palettes, tours), mutates state, or hosts a
+ * third-party widget.
+ */
+const CHAT_EXCLUDED_COMPONENTS: ReadonlySet<string> = new Set([
+  // Overlays and transient surfaces — nothing can open them in a chat reply.
+  "Modal", "Drawer", "Sheet", "BottomSheet", "ConfirmDialog", "Popover",
+  "HoverCard", "DropdownMenu", "MenuItem", "MenuSeparator", "MenuLabel",
+  "ContextMenu", "CommandPalette", "Lightbox", "Toast", "Toasts", "Backdrop",
+  "SpeedDial", "FloatingActionButton", "Tour", "Spotlight", "Confetti",
+  // Paging / windowing / infinite loading — all need interaction to be useful.
+  "Pagination", "DataGrid", "InfiniteList", "VirtualList", "VirtualGrid",
+  "Carousel", "Gallery", "MasonryGrid", "ResizablePanels", "ScrollSpy",
+  // Drag, gesture, and canvas input.
+  "Sortable", "Draggable", "DropZone", "OnGesture", "DrawingCanvas",
+  "SignaturePad", "ReactionPicker", "QuantityStepper", "VariantSelector",
+  // Session-bound chrome and utilities.
+  "ThemeToggle", "CopyButton", "ShareButtons", "BackToTop", "NotificationBell",
+  "InlineEdit", "FilterChips", "FilterPill", "QueryBuilder", "InboxPanel",
+  "OnboardingChecklist", "KanbanBoard", "KanbanColumn", "KanbanCard",
+  "Toolbar", "TopBar", "Navbar", "NavbarItem", "NavBar", "TabBar", "Sticky",
+  "LiveCursor", "PresenceAvatars", "Lottie", "Map", "VideoPlayer", "AudioPlayer",
+  "Calendar", "CalendarView", "Gantt", "Reveal", "Parallax", "ReadingProgress",
+  "Transition", "FlipList", "Overlay", "OverlayItem", "RouteView", "Cart",
+]);
+
+/** True when a component may appear in the chat-mode catalogue. */
+function isChatComponent(groupName: string, componentName: string): boolean {
+  if (CHAT_EXCLUDED_GROUPS.has(groupName)) return false;
+  return !CHAT_EXCLUDED_COMPONENTS.has(componentName);
+}
 
 function chatHeader(preamble: string | undefined): string {
   const lead = preamble?.trim() ||
@@ -920,7 +1327,7 @@ function chatComponentLibrary(library: ComponentLibrary): string {
     "Use only these components. Each signature lists props in declaration order; optional props end with `?`. Pass the positional prop bare, then all other props in a trailing `{ prop: value }` object.",
   ];
   for (const group of groups) {
-    const filtered = group.components.filter((name) => CHAT_COMPONENT_ALLOWLIST.includes(name));
+    const filtered = group.components.filter((name) => isChatComponent(group.name, name));
     if (filtered.length === 0) continue;
     lines.push(`\n### ${group.name}`);
     for (const name of filtered) {
@@ -1011,11 +1418,44 @@ function formatComponentSignature(spec: ComponentSpec): string {
   const positional = findPositionalProp(spec);
   const params = spec.props.map((prop) => {
     const typePart = prop.enum ? prop.enum.map((v) => `"${v}"`).join("|") : prop.type;
-    const tag = prop === positional && prop.positional === true ? " (positional)" : "";
-    return `${prop.name}${prop.optional ? "?" : ""}: ${typePart}${tag}`;
+    // Mark whichever prop the RUNTIME resolves as the positional slot. Only 88 of
+    // 282 specs set `positional: true` explicitly; for the rest
+    // `findPositionalIndex` falls back to props[0], so gating the tag on the
+    // explicit flag left 194 components — Column, Row, Card, Text, Button, Grid,
+    // Table, Input, Icon, Hero, PageHeader … — with no marker at all, while the
+    // section header above tells the model to "pass the prop tagged
+    // (positional) bare". The convention has to be visible on every component
+    // for that instruction to mean anything.
+    //
+    // The two cases must stay distinguishable: when the positional prop is
+    // itself object-typed, a lone object argument IS that prop's payload rather
+    // than a named-props bag, which changes how the call must be written.
+    const tag = prop === positional
+      ? (propExpectsObject(prop) ? " (positional, object payload)" : " (positional)")
+      : "";
+    const aliasPart = prop.aliases?.length ? ` [also: ${prop.aliases.join(", ")}]` : "";
+    // A bare `items: object[]` tells the model nothing about the required shape,
+    // and that shape is often only recoverable from the prop description. Inline
+    // the description for exactly those props — the ones whose type alone is
+    // useless — rather than for all 1,521 (which would balloon the dump).
+    const shapePart = prop.description && OPAQUE_PROP_TYPES.has(prop.type)
+      ? ` (${prop.description})`
+      : "";
+    return `${prop.name}${prop.optional ? "?" : ""}: ${typePart}${tag}${aliasPart}${shapePart}`;
   }).join(", ");
   return `- ${spec.name}(${params}) — ${spec.description}`;
 }
+
+/**
+ * Prop types that carry no information on their own, so the prop's description
+ * is worth inlining into the signature.
+ */
+const OPAQUE_PROP_TYPES: ReadonlySet<string> = new Set([
+  "object",
+  "object[]",
+  "any",
+  "any[]",
+]);
 
 function examplesSection(title: string, examples: ReadonlyArray<string>): string {
   const lines = [`## ${title}`];

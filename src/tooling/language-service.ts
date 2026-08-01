@@ -17,10 +17,12 @@
  *   - `getHoverInfo(source, position, library)` — the description /
  *     signature for the symbol under the cursor.
  *
- * Why not a real LSP? Network/process plumbing for a full LSP is an
- * order of magnitude more code than the language service it would wrap.
- * Shipping the projection makes the surface available to every host
- * today (LSP wrapper is straightforward when needed).
+ * Why a projection rather than a protocol? Transport plumbing is host-specific,
+ * so the analysis stays pure here and each host adapts it: the VS Code
+ * extension calls these functions in-process, the docs playground calls them
+ * in-page, and `editors/lsp` wraps them in an LSP server over stdio for every
+ * other editor (JetBrains, Neovim, Helix, Zed, …). One implementation, three
+ * adapters — never a second parser.
  */
 
 import { parse, collectPatternNames } from "../parser/index.js";
@@ -28,6 +30,7 @@ import type { DestructuringPattern } from "../parser/types.js";
 import type { ComponentLibrary, ComponentSpec, PropSpec } from "../library/types.js";
 import { findComponent } from "../library/registry.js";
 import { validateProgramSchema } from "../library/validate.js";
+import { suggestComponent } from "./schema.js";
 import { findPositionalProp, chooseNamedBagIndex, slotForNthPositional } from "../library/types.js";
 import { keywordDocs, type KeywordDoc } from "../language/grammar.js";
 import { builtinCatalog, findBuiltin } from "../language/builtins.js";
@@ -130,15 +133,18 @@ export function getDiagnostics(
     // worst silent bugs (#1 scope leak, #2 placeholder stripping, #3 Date
     // compares, #5 unicode escapes) are now fixed in the runtime, so linting
     // them would flag correct code.
-    ...lintProgram(program),
+    ...lintProgram(program, library),
   ];
 }
 
 /**
- * Static lint warnings for patterns that still mislead even after the runtime
- * fixes (issue #8). On by default inside `getDiagnostics`; also exported
- * standalone for hosts that want only the soft warnings. Currently:
+ * Static lint warnings for patterns the schema validator cannot flag. On by
+ * default inside `getDiagnostics`; also exported standalone for hosts that want
+ * only the soft warnings. Currently:
  *
+ *   - `unknown-component` — a PascalCase call (`Cardd(...)`) that is neither a
+ *     library component nor anything this document declares or imports.
+ *     Requires `library`; skipped when it is omitted.
  *   - `shadowed-i18n` — a `function` / lambda parameter or `for…of` / `for…in`
  *     loop variable named the same as a binding destructured from `$i18n(...)`
  *     (typically `t`). Inside that scope the name resolves to the local, so a
@@ -146,11 +152,21 @@ export function getDiagnostics(
  *     Only fires when `$i18n` is actually destructured in the program, so a
  *     plain `arr.map(t => …)` elsewhere is never flagged.
  */
-export function getLintWarnings(source: string): Diagnostic[] {
-  return lintProgram(parse(source));
+export function getLintWarnings(source: string, library?: ComponentLibrary): Diagnostic[] {
+  return lintProgram(parse(source), library);
 }
 
-function lintProgram(program: ReturnType<typeof parse>): Diagnostic[] {
+function lintProgram(
+  program: ReturnType<typeof parse>,
+  library?: ComponentLibrary,
+): Diagnostic[] {
+  return [
+    ...(library ? lintUnknownComponents(program, library) : []),
+    ...lintShadowedI18n(program),
+  ];
+}
+
+function lintShadowedI18n(program: ReturnType<typeof parse>): Diagnostic[] {
   const protectedNames = collectI18nBindingNames(program);
   if (protectedNames.size === 0) return [];
 
@@ -206,6 +222,183 @@ function lintProgram(program: ReturnType<typeof parse>): Diagnostic[] {
   };
   visit(program.statements);
   return warnings;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  `unknown-component` lint                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Host/JS constructors and callables an author may legitimately invoke with a
+ * PascalCase bare name. Without this list, ordinary JavaScript (`Date.now()`
+ * is a MethodCall and safe, but `new Date()`/`Number(x)`/`Promise.all` style
+ * bare calls like `Number(x)` / `String(v)` / `BigInt(n)` are plain `Call`s)
+ * would be flagged as hallucinated components.
+ */
+const JS_GLOBAL_CALLABLES: ReadonlySet<string> = new Set([
+  // Type coercion / value constructors (called bare, without `new`)
+  "Array", "BigInt", "Boolean", "Number", "Object", "String", "Symbol",
+  // Namespaces occasionally called or shadow-checked
+  "Date", "Error", "Function", "JSON", "Map", "Math", "Promise", "Proxy",
+  "RangeError", "Reflect", "RegExp", "Set", "TypeError", "WeakMap", "WeakSet",
+  // Web platform constructors reachable from an action body
+  "AbortController", "Blob", "CustomEvent", "DOMParser", "Event", "EventSource",
+  "File", "FormData", "Headers", "Image", "Intl", "IntersectionObserver",
+  "MutationObserver", "Notification", "Request", "Response", "ResizeObserver",
+  "TextDecoder", "TextEncoder", "URL", "URLSearchParams", "WebSocket", "Worker",
+]);
+
+/**
+ * `unknown-component` — flag `Cardd([...])` when no such component exists.
+ *
+ * This is the single most common defect in LLM-authored Aktion: a plausible but
+ * non-existent component name. The schema validator deliberately cannot report
+ * it, because from its point of view `Panel("x")` (the author's own
+ * `function Panel(...)`) and `Cardd("x")` (a typo) are the same shape. The AST
+ * resolves the ambiguity: collect every name this document *binds* — component /
+ * action / hook declarations, import specifiers, assignments, destructurings,
+ * parameters, loop and catch variables — then flag PascalCase `Call` callees
+ * that are in neither that set nor the library.
+ *
+ * A `warning`, not an `error`: the runtime renders an unknown component as
+ * nothing rather than failing the program, and a stale editor library must never
+ * turn a working file red. `suggestComponent` supplies the "did you mean" hint,
+ * which is what actually gets an LLM to self-correct.
+ *
+ * Only bare-identifier calls are considered — `obj.Method()` is a `MethodCall`,
+ * `new Foo()` is a `New`, and `(fn)()` is an `Invoke`, so none of them reach here.
+ */
+function lintUnknownComponents(
+  program: ReturnType<typeof parse>,
+  library: ComponentLibrary,
+): Diagnostic[] {
+  const bound = collectBoundNames(program);
+  const warnings: Diagnostic[] = [];
+  const seen = new Set<string>();
+
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const n of node) visit(n);
+      return;
+    }
+    const rec = node as Record<string, unknown> & { kind?: string; loc?: Position };
+
+    if (rec.kind === "Call" && typeof rec.callee === "string") {
+      const name = rec.callee;
+      if (
+        /^[A-Z][A-Za-z0-9_]*$/.test(name) &&
+        !bound.has(name) &&
+        !JS_GLOBAL_CALLABLES.has(name) &&
+        !findComponent(library, name)
+      ) {
+        const line = rec.loc?.line ?? 0;
+        const column = rec.loc?.column ?? 0;
+        const key = `${name}:${line}:${column}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          const hint = suggestComponent(name, library, 3).filter((s) => s !== name);
+          warnings.push({
+            line,
+            column,
+            severity: "warning",
+            message:
+              `Unknown component <${name}> — it is not in the component library and this ` +
+              `file does not declare or import it.` +
+              (hint.length > 0
+                ? ` Did you mean ${hint.map((h) => `"${h}"`).join(" or ")}?`
+                : ""),
+          });
+        }
+      }
+    }
+
+    for (const key of Object.keys(rec)) {
+      if (key !== "loc") visit(rec[key]);
+    }
+  };
+
+  visit(program.statements);
+  return warnings;
+}
+
+/**
+ * Every name the program binds, anywhere and at any nesting depth. Deliberately
+ * over-collects (it ignores scope) — a false negative here just means one
+ * unknown component goes unreported, whereas a false positive would put a red
+ * squiggle on working code.
+ */
+function collectBoundNames(program: ReturnType<typeof parse>): Set<string> {
+  const names = new Set<string>();
+  const add = (name: unknown): void => {
+    if (typeof name === "string" && name.length > 0) names.add(name);
+  };
+  const addParams = (params: unknown): void => {
+    for (const p of (params as Array<{ name?: unknown; pattern?: DestructuringPattern }>) ?? []) {
+      if (p.pattern) {
+        for (const n of collectPatternNames(p.pattern)) add(n);
+      } else {
+        add(p.name);
+      }
+    }
+  };
+
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const n of node) visit(n);
+      return;
+    }
+    const rec = node as Record<string, unknown> & { kind?: string };
+
+    switch (rec.kind) {
+      case "ComponentDeclaration":
+      case "ActionDeclaration":
+      case "HookDeclaration":
+        add(rec.name);
+        addParams(rec.params);
+        break;
+      case "Lambda":
+        addParams(rec.params);
+        break;
+      case "Import":
+        for (const s of (rec.specifiers as Array<{ local?: unknown }>) ?? []) add(s.local);
+        break;
+      case "Assignment":
+        add(rec.identifier);
+        break;
+      case "DestructureStatement":
+        for (const n of collectPatternNames({
+          kind: (rec.patternKind as "array" | "object") ?? "object",
+          bindings: (rec.bindings as DestructuringPattern["bindings"]) ?? [],
+        })) {
+          add(n);
+        }
+        break;
+      case "ForOfStatement": {
+        const pattern = rec.pattern as DestructuringPattern | undefined;
+        if (pattern) {
+          for (const n of collectPatternNames(pattern)) add(n);
+        } else {
+          add(rec.item);
+        }
+        break;
+      }
+      case "ForInStatement":
+        add(rec.item);
+        break;
+      case "TryStatement":
+        add(rec.catchParam);
+        break;
+    }
+
+    for (const key of Object.keys(rec)) {
+      if (key !== "loc") visit(rec[key]);
+    }
+  };
+
+  visit(program.statements);
+  return names;
 }
 
 /** Names destructured from a `$i18n(...)` call (e.g. `const { t } = $i18n(...)`). */

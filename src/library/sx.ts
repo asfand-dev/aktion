@@ -649,8 +649,40 @@ export function resolveAnimate(raw: unknown): { classes: string[]; style: string
  * ------------------------------------------------------------------------ */
 
 /** Named props that every component implicitly accepts (the universal channel). */
+/**
+ * Roles an app author may set through the universal `role` channel.
+ *
+ * Deliberately a closed list: an unrecognised role is dropped by assistive tech
+ * anyway, and a plausible-but-wrong one (say `button` on a container) is worse
+ * than the original defect. Landmarks, common widget roles, and the two
+ * "remove me from the tree" values are covered; anything requiring a matching
+ * set of owned children or ARIA state is not, because a bare role override
+ * cannot supply those.
+ */
+const ALLOWED_ROLES = new Set([
+  // Landmarks and document structure
+  "banner", "complementary", "contentinfo", "form", "main", "navigation",
+  "region", "search", "article", "group", "list", "listitem", "separator",
+  "heading", "figure", "note", "definition", "term",
+  // Live regions and status
+  "status", "alert", "log", "timer", "marquee", "progressbar", "meter",
+  // Common widgets
+  "button", "link", "img", "toolbar", "tooltip", "dialog", "tab", "tabpanel",
+  "tablist", "menuitem", "option", "checkbox", "radio", "switch",
+  // Explicitly neutral
+  "none", "presentation",
+]);
+
 export const UNIVERSAL_PROP_NAMES = new Set([
   "sx", "animate", "id", "anchor", "className", "class", "style", "aria", "data", "tooltip", "hidden",
+  // Escape valve for ARIA defects that cannot be fixed from outside the library:
+  // without it an app author has no way to correct a component's role.
+  "role",
+  // Second spelling of the `data` channel, for the components that declare a
+  // `data` prop of their own (LineChart, JsonTree, Async, Draggable, Lottie,
+  // QRCode). On those, the component prop wins and the universal channel was
+  // unreachable, so `data-*` attributes could not be set at all.
+  "dataAttrs",
 ]);
 
 export interface UniversalProps {
@@ -663,6 +695,8 @@ export interface UniversalProps {
   style?: unknown;
   aria?: unknown;
   data?: unknown;
+  dataAttrs?: unknown;
+  role?: unknown;
   tooltip?: unknown;
   hidden?: unknown;
 }
@@ -694,6 +728,40 @@ function sanitiseStyleString(raw: unknown): string {
 const ARIA_KEY = /^[a-z][a-z-]{1,32}$/;
 
 /**
+ * Declarations that only mean something when the element generates a box.
+ * On a `display: contents` host every one of them is inert — the style
+ * attribute really is written, it just cannot render.
+ */
+const NEEDS_BOX_DECL =
+  /(?:^|;)\s*(?:padding|margin|width|height|min-width|max-width|min-height|max-height|background|border|box-shadow|outline|overflow|gap|position|inset|top|right|bottom|left|aspect-ratio)\b/i;
+
+/** True when the merged `sx` / `style` decides the element's `display` itself. */
+const DECLARES_DISPLAY = /(?:^|;)\s*display\s*:/i;
+
+/** An inline `display: contents` the component put on its own root. */
+const INLINE_CONTENTS = /(?:^|;)\s*display\s*:\s*contents\s*(?:;|$)/i;
+
+/**
+ * Boxless component roots whose `display: contents` comes from the theme
+ * stylesheet rather than an inline style, plus the renderer's own host span for
+ * fragment-returning components (an inline `<span>` cannot carry a box either).
+ *
+ * An inline `padding` does not rescue these: the inline style only wins per
+ * property, so an author `display: contents` rule keeps beating it. Keep in
+ * sync with the `display: contents` rules in `src/theme/styles.ts`.
+ */
+const BOXLESS_HOST_CLASSES = ["rui-universal-host", "rui-route", "rui-transition", "rui-focus-trap"];
+
+/** Drop inline `display` declarations so a promoted host's own display wins. */
+function stripDisplay(style: string): string {
+  return style
+    .split(";")
+    .map((decl) => decl.trim())
+    .filter((decl) => decl !== "" && !/^display\s*:/i.test(decl))
+    .join(";");
+}
+
+/**
  * Apply the universal-prop channel to a rendered element. Merges with any
  * inline style/classes the component already set. Safe to call with a
  * non-Element (no-ops) and with an empty `universal` (no-ops).
@@ -709,17 +777,38 @@ export function applyUniversal(node: Node, universal: UniversalProps | null | un
     if (style) styleParts.push(style);
     classes.push(...sxClasses);
   }
+  /** Set when the channel carries something that a boxless host cannot show. */
+  let needsBox = false;
   if (universal.animate != null) {
     const { classes: aClasses, style } = resolveAnimate(universal.animate);
     classes.push(...aClasses);
     if (style) styleParts.push(style);
+    // An animation on a boxless element animates nothing.
+    if (aClasses.length > 0) needsBox = true;
   }
   const rawStyle = sanitiseStyleString(universal.style);
   if (rawStyle) styleParts.push(rawStyle);
 
-  if (styleParts.length > 0) {
-    const existing = elNode.getAttribute("style");
-    const merged = [existing, styleParts.join(";")].filter(Boolean).join(";");
+  const sxStyle = styleParts.join(";");
+  const existing = elNode.getAttribute("style") ?? "";
+  // A boxless root (`display: contents`, or the renderer's host span) adds no
+  // box to the layout — which also means padding / background / sizing /
+  // animation from the universal channel provably cannot render on it, with no
+  // warning anywhere. When the author asks for a box, give the host one.
+  // `hidden` needs the same treatment: the UA's `[hidden] { display: none }`
+  // loses to an author `display: contents`.
+  const boxless = INLINE_CONTENTS.test(existing)
+    || BOXLESS_HOST_CLASSES.some((c) => elNode.classList.contains(c));
+  let promoted: string | null = null;
+  if (boxless) {
+    if (universal.hidden === true) promoted = "none";
+    // `block`, matching the wrapper components (`wrapperStyle`): a block child
+    // keeps its width and gains no baseline gap underneath it.
+    else if (!DECLARES_DISPLAY.test(sxStyle) && (needsBox || NEEDS_BOX_DECL.test(sxStyle))) promoted = "block";
+  }
+  if (sxStyle || promoted) {
+    const base = promoted ? stripDisplay(existing) : existing;
+    const merged = [base, promoted ? `display:${promoted}` : "", sxStyle].filter(Boolean).join(";");
     elNode.setAttribute("style", merged);
   }
 
@@ -735,6 +824,14 @@ export function applyUniversal(node: Node, universal: UniversalProps | null | un
   const tooltip = asString(universal.tooltip).trim();
   if (tooltip) elNode.setAttribute("title", tooltip);
 
+  // `role` is allow-listed rather than passed through. An arbitrary value can
+  // make a component WORSE than the defect it was meant to work around — an
+  // unknown role is ignored by AT, and a wrong landmark or widget role silently
+  // breaks the accessibility tree. These are the roles that are meaningful to
+  // override on a component root.
+  const roleRaw = asString(universal.role).trim().toLowerCase();
+  if (roleRaw && ALLOWED_ROLES.has(roleRaw)) elNode.setAttribute("role", roleRaw);
+
   if (universal.aria && typeof universal.aria === "object") {
     for (const [k, v] of Object.entries(universal.aria as Record<string, unknown>)) {
       const key = k.toLowerCase();
@@ -743,8 +840,13 @@ export function applyUniversal(node: Node, universal: UniversalProps | null | un
       }
     }
   }
-  if (universal.data && typeof universal.data === "object") {
-    for (const [k, v] of Object.entries(universal.data as Record<string, unknown>)) {
+  // `dataAttrs` is the escape hatch for components whose own `data` prop shadows
+  // this channel; when both are present the explicit spelling wins.
+  const dataBag = (universal.dataAttrs && typeof universal.dataAttrs === "object")
+    ? universal.dataAttrs
+    : (universal.data && typeof universal.data === "object" ? universal.data : null);
+  if (dataBag) {
+    for (const [k, v] of Object.entries(dataBag as Record<string, unknown>)) {
       const key = k.toLowerCase().replace(/[^a-z0-9-]/g, "");
       if (key && v != null) elNode.setAttribute(`data-${key}`, asString(v));
     }

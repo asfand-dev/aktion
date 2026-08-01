@@ -21,7 +21,7 @@
  */
 
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { dirname, extname, resolve } from "node:path";
+import { dirname, extname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -70,26 +70,40 @@ async function writeDemosManifest() {
 
 /**
  * Rewrite dev-mode relative paths into deploy-mode relative paths.
- *  - HTML files (at site/*.html) reach the bundle via `./dist/…`.
- *  - site/assets/site.js (one level deeper) reaches it via `../dist/…`.
+ *
+ * In the repo, `docs/` and `dist/` are siblings, so a page at `docs/x.html`
+ * reaches a bundle via `../dist/…` and a module at `docs/assets/x.js` via
+ * `../../dist/…`. In the deployed site the bundle is nested INSIDE the docs
+ * (`site/dist/…`), so both need one fewer `..`.
+ *
+ * The `dist/` PREFIX is rewritten wholesale rather than one bundle name at a
+ * time. The previous version enumerated `aktion`, `devtools` and `system_prompt`,
+ * which meant that adding an import of any other bundle — `dist/language.js`,
+ * `dist/testing.js` — silently shipped a path that 404s only on the deployed
+ * site and works fine locally. That is the worst possible failure shape.
  */
 async function rewriteDeployPaths(siteDir) {
+  const bundleDir = resolve(siteDir, "dist");
+
   for await (const path of walk(siteDir)) {
+    // Never rewrite inside the copied bundle itself: those are build artefacts
+    // that must ship byte-for-byte, and a bundled string that happens to look
+    // like a relative path is not ours to touch.
+    if (path.startsWith(`${bundleDir}${sep}`)) continue;
+
     const ext = extname(path).toLowerCase();
     if (ext !== ".html" && ext !== ".js") continue;
-    const original = await readFile(path, "utf8");
-    let updated = original;
 
-    if (ext === ".html") {
-      updated = updated
-        .replaceAll("../dist/aktion", "./dist/aktion")
-        .replaceAll("../dist/devtools", "./dist/devtools")
-        .replaceAll("../dist/system_prompt", "./dist/system_prompt");
-    } else {
-      updated = updated
-        .replaceAll("../../dist/aktion", "../dist/aktion")
-        .replaceAll("../../dist/devtools", "../dist/devtools");
-    }
+    // How many directories deep is this file? `site/x.html` -> 0 -> `./dist/`;
+    // `site/assets/x.js` -> 1 -> `../dist/`. Deriving the prefix means a file
+    // added at any depth gets the right one with no new rule.
+    const depth = relative(siteDir, dirname(path)).split(sep).filter(Boolean).length;
+    const prefix = depth === 0 ? "./dist/" : `${"../".repeat(depth)}dist/`;
+
+    const original = await readFile(path, "utf8");
+    // Match any number of leading `../` segments before `dist/` and normalise
+    // them all to the correct prefix for this file's depth.
+    const updated = original.replaceAll(/(?:\.\.\/)+dist\//g, prefix);
 
     if (updated !== original) {
       await writeFile(path, updated, "utf8");

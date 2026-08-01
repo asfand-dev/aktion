@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <style>
     /* Component reference uses richer cells than the generic signature-table:
        a per-prop list with name, type, optional flag, enum values, and a
@@ -278,7 +278,7 @@
         <div class="ref-loading">Loading component reference…</div>
       </div>
 
-      <h2>Adding your own components</h2>
+      <h2 id="adding-your-own">Adding your own components</h2>
       <p>
         In-program <code>function MyCard(...) { return ... }</code> declarations
         may not reuse a built-in component's name — the validator flags the
@@ -302,7 +302,7 @@
     { name: "variant", type: "string", optional: true, enum: ["default", "featured"] },
     { name: "cta", type: "Action", optional: true },
   ],
-  render: (_node, props, helpers) =&gt; {
+  render: (_node, props, helpers) => {
     const card = document.createElement("div");
     card.className = "product";
     card.textContent = `${props.title} — $${props.price}`;
@@ -311,6 +311,28 @@
 };
 
 el.registerComponents([ProductCard]);</code></pre>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="layout.html">
+          <span class="demo-tag">Core concepts</span>
+          <h3>Layout</h3>
+          <p>Compose the containers above into dashboards, sidebars, and app shells.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="sx.html">
+          <span class="demo-tag">Core concepts</span>
+          <h3>Styling (sx)</h3>
+          <p>The universal <code>sx</code> prop every component above accepts.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="themes.html">
+          <span class="demo-tag">Theming</span>
+          <h3>Themes</h3>
+          <p>The six built-in themes and the tokens each component reads.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+      </div>
     </main>
   </div>
 
@@ -624,9 +646,9 @@ $app(Combobox("country", { items: countries, value: $country, placeholder: "Sear
 # A column cell can be plain text, a Badge, a Button, or any component.
 # Map values to components directly \u2014 no render() needed:
 $app(Table([
-  Col("Name", $rows.name, { onClick: (name) =&gt; { $picked = name } }),
-  Col("Status", $rows.map(r =&gt; Badge(r.active ? "Active" : "Off", { tone: r.active ? "success" : "neutral" }))),
-  Col("", $rows.map(r =&gt; Button("Edit", { onClick: () =&gt; { $picked = r.name }, size: "sm", variant: "ghost" })))
+  Col("Name", $rows.name, { onClick: (name) => { $picked = name } }),
+  Col("Status", $rows.map(r => Badge(r.active ? "Active" : "Off", { tone: r.active ? "success" : "neutral" }))),
+  Col("", $rows.map(r => Button("Edit", { onClick: () => { $picked = r.name }, size: "sm", variant: "ghost" })))
 ]))`,
       List: `$app(List([
   ListItem("Tasks",    { meta: "3 active",   icon: "list-check" }),
@@ -761,6 +783,71 @@ $app(Pagination($page, { pages: 10, siblings: 1 }))`,
   tone: "success",
   icon: "circle-check" }
 ))`,
+
+      // -------------------------------------------------------------------
+      // Aktion 0.5 additions — state labels, joined controls, card bands
+      // -------------------------------------------------------------------
+      Pill: `$app(Row([
+  Pill("SSL active", "success", "lock"),
+  Pill("Deploying", "activating", "arrows-rotate"),
+  Pill("Quota near limit", "warning"),
+  Pill("Build failed", "critical"),
+  Pill("Draft", "neutral")
+], { gap: "sm" }))`,
+      CardSection: `$app(Card([
+  CardHeader("Production cluster"),
+  CardSection([Text("Rolling update in progress \u2014 3 of 8 nodes drained.")], { tone: "activating" }),
+  CardSection([Text("Last backup completed 20 minutes ago.")], { tone: "success" }),
+  CardSection([Text("TLS certificate expires in 6 days.")], { tone: "warning" })
+]))`,
+      ActionStripe: `$app(Card([
+  CardHeader("Account settings"),
+  ActionStripe("Profile", { description: "Name, avatar, and contact details", icon: "user", value: "Ada Lovelace" }),
+  ActionStripe("Notifications", { description: "Email and in-app alerts", icon: "bell", trailing: Switch("notify", { value: true }) }),
+  ActionStripe("Billing", { description: "Plan, invoices, payment method", icon: "credit-card", value: "Team \u00b7 $49/mo" }),
+  ActionStripe("Danger zone", { description: "Delete this workspace", icon: "triangle-exclamation", disabled: true })
+]))`,
+      ButtonGroup: `$app(Column([
+  ButtonGroup([
+    Button("Day"),
+    Button("Week", { variant: "primary" }),
+    Button("Month")
+  ], { ariaLabel: "Date range" }),
+  ButtonGroup([
+    Button("Save", { variant: "primary", icon: "check" }),
+    Button("Save and close", { variant: "primary" })
+  ], { size: "sm" })
+], { gap: "md" }))`,
+      InputGroup: `$app(Column([
+  InputGroup(Input("search", { placeholder: "Search invoices\u2026" }), {
+    icon: "magnifying-glass",
+    action: Button("Search", { variant: "primary" })
+  }),
+  InputGroup(Input("domain", { placeholder: "my-team" }), {
+    label: "Workspace URL", suffix: ".aktion.app", hint: "Lowercase letters, digits, and dashes."
+  })
+], { gap: "md" }))`,
+      LoadingDots: `$app(Column([
+  Row([Text("Generating reply"), LoadingDots()], { gap: "sm" }),
+  Row([
+    LoadingDots("Uploading", { size: "sm", tone: "primary" }),
+    LoadingDots("Verifying", { size: "sm", tone: "success" })
+  ], { gap: "lg" })
+], { gap: "md" }))`,
+      FilterPill: `$showOpen = true
+$showMine = false
+$app(Row([
+  FilterPill("Open", { active: $showOpen, count: 12, icon: "inbox", onToggle: () => $showOpen = !$showOpen }),
+  FilterPill("Assigned to me", { active: $showMine, count: 3, onToggle: () => $showMine = !$showMine }),
+  FilterPill("Archived", { active: false, count: 0, disabled: true })
+], { gap: "sm" }))`,
+      Toasts: `$app(Column([
+  Text("Custom placement for the toast stack:", { tone: "muted", variant: "small" }),
+  Toasts([
+    Toast("Deploy finished", { tone: "success", description: "v2.4.1 is live in eu-central-1." }),
+    Toast("Certificate expiring", { tone: "warning", description: "Renew within 6 days." })
+  ], { position: "top-center", max: 3 })
+], { gap: "md" }))`,
 
       // Navigation
       Breadcrumb: `$app(Breadcrumb([
@@ -930,7 +1017,7 @@ $app(Toolbar(
 ]))`,
       FeatureGrid: `$app(FeatureGrid([
   FeatureItem("Streaming-first", { description: "Parse and render token-by-token.",          icon: "bolt",         tone: "primary" }),
-  FeatureItem("Themeable",       { description: "Seven built-in themes, custom tokens too.", icon: "palette",      tone: "success" }),
+  FeatureItem("Themeable",       { description: "Six built-in themes, custom tokens too.", icon: "palette",      tone: "success" }),
   FeatureItem("Framework-free",  { description: "One web component, any host stack.",        icon: "puzzle-piece", tone: "info" })
 ]))`,
       FeatureItem: `$app(FeatureGrid([
@@ -1193,7 +1280,7 @@ $app(QueryBuilder(
   {id: "ship", label: "Ship release", start: "2026-05-03", end: "2026-05-05", progress: 0}
 ], { startDate: "2026-05-01", endDate: "2026-05-05" }))`,
       Truncate: `$app(Truncate(
-  "Aktion is a compact, declarative DSL designed for LLM-generated rich UI responses. It ships with 270+ components, six built-in themes, hash-based routing, and real-time streaming. The language is parsed token-by-token so partial responses render progressively without waiting for the full payload.",
+  "Aktion is a compact, declarative DSL designed for LLM-generated rich UI responses. It ships with 281 components, six built-in themes, hash-based routing, and real-time streaming. The language is parsed token-by-token so partial responses render progressively without waiting for the full payload.",
   { maxLines: 2, expandLabel: "Read more" }
 ))`,
       InlineEdit: `$value = "Click to edit this text"
@@ -2352,6 +2439,28 @@ $isActive = false`,
       return wrap;
     }
 
+    // Anchor ids for the cards. Two distinct components can slugify to the same
+    // string — the library ships both `Navbar` (navigation) and `NavBar`
+    // (marketing) — and a shared `id` is invalid HTML that silently sends every
+    // anchor, TOC entry and search hit to whichever card rendered first. Assign
+    // ids here rather than leaving it to site.js's generic heading pass, so the
+    // value does not depend on when the cards happen to be attached.
+    // `assets/site.js` reproduces these ids for the search palette by applying
+    // the same collide-then-suffix rule in the same order.
+    const takenCardIds = new Set();
+    function cardAnchorId(name) {
+      const base = String(name)
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "") || "component";
+      let id = base;
+      for (let n = 2; takenCardIds.has(id); n += 1) id = `${base}-${n}`;
+      takenCardIds.add(id);
+      return id;
+    }
+
     function renderComponentCard(spec) {
       const card = document.createElement("section");
       card.className = "component-card";
@@ -2360,6 +2469,7 @@ $isActive = false`,
       header.className = "component-card-header";
       const title = document.createElement("h3");
       title.className = "component-card-name";
+      title.id = cardAnchorId(spec.name);
       title.innerHTML = `<code>${escape(spec.name)}</code>`;
       header.appendChild(title);
       card.appendChild(header);
@@ -2525,6 +2635,6 @@ $isActive = false`,
 
     render();
   </script>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
 </body>
 </html>

@@ -1,30 +1,51 @@
 ---
-description: When changing the runtime/library/language surface, keep the VS Code extension (editors/vscode) and the scaffolder (create-aktion) in sync.
+description: When changing the runtime/library/language surface, keep the three editor adapters (editors/vscode, editors/lsp, editors/jetbrains) and the scaffolder (create-aktion) in sync.
 alwaysApply: true
 ---
 
-# Keep `editors/vscode` and `create-aktion` in sync with the codebase
+# Keep the editor adapters and `create-aktion` in sync with the codebase
 
-Two downstream artifacts ship Aktion to users and **must not drift** when the
-core changes:
+Four downstream artifacts ship Aktion to users and **must not drift** when the
+core changes. Three of them are ADAPTERS over one implementation:
 
-- **`editors/vscode`** — the VS Code / Cursor / Open VSX extension. It is a
-  thin in-process client that delegates ALL language intelligence to the
-  DOM-free `aktion-runtime/language` surface (`src/language-api.ts`):
-  diagnostics, hover, completions, formatting, definition, references, rename,
-  document symbols, document highlights, signature help, and semantic tokens.
-  Its TextMate grammar and snippets are **generated** from that surface, never
-  hand-listed.
+```
+src/tooling/*  (the only parser, schema validator, and formatter)
+      │
+      └── src/language-api.ts  ──►  editors/vscode      in-process (JS host)
+                               ──►  editors/lsp         LSP over stdio
+                               │        └──►  editors/jetbrains, Neovim, Helix, Zed, Sublime, Emacs
+                               └──►  docs/assets/playground.js   in-page (browser)
+```
+
+- **`editors/vscode`** — the VS Code / Cursor / Open VSX extension. A thin
+  in-process client that delegates ALL language intelligence to the DOM-free
+  `aktion-runtime/language` surface (`src/language-api.ts`). Its TextMate grammar
+  and snippets are **generated** from that surface, never hand-listed. It does
+  NOT use the LSP server — it runs the service directly, so there is nothing to
+  gain from a subprocess.
+- **`editors/lsp`** — `aktion-language-server`, a standalone, zero-dependency LSP
+  server wrapping the same surface. It exists because no other editor family can
+  call JavaScript in-process: a JetBrains plugin is JVM code, and Neovim / Helix /
+  Zed / Sublime / Emacs are not JS hosts. Adding a capability here lights it up in
+  every one of those editors at once.
+- **`editors/jetbrains`** — the JetBrains plugin (Kotlin + Gradle). An LSP4IJ
+  client plus ~4 small glue classes; it contains **no** language logic, no lexer,
+  and no component list. It bundles `editors/lsp/dist/server.mjs`.
 - **`create-aktion`** — the `npm create aktion` scaffolder. Its templates are
   the first code a new user sees, and they recommend + configure the extension.
 
 ## The golden rule
 
-The extension owns **no** language logic. If a feature needs new behaviour,
-add a pure, DOM-free function to the language surface (`src/tooling/*` →
-re-exported from `src/language-api.ts`) and have the extension adapt it. Never
+No adapter owns any language logic. If a feature needs new behaviour, add a pure,
+DOM-free function to the language surface (`src/tooling/*` → re-exported from
+`src/language-api.ts`) and have each adapter map it onto its host's API. Never
 hard-code component names, builtins, keywords, or theme names inside
-`editors/vscode/**` — derive them from the surface.
+`editors/**` or `docs/assets/playground.js` — derive them from the surface.
+
+This is why the JetBrains plugin runs a Node process rather than being a native
+Kotlin implementation: a Kotlin lexer and parser would be a second model of the
+language, plus a second copy of 281 component signatures — three things
+guaranteed to rot. One Node process is the cheaper trade.
 
 The one allowed exception is **filesystem-bound work the pure service cannot
 do**: cross-file go-to-definition reads other files. The service stays pure by
@@ -53,21 +74,29 @@ artifacts in the same commit. Triggers:
 | `src/library/components/*` / `src/library/index.ts` — add/remove/rename a component | Nothing by hand: completions, hover, diagnostics, semantic `class` tokens, snippets, and the TextMate component overlay all derive from the library. Re-run the extension build (`gen-snippets` + `gen-grammar`) and confirm the new component appears. |
 | Add / remove / rename a `$`-builtin (runtime dispatch in `src/runtime/evaluator.ts`) | **`src/language/builtins.ts`** (`builtinCatalog`) — the single source of truth. This automatically flows into completions, hover, semantic `function`/`namespace` tokens, signature help, and the generated TextMate `aktion-builtin` overlay. Re-run `gen-grammar`. |
 | `src/parser/lexer.ts` `KEYWORDS_AKTION` / `src/language/grammar.ts` `grammarSpec` / `keywordDocs` | Keep `grammarSpec.keywords` and `keywordDocs` aligned with the lexer; the extension's hover + completions read `keywordDocs`. |
-| Add a new editor capability (e.g. code actions, folding ranges, inlay hints) | Add a pure function to `src/tooling/*`, export it from `src/language-api.ts` + `src/tooling/index.ts`, then register a provider in `editors/vscode/src/extension.ts`. Add a Vitest in `tests/tooling-*.test.ts`. |
+| Add a new editor capability (e.g. code actions, folding ranges, inlay hints) | Add a pure function to `src/tooling/*`, export it from `src/language-api.ts` + `src/tooling/index.ts`, then (a) register a provider in `editors/vscode/src/extension.ts` AND (b) advertise + handle it in `editors/lsp/src/server.ts`. The JetBrains plugin needs no change — LSP4IJ enables whatever the server advertises. Add a Vitest in `tests/tooling-*.test.ts` and, for the LSP half, in `tests/lsp-server.test.ts`. |
+| Change the semantic-token legend (`semanticTokenTypes` / `semanticTokenModifiers`) | The VS Code extension and the LSP server both derive the legend, so neither needs editing — but `editors/jetbrains`'s `AktionSemanticTokensColorsProvider` maps each type onto an IntelliJ colour key by hand. Add the new type there, or it falls through to TextMate's lexical colour. |
+| Add or change a `getDiagnostics` / `getLintWarnings` pass | Nothing by hand in any adapter: all three call `getDiagnostics`. Verify the new severity themes correctly (an `error` vs a `warning`) in at least the VS Code adapter, which maps them explicitly. |
 | The exported shape of any `src/tooling/*` function the extension calls | `editors/vscode/src/extension.ts` (the adapter) and bump `editors/vscode/package.json` `version`. |
 | Add / change a user-visible editor feature | `editors/vscode/README.md` (public-facing: what it does / install / use / update / contribute). Keep build, debug, architecture, and publishing details in `editors/vscode/docs/README.md` (the contributor guide). The two READMEs must not duplicate each other — the public one links to the contributor one. |
 | `src/theme/index.ts` — add/remove a theme | `themeNames` is derived; nothing by hand, but verify theme-name completion still lists it. |
 | Add a new `$`-builtin or component | Consider whether the `create-aktion` templates or their `.vscode` settings should showcase it. |
 
-## Build + verify the extension
+## Build + verify the adapters
 
 The extension bundles the language surface, so rebuild the runtime first when
 `src/` changed:
 
 ```bash
-npm run build:language          # repo root → refreshes dist/language.js
+npm run build:language               # repo root → refreshes dist/language.js
 cd editors/vscode && npm run build   # gen-snippets + gen-grammar + esbuild
+cd ../.. && npm run build:lsp        # → editors/lsp/dist/server.mjs
+npx vitest run tests/lsp-server.test.ts
 ```
+
+The JetBrains plugin is built separately (`cd editors/jetbrains && ./gradlew
+buildPlugin`); its `syncAssets` task rebuilds the LSP server and regenerates its
+TextMate grammar, so it cannot ship a stale copy of either.
 
 `gen-snippets` and `gen-grammar` fall back to bundling the TS source when
 `dist/language.js` is missing or stale, so the extension build never depends on
@@ -97,6 +126,11 @@ change, and run `npx vitest run` before finishing.
 - Don't hand-edit `editors/vscode/syntaxes/aktion.tmLanguage.json` or
   `editors/vscode/snippets/aktion.code-snippets` — they are generated. Edit the
   generators / source data and re-run the build.
-- Don't add language logic to the extension that belongs in `src/tooling/*`.
+- Don't add language logic to any adapter that belongs in `src/tooling/*`.
+- Don't hand-edit `editors/jetbrains/server/` or `editors/jetbrains/textmate/` —
+  both are generated by `editors/jetbrains/scripts/sync-assets.mjs` and gitignored.
+- Don't add a capability to one adapter and not the others without saying why in
+  the commit. Divergence between editors is the failure this rule exists to
+  prevent.
 - Don't let `editors/vscode/package.json` `aktion-runtime` dependency range or
   the recommended-extension id in `create-aktion` drift from reality.

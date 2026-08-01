@@ -1,0 +1,85 @@
+---
+description: Keep the Aktion agent skill (skills/aktion/) in sync with the codebase; know which half is generated and which is hand-written.
+alwaysApply: true
+---
+
+# Keep `skills/aktion/` in sync with the codebase
+
+`skills/aktion/` is the **Agent Skill** that teaches an AI agent how to author
+complete applications in Aktion. It replaced `coding-gen-skill.md`, a single
+4,153-line hand-maintained file that drifted through two feature waves until
+**11 of its 22 flagship worked examples no longer validated** — they taught props
+that do not exist. If this skill drifts the same way, every agent consuming it
+generates broken UI, silently.
+
+The replacement is structured so that most of it *cannot* drift.
+
+## Which half is which
+
+**GENERATED — never hand-edit. `scripts/emit-skill.mjs` rewrites these:**
+
+| Path | Derived from |
+| --- | --- |
+| `references/components/index.md` | `getComponentCatalog()` + `defaultLibrary.componentGroups` |
+| `references/components/<group>.md` | the same, one file per group, including `group.notes` |
+| `references/builtins.md` | `builtinCatalog` + `findBuiltinConfig()` |
+| `references/namespaces.md` | `namespaceCatalog`, `factoryResourceCatalog`, `routeMembers`, `i18nResultMembers` |
+| `references/themes.md` | `builtInThemes` + `builtInThemeFonts` |
+
+**HAND-WRITTEN — the judgement the generator cannot produce:**
+
+| Path | What it carries |
+| --- | --- |
+| `SKILL.md` | Frontmatter (trigger conditions), the ten rules, the workflow. |
+| `references/layout.md` | Rich-layout principles: pattern-first composition, visual hierarchy, **density targets per page type**, theme-aware authoring, anti-patterns. The reason the skill exists. |
+| `references/gotchas.md` | Traps the schema validator cannot catch. |
+| `references/patterns.md` | Worked application patterns. |
+| `references/language.md` | A compact authoring reference. |
+
+## Two build-time gates protect it
+
+`npm run build` runs `node scripts/emit-skill.mjs`, which **fails the build** if:
+
+1. **A `` ```aktion `` example does not validate.** Every fenced block tagged
+   `aktion` is run through `getDiagnostics(code, defaultLibrary)` and must produce
+   zero errors AND zero warnings. A block tagged `aktion` is a promise that it is
+   a complete, valid program — tag fragments as `js` instead.
+2. **A hand-written count disagrees with the library** (e.g. `SKILL.md` says 282
+   components when there are 281).
+3. **A component is in the library but in no `componentGroup`** — it would be
+   missing from the per-group reference entirely.
+
+So: after changing the library, run `npm run build:skill`. If it passes, the
+generated half is correct by construction.
+
+## Before changing anything under `src/`
+
+Read `references/layout.md` and `references/gotchas.md`. They state the authoring
+rules an agent is expected to follow; a change that invalidates one of them needs
+that file updated in the same commit.
+
+## After (or while making) a code change
+
+| If you change… | Then… |
+| --- | --- |
+| `src/library/components/*` or `src/library/index.ts` — add/remove/rename a component | Nothing by hand. Run `npm run build:skill`; the group reference and the catalogue index regenerate. Then check whether `references/layout.md`'s composition table should recommend the new component, and whether any `patterns.md` example should use it. |
+| `componentGroups[].notes` in `src/library/index.ts` | Nothing by hand — the notes are emitted into the group file. This is the RIGHT place to put "reach for X, not Y" guidance: it flows into the skill, the system prompt, and nothing else has to know. |
+| Add / remove / rename a `$`-builtin | Nothing by hand for `builtins.md`. Consider whether `SKILL.md`'s cheat-sheet-level rules or `references/language.md` should mention it. |
+| A namespace member (`src/language/namespaces.ts`) | Nothing by hand. |
+| `src/theme/index.ts` — a theme or token | Nothing by hand for `themes.md`. Update the theme-vibe table in `references/layout.md` if a theme was added or its character changed. |
+| An authoring rule, a footgun, or a new lint | `references/gotchas.md` — and if the validator now catches it, say so, because the whole point of that file is what the validator *cannot* catch. |
+| A component signature used by an example | Nothing by hand: the build gate will fail and tell you which example and which prop. Fix the example. |
+
+## Don't
+
+- Don't hand-edit anything under `references/components/`, or
+  `references/builtins.md` / `namespaces.md` / `themes.md`. Change the source data
+  or the generator.
+- Don't hand-write a component list, prop table, builtin signature, or count
+  anywhere in the skill. If you find yourself typing one, it belongs in the
+  generator.
+- Don't add an example you have not validated. Tag it `aktion` and let the build
+  check it — that is cheaper than being wrong.
+- Don't duplicate `README.md` (host-page integration) or `dist/system_prompt.txt`
+  (the full generated language reference). The skill points at both. Its own value
+  is the layout/density judgement and the gotchas.

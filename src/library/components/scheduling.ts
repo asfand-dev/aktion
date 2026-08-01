@@ -9,9 +9,13 @@
  * Pairs with the existing `Gantt` for timelines and `DatePicker` for single
  * date input. Bounded + theme-aware, no dependencies. Uses its own
  * `rui-gcal-*` class namespace so it never collides with `CalendarView`.
+ *
+ * The grid is a real ARIA grid: each week of seven cells is wrapped in a
+ * `role="row"` (laid out with `display: contents`, so the CSS grid still owns
+ * the columns), and exactly one cell is in the tab order at a time.
  */
 
-import type { ComponentSpec, RenderHelpers } from "../types.js";
+import type { ComponentSpec, InstanceStateSlot, RenderHelpers } from "../types.js";
 import { el, asArray, asString, asNumber, asBoolean, renderIcon, sanitiseCssColor } from "../utils.js";
 
 const WEEKDAY_LABELS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -28,26 +32,40 @@ const CHIP_TONES: Record<string, string> = {
   info: "var(--rui-color-info, #06b6d4)",
 };
 
-interface GcalEvent { label: string; color: string; time: string }
+interface GcalEvent { label: string; color: string; time: string; raw: unknown }
 
 interface GcalConfig {
   todayIso: string;
   selected: string;
+  /** The `selected` prop this build started from (the instance slot's stamp). */
+  propSelected: string;
   chips: Map<string, GcalEvent[]>;
   dots: Map<string, number>;
   firstDay: number;
   navigable: boolean;
+  minIso: string;
+  maxIso: string;
+  blocked: Set<string>;
+  weekdays: string[];
+  months: string[];
+  dayLabel: (date: Date) => string;
   onSelect: unknown;
   onNavigate: unknown;
+  onEventClick: unknown;
   selRef: string | undefined;
   helpers: RenderHelpers;
-  viewSlot: { get(): GcalView | null; set(v: GcalView): void };
+  viewSlot: InstanceStateSlot<GcalView | null>;
+  /** Selection kept per-instance when `selected` is not $-bound. */
+  selSlot: InstanceStateSlot<{ prop: string; value: string } | null>;
+  /** The day cell that owns the single tab stop. */
+  activeSlot: InstanceStateSlot<string | null>;
 }
 
 interface GcalView { propsYear: number; propsMonth: number; year: number; month: number }
 
 const pad2 = (n: number): string => String(n).padStart(2, "0");
 const isoOf = (y: number, m: number, d: number): string => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+const isoDay = (raw: unknown): string => asString(raw).slice(0, 10);
 
 /** Normalise the `events` prop: bare ISO strings → dots, objects → chips. */
 function readGcalEvents(raw: unknown): { chips: Map<string, GcalEvent[]>; dots: Map<string, number> } {
@@ -72,10 +90,79 @@ function readGcalEvents(raw: unknown): { chips: Map<string, GcalEvent[]>; dots: 
     const colorRaw = asString(e.color ?? e.tone, "primary");
     const color = CHIP_TONES[colorRaw] ?? sanitiseCssColor(colorRaw) ?? CHIP_TONES.primary!;
     const list = chips.get(date) ?? [];
-    list.push({ label, color, time: asString(e.time) });
+    // `raw` is handed back to `onEventClick` so the author can open the event
+    // they actually passed in, not a reconstruction of it.
+    list.push({ label, color, time: asString(e.time), raw: entry });
     chips.set(date, list);
   }
   return { chips, dots };
+}
+
+/**
+ * Weekday / month names for the calendar. `locale` drives `Intl`; explicit
+ * `weekdayLabels` / `monthLabels` win over both so an app can ship its own
+ * translations without depending on the runtime's ICU data.
+ */
+function resolveLabels(
+  locale: string,
+  weekdayLabels: unknown,
+  monthLabels: unknown,
+): { weekdays: string[]; months: string[] } {
+  let weekdays = WEEKDAY_LABELS.slice();
+  let months = MONTH_NAMES.slice();
+  if (locale && typeof Intl !== "undefined") {
+    try {
+      // 1970-01-04 was a Sunday, so index 0 stays Sunday like the constants.
+      const wd = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" });
+      weekdays = Array.from({ length: 7 }, (_unused, i) =>
+        wd.format(new Date(Date.UTC(1970, 0, 4 + i))).toUpperCase());
+      const mo = new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" });
+      months = Array.from({ length: 12 }, (_unused, i) => mo.format(new Date(Date.UTC(2021, i, 15))));
+    } catch {
+      /* unknown locale / no ICU data — keep the English defaults. */
+    }
+  }
+  const wdOverride = asArray<unknown>(weekdayLabels).map((v) => asString(v)).filter(Boolean);
+  if (wdOverride.length === 7) weekdays = wdOverride;
+  const moOverride = asArray<unknown>(monthLabels).map((v) => asString(v)).filter(Boolean);
+  if (moOverride.length === 12) months = moOverride;
+  return { weekdays, months };
+}
+
+/** `true` when a day is outside the window or explicitly blacked out. */
+function isBlocked(cfg: GcalConfig, iso: string): boolean {
+  // ISO dates compare correctly as strings.
+  if (cfg.minIso && iso < cfg.minIso) return true;
+  if (cfg.maxIso && iso > cfg.maxIso) return true;
+  return cfg.blocked.has(iso);
+}
+
+/**
+ * Remember what has focus inside the calendar as a selector, so a rebuild can
+ * put it back. Paging months replaces the whole subtree — including the very
+ * button the user pressed — which otherwise dumps focus on `<body>` and leaves
+ * a keyboard user unable to advance a second month.
+ */
+function captureFocus(root: HTMLElement): string | null {
+  const scope = root.getRootNode() as Document | ShadowRoot;
+  const active = scope.activeElement as HTMLElement | null;
+  if (!active || !root.contains(active)) return null;
+  if (active.classList.contains("rui-gcal-today")) return ".rui-gcal-today";
+  const dir = active.getAttribute("data-dir");
+  if (dir) return `.rui-gcal-nav[data-dir="${dir}"]`;
+  const iso = active.closest(".rui-gcal-day")?.getAttribute("data-iso");
+  return iso ? `.rui-gcal-day[data-iso="${iso}"]` : null;
+}
+
+function restoreFocus(root: HTMLElement, selector: string | null): void {
+  if (!selector) return;
+  const target = root.querySelector<HTMLElement>(selector)
+    // The focused day may not exist in the new month — land on a usable cell
+    // rather than dropping focus to the document.
+    ?? (selector.startsWith(".rui-gcal-day")
+      ? root.querySelector<HTMLElement>('.rui-gcal-day[tabindex="0"]')
+      : null);
+  target?.focus();
 }
 
 /**
@@ -109,6 +196,7 @@ function buildCalendarInto(root: HTMLElement, year: number, month: number, cfg: 
     navigateTo(event, shifted.getFullYear(), shifted.getMonth());
   };
 
+  const title = `${cfg.months[month] ?? MONTH_NAMES[month]} ${year}`;
   const toolbar = el("div", { class: "rui-gcal-toolbar" });
   if (cfg.navigable) {
     const todayBtn = el("button", { type: "button", class: "rui-gcal-today" }, ["Today"]) as HTMLButtonElement;
@@ -126,32 +214,51 @@ function buildCalendarInto(root: HTMLElement, year: number, month: number, cfg: 
     nextBtn.onclick = (event: Event) => navigateBy(event, 1);
     toolbar.append(todayBtn, prevBtn, nextBtn);
   }
-  toolbar.append(el("span", { class: "rui-gcal-title" }, [`${MONTH_NAMES[month]} ${year}`]));
+  toolbar.append(el("span", { class: "rui-gcal-title" }, [title]));
 
-  const grid = el("div", { class: "rui-gcal-grid", role: "grid" });
+  const grid = el("div", { class: "rui-gcal-grid", role: "grid", "aria-label": title });
+  // `role="grid"` with bare gridcells is a structurally invalid grid: no
+  // row/column position is conveyed and the columnheaders associate with
+  // nothing. Rows are `display: contents` so the 7-column CSS grid is intact.
+  const headRow = el("div", { class: "rui-gcal-row rui-gcal-head", role: "row", style: "display:contents" });
   for (let i = 0; i < 7; i += 1) {
-    grid.append(el("div", { class: "rui-gcal-weekday", role: "columnheader" }, [WEEKDAY_LABELS[(cfg.firstDay + i) % 7]!]));
+    headRow.append(el("div", { class: "rui-gcal-weekday", role: "columnheader" }, [cfg.weekdays[(cfg.firstDay + i) % 7]!]));
   }
+  grid.append(headRow);
+
   // Keyboard navigation (X.3): arrows move a week/day at a time, Home/End
   // jump within the row. Enter/Space activate natively (cells are buttons).
   grid.onkeydown = (event: KeyboardEvent) => {
     const key = event.key;
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(key)) return;
     const live = liveRootOf(event);
-    const days = Array.from(live.querySelectorAll<HTMLElement>(".rui-gcal-day"));
+    const days = Array.from(live.querySelectorAll<HTMLButtonElement>(".rui-gcal-day"));
     const doc = live.getRootNode() as Document | ShadowRoot;
-    const idx = days.indexOf(doc.activeElement as HTMLElement);
+    const idx = days.indexOf(doc.activeElement as HTMLButtonElement);
     if (idx < 0) return;
-    let next = idx;
-    if (key === "ArrowLeft") next = idx - 1;
-    else if (key === "ArrowRight") next = idx + 1;
-    else if (key === "ArrowUp") next = idx - 7;
-    else if (key === "ArrowDown") next = idx + 7;
-    else if (key === "Home") next = idx - (idx % 7);
-    else if (key === "End") next = idx - (idx % 7) + 6;
-    if (next < 0 || next >= days.length) return;
+    // Step past unselectable days instead of stalling on them.
+    const seek = (from: number, step: number): number => {
+      for (let i = from; i >= 0 && i < days.length; i += step) {
+        if (!days[i]!.disabled) return i;
+      }
+      return -1;
+    };
+    let next = -1;
+    if (key === "ArrowLeft") next = seek(idx - 1, -1);
+    else if (key === "ArrowRight") next = seek(idx + 1, 1);
+    else if (key === "ArrowUp") next = seek(idx - 7, -7);
+    else if (key === "ArrowDown") next = seek(idx + 7, 7);
+    else if (key === "Home") next = seek(idx - (idx % 7), 1);
+    else if (key === "End") next = seek(idx - (idx % 7) + 6, -1);
+    const target = next >= 0 ? days[next] : undefined;
+    if (!target) return;
     event.preventDefault();
-    days[next]?.focus();
+    // Move the single tab stop with the focus, and remember it so the next
+    // render (or month rebuild) puts the tab stop back where the user left it.
+    for (const day of days) day.setAttribute("tabindex", "-1");
+    target.setAttribute("tabindex", "0");
+    cfg.activeSlot.set(target.getAttribute("data-iso"));
+    target.focus();
   };
 
   // Full weeks, Google-style: pad with the previous month's tail and the
@@ -161,22 +268,37 @@ function buildCalendarInto(root: HTMLElement, year: number, month: number, cfg: 
   const lead = (firstOfMonth.getDay() - cfg.firstDay + 7) % 7;
   const totalCells = Math.ceil((lead + daysInMonth) / 7) * 7;
   const start = new Date(year, month, 1 - lead);
+  const cells: HTMLButtonElement[] = [];
+  let week: HTMLElement | null = null;
 
   for (let i = 0; i < totalCells; i += 1) {
+    if (i % 7 === 0) {
+      week = el("div", { class: "rui-gcal-row", role: "row", style: "display:contents" });
+      grid.append(week);
+    }
     const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
     const iso = isoOf(date.getFullYear(), date.getMonth(), date.getDate());
     const inMonth = date.getMonth() === month;
+    const isSelected = Boolean(cfg.selected) && iso === cfg.selected;
+    const blocked = isBlocked(cfg, iso);
     const cell = el("button", {
       type: "button",
       class: "rui-gcal-day",
       role: "gridcell",
       "data-in-month": inMonth ? "true" : "false",
       "data-today": iso === cfg.todayIso ? "true" : null,
-      "data-selected": cfg.selected && iso === cfg.selected ? "true" : null,
+      "data-selected": isSelected ? "true" : null,
       "data-iso": iso,
       // Human-readable for screen readers ("June 10, 2026", not the ISO).
-      "aria-label": `${MONTH_NAMES[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`,
-      "aria-pressed": cfg.selected && iso === cfg.selected ? "true" : "false",
+      "aria-label": cfg.dayLabel(date),
+      // `aria-pressed` is not permitted on `role="gridcell"`; selection state
+      // belongs in `aria-selected`.
+      "aria-selected": isSelected ? "true" : "false",
+      // Roving tabindex — the active cell is chosen after the loop, so every
+      // cell starts out of the tab order instead of adding 42 tab stops.
+      tabindex: "-1",
+      disabled: blocked ? "" : null,
+      "data-disabled": blocked ? "true" : null,
     }) as HTMLButtonElement;
     cell.append(el("span", { class: "rui-gcal-daynum" }, [String(date.getDate())]));
 
@@ -186,11 +308,20 @@ function buildCalendarInto(root: HTMLElement, year: number, month: number, cfg: 
       const eventsEl = el("div", { class: "rui-gcal-events" });
       const visible = chipEvents.slice(0, 2);
       for (const evt of visible) {
-        eventsEl.append(el("span", {
+        const chip = el("span", {
           class: "rui-gcal-chip",
           style: `--rui-gcal-chip:${evt.color}`,
           title: evt.time ? `${evt.time} — ${evt.label}` : evt.label,
-        }, [evt.time ? `${evt.time} ${evt.label}` : evt.label]));
+          "data-clickable": cfg.onEventClick != null ? "true" : null,
+        }, [evt.time ? `${evt.time} ${evt.label}` : evt.label]);
+        if (cfg.onEventClick != null) {
+          chip.onclick = (event: Event) => {
+            // Opening the event must not also select the day underneath it.
+            event.stopPropagation();
+            cfg.helpers.invoke(cfg.onEventClick, evt.raw, iso);
+          };
+        }
+        eventsEl.append(chip);
       }
       if (dotCount > 0) {
         const dotsEl = el("div", { class: "rui-gcal-dots" });
@@ -202,24 +333,49 @@ function buildCalendarInto(root: HTMLElement, year: number, month: number, cfg: 
       cell.append(eventsEl);
     }
 
-    cell.onclick = (event: Event) => {
-      const live = liveRootOf(event);
-      // Instant visual feedback; a bound `selected` re-render confirms it.
-      for (const sel of live.querySelectorAll('.rui-gcal-day[data-selected="true"]')) {
-        sel.removeAttribute("data-selected");
-        sel.setAttribute("aria-pressed", "false");
-      }
-      const origin = (event.currentTarget ?? event.target) as HTMLElement | null;
-      const liveCell = origin?.closest?.(".rui-gcal-day") as HTMLElement | null;
-      liveCell?.setAttribute("data-selected", "true");
-      liveCell?.setAttribute("aria-pressed", "true");
-      if (cfg.selRef) cfg.helpers.setState(cfg.selRef, iso);
-      cfg.helpers.invoke(cfg.onSelect, iso);
-    };
-    grid.append(cell);
+    if (!blocked) {
+      cell.onclick = (event: Event) => {
+        const live = liveRootOf(event);
+        // Instant visual feedback; the fresh render confirms it from either the
+        // bound $variable or the instance slot written below.
+        for (const sel of live.querySelectorAll('.rui-gcal-day[data-selected="true"]')) {
+          sel.removeAttribute("data-selected");
+          sel.setAttribute("aria-selected", "false");
+        }
+        const origin = (event.currentTarget ?? event.target) as HTMLElement | null;
+        const liveCell = origin?.closest?.(".rui-gcal-day") as HTMLElement | null;
+        liveCell?.setAttribute("data-selected", "true");
+        liveCell?.setAttribute("aria-selected", "true");
+        // Keep the config in step so paging months re-renders the highlight.
+        cfg.selected = iso;
+        cfg.activeSlot.set(iso);
+        if (cfg.selRef) cfg.helpers.setState(cfg.selRef, iso);
+        // No $-binding: without this the next unrelated commit re-rendered a
+        // tree with no `data-selected`, and morph stripped the highlight while
+        // the app's own state still held the day.
+        else cfg.selSlot.set({ prop: cfg.propSelected, value: iso });
+        cfg.helpers.invoke(cfg.onSelect, iso);
+      };
+    }
+    (week ?? grid).append(cell);
+    cells.push(cell);
   }
 
+  // Exactly one cell in the tab order: where the user last was, else the
+  // selection, else today, else the first selectable day of the month.
+  const preferred = [cfg.activeSlot.get() ?? "", cfg.selected, cfg.todayIso].filter(Boolean);
+  let active: HTMLButtonElement | undefined;
+  for (const iso of preferred) {
+    active = cells.find((cell) => cell.getAttribute("data-iso") === iso && !cell.disabled);
+    if (active) break;
+  }
+  active ??= cells.find((cell) => !cell.disabled && cell.getAttribute("data-in-month") === "true")
+    ?? cells.find((cell) => !cell.disabled);
+  active?.setAttribute("tabindex", "0");
+
+  const focused = captureFocus(root);
   root.replaceChildren(toolbar, grid);
+  restoreFocus(root, focused);
 }
 
 export const Calendar: ComponentSpec = {
@@ -231,9 +387,13 @@ export const Calendar: ComponentSpec = {
     "for two-way selection; `onSelect(iso)` fires on a day click. `events` " +
     "mixes bare ISO strings (rendered as dots) and `{date, label, color?, " +
     "time?}` objects (rendered as colored chips with a '+N more' overflow; " +
-    "`color` is a tone name or CSS color). `onNavigate(year, month)` fires " +
-    "when the user pages months; `navigable=false` hides the toolbar " +
-    "buttons. Use for schedules, bookings, and availability calendars.",
+    "`color` is a tone name or CSS color); `onEventClick(event, iso)` fires " +
+    "when a chip is clicked. `minDate`/`maxDate`/`disabledDates` block days " +
+    "from being selected at all (booking windows, blackout days). " +
+    "`onNavigate(year, month)` fires when the user pages months; " +
+    "`navigable=false` hides the toolbar buttons; `locale` (or " +
+    "`weekdayLabels`/`monthLabels`) localises the names. Use for schedules, " +
+    "bookings, and availability calendars.",
   props: [
     { name: "month", type: "number", optional: true, description: "0–11 (default current month)" },
     { name: "year", type: "number", optional: true, description: "Full year (default current)" },
@@ -243,6 +403,13 @@ export const Calendar: ComponentSpec = {
     { name: "firstDay", type: "number", optional: true, description: "0=Sunday (default), 1=Monday" },
     { name: "navigable", type: "boolean", optional: true, description: "Show Today/prev/next controls (default true)" },
     { name: "onNavigate", type: "callable", optional: true, description: "(year, month) => … after paging" },
+    { name: "minDate", type: "string", optional: true, description: "ISO date — earlier days are not selectable (e.g. no past bookings)" },
+    { name: "maxDate", type: "string", optional: true, description: "ISO date — later days are not selectable (e.g. a 90-day horizon)" },
+    { name: "disabledDates", type: "any[]", optional: true, aliases: ["blackoutDates"], description: "ISO dates that cannot be selected (holidays, fully-booked days)" },
+    { name: "onEventClick", type: "callable", optional: true, description: "(event, isoDate) => … when an event chip is clicked (the day cell still handles keyboard selection)" },
+    { name: "locale", type: "string", optional: true, description: "BCP 47 tag for the weekday/month/day names (e.g. `de-DE`)" },
+    { name: "weekdayLabels", type: "any[]", optional: true, description: "Exactly 7 labels, Sunday first — overrides `locale`" },
+    { name: "monthLabels", type: "any[]", optional: true, description: "Exactly 12 month names — overrides `locale`" },
   ],
   render: (node, props, helpers) => {
     const now = new Date();
@@ -261,19 +428,49 @@ export const Calendar: ComponentSpec = {
       : stored;
     viewSlot.set(view);
 
+    // `selected` is authoritative when it is $-bound; otherwise the user's
+    // click lives in an instance slot (stamped with the prop it started from,
+    // so an author-driven change still wins).
+    const selRef = node.argMeta?.[2]?.stateRef;
+    const propSelected = asString(props.selected);
+    const selSlot = helpers.useInstanceState<{ prop: string; value: string } | null>("rui-gcal-selected", null);
+    const storedSel = selSlot.get();
+    const followSel = !storedSel || storedSel.prop !== propSelected;
+    if (!selRef && followSel) selSlot.set({ prop: propSelected, value: propSelected });
+    const selected = selRef || followSel ? propSelected : storedSel!.value;
+
     const { chips, dots } = readGcalEvents(props.events);
+    const { weekdays, months } = resolveLabels(asString(props.locale), props.weekdayLabels, props.monthLabels);
+    const locale = asString(props.locale);
     const cfg: GcalConfig = {
       todayIso: isoOf(now.getFullYear(), now.getMonth(), now.getDate()),
-      selected: asString(props.selected),
+      selected,
+      propSelected,
       chips,
       dots,
       firstDay: ((Math.round(asNumber(props.firstDay, 0)) % 7) + 7) % 7,
       navigable: props.navigable === undefined ? true : asBoolean(props.navigable),
+      minIso: isoDay(props.minDate),
+      maxIso: isoDay(props.maxDate),
+      blocked: new Set(asArray<unknown>(props.disabledDates).map(isoDay).filter(Boolean)),
+      weekdays,
+      months,
+      dayLabel: (date: Date): string => {
+        if (locale && typeof Intl !== "undefined") {
+          try {
+            return new Intl.DateTimeFormat(locale, { dateStyle: "long" }).format(date);
+          } catch { /* fall through to the label arrays */ }
+        }
+        return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+      },
       onSelect: props.onSelect,
       onNavigate: props.onNavigate,
-      selRef: node.argMeta?.[2]?.stateRef,
+      onEventClick: props.onEventClick,
+      selRef,
       helpers,
       viewSlot,
+      selSlot,
+      activeSlot: helpers.useInstanceState<string | null>("rui-gcal-active", null),
     };
 
     const root = el("div", { class: "rui-gcal" });

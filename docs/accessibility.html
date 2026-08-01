@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Accessibility · Aktion</title>
-  <meta name="description" content="Aktion's accessibility posture: conformance target, the keyboard map, screen-reader and streaming behavior, the ARIA built into components, and theme contrast guidance." />
+  <meta name="description" content="What Aktion guarantees for keyboard and screen-reader users: the machine-checked contrast invariants, the real keyboard map including every arrow-key component, the accessibility primitives, the universal role/aria channel, and the axe() audit." />
   <script>
     (function () {
       try {
@@ -15,10 +15,10 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
-    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #4f46e5); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
     .callout.warn { border-left-color: #f59e0b; }
     .callout.ok { border-left-color: #10b981; }
     .callout h4 { margin: 0 0 8px; font-size: 15px; }
@@ -31,6 +31,7 @@
     .pair-card.bad .pair-head { color: #b91c1c; background: rgba(239, 68, 68, .08); }
     .pair-card.good .pair-head { color: #047857; background: rgba(16, 185, 129, .1); }
     .pair-card pre { border: none; border-radius: 0; margin: 0; }
+    .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--doc-border); vertical-align: -1px; margin-right: 6px; }
     .lay-demo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; margin: 18px 0 28px; border: 1px solid var(--doc-border); border-radius: 12px; overflow: hidden; background: var(--doc-surface-elev); }
     @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
     .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
@@ -52,24 +53,40 @@
           LLM-generated UI is high-stakes for accessibility &mdash; the markup is
           produced for the user, not hand-audited. Aktion bakes accessible
           semantics into its components so generated output is usable by keyboard
-          and screen reader by default. This page documents what&rsquo;s built in
-          and how to keep your own additions conformant.
+          and screen reader by default. This page documents what&rsquo;s built in,
+          what the test suite actually enforces, and what you still own.
         </p>
       </header>
 
-      <h2 id="target">Conformance target</h2>
+      <h2 id="target">What the runtime guarantees</h2>
       <p>
-        Components target <strong>WCAG 2.1 AA</strong> semantics: meaningful roles,
-        accessible names, keyboard operability, and visible focus. The runtime
-        renders into a shadow DOM, so component-provided ARIA travels with the
-        element and is exposed to assistive technology like any native control.
+        Aktion is not certified against a conformance level, and this page does not
+        claim one &mdash; WCAG conformance is a property of a finished page, and the
+        library controls only part of it.
       </p>
-      <div class="callout">
-        <p>Conformance is a property of the <em>final page</em>, not just the
-          library. Custom themes, custom components, and the surrounding host page
-          all affect it &mdash; use the checklist at the end to verify your build.</p>
-      </div>
-
+      <p>
+        What it does do is ship accessible behaviour by default, and pin the
+        measurable parts to tests in this repository:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Guarantee</th><th>How it is enforced</th></tr></thead>
+        <tbody>
+          <tr><td>Every theme&rsquo;s focus ring, control boundary, and primary colour clear their contrast bar</td><td><strong>Machine-checked</strong> for all six built-in themes in <code>tests/theme-focus-contrast.test.ts</code> &mdash; see <a href="#contrast">Theme contrast</a>.</td></tr>
+          <tr><td>Nothing focusable is left without a visible indicator</td><td>A zero-specificity global rule paints a 2px <code>outline</code> in the focus token on every <code>button</code>, <code>a[href]</code>, <code>summary</code>, positive <code>tabindex</code>, and widget <code>role</code> at <code>:focus-visible</code>.</td></tr>
+          <tr><td>Components render real interactive elements with accessible names</td><td>Buttons are <code>&lt;button&gt;</code>, links are <code>&lt;a href&gt;</code>, fields are <code>&lt;input&gt;</code>/<code>&lt;select&gt;</code>/<code>&lt;textarea&gt;</code>, so <kbd>Enter</kbd>&hairsp;/&hairsp;<kbd>Space</kbd> activation and name computation are the browser&rsquo;s, not a handler&rsquo;s.</td></tr>
+          <tr><td>Dialogs are labelled, trap focus, and restore it</td><td><code>Modal</code> renders <code>role="dialog"</code> + <code>aria-modal="true"</code> + <code>aria-labelledby</code>, moves focus in, locks background scroll (ref-counted for nesting), and restores focus on close.</td></tr>
+          <tr><td>Motion respects the OS setting</td><td>13 <code>@media (prefers-reduced-motion: reduce)</code> blocks in the stylesheet, one of which disables every <code>animate</code> preset and hover utility outright.</td></tr>
+          <tr><td>Windows High Contrast stays legible</td><td>Two <code>@media (forced-colors: active)</code> blocks switch borders to <code>CanvasText</code> and focus rings to <code>Highlight</code>.</td></tr>
+          <tr><td>Common ARIA defects are catchable in CI</td><td><code>axe(node)</code> from <code>aktion-runtime/test</code> &mdash; see <a href="#audit">Auditing</a>.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The criteria the source and tests name as targets are <strong>1.4.11</strong>
+        (non-text contrast, the 3:1 bar), <strong>2.4.11</strong> (focus
+        appearance), and <strong>2.4.3</strong> (focus order &mdash; what
+        <code>FocusTrap</code>&rsquo;s <code>restoreFocus</code> exists for). They
+        are design targets, not an audit result.
+      </p>
       <div class="callout ok">
         <h4>What you get for free vs. what you own</h4>
         <p><strong>The library handles:</strong> roles, accessible names, focus
@@ -82,27 +99,72 @@
       </div>
 
       <h2 id="built-in">ARIA built into components</h2>
+      <p>
+        These behaviours come from the component itself, so a generated program
+        gets them without asking. Everything here was read out of the component
+        source, not inferred from the class names:
+      </p>
       <table class="signature-table">
         <thead><tr><th>Component</th><th>Accessibility behaviour</th></tr></thead>
         <tbody>
-          <tr><td><code>Modal</code></td><td>Sets <code>aria-modal</code> and <code>aria-labelledby</code> (from its title), <strong>traps focus</strong> within the dialog, restores focus to the trigger on close, and closes on <kbd>Esc</kbd>.</td></tr>
-          <tr><td><code>Toast</code></td><td>Uses <code>role="alert"</code> for the <code>danger</code> tone (assertive) and <code>role="status"</code> otherwise (polite), so notifications are announced appropriately.</td></tr>
-          <tr><td><code>NavLink</code></td><td>Marks the active route with <code>aria-current="page"</code>.</td></tr>
-          <tr><td>Buttons &amp; controls</td><td>Render as real interactive elements with accessible names, focusable in tab order with visible focus styling.</td></tr>
-          <tr><td>Form controls</td><td><code>FormControl</code> associates labels, help text, and error messages with their input.</td></tr>
+          <tr><td><code>Modal</code></td><td><code>role="dialog"</code>, <code>aria-modal="true"</code>, and <code>aria-labelledby</code> pointing at its title. Renders in the browser&rsquo;s top layer, <strong>traps</strong> <kbd>Tab</kbd>, moves focus in on open and restores it on close, locks background scrolling, and closes on <kbd>Esc</kbd> (unless <code>closable: false</code>).</td></tr>
+          <tr><td><code>Drawer</code> · <code>Sheet</code></td><td>Same overlay contract: labelled panel, backdrop and <kbd>Esc</kbd> dismissal, <code>onClose</code> on every route out. <code>Sheet</code> takes <code>label</code> when there is no visible <code>title</code>, so it is never an unnamed dialog.</td></tr>
+          <tr><td><code>Toast</code></td><td><code>role="alert"</code> (assertive) for the <code>danger</code> tone and <code>role="status"</code> (polite) for every other tone, so only real problems interrupt a screen reader.</td></tr>
+          <tr><td><code>NavLink</code></td><td>Marks the matching route with <code>aria-current="page"</code> alongside <code>data-active="true"</code>.</td></tr>
+          <tr><td><code>FormControl</code></td><td>Associates its label with the nested control automatically (override with <code>for</code>), and adds the validation slot &mdash; <code>error</code> marks the control invalid, <code>required</code> adds the <code>required</code> attribute.</td></tr>
+          <tr><td><code>Calendar</code> · <code>CalendarView</code></td><td>A real <code>role="grid"</code> with <code>role="row"</code> / <code>role="columnheader"</code> rows, a single roving tab stop, and disabled days skipped rather than stalled on.</td></tr>
+          <tr><td><code>Tabs</code></td><td><code>tablist</code>&hairsp;/&hairsp;<code>tab</code>&hairsp;/&hairsp;<code>tabpanel</code> wiring plus the full arrow&#8209;key contract below.</td></tr>
         </tbody>
       </table>
 
       <h2 id="keyboard">Keyboard map</h2>
+      <p>
+        Aktion adds no global shortcuts of its own. Everything below is either the
+        browser&rsquo;s native behaviour on a real element, or a documented
+        component contract:
+      </p>
       <table class="signature-table">
         <thead><tr><th>Key</th><th>Action</th></tr></thead>
         <tbody>
-          <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Move focus forward / backward through interactive elements. Inside a <code>Modal</code>, focus wraps within the dialog.</td></tr>
-          <tr><td><kbd>Enter</kbd> / <kbd>Space</kbd></td><td>Activate the focused button or control.</td></tr>
-          <tr><td><kbd>Esc</kbd></td><td>Close the open <code>Modal</code> (focus returns to the trigger).</td></tr>
-          <tr><td>Arrow keys</td><td>Move within composite widgets (tabs, menus) where applicable.</td></tr>
+          <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Move focus forward / backward through interactive elements. Inside a <code>Modal</code>, <code>Drawer</code>, <code>Sheet</code>, or an explicit <code>FocusTrap</code>, the cycle wraps instead of escaping to the page behind.</td></tr>
+          <tr><td><kbd>Enter</kbd> / <kbd>Space</kbd></td><td>Activate the focused control. Because controls are real <code>&lt;button&gt;</code> / <code>&lt;a&gt;</code> / <code>&lt;input&gt;</code> elements, this is native behaviour &mdash; there is no key handler to get wrong.</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Dismiss the <strong>topmost</strong> open overlay: <code>Modal</code>, <code>Drawer</code>, <code>Sheet</code>, <code>Popover</code>, <code>HoverCard</code>, <code>Tooltip</code>, <code>DropdownMenu</code>, <code>ContextMenu</code>, <code>Combobox</code>, <code>MultiSelect</code>, <code>MentionInput</code>, <code>NotificationBell</code>, <code>CommandPalette</code>, <code>Lightbox</code>, <code>SpeedDial</code>. It also cancels an <code>InlineEdit</code> and an in-flight keyboard drag in <code>Draggable</code> / <code>Sortable</code>. The innermost surface consumes the keystroke, so one press never closes two things.</td></tr>
+          <tr><td>Arrow keys</td><td>Move within a composite widget. <strong>24 components implement this</strong> &mdash; the full list is below, because &ldquo;where applicable&rdquo; is not something you can build against.</td></tr>
+          <tr><td><kbd>Home</kbd> / <kbd>End</kbd></td><td>Jump to the first / last item, in every widget marked in that list.</td></tr>
         </tbody>
       </table>
+      <div class="callout warn">
+        <h4><kbd>Esc</kbd> on a bare <code>FocusTrap</code> does nothing by default</h4>
+        <p><strong><code>FocusTrap</code> only acts on <kbd>Esc</kbd> when you give
+          it <code>onEscape</code>.</strong> The overlay components wire their own,
+          which is why <code>Modal</code> closes and a hand-rolled panel does not.
+          See <a href="#focustrap"><code>FocusTrap</code></a>.</p>
+      </div>
+
+      <h3 id="arrow-keys">Which components implement arrow-key navigation</h3>
+      <p>
+        Grouped by the interaction pattern, so you can tell what a key will do
+        before you press it:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Pattern</th><th>Components</th><th>Keys</th></tr></thead>
+        <tbody>
+          <tr><td>Tab strips &amp; option strips</td><td><code>Tabs</code>, <code>SegmentedControl</code>, <code>ToggleGroup</code>, <code>VariantSelector</code></td><td><kbd>&larr;</kbd><kbd>&rarr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd> move the selection, <kbd>Home</kbd>/<kbd>End</kbd> jump to the ends</td></tr>
+          <tr><td>Menus &amp; listbox popups</td><td><code>DropdownMenu</code>, <code>ContextMenu</code>, <code>Combobox</code>, <code>MultiSelect</code>, <code>NotificationBell</code>, <code>CommandPalette</code></td><td><kbd>&uarr;</kbd><kbd>&darr;</kbd> move the active option, <kbd>Home</kbd>/<kbd>End</kbd> to the ends, <kbd>Enter</kbd> commits</td></tr>
+          <tr><td>Inline autocomplete</td><td><code>MentionInput</code></td><td><kbd>&uarr;</kbd><kbd>&darr;</kbd> only &mdash; no <kbd>Home</kbd>/<kbd>End</kbd>, because those belong to the text field</td></tr>
+          <tr><td>Trees</td><td><code>Tree</code>, <code>JsonTree</code></td><td><kbd>&uarr;</kbd><kbd>&darr;</kbd> move, <kbd>&larr;</kbd><kbd>&rarr;</kbd> collapse / expand, <kbd>Home</kbd>/<kbd>End</kbd> to the ends</td></tr>
+          <tr><td>Date grids</td><td><code>Calendar</code>, <code>CalendarView</code></td><td><kbd>&larr;</kbd><kbd>&rarr;</kbd> a day, <kbd>&uarr;</kbd><kbd>&darr;</kbd> a week, <kbd>Home</kbd>/<kbd>End</kbd> the row (<code>CalendarView</code> adds <kbd>PageUp</kbd>/<kbd>PageDown</kbd> for months)</td></tr>
+          <tr><td>Media</td><td><code>Carousel</code>, <code>Lightbox</code></td><td><kbd>&larr;</kbd><kbd>&rarr;</kbd> step between slides; <code>Carousel</code> adds <kbd>Home</kbd>/<kbd>End</kbd></td></tr>
+          <tr><td>Value steppers</td><td><code>Rating</code>, <code>QuantityStepper</code></td><td><kbd>&larr;</kbd><kbd>&rarr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd> change the value, <kbd>Home</kbd>/<kbd>End</kbd> the extremes (<code>QuantityStepper</code> adds <kbd>PageUp</kbd>/<kbd>PageDown</kbd>)</td></tr>
+          <tr><td>Splitters &amp; keyboard drag</td><td><code>ResizablePanels</code>, <code>Sortable</code>, <code>OnGesture</code></td><td><kbd>&larr;</kbd><kbd>&rarr;</kbd> (and <kbd>&uarr;</kbd><kbd>&darr;</kbd> on the latter two) resize or reorder without a pointer; <kbd>Esc</kbd> cancels a <code>Sortable</code> drag</td></tr>
+          <tr><td>Text entry</td><td><code>PinInput</code>, <code>RichTextEditor</code></td><td><kbd>&larr;</kbd><kbd>&rarr;</kbd> move between <code>PinInput</code> slots (<kbd>Backspace</kbd> steps back too); caret motion in the editor</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Every widget in the first four rows uses a <strong>roving tab stop</strong>:
+        the group is one <kbd>Tab</kbd> stop and the arrows move inside it, which is
+        what keeps a 30-item menu from adding 30 stops to the page.
+      </p>
 
       <h2 id="streaming">Screen readers &amp; streaming</h2>
       <p>
@@ -119,20 +181,105 @@
         <li>Prefer revealing a region once its content has settled (e.g. an
           <code>Async</code>/<code>Lazy</code> fallback) over announcing every
           intermediate token.</li>
+        <li>Announce the <em>outcome</em>, not the progress: one
+          <code>LiveRegion</code> that flips to &ldquo;Saved&rdquo; beats a region
+          bound to a value that changes on every keystroke.</li>
       </ul>
 
       <h2 id="contrast">Theme contrast</h2>
       <p>
-        The built-in light and dark themes are designed for readable text/background
-        contrast. When you author a custom theme with <code>$theme({...})</code>:
+        The six built-in themes are not eyeballed. Three contrast invariants are
+        asserted for every one of them in
+        <code>tests/theme-focus-contrast.test.ts</code>, so a retint that breaks one
+        fails the build rather than shipping:
       </p>
-      <ul>
-        <li>Keep body text at <strong>4.5:1</strong> contrast against its background
-          and large text / UI affordances at <strong>3:1</strong>.</li>
-        <li>Never encode meaning with colour alone &mdash; pair <code>tone</code>
-          with an icon or text label (the components already do this for status).</li>
-        <li>Verify focus indicators remain visible against your custom surfaces.</li>
-      </ul>
+      <table class="signature-table">
+        <thead><tr><th>Invariant</th><th>Bar</th><th>Why that token carries it</th></tr></thead>
+        <tbody>
+          <tr><td><code>colorFocusRing</code> against the theme&rsquo;s own <code>colorSurface</code></td><td><strong>&ge; 3:1</strong></td><td>The focus indicator is the control&rsquo;s <code>border-color</code> switching to the full-strength focus token. The 22&nbsp;%-alpha glow that accompanies it measures only ~1.2&ndash;1.4:1 and <em>cannot</em> carry the indicator on its own.</td></tr>
+          <tr><td><code>colorBorderControl</code> against <code>colorSurface</code></td><td><strong>&ge; 3:1</strong></td><td>The boundary of a control the user has to locate: <code>Input</code>, <code>Select</code>, <code>Textarea</code>, <code>Checkbox</code>, <code>Radio</code>, the <code>Switch</code> track, and the picker triggers.</td></tr>
+          <tr><td><code>colorPrimary</code> against <code>colorSurface</code></td><td><strong>&ge; 4.5:1</strong></td><td>Over a hundred rules paint <code>color: var(--rui-color-primary)</code> as body text, <em>and</em> the same token is the fill behind the primary button&rsquo;s white label &mdash; so it must clear the text bar in both directions.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        That third invariant is why <code>light.colorPrimary</code> is
+        <span class="swatch" style="background:#4f46e5"></span><code>#4f46e5</code>
+        (6.29:1 on white) and no longer the indigo-500 <code>#6366f1</code>, which
+        measured 4.47:1 &mdash; fine as large text, short as the small text the
+        library actually paints with it. <code>colorPrimaryHover</code> moved with
+        it, to <code>#4338ca</code>.
+      </p>
+      <div class="callout">
+        <h4><code>colorBorder</code> and <code>colorBorderControl</code> are two different jobs</h4>
+        <p><strong>Do not collapse them into one value.</strong>
+          <code>colorBorder</code> is deliberately faint
+          (<span class="swatch" style="background:#e2e8f0"></span><code>#e2e8f0</code>
+          on <code>light</code>, 1.17&ndash;1.70:1 across the six themes) because the
+          same token draws dividers and table row separators, where a 3:1 hairline
+          reads as heavy ruling. <code>colorBorderControl</code>
+          (<span class="swatch" style="background:#767f8c"></span><code>#767f8c</code>)
+          exists precisely so form controls can clear 3:1 while decorative
+          hairlines stay quiet. Retint <strong>both</strong> when you author a
+          theme.</p>
+      </div>
+      <p>
+        One more split worth knowing: <code>colorAccent</code> has two jobs &mdash;
+        a fill paired with <code>colorAccentText</code>, and link text. Themes whose
+        accent already clears 4.5:1 as text inherit a derived
+        <code>colorLink</code>; <code>soft</code>, <code>glass</code>, and
+        <code>modern</code> ship an explicit one because their accents do not.
+      </p>
+
+      <h3 id="status-colours">The three-way status colour split</h3>
+      <p>
+        A status hue cannot do three jobs at three different contrast bars, so each
+        one is three tokens. This is the part of the theme system most likely to be
+        missed when you write a custom palette:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Token family</th><th>Painted as</th><th>Bar</th><th><code>light</code> values</th></tr></thead>
+        <tbody>
+          <tr><td><code>colorSuccess</code> · <code>Warning</code> · <code>Danger</code> · <code>Info</code></td><td>Fills, bars, dots, chart marks &mdash; shapes, never text</td><td>3:1</td><td><code>#10b981</code> · <code>#f59e0b</code> · <code>#ef4444</code> · <code>#06b6d4</code></td></tr>
+          <tr><td><code>colorSuccessText</code> · <code>WarningText</code> · <code>DangerText</code> · <code>InfoText</code></td><td>The same status hue rendered as <em>text</em> on a surface</td><td>4.5:1</td><td><code>#047857</code> · <code>#a35a00</code> · <code>#d92d20</code> · <code>#0e7490</code></td></tr>
+          <tr><td><code>colorOnSuccess</code> · <code>OnWarning</code> · <code>OnDanger</code> · <code>OnInfo</code></td><td>Ink painted <em>on top of</em> the status fill</td><td>4.5:1 against that fill</td><td><code>#04291e</code> · <code>#451a03</code> · <code>#2c0606</code> · <code>#0c2b3a</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>#10b981</code> measures 2.54:1 on white, so around forty-five rules
+        &mdash; <code>Badge</code>, <code>Tag</code>, <code>Pill</code>,
+        <code>Callout</code>, the <code>StatCard</code> value, a danger
+        <code>MenuItem</code>, field errors &mdash; take the <code>*Text</code> token
+        instead of the fill.
+      </p>
+      <p>
+        Symmetrically, everywhere that used a literal <code>#fff</code> on a status
+        fill now takes <code>colorOn*</code>: a completed <code>Step</code> tick, a
+        <code>Toast</code> icon disc, a danger <code>Button</code> label, a count
+        badge.
+      </p>
+      <div class="callout warn">
+        <h4>The rule for theme authors</h4>
+        <p><strong>Retint a status hue &rarr; retint its <code>*Text</code> and
+          <code>colorOn*</code> partners.</strong> Change
+          <code>colorSuccess</code> alone and your success <em>text</em> and your
+          on-fill ink still come from the default palette, so they stop matching
+          the brand and may stop clearing their bar. Two themes already break the
+          &ldquo;white ink is fine&rdquo; assumption in the other direction:
+          <code>corporate</code> sets <code>colorOnDanger: "#ffffff"</code> and
+          <code>modern</code> sets <code>colorOnInfo: "#ffffff"</code>, because
+          those two fills are dark enough for it.</p>
+      </div>
+      <p>
+        The rest of the rule set is short: body text at 4.5:1, large text and UI
+        affordances at 3:1, and never meaning from colour alone &mdash; pair
+        <code>tone</code> with an icon or a label, as the components already do.
+      </p>
+      <p>
+        One caveat on the invariants: they compare opaque hex values, so
+        <code>glass</code>&rsquo;s translucent <code>rgba(&hellip;)</code> surfaces
+        are skipped by the test and reviewed by hand.
+        <a href="themes.html#colors">Themes</a> has the full token reference.
+      </p>
 
       <h2 id="custom">Keeping custom components accessible</h2>
       <div class="pair">
@@ -155,14 +302,75 @@
       <ul>
         <li>Build from real interactive elements (<code>button</code>,
           <code>a</code>, <code>input</code>) rather than click-handler
-          <code>div</code>s.</li>
-        <li>Give every control an accessible name (visible label, <code>aria-label</code>,
-          or <code>aria-labelledby</code>).</li>
-        <li>Use <code>$id</code> to generate unique ids for label/description
-          associations instead of hard-coding them.</li>
-        <li>Manage focus for anything that opens/closes (mirror <code>Modal</code>:
-          trap while open, restore on close).</li>
+          <code>div</code>s. The global focus-visible rule only nets real controls
+          and widget roles &mdash; a bare <code>div</code> gets nothing.</li>
+        <li>Give every control an accessible name (visible label,
+          <code>aria: { label: "&hellip;" }</code>, or
+          <code>aria: { labelledby: "&hellip;" }</code>).</li>
+        <li>Use <code>$id(prefix?)</code> to generate unique ids for
+          label/description associations instead of hard-coding them &mdash;
+          hard-coded ids collide the moment the component renders twice, and
+          <code>axe()</code> flags it as <code>duplicate-id</code>.</li>
+        <li>Manage focus for anything that opens or closes: wrap it in
+          <code>FocusTrap</code> while open rather than reimplementing the cycle.</li>
+        <li>An icon-only control needs a label somewhere &mdash; either
+          <code>aria: { label }</code> on the button or a
+          <code>VisuallyHidden</code> child.</li>
       </ul>
+
+      <h2 id="channels">The universal <code>role</code> and <code>aria</code> channels</h2>
+      <p>
+        Every component accepts a small set of universal props on top of its own,
+        and two of them are the escape valve for ARIA you cannot fix from the
+        outside. Reach for them when a component&rsquo;s default semantics are wrong
+        for your context &mdash; not as a first resort.
+      </p>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Prop</th><th>Shape</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>aria</code></td><td><code>{ label, labelledby, describedby, expanded, &hellip; }</code></td><td>Each key is lower-cased and prefixed with <code>aria-</code> when it is not already, then set as an attribute. <code>null</code> values are skipped, and a key must be 2&ndash;33 lowercase letters or hyphens.</td></tr>
+          <tr><td><code>role</code></td><td><code>string</code></td><td>Trimmed, lower-cased, and set <strong>only if it is on the allow-list</strong> below. Anything else is dropped silently.</td></tr>
+          <tr><td><code>id</code> / <code>anchor</code></td><td><code>string</code></td><td>Sets the element id (must match <code>/^[A-Za-z][\w-]*$/</code>) &mdash; the target for <code>SkipLink</code> and <code>aria-labelledby</code>.</td></tr>
+          <tr><td><code>tooltip</code></td><td><code>string</code></td><td>Sets the native <code>title</code> attribute. Not a substitute for a label.</td></tr>
+          <tr><td><code>hidden</code></td><td><code>boolean</code></td><td>Sets the <code>hidden</code> attribute, removing the node from the accessibility tree as well as the layout.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The <code>role</code> allow-list is closed on purpose: an unrecognised role
+        is ignored by assistive tech anyway, and a plausible-but-wrong one
+        (<code>button</code> on a container, a landmark with no owned children) is
+        worse than the defect it was meant to work around.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Category</th><th>Accepted values</th></tr></thead>
+        <tbody>
+          <tr><td>Landmarks &amp; structure</td><td><code>banner</code>, <code>complementary</code>, <code>contentinfo</code>, <code>form</code>, <code>main</code>, <code>navigation</code>, <code>region</code>, <code>search</code>, <code>article</code>, <code>group</code>, <code>list</code>, <code>listitem</code>, <code>separator</code>, <code>heading</code>, <code>figure</code>, <code>note</code>, <code>definition</code>, <code>term</code></td></tr>
+          <tr><td>Live regions &amp; status</td><td><code>status</code>, <code>alert</code>, <code>log</code>, <code>timer</code>, <code>marquee</code>, <code>progressbar</code>, <code>meter</code></td></tr>
+          <tr><td>Common widgets</td><td><code>button</code>, <code>link</code>, <code>img</code>, <code>toolbar</code>, <code>tooltip</code>, <code>dialog</code>, <code>tab</code>, <code>tabpanel</code>, <code>tablist</code>, <code>menuitem</code>, <code>option</code>, <code>checkbox</code>, <code>radio</code>, <code>switch</code></td></tr>
+          <tr><td>Explicitly neutral</td><td><code>none</code>, <code>presentation</code></td></tr>
+        </tbody>
+      </table>
+<pre><code>$app(Column([
+  Column([
+    Input("q", { placeholder: "Search invoices", aria: { label: "Search invoices" } }),
+    Button("Search", { variant: "primary" })
+  ], { gap: "sm", role: "search" }),                              // landmark on a plain container
+  Row([
+    IconButton("trash", { aria: { label: "Delete selected" } }),  // name an icon-only control
+    IconButton("download", { aria: { label: "Export selected" } })
+  ], { gap: "xs", role: "toolbar" }),                             // one group, not two loose buttons
+  Box([Text("3 of 12 selected")], { role: "status" })             // announced whenever the text changes
+], { gap: "md" }))</code></pre>
+      <p>
+        Roles that need matching owned children or ARIA state
+        (<code>gridcell</code>, <code>row</code>, <code>treeitem</code>&hellip;) are
+        deliberately absent, because a bare role override cannot supply them. Use
+        the component that already builds the whole pattern instead.
+      </p>
+      <p>
+        <code>none</code> and <code>presentation</code> go the other way: they take a
+        purely decorative wrapper out of the accessibility tree entirely.
+      </p>
 
       <h2 id="primitives">Accessibility primitives</h2>
       <p>
@@ -171,28 +379,46 @@
         don&rsquo;t hand&#8209;roll it.
       </p>
       <table class="signature-table">
-        <thead><tr><th>Component</th><th>What it does</th></tr></thead>
+        <thead><tr><th>Signature</th><th>What it does</th></tr></thead>
         <tbody>
-          <tr><td><code>VisuallyHidden(child)</code></td><td>Hides content visually but keeps it in the accessibility tree &mdash; for extra context a sighted user doesn&rsquo;t need.</td></tr>
-          <tr><td><code>SkipLink({ to, label })</code></td><td>A &ldquo;skip to main content&rdquo; link that appears on focus &mdash; the first thing a keyboard user tabs to.</td></tr>
-          <tr><td><code>LiveRegion(text, { politeness, visible })</code></td><td>An <code>aria-live</code> region. <code>politeness: "polite"</code> (default) or <code>"assertive"</code> announces dynamic changes; set <code>visible: true</code> to also show it on screen.</td></tr>
-          <tr><td><code>FocusTrap(child, { active })</code></td><td>Cycles <kbd>Tab</kbd> within its subtree and autofocuses the first control &mdash; the mechanism behind accessible dialogs. <code>active</code> defaults to <code>true</code>.</td></tr>
+          <tr><td><code>VisuallyHidden(children)</code></td><td>Renders content that is invisible on screen but present in the accessibility tree (the <code>sr-only</code> pattern) &mdash; icon-button labels, form hints, context a sighted user gets from layout. <code>children</code> is <code>Node[]</code> and takes the positional slot; <code>child</code> is an accepted alias.</td></tr>
+          <tr><td><code>SkipLink(to, { label })</code></td><td>A &ldquo;skip to main content&rdquo; link, hidden until focused. <code>to</code> is <strong>positional and required</strong> &mdash; the target element id, with or without the <code>#</code>. <code>label</code> defaults to <code>"Skip to content"</code>.</td></tr>
+          <tr><td><code>LiveRegion(text, { politeness, visible })</code></td><td>An <code>aria-live</code> region with <code>aria-atomic="true"</code>. <code>politeness: "polite"</code> (default) renders <code>role="status"</code>; <code>"assertive"</code> renders <code>role="alert"</code>. Visually hidden unless <code>visible: true</code>.</td></tr>
+          <tr><td><code>FocusTrap(child, { active, restoreFocus, onEscape, autoFocus })</code></td><td>Confines <kbd>Tab</kbd> to its subtree. <code>child</code> is positional and required; see the <a href="#focustrap">full prop table</a> below.</td></tr>
         </tbody>
       </table>
-<pre><code>$app(Column([
+      <div class="callout warn">
+        <h4><code>SkipLink</code> takes its target positionally</h4>
+        <p><strong><code>SkipLink("#main", { label })</code>, not
+          <code>SkipLink({ to, label })</code>.</strong> Because the runtime is
+          lenient about argument shapes, the object-only form parses and renders an
+          empty link instead of erroring &mdash; which is exactly why it is worth
+          calling out.</p>
+      </div>
+<pre><code>$status = "Nothing saved yet"
+$app(Column([
   SkipLink("#main", { label: "Skip to content" }),
-  Button("Save", { onClick: () =&gt; { save(); $status = "Saved" } }),
-  LiveRegion(`Status: ${$status}`, { politeness: "polite" }),  // announced to screen readers
-  VisuallyHidden(Text("Press Escape to close")),
-]))</code></pre>
+  Column([Text("Main content starts here.")], { id: "main" }),
+  Button("Save", { variant: "primary", onClick: () =&gt; { $status = "Saved just now" } }),
+  LiveRegion(`Status: ${$status}`, { politeness: "polite" }),   // announced, not shown
+  VisuallyHidden(Text("Press Escape to close"))                 // shown to AT only
+], { gap: "md" }))</code></pre>
+      <p>
+        Give the <code>SkipLink</code> target a real <code>id</code> through the
+        universal <code>id</code> channel. If that id is missing at click time the
+        link lands on the nearest content landmark (<code>main</code>,
+        <code>[role="main"]</code>, the render root, or the first <code>h1</code>)
+        instead of sending the hash router to a bogus route.
+      </p>
       <div class="lay-demo">
-        <span class="lay-demo-label">Live &mdash; the status text is announced politely to screen readers</span>
+        <span class="lay-demo-label">Live &mdash; tab into the page: the skip link appears first, and the status text is announced politely</span>
 <pre><code>$status = "Nothing saved yet"
 $app(Column([
   SkipLink("#main", { label: "Skip to content" }),
   Button("Save", { variant: "primary", onClick: () =&gt; { $status = "Saved just now" } }),
+  Column([Text($status)], { id: "main" }),
   LiveRegion(`Status: ${$status}`, { politeness: "polite" }),
-  VisuallyHidden(Text("This sentence is read by screen readers but hidden visually.")),
+  VisuallyHidden(Text("This sentence is read by screen readers but hidden visually."))
 ], { gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
@@ -201,29 +427,55 @@ $app(Column([
       <p>
         Wrap any subtree in <code>FocusTrap</code> while it is open and
         <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> cycle <em>within</em> it
-        instead of escaping to the page behind. It autofocuses the first control on
-        mount, so it&rsquo;s the right primitive for hand&#8209;rolled dialogs,
-        drawers, and command palettes. (<code>Modal</code> already traps focus, so
-        reach for <code>FocusTrap</code> only when you build the overlay yourself.)
-        Bind <code>active</code> to the open state so the trap engages only while the
-        surface is visible:
+        instead of escaping to the page behind. It is the primitive for
+        hand&#8209;rolled dialogs, drawers, and command palettes.
       </p>
+      <p>
+        <code>Modal</code>, <code>Drawer</code>, and <code>Sheet</code> already trap
+        focus, so reach for it only when you build the overlay yourself.
+      </p>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Prop</th><th>Type</th><th>Default</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td><code>child</code></td><td><code>Node</code></td><td>&mdash;</td><td><strong>Required, positional.</strong> The subtree to confine. <code>children</code> is an accepted alias.</td></tr>
+          <tr><td><code>active</code></td><td><code>boolean</code></td><td><code>true</code></td><td>Bind it to the open state so the trap engages only while the surface is visible. Flipping it to <code>false</code> releases focus and runs the restore.</td></tr>
+          <tr><td><code>restoreFocus</code></td><td><code>boolean</code></td><td><code>true</code></td><td>Return focus to whatever opened the trap when it closes &mdash; including when it is unmounted in the same tick. Set <code>false</code> only when you move focus somewhere else yourself.</td></tr>
+          <tr><td><code>onEscape</code></td><td><code>callable</code></td><td>none</td><td>Called on <kbd>Esc</kbd> inside the trap, and the keystroke is consumed so an outer surface does not also close. <strong>Without it, <kbd>Esc</kbd> does nothing.</strong></td></tr>
+          <tr><td><code>autoFocus</code></td><td><code>boolean | string</code></td><td><code>true</code></td><td><code>true</code> focuses the first focusable control in document order on open. A CSS selector focuses that element instead (<code>"[data-cancel]"</code> for a destructive dialog). <code>false</code> opts out entirely.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Initial focus fires on the closed&rarr;open transition only, so typing
+        inside a trapped form never yanks the caret back to the first field.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; open the panel, then press Tab repeatedly (focus cycles) and Escape (onEscape closes it)</span>
 <pre><code>$open = false
+function closePanel() { $open = false }
 $app(Column([
   Button("Open panel", { variant: "primary", onClick: () =&gt; { $open = true } }),
   $open ? FocusTrap(
     Card([
-      CardHeader("Edit profile"),
-      Input("name", { placeholder: "Name" }),
-      Input("email", { placeholder: "Email" }),
+      CardHeader("Edit profile", { subtitle: "Tab cycles inside. Escape closes." }),
+      Input("name", { placeholder: "Name", aria: { label: "Name" } }),
+      Input("email", { placeholder: "Email", aria: { label: "Email" } }),
       Row([
-        Button("Cancel", { onClick: () =&gt; { $open = false } }),
-        Button("Save", { variant: "primary", onClick: () =&gt; { $open = false } }),
-      ], { gap: "sm" }),
+        Button("Cancel", { onClick: closePanel, data: { cancel: "true" } }),
+        Button("Save", { variant: "primary", onClick: closePanel })
+      ], { gap: "sm" })
     ]),
-    { active: $open }
-  ) : null,
+    { active: $open, onEscape: closePanel, autoFocus: "[data-cancel]" }
+  ) : Text("Panel closed.", { tone: "muted" })
 ], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        <code>autoFocus: "[data-cancel]"</code> lands on Cancel rather than the
+        first field &mdash; the right default for a dialog whose primary action is
+        destructive. The selector is resolved inside the trap, so
+        <code>data: { cancel: "true" }</code> on the button is all the wiring it
+        needs.
+      </p>
 
       <h2 id="rtl">RTL &amp; logical layout</h2>
       <p>
@@ -237,47 +489,107 @@ $app(Column([
       <p>
         Because spacing and layout primitives use logical properties, most programs
         need no changes &mdash; the same tree lays out correctly in both directions.
+        The <code>direction</code> key inside <code>$theme({&hellip;})</code> is
+        advisory metadata only; the attribute is what flips layout.
       </p>
 
       <h2 id="motion">Reduced motion &amp; forced colors</h2>
       <p>
         Motion is suppressed automatically under
-        <code>prefers-reduced-motion: reduce</code>: a global rule disables every
-        <code>animate</code> preset and hover utility, and motion components
-        (<code>Reveal</code>, <code>Parallax</code>, <code>Confetti</code>,
-        <code>Backdrop</code>, <code>TypingIndicator</code>, <code>Sheet</code>&hellip;)
-        guard themselves with <code>matchMedia</code>. You can branch on it directly:
+        <code>prefers-reduced-motion: reduce</code>. A global rule disables every
+        <code>animate</code> preset and hover utility; twelve more scoped blocks stop
+        or slow individual animations; and motion components (<code>Reveal</code>,
+        <code>Parallax</code>, <code>Confetti</code>, <code>Backdrop</code>,
+        <code>TypingIndicator</code>, <code>Sheet</code>&hellip;) guard themselves
+        with <code>matchMedia</code>.
+      </p>
+      <p>
+        You can branch on the same flag from a program:
       </p>
 <pre><code>anim = $util.media.prefersReducedMotion ? "none" : "fade-up"
 Card([Text("Respectful by default")], { animate: anim })</code></pre>
       <p>
-        A global <code>@media (forced-colors: active)</code> block keeps components
-        legible in Windows High Contrast mode &mdash; borders and focus rings switch
-        to system colors so nothing disappears.
+        Looping indicators are slowed rather than frozen &mdash; a
+        <code>Spinner</code> or <code>Skeleton</code> that stopped entirely would
+        read as a hung page &mdash; while decorative animation
+        (<code>Confetti</code>, blobs, pulsing dots) is switched off outright.
+      </p>
+      <p>
+        Two <code>@media (forced-colors: active)</code> blocks keep components legible
+        in Windows High Contrast mode. Borders on buttons, cards, inputs, badges,
+        tags, selects, textareas, tables, and modals switch to
+        <code>CanvasText</code>, and focus rings switch to <code>Highlight</code>.
+      </p>
+      <p>
+        The second block reverts the gradient-title effect the <code>soft</code> theme
+        uses to plain <code>CanvasText</code>, so those headings do not vanish.
       </p>
 
       <h2 id="audit">Auditing with <code>axe()</code></h2>
       <p>
         The <a href="testing.html">testing utilities</a> ship an
-        <code>axe(node)</code> audit that flags the most common violations &mdash;
-        missing <code>alt</code> text, unnamed buttons, unlabelled inputs, duplicate
-        ids, and bad <code>tabindex</code> &mdash; plus <code>within(node)</code> for
-        scoped queries. Run it in a test to keep regressions out.
+        <code>axe(node)</code> audit that needs no dependency. It returns an array
+        of <code>{ rule, message, element }</code> violations &mdash; empty means
+        clean &mdash; so it drops straight into an assertion:
       </p>
-<pre><code>import { render, axe } from "aktion-runtime/test"
+      <table class="signature-table">
+        <thead><tr><th><code>rule</code></th><th>Flags</th></tr></thead>
+        <tbody>
+          <tr><td><code>img-alt</code></td><td>An <code>&lt;img&gt;</code> with no <code>alt</code> attribute at all.</td></tr>
+          <tr><td><code>svg-name</code></td><td>A standalone <code>&lt;svg&gt;</code> with no <code>aria-label</code>, no <code>&lt;title&gt;</code>, and no <code>aria-hidden="true"</code>. An SVG inside a button or link is judged by its control&rsquo;s name instead.</td></tr>
+          <tr><td><code>button-name</code> · <code>link-name</code></td><td>A button or link with no accessible name. <code>aria-labelledby</code> counts only when the referenced element exists.</td></tr>
+          <tr><td><code>label</code></td><td>An <code>input</code>/<code>select</code>/<code>textarea</code> with no label, <code>aria-label</code>, resolvable <code>aria-labelledby</code>, or wrapping <code>&lt;label&gt;</code>.</td></tr>
+          <tr><td><code>duplicate-id</code></td><td>The same <code>id</code> twice in the audited subtree.</td></tr>
+          <tr><td><code>tabindex</code></td><td>A positive <code>tabindex</code>, which disrupts document tab order.</td></tr>
+        </tbody>
+      </table>
+<pre><code>import { describe, it, expect } from "vitest"
+import { render, axe, flush } from "aktion-runtime/test"
 
-const { container } = render(program)
-const issues = axe(container)
-expect(issues).toHaveLength(0)</code></pre>
+describe("dashboard a11y", () =&gt; {
+  it("has no axe violations", async () =&gt; {
+    const screen = render(program)
+    await flush()                                        // let the first render commit
+    const issues = axe(screen.shadowRoot)                // NOT screen.container — see below
+    expect(issues).toEqual([])                           // failure prints rule + message + element
+  })
+})</code></pre>
+      <div class="callout warn">
+        <h4>Audit <code>screen.shadowRoot</code>, not <code>screen.container</code></h4>
+        <p><strong><code>axe()</code> walks the subtree with
+          <code>querySelectorAll</code>, which does not cross a shadow
+          boundary.</strong> <code>screen.container</code> is the
+          <code>&lt;aktion-app&gt;</code> host and the program renders <em>inside</em>
+          its shadow root, so <code>axe(screen.container)</code> always returns an
+          empty array &mdash; a test that passes because it looked at nothing. Pass
+          <code>screen.shadowRoot</code>, and <code>await flush()</code> first so
+          there is something there to audit.</p>
+      </div>
+      <p>
+        <code>within(node)</code> from the same entry point scopes queries to one
+        subtree, which pairs well with auditing a single <code>Card</code> or dialog
+        rather than the whole app. See <a href="testing.html#a11y">Testing</a> for
+        the surrounding harness and <a href="typescript.html#types">TypeScript</a>
+        for the <code>A11yViolation</code> type.
+      </p>
 
       <h2 id="checklist">Pre-ship checklist</h2>
       <ol>
-        <li>Every interactive element is reachable and operable by keyboard.</li>
-        <li>Focus is visible and never trapped except intentionally (modals).</li>
-        <li>All controls have accessible names.</li>
-        <li>Status/error messages use the correct <code>Toast</code> tone (polite vs assertive).</li>
-        <li>Custom theme contrast meets AA.</li>
+        <li>Every interactive element is reachable and operable by keyboard, and
+          composite widgets are one tab stop with arrow keys inside.</li>
+        <li>Focus is visible everywhere and never trapped except intentionally
+          &mdash; and every intentional trap has an <kbd>Esc</kbd> route out.</li>
+        <li>All controls have accessible names; icon-only controls carry
+          <code>aria: { label }</code> or a <code>VisuallyHidden</code> child.</li>
+        <li>Status and error messages use the correct <code>Toast</code> tone or
+          <code>LiveRegion</code> politeness &mdash; assertive only for
+          interruptions.</li>
+        <li>Ids come from <code>$id</code>, not literals, so nothing collides.</li>
+        <li>A custom theme retints <code>colorBorderControl</code>,
+          <code>colorFocusRing</code>, and every <code>*Text</code> /
+          <code>colorOn*</code> partner &mdash; not just the base hues.</li>
         <li>Meaning isn&rsquo;t conveyed by colour alone.</li>
+        <li><code>axe(screen.shadowRoot)</code> returns an empty array in CI.</li>
       </ol>
 
       <h2 id="next">Next</h2>
@@ -291,19 +603,19 @@ expect(issues).toHaveLength(0)</code></pre>
         <a class="demo-card" href="themes.html">
           <span class="demo-tag">Theming</span>
           <h3>Themes</h3>
-          <p>Author custom themes with contrast in mind.</p>
+          <p>The full token reference, including the contrast-critical families.</p>
           <span class="demo-arrow">Open the guide &rarr;</span>
         </a>
-        <a class="demo-card" href="hooks.html">
-          <span class="demo-tag">Core</span>
-          <h3>Hooks</h3>
-          <p><code>$id</code> for stable label/description associations.</p>
+        <a class="demo-card" href="testing.html">
+          <span class="demo-tag">Quality</span>
+          <h3>Testing</h3>
+          <p>Where <code>axe()</code>, <code>within()</code>, and the render harness live.</p>
           <span class="demo-arrow">Open the guide &rarr;</span>
         </a>
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     import "../dist/aktion.js";
     const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";

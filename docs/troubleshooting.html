@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Troubleshooting &amp; FAQ · Aktion</title>
-  <meta name="description" content="Answers to the most common Aktion questions: lost input focus, effects that don't re-run, components memoized away, the Map component vs JS Map, dropped inline styles, and missing i18n keys." />
+  <meta name="description" content="Answers to the most common Aktion questions: lost input focus, two-way binding, effects that don't re-run, components memoized away, the Map component vs JS Map, dropped inline styles, missing i18n keys, and the allow-lists behind a dropped $head link, an empty Styles sheet, a thinned-out SVG, a blocked $script, and an undefined constructor." />
   <script>
     (function () {
       try {
@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     .faq { border: 1px solid var(--doc-border); border-radius: 10px; padding: 16px 18px; margin: 14px 0; background: var(--doc-surface-elev); }
@@ -23,6 +23,7 @@
     .faq .fix { color: var(--doc-text-muted); }
     .faq pre { margin: 12px 0 4px; }
     .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.warn { border-left-color: #f59e0b; }
     .callout h4 { margin: 0 0 8px; font-size: 15px; }
     .callout p:last-child { margin-bottom: 0; }
     /* Symptom index */
@@ -60,7 +61,15 @@
           <li><a href="#map"><code>Map(&hellip;)</code> rendered the wrong thing</a></li>
           <li><a href="#style">An inline style was dropped</a></li>
           <li><a href="#theme">My theme isn&rsquo;t applying</a></li>
+          <li><a href="#fonts">The <code>corporate</code> theme has no custom type</a></li>
           <li><a href="#i18n">A translation shows the key</a></li>
+          <li><a href="#cookie-samesite">My cookie gained <code>SameSite=Lax</code></a></li>
+          <li><a href="#head-rel">A <code>$head</code> <code>&lt;link&gt;</code> never appears</a></li>
+          <li><a href="#styles-empty">My <code>Styles</code> sheet renders empty</a></li>
+          <li><a href="#svg-nodes">My inline SVG lost nodes</a></li>
+          <li><a href="#htmltag-svg"><code>HTMLTag</code> rendered a <code>&lt;div&gt;</code></a></li>
+          <li><a href="#script-blocked"><code>$script</code> errors and never loads</a></li>
+          <li><a href="#constructor"><code>x.constructor</code> is <code>undefined</code></a></li>
           <li><a href="#silent">Nothing rendered, no error</a></li>
           <li><a href="#declare">&ldquo;Reactive write during render&rdquo; warning</a></li>
         </ul>
@@ -80,27 +89,48 @@
           <code>Modal</code> (which traps and restores focus). If you must keep an
           input mounted, bind it to a top-level atom so typing only triggers a
           path-scoped update rather than a full re-render of the surrounding tree.</p>
+        <p class="fix">For a hand-rolled overlay, <code>FocusTrap</code> and the rest
+          of the focus primitives are on
+          <a href="accessibility.html">Accessibility</a>.</p>
       </div>
 
       <div class="faq">
         <h3 id="binding">Typing in an <code>Input</code> doesn&rsquo;t update my state (two-way binding)</h3>
-        <p><strong>Cause.</strong> A control only writes back when you pass the
-          <code>$variable</code> itself as its bound argument. Passing
-          <code>$name</code>&rsquo;s <em>value</em> (e.g. interpolated into a
-          string) gives the control a one-way snapshot &mdash; it renders, but has
-          nothing to write to.</p>
-<pre><code>// ❌ no binding — the field shows the value but typing goes nowhere
-Input({ placeholder: "Name", value: `${$name}` })
+        <p><strong>Cause.</strong> A control writes back only when its
+          <code>value</code> receives the <strong>bare
+          <code>$variable</code></strong> &mdash; a plain reference such as
+          <code>$name</code>, a member chain rooted at one such as
+          <code>$form.email</code>, or a <code>$store</code> field such as
+          <code>cart.draft</code>.</p>
+        <p>Anything the runtime has to compute first &mdash; an interpolated string,
+          a concatenation, a ternary &mdash; arrives as a value with no path
+          attached. The control renders it and then has nowhere to write back
+          to.</p>
+<pre><code>$name = ""
 
-// ✅ pass the $variable last so the control reads AND writes it
-$name = ""
-Input("Name", { value: $name }, $name)</code></pre>
+// ❌ interpolated — the field shows the value, typing goes nowhere
+Input("name", { placeholder: "Your name", value: `${$name}` })
+
+// ✅ the bare $variable in `value` IS the binding
+Input("name", { label: "Your name", value: $name })</code></pre>
         <p class="fix"><strong>Fix.</strong> Pass the bare <code>$variable</code> as
-          the last argument to <code>Input</code>, <code>Select</code>,
-          <code>Checkbox</code>, <code>Switch</code>, <code>Slider</code>,
-          <code>MultiSelect</code>, and the other bindable controls. See
-          <a href="components.html">Components</a> for each control&rsquo;s binding
-          argument.</p>
+          <code>value</code> on <code>Input</code>, <code>TextArea</code>,
+          <code>Select</code>, <code>Checkbox</code>, <code>Switch</code>,
+          <code>Slider</code>, <code>MultiSelect</code>, and the other bindable
+          controls. That is the whole mechanism &mdash; there is no separate
+          binding argument. See <a href="components.html">Components</a> for each
+          control&rsquo;s prop list.</p>
+        <div class="callout warn">
+          <h4>A trailing extra argument is not a binding slot</h4>
+          <p><strong>Do not write <code>Input("Name", { value: $name },
+            $name)</code>.</strong> Aktion routes surplus positional arguments into
+            the next unfilled prop <em>in declaration order</em>, so that third
+            argument does not re-bind anything &mdash; it lands in
+            <code>placeholder</code> and your placeholder becomes the field&rsquo;s
+            current value. On <code>Select</code> the same shape fills
+            <code>label</code> instead. The two-argument form above already binds
+            both ways.</p>
+        </div>
       </div>
 
       <div class="faq">
@@ -194,14 +224,39 @@ Async($users, {
 
       <div class="faq">
         <h3 id="style">My inline style was dropped</h3>
-        <p><strong>Cause.</strong> Styles pass through a sanitizer. Declarations that
-          look unsafe (e.g. <code>url(javascript:&hellip;)</code>, expression-based
-          values) are dropped silently so streamed, partial output can never inject
-          script.</p>
-        <p class="fix"><strong>Fix.</strong> Use plain, static CSS values. For
-          anything dynamic, compute the value in an expression and pass a clean
-          string. Turn on <a href="errors.html">strict mode</a> to get a console
-          warning when a declaration is rejected instead of a silent drop.</p>
+        <p><strong>Cause.</strong> Every length and colour value that reaches an
+          inline <code>style</code> attribute &mdash; through <code>sx</code>, through
+          <code>Container.maxWidth</code>, through chart geometry &mdash; passes one
+          of two validators, and both are allow-lists rather than blocklists.</p>
+        <table class="signature-table">
+          <thead><tr><th>Validator</th><th>Accepts</th><th>On rejection</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Lengths / sizes</td>
+              <td>Letters, digits, and <code>. % + - * / ( ) ,</code> plus spaces. Max <strong>64 characters</strong>. So <code>clamp(280px, 40vw, 640px)</code> and <code>var(--rui-spacing-l)</code> both pass.</td>
+              <td>The component&rsquo;s own fallback value.</td>
+            </tr>
+            <tr>
+              <td>Colours</td>
+              <td>Letters, digits, and <code>#&nbsp;% . , ( ) + -</code> plus spaces. Max 64 characters. Additionally rejected outright: <code>url(</code>, <code>expression(</code>, <code>javascript:</code>, <code>@import</code>.</td>
+              <td><code>""</code> &mdash; the declaration is omitted entirely.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p><strong>Neither validator logs anything, in any mode.</strong>
+          <code>strict</code> does not surface these &mdash; there is no console
+          warning for a rejected length or colour, which is exactly why the symptom
+          reads as &ldquo;my style vanished&rdquo;.</p>
+        <p class="fix"><strong>Fix.</strong> Log the string you are actually passing.
+          Quotes, semicolons, and braces are the usual culprits &mdash; a value
+          assembled by concatenation that picks up a stray <code>;</code> falls
+          outside both alphabets, and a value over 64 characters is rejected for
+          length alone regardless of content.</p>
+        <p class="fix">Prefer theme tokens (<code>var(--rui-&hellip;)</code>) over
+          hand-built strings: see <a href="sx.html">sx</a> and
+          <a href="themes.html#using-tokens">Themes</a>. The <code>Styles</code>
+          component is louder than this &mdash; it warns on every rejection (see
+          <a href="#styles-empty">below</a>).</p>
       </div>
 
       <div class="faq">
@@ -223,6 +278,34 @@ $theme({ colors: { primary: "#e11d48" }, radius: { md: "14px" } })
       </div>
 
       <div class="faq">
+        <h3 id="fonts">The <code>corporate</code> theme renders in the system font</h3>
+        <p><strong>Cause.</strong> <code>corporate</code> is the only built-in theme
+          that declares web fonts &mdash; Open&nbsp;Sans for body text and Overpass
+          for headings. Activating it appends
+          <code>&lt;link rel="stylesheet" href="https://fonts.googleapis.com/css2&hellip;"&gt;</code>
+          to the host <code>&lt;head&gt;</code>. If that request is blocked or fails,
+          each token&rsquo;s fallback chain takes over and you get
+          <code>system-ui</code> &mdash; with no error, because a font fallback is
+          not an error.</p>
+        <p class="fix"><strong>Fix.</strong> Allow
+          <code>https://fonts.googleapis.com</code> in <code>style-src</code> and
+          <code>https://fonts.gstatic.com</code> in <code>font-src</code>, then check
+          the Network panel for the <code>css2</code> request. A blocked stylesheet
+          shows up as a CSP violation in the console; a 404 does not. See
+          <a href="deployment.html#csp">the CSP policy</a> and
+          <a href="themes.html#theme-fonts">theme fonts</a>.</p>
+        <p class="fix">Two related gotchas. <code>corporate</code> names
+          <code>JetBrains&nbsp;Mono</code> in its mono token but does
+          <strong>not</strong> import it, so code always renders in the platform mono
+          fallback unless you import it yourself.</p>
+        <p class="fix">And with
+          <code>$theme({ fonts: { import: ["Inter:400,600"] } })</code> the family
+          name must match <code>/^[A-Za-z0-9 ]{1,48}$/</code> and each weight must be
+          an integer from 100 to 900. An entry failing either check is dropped from
+          the constructed URL rather than reported.</p>
+      </div>
+
+      <div class="faq">
         <h3 id="i18n">A missing translation shows the key instead of text</h3>
         <p><strong>Cause.</strong> When an <code>$i18n</code> key has no entry for the
           active locale, the runtime returns the key itself rather than throwing &mdash;
@@ -230,6 +313,246 @@ $theme({ colors: { primary: "#e11d48" }, radius: { md: "14px" } })
         <p class="fix"><strong>Fix.</strong> Add the missing key to the locale table.
           In <a href="errors.html">strict mode</a>, missing keys are surfaced as
           console warnings so you can find them during development.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="cookie-samesite">My cookie suddenly has <code>SameSite=Lax</code></h3>
+        <p><strong>Cause.</strong> <code>storage.cookies.set</code> now
+          <strong>always</strong> emits a <code>SameSite</code> attribute, and
+          <code>Lax</code> is the default when you do not pass one. Leaving it off
+          used to hand cross-site behaviour to per-engine browser defaults; emitting
+          it makes the behaviour the same everywhere and matches what modern browsers
+          apply anyway.</p>
+<pre><code>// Default — SameSite=Lax; Path=/ is also always emitted
+storage.cookies.set("theme", "dark")
+
+// Explicit — a genuine cross-site cookie needs both
+storage.cookies.set("sid", $token, { sameSite: "None", secure: true })</code></pre>
+        <p class="fix"><strong>Fix.</strong> Pass <code>sameSite</code> explicitly.
+          The value is normalised to <code>Strict</code>, <code>Lax</code>, or
+          <code>None</code>, and anything else becomes <code>Lax</code>. Browsers
+          reject <code>SameSite=None</code> without <code>Secure</code>, so set both
+          together.</p>
+        <p class="fix">Three neighbouring rules in the same writer:
+          <code>path</code> defaults to <code>/</code> and falls back to
+          <code>/</code> when it fails validation; <code>domain</code> is dropped
+          unless it is a valid hostname of at most 253 characters; and names and
+          values are percent-encoded on write, decoded per entry on read, so one
+          malformed cookie cannot break the whole jar.</p>
+      </div>
+
+      <h2 class="faq-cat" id="cat-allowlists">Allow-lists &amp; sanitisers</h2>
+      <p>
+        Five APIs are allow-listed rather than filtered, because each one writes
+        somewhere a blocklist cannot safely defend: the host
+        <code>&lt;head&gt;</code>, a raw stylesheet, raw SVG, raw HTML attributes,
+        and a remote <code>&lt;script&gt;</code>. When something disappears from one
+        of them, it is almost always the allow-list.
+      </p>
+      <p>
+        The trap is that <strong>the schema validator does not flag any of this</strong>.
+        The allow-lists are runtime behaviour, so your program parses and validates
+        cleanly and then quietly renders less than you wrote.
+        <a href="security.html#sinks">Security</a> is the full reference.
+      </p>
+
+      <div class="faq">
+        <h3 id="head-rel">My <code>$head</code> <code>&lt;link rel="stylesheet"&gt;</code> never appears</h3>
+        <p><strong>Cause.</strong> <code>$head</code> is the only runtime API that
+          writes <em>outside</em> the shadow root, into the host
+          <code>&lt;head&gt;</code> and <code>&lt;html&gt;</code>, so every field it
+          accepts is allow-listed rather than filtered.</p>
+        <p><code>rel</code> must be one of 17 values, and <code>stylesheet</code> is
+          deliberately not among them &mdash; neither are <code>preload</code>,
+          <code>modulepreload</code>, <code>prefetch</code>, <code>prerender</code>,
+          or <code>import</code>, each of which can be turned into a script load. An
+          entry with a disallowed <code>rel</code>, or an <code>href</code> that does
+          not survive sanitisation, is dropped whole and silently.</p>
+<pre><code>$app(Column([
+  $head({
+    // ✅ allowed: canonical, alternate, prev, next, author, license, help,
+    //    icon, shortcut icon, apple-touch-icon, apple-touch-icon-precomposed,
+    //    mask-icon, manifest, search, dns-prefetch, preconnect, me
+    link: [{ rel: "canonical", href: "https://acme.example/invoices" }],
+    htmlAttrs: { lang: "en", dir: "ltr" }
+  }),
+  Text("Invoices")
+]))</code></pre>
+        <p class="fix"><strong>Fix.</strong> For web fonts use
+          <code>$theme({ fonts: { import: [&hellip;] } })</code> &mdash; the vetted
+          path, which builds the <code>fonts.googleapis.com</code> URL itself. For
+          your own CSS, either link the stylesheet from the host page or use the
+          <code>Styles</code> component inside the app. See
+          <a href="head.html">Document head</a>.</p>
+        <p class="fix">The same shape applies to the other fields.
+          <code>htmlAttrs</code> accepts only <code>lang</code>, <code>dir</code>,
+          <code>class</code>, <code>translate</code>, <code>id</code>, and
+          <code>data-*</code> &mdash; <strong>not <code>style</code></strong>.
+          <code>base</code> accepts same-origin relative paths only, and a
+          <code>meta</code> key is always emitted as a <code>name</code> attribute,
+          never as <code>http-equiv</code>.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="styles-empty">My <code>Styles</code> sheet renders empty</h3>
+        <p><strong>Cause.</strong> The <code>Styles</code> component has two
+          independent gates, and either one produces an empty
+          <code>&lt;style&gt;</code>. The CSS itself is rejected if it exceeds
+          64&nbsp;KB or contains <code>&lt;/style</code>, <code>&lt;script</code>,
+          <code>expression(</code>, <code>javascript:</code>, <code>behavior:</code>,
+          or <code>@import</code>.</p>
+        <p>Separately, <code>scope</code> is concatenated into the generated sheet, so
+          it must be a plain selector: class, id, or tag compounds joined by
+          descendant, child, or sibling combinators, at most 128 characters.</p>
+        <p><strong>Check the console.</strong> Unlike the SVG and HTML sanitisers,
+          which drop silently, this one announces every rejection with a
+          <code>console.warn</code> naming the gate it hit &mdash; precisely because
+          a silently empty <code>&lt;style&gt;</code> is indistinguishable from a
+          typo&rsquo;d selector.</p>
+<pre><code>$app(Column([
+  // ❌ dropped: @import is on the blocklist
+  // Styles("@import url(/theme.css); .panel { padding: 12px }")
+
+  // ❌ dropped whole: `scope` is not a plain selector, and an unscoped
+  //    fallback would leak every rule to the shadow root
+  // Styles(".panel { padding: 12px }", { scope: ".a { } .b" })
+
+  // ✅
+  Styles(".panel { padding: 12px; border-radius: 8px }", { scope: ".panel" }),
+  Text("Scoped")
+]))</code></pre>
+        <p class="fix"><strong>Fix.</strong> Move an <code>@import</code> to the host
+          page, or use <code>$theme({ fonts: { import: [&hellip;] } })</code> when it
+          is a web font. Keep <code>scope</code> to a single plain selector. Token
+          interpolation still works inside the CSS &mdash;
+          <code>padding: {spacing.l}</code> becomes
+          <code>var(--rui-spacing-l)</code> &mdash; so you rarely need anything the
+          blocklist rejects.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="svg-nodes">My inline SVG came back with nodes missing</h3>
+        <p><strong>Cause.</strong> Markup passed to <code>Svg(&hellip;)</code> or
+          registered through <code>$theme({ icons })</code> is parsed in an inert
+          document and then rebuilt from an element and attribute allow-list.
+          Anything outside the list is dropped, and nothing is logged.</p>
+        <table class="signature-table">
+          <thead><tr><th>Dropped element</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td><code>&lt;a&gt;</code></td><td>SVG anchors execute <code>javascript:</code> hrefs.</td></tr>
+            <tr><td><code>&lt;style&gt;</code></td><td>CSS injection &mdash; <code>@import</code>, background beacons, full-cover overlays.</td></tr>
+            <tr><td><code>&lt;image&gt;</code></td><td>Fetches an external URL (a tracking beacon) and can reference a nested SVG document.</td></tr>
+            <tr><td><code>&lt;foreignObject&gt;</code></td><td>Re-enters the HTML namespace, which makes every HTML element &mdash; including <code>&lt;script&gt;</code> &mdash; reachable.</td></tr>
+            <tr><td><code>&lt;set&gt;</code></td><td>Assigns an arbitrary attribute value, defeating attribute sanitisation.</td></tr>
+            <tr><td><code>&lt;discard&gt;</code></td><td>Removes elements at a scheduled time.</td></tr>
+          </tbody>
+        </table>
+        <p class="fix"><strong>Fix.</strong> Export flattened SVG. Replace a
+          <code>&lt;style&gt;</code> block with per-element attributes or
+          <code>fill="currentColor"</code>; replace an embedded
+          <code>&lt;image&gt;</code> with the <code>Image</code> component; wrap the
+          whole <code>Svg</code> in a <code>Link</code> instead of using an SVG
+          anchor.</p>
+        <p class="fix">Two more rules that surprise people. Inline
+          <code>style</code> on an SVG node survives only up to 512 characters and
+          must not contain <code>&lt; &gt; { } @ \ " '</code>, <code>url(</code>,
+          <code>image-set(</code>, <code>element(</code>, <code>expression(</code>,
+          <code>behavior:</code>, or <code>--</code> &mdash; so CSS custom properties
+          do not work there.</p>
+        <p class="fix">And <code>href</code>&nbsp;/&nbsp;<code>xlink:href</code>
+          survive only as same-document fragments (<code>#gradient-1</code>) and only
+          on <code>use</code>, <code>mpath</code>, and <code>textPath</code>. Size
+          bounds are 64&nbsp;KB of input, 4096 nodes, and depth 32 &mdash; see
+          <a href="security.html#dos">resource bounds</a>.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="htmltag-svg"><code>HTMLTag("svg", &hellip;)</code> rendered a <code>&lt;div&gt;</code></h3>
+        <p><strong>Cause.</strong> <code>HTMLTag</code>&rsquo;s tag name goes through
+          an allow-list of structural, text, table, media, and form tags. SVG and
+          MathML are excluded on purpose &mdash; their namespaces need a different
+          <code>createElement</code> path, so a bare <code>createElement("svg")</code>
+          would produce an HTML element that merely looks like SVG. An unknown tag
+          collapses to <code>div</code> and warns once on the console, naming the
+          tag.</p>
+        <p class="fix"><strong>Fix.</strong> Use <code>Svg</code> for inline vector
+          markup, <code>Icon</code> for icons, and <code>Image</code> for a
+          <code>.svg</code> file loaded by URL.</p>
+        <p class="fix">The attribute rules are worth knowing while you are here:</p>
+        <ul>
+          <li>Names must match <code>/^[a-zA-Z][a-zA-Z0-9_:-]*$/</code>, and every
+            <code>on*</code> handler is dropped case-insensitively.</li>
+          <li><code>href</code>, <code>ping</code>, <code>action</code>, and
+            <code>formaction</code> go through the href sanitiser;
+            <code>src</code> and <code>poster</code> through the image sanitiser.
+            A namespace prefix is stripped first, so <code>xlink:href</code> cannot
+            skip the check.</li>
+          <li>Blocked outright: <code>srcset</code>, <code>imagesrcset</code>,
+            <code>srcdoc</code>, <code>data</code>, <code>background</code>,
+            <code>manifest</code>, <code>http-equiv</code>, <code>html</code>,
+            <code>innerhtml</code>, <code>outerhtml</code>,
+            <code>textcontent</code>, <code>is</code>.</li>
+          <li>A <code>target</code> other than
+            <code>_self</code>/<code>_parent</code>/<code>_top</code> forces
+            <code>rel</code> to carry both <code>noopener</code> and
+            <code>noreferrer</code>, preserving any <code>rel</code> you
+            supplied.</li>
+        </ul>
+      </div>
+
+      <div class="faq">
+        <h3 id="script-blocked"><code>$script</code> reports an error and never loads</h3>
+        <p><strong>Cause &mdash; gate 1, the scheme.</strong> <code>src</code> must be
+          <code>http(s)</code> or a same-origin relative path (<code>/</code>,
+          <code>./</code>, <code>../</code>). Protocol-relative
+          <code>//host/x.js</code>, <code>javascript:</code>, <code>data:</code>, and
+          <code>blob:</code> are all rejected, and control characters are stripped
+          before the scheme is read.</p>
+        <p><strong>Cause &mdash; gate 2, the policy.</strong> <code>$script</code> is
+          disabled outright whenever the global-access policy is anything other than
+          <code>"all"</code>, because it downloads and executes remote code &mdash;
+          exactly what a narrowed policy exists to prevent.</p>
+        <p>Either way the resource comes back with <code>error</code> set and
+          <code>ready</code> still <code>false</code>. It never throws, so a program
+          that gates on <code>ready</code> degrades instead of crashing.</p>
+<pre><code>$stripe = $script({ src: "https://js.stripe.com/v3/", global: "Stripe" })
+
+$app(Column([
+  $stripe.error ? Callout("Payment SDK unavailable", { tone: "danger", description: `${$stripe.error}` }) : Spacer(),
+  $stripe.ready ? Text("SDK loaded") : Spinner()
+]))</code></pre>
+        <p class="fix"><strong>Fix.</strong> Render <code>$stripe.error</code> while
+          you debug &mdash; it names the gate. For the scheme case, use an absolute
+          <code>https://</code> URL or a same-origin path. For the policy case,
+          either fetch what you needed through <code>$http</code> instead of loading
+          an SDK, or keep that surface on the default <code>"all"</code> policy.</p>
+        <p class="fix">Note the policy is <em>process-global</em>: one
+          <code>setGlobalAccessPolicy</code> call disables <code>$script</code> for
+          every program on the page. See
+          <a href="interop.html#script-policy">$script and the policy</a>.</p>
+        <p class="fix">Under SSR there is no DOM, so the resource simply stays
+          un-ready rather than erroring &mdash; another reason to branch on
+          <code>ready</code> instead of assuming the script arrived.</p>
+      </div>
+
+      <div class="faq">
+        <h3 id="constructor"><code>x.constructor</code> is <code>undefined</code></h3>
+        <p><strong>Cause.</strong> Three property names are unreadable from Aktion
+          on every access path: <code>constructor</code>, <code>__proto__</code>, and
+          <code>prototype</code>. Dot access, computed access
+          (<code>x["cons" + "tructor"]</code>), and method-call dispatch each resolve
+          properties independently, and all three enforce the block.</p>
+        <p>The reason is that every lambda you write is a real JS function, so
+          <code>f.constructor</code> would be <code>Function</code> and
+          <code>f.constructor("&hellip;")()</code> would be arbitrary code execution.
+          Blocking these three names is what makes narrowing the global surface mean
+          anything at all &mdash; see
+          <a href="security.html#forbidden-props">forbidden property names</a>.
+          Writes through the same names are silent no-ops.</p>
+        <p class="fix"><strong>Fix.</strong> There is no opt-out and no policy that
+          re-enables them. For a type check use <code>typeof</code> or
+          <code>Array.isArray(x)</code>; for a class name from an API response, put
+          the name in the payload and read it as an ordinary field.</p>
       </div>
 
       <h2 class="faq-cat" id="cat-silent">Silent failures &amp; warnings</h2>
@@ -266,6 +589,15 @@ $theme({ colors: { primary: "#e11d48" }, radius: { md: "14px" } })
           console warnings (see <a href="errors.html">Error handling</a>), and open
           the <a href="devtools.html">DevTools</a> panel to inspect live state and
           read each commit&rsquo;s &ldquo;why did this render&rdquo; reason.</p>
+        <p>Neither one reaches an allow-list drop &mdash; those are runtime
+          behaviour, not diagnostics. When something you wrote simply is not in the
+          output, read the rules in
+          <a href="security.html#sinks">Security</a> rather than looking for a
+          warning that will never arrive.</p>
+        <p>If the problem is on the host side instead &mdash; an event payload or an
+          element method coming back as <code>any</code>, or a subpath import that
+          will not resolve &mdash; the typed surface is documented in
+          <a href="typescript.html">TypeScript</a>.</p>
       </div>
 
       <h2 id="next">Next</h2>
@@ -291,6 +623,6 @@ $theme({ colors: { primary: "#e11d48" }, radius: { md: "14px" } })
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
 </body>
 </html>

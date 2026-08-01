@@ -50,11 +50,22 @@ const NUMBER = /0[xX][0-9a-fA-F]+|\d*\.?\d+(?:[eE][+-]?\d+)?/y;
 const WS = /\s+/y;
 
 /** Tokenise one line. `state` carries an open block-comment flag across lines. */
+/**
+ * Longest line the highlighter will tokenise. The HTML tokeniser's regex has
+ * super-linear cost on pathological input (a long run of unbalanced quotes or
+ * an unterminated comment), so a single very long line of untrusted code — an
+ * LLM response, a pasted payload — could otherwise block the render thread for
+ * seconds. Past this length the line renders as plain, unhighlighted text,
+ * which is a cosmetic loss rather than a correctness one.
+ */
+const MAX_HIGHLIGHT_LINE_LENGTH = 4096;
+
 export function highlightLine(
   line: string,
   lang: string,
   state: { inBlockComment: boolean },
 ): HlToken[] {
+  if (line.length > MAX_HIGHLIGHT_LINE_LENGTH) return [{ text: line, cls: null }];
   const family = langFamily(lang);
   if (family === "html") return highlightHtmlLine(line);
   const tokens: HlToken[] = [];

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JavaScript interactions · Aktion</title>
-  <meta name="description" content="Aktion is a strict subset of JavaScript — inside action, effect, and lambda bodies you get the full JavaScript language and the entire browser global surface: dialogs, fetch, crypto, Intl, timers, window, and document, with no imports." />
+  <meta name="description" content="Aktion is a strict subset of JavaScript — inside action, $effect, and lambda bodies you get the full JavaScript language and, by default, the entire browser global surface: dialogs, fetch, crypto, Intl, timers, window, and document, with no imports. Bodies run synchronously, so async work is callback-shaped; a global access policy or a server render narrows what resolves." />
   <script>
     (function () {
       try {
@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     /* Live layout demo: code on the left, rendered output on the right. */
@@ -54,6 +54,10 @@
     }
     /* Visual filler so structural demos read clearly without real content. */
     .demo-cheats code { white-space: nowrap; }
+    /* Amber variant of the shared .callout. site.css ships the
+       `[data-variant="warning"]` spelling; the guides use `.callout.warn`. */
+    .callout.warn { background: rgba(245, 158, 11, .10); border-color: rgba(245, 158, 11, .30); }
+    .callout.warn h4 { color: #b45309; }
   </style>
 </head>
 <body data-page="javascript-interactions">
@@ -66,12 +70,14 @@
         <h1>JavaScript interactions.</h1>
         <p class="lead">
           Aktion is a strict subset of JavaScript, and inside
-          <code>function</code>, <code>effect</code>, and lambda bodies you
-          have the <strong>full JavaScript language</strong> and the
+          <code>function</code>, <code>$effect</code>, and lambda bodies you
+          have the <strong>full JavaScript language</strong> and, by default, the
           <strong>entire browser global surface</strong> &mdash; dialogs,
           <code>fetch</code>, <code>crypto</code>, <code>Intl</code>, timers,
           <code>window</code>, and <code>document</code>. No imports, no
-          wrappers: every global resolves by name.
+          wrappers: every global resolves by name. A host can narrow that
+          surface deliberately &mdash; see
+          <a href="#limits">What is not available</a>.
         </p>
       </header>
 
@@ -84,21 +90,28 @@
       </p>
       <ul>
         <li>Inside a <code>function</code> body (an action / event handler).</li>
-        <li>Inside an <code>effect</code> body (a declarative side effect).</li>
+        <li>Inside an <code>$effect</code> body (a declarative side effect).</li>
         <li>Inside a lambda &mdash; including the multi-statement
           <code>(x) =&gt; { &hellip;; return &hellip; }</code> form.</li>
       </ul>
       <p>
         State is read and written with the bare <code>$</code> sigil &mdash;
         no bridge object, no getter/setter calls. Writing a <code>$atom</code>
-        triggers a re-render:
+        triggers a re-render.
+      </p>
+      <p>
+        Every one of those bodies runs <strong>synchronously</strong>: it executes
+        top to bottom and the runtime paints once it returns. Asynchronous work is
+        therefore always expressed as a <em>callback</em> &mdash;
+        <code>.then</code>, <code>.catch</code>, a <code>setTimeout</code>, an
+        event listener &mdash; and a state write inside that callback is a normal
+        reactive write that schedules its own re-render:
       </p>
 
 <pre><code>$copied = false
 
 function copyShareLink() {
-  await navigator.clipboard.writeText(window.location.href)
-  $copied = true
+  $util.copy(window.location.href).then(ok =&gt; { $copied = ok })   // resolves true on a real copy
 }
 
 $effect(() =&gt; {
@@ -108,10 +121,26 @@ $effect(() =&gt; {
 }, ["mount"])</code></pre>
 
       <p>
-        Bodies run as <code>async</code> functions, so you can
-        <code>await</code> anywhere inside a <code>function</code> or
-        <code>effect</code>.
+        <code>$copied</code> flips when the clipboard write settles, not when
+        <code>copyShareLink</code> returns &mdash; and the scroll listener is
+        removed by <code>cleanup</code> when the effect tears down.
       </p>
+      <div class="callout warn">
+        <h4><code>await</code> parses, but it never suspends</h4>
+        <p>
+          <strong>Do not use <code>await</code> in an Aktion body.</strong> The
+          parser accepts the keyword so JavaScript-shaped output still parses, but
+          bodies are not <code>async</code> functions.
+        </p>
+        <p>
+          A bare <code>await doThing()</code> statement at the top level of a body
+          is <em>dropped entirely</em> &mdash; the call never happens. Inside an
+          expression the call happens but the value is the promise, the next
+          statement runs immediately, and a rejection escapes any surrounding
+          <code>try</code>/<code>catch</code>. Chain the promise instead &mdash; see
+          <a href="actions.html#async">Actions &rarr; Async work</a>.
+        </p>
+      </div>
 
       <h2 id="surface">The full global surface</h2>
       <p>
@@ -216,7 +245,7 @@ $app(Column([
       </p>
       <p>
         The canonical pattern is to create the timer inside an
-        <code>effect</code> (not at the top level, which would re-create it on
+        <code>$effect</code> (not at the top level, which would re-create it on
         every render) and clear it in the effect&rsquo;s <code>cleanup</code>:
       </p>
 <pre><code>$now = $util.now()
@@ -228,13 +257,29 @@ $effect(() =&gt; {
 
 clock = Text($util.formatDate($now, "time"))</code></pre>
       <p>
-        For a debounce, clear and restart a <code>setTimeout</code> on each
-        keystroke:
+        The interval writes <code>$now</code> once a second and each write
+        re-renders <code>clock</code>. Because the handle lives in a
+        <code>let</code> inside the effect, the <code>cleanup</code> closure is the
+        only thing that can clear it &mdash; which is exactly what you want.
       </p>
-<pre><code>function onType(q) {
+      <p>
+        For a debounce you need the handle to survive between calls, so keep it in
+        an atom and declare it up front. An undeclared
+        <code>$searchTimer</code> would read as <code>null</code> on the first
+        keystroke and hide the mistake:
+      </p>
+<pre><code>$query = ""
+$searchTimer = null
+
+function onType(q) {
   clearTimeout($searchTimer)
   $searchTimer = setTimeout(() =&gt; { $query = q }, 300)
 }</code></pre>
+      <p>
+        Only the last keystroke in a 300&nbsp;ms window reaches
+        <code>$query</code>, so a search bound to <code>$query</code> fires once
+        instead of once per character.
+      </p>
       <p>
         For a plain repeating effect, prefer the declarative
         <code>$effect(&hellip;, ["every(1000)"])</code> trigger &mdash; reach for
@@ -244,38 +289,72 @@ clock = Text($util.formatDate($now, "time"))</code></pre>
       </p>
 
       <h2 id="recipes">Recipes</h2>
+      <p>
+        Five patterns that come up constantly. Each is a complete action body
+        &mdash; drop it into a program and wire it to a control.
+      </p>
 
-      <h3>Copy to clipboard</h3>
+      <h3 id="recipe-clipboard">Copy to clipboard</h3>
 <pre><code>function copyToClipboard(text) {
-  try {
-    await navigator.clipboard.writeText(text)
-    $toast = { kind: "success", message: "Copied" }
-  } catch (err) {
-    $toast = { kind: "error", message: err.message }
-  }
+  $util.copy(text).then(ok =&gt; {
+    $toast = ok
+      ? { kind: "success", message: "Copied" }
+      : { kind: "error", message: "The browser blocked the copy" }
+  })
 }</code></pre>
+      <p>
+        <code>$util.copy</code> wraps the async Clipboard API and resolves
+        <code>true</code> only when the write really succeeded, so a denied
+        permission lands in the <code>false</code> branch rather than throwing.
+        Prefer it to raw <code>navigator.clipboard</code>: it survives a missing
+        API and keeps working when the host narrows the global surface.
+      </p>
 
-      <h3>Generate an id</h3>
+      <h3 id="recipe-id">Generate an id</h3>
 <pre><code>function addRow() {
   $rows = [...$rows, { id: crypto.randomUUID(), label: "New row" }]
 }</code></pre>
+      <p>
+        A stable id per row is what lets the reconciler follow a row when the list
+        is reordered or filtered &mdash; see
+        <a href="reactivity.html">Reactivity</a> for how keys are matched.
+        <code>$util.uuid()</code> is the portable equivalent: it uses
+        <code>crypto.randomUUID</code> when available and falls back to a
+        generated v4 string when it is not.
+      </p>
 
-      <h3>Format a number</h3>
+      <h3 id="recipe-number">Format a number</h3>
 <pre><code>function formatTotal(n) {
   $total = Intl.NumberFormat("en-US").format(n)
 }</code></pre>
+      <p>
+        Format at the edge, not in storage: keep <code>n</code> numeric in state
+        and write the formatted <em>string</em> to a separate atom, so sorting and
+        arithmetic still work on the raw value.
+      </p>
 
-      <h3>Read a file as a data URL</h3>
+      <h3 id="recipe-file">Read a file as a data URL</h3>
 <pre><code>function pickAvatar(file) {
   const reader = new FileReader()
   reader.onload = () =&gt; { $avatarPreview = reader.result }
   reader.readAsDataURL(file)
 }</code></pre>
+      <p>
+        <code>readAsDataURL</code> is asynchronous, so the write happens in
+        <code>onload</code> &mdash; that callback re-renders on its own. Data URLs
+        inline the whole file into the atom, so use them for previews, not for
+        uploads.
+      </p>
 
-      <h3>Encode to Base64</h3>
+      <h3 id="recipe-base64">Encode to Base64</h3>
 <pre><code>function encode(text) {
   $encoded = btoa(text)
 }</code></pre>
+      <p>
+        <code>btoa</code> is synchronous and throws on characters outside Latin&#8209;1,
+        so run text through <code>encodeURIComponent</code> first when it may
+        contain non&#8209;ASCII.
+      </p>
 
       <p>
         The synchronous helpers &mdash; <code>crypto.randomUUID()</code>,
@@ -306,8 +385,10 @@ $app(Column([
       <p>
         The global passthrough is always tried <strong>last</strong> &mdash;
         after your state, bindings, actions, user-defined components, the
-        curated standard library, and the component catalog. Author
-        declarations and built-in components therefore always win over a
+        curated standard library, and the component catalog.
+      </p>
+      <p>
+        Author declarations and built-in components therefore always win over a
         same-named global: a library <code>Text</code> or <code>Map</code>
         component still beats the DOM <code>Text</code> node or the
         <code>Map</code> constructor, and your own <code>$crypto</code> shadows
@@ -316,12 +397,106 @@ $app(Column([
         name you control.
       </p>
 
+      <h2 id="limits">What is not available</h2>
+      <p>
+        Everything above describes the <em>default</em>. The passthrough is a host
+        setting, and there are two places where a global you expect will not be
+        there: a narrowed access policy, and a server render.
+      </p>
+
+      <h3 id="limits-policy">Under a narrowed global access policy</h3>
+      <p>
+        By default the policy is <code>"all"</code>, which makes an Aktion program
+        exactly as privileged as a <code>&lt;script&gt;</code> tag on the same page.
+        A host that runs program text it did not write calls
+        <code>setGlobalAccessPolicy("safe")</code> (or passes an explicit array of
+        names) at bootstrap, and the passthrough stops resolving anything outside
+        that set:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Under <code>"safe"</code></th><th>Names</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Blocked</strong></td>
+            <td><code>eval</code> <code>Function</code> <code>WebAssembly</code> <code>window</code> <code>self</code> <code>globalThis</code> <code>top</code> <code>parent</code> <code>document</code> <code>fetch</code> <code>XMLHttpRequest</code> <code>WebSocket</code> <code>EventSource</code> <code>Worker</code> <code>navigator</code> <code>localStorage</code> <code>sessionStorage</code> <code>indexedDB</code> <code>caches</code> <code>Reflect</code> <code>Proxy</code> &mdash; and <code>$script({ src })</code> is switched off entirely.</td>
+          </tr>
+          <tr>
+            <td><strong>Still resolves</strong></td>
+            <td>The curated fast path &mdash; <code>Math</code> <code>JSON</code> <code>Object</code> <code>Array</code> <code>Number</code> <code>String</code> <code>Boolean</code> <code>Date</code> <code>Map</code> <code>Set</code> <code>WeakMap</code> <code>WeakSet</code> <code>RegExp</code> <code>Symbol</code> <code>Promise</code> <code>Error</code> <code>parseInt</code> <code>parseFloat</code> <code>isNaN</code> <code>isFinite</code> <code>encodeURIComponent</code> <code>decodeURIComponent</code> <code>encodeURI</code> <code>decodeURI</code> <code>structuredClone</code> &mdash; plus <code>Intl</code>, <code>atob</code>/<code>btoa</code>, <code>URL</code>, <code>console</code>, the timers, and every Aktion namespace (<code>$http</code>, <code>$util</code>, <code>storage</code>, <code>$dom</code>, <code>$toast</code>, &hellip;).</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        The curated names resolve <em>before</em> the passthrough, which is why
+        they are unaffected: flipping the policy does not break ordinary
+        value-crunching code. What it breaks is anything reaching for the DOM, the
+        network, or persistence directly.
+      </p>
+      <p>
+        That failure is quiet. A blocked name does not throw; it simply does not
+        resolve, so the expression behaves as if the identifier were undeclared.
+        Turn on <a href="errors.html#strict"><code>strict</code></a> in development
+        to see those lookups reported. The full allow-lists, the array form, and
+        the rationale live in
+        <a href="security.html#policy">Security &rarr; Narrowing the global
+        surface</a>.
+      </p>
+      <div class="callout warn">
+        <h4>Three property names are always unreachable</h4>
+        <p>
+          <strong><code>.constructor</code>, <code>.__proto__</code> and
+          <code>.prototype</code> cannot be read or written from a program</strong>
+          &mdash; on any path, under every policy. A dotted read yields
+          <code>undefined</code>, a computed read yields <code>undefined</code>, a
+          method call yields <code>null</code>, and a write is a no-op. Without
+          this, <code>someLambda.constructor("&hellip;")()</code> would rebuild
+          <code>eval</code> and make the policy decorative.
+        </p>
+      </div>
+
+      <h3 id="limits-ssr">During a server render</h3>
+      <p>
+        <code>renderToString(program)</code> needs a DOM, so a Node entry point has
+        to register <code>happy-dom</code> or <code>jsdom</code> on
+        <code>globalThis</code> first &mdash; without one it throws rather than
+        rendering half a page.
+      </p>
+      <p>
+        That shim is not a browser. It implements a subset of the platform, there
+        is no real clipboard, nothing has been laid out so there is nothing to
+        measure, and capabilities such as <code>matchMedia</code> or
+        <code>localStorage</code> exist only if the shim supplies them.
+      </p>
+      <p>
+        The load-bearing detail is that <strong>effects do not run during
+        <code>renderToString</code></strong> &mdash; the effect runner is part of
+        the <code>&lt;aktion-app&gt;</code> element, not the SSR path. A
+        <code>["mount"]</code> body, an <code>["every(1000)"]</code> tick, and any
+        timer they start never fire on the server.
+      </p>
+      <p>
+        Top-level bindings and the component tree <em>are</em> evaluated, though, so
+        that is where a browser-only read either throws or quietly yields a
+        meaningless value:
+      </p>
+<pre><code>// ❌ read during SSR: there is no viewport behind the shim
+$width = window.innerWidth
+
+// ✅ effects are client-only, so this never runs on the server
+$width = 0
+$effect(() =&gt; { $width = window.innerWidth }, ["mount"])</code></pre>
+      <p>
+        Anything that touches a browser capability belongs in an effect or an event
+        handler, never in a top-level binding. See
+        <a href="deployment.html">Deployment</a> for the SSR and hydration seams.
+      </p>
+
       <h2 id="next">Next</h2>
       <div class="demo-grid">
         <a class="demo-card" href="side-effects.html">
           <span class="demo-tag">Behaviour</span>
           <h3>Side effects</h3>
-          <p>The <code>effect</code> trigger grammar, cleanup, timers, and watched atoms.</p>
+          <p>The <code>$effect</code> trigger grammar, cleanup, timers, and watched atoms.</p>
           <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
         <a class="demo-card" href="actions.html">
@@ -339,7 +514,7 @@ $app(Column([
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     // Render each .lay-demo code block as a live <aktion-app> beside it.
     import "../dist/aktion.js"; // registers the <aktion-app> custom element

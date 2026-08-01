@@ -8,6 +8,7 @@
 
 import type { ComponentLibrary, ComponentSpec, PropSpec } from "../library/types.js";
 import { defaultLibrary } from "../library/index.js";
+import { UNIVERSAL_PROP_NAMES } from "../library/sx.js";
 
 export interface ComponentParam {
   name: string;
@@ -66,6 +67,75 @@ export function getComponentCatalog(library: ComponentLibrary = defaultLibrary):
     signature: buildSignature(spec),
   }));
 }
+
+/**
+ * Prose for the universal props. Keyed by name so the catalog below can be
+ * DERIVED from `UNIVERSAL_PROP_NAMES` (the set the validator actually enforces)
+ * rather than hand-listed alongside it — a new universal prop then shows up in
+ * every editor automatically, with a generic entry until someone writes its
+ * description here.
+ */
+const UNIVERSAL_PROP_DOCS: Record<string, { type: string; description: string }> = {
+  sx: {
+    type: "object",
+    description:
+      "Style channel accepted by EVERY component: layout, colour, typography, spacing, borders, effects. "
+      + "Values may be responsive maps (`{base, sm, md, lg}`), interaction states (`{_hover, _focus, _active}`), "
+      + "or theme-token refs (`\"primary\"`, `\"gradient.brand\"`, `\"space.md\"`).",
+  },
+  animate: {
+    type: "string | object",
+    description:
+      "Motion channel accepted by EVERY component. A preset name (`\"fade\"`, `\"slide-up\"`, `\"pulse\"`, `\"none\"`) "
+      + "or an object with `{ preset, duration, delay, easing, repeat }`.",
+  },
+  id: { type: "string", description: "DOM id on the rendered root element." },
+  anchor: {
+    type: "string",
+    description: "Scroll-anchor id — the target for `SkipLink`, `ScrollSpy` and `#hash` links.",
+  },
+  className: { type: "string", description: "Extra CSS classes appended to the rendered root element." },
+  class: { type: "string", description: "Alias of `className`." },
+  style: { type: "string | object", description: "Inline CSS. Prefer `sx`, which is token- and breakpoint-aware." },
+  aria: {
+    type: "object",
+    description: "ARIA attributes as a plain object, e.g. `{ label: \"Close\", expanded: false }` → `aria-*`.",
+  },
+  data: { type: "object", description: "`data-*` attributes as a plain object, e.g. `{ testid: \"row-1\" }`." },
+  dataAttrs: {
+    type: "object",
+    description:
+      "Second spelling of the `data` channel, for the components that declare a `data` prop of their own "
+      + "(LineChart, JsonTree, Async, Draggable, Lottie, QRCode) and would otherwise shadow it.",
+  },
+  role: {
+    type: "string",
+    description: "Override the rendered ARIA role. An escape valve for accessibility defects; use sparingly.",
+  },
+  tooltip: { type: "string", description: "Native hover tooltip (`title`) on the rendered root element." },
+  hidden: { type: "boolean", description: "Remove the component from the accessibility tree and hide it visually." },
+};
+
+/**
+ * The props EVERY component in the library accepts, over and above its own
+ * declared params.
+ *
+ * These live in a separate `UNIVERSAL_PROP_NAMES` allow-list inside the
+ * validator rather than on each `ComponentSpec`, so nothing derived from
+ * `getComponentCatalog()` mentions them — which left editors unable to complete,
+ * hover, or document `sx` and `animate`, the two channels most likely to be
+ * reached for. Editors should append this catalog to a component's own `params`
+ * (ranked below them) wherever named args are offered.
+ */
+export const universalPropCatalog: readonly ComponentParam[] = [...UNIVERSAL_PROP_NAMES].map((name) => {
+  const doc = UNIVERSAL_PROP_DOCS[name];
+  return {
+    name,
+    type: doc?.type ?? "any",
+    required: false,
+    description: doc?.description ?? "Universal prop accepted by every component.",
+  };
+});
 
 /**
  * Returns an index of component name → entry for O(1) lookup. Convenient

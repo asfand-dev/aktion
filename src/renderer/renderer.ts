@@ -13,6 +13,31 @@
  *   - `helpers.bindState(...)` attaches its event listener as a DOM
  *     property (`el.oninput = fn`) so the `morph` reconciler can transfer
  *     the closure onto a kept element when the tree is patched in place.
+ *
+ * ## The rule a component author breaks most often
+ *
+ * Every commit re-renders the whole tree and hands it to `morphChildren`,
+ * which keeps the live node and makes its attributes match the freshly
+ * rendered one — attributes the fresh tree omits are REMOVED. So an event
+ * handler that writes `class` / `style` / `data-*` straight onto the live DOM
+ * without a matching source of truth is describing a UI state the next render
+ * cannot reproduce, and the next commit (triggered by anything, anywhere)
+ * silently undoes it: the mobile drawer closes itself, the dragged divider
+ * snaps back, the "Copied!" label reverts mid-timeout.
+ *
+ * An imperative write is a paint-time OPTIMISATION, never the state. Put the
+ * bit somewhere the render reads:
+ *
+ *   - the prop is `$`-bound (`node.argMeta[i].stateRef`) → `helpers.setState`
+ *   - otherwise → `helpers.useInstanceState(key, initial)`
+ *
+ * …then emit the attribute/style from that value during render. Only a handful
+ * of attributes are exempt because something other than the render owns them
+ * (the floating layer's `popover` / measured `style`, a `data-rui-preserve`
+ * widget's own attributes, `<details open>`); `morph.ts` lists them.
+ *
+ * `<aktion-app strict>` arms a MutationObserver that reports the first
+ * handler-only write a commit reverts, naming the element and attribute.
  */
 
 import {
@@ -124,6 +149,57 @@ function namedEqual(a: Record<string, unknown>, b: Record<string, unknown>): boo
   return true;
 }
 
+/**
+ * Close an out-of-band paint "burst" once the current callback has finished.
+ *
+ * A microtask is exactly the right granularity: every `renderNode` call a
+ * settled promise (or a deferred callback) makes happens synchronously inside
+ * that callback, and the next paint arrives in a later turn.
+ */
+function endOfBurst(fn: () => void): void {
+  if (typeof queueMicrotask === "function") queueMicrotask(fn);
+  else void Promise.resolve().then(fn);
+}
+
+/** An output the universal channel has nothing to attach to (no content). */
+function isEmptyOutput(node: Node): boolean {
+  if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) return node.childNodes.length === 0;
+  return node.nodeType === Node.TEXT_NODE && (node.textContent ?? "") === "";
+}
+
+/**
+ * Give the universal channel (`sx`, `class`, `aria`, `id`, `animate`, …) an
+ * element to land on, then apply it.
+ *
+ * `applyUniversal` needs an Element, and `Show` / `Async` / `Lazy` return a
+ * DocumentFragment (or a bare text node for the empty branch) — so everything
+ * the author wrote on the universal channel used to be dropped without a word.
+ * `validate.ts` accepts `sx` on every component, so the styling read as
+ * correct and simply never rendered.
+ *
+ * The host is a plain `<span>`, deliberately NOT `display: contents`: a
+ * transparent host keeps the fragment's layout neutrality but is unreliable in
+ * the accessibility tree, and it would leave every box-model token inert —
+ * which is the defect, not the fix. `sx.ts` promotes the span to a block box
+ * when the channel carries a declaration that needs one.
+ *
+ * An empty output is left alone: hosting a false `Show` with no fallback would
+ * paint an empty padded box where the author expects nothing at all.
+ */
+function hostUniversal(out: Node, universal: Record<string, unknown>): Node {
+  if (out instanceof Element) {
+    applyUniversal(out, universal);
+    return out;
+  }
+  const carries = Object.values(universal).some((v) => v != null);
+  if (!carries || isEmptyOutput(out)) return out;
+  const host = document.createElement("span");
+  host.className = "rui-universal-host";
+  host.append(out);
+  applyUniversal(host, universal);
+  return host;
+}
+
 export class Renderer {
   /**
    * Persistent state cells, keyed by `instancePath::userKey`. Lives as long
@@ -140,6 +216,23 @@ export class Renderer {
   private readonly instanceDisposers = new Map<string, Map<string, () => void>>();
   /** Instance paths seen during the current render — used to GC stale state. */
   private aliveInstances = new Set<string>();
+  /**
+   * Instances painted OUTSIDE a render pass — `helpers.renderNode` called from
+   * a deferred callback, i.e. `Lazy` swapping in its resolved subtree — mapped
+   * to the instance that painted them.
+   *
+   * Such a subtree registers its liveness against a pass that has already
+   * closed, so `endRender` used to find those paths missing from the NEXT
+   * pass's set and GC their state cells / run their disposers underneath a
+   * subtree the user can still see (a `Tabs` inside a lazily-painted panel lost
+   * its active tab and its observers). They stay alive here for as long as the
+   * instance that painted them does.
+   */
+  private readonly externalInstances = new Map<string, string>();
+  /** The instance whose `renderNode` is currently painting out of band. */
+  private externalOwner: string | null = null;
+  /** >0 while a render pass is on the stack (`render` → `renderAt` → …). */
+  private passDepth = 0;
   /**
    * User-declared component instances that currently hold per-instance
    * effects (mounted via `mountInstanceEffects`). Tracked separately from
@@ -273,6 +366,7 @@ export class Renderer {
     }
     this.instancesWithHooks.clear();
     this.aliveInstances = new Set<string>();
+    this.externalInstances.clear();
     this.profilerRecords = [];
     this.profiledInstances.clear();
   }
@@ -298,6 +392,13 @@ export class Renderer {
    */
   endRender(): void {
     const alive = this.aliveInstances;
+    // Instances painted out of band are alive as long as the instance that
+    // painted them is; once that one leaves the tree the record goes with it
+    // and the sweeps below reclaim the subtree normally.
+    for (const [instancePath, owner] of [...this.externalInstances]) {
+      if (alive.has(owner)) alive.add(instancePath);
+      else this.externalInstances.delete(instancePath);
+    }
     for (const key of [...this.instanceStates.keys()]) {
       // `key` has the form `${instancePath}::${userKey}`. Walk back to the
       // instance prefix and check liveness in one go.
@@ -409,7 +510,42 @@ export class Renderer {
   }
 
   render(value: unknown): Node {
-    return this.renderAt(value, ROOT_PATH);
+    this.passDepth += 1;
+    try {
+      return this.renderAt(value, ROOT_PATH);
+    } finally {
+      this.passDepth -= 1;
+    }
+  }
+
+  /**
+   * Record that `instancePath` is part of the tree the user can see.
+   *
+   * Inside a pass that is just the pass's own alive-set. Outside one (a
+   * deferred `helpers.renderNode`) the pass's set is already closed, so the
+   * instance is remembered against the component that painted it — see
+   * {@link externalInstances}.
+   */
+  private markAlive(instancePath: string): void {
+    this.aliveInstances.add(instancePath);
+    const owner = this.externalOwner;
+    if (this.passDepth === 0 && owner !== null && owner !== instancePath) {
+      this.externalInstances.set(instancePath, owner);
+    }
+  }
+
+  /**
+   * Render a subtree painted outside a render pass, attributed to `owner` (the
+   * instance whose `helpers.renderNode` is doing the painting).
+   */
+  private renderExternal(value: unknown, path: string, owner: string): Node {
+    const prev = this.externalOwner;
+    this.externalOwner = owner;
+    try {
+      return this.renderAt(value, path);
+    } finally {
+      this.externalOwner = prev;
+    }
   }
 
   private renderAt(value: unknown, path: string): Node {
@@ -453,7 +589,7 @@ export class Renderer {
       ? `=${String(node.explicitKey)}`
       : `@${node.source?.line ?? 0}:${node.source?.column ?? 0}`;
     const instancePath = `${path}#${node.decl.name}${keyPart}`;
-    this.aliveInstances.add(instancePath);
+    this.markAlive(instancePath);
 
     // Per-component memoization: when the change set is fully known and this
     // instance's args are unchanged AND none of the `$state` paths it read
@@ -574,14 +710,34 @@ export class Renderer {
       ? `=${String(node.explicitKey)}`
       : `@${node.source?.line ?? 0}:${node.source?.column ?? 0}`;
     const instancePath = `${path}#${node.name}${keySuffix}`;
-    this.aliveInstances.add(instancePath);
+    this.markAlive(instancePath);
 
     // Track an auto-increment counter so `helpers.renderNode(child)` calls
     // get a stable sibling index even when a component renders several
     // children in a row.
     let childCounter = 0;
+    /** True while an out-of-band burst is still numbering children. */
+    let outOfBand = false;
+    /** Anonymous disposer slots, numbered per render generation (see below). */
+    let anonSlot = 0;
     const helpers: RenderHelpers = {
-      renderNode: (childValue) => this.renderAt(childValue, `${instancePath}>${childCounter++}`),
+      renderNode: (childValue) => {
+        if (this.passDepth > 0) return this.renderAt(childValue, `${instancePath}>${childCounter++}`);
+        // Painting outside a render pass — `Lazy` swapping its resolved subtree
+        // in from a promise callback. These `helpers` belong to a pass that has
+        // closed, so `childCounter` is wherever that pass left it: the subtree
+        // would land on a path no future pass ever produces, its state cells
+        // would be orphaned (and GC'd) and the next in-pass render would build
+        // it again from scratch. Restarting the numbering once per burst puts it
+        // on the same path the next in-pass render will use, so the instance
+        // state a lazily-painted `Tabs` holds survives the hand-over.
+        if (!outOfBand) {
+          outOfBand = true;
+          childCounter = 0;
+          endOfBurst(() => { outOfBand = false; });
+        }
+        return this.renderExternal(childValue, `${instancePath}>${childCounter++}`, instancePath);
+      },
       invoke: (callable, ...args) => {
         if (typeof callable !== "function") return;
         try {
@@ -652,10 +808,14 @@ export class Renderer {
           bucket = new Map();
           this.instanceDisposers.set(instancePath, bucket);
         }
-        // Generate a stable key when the caller didn't provide one so each
-        // anonymous registration gets its own slot (and never replaces a
-        // previous one by accident).
-        const slot = key ?? `__anon::${bucket.size}`;
+        // Anonymous registrations get their own slot within one render — the
+        // documented contract — but the numbering restarts every render (these
+        // `helpers` are rebuilt per render), so the next generation REPLACES the
+        // previous one instead of adding an entry. Keying off `bucket.size`
+        // grew the bucket by one live closure per render, each pinning whatever
+        // it captured until the instance unmounted: the opposite of the "never
+        // accumulate work for components the user can no longer see" promise.
+        const slot = key ?? `__anon::${anonSlot++}`;
         const prior = bucket.get(slot);
         if (prior && prior !== cleanup) this.safeDispose(prior);
         bucket.set(slot, cleanup);
@@ -668,8 +828,10 @@ export class Renderer {
     const libPhase: RenderPhase = this.profiledInstances.has(instancePath) ? "update" : "mount";
     const libStart = this.profiling ? nowMs() : 0;
     try {
-      const out = spec.render(node, props, helpers);
-      if (node.universal) applyUniversal(out, node.universal);
+      const rawOut = spec.render(node, props, helpers);
+      // A fragment-returning component (Show / Async / Lazy) gets a host span
+      // so the universal channel is not silently discarded — see hostUniversal.
+      const out = node.universal ? hostUniversal(rawOut, node.universal) : rawOut;
       // Stamp the author `key:` so the morph reconciler moves this node on a
       // sibling reorder (preserves DOM identity + enables FLIP — III.4).
       if (node.explicitKey != null && out instanceof Element && !(out as Element).hasAttribute("data-rui-key")) {

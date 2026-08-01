@@ -1,0 +1,67 @@
+<!--
+  Aktion for JetBrains IDEs.
+
+  `version`, `description`, and `idea-version` are injected at build time by the
+  `intellijPlatform { pluginConfiguration { … } }` block in build.gradle.kts, so
+  they cannot drift from gradle.properties / README.md. Do not add them here.
+-->
+<idea-plugin require-restart="false">
+  <id>dev.aktion.jetbrains</id>
+  <name>Aktion</name>
+  <vendor url="https://asfand-dev.github.io/aktion/">Asfandiyar Khan</vendor>
+
+  <depends>com.intellij.modules.platform</depends>
+
+  <!--
+    LSP4IJ is the LSP client. It is a hard dependency: without it there is no
+    language intelligence at all, so failing plugin load with a clear
+    "install LSP4IJ" prompt beats installing silently broken.
+  -->
+  <depends>com.redhat.devtools.lsp4ij</depends>
+
+  <!--
+    TextMate ships with every JetBrains IDE, but keep it optional so an IDE with
+    the bundled plugin disabled still gets the language server — colouring then
+    degrades to semantic tokens only.
+  -->
+  <depends optional="true" config-file="aktion-textmate.xml">org.jetbrains.plugins.textmate</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <applicationService serviceImplementation="dev.aktion.jetbrains.AktionSettings"/>
+    <applicationConfigurable
+        parentId="language"
+        instance="dev.aktion.jetbrains.AktionSettingsConfigurable"
+        id="dev.aktion.jetbrains.settings"
+        displayName="Aktion"/>
+    <notificationGroup id="Aktion" displayType="BALLOON"/>
+  </extensions>
+
+  <extensions defaultExtensionNs="com.redhat.devtools.lsp4ij">
+    <server
+        id="aktion"
+        name="Aktion"
+        factoryClass="dev.aktion.jetbrains.AktionLanguageServerFactory">
+      <description><![CDATA[
+        Language support for <a href="https://asfand-dev.github.io/aktion/">Aktion</a>
+        <code>.aktion</code> files, powered by the <code>aktion-language-server</code>
+        bundled with this plugin — the same DOM-free analysis the VS Code extension
+        and the docs playground use.
+      ]]></description>
+    </server>
+
+    <!--
+      Mapped by FILE NAME PATTERN rather than by an IntelliJ Language on purpose:
+      registering a FileType for *.aktion would switch TextMate off for those
+      files and cost us the generated grammar's lexical colouring. LSP4IJ
+      documents this as the recommended approach when you want to keep TextMate.
+
+      `languageId` is what lands in the LSP `TextDocumentItem.languageId` field;
+      the server keys nothing off it, but clients and logs expect it to be set.
+    -->
+    <fileNamePatternMapping patterns="*.aktion" serverId="aktion" languageId="aktion"/>
+
+    <semanticTokensColorsProvider
+        serverId="aktion"
+        class="dev.aktion.jetbrains.AktionSemanticTokensColorsProvider"/>
+  </extensions>
+</idea-plugin>

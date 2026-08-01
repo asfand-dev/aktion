@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Global state · Aktion</title>
-  <meta name="description" content="Global state management in Aktion with $store({...}) — colocate state, actions, and getters in one app-global store, share it across components without prop drilling, and get fine-grained per-component updates. Like Zustand/Pinia/Redux, in Aktion syntax." />
+  <meta name="description" content="Global state management in Aktion with $store({...}) — colocate state, actions, and getters in one app-global store, share it across components without prop drilling, and get fine-grained per-component updates. Persistence, undo/redo, the storage namespace, and a concept map from Redux, Zustand and Pinia." />
   <script>
     (function () {
       try {
@@ -15,9 +15,13 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
     /* Live demo: code on the left, rendered output on the right. */
     .lay-demo {
       display: grid;
@@ -186,6 +190,18 @@ function Summary() {
 $app(Column([Menu(), Summary()], { gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
+      <div class="callout">
+        <h4>Member writes go through the guarded state path</h4>
+        <p>
+          <strong>Two writes are refused rather than performed.</strong> A path
+          segment named <code>__proto__</code>, <code>constructor</code> or
+          <code>prototype</code> is rejected outright &mdash; the write is a silent
+          no&#8209;op &mdash; and an array index above 1&nbsp;000&nbsp;000 is refused
+          instead of allocating that many slots. Both matter when a key comes from a
+          server payload (<code>s[key] = value</code>); see
+          <a href="security.html#sinks">the sink table</a>.
+        </p>
+      </div>
 
       <h2 id="sharing">Sharing across components</h2>
       <p>
@@ -229,30 +245,38 @@ $app(SignupForm())</code></pre>
       <h2 id="persist">Persistence</h2>
       <p>
         Add a <code>persist</code> key and the store mirrors its data to storage &mdash;
-        declared fields hydrate from the saved snapshot on mount, and every change
-        writes back. A string is the storage key; <code>true</code> derives one.
-        <code>persistIn: "session"</code> swaps <code>localStorage</code> for
-        per&#8209;tab <code>sessionStorage</code>.
+        declared fields hydrate from the saved snapshot <em>before</em> the first
+        render, so the restored values are what the user sees, and every later change
+        writes back. <code>persistIn: "session"</code> swaps
+        <code>localStorage</code> for per&#8209;tab <code>sessionStorage</code>.
       </p>
 <pre><code>prefs = $store({
   theme: "system",
   density: "comfortable",
-  persist: "prefs",        // ← survives a page reload
+  persist: "prefs",        // ← the storage key; survives a page reload
   persistIn: "local"       // "local" (default) | "session"
 })</code></pre>
       <p>
-        Methods and unknown/renamed keys are never written; new fields keep their
-        code defaults when an older snapshot loads, so it&rsquo;s safe to evolve the
-        shape over time.
+        Only the fields the store <em>declares</em> are restored: a renamed or
+        removed key in the snapshot is ignored, and a newly added field keeps its
+        code default. That is what makes it safe to evolve the shape over time.
+      </p>
+      <p>
+        Prefer an explicit string key. <code>persist: true</code> works, but it
+        derives the key from the call site &mdash; move the <code>$store</code> call
+        to a different line and the saved data is orphaned. Persistence is also a
+        no&#8209;op wherever Web Storage is missing, so an
+        <a href="deployment.html#ssr">SSR</a> render neither reads nor writes.
       </p>
 
       <h2 id="history">Undo &amp; redo</h2>
       <p>
-        Set <code>history: true</code> (or a number to cap the depth) and the store
-        records a snapshot before each user&#8209;driven change. That adds
-        <code>undo()</code> / <code>redo()</code> / <code>clearHistory()</code> methods
-        and reactive <code>canUndo</code> / <code>canRedo</code> flags &mdash; perfect
-        for an editor or a form wizard. A fresh edit clears the redo stack.
+        Set <code>history: true</code> and the store records a snapshot before each
+        user&#8209;driven change, keeping the last <strong>50</strong>. Pass a number
+        instead to cap the depth. That injects <code>undo()</code> /
+        <code>redo()</code> / <code>clearHistory()</code> methods and reactive
+        <code>canUndo</code> / <code>canRedo</code> flags &mdash; perfect for an
+        editor or a form wizard. A fresh edit clears the redo stack.
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
@@ -268,7 +292,7 @@ function Editor() {
       Button("Undo", { onClick: () =&gt; doc.undo(), disabled: !doc.canUndo, variant: "ghost" }),
       Button("Redo", { onClick: () =&gt; doc.redo(), disabled: !doc.canRedo, variant: "ghost" }),
     ], { gap: "sm" }),
-    Text(`Now: ${doc.title}`, { variant: "small-soft" }),
+    Text(`Now: ${doc.title}`, { variant: "small", tone: "muted" }),
   ], { gap: "md" })
 }
 $app(Editor())</code></pre>
@@ -280,51 +304,192 @@ $app(Editor())</code></pre>
         step on each other.
       </p>
 
-      <h2 id="forms">Forms with <code>$form</code></h2>
+      <h2 id="api">Store API</h2>
       <p>
-        <code>$form</code> is a store&#8209;backed form engine &mdash; managed values,
-        validation, touched&#8209;tracking, and submit handling in one handle.
-        Two&#8209;way bind inputs to <code>form.values.&lt;field&gt;</code>, declare
-        per&#8209;field <code>rules</code> using the
-        <a href="language-reference.html#util-rt-rules"><code>$util.rules</code></a>
-        validators, and let <code>handleSubmit()</code> touch&#8209;all, validate, and
-        call <code>onSubmit</code> only when valid.
+        A store&rsquo;s object is mostly your own state and methods, but three keys
+        are <strong>configuration</strong> rather than data: they never appear as
+        fields, and <code>history</code> injects members of its own. Here is the
+        whole surface in one place.
       </p>
-      <div class="lay-demo">
-        <span class="lay-demo-label">Live</span>
-<pre><code>signup = $form({
-  values: { email: "", password: "" },
-  rules: {
-    email: [$util.rules.required(), $util.rules.email()],
-    password: [$util.rules.required(), $util.rules.minLength(8)],
-  },
-  onSubmit: (v) =&gt; { $done = v.email },
-})
 
-function Signup() {
-  return Column([
-    Input("email", { label: "Email", value: signup.values.email, error: signup.errors.email }),
-    Input("password", { label: "Password", type: "password", value: signup.values.password, error: signup.errors.password }),
-    Button("Create account", { onClick: () =&gt; signup.handleSubmit() }),
-    $done ? Alert(`Welcome, ${$done}!`, { tone: "success" }) : Text(""),
-  ], { gap: "md" })
-}
-$app(Signup())</code></pre>
-        <div class="lay-demo-preview"></div>
-      </div>
-      <table class="signature-table">
-        <thead><tr><th>Member</th><th>Type</th><th>Purpose</th></tr></thead>
+      <h3 id="api-config">Configuration keys</h3>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Key</th><th>Type</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td><code>.values</code></td><td><code>object</code></td><td>Current field values (two&#8209;way bindable).</td></tr>
-          <tr><td><code>.errors</code> · <code>.touched</code></td><td><code>object</code></td><td>Per&#8209;field error messages and touched flags.</td></tr>
-          <tr><td><code>.valid</code> · <code>.submitting</code></td><td><code>boolean</code></td><td>Whole&#8209;form status.</td></tr>
-          <tr><td><code>.setField(name, value)</code></td><td><code>fn</code></td><td>Set one field and clear its error.</td></tr>
-          <tr><td><code>.validate()</code> · <code>.validateField(name)</code></td><td><code>fn</code></td><td>Run validation now.</td></tr>
-          <tr><td><code>.touch(name)</code></td><td><code>fn</code></td><td>Mark touched + validate that field.</td></tr>
-          <tr><td><code>.handleSubmit(extra?)</code></td><td><code>fn</code></td><td>Touch&#8209;all &rarr; validate &rarr; <code>onSubmit(values)</code> when valid.</td></tr>
-          <tr><td><code>.reset()</code></td><td><code>fn</code></td><td>Restore initial values, clear errors/touched.</td></tr>
+          <tr><td><code>persist</code></td><td><code>string | true</code></td><td>Mirror the declared fields to Web Storage. A string is the storage key; <code>true</code> derives one from the call site. Omitted &rarr; no persistence.</td></tr>
+          <tr><td><code>persistIn</code></td><td><code>"local" | "session"</code></td><td>Which backend to use. <code>"local"</code> is the default; anything other than <code>"session"</code> falls back to it.</td></tr>
+          <tr><td><code>history</code></td><td><code>true | number</code></td><td>Record undo snapshots of the declared fields. <code>true</code> keeps 50; a positive number caps the depth at that value.</td></tr>
         </tbody>
       </table>
+
+      <h3 id="api-history">Members injected by <code>history</code></h3>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Member</th><th>Type</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td><code>.undo()</code></td><td><code>fn</code></td><td>Restore the previous snapshot and push the current one onto the redo stack. A no&#8209;op when there is nothing to undo.</td></tr>
+          <tr><td><code>.redo()</code></td><td><code>fn</code></td><td>Re&#8209;apply the snapshot that <code>undo()</code> stepped past. A no&#8209;op when the redo stack is empty.</td></tr>
+          <tr><td><code>.clearHistory()</code></td><td><code>fn</code></td><td>Drop both stacks. The current values are untouched; <code>canUndo</code> and <code>canRedo</code> go <code>false</code>.</td></tr>
+          <tr><td><code>.canUndo</code></td><td><code>boolean</code></td><td>Reactive &mdash; read it straight into a <code>disabled</code> prop.</td></tr>
+          <tr><td><code>.canRedo</code></td><td><code>boolean</code></td><td>Reactive, same as above. Cleared by any fresh edit.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Restoring a snapshot does not itself count as an edit, so undo and redo never
+        record each other. One store can use every key at once:
+      </p>
+<pre><code>prefs = $store({
+  theme: "system",
+  density: "comfortable",
+
+  persist: "prefs",        // localStorage key
+  persistIn: "local",      // "local" (default) | "session"
+  history: 20,             // true = 50 snapshots; a number caps the depth
+
+  setTheme: (s, t) =&gt; { s.theme = t }
+})
+
+$app(Column([
+  Select("theme", {
+    label: "Theme",
+    value: prefs.theme,
+    items: [
+      SelectItem("system", { label: "System" }),
+      SelectItem("light", { label: "Light" }),
+      SelectItem("dark", { label: "Dark" })
+    ]
+  }),
+  Row([
+    Button("Undo", { onClick: () =&gt; prefs.undo(), disabled: !prefs.canUndo, variant: "ghost" }),
+    Button("Redo", { onClick: () =&gt; prefs.redo(), disabled: !prefs.canRedo, variant: "ghost" }),
+    Button("Forget history", { onClick: () =&gt; prefs.clearHistory(), variant: "ghost" })
+  ], { gap: "sm" }),
+  Text(`Saved as "${prefs.theme}" — reload the page and it is still there.`, { variant: "small", tone: "muted" })
+], { gap: "md" }))</code></pre>
+      <p>
+        <code>canUndo</code> is <code>false</code> on the first render and becomes
+        <code>true</code> the moment the select changes, so the toolbar enables itself
+        without any bookkeeping of yours.
+      </p>
+
+      <h2 id="storage">The <code>storage</code> namespace</h2>
+      <p>
+        When you want to persist one value rather than a whole store, use the
+        <code>storage</code> namespace. It wraps the three browser backends behind
+        one <code>set</code> / <code>get</code> / <code>remove</code> /
+        <code>clear</code> API, and it is the <strong>vetted</strong> path &mdash; the
+        only persistence surface still reachable once you narrow globals with
+        <a href="security.html#policy"><code>setGlobalAccessPolicy("safe")</code></a>.
+      </p>
+<pre><code>storage.set("draft", { title: $title, body: $body })   // bare storage.* = localStorage
+storage.get("draft")                                   // → { title: …, body: … } — JSON round-trips
+storage.session.set("activeTab", $tab)                 // per-tab sessionStorage
+storage.local.remove("draft")
+storage.cookies.set("uid", $id, { expires: 7 })        // expires in DAYS
+
+$storage.set("draft", $draft)                          // the $-sigil spelling is identical</code></pre>
+      <p>
+        Non&#8209;string values round&#8209;trip through JSON, so arrays and objects
+        persist without manual serialisation; a value that is already a string passes
+        through untouched, which keeps legacy raw&#8209;string keys readable. Nothing
+        throws &mdash; <code>set</code>/<code>remove</code>/<code>clear</code> return
+        <code>false</code> and <code>get</code> returns <code>null</code> when storage
+        is blocked, full, or absent (private mode, SSR).
+      </p>
+
+      <h3 id="cookies">Cookies</h3>
+      <p>
+        <code>storage.cookies</code> takes the standard attributes, with two
+        conversions worth remembering: <code>expires</code> as a number means
+        <strong>days</strong>, while <code>maxAge</code> is in
+        <strong>seconds</strong> and wins when both are set.
+      </p>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Option</th><th>Type</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>expires</code></td><td><code>number | Date | string</code></td><td>A number is days from now; a <code>Date</code> or parseable string is an absolute expiry.</td></tr>
+          <tr><td><code>maxAge</code></td><td><code>number</code></td><td>Seconds, floored. Overrides <code>expires</code> when both are present.</td></tr>
+          <tr><td><code>path</code></td><td><code>string</code></td><td>Defaults to <code>"/"</code>. Validated &mdash; a value that is not a plain cookie path is <strong>silently replaced</strong> with <code>"/"</code>.</td></tr>
+          <tr><td><code>domain</code></td><td><code>string</code></td><td>Validated as a hostname (up to 253 characters, optional leading dot). A value that fails is <strong>dropped</strong>.</td></tr>
+          <tr><td><code>secure</code></td><td><code>boolean</code></td><td>Adds <code>Secure</code>. Required by browsers alongside <code>SameSite=None</code>.</td></tr>
+          <tr><td><code>sameSite</code></td><td><code>"Strict" | "Lax" | "None"</code></td><td>Case&#8209;insensitive. <strong>Always emitted</strong>, defaulting to <code>Lax</code>; an unrecognised value also falls back to <code>Lax</code>.</td></tr>
+        </tbody>
+      </table>
+<pre><code>storage.cookies.set("a", "1")
+// → a=1; path=/; samesite=Lax                      ← SameSite is always written
+
+storage.cookies.set("b", { x: 1 }, { path: "/app", domain: "example.com", secure: true, sameSite: "none", maxAge: 60 })
+// → b=%7B%22x%22%3A1%7D; max-age=60; path=/app; domain=example.com; secure; samesite=None
+
+storage.cookies.get("b")   // → { x: 1 }  — the JSON round-trip works here too</code></pre>
+      <p>
+        The name and value are percent&#8209;encoded, and the attributes are
+        validated rather than interpolated raw, so a <code>path</code> carrying its
+        own <code>; Domain=&hellip;</code> cannot smuggle an attribute in. The
+        always&#8209;on <code>SameSite</code> is a change in behaviour: previously it
+        was omitted when you omitted it.
+      </p>
+      <p>
+        <code>remove(key, options)</code> must be given the <em>same</em>
+        <code>path</code> and <code>domain</code> as the original <code>set</code>, or
+        the browser will not match the cookie and it will still be there.
+      </p>
+      <div class="callout warn">
+        <h4>Storage is host&#8209;visible, not private</h4>
+        <p>
+          <strong>Never put a secret in it.</strong> Everything in
+          <code>localStorage</code>, <code>sessionStorage</code> and the cookie jar is
+          readable by every script on the origin, including the embedding page.
+          <a href="security.html">Security</a> has the trust model and the full
+          sink&#8209;to&#8209;sanitiser table &mdash; read it before you persist
+          anything that came from a user.
+        </p>
+      </div>
+
+      <h2 id="scope">Where to call <code>$store</code></h2>
+      <p>
+        Call it at the top level. A store is <strong>keyed by its call site</strong>,
+        not by the component that ran it, so the first evaluation creates it and every
+        later reference &mdash; from any component, on any render &mdash; gets the
+        same handle back.
+      </p>
+      <p>
+        Calling it inside a component body is legal and does work, but it is
+        <em>not</em> per&#8209;instance state. Two instances rendered from the same
+        <code>$store</code> line share one store and one backing atom, so they can
+        never hold different values &mdash; and the binding is scoped to that body, so
+        no other component can reach it.
+      </p>
+      <div class="callout warn">
+        <h4>A store inside a component is still one store</h4>
+        <p>
+          <strong>Use <a href="hooks.html"><code>$state</code></a> for
+          per&#8209;instance state.</strong> Two
+          <code>Counter()</code>s whose body calls <code>$store({ n: 0 })</code> read
+          and write the same <code>n</code>. The config object is also evaluated only
+          on the first call, so defaults computed from state are frozen at that
+          moment.
+        </p>
+      </div>
+      <p>
+        Stores live as long as the program. Loading a new program rebuilds the
+        context, which recreates every store from its declared defaults &mdash; unless
+        <code>persist</code> hydrates it again.
+      </p>
+
+      <h2 id="forms">Forms with <code>$form</code></h2>
+      <p>
+        Forms have their own store&#8209;backed primitive.
+        <code>$form({ values, rules, onSubmit })</code> holds the field values, runs
+        <a href="language-reference.html#util-rt-rules"><code>$util.rules</code></a>
+        validators, tracks <code>touched</code> / <code>dirty</code> /
+        <code>valid</code> / <code>submitting</code>, and submits exactly once.
+      </p>
+      <p>
+        It is the same reactive machinery, so everything on this page about
+        fine&#8209;grained reads and two&#8209;way binding applies to it &mdash; but
+        the API is large enough to deserve its own guide.
+        <strong><a href="forms.html">Read the Forms guide &rarr;</a></strong>
+      </p>
 
       <h2 id="vs-local">Store vs. local state</h2>
       <p>
@@ -356,9 +521,60 @@ $app(Signup())</code></pre>
         </tbody>
       </table>
       <p>
-        You can freely mix them: derive a top-level computed value from a store
-        (<code>$cheapest = $util.min(cart.total())</code>), or read a store inside a
-        custom <a href="hooks.html">hook</a>.
+        Mixing the two is normal. A component reads the store for shared data and
+        keeps its own presentation state locally, and derived values go in a
+        <code>$memo</code> so they are recomputed only when their inputs move.
+      </p>
+<pre><code>cart = $store({
+  items: [{ name: "Latte", price: 4.5 }, { name: "Muffin", price: 3 }],
+  total: (s) =&gt; $util.sum(s.items.map(i =&gt; i.price)),
+  cheapest: (s) =&gt; $util.min(s.items.map(i =&gt; i.price))
+})
+
+function CartSummary(vatRate) {
+  const gross = $memo(() =&gt; cart.total() * (1 + vatRate), [cart.total(), vatRate])
+  return Column([
+    Text(`Subtotal ${$util.currency(cart.total(), "EUR")}`),
+    Text(`With VAT ${$util.currency(gross, "EUR")}`, { variant: "body-heavy" }),
+    Text(`Cheapest item ${$util.currency(cart.cheapest(), "EUR")}`, { variant: "small", tone: "muted" })
+  ], { gap: "xs" })
+}
+
+$app(CartSummary(0.19))</code></pre>
+      <p>
+        Note that the aggregate helpers take an <strong>array</strong>:
+        <code>$util.min(s.items.map(i =&gt; i.price))</code> is the cheapest price,
+        while <code>$util.min(cart.total())</code> passes a single number and returns
+        <code>0</code>. The same applies to <code>sum</code>, <code>avg</code>,
+        <code>max</code> and <code>count</code>.
+      </p>
+
+      <h2 id="migrating">Coming from Redux, Zustand or Pinia</h2>
+      <p>
+        A store is the same idea those libraries implement, minus the wiring: there is
+        no provider to mount, no reducer indirection, and no selector function,
+        because a plain <code>store.field</code> read already subscribes the component
+        to that one path.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Concept</th><th>Redux Toolkit</th><th>Zustand</th><th>Pinia</th><th>Aktion</th></tr></thead>
+        <tbody>
+          <tr><td>Declaring it</td><td><code>createSlice</code> + <code>configureStore</code></td><td><code>create(fn)</code></td><td><code>defineStore(id, &hellip;)</code></td><td><code>cart = $store({ &hellip; })</code></td></tr>
+          <tr><td>State</td><td><code>initialState</code></td><td>Fields returned by the creator</td><td><code>state()</code></td><td>Non&#8209;function entries</td></tr>
+          <tr><td>Derived value</td><td>Selector / <code>createSelector</code></td><td>Selector passed to the hook</td><td><code>getters</code></td><td>A method that returns: <code>count: (s) =&gt; s.items.length</code></td></tr>
+          <tr><td>Mutation</td><td>Reducer + <code>dispatch(action)</code></td><td><code>set(&hellip;)</code> in an action</td><td><code>actions</code> / <code>$patch</code></td><td>A method that writes: <code>add: (s, x) =&gt; { &hellip; }</code></td></tr>
+          <tr><td>Reading in a component</td><td><code>useSelector(&hellip;)</code></td><td><code>useStore(s =&gt; s.x)</code></td><td><code>store.x</code></td><td><code>cart.items</code> &mdash; tracked automatically</td></tr>
+          <tr><td>Provider setup</td><td><code>&lt;Provider store&gt;</code></td><td>None</td><td><code>app.use(createPinia())</code></td><td>None &mdash; the store <em>is</em> the module</td></tr>
+          <tr><td>Persistence</td><td><code>redux-persist</code></td><td><code>persist</code> middleware</td><td>A persistence plugin</td><td><a href="#persist"><code>persist: "key"</code></a></td></tr>
+          <tr><td>Undo / redo</td><td>A history middleware</td><td>A history middleware</td><td>Hand&#8209;rolled</td><td><a href="#history"><code>history: true</code></a></td></tr>
+          <tr><td>Immutability</td><td>Immer inside reducers</td><td>Spread by hand</td><td>Direct mutation</td><td>Direct&#8209;looking writes; the runtime rebuilds each level immutably</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The habit worth unlearning is the selector. Aktion tracks reads at the path
+        level, so <code>cart.items</code> in one component and
+        <code>cart.coupon</code> in another already re&#8209;render independently
+        &mdash; wrapping either in a memoised selector buys nothing.
       </p>
 
       <h2 id="next">Next</h2>
@@ -369,11 +585,11 @@ $app(Signup())</code></pre>
           <p>Component-local state with <code>$state</code> / <code>$memo</code>, and your own custom hooks.</p>
           <span class="demo-arrow">Open the guide &rarr;</span>
         </a>
-        <a class="demo-card" href="language.html">
-          <span class="demo-tag">Reference</span>
-          <h3>Language</h3>
-          <p>Reactive state, fine-grained dependency tracking, and per-component re-rendering.</p>
-          <span class="demo-arrow">View the reference &rarr;</span>
+        <a class="demo-card" href="forms.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Forms</h3>
+          <p>The store-backed <code>$form</code> engine &mdash; validation rules, error surfacing, and submitting to a server.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
         <a class="demo-card" href="actions.html">
           <span class="demo-tag">Behaviour</span>
@@ -384,7 +600,7 @@ $app(Signup())</code></pre>
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     // Render each .lay-demo code block as a live <aktion-app> beside it.
     import "../dist/aktion.js"; // registers the <aktion-app> custom element

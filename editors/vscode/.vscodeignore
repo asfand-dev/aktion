@@ -1,3 +1,7 @@
+# What NOT to put in the .vsix. Everything else ships, so the omissions matter:
+# `snippets/` and `syntaxes/` are generated build output but MUST be packaged
+# (package.json contributes them), and README.md / CHANGELOG.md / LICENSE /
+# icon.png are what the marketplace listing renders.
 src/**
 scripts/**
 esbuild.mjs
@@ -7,3 +11,16 @@ tsconfig.json
 **/*.map
 node_modules/**
 .env
+
+# Maintainer-only: the contributor guide documents PAT scopes and CI secret
+# names — no reason to publish it to every user.
+docs/**
+
+# Dev-only lock data, and a previous package artifact (which would otherwise be
+# nested inside the next one).
+package-lock.json
+*.vsix
+
+# esbuild fallback bundles. Covered by `scripts/**` today; listed explicitly so
+# the exclusion survives scripts/ ever being un-ignored.
+**/.gen-*.tmp.mjs

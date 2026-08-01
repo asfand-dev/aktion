@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Brand themes · Aktion</title>
-  <meta name="description" content="Same Aktion program rendered with GitHub, Apple, Stripe, IONOS, Notion, and Vercel-style $theme() declarations. Copy any brand into your own response." />
+  <meta name="description" content="One Aktion program rendered with six brand-style token maps — GitHub, Apple, Stripe, IONOS, Notion, Vercel. Each preset is a flat ThemeTokens map for setTheme(), shown alongside its grouped $theme({...}) translation." />
   <link rel="stylesheet" href="assets/example-page.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
@@ -196,21 +196,28 @@
       <span class="tag-pill">Live demo · $theme({...})</span>
       <h1 style="margin-top:10px">Same UI, six brands.</h1>
       <p>
-        Pick a brand below — the preview reskins to GitHub, Apple, Stripe,
-        IONOS, Notion, or Vercel using only a bare <code>$theme({...})</code>
-        line at the top of the response. No CSS, no host configuration, no
-        custom components. Copy any token map into your own LLM response to
-        brand a single reply, or feed it through
+        Pick a brand below — the preview reskins to a GitHub, Apple, Stripe,
+        IONOS, Notion or Vercel-flavoured palette using only a bare
+        <code>$theme({...})</code> line at the top of the program. No CSS, no host
+        configuration, no custom components. Copy any block into your own
+        response to brand a single reply, or feed the flat token map through
         <code>el.setTheme(...)</code> to brand the whole host.
+      </p>
+      <p class="small muted">
+        Each palette is an approximation assembled from publicly visible colours and
+        type stacks, kept deliberately small so you can see which tokens carry a
+        brand. They are illustrations of the token system, not reproductions of
+        anyone's design system.
       </p>
     </section>
 
     <article class="example-card">
-      <h2>Pick a brand</h2>
+      <h2 id="pick-a-brand">Pick a brand</h2>
       <p class="lede">
         Each chip swaps just the <code>$theme({...})</code> block at the top
-        of the program. The rest of the UI Script is identical across every
-        brand — the renderer picks up the new tokens between renders.
+        of the program. The rest of the Aktion program is identical across every
+        brand — the renderer picks up the new tokens between renders, without
+        re-mounting a single component.
       </p>
 
       <div class="brand-picker" role="radiogroup" aria-label="Brand picker">
@@ -263,7 +270,39 @@
     </article>
 
     <article class="example-card">
-      <h2>The shared UI program</h2>
+      <h2 id="how-it-works">Flat token maps, grouped output</h2>
+      <p class="lede">
+        Each preset on this page is stored as a <strong>flat</strong>
+        <code>ThemeTokens</code> map — <code>colorPrimary</code>,
+        <code>radiusButton</code>, <code>buttonFontWeight</code> — because that is the
+        shape <code>el.setTheme(...)</code> and the <code>theme</code> attribute take.
+        The <strong>Theme source</strong> panel above shows the same palette translated
+        into the <strong>grouped</strong> <code>$theme({...})</code> shape a program
+        uses, and that translated block is what the live preview actually runs.
+      </p>
+      <p class="lede">
+        The two shapes are not quite interchangeable. Ten groups exist —
+        <code>colors</code>, <code>radius</code>, <code>font</code>,
+        <code>spacing</code>, <code>shadows</code>, <code>gradients</code>,
+        <code>zIndex</code>, <code>motion</code>, plus the two side-effect groups
+        <code>fonts</code> and <code>icons</code> — but 25 tokens have no group at all.
+        The <code>button*</code> padding and weight, the six <code>chart*</code> series
+        colours, <code>borderWidth</code>, <code>letterSpacingHeading</code> and
+        <code>lineHeight*</code> only reach the host through the flat path, so the
+        grouped block you copy from here omits them. Every preset on this page uses some
+        of them, which is exactly why the flat map is the source of truth.
+      </p>
+      <p class="lede">
+        One more gap worth knowing about: these presets retint the status
+        <em>fills</em> (<code>colorSuccess</code> and friends) but not their text-safe
+        partners (<code>colorSuccessText</code>, <code>colorOnSuccess</code>, …) or
+        <code>colorBorderControl</code>. Those inherit the <code>light</code> theme's
+        accessible values, so status <em>labels</em> stay on the built-in hue rather
+        than the brand's. Add the partners to finish a brand — see
+        <a href="themes.html#status-colors">status colours come in threes</a>.
+      </p>
+
+      <h2 id="shared-program">The shared program</h2>
       <p class="lede">
         Every brand renders the same Aktion source. Only the
         <code>$theme({...})</code> line at the top changes — the
@@ -354,31 +393,67 @@ $app(Stack([head, kpis, trendChart, bottomGrid], { direction: "column", gap: "lg
     </article>
 
     <article class="example-card">
-      <h2>Use it from your app</h2>
+      <h2 id="use-it">Use it from your app</h2>
       <p class="lede">
-        Three equivalent ways to apply a brand: emit a <code>$theme(...)</code>
-        line from the LLM, call <code>setTheme()</code> from the host page,
-        or set CSS variables on the host element.
+        Three ways to apply a brand, in three different languages. Pick by where the
+        decision lives: in the model's response, in your host JavaScript, or in your
+        page's stylesheet.
       </p>
-      <pre class="example-source"><code>// 1. Brand a single response from inside the script (structured form).
-el.setResponse(`$theme({
-  colors: { primary: "#0969da" },
-  font:   { family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", weightButton: "500" },
+
+      <div class="example-source-header">
+        <span class="example-source-label">1 · Aktion — brand one response (grouped shape)</span>
+      </div>
+      <pre class="example-source"><code>$theme({
+  colors: { primary: "#0969da", primaryText: "#ffffff" },
+  font:   { family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
   radius: { button: "6px" }
 })
-$app(Stack([CardHeader("Welcome"), Buttons([Button("Sign in")])]))`);
+$app(Stack([CardHeader("Welcome"), Buttons([Button("Sign in")])]))</code></pre>
+      <p class="lede small">
+        Inside a program the keys are grouped. Button weight is not available here —
+        <code>buttonFontWeight</code> has no group, so it has to come from the host.
+      </p>
 
-// 2. Or apply a flat token map programmatically (host-wide).
-//    The host-side setTheme() still accepts the flat token names.
-import { brandThemes } from "./brand-themes.js";
-el.setTheme(brandThemes.github);
+      <div class="example-source-header">
+        <span class="example-source-label">2 · JavaScript — brand the whole host (flat shape)</span>
+      </div>
+      <pre class="example-source"><code>// The host paths take flat token names, and they reach every token —
+// including buttonFontWeight, chart1..6 and borderWidth.
+el.setTheme({
+  colorPrimary:     "#0969da",
+  colorPrimaryText: "#ffffff",
+  radiusButton:     "6px",
+  buttonFontWeight: "500",
+  fontFamily:       "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+});
 
-// 3. Or set CSS variables on the host element.
-aktion-app {
-  --rui-color-primary:     #0969da;
-  --rui-radius-button:     6px;
-  --rui-font-family:       -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+// Equivalently, hand the element a JSON token map on the attribute:
+el.setAttribute("theme", JSON.stringify({ colorPrimary: "#0969da" }));</code></pre>
+      <p class="lede small">
+        <code>setTheme()</code> replaces the whole base layer and resets the
+        per-response overlay tracker; the next render reapplies any
+        <code>$theme({...})</code> from the program on top.
+      </p>
+
+      <div class="example-source-header">
+        <span class="example-source-label">3 · CSS — set the variables directly</span>
+      </div>
+      <pre class="example-source"><code>aktion-app {
+  /* !important is required: see the note below. */
+  --rui-color-primary: #0969da !important;
+  --rui-radius-button: 6px !important;
+  --rui-font-family:   -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
 }</code></pre>
+      <p class="lede small">
+        The <code>--rui-*</code> prefix is the public contract, so a stylesheet can
+        drive it — with one catch. Applying a theme writes every token the theme
+        defines as an <strong>inline style</strong> on the host element, and an inline
+        declaration beats a normal stylesheet rule, so the <code>!important</code> is
+        what makes this win. Tokens the active theme leaves unset (the optional ones,
+        such as <code>--rui-color-link</code> or <code>--rui-motion-fast</code>) are not
+        written inline, so those need no <code>!important</code>. Prefer options 1 and 2
+        unless the values genuinely have to come from CSS.
+      </p>
     </article>
   </div>
 
@@ -741,34 +816,50 @@ aktion-app {
     const copyProgBtn  = document.getElementById("copy-program");
 
     // Map a flat-shape token key (e.g. "colorPrimaryHover", "radiusButton",
-    // "fontFamilyHeading") to a structured group/inner-key pair (e.g.
+    // "shadowMd") to a structured group/inner-key pair (e.g.
     // { group: "colors", inner: "primaryHover" }).
     //
-    // The in-script `$theme({...})` binding only accepts the structured
-    // groups `colors` / `radius` / `font` (§16), which flatten back to
-    // `color*` / `radius*` / `font*`. Tokens with no structured-group
-    // spelling that reproduces the real token name — charts, shadows,
-    // border width, button padding, transition timing — are dropped from
-    // the generated snippet rather than emitted as silently-ignored keys.
+    // These are every token-bearing group `$theme({...})` accepts. The two
+    // remaining groups, `fonts` (web-font imports) and `icons` (inline SVG),
+    // are side effects rather than tokens, so no flat token maps onto them.
+    //
+    // Order matters only in that no prefix here is a prefix of another.
+    // `spacing`'s single-letter tokens round-trip fine: spacingM -> spacing.m,
+    // which the evaluator normalises back to --rui-spacing-m.
+    const STRUCTURED_GROUPS = [
+      { prefix: "color",    group: "colors" },
+      { prefix: "radius",   group: "radius" },
+      { prefix: "font",     group: "font" },
+      { prefix: "spacing",  group: "spacing" },
+      { prefix: "shadow",   group: "shadows" },
+      { prefix: "gradient", group: "gradients" },
+      { prefix: "motion",   group: "motion" },
+      { prefix: "z",        group: "zIndex" },
+    ];
+
     function flatToStructured(key) {
-      const groups = [
-        { prefix: "color",  group: "colors" },
-        { prefix: "radius", group: "radius" },
-        { prefix: "font",   group: "font" },
-      ];
-      for (const { prefix, group } of groups) {
+      for (const { prefix, group } of STRUCTURED_GROUPS) {
         if (key.startsWith(prefix) && key.length > prefix.length) {
           const tail = key.slice(prefix.length);
+          // A group key is the tail with its first letter lowercased; a digit
+          // (spacing2xl, fontSize13) passes through untouched.
           const inner = tail.charAt(0).toLowerCase() + tail.slice(1);
           return { group, inner };
         }
       }
-      // Not expressible via the structured form — skip it.
+      // 25 of the 113 tokens have no group at all: buttonFontWeight,
+      // buttonTextTransform, buttonLetterSpacing, buttonPaddingY/X, chart1..6,
+      // hlKeyword..hlPunct, borderWidth, transitionDuration, lineHeightBody,
+      // lineHeightHeading, letterSpacingHeading and headingTextTransform.
+      // $theme() silently drops them, so the copyable snippet drops them too
+      // rather than emitting keys that look like they work. Reach those with the
+      // flat host paths — el.setTheme({...}) or a JSON `theme` attribute.
       return null;
     }
 
     function formatThemeBlock(tokens) {
-      const buckets = { colors: [], radius: [], font: [] };
+      const buckets = {};
+      for (const { group } of STRUCTURED_GROUPS) buckets[group] = [];
       for (const [key, value] of Object.entries(tokens)) {
         const mapped = flatToStructured(key);
         if (!mapped) continue;

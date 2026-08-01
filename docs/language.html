@@ -15,9 +15,13 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
     /* Live layout demo: code on the left, rendered output on the right. */
     .lay-demo {
       display: grid;
@@ -459,6 +463,38 @@ Button({ label: "Save", variant: "primary" })
 // Button(label, onClick?, variant?, …) — so this binds "primary" to
 // onClick, NOT variant. Prefer the trailing object for non-adjacent props.
 Button("Save", "primary")</code></pre>
+      <div class="callout warn">
+        <h4>Slot order past the first argument is not a stable API</h4>
+        <p>
+          Only the prop tagged <em>(positional)</em> has a guaranteed slot. Every
+          later positional argument binds to <strong>the next unfilled prop in
+          declaration order</strong>, so adding a prop in the middle of a
+          component's signature silently rebinds every argument after it. That is
+          not hypothetical: the 0.5 component pass added roughly a thousand props,
+          and 24 components changed which prop a given slot lands on &mdash;
+          <code>Input</code>, <code>TextArea</code>, <code>Combobox</code>,
+          <code>TagInput</code>, <code>PasswordInput</code>, <code>Gauge</code>,
+          <code>Histogram</code>, <code>Draggable</code>, <code>Reveal</code> and
+          <code>Show</code> among them.
+        </p>
+        <p>
+          These rebinds produce <strong>no validation error</strong> &mdash; the call
+          is still well-formed, it just means something else. Both lines below
+          validate clean, and neither does what it looks like:
+        </p>
+<pre><code>// slots 2 and 3 are now `type` and `disabled` — the callbacks land on the
+// wrong props, and nothing complains.
+Draggable(Card([Text("drag me")]), "id-1", () =&gt; {}, () =&gt; {})
+
+// slot 3 is now `duration`, so `true` becomes a duration, not `once`.
+Reveal(Card([Text("hi")]), "fade", 100, true)</code></pre>
+        <p>
+          So: use <strong>one positional argument at most</strong>, and put
+          everything else in the trailing object. The named form is stable across
+          versions, self-documenting at the call site, and the form every example in
+          these docs uses.
+        </p>
+      </div>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$app(Grid([
@@ -514,7 +550,7 @@ $app(Text(`Count: ${$count}`))</code></pre>
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     // Render each .lay-demo code block as a live <aktion-app> beside it.
     import "../dist/aktion.js"; // registers the <aktion-app> custom element

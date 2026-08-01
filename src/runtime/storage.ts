@@ -151,6 +151,18 @@ const formatExpires = (value: CookieOptions["expires"]): string | null => {
 };
 
 /** Build the trailing attribute portion of a `Set-Cookie` string. */
+/**
+ * A cookie `Path` attribute value. `;` and `,` would terminate the attribute
+ * and let a caller append attributes of their own choosing (`Domain=`,
+ * `SameSite=None`, …) — the cookie name and value are percent-encoded, but the
+ * attributes were interpolated raw. Since the DSL is untrusted, they are
+ * validated instead.
+ */
+const COOKIE_PATH_RE = /^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%/]*$/;
+
+/** A cookie `Domain` attribute value: a hostname, optionally leading-dotted. */
+const COOKIE_DOMAIN_RE = /^\.?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/;
+
 const buildCookieAttributes = (options: CookieOptions = {}): string => {
   const parts: string[] = [];
   const expires = formatExpires(options.expires);
@@ -158,13 +170,19 @@ const buildCookieAttributes = (options: CookieOptions = {}): string => {
   if (typeof options.maxAge === "number" && Number.isFinite(options.maxAge)) {
     parts.push(`max-age=${Math.floor(options.maxAge)}`);
   }
-  parts.push(`path=${options.path ?? "/"}`);
-  if (options.domain) parts.push(`domain=${options.domain}`);
-  if (options.secure) parts.push("secure");
-  if (options.sameSite) {
-    const value = options.sameSite.charAt(0).toUpperCase() + options.sameSite.slice(1).toLowerCase();
-    parts.push(`samesite=${value}`);
+  const path = options.path ?? "/";
+  parts.push(`path=${COOKIE_PATH_RE.test(path) ? path : "/"}`);
+  if (options.domain && COOKIE_DOMAIN_RE.test(options.domain) && options.domain.length <= 253) {
+    parts.push(`domain=${options.domain}`);
   }
+  if (options.secure) parts.push("secure");
+  // Always emit SameSite. Omitting it leaves the cookie's cross-site behaviour
+  // to browser defaults, which SonarQube / CodeQL flag and which differ between
+  // engines; `Lax` matches what modern browsers apply anyway.
+  const sameSite = options.sameSite
+    ? options.sameSite.charAt(0).toUpperCase() + options.sameSite.slice(1).toLowerCase()
+    : "Lax";
+  parts.push(`samesite=${["Strict", "Lax", "None"].includes(sameSite) ? sameSite : "Lax"}`);
   return parts.length === 0 ? "" : `; ${parts.join("; ")}`;
 };
 
@@ -174,17 +192,26 @@ const readAllCookies = (): Record<string, string> => {
   const out: Record<string, string> = {};
   const raw = doc.cookie ?? "";
   if (!raw) return out;
+  // `decodeURIComponent` throws on a malformed escape (`%`, `%zz`). Cookies
+  // set by the host app or a third-party script share this jar, so one
+  // undecodable cookie must not make every cookie read fail — decode per
+  // entry and fall back to the raw text.
+  const decode = (input: string): string => {
+    try { return decodeURIComponent(input); } catch { return input; }
+  };
   for (const pair of raw.split(";")) {
     const trimmed = pair.trim();
     if (!trimmed) continue;
     const eq = trimmed.indexOf("=");
     if (eq < 0) {
-      out[decodeURIComponent(trimmed)] = "";
+      out[decode(trimmed)] = "";
       continue;
     }
-    const key = decodeURIComponent(trimmed.slice(0, eq));
-    const value = decodeURIComponent(trimmed.slice(eq + 1));
-    out[key] = value;
+    const key = decode(trimmed.slice(0, eq));
+    // A cookie name that reaches a prototype key would make `out.__proto__`
+    // assignment retarget the object's prototype instead of adding an entry.
+    if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+    out[key] = decode(trimmed.slice(eq + 1));
   }
   return out;
 };

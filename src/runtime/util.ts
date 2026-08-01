@@ -192,6 +192,29 @@ const recase = (input: unknown, kind: "camel" | "pascal" | "snake" | "kebab"): s
  * `"startsWith"`, `"endsWith"`. The string operators (`contains` /
  * `startsWith` / `endsWith`) match case-insensitively.
  */
+/**
+ * Test a DSL-supplied regex against a DSL-supplied subject with bounded cost.
+ *
+ * Both the pattern and the subject are untrusted, which is the textbook ReDoS
+ * setup: a pattern like `(a+)+$` against a long run of `a` backtracks
+ * exponentially and freezes the render thread. An arbitrary pattern cannot be
+ * made safe, so the mitigation bounds the subject — worst-case backtracking
+ * grows with subject length, so a small cap keeps the worst case small.
+ * Over-long subjects are truncated rather than rejected so ordinary matching
+ * still behaves as authors expect.
+ */
+const REGEX_MAX_PATTERN_LENGTH = 1024;
+const REGEX_MAX_SUBJECT_LENGTH = 8 * 1024;
+
+export function safeRegexTest(pattern: string, subject: string): boolean {
+  if (pattern.length > REGEX_MAX_PATTERN_LENGTH) return false;
+  const bounded = subject.length > REGEX_MAX_SUBJECT_LENGTH
+    ? subject.slice(0, REGEX_MAX_SUBJECT_LENGTH)
+    : subject;
+  try { return new RegExp(pattern).test(bounded); }
+  catch { return false; }
+}
+
 export const Util = {
   // ── Aggregation ───────────────────────────────────────────
   count: (arr: unknown): number => toArray(arr).length,
@@ -479,7 +502,7 @@ export const Util = {
   contains: (text: unknown, needle: unknown): boolean =>
     String(text ?? "").includes(String(needle ?? "")),
   match: (text: unknown, pattern: unknown): boolean => {
-    try { return new RegExp(String(pattern ?? "")).test(String(text ?? "")); }
+    try { return safeRegexTest(String(pattern ?? ""), String(text ?? "")); }
     catch { return false; }
   },
 

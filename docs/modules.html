@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     /* Live demo: code on the left, rendered output on the right. */
@@ -72,6 +72,10 @@
       border-radius: 999px;
       padding: 0 6px;
     }
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
   </style>
 </head>
 <body data-page="modules">
@@ -90,8 +94,8 @@
           functions, and reactive <code>$state</code>, with
           <strong>JavaScript-like syntax</strong> and <strong>true per-file
           scope</strong>. The files are <strong>linked in the browser</strong> &mdash;
-          no build step &mdash; so the <a href="playground.html">playground</a> and
-          any web page work the same way.
+          no build step &mdash; or
+          <a href="#vite">ahead of time by the Vite plugin</a>, from the same linker.
         </p>
       </header>
 
@@ -170,6 +174,32 @@ import { $count as $total } from "./store.aktion"           // $ stays across `a
         <code>as</code> are ordinary identifiers everywhere else, so existing code
         that uses them as variable names keeps working.
       </p>
+      <p>
+        A specifier list may span several lines and may end with a trailing
+        comma, so a long import formats the way you would format it in
+        JavaScript:
+      </p>
+<pre><code>import {
+  Button,
+  Card,
+  PrimaryButton,
+} from "./ui.aktion"</code></pre>
+      <p>
+        All three names bind exactly as they would on a single line &mdash; the layout
+        carries no meaning.
+      </p>
+      <div class="callout warn">
+        <h4>If a multi-line import used to vanish, this is why</h4>
+        <p>
+          <strong>Multi-line specifier lists used to fail to parse.</strong>
+          Because <code>parse()</code> records the error and recovers to the next
+          statement, the <em>entire</em> <code>import</code> disappeared while the
+          program still &ldquo;parsed&rdquo; &mdash; leaving every imported name
+          undefined and every reference to it silently <code>null</code>. Both the
+          line breaks and the trailing comma parse correctly now, so a program
+          that was quietly missing bindings starts working without any edit.
+        </p>
+      </div>
 
       <h2 id="scope">True per-file scope</h2>
       <p>
@@ -251,8 +281,40 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
         A relative import inside a URL module resolves against that URL, so a remote
         file can pull in its own neighbours. Bare specifiers
         (<code>import { x } from "lodash"</code>) have no meaning and are reported as
-        unresolved.
+        unresolved. These are the exact rules
+        <code>resolveSpecifier(spec, importerPath)</code> applies:
       </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Specifier</th><th>Importer</th><th>Module key</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>./Button.aktion</code></td><td><code>app.aktion</code></td><td><code>Button.aktion</code></td></tr>
+          <tr><td><code>../Button.aktion</code></td><td><code>components/App.aktion</code></td><td><code>Button.aktion</code></td></tr>
+          <tr><td><code>/layout/Nav.aktion</code></td><td>any project file</td><td><code>layout/Nav.aktion</code> &mdash; from the project root, leading slash dropped</td></tr>
+          <tr><td><code>https://x.test/H.aktion</code></td><td>any</td><td>the URL itself, normalised</td></tr>
+          <tr><td><code>./n.aktion</code></td><td><code>https://x.test/ui/H.aktion</code></td><td><code>https://x.test/ui/n.aktion</code></td></tr>
+          <tr><td><code>lodash</code></td><td>any</td><td><code>null</code> &mdash; reported as <code>Cannot resolve import</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Keys are normalised, so <code>.</code> and <code>..</code> segments collapse
+        before lookup (<code>/a/../b.aktion</code>&nbsp;&rarr;&nbsp;<code>b.aktion</code>)
+        and two specifiers that name the same file share one module instance.
+      </p>
+      <div class="callout warn">
+        <h4>Root&#8209;absolute and URL specifiers are browser&#8209;only</h4>
+        <p>
+          <strong>The table above describes the in&#8209;browser linker.</strong> The
+          <a href="#vite">Vite plugin</a> resolves against the Node filesystem
+          instead, where a leading <code>/</code> means <em>filesystem</em> root, not
+          project root &mdash; so <code>"/layout/Nav.aktion"</code> lands outside the
+          project and is refused. URL specifiers are refused there too: that resolver
+          only handles filesystem paths, and anything that is neither <code>./</code>,
+          <code>../</code>, nor <code>/</code> is treated as a non&#8209;project module.
+          In a bundled project, use relative specifiers only.
+        </p>
+      </div>
 
       <h2 id="entry">The entry file</h2>
       <p>
@@ -263,6 +325,309 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
         <em>declare and export</em>. The linker walks every <code>import</code> from
         the entry, merges the whole graph into one program, and the runtime renders
         it &mdash; import cycles are fine (each file is merged once).
+      </p>
+
+      <h2 id="diagnostics">When a link fails</h2>
+      <p>
+        Linking produces its own diagnostics, separate from parse errors. A problem
+        found in an imported file is prefixed with that file&rsquo;s path, so a broken
+        import in a five&#8209;file app points at the file that has the problem instead
+        of at the entry; the entry&rsquo;s own diagnostics carry no prefix.
+      </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Message</th><th>What happened</th><th>Fix</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Cannot resolve import "&hellip;"</code></td>
+            <td>The specifier maps to no module key &mdash; a bare specifier, or one the active resolver refuses (see the <a href="#specifiers">resolution rules</a>).</td>
+            <td>Use a relative <code>./</code>&nbsp;/&nbsp;<code>../</code> path, or check the spelling.</td>
+          </tr>
+          <tr>
+            <td><code>Failed to load imported module "&hellip;"</code></td>
+            <td>The key resolved but there is no source behind it &mdash; the file does not exist in the project.</td>
+            <td>Create the file, or fix the path.</td>
+          </tr>
+          <tr>
+            <td><code>Failed to fetch module "&hellip;": &hellip;</code></td>
+            <td>A URL import could not be fetched (network, CORS, non&#8209;200). The rest of the graph still links.</td>
+            <td>Check the URL and its CORS headers.</td>
+          </tr>
+          <tr>
+            <td><code>"./store.aktion" does not export `increment`</code></td>
+            <td>The name exists in that file but is not prefixed with <code>export</code>. State imports report the sigil: <code>does not export `$count`</code>.</td>
+            <td>Add <code>export</code> to the declaration.</td>
+          </tr>
+          <tr>
+            <td><code>Greeting.aktion: Unexpected token &hellip;</code></td>
+            <td>A <strong>dependency&rsquo;s own parse error</strong>, prefixed with its path.</td>
+            <td>Fix the syntax in that file.</td>
+          </tr>
+          <tr>
+            <td><code>Entry module "app.aktion" was not found</code></td>
+            <td>The entry key is not present in the file map handed to the linker.</td>
+            <td>Check the entry name against the keys you passed.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Where they show up depends on the host: <code>&lt;aktion-app src="&hellip;"&gt;</code>
+        surfaces them in the error banner and through the <code>error</code> event
+        alongside parse errors, the <a href="playground.html">playground</a> lists them in
+        its error inspector, and the <a href="#vite">Vite plugin</a> turns them into
+        build failures.
+      </p>
+      <div class="callout">
+        <h4>A dependency&rsquo;s syntax error used to be invisible</h4>
+        <p>
+          <strong>Only the entry&rsquo;s parse errors used to travel out.</strong>
+          <code>parse()</code> drops a malformed statement and recovers, so an
+          imported file with a syntax error linked &ldquo;successfully&rdquo; minus
+          whatever the parser threw away &mdash; you saw a missing component, not an
+          error. Every module&rsquo;s parse errors are now reported as link
+          diagnostics, which means an app that used to link clean may start reporting
+          errors it always had.
+        </p>
+      </div>
+
+      <h2 id="vite">Building with the Vite plugin</h2>
+      <p>
+        For a bundled app, run the linker at build time instead of in the browser.
+        <code>aktion-runtime/vite</code> compiles every <code>.aktion</code> file it
+        sees into a module that default&#8209;exports a pre&#8209;linked program, so the
+        browser never parses that source. Projects created with
+        <a href="get-started.html#scaffold"><code>create-aktion</code></a> ship this
+        wired up already:
+      </p>
+<pre><code>// vite.config.ts
+import { defineConfig } from "vite";
+import aktion from "aktion-runtime/vite";   // default export = aktionPlugin
+
+export default defineConfig({
+  plugins: [aktion()],
+});</code></pre>
+      <p>
+        With the plugin installed, a <code>.aktion</code> file is an importable
+        module. Its default export is a <code>CompiledProgram</code>, which the
+        element mounts with <code>mountCompiled()</code>:
+      </p>
+<pre><code>// src/main.ts
+import "aktion-runtime";                       // registers &lt;aktion-app&gt;
+import type { AktionElement } from "aktion-runtime";
+import app from "./app.aktion";                // linked at build time
+
+document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code></pre>
+      <p>
+        The plugin follows every <code>import</code> from the entry, registers each
+        dependency as a watched file, and inlines the whole graph into that one
+        module &mdash; so editing an imported file re-transforms the entry.
+      </p>
+      <p>
+        In <code>vite dev</code> it also appends a self&#8209;accepting HMR hook that
+        re&#8209;mounts each matching <code>&lt;aktion-app&gt;</code> with its
+        <code>serializeState()</code> snapshot. That is why a hot edit keeps live
+        <code>$state</code>.
+      </p>
+      <h3 id="vite-options">Plugin options</h3>
+      <p>
+        <code>aktionPlugin(options?)</code> accepts three options, all optional:
+      </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Option</th><th>Type</th><th>Default</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>allowOutsideRoot</code></td>
+            <td><code>boolean</code></td>
+            <td><code>false</code></td>
+            <td>Let <code>.aktion</code> imports resolve outside the Vite project root. See the warning below.</td>
+          </tr>
+          <tr>
+            <td><code>runtimeModuleId</code></td>
+            <td><code>string</code></td>
+            <td><code>"aktion-runtime"</code></td>
+            <td>Specifier the generated module imports <code>defineCompiledProgram</code> from. Change it only when the runtime is aliased.</td>
+          </tr>
+          <tr>
+            <td><code>strict</code></td>
+            <td><code>boolean</code></td>
+            <td><code>false</code></td>
+            <td>Promote linker <em>warnings</em> to build errors. Errors already fail the build either way.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <h4>Breaking: <code>.aktion</code> imports are confined to the project root</h4>
+        <p>
+          <strong>An import that resolves outside the Vite <code>root</code> is now
+          refused</strong> &mdash; resolution returns nothing and the build fails with
+          <code>Cannot resolve import "&hellip;"</code>; a second check in the loader
+          refuses the read outright
+          (<code>[aktion] refusing to read "&hellip;" &mdash; outside the project root</code>).
+          The comparison is separator&#8209;aware, so <code>/srv/app</code> does not
+          admit a sibling named <code>/srv/app-secrets</code>.
+        </p>
+        <p>
+          A <code>.aktion</code> file is source, but it is also data that may have
+          arrived with an untrusted repository. Without the check,
+          <code>"../../../../etc/passwd"</code> is read by the build and &mdash; under
+          <code>vite dev</code> &mdash; served to the browser inside the compiled
+          module.
+        </p>
+        <p>
+          <strong>This breaks a monorepo</strong> that imports <code>.aktion</code>
+          files from a sibling package. The opt&#8209;out is
+          <code>aktion({ allowOutsideRoot: true })</code>, and it is only appropriate
+          for a layout you control and trust. Prefer raising the Vite
+          <code>root</code>, or re-exporting the shared files from inside the project.
+          See <a href="security.html">Security</a> for the reasoning.
+        </p>
+      </div>
+      <div class="callout warn">
+        <h4><code>strict: true</code> currently rejects <code>$app(&hellip;)</code> programs</h4>
+        <p>
+          <strong>The plugin warns when a linked program has no top-level
+          <code>aktion = &hellip;</code> binding</strong>, and that check does not
+          recognise the modern <code>$app(&hellip;)</code> root. So every
+          <code>$app</code>&#8209;based entry emits
+          <code>No top-level `aktion = &hellip;` entry binding found</code>.
+        </p>
+        <p>
+          It is harmless noise with the default options, but <code>strict: true</code>
+          turns it into a fatal build error. Leave <code>strict</code> off until the
+          check understands <code>$app</code>.
+        </p>
+      </div>
+
+      <h2 id="api">Linking from JavaScript</h2>
+      <p>
+        Three public entry points turn source text into something
+        <code>mountCompiled()</code> accepts. Pick by how the sources reach you:
+        a resolver you own, an in-memory map that may contain URLs, or a single
+        string.
+      </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Function</th><th>Shape</th><th>Reach for it when</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>linkProgram</code></td>
+            <td>Synchronous. <code>(entrySource, entryPath, resolver)</code> &rarr; <code>{ program, diagnostics, dependencies }</code>.</td>
+            <td>You can load every module synchronously &mdash; a filesystem, a bundler, an in-memory map. This is what the Vite plugin uses.</td>
+          </tr>
+          <tr>
+            <td><code>linkProject</code></td>
+            <td>Async. <code>({ entry, files, fetch? })</code> &rarr; <code>Promise&lt;{ program, source, diagnostics, dependencies }&gt;</code>.</td>
+            <td>The graph may reach the network. It walks the imports, <strong>fetches every URL specifier</strong>, then links. This is what the playground and <code>&lt;aktion-app src&gt;</code> use.</td>
+          </tr>
+          <tr>
+            <td><code>compileLite</code></td>
+            <td>Synchronous. <code>(source, { path?, library? })</code> &rarr; <code>CompiledProgram</code>.</td>
+            <td>One file, no imports. It parses and wraps &mdash; <strong>no linking and no schema validation</strong> &mdash; so it is the cheapest way to mount a string through <code>mountCompiled()</code> instead of <code>setResponse()</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        <code>linkProject</code> is async <em>only</em> because of URL fetches: a
+        project with no remote imports settles on one microtask. It also returns
+        <code>source</code> &mdash; the merged program re&#8209;emitted as text &mdash;
+        which is what keeps <code>applyDelta()</code> and
+        <code>serializeState()</code> round&#8209;trips working after a link.
+      </p>
+<pre><code>import { linkProject, defineCompiledProgram, COMPILED_PROGRAM_VERSION } from "aktion-runtime";
+
+const files = {
+  "app.aktion": `
+    import { $count, increment } from "./store.aktion"
+    $app(Button("+1", { onClick: increment }))
+  `,
+  "store.aktion": `
+    export $count = 0
+    export function increment() { $count = $count + 1 }
+  `,
+};
+
+const res = await linkProject({ entry: "app.aktion", files });
+if (res.diagnostics.length) console.error(res.diagnostics);   // [] when the link is clean
+
+document.querySelector("aktion-app").mountCompiled(
+  defineCompiledProgram({
+    __aktionCompiled: COMPILED_PROGRAM_VERSION,
+    program: res.program,
+    source: res.source,
+    path: "app.aktion",
+  }),
+);</code></pre>
+      <p>
+        That is exactly what the multi&#8209;file demos on this page do. Diagnostics
+        are returned, never thrown &mdash; a URL that fails to fetch becomes one
+        diagnostic and the rest of the graph still links, so you decide whether to
+        mount a partial program or stop.
+      </p>
+      <h3 id="api-resolver">Supplying your own resolver</h3>
+      <p>
+        <code>linkProgram</code> does no I/O itself. You hand it a
+        <code>ModuleResolver</code> with two methods, and it calls them as it walks
+        the graph:
+      </p>
+<pre><code>import { linkProgram, createMemoryResolver, resolveSpecifier } from "aktion-runtime";
+
+// The ready-made one: a complete { path: source } map.
+const res = linkProgram(files["app.aktion"], "app.aktion", createMemoryResolver(files));
+
+// Or your own — `resolve` returns a module key or null, `load` returns text or throws.
+const resolver = {
+  resolve: (spec, importerPath) =&gt; resolveSpecifier(spec, importerPath),
+  load: (path) =&gt; readMySource(path),          // throws → "Failed to load imported module"
+};</code></pre>
+      <div class="callout warn">
+        <h4>A custom resolver gets no path confinement for free</h4>
+        <p>
+          <strong>Confinement lives in the resolver, not in the linker.</strong> The
+          Vite plugin&rsquo;s resolver is the one that refuses paths outside the
+          project root; <code>linkProgram</code> itself will load whatever your
+          <code>resolve</code> returns. If your specifiers can come from a source you
+          do not control, check the resolved path against your own root before
+          returning it &mdash; and read <a href="security.html">Security</a> first.
+        </p>
+      </div>
+      <h3 id="api-compiled">The compiled&#8209;program contract</h3>
+      <p>
+        A <code>CompiledProgram</code> is the artefact
+        <code>mountCompiled()</code> accepts. It carries the parsed AST so the
+        runtime skips <code>parse()</code>, plus the original source so the
+        text&#8209;based features keep working. The reactive runtime &mdash; state,
+        <code>$http</code>, effects, routing &mdash; still runs in the browser
+        exactly as it does for a streamed string; only the parse is gone.
+      </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Member</th><th>Type</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>__aktionCompiled</code></td><td><code>1</code></td><td>Version marker. Must equal <code>COMPILED_PROGRAM_VERSION</code>.</td></tr>
+          <tr><td><code>program</code></td><td><code>Program</code></td><td>The merged, scope-renamed AST.</td></tr>
+          <tr><td><code>source</code></td><td><code>string</code></td><td>The original (or re&#8209;emitted) text. Powers <code>applyDelta</code>, <code>serializeState</code> round&#8209;trips, and debugging.</td></tr>
+          <tr><td><code>path</code></td><td><code>string</code></td><td>Module id. Used for diagnostics and to target HMR &mdash; it is what <code>el.sourceId</code> reports.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Two helpers guard that shape. <code>defineCompiledProgram(obj)</code> is an
+        identity function whose only job is to give you one typed construction point,
+        so a malformed payload is a compile error rather than a runtime surprise.
+        <code>isCompiledProgram(value)</code> is the runtime narrowing guard
+        <code>mountCompiled()</code> itself applies &mdash; fail it and the call is
+        ignored with
+        <code>[aktion] mountCompiled() expected a CompiledProgram &hellip;</code> on the
+        console.
+      </p>
+      <p>
+        <code>COMPILED_PROGRAM_VERSION</code> is <strong>1</strong> today and is bumped
+        only on a breaking change to the shape, so a stale build artefact is rejected
+        instead of mounted as garbage.
       </p>
 
       <h2 id="playground">In the playground</h2>
@@ -286,7 +651,8 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
         promise resolves), and reach for modules to keep that part &mdash; and the
         rest of the app &mdash; in readable, reusable files.
       </p>
-<pre><code>// In app.aktion
+<pre><code>// app.aktion
+import { Header } from "./Header.aktion"
 import { Dashboard } from "./Dashboard.aktion"
 
 $app(Column([
@@ -294,6 +660,14 @@ $app(Column([
   // Render the heavy view behind a fallback until it's ready.
   Lazy(() =&gt; Dashboard(), { fallback: Skeleton({ lines: 6 }) })
 ]))</code></pre>
+      <p>
+        The two are orthogonal: the <code>import</code> still links
+        <code>Dashboard.aktion</code> into the program, so <code>Lazy</code> defers
+        when the subtree <em>renders</em>, not when its source arrives. For code that
+        should not be in the bundle at all, split at the bundler level &mdash; a
+        dynamic <code>import()</code> of a module that itself imports the
+        <code>.aktion</code> entry.
+      </p>
 
       <h2 id="best-practices">Best practices</h2>
       <ul>
@@ -301,10 +675,11 @@ $app(Column([
         <li><strong>Keep shared <code>$state</code> in its own store file</strong> and export the atoms plus the actions that mutate them &mdash; importers get a consistent surface.</li>
         <li><strong>Keep the entry thin.</strong> Let <code>app.aktion</code> wire pieces together and own the <code>$app(&hellip;)</code> root; push real UI into imported files.</li>
         <li><strong>Export only what other files need.</strong> Everything else stays private &mdash; that is what makes a name safe to reuse.</li>
-        <li><strong>Prefer relative imports</strong> within a project; reserve URL imports for genuinely shared, versioned components.</li>
+        <li><strong>Prefer relative imports</strong> within a project; reserve URL imports for genuinely shared, versioned components &mdash; and remember they only resolve in the <a href="#specifiers">browser linker</a>, not under the Vite plugin.</li>
+        <li><strong>Check <code>diagnostics</code> before you mount.</strong> A link returns its problems instead of throwing, so an unchecked result mounts a partial program with no complaint.</li>
       </ul>
 
-      <h2 id="next">Next steps</h2>
+      <h2 id="next">Next</h2>
       <div class="demo-grid">
         <a class="demo-card" href="playground.html">
           <span class="demo-tag">Try it</span>
@@ -327,7 +702,7 @@ $app(Column([
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     // Registers <aktion-app> and exposes the in-browser linker.
     import { linkProject, defineCompiledProgram, COMPILED_PROGRAM_VERSION } from "../dist/aktion.js";

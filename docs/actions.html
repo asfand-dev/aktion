@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Actions · Aktion</title>
-  <meta name="description" content="Actions are function declarations that run when the user clicks, types, or submits — the imperative counterpart to reactive bindings. Wire them to onClick / onChange / onSubmit, read and write state, call Http, navigate, and emit events." />
+  <meta name="description" content="Actions are function declarations that run when the user clicks, types, or submits — the imperative counterpart to reactive bindings. Wire them to onClick / onChange / onSubmit, read and write state, call Http, navigate, emit events, and handle a throw. Bodies run synchronously: await parses but never suspends." />
   <script>
     (function () {
       try {
@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     /* Live layout demo: code on the left, rendered output on the right. */
@@ -54,6 +54,10 @@
     }
     /* Visual filler so structural demos read clearly without real content. */
     .demo-cheats code { white-space: nowrap; }
+    /* Amber variant of the shared .callout. site.css ships the
+       `[data-variant="warning"]` spelling; the guides use `.callout.warn`. */
+    .callout.warn { background: rgba(245, 158, 11, .10); border-color: rgba(245, 158, 11, .30); }
+    .callout.warn h4 { color: #b45309; }
   </style>
 </head>
 <body data-page="actions">
@@ -75,38 +79,137 @@
 
       <h2 id="anatomy">Anatomy</h2>
       <p>
-        An action is an ordinary function declaration: <code>function name(args) { &hellip; }</code>.
-        Every <code>function</code> declaration creates both a component and an
-        action with the same name &mdash; if it returns a value, that value is
-        rendered when called in a render position; if it runs for side effects,
-        the same name can be referenced from an event handler. The first-letter
-        case of the name is <em>not</em> significant: <code>save</code> and
-        <code>Save</code> are equally valid.
+        An action is an ordinary function declaration:
+        <code>function name(args) { &hellip; }</code>. The body is imperative
+        JavaScript &mdash; read and write state, call <code>$http</code>,
+        navigate, emit an event &mdash; and it runs to completion before the
+        runtime paints.
+      </p>
+      <p>
+        The first letter of the name decides how the declaration is
+        <em>registered</em>, not where you may use it. A PascalCase
+        <code>function Panel()</code> is registered as <strong>both</strong> a
+        component and an action, so <code>Panel()</code> renders in a render
+        position <em>and</em> <code>onClick: Panel</code> runs the body.
+      </p>
+      <p>
+        A lowercase <code>function save()</code> is registered as an action only
+        &mdash; but a call in render position renders whatever the body returns, so
+        a lowercase helper that returns a node still renders. Either spelling works
+        in either position.
       </p>
       <table class="signature-table">
         <thead><tr><th>Wire it to&hellip;</th><th>Prop</th></tr></thead>
         <tbody>
           <tr><td>A button press</td><td><code>Button("Save", { onClick: save })</code></td></tr>
           <tr><td>Typing / value changes</td><td><code>Input("q", { onChange: (v) =&gt; $q = v })</code></td></tr>
-          <tr><td>A form submit</td><td><code>Form("login", { onSubmit: submit, fields: [&hellip;] })</code></td></tr>
+          <tr><td>A form submit</td><td><code>Form({ onSubmit: submit, fields: [&hellip;] })</code> &mdash; see <a href="#form">Wiring a form submit</a></td></tr>
         </tbody>
       </table>
       <p>
-        When the event fires the runtime runs the function, applies every state
-        write atomically, then re-renders once. Pass the <em>name</em>
-        (<code>onClick: save</code>) when the handler takes no arguments, or a thin
-        lambda (<code>onClick: () =&gt; remove(id)</code>) when you need to forward
+        When the event fires the runtime runs the function, applies its state
+        writes as they execute, then batches them into a <strong>single</strong>
+        re-render. Pass the <em>name</em> (<code>onClick: save</code>) when the
+        handler takes no arguments, or a thin lambda
+        (<code>onClick: () =&gt; remove(id)</code>) when you need to forward
         something.
+      </p>
+      <p>
+        The demo below is one program using both directions at once:
+        <code>summary()</code> is lowercase and renders,
+        <code>Cycle</code> is PascalCase and is handed to <code>onClick</code>
+        by name. Nothing about the call sites had to change to match the casing.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; a lowercase declaration renders, a PascalCase one handles the click</span>
+<pre><code>$tone = "info"
+$runs = 0
+
+function summary() {
+  return Callout("A lowercase declaration renders here", {
+    tone: $tone,
+    description: `Cycle has run ${$runs} time(s); it was passed to onClick by name.`,
+    compact: true,
+    actions: [Button("Reset", { onClick: reset, variant: "ghost", size: "sm" })]
+  })
+}
+
+function Cycle() {
+  $runs = $runs + 1
+  $tone = $tone == "info" ? "success" : "info"
+}
+
+function reset() {
+  $runs = 0
+  $tone = "info"
+}
+
+$app(Column([
+  summary(),
+  Button("Run Cycle", { onClick: Cycle, variant: "primary" })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        <code>Callout</code>&rsquo;s first argument is positional and is the
+        <strong>title</strong> &mdash; <code>Callout(title, { tone, description,
+        actions, &hellip; })</code>. The <code>actions</code> prop takes a list of
+        nodes rendered under the body, which is where a &ldquo;Retry&rdquo; or
+        &ldquo;Reset&rdquo; button belongs.
+      </p>
+
+      <h3 id="form">Wiring a form submit</h3>
+      <p>
+        <code>Form({ onSubmit, fields, buttons })</code> takes its inputs as a
+        <code>fields</code> array of <code>FormControl</code> nodes and its
+        submit controls as <code>buttons</code>. <code>onSubmit</code> fires when
+        the user presses Enter in a focused input or clicks a
+        <code>type: "submit"</code> button inside the form &mdash; you never wire
+        <code>onClick</code> on the submit button yourself.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; press Enter in a field, or click Sign in</span>
+<pre><code>$email = ""
+$password = ""
+$signedIn = false
+
+function signIn() {
+  $signedIn = true
+}
+
+$app($signedIn
+  ? Callout("Signed in", { tone: "success", description: $email })
+  : Form({
+      onSubmit: signIn,
+      fields: [
+        FormControl({ label: "Email", field: Input({ type: "email", value: $email, onChange: (v) =&gt; $email = v }) }),
+        FormControl({ label: "Password", field: Input({ type: "password", value: $password, onChange: (v) =&gt; $password = v }) })
+      ],
+      buttons: Button("Sign in", { type: "submit", variant: "primary" })
+    }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        <code>Form</code> also takes <code>error</code> for a form&#8209;level
+        message and <code>loading: true</code> while a submit is in flight
+        &mdash; that marks the form <code>aria-busy</code>, disables its submit
+        buttons, and blocks re&#8209;entry. For validation rules, dirty/touched
+        tracking, and async validators, reach for the
+        <a href="stores.html"><code>$form</code> engine</a> instead of wiring
+        each field by hand.
       </p>
 
       <h2 id="state">Reading &amp; writing state</h2>
       <p>
         The only place a script mutates state is inside an action (or an effect /
         lambda body). Writing <code>$name = value</code> is reactive &mdash; every
-        binding that reads <code>$name</code> re-renders. The compound assignment
-        operators <code>+= -= *= /= ??=</code> and <code>++ -- </code> all work, and
-        member writes like <code>$user.name = "Alex"</code> rebuild the root object
-        immutably so subscribers see a fresh reference.
+        binding that reads <code>$name</code> re-renders.
+      </p>
+      <p>
+        The compound assignment operators <code>+= -= *= /= ??=</code> and
+        <code>++ -- </code> all work, and member writes like
+        <code>$user.name = "Alex"</code> rebuild the root object immutably so
+        subscribers see a fresh reference.
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
@@ -122,6 +225,11 @@ $app(Card([Column([
 ], { gap: "md" })]))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
+      <p>
+        Both buttons re-render the same <code>Text</code>, because both write the
+        same atom &mdash; you never tell the runtime <em>what</em> to update, only
+        what the new value is.
+      </p>
 
       <h2 id="inline-vs-named">Event handlers: inline vs named</h2>
       <p>
@@ -137,11 +245,16 @@ $app(Card([Column([
 function close() { $open = false }
 $app(Column([
   Button("Open", { onClick: () =&gt; $open = true, variant: "primary" }),
-  $open ? Callout("info", { title: "Now open", description: "Inline lambda opened me; a named action closes me." }) : Text("Closed."),
+  $open ? Callout("Now open", { tone: "info", description: "Inline lambda opened me; a named action closes me." }) : Text("Closed."),
   $open ? Button("Close", { onClick: close, variant: "ghost" }) : Spacer()
 ], { gap: "md" }))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
+      <p>
+        The two forms are interchangeable at the call site &mdash; a lambda and a
+        named action both arrive at the prop as a callable, so switching one for
+        the other later is a rename, not a refactor.
+      </p>
 
       <h2 id="arguments">Passing arguments</h2>
       <p>
@@ -210,12 +323,88 @@ addBtn = Button("Add", { onClick: save, variant: "primary" })</code></pre>
 Button("Add", { onClick: () =&gt; $addTodo.mutate({ body: { title: $draft } }) })</code></pre>
       </div>
 
+      <h2 id="async">Async work, and what <code>await</code> does</h2>
+      <p>
+        An action body runs <strong>synchronously</strong>, start to finish, and
+        the runtime paints once it returns. There is no suspension point: nothing
+        in a body pauses and resumes later.
+      </p>
+      <div class="callout warn">
+        <h4><code>await</code> parses, but it does not wait</h4>
+        <p>
+          <strong>Do not use <code>await</code> in an Aktion body.</strong> The
+          parser accepts the keyword so JavaScript-shaped output does not fail to
+          parse, but it never suspends.
+        </p>
+        <p>
+          As a bare statement at the top level of a body
+          (<code>await doThing()</code>) the call is <em>dropped entirely</em>
+          &mdash; <code>doThing</code> never runs. Inside an expression
+          (<code>let p = await doThing()</code>) the call does happen, but
+          <code>p</code> is the promise rather than its resolved value, the next
+          statement runs immediately, and a rejection escapes any surrounding
+          <code>try</code>/<code>catch</code>.
+        </p>
+      </div>
+      <p>
+        Reach for a promise chain, or better, for the reactive primitive that
+        already owns the lifecycle:
+      </p>
+<pre><code>$profile = "not loaded"
+
+// ❌ `await` does not suspend: `p` holds the promise and the next line runs at once.
+function loadWrong() {
+  let p = await fetch("/api/me")
+  $profile = String(p)
+}
+
+// ✅ Chain it: the callback writes state, and the write re-renders.
+function loadRight() {
+  fetch("/api/me").then(r =&gt; r.json()).then(me =&gt; { $profile = me.name })
+}</code></pre>
+      <p>
+        A state write from inside a <code>.then</code> / <code>.catch</code> /
+        <code>setTimeout</code> callback is a normal reactive write &mdash; it
+        schedules a re-render exactly like a write in the body itself. That is why
+        the chained form works and the awaited one does not.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; the await button does nothing at all</span>
+<pre><code>$log = "nothing ran"
+
+function bare() {
+  await Promise.resolve("bare await").then(v =&gt; { $log = v })
+}
+
+function chained() {
+  Promise.resolve("plain .then()").then(v =&gt; { $log = v })
+}
+
+$app(Column([
+  Text($log, { variant: "large-heavy" }),
+  Row([
+    Button("await doThing()", { onClick: bare, variant: "ghost" }),
+    Button("doThing().then(&hellip;)", { onClick: chained, variant: "primary" })
+  ], { gap: "sm" })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        For anything that fetches, prefer <code>$http</code> /
+        <code>$mutation</code> over a hand-rolled chain: they expose
+        <code>.loading</code> and <code>.error</code> as reactive fields, so the UI
+        describes the in-flight state instead of you tracking it. Use
+        <code>$util.copy(text)</code>, <code>$util.sleep(ms)</code> and friends the
+        same way &mdash; they return promises you chain with <code>.then</code>.
+      </p>
+
       <h2 id="confirm">Confirming destructive actions</h2>
       <p>
-        The full JavaScript global surface is available inside an action body, so
-        the browser dialogs &mdash; <code>confirm(...)</code>, <code>alert(...)</code>,
-        <code>prompt(...)</code> &mdash; work directly. Guard a destructive write
-        with <code>confirm</code> and bail early when the user cancels:
+        Host globals resolve by name inside an action body, so the browser dialogs
+        &mdash; <code>confirm(...)</code>, <code>alert(...)</code>,
+        <code>prompt(...)</code> &mdash; work directly under the default global
+        access policy. Guard a destructive write with <code>confirm</code> and bail
+        early when the user cancels:
       </p>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
@@ -251,7 +440,9 @@ row = Button("View", { onClick: () =&gt; openOrder(order.id), variant: "ghost" }
         <code>CustomEvent</code> on the <code>&lt;aktion-app&gt;</code> host element.
         The page embedding the app listens with <code>addEventListener</code>. Pick
         stable names; <code>assistant-message</code>, <code>error</code>, and
-        <code>route-change</code> are reserved.
+        <code>route-change</code> are dispatched by the host element itself and are
+        documented with the rest of the host contract in
+        <a href="frameworks.html#contract">Frameworks &rarr; The contract</a>.
       </p>
 <pre><code>function submit() {
   $emit("form-submitted", { email: $email, name: $name })
@@ -260,6 +451,87 @@ row = Button("View", { onClick: () =&gt; openOrder(order.id), variant: "ghost" }
 el.addEventListener("form-submitted", (event) =&gt; {
   console.log(event.detail.email);
 });</code></pre>
+      <p>
+        The detail object is passed through unchanged, so the host reads
+        <code>event.detail.email</code>. Nothing in the program observes whether
+        anyone is listening &mdash; an unhandled <code>$emit</code> is a no-op.
+      </p>
+
+      <h2 id="errors">When an action throws</h2>
+      <p>
+        A throw inside a handler is caught at the component boundary, logged as
+        <code>[aktion] handler threw &hellip;</code>, and swallowed &mdash; the page
+        keeps rendering rather than going blank. State written <em>before</em> the
+        throw stays written; there is no automatic rollback.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Tool</th><th>Catches</th><th>Reach for it when</th></tr></thead>
+        <tbody>
+          <tr><td><code>$util.onError(fn)</code></td><td>A throw from a <strong>named</strong> action, as <code>fn({ error, source })</code> where <code>source</code> is the declaration&rsquo;s name.</td><td>You want one program&#8209;level sink: a toast, or a report to your telemetry.</td></tr>
+          <tr><td><code>$optimistic(() =&gt; { &hellip; })</code></td><td>Nothing &mdash; it re&#8209;throws. But it restores every atom to its pre&#8209;callback value first.</td><td>The handler applies an optimistic write that must be undone if the work fails.</td></tr>
+          <tr><td><code>ErrorBoundary(child, { fallback })</code></td><td>A throw during <em>render</em> of its subtree, not a handler throw.</td><td>A risky component tree should degrade to a card instead of breaking the page.</td></tr>
+          <tr><td>A DSL <code>try</code>/<code>catch</code> in the body</td><td>Anything the body throws synchronously. Not a promise rejection &mdash; nothing is awaited.</td><td>The failure has a local recovery: a fallback value, a retry, an inline error message.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <h4><code>$util.onError</code> only sees named actions</h4>
+        <p>
+          A throw from an <strong>inline lambda</strong>
+          (<code>onClick: () =&gt; { &hellip; }</code>) or from an
+          <code>$effect</code> body does not reach the sink. Those log
+          <code>[aktion] handler threw &hellip;</code> and
+          <code>[aktion] effect "&lt;name&gt;" failed &hellip;</code> to the console
+          instead.
+        </p>
+        <p>
+          To get a throw reported, move the body into a named
+          <code>function</code>. The sink wraps the declaration, so a lambda that
+          merely <em>calls</em> it &mdash; as in the demo below &mdash; is still
+          covered.
+        </p>
+      </div>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; the row is removed optimistically, then restored when the write throws</span>
+<pre><code>$rows = [{ id: 1, title: "Quarterly report" }]
+
+$util.onError(({ error, source }) =&gt; {
+  $toast.error(`${source} failed: ${error}`)
+})
+
+function publish(id) {
+  $optimistic(() =&gt; {
+    $rows = $rows.filter(r =&gt; r.id != id)
+    if (id == 1) { throw "server rejected the publish" }
+  })
+}
+
+$app(Card([Column($rows.map(r =&gt; Row([
+  Text(r.title),
+  Spacer(),
+  Button("Publish", { onClick: () =&gt; publish(r.id), variant: "primary", size: "sm" })
+], { gap: "sm" })), { gap: "sm" })]))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Clicking Publish removes the row, the throw rolls
+        <code>$rows</code> back, <code>$util.onError</code> raises the toast, and
+        the console still records <code>[aktion] handler threw</code>. Without the
+        <code>$optimistic</code> wrapper the row would stay gone. For the full
+        error model &mdash; strict mode, the host <code>error</code> event, parse
+        errors, and <code>ErrorBoundary</code> &mdash; see
+        <a href="errors.html#boundary">Error handling &rarr; ErrorBoundary &amp;
+        <code>$util.onError</code></a>.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>A handler that returns a promise is not awaited.</strong> The
+          runtime attaches a rejection handler and logs
+          <code>[aktion] handler rejected &hellip;</code>, so a failed promise never
+          becomes an uncaught error &mdash; but it also never reaches
+          <code>$util.onError</code>. Put the failure path in an explicit
+          <code>.catch</code> that writes state.
+        </p>
+      </div>
 
       <h2 id="vs">Action vs effect vs binding</h2>
       <p>
@@ -298,7 +570,7 @@ el.addEventListener("form-submitted", (event) =&gt; {
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     // Render each .lay-demo code block as a live <aktion-app> beside it.
     import "../dist/aktion.js"; // registers the <aktion-app> custom element

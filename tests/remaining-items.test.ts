@@ -23,17 +23,25 @@ const create = (): ScriptedEl => {
 describe("Fragment (XIII.3)", () => {
   afterEach(() => { document.body.innerHTML = ""; });
 
-  it("groups siblings in a display:contents wrapper (no layout box)", async () => {
+  it("splices siblings into the parent with no wrapper element at all", async () => {
     const el = create();
     el.setResponse(`$app(Grid([Fragment([Text("A"), Text("B")]), Text("C")], { columns: 3 }))`);
     await settle();
-    const frag = el.shadowRoot?.querySelector(".rui-fragment") as HTMLElement;
-    expect(frag).toBeTruthy();
-    expect(frag.getAttribute("style")).toContain("display:contents");
-    // All three texts render as descendants.
-    expect(el.shadowRoot?.textContent).toContain("A");
-    expect(el.shadowRoot?.textContent).toContain("B");
-    expect(el.shadowRoot?.textContent).toContain("C");
+
+    // Fragment now returns a real DocumentFragment rather than a
+    // `display: contents` wrapper. The wrapper was the weaker implementation of
+    // the same intent: even with no layout box it still matched every `> *` rule
+    // the parent aimed at its children (`.rui-grid[data-grid-mode] > *`, the row
+    // hugging rules, the mobile column collapse), so those rules landed on the
+    // wrapper instead of the nodes they were written for.
+    expect(el.shadowRoot?.querySelector(".rui-fragment")).toBeNull();
+
+    // The three texts are now true siblings inside the grid, which is what
+    // "groups siblings without a layout box" was always supposed to mean.
+    const grid = el.shadowRoot?.querySelector(".rui-grid") as HTMLElement;
+    expect(grid).toBeTruthy();
+    const texts = [...grid.children].filter((c) => (c.textContent ?? "").trim());
+    expect(texts.map((c) => c.textContent?.trim())).toEqual(["A", "B", "C"]);
   });
 
   it("lets a user component return multiple nodes via Fragment", async () => {
@@ -62,14 +70,33 @@ describe("Sticky stuck-state (II.4)", () => {
       FakeObserver as unknown as typeof IntersectionObserver;
     vi.useFakeTimers();
     try {
+      // Two changes to this harness, both forced by the audit fix rather than by
+      // a change of intent:
+      //
+      // 1. `useInstanceState` is now required. The stuck flag has to survive a
+      //    re-render — morph strips attributes the fresh node omits, and the
+      //    observer only fires on a *change*, so a flag kept only on the DOM
+      //    node never recovers after an unrelated re-render.
+      // 2. The node must be mounted. Sticky now attaches its observer only to a
+      //    connected node, because attaching to the freshly-rendered (discarded)
+      //    one and registering the same disposer key tore down the observer
+      //    watching the live node — killing the feature permanently after the
+      //    first re-render. A detached target also receives an initial callback
+      //    with ratio 0 in real browsers, which would write a false "unstuck".
+      const slots = new Map<string, unknown>();
       const node = Sticky.render(
         { type: "Component", name: "Sticky", props: {}, children: [] } as never,
         { children: [], offset: "8px" },
         {
           renderNode: () => document.createTextNode(""),
           registerDisposer: () => {},
+          useInstanceState: <T,>(key: string, initial: T) => {
+            if (!slots.has(key)) slots.set(key, initial);
+            return { get: () => slots.get(key) as T, set: (v: T) => slots.set(key, v) };
+          },
         } as never,
       ) as HTMLElement;
+      document.body.appendChild(node);
       vi.runAllTimers();
       expect(FakeObserver).toHaveBeenCalledTimes(1);
       expect(observe).toHaveBeenCalledWith(node);

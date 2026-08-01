@@ -9,14 +9,52 @@ import { el, sanitiseImageSrc } from "../utils.js";
 
 export type AvatarSize = "sm" | "md" | "lg" | "xl";
 
+/**
+ * The slice of `RenderHelpers` an avatar needs. Declared locally (like
+ * `DisposerHelpers` below) so this module stays independent of the public
+ * type surface. Required, not optional: a caller without it silently loses
+ * the error latch, which is the whole point of the parameter.
+ */
+export interface InstanceStateHelpers {
+  useInstanceState: <T>(key: string, initialValue: T) => { get: () => T; set: (value: T) => void };
+}
+
 /** Render an `<rui-avatar>` matching the canonical Avatar primitive. */
-export function renderAvatar(src: string, name: string, size: AvatarSize): HTMLElement {
-  const root = el("span", { class: "rui-avatar", "data-size": size, role: "img" });
+export function renderAvatar(
+  src: string,
+  name: string,
+  size: AvatarSize,
+  helpers: InstanceStateHelpers,
+): HTMLElement {
+  // `role="img"` prunes this element's contents from the accessibility tree, so
+  // the inner `<img alt>` (or the initials fallback) never reached a screen
+  // reader — the avatar was announced as an unnamed graphic. The role has to
+  // carry the name itself.
+  //
+  // A nameless avatar is decorative rather than informative (it sits beside the
+  // name it would otherwise repeat), so it is hidden instead of announced as an
+  // anonymous "image".
+  const trimmed = name.trim();
+  const root = el("span", {
+    class: "rui-avatar",
+    "data-size": size,
+    role: trimmed ? "img" : null,
+    "aria-label": trimmed || null,
+    "aria-hidden": trimmed ? null : "true",
+  });
   // Defensive sanitisation — even though browsers do not execute JS from
   // `img.src`, an unsafe scheme should never land on a network-fetched
   // attribute (some hosts copy the value into other sinks).
   const safeSrc = sanitiseImageSrc(src);
-  if (safeSrc) {
+  // Remember a broken image *per src*. The handler below swaps the live `<img>`
+  // for a `<span>`, and morph replaces a node outright whenever the tag names
+  // differ — so without a record the next commit re-emitted the `<img>`, threw
+  // the initials away, re-requested the dead URL and flashed the broken-image
+  // glyph again, on every render. Latching the failure makes the fresh tree
+  // agree with the DOM the handler produced; keying by src re-arms the attempt
+  // when the caller points at a different image.
+  const errorSlot = safeSrc ? helpers.useInstanceState<boolean>(`avatar-error:${safeSrc}`, false) : null;
+  if (safeSrc && !errorSlot?.get()) {
     const img = el("img", { src: safeSrc, alt: name, loading: "lazy" });
     // Resolve the live image from the event so this handler still works
     // after the morph reconciler copies it onto a kept DOM node.
@@ -24,8 +62,12 @@ export function renderAvatar(src: string, name: string, size: AvatarSize): HTMLE
     // window-level handler also fires from script errors — but for an
     // `<img>` it's always an Event.)
     img.onerror = (event) => {
+      errorSlot?.set(true);
       const ev = event as Event;
       const live = (ev.currentTarget ?? ev.target) as Element;
+      // The imperative swap is only the first-paint optimisation now: instance
+      // state does not schedule a render, so the fallback still has to appear
+      // before the next commit re-emits it from the branch above.
       live.replaceWith(el("span", { class: "rui-avatar-fallback" }, [initialsFor(name)]));
     };
     root.append(img);
@@ -61,9 +103,23 @@ export function initialsFor(name: string): string {
  * `dispose()` so every close path can clean up, and observes the host so we
  * auto-dispose when the floater is unmounted.
  *
- * `key` lets the caller dedupe re-opens — if the same `key` is passed while
- * a previous registration is still live, we dispose it before installing
- * the new one.
+ * `key` dedupes re-opens across element identities. The morph reconciler
+ * discards the previous render's panel, so a re-open usually arrives with a
+ * *new* `liveRoot` that the element-keyed registry can never match — which is
+ * how a closed-and-reopened floater ended up with a second listener pair on
+ * the shared shadow root. When the registration held under `key` is no longer
+ * connected it is therefore disposed before the new pair is installed. Two
+ * roots that are both still on screen under one `key` are two instances of the
+ * same component (the keys callers pass are per-component, not per-instance),
+ * so that registration is left alone.
+ *
+ * Escape is handled topmost-first. Every registration listens on the same
+ * shared shadow root, and capture at that root is the only phase that runs
+ * before a dialog's own bubble-phase Escape handler — so without a stack one
+ * keystroke closed the combobox, the popover around it AND the enclosing
+ * dialog. The innermost open floater consumes the keystroke; the next Escape
+ * reaches the layer below, which is the contract users expect: one press peels
+ * exactly one layer.
  */
 export interface DismissHandle {
   dispose: () => void;
@@ -76,12 +132,52 @@ interface DismissOptions {
   key?: string;
 }
 
+/** One live registration. `root` is needed to tell a dead floater from a live one. */
+interface DismissEntry {
+  root: HTMLElement;
+  key: string | undefined;
+  handle: DismissHandle;
+}
+
 const DISMISS_REGISTRY: WeakMap<HTMLElement, DismissHandle> = new WeakMap();
+/** Live registrations by caller `key` — see the `key` paragraph above. */
+const KEYED_REGISTRY = new Map<string, DismissEntry>();
+/** Every open floater, innermost LAST. Escape peels the last one only. */
+const OPEN_FLOATERS: DismissEntry[] = [];
+/** Escape keystrokes already consumed, so no second layer reacts to one press. */
+const HANDLED_ESCAPES = new WeakSet<Event>();
+
+/**
+ * The innermost floater still on screen.
+ *
+ * Registrations whose root was unmounted without going through a close path are
+ * reclaimed here: the MutationObserver below only notices on the next DOM
+ * mutation, which may never come, and until then a dead floater would swallow
+ * Escape for the layer the user can actually see.
+ */
+function topFloater(): DismissEntry | null {
+  for (let i = OPEN_FLOATERS.length - 1; i >= 0; i -= 1) {
+    const entry = OPEN_FLOATERS[i]!;
+    if (entry.root.isConnected) return entry;
+    entry.handle.dispose(); // splices itself out of the stack
+  }
+  return null;
+}
 
 export function installDismissListeners(opts: DismissOptions): DismissHandle {
-  const { liveRoot, onDismiss } = opts;
-  const existing = DISMISS_REGISTRY.get(liveRoot);
-  if (existing) existing.dispose();
+  const { liveRoot, onDismiss, key } = opts;
+  DISMISS_REGISTRY.get(liveRoot)?.dispose();
+  // A re-open under a fresh element: the pair registered for the panel morph
+  // threw away is still on the shared root, and only `key` can find it.
+  const prior = key ? KEYED_REGISTRY.get(key) : undefined;
+  if (prior && !prior.root.isConnected) prior.handle.dispose();
+  // Reclaim any registration whose root has since been unmounted without going
+  // through a close path: the observer below only fires on the next DOM
+  // mutation, so until now a floater that re-rendered while open could leave a
+  // growing pile of dead listener pairs on the shared root.
+  for (const stale of [...OPEN_FLOATERS]) {
+    if (!stale.root.isConnected) stale.handle.dispose();
+  }
 
   const host = liveRoot.getRootNode() as Document | ShadowRoot;
   let disposed = false;
@@ -94,8 +190,25 @@ export function installDismissListeners(opts: DismissOptions): DismissHandle {
   };
   const onKey = (event: Event): void => {
     if ((event as KeyboardEvent).key !== "Escape") return;
+    // Topmost-first: only the innermost open floater reacts, and it consumes
+    // the keystroke so neither a floater below nor the enclosing dialog's own
+    // Escape handler closes on the same press. `stopPropagation` from capture
+    // at the shared root is what makes that gate work — the dialog listens in
+    // the bubble phase, which capture at the root precedes.
+    if (HANDLED_ESCAPES.has(event) || topFloater()?.handle !== handle) return;
+    HANDLED_ESCAPES.add(event);
+    event.preventDefault();
+    event.stopPropagation();
+    // Consuming the event also swallows the floater's own Escape handler, which
+    // is where focus used to be sent back to the trigger. The panel is hidden
+    // by the dismissal, so focus left inside it falls to the document body and
+    // a keyboard user loses their place — hand it back here instead. Every
+    // floater trigger in the library carries `aria-expanded`.
+    const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+    const fromInside = path.includes(liveRoot) || liveRoot.contains(event.target as Node | null);
     handle.dispose();
     onDismiss();
+    if (fromInside) liveRoot.querySelector<HTMLElement>("[aria-expanded]")?.focus?.();
   };
 
   // Auto-dispose when the floater is removed from the DOM so we never keep
@@ -120,18 +233,27 @@ export function installDismissListeners(opts: DismissOptions): DismissHandle {
       host.removeEventListener("keydown", onKey, true);
       observer?.disconnect();
       DISMISS_REGISTRY.delete(liveRoot);
+      const idx = OPEN_FLOATERS.indexOf(entry);
+      if (idx >= 0) OPEN_FLOATERS.splice(idx, 1);
+      if (key && KEYED_REGISTRY.get(key) === entry) KEYED_REGISTRY.delete(key);
     },
   };
+  const entry: DismissEntry = { root: liveRoot, key, handle };
 
-  // Defer attachment so the same click that opened the floater does not
-  // immediately trip the close handler.
+  // Escape is armed immediately: the deferral below exists so the click that
+  // opened the floater cannot close it again, and a keystroke cannot do that
+  // (the capture phase at this root has already passed for the event that ran
+  // the opener). Deferring it lost the Escape a keyboard user pressed right
+  // after opening — which then closed the surrounding dialog instead.
+  host.addEventListener("keydown", onKey, true);
   setTimeout(() => {
     if (disposed) return;
     host.addEventListener("click", onOutside, true);
-    host.addEventListener("keydown", onKey, true);
   }, 0);
 
   DISMISS_REGISTRY.set(liveRoot, handle);
+  if (key) KEYED_REGISTRY.set(key, entry);
+  OPEN_FLOATERS.push(entry);
   return handle;
 }
 

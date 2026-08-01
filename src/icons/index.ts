@@ -10,10 +10,23 @@
  * to make icons render.
  */
 
+import { isRenderableSvgMarkup } from "../library/svg-sanitizer.js";
+
 export const FONT_AWESOME_CDN_URL =
   "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css";
 
 export const FONT_AWESOME_VERSION = "6.7.2";
+
+/**
+ * Subresource-integrity hash for {@link FONT_AWESOME_CDN_URL}.
+ *
+ * Empty by default: publishing a wrong hash would silently break icon
+ * rendering for every consumer, and the digest must be verified against the
+ * exact file the pinned version serves before it can be asserted here. Set it
+ * (`sha384-…`) to have the browser reject a tampered stylesheet, or self-host
+ * the CSS and never call `ensureFontAwesomeLoaded`.
+ */
+export const FONT_AWESOME_CDN_INTEGRITY = "";
 
 const LINK_MARKER_ATTR = "data-rui-font-awesome";
 
@@ -49,6 +62,14 @@ function injectLink(root: ParentNode, doc: Document): void {
   const link = doc.createElement("link");
   link.rel = "stylesheet";
   link.href = FONT_AWESOME_CDN_URL;
+  // A third-party stylesheet on the host page is a supply-chain dependency:
+  // whoever controls the CDN controls CSS in this document. `crossorigin`
+  // is required for SRI to be enforced, and `referrerpolicy` avoids leaking
+  // the host URL to the CDN. Hosts that cannot accept the CDN at all should
+  // self-host the stylesheet and skip `ensureFontAwesomeLoaded`.
+  link.crossOrigin = "anonymous";
+  link.referrerPolicy = "no-referrer";
+  if (FONT_AWESOME_CDN_INTEGRITY) link.integrity = FONT_AWESOME_CDN_INTEGRITY;
   link.setAttribute(LINK_MARKER_ATTR, FONT_AWESOME_VERSION);
   try {
     root.appendChild(link);
@@ -138,13 +159,19 @@ export function isIconSize(value: unknown): value is IconSize {
  * ------------------------------------------------------------------------ */
 
 const customIcons = new Map<string, string>();
-const CUSTOM_ICON_BLOCK_RE = /<script|<foreignObject|on\w+\s*=|javascript\s*:|<!ENTITY|<iframe|<embed|<object/i;
 const CUSTOM_ICON_NAME_RE = /^[a-zA-Z0-9:_-]+$/;
 
+/**
+ * Gate icon markup at registration time. The real defence is the allow-list
+ * sanitiser applied at render (`renderIcon` → `sanitiseSvgMarkup`); this only
+ * rejects values that could never render anything, so a typo'd or hostile
+ * entry never makes it into the registry. Registration is reachable from DSL
+ * via `$theme({ icons: … })`, so it must not trust its input.
+ */
 function sanitiseIconMarkup(raw: unknown): string {
   const s = typeof raw === "string" ? raw : "";
   if (!s || s.length > 16 * 1024) return "";
-  if (CUSTOM_ICON_BLOCK_RE.test(s)) return "";
+  if (!isRenderableSvgMarkup(s)) return "";
   return s;
 }
 

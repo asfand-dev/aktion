@@ -3,6 +3,7 @@
  */
 
 import { resolveIconClasses, getCustomIcon, type IconSize } from "../icons/index.js";
+import { sanitiseSvgMarkup } from "./svg-sanitizer.js";
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -14,7 +15,14 @@ export function el<K extends keyof HTMLElementTagNameMap>(
     for (const [key, value] of Object.entries(attrs)) {
       if (value === null || value === undefined || value === false) continue;
       if (key === "class") node.setAttribute("class", String(value));
-      else if (key === "html") node.innerHTML = String(value);
+      // NOTE: there is deliberately no magic `html` key here. This helper is
+      // applied to attribute records that components build from DSL props, and
+      // for `HTMLTag` the *keys* themselves are DSL-supplied — so a key with an
+      // implicit `innerHTML` meaning was directly reachable as
+      // `HTMLTag("div", { attributes: { html: "<img src=x onerror=…>" } })`.
+      // Components that genuinely need to turn a string into DOM must call
+      // `setSanitisedHtml` from `html-sanitizer.ts`, which is allow-listed and
+      // obvious at the call site.
       else if (value === true) node.setAttribute(key, "");
       else node.setAttribute(key, String(value));
     }
@@ -49,6 +57,25 @@ export function asString(value: unknown, fallback = ""): string {
   if (value === null || value === undefined) return fallback;
   if (typeof value === "string") return value;
   return String(value);
+}
+
+/**
+ * Resolve a form control's `value` attribute, preserving the difference between
+ * "the program did not supply a value" and "the program supplied an empty one".
+ *
+ * Returns `null` when the prop is absent, and `el()` skips null attributes — so
+ * the rendered element carries no `value` attribute at all. The morph
+ * reconciler reads that absence as "this render is not asserting a value" and
+ * leaves whatever the user typed alone (see `syncInput` in renderer/morph.ts).
+ *
+ * Using `asString(props.value)` here instead is the bug this exists to prevent:
+ * it collapses "unset" to `""`, which morph applied as a deliberate clear, so
+ * every uncontrolled field wiped itself on the next re-render from anywhere in
+ * the app.
+ */
+export function valueAttr(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  return typeof value === "string" ? value : String(value);
 }
 
 export function asBoolean(value: unknown, fallback = false): boolean {
@@ -449,14 +476,17 @@ export function renderIcon(
       style,
       "aria-hidden": "true",
     });
-    if (/^\s*<svg[\s>]/i.test(custom)) {
-      span.innerHTML = custom;
-    } else {
+    // Registered icon markup is sanitised against an allow-list here rather
+    // than assigned via `innerHTML`. `registerIcons` also checks the markup,
+    // but re-sanitising at render keeps the guarantee local to the sink: a
+    // host that reaches the registry by another route still cannot inject.
+    const safe = sanitiseSvgMarkup(custom);
+    if (safe) {
       const ns = "http://www.w3.org/2000/svg";
       const svg = document.createElementNS(ns, "svg");
-      svg.setAttribute("viewBox", "0 0 24 24");
-      svg.setAttribute("fill", "currentColor");
-      svg.innerHTML = custom;
+      svg.setAttribute("viewBox", safe.rootAttrs.viewbox || "0 0 24 24");
+      svg.setAttribute("fill", safe.rootAttrs.fill || "currentColor");
+      for (const child of safe.children) svg.appendChild(child);
       span.appendChild(svg as unknown as Node);
     }
     return span;

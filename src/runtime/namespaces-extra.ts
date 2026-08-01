@@ -5,6 +5,8 @@
  * call from any expression / action / effect / lambda.
  */
 
+import { safeRegexTest } from "./util.js";
+
 /* ----------------------------------------------------------------------- *
  * $style — safe, declarative styling helpers
  * ----------------------------------------------------------------------- */
@@ -176,9 +178,10 @@ export const Rules = {
     (v) => (isEmpty(v) || String(v).length <= n ? null : (message ?? `Must be at most ${n} characters`)),
 
   pattern: (re: unknown, message = "Invalid format"): Validator => {
-    let rx: RegExp | null = null;
-    try { rx = re instanceof RegExp ? re : new RegExp(String(re)); } catch { rx = null; }
-    return (v) => (isEmpty(v) || !rx || rx.test(String(v)) ? null : message);
+    // Both the pattern and the value being validated are untrusted, so this is
+    // a ReDoS pair. Run it through the bounded tester rather than `rx.test`.
+    const source = re instanceof RegExp ? re.source : String(re ?? "");
+    return (v) => (isEmpty(v) || safeRegexTest(source, String(v)) ? null : message);
   },
 
   oneOf: (options: unknown[], message = "Not an allowed value"): Validator =>

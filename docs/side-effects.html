@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     /* Live layout demo: code on the left, rendered output on the right. */
@@ -77,7 +77,14 @@
       <p>An effect declaration has two parts: a body and an optional dependency array.</p>
 <pre><code>$effect(() =&gt; {
   // body — side effects: state writes, $http(…), $emit(…), cleanup(…)
-}, [...dependencies])</code></pre>
+}, [$query, "mount"])</code></pre>
+      <p>
+        Each entry in the dependency array is either a <code>$state</code> reference
+        (re-run when that state changes) or one of the scheduling tokens
+        <code>"mount"</code>, <code>"unmount"</code>, <code>"every(N)"</code>,
+        <code>"debounce(N)"</code>, or <code>"throttle(N)"</code>. Anything else is a
+        parse error, so a typo fails loudly instead of silently never firing.
+      </p>
       <ul>
         <li>The <code>$effect()</code> call &mdash; effects are <strong>anonymous</strong>; there is no name and no return value. The runtime keys on the source location.</li>
         <li>An arrow-function body that performs the side effect.</li>
@@ -128,7 +135,7 @@
         observes the initial state.
       </p>
 
-      <h3>Scope: top-level vs. component-local</h3>
+      <h3 id="scope-top-level-vs-component-local">Scope: top-level vs. component-local</h3>
       <p>
         An <code>effect</code> can live at the <strong>program top level</strong>
         or <strong>inside a component body</strong>. The dependency-array
@@ -235,7 +242,7 @@ $create.onDone = () =&gt; { $orders.refetch() }</code></pre>
 
       <h2 id="recipes">Recipes</h2>
 
-      <h3>React to multiple atoms</h3>
+      <h3 id="react-to-multiple-atoms">React to multiple atoms</h3>
 <pre><code>$query = ""
 $page  = 1
 
@@ -246,12 +253,12 @@ $effect(() =&gt; {
   })
 }, [$query, $page, "debounce(250)"])</code></pre>
 
-      <h3>Polling on an interval</h3>
+      <h3 id="polling-on-an-interval">Polling on an interval</h3>
 <pre><code>$effect(() =&gt; {
   $orders.refetch()
 }, ["every(30000)"])</code></pre>
 
-      <h3>Autosave a draft</h3>
+      <h3 id="autosave-a-draft">Autosave a draft</h3>
 <pre><code>$draft = ""
 
 $effect(() =&gt; {
@@ -262,7 +269,7 @@ $effect(() =&gt; {
   })
 }, [$draft, "debounce(500)"])</code></pre>
 
-      <h3>Keyboard-shortcut listener</h3>
+      <h3 id="keyboard-shortcut-listener">Keyboard-shortcut listener</h3>
 <pre><code>$effect(() =&gt; {
   const onKey = (e) =&gt; {
     if (e.key === "/" &amp;&amp; !e.metaKey &amp;&amp; !e.ctrlKey) {
@@ -274,7 +281,7 @@ $effect(() =&gt; {
   cleanup(() =&gt; document.removeEventListener("keydown", onKey))
 }, ["mount"])</code></pre>
 
-      <h3>IntersectionObserver for infinite scroll</h3>
+      <h3 id="intersectionobserver-for-infinite-scroll">IntersectionObserver for infinite scroll</h3>
 <pre><code>$effect(() =&gt; {
   const sentinel = document.querySelector("[data-sentinel]")
   if (!sentinel) return
@@ -287,7 +294,7 @@ $effect(() =&gt; {
   cleanup(() =&gt; observer.disconnect())
 }, ["mount"])</code></pre>
 
-      <h3>WebSocket subscription</h3>
+      <h3 id="websocket-subscription">WebSocket subscription</h3>
 <pre><code>$effect(() =&gt; {
   const socket = new WebSocket("wss://example.com/ticker")
   socket.addEventListener("message", (event) =&gt; {
@@ -296,7 +303,7 @@ $effect(() =&gt; {
   cleanup(() =&gt; socket.close())
 }, ["mount"])</code></pre>
 
-      <h3>Debounced restart with an imperative timer</h3>
+      <h3 id="debounced-restart-with-an-imperative-timer">Debounced restart with an imperative timer</h3>
 <pre><code>$searchTimer = null
 
 function onType(q) {
@@ -365,20 +372,20 @@ $effect(() =&gt; { if ($feed.last) $items = [...$items, $feed.last] }, [$feed.la
         </a>
         <a class="demo-card" href="javascript-interactions.html">
           <span class="demo-tag">Advanced</span>
-          <h3>JavaScript interactions</h3>
+          <h3 id="javascript-interactions">JavaScript interactions</h3>
           <p>Inline JavaScript &mdash; browser APIs, host globals, and custom-event integration.</p>
           <span class="demo-arrow">Open the guide &rarr;</span>
         </a>
         <a class="demo-card" href="http.html">
           <span class="demo-tag">Data</span>
-          <h3>HTTP &amp; resources</h3>
+          <h3 id="http-and-resources">HTTP &amp; resources</h3>
           <p>The <code>$http({…})</code> resource bag, <code>refetch()</code>, and the <code>onDone</code> callback.</p>
           <span class="demo-arrow">View the guide &rarr;</span>
         </a>
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     // Render each .lay-demo code block as a live <aktion-app> beside it.
     import "../dist/aktion.js"; // registers the <aktion-app> custom element

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>The sx prop · Aktion</title>
-  <meta name="description" content="The universal sx prop accepted by every Aktion component — a bounded, theme-safe, XSS-safe styling channel. A complete reference for every key (spacing, sizing, color, border, flex/grid, position, typography, effects, background images), with responsive maps, interaction states, the animate prop, copy-paste snippets, and live mini-UI examples." />
+  <meta name="description" content="The universal sx prop accepted by every Aktion component — a bounded, theme-safe, XSS-safe styling channel. A complete reference for every key (spacing, sizing, color, border, flex/grid, position, typography, effects, background images), with responsive maps and which keys accept them, interaction states, the animate prop, the role and dataAttrs channels, a troubleshooting checklist for values that were dropped, copy-paste snippets, and live mini-UI examples." />
   <script>
     (function () {
       try {
@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     /* Live sx demo: code on the left, rendered output on the right. */
@@ -66,8 +66,10 @@
     [data-doc-theme="light"] .tok { background: var(--doc-code-bg-soft); }
     .prop-table code { white-space: nowrap; }
     .prop-table td:first-child { white-space: nowrap; }
-    .note-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin: 16px 0; }
-    .note-grid .callout { margin: 0; }
+    .demo-cheats code { white-space: nowrap; }
+    /* Warning variant of the shared site.css callout. */
+    .callout.warn { background: rgba(245, 158, 11, 0.10); border-color: rgba(245, 158, 11, 0.30); }
+    .callout.warn h4 { color: #b45309; }
   </style>
 </head>
 <body data-page="sx">
@@ -109,7 +111,9 @@
           swap restyles everything at once. Raw lengths/colors are accepted where
           it makes sense, but tokens travel better.</li>
         <li><strong>Unknown keys and invalid values are ignored</strong> &mdash; never
-          injected. A typo silently no&#8209;ops rather than breaking the page.</li>
+          injected. A typo silently no&#8209;ops rather than breaking the page, which is
+          also the one thing that can make <code>sx</code> puzzling:
+          <a href="#why-dropped">a checklist for a value that did nothing</a>.</li>
       </ul>
 <pre><code>// sx is just another prop on the options bag.
 Card([Text("Hello")], { sx: { p: "lg", bg: "surface", radius: "lg", shadow: "md" } })
@@ -143,6 +147,17 @@ Button("Save", { variant: "primary", sx: { mt: "md", w: "full" } })</code></pre>
           <code>"12px"</code>/<code>"60%"</code>, a raw color, or a number).</li>
         <li>Otherwise the value is <strong>dropped</strong>.</li>
       </ol>
+      <p>
+        Everything that survives step 2 or 3 becomes an <strong>inline style</strong> on the
+        element the component renders; responsive maps become atomic classes in a shared
+        stylesheet instead. That split decides what wins &mdash; see
+        <a href="#responsive-specificity">how responsive values beat component defaults</a>.
+      </p>
+      <p>
+        Nothing here ever concatenates your value into a stylesheet verbatim. Lengths and
+        colours go through a restricted alphabet with a 64&#8209;character cap first, which is
+        <a href="#why-dropped">why an exotic raw CSS value can vanish</a>.
+      </p>
 
       <!-- ============================ SPACING ============================ -->
       <h2 id="spacing">Spacing &mdash; padding, margin, gap</h2>
@@ -347,8 +362,26 @@ Button("Save", { variant: "primary", sx: { mt: "md", w: "full" } })</code></pre>
       </p>
       <p>
         <strong>Layer tokens (low &rarr; high):</strong>
-        <span class="tok">base</span><span class="tok">raised</span><span class="tok">dropdown</span><span class="tok">sticky</span><span class="tok">banner</span><span class="tok">overlay</span><span class="tok">modal</span><span class="tok">popover</span><span class="tok">toast</span><span class="tok">tooltip</span>
+        <span class="tok">base</span><span class="tok">raised</span><span class="tok">sticky</span><span class="tok">banner</span><span class="tok">overlay</span><span class="tok">dropdown</span><span class="tok">modal</span><span class="tok">popover</span><span class="tok">toast</span><span class="tok">tooltip</span>
       </p>
+      <p>
+        Pick the token that names your intent rather than a number, and the app stays
+        consistent with the library&rsquo;s own surfaces. The numbers behind the tokens are
+        the theme&rsquo;s <code>--rui-z-*</code> scale &mdash;
+        <a href="themes.html#layers">listed in full on the theming page</a> &mdash; so a
+        <code>$theme({ zIndex: {&hellip;} })</code> override moves your elements and the
+        library&rsquo;s together.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>Anchored popups do not compete for <code>z-index</code> any more.</strong>
+          Tooltips, dropdowns, popovers and picker lists are promoted into the browser top
+          layer, so they paint above everything regardless of these tokens &mdash; see
+          <a href="layout.html#floating">the floating layer</a>. Reach for a layer token when
+          <em>you</em> are stacking your own elements: a sticky table header, a custom
+          banner, a decorative ribbon.
+        </p>
+      </div>
       <table class="signature-table prop-table">
         <thead><tr><th>Key</th><th>Accepts</th><th>Example</th></tr></thead>
         <tbody>
@@ -460,12 +493,15 @@ Button("Save", { variant: "primary", sx: { mt: "md", w: "full" } })</code></pre>
       <!-- ============================ RESPONSIVE ============================ -->
       <h2 id="responsive">Responsive maps</h2>
       <p>
-        <strong>Any</strong> <code>sx</code> value can be a breakpoint map
-        <code>{ base, sm, md, lg, xl }</code> instead of a single value. These emit
-        real <code>@media (min-width: &hellip;)</code> rules &mdash; not just the resolved
-        base &mdash; so the style genuinely changes at the breakpoint. It is
-        <strong>mobile&#8209;first</strong>: <code>base</code> applies at every width,
-        and each larger key overrides from its min&#8209;width up.
+        Most <code>sx</code> values can be a breakpoint map
+        <code>{ base, sm, md, lg, xl }</code> instead of a single value. These emit real
+        <code>@media (min-width: &hellip;)</code> rules &mdash; not just the resolved base
+        &mdash; so the style genuinely changes at the breakpoint.
+      </p>
+      <p>
+        It is <strong>mobile&#8209;first</strong>: <code>base</code> applies at every width, and
+        each larger key overrides from its min&#8209;width up. A map needs only <em>one</em> of
+        the five keys to count as one.
       </p>
       <table class="signature-table prop-table">
         <thead><tr><th>Key</th><th>Min&#8209;width</th></tr></thead>
@@ -489,6 +525,63 @@ Button("Save", { variant: "primary", sx: { mt: "md", w: "full" } })</code></pre>
 }))</code></pre>
         <div class="sx-demo-preview"></div>
       </div>
+      <p>
+        Three keys, three sets of <code>@media</code> rules, one element. Because
+        <code>base</code> is the only key without a media query, a map with no
+        <code>base</code> simply has no style below its smallest breakpoint.
+      </p>
+
+      <h3 id="responsive-keys">Which keys accept a map</h3>
+      <p>
+        The whole box model, the flex/grid controls, position, and the typography keys do.
+        Five keys do not, and a map passed to one of them <strong>collapses to its
+        <code>base</code> value</strong> rather than erroring &mdash; so the style still
+        renders, it just stops changing at the breakpoint.
+      </p>
+      <p>
+        <strong>Accept a map:</strong>
+        <span class="tok">p</span><span class="tok">px</span><span class="tok">py</span><span class="tok">pt</span><span class="tok">pr</span><span class="tok">pb</span><span class="tok">pl</span><span class="tok">ps</span><span class="tok">pe</span><span class="tok">m</span><span class="tok">mx</span><span class="tok">my</span><span class="tok">mt</span><span class="tok">mr</span><span class="tok">mb</span><span class="tok">ml</span><span class="tok">ms</span><span class="tok">me</span><span class="tok">gap</span><span class="tok">w</span><span class="tok">h</span><span class="tok">minW</span><span class="tok">maxW</span><span class="tok">minH</span><span class="tok">maxH</span><span class="tok">bg</span><span class="tok">color</span><span class="tok">radius</span><span class="tok">shadow</span><span class="tok">border</span><span class="tok">borderColor</span><span class="tok">opacity</span><span class="tok">display</span><span class="tok">direction</span><span class="tok">align</span><span class="tok">justify</span><span class="tok">wrap</span><span class="tok">grow</span><span class="tok">shrink</span><span class="tok">basis</span><span class="tok">columns</span><span class="tok">overflow</span><span class="tok">position</span><span class="tok">top</span><span class="tok">right</span><span class="tok">bottom</span><span class="tok">left</span><span class="tok">inset</span><span class="tok">zIndex</span><span class="tok">fontSize</span><span class="tok">weight</span><span class="tok">textAlign</span><span class="tok">textDecoration</span>
+      </p>
+      <p>
+        <strong>Do not &mdash; a map collapses to <code>base</code>:</strong>
+        <span class="tok">cursor</span><span class="tok">backdrop</span><span class="tok">bgImage</span><span class="tok">bgOverlay</span><span class="tok">bgSize</span>
+        &mdash; and the state channels <span class="tok">hover</span><span class="tok">focus</span><span class="tok">states</span>,
+        which take a style object of their own rather than a value.
+      </p>
+      <p>
+        If you need a background image only above a breakpoint, put the two variants on two
+        elements and toggle them with <code>display: { base: "none", md: "block" }</code>
+        &mdash; <code>display</code> <em>is</em> responsive.
+      </p>
+
+      <h3 id="responsive-specificity">Why a responsive value wins</h3>
+      <p>
+        A responsive key is not emitted inline. It becomes a deduplicated atomic class in one
+        shared stylesheet, and that class is written into the selector three times &mdash;
+        <code>.ak-rX.ak-rX.ak-rX</code>. That is deliberate: nearly every component styles
+        itself with an attribute selector such as
+        <code>.rui-stack[data-gap="md"]</code>, which outranks a single class, so a
+        single&#8209;class rule would lose and the map would silently do nothing.
+      </p>
+      <p>
+        The tripled class still loses to <code>!important</code> and to inline styles, which
+        is the intended order &mdash; a <em>non&#8209;responsive</em> <code>sx</code> value
+        <em>is</em> an inline style, so an explicit single value on the same element should
+        beat a breakpoint rule. If a map looks ignored, check whether something else on the
+        element already sets the same CSS property as a plain value, and fold it into the
+        map&rsquo;s <code>base</code> key instead.
+      </p>
+      <div class="callout warn">
+        <h4>Upgrading: maps that used to do nothing now apply</h4>
+        <p>
+          <strong>Re&#8209;check any responsive <code>sx</code> map you wrote against a
+          component&rsquo;s own prop.</strong> Before the specificity fix, a map like
+          <code>Row([&hellip;], { gap: "sm", sx: { gap: { md: "xl" } } })</code> was
+          overridden by the component&rsquo;s own <code>data-gap</code> rule and rendered as
+          if it were not there. It now takes effect at <code>md</code>, so a layout that
+          looked correct only because the map no&#8209;opped will change.
+        </p>
+      </div>
 
       <!-- ============================ STATES ============================ -->
       <h2 id="states">Interaction states</h2>
@@ -496,7 +589,7 @@ Button("Save", { variant: "primary", sx: { mt: "md", w: "full" } })</code></pre>
         <code>sx</code> styles interaction states with <strong>no dynamic CSS
         injection</strong> &mdash; two complementary forms:
       </p>
-      <h3>1. Quick effect shorthands</h3>
+      <h3 id="state-shorthands">1. Quick effect shorthands</h3>
       <p>
         <code>hover</code> and <code>focus</code> accept a preset effect name (or an
         object of <code>{ effect: true }</code>) that maps to a prebuilt utility
@@ -505,7 +598,7 @@ Button("Save", { variant: "primary", sx: { mt: "md", w: "full" } })</code></pre>
       </p>
 <pre><code>Card([Text("Lift on hover")], { sx: { p: "lg", hover: "lift" } })
 Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code></pre>
-      <h3>2. Arbitrary state styling with <code>states</code></h3>
+      <h3 id="state-objects">2. Arbitrary state styling with <code>states</code></h3>
       <p>
         For full control, <code>states</code> (or a rich object form of
         <code>hover</code>/<code>focus</code>) compiles a small, <strong>bounded</strong>
@@ -516,8 +609,18 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
       <p>
         Each state value accepts these bounded keys:
         <span class="tok">bg</span><span class="tok">color</span><span class="tok">borderColor</span><span class="tok">shadow</span><span class="tok">radius</span><span class="tok">opacity</span><span class="tok">cursor</span><span class="tok">textDecoration</span><span class="tok">scale</span><span class="tok">translateX</span><span class="tok">translateY</span><span class="tok">rotate</span>.
-        A smooth transition is added automatically and
+        A 150&nbsp;ms transition on background, color, shadow, transform, opacity and
+        border&#8209;color is added automatically, and
         <code>prefers-reduced-motion</code> is respected.
+        <code>rotate</code> is capped at &plusmn;360 degrees.
+      </p>
+      <p>
+        Two states match more than their pseudo&#8209;class, because component libraries
+        express those conditions with attributes: <code>disabled</code> also fires on
+        <code>[disabled]</code> and <code>[data-disabled="true"]</code>, and
+        <code>checked</code> also fires on <code>[aria-checked="true"]</code>. So styling
+        <code>disabled</code> works on a custom control that is not a native
+        <code>&lt;button&gt;</code>.
       </p>
       <div class="callout">
         <p>
@@ -588,8 +691,10 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
           <tr><td><code>id</code> / <code>anchor</code></td><td>Sets the element&rsquo;s <code>id</code> (validated identifier) &mdash; handy as a scroll anchor.</td></tr>
           <tr><td><code>className</code> / <code>class</code></td><td><strong>Escape hatch.</strong> Adds sanitised CSS class tokens (string or array).</td></tr>
           <tr><td><code>style</code></td><td><strong>Escape hatch.</strong> A sanitised inline&#8209;style string for the rare property <code>sx</code> doesn&rsquo;t cover.</td></tr>
-          <tr><td><code>aria</code></td><td>An object of ARIA attributes, e.g. <code>{ label: "Close", expanded: true }</code> &rarr; <code>aria-*</code>.</td></tr>
-          <tr><td><code>data</code></td><td>An object of <code>data-*</code> attributes, e.g. <code>{ testid: "row-1" }</code>.</td></tr>
+          <tr><td><code>aria</code></td><td>An object of ARIA attributes, e.g. <code>{ label: "Close", expanded: true }</code> &rarr; <code>aria-*</code>. Keys are lower&#8209;cased for you; letters and hyphens only.</td></tr>
+          <tr><td><code>role</code></td><td>Overrides the element&rsquo;s ARIA role. <strong>Allow&#8209;listed</strong> &mdash; see below.</td></tr>
+          <tr><td><code>data</code></td><td>An object of <code>data-*</code> attributes, e.g. <code>{ testid: "row-1" }</code>. Keys are lower&#8209;cased and stripped to <code>a&ndash;z 0&ndash;9 -</code>; <code>null</code> values are skipped.</td></tr>
+          <tr><td><code>dataAttrs</code></td><td>The same channel under a second name, for components that declare a <code>data</code> prop of their own. Wins when both are present.</td></tr>
           <tr><td><code>tooltip</code></td><td>Sets the native <code>title</code> attribute.</td></tr>
           <tr><td><code>hidden</code></td><td><code>true</code> &rarr; adds the <code>hidden</code> attribute.</td></tr>
         </tbody>
@@ -601,6 +706,83 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
   tooltip: "Esc",
   sx: { radius: "circle" }
 })</code></pre>
+      <p>
+        Universal props sit alongside a component&rsquo;s own props in the same options bag
+        &mdash; there is no separate slot for them, and every component accepts all of them.
+      </p>
+
+      <h3 id="role">Overriding the role</h3>
+      <p>
+        <code>role</code> exists for the case where a component&rsquo;s markup is right but
+        its semantics are not &mdash; a <code>Box</code> that is really a live status region,
+        a <code>Row</code> that is really a toolbar. It is <strong>allow&#8209;listed</strong>:
+        the value is trimmed and lower&#8209;cased, and anything not on the list is dropped
+        silently, because a plausible&#8209;but&#8209;wrong role is worse for a screen&#8209;reader
+        user than the original defect.
+      </p>
+      <p>
+        <strong>Accepted roles:</strong>
+        <span class="tok">banner</span><span class="tok">complementary</span><span class="tok">contentinfo</span><span class="tok">form</span><span class="tok">main</span><span class="tok">navigation</span><span class="tok">region</span><span class="tok">search</span><span class="tok">article</span><span class="tok">group</span><span class="tok">list</span><span class="tok">listitem</span><span class="tok">separator</span><span class="tok">heading</span><span class="tok">figure</span><span class="tok">note</span><span class="tok">definition</span><span class="tok">term</span><span class="tok">status</span><span class="tok">alert</span><span class="tok">log</span><span class="tok">timer</span><span class="tok">marquee</span><span class="tok">progressbar</span><span class="tok">meter</span><span class="tok">button</span><span class="tok">link</span><span class="tok">img</span><span class="tok">toolbar</span><span class="tok">tooltip</span><span class="tok">dialog</span><span class="tok">tab</span><span class="tok">tabpanel</span><span class="tok">tablist</span><span class="tok">menuitem</span><span class="tok">option</span><span class="tok">checkbox</span><span class="tok">radio</span><span class="tok">switch</span><span class="tok">none</span><span class="tok">presentation</span>
+      </p>
+<pre><code>Box([Text("Live figures")], { padding: "md", background: "muted", role: "status" })
+// roles that need owned children or matching ARIA state (grid, listbox, menu, …)
+// are deliberately absent — a bare role override cannot supply those</code></pre>
+      <p>
+        Composite roles are excluded on purpose. If you need one, use the component that
+        implements it &mdash; see <a href="accessibility.html">Accessibility</a>.
+      </p>
+
+      <h3 id="data-attrs">Six components need <code>dataAttrs</code></h3>
+      <p>
+        <code>LineChart</code>, <code>JsonTree</code>, <code>Async</code>,
+        <code>Draggable</code>, <code>Lottie</code> and <code>QRCode</code> all declare a
+        <code>data</code> prop of their own &mdash; the payload they render. On those six the
+        component prop wins, so use <code>dataAttrs</code> for the attribute channel.
+      </p>
+<pre><code>QRCode("https://example.com/join", { size: 160, dataAttrs: { testid: "join-qr" } })
+// the positional argument IS `data` (the QR payload); dataAttrs emits data-testid="join-qr"</code></pre>
+      <p>
+        On every other component the two spellings are interchangeable, and
+        <code>dataAttrs</code> wins if you pass both.
+      </p>
+
+      <h3 id="boxless">Elements with no box of their own</h3>
+      <p>
+        A few component roots are <code>display: contents</code> &mdash; they exist in the
+        tree but generate no box, so <code>padding</code>, <code>background</code>,
+        <code>width</code>, a border, or an <code>animate</code> transform on them provably
+        cannot render. <code>Show</code>, <code>Async</code>, <code>Lazy</code> and
+        <code>Fragment</code> are a related case: they return a fragment rather than an
+        element, so there is nothing for the universal channel to land on at all.
+      </p>
+      <p>
+        Both are handled for you. A fragment&#8209;returning component gets a wrapper
+        <code>&lt;span class="rui-universal-host"&gt;</code> when &mdash; and only when &mdash;
+        the universal channel actually carries something, and a boxless root is promoted to
+        <code>display: block</code> when your <code>sx</code> asks for a box (or your
+        <code>animate</code> preset needs one). An empty output is left un&#8209;hosted, so a
+        false <code>Show</code> with no fallback still renders nothing rather than an empty
+        padded box.
+      </p>
+<pre><code>$open = false
+$app(Column([
+  Show($open, [Card([Text("Hosted in a span, so the padding and border render.")])], Text("Nothing yet."), {
+    sx: { p: "lg", bg: "surface-muted", radius: "lg" }
+  }),
+  Button("Toggle", { onClick: () =&gt; $open = !$open })
+], { gap: "md" }))</code></pre>
+      <p>
+        Two consequences worth knowing. Your <code>sx</code> styles the <em>host span</em>, not
+        the branch inside it. And the promotion only fills in a <code>display</code> you did not
+        set yourself: pass <code>display: "contents"</code> to keep the boxless behaviour, or
+        any other value to choose the box.
+      </p>
+      <p>
+        The one override is <code>hidden: true</code>, which always wins &mdash; the
+        browser&rsquo;s own <code>[hidden]</code> rule would otherwise lose to an author
+        <code>display: contents</code> and the element would stay visible. When you want the box
+        to be explicit in the code rather than inferred, wrap the group in a <code>Box</code>.
+      </p>
 
       <!-- ============================ MINI UIs ============================ -->
       <h2 id="mini-uis">Mini UIs built with <code>sx</code></h2>
@@ -609,7 +791,7 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
         <code>sx</code> &mdash; no stylesheet, no raw CSS.
       </p>
 
-      <h3>Pricing card</h3>
+      <h3 id="mini-pricing">Pricing card</h3>
       <div class="sx-demo">
         <span class="sx-demo-label">Live</span>
 <pre><code>$app(Box([Column([
@@ -635,7 +817,7 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
         <div class="sx-demo-preview"></div>
       </div>
 
-      <h3>Notification banner</h3>
+      <h3 id="mini-banner">Notification banner</h3>
       <div class="sx-demo">
         <span class="sx-demo-label">Live</span>
 <pre><code>$app(Box([Row([
@@ -652,7 +834,7 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
         <div class="sx-demo-preview"></div>
       </div>
 
-      <h3>Glass profile card over a gradient</h3>
+      <h3 id="mini-glass">Glass profile card over a gradient</h3>
       <div class="sx-demo">
         <span class="sx-demo-label">Live</span>
 <pre><code>$app(Box([
@@ -671,6 +853,92 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
 ], { sx: { p: "2xl", bg: "gradient.brand", radius: "lg" } }))</code></pre>
         <div class="sx-demo-preview"></div>
       </div>
+      <div class="callout">
+        <h4>Before you hand&#8209;roll a chip</h4>
+        <p>
+          <strong><code>sx</code> can build a pill, but two components already are one.</strong>
+          <code>Badge(label, { tone, icon })</code> is the solid, high&#8209;attention chip
+          (&ldquo;Recommended&rdquo;, &ldquo;Save 50&nbsp;%&rdquo;).
+          <code>Pill(label, { tone, icon })</code> is the softer tinted label for the current
+          <em>state</em> of a thing &mdash; &ldquo;SSL active&rdquo;, &ldquo;pending&rdquo;,
+          &ldquo;broken&rdquo;.
+        </p>
+        <p>
+          Pill tones are
+          <code>neutral&nbsp;&middot;&nbsp;activating&nbsp;&middot;&nbsp;success&nbsp;&middot;&nbsp;warning&nbsp;&middot;&nbsp;critical&nbsp;&middot;&nbsp;promoting&nbsp;&middot;&nbsp;corporate</code>.
+          Both components follow the theme, both accept <code>sx</code>, and neither needs you
+          to pick a padding.
+        </p>
+      </div>
+
+      <!-- ============================ TROUBLESHOOTING ============================ -->
+      <h2 id="why-dropped">Why didn&rsquo;t my <code>sx</code> apply?</h2>
+      <p>
+        <code>sx</code> never throws and never warns: an unusable key or value is dropped so
+        the rest of the page still renders. That is the right trade for a channel an LLM
+        writes into, but it means a silent no&#8209;op is the failure mode you will meet.
+        Work down this table.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>A key does nothing at all</td>
+            <td>The key is not part of the bounded surface &mdash; a typo, or a CSS property <code>sx</code> does not expose.</td>
+            <td>Check it against the tables above. For a genuinely missing property use the <code>style</code> escape hatch.</td>
+          </tr>
+          <tr>
+            <td>The key is right, the value is ignored</td>
+            <td>The value is not a token or enum member for that key, and did not survive sanitisation.</td>
+            <td>Use a token, or a plain length / colour. Enum keys (<code>display</code>, <code>justify</code>, <code>shadow</code>&hellip;) accept <em>only</em> the listed values.</td>
+          </tr>
+          <tr>
+            <td>An exotic raw length or colour vanished</td>
+            <td>Lengths and colours pass a restricted alphabet with a 64&#8209;character cap before they reach an inline style.</td>
+            <td>Keep them short and plain. <code>clamp(1rem, 2vw, 2rem)</code> is fine; quotes, <code>;</code>, <code>url(&hellip;)</code> and <code>@import</code> are not. See <a href="security.html">Security</a>.</td>
+          </tr>
+          <tr>
+            <td>A whole <code>style</code> string vanished</td>
+            <td>The raw <code>style</code> channel is all&#8209;or&#8209;nothing: a string containing markup, <code>javascript:</code>, <code>expression(</code>, <code>@import</code>, or a <code>url(javascript:&hellip;)</code> / <code>url(data:text&hellip;)</code> is rejected whole, as is anything over 2048 characters.</td>
+            <td>Move what you can into <code>sx</code>; keep the leftover declaration minimal.</td>
+          </tr>
+          <tr>
+            <td>A responsive map never changes at the breakpoint</td>
+            <td>That key has no responsive resolver, so the map collapsed to its <code>base</code> value.</td>
+            <td>See <a href="#responsive-keys">which keys accept a map</a>.</td>
+          </tr>
+          <tr>
+            <td>A responsive map is overridden</td>
+            <td>Something on the same element sets the same CSS property inline, or with <code>!important</code>.</td>
+            <td>See <a href="#responsive-specificity">why a responsive value wins</a> &mdash; and what still beats it.</td>
+          </tr>
+          <tr>
+            <td>Padding or a background does nothing on <code>Show</code>, a route, or a transition wrapper</td>
+            <td>That root generates no box. It is promoted for you &mdash; unless your own <code>sx</code> declares a <code>display</code>.</td>
+            <td>Drop the <code>display</code> key, or set a non&#8209;<code>contents</code> one explicitly. See <a href="#boxless">boxless roots</a>.</td>
+          </tr>
+          <tr>
+            <td><code>data-*</code> attributes never appear</td>
+            <td>The component declares a <code>data</code> prop of its own, which shadows the channel.</td>
+            <td>Use <code>dataAttrs</code> &mdash; see <a href="#data-attrs">the six components</a>.</td>
+          </tr>
+          <tr>
+            <td>A <code>role</code> is missing from the DOM</td>
+            <td>The value is not on the allow&#8209;list.</td>
+            <td>Pick one of <a href="#role">the accepted roles</a>, or use the component that implements the semantics.</td>
+          </tr>
+          <tr>
+            <td>An <code>aria</code> key is missing</td>
+            <td>Keys are lower&#8209;cased, then must be 2&ndash;33 characters of letters and hyphens &mdash; a key containing a digit or an underscore is dropped.</td>
+            <td>Use the plain ARIA name. Case does not matter (<code>labelledBy</code> and <code>labelledby</code> both work) and the <code>aria-</code> prefix is optional.</td>
+          </tr>
+          <tr>
+            <td>No <code>@media</code> rules in a test environment</td>
+            <td>Responsive emission needs constructable stylesheets. Where they are unavailable, the map degrades to its <code>base</code> value inline.</td>
+            <td>Nothing &mdash; this is deliberate. Assert on the base value, or test breakpoints in a real browser.</td>
+          </tr>
+        </tbody>
+      </table>
 
       <!-- ============================ SECURITY / NOTES ============================ -->
       <h2 id="notes">Safety &amp; gotchas</h2>
@@ -678,11 +946,13 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
         <li><strong>Bounded by design.</strong> <code>sx</code> never injects
           arbitrary CSS. Values that don&rsquo;t resolve to a known token, enum,
           sanitised length/color, or scalar are dropped &mdash; so a hostile or
-          mistaken value can&rsquo;t break out into the stylesheet.</li>
+          mistaken value can&rsquo;t break out into the stylesheet. The per&#8209;sink
+          sanitisers and what each one accepts are documented on
+          <a href="security.html">Security</a>.</li>
         <li><strong>Tokens beat raw values.</strong> A raw color or length works, but
           it won&rsquo;t follow theme / dark&#8209;mode changes. Prefer
-          <code>"primary"</code> over <code>"#6366f1"</code>,
-          <code>"lg"</code> over <code>"24px"</code>.</li>
+          <code>"primary"</code> over a hex literal and <code>"lg"</code> over
+          <code>"24px"</code>.</li>
         <li><strong>Responsive needs constructable stylesheets.</strong> In headless
           DOMs that lack them, a breakpoint map gracefully falls back to emitting the
           <code>base</code> value inline (no media queries) rather than failing.</li>
@@ -713,14 +983,38 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
           <tr><td>Responsive width</td><td><code>{ sx: { w: { base: "100%", md: "50%" } } }</code></td></tr>
           <tr><td>Sticky header</td><td><code>{ sx: { position: "sticky", top: 0, zIndex: "sticky" } }</code></td></tr>
           <tr><td>Inline 3&#8209;col grid</td><td><code>{ sx: { display: "grid", columns: 3, gap: "md" } }</code></td></tr>
-          <tr><td>Pill badge</td><td><code>{ sx: { px: "sm", py: "3xs", radius: "pill", bg: "danger", color: "#fff" } }</code></td></tr>
+          <tr><td>Pill&#8209;shaped chip (or just use <code>Pill</code>)</td><td><code>{ sx: { px: "sm", py: "3xs", radius: "pill", bg: "danger", color: "#fff" } }</code></td></tr>
           <tr><td>Glass panel</td><td><code>{ sx: { backdrop: "blur", bg: "rgba(255,255,255,.12)" } }</code></td></tr>
           <tr><td>Entrance animation</td><td><code>{ animate: "fade-up" }</code></td></tr>
+          <tr><td>Fix a wrong role</td><td><code>{ role: "status" }</code></td></tr>
+          <tr><td>Test hook on a chart / QR code</td><td><code>{ dataAttrs: { testid: "chart" } }</code></td></tr>
         </tbody>
       </table>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="layout.html">
+          <span class="demo-tag">Core concepts</span>
+          <h3>Layout</h3>
+          <p>Structure first: Column, Row, Grid, cards, and the primitives <code>sx</code> polishes.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="themes.html">
+          <span class="demo-tag">Theming</span>
+          <h3>Themes &amp; tokens</h3>
+          <p>Every token an <code>sx</code> value resolves to, and how to rebrand them in one call.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Component catalog</h3>
+          <p>Every component and prop, with a live preview &mdash; all of them accept <code>sx</code>.</p>
+          <span class="demo-arrow">Browse components &rarr;</span>
+        </a>
+      </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     // Render each .sx-demo code block as a live <aktion-app> beside it.
     import "../dist/aktion.js"; // registers the <aktion-app> custom element

@@ -221,6 +221,62 @@ let sharedStyleSheetSupported: boolean | null = null;
  */
 let devtoolsAppCounter = 0;
 
+/**
+ * One transformed-ancestor warning per page load — every `<aktion-app>` on the
+ * page shares the same ancestor chain, so repeating it per instance is noise.
+ */
+let warnedContainingBlock = false;
+
+/**
+ * Overlay roots that rely on `position: fixed` resolving against the viewport,
+ * i.e. the ones a transformed ancestor breaks (see
+ * `detectContainingBlockTrap`). Anchored popups are absent on purpose: they
+ * are promoted into the browser top layer by `library/floating.ts`, which is
+ * laid out against the viewport whatever the ancestor chain says.
+ *
+ * This drives a diagnostic only, so drifting behind a renamed class costs a
+ * missed warning and nothing else. Mirrors the `position: fixed` rules in
+ * `src/theme/styles.ts`.
+ */
+const FIXED_OVERLAY_SELECTOR = [
+  ".rui-modal-overlay", ".rui-sheet-overlay", ".rui-lightbox-overlay",
+  ".rui-toasts", ".rui-toast-standalone", ".rui-command-palette-backdrop",
+  ".rui-app-shell-scrim", ".rui-tour", ".rui-spotlight", ".rui-spotlight-ring",
+  ".rui-fab", ".rui-skip-link", '.rui-backdrop[data-fixed="true"]',
+].join(",");
+
+/** `<div class="page" id="root">` → `div.page#root`, for a readable warning. */
+function describeElement(node: Element): string {
+  const tag = node.tagName.toLowerCase();
+  const id = node.id ? `#${node.id}` : "";
+  const cls = node.classList.length > 0 ? `.${node.classList[0]}` : "";
+  return `${tag}${cls}${id}`;
+}
+
+/**
+ * Whether `style` makes its element the containing block for `position: fixed`
+ * descendants, and if so which declaration does it.
+ *
+ * Read through `getPropertyValue` so unsupported / vendor-prefixed properties
+ * come back as `""` instead of `undefined` in non-browser DOMs.
+ */
+function containingBlockCause(style: CSSStyleDeclaration): string | null {
+  const val = (prop: string): string => (style.getPropertyValue(prop) || "").trim().toLowerCase();
+  for (const prop of ["transform", "filter", "backdrop-filter", "-webkit-backdrop-filter", "perspective"]) {
+    const v = val(prop);
+    if (v && v !== "none") return `${prop}: ${v}`;
+  }
+  // `contain` only creates one for the layout-affecting keywords.
+  const contain = val("contain");
+  if (/\b(?:paint|layout|strict|content)\b/.test(contain)) return `contain: ${contain}`;
+  // `will-change` creates the containing block up front, before any value is set.
+  const willChange = val("will-change");
+  if (/\b(?:transform|perspective|filter|backdrop-filter|contain)\b/.test(willChange)) {
+    return `will-change: ${willChange}`;
+  }
+  return null;
+}
+
 function getSharedStyleSheet(): CSSStyleSheet | null {
   if (sharedStyleSheetSupported === false) return null;
   if (sharedStyleSheet) return sharedStyleSheet;
@@ -347,6 +403,25 @@ export class AktionElement extends HTMLElement {
    */
   private scriptThemeKeys: ReadonlyArray<keyof ThemeTokens> = [];
 
+  /**
+   * Strict-mode guard for the "handler-only DOM write" hazard documented in
+   * `src/renderer/renderer.ts`: a MutationObserver that queues every attribute
+   * an event handler writes on the live DOM, so the next commit can report the
+   * ones the reconciler reverted. Armed only when the `strict` attribute is
+   * present — always-on it would allocate a record per attribute per commit.
+   */
+  private morphGuard: MutationObserver | null = null;
+  /** Elements → attribute names written since the last commit (strict only). */
+  private imperativeAttrWrites: Map<Element, Set<string>> | null = null;
+  /** One reverted-write report is a bug report; one per commit is a flood. */
+  private warnedMorphRevert = false;
+  /**
+   * Description of the host-page ancestor that traps `position: fixed` (see
+   * {@link detectContainingBlockTrap}), or `null` — the normal case, in which
+   * the per-commit overlay check below costs nothing.
+   */
+  private containingBlockTrap: string | null = null;
+
   /** Stable DevTools id for this element (`aktion-app-N`). */
   private readonly devtoolsId = `aktion-app-${(devtoolsAppCounter += 1)}`;
   /** Monotonic commit sequence for the render profiler (0 = initial mount). */
@@ -467,6 +542,7 @@ export class AktionElement extends HTMLElement {
   connectedCallback(): void {
     this.hasConnected = true;
     ensureFontAwesomeLoaded(this.root);
+    this.containingBlockTrap = this.detectContainingBlockTrap();
     this.registerWithDevtools();
     this.applyThemeFromAttribute();
     this.applyDir();
@@ -500,9 +576,155 @@ export class AktionElement extends HTMLElement {
     }
   }
 
+  /**
+   * Look for an ancestor in the EMBEDDING page that is the containing block for
+   * `position: fixed`, and remember what makes it one.
+   *
+   * A wrapper with `transform` / `filter` / `perspective` / `contain: paint` /
+   * `will-change` — a scaled slide deck, an off-canvas nav, a card grid with a
+   * hover lift, a page-transition wrapper — makes every fixed overlay inside
+   * the shadow root resolve against that wrapper instead of the viewport: the
+   * Modal scrim covers only the embed box, Toasts pin to its corner, the FAB
+   * floats mid-page. Anchored popups are immune because `floating.ts` promotes
+   * them into the browser top layer, which is laid out against the viewport
+   * whatever the ancestor chain says; the remaining overlays cannot be rescued
+   * from inside the shadow root, because the offending element belongs to the
+   * host page and `position: fixed` has no escape hatch. So the only thing left
+   * is to name the culprit — otherwise this is indistinguishable from a library
+   * bug. Reported by `reportTrappedOverlay` once an affected overlay actually
+   * renders, because a transformed wrapper around an app that never opens one is
+   * harmless and does not deserve a warning.
+   */
+  private detectContainingBlockTrap(): string | null {
+    if (warnedContainingBlock) return null;
+    const view = this.ownerDocument?.defaultView;
+    if (!view || typeof view.getComputedStyle !== "function") return null;
+    let node: Element | null = this.parentElement;
+    // Bounded walk: a pathological DOM must not turn a diagnostic into a stall.
+    for (let depth = 0; node && depth < 64; depth += 1, node = node.parentElement) {
+      let cause: string | null = null;
+      try {
+        cause = containingBlockCause(view.getComputedStyle(node));
+      } catch {
+        return null;
+      }
+      if (cause) return `<${describeElement(node)}> which sets \`${cause}\``;
+    }
+    return null;
+  }
+
+  /** Name the trap the first time an overlay it breaks reaches the DOM. */
+  private reportTrappedOverlay(): void {
+    const trap = this.containingBlockTrap;
+    if (!trap) return;
+    if (warnedContainingBlock) {
+      this.containingBlockTrap = null;
+      return;
+    }
+    const overlay = this.rootEl.querySelector(FIXED_OVERLAY_SELECTOR);
+    if (!overlay) return;
+    warnedContainingBlock = true;
+    // Said once; stop querying for the rest of this app's life.
+    this.containingBlockTrap = null;
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[aktion] <aktion-app> is inside ${trap}. That element becomes the containing block for ` +
+        `\`position: fixed\`, so <${describeElement(overlay)}> (and any other Modal / Sheet / ` +
+        "BottomSheet / Toasts / FAB) is positioned against it instead of the viewport — the " +
+        "overlay covers only the embed box. Move `<aktion-app>` out of that wrapper, or drop the " +
+        "property while an overlay is open. Anchored popups (menus, tooltips, selects) are " +
+        "unaffected: they use the browser top layer.",
+    );
+  }
+
+  /**
+   * Arm the strict-mode morph guard (see {@link morphGuard}). Returns whether
+   * the guard is running, so the render path can skip the snapshot work
+   * entirely in the default (non-strict) case.
+   */
+  private ensureMorphGuard(): boolean {
+    if (this.morphGuard) return true;
+    if (!this.hasAttribute("strict") || typeof MutationObserver === "undefined") return false;
+    this.imperativeAttrWrites = new Map();
+    this.morphGuard = new MutationObserver((records) => this.queueImperativeWrites(records));
+    this.morphGuard.observe(this.rootEl, { subtree: true, attributes: true });
+    return true;
+  }
+
+  private queueImperativeWrites(records: MutationRecord[]): void {
+    const seen = this.imperativeAttrWrites;
+    // Cap the map: a program that writes attributes in a loop must not turn a
+    // diagnostic into a leak. The first few hundred are plenty to find the bug.
+    if (!seen || seen.size >= 256) return;
+    for (const record of records) {
+      const name = record.attributeName;
+      if (record.type !== "attributes" || !name || !(record.target instanceof Element)) continue;
+      let attrs = seen.get(record.target);
+      if (!attrs) {
+        attrs = new Set();
+        seen.set(record.target, attrs);
+      }
+      attrs.add(name);
+    }
+  }
+
+  /**
+   * Snapshot every attribute written since the last commit, with the value the
+   * writer left behind. Draining the observer at the END of each commit is what
+   * keeps the reconciler's own writes out of this set, so what remains here is
+   * exactly the imperative writes an event handler (or a post-paint measure)
+   * made between two commits.
+   */
+  private snapshotImperativeWrites(): Array<[Element, string, string | null]> {
+    const guard = this.morphGuard;
+    const seen = this.imperativeAttrWrites;
+    if (!guard || !seen) return [];
+    this.queueImperativeWrites(guard.takeRecords());
+    const out: Array<[Element, string, string | null]> = [];
+    for (const [node, attrs] of seen) {
+      if (!node.isConnected) continue;
+      for (const attr of attrs) out.push([node, attr, node.getAttribute(attr)]);
+    }
+    seen.clear();
+    return out;
+  }
+
+  /**
+   * Report the first handler-only DOM write this commit undid. A value that
+   * survived the commit is fine — either the render reproduced it (the write
+   * was a genuine optimisation over real state) or the attribute is one the
+   * reconciler treats as element-owned (a promoted floating panel, a
+   * `data-rui-preserve` widget, `<details open>`).
+   */
+  private checkImperativeWrites(before: ReadonlyArray<[Element, string, string | null]>): void {
+    const guard = this.morphGuard;
+    if (!guard) return;
+    guard.takeRecords();
+    this.imperativeAttrWrites?.clear();
+    if (this.warnedMorphRevert) return;
+    for (const [node, attr, value] of before) {
+      // A node the commit removed was not "reverted" — it is simply gone.
+      if (!node.isConnected || node.getAttribute(attr) === value) continue;
+      this.warnedMorphRevert = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[aktion] strict: this commit reverted \`${attr}\` on <${describeElement(node)}> — it was ` +
+          "written straight onto the live DOM by a handler, and the render does not reproduce it, " +
+          "so the reconciler removed it again. Back the value with `helpers.setState` (when the " +
+          "prop is $-bound) or `helpers.useInstanceState`, and emit the attribute from that value " +
+          "during render; keep the direct write as an optimisation only. See the morph contract in " +
+          "src/renderer/renderer.ts.",
+      );
+      return;
+    }
+  }
+
   disconnectedCallback(): void {
     this.effectRunner.reset();
     if (this.context) disposeContext(this.context);
+    this.morphGuard?.disconnect();
+    this.morphGuard = null;
+    this.imperativeAttrWrites = null;
     this.router.stop();
     if (this.devtoolsRegistered) {
       unregisterDevtoolsApp(this.devtoolsId);
@@ -872,6 +1094,11 @@ export class AktionElement extends HTMLElement {
     this.errorEl.hidden = true;
     this.errorEl.replaceChildren();
     this.rootEl.replaceChildren();
+    // A fresh program gets a fresh strict-mode diagnostic, and the queued
+    // writes point at nodes that no longer exist.
+    this.morphGuard?.takeRecords();
+    this.imperativeAttrWrites?.clear();
+    this.warnedMorphRevert = false;
     // Drop any cached active match — the next render will recompute from
     // the current path against whatever routes the new program declares.
     this.router.setActiveMatch(null, {});
@@ -1286,10 +1513,18 @@ export class AktionElement extends HTMLElement {
         }
         throw err;
       }
+      // Strict mode only: remember what handlers wrote on the live DOM since
+      // the last commit, then report anything this commit undoes (S1204 — a
+      // handler-only write has no source of truth the render can reproduce).
+      const guarded = this.ensureMorphGuard();
+      const imperativeWrites = guarded ? this.snapshotImperativeWrites() : [];
       morphChildren(this.rootEl, rendered);
+      if (guarded) this.checkImperativeWrites(imperativeWrites);
       this.renderer.endRender();
       this.restoreFocus(focusSnapshot);
       renderCompleted = true;
+      // No-op unless an ancestor of the host traps `position: fixed`.
+      if (this.containingBlockTrap) this.reportTrappedOverlay();
 
       // DevTools: publish this commit (timing + per-component records) to the
       // render profiler. `changedPaths`/`memoize` are still in scope here.

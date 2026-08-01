@@ -11,43 +11,20 @@
  *   - PascalCase component calls
  *   - reserved handles (`route`, `aktion`)
  *
- * Resolves the language surface from the repo's built `dist/language.js`, or
- * falls back to the TypeScript source via a tiny esbuild transform.
+ * The language surface is resolved by `scripts/load-surface.mjs` (built
+ * `dist/language.js`, else the TypeScript source via esbuild).
  */
 
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import { loadSurface } from "./load-surface.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(here, "../../..");
 
-async function bundleFromSource() {
-  const { build } = await import("esbuild");
-  const out = resolve(here, ".gen-grammar.tmp.mjs");
-  await build({
-    entryPoints: [resolve(repoRoot, "src/language-api.ts")],
-    outfile: out,
-    bundle: true,
-    format: "esm",
-    platform: "node",
-    logLevel: "silent",
-  });
-  return await import(`${pathToFileURL(out).href}?t=${Date.now()}`);
-}
-
-async function loadSurface() {
-  const built = resolve(repoRoot, "dist/language.js");
-  if (existsSync(built)) {
-    const mod = await import(pathToFileURL(built).href);
-    // A stale `dist/language.js` (predating the builtin catalog) lacks the
-    // export — fall back to bundling the TS source so the build still works.
-    if (Array.isArray(mod.builtinCatalog)) return mod;
-  }
-  return await bundleFromSource();
-}
-
-const surface = await loadSurface();
+// A stale `dist/language.js` (predating the builtin catalog) lacks the export —
+// treat it as unusable so the loader bundles the TS source instead.
+const surface = await loadSurface((mod) => Array.isArray(mod.builtinCatalog));
 const builtinNames = surface.builtinCatalog.map((b) => b.name).join("|");
 
 const grammar = {

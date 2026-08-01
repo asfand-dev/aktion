@@ -1,0 +1,20 @@
+<!--
+  JetBrains Marketplace plugin icon. 40x40 is the required intrinsic size.
+  `pluginIcon_dark.svg` would override this in dark themes; the mark is legible
+  on both, so one file is enough.
+
+  The indigo is the runtime's own `colorPrimary` (#4f46e5) from src/theme/index.ts.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40" role="img" aria-label="Aktion">
+  <defs>
+    <linearGradient id="aktionBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <rect width="40" height="40" rx="9" fill="url(#aktionBg)"/>
+  <!-- Stylised "A": two strokes plus the crossbar, drawn as paths so the mark
+       stays crisp at 16px in the plugins list. -->
+  <path d="M20 9.5 L29.5 30.5 L24.9 30.5 L20 19.2 L15.1 30.5 L10.5 30.5 Z" fill="#ffffff"/>
+  <rect x="15.4" y="23.1" width="9.2" height="3.4" rx="1.7" fill="#ffffff"/>
+</svg>

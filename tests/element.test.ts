@@ -8,6 +8,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "../src/index.js";
+import { builtInThemes } from "../src/theme/index.js";
 
 const flush = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
@@ -275,11 +276,20 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
   });
 
   it("applies CSS custom properties for built-in themes", () => {
+    // Assert against each theme's OWN declared value rather than a hardcoded
+    // literal. What this test exists to prove is that switching the attribute
+    // writes the token onto the host — the specific hex is incidental, and
+    // pinning it made a legitimate accessibility fix (soft's primary was 2.72:1
+    // as text) look like a regression.
     const el = create();
-    el.setAttribute("theme", "modern");
-    expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#111827");
-    el.setAttribute("theme", "soft");
-    expect(el.style.getPropertyValue("--rui-color-primary")).toBe("#a78bfa");
+    for (const name of ["modern", "soft"] as const) {
+      el.setAttribute("theme", name);
+      expect(el.style.getPropertyValue("--rui-color-primary"))
+        .toBe(builtInThemes[name].colorPrimary);
+    }
+    // …and the two themes must genuinely differ, or the assertion above could
+    // pass while nothing was being applied at all.
+    expect(builtInThemes.modern.colorPrimary).not.toBe(builtInThemes.soft.colorPrimary);
   });
 
   it("preserves DOM identity for non-text input types (email/number)", async () => {

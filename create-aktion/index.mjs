@@ -19,7 +19,7 @@
 
 import { cp, readFile, writeFile, rename, readdir, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { dirname, join, resolve, basename } from "node:path";
+import { dirname, join, resolve, basename, isAbsolute, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
 import process from "node:process";
@@ -129,6 +129,36 @@ function deepMerge(base, over) {
 
 const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+/**
+ * Reject a project name that would write outside the current directory or
+ * confuse a downstream tool. Returns an error message, or `null` when the name
+ * is usable. A single trailing path segment (`my-app`) or a nested one
+ * (`apps/my-app`) is allowed; anything reaching upward or sideways is not.
+ */
+function validateProjectName(name) {
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(name)) return "Project name contains control characters.";
+  if (name.startsWith("-")) return `Project name cannot start with "-" (it reads as a command-line flag).`;
+  if (name.startsWith("~")) return `Project name cannot start with "~".`;
+  if (isAbsolute(name) || /^[A-Za-z]:/.test(name)) return "Project name must be relative, not an absolute path.";
+  const segments = name.split(/[/\\]/);
+  if (segments.some((s) => s === ".." )) return `Project name cannot contain ".." segments.`;
+  if (segments.some((s) => s === "")) return "Project name contains an empty path segment.";
+  // Windows-reserved device names, which cannot be created as directories.
+  if (segments.some((s) => /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(s))) {
+    return "Project name uses a reserved device name.";
+  }
+  return null;
+}
+
+/** True when `target` is the cwd or sits underneath it. */
+function isInsideCwd(target) {
+  const root = resolve(process.cwd());
+  const candidate = resolve(target);
+  if (candidate === root) return false; // scaffolding over the cwd itself
+  return candidate.startsWith(root.endsWith(sep) ? root : root + sep);
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) return printHelp();
@@ -175,7 +205,22 @@ async function main() {
       process.exit(1);
     }
 
+    // The name becomes a filesystem path, so it must not escape the current
+    // directory. `..` segments, an absolute path, a `~`, control characters, or
+    // a leading `-` (which downstream tools read as a flag) are all refused
+    // rather than normalised — a scaffolder writing outside the directory the
+    // user is standing in is never what they meant.
+    const nameError = validateProjectName(name);
+    if (nameError) {
+      console.error(c.red(nameError));
+      process.exit(1);
+    }
+
     const target = resolve(process.cwd(), name);
+    if (!isInsideCwd(target)) {
+      console.error(c.red(`Refusing to create "${name}" outside the current directory.`));
+      process.exit(1);
+    }
     if (!(await isEmptyDir(target))) {
       console.error(c.red(`Directory "${name}" already exists and is not empty.`));
       process.exit(1);

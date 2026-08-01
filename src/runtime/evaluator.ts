@@ -460,14 +460,103 @@ function writeUrlQuery(ctx: EvaluationContext, params: Record<string, string>): 
  * (`toString`, `constructor`, `hasOwnProperty`, …) are skipped so a bare
  * undeclared identifier can't accidentally resolve to prototype noise.
  *
- * Security note: this is a deliberate full passthrough to the embedding
- * realm. The runtime already executes author-supplied code through this
- * evaluator, so surfacing capability-granting globals does not widen the
- * trust boundary beyond what the host page already grants the script.
+ * SECURITY — READ THIS BEFORE CHANGING THE DEFAULT.
+ *
+ * Under the default `"all"` policy this is a full passthrough to the embedding
+ * realm, which means **an Aktion program is as privileged as a `<script>` tag**:
+ * it can reach `eval`, `Function`, `document`, `fetch`, `localStorage`, and
+ * everything else on `globalThis`. That is a deliberate design choice — the
+ * language is meant to be a productive authoring surface for code you trust —
+ * but it has a consequence that is easy to miss:
+ *
+ *   The per-sink sanitisers elsewhere in this library (`sanitiseHref`,
+ *   `sanitiseSvgMarkup`, the Markdown escaper, the `$head` allow-lists) defend
+ *   **untrusted DATA flowing through a trusted program** — an API response, a
+ *   chat message, a tool result, a URL parameter. They do NOT contain a hostile
+ *   program *author*, and cannot: such an author would simply call `eval`.
+ *
+ * So if the program text itself can come from somewhere you do not trust — a
+ * prompt-injectable LLM, a multi-tenant database, a user-editable template —
+ * you must narrow this surface with {@link setGlobalAccessPolicy}. Otherwise
+ * treat authoring a program as equivalent to shipping a script.
  */
+export type GlobalAccessPolicy = "all" | "safe" | readonly string[];
+
+/**
+ * Globals reachable under the `"safe"` policy: data types, formatting, and
+ * encoding — capabilities a program needs to compute with values, but none that
+ * grant code execution, DOM access, network access, or persistence.
+ *
+ * Excluded on purpose: `eval` / `Function` / `WebAssembly` (code execution),
+ * `window` / `self` / `globalThis` / `top` / `parent` / `frames` / `document`
+ * (which re-expose everything, including the excluded names), `fetch` /
+ * `XMLHttpRequest` / `EventSource` / `WebSocket` / `navigator` / `Worker`
+ * (network + threads — `$http` is the vetted path), `localStorage` /
+ * `sessionStorage` / `indexedDB` / `caches` (persistence — `storage` is the
+ * vetted path), and `import` / `Reflect` / `Proxy` (reflection escapes).
+ *
+ * Exported so a host can SHOW the surface it is granting (the playground lists
+ * these names in autocomplete) and so tooling never has to hand-maintain a
+ * second copy of the allow-list.
+ */
+export const SAFE_HOST_GLOBALS: ReadonlySet<string> = new Set([
+  // Values and collections
+  "BigInt", "Symbol", "Map", "Set", "WeakMap", "WeakSet", "Promise",
+  "ArrayBuffer", "DataView", "Int8Array", "Uint8Array", "Uint8ClampedArray",
+  "Int16Array", "Uint16Array", "Int32Array", "Uint32Array",
+  "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
+  // Formatting / parsing
+  "Intl", "RegExp", "Error", "TypeError", "RangeError", "SyntaxError",
+  "isNaN", "isFinite", "parseInt", "parseFloat",
+  // Encoding
+  "atob", "btoa", "TextEncoder", "TextDecoder",
+  "encodeURIComponent", "decodeURIComponent", "encodeURI", "decodeURI",
+  "structuredClone",
+  // URL parsing (inert: parses and formats, performs no request)
+  "URL", "URLSearchParams",
+  // Inert data containers
+  "Blob", "File", "FormData", "Headers",
+  // Diagnostics (no capability beyond writing to the devtools console)
+  "console",
+]);
+
+let globalAccessPolicy: GlobalAccessPolicy = "all";
+
+/**
+ * Narrow which host JavaScript globals an Aktion program may reach.
+ *
+ *   - `"all"` (default) — the full `globalThis` surface, including `eval` and
+ *     `Function`. Appropriate only when program text is as trusted as your own
+ *     source code.
+ *   - `"safe"` — the {@link SAFE_HOST_GLOBALS} allow-list: data, formatting,
+ *     and encoding, with no code-execution / DOM / network / storage capability.
+ *     Use this whenever program text may come from an untrusted source.
+ *   - an explicit array — exactly those names, and nothing else.
+ *
+ * The curated `GLOBAL_NAMESPACES` fast path (`Math`, `JSON`, `Object`, …) and
+ * the runtime's own namespaces (`$http`, `storage`, …) are unaffected: they are
+ * resolved before this passthrough and are already a vetted surface.
+ */
+export function setGlobalAccessPolicy(policy: GlobalAccessPolicy): void {
+  globalAccessPolicy = policy;
+}
+
+/** The active policy (see {@link setGlobalAccessPolicy}). */
+export function getGlobalAccessPolicy(): GlobalAccessPolicy {
+  return globalAccessPolicy;
+}
+
+function isGlobalAllowed(name: string): boolean {
+  const policy = globalAccessPolicy;
+  if (policy === "all") return true;
+  if (policy === "safe") return SAFE_HOST_GLOBALS.has(name);
+  return policy.includes(name);
+}
+
 function lookupHostGlobal(name: string): { found: boolean; value: unknown } {
   if (typeof globalThis === "undefined") return { found: false, value: undefined };
   if (name in Object.prototype) return { found: false, value: undefined };
+  if (!isGlobalAllowed(name)) return { found: false, value: undefined };
   const g = globalThis as Record<string, unknown>;
   if (name in g) return { found: true, value: g[name] };
   return { found: false, value: undefined };
@@ -3692,6 +3781,10 @@ function evaluateMethodCall(
   if (target == null) {
     return expr.optional ? undefined : null;
   }
+  // Method dispatch resolves properties on its own, so it needs the same guard
+  // as the member-read paths. `f.constructor("…")` on any lambda would
+  // otherwise hand the program `Function`.
+  if (FORBIDDEN_PROPERTY_NAMES.has(expr.method)) return null;
   // `store.method(args)` — dispatch to the store's pre-bound method (which
   // injects the handle). Methods live on `__methods`, not on the handle
   // object itself, so this lookup must precede the generic property path.
@@ -5034,6 +5127,9 @@ function evaluateSyntheticAssign(
         }
         if (parent && typeof parent === "object") {
           const key = extracted.path[extracted.path.length - 1]!;
+          // This branch writes IN PLACE (see the comment above), so unlike the
+          // immutable `setPath` route it needs its own prototype guard.
+          if (FORBIDDEN_PROPERTY_NAMES.has(key)) return null;
           const current = (parent as Record<string, unknown>)[key];
           const next = applyAssignOp(op, current, rhs);
           (parent as Record<string, unknown>)[key] = next;
@@ -5068,6 +5164,11 @@ function evaluateSyntheticAssign(
       ? evaluate(targetExpr.computed, ctx)
       : targetExpr.property;
     if (root && typeof root === "object" && key != null) {
+      // In-place write with a key that may be any computed expression, so
+      // `$o[someUntrustedKey] = …` lands here. A prototype-reaching key would
+      // invoke the `__proto__` setter and re-parent the object, which is how a
+      // poisoned `toString`/`valueOf`/`then` gets smuggled into host logic.
+      if (FORBIDDEN_PROPERTY_NAMES.has(String(key))) return null;
       const current = (root as Record<string, unknown>)[String(key)];
       const next = applyAssignOp(op, current, rhs);
       (root as Record<string, unknown>)[String(key)] = next;
@@ -5277,6 +5378,8 @@ function buildRouteState(router: NonNullable<EvaluationContext["router"]>): Reco
 
 function computedMemberAccess(target: unknown, key: unknown): unknown {
   if (target == null) return undefined;
+  // `obj["cons" + "tructor"]` must be refused exactly like `obj.constructor`.
+  if (typeof key === "string" && FORBIDDEN_PROPERTY_NAMES.has(key)) return undefined;
 
   if (Array.isArray(target)) {
     const index = toArrayIndex(key, target.length);
@@ -5312,8 +5415,28 @@ function toArrayIndex(key: unknown, length: number): number | null {
   return index;
 }
 
+/**
+ * Property names that must never be readable from DSL, on any value.
+ *
+ * `constructor` is the important one: given any function value — and a lambda
+ * (`() => 1`) is a real JS function — `f.constructor` is `Function`, so
+ * `f.constructor("…")()` is arbitrary code execution. `__proto__` and
+ * `prototype` reach the shared prototype objects, which is how a program
+ * pollutes `Object.prototype` for the whole host page.
+ *
+ * This has to be enforced on every read path (dot access, computed access, and
+ * method-call dispatch), because each resolves properties independently. It is
+ * what makes {@link setGlobalAccessPolicy} meaningful: without it, narrowing
+ * the global surface accomplishes nothing, since `Function` is reachable
+ * through any lambda the program can write.
+ */
+const FORBIDDEN_PROPERTY_NAMES: ReadonlySet<string> = new Set([
+  "constructor", "__proto__", "prototype",
+]);
+
 function memberAccess(target: unknown, property: string): unknown {
   if (target == null) return undefined;
+  if (FORBIDDEN_PROPERTY_NAMES.has(property)) return undefined;
   if (Array.isArray(target)) {
     // A handful of "array-shaped" properties LLMs reach for reflexively.
     // Resolving them here means common JS idioms (`$todos.length`,

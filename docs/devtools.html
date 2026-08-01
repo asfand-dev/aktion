@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DevTools · Aktion</title>
-  <meta name="description" content="Aktion DevTools — a real, in-page debugger for any <aktion-app>. Inspect and edit live reactive $state with per-atom reactivity heat, profile every render commit (mount/update/memoized) with a flamegraph, performance-summary stats, hot-path insights, and a ranked sortable component table, and watch every effect on a visual timeline with run/error insights. The React/Vue DevTools experience, built on Aktion's own runtime signals." />
+  <meta name="description" content="Aktion DevTools — an in-page debugger for any <aktion-app>. Mount it with one line, then inspect and edit live $state, profile every render commit with a commit strip and flamegraph, and watch every effect on a timeline. Full API reference for mountDevtools(), the controller, and the global hook, plus colour legends and a troubleshooting guide." />
   <script>
     (function () {
       try {
@@ -15,26 +15,33 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
-    .dt-demo {
-      border: 1px solid var(--doc-border, #e2e8f0);
-      border-radius: 14px;
-      overflow: hidden;
-      margin: 1.5rem 0;
-      background: var(--doc-surface, #fff);
+    .callout {
+      border: 1px solid var(--doc-border);
+      border-left: 4px solid var(--doc-accent, #6366f1);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 18px 0;
+      background: var(--doc-surface-elev);
     }
-    .dt-demo-bar {
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout h4 { margin: 0 0 6px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
+    /* Launch bar above the live demo. */
+    .dt-launch-bar {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--doc-border, #e2e8f0);
-      background: var(--doc-surface-2, #f8fafc);
       flex-wrap: wrap;
+      padding: 10px 14px;
+      margin: 18px 0 -10px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      background: var(--doc-surface-elev);
     }
-    .dt-demo-bar .dt-launch {
+    .dt-launch-bar .dt-launch {
       appearance: none;
       border: none;
       border-radius: 8px;
@@ -45,10 +52,51 @@
       cursor: pointer;
       font-size: 14px;
     }
-    .dt-demo-bar .dt-launch:hover { background: #94b0ff; }
-    .dt-demo-bar .dt-hint { color: var(--doc-text-dim, #64748b); font-size: 13px; }
-    .dt-demo-stage { padding: 18px; min-height: 220px; }
-    .dt-demo-stage aktion-app { display: block; }
+    .dt-launch-bar .dt-launch:hover { background: #94b0ff; }
+    .dt-launch-bar .dt-hint { color: var(--doc-text-muted); font-size: 13px; }
+    /* Swatches for the colour-legend tables. */
+    .dt-sw {
+      display: inline-block;
+      width: 11px;
+      height: 11px;
+      border-radius: 3px;
+      margin-right: 7px;
+      vertical-align: -1px;
+      border: 1px solid rgba(0, 0, 0, .25);
+    }
+    /* Live demo */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
   </style>
 </head>
 <body data-page="devtools">
@@ -60,245 +108,917 @@
         <span class="hero-eyebrow">Quality</span>
         <h1>DevTools.</h1>
         <p class="lead">
-          <strong>Aktion DevTools</strong> (<code>aktion-runtime/devtools</code>) is a
-          real, in-page debugger for any <code>&lt;aktion-app&gt;</code> on the
-          page &mdash; the Aktion equivalent of the React / Vue DevTools, built
-          on Aktion&rsquo;s own runtime signals. Inspect and edit live reactive
-          <code>$state</code>, profile every render commit, and watch a
-          timeline of every effect as it mounts, runs, and cleans up.
+          <code>aktion-runtime/devtools</code> is an in&#8209;page debugger for every
+          <code>&lt;aktion-app&gt;</code> on the document. You mount it yourself with one
+          line &mdash; there is no browser extension to install &mdash; and you get three
+          tabs over the running program: a live editable <code>$state</code> tree, a render
+          profiler, and an effect timeline.
         </p>
       </header>
 
-      <h2 id="try-it">Try it live</h2>
+      <h2 id="overview">What it is</h2>
       <p>
-        The little app below is a normal <code>&lt;aktion-app&gt;</code>. Click
-        <strong>Launch DevTools</strong> to open the inspector docked to the
-        corner of this page, then poke at the app &mdash; increment the counter,
-        toggle the checkbox, watch the uptime ticker &mdash; and see the three
-        panels react in real time.
+        DevTools is a second, opt&#8209;in entry point of the same package. It renders a
+        draggable panel inside its own shadow root, so it cannot be restyled by the app it
+        inspects and can still debug a program that is throwing.
       </p>
-
-      <div class="dt-demo">
-        <div class="dt-demo-bar">
-          <button class="dt-launch" id="dt-launch" type="button">⚡ Launch DevTools</button>
-          <span class="dt-hint">Opens a draggable, resizable panel pinned to the corner. Click again to toggle.</span>
-        </div>
-        <div class="dt-demo-stage">
-          <aktion-app id="devtools-demo-app" data-devtools-label="Demo app" data-theme-managed="true" theme="light"></aktion-app>
-        </div>
-      </div>
-
-      <p class="muted">The program driving the demo:</p>
-<pre><code id="dt-demo-program">$count = 0
-$seconds = 0
-$user = { name: "Ada", role: "engineer", prefs: { notify: true, theme: "dark" } }
-$tags = ["state", "renders", "effects"]
-
-// An interval effect — runs every second, so the Effect timeline fills up live.
-$effect(() => { $seconds = $seconds + 1 }, ["every(1000)"])
-
-// A user component — appears as its own instance in the Render profiler.
-function Stat(label, value, tone) {
-  return Card([
-    Column([
-      Text(label, { variant: "small", tone: "muted" }),
-      Text(value, { variant: "title" }),
-      Badge(tone, { tone: tone })
-    ], { gap: "xs" })
-  ])
-}
-
-$app(Column([
-  CardHeader("DevTools demo", { subtitle: "Open the inspector, then interact." }),
-  Row([
-    Stat("Count", `${$count}`, "info"),
-    Stat("Uptime", `${$seconds}s`, "success")
-  ], { grow: true }),
-  Row([
-    Button("Increment", { onClick: () =&gt; $count = $count + 1, variant: "primary" }),
-    Button("Reset", { onClick: () =&gt; $count = 0, variant: "secondary" })
-  ]),
-  Separator(),
-  Checkbox("notify", { label: "Email notifications", value: $user.prefs.notify }),
-  Text(`Signed in as ${$user.name} (${$user.role})`, { variant: "small", tone: "muted" })
-]))</code></pre>
-
-      <h2 id="how-it-works">How it works</h2>
+      <table class="signature-table">
+        <thead><tr><th>Tab</th><th>Answers</th><th>The number on the tab</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>State</code></td>
+            <td>What is <code>$state</code> right now, what just changed, and which atom churns most?</td>
+            <td>Reactive atoms in the snapshot</td>
+          </tr>
+          <tr>
+            <td><code>Profiler</code></td>
+            <td>What re&#8209;rendered on this commit, <em>why</em>, and how long did each body take?</td>
+            <td>Commits captured</td>
+          </tr>
+          <tr>
+            <td><code>Effects</code></td>
+            <td>Which effect ran, what fired it, how long it took, and did it throw?</td>
+            <td>Effect events captured</td>
+          </tr>
+        </tbody>
+      </table>
       <p>
-        DevTools mirrors the architecture of the browser DevTools: a
-        <strong>backend</strong> (the runtime) and a <strong>frontend</strong>
-        (the panel) that only ever talk through a structured event protocol.
-      </p>
-      <ul>
-        <li>
-          <strong>The runtime always emits to a global hook</strong>
-          (<code>window.__AKTION_DEVTOOLS_HOOK__</code>), exactly like React&rsquo;s
-          <code>__REACT_DEVTOOLS_GLOBAL_HOOK__</code>. Until a frontend installs
-          that hook <em>and</em> subscribes, every emit is a single
-          property-read no-op &mdash; so production bundles that never open
-          DevTools pay essentially nothing.
-        </li>
-        <li>
-          <strong>The panel is a separate, opt-in entry</strong>
-          (<code>aktion-runtime/devtools</code>). It installs the hook, adopts every
-          <code>&lt;aktion-app&gt;</code> on the page, and renders inside its own
-          shadow root &mdash; fully isolated from the app it inspects, so it can
-          debug even a broken program without sharing its fate.
-        </li>
-        <li>
-          <strong>Everything is the real runtime.</strong> State edits flow back
-          through the genuine reactive pipeline; the profiler reads the actual
-          per-instance memoization decisions; the effect timeline is fed by the
-          real effect runner. Nothing is mocked.
-        </li>
-      </ul>
-
-      <h2 id="state-inspector">State inspector</h2>
-      <p>
-        A live, editable tree of every reactive <code>$state</code> atom. Expand
-        objects and arrays to any depth, filter by name, and
-        <strong>click any value to edit it</strong> &mdash; the edit is parsed
-        (JSON first, then bare string) and written through the same path the
-        runtime uses, so dependents re-render and computed atoms re-derive
-        exactly as a real event handler would. Dotted edits
-        (<code>user.prefs.notify</code>) reconstruct the object immutably, so
-        sibling fields are preserved. Atoms flash as they change, and runtime-owned
-        atoms (like <code>route</code>) are shown but marked read-only.
-      </p>
-      <p>
-        Each atom also carries a <strong>reactivity-heat badge</strong> &mdash; a
-        small bar and count of how often it has changed this session &mdash; so
-        the busiest state stands out instantly. Hit <strong>Sort by
-        activity</strong> to rank atoms by change frequency and find what your UI
-        actually churns on.
-      </p>
-<pre><code>import { mountDevtools } from "aktion-runtime/devtools";
-mountDevtools();        // attaches to every &lt;aktion-app&gt; on the page</code></pre>
-
-      <h2 id="render-profiler">Render profiler</h2>
-      <p>
-        Every commit is captured with its trigger, total duration, and a
-        per-component breakdown. The <strong>commit strip</strong> shows each
-        render as a bar (green = initial mount, amber = full render, blue =
-        incremental); click one to inspect it. The <strong>flamegraph</strong>
-        lists every component instance in that commit, indented by tree depth and
-        coloured by phase:
-      </p>
-      <ul>
-        <li><strong>mount</strong> &mdash; the instance appeared for the first time;</li>
-        <li><strong>update</strong> &mdash; it re-evaluated, with the reason (an arg changed, a <code>$state</code> dependency changed, or a forced full render);</li>
-        <li><strong>memoized</strong> &mdash; its body was skipped because neither its args nor the <code>$state</code> paths it reads changed.</li>
-      </ul>
-      <p>
-        A ranked <strong>components</strong> table aggregates render counts,
-        total / average / <strong>max</strong> self-time and memo skips across
-        captured commits &mdash; click any column header to sort &mdash; so you
-        can spot hot paths at a glance. Above it, a <strong>performance
-        summary</strong> shows headline numbers (total render time, average and
-        slowest commit, memoization ratio, full-render count, commit rate), a
-        <strong>reactivity</strong> panel ranks the <code>$state</code> paths
-        that triggered the most commits, and an <strong>insights</strong> list
-        calls out likely problems &mdash; heavy component bodies, components that
-        re-render without ever memoizing, and bursts of forced full renders.
-        Flip on <strong>Flash on commit</strong> to outline the app element every
-        time it re-renders.
-      </p>
-
-      <h2 id="effect-timeline">Effect timeline</h2>
-      <p>
-        A stream of every effect lifecycle transition &mdash;
-        <code>mount</code>, <code>run</code>, <code>cleanup</code>,
-        <code>unmount</code>, and <code>error</code> &mdash; each attributed to
-        the trigger that fired it: a <code>$state</code> change
-        (<code>state:count</code>), an interval tick
-        (<code>every(1000)</code>), or a lifecycle event. A
-        <strong>visual timeline</strong> plots every event for each effect along
-        a shared time axis &mdash; coloured by phase &mdash; so bursts,
-        overlapping runs, and cleanup&rarr;run pairing are obvious at a glance
-        (toggle to a flat <strong>Log</strong> view when you want exact
-        ordering). An <strong>effect summary</strong> totals runs, run time,
-        cleanups, and errors, while <strong>insights</strong> flag effects that
-        re-ran excessively (a hot trigger or over-broad dependency list), did
-        heavy work per run, or threw. Per-effect <strong>lanes</strong> summarise
-        run counts and total time, and you can filter by phase. Component-scoped
-        effects (declared inside a <code>function</code> body) are tagged
-        <em>instance</em> and correctly report their <code>unmount</code> when the
-        component leaves the tree.
+        Everything you see is the real runtime. State edits go through the genuine reactive
+        pipeline, the profiler reads the actual per&#8209;instance memoization decisions, and
+        the timeline is fed by the real effect runner. Nothing is simulated.
       </p>
 
       <h2 id="enable">Enable it</h2>
-      <p>One line, from any page that already loads Aktion:</p>
-<pre><code>import "aktion-runtime";                  // registers &lt;aktion-app&gt;
+      <p>
+        The runtime never installs the panel. You do, from anywhere in your own code, and
+        the whole surface is one function call.
+      </p>
+
+      <h3 id="from-a-bundler">From a bundler</h3>
+<pre><code>import "aktion-runtime";                              // registers &lt;aktion-app&gt;
 import { mountDevtools } from "aktion-runtime/devtools";
 
-mountDevtools();</code></pre>
-      <p>Or straight from a CDN, as ES modules:</p>
+mountDevtools();   // opens immediately, attaches to every app on the page</code></pre>
+      <p>
+        That is the whole setup. <code>mountDevtools()</code> installs the global hook,
+        appends the panel to <code>document.body</code>, and adopts every
+        <code>&lt;aktion-app&gt;</code> already in the document &mdash; including apps that
+        mounted long before the panel opened.
+      </p>
+
+      <h3 id="from-a-cdn">From a CDN</h3>
 <pre><code>&lt;script type="module"&gt;
   import "https://cdn.jsdelivr.net/npm/aktion-runtime/dist/aktion.js";
   import { mountDevtools } from "https://cdn.jsdelivr.net/npm/aktion-runtime/dist/devtools.js";
   mountDevtools();
 &lt;/script&gt;</code></pre>
       <p>
-        <code>mountDevtools()</code> returns a controller
-        (<code>{ element, hook, open, close, toggle, selectApp, destroy }</code>) so
-        you can bind it to a keyboard shortcut or a &ldquo;debug&rdquo; button
-        and ship it behind a flag. Because the hook is shared, multiple panels
-        cooperate on one event stream.
+        Both bundles are self&#8209;contained ES modules, so no build step is involved. The
+        DevTools bundle talks to the runtime only through the global hook, which is why
+        loading them from two different URLs still works.
+      </p>
+
+      <h3 id="behind-a-flag">Behind a flag or a keyboard shortcut</h3>
+      <p>
+        Because it is a separate entry, a dynamic <code>import()</code> keeps the panel out
+        of your main chunk entirely until someone asks for it.
+      </p>
+<pre><code>let devtools = null;
+
+async function toggleDevtools() {
+  if (!devtools) {
+    const { mountDevtools } = await import("aktion-runtime/devtools");
+    devtools = mountDevtools();     // first press mounts it, already open
+  } else {
+    devtools.toggle();              // later presses just show / hide
+  }
+}
+
+// Ctrl+Shift+D, or ?debug in the URL.
+addEventListener("keydown", (e) =&gt; {
+  if (e.ctrlKey &amp;&amp; e.shiftKey &amp;&amp; e.key === "D") toggleDevtools();
+});
+if (new URLSearchParams(location.search).has("debug")) toggleDevtools();</code></pre>
+      <p>
+        Aktion ships no keyboard shortcut of its own, so the binding above is yours to
+        choose. Mount once and keep the controller: every call to
+        <code>mountDevtools()</code> adds another panel element, even though they all share
+        one hook and one event stream.
       </p>
       <div class="callout">
+        <h4>Client only</h4>
         <p>
-          <strong>Zero-cost when closed.</strong> If you never import
-          <code>aktion-runtime/devtools</code>, the runtime&rsquo;s instrumentation is
-          dormant &mdash; no profiling bookkeeping, no event allocation. Open the
-          panel and it lights up on the next render.
+          <strong><code>mountDevtools()</code> needs a live <code>document</code>.</strong>
+          Under SSR or a framework that renders on the server, call it from a
+          client&#8209;only effect (<code>useEffect</code>, <code>onMounted</code>, a
+          <code>&lt;script&gt;</code> in the browser bundle), never at module scope in shared
+          code.
         </p>
       </div>
 
-      <h2 id="more">Keep exploring</h2>
+      <h2 id="try-it">Try it live</h2>
+      <p>
+        The app below is an ordinary <code>&lt;aktion-app&gt;</code> rendered from the program
+        on the left. Press <strong>Launch DevTools</strong> to open the real panel over this
+        page, then interact with the app and watch the three tabs fill up.
+      </p>
+
+      <div class="dt-launch-bar">
+        <button class="dt-launch" id="dt-launch" type="button">Launch DevTools</button>
+        <span class="dt-hint">Drag the panel by its header, resize it from the corner grip, press again to toggle.</span>
+      </div>
+
+      <div class="lay-demo" data-devtools-label="Docs demo app">
+        <span class="lay-demo-label">Live &mdash; the program the panel inspects</span>
+<pre><code>$count = 0
+$seconds = 0
+$user = { name: "Ada", role: "engineer", prefs: { notify: true } }
+
+// An interval effect: one `run` event per second, so the Effect timeline fills live.
+$effect(() =&gt; { $seconds = $seconds + 1 }, ["every(1000)"])
+
+// A user component: its own instance, and its own memo record, in the profiler.
+function Stat(label, value, tone) {
+  return Card([Column([
+    Text(label, { variant: "small", tone: "muted" }),
+    Text(value, { variant: "title" }),
+    Badge(tone, { tone: tone })
+  ], { gap: "xs" })])
+}
+
+$app(Column([
+  CardHeader("DevTools demo", { subtitle: "Open the inspector, then interact." }),
+  Row([Stat("Count", `${$count}`, "info"), Stat("Uptime", `${$seconds}s`, "success")], { grow: true }),
+  Button("Increment", { onClick: () =&gt; $count = $count + 1, variant: "primary" }),
+  Text(`Signed in as ${$user.name} (${$user.role})`, { variant: "small", tone: "muted" })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <p>Three things to look at, in order:</p>
+      <ul>
+        <li>
+          <strong>State</strong> &mdash; expand <code>user</code>, then <code>prefs</code>,
+          click <code>notify</code>, type <code>false</code>, press Enter. The write lands in
+          the real store and the app re&#8209;renders.
+        </li>
+        <li>
+          <strong>Profiler</strong> &mdash; press <em>Increment</em> a few times. Each press
+          adds one blue bar to the commit strip; the first bar of the session is green.
+        </li>
+        <li>
+          <strong>Effects</strong> &mdash; the <code>every(1000)</code> effect adds a
+          <code>run</code> event per second, so its lane grows while you read this.
+        </li>
+      </ul>
+
+      <h2 id="state-inspector">State inspector</h2>
+      <p>
+        The State tab is a live tree of every reactive <code>$state</code> atom, updated on
+        every state flush &mdash; including flushes the render gate decides not to re&#8209;render
+        for. So the tree mirrors the store even when the screen does not move.
+      </p>
+
+      <h3 id="reading-the-tree">Reading the tree</h3>
+      <p>
+        One row per atom, indented by depth. Values are coloured by type and collapsed to a
+        preview until you expand them.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>You see</th><th>It means</th></tr></thead>
+        <tbody>
+          <tr><td><code>▸</code> / <code>▾</code></td><td>An object or array with at least one entry. Click to expand or collapse.</td></tr>
+          <tr><td><code>•</code></td><td>A leaf &mdash; a scalar, an empty object or array, or a function.</td></tr>
+          <tr><td><code>Array(12)</code></td><td>Array preview, with its length.</td></tr>
+          <tr><td><code>{ name, role, prefs }</code></td><td>Object preview: the first three keys, then <code>&hellip;</code> if there are more.</td></tr>
+          <tr><td><code>ƒ ()</code></td><td>A function-valued atom. Shown, never editable.</td></tr>
+          <tr><td><code>reserved</code> tag</td><td>An atom the runtime owns. <code>route</code> is the only one; its value is not editable.</td></tr>
+          <tr><td>Row highlighted</td><td>The atom&rsquo;s root changed in the last 1.1&nbsp;seconds. The flash is keyed on the root, so every row under <code>user</code> flashes when <code>user.prefs.notify</code> changes.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Only <code>$</code>&#8209;prefixed reactive atoms appear here. Plain top&#8209;level
+        <code>let</code> / <code>const</code> bindings are re&#8209;seeded every render and are
+        not part of the store, so they are never listed &mdash; see
+        <a href="reactivity.html">Reactivity</a> for the distinction.
+      </p>
+
+      <h3 id="editing-a-value">Editing a value</h3>
+      <p>
+        Click any leaf value to turn it into an input. <strong>Enter</strong> commits,
+        <strong>Escape</strong> cancels, and clicking away also commits. What you type is
+        run through <code>JSON.parse</code> first and kept as raw text only if that fails.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>You type</th><th>What is written</th></tr></thead>
+        <tbody>
+          <tr><td><code>42</code></td><td>The number <code>42</code></td></tr>
+          <tr><td><code>false</code></td><td>The boolean <code>false</code></td></tr>
+          <tr><td><code>null</code></td><td><code>null</code></td></tr>
+          <tr><td><code>{ "a": 1 }</code></td><td>An object &mdash; any JSON literal works</td></tr>
+          <tr><td><code>"true"</code></td><td>The <em>string</em> <code>true</code></td></tr>
+          <tr><td><code>pending</code></td><td>The string <code>pending</code> &mdash; not valid JSON, so it is kept verbatim</td></tr>
+        </tbody>
+      </table>
+      <p>
+        A dotted row such as <code>user.prefs.notify</code> writes through the store&rsquo;s
+        path API, which rebuilds <code>user</code> immutably: sibling fields survive and
+        every dependent of <code>user</code> wakes up. The edit is indistinguishable from one
+        an <code>onClick</code> handler would make.
+      </p>
+      <div class="callout warn">
+        <h4>Containers are not editable</h4>
+        <p>
+          <strong>Edit leaves, not branches.</strong> An object or array that has entries is
+          a container &mdash; expand it and edit the values inside. An <em>empty</em> object or
+          array is a leaf, so you can replace it wholesale by typing a JSON literal over it.
+        </p>
+      </div>
+
+      <h3 id="reactivity-heat">Filtering and reactivity heat</h3>
+      <p>
+        Every top&#8209;level atom carries a heat badge: a bar sized against the busiest atom
+        and a count of how many flushes changed it this session. The toolbar shows the
+        session total.
+      </p>
+      <ul>
+        <li><strong>Filter atoms&hellip;</strong> &mdash; case&#8209;insensitive substring match on top&#8209;level atom names. Expanded children are not searched.</li>
+        <li><strong>Sort by activity</strong> &mdash; ranks atoms by change count, descending, falling back to alphabetical for ties. Off by default; the default order is alphabetical.</li>
+        <li><strong><code>12 atoms · 1.4k changes</code></strong> &mdash; atoms in the snapshot, and every counted change across them.</li>
+      </ul>
+      <p>
+        Sort by activity is the fastest way to find the atom your UI actually churns on. An
+        atom with a heat count far above the rest is usually a timer, a scroll position, or a
+        pointer coordinate that belongs in an instance hook rather than the global store.
+      </p>
+
+      <h2 id="render-profiler">Render profiler</h2>
+      <p>
+        Every commit is captured with its trigger, its wall&#8209;clock duration, and one
+        record per component instance. Open the Profiler tab, interact with the app, and read
+        it top&#8209;to&#8209;bottom: summary, strip, insights, commit detail, reactivity,
+        ranked components.
+      </p>
+
+      <h3 id="commit-strip">The commit strip</h3>
+      <p>
+        One bar per commit, oldest on the left. Bar height is that commit&rsquo;s duration
+        relative to the slowest one captured, so the strip is a shape, not an axis. Click a
+        bar to pin it; the Commit detail section below follows your selection instead of the
+        latest commit.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Bar</th><th>Means</th><th>Source flag</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="dt-sw" style="background:#5ad19b"></span><strong>Green</strong></td>
+            <td>The initial mount &mdash; the first commit DevTools captured for this app. There is exactly one.</td>
+            <td><code>initial: true</code></td>
+          </tr>
+          <tr>
+            <td><span class="dt-sw" style="background:#f0b35e"></span><strong>Amber</strong></td>
+            <td>A full render: memoization was bypassed and every component body re&#8209;ran.</td>
+            <td><code>fullRender: true</code></td>
+          </tr>
+          <tr>
+            <td><span class="dt-sw" style="background:#6aa6ff"></span><strong>Blue</strong></td>
+            <td>An incremental commit &mdash; the normal case, where memoized instances were skipped.</td>
+            <td>neither flag</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Green wins over amber, so the first captured commit reads green even though it is also
+        a full render. Hover any bar for
+        <code>#7 · 3.10 ms · 4 rendered / 9 memoized</code>, and look for runs of amber:
+        repeated full renders are the single most common Aktion performance bug.
+      </p>
+
+      <h3 id="flamegraph">The flamegraph</h3>
+      <p>
+        Commit detail lists every instance in the selected commit, in render order, indented
+        by tree depth. Bar width is that instance&rsquo;s self time relative to the widest one
+        in the same commit. Library components are prefixed with a small square; user
+        components are not.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Phase</th><th>Bar</th><th>What happened</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>mount</code></td>
+            <td><span class="dt-sw" style="background:#5ad19b"></span>Green</td>
+            <td>This instance appeared in the tree for the first time.</td>
+          </tr>
+          <tr>
+            <td><code>update</code></td>
+            <td><span class="dt-sw" style="background:#6aa6ff"></span>Blue</td>
+            <td>The instance already existed and its body re&#8209;ran.</td>
+          </tr>
+          <tr>
+            <td><code>memo</code></td>
+            <td><span class="dt-sw" style="background:#5b626f"></span>Grey, dimmed</td>
+            <td>Skipped by per&#8209;instance memoization &mdash; the body did <em>not</em> run and the cached tree was reused. Fixed&#8209;width bar; the time column reads <code>memo</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Hover a bar for the reason the phase was chosen. These strings come straight from the
+        renderer, so they name the exact decision it made:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Reason</th><th>Read it as</th></tr></thead>
+        <tbody>
+          <tr><td><code>initial mount</code></td><td>First render of this instance; nothing was cached yet.</td></tr>
+          <tr><td><code>positional args changed</code></td><td>A positional argument differs from the memoized call.</td></tr>
+          <tr><td><code>named args changed</code></td><td>A prop in the options object differs.</td></tr>
+          <tr><td><code>state dependency changed</code></td><td>Args matched, but a <code>$state</code> path this body reads was in the commit&rsquo;s change set.</td></tr>
+          <tr><td><code>no memo (full render)</code> / <code>full render</code></td><td>Memoization was off for this commit, so the body re&#8209;ran regardless.</td></tr>
+          <tr><td><code>memoized (args + deps unchanged)</code></td><td>Both checks passed; the body was skipped.</td></tr>
+          <tr><td><code>mounted</code> / <code>re-rendered</code></td><td>A library component. These two are the only reasons library instances report.</td></tr>
+          <tr><td><code>render threw</code></td><td>The component&rsquo;s render function raised. Check the console for the error.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <h4>Self time means two different things</h4>
+        <p>
+          <strong>Compare user components with user components.</strong> For a
+          <code>function Foo()</code> the number is body&#8209;evaluation time only, with
+          children excluded. For a library component it is inclusive of the subtree its render
+          function builds in one call. A <code>memo</code> record always reports zero.
+        </p>
+      </div>
+
+      <h3 id="summary">Performance summary and the components table</h3>
+      <p>
+        The stat grid at the top of the tab aggregates every captured commit. Several tiles
+        change colour once they cross a fixed threshold, so you can read the grid without
+        knowing what &ldquo;good&rdquo; looks like.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Tile</th><th>What it measures</th><th>Turns amber at</th></tr></thead>
+        <tbody>
+          <tr><td><code>commits</code></td><td>Commits captured this session.</td><td>&mdash;</td></tr>
+          <tr><td><code>total render</code></td><td>Sum of every captured commit&rsquo;s duration.</td><td>&mdash;</td></tr>
+          <tr><td><code>avg / commit</code></td><td>Total divided by commit count.</td><td>&ge; 8&nbsp;ms</td></tr>
+          <tr><td><code>slowest</code></td><td>The single longest commit. Click the tile to pin that commit in the strip.</td><td>&ge; 16&nbsp;ms</td></tr>
+          <tr><td><code>memoized</code></td><td>Share of component evaluations that were skipped.</td><td>below 20% &mdash; green above it</td></tr>
+          <tr><td><code>full renders</code></td><td>Commits that bypassed memoization entirely.</td><td>more than half the commits</td></tr>
+          <tr><td><code>commit rate</code></td><td>Commits per second across the captured span. Hidden until the commits span a measurable interval.</td><td>&ge; 30/s</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Below the flamegraph, <strong>Components &mdash; ranked by self time</strong>
+        aggregates the same records by component name across every captured commit. Click any
+        header to sort by it; clicking the active header flips the direction. It opens sorted
+        by <code>Total</code>, descending.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>Component</code></td><td>Component name. Instances of the same component are merged into one row.</td></tr>
+          <tr><td><code>Type</code></td><td><code>user</code> for a <code>function</code> in your program, <code>library</code> for a built&#8209;in.</td></tr>
+          <tr><td><code>Renders</code></td><td>Commits in which a body actually ran. Memoized skips are excluded.</td></tr>
+          <tr><td><code>Memo</code></td><td>Commits in which the instance was skipped.</td></tr>
+          <tr><td><code>Total</code></td><td>Summed self time, with an inline bar against the heaviest row.</td></tr>
+          <tr><td><code>Avg</code></td><td><code>Total</code> &divide; <code>Renders</code>.</td></tr>
+          <tr><td><code>Max</code></td><td>The worst single render. A high <code>Max</code> with a low <code>Avg</code> is a first&#8209;render or cold&#8209;cache cost.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        A healthy row has <code>Memo</code> comfortably above <code>Renders</code>. A user
+        component with a large <code>Renders</code> and <code>Memo</code> of zero reads a
+        <code>$state</code> path that changes on nearly every commit.
+      </p>
+
+      <h3 id="profiler-insights">Insights and the reactivity panel</h3>
+      <p>
+        <strong>Insights</strong> is a fixed set of heuristics over the captured commits,
+        capped at six entries. Each one names the component and the number that triggered it,
+        so you can verify the claim in the table below.
+      </p>
+      <ul>
+        <li>A component averaging <strong>&ge; 8&nbsp;ms</strong> per render &mdash; split it, or move the work into a <code>$memo</code>.</li>
+        <li>A <em>user</em> component that rendered <strong>&ge; 12&nbsp;times</strong>, was <strong>never memoized</strong>, across at least four commits &mdash; check what <code>$state</code> its body reads.</li>
+        <li><strong>Three or more</strong> non&#8209;initial commits that forced a full re&#8209;render &mdash; usually an async resolution, a timer, or an effect calling notify.</li>
+        <li>Nothing found, with at least one commit &mdash; a single green &ldquo;no render hot&#8209;spots detected&rdquo;.</li>
+      </ul>
+      <p>
+        <strong>Reactivity &mdash; state paths that triggered commits</strong> ranks the top
+        eight <code>$state</code> paths by how many commits they caused. It answers a
+        different question from the heat badges on the State tab: heat counts every
+        <em>write</em>, this panel counts only the writes that actually cost you a render.
+      </p>
+      <p>
+        <strong>Flash on commit</strong> outlines the inspected element for 140&nbsp;ms on
+        every commit &mdash; the quickest way to tell which of several apps on a page is the
+        one re&#8209;rendering. <strong>Clear</strong> empties the strip without stopping
+        recording.
+      </p>
+
+      <h2 id="effect-timeline">Effect timeline</h2>
+      <p>
+        Every transition of every effect, attributed to the trigger that caused it. This is
+        where you take an effect that &ldquo;runs too often&rdquo; and find out what is firing
+        it.
+      </p>
+
+      <h3 id="effect-phases">Phases and triggers</h3>
+      <p>
+        Five phases, each with its own colour and its own extra payload. They arrive in
+        lifecycle order, and a re&#8209;run emits <code>cleanup</code> before its
+        <code>run</code> whenever the previous run registered any cleanup handlers.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Phase</th><th>Chip</th><th>Emitted when</th><th>Also carries</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>mount</code></td>
+            <td><span class="dt-sw" style="background:#5ad19b"></span>Green</td>
+            <td>The declaration was registered and its subscriptions or intervals were wired &mdash; before any body runs.</td>
+            <td>&mdash;</td>
+          </tr>
+          <tr>
+            <td><code>run</code></td>
+            <td><span class="dt-sw" style="background:#6aa6ff"></span>Blue</td>
+            <td>The body executed.</td>
+            <td>Body duration</td>
+          </tr>
+          <tr>
+            <td><code>cleanup</code></td>
+            <td><span class="dt-sw" style="background:#c08cf0"></span>Purple</td>
+            <td>Registered <code>cleanup(fn)</code> handlers fired, before a re&#8209;run or on teardown.</td>
+            <td>How many handlers ran</td>
+          </tr>
+          <tr>
+            <td><code>unmount</code></td>
+            <td><span class="dt-sw" style="background:#5b626f"></span>Grey</td>
+            <td>The declaration was torn down &mdash; the owning instance left the tree, or the program was re&#8209;planned.</td>
+            <td>&mdash;</td>
+          </tr>
+          <tr>
+            <td><code>error</code></td>
+            <td><span class="dt-sw" style="background:#f87171"></span>Red</td>
+            <td>The body threw. The effect stays mounted and will run again on its next trigger.</td>
+            <td>The message, and the duration up to the throw</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        The reason column is the attribution &mdash; the answer to &ldquo;what fired this?&rdquo;
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Reason</th><th>Fired by</th></tr></thead>
+        <tbody>
+          <tr><td><code>mount</code></td><td>Registration, or a body run triggered by mounting.</td></tr>
+          <tr><td><code>state:count</code></td><td>The <code>$count</code> trigger. It shows the atom <em>you wrote</em>, not the per&#8209;instance alias the runtime subscribed to.</td></tr>
+          <tr><td><code>every(1000)</code></td><td>An interval tick, with the declared period.</td></tr>
+          <tr><td><code>unmount</code></td><td>Teardown &mdash; the final cleanup, and the body of an <code>on:unmount</code> effect.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Alongside the reason, each effect shows its declared trigger list exactly as you wrote
+        it &mdash; <code>[$count, "mount"]</code>, <code>[every(1000)]</code>,
+        <code>[debounce(250), $query]</code>. An effect that declares no triggers at all reads
+        <code>[mount]</code>, which is the rule the runtime applies to it.
+      </p>
+
+      <h3 id="effect-views">Timeline versus Log</h3>
+      <p>
+        The <strong>Timeline</strong> view (the default) gives each effect a lane and places
+        one dot per event on a shared time axis measured from the first event this app
+        emitted. Bursts, overlapping runs, and cleanup&rarr;run pairing are obvious at a
+        glance; exact ordering within a burst is not.
+      </p>
+      <p>
+        Press the toggle for the <strong>Log</strong> view: a flat, newest&#8209;first list of
+        the last 250 matching events with a relative timestamp, the phase chip, the effect
+        label, and the reason. Use Timeline to find the effect, Log to read the sequence.
+      </p>
+      <p>
+        The five phase chips in the toolbar filter both views &mdash; all on by default. Turn
+        off <code>run</code> and <code>mount</code> and a noisy timeline collapses to just the
+        cleanups and errors you care about.
+      </p>
+
+      <h3 id="effect-lanes">Lanes, summary, and insights</h3>
+      <p>
+        Between the insights and the visualisation, one lane per effect lists its label, its
+        declared triggers, its run count, and its total run time, sorted by run count. Effects
+        declared inside a <code>function</code> body carry an <code>instance</code> tag, and
+        report their <code>unmount</code> when that component leaves the tree.
+      </p>
+      <p>
+        Effect labels are always derived from source position &mdash;
+        <code>effect @ L3:C1</code> is the effect declared at line 3, column 1. There is no
+        way to name an effect, so the position <em>is</em> the identity: move the declaration
+        and its lane is a new lane.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Summary tile</th><th>What it counts</th></tr></thead>
+        <tbody>
+          <tr><td><code>effects</code></td><td>Distinct effects seen, counting each component instance separately.</td></tr>
+          <tr><td><code>runs</code></td><td><code>run</code> events.</td></tr>
+          <tr><td><code>total run</code> / <code>avg run</code></td><td>Summed and mean body duration across those runs.</td></tr>
+          <tr><td><code>cleanups</code></td><td><code>cleanup</code> events, not individual handlers.</td></tr>
+          <tr><td><code>errors</code></td><td><code>error</code> events. Green at zero, red above it.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The Insights list applies three rules per effect, capped at six entries: any error at
+        all is flagged red; <strong>&ge; 20 runs</strong> is flagged as a hot trigger worth
+        re&#8209;checking the dependency list for; otherwise an average of
+        <strong>&ge; 6&nbsp;ms</strong> per run is flagged as heavy work in an effect body.
+      </p>
+
+      <h2 id="api">API reference</h2>
+      <p>
+        <code>aktion-runtime/devtools</code> is a self&#8209;contained ES module. Importing it
+        registers the <code>&lt;aktion-devtools&gt;</code> custom element as a side effect, so
+        you can also drop the tag straight into your HTML instead of calling the mount
+        function.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Export</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>mountDevtools(options?)</code></td><td>Install the hook and mount a panel. Returns a controller.</td></tr>
+          <tr><td><code>isDevtoolsInstalled()</code></td><td><code>true</code> when a hook exists on this page, whatever installed it.</td></tr>
+          <tr><td><code>isDevtoolsActive()</code></td><td><code>true</code> only when a hook exists <em>and</em> a frontend is subscribed. This is the flag the runtime gates instrumentation on.</td></tr>
+          <tr><td><code>installDevtoolsHook(version?)</code></td><td>Install the hub without any UI. For an extension or a custom frontend.</td></tr>
+          <tr><td><code>getDevtoolsHook()</code></td><td>The installed hook, or <code>undefined</code>.</td></tr>
+          <tr><td><code>defineDevtoolsElement()</code></td><td>Register <code>&lt;aktion-devtools&gt;</code>. Idempotent, and already called on import.</td></tr>
+          <tr><td><code>AktionDevtoolsElement</code></td><td>The panel class. <code>AktionDevtoolsElement.tagName</code> is <code>"aktion-devtools"</code>.</td></tr>
+          <tr><td><code>HOOK_KEY</code></td><td><code>"__AKTION_DEVTOOLS_HOOK__"</code> &mdash; the property the hook lives under on <code>globalThis</code>.</td></tr>
+          <tr><td><code>DEVTOOLS_PROTOCOL_VERSION</code></td><td>Currently <code>1</code>. Bumped only when the event shapes change incompatibly.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The event shapes themselves are exported as types &mdash; <code>DevtoolsEvent</code>,
+        <code>CommitRecord</code>, <code>ComponentRenderRecord</code>, <code>StateEvent</code>,
+        <code>EffectEvent</code>, <code>RenderPhase</code>, <code>EffectPhase</code> &mdash; so a
+        custom frontend can be fully typed. See <a href="typescript.html">TypeScript</a>.
+      </p>
+
+      <h3 id="mountdevtools"><code>mountDevtools(options?)</code></h3>
+      <p>
+        One call does three things: it installs the hook, registers and appends the panel
+        element, and adopts every app on the page. It is idempotent at the hook level but not
+        at the panel level &mdash; a second call mounts a second panel.
+      </p>
+<pre><code>const devtools = mountDevtools({
+  container: document.querySelector("#debug-dock"),  // default: document.body
+  appId: "aktion-app-2",                             // default: the first app that registered
+  open: false                                        // default: true — mounts already open
+});</code></pre>
+      <p>
+        Nothing here is required. <code>mountDevtools()</code> with no arguments is the call
+        you want almost always &mdash; reach for the options only when the panel has to live
+        somewhere other than <code>document.body</code>, or start hidden.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>container</code></td><td><code>HTMLElement</code></td><td><code>document.body</code></td><td>Where the panel element is appended.</td></tr>
+          <tr><td><code>appId</code></td><td><code>string</code></td><td>First registered app</td><td>Pre&#8209;selects an app in the picker.</td></tr>
+          <tr><td><code>open</code></td><td><code>boolean</code></td><td><code>true</code></td><td><code>false</code> mounts the panel hidden. It still subscribes &mdash; see <a href="#cost">what it costs</a>.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The panel is <code>position: fixed</code> at a very high z&#8209;index, sized
+        480&times;560 and placed 16&nbsp;px from the bottom&#8209;right corner. Drag the header
+        to move it, use the corner grip to resize down to 320&times;240, and the header buttons
+        to pause recording, collapse, or close.
+      </p>
+
+      <h3 id="controller">The controller</h3>
+      <p>
+        <code>mountDevtools()</code> returns a plain object. Keep it: it is the only handle on
+        that panel.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Member</th><th>Type</th><th>Does</th></tr></thead>
+        <tbody>
+          <tr><td><code>element</code></td><td><code>AktionDevtoolsElement</code></td><td>The live panel element.</td></tr>
+          <tr><td><code>hook</code></td><td><code>AktionDevtoolsHook</code></td><td>The installed hook &mdash; shared by every panel on the page.</td></tr>
+          <tr><td><code>open()</code></td><td><code>void</code></td><td>Show the panel and resume rendering it.</td></tr>
+          <tr><td><code>close()</code></td><td><code>void</code></td><td>Hide it. It stays subscribed and keeps recording.</td></tr>
+          <tr><td><code>toggle()</code></td><td><code>void</code></td><td>Flip hidden state. Bind this to your shortcut.</td></tr>
+          <tr><td><code>selectApp(id)</code></td><td><code>void</code></td><td>Switch the inspected app. Also un&#8209;pins the selected commit.</td></tr>
+          <tr><td><code>destroy()</code></td><td><code>void</code></td><td>Remove the panel element. It unsubscribes, so the runtime goes dormant again &mdash; but the hook and its buffered events stay installed.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>close()</code> and <code>destroy()</code> are not interchangeable.
+        <code>close()</code> is a UI state; <code>destroy()</code> is the one that turns the
+        instrumentation back off.
+      </p>
+
+      <h3 id="hook-api">The hook and the app record</h3>
+      <p>
+        The hook is the wire between the runtime and any frontend. You rarely touch it
+        directly, but reading it in the console is a fast way to confirm DevTools is wired up
+        at all.
+      </p>
+<pre><code>const hook = window.__AKTION_DEVTOOLS_HOOK__;
+
+hook.aktion;            // true — the marker that says you found the real hub
+hook.protocolVersion;   // 1
+hook.apps.size;         // how many &lt;aktion-app&gt; elements registered
+hook.active;            // true only while a frontend is subscribed
+hook.buffer.length;     // recent events, capped at hook.bufferLimit (default 500)
+
+const stop = hook.subscribe((event) =&gt; console.log(event.kind, event));
+// ... later
+stop();</code></pre>
+      <p>
+        <code>subscribe(fn)</code> and <code>subscribeApps(fn)</code> both return an
+        unsubscribe function. A listener that throws is caught and logged, so a broken
+        frontend can never break the app it inspects.
+      </p>
+      <p>
+        Each entry in <code>hook.apps</code> is a deliberately narrow handle. It exposes what
+        a debugger legitimately needs and nothing else &mdash; there is no path from it to the
+        raw runtime internals.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Member</th><th>Gives you</th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>Stable per&#8209;element id, <code>aktion-app-1</code>, <code>aktion-app-2</code>, &hellip;</td></tr>
+          <tr><td><code>label</code></td><td>The name in the app picker: <code>data-devtools-label</code> if present, else the element&rsquo;s <code>id</code>, else the generated id.</td></tr>
+          <tr><td><code>element</code></td><td>The host element, for highlighting and scroll&#8209;into&#8209;view.</td></tr>
+          <tr><td><code>getState()</code></td><td>The current reactive <code>$state</code> snapshot.</td></tr>
+          <tr><td><code>setState(path, value)</code></td><td>Write an atom. Dotted paths are rebuilt immutably.</td></tr>
+          <tr><td><code>getProgram()</code></td><td>The current program source text.</td></tr>
+          <tr><td><code>forceRender()</code></td><td>Force one non&#8209;memoized render.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        So <code>data-devtools-label</code> is the one authoring hook on the app side. With
+        several apps on a page, name them &mdash; otherwise the picker reads
+        <code>aktion-app-1</code>, <code>aktion-app-2</code>, and you will pick the wrong one.
+      </p>
+<pre><code>&lt;aktion-app data-devtools-label="Checkout form"&gt;&lt;/aktion-app&gt;
+&lt;aktion-app data-devtools-label="Live order feed"&gt;&lt;/aktion-app&gt;</code></pre>
+      <p>
+        There is also <code>el.connectDevtools()</code> on the element itself. The panel calls
+        it on every <code>aktion-app</code> it finds when it opens, which is what makes
+        late&#8209;attach work; call it yourself for an app the panel cannot reach with a
+        document query.
+      </p>
+
+      <h2 id="how-it-works">How it works</h2>
+      <p>
+        The architecture is the browser&#8209;DevTools split: a <strong>backend</strong> (the
+        runtime) and a <strong>frontend</strong> (the panel) that only ever talk through
+        structured, JSON&#8209;serialisable events.
+      </p>
+      <ul>
+        <li>
+          <strong>The runtime emits to a global hook</strong> at
+          <code>window.__AKTION_DEVTOOLS_HOOK__</code>, exactly like React&rsquo;s
+          <code>__REACT_DEVTOOLS_GLOBAL_HOOK__</code>. Nothing installs that hook until a
+          frontend does.
+        </li>
+        <li>
+          <strong>The hook buffers.</strong> Recent events are kept in a ring buffer, so a
+          panel that opens after an app has already rendered can backfill its timeline
+          instead of starting blank.
+        </li>
+        <li>
+          <strong>Panels share one hub.</strong> <code>installDevtoolsHook()</code> is
+          idempotent, so a second <code>mountDevtools()</code> attaches to the same registry
+          and the same event stream.
+        </li>
+        <li>
+          <strong>The protocol is transport&#8209;agnostic.</strong> No payload contains a DOM
+          node, a class instance, or a function, so the same events could cross a
+          <code>postMessage</code> boundary into a browser&#8209;extension panel.
+        </li>
+      </ul>
+      <p>
+        Everything is bounded, so a session can run for hours without the panel&rsquo;s model
+        growing without limit. When a cap is hit the oldest entries are dropped.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Cap</th><th>Limit</th></tr></thead>
+        <tbody>
+          <tr><td>Hook event buffer</td><td>500 events &mdash; writable via <code>hook.bufferLimit</code></td></tr>
+          <tr><td>Commits kept per app</td><td>200</td></tr>
+          <tr><td>Effect events kept per app</td><td>400</td></tr>
+          <tr><td>Rows in the flat Log view</td><td>250 most recent matches</td></tr>
+          <tr><td>Change&#8209;flash duration</td><td>1100&nbsp;ms</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="cost">What it costs when it is not open</h2>
+      <p>
+        The runtime always <em>attempts</em> to talk to the hook, so the cost question is
+        really about which of three states you are in. Only the third one is not free.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>State</th><th><code>isDevtoolsActive()</code></th><th>What the runtime pays</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>You never import <code>aktion-runtime/devtools</code></td>
+            <td><code>false</code></td>
+            <td>One property read per emit site. No profiler records, no event objects, no panel code in the bundle.</td>
+          </tr>
+          <tr>
+            <td>Hook installed, but nothing subscribed &mdash; including after <code>destroy()</code></td>
+            <td><code>false</code></td>
+            <td>The same single property read. Instrumentation stays dormant.</td>
+          </tr>
+          <tr>
+            <td>A panel is mounted &mdash; even hidden by <code>close()</code> or <code>open: false</code></td>
+            <td><code>true</code></td>
+            <td>Per&#8209;commit timing plus one record per component instance, and a state snapshot on every flush.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        The gate is decided once per commit, so the profiler flag stays consistent across a
+        whole render pass. A hidden panel skips its own rendering, but it is still subscribed
+        &mdash; which is why <code>destroy()</code>, not <code>close()</code>, is what you call
+        before measuring real performance numbers.
+      </p>
+      <div class="callout warn">
+        <h4>Do not ship it enabled</h4>
+        <p>
+          <strong>Gate the mount, not just the panel.</strong> Put
+          <code>mountDevtools()</code> behind a dynamic <code>import()</code> that only a flag,
+          a shortcut, or a non&#8209;production build can reach. The panel can read and write
+          any atom in the program, so an always&#8209;mounted DevTools in production is a
+          debugging surface you did not intend to publish &mdash; see
+          <a href="security.html">Security</a>.
+        </p>
+      </div>
+
+      <h2 id="troubleshoot">Troubleshooting</h2>
+      <p>
+        Four failures account for almost every &ldquo;DevTools isn&rsquo;t working&rdquo;
+        report. Work down the list in order &mdash; each one rules out the ones below it.
+      </p>
+
+      <h3 id="tr-no-panel">No panel appears</h3>
+      <ul>
+        <li>
+          <strong>The import alone does nothing.</strong> You have to call
+          <code>mountDevtools()</code>, or place an <code>&lt;aktion-devtools&gt;</code> element
+          in the document. A bundler may also have tree&#8209;shaken an import whose result you
+          never used.
+        </li>
+        <li>
+          <strong>You passed <code>open: false</code>.</strong> The panel is mounted and
+          recording, just hidden. Call <code>controller.open()</code>.
+        </li>
+        <li>
+          <strong>It is off&#8209;screen.</strong> The corner position is computed once, at
+          mount, from the viewport size. Shrink the window afterwards and the panel can sit
+          outside it. Drag the header back, or <code>destroy()</code> and mount again.
+        </li>
+        <li>
+          <strong>A <code>container</code> ancestor traps it.</strong> A
+          <code>transform</code>, <code>filter</code>, <code>backdrop-filter</code>, or
+          <code>contain</code> on an ancestor establishes a containing block for
+          <code>position: fixed</code>, which clips or mispositions the panel. Mount into
+          <code>document.body</code>, which is the default.
+        </li>
+      </ul>
+
+      <h3 id="tr-no-hook">The hook is not installed</h3>
+      <p>
+        Type <code>window.__AKTION_DEVTOOLS_HOOK__</code> in the console. If it is
+        <code>undefined</code>, no frontend has run &mdash; the runtime never installs the hook
+        by itself.
+      </p>
+      <ul>
+        <li><strong>Confirm from code</strong> with <code>isDevtoolsInstalled()</code>, and check whether anything is actually listening with <code>isDevtoolsActive()</code>.</li>
+        <li><strong>Two realms will not see each other.</strong> A panel mounted inside an iframe installs the hook on that iframe&rsquo;s <code>globalThis</code>; an app in the parent document emits to the parent&rsquo;s. Mount the panel in the same document as the app.</li>
+        <li><strong>Check the load order of the bundles</strong> only if the app itself is broken: the hook does not depend on the runtime, and either import may come first.</li>
+      </ul>
+
+      <h3 id="tr-no-apps">&ldquo;No Aktion app detected&rdquo;</h3>
+      <p>
+        The panel adopts apps two ways: they register themselves when they render, and on open
+        the panel calls <code>connectDevtools()</code> on every <code>aktion-app</code> it can
+        find with a document query. If the picker is still empty:
+      </p>
+      <ul>
+        <li>
+          <strong>The element never upgraded.</strong> <code>import "aktion-runtime"</code> has
+          to run for <code>&lt;aktion-app&gt;</code> to become a custom element. An un&#8209;upgraded
+          tag has no <code>connectDevtools</code> and is skipped silently.
+        </li>
+        <li>
+          <strong>The app is inside a shadow root or an iframe.</strong>
+          <code>document.querySelectorAll</code> pierces neither. Reach the element yourself
+          and call <code>el.connectDevtools()</code>.
+        </li>
+        <li>
+          <strong>The tag is created later.</strong> An app added to the DOM after the panel
+          opened registers on its first render, so give it one interaction &mdash; or call
+          <code>connectDevtools()</code> right after you insert it.
+        </li>
+      </ul>
+
+      <h3 id="tr-empty-profiler">The Profiler tab is empty</h3>
+      <ul>
+        <li>
+          <strong>Commits are only recorded while a frontend is subscribed.</strong> Renders
+          that happened before you opened the panel were never instrumented. Attaching forces
+          one full render per app, so you should see at least one commit immediately &mdash; if
+          you see exactly one, that is it.
+        </li>
+        <li>
+          <strong>Recording is paused.</strong> The header button flips to <em>Paused</em> and
+          the dot goes grey. Paused events are dropped by the panel, not queued, so they do
+          not appear when you resume.
+        </li>
+        <li><strong>You pressed Clear</strong>, which empties the strip and un&#8209;pins the selected commit.</li>
+        <li><strong>The app is idle.</strong> Nothing has changed, so nothing has committed. Interact with it, or give it an <code>every(N)</code> effect.</li>
+      </ul>
+
+      <h3 id="tr-empty-state">The State tab is empty, or an edit does nothing</h3>
+      <ul>
+        <li><strong>Only <code>$</code>&#8209;prefixed atoms are state.</strong> Plain <code>let</code> / <code>const</code> bindings are re&#8209;seeded each render and never appear in the tree.</li>
+        <li><strong>You clicked a container.</strong> Only leaf values are editable. Expand the object and edit the value inside.</li>
+        <li><strong>The row is tagged <code>reserved</code>.</strong> <code>route</code> is runtime&#8209;owned; change the URL through the router instead. See <a href="routing.html">Routing</a>.</li>
+        <li><strong>Your input parsed as a string.</strong> <code>JSON.parse</code> runs first, so <code>true</code> writes a boolean but <code>yes</code> writes the text <code>"yes"</code>. Quote it &mdash; <code>"true"</code> &mdash; when you really want the string.</li>
+        <li><strong>The value snaps back.</strong> Something re&#8209;derives it: an effect, an <code>$http</code> resolution, or a <code>$memo</code>. Watch the Effects tab immediately after the edit to see which.</li>
+      </ul>
+      <div class="callout">
+        <h4>When the DOM reverts instead of the state</h4>
+        <p>
+          <strong>Add <code>strict</code> to the app element.</strong> If an attribute a handler
+          wrote onto the live DOM keeps disappearing, that is the reconciler, not DevTools:
+          <code>&lt;aktion-app strict&gt;</code> arms a guard that logs exactly which attribute
+          each commit reverted and on which element. See
+          <a href="troubleshooting.html">Troubleshooting</a>.
+        </p>
+      </div>
+
+      <h2 id="next"><span id="more"></span>Next</h2>
       <div class="demo-grid">
-        <a class="demo-card" href="hooks.html">
-          <span class="demo-tag">State</span>
-          <h3>Hooks</h3>
-          <p>Per-instance <code>$state</code> / <code>$memo</code> &mdash; exactly what the State inspector shows you live.</p>
+        <a class="demo-card" href="performance.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Performance</h3>
+          <p>Turn a profiler reading into a fix &mdash; memoization, virtual lists, and workers.</p>
           <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
         <a class="demo-card" href="side-effects.html">
           <span class="demo-tag">Behaviour</span>
           <h3>Side effects</h3>
-          <p>Effects, intervals, and cleanup &mdash; the events that fill the Effect timeline.</p>
+          <p>Triggers, intervals, and cleanup &mdash; the declarations the Effect timeline shows.</p>
           <span class="demo-arrow">Open the guide &rarr;</span>
         </a>
-        <a class="demo-card" href="testing.html">
-          <span class="demo-tag">Quality</span>
-          <h3>Testing</h3>
-          <p>Assert on rendered output, <code>$state</code>, and events with the Aktion Testing Library.</p>
-          <span class="demo-arrow">View the guide &rarr;</span>
+        <a class="demo-card" href="troubleshooting.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Troubleshooting</h3>
+          <p>Symptom&rarr;cause&rarr;fix for the bugs a profiler reading will not explain.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
         </a>
       </div>
     </main>
   </div>
 
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
-    // Drive the live demo from the program shown above (single source of truth),
-    // and wire the Launch button to the real `aktion-runtime/devtools` bundle.
-    const libUrl = new URL("../dist/aktion.js", import.meta.url).href;
+    // Render each .lay-demo code block as a live <aktion-app> beside it, then wire
+    // the Launch button to the real `aktion-runtime/devtools` bundle.
+    import "../dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      // Names this app in the DevTools app picker (see #hook-api).
+      if (demo.dataset.devtoolsLabel) app.setAttribute("data-devtools-label", demo.dataset.devtoolsLabel);
+      host.appendChild(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[devtools demo] render failed", err);
+      }
+    }
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+
+    // Lazy-load the panel on first press, exactly as the #behind-a-flag recipe does.
     const dtUrl = new URL("../dist/devtools.js", import.meta.url).href;
-
-    const app = document.getElementById("devtools-demo-app");
-    const codeEl = document.getElementById("dt-demo-program");
-    const program = (codeEl.textContent || "").trim();
-
-    await import(/* @vite-ignore */ libUrl);
-    app.setResponse(program);
-
-    let controller = null;
     const launch = document.getElementById("dt-launch");
+    let controller = null;
     launch.addEventListener("click", async () => {
       if (!controller) {
         const { mountDevtools } = await import(/* @vite-ignore */ dtUrl);
         controller = mountDevtools();
-        launch.textContent = "⚡ Toggle DevTools";
+        launch.textContent = "Toggle DevTools";
       } else {
         controller.toggle();
       }

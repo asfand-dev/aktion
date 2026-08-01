@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     /* =========================================================================
@@ -278,6 +278,10 @@
     }
     .pg-status button:hover { color: var(--doc-primary); }
     .pg-status [data-tone="danger"] { color: var(--doc-danger); }
+    /* Lint warnings (unknown component, shadowed $i18n `t`) are silent
+       footguns, not broken programs — amber, not red. */
+    .pg-status [data-tone="warning"] { color: #d97706; }
+    :root[data-doc-theme="dark"] .pg-status [data-tone="warning"] { color: #fbbf24; }
 
     /* ------- Viewer ------- */
     .pg-pane--viewer { background: var(--doc-bg-soft); position: relative; }
@@ -984,31 +988,16 @@
             <span>Playground</span>
           </div>
 
+          <!-- Both selects below are POPULATED BY playground.js and deliberately
+               hold only a pre-hydration placeholder: the examples come from the
+               `EXAMPLES` map and the themes from `getLanguageSpec().themeNames`,
+               so neither list can drift from the code the way the hand-written
+               copies did (`storageConsole` shipped unreachable for exactly that
+               reason). Do not re-add options here. -->
           <div class="pg-group" role="group" aria-label="Example presets">
             <label class="sr-only" for="pg-example">Example</label>
             <select id="pg-example" aria-label="Example preset">
               <option value="chat">Chat reply</option>
-              <option value="modules">Multi-file modules</option>
-              <option value="dashboard">Project dashboard</option>
-              <option value="todo">Reactive todo</option>
-              <option value="reactiveApp">Reactive app</option>
-              <option value="routing">Routing demo</option>
-              <option value="counter">JS counter</option>
-              <option value="chart">Chart + metrics</option>
-              <option value="dataGrid">DataGrid + bulk actions</option>
-              <option value="calendar">CalendarView planner</option>
-              <option value="media">Media gallery + Map</option>
-              <option value="wizard">MultiStepForm wizard</option>
-              <option value="advancedCharts">Gauge, Heatmap, Radar, Scatter</option>
-              <option value="gridLayout">12-col grid + named args</option>
-              <optgroup label="── New features ──">
-                <option value="realtime">Realtime — $socket + $sse</option>
-                <option value="forms">Forms + validation ($form)</option>
-                <option value="persistUndo">Persist + undo/redo ($store)</option>
-                <option value="sxLayout">sx + layout (Section/Split/Bento)</option>
-                <option value="infiniteScroll">Infinite scroll ($query infinite)</option>
-                <option value="dialogs">Dialogs, Calendar &amp; a11y</option>
-              </optgroup>
             </select>
           </div>
 
@@ -1016,12 +1005,33 @@
             <label class="sr-only" for="pg-theme">Theme</label>
             <select id="pg-theme" aria-label="Renderer theme">
               <option value="light">Light</option>
-              <option value="dark">Dark</option>
-              <option value="corporate">Corporate</option>
-              <option value="soft">Soft</option>
-              <option value="glass">Glass</option>
-              <option value="modern">Modern</option>
             </select>
+          </div>
+
+          <!-- Runtime: <aktion-app> attributes the preview can be driven with.
+               Everything here maps 1:1 onto an element attribute rather than a
+               playground-only concept — see `applyRuntimeAttributes()`. -->
+          <div class="pg-group" role="group" aria-label="Runtime options">
+            <button class="pg-btn" id="pg-strict" aria-pressed="false"
+                    title="strict — dev-mode morph guard + unresolved-identifier warnings">
+              <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+              <span class="pg-btn-text">Strict</span>
+            </button>
+            <button class="pg-btn" id="pg-rtl" aria-pressed="false"
+                    title='dir="rtl" — preview the right-to-left mirror of the layout'>
+              <i class="fa-solid fa-right-left" aria-hidden="true"></i>
+              <span class="pg-btn-text">RTL</span>
+            </button>
+            <button class="pg-btn" id="pg-showerrors" aria-pressed="false"
+                    title="showerrors — render the runtime's own error banner inside the preview">
+              <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+              <span class="pg-btn-text">Errors</span>
+            </button>
+            <button class="pg-btn" id="pg-access" aria-pressed="false"
+                    title="Global access policy — Trusted exposes the full JS surface; Sandboxed limits the program to the runtime's vetted data/format/encode globals (no eval, DOM, network, or storage). Shared links start Sandboxed.">
+              <i class="fa-solid fa-lock" aria-hidden="true"></i>
+              <span class="pg-btn-text" id="pg-access-label">Trusted</span>
+            </button>
           </div>
 
           <div class="pg-spacer"></div>
@@ -1129,8 +1139,24 @@
               <!-- The preview renders inside a same-origin iframe so the
                    renderer's responsive @media breakpoints resolve against the
                    pane width, not the whole browser window. playground.js
-                   writes an <aktion-app id="pg-target"> into it on boot. -->
-              <iframe id="pg-frame" title="Live preview"></iframe>
+                   writes an <aktion-app id="pg-target"> into it on boot.
+
+                   `sandbox` withholds allow-top-navigation, so a program from a
+                   shared `?code=` link cannot redirect the docs site out from
+                   under the reader. `allow-same-origin` IS granted and cannot be
+                   withheld: the parent drives the inner <aktion-app>, reads its
+                   shadow root for Inspect, and the frame bridges the DevTools
+                   global hook through `window.parent` — all of which need a
+                   same-origin document. So this is defence in depth, not an
+                   origin boundary; the load-bearing mitigation for untrusted
+                   program text is `setGlobalAccessPolicy("safe")`, which
+                   playground.js applies to the shared-link path (see
+                   `initPreviewFrame`). The remaining grants keep real programs
+                   working: allow-modals for `confirm()`/`alert()`, allow-forms
+                   for form submission, allow-popups for `target="_blank"`
+                   links, allow-downloads for CSV/file exports. -->
+              <iframe id="pg-frame" title="Live preview"
+                      sandbox="allow-scripts allow-same-origin allow-modals allow-forms allow-popups allow-downloads"></iframe>
             </div>
           </section>
         </div>
@@ -1169,65 +1195,59 @@
             <tbody>
               <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
               <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd></td><td>Run program (in manual mode)</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>K</kbd></td><td>Toggle live / manual run</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>S</kbd></td><td>Save to localStorage (auto on type)</td></tr>
               <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd></td><td>Toggle inspect mode</td></tr>
               <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>D</kbd></td><td>Toggle Aktion DevTools (state · profiler · effects)</td></tr>
-              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>S</kbd></td><td>Save to localStorage (auto on type)</td></tr>
-              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>K</kbd></td><td>Toggle live / manual run</td></tr>
-              <tr><td><kbd>Tab</kbd> / <kbd>Enter</kbd></td><td>Accept the highlighted autocomplete suggestion (Tab otherwise indents / advances snippet fields)</td></tr>
               <tr><td><kbd>Ctrl</kbd> + <kbd>Space</kbd></td><td>Trigger autocomplete</td></tr>
-              <tr><td><kbd>Esc</kbd></td><td>Close popups / exit full-screen</td></tr>
+              <tr><td><kbd>Tab</kbd> / <kbd>Enter</kbd></td><td>Accept the highlighted autocomplete suggestion (Tab otherwise indents / advances snippet fields)</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>F</kbd></td><td>Find / replace panel (<kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>G</kbd> next, <kbd>Shift</kbd> + that for previous)</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>D</kbd></td><td>Select the next occurrence of the selection</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>G</kbd></td><td>Go to line</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd></td><td>Open the diagnostics panel (errors and lint warnings)</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>[</kbd> / <kbd>]</kbd></td><td>Fold / unfold the block at the cursor</td></tr>
+              <tr><td><kbd>Esc</kbd></td><td>Close popups / exit inspect mode / exit full-screen</td></tr>
             </tbody>
           </table>
+          <p style="margin-top:14px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>File explorer.</strong> With the tree focused:
+            <kbd>Enter</kbd> opens the selected file (or expands a folder),
+            <kbd>F2</kbd> renames, <kbd>Delete</kbd> / <kbd>Backspace</kbd>
+            deletes, and <kbd>↑</kbd> / <kbd>↓</kbd> move the selection
+            (<kbd>Shift</kbd> extends it). With the pane splitter focused, the
+            arrow keys resize the editor / preview split.
+          </p>
           <p style="margin-top:14px; font-size:13px; color:var(--doc-text-muted)">
             <strong>Smart autocomplete.</strong> At the top level, tab through
             components, builtins, language keywords
             (<code>if</code>, <code>for</code>, <code>function</code>,
-            <code>effect</code>, <code>try</code>…), the runtime globals
+            <code>import</code>, <code>export</code>, <code>try</code>…), the
+            runtime globals
             (<code>$http</code>, <code>$query</code>, <code>$mutation</code>,
             <code>$socket</code>, <code>$sse</code>, <code>$form</code>,
-            <code>$store</code>, <code>$router</code>,
-            <code>setTimeout</code>, <code>$storage</code>, <code>$console</code>,
-            <code>Math</code>, <code>JSON</code>, <code>Object</code>,
-            <code>Array</code>, <code>Date</code>…), and snippets (<code>router…</code>,
-            <code>function…</code>, <code>http…</code>, <code>form…</code>,
-            <code>socket…</code>). Inside a call like
+            <code>$store</code>, <code>$router</code>, <code>$effect</code>,
+            <code>$state</code>, <code>$memo</code>, <code>$i18n</code>,
+            <code>$head</code>, <code>$script</code>, <code>$toast</code>,
+            <code>$dom</code>, <code>setTimeout</code>, <code>$storage</code>,
+            <code>$console</code>, <code>Math</code>, <code>JSON</code>,
+            <code>Object</code>, <code>Array</code>, <code>Date</code>…), and
+            snippets (<code>Router…</code>, <code>Effect…</code>,
+            <code>function…</code>, <code>Http…</code>, <code>Form…</code>,
+            <code>Socket…</code>, <code>Hook…</code>). Inside a call like
             <code>Button("Save", { <em>cursor</em> })</code> the editor surfaces
             <strong>named-arg names</strong> with their types
-            (<code>variant:</code>, <code>tone:</code>, <code>icon:</code>,
-            <code>sx:</code>, <code>animate:</code>…); after the colon, enum-typed
-            args show their allowed values inline so you can pick one with a
-            single tab.
+            (<code>variant:</code>, <code>tone:</code>, <code>icon:</code>) plus
+            the <strong>universal</strong> channels every component accepts
+            (<code>sx:</code>, <code>animate:</code>, <code>aria:</code>,
+            <code>data:</code>…), ranked below the component's own props. After
+            the colon, enum-typed args show their allowed values inline so you
+            can pick one with a single tab.
           </p>
-          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
-            <strong>Member completion.</strong> Type a dot after an object to
-            see its members: <code>$todos</code> from <code>$http({…})</code>
-            completes to <code>.data</code>, <code>.error</code>,
-            <code>.loading</code>, <code>.refetch()</code>,
-            <code>.cancel()</code>, <code>.onDone</code>; a <code>$query</code>
-            resource adds <code>.loadMore()</code>, <code>.hasMore</code>,
-            <code>.loadingMore</code>; a <code>$socket</code> bag adds
-            <code>.send()</code>, <code>.close()</code>, <code>.status</code>
-            (<code>"connecting" | "open" | "closed"</code>),
-            <code>.connected</code>, <code>.last</code>, <code>.messages</code>,
-            <code>.attempts</code>; a <code>$form</code>
-            handle lists <code>.values</code>, <code>.errors</code>,
-            <code>.touched</code>, <code>.dirty</code>, <code>.valid</code>,
-            <code>.submitting</code>, <code>.validating</code>,
-            <code>.submit()</code>, <code>.setField()</code>,
-            <code>.reset()</code>; a <code>$store</code> with
-            <code>history: true</code> adds <code>.undo()</code>,
-            <code>.redo()</code>, <code>.canUndo</code>, <code>.canRedo</code>;
-            <code>$util.</code> lists every helper group including the reactive
-            env getters (<code>.scroll</code>, <code>.viewport</code>,
-            <code>.breakpoint</code>, <code>.media</code>, <code>.url</code>)
-            and the new helpers
-            (<code>.style.cx</code>, <code>.rules.required</code>,
-            <code>.derived</code>, <code>.worker</code>,
-            <code>.registerServiceWorker</code>, <code>.vibrate</code>, …);
-            <code>route.</code> lists <code>path</code> / <code>params</code> /
-            <code>query</code> / <code>navigate()</code>; and <code>Math.</code>,
-            <code>JSON.</code>, <code>$storage.</code>, … list their methods.
-          </p>
+          <!-- Generated by playground.js from the reconciled namespace / factory-bag
+               catalogs. A hand-written version of this paragraph went stale every
+               time the runtime gained a bag member, so it is no longer written by
+               hand — see `renderMemberHelp()`. -->
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)" id="pg-help-members"></p>
           <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
             <strong>Cursor-aware param docs.</strong> Hover any identifier,
             <em>or just place your cursor</em> inside a
@@ -1242,9 +1262,25 @@
             download a standalone HTML file you can host or open offline.
           </p>
           <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
-            <strong>Errors.</strong> Click the error pill in the editor's
-            status bar to open the error inspector — every diagnostic, with
-            line numbers and click-to-jump.
+            <strong>Errors and warnings.</strong> Click the pill in the editor's
+            status bar to open the diagnostics inspector — every parse error,
+            schema error and lint <em>warning</em>, with line numbers and
+            click-to-jump. Warnings are amber and don't block rendering: they
+            flag silent footguns the schema validator can't see, such as calling
+            a component that doesn't exist (which renders nothing at all) or
+            shadowing the <code>t</code> destructured from <code>$i18n</code>.
+          </p>
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>Runtime options.</strong> The toolbar's Runtime group drives
+            <code>&lt;aktion-app&gt;</code> attributes directly:
+            <strong>Strict</strong> turns on the dev-mode morph guard and
+            unresolved-identifier warnings, <strong>RTL</strong> previews the
+            mirrored layout (<code>dir="rtl"</code>), <strong>Errors</strong>
+            renders the runtime's own error banner inside the preview, and
+            <strong>Trusted / Sandboxed</strong> switches the program's access to
+            host JavaScript globals. A program opened from a share link starts
+            <em>Sandboxed</em> — no <code>eval</code>, DOM, network or storage —
+            because it came from whoever wrote the URL.
           </p>
           <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
             <strong>DevTools.</strong> Click <i class="fa-solid fa-bug"
@@ -1262,6 +1298,11 @@
     </main>
   </div>
 
-  <script type="module" src="assets/playground.js?v=2026.06.14-iframe-preview2"></script>
+  <!-- Cache-buster. The old `-iframe-preview2` suffix named a feature that had
+       already shipped, and the date was bumped by a blanket sed while the asset
+       itself was untouched — so the string asserted a currency it did not have.
+       Bump this whenever playground.js changes; better still, have
+       scripts/build-docs.mjs stamp a content hash so it cannot lie. -->
+  <script type="module" src="assets/playground.js?v=2026.08.01-language-service"></script>
 </body>
 </html>

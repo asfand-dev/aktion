@@ -1781,7 +1781,15 @@ describe("DropdownMenu", () => {
       localHelpers,
     ) as HTMLElement;
     const itemBtn = node.querySelector<HTMLButtonElement>(".rui-menu-item");
-    expect(itemBtn?.disabled).toBe(true);
+    // Marked unavailable with `aria-disabled`, NOT the native `disabled`
+    // attribute. A WAI-ARIA menu keeps a disabled item focusable and announced,
+    // so a keyboard user learns the option exists at all; `disabled` would remove
+    // it from the tab order entirely and hide that fact.
+    expect(itemBtn?.getAttribute("aria-disabled")).toBe("true");
+    expect(itemBtn?.disabled).toBe(false);
+    // …and it is still reachable, which is the point of the change.
+    expect(itemBtn?.getAttribute("tabindex")).not.toBe("-1");
+    // The behaviour under test is unchanged: activating it must do nothing.
     itemBtn?.click();
     expect(action).not.toHaveBeenCalled();
   });

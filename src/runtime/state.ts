@@ -269,11 +269,37 @@ export class StateStore {
 }
 
 /**
+ * Path segments that must never be written through. State paths come from the
+ * DSL (`$user.profile.name = …`, including computed `$user[key] = …` where
+ * `key` may itself derive from an HTTP or WebSocket payload), so an unguarded
+ * write reaches `Object.prototype` and every `{}` in the *host* application.
+ *
+ * The immutable reconstruction below already blunts the classic payload — each
+ * level is rebuilt as a fresh object rather than mutated in place, so
+ * `$s.x.__proto__.polluted = 1` retargets the copy instead of the shared
+ * prototype. That is an accident of the algorithm, not a guarantee: it would
+ * silently stop holding the moment a level is mutated in place for performance.
+ * The explicit check makes the property a stated invariant (and clears
+ * `js/prototype-polluting-assignment` in static analysis).
+ */
+const FORBIDDEN_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
+
+/**
+ * Largest array index a state write may materialise. Writing `$rows[5]` on an
+ * absent atom legitimately creates a 6-slot array; writing `$rows[1e9]` would
+ * allocate a billion slots and exhaust the tab's memory.
+ */
+const MAX_MATERIALISED_INDEX = 1_000_000;
+
+/**
  * Immutably write `value` at `path[index..]` inside `target`. Each level
  * is reconstructed (`{...prev, key: …}` for objects, `[…prev]` for
  * arrays) so the returned root has a fresh identity at every visited
  * level. Missing intermediate slots are materialised as plain objects
  * (or arrays when the segment is numeric).
+ *
+ * A path containing a prototype-reaching segment is refused outright: the
+ * original `target` is returned unchanged, so the write is a no-op.
  */
 function updateAtPath(
   target: unknown,
@@ -283,6 +309,7 @@ function updateAtPath(
 ): unknown {
   if (index >= path.length) return value;
   const key = path[index]!;
+  if (FORBIDDEN_PATH_SEGMENTS.has(key)) return target;
   const asIndex = key !== "" && !Number.isNaN(Number(key)) ? Number(key) : null;
   if (Array.isArray(target) && asIndex !== null) {
     const next = target.slice();
@@ -300,6 +327,9 @@ function updateAtPath(
     return base;
   }
   if (asIndex !== null) {
+    // A numeric path segment materialises a fresh array of that length, so an
+    // untrusted index (`$rows[1e9] = 1`) would allocate a billion-slot array.
+    if (asIndex > MAX_MATERIALISED_INDEX) return target;
     const next: unknown[] = [];
     next[asIndex] = updateAtPath(undefined, path, index + 1, value);
     return next;

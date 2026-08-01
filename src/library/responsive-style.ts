@@ -80,12 +80,25 @@ export function responsiveClassFor(groups: ResponsiveGroup[]): string | null {
   if (cached) return cached;
 
   const cls = `ak-r${(classCounter++).toString(36)}`;
+  // The selector repeats the class three times on purpose.
+  //
+  // A single `.ak-rX` is specificity (0,1,0), but almost every component styles
+  // itself with an attribute selector — `.rui-stack[data-gap="md"]`, (0,2,0) —
+  // so the component's own default beat the author's `sx` value and every
+  // responsive map was silently ignored. (Non-responsive `sx` values were never
+  // affected: those are emitted as an inline style, which already wins.)
+  //
+  // Repeating the class lifts it to (0,3,0), which beats the component rules
+  // outright rather than relying on source order between two stylesheets. It
+  // still loses to `!important` and to inline styles, which is correct — an
+  // explicit non-responsive `sx` value on the same element should win.
+  const sel = `.${cls}.${cls}.${cls}`;
   for (const g of ordered) {
     const body = g.decls.map(([p, v]) => `${p}:${v}`).join(";");
     const min = BREAKPOINT_MIN[g.bp] ?? 0;
     const rule = min > 0
-      ? `@media (min-width:${min}px){.${cls}{${body}}}`
-      : `.${cls}{${body}}`;
+      ? `@media (min-width:${min}px){${sel}{${body}}}`
+      : `${sel}{${body}}`;
     try {
       sheet.insertRule(rule, sheet.cssRules.length);
     } catch {

@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     /* =========================================================================
@@ -396,7 +396,7 @@
       <div class="tg-prose">
         <h2 id="how-to-use">How to use it</h2>
         <p>
-          The generator starts from one of the seven built&#8209;in themes
+          The generator starts from one of the six built&#8209;in themes
           (<strong>Start from</strong>). Every control you touch becomes an
           <em>override</em> layered on top of that base &mdash; so the output stays
           minimal and only contains what you actually changed. Pick a colour preset
@@ -413,6 +413,10 @@
             <em>Copy</em>, then paste the <code>$theme({&hellip;})</code> at the top of
             any Aktion program.</li>
         </ol>
+        <p>
+          Every value in the panel is read back from the runtime rather than hardcoded
+          here, so the base defaults you see are the ones the library actually ships.
+        </p>
 
         <h2 id="using-output">Using the generated theme</h2>
         <p>
@@ -463,15 +467,21 @@ app.setTheme({ colorPrimary: "#7c3aed",        // flat token overrides
         <p>
           Use <code>$theme({&hellip;})</code> (grouped) inside a program for a
           per&#8209;response brand; use <code>setTheme()</code> (flat) on the host for an
-          app&#8209;wide base. See <a href="themes.html">Themes &amp; customization</a> for the
-          full token reference.
+          app&#8209;wide base. The flat shape is also the only one that reaches all 113
+          tokens. See <a href="themes.html">Themes &amp; customization</a> for the full
+          token reference.
         </p>
 
         <h2 id="what-you-can-set">What the generator controls</h2>
+        <p>
+          Six of the ten token groups have controls here. They are the ones that change
+          how a UI <em>feels</em>; the rest are better set by hand once, and are listed
+          below.
+        </p>
         <table class="signature-table">
           <thead><tr><th>Group</th><th>Tokens</th></tr></thead>
           <tbody>
-            <tr><td><code>colors</code></td><td>Brand (<code>primary</code>, <code>accent</code>, focus ring), surfaces (<code>bg</code>, <code>surface</code>, <code>border</code>), text, and status (<code>success</code> / <code>warning</code> / <code>danger</code> / <code>info</code>).</td></tr>
+            <tr><td><code>colors</code></td><td>Brand (<code>primary</code>, <code>accent</code>, <code>focusRing</code>), surfaces (<code>bg</code>, <code>surface</code>, <code>border</code>, <code>borderControl</code>), text, status fills (<code>success</code> / <code>warning</code> / <code>danger</code> / <code>info</code>) and their text&#8209;safe partners (<code>successText</code>, <code>onSuccess</code>, &hellip;).</td></tr>
             <tr><td><code>radius</code></td><td>One roundness slider drives <code>xs</code>&hellip;<code>lg</code> plus <code>button</code>/<code>input</code>; a pill toggle rounds buttons fully.</td></tr>
             <tr><td><code>spacing</code></td><td>A density control scales the <code>xs</code>&hellip;<code>xl</code> spacing ramp behind every <code>gap</code>/<code>padding</code>.</td></tr>
             <tr><td><code>font</code></td><td>Body &amp; heading families (with on&#8209;demand web&#8209;font loading), base size, and heading weight.</td></tr>
@@ -480,9 +490,46 @@ app.setTheme({ colorPrimary: "#7c3aed",        // flat token overrides
           </tbody>
         </table>
         <p>
-          Tokens that are not expressible in the grouped <code>$theme({&hellip;})</code>
-          form (motion, z&#8209;index layers, RTL direction) are documented on the
-          <a href="themes.html#layers">Themes</a> page.
+          The generator does not emit <code>zIndex</code> or <code>motion</code>, but both
+          <em>are</em> real <code>$theme</code> groups &mdash; add them to the copied
+          statement by hand:
+        </p>
+<pre><code>$theme({
+  zIndex: { modal: 2000, toast: 2100 },
+  motion: { fast: "100ms", base: "160ms", ease: "cubic-bezier(.2,.8,.2,1)" }
+})</code></pre>
+        <p>
+          What genuinely cannot be expressed in the grouped form is a different list: the
+          five <code>button*</code> tokens, the six <code>chart*</code> series colours, the
+          eight <code>hl*</code> syntax colours, <code>borderWidth</code>,
+          <code>transitionDuration</code> and the four type metrics
+          (<code>lineHeightBody</code>, <code>lineHeightHeading</code>,
+          <code>letterSpacingHeading</code>, <code>headingTextTransform</code>). Those 25
+          tokens have no group to live in, so they only reach the host through the flat
+          shape &mdash; see
+          <a href="themes.html#flat-only">tokens with no <code>$theme</code> route</a>.
+        </p>
+        <div class="callout" data-variant="warning">
+          <h4>A <code>name:</code> base does not carry the theme's CSS personality</h4>
+          <p>
+            When you start from <code>corporate</code>, <code>soft</code>,
+            <code>glass</code> or <code>modern</code>, the generated statement begins
+            <code>$theme({ name: "&hellip;" })</code>. That copies the theme's
+            <strong>token values</strong>, but not its extra stylesheet block &mdash;
+            glass's backdrop blur, corporate's uppercase table headers, the hover lift on
+            soft and modern cards. Those are gated on the <code>data-rui-theme</code>
+            marker, which only the host <code>theme</code> attribute and
+            <code>setTheme()</code> write. For the full look, set the theme on the host
+            <em>and</em> paste the generated overrides on top. Details:
+            <a href="themes.html#precedence">Per-response vs host theme</a>.
+          </p>
+        </div>
+        <p>
+          Two more things the panel leaves alone. <code>colors.link</code> /
+          <code>colors.linkHover</code> are optional and derived from the accent, so they
+          have no base value to show; add them by hand if your accent is too light to read
+          as link text. And RTL is not a token at all &mdash; use the <code>dir</code>
+          attribute on <code>&lt;aktion-app&gt;</code>.
         </p>
 
         <h2 id="next">Next</h2>
@@ -510,7 +557,7 @@ app.setTheme({ colorPrimary: "#7c3aed",        // flat token overrides
     </main>
   </div>
 
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     import "../dist/aktion.js"; // registers <aktion-app>
 
@@ -586,22 +633,39 @@ app.setTheme({ colorPrimary: "#7c3aed",        // flat token overrides
         ["colorBgSubtle", "Background subtle"],
         ["colorSurface", "Surface"],
         ["colorSurfaceMuted", "Surface muted"],
-        ["colorBorder", "Border"],
+        ["colorBorder", "Border (dividers)"],
+        ["colorBorderControl", "Border (controls)"],
       ]},
       { label: "Text", icon: "fa-font", fields: [
         ["colorText", "Text"],
         ["colorTextMuted", "Muted text"],
       ]},
-      { label: "Status", icon: "fa-circle-info", fields: [
+      // Status hues come in threes: the FILL, the same hue used as TEXT, and the
+      // ink painted ON the fill. Retinting only the fill leaves labels on the
+      // built-in palette, so all three are editable here.
+      { label: "Status fills", icon: "fa-circle-info", fields: [
         ["colorSuccess", "Success"],
         ["colorWarning", "Warning"],
         ["colorDanger", "Danger"],
         ["colorInfo", "Info"],
       ]},
+      { label: "Status text & ink", icon: "fa-highlighter", fields: [
+        ["colorSuccessText", "Success as text"],
+        ["colorWarningText", "Warning as text"],
+        ["colorDangerText", "Danger as text"],
+        ["colorInfoText", "Info as text"],
+        ["colorOnSuccess", "Ink on success"],
+        ["colorOnWarning", "Ink on warning"],
+        ["colorOnDanger", "Ink on danger"],
+        ["colorOnInfo", "Ink on info"],
+      ]},
     ];
 
     const PRESETS = [
-      { name: "Indigo", colors: ["#6366f1", "#4f46e5", "#06b6d4", "#0891b2"] },
+      // Indigo mirrors the light theme's own pair (#4f46e5 / #4338ca). The older
+      // indigo-500 #6366f1 measures 4.47:1 on white and the library moved off it,
+      // so the preset should not hand it back to you.
+      { name: "Indigo", colors: ["#4f46e5", "#4338ca", "#06b6d4", "#0891b2"] },
       { name: "Emerald", colors: ["#10b981", "#059669", "#14b8a6", "#0d9488"] },
       { name: "Sunset", colors: ["#f97316", "#ea580c", "#f43f5e", "#e11d48"] },
       { name: "Royal", colors: ["#7c3aed", "#6d28d9", "#db2777", "#be185d"] },
@@ -671,7 +735,7 @@ $app(Column([
     ], { gap: "sm" })
   ], { align: "center" }),
 
-  GradientText("Brand gradient heading", { gradient: "brand", variant: "display" }),
+  Display([GradientText("Brand gradient heading", { gradient: "brand" })], { size: "lg" }),
 
   Grid([
     StatCard("Revenue", "$48.2k", "up", "12%", "dollar-sign"),

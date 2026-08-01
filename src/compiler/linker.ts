@@ -122,6 +122,12 @@ export function linkProgram(
     }
 
     const program = parse(src);
+    // `parse()` records a bad statement's error and recovers rather than
+    // throwing, so a dependency with a syntax error would otherwise link
+    // "successfully" minus whatever statements were dropped. Surface each
+    // module's own parse errors as link diagnostics — only the ENTRY's errors
+    // travel out on `program.errors`, so a dependency's would vanish entirely.
+    for (const e of program.errors) fail(path, e.line, e.column, e.message);
     const rec: ModuleRecord = {
       id: nextId++,
       path,

@@ -83,5 +83,15 @@ my-app/
   .vscode/                  recommends the Aktion extension + format-on-save
 ```
 
-Install the **Aktion** VS Code extension for highlighting, diagnostics, hover,
-and completions on `.aktion` files.
+## Editor support
+
+Install the Aktion extension for your editor to get highlighting, diagnostics,
+hover, completions, go-to-definition, rename, and formatting on `.aktion` files.
+All three integrations run the runtime's own analysis, so they flag exactly what
+the runtime flags:
+
+| Editor | Install |
+| --- | --- |
+| VS Code / Cursor / VSCodium | Search **"Aktion"** in the Extensions view. The scaffolded `.vscode/extensions.json` prompts for it on first open. |
+| WebStorm / IntelliJ IDEA / PyCharm / … | Search **"Aktion"** in <kbd>Settings</kbd> → <kbd>Plugins</kbd> → <kbd>Marketplace</kbd>. Requires Node 18+ and the LSP4IJ plugin, which the IDE offers to install alongside it. |
+| Neovim / Helix / Zed / Sublime / Emacs | `npm i -g aktion-language-server`, then point your LSP client at `aktion-language-server --stdio` for `*.aktion`. |

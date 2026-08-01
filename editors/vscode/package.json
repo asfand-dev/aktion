@@ -1,7 +1,7 @@
 {
   "name": "aktion-vscode",
   "displayName": "Aktion",
-  "description": "Rich language support for Aktion (.aktion) files: syntax + semantic highlighting, diagnostics, hover, completions, signature help, go-to-definition, find references, rename, document outline, formatting, and snippets. Covers all builtins: $http, $query/$mutation (optimistic/infinite), $socket/$sse, $script, $head, $dom, $form, $store (persist/history/undo-redo), $router (nested layouts/guards), $util (style/rules/derived/env/device/worker/PWA), sx/animate universal props, and the full 275-component library (incl. Mount / WebComponent interop). Also highlights Aktion code embedded in <aktion-app> tags inside HTML files.",
+  "description": "Rich language support for Aktion (.aktion) files: syntax + semantic highlighting, diagnostics with quick fixes, hover, completions, signature help, cross-file go-to-definition, find references, rename, document + workspace outline, formatting, and snippets. Covers all 26 $-builtins — $state, $memo, $ref, $reducer, $id, $effect, $optimistic, $http, $query, $mutation, $socket, $sse, $script, $head, $dom, $form, $store, $router, $theme, $i18n, $storage, $console, $toast, $emit, $app, $util — plus sx/animate universal props, 6 built-in themes, and the full 281-component library (incl. Mount / WebComponent interop). Also highlights Aktion code embedded in <aktion-app> tags inside HTML files.",
   "version": "0.5.15",
   "publisher": "AsfandiyarKhan",
   "license": "MIT",
@@ -34,8 +34,18 @@
     "url": "https://github.com/asfand-dev/aktion/issues"
   },
   "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "The extension only parses and pretty-prints Aktion source — it never evaluates it, spawns a process, or loads workspace configuration."
+    },
+    "virtualWorkspaces": {
+      "supported": "limited",
+      "description": "Cross-file go-to-definition needs a local filesystem; every other feature works on virtual documents."
+    }
+  },
   "activationEvents": [
-    "onLanguage:aktion"
+    "workspaceContains:**/*.aktion"
   ],
   "contributes": {
     "languages": [
@@ -47,7 +57,11 @@
         "extensions": [
           ".aktion"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icon.png",
+          "dark": "./icon.png"
+        }
       }
     ],
     "grammars": [
@@ -74,6 +88,53 @@
         "path": "./snippets/aktion.code-snippets"
       }
     ],
+    "commands": [
+      {
+        "command": "aktion.copySystemPrompt",
+        "title": "Copy System Prompt (for an LLM)",
+        "category": "Aktion"
+      },
+      {
+        "command": "aktion.showLanguageReference",
+        "title": "Show Language Reference",
+        "category": "Aktion"
+      },
+      {
+        "command": "aktion.insertComponent",
+        "title": "Insert Component…",
+        "category": "Aktion"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "aktion.insertComponent",
+          "when": "editorLangId == aktion"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Aktion",
+      "properties": {
+        "aktion.diagnostics.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Report Aktion parse errors, schema errors and lint warnings while you type."
+        },
+        "aktion.diagnostics.debounceMs": {
+          "type": "number",
+          "default": 200,
+          "minimum": 0,
+          "description": "Idle time before a changed document is re-analysed. 0 analyses on every keystroke. Open and save always publish immediately."
+        },
+        "aktion.maxFileSizeKb": {
+          "type": "number",
+          "default": 512,
+          "minimum": 0,
+          "description": "Skip diagnostics for documents larger than this (KB). 0 disables the cap."
+        }
+      }
+    },
     "semanticTokenScopes": [
       {
         "scopes": {
@@ -85,13 +146,31 @@
             "entity.name.type.class",
             "support.class"
           ],
+          "class.defaultLibrary": [
+            "support.class.aktion",
+            "support.class"
+          ],
+          "class.declaration": [
+            "entity.name.type.class"
+          ],
           "function": [
             "entity.name.function",
             "support.function"
           ],
+          "function.defaultLibrary": [
+            "support.function.aktion",
+            "support.function"
+          ],
+          "function.declaration": [
+            "entity.name.function"
+          ],
           "variable": [
             "variable.other.aktion",
             "variable.other"
+          ],
+          "variable.declaration": [
+            "variable.other.aktion.declaration",
+            "variable.other.aktion"
           ],
           "property": [
             "variable.other.property"
@@ -112,21 +191,20 @@
     }
   },
   "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
     "gen-snippets": "node scripts/gen-snippets.mjs",
     "gen-grammar": "node scripts/gen-grammar.mjs",
-    "build": "npm run gen-snippets && npm run gen-grammar && node esbuild.mjs",
+    "build": "npm run typecheck && npm run gen-snippets && npm run gen-grammar && node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "vscode:prepublish": "npm run build",
     "package": "vsce package",
     "publish": "vsce publish",
     "publish:ovsx": "ovsx publish"
   },
-  "dependencies": {
-    "aktion-runtime": "^0.5.15"
-  },
   "devDependencies": {
     "@types/vscode": "^1.75.0",
     "@vscode/vsce": "^3.0.0",
+    "aktion-runtime": "^0.5.15",
     "esbuild": "^0.21.0",
     "ovsx": "^0.9.0",
     "typescript": "^5.6.3"

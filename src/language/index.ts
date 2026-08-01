@@ -29,6 +29,7 @@ import {
 import {
   getComponentCatalog,
   indexCatalog,
+  universalPropCatalog,
   type ComponentEntry,
   type ComponentParam,
 } from "./components.js";
@@ -85,6 +86,7 @@ export {
   keywordDocs,
   getComponentCatalog,
   indexCatalog,
+  universalPropCatalog,
   getSnippets,
   builtinCatalog,
   builtinNames,

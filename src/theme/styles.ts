@@ -35,6 +35,240 @@ function spacingAttrRules(selector: string, attr: string, decl: (css: string) =>
     .join("\n");
 }
 
+/**
+ * Compact inline controls that must hug their content inside a row Stack,
+ * instead of being flex-grown into full-width banners.
+ */
+const ROW_HUG_SELECTORS: ReadonlyArray<string> = [
+  ".rui-tag", ".rui-badge", ".rui-status-dot", ".rui-kbd-group", ".rui-icon", ".rui-rating",
+];
+
+/**
+ * Row-direction rules for one breakpoint of a responsive Stack.
+ *
+ * A responsive `direction` map sets `data-direction="responsive"`, which kills
+ * every `[data-direction="row"]`-keyed rule: uniform sizing stops working, the
+ * `min-width: 0` overflow guard disappears, and chips stretch into banners.
+ * CSS cannot branch on a custom property's value, so the render also emits
+ * `data-row-at` listing the breakpoints whose cascaded direction resolves to
+ * row — these rules key off that, once per breakpoint, inside the matching
+ * mobile-first media query.
+ */
+function rowAtRules(bp: string): string {
+  const at = `.rui-stack[data-row-at~="${bp}"]`;
+  return [
+    `${at}[data-uniform="true"] > *:not(.rui-stack-item) { flex: 1 1 auto; min-width: 0; }`,
+    `${at} > * { min-width: 0; }`,
+    `${ROW_HUG_SELECTORS.map((cls) => `${at} > ${cls}`).join(",\n")} { flex: 0 0 auto; }`,
+  ].join("\n");
+}
+
+/**
+ * THE breakpoint ladder. Every viewport media query in this sheet is generated
+ * from this map — nothing here writes a raw pixel threshold.
+ *
+ * `sm`/`md`/`lg`/`xl` are byte-for-byte the values in
+ * `src/library/responsive-style.ts` (`BREAKPOINT_MIN`), which is what an author's
+ * `sx` breakpoint map and every `data-responsive-*` ladder resolve against. The
+ * sheet used to carry a *second*, hand-written family alongside them — 480, 560,
+ * 720, 760, 820, 900, 920 plus `max-width: 640/768/1024px` — so a page built from
+ * Stack + Grid + Navbar2 reflowed in three separate steps between 560px and
+ * 920px and an author's `md` (768px) never lined up with the component collapse
+ * (720px). Those thresholds are now snapped to the nearest rung.
+ *
+ * `xs` is the one rung with no `sx` counterpart. It subdivides `base` rather than
+ * contradicting it, and it exists because the narrow-phone compaction (stretched
+ * card footers, full-width StatCards) genuinely should not reach a 600px tablet.
+ */
+const BREAKPOINTS = {
+  xs: 480,
+  sm: 640,
+  md: 768,
+  lg: 1024,
+  xl: 1280,
+} as const;
+
+type Breakpoint = keyof typeof BREAKPOINTS;
+
+/** Mobile-first: this rung and wider. */
+function up(bp: Breakpoint): string {
+  return `@media (min-width: ${BREAKPOINTS[bp]}px)`;
+}
+
+/**
+ * Narrower than this rung. The 0.02px step is what keeps `below("sm")` and
+ * `up("sm")` from both matching at exactly 640px — the bug behind every
+ * `max-width: 640px` this replaced, where the collapse rule and the sm rule
+ * applied together.
+ */
+function belowCond(bp: Breakpoint): string {
+  return `(max-width: ${BREAKPOINTS[bp] - 0.02}px)`;
+}
+
+function below(bp: Breakpoint): string {
+  return `@media ${belowCond(bp)}`;
+}
+
+/**
+ * Mobile-first rungs for the responsive custom-property ladders (Grid columns
+ * and gaps, Stack direction, Box padding, masonry, pattern grids). `base` is
+ * implicit — it is the unqualified rule these cascade on top of.
+ */
+const COLUMN_LADDER_RUNGS: ReadonlyArray<readonly [rung: string, minWidth: string]> =
+  (["sm", "md", "lg", "xl"] as const).map((rung) => [rung, `${BREAKPOINTS[rung]}px`] as const);
+
+/**
+ * Cascading fallback chain for one rung of a responsive custom-property ladder:
+ * at `md` (rungCount 2) this is
+ * `var(--p-md, var(--p-sm, var(--p-base, fallback)))`, so a map that only
+ * declares `base` and `sm` still resolves at every wider breakpoint.
+ */
+function responsiveVarChain(prefix: string, rungCount: number, fallback: string): string {
+  return COLUMN_LADDER_RUNGS
+    .slice(0, rungCount)
+    .reduce((acc, [rung]) => `var(${prefix}-${rung}, ${acc})`, `var(${prefix}-base, ${fallback})`);
+}
+
+/**
+ * Per-axis gap ladder for Grid.
+ *
+ * `rowGap` / `columnGap` accept the same responsive maps as `gap`, and the
+ * render emits `data-responsive-row-gap` plus `--rui-grid-row-gap-{bp}` for
+ * them (layout.ts). Nothing consumed either name, so a responsive rowGap
+ * silently fell back to the uniform `gap` — and an author who already had
+ * `rowGap: "xl"` working lost it the moment they made it responsive. Emitted
+ * *after* the shorthand `gap` rule at each rung so the axis override wins the
+ * source-order tie-break.
+ */
+function responsiveAxisGapRules(rungCount: number): string {
+  return [["row", "row-gap"], ["column", "column-gap"]]
+    .map(([axis, prop]) => {
+      const chain = responsiveVarChain(`--rui-grid-${axis}-gap`, rungCount, "var(--rui-spacing-m)");
+      return `.rui-grid[data-responsive-${axis}-gap] { ${prop}: ${chain}; }`;
+    })
+    .join("\n");
+}
+
+/** A `repeat()` track list, collapsing the single-column case to plain `1fr`. */
+function gridTracks(count: number): string {
+  return count <= 1 ? "1fr" : `repeat(${count}, minmax(0, 1fr))`;
+}
+
+/**
+ * Breakpoint ladder for a pattern grid whose `data-columns="N"` would otherwise
+ * pin the same track count at every viewport width — the reason a 4-column
+ * PricingTable used to render four 84px columns on a 375px phone while the same
+ * grid *without* `columns` reflowed correctly.
+ *
+ * Shaped like `.rui-masonry-grid[data-responsive-columns]`: the element declares
+ * one custom property per breakpoint and each media query reads its own rung
+ * with a cascade of fallbacks down to the base. `caps` is the maximum number of
+ * columns allowed at base/sm/md/lg/xl, so the author's count is honoured once
+ * there is room for it and clamped below that.
+ *
+ * Every rung is declared for every count instead of being left to fall through,
+ * because custom properties inherit: a pattern grid nested inside another one
+ * would otherwise adopt its ancestor's track list at the breakpoints it did not
+ * set itself.
+ */
+function columnLadderRules(
+  selector: string,
+  prefix: string,
+  maxColumns: number,
+  caps: readonly [base: number, sm: number, md: number, lg: number, xl: number],
+): string {
+  const scope = `${selector}[data-columns]`;
+  const out: string[] = [`${scope} { grid-template-columns: var(${prefix}-base, 1fr); }`];
+  COLUMN_LADDER_RUNGS.forEach(([, minWidth], i) => {
+    // Read this rung, then every lower one, then the base: a count that only
+    // needs two steps still resolves at xl.
+    const chain = COLUMN_LADDER_RUNGS
+      .slice(0, i + 1)
+      .reduce((acc, [rung]) => `var(${prefix}-${rung}, ${acc})`, `var(${prefix}-base, 1fr)`);
+    out.push(`@media (min-width: ${minWidth}) { ${scope} { grid-template-columns: ${chain}; } }`);
+  });
+  for (let n = 1; n <= maxColumns; n += 1) {
+    const decls = [`${prefix}-base: ${gridTracks(Math.min(n, caps[0]))};`];
+    COLUMN_LADDER_RUNGS.forEach(([rung], i) => {
+      // caps is a 5-tuple keyed base,sm,md,lg,xl, so the index always resolves;
+      // the fallback only satisfies the indexed-access check.
+      decls.push(`${prefix}-${rung}: ${gridTracks(Math.min(n, caps[i + 1] ?? maxColumns))};`);
+    });
+    out.push(`${selector}[data-columns="${n}"] { ${decls.join(" ")} }`);
+  }
+  return out.join("\n");
+}
+
+/**
+ * The eight roots that share the `SURFACE_TONES` enum (patterns.ts:23): Hero,
+ * TimelineItem, FeatureItem, Banner, KanbanCard, KanbanColumn, Tile and
+ * Notification. The CSS used to be hand-written per component, so `info` styled
+ * a Tile and silently no-opped on a KanbanColumn while `primary` was the one
+ * tone a FeatureItem could not render. Each root resolves the attribute ONCE
+ * into the `--rui-tone-*` trio and the component rules consume that, so a tone
+ * added to the enum can no longer land on only some of the eight.
+ */
+const SURFACE_TONE_ROOTS: ReadonlyArray<string> = [
+  ".rui-hero",
+  ".rui-timeline-item",
+  ".rui-feature-item",
+  ".rui-banner",
+  ".rui-kanban-card",
+  ".rui-kanban-column",
+  ".rui-tile",
+  ".rui-notification",
+];
+
+/**
+ * tone → [colour, surface tint, border tint]. The two percentages carry the
+ * per-tone nuance the hand-written rules had — amber needs more of itself than
+ * green before it reads as a warning wash — so no component has to re-decide it.
+ */
+const SURFACE_TONE_MAP: ReadonlyArray<
+  readonly [tone: string, color: string, surfaceMix: string, borderMix: string]
+> = [
+  ["primary", "var(--rui-color-primary)", "18%", "28%"],
+  ["success", "var(--rui-color-success)", "18%", "28%"],
+  ["warning", "var(--rui-color-warning)", "22%", "32%"],
+  ["danger", "var(--rui-color-danger)", "18%", "32%"],
+  ["info", "var(--rui-color-info)", "18%", "30%"],
+];
+
+/** `--rui-tone-*` resolution for every shared-tone root. */
+function surfaceToneTokenRules(): string {
+  const roots = (suffix: string) => SURFACE_TONE_ROOTS.map((root) => `${root}${suffix}`).join(",\n");
+  // `default` resets the trio rather than leaving it unset: custom properties
+  // inherit, so an untoned Tile inside a toned Hero would otherwise pick up the
+  // Hero's tone. Every one of the eight always emits data-tone, so the reset
+  // selector reaches all of them.
+  const blocks = [`${roots("[data-tone]")} {
+  --rui-tone-color: var(--rui-color-border);
+  --rui-tone-surface-mix: 0%;
+  --rui-tone-border-mix: 0%;
+}`];
+  for (const [tone, color, surfaceMix, borderMix] of SURFACE_TONE_MAP) {
+    blocks.push(`${roots(`[data-tone="${tone}"]`)} {
+  --rui-tone-color: ${color};
+  --rui-tone-surface-mix: ${surfaceMix};
+  --rui-tone-border-mix: ${borderMix};
+}`);
+  }
+  return blocks.join("\n");
+}
+
+/**
+ * Scope for a rule that consumes `--rui-tone-color`. `default` is always
+ * excluded — that is the component's own neutral look. `excludePrimary` is for
+ * the surfaces whose *base* rule already IS the primary tone because their
+ * render defaults `tone` to `"primary"` (Hero/Cover patterns.ts:173, Banner
+ * patterns.ts:731); restating it here would only re-paint every default Hero
+ * and Banner with a flatter gradient than the one they are designed around.
+ */
+function tonedScope(root: string, excludePrimary = false): string {
+  const primary = excludePrimary ? `:not([data-tone="primary"])` : "";
+  return `${root}[data-tone]:not([data-tone="default"])${primary}`;
+}
+
 export const componentStyles = `
 :host {
   display: block;
@@ -45,31 +279,91 @@ export const componentStyles = `
   font-weight: var(--rui-font-weight-body);
   line-height: var(--rui-line-height-body);
   font-size: var(--rui-font-size-base);
+  /* Long unbroken strings (URLs, hashes, IDs, base64, German compounds) used to
+     blow out of every card, table cell, badge and list row: overflow-wrap did
+     not appear once in this stylesheet. It is an inherited property, so one
+     declaration here covers all 288 components. break-word rather than
+     anywhere, because anywhere also shrinks min-content contributions, which
+     would change existing flex/grid sizing. Elements set to white-space nowrap
+     are unaffected — they never wrap, so this is inert there. */
+  overflow-wrap: break-word;
   /* Surface & semantic */
   --rui-color-bg: #ffffff;
   --rui-color-bg-subtle: #f8fafc;
   --rui-color-surface: #ffffff;
   --rui-color-surface-muted: #f1f5f9;
   --rui-color-border: #e2e8f0;
+  /* The boundary of a control the user has to LOCATE needs 3:1 (WCAG 1.4.11);
+     --rui-color-border sits around 1.2:1 in every theme. Darkening it would make
+     every divider and table separator in the library heavy, so interactive form
+     controls take this separate, darker token and decorative hairlines keep the
+     faint one. Kept in sync with colorBorderControl in theme/index.ts. */
+  --rui-color-border-control: #767f8c;
   --rui-color-border-subtle: rgba(15, 23, 42, 0.08);
   --rui-color-text: #0f172a;
   --rui-color-text-muted: #475569;
-  --rui-color-primary: #6366f1;
-  --rui-color-primary-hover: #4f46e5;
+  /* indigo-600, not indigo-500: #6366f1 measures 4.47:1 on this theme's white
+     surface, which fails both as text (125 rules paint color: primary) and for
+     the white label on a primary button. Kept in sync with theme/index.ts. */
+  --rui-color-primary: #4f46e5;
+  --rui-color-primary-hover: #4338ca;
   --rui-color-primary-text: #ffffff;
-  --rui-color-accent: #6366f1;
-  --rui-color-accent-hover: #4f46e5;
+  --rui-color-accent: #4f46e5;
+  --rui-color-accent-hover: #4338ca;
   --rui-color-accent-text: #ffffff;
-  --rui-color-focus-ring: #6366f1;
+  /* Interactive TEXT (links, link/ghost buttons, selected tab label, pagination
+     digits). DERIVED from the accent, so a theme or a partial $theme({accent})
+     that only retints the accent still moves its links. A theme overrides these
+     when its accent cannot also be text: the accent is simultaneously a FILL
+     paired with --rui-color-accent-text, so it cannot just be darkened. soft's
+     mint accent measured 1.48:1 as link text and glass's lavender 2.63:1; both
+     now ship an explicit pair. Kept in sync with colorLink in theme/index.ts. */
+  --rui-color-link: var(--rui-color-accent);
+  --rui-color-link-hover: var(--rui-color-accent-hover);
+  --rui-color-focus-ring: #4f46e5;
   --rui-color-success: #10b981;
   --rui-color-warning: #f59e0b;
   --rui-color-danger: #ef4444;
   --rui-color-info: #06b6d4;
+  /* Text-safe partners for the four status hues. The tokens above are tuned for
+     FILLS and shapes, where 3:1 is the bar (WCAG 1.4.11); painted as a text
+     colour on a light surface, #10b981 measures 2.54:1 and #f59e0b 2.15:1. Every
+     rule that renders status TEXT takes these instead, and a theme that retints
+     a status hue is expected to retint its -text partner with it. */
+  --rui-color-success-text: #047857;
+  --rui-color-warning-text: #a35a00;
+  --rui-color-danger-text: #d92d20;
+  --rui-color-info-text: #0e7490;
+  /* The mirror image: ink for a label sitting ON one of those fills (the check in
+     a completed Step, a Callout/Toast icon disc, a danger Button, a TabBar count).
+     Those places all used a literal #fff, which fails in every theme — white is
+     2.54:1 on success, 2.15:1 on warning, 2.43:1 on info, 3.76:1 on danger. No
+     fill was darkened to fix it; a hue-matched dark ink clears 4.5:1 on all four.
+     Kept in sync with colorOnSuccess... in theme/index.ts. */
+  --rui-color-on-success: #04291e;
+  --rui-color-on-warning: #451a03;
+  --rui-color-on-danger: #2c0606;
+  --rui-color-on-info: #0c2b3a;
+  /* Hover wash for rows/cells that are clickable but have no surface of their
+     own. Derived from the theme's own ink so it stays visible on dark and
+     translucent surfaces — the literal rgba(0,0,0,.04) it replaced did not. */
+  --rui-color-surface-hover: color-mix(in srgb, var(--rui-color-text) 6%, var(--rui-color-surface));
   /* Typography */
   --rui-font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --rui-font-family-heading: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --rui-font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --rui-font-size-base: 14px;
+  /* Extra type-scale rungs covering the sizes the sheet actually uses, so a
+     theme can retune the whole scale. Values match what was hardcoded, so
+     converting the raw px to these tokens is visually a no-op. */
+  --rui-font-size-10: 10px;
+  --rui-font-size-11: 11px;
+  --rui-font-size-13: 13px;
+  --rui-font-size-15: 15px;
+  --rui-font-size-18: 18px;
+  --rui-font-size-20: 20px;
+  --rui-font-size-24: 24px;
+  --rui-font-size-32: 32px;
   --rui-font-size-sm: 12px;
   --rui-font-size-lg: 16px;
   --rui-font-size-heading: 16px;
@@ -92,6 +386,29 @@ export const componentStyles = `
   --rui-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
   --rui-shadow-md: 0 6px 24px rgba(15, 23, 42, 0.08);
   --rui-shadow-lg: 0 18px 60px rgba(15, 23, 42, 0.12);
+  /* Stacking — ONE ladder for the whole library (audit phase 2).
+     Before this existed there were two disjoint families: components hardcoded
+     25-81 while overlays hardcoded 1000-9999, so a Modal (50) painted *under* a
+     FAB (1300), a Tour (9100) and a Lightbox (9999). sx.ts also exposed a
+     third, unused token ladder. These names match the sx zIndex keywords so
+     a zIndex style prop and the component's own CSS now agree.
+     Anchored popups are promoted to the browser top layer by floating.ts and
+     do not depend on these values; the popup tokens are the fallback path. */
+  --rui-z-base: 0;
+  --rui-z-raised: 10;
+  --rui-z-sticky: 100;          /* sticky headers, FAB, speed dial */
+  --rui-z-header: 200;
+  --rui-z-banner: 300;          /* reading progress, page-top bars */
+  --rui-z-overlay: 900;         /* scrims — must sit under what they dim */
+  --rui-z-dropdown: 1000;       /* menus, listboxes, autocompletes */
+  --rui-z-modal: 1100;          /* modal, sheet, drawer, command palette */
+  --rui-z-modal-top: 1200;      /* a dialog that must beat another modal (ConfirmDialog) */
+  --rui-z-popover: 1350;
+  --rui-z-toast: 1400;
+  --rui-z-tooltip: 1500;
+  --rui-z-top: 1600;            /* lightbox, tour, spotlight, confetti */
+  --rui-z-skip-link: 1700;      /* must stay reachable above everything */
+  --rui-z-max: 2147483000;
   /* Spacing — canonical scale none/3xs/2xs/xs/sm/md/lg/xl/2xl/3xl. The
      sm/md/lg storage vars keep their historical short names (-s/-m/-l) so
      existing theme overrides keep working; the canonical spellings alias
@@ -116,6 +433,20 @@ export const componentStyles = `
   --rui-gradient-cool: linear-gradient(120deg, #3b82f6 0%, #06b6d4 100%);
   --rui-gradient-success: linear-gradient(120deg, #10b981 0%, #22d3ee 100%);
   --rui-gradient-danger: linear-gradient(120deg, #f43f5e 0%, #ec4899 100%);
+  /* Syntax highlighting (CodeBlock / CodeEditor). These existed only as literal
+     var() fallbacks — an unthemeable One Dark palette
+     painted on CodeBlock's LIGHT --rui-color-surface-muted in five of six
+     themes, where #c678dd measures 2.9:1. The defaults below are the light
+     palette (4.4-11.7:1 on every theme's muted surface) and the dark theme
+     overrides them with One Dark, which is what that palette was drawn for. */
+  --rui-hl-keyword: #cf222e;
+  --rui-hl-string: #0a3069;
+  --rui-hl-number: #0550ae;
+  --rui-hl-comment: #57606a;
+  --rui-hl-fn: #6f42c1;
+  --rui-hl-tag: #116329;
+  --rui-hl-attr: #953800;
+  --rui-hl-punct: var(--rui-color-text-muted);
   /* Buttons */
   --rui-button-font-weight: 600;
   --rui-button-text-transform: none;
@@ -140,11 +471,11 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   justify-content: center;
   line-height: 1;
 }
-.rui-icon[data-icon-size="xs"] { font-size: 10px; }
-.rui-icon[data-icon-size="sm"] { font-size: 12px; }
-.rui-icon[data-icon-size="md"] { font-size: 14px; }
-.rui-icon[data-icon-size="lg"] { font-size: 18px; }
-.rui-icon[data-icon-size="xl"] { font-size: 24px; }
+.rui-icon[data-icon-size="xs"] { font-size: var(--rui-font-size-10); }
+.rui-icon[data-icon-size="sm"] { font-size: var(--rui-font-size-sm); }
+.rui-icon[data-icon-size="md"] { font-size: var(--rui-font-size-base); }
+.rui-icon[data-icon-size="lg"] { font-size: var(--rui-font-size-18); }
+.rui-icon[data-icon-size="xl"] { font-size: var(--rui-font-size-24); }
 
 /* Custom (inline-SVG) icons registered via $theme({ icons }) — size to 1em
    so they track the surrounding text / icon-size like a Font Awesome glyph. */
@@ -152,10 +483,10 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 
 /* Field shell — label/hint/error wrapper for inputs (suggestions-global V.4) */
 .rui-field { display: flex; flex-direction: column; gap: 6px; }
-.rui-field-label { font-size: 13px; font-weight: 600; color: var(--rui-color-text); }
-.rui-field-required { color: var(--rui-color-danger); margin-left: 3px; }
+.rui-field-label { font-size: var(--rui-font-size-13); font-weight: 600; color: var(--rui-color-text); }
+.rui-field-required { color: var(--rui-color-danger-text); margin-left: 3px; }
 .rui-field-hint { font-size: 12.5px; color: var(--rui-color-text-muted); }
-.rui-field-error { font-size: 12.5px; color: var(--rui-color-danger); font-weight: 500; }
+.rui-field-error { font-size: 12.5px; color: var(--rui-color-danger-text); font-weight: 500; }
 .rui-field[data-invalid="true"] .rui-input,
 .rui-field[data-invalid="true"] .rui-textarea,
 .rui-field[data-invalid="true"] .rui-select,
@@ -177,25 +508,71 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
   padding: var(--rui-app-margin, 20px);
 }
 
+/* ----- Focus-visible safety net -------------------------------------------
+   85 classes in this sheet declare cursor: pointer and most of them strip the
+   UA chrome (border: none / appearance: none), which also removes the UA focus
+   ring — so a keyboard user tabbing a Rating, TabBar item or KanbanCard used to
+   see nothing at all outside Windows High Contrast.
+
+   This must LOSE to every per-component rule, including the ones that
+   deliberately swap the outline for a box-shadow ring via "outline: none", or it
+   would double-ring them. Two things guarantee that: :where() contributes zero
+   specificity, so the whole selector weighs exactly one pseudo-class and any
+   per-class ":focus-visible" rule outranks it; and it is declared here, near the
+   top of the sheet, so a component rule also wins on source order when specificity
+   ties. Slider and Switch paint their ring on a sibling or a ::thumb rather than
+   on the focused input, so they opt out instead of collecting a second ring.
+
+   Form controls are deliberately absent: .rui-input, .rui-select and friends all
+   style :focus themselves with a border + shadow and no outline reset, and would
+   be the one group this net actually double-rings. */
+:where(.rui-root) :where(
+    button, a[href], summary, [tabindex]:not([tabindex="-1"]),
+    [role="button"], [role="link"], [role="option"], [role="menuitem"],
+    [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"],
+    [role="switch"], [role="checkbox"], [role="radio"], [role="treeitem"]
+  ):where(:not(.rui-slider-input, .rui-switch-input)):focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+}
+
 .rui-error-banner {
-  border: 1px solid var(--rui-color-danger);
+  border: var(--rui-border-width) solid var(--rui-color-danger);
   background: color-mix(in srgb, var(--rui-color-danger) 8%, transparent);
-  color: var(--rui-color-danger);
+  color: var(--rui-color-danger-text);
   border-radius: var(--rui-radius-md);
   padding: var(--rui-spacing-s) var(--rui-spacing-m);
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   margin-bottom: var(--rui-spacing-s);
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .rui-error-banner[hidden] { display: none; }
+/* The universal hidden prop (sx.ts sets the bare attribute) relies on the UA
+   rule [hidden] { display: none }, which is normal-origin and loses to any
+   author display declaration on the same element — and nearly every component
+   root in this sheet has one. So hidden: true used to leave 288 components on
+   screen, and each case had to be patched per component (see .rui-error-banner
+   above and .rui-validation-summary below). This states it once. !important is
+   what makes it beat those author declarations; nothing in the library sets
+   [hidden] on an element it then wants painted. */
+[hidden] { display: none !important; }
+/* Same trap, stated declaratively: an author-sheet display: flex on a component
+   root outranks the UA [hidden] rule, so hidden alone never collapses these. The
+   dismiss handlers also set an inline display:none, which wins on its own — this
+   documents the contract. */
+.rui-notification[data-dismissed="true"],
+.rui-banner[data-dismissed="true"] { display: none !important; }
 .rui-error-banner ul { margin: 0; padding-left: 18px; }
 
 /* Stack */
 .rui-stack {
   display: flex;
   gap: var(--rui-spacing-m);
+  /* So a Stack nested in a flex/grid parent can shrink below its content's
+     min-content width instead of pushing the parent open. */
+  min-width: 0;
 }
 .rui-stack[data-direction="row"] { flex-direction: row; }
 .rui-stack[data-direction="column"] { flex-direction: column; }
@@ -223,6 +600,13 @@ ${spacingAttrRules(".rui-stack", "data-gap", (v) => `gap: ${v};`)}
 ${spacingAttrRules(".rui-stack", "data-padding", (v) => `padding: ${v};`)}
 .rui-stack[data-direction="row"][data-uniform="true"] > *:not(.rui-stack-item) { flex: 1 1 auto; min-width: 0; }
 .rui-stack[data-direction="row-reverse"][data-uniform="true"] > *:not(.rui-stack-item) { flex: 1 1 auto; min-width: 0; }
+/* min-width: 0 on every row child, NOT only the uniform ones: a default Row is
+   data-uniform="false", so its children kept min-width: auto — one unbreakable
+   URL grew the Row past its Card, and no ellipsis anywhere in the library could
+   engage, because no ancestor flex item was allowed to shrink below min-content.
+   .rui-stack-item already does exactly this. */
+.rui-stack[data-direction="row"] > *,
+.rui-stack[data-direction="row-reverse"] > * { min-width: 0; }
 /* Compact inline pills should hug their content, even inside a row Stack
    that flex-grows its children. Without this they get stretched to fill the
    leftover space and look like full-width banners. */
@@ -270,8 +654,8 @@ ${spacingAttrRules(".rui-stack", "data-padding", (v) => `padding: ${v};`)}
 ${spacingAttrRules(".rui-center", "data-gap", (v) => `gap: ${v};`)}
 ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 
-/* Section */
-.rui-section { display: flex; flex-direction: column; gap: var(--rui-spacing-s); }
+/* Section — the root rule lives with the page-band block further down (search
+   "Section page-band"); this half of a split definition was merged into it. */
 .rui-section-title {
   margin: 0;
   font-family: var(--rui-font-family-heading);
@@ -284,11 +668,17 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 }
 
 /* Card */
+/* The padding is routed through --rui-card-pad so CardSection's full-bleed
+   negative margin can be computed from the SAME value. The band used to hardcode
+   --rui-spacing-l while the card dropped to --rui-spacing-m below 720px, which
+   overhung the card by 4px a side and put the band's content 4px out of line with
+   the header. Everything that changes card padding now sets the variable. */
 .rui-card {
+  --rui-card-pad: var(--rui-spacing-l);
   background: var(--rui-color-surface);
   border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
-  padding: var(--rui-spacing-l);
+  padding: var(--rui-card-pad);
   display: flex;
   flex-direction: column;
   gap: var(--rui-spacing-m);
@@ -296,7 +686,33 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 }
 .rui-card[data-variant="elevated"] { box-shadow: var(--rui-shadow-md); }
 .rui-card[data-variant="outlined"] { box-shadow: none; }
+${spacingAttrRules(".rui-card", "data-padding", (v) => `--rui-card-pad: ${v};`)}
+/* A clickable Card is a real button/anchor for keyboard operation, so the UA
+   chrome — centred text, system font, its own border — has to go, and the
+   keyboard target needs a ring. */
+button.rui-card,
+a.rui-card {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  width: 100%;
+}
+.rui-card[data-clickable="true"]:focus-visible { outline: 2px solid var(--rui-color-focus-ring); outline-offset: 2px; }
 .rui-card-header { display: flex; flex-direction: column; gap: var(--rui-spacing-xs); }
+/* The header is a column, so an actions container would stack under the subtitle.
+   The wrapper pair only exists when actions are present. */
+.rui-card-header[data-has-actions="true"] {
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--rui-spacing-m);
+}
+.rui-card-header-text { display: flex; flex-direction: column; gap: var(--rui-spacing-xs); min-width: 0; }
+.rui-card-header-actions { display: flex; align-items: center; gap: var(--rui-spacing-s); flex: 0 0 auto; }
 .rui-card-title {
   margin: 0;
   font-family: var(--rui-font-family-heading);
@@ -306,7 +722,7 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   letter-spacing: var(--rui-letter-spacing-heading);
   text-transform: var(--rui-heading-text-transform);
 }
-.rui-card-subtitle { margin: 0; color: var(--rui-color-text-muted); font-size: 13px; }
+.rui-card-subtitle { margin: 0; color: var(--rui-color-text-muted); font-size: var(--rui-font-size-13); }
 .rui-card-eyebrow {
   margin: 0;
   color: var(--rui-color-text-muted);
@@ -315,29 +731,25 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.rui-card-body { display: flex; flex-direction: column; gap: var(--rui-spacing-m); }
 .rui-card-footer { display: flex; gap: var(--rui-spacing-s); justify-content: flex-end; flex-wrap: wrap; }
-
-/* Header */
-.rui-header { display: flex; flex-direction: column; gap: var(--rui-spacing-xs); }
-.rui-header-title {
-  margin: 0;
-  font-family: var(--rui-font-family-heading);
-  font-size: var(--rui-font-size-title);
-  font-weight: var(--rui-font-weight-heading);
-  line-height: var(--rui-line-height-heading);
-  letter-spacing: var(--rui-letter-spacing-heading);
-  text-transform: var(--rui-heading-text-transform);
-}
-.rui-header-subtitle { margin: 0; color: var(--rui-color-text-muted); font-size: 14px; }
+/* justify was emitted against a hardcoded flex-end, so the "destructive left,
+   confirm right" footer was unexpressible. */
+.rui-card-footer[data-justify="start"] { justify-content: flex-start; }
+.rui-card-footer[data-justify="center"] { justify-content: center; }
+.rui-card-footer[data-justify="end"] { justify-content: flex-end; }
+.rui-card-footer[data-justify="between"] { justify-content: space-between; }
 
 /* Text */
-.rui-text { display: inline; }
+/* overflow-wrap so a 64-char unbroken token (an API key, a hash) breaks instead
+   of pushing its siblings out of the card, and min-width: 0 so it can shrink
+   below its min-content width as a flex item. Here rather than inline in the
+   component, so a theme can still override the wrapping. */
+.rui-text { display: inline; overflow-wrap: anywhere; min-width: 0; }
 .rui-text[data-variant="small"] { font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); }
 .rui-text[data-variant="small-heavy"] { font-size: var(--rui-font-size-sm); font-weight: 600; }
 .rui-text[data-variant="body"] { font-size: var(--rui-font-size-base); }
 .rui-text[data-variant="body-heavy"] { font-size: var(--rui-font-size-base); font-weight: 600; }
-.rui-text[data-variant="large"] { font-size: 18px; }
+.rui-text[data-variant="large"] { font-size: var(--rui-font-size-18); }
 .rui-text[data-variant="large-heavy"] {
   font-size: var(--rui-font-size-title);
   font-family: var(--rui-font-family-heading);
@@ -348,7 +760,7 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   display: block;
 }
 .rui-text[data-variant="heading"] {
-  font-size: 20px;
+  font-size: var(--rui-font-size-20);
   font-family: var(--rui-font-family-heading);
   font-weight: var(--rui-font-weight-heading);
   line-height: var(--rui-line-height-heading);
@@ -367,9 +779,9 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 }
 .rui-text[data-color="muted"] { color: var(--rui-color-text-muted); }
 .rui-text[data-color="primary"] { color: var(--rui-color-primary); }
-.rui-text[data-color="success"] { color: var(--rui-color-success); }
-.rui-text[data-color="warning"] { color: var(--rui-color-warning); }
-.rui-text[data-color="danger"] { color: var(--rui-color-danger); }
+.rui-text[data-color="success"] { color: var(--rui-color-success-text); }
+.rui-text[data-color="warning"] { color: var(--rui-color-warning-text); }
+.rui-text[data-color="danger"] { color: var(--rui-color-danger-text); }
 /* align only works on a block box — the span is inline by default. */
 .rui-text[data-align] { display: block; }
 .rui-text[data-align="left"] { text-align: left; }
@@ -379,28 +791,38 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 /* Image */
 .rui-image { margin: 0; display: flex; flex-direction: column; gap: var(--rui-spacing-xs); }
 .rui-image img { max-width: 100%; height: auto; border-radius: var(--rui-radius-md); display: block; }
-.rui-image-caption { color: var(--rui-color-text-muted); font-size: 12px; }
+.rui-image-caption { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-sm); }
 
 /* Link */
+/* --rui-color-link, not --rui-color-accent: the accent is also a FILL (paired
+   with --rui-color-accent-text) and two themes therefore ship an accent that is
+   unreadable as text — soft's mint is 1.48:1 on its own white surface. */
 .rui-link {
-  color: var(--rui-color-accent);
+  color: var(--rui-color-link);
   text-decoration: none;
   font-weight: 500;
   word-break: break-word;
   transition: color var(--rui-transition-duration) ease;
 }
-.rui-link:hover { color: var(--rui-color-accent-hover); text-decoration: underline; }
-
-/* Routing — NavLink anchor + Routes outlet. NavLink is a hash-aware anchor
-   that reflects the current route via data-active="true". Routes wraps
-   the matched page so themes can target it without leaking styles into
-   surrounding content. */
-.rui-routes {
-  display: flex;
-  flex-direction: column;
-  gap: var(--rui-spacing-m);
-  width: 100%;
+.rui-link:hover { color: var(--rui-color-link-hover); text-decoration: underline; }
+/* The only focus-visible rule for links was corporate-scoped, so on every other
+   theme a keyboard user got the UA ring alone — which text-decoration: none makes
+   hard to locate (WCAG 2.4.7). The ring is the focus token rather than the accent
+   because that is the one token guaranteed to clear 3:1 in every theme. */
+.rui-link:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
+/* variant is declared, read and written as data-variant with nothing reading it,
+   so a subtle link was identical to the default accent one. */
+.rui-link[data-variant="subtle"] { color: var(--rui-color-text-muted); font-weight: 400; }
+.rui-link[data-variant="subtle"]:hover { color: var(--rui-color-text); }
+
+/* Routing — NavLink anchor + the RouteView page wrapper. NavLink is a
+   hash-aware anchor that reflects the current route via data-active="true".
+   The .rui-routes outlet block that used to sit here was dead: nothing has
+   emitted that class since RouteView replaced it. */
 .rui-route { display: contents; }
 .rui-nav-link {
   display: inline-flex;
@@ -412,7 +834,7 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   color: var(--rui-color-text);
   text-decoration: none;
   background: transparent;
-  border: 1px solid transparent;
+  border: var(--rui-border-width) solid transparent;
   transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 .rui-nav-link:hover {
@@ -449,12 +871,17 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   color: var(--rui-color-primary-text);
   border-color: transparent;
 }
-.rui-nav-link[data-routes-enabled="false"] { opacity: 0.6; }
+/* data-routes-enabled was dead — nothing in the repo ever wrote it. NavLink's
+   disabled prop emits data-disabled, the house convention. */
+.rui-nav-link[data-disabled="true"] { opacity: 0.6; pointer-events: none; cursor: not-allowed; }
 .rui-nav-link-icon { display: inline-flex; align-items: center; }
 
 /* Badge & Tag */
+/* No margin-right: the badge is a flex row and owns the spacing through gap,
+   which also makes the icon-only badge centre without a conditional class. */
 .rui-badge-icon {
-  margin-right: 4px;
+  display: inline-flex;
+  align-items: center;
 }
 .rui-badge-list {
   display: flex;
@@ -466,18 +893,27 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   display: inline-flex;
   width: fit-content;
   align-items: center;
+  gap: 4px;
   border-radius: var(--rui-radius-pill);
   padding: 2px 10px;
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   font-weight: 600;
   background: var(--rui-color-surface-muted);
   color: var(--rui-color-text);
 }
+/* data-size was normalised and emitted on every badge with nothing reading it,
+   so size was silently inert while the sibling .rui-tag had its rules. */
+.rui-badge[data-size="xs"] { font-size: var(--rui-font-size-10); padding: 0 6px; }
+.rui-badge[data-size="sm"] { font-size: var(--rui-font-size-11); padding: 1px 8px; }
+.rui-badge[data-size="lg"] { font-size: var(--rui-font-size-base); padding: 4px 12px; }
+.rui-badge[data-size="xl"] { font-size: var(--rui-font-size-lg); padding: 6px 14px; }
+/* The "+N more" overflow chip is a count, not a label — read it back a step. */
+.rui-badge[data-overflow="true"] { opacity: 0.75; cursor: default; }
 .rui-badge[data-variant="primary"] { background: var(--rui-color-primary); color: var(--rui-color-primary-text); }
-.rui-badge[data-variant="success"] { background: color-mix(in srgb, var(--rui-color-success) 18%, transparent); color: var(--rui-color-success); }
-.rui-badge[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 18%, transparent); color: var(--rui-color-warning); }
-.rui-badge[data-variant="danger"] { background: color-mix(in srgb, var(--rui-color-danger) 18%, transparent); color: var(--rui-color-danger); }
-.rui-badge[data-variant="info"] { background: color-mix(in srgb, var(--rui-color-info) 18%, transparent); color: var(--rui-color-info); }
+.rui-badge[data-variant="success"] { background: color-mix(in srgb, var(--rui-color-success) 18%, transparent); color: var(--rui-color-success-text); }
+.rui-badge[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 18%, transparent); color: var(--rui-color-warning-text); }
+.rui-badge[data-variant="danger"] { background: color-mix(in srgb, var(--rui-color-danger) 18%, transparent); color: var(--rui-color-danger-text); }
+.rui-badge[data-variant="info"] { background: color-mix(in srgb, var(--rui-color-info) 18%, transparent); color: var(--rui-color-info-text); }
 
 .rui-tag {
   display: inline-flex;
@@ -486,16 +922,16 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   gap: 4px;
   border-radius: var(--rui-radius-pill);
   padding: 2px 10px;
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   font-weight: 500;
   background: var(--rui-color-surface-muted);
-  border: 1px solid var(--rui-color-border-subtle);
+  border: var(--rui-border-width) solid var(--rui-color-border-subtle);
 }
-.rui-tag[data-size="sm"] { font-size: 11px; padding: 1px 8px; }
-.rui-tag[data-size="lg"] { font-size: 14px; padding: 4px 12px; }
-.rui-tag[data-variant="success"] { background: color-mix(in srgb, var(--rui-color-success) 16%, transparent); color: var(--rui-color-success); border-color: transparent; }
-.rui-tag[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 16%, transparent); color: var(--rui-color-warning); border-color: transparent; }
-.rui-tag[data-variant="danger"] { background: color-mix(in srgb, var(--rui-color-danger) 16%, transparent); color: var(--rui-color-danger); border-color: transparent; }
+.rui-tag[data-size="sm"] { font-size: var(--rui-font-size-11); padding: 1px 8px; }
+.rui-tag[data-size="lg"] { font-size: var(--rui-font-size-base); padding: 4px 12px; }
+.rui-tag[data-variant="success"] { background: color-mix(in srgb, var(--rui-color-success) 16%, transparent); color: var(--rui-color-success-text); border-color: transparent; }
+.rui-tag[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 16%, transparent); color: var(--rui-color-warning-text); border-color: transparent; }
+.rui-tag[data-variant="danger"] { background: color-mix(in srgb, var(--rui-color-danger) 16%, transparent); color: var(--rui-color-danger-text); border-color: transparent; }
 .rui-tag[data-variant="primary"] { background: color-mix(in srgb, var(--rui-color-primary) 16%, transparent); color: var(--rui-color-primary); border-color: transparent; }
 
 /* Pill — soft tinted STATE label (vs Badge's solid attention chip). Pale
@@ -515,11 +951,11 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   color: var(--rui-color-text-muted);
 }
 .rui-pill-icon { font-size: 0.95em; }
-.rui-pill[data-tone="activating"] { background: color-mix(in srgb, var(--rui-color-info) 16%, transparent); color: var(--rui-color-info); }
+.rui-pill[data-tone="activating"] { background: color-mix(in srgb, var(--rui-color-info) 16%, transparent); color: var(--rui-color-info-text); }
 .rui-pill[data-tone="corporate"] { background: color-mix(in srgb, var(--rui-color-primary) 14%, transparent); color: var(--rui-color-primary); }
-.rui-pill[data-tone="success"] { background: color-mix(in srgb, var(--rui-color-success) 16%, transparent); color: var(--rui-color-success); }
-.rui-pill[data-tone="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 18%, transparent); color: var(--rui-color-warning); }
-.rui-pill[data-tone="critical"] { background: color-mix(in srgb, var(--rui-color-danger) 14%, transparent); color: var(--rui-color-danger); }
+.rui-pill[data-tone="success"] { background: color-mix(in srgb, var(--rui-color-success) 16%, transparent); color: var(--rui-color-success-text); }
+.rui-pill[data-tone="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 18%, transparent); color: var(--rui-color-warning-text); }
+.rui-pill[data-tone="critical"] { background: color-mix(in srgb, var(--rui-color-danger) 14%, transparent); color: var(--rui-color-danger-text); }
 .rui-pill[data-tone="promoting"] { background: color-mix(in srgb, var(--rui-chart-5, #b410e7) 14%, transparent); color: var(--rui-chart-5, #b410e7); }
 
 /* ButtonGroup — buttons joined edge-to-edge into one continuous control:
@@ -558,17 +994,38 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   border-color: var(--rui-color-focus-ring);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 22%, transparent);
 }
+/* The shell owns the border, so disabled and invalid have to be read here: the
+   nested control's own chrome is stripped, which puts .rui-field[data-invalid]
+   out of reach of anything visible. */
+.rui-input-group[data-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: var(--rui-color-surface-muted);
+}
+.rui-input-group[data-disabled="true"]:focus-within { border-color: var(--rui-color-border); box-shadow: none; }
+.rui-input-group[data-invalid="true"] { border-color: var(--rui-color-danger); }
+.rui-input-group[data-invalid="true"]:focus-within {
+  border-color: var(--rui-color-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-danger) 22%, transparent);
+}
 .rui-input-group-icon { flex: none; margin-left: 10px; color: var(--rui-color-text-muted); }
 .rui-input-group-field { flex: 1 1 auto; min-width: 0; display: flex; }
-/* the nested control loses its own chrome — the group owns it now */
-.rui-input-group-field > .rui-input,
-.rui-input-group-field > .rui-select,
-.rui-input-group-field > .rui-textarea {
+/* the nested control loses its own chrome — the group owns it now.
+   Descendant, not child: as soon as the field carries a label/hint/error the
+   control is wrapped in a .rui-field, so a child combinator misses it and the
+   shell renders a box inside a box with two focus rings. */
+.rui-input-group-field .rui-input,
+.rui-input-group-field .rui-select,
+.rui-input-group-field .rui-textarea,
+.rui-input-group-field .rui-number-input,
+.rui-input-group-field .rui-combobox-trigger {
   border: none; border-radius: 0; background: transparent; width: 100%; box-shadow: none; outline: none;
 }
-.rui-input-group-field > .rui-input:focus,
-.rui-input-group-field > .rui-select:focus,
-.rui-input-group-field > .rui-textarea:focus { border: none; box-shadow: none; outline: none; }
+.rui-input-group-field .rui-input:focus,
+.rui-input-group-field .rui-select:focus,
+.rui-input-group-field .rui-textarea:focus,
+.rui-input-group-field .rui-number-input:focus,
+.rui-input-group-field .rui-combobox-trigger:focus { border: none; box-shadow: none; outline: none; }
 .rui-input-group-suffix {
   flex: none; padding: 0 10px; color: var(--rui-color-text-muted);
   font-size: var(--rui-font-size-sm); white-space: nowrap;
@@ -633,11 +1090,15 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   outline-offset: -2px;
 }
 .rui-action-stripe[data-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
-.rui-action-stripe-icon { flex: none; font-size: 20px; color: var(--rui-color-accent); }
+.rui-action-stripe-icon { flex: none; font-size: var(--rui-font-size-20); color: var(--rui-color-link); }
 .rui-action-stripe-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .rui-action-stripe-label { font-weight: 600; }
 .rui-action-stripe-description { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-sm); }
 .rui-action-stripe-value { flex: none; color: var(--rui-color-text-muted); font-size: var(--rui-font-size-sm); }
+/* The trailing-node slot (Switch, Badge, Avatar) had no rule, so a Switch in a
+   settings row was neither centred against the label nor safe from the flex row
+   squeezing it. */
+.rui-action-stripe-trailing { display: inline-flex; align-items: center; gap: var(--rui-spacing-s); flex-shrink: 0; }
 .rui-action-stripe-chevron {
   flex: none;
   width: 0.5em; height: 0.5em;
@@ -651,8 +1112,11 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   display: flex;
   flex-direction: column;
   gap: var(--rui-spacing-s);
-  margin: 0 calc(-1 * var(--rui-spacing-l));
-  padding: var(--rui-spacing-m) var(--rui-spacing-l);
+  /* Bleed and inset both read the Card's own --rui-card-pad, so the band always
+     lines up with the header no matter what the card's padding resolves to. */
+  margin-inline: calc(-1 * var(--rui-card-pad, var(--rui-spacing-l)));
+  padding-block: var(--rui-spacing-m);
+  padding-inline: var(--rui-card-pad, var(--rui-spacing-l));
 }
 .rui-card-section[data-align="center"] { text-align: center; }
 .rui-card-section[data-align="right"] { text-align: right; }
@@ -667,20 +1131,9 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 /* Callout footer — action row under the callout body. */
 .rui-callout-footer { display: flex; flex-wrap: wrap; gap: var(--rui-spacing-s); margin-top: var(--rui-spacing-s); }
 
-/* Alert */
-.rui-alert {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: var(--rui-spacing-m) var(--rui-spacing-l);
-  border-radius: var(--rui-radius-md);
-  border: 1px solid var(--rui-color-border);
-}
-.rui-alert-title { font-weight: 600; }
-.rui-alert[data-variant="info"] { background: color-mix(in srgb, var(--rui-color-info) 12%, transparent); border-color: transparent; color: var(--rui-color-info); }
-.rui-alert[data-variant="success"] { background: color-mix(in srgb, var(--rui-color-success) 12%, transparent); border-color: transparent; color: var(--rui-color-success); }
-.rui-alert[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 12%, transparent); border-color: transparent; color: var(--rui-color-warning); }
-.rui-alert[data-variant="danger"] { background: color-mix(in srgb, var(--rui-color-danger) 12%, transparent); border-color: transparent; color: var(--rui-color-danger); }
+/* There is no Alert component — Callout above is the banner primitive. The
+   .rui-alert / .rui-alert-title block that used to sit here, plus its four
+   variant rules, matched nothing in any of the 288 renders. */
 
 /* Skeleton */
 .rui-skeleton { display: flex; flex-direction: column; gap: 6px; }
@@ -697,6 +1150,9 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 
 /* Markdown */
 .rui-markdown { display: flex; flex-direction: column; gap: var(--rui-spacing-s); word-break: break-word; }
+/* The alt-text stand-in for an image that failed to load — italic muted so it
+   reads as a note about missing content, not as body copy. */
+.rui-markdown-image-fallback { color: var(--rui-color-text-muted); font-style: italic; }
 .rui-markdown p { margin: 0; }
 .rui-markdown ul { margin: 0; padding-left: var(--rui-spacing-l); }
 .rui-markdown code {
@@ -707,17 +1163,9 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   font-size: 0.92em;
 }
 
-/* Divider */
-.rui-divider { border: none; height: var(--rui-border-width); background: var(--rui-color-border); margin: var(--rui-spacing-s) 0; }
-.rui-divider-with-label {
-  display: flex;
-  align-items: center;
-  gap: var(--rui-spacing-s);
-  height: auto;
-  background: none;
-}
-.rui-divider-line { flex: 1; height: var(--rui-border-width); background: var(--rui-color-border); }
-.rui-divider-label { color: var(--rui-color-text-muted); font-size: 12px; }
+/* The .rui-divider family that used to sit here was the pre-rename spelling of
+   Separator below; nothing emits it. Its four theme overrides went with it —
+   every one of them already listed .rui-separator alongside. */
 
 /* Separator */
 .rui-separator {
@@ -765,17 +1213,39 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
+/* A bare component item is wrapped in an li so the ol only ever has li children
+   and the item keeps the 44px gutter — but it must not also get a numbered badge
+   or consume a step number, or two real steps render as a three-rung ladder. */
+.rui-steps-item[data-bare="true"] { counter-increment: none; }
+.rui-steps-item[data-bare="true"]::before { content: none; }
+/* Pending / active / complete / error share MultiStepForm's visual language.
+   The badge is drawn with ::before; the old active accent targeted ::marker,
+   which list-style: none means never exists, so the highlight was invisible. */
+.rui-steps-item[data-status="pending"]::before {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text-muted);
+  border: var(--rui-border-width) solid var(--rui-color-border);
+}
+/* The glyph reads on-success / on-danger, not #ffffff: white on a success fill is
+   2.54:1 and on a danger fill 3.76:1 in the light theme, and worse in the pastel
+   ones — the check mark was the least readable thing in the stepper. */
+.rui-steps-item[data-complete="true"]::before { content: "✓"; background: var(--rui-color-success); color: var(--rui-color-on-success); }
+.rui-steps-item[data-status="error"]::before { content: "!"; background: var(--rui-color-danger); color: var(--rui-color-on-danger); }
 .rui-steps-title { font-weight: 600; line-height: 28px; }
-.rui-steps-details { color: var(--rui-color-text-muted); font-size: 13px; margin-top: 2px; }
-
-/* TagBlock */
-.rui-tag-block {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--rui-spacing-xs);
+.rui-steps-details { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-13); margin-top: 2px; }
+/* orientation was emitted against a hardcoded column, so a horizontal stepper
+   across the top of a checkout still stacked. Modelled on the row layout
+   .rui-multi-step-form-steps already uses. */
+.rui-steps[data-orientation="horizontal"] { flex-direction: row; flex-wrap: wrap; }
+.rui-steps[data-orientation="horizontal"] .rui-steps-item {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-left: 0;
+  padding-top: 36px;
 }
+.rui-steps[data-orientation="horizontal"] .rui-steps-item::before { left: 0; }
 
 /* Callout */
 /* Mirrors UI block's .message / .message__section split: the OUTER element draws the
@@ -785,7 +1255,7 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 .rui-callout {
   display: block;
   border-radius: var(--rui-radius-md);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   background: var(--rui-color-surface);
   overflow: hidden;
 }
@@ -803,39 +1273,68 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   background: var(--rui-color-info);
-  color: #ffffff;
+  /* Ink tracks the disc's fill (see the per-variant rules below). The literal
+     #ffffff this replaces was 2.43:1 on the info fill it sits on by default. */
+  color: var(--rui-color-on-info);
 }
 .rui-callout-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .rui-callout-title { font-weight: 600; }
-.rui-callout-description { color: var(--rui-color-text-muted); font-size: 13px; }
+.rui-callout-description { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-13); }
+/* compact was emitted with nothing reading it — the padding lives on the section
+   unconditionally, so compact:true was byte-identical to compact:false. */
+.rui-callout[data-compact="true"] .rui-callout-section { padding: 6px 10px; gap: 6px; }
+.rui-callout[data-compact="true"] .rui-callout-icon { width: 16px; height: 16px; font-size: var(--rui-font-size-10); }
+.rui-callout[data-compact="true"] .rui-callout-title { font-size: var(--rui-font-size-sm); }
+/* The dismissible Callout's close button had no rule at all, so it drew default
+   browser button chrome inside the banner. */
+.rui-callout-dismiss {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-left: auto;
+  background: transparent;
+  border: 0;
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-18);
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--rui-radius-sm);
+  cursor: pointer;
+}
+.rui-callout-dismiss:hover { color: var(--rui-color-text); background: var(--rui-color-surface-muted); }
 .rui-callout[data-variant="info"] { background: color-mix(in srgb, var(--rui-color-info) 8%, var(--rui-color-surface)); border-color: color-mix(in srgb, var(--rui-color-info) 30%, transparent); }
-.rui-callout[data-variant="info"] .rui-callout-icon { background: var(--rui-color-info); }
+.rui-callout[data-variant="info"] .rui-callout-icon { background: var(--rui-color-info); color: var(--rui-color-on-info); }
 .rui-callout[data-variant="success"] { background: color-mix(in srgb, var(--rui-color-success) 8%, var(--rui-color-surface)); border-color: color-mix(in srgb, var(--rui-color-success) 30%, transparent); }
-.rui-callout[data-variant="success"] .rui-callout-icon { background: var(--rui-color-success); }
+.rui-callout[data-variant="success"] .rui-callout-icon { background: var(--rui-color-success); color: var(--rui-color-on-success); }
 .rui-callout[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 10%, var(--rui-color-surface)); border-color: color-mix(in srgb, var(--rui-color-warning) 32%, transparent); }
-.rui-callout[data-variant="warning"] .rui-callout-icon { background: var(--rui-color-warning); }
+.rui-callout[data-variant="warning"] .rui-callout-icon { background: var(--rui-color-warning); color: var(--rui-color-on-warning); }
 .rui-callout[data-variant="danger"], .rui-callout[data-variant="error"] {
   background: color-mix(in srgb, var(--rui-color-danger) 8%, var(--rui-color-surface));
   border-color: color-mix(in srgb, var(--rui-color-danger) 32%, transparent);
 }
 .rui-callout[data-variant="danger"] .rui-callout-icon, .rui-callout[data-variant="error"] .rui-callout-icon {
   background: var(--rui-color-danger);
+  color: var(--rui-color-on-danger);
 }
 .rui-callout[data-variant="neutral"] .rui-callout-icon {
   background: var(--rui-color-text-muted);
+  /* The only disc whose fill is NOT a status hue. primary-text is the token that
+     already means "readable on a filled surface" and it flips with the theme, so
+     the glyph stays legible on a muted grey that is dark in five themes and light
+     in the dark one: 7.58:1 in light, 7.30:1 in dark, 5.25-7.05:1 elsewhere. */
+  color: var(--rui-color-primary-text);
 }
 
 /* CodeBlock */
 .rui-code-block {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-surface-muted);
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
 /* Chromeless variant (header=false): no frame, fills its container, scrolls. */
 .rui-code-block[data-headerless="true"] {
@@ -846,13 +1345,15 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 }
 .rui-code-block-language {
   font-family: var(--rui-font-family-mono);
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--rui-color-text-muted);
   padding: 6px 12px;
-  border-bottom: 1px solid var(--rui-color-border-subtle);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle);
 }
+/* Matches its sibling above minus the uppercase — a filename is a filename. */
+.rui-code-block-filename { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-11); padding: 6px 12px; }
 .rui-code-block-pre {
   margin: 0;
   padding: var(--rui-spacing-m);
@@ -871,12 +1372,17 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   flex-direction: column;
   gap: var(--rui-spacing-s);
 }
-.rui-checkbox-group .rui-checkbox-item {
+/* CheckBoxItem is exported on its own, so the layout has to work without a
+   group ancestor — otherwise a standalone item is a block label and the box
+   lands on its own line above the text. Only the card chrome stays scoped. */
+.rui-checkbox-item {
   display: flex;
   align-items: flex-start;
   gap: var(--rui-spacing-s);
+}
+.rui-checkbox-group .rui-checkbox-item {
   padding: var(--rui-spacing-s);
-  border: 1px solid var(--rui-color-border-subtle);
+  border: var(--rui-border-width) solid var(--rui-color-border-subtle);
   border-radius: var(--rui-radius-sm);
   background: var(--rui-color-surface);
   cursor: pointer;
@@ -887,15 +1393,15 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   background: var(--rui-color-surface-muted);
 }
 .rui-checkbox-item-text { display: flex; flex-direction: column; gap: 2px; }
-.rui-checkbox-item-label { font-weight: 500; font-size: 13px; }
-.rui-checkbox-item-description { color: var(--rui-color-text-muted); font-size: 12px; }
+.rui-checkbox-item-label { font-weight: 500; font-size: var(--rui-font-size-13); }
+.rui-checkbox-item-description { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-sm); }
 
 /* Tabs */
 .rui-tabs { display: flex; flex-direction: column; gap: var(--rui-spacing-m); }
 .rui-tab-list {
   display: flex;
   gap: var(--rui-spacing-xs);
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
   flex-wrap: wrap;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -912,6 +1418,10 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   white-space: nowrap;
 }
 .rui-tab-trigger:hover { color: var(--rui-color-text); }
+/* After :hover so a disabled trigger stops lighting up under the pointer. */
+.rui-tab-trigger:disabled,
+.rui-tab-trigger[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; color: var(--rui-color-text-muted); }
+.rui-tab-trigger:disabled:hover { color: var(--rui-color-text-muted); }
 .rui-tab-trigger[aria-selected="true"] {
   color: var(--rui-color-primary);
   border-bottom-color: var(--rui-color-primary);
@@ -923,7 +1433,7 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 /* Accordion */
 .rui-accordion { display: flex; flex-direction: column; gap: var(--rui-spacing-xs); }
 .rui-accordion-item {
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-surface);
   overflow: hidden;
@@ -939,6 +1449,18 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   gap: var(--rui-spacing-s);
 }
 .rui-accordion-trigger::-webkit-details-marker { display: none; }
+/* disabled emits data-disabled, sets aria-disabled on the summary and swallows
+   the activation click, but the row still looked fully interactive — so a
+   "available after you pick a plan" section read as clickable. */
+.rui-accordion-item[data-disabled="true"] { opacity: 0.6; }
+.rui-accordion-item[data-disabled="true"] > .rui-accordion-trigger { cursor: not-allowed; }
+/* Semantic left stripe, mirroring the corporate theme's own accordion variants
+   so the prop is not a silent no-op in every other theme. */
+.rui-accordion-item[data-variant="success"] { box-shadow: inset 4px 0 0 0 var(--rui-color-success); }
+.rui-accordion-item[data-variant="warning"] { box-shadow: inset 4px 0 0 0 var(--rui-color-warning); }
+.rui-accordion-item[data-variant="danger"] { box-shadow: inset 4px 0 0 0 var(--rui-color-danger); }
+.rui-accordion-item[data-variant="info"] { box-shadow: inset 4px 0 0 0 var(--rui-color-info); }
+.rui-accordion-item[data-variant="neutral"] { box-shadow: inset 4px 0 0 0 var(--rui-color-border); }
 .rui-accordion-title { flex: 1; min-width: 0; }
 /* Chevron: hidden by default; revealed when wrapper or item opts in via data-show-arrow="true". */
 .rui-accordion-chevron {
@@ -976,7 +1498,9 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   align-items: center;
   justify-content: center;
   padding: var(--rui-spacing-l);
-  z-index: 50;
+  z-index: var(--rui-z-modal);
+  /* Stops the gesture chaining to the document once the modal reaches its end. */
+  overscroll-behavior: contain;
 }
 .rui-modal-overlay[data-open="true"] { display: flex; }
 .rui-modal {
@@ -989,18 +1513,22 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   display: flex;
   flex-direction: column;
   gap: var(--rui-spacing-m);
+  /* dvh with a vh fallback: on iOS Safari 100vh is the LARGEST viewport, roughly
+     80px taller than the visible one, so the footer — the canonical place for the
+     action buttons — rendered under the browser toolbar and could not be tapped. */
   max-height: calc(100vh - 2 * var(--rui-spacing-l));
+  max-height: calc(100dvh - 2 * var(--rui-spacing-l));
   overflow-y: auto;
 }
 .rui-modal-header { display: flex;justify-content: space-between; }
-.rui-modal-title { margin: 0; font-size: 18px; }
-.rui-modal-close { background: none; border: none; padding: 5px; margin: 0; cursor: pointer; font-size: 18px; color: var(--rui-color-primary); }
+.rui-modal-title { margin: 0; font-size: var(--rui-font-size-18); }
+.rui-modal-close { background: none; border: none; padding: 5px; margin: 0; cursor: pointer; font-size: var(--rui-font-size-18); color: var(--rui-color-primary); }
 
 /* Forms */
 .rui-form { display: flex; flex-direction: column; gap: var(--rui-spacing-m); }
 .rui-form-control { display: flex; flex-direction: column; gap: 4px; }
-.rui-form-label { font-size: 13px; font-weight: 600; color: var(--rui-color-text); }
-.rui-form-hint { font-size: 12px; color: var(--rui-color-text-muted); margin: 0; }
+.rui-form-label { font-size: var(--rui-font-size-13); font-weight: 600; color: var(--rui-color-text); }
+.rui-form-hint { font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); margin: 0; }
 .rui-form-actions {
   display: flex;
   gap: var(--rui-spacing-s);
@@ -1011,7 +1539,7 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 
 .rui-input, .rui-select, .rui-textarea {
   width: 100%;
-  border: var(--rui-border-width) solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border-control, var(--rui-color-border));
   border-radius: var(--rui-radius-input);
   padding: 8px 12px;
   background: var(--rui-color-surface);
@@ -1031,7 +1559,7 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   align-items: center;
   gap: var(--rui-spacing-s);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   user-select: none;
   line-height: 1.4;
 }
@@ -1053,7 +1581,7 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   height: 20px;
   transform: scale(0.8);
   background: var(--rui-color-surface);
-  border: 1.5px solid var(--rui-color-border);
+  border: 1.5px solid var(--rui-color-border-control, var(--rui-color-border));
   cursor: pointer;
   position: relative;
   transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
@@ -1138,14 +1666,20 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 .rui-button[data-variant="secondary"]:hover:not(:disabled) { background: var(--rui-color-surface-muted); }
 .rui-button[data-variant="ghost"] { background: transparent; color: var(--rui-color-text); }
 .rui-button[data-variant="ghost"]:hover:not(:disabled) { background: var(--rui-color-surface-muted); }
-.rui-button[data-variant="danger"] { background: var(--rui-color-danger); color: #fff; }
-.rui-button[data-variant="danger"]:hover:not(:disabled) { background: color-mix(in srgb, var(--rui-color-danger) 80%, black); }
+/* #fff on a danger fill is 3.76:1 in light/dark, 3.67:1 in modern and 1.89:1 in
+   soft — the destructive action was the least readable button in the library. The
+   ink token clears 4.5:1 on every theme's danger fill without moving the hue, which
+   also draws borders, dots and progress bars. The hover BRIGHTENS rather than
+   darkens for the same reason corporate's does (critical-5 -> critical-4): mixing
+   toward black shrinks the gap to a dark ink, mixing toward white widens it. */
+.rui-button[data-variant="danger"] { background: var(--rui-color-danger); color: var(--rui-color-on-danger); }
+.rui-button[data-variant="danger"]:hover:not(:disabled) { background: color-mix(in srgb, var(--rui-color-danger) 85%, white); }
 /* "default" is an alias for the base (primary) look — no override needed. */
 .rui-button[data-variant="outline"] { background: transparent; color: var(--rui-color-primary); border-color: color-mix(in srgb, var(--rui-color-primary) 55%, transparent); }
 .rui-button[data-variant="outline"]:hover:not(:disabled) { background: color-mix(in srgb, var(--rui-color-primary) 10%, transparent); border-color: var(--rui-color-primary); }
 .rui-button[data-variant="link"] { background: transparent; color: var(--rui-color-primary); border-color: transparent; text-underline-offset: 3px; }
 .rui-button[data-variant="link"]:hover:not(:disabled) { background: transparent; color: var(--rui-color-primary-hover); text-decoration: underline; }
-.rui-button[data-size="xs"] { padding: calc(var(--rui-button-padding-y) * 0.45) calc(var(--rui-button-padding-x) * 0.6); font-size: 11px; }
+.rui-button[data-size="xs"] { padding: calc(var(--rui-button-padding-y) * 0.45) calc(var(--rui-button-padding-x) * 0.6); font-size: var(--rui-font-size-11); }
 .rui-button[data-size="sm"] { padding: calc(var(--rui-button-padding-y) * 0.55) calc(var(--rui-button-padding-x) * 0.7); font-size: var(--rui-font-size-sm); }
 .rui-button[data-size="lg"] { padding: calc(var(--rui-button-padding-y) * 1.4) calc(var(--rui-button-padding-x) * 1.3); font-size: var(--rui-font-size-lg); }
 .rui-button[data-size="xl"] { padding: calc(var(--rui-button-padding-y) * 1.6) calc(var(--rui-button-padding-x) * 1.5); font-size: var(--rui-font-size-lg); }
@@ -1167,7 +1701,7 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 /* Table — wrapper provides horizontal scroll when columns overflow the
    viewport so tables stay readable on phones and tablets. */
 .rui-table-wrapper {
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-surface);
   overflow-x: auto;
@@ -1177,7 +1711,7 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 .rui-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   min-width: max-content;
 }
 .rui-table-caption {
@@ -1189,20 +1723,47 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
 .rui-table th, .rui-table td {
   padding: var(--rui-spacing-s) var(--rui-spacing-m);
   text-align: left;
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
   white-space: nowrap;
 }
 .rui-table th {
   background: var(--rui-color-bg-subtle);
   font-weight: 600;
-  position: sticky;
-  top: 0;
+  /* No position: sticky here. It only works inside a vertical scroller, which
+     the wrapper only becomes under [data-sticky="true"] (that rule sets both
+     max-height and the sticky th) — so unconditionally it did nothing except
+     make every header cell a positioned element that painted over a tooltip
+     opened in the first data row. The [data-sticky="false"] reset that used to
+     undo it is now redundant but kept, in case a wrapper omits the attribute. */
 }
 .rui-table td[data-format="number"], .rui-table td[data-format="currency"] {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* Col(wrap:) — both grids emit data-wrap on th and td (null when the column said
+   nothing, so the nowrap default above still applies). Without these the prop
+   validated and did nothing, because the base rule pins nowrap unconditionally. */
+.rui-table th[data-wrap="true"], .rui-table td[data-wrap="true"],
+.rui-data-grid-table th[data-wrap="true"], .rui-data-grid-table td[data-wrap="true"] {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.rui-table th[data-wrap="false"], .rui-table td[data-wrap="false"],
+.rui-data-grid-table th[data-wrap="false"], .rui-data-grid-table td[data-wrap="false"] {
+  white-space: nowrap;
+}
 .rui-table tbody tr:last-child td { border-bottom: none; }
+/* onRowClick sets tabIndex = 0 on every row, so the rows are keyboard-reachable
+   and need a visible focus indicator (WCAG 2.4.7) plus a pointer affordance. */
+.rui-table tr[data-clickable="true"],
+.rui-data-grid-table tbody tr[data-clickable="true"] { cursor: pointer; }
+.rui-table tr[data-clickable="true"]:hover > td,
+.rui-data-grid-table tbody tr[data-clickable="true"]:hover > td { background: var(--rui-color-surface-muted); }
+.rui-table tr[data-clickable="true"]:focus-visible,
+.rui-data-grid-table tbody tr[data-clickable="true"]:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: -2px;
+}
 .rui-table-empty {
   text-align: center;
   color: var(--rui-color-text-muted);
@@ -1218,17 +1779,68 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   gap: var(--rui-spacing-s);
   padding: var(--rui-spacing-s);
   border-radius: var(--rui-radius-sm);
-  border: 1px solid var(--rui-color-border-subtle);
+  border: var(--rui-border-width) solid var(--rui-color-border-subtle);
   background: var(--rui-color-surface);
 }
-.rui-list-icon { font-size: 20px; }
+/* divided: the flush hairline list — the common settings-list shape — had no rule
+   at all, so the prop was inert. */
+.rui-list[data-divided="true"] {
+  gap: 0;
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: var(--rui-radius-md);
+  overflow: hidden;
+}
+.rui-list[data-divided="true"] > .rui-list-item {
+  border: 0;
+  border-radius: 0;
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle);
+}
+.rui-list[data-divided="true"] > .rui-list-item:last-child { border-bottom: 0; }
+/* active/selected already sets aria-current, so AT was covered — this is the
+   visible half. The inset bar keeps the state from being colour-only. */
+.rui-list-item[data-active="true"] {
+  border-color: var(--rui-color-primary);
+  background: color-mix(in srgb, var(--rui-color-primary) 8%, var(--rui-color-surface));
+  box-shadow: inset 2px 0 0 var(--rui-color-primary);
+}
+/* tone was emitted with no rule, so a status list rendered every row on the same
+   neutral surface. Accent border, matching the other toned surfaces. */
+.rui-list-item[data-tone="primary"] { border-left: 3px solid var(--rui-color-primary); }
+.rui-list-item[data-tone="success"] { border-left: 3px solid var(--rui-color-success); }
+.rui-list-item[data-tone="warning"] { border-left: 3px solid var(--rui-color-warning); }
+.rui-list-item[data-tone="danger"] { border-left: 3px solid var(--rui-color-danger); }
+.rui-list-item[data-tone="info"] { border-left: 3px solid var(--rui-color-info); }
+.rui-list-icon { font-size: var(--rui-font-size-20); }
 .rui-list-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* A clickable ListItem is a real button or anchor; without the reset it rendered
+   as a grey UA button box (or an underlined link) inside the row. */
+.rui-list-action {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+  flex: 1 1 auto;
+}
+.rui-list-trailing { margin-left: auto; display: flex; align-items: center; gap: var(--rui-spacing-xs); flex: 0 0 auto; }
 .rui-list-title { font-weight: 600; }
-.rui-list-description { color: var(--rui-color-text-muted); font-size: 13px; }
+.rui-list-description { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-13); }
+/* Same muted, centred treatment .rui-table-empty already uses. */
+.rui-list-empty, .rui-tree-empty {
+  list-style: none;
+  text-align: center;
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-13);
+  padding: var(--rui-spacing-m);
+}
 
 /* StatCard */
 .rui-stat-card {
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-surface);
   padding: var(--rui-spacing-l);
@@ -1246,50 +1858,70 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   height: 22px;
   border-radius: 6px;
   color: var(--rui-color-primary);
-  font-size: 16px;
+  font-size: var(--rui-font-size-lg);
 }
-.rui-stat-label { color: var(--rui-color-text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.rui-stat-label { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-sm); text-transform: uppercase; letter-spacing: 0.04em; }
 .rui-stat-value {
   font-family: var(--rui-font-family-heading);
-  font-size: 24px;
+  font-size: var(--rui-font-size-24);
   font-weight: var(--rui-font-weight-heading);
   line-height: var(--rui-line-height-heading);
   letter-spacing: var(--rui-letter-spacing-heading);
 }
-.rui-stat-trend { font-size: 12px; font-weight: 600; }
-.rui-stat-trend[data-trend="up"] { color: var(--rui-color-success); }
-.rui-stat-trend[data-trend="down"] { color: var(--rui-color-danger); }
+.rui-stat-trend { font-size: var(--rui-font-size-sm); font-weight: 600; }
+.rui-stat-trend[data-trend="up"] { color: var(--rui-color-success-text); }
+.rui-stat-trend[data-trend="down"] { color: var(--rui-color-danger-text); }
 
-/* Charts */
+/* Charts — the ONE canonical home for the .rui-chart* selectors.
+   These used to be declared twice (here and again under "Advanced charts"), so
+   the cascade decided per property which file's intent won: gap, title size,
+   tick size, legend gap and the swatch shape came from the later block while
+   padding/border/background survived only because that block forgot to
+   re-declare them. The winning values are folded in below and the duplicates
+   are gone, so the rendering is unchanged and there is a single place to edit. */
 .rui-chart {
   display: flex;
   flex-direction: column;
-  gap: var(--rui-spacing-s);
+  gap: 10px;
+  width: 100%;
   padding: var(--rui-spacing-m);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-surface);
 }
-.rui-chart-title { font-weight: 600; font-size: 14px; }
-.rui-chart-svg { width: 100%; height: auto; max-height: 240px; }
-.rui-chart-svg text { fill: var(--rui-color-text-muted); font-size: 12px; font-family: var(--rui-font-family); }
-.rui-chart-tick { font-size: 10px; }
+.rui-chart-title { font-weight: 600; font-size: var(--rui-font-size-13); color: var(--rui-color-text); }
+/* max-height is the default height cap the chart components rely on: they only
+   emit an inline override when the requested height differs from their default,
+   so removing it here would uncap every default chart. */
+.rui-chart-svg { display: block; width: 100%; height: auto; max-height: 240px; }
+.rui-chart-svg text { fill: var(--rui-color-text-muted); font-size: var(--rui-font-size-sm); font-family: var(--rui-font-family); }
+.rui-chart-label { font-size: var(--rui-font-size-11); fill: var(--rui-color-text-muted); }
+.rui-chart-tick { font-size: 10.5px; fill: var(--rui-color-text-muted); }
+.rui-chart-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-13);
+}
+/* A Series written outside a chart renders this placeholder in a <span>, whose
+   padding and centring are inert on an inline box. */
+.rui-series { display: block; }
 .rui-chart-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--rui-spacing-s);
-  font-size: 12px;
+  gap: 14px;
+  font-size: 12.5px;
   color: var(--rui-color-text-muted);
 }
 .rui-chart-legend-item { display: inline-flex; align-items: center; gap: 6px; }
-.rui-chart-legend-swatch { width: 10px; height: 10px; border-radius: 999px; }
+.rui-chart-legend-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 /* Pie chart inline value labels: bold, centered, painted with a soft
  * stroke (set inline) so they remain legible on any slice color. The
  * specificity here is higher than the generic '.rui-chart-svg text'
  * fill, so the white fill wins. */
 .rui-chart-svg .rui-pie-chart-value,
 .rui-pie-chart .rui-pie-chart-value {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   font-weight: 700;
   pointer-events: none;
   font-variant-numeric: tabular-nums;
@@ -1302,21 +1934,27 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   flex-direction: column;
   gap: var(--rui-spacing-s);
 }
-.rui-section-block-title { margin: 0; font-size: 16px; font-weight: 600; }
-.rui-section-block-description { margin: 0; color: var(--rui-color-text-muted); font-size: 13px; }
+.rui-section-block-title { margin: 0; font-size: var(--rui-font-size-lg); font-weight: 600; }
+.rui-section-block-description { margin: 0; color: var(--rui-color-text-muted); font-size: var(--rui-font-size-13); }
 .rui-list-block { margin: 0; padding-left: var(--rui-spacing-l); }
+.rui-list-block[data-marker="check"] { list-style: none; padding-left: 0; }
+.rui-list-block[data-marker="check"] li::before {
+  content: "\\2713";
+  margin-right: 0.5em;
+  color: var(--rui-color-success-text);
+}
 .rui-list-block li { margin-bottom: 4px; }
 
 .rui-follow-up { display: flex; flex-direction: column; gap: var(--rui-spacing-s); margin-top: var(--rui-spacing-m); }
-.rui-follow-up-title { font-size: 12px; color: var(--rui-color-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.rui-follow-up-title { font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .rui-follow-up-list { display: flex; flex-wrap: wrap; gap: var(--rui-spacing-s); }
 .rui-follow-up-button {
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   background: var(--rui-color-surface);
   color: var(--rui-color-text);
   border-radius: 999px;
   padding: 6px 14px;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   cursor: pointer;
   transition: background 120ms ease;
   font-family: inherit;
@@ -1326,6 +1964,11 @@ ${spacingAttrRules(".rui-center", "data-padding", (v) => `padding: ${v};`)}
   color: var(--rui-color-primary);
   cursor: pointer;
   text-decoration: underline;
+}
+.rui-action-link:focus-visible {
+  outline: 2px solid var(--rui-color-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* ========================================================================
@@ -1360,11 +2003,12 @@ ${spacingAttrRules(".rui-grid", "data-gap", (v) => `gap: ${v};`)}
  * each requested breakpoint; the cascade picks the most specific value
  * via mobile-first min-width media queries. */
 .rui-grid[data-responsive-cols] {
-  grid-template-columns: repeat(var(--rui-grid-cols-base, 1), minmax(0, 1fr));
+  grid-template-columns: repeat(var(--rui-grid-cols-base, 1), minmax(var(--rui-grid-min-child, 0), 1fr));
 }
 .rui-grid[data-responsive-gap] {
   gap: var(--rui-grid-gap-base, var(--rui-spacing-m));
 }
+${responsiveAxisGapRules(0)}
 .rui-stack[data-responsive-dir] {
   flex-direction: var(--rui-stack-dir-base, column);
 }
@@ -1380,13 +2024,22 @@ ${spacingAttrRules(".rui-grid", "data-gap", (v) => `gap: ${v};`)}
 .rui-stack[data-responsive-padding] {
   padding: var(--rui-stack-padding-base, 0);
 }
-@media (min-width: 640px) {
+/* Bento row height takes the same responsive maps. Lives here rather than next
+   to the Bento block so the per-breakpoint overrides below stay downstream of
+   it; the plain .rui-bento rule that reads --rui-bento-row is one class less
+   specific, so it still loses to every rule in this section. */
+.rui-bento[data-responsive-row] {
+  grid-auto-rows: var(--rui-bento-row-base, minmax(110px, auto));
+}
+${rowAtRules("base")}
+${up("sm")} {
   .rui-grid[data-responsive-cols] {
-    grid-template-columns: repeat(var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1)), minmax(0, 1fr));
+    grid-template-columns: repeat(var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1)), minmax(var(--rui-grid-min-child, 0), 1fr));
   }
   .rui-grid[data-responsive-gap] {
     gap: var(--rui-grid-gap-sm, var(--rui-grid-gap-base, var(--rui-spacing-m)));
   }
+${responsiveAxisGapRules(1)}
   .rui-stack[data-responsive-dir] {
     flex-direction: var(--rui-stack-dir-sm, var(--rui-stack-dir-base, column));
   }
@@ -1402,14 +2055,19 @@ ${spacingAttrRules(".rui-grid", "data-gap", (v) => `gap: ${v};`)}
   .rui-stack[data-responsive-padding] {
     padding: var(--rui-stack-padding-sm, var(--rui-stack-padding-base, 0));
   }
+  .rui-bento[data-responsive-row] {
+    grid-auto-rows: var(--rui-bento-row-sm, var(--rui-bento-row-base, minmax(110px, auto)));
+  }
+${rowAtRules("sm")}
 }
-@media (min-width: 768px) {
+${up("md")} {
   .rui-grid[data-responsive-cols] {
-    grid-template-columns: repeat(var(--rui-grid-cols-md, var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1))), minmax(0, 1fr));
+    grid-template-columns: repeat(var(--rui-grid-cols-md, var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1))), minmax(var(--rui-grid-min-child, 0), 1fr));
   }
   .rui-grid[data-responsive-gap] {
     gap: var(--rui-grid-gap-md, var(--rui-grid-gap-sm, var(--rui-grid-gap-base, var(--rui-spacing-m))));
   }
+${responsiveAxisGapRules(2)}
   .rui-stack[data-responsive-dir] {
     flex-direction: var(--rui-stack-dir-md, var(--rui-stack-dir-sm, var(--rui-stack-dir-base, column)));
   }
@@ -1425,14 +2083,19 @@ ${spacingAttrRules(".rui-grid", "data-gap", (v) => `gap: ${v};`)}
   .rui-stack[data-responsive-padding] {
     padding: var(--rui-stack-padding-md, var(--rui-stack-padding-sm, var(--rui-stack-padding-base, 0)));
   }
+  .rui-bento[data-responsive-row] {
+    grid-auto-rows: var(--rui-bento-row-md, var(--rui-bento-row-sm, var(--rui-bento-row-base, minmax(110px, auto))));
+  }
+${rowAtRules("md")}
 }
-@media (min-width: 1024px) {
+${up("lg")} {
   .rui-grid[data-responsive-cols] {
-    grid-template-columns: repeat(var(--rui-grid-cols-lg, var(--rui-grid-cols-md, var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1)))), minmax(0, 1fr));
+    grid-template-columns: repeat(var(--rui-grid-cols-lg, var(--rui-grid-cols-md, var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1)))), minmax(var(--rui-grid-min-child, 0), 1fr));
   }
   .rui-grid[data-responsive-gap] {
     gap: var(--rui-grid-gap-lg, var(--rui-grid-gap-md, var(--rui-grid-gap-sm, var(--rui-grid-gap-base, var(--rui-spacing-m)))));
   }
+${responsiveAxisGapRules(3)}
   .rui-stack[data-responsive-dir] {
     flex-direction: var(--rui-stack-dir-lg, var(--rui-stack-dir-md, var(--rui-stack-dir-sm, var(--rui-stack-dir-base, column))));
   }
@@ -1448,14 +2111,19 @@ ${spacingAttrRules(".rui-grid", "data-gap", (v) => `gap: ${v};`)}
   .rui-stack[data-responsive-padding] {
     padding: var(--rui-stack-padding-lg, var(--rui-stack-padding-md, var(--rui-stack-padding-sm, var(--rui-stack-padding-base, 0))));
   }
+  .rui-bento[data-responsive-row] {
+    grid-auto-rows: var(--rui-bento-row-lg, var(--rui-bento-row-md, var(--rui-bento-row-sm, var(--rui-bento-row-base, minmax(110px, auto)))));
+  }
+${rowAtRules("lg")}
 }
-@media (min-width: 1280px) {
+${up("xl")} {
   .rui-grid[data-responsive-cols] {
-    grid-template-columns: repeat(var(--rui-grid-cols-xl, var(--rui-grid-cols-lg, var(--rui-grid-cols-md, var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1))))), minmax(0, 1fr));
+    grid-template-columns: repeat(var(--rui-grid-cols-xl, var(--rui-grid-cols-lg, var(--rui-grid-cols-md, var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1))))), minmax(var(--rui-grid-min-child, 0), 1fr));
   }
   .rui-grid[data-responsive-gap] {
     gap: var(--rui-grid-gap-xl, var(--rui-grid-gap-lg, var(--rui-grid-gap-md, var(--rui-grid-gap-sm, var(--rui-grid-gap-base, var(--rui-spacing-m))))));
   }
+${responsiveAxisGapRules(4)}
   .rui-stack[data-responsive-dir] {
     flex-direction: var(--rui-stack-dir-xl, var(--rui-stack-dir-lg, var(--rui-stack-dir-md, var(--rui-stack-dir-sm, var(--rui-stack-dir-base, column)))));
   }
@@ -1471,6 +2139,10 @@ ${spacingAttrRules(".rui-grid", "data-gap", (v) => `gap: ${v};`)}
   .rui-stack[data-responsive-padding] {
     padding: var(--rui-stack-padding-xl, var(--rui-stack-padding-lg, var(--rui-stack-padding-md, var(--rui-stack-padding-sm, var(--rui-stack-padding-base, 0)))));
   }
+  .rui-bento[data-responsive-row] {
+    grid-auto-rows: var(--rui-bento-row-xl, var(--rui-bento-row-lg, var(--rui-bento-row-md, var(--rui-bento-row-sm, var(--rui-bento-row-base, minmax(110px, auto))))));
+  }
+${rowAtRules("xl")}
 }
 
 /* Grid — 12-column mode + GridItem spans */
@@ -1514,27 +2186,37 @@ ${spacingAttrRules(".rui-grid", "data-column-gap", (v) => `column-gap: ${v};`)}
   grid-column-start: calc(var(--rui-grid-item-offset, 0) + 1);
   grid-column-end: span var(--rui-grid-item-span, 1);
 }
+/* Longhand pair, not the grid-column shorthand: the shorthand resets
+   grid-column-start to auto and these rules come later than
+   .rui-grid-item[data-offset] at identical specificity, so offset + spanAt
+   silently cancelled each other and the item sat flush left at every
+   breakpoint. Both attributes are emitted together whenever both props are set. */
 .rui-grid-item[data-responsive-span] {
-  grid-column: span var(--rui-grid-item-span-base, var(--rui-grid-item-span, 1));
+  grid-column-start: calc(var(--rui-grid-item-offset, 0) + 1);
+  grid-column-end: span var(--rui-grid-item-span-base, var(--rui-grid-item-span, 1));
 }
-@media (min-width: 640px) {
+${up("sm")} {
   .rui-grid-item[data-responsive-span] {
-    grid-column: span var(--rui-grid-item-span-sm, var(--rui-grid-item-span-base, var(--rui-grid-item-span, 1)));
+    grid-column-start: calc(var(--rui-grid-item-offset, 0) + 1);
+    grid-column-end: span var(--rui-grid-item-span-sm, var(--rui-grid-item-span-base, var(--rui-grid-item-span, 1)));
   }
 }
-@media (min-width: 768px) {
+${up("md")} {
   .rui-grid-item[data-responsive-span] {
-    grid-column: span var(--rui-grid-item-span-md, var(--rui-grid-item-span-sm, var(--rui-grid-item-span-base, var(--rui-grid-item-span, 1))));
+    grid-column-start: calc(var(--rui-grid-item-offset, 0) + 1);
+    grid-column-end: span var(--rui-grid-item-span-md, var(--rui-grid-item-span-sm, var(--rui-grid-item-span-base, var(--rui-grid-item-span, 1))));
   }
 }
-@media (min-width: 1024px) {
+${up("lg")} {
   .rui-grid-item[data-responsive-span] {
-    grid-column: span var(--rui-grid-item-span-lg, var(--rui-grid-item-span-md, var(--rui-grid-item-span-sm, var(--rui-grid-item-span-base, var(--rui-grid-item-span, 1)))));
+    grid-column-start: calc(var(--rui-grid-item-offset, 0) + 1);
+    grid-column-end: span var(--rui-grid-item-span-lg, var(--rui-grid-item-span-md, var(--rui-grid-item-span-sm, var(--rui-grid-item-span-base, var(--rui-grid-item-span, 1)))));
   }
 }
-@media (min-width: 1280px) {
+${up("xl")} {
   .rui-grid-item[data-responsive-span] {
-    grid-column: span var(--rui-grid-item-span-xl, var(--rui-grid-item-span-lg, var(--rui-grid-item-span-md, var(--rui-grid-item-span-sm, var(--rui-grid-item-span-base, var(--rui-grid-item-span, 1))))));
+    grid-column-start: calc(var(--rui-grid-item-offset, 0) + 1);
+    grid-column-end: span var(--rui-grid-item-span-xl, var(--rui-grid-item-span-lg, var(--rui-grid-item-span-md, var(--rui-grid-item-span-sm, var(--rui-grid-item-span-base, var(--rui-grid-item-span, 1))))));
   }
 }
 
@@ -1545,7 +2227,7 @@ ${spacingAttrRules(".rui-grid", "data-column-gap", (v) => `column-gap: ${v};`)}
    and stack 12-column layout grids (non-responsive GridItems go full-width).
    Untouched: data-responsive-cols / data-responsive-span (author opted into a
    breakpoint map) and data-min-child-width grids (already auto-wrap via minmax). */
-@media (max-width: 639.98px) {
+${below("sm")} {
   .rui-grid[data-columns]:not([data-columns="1"]):not([data-columns="2"]):not([data-grid-mode="12"]):not([data-min-child-width]) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1558,7 +2240,7 @@ ${spacingAttrRules(".rui-grid", "data-column-gap", (v) => `column-gap: ${v};`)}
    Smooth the jump from the phone cap (2 cols) to the full count: fixed grids
    of 4+ columns render 3-up at tablet widths. columns 2-3 already fit, and
    responsive-cols / min-child / 12-col modes manage themselves. */
-@media (min-width: 640px) and (max-width: 767.98px) {
+${up("sm")} and ${belowCond("md")} {
   .rui-grid[data-columns]:not([data-columns="1"]):not([data-columns="2"]):not([data-columns="3"]):not([data-grid-mode="12"]):not([data-min-child-width]) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1568,8 +2250,8 @@ ${spacingAttrRules(".rui-grid", "data-column-gap", (v) => `column-gap: ${v};`)}
 .rui-box { box-sizing: border-box; }
 ${spacingAttrRules(".rui-box", "data-padding", (v) => `padding: ${v};`)}
 ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
-.rui-box[data-border="subtle"] { border: 1px solid color-mix(in srgb, var(--rui-color-border) 60%, transparent); border-radius: var(--rui-radius-md); }
-.rui-box[data-border="default"] { border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-md); }
+.rui-box[data-border="subtle"] { border: var(--rui-border-width) solid color-mix(in srgb, var(--rui-color-border) 60%, transparent); border-radius: var(--rui-radius-md); }
+.rui-box[data-border="default"] { border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-md); }
 .rui-box[data-background="surface"] { background: var(--rui-color-surface); }
 .rui-box[data-background="muted"] { background: var(--rui-color-surface-muted); }
 .rui-box[data-background="primary"] { background: color-mix(in srgb, var(--rui-color-primary) 10%, var(--rui-color-surface)); }
@@ -1579,19 +2261,19 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 .rui-box[data-background="info"] { background: color-mix(in srgb, var(--rui-color-info) 10%, var(--rui-color-surface)); }
 .rui-box[data-responsive-padding] { padding: var(--rui-box-padding-base, 0); }
 .rui-box[data-responsive-margin] { margin: var(--rui-box-margin-base, 0); }
-@media (min-width: 640px) {
+${up("sm")} {
   .rui-box[data-responsive-padding] { padding: var(--rui-box-padding-sm, var(--rui-box-padding-base, 0)); }
   .rui-box[data-responsive-margin] { margin: var(--rui-box-margin-sm, var(--rui-box-margin-base, 0)); }
 }
-@media (min-width: 768px) {
+${up("md")} {
   .rui-box[data-responsive-padding] { padding: var(--rui-box-padding-md, var(--rui-box-padding-sm, var(--rui-box-padding-base, 0))); }
   .rui-box[data-responsive-margin] { margin: var(--rui-box-margin-md, var(--rui-box-margin-sm, var(--rui-box-margin-base, 0))); }
 }
-@media (min-width: 1024px) {
+${up("lg")} {
   .rui-box[data-responsive-padding] { padding: var(--rui-box-padding-lg, var(--rui-box-padding-md, var(--rui-box-padding-sm, var(--rui-box-padding-base, 0)))); }
   .rui-box[data-responsive-margin] { margin: var(--rui-box-margin-lg, var(--rui-box-margin-md, var(--rui-box-margin-sm, var(--rui-box-margin-base, 0)))); }
 }
-@media (min-width: 1280px) {
+${up("xl")} {
   .rui-box[data-responsive-padding] { padding: var(--rui-box-padding-xl, var(--rui-box-padding-lg, var(--rui-box-padding-md, var(--rui-box-padding-sm, var(--rui-box-padding-base, 0))))); }
   .rui-box[data-responsive-margin] { margin: var(--rui-box-margin-xl, var(--rui-box-margin-lg, var(--rui-box-margin-md, var(--rui-box-margin-sm, var(--rui-box-margin-base, 0))))); }
 }
@@ -1609,6 +2291,17 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   height: 100%;
   display: block;
   object-fit: cover;
+}
+/* Every child is sized 100%x100% inside an overflow: hidden box, so a second
+   child — a Badge over an Image — was stretched to the full box, pushed below the
+   image and clipped away. The container is already position: relative; the render
+   marks the multi-child case with data-overlay. */
+.rui-aspect-ratio[data-overlay="true"] > *:not(:first-child) {
+  position: absolute;
+  top: var(--rui-spacing-s);
+  left: var(--rui-spacing-s);
+  width: auto;
+  height: auto;
 }
 
 /* ScrollArea */
@@ -1654,10 +2347,10 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   color: color-mix(in srgb, var(--rui-color-primary) 90%, var(--rui-color-text));
 }
 .rui-avatar[data-size="xs"] { width: 18px; height: 18px; font-size: 8px; max-width: 18px; max-height: 18px; }
-.rui-avatar[data-size="sm"] { width: 24px; height: 24px; font-size: 10px; max-width: 24px; max-height: 24px; }
-.rui-avatar[data-size="md"] { width: 36px; height: 36px; font-size: 13px; max-width: 36px; max-height: 36px; }
-.rui-avatar[data-size="lg"] { width: 52px; height: 52px; font-size: 18px; max-width: 52px; max-height: 52px; }
-.rui-avatar[data-size="xl"] { width: 72px; height: 72px; font-size: 22px; max-width: 72px; max-height: 72px; }
+.rui-avatar[data-size="sm"] { width: 24px; height: 24px; font-size: var(--rui-font-size-10); max-width: 24px; max-height: 24px; }
+.rui-avatar[data-size="md"] { width: 36px; height: 36px; font-size: var(--rui-font-size-13); max-width: 36px; max-height: 36px; }
+.rui-avatar[data-size="lg"] { width: 52px; height: 52px; font-size: var(--rui-font-size-18); max-width: 52px; max-height: 52px; }
+.rui-avatar[data-size="xl"] { width: 72px; height: 72px; font-size: var(--rui-font-size-title); max-width: 72px; max-height: 72px; }
 .rui-avatar-status {
   position: absolute;
   right: 2px;
@@ -1670,10 +2363,16 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   border: 2px solid var(--rui-color-surface);
   background: var(--rui-color-text-muted);
 }
+/* Shape as well as colour (WCAG 1.4.1) — the same four cues .rui-person-chip-status
+   uses, so the two presence indicators stay one visual language: round vs square
+   crossed with filled vs hollow. Without a shape, busy and online differ only in
+   red vs green, exactly the pair red-green colour blindness collapses. Only the
+   radius and the fill vary — this dot is sized in % of the avatar and wears a 2px
+   ring, so shrinking it into a bar would leave no room inside the ring to paint. */
 .rui-avatar-status[data-status="online"] { background: var(--rui-color-success); }
-.rui-avatar-status[data-status="busy"] { background: var(--rui-color-danger); }
-.rui-avatar-status[data-status="away"] { background: var(--rui-color-warning); }
-.rui-avatar-status[data-status="offline"] { background: var(--rui-color-text-muted); }
+.rui-avatar-status[data-status="busy"] { background: var(--rui-color-danger); border-radius: 2px; }
+.rui-avatar-status[data-status="away"] { background: transparent; border: 2px solid var(--rui-color-warning); }
+.rui-avatar-status[data-status="offline"] { background: transparent; border: 2px solid var(--rui-color-text-muted); border-radius: 2px; }
 
 /* AvatarGroup — overlapping pile with ring border. */
 .rui-avatar-group {
@@ -1684,9 +2383,15 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   border: 2px solid var(--rui-color-surface);
   margin-left: -8px;
 }
-.rui-avatar-group > .rui-avatar:first-child { margin-left: 0; }
+/* Overlap tracks avatar diameter — the generic -8px hides 44% of an 18px xs
+   avatar and is barely visible on a 72px xl one. These keep the ~22% ratio. */
+.rui-avatar-group[data-size="xs"] > .rui-avatar { margin-left: -4px; }
 .rui-avatar-group[data-size="sm"] > .rui-avatar { margin-left: -6px; }
 .rui-avatar-group[data-size="lg"] > .rui-avatar { margin-left: -12px; }
+.rui-avatar-group[data-size="xl"] > .rui-avatar { margin-left: -16px; }
+/* After the sized overlaps: same specificity, so it has to come last to keep
+   the leading avatar flush with the group's left edge in every size. */
+.rui-avatar-group > .rui-avatar:first-child { margin-left: 0; }
 .rui-avatar-overflow .rui-avatar-fallback {
   background: var(--rui-color-surface-muted);
   color: var(--rui-color-text-muted);
@@ -1702,7 +2407,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 .rui-progress-head {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
 }
 .rui-progress-label { font-weight: 500; }
@@ -1754,7 +2459,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   height: 20px;
   border-radius: 999px;
   background: var(--rui-color-surface-muted);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border-control, var(--rui-color-border));
   position: relative;
   transition: background 160ms ease, border-color 160ms ease;
   flex-shrink: 0;
@@ -1767,7 +2472,9 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   height: 16px;
   background: var(--rui-color-surface);
   border-radius: 999px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+  /* Was rgba(15, 23, 42, 0.18) — a light-theme ink shadow that is invisible on
+     the dark theme's surfaces, so the thumb lost its lift entirely. */
+  box-shadow: var(--rui-shadow-sm);
   transition: transform 180ms cubic-bezier(0.5, 0.05, 0.5, 1.2);
 }
 .rui-switch-input:checked + .rui-switch-track {
@@ -1779,12 +2486,12 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-primary) 25%, transparent);
 }
 .rui-switch-meta { display: flex; flex-direction: column; gap: 2px; }
-.rui-switch-label { font-weight: 500; font-size: 14px; }
-.rui-switch-description { font-size: 12px; color: var(--rui-color-text-muted); }
+.rui-switch-label { font-weight: 500; font-size: var(--rui-font-size-base); }
+.rui-switch-description { font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); }
 
 /* Toggle (single + group) */
 .rui-toggle {
-  border: 1px solid transparent;
+  border: var(--rui-border-width) solid transparent;
   border-radius: var(--rui-radius-sm);
   background: transparent;
   color: var(--rui-color-text);
@@ -1797,8 +2504,8 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   gap: 6px;
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
-.rui-toggle[data-size="sm"] { padding: 4px 8px; font-size: 12px; }
-.rui-toggle[data-size="lg"] { padding: 9px 16px; font-size: 15px; }
+.rui-toggle[data-size="sm"] { padding: 4px 8px; font-size: var(--rui-font-size-sm); }
+.rui-toggle[data-size="lg"] { padding: 9px 16px; font-size: var(--rui-font-size-15); }
 .rui-toggle[data-variant="outline"] {
   border-color: var(--rui-color-border);
   background: var(--rui-color-surface);
@@ -1816,7 +2523,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   align-items: stretch;
   gap: 0;
   border-radius: var(--rui-radius-sm);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   background: var(--rui-color-surface);
   padding: 2px;
 }
@@ -1828,6 +2535,23 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 .rui-toggle-group .rui-toggle[data-state="on"] {
   background: var(--rui-color-surface-muted);
   color: var(--rui-color-primary);
+}
+/* The group's own reset out-specifies .rui-toggle[data-variant], so the variant
+   has to be read off the group root or all three enum values render alike.
+   No rule for "outline": that is the render default and must not change. */
+.rui-toggle-group[data-variant="default"] .rui-toggle[data-state="on"] {
+  background: var(--rui-color-primary);
+  border-color: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+}
+.rui-toggle-group[data-variant="ghost"] {
+  border-color: transparent;
+  background: transparent;
+  padding: 0;
+  gap: 4px;
+}
+.rui-toggle-group[data-variant="ghost"] .rui-toggle[data-state="on"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 14%, transparent);
 }
 
 /* Tooltip — CSS-only hover/focus reveal with arrow and accurate placement. */
@@ -1844,15 +2568,20 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   border-radius: var(--rui-radius-sm);
   background: var(--rui-color-text);
   color: var(--rui-color-bg);
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   font-weight: 500;
   line-height: 1.3;
-  white-space: nowrap;
+  /* nowrap and max-width cancel each other out — the cap sizes the box but
+     forbids the break that would honour it, so long hints spilled outside the
+     dark background. max-content keeps short hints on one line as before. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  width: max-content;
   max-width: 240px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms ease, transform 140ms ease;
-  z-index: 30;
+  z-index: var(--rui-z-tooltip);
   box-shadow: var(--rui-shadow-sm);
   /* Default origin — overridden per side below. */
   --rui-tooltip-x: -50%;
@@ -1875,7 +2604,8 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   --rui-tooltip-y: 0;
   --rui-tooltip-offset-y: 4px;
 }
-.rui-tooltip[data-side="top"] .rui-tooltip-arrow {
+.rui-tooltip[data-side="top"] .rui-tooltip-content:not([data-floating-side]) .rui-tooltip-arrow,
+.rui-tooltip-content[data-floating-side="top"] .rui-tooltip-arrow {
   bottom: -4px;
   left: calc(50% - 4px);
 }
@@ -1886,7 +2616,8 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   --rui-tooltip-y: 0;
   --rui-tooltip-offset-y: -4px;
 }
-.rui-tooltip[data-side="bottom"] .rui-tooltip-arrow {
+.rui-tooltip[data-side="bottom"] .rui-tooltip-content:not([data-floating-side]) .rui-tooltip-arrow,
+.rui-tooltip-content[data-floating-side="bottom"] .rui-tooltip-arrow {
   top: -4px;
   left: calc(50% - 4px);
 }
@@ -1898,7 +2629,8 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   --rui-tooltip-offset-x: 4px;
   --rui-tooltip-offset-y: 0;
 }
-.rui-tooltip[data-side="left"] .rui-tooltip-arrow {
+.rui-tooltip[data-side="left"] .rui-tooltip-content:not([data-floating-side]) .rui-tooltip-arrow,
+.rui-tooltip-content[data-floating-side="left"] .rui-tooltip-arrow {
   right: -4px;
   top: calc(50% - 4px);
 }
@@ -1910,18 +2642,24 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   --rui-tooltip-offset-x: -4px;
   --rui-tooltip-offset-y: 0;
 }
-.rui-tooltip[data-side="right"] .rui-tooltip-arrow {
+.rui-tooltip[data-side="right"] .rui-tooltip-content:not([data-floating-side]) .rui-tooltip-arrow,
+.rui-tooltip-content[data-floating-side="right"] .rui-tooltip-arrow {
   left: -4px;
   top: calc(50% - 4px);
 }
 .rui-tooltip-content {
   transform: translate(calc(var(--rui-tooltip-x) + var(--rui-tooltip-offset-x)), calc(var(--rui-tooltip-y) + var(--rui-tooltip-offset-y)));
 }
-.rui-tooltip:hover .rui-tooltip-content,
-.rui-tooltip:focus-visible .rui-tooltip-content,
-.rui-tooltip:focus-within:not(:active) .rui-tooltip-content {
+/* Reveal is now owned by JS, not by pseudo-classes. The hint is positioned by
+   library/floating.ts (which promotes it to the top layer so it is not clipped),
+   and a CSS-only reveal could show a panel JS never positioned — an
+   unpositioned absolute panel is the original clipping bug. The root carries
+   data-open; the second selector covers the reparenting fallback used by engines
+   without the Popover API, where the descendant selector no longer matches
+   because the panel is no longer inside the root. */
+.rui-tooltip[data-open="true"] .rui-tooltip-content,
+.rui-tooltip-content[data-floating-side] {
   opacity: 1;
-  transform: translate(var(--rui-tooltip-x), var(--rui-tooltip-y));
 }
 /* When the wrapper (or any descendant) is being pressed, suppress the
  * tooltip immediately so clicking the trigger doesn't leave it visible. */
@@ -1945,12 +2683,15 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   padding: var(--rui-spacing-m);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   box-shadow: var(--rui-shadow-md);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 160ms ease, transform 160ms ease;
-  z-index: 25;
+  /* visibility (not just opacity) keeps the closed card out of the tab order on
+     engines that ignore inert; the delayed transition lets it fade out first. */
+  visibility: hidden;
+  transition: opacity 160ms ease, transform 160ms ease, visibility 0s linear 160ms;
+  z-index: var(--rui-z-popover);
   display: flex;
   flex-direction: column;
   gap: var(--rui-spacing-s);
@@ -1959,12 +2700,14 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 .rui-hover-card[data-side="top"] .rui-hover-card-content { bottom: calc(100% + 6px); left: 0; transform: translateY(4px); }
 .rui-hover-card[data-side="left"] .rui-hover-card-content { right: calc(100% + 6px); top: 0; transform: translateX(4px); }
 .rui-hover-card[data-side="right"] .rui-hover-card-content { left: calc(100% + 6px); top: 0; transform: translateX(-4px); }
-.rui-hover-card:hover .rui-hover-card-content,
-.rui-hover-card:focus-visible .rui-hover-card-content,
-.rui-hover-card:focus-within .rui-hover-card-content,
-.rui-hover-card[data-open="true"] .rui-hover-card-content {
+/* Same single-owner rule as the Tooltip above: JS drives data-open and does the
+   positioning, so the hover/focus pseudo-classes are gone. */
+.rui-hover-card[data-open="true"] .rui-hover-card-content,
+.rui-hover-card-content[data-floating-side] {
   opacity: 1;
   pointer-events: auto;
+  visibility: visible;
+  transition-delay: 0s;
   transform: translate(0, 0);
 }
 
@@ -1976,17 +2719,19 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   padding: 2px 6px;
   border-radius: 4px;
   background: var(--rui-color-surface-muted);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-bottom-width: 2px;
   font-family: var(--rui-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   font-weight: 600;
   color: var(--rui-color-text);
   line-height: 1.2;
-  box-shadow: inset 0 -1px 0 rgba(15, 23, 42, 0.04);
+  /* Derived from the theme's ink rather than a light-theme slate, which was
+     invisible on dark. */
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--rui-color-text) 10%, transparent);
 }
-.rui-kbd-group[data-size="sm"] .rui-kbd { padding: 1px 4px; font-size: 10px; }
-.rui-kbd-sep { color: var(--rui-color-text-muted); font-size: 10px; }
+.rui-kbd-group[data-size="sm"] .rui-kbd { padding: 1px 4px; font-size: var(--rui-font-size-10); }
+.rui-kbd-sep { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-10); }
 
 /* Breadcrumb */
 .rui-breadcrumb { display: flex; }
@@ -1998,7 +2743,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   list-style: none;
   padding: 0;
   margin: 0;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   color: var(--rui-color-text-muted);
 }
 .rui-breadcrumb-item { display: inline-flex; align-items: center; }
@@ -2011,6 +2756,11 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   gap: 4px;
 }
 .rui-breadcrumb-link:hover { color: var(--rui-color-primary); text-decoration: underline; }
+/* A plain-string crumb with onItemClick renders as a <button>, and
+   .rui-breadcrumb-link only sets colour and layout — the native chrome showed
+   through and the crumb stopped looking like part of the trail. */
+.rui-breadcrumb-button { appearance: none; background: none; border: none; padding: 0; font: inherit; cursor: pointer; }
+.rui-breadcrumb-text { color: var(--rui-color-text-muted); display: inline-flex; align-items: center; gap: 4px; }
 .rui-breadcrumb-current {
   color: var(--rui-color-text);
   font-weight: 600;
@@ -2019,24 +2769,20 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   gap: 4px;
 }
 
-/* Pagination */
-.rui-pagination {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  border-radius: var(--rui-radius-sm);
-}
+/* Pagination — the root rule lives with the summary/per-page block further down
+   (search "Pagination summary"). There used to be two top-level .rui-pagination
+   definitions ~5600 lines apart fighting over display and gap, and only the
+   later one's values ever shipped; they are merged there, at the winning site. */
 .rui-pagination-button {
   min-width: 32px;
   height: 32px;
   border-radius: var(--rui-radius-sm);
-  border: 1px solid transparent;
+  border: var(--rui-border-width) solid transparent;
   background: transparent;
   color: var(--rui-color-text);
   font: inherit;
   font-weight: 500;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   padding: 0 8px;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
@@ -2059,16 +2805,23 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   color: var(--rui-color-text-muted);
 }
 
-/* Sheet — side drawer overlay. */
+/* Sheet — side drawer overlay (also used by Drawer and BottomSheet).
+   A closed sheet was hidden with opacity 0 plus pointer-events none alone.
+   Neither removes an element from the tab order or the accessibility tree, so
+   every control inside a *closed* drawer stayed keyboard-focusable and
+   screen-reader-visible: Tab walked into an invisible drawer. visibility is
+   animatable (it flips discretely at the end of the transition), so adding it
+   keeps the fade-out intact while genuinely removing the subtree from both. */
 .rui-sheet-overlay {
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.40);
   display: flex;
-  z-index: 50;
+  z-index: var(--rui-z-modal);
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  transition: opacity 200ms ease;
+  transition: opacity 200ms ease, visibility 200ms ease;
 }
 .rui-sheet-overlay[data-side="right"] { justify-content: flex-end; }
 .rui-sheet-overlay[data-side="left"] { justify-content: flex-start; }
@@ -2077,6 +2830,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 .rui-sheet-overlay[data-side="bottom"] { justify-content: flex-end; }
 .rui-sheet-overlay[data-open="true"] {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
 }
 .rui-sheet {
@@ -2098,13 +2852,13 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   align-items: center;
   justify-content: space-between;
   padding: var(--rui-spacing-l);
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
 }
-.rui-sheet-title { margin: 0; font-size: 16px; font-weight: 600; }
+.rui-sheet-title { margin: 0; font-size: var(--rui-font-size-lg); font-weight: 600; }
 .rui-sheet-close {
   background: transparent;
   border: none;
-  font-size: 22px;
+  font-size: var(--rui-font-size-title);
   line-height: 1;
   color: var(--rui-color-text-muted);
   cursor: pointer;
@@ -2120,12 +2874,17 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   flex-direction: column;
   gap: var(--rui-spacing-m);
 }
+/* Drawer emits rui-drawer-* alongside rui-sheet-* so the newer Sheet
+   redefinitions further down the sheet cannot steal its chrome (audit D0955). */
+.rui-drawer-title { margin: 0; font-size: var(--rui-font-size-lg); font-weight: 600; }
+.rui-drawer-close { font-size: var(--rui-font-size-title); line-height: 1; width: auto; height: auto; padding: 4px 8px; }
+.rui-drawer-body { padding: var(--rui-spacing-l); display: flex; flex-direction: column; gap: var(--rui-spacing-m); }
 .rui-sheet-footer {
   display: flex;
   gap: var(--rui-spacing-s);
   justify-content: flex-end;
   padding: var(--rui-spacing-l);
-  border-top: 1px solid var(--rui-color-border);
+  border-top: var(--rui-border-width) solid var(--rui-color-border);
 }
 
 /* ========================================================================
@@ -2138,6 +2897,15 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   gap: var(--rui-spacing-s);
   flex-wrap: wrap;
 }
+
+/* ----- Shared surface tones ------------------------------------------------
+   One resolution point for the SURFACE_TONES enum, consumed by the eight roots
+   that declare it. A component rule reads --rui-tone-color (and the two tint
+   percentages where it paints a wash) instead of naming a colour token per tone,
+   so the enum and the stylesheet can no longer disagree about which tones exist.
+   Both the reset and the per-tone blocks are keyed on the same [data-tone]
+   attribute the specs already emit, so nothing has to change in the renders. */
+${surfaceToneTokenRules()}
 
 /* Hero */
 .rui-hero {
@@ -2152,18 +2920,17 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
     radial-gradient(60% 60% at 0% 0%, color-mix(in srgb, var(--rui-color-primary) 18%, transparent), transparent 60%),
     radial-gradient(50% 50% at 100% 100%, color-mix(in srgb, var(--rui-color-info) 18%, transparent), transparent 60%),
     var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
-  overflow: hidden;
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  /* No overflow: hidden. Author nodes render into the CTA/actions rows, and the
+     clip amputated any absolutely-positioned one at the rounded bottom edge. The
+     radial-gradient background is painted by this element, so border-radius
+     already clips it, and .rui-hero-media img carries its own radius. */
 }
 .rui-hero[data-has-image="true"] { grid-template-columns: 1.2fr 1fr; }
-.rui-hero[data-tone="success"] { background:
-    radial-gradient(60% 60% at 0% 0%, color-mix(in srgb, var(--rui-color-success) 18%, transparent), transparent 60%),
-    var(--rui-color-surface); }
-.rui-hero[data-tone="warning"] { background:
-    radial-gradient(60% 60% at 0% 0%, color-mix(in srgb, var(--rui-color-warning) 22%, transparent), transparent 60%),
-    var(--rui-color-surface); }
-.rui-hero[data-tone="danger"] { background:
-    radial-gradient(60% 60% at 0% 0%, color-mix(in srgb, var(--rui-color-danger) 18%, transparent), transparent 60%),
+/* One rule for every tone but "primary", which is the base's own primary+info
+   sweep (and the render's default), and "default". "info" used to be the gap. */
+${tonedScope(".rui-hero", true)} { background:
+    radial-gradient(60% 60% at 0% 0%, color-mix(in srgb, var(--rui-tone-color) var(--rui-tone-surface-mix), transparent), transparent 60%),
     var(--rui-color-surface); }
 .rui-hero-body {
   display: flex;
@@ -2172,8 +2939,13 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   align-items: flex-start;
   min-width: 0;
 }
+/* align was declared, read and emitted with no selector behind it, so
+   align: "center" did nothing at all — the body hardcodes flex-start. */
+.rui-hero[data-align="center"] { justify-items: center; text-align: center; }
+.rui-hero[data-align="center"] .rui-hero-body { align-items: center; }
+.rui-hero[data-align="center"] .rui-hero-subtitle { margin-inline: auto; }
 .rui-hero-eyebrow {
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -2200,12 +2972,12 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 }
 .rui-hero-highlights { display: flex; flex-wrap: wrap; gap: 8px; }
 .rui-hero-highlight {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 999px;
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   color: var(--rui-color-text);
 }
 .rui-hero-ctas { display: flex; flex-wrap: wrap; gap: var(--rui-spacing-s); margin-top: 4px; }
@@ -2234,11 +3006,13 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
 }
 .rui-page-header-crumb-sep { color: var(--rui-color-border); }
-.rui-page-header-crumb { color: var(--rui-color-text-muted); }
+/* Crumbs are real anchors now — keep them flat instead of UA-underlined. */
+.rui-page-header-crumb { color: var(--rui-color-text-muted); text-decoration: none; }
+.rui-page-header-crumb:hover { text-decoration: underline; }
 .rui-page-header-crumb:last-child { color: var(--rui-color-text); font-weight: 600; }
 .rui-page-header-title-row {
   display: flex;
@@ -2266,7 +3040,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 .rui-page-header-subtitle {
   margin: 0;
   color: var(--rui-color-text-muted);
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   max-width: 70ch;
 }
 .rui-page-header-actions { gap: var(--rui-spacing-s); flex-wrap: wrap; }
@@ -2277,12 +3051,11 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   gap: var(--rui-spacing-m);
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
-.rui-metric-grid[data-columns="1"] { grid-template-columns: 1fr; }
-.rui-metric-grid[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.rui-metric-grid[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.rui-metric-grid[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.rui-metric-grid[data-columns="5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.rui-metric-grid[data-columns="6"] { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+/* KPI tiles are the narrowest of the three pattern grids and Stats(layout=grid)
+   also carries .rui-grid, so the ladder starts at the same 2-up the shared
+   .rui-grid phone/tablet collapse enforces — the two must agree or the higher
+   specificity of that :not() chain would win and contradict this ladder. */
+${columnLadderRules(".rui-metric-grid", "--rui-metric-grid-cols", 6, [2, 3, 4, 5, 6])}
 
 /* EmptyState */
 .rui-empty-state {
@@ -2306,13 +3079,13 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   justify-content: center;
   border-radius: 999px;
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
 }
-.rui-empty-state-title { margin: 0; font-size: 16px; font-weight: 600; }
+.rui-empty-state-title { margin: 0; font-size: var(--rui-font-size-lg); font-weight: 600; }
 .rui-empty-state-description {
   margin: 0;
   color: var(--rui-color-text-muted);
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   max-width: 48ch;
 }
 .rui-empty-state-action { margin-top: var(--rui-spacing-s); }
@@ -2351,24 +3124,41 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   color: var(--rui-color-text);
   flex-shrink: 0;
 }
-.rui-timeline-item[data-tone="primary"] .rui-timeline-marker { border-color: var(--rui-color-primary); color: var(--rui-color-primary); }
-.rui-timeline-item[data-tone="success"] .rui-timeline-marker { border-color: var(--rui-color-success); color: var(--rui-color-success); }
-.rui-timeline-item[data-tone="warning"] .rui-timeline-marker { border-color: var(--rui-color-warning); color: var(--rui-color-warning); }
-.rui-timeline-item[data-tone="danger"] .rui-timeline-marker { border-color: var(--rui-color-danger); color: var(--rui-color-danger); }
-.rui-timeline-item[data-tone="info"] .rui-timeline-marker { border-color: var(--rui-color-info); color: var(--rui-color-info); }
+${tonedScope(".rui-timeline-item")} .rui-timeline-marker { border-color: var(--rui-tone-color); color: var(--rui-tone-color); }
 .rui-timeline-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-top: 6px; }
 .rui-timeline-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.rui-timeline-title { font-weight: 600; }
+/* A linked entry title is an anchor; inherit the row's colour and stay flat. */
+.rui-timeline-title { font-weight: 600; color: inherit; text-decoration: none; }
+a.rui-timeline-title:hover { text-decoration: underline; }
 .rui-timeline-time {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
   font-variant-numeric: tabular-nums;
 }
-.rui-timeline-description { color: var(--rui-color-text-muted); font-size: 13px; }
+.rui-timeline-description { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-13); }
+/* The rich content slot had no rule, so its children stacked with no gap. */
+.rui-timeline-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rui-spacing-s);
+  margin-top: 4px;
+}
+/* A row that is now role=button with tabindex=0 needs both affordances. */
+.rui-timeline-item[data-interactive="true"] .rui-timeline-body {
+  cursor: pointer;
+  border-radius: var(--rui-radius-sm);
+  transition: background 160ms ease;
+}
+.rui-timeline-item[data-interactive="true"] .rui-timeline-body:hover { background: var(--rui-color-surface-muted); }
+.rui-timeline-item[data-interactive="true"] .rui-timeline-body:focus-visible {
+  outline: 2px solid var(--rui-color-primary);
+  outline-offset: 2px;
+}
 
 /* FeatureGrid */
 .rui-feature-grid {
@@ -2377,10 +3167,8 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   margin: var(--rui-spacing-l) 0;
 }
-.rui-feature-grid[data-columns="1"] { grid-template-columns: 1fr; }
-.rui-feature-grid[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.rui-feature-grid[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.rui-feature-grid[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* A 40px icon plus a title and description needs the full width on a phone. */
+${columnLadderRules(".rui-feature-grid", "--rui-feature-grid-cols", 4, [1, 2, 3, 4, 4])}
 .rui-feature-item {
   display: flex;
   flex-direction: column;
@@ -2388,13 +3176,24 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   padding: var(--rui-spacing-l);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  /* The tile renders as an <a> when it has an href, and text-decoration
+     propagates down the box tree, so without these the heading, description and
+     meta all came out underlined in link blue. */
+  color: var(--rui-color-text);
+  text-decoration: none;
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
-.rui-feature-item:hover {
+/* Gated on data-interactive: a display-only tile must not advertise a click. */
+.rui-feature-item[data-interactive="true"] { cursor: pointer; }
+.rui-feature-item[data-interactive="true"]:hover {
   transform: translateY(-2px);
   box-shadow: var(--rui-shadow-md);
   border-color: color-mix(in srgb, var(--rui-color-primary) 28%, var(--rui-color-border));
+}
+.rui-feature-item[data-interactive="true"]:focus-visible {
+  outline: 2px solid var(--rui-color-primary);
+  outline-offset: 2px;
 }
 .rui-feature-icon {
   width: 40px;
@@ -2403,17 +3202,18 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: var(--rui-font-size-title);
   margin-bottom: var(--rui-spacing-s);
   background: color-mix(in srgb, var(--rui-color-primary) 14%, transparent);
   color: var(--rui-color-primary);
 }
-.rui-feature-item[data-tone="success"] .rui-feature-icon { background: color-mix(in srgb, var(--rui-color-success) 14%, transparent); color: var(--rui-color-success); }
-.rui-feature-item[data-tone="warning"] .rui-feature-icon { background: color-mix(in srgb, var(--rui-color-warning) 14%, transparent); color: var(--rui-color-warning); }
-.rui-feature-item[data-tone="danger"] .rui-feature-icon { background: color-mix(in srgb, var(--rui-color-danger) 14%, transparent); color: var(--rui-color-danger); }
-.rui-feature-item[data-tone="info"] .rui-feature-icon { background: color-mix(in srgb, var(--rui-color-info) 14%, transparent); color: var(--rui-color-info); }
-.rui-feature-title { margin: 0; font-size: 16px; font-weight: 600; }
-.rui-feature-description { margin: 0; color: var(--rui-color-text-muted); font-size: 13px; line-height: 1.5; }
+/* 14% is the icon chip's own strength (a 40px swatch needs less tint than a
+   full-width wash), so it stays a literal here rather than reading the shared
+   surface mix. "primary" is included — it is FeatureItem's default tone, and this
+   resolves to exactly the base .rui-feature-icon look. */
+${tonedScope(".rui-feature-item")} .rui-feature-icon { background: color-mix(in srgb, var(--rui-tone-color) 14%, transparent); color: var(--rui-tone-color); }
+.rui-feature-title { margin: 0; font-size: var(--rui-font-size-lg); font-weight: 600; }
+.rui-feature-description { margin: 0; color: var(--rui-color-text-muted); font-size: var(--rui-font-size-13); line-height: 1.5; }
 
 /* Testimonial */
 .rui-testimonial {
@@ -2424,7 +3224,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   padding: var(--rui-spacing-l);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   position: relative;
 }
 .rui-testimonial::before {
@@ -2440,7 +3240,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 .rui-testimonial-rating { color: var(--rui-color-warning); letter-spacing: 1px; }
 .rui-testimonial-quote {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--rui-font-size-15);
   line-height: 1.6;
   color: var(--rui-color-text);
 }
@@ -2452,8 +3252,8 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 }
 .rui-testimonial-avatar { width: 36px; height: 36px; border-radius: 999px; object-fit: cover; }
 .rui-testimonial-meta { display: flex; flex-direction: column; }
-.rui-testimonial-name { font-weight: 600; font-size: 14px; }
-.rui-testimonial-role { font-size: 12px; color: var(--rui-color-text-muted); }
+.rui-testimonial-name { font-weight: 600; font-size: var(--rui-font-size-base); }
+.rui-testimonial-role { font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); }
 
 /* ProfileCard */
 .rui-profile-card {
@@ -2463,13 +3263,13 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   padding: var(--rui-spacing-l);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
 }
 .rui-profile-card-header { display: flex; align-items: center; gap: var(--rui-spacing-m); }
 .rui-profile-card-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.rui-profile-card-name { margin: 0; font-size: 16px; font-weight: 600; }
-.rui-profile-card-role { margin: 0; font-size: 13px; color: var(--rui-color-text-muted); }
-.rui-profile-card-bio { margin: 0; color: var(--rui-color-text); font-size: 13px; line-height: 1.5; }
+.rui-profile-card-name { margin: 0; font-size: var(--rui-font-size-lg); font-weight: 600; }
+.rui-profile-card-role { margin: 0; font-size: var(--rui-font-size-13); color: var(--rui-color-text-muted); }
+.rui-profile-card-bio { margin: 0; color: var(--rui-color-text); font-size: var(--rui-font-size-13); line-height: 1.5; }
 .rui-profile-card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .rui-profile-card-actions { gap: var(--rui-spacing-s); }
 
@@ -2489,12 +3289,12 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   background: var(--rui-color-bg-subtle);
   padding: var(--rui-spacing-s) var(--rui-spacing-m);
   border-radius: var(--rui-radius-md);
-  border: 1px solid var(--rui-color-border-subtle);
+  border: var(--rui-border-width) solid var(--rui-color-border-subtle);
 }
 .rui-comment-header { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.rui-comment-author { font-weight: 600; font-size: 13px; }
-.rui-comment-time { font-size: 12px; color: var(--rui-color-text-muted); }
-.rui-comment-content { font-size: 14px; color: var(--rui-color-text); line-height: 1.5; }
+.rui-comment-author { font-weight: 600; font-size: var(--rui-font-size-13); }
+.rui-comment-time { font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); }
+.rui-comment-content { font-size: var(--rui-font-size-base); color: var(--rui-color-text); line-height: 1.5; }
 .rui-comment-actions { gap: var(--rui-spacing-xs); margin-top: 4px; }
 
 /* Banner */
@@ -2507,29 +3307,51 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   background: linear-gradient(135deg,
     color-mix(in srgb, var(--rui-color-primary) 18%, var(--rui-color-surface)),
     color-mix(in srgb, var(--rui-color-info) 12%, var(--rui-color-surface)));
-  border: 1px solid color-mix(in srgb, var(--rui-color-primary) 28%, var(--rui-color-border));
+  border: var(--rui-border-width) solid color-mix(in srgb, var(--rui-color-primary) 28%, var(--rui-color-border));
   color: var(--rui-color-text);
+  /* Rendered as an <a> when it links out; the UA underline would propagate to
+     the title and message. */
+  text-decoration: none;
 }
-.rui-banner[data-tone="success"] {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--rui-color-success) 18%, var(--rui-color-surface)), var(--rui-color-surface));
-  border-color: color-mix(in srgb, var(--rui-color-success) 28%, var(--rui-color-border));
+/* "primary" is the render's default and is what the base rule above paints, so
+   the shared rule covers the other four. info used to be the gap: an
+   informational banner silently took the brand treatment. */
+${tonedScope(".rui-banner", true)} {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--rui-tone-color) var(--rui-tone-surface-mix), var(--rui-color-surface)), var(--rui-color-surface));
+  border-color: color-mix(in srgb, var(--rui-tone-color) var(--rui-tone-border-mix), var(--rui-color-border));
 }
-.rui-banner[data-tone="warning"] {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--rui-color-warning) 18%, var(--rui-color-surface)), var(--rui-color-surface));
-  border-color: color-mix(in srgb, var(--rui-color-warning) 32%, var(--rui-color-border));
-}
-.rui-banner[data-tone="danger"] {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--rui-color-danger) 18%, var(--rui-color-surface)), var(--rui-color-surface));
-  border-color: color-mix(in srgb, var(--rui-color-danger) 32%, var(--rui-color-border));
+.rui-banner[data-tone="default"] {
+  background: var(--rui-color-surface-muted);
+  border-color: var(--rui-color-border);
 }
 .rui-banner-icon {
-  font-size: 22px;
+  font-size: var(--rui-font-size-title);
   flex-shrink: 0;
 }
 .rui-banner-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.rui-banner-title { font-size: 14px; }
-.rui-banner-message { font-size: 13px; color: var(--rui-color-text-muted); }
+.rui-banner-title { font-size: var(--rui-font-size-base); }
+.rui-banner-message { font-size: var(--rui-font-size-13); color: var(--rui-color-text-muted); }
 .rui-banner-action { flex-shrink: 0; }
+/* The dismissible Banner's close button had no CSS, so it rendered as a raw UA
+   button on the gradient band. currentColor so it works on every tone. */
+.rui-banner-dismiss {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--rui-radius-sm);
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.rui-banner-dismiss:hover { opacity: 1; background: color-mix(in srgb, currentColor 10%, transparent); }
+.rui-banner-dismiss:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.rui-banner-dismiss-icon { font-size: var(--rui-font-size-sm); }
 
 /* Kanban */
 .rui-kanban-board {
@@ -2547,28 +3369,38 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   padding: var(--rui-spacing-m);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-bg-subtle);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   min-width: 0;
 }
 .rui-kanban-column-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.rui-kanban-column-title { font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--rui-color-text); }
+.rui-kanban-column-title { font-weight: 600; font-size: var(--rui-font-size-13); text-transform: uppercase; letter-spacing: 0.04em; color: var(--rui-color-text); }
 .rui-kanban-column-count {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   color: var(--rui-color-text-muted);
 }
-.rui-kanban-column[data-tone="primary"] .rui-kanban-column-title { color: var(--rui-color-primary); }
-.rui-kanban-column[data-tone="success"] .rui-kanban-column-title { color: var(--rui-color-success); }
-.rui-kanban-column[data-tone="warning"] .rui-kanban-column-title { color: var(--rui-color-warning); }
-.rui-kanban-column[data-tone="danger"] .rui-kanban-column-title { color: var(--rui-color-danger); }
+/* "info" was the tone this component used to be missing while
+   .rui-kanban-card[data-tone="info"] had it — the enum validated, the attribute
+   was set, and the title stayed in the default colour. */
+${tonedScope(".rui-kanban-column")} .rui-kanban-column-title { color: var(--rui-tone-color); }
+/* Header actions row + the WIP-limit overflow flag — new markup with no styling,
+   so the actions sat flush after the count and an over-limit column looked
+   exactly like one inside its limit. */
+.rui-kanban-column-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.rui-kanban-column-count[data-over-limit="true"] {
+  color: var(--rui-color-danger-text);
+  background: color-mix(in srgb, var(--rui-color-danger) 14%, transparent);
+  font-weight: 600;
+}
+.rui-kanban-column[data-over-limit="true"] { border-color: color-mix(in srgb, var(--rui-color-danger) 30%, var(--rui-color-border)); }
 .rui-kanban-column-body { display: flex; flex-direction: column; gap: var(--rui-spacing-s); }
 .rui-kanban-column-empty {
   text-align: center;
   padding: var(--rui-spacing-m);
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
   border: 1px dashed var(--rui-color-border);
   border-radius: var(--rui-radius-sm);
@@ -2580,7 +3412,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   padding: var(--rui-spacing-s) var(--rui-spacing-m);
   border-radius: var(--rui-radius-sm);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   box-shadow: var(--rui-shadow-sm);
 }
 .rui-kanban-card[role="button"] {
@@ -2588,17 +3420,13 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   transition: transform 120ms ease, box-shadow 160ms ease;
 }
 .rui-kanban-card[role="button"]:hover { transform: translateY(-1px); box-shadow: var(--rui-shadow-md); }
-.rui-kanban-card-title { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 6px; }
-.rui-kanban-card-icon { font-size: 14px; }
-.rui-kanban-card-description { margin: 0; color: var(--rui-color-text-muted); font-size: 12px; line-height: 1.4; }
+.rui-kanban-card-title { font-weight: 600; font-size: var(--rui-font-size-base); display: flex; align-items: center; gap: 6px; }
+.rui-kanban-card-icon { font-size: var(--rui-font-size-base); }
+.rui-kanban-card-description { margin: 0; color: var(--rui-color-text-muted); font-size: var(--rui-font-size-sm); line-height: 1.4; }
 .rui-kanban-card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .rui-kanban-card-footer { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
-.rui-kanban-card-assignee { font-size: 12px; color: var(--rui-color-text-muted); }
-.rui-kanban-card[data-tone="primary"] { border-left: 3px solid var(--rui-color-primary); }
-.rui-kanban-card[data-tone="success"] { border-left: 3px solid var(--rui-color-success); }
-.rui-kanban-card[data-tone="warning"] { border-left: 3px solid var(--rui-color-warning); }
-.rui-kanban-card[data-tone="danger"] { border-left: 3px solid var(--rui-color-danger); }
-.rui-kanban-card[data-tone="info"] { border-left: 3px solid var(--rui-color-info); }
+.rui-kanban-card-assignee { font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); }
+${tonedScope(".rui-kanban-card")} { border-left: 3px solid var(--rui-tone-color); }
 
 /* SectionHeader */
 .rui-section-header {
@@ -2608,12 +3436,12 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   gap: var(--rui-spacing-m);
   flex-wrap: wrap;
   padding-bottom: var(--rui-spacing-s);
-  border-bottom: 1px solid var(--rui-color-border-subtle);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle);
   margin-bottom: var(--rui-spacing-s);
 }
 .rui-section-header-left { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 auto; }
 .rui-section-header-eyebrow {
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
@@ -2636,7 +3464,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 }
 .rui-section-header-subtitle {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   color: var(--rui-color-text-muted);
   max-width: 70ch;
 }
@@ -2657,7 +3485,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   padding: var(--rui-spacing-s) var(--rui-spacing-m);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-bg-subtle);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
 }
 .rui-toolbar-side {
   display: flex;
@@ -2669,7 +3497,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 .rui-toolbar-left { flex: 1 1 auto; }
 .rui-toolbar-right { flex-shrink: 0; }
 .rui-toolbar .rui-form-control { gap: 4px; }
-.rui-toolbar .rui-form-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--rui-color-text-muted); }
+.rui-toolbar .rui-form-label { font-size: var(--rui-font-size-11); text-transform: uppercase; letter-spacing: 0.04em; color: var(--rui-color-text-muted); }
 .rui-toolbar .rui-input,
 .rui-toolbar .rui-select { min-width: 160px; }
 
@@ -2682,7 +3510,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   width: 240px;
   flex-shrink: 0;
   background: var(--rui-color-bg-subtle);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   align-self: stretch;
 }
@@ -2698,16 +3526,21 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   top: var(--rui-app-margin, 20px);
   height: calc(100vh - var(--rui-app-margin, 20px) * 2);
   max-height: calc(100vh - var(--rui-app-margin, 20px) * 2);
-  overflow-y: auto;
 }
-.rui-sidebar-header { display: flex; flex-direction: column; gap: 2px; padding-bottom: var(--rui-spacing-s); border-bottom: 1px solid var(--rui-color-border-subtle); }
-.rui-sidebar-brand { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; color: var(--rui-color-text); }
-.rui-sidebar-tagline { font-size: 12px; color: var(--rui-color-text-muted); }
+/* Scroll the nav body, not the rail: with overflow on the rail itself the rail
+   clipped its own header and footer, and max-height guarantees there is no room
+   below — so the documented footer block (avatar, upgrade CTA) was cut off.
+   .rui-sidebar-body already has flex: 1 + min-height: 0, so it is ready to be
+   the scroll container. */
+.rui-app-shell .rui-sidebar[data-full-height="true"] .rui-sidebar-body { overflow-y: auto; }
+.rui-sidebar-header { display: flex; flex-direction: column; gap: 2px; padding-bottom: var(--rui-spacing-s); border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle); }
+.rui-sidebar-brand { font-size: var(--rui-font-size-base); font-weight: 700; letter-spacing: -0.01em; color: var(--rui-color-text); }
+.rui-sidebar-tagline { font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); }
 .rui-sidebar-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-height: 0; }
 .rui-sidebar-section { display: flex; flex-direction: column; gap: 2px; margin-top: var(--rui-spacing-s); }
 .rui-sidebar-section:first-child { margin-top: 0; }
 .rui-sidebar-section-label {
-  font-size: 10px;
+  font-size: var(--rui-font-size-10);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
@@ -2722,15 +3555,16 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   padding: var(--rui-spacing-xs) var(--rui-spacing-s);
   border-radius: var(--rui-radius-sm);
   background: transparent;
-  border: 1px solid transparent;
+  border: var(--rui-border-width) solid transparent;
   color: var(--rui-color-text);
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   font-weight: 500;
   text-align: left;
   cursor: pointer;
   transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
   width: 100%;
 }
+a.rui-sidebar-item { text-decoration: none; }
 .rui-sidebar-item:hover {
   background: var(--rui-color-surface);
   color: var(--rui-color-primary);
@@ -2740,14 +3574,14 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   color: var(--rui-color-primary);
   border-color: color-mix(in srgb, var(--rui-color-primary) 32%, transparent);
 }
-.rui-sidebar-item-icon { font-size: 14px; width: 18px; text-align: center; }
+.rui-sidebar-item-icon { font-size: var(--rui-font-size-base); width: 18px; text-align: center; }
 .rui-sidebar-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rui-sidebar-item-badge {
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   color: var(--rui-color-text-muted);
   font-weight: 600;
 }
@@ -2758,7 +3592,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 }
 .rui-sidebar-footer {
   padding-top: var(--rui-spacing-s);
-  border-top: 1px solid var(--rui-color-border-subtle);
+  border-top: var(--rui-border-width) solid var(--rui-color-border-subtle);
   display: flex;
   flex-direction: column;
   gap: var(--rui-spacing-s);
@@ -2783,7 +3617,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   gap: var(--rui-spacing-m);
   padding: var(--rui-spacing-s) var(--rui-spacing-m);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
 }
 /* Topbar content (a Row / TopBar / actions block) grows to fill the bar so
@@ -2838,7 +3672,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 }
 .rui-description-label {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 600;
@@ -2847,10 +3681,10 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   align-items: center;
   gap: 6px;
 }
-.rui-description-icon { font-size: 13px; }
+.rui-description-icon { font-size: var(--rui-font-size-13); }
 .rui-description-value {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   color: var(--rui-color-text);
   font-weight: 500;
   word-break: break-word;
@@ -2861,21 +3695,27 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
 }
+/* The pulse keyframes below paint their halo with currentColor, so every tone has
+   to set color as well as background — otherwise a danger dot pulsed a GREY halo
+   inherited from .rui-status-dot, and the animated box-shadow overrode the tone's
+   static coloured one. The base marker states its muted colour for the same
+   reason: so an untoned dot pulses grey deliberately. */
 .rui-status-dot-marker {
   width: 8px;
   height: 8px;
   border-radius: 999px;
   background: var(--rui-color-text-muted);
+  color: var(--rui-color-text-muted);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-text-muted) 18%, transparent);
 }
-.rui-status-dot[data-tone="primary"] .rui-status-dot-marker { background: var(--rui-color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-primary) 20%, transparent); }
-.rui-status-dot[data-tone="success"] .rui-status-dot-marker { background: var(--rui-color-success); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-success) 22%, transparent); }
-.rui-status-dot[data-tone="warning"] .rui-status-dot-marker { background: var(--rui-color-warning); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-warning) 22%, transparent); }
-.rui-status-dot[data-tone="danger"] .rui-status-dot-marker { background: var(--rui-color-danger); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-danger) 22%, transparent); }
-.rui-status-dot[data-tone="info"] .rui-status-dot-marker { background: var(--rui-color-info); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-info) 22%, transparent); }
+.rui-status-dot[data-tone="primary"] .rui-status-dot-marker { background: var(--rui-color-primary); color: var(--rui-color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-primary) 20%, transparent); }
+.rui-status-dot[data-tone="success"] .rui-status-dot-marker { background: var(--rui-color-success); color: var(--rui-color-success); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-success) 22%, transparent); }
+.rui-status-dot[data-tone="warning"] .rui-status-dot-marker { background: var(--rui-color-warning); color: var(--rui-color-warning); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-warning) 22%, transparent); }
+.rui-status-dot[data-tone="danger"] .rui-status-dot-marker { background: var(--rui-color-danger); color: var(--rui-color-danger); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-danger) 22%, transparent); }
+.rui-status-dot[data-tone="info"] .rui-status-dot-marker { background: var(--rui-color-info); color: var(--rui-color-info); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-info) 22%, transparent); }
 .rui-status-dot-label { color: var(--rui-color-text); font-weight: 500; }
 .rui-status-dot[data-pulse="true"] .rui-status-dot-marker {
   animation: rui-status-dot-pulse 1600ms ease-in-out infinite;
@@ -2893,10 +3733,9 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   align-items: stretch;
   margin: var(--rui-spacing-l) 0;
 }
-.rui-pricing-table[data-columns="1"] { grid-template-columns: 1fr; }
-.rui-pricing-table[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.rui-pricing-table[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.rui-pricing-table[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* A tier card carries a price, a feature list and a CTA button — four of them
+   side by side on a 375px phone overflowed every one of those. */
+${columnLadderRules(".rui-pricing-table", "--rui-pricing-table-cols", 4, [1, 2, 3, 4, 4])}
 
 .rui-pricing-card {
   position: relative;
@@ -2906,7 +3745,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   padding: var(--rui-spacing-l);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
 }
 .rui-pricing-card:hover {
@@ -2923,7 +3762,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   position: absolute;
   top: -10px;
   right: var(--rui-spacing-l);
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -2935,13 +3774,13 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 }
 .rui-pricing-card-plan {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--rui-color-text-muted);
 }
-.rui-pricing-card-description { margin: 0; font-size: 13px; color: var(--rui-color-text-muted); line-height: 1.5; }
+.rui-pricing-card-description { margin: 0; font-size: var(--rui-font-size-13); color: var(--rui-color-text-muted); line-height: 1.5; }
 .rui-pricing-card-price-row {
   display: flex;
   align-items: baseline;
@@ -2954,7 +3793,7 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   letter-spacing: -0.02em;
   color: var(--rui-color-text);
 }
-.rui-pricing-card-period { font-size: 13px; color: var(--rui-color-text-muted); }
+.rui-pricing-card-period { font-size: var(--rui-font-size-13); color: var(--rui-color-text-muted); }
 .rui-pricing-card-features {
   list-style: none;
   margin: 0;
@@ -2968,8 +3807,18 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   color: var(--rui-color-text);
+}
+/* An excluded feature swaps the glyph but was otherwise styled identically to an
+   included one, so at a glance it still read as included. */
+.rui-pricing-card-feature[data-included="false"] { color: var(--rui-color-text-muted); }
+.rui-pricing-card-feature[data-included="false"] .rui-pricing-card-check {
+  color: var(--rui-color-text-muted);
+  /* The disc is a success-tinted green; leaving it would put a grey cross inside
+     a green badge. */
+  background: color-mix(in srgb, var(--rui-color-text-muted) 16%, transparent);
+  opacity: 0.7;
 }
 .rui-pricing-card-check {
   display: inline-flex !important;
@@ -2979,8 +3828,8 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
   height: 16px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--rui-color-success) 18%, transparent);
-  color: var(--rui-color-success);
-  font-size: 15px;
+  color: var(--rui-color-success-text);
+  font-size: var(--rui-font-size-15);
   font-weight: 700;
   flex-shrink: 0;
   margin-top: 1px;
@@ -3001,6 +3850,9 @@ ${spacingAttrRules(".rui-box", "data-margin", (v) => `margin: ${v};`)}
 /* Container */
 .rui-container {
   width: 100%;
+  /* The centring guarantee belongs to the class, not only to the inline style the
+     component emits — the max-width rules below are useless without it. */
+  margin-inline: auto;
 }
 .rui-container[data-size="sm"]  { max-width: 640px; }
 .rui-container[data-size="md"]  { max-width: 820px; }
@@ -3036,17 +3888,35 @@ ${spacingAttrRules(".rui-spacer", "data-size", (v) => `min-width: ${v}; min-heig
   max-width: 720px;
   z-index: 1;
 }
+/* Same inert-prop fix as the Hero above: .rui-cover hardcodes align-items:
+   flex-end, so nothing read data-align. */
+.rui-cover[data-align="center"] { align-items: center; justify-content: center; text-align: center; }
+.rui-cover[data-align="center"] .rui-cover-body { align-items: center; }
+.rui-cover[data-align="center"] .rui-cover-eyebrow { align-self: center; }
+/* Highlights reuse the light-theme .rui-hero-highlight pill, which is close to
+   invisible on the dark cover scrim — the render adds this class to override it. */
+.rui-cover-highlights { display: flex; flex-wrap: wrap; gap: 8px; }
+.rui-cover-highlight {
+  font-size: var(--rui-font-size-sm);
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  border: var(--rui-border-width) solid rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+  backdrop-filter: blur(2px);
+}
 .rui-cover-eyebrow {
   display: inline-flex;
   align-self: flex-start;
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   padding: 4px 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  border: var(--rui-border-width) solid rgba(255, 255, 255, 0.24);
   backdrop-filter: blur(6px);
 }
 .rui-cover-title {
@@ -3061,14 +3931,14 @@ ${spacingAttrRules(".rui-spacer", "data-size", (v) => `min-width: ${v}; min-heig
 }
 .rui-cover-subtitle {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--rui-font-size-15);
   color: rgba(255, 255, 255, 0.92);
   max-width: 640px;
   line-height: 1.55;
 }
 .rui-cover-caption {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   color: rgba(255, 255, 255, 0.82);
 }
 .rui-cover-actions { margin-top: var(--rui-spacing-s); }
@@ -3083,21 +3953,39 @@ ${spacingAttrRules(".rui-spacer", "data-size", (v) => `min-width: ${v}; min-heig
   display: flex;
   flex-direction: column;
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
-  overflow: hidden;
-  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+  /* The card is an <a> when it links out, and text-decoration propagates to
+     every descendant — the title, description, tags and meta were all
+     underlined and in link blue. */
+  color: var(--rui-color-text);
+  text-decoration: none;
+  /* No overflow: hidden — the classic overflow menu in the actions row was cut
+     off at the card's bottom edge. The media band clips itself below. */
+  transition: box-shadow 200ms ease, border-color 200ms ease;
 }
-.rui-media-card:hover {
-  transform: translateY(-2px);
+/* Gated on data-interactive so a plain gallery card does not lift and glow and
+   then do nothing on click. No transform: the hover lift made the card a
+   containing block and re-anchored any fixed child by 2px on pointer-enter. */
+.rui-media-card[data-interactive="true"] { cursor: pointer; }
+.rui-media-card[data-interactive="true"]:hover {
   box-shadow: var(--rui-shadow-md);
   border-color: color-mix(in srgb, var(--rui-color-primary) 20%, var(--rui-color-border));
+}
+.rui-media-card[data-interactive="true"]:focus-visible {
+  outline: 2px solid var(--rui-color-primary);
+  outline-offset: 2px;
 }
 .rui-media-card-media {
   position: relative;
   width: 100%;
   background: color-mix(in srgb, var(--rui-color-text) 6%, var(--rui-color-surface-muted));
   overflow: hidden;
+  /* Own the rounded top corners now that the card itself no longer clips. */
+  border-radius: calc(var(--rui-radius-md) - var(--rui-border-width)) calc(var(--rui-radius-md) - var(--rui-border-width)) 0 0;
+}
+.rui-media-card[data-orientation="horizontal"] .rui-media-card-media {
+  border-radius: calc(var(--rui-radius-md) - var(--rui-border-width)) 0 0 calc(var(--rui-radius-md) - var(--rui-border-width));
 }
 .rui-media-card-media img {
   display: block;
@@ -3116,7 +4004,7 @@ ${spacingAttrRules(".rui-spacer", "data-size", (v) => `min-width: ${v}; min-heig
   position: absolute;
   top: var(--rui-spacing-s);
   left: var(--rui-spacing-s);
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -3134,7 +4022,7 @@ ${spacingAttrRules(".rui-spacer", "data-size", (v) => `min-width: ${v}; min-heig
 }
 .rui-media-card-title {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--rui-font-size-lg);
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--rui-color-text);
@@ -3152,9 +4040,9 @@ ${spacingAttrRules(".rui-spacer", "data-size", (v) => `min-width: ${v}; min-heig
 }
 .rui-media-card-meta {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
-  border-top: 1px solid var(--rui-color-border-subtle);
+  border-top: var(--rui-border-width) solid var(--rui-color-border-subtle);
   padding-top: var(--rui-spacing-s);
 }
 .rui-media-card-actions {
@@ -3189,31 +4077,31 @@ ${spacingAttrRules(".rui-spacer", "data-size", (v) => `min-width: ${v}; min-heig
   gap: 2px;
   min-width: 96px;
   padding: 0 var(--rui-spacing-m);
-  border-left: 1px solid var(--rui-color-border-subtle);
+  border-left: var(--rui-border-width) solid var(--rui-color-border-subtle);
 }
 .rui-stats-item:first-child { padding-left: 0; border-left: none; }
 .rui-stats-label {
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 600;
   color: var(--rui-color-text-muted);
 }
 .rui-stats-value {
-  font-size: 22px;
+  font-size: var(--rui-font-size-title);
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--rui-color-text);
 }
 .rui-stats-hint {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
 }
 .rui-stats-item[data-tone="primary"] .rui-stats-value { color: var(--rui-color-primary); }
-.rui-stats-item[data-tone="success"] .rui-stats-value { color: var(--rui-color-success); }
-.rui-stats-item[data-tone="warning"] .rui-stats-value { color: var(--rui-color-warning); }
-.rui-stats-item[data-tone="danger"]  .rui-stats-value { color: var(--rui-color-danger); }
-.rui-stats-item[data-tone="info"]    .rui-stats-value { color: var(--rui-color-info); }
+.rui-stats-item[data-tone="success"] .rui-stats-value { color: var(--rui-color-success-text); }
+.rui-stats-item[data-tone="warning"] .rui-stats-value { color: var(--rui-color-warning-text); }
+.rui-stats-item[data-tone="danger"]  .rui-stats-value { color: var(--rui-color-danger-text); }
+.rui-stats-item[data-tone="info"]    .rui-stats-value { color: var(--rui-color-info-text); }
 
 /* Tile */
 .rui-tile {
@@ -3222,21 +4110,31 @@ ${spacingAttrRules(".rui-spacer", "data-size", (v) => `min-width: ${v}; min-heig
   gap: var(--rui-spacing-m);
   padding: var(--rui-spacing-m) var(--rui-spacing-l);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   text-align: left;
   color: inherit;
+  /* The tile is an <a> when it has an href; without this the label, description
+     and everything under it inherit the UA underline. */
+  text-decoration: none;
   font: inherit;
   cursor: default;
   transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
-button.rui-tile { cursor: pointer; }
+button.rui-tile, a.rui-tile { cursor: pointer; }
+/* Element-scoped, matching the base rule's own cursor: default — the render
+   emits a plain div when there is neither href nor onClick. */
 button.rui-tile:hover,
-.rui-tile:hover {
+a.rui-tile:hover {
   transform: translateY(-1px);
   box-shadow: var(--rui-shadow-sm);
   border-color: color-mix(in srgb, var(--rui-color-primary) 18%, var(--rui-color-border));
 }
+.rui-tile[data-selected="true"] {
+  border-color: var(--rui-color-primary);
+  background: color-mix(in srgb, var(--rui-color-primary) 8%, var(--rui-color-surface));
+}
+.rui-tile[data-selected="true"] .rui-tile-label { color: var(--rui-color-primary); font-weight: 600; }
 .rui-tile-icon {
   display: inline-flex !important;
   align-items: center;
@@ -3245,7 +4143,7 @@ button.rui-tile:hover,
   height: 38px;
   border-radius: var(--rui-radius-md);
   background: color-mix(in srgb, var(--rui-color-primary) 12%, var(--rui-color-surface-muted));
-  font-size: 18px;
+  font-size: var(--rui-font-size-18);
   flex-shrink: 0;
 }
 .rui-tile-body {
@@ -3255,25 +4153,21 @@ button.rui-tile:hover,
   min-width: 0;
 }
 .rui-tile-label {
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   font-weight: 600;
   color: var(--rui-color-text);
 }
 .rui-tile-value {
-  font-size: 18px;
+  font-size: var(--rui-font-size-18);
   font-weight: 700;
   color: var(--rui-color-text);
 }
 .rui-tile-description {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
   line-height: 1.45;
 }
-.rui-tile[data-tone="primary"] .rui-tile-icon { background: color-mix(in srgb, var(--rui-color-primary) 18%, transparent); color: var(--rui-color-primary); }
-.rui-tile[data-tone="success"] .rui-tile-icon { background: color-mix(in srgb, var(--rui-color-success) 18%, transparent); color: var(--rui-color-success); }
-.rui-tile[data-tone="warning"] .rui-tile-icon { background: color-mix(in srgb, var(--rui-color-warning) 18%, transparent); color: var(--rui-color-warning); }
-.rui-tile[data-tone="danger"]  .rui-tile-icon { background: color-mix(in srgb, var(--rui-color-danger)  18%, transparent); color: var(--rui-color-danger); }
-.rui-tile[data-tone="info"]    .rui-tile-icon { background: color-mix(in srgb, var(--rui-color-info)    18%, transparent); color: var(--rui-color-info); }
+${tonedScope(".rui-tile")} .rui-tile-icon { background: color-mix(in srgb, var(--rui-tone-color) 18%, transparent); color: var(--rui-tone-color); }
 
 /* Notification */
 .rui-notification {
@@ -3281,11 +4175,37 @@ button.rui-tile:hover,
   gap: var(--rui-spacing-m);
   padding: var(--rui-spacing-m) var(--rui-spacing-l);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   position: relative;
   transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
+/* A clickable notification must look and focus like a control (audit D0917/D0918). */
+.rui-notification[data-clickable="true"] { cursor: pointer; }
+.rui-notification[data-clickable="true"]:hover { border-color: color-mix(in srgb, var(--rui-color-primary) 40%, var(--rui-color-border)); box-shadow: var(--rui-shadow-sm); }
+.rui-notification[data-clickable="true"]:focus-visible { outline: 2px solid var(--rui-color-primary); outline-offset: 2px; }
+/* The per-item dismiss button is new markup with no styling — it rendered as a
+   default UA button inside the notification's flex row. */
+.rui-notification-dismiss {
+  flex-shrink: 0;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin-left: auto;
+  border: none;
+  border-radius: var(--rui-radius-sm);
+  background: transparent;
+  color: var(--rui-color-text-muted);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+.rui-notification-dismiss:hover { background: var(--rui-color-surface-muted); color: var(--rui-color-text); }
+.rui-notification-dismiss:focus-visible { outline: 2px solid var(--rui-color-primary); outline-offset: 2px; }
+.rui-notification-dismiss-icon { font-size: var(--rui-font-size-sm); }
 .rui-notification[data-unread="true"] {
   background: color-mix(in srgb, var(--rui-color-primary) 5%, var(--rui-color-surface));
   border-color: color-mix(in srgb, var(--rui-color-primary) 28%, var(--rui-color-border));
@@ -3301,30 +4221,12 @@ button.rui-tile:hover,
   background: var(--rui-color-primary);
   border-radius: var(--rui-radius-md) 0 0 var(--rui-radius-md);
 }
-.rui-notification[data-tone="success"][data-unread="true"] {
-  background: color-mix(in srgb, var(--rui-color-success) 6%, var(--rui-color-surface));
-  border-color: color-mix(in srgb, var(--rui-color-success) 28%, var(--rui-color-border));
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--rui-color-success) 16%, transparent);
+${tonedScope(".rui-notification")}[data-unread="true"] {
+  background: color-mix(in srgb, var(--rui-tone-color) 6%, var(--rui-color-surface));
+  border-color: color-mix(in srgb, var(--rui-tone-color) 28%, var(--rui-color-border));
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--rui-tone-color) 16%, transparent);
 }
-.rui-notification[data-tone="success"][data-unread="true"]::before { background: var(--rui-color-success); }
-.rui-notification[data-tone="warning"][data-unread="true"] {
-  background: color-mix(in srgb, var(--rui-color-warning) 6%, var(--rui-color-surface));
-  border-color: color-mix(in srgb, var(--rui-color-warning) 28%, var(--rui-color-border));
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--rui-color-warning) 16%, transparent);
-}
-.rui-notification[data-tone="warning"][data-unread="true"]::before { background: var(--rui-color-warning); }
-.rui-notification[data-tone="danger"][data-unread="true"] {
-  background: color-mix(in srgb, var(--rui-color-danger) 6%, var(--rui-color-surface));
-  border-color: color-mix(in srgb, var(--rui-color-danger) 28%, var(--rui-color-border));
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--rui-color-danger) 16%, transparent);
-}
-.rui-notification[data-tone="danger"][data-unread="true"]::before  { background: var(--rui-color-danger); }
-.rui-notification[data-tone="info"][data-unread="true"] {
-  background: color-mix(in srgb, var(--rui-color-info) 6%, var(--rui-color-surface));
-  border-color: color-mix(in srgb, var(--rui-color-info) 28%, var(--rui-color-border));
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--rui-color-info) 16%, transparent);
-}
-.rui-notification[data-tone="info"][data-unread="true"]::before    { background: var(--rui-color-info); }
+${tonedScope(".rui-notification")}[data-unread="true"]::before { background: var(--rui-tone-color); }
 .rui-notification-visual { flex-shrink: 0; display: flex; }
 .rui-notification-icon {
   display: inline-flex !important;
@@ -3334,17 +4236,14 @@ button.rui-tile:hover,
   height: 34px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--rui-color-primary) 12%, var(--rui-color-surface-muted));
-  font-size: 16px;
+  font-size: var(--rui-font-size-lg);
   flex-shrink: 0;
 }
 .rui-notification[data-unread="true"] .rui-notification-icon {
   background: color-mix(in srgb, var(--rui-color-primary) 18%, var(--rui-color-surface));
   color: var(--rui-color-primary);
 }
-.rui-notification[data-tone="success"] .rui-notification-icon { background: color-mix(in srgb, var(--rui-color-success) 18%, transparent); color: var(--rui-color-success); }
-.rui-notification[data-tone="warning"] .rui-notification-icon { background: color-mix(in srgb, var(--rui-color-warning) 18%, transparent); color: var(--rui-color-warning); }
-.rui-notification[data-tone="danger"]  .rui-notification-icon { background: color-mix(in srgb, var(--rui-color-danger)  18%, transparent); color: var(--rui-color-danger); }
-.rui-notification[data-tone="info"]    .rui-notification-icon { background: color-mix(in srgb, var(--rui-color-info)    18%, transparent); color: var(--rui-color-info); }
+${tonedScope(".rui-notification")} .rui-notification-icon { background: color-mix(in srgb, var(--rui-tone-color) 18%, transparent); color: var(--rui-tone-color); }
 .rui-notification-body {
   display: flex;
   flex-direction: column;
@@ -3372,24 +4271,12 @@ button.rui-tile:hover,
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-primary) 25%, transparent);
   flex-shrink: 0;
 }
-.rui-notification[data-tone="success"] .rui-notification-unread-dot {
-  background: var(--rui-color-success);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-success) 25%, transparent);
-}
-.rui-notification[data-tone="warning"] .rui-notification-unread-dot {
-  background: var(--rui-color-warning);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-warning) 25%, transparent);
-}
-.rui-notification[data-tone="danger"] .rui-notification-unread-dot {
-  background: var(--rui-color-danger);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-danger) 25%, transparent);
-}
-.rui-notification[data-tone="info"] .rui-notification-unread-dot {
-  background: var(--rui-color-info);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-info) 25%, transparent);
+${tonedScope(".rui-notification")} .rui-notification-unread-dot {
+  background: var(--rui-tone-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-tone-color) 25%, transparent);
 }
 .rui-notification-title {
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   font-weight: 600;
   color: var(--rui-color-text);
 }
@@ -3397,7 +4284,7 @@ button.rui-tile:hover,
   font-weight: 700;
 }
 .rui-notification-time {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
   flex-shrink: 0;
 }
@@ -3405,13 +4292,10 @@ button.rui-tile:hover,
   color: var(--rui-color-primary);
   font-weight: 600;
 }
-.rui-notification[data-tone="success"][data-unread="true"] .rui-notification-time { color: var(--rui-color-success); }
-.rui-notification[data-tone="warning"][data-unread="true"] .rui-notification-time { color: var(--rui-color-warning); }
-.rui-notification[data-tone="danger"][data-unread="true"] .rui-notification-time { color: var(--rui-color-danger); }
-.rui-notification[data-tone="info"][data-unread="true"] .rui-notification-time { color: var(--rui-color-info); }
+${tonedScope(".rui-notification")}[data-unread="true"] .rui-notification-time { color: var(--rui-tone-color); }
 .rui-notification-message {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   color: var(--rui-color-text-muted);
   line-height: 1.5;
 }
@@ -3450,10 +4334,19 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   border-radius: 999px;
   border: 2px solid var(--rui-color-surface);
 }
+/* Shape as well as colour: on a 9px dot, red-green colour blindness makes busy
+   and online indistinguishable, and shape survives without colour. Two axes give
+   four unambiguous cues — round vs square, filled vs hollow:
+     online  filled round    busy    filled square
+     away    hollow round    offline hollow square
+   busy used to be a 4px-tall bar, which under the global "* { box-sizing:
+   border-box }" left ZERO content height inside the 2px ring — the whole marker
+   painted in --rui-color-surface and the danger fill never showed. away and
+   offline were both hollow rounds, i.e. still colour-only against each other. */
 .rui-person-chip-status[data-status="online"]  { background: var(--rui-color-success); }
-.rui-person-chip-status[data-status="busy"]    { background: var(--rui-color-danger); }
-.rui-person-chip-status[data-status="away"]    { background: var(--rui-color-warning); }
-.rui-person-chip-status[data-status="offline"] { background: var(--rui-color-text-muted); }
+.rui-person-chip-status[data-status="busy"]    { background: var(--rui-color-danger); border-radius: 2px; }
+.rui-person-chip-status[data-status="away"]    { background: transparent; border: 2px solid var(--rui-color-warning); }
+.rui-person-chip-status[data-status="offline"] { background: transparent; border: 2px solid var(--rui-color-text-muted); border-radius: 2px; }
 .rui-person-chip-meta {
   display: flex;
   flex-direction: column;
@@ -3461,7 +4354,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   min-width: 0;
 }
 .rui-person-chip-name {
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   font-weight: 600;
   color: var(--rui-color-text);
   white-space: nowrap;
@@ -3475,10 +4368,10 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rui-person-chip[data-size="sm"] .rui-person-chip-name { font-size: 12px; }
-.rui-person-chip[data-size="sm"] .rui-person-chip-role { font-size: 11px; }
-.rui-person-chip[data-size="lg"] .rui-person-chip-name { font-size: 14px; }
-.rui-person-chip[data-size="lg"] .rui-person-chip-role { font-size: 12px; }
+.rui-person-chip[data-size="sm"] .rui-person-chip-name { font-size: var(--rui-font-size-sm); }
+.rui-person-chip[data-size="sm"] .rui-person-chip-role { font-size: var(--rui-font-size-11); }
+.rui-person-chip[data-size="lg"] .rui-person-chip-name { font-size: var(--rui-font-size-base); }
+.rui-person-chip[data-size="lg"] .rui-person-chip-role { font-size: var(--rui-font-size-sm); }
 
 /* Quote */
 .rui-quote {
@@ -3493,7 +4386,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 .rui-quote-text {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--rui-font-size-15);
   line-height: 1.55;
   font-style: italic;
   color: var(--rui-color-text);
@@ -3501,7 +4394,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-quote-text::before { content: "“"; margin-right: 2px; opacity: 0.55; }
 .rui-quote-text::after  { content: "”"; margin-left: 2px; opacity: 0.55; }
 .rui-quote-cite {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
   font-style: normal;
 }
@@ -3510,54 +4403,29 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-quote[data-tone="danger"]  { border-left-color: color-mix(in srgb, var(--rui-color-danger)  60%, transparent); background: color-mix(in srgb, var(--rui-color-danger)  4%, var(--rui-color-surface)); }
 .rui-quote[data-tone="info"]    { border-left-color: color-mix(in srgb, var(--rui-color-info)    60%, transparent); background: color-mix(in srgb, var(--rui-color-info)    4%, var(--rui-color-surface)); }
 
-/* Note */
-.rui-note {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--rui-spacing-s);
-  padding: 8px var(--rui-spacing-m);
-  border-radius: var(--rui-radius-md);
-  background: color-mix(in srgb, var(--rui-color-info) 10%, var(--rui-color-surface-muted));
-  border: 1px solid color-mix(in srgb, var(--rui-color-info) 22%, transparent);
-}
-.rui-note-icon {
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--rui-color-info) 28%, transparent);
-  color: var(--rui-color-info);
-  font-size: 11px;
-  font-weight: 700;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-.rui-note-text { margin: 0; font-size: 13px; color: var(--rui-color-text); line-height: 1.5; }
-.rui-note[data-tone="success"] { background: color-mix(in srgb, var(--rui-color-success) 10%, var(--rui-color-surface-muted)); border-color: color-mix(in srgb, var(--rui-color-success) 22%, transparent); }
-.rui-note[data-tone="success"] .rui-note-icon { background: color-mix(in srgb, var(--rui-color-success) 28%, transparent); color: var(--rui-color-success); }
-.rui-note[data-tone="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 10%, var(--rui-color-surface-muted)); border-color: color-mix(in srgb, var(--rui-color-warning) 22%, transparent); }
-.rui-note[data-tone="warning"] .rui-note-icon { background: color-mix(in srgb, var(--rui-color-warning) 28%, transparent); color: var(--rui-color-warning); }
-.rui-note[data-tone="danger"]  { background: color-mix(in srgb, var(--rui-color-danger)  10%, var(--rui-color-surface-muted)); border-color: color-mix(in srgb, var(--rui-color-danger)  22%, transparent); }
-.rui-note[data-tone="danger"]  .rui-note-icon { background: color-mix(in srgb, var(--rui-color-danger)  28%, transparent); color: var(--rui-color-danger); }
-.rui-note[data-tone="tip"]     { background: color-mix(in srgb, var(--rui-color-primary) 8%,  var(--rui-color-surface-muted)); border-color: color-mix(in srgb, var(--rui-color-primary) 22%, transparent); }
-.rui-note[data-tone="tip"]     .rui-note-icon { background: color-mix(in srgb, var(--rui-color-primary) 28%, transparent); color: var(--rui-color-primary); }
-.rui-note[data-tone="default"] { background: var(--rui-color-surface-muted); border-color: var(--rui-color-border); }
-.rui-note[data-tone="default"] .rui-note-icon { background: color-mix(in srgb, var(--rui-color-text-muted) 22%, transparent); color: var(--rui-color-text-muted); }
+/* There is no Note component either — the .rui-note / -icon / -text family and
+   its six tones sat here unreachable. Callout(variant) is the live equivalent
+   and carries the same tone set. */
 
 /* Rating */
+/* No !important on display, unlike the icon wrappers further up: this is a
+   component ROOT, and those sites exist to beat the inline-block display Font
+   Awesome sets on elements that are co-classed fa-solid (renderIcon puts both
+   class families on one node). A Rating root never carries an FA class, so the
+   !important bought nothing and cost two features — an author !important
+   outranks an inline style, so sx.display and the universal hidden prop were
+   both dead here. */
 .rui-rating {
-  display: inline-flex !important;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-.rui-rating-stars { display: inline-flex !important; gap: 2px; }
+.rui-rating-stars { display: inline-flex; gap: 2px; }
 .rui-rating-star {
   background: transparent;
   border: none;
   padding: 0;
-  font-size: 16px;
+  font-size: var(--rui-font-size-lg);
   line-height: 1;
   color: color-mix(in srgb, var(--rui-color-text-muted) 40%, transparent);
   cursor: default;
@@ -3571,24 +4439,35 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
    * (the "horizontal stripes instead of stars" regression).
    */
 }
+/* Route the filled colour through a custom property: the tone prop needs a hook,
+   and the half-glyph gradient below cannot use currentColor because that rule
+   has to set the text fill transparent for background-clip to show through. */
+.rui-rating { --rui-rating-color: var(--rui-color-warning); }
+.rui-rating[data-tone="primary"] { --rui-rating-color: var(--rui-color-primary); }
+.rui-rating[data-tone="success"] { --rui-rating-color: var(--rui-color-success); }
+.rui-rating[data-tone="warning"] { --rui-rating-color: var(--rui-color-warning); }
+.rui-rating[data-tone="danger"]  { --rui-rating-color: var(--rui-color-danger); }
+.rui-rating[data-tone="info"]    { --rui-rating-color: var(--rui-color-info); }
 .rui-rating-star[data-fill="full"],
-.rui-rating-star[data-fill="half"] { color: var(--rui-color-warning); }
+.rui-rating-star[data-fill="half"] { color: var(--rui-rating-color); }
 .rui-rating[data-interactive="true"] .rui-rating-star { cursor: pointer; }
-.rui-rating[data-size="sm"] .rui-rating-star { font-size: 13px; }
-.rui-rating[data-size="lg"] .rui-rating-star { font-size: 20px; }
-.rui-rating-label { font-size: 13px; color: var(--rui-color-text); font-weight: 600; }
-.rui-rating-count { font-size: 12px; color: var(--rui-color-text-muted); }
+.rui-rating[data-size="sm"] .rui-rating-star { font-size: var(--rui-font-size-13); }
+.rui-rating[data-size="lg"] .rui-rating-star { font-size: var(--rui-font-size-20); }
+.rui-rating-label { font-size: var(--rui-font-size-13); color: var(--rui-color-text); font-weight: 600; }
+.rui-rating-count { font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); }
 
 /* ProgressRing */
+/* Same as .rui-rating above: component root, no Font Awesome classes, so the
+   !important only blocked sx.display and the hidden prop. */
 .rui-progress-ring {
-  display: inline-flex !important;
+  display: inline-flex;
   flex-direction: column;
   align-items: center;
   gap: var(--rui-spacing-xs);
 }
 .rui-progress-ring-wrap {
   position: relative;
-  display: inline-flex !important;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
 }
@@ -3601,7 +4480,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-progress-ring[data-tone="info"]    .rui-progress-ring-bar { stroke: var(--rui-color-info); }
 .rui-progress-ring-value {
   position: absolute;
-  font-size: 16px;
+  font-size: var(--rui-font-size-lg);
   font-weight: 700;
   color: var(--rui-color-text);
   display: inline-flex;
@@ -3609,8 +4488,8 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   justify-content: center;
   line-height: 1;
 }
-.rui-progress-ring[data-size="sm"] .rui-progress-ring-value { font-size: 13px; }
-.rui-progress-ring[data-size="lg"] .rui-progress-ring-value { font-size: 20px; }
+.rui-progress-ring[data-size="sm"] .rui-progress-ring-value { font-size: var(--rui-font-size-13); }
+.rui-progress-ring[data-size="lg"] .rui-progress-ring-value { font-size: var(--rui-font-size-20); }
 .rui-progress-ring-icon { font-size: 1.6em; }
 .rui-progress-ring[data-tone="primary"] .rui-progress-ring-icon { color: var(--rui-color-primary); }
 .rui-progress-ring[data-tone="success"] .rui-progress-ring-icon { color: var(--rui-color-success); }
@@ -3618,7 +4497,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-progress-ring[data-tone="danger"]  .rui-progress-ring-icon { color: var(--rui-color-danger); }
 .rui-progress-ring[data-tone="info"]    .rui-progress-ring-icon { color: var(--rui-color-info); }
 .rui-progress-ring-caption {
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--rui-color-text-muted);
@@ -3659,7 +4538,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   flex-shrink: 0;
 }
 .rui-chat-bubble-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.rui-chat-bubble-fallback { font-size: 11px; font-weight: 700; color: var(--rui-color-primary); }
+.rui-chat-bubble-fallback { font-size: var(--rui-font-size-11); font-weight: 700; color: var(--rui-color-primary); }
 .rui-chat-bubble-bubble {
   display: flex;
   flex-direction: column;
@@ -3667,7 +4546,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   padding: 8px var(--rui-spacing-m);
   border-radius: 16px;
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   max-width: min(72ch, 100%);
 }
 .rui-chat-bubble[data-from="me"] .rui-chat-bubble-bubble {
@@ -3685,12 +4564,12 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   gap: 8px;
 }
 .rui-chat-bubble-author {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   font-weight: 600;
   color: var(--rui-color-text);
 }
 .rui-chat-bubble-time {
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   color: var(--rui-color-text-muted);
 }
 .rui-chat-bubble-body {
@@ -3700,15 +4579,44 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   line-height: 1.5;
   white-space: pre-wrap;
 }
+/* The content escape hatch drops arbitrary components into a bare div, so it
+   needs its own rhythm. min-width: 0 is what lets a wide CodeBlock scroll inside
+   the bubble instead of stretching it past max-width. */
+.rui-chat-bubble-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rui-spacing-xs);
+  min-width: 0;
+}
+.rui-chat-bubble-content > * { max-width: 100%; }
 .rui-chat-bubble-status {
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--rui-font-size-10);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--rui-color-text-muted);
   align-self: flex-end;
 }
-.rui-chat-bubble-status[data-status="error"] { color: var(--rui-color-danger); }
-.rui-chat-bubble-status[data-status="read"]  { color: var(--rui-color-success); }
+.rui-chat-bubble-status[data-status="error"] { color: var(--rui-color-danger-text); }
+.rui-chat-bubble-status[data-status="read"]  { color: var(--rui-color-success-text); }
+/* Retry lives inside the status row, which is 10px uppercase letter-spaced — a
+   UA-default button inherits none of that and reads as a stray control. */
+.rui-chat-bubble-retry {
+  border: var(--rui-border-width) solid var(--rui-color-danger);
+  background: transparent;
+  color: var(--rui-color-danger-text);
+  border-radius: var(--rui-radius-sm);
+  padding: 1px 6px;
+  font: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+}
+.rui-chat-bubble-retry:hover {
+  background: color-mix(in srgb, var(--rui-color-danger) 12%, transparent);
+}
 
 /* SearchBar */
 .rui-search-bar {
@@ -3717,7 +4625,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   gap: var(--rui-spacing-s);
   padding: 6px 10px;
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   transition: border-color 140ms ease, box-shadow 140ms ease;
   width: 100%;
@@ -3730,7 +4638,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 .rui-search-bar-icon {
   display: inline-flex;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   color: var(--rui-color-text-muted);
   flex-shrink: 0;
 }
@@ -3745,16 +4653,27 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   font-size: 13.5px;
   padding: 4px 0;
 }
+.rui-search-bar-clear {
+  flex: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  font-size: var(--rui-font-size-lg);
+  color: var(--rui-color-text-muted);
+}
+.rui-search-bar-clear:hover { color: var(--rui-color-text); }
 .rui-search-bar-input::placeholder { color: var(--rui-color-text-muted); }
 .rui-search-bar-input::-webkit-search-cancel-button { -webkit-appearance: none; }
 .rui-search-bar-shortcut {
   display: inline-flex;
   align-items: center;
   font-family: var(--rui-font-family);
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   color: var(--rui-color-text-muted);
   padding: 2px 6px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: 6px;
   background: var(--rui-color-surface-muted);
   flex-shrink: 0;
@@ -3779,19 +4698,33 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
    action rows are most likely to overflow, so we relax their sizing here.
    ======================================================================== */
 
-@media (max-width: 720px) {
-  :host {
-    font-size: 14px;
-    --rui-spacing-l: 16px;
-    --rui-spacing-xl: 24px;
+${below("md")} {
+  /* Compaction has to land on .rui-root, not :host. applyTheme() writes every
+     theme token as an INLINE style on the host (theme/index.ts:709-715) and an
+     inline declaration beats any stylesheet rule, so the :host version of this
+     block never applied once — spacing stayed at desktop values on every phone.
+     .rui-root is the shadow child that wraps all rendered content, so a rule here
+     wins and still inherits into everything.
+
+     The three -mobile properties are the opt-out: the host never sets them, so
+     an author or theme can pin any step back to its desktop value. font-size is
+     one of them for the same reason the literal 14px had to go — it is NOT a
+     custom property, so it was the one declaration here that DID win, silently
+     overriding whatever fontSizeBase the active theme (or a custom token map)
+     had set. It now defaults to the theme's own base size. */
+  .rui-root {
+    font-size: var(--rui-font-size-base-mobile, var(--rui-font-size-base));
+    --rui-spacing-l: var(--rui-spacing-l-mobile, 16px);
+    --rui-spacing-xl: var(--rui-spacing-xl-mobile, 24px);
   }
-  .rui-card { padding: var(--rui-spacing-m); }
+  /* Set the variable, not padding, so CardSection's bleed follows. */
+  .rui-card { --rui-card-pad: var(--rui-spacing-m); }
   .rui-stat-card { padding: var(--rui-spacing-m); min-width: 120px; }
-  .rui-stat-value { font-size: 20px; }
-  .rui-text[data-variant="title"] { font-size: 24px; }
-  .rui-text[data-variant="large-heavy"] { font-size: 18px; }
-  .rui-header-title { font-size: 20px; }
-  .rui-callout, .rui-alert { padding: var(--rui-spacing-s) var(--rui-spacing-m); }
+  .rui-stat-value { font-size: var(--rui-font-size-20); }
+  .rui-text[data-variant="title"] { font-size: var(--rui-font-size-24); }
+  .rui-text[data-variant="large-heavy"] { font-size: var(--rui-font-size-18); }
+  .rui-page-header-title { font-size: var(--rui-font-size-20); }
+  .rui-callout { padding: var(--rui-spacing-s) var(--rui-spacing-m); }
   .rui-modal { padding: var(--rui-spacing-m); border-radius: var(--rui-radius-md); }
   .rui-modal-overlay { padding: var(--rui-spacing-s); }
   .rui-form-actions { justify-content: stretch; }
@@ -3816,6 +4749,11 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   .rui-app-shell { flex-direction: column; }
   .rui-sidebar { width: 100%; }
   .rui-split-view { grid-template-columns: 1fr; }
+  /* showDetail: only one pane at a time on a phone, so tapping a list row does
+     not leave the user scrolling past the whole list to reach the message.
+     Emitted only when the author opts in, so the stacked default is preserved. */
+  .rui-split-view[data-mobile-pane="detail"] .rui-split-view-primary { display: none; }
+  .rui-split-view[data-mobile-pane="primary"] .rui-split-view-detail { display: none; }
   .rui-description-list[data-columns="2"] { grid-template-columns: 1fr; }
   .rui-toolbar { padding: var(--rui-spacing-s); }
   .rui-toolbar .rui-input,
@@ -3830,6 +4768,8 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   .rui-media-card[data-orientation="horizontal"] .rui-media-card-media {
     width: 100%;
     max-width: 100%;
+    /* Stacked again on a phone, so the media band is back on top. */
+    border-radius: calc(var(--rui-radius-md) - var(--rui-border-width)) calc(var(--rui-radius-md) - var(--rui-border-width)) 0 0;
   }
   .rui-stats { gap: var(--rui-spacing-m); }
   .rui-stats-item { padding: 0; border-left: none; padding-bottom: var(--rui-spacing-s); }
@@ -3839,12 +4779,17 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   .rui-chat-bubble-bubble { max-width: 86%; }
 }
 
-@media (max-width: 480px) {
-  :host { font-size: 13.5px; }
-  .rui-card { padding: var(--rui-spacing-m); }
-  .rui-card-footer { justify-content: stretch; }
+${below("xs")} {
+  /* Same story as the 720px step: on :host this lost to applyTheme's inline
+     font-size — except it was a plain property, so it won and hard-coded 13.5px
+     over every theme's scale. Themeable, and off by default. */
+  .rui-root { font-size: var(--rui-font-size-base-xs, var(--rui-font-size-base-mobile, var(--rui-font-size-base))); }
+  .rui-card { --rui-card-pad: var(--rui-spacing-m); }
+  /* :not([data-justify]) so an explicit footer alignment is not silently
+     discarded on a phone. */
+  .rui-card-footer:not([data-justify]) { justify-content: stretch; }
   .rui-card-footer .rui-button { flex: 1 1 auto; }
-  .rui-tab-trigger { padding: var(--rui-spacing-xs) var(--rui-spacing-s); font-size: 13px; }
+  .rui-tab-trigger { padding: var(--rui-spacing-xs) var(--rui-spacing-s); font-size: var(--rui-font-size-13); }
   .rui-stat-card { width: 100%; }
 }
 
@@ -3878,16 +4823,48 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   transform: translateY(-2px);
   box-shadow: var(--rui-shadow-md);
 }
+/* Gradient titles, in three layers.
+   1. A solid, readable colour is painted FIRST. The clip trick works by making
+      the text fill transparent and letting a background show through it, so any
+      environment that keeps the transparent fill but drops the background —
+      forced colors, print, an engine without background-clip: text — rendered
+      every soft-theme title invisible.
+   2. The gradient itself moved off two literals onto --rui-gradient-brand (soft
+      now defines its own; before this it was inlined, so $theme({ gradients:
+      { brand } }) could not reach it) and its end stops were darkened: the old
+      #f9a8d4 measured 1.81:1 on this theme's white surface, so the right-hand
+      half of every title failed WCAG 1.4.3.
+   3. forced-colors puts the fill back, because the OS replaces the gradient. */
 :host([data-rui-theme="soft"]) .rui-card-title,
 :host([data-rui-theme="soft"]) .rui-section-title,
-:host([data-rui-theme="soft"]) .rui-header-title,
+:host([data-rui-theme="soft"]) .rui-page-header-title,
 :host([data-rui-theme="soft"]) .rui-text[data-variant="title"],
 :host([data-rui-theme="soft"]) .rui-text[data-variant="heading"] {
   font-weight: 700;
-  background: linear-gradient(135deg, #8b5cf6, #f9a8d4);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--rui-color-text);
+}
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  :host([data-rui-theme="soft"]) .rui-card-title,
+  :host([data-rui-theme="soft"]) .rui-section-title,
+  :host([data-rui-theme="soft"]) .rui-page-header-title,
+  :host([data-rui-theme="soft"]) .rui-text[data-variant="title"],
+  :host([data-rui-theme="soft"]) .rui-text[data-variant="heading"] {
+    background: var(--rui-gradient-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+@media (forced-colors: active) {
+  :host([data-rui-theme="soft"]) .rui-card-title,
+  :host([data-rui-theme="soft"]) .rui-section-title,
+  :host([data-rui-theme="soft"]) .rui-page-header-title,
+  :host([data-rui-theme="soft"]) .rui-text[data-variant="title"],
+  :host([data-rui-theme="soft"]) .rui-text[data-variant="heading"] {
+    background: none;
+    color: CanvasText;
+    -webkit-text-fill-color: currentColor;
+  }
 }
 :host([data-rui-theme="soft"]) .rui-button {
   background: linear-gradient(135deg, #a78bfa, #f9a8d4);
@@ -3963,11 +4940,35 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="glass"]) .rui-accordion-item,
 :host([data-rui-theme="glass"]) .rui-list-item,
 :host([data-rui-theme="glass"]) .rui-modal,
+:host([data-rui-theme="glass"]) .rui-dropdown-menu-content,
+:host([data-rui-theme="glass"]) .rui-popover-content,
+:host([data-rui-theme="glass"]) .rui-hover-card-content,
+:host([data-rui-theme="glass"]) .rui-combobox-panel,
+:host([data-rui-theme="glass"]) .rui-multiselect-panel,
+:host([data-rui-theme="glass"]) .rui-context-menu-pop,
+:host([data-rui-theme="glass"]) .rui-mention-input-suggestions,
+:host([data-rui-theme="glass"]) .rui-notification-bell-panel,
+:host([data-rui-theme="glass"]) .rui-command-palette-panel,
+:host([data-rui-theme="glass"]) .rui-sheet,
+:host([data-rui-theme="glass"]) .rui-sheet-panel,
+:host([data-rui-theme="glass"]) .rui-toast,
+:host([data-rui-theme="glass"]) .rui-toast-standalone,
+:host([data-rui-theme="glass"]) .rui-tour-card,
+:host([data-rui-theme="glass"]) .rui-spotlight-card,
+:host([data-rui-theme="glass"]) .rui-confirm-card,
+:host([data-rui-theme="glass"]) .rui-drawer,
+:host([data-rui-theme="glass"]) .rui-notification,
+:host([data-rui-theme="glass"]) .rui-tile,
+:host([data-rui-theme="glass"]) .rui-media-card,
+:host([data-rui-theme="glass"]) .rui-pricing-card,
+:host([data-rui-theme="glass"]) .rui-profile-card,
+:host([data-rui-theme="glass"]) .rui-product-card,
+:host([data-rui-theme="glass"]) .rui-kanban-card,
 :host([data-rui-theme="glass"]) .rui-code-block {
   background: linear-gradient(150deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.40));
   backdrop-filter: blur(26px) saturate(150%);
   -webkit-backdrop-filter: blur(26px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.75);
+  border: var(--rui-border-width) solid rgba(255, 255, 255, 0.75);
   box-shadow:
     0 14px 40px rgba(120, 110, 140, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
@@ -4004,7 +5005,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="glass"]) .rui-button {
   background: linear-gradient(135deg, #f7a072, #f2826a);
   color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.45);
+  border: var(--rui-border-width) solid rgba(255, 255, 255, 0.45);
   box-shadow: 0 10px 24px rgba(242, 130, 106, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 :host([data-rui-theme="glass"]) .rui-button:hover:not(:disabled) {
@@ -4027,7 +5028,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 :host([data-rui-theme="glass"]) .rui-card-title,
 :host([data-rui-theme="glass"]) .rui-section-title,
-:host([data-rui-theme="glass"]) .rui-header-title,
+:host([data-rui-theme="glass"]) .rui-page-header-title,
 :host([data-rui-theme="glass"]) .rui-text[data-variant="title"],
 :host([data-rui-theme="glass"]) .rui-text[data-variant="heading"] {
   color: var(--rui-color-text);
@@ -4061,7 +5062,6 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.7) 50%, rgba(255, 255, 255, 0.3) 100%);
   background-size: 200% 100%;
 }
-:host([data-rui-theme="glass"]) .rui-divider { background: rgba(255, 255, 255, 0.6); }
 :host([data-rui-theme="glass"]) .rui-separator { background: rgba(255, 255, 255, 0.6); }
 
 /* ============================================================================
@@ -4099,7 +5099,6 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
    large-heavy) is Overpass; third-level tier (16px: section/card headings)
    is Open Sans Semibold — UI block switches FAMILY at the third-level boundary,
    not just weight. */
-:host([data-rui-theme="corporate"]) .rui-header-title,
 :host([data-rui-theme="corporate"]) .rui-page-header-title,
 :host([data-rui-theme="corporate"]) .rui-text[data-variant="title"],
 :host([data-rui-theme="corporate"]) .rui-text[data-variant="large-heavy"],
@@ -4118,6 +5117,10 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   letter-spacing: 0;
 }
 
+:host([data-rui-theme="corporate"]) .rui-page-header-title-line .rui-badge{
+  margin-bottom: 16px;
+}
+
 /* UI block's headline ladder has exactly three levels, and the FIRST is Overpass
    REGULAR (--first-level-headline-family resolves to --corporate-font-regular),
    not semibold — a detail that reads very differently at 32px:
@@ -4128,22 +5131,21 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-page-header-title,
 :host([data-rui-theme="corporate"]) .rui-heading[data-size="section"] {
   font-family: var(--rui-font-family-heading);
-  font-size: 32px;
+  font-size: var(--rui-font-size-32);
   line-height: 42px;
   font-weight: 400;                            /* L1 is REGULAR weight */
   letter-spacing: 0;
   color: var(--rui-color-text);
   margin: 0 0 16px;
 }
-:host([data-rui-theme="corporate"]) .rui-heading[data-size="lg"],
-:host([data-rui-theme="corporate"]) .rui-header-title {
+:host([data-rui-theme="corporate"]) .rui-heading[data-size="lg"] {
   font-family: var(--rui-font-family-heading);
-  font-size: 22px; line-height: 30px; font-weight: 600; letter-spacing: 0;
+  font-size: var(--rui-font-size-title); line-height: 30px; font-weight: 600; letter-spacing: 0;
 }
 :host([data-rui-theme="corporate"]) .rui-heading[data-size="md"],
 :host([data-rui-theme="corporate"]) .rui-heading[data-size="sm"] {
   font-family: var(--rui-font-family);         /* L3 drops to Open Sans Semibold */
-  font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: 0;
+  font-size: var(--rui-font-size-lg); line-height: 24px; font-weight: 600; letter-spacing: 0;
 }
 /* Card headline is UI block's SECOND-level headline: 22px Overpass / 30px —
    measured against the live framework (card.scss:578-583), not the
@@ -4152,7 +5154,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-card-title {
   color: #001b41;                              /* --default-text-color */
   font-family: var(--rui-font-family-heading); /* OverpassSemibold */
-  font-size: 22px;
+  font-size: var(--rui-font-size-title);
   line-height: 30px;
   font-weight: 600;
   margin-bottom: 12px;
@@ -4160,7 +5162,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-card-subtitle {
   color: #001b41;
   font-family: var(--rui-font-family);         /* Open Sans Semibold tier */
-  font-size: 16px;
+  font-size: var(--rui-font-size-lg);
   line-height: 24px;
   font-weight: 600;
 }
@@ -4176,7 +5178,6 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   text-transform: none;
   margin-bottom: 3px;
 }
-:host([data-rui-theme="corporate"]) .rui-divider-label { color: var(--rui-color-text); }  /* no muted modifier in UI block's divider-label markup */
 
 /* ---- Flat surfaces — white, borderless, shadowless; separate by colour alone.
    UI block's --card-shadow/--card-border resolve to none/0 unconditionally, so
@@ -4239,7 +5240,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-tour-title,
 :host([data-rui-theme="corporate"]) .rui-spotlight-title,
 :host([data-rui-theme="corporate"]) .rui-confirm-title { font-weight: 600; }
-:host([data-rui-theme="corporate"]) .rui-confirm-title { font-size: 16px; line-height: 24px; }
+:host([data-rui-theme="corporate"]) .rui-confirm-title { font-size: var(--rui-font-size-lg); line-height: 24px; }
 
 /* UI block's FIRST-level headline is Overpass REGULAR at 400 -- the biggest overshoot
    was at the largest size, where it shows most. */
@@ -4257,7 +5258,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 /* Sheet headline is the THIRD-level role, 16/24 SemiBold. Overrides a duplicate
    17px/700 declaration further down this sheet that would otherwise win on order. */
 :host([data-rui-theme="corporate"]) .rui-sheet-title {
-  font-size: 16px; line-height: 24px; font-weight: 600;
+  font-size: var(--rui-font-size-lg); line-height: 24px; font-weight: 600;
 }
 
 /* UI block never uppercases or letter-spaces a heading, and never exceeds SemiBold. */
@@ -4304,7 +5305,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
    Semibold, not body copy (page-header.scss:173-178 -> default.scss:35-36). */
 :host([data-rui-theme="corporate"]) .rui-page-header-subtitle {
   font-family: var(--rui-font-family-heading);
-  font-size: 22px;
+  font-size: var(--rui-font-size-title);
   line-height: 30px;
   color: var(--rui-color-text);
   margin-top: -4px;                            /* page-header.scss:180-182 */
@@ -4312,7 +5313,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 
 /* UI block dialog headlines are .headline--sub = THIRD level, 16/24 (default.scss:38-39). */
 :host([data-rui-theme="corporate"]) .rui-modal-title {
-  font-size: 16px;
+  font-size: var(--rui-font-size-lg);
   line-height: 24px;
 }
 
@@ -4327,11 +5328,11 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 /* Left navigation: first level 16px, second level 14px, both 22px line-height
    (left-navigation.scss:476-482 / 575-580 -> default.scss:487-488). */
 :host([data-rui-theme="corporate"]) .rui-sidebar-item {
-  font-size: 16px;
+  font-size: var(--rui-font-size-lg);
   line-height: 22px;
 }
 :host([data-rui-theme="corporate"]) .rui-sidebar-section .rui-sidebar-item {
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   line-height: 22px;
 }
 
@@ -4384,7 +5385,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-toolbar {
   background: var(--rui-color-surface);        /* white, not bg-subtle */
   border: none;
-  border-bottom: 1px solid #bcc8d4;            /* neutral-3 · tertiary-shape-color */
+  border-bottom: var(--rui-border-width) solid #bcc8d4;            /* neutral-3 · tertiary-shape-color */
   border-radius: var(--rui-radius-lg) var(--rui-radius-lg) 0 0;   /* 16px top only */
   box-shadow: none;
   padding: 24px 16px;
@@ -4413,7 +5414,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 :host([data-rui-theme="corporate"]) .rui-tile-icon {
   background: transparent;
-  color: var(--rui-color-accent);
+  color: var(--rui-color-link);
   width: auto;
   height: auto;
   font-size: 48px;
@@ -4422,8 +5423,8 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   border-radius: 0;
 }
 :host([data-rui-theme="corporate"]) .rui-tile-body { align-items: center; text-align: center; }
-:host([data-rui-theme="corporate"]) .rui-tile-label { color: var(--rui-color-accent); font-size: 16px; line-height: 22px; margin: 4px auto; } /* interactive-text-color, third-level size */
-:host([data-rui-theme="corporate"]) .rui-tile-description { color: #001b41; font-size: 14px; line-height: 20px; margin: 4px auto; }           /* default-text-color, fourth-level size */
+:host([data-rui-theme="corporate"]) .rui-tile-label { color: var(--rui-color-link); font-size: var(--rui-font-size-lg); line-height: 22px; margin: 4px auto; } /* interactive-text-color, third-level size */
+:host([data-rui-theme="corporate"]) .rui-tile-description { color: #001b41; font-size: var(--rui-font-size-base); line-height: 20px; margin: 4px auto; }           /* default-text-color, fourth-level size */
 :host([data-rui-theme="corporate"]) .rui-tile:hover { background: #dbedf8; transform: none; }            /* no lift — UI block tiles never move on hover */
 :host([data-rui-theme="corporate"]) .rui-tile:hover .rui-tile-icon { color: #095bb1; }                   /* hovered-interactive-text-color */
 :host([data-rui-theme="corporate"]) .rui-tile:hover .rui-tile-label,
@@ -4482,7 +5483,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 :host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"],
 :host([data-rui-theme="corporate"]) .rui-button[data-variant="link"] {
-  background: transparent; border-color: transparent; color: var(--rui-color-accent);
+  background: transparent; border-color: transparent; color: var(--rui-color-link);
   padding: 4px var(--rui-button-padding-x); min-height: 28px; /* ghost-button.scss: no border, shorter box */
 }
 :host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
@@ -4512,7 +5513,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
      left. Fix the box and centre the glyph inside it. */
   width: 16px; height: 16px;
   display: inline-flex; align-items: center; justify-content: center;
-  flex: 0 0 auto; font-size: 16px; line-height: 16px;
+  flex: 0 0 auto; font-size: var(--rui-font-size-lg); line-height: 16px;
 }
 :host([data-rui-theme="corporate"]) .rui-button[data-icon-position="trailing"] .rui-button-icon { margin-right: 0; margin-left: 8px; }
 :host([data-rui-theme="corporate"]) .rui-button-spinner { margin-right: 8px; }
@@ -4524,7 +5525,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-button[data-icon-only="true"] .rui-button-spinner { margin: 0; }
 :host([data-rui-theme="corporate"]) .rui-buttons { gap: 12px; }
 :host([data-rui-theme="corporate"]) .rui-icon-button,
-:host([data-rui-theme="corporate"]) .rui-fab { border-radius: 999px; color: var(--rui-color-accent); }
+:host([data-rui-theme="corporate"]) .rui-fab { border-radius: 999px; color: var(--rui-color-link); }
 :host([data-rui-theme="corporate"]) .rui-icon-button:hover:not(:disabled) { background: #dbedf8; color: #095bb1; }
 :host([data-rui-theme="corporate"]) .rui-icon-button:disabled { opacity: 0.38; }
 /* follow-up chips — navy pill outline that fills on hover, same focus ring as button */
@@ -4543,17 +5544,20 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-toggle[data-state="on"] { background: #dbedf8; color: #095bb1; border-color: transparent; }
 :host([data-rui-theme="corporate"]) .rui-segmented-control { border-radius: 999px; background: #f4f7fa; border-color: var(--rui-color-border); }
 :host([data-rui-theme="corporate"]) .rui-segmented-control-option { border-radius: 999px; color: var(--rui-color-text-muted); }
-:host([data-rui-theme="corporate"]) .rui-segmented-control-option:hover:not([data-active="true"]):not([aria-selected="true"]) { color: var(--rui-color-accent); }
+:host([data-rui-theme="corporate"]) .rui-segmented-control-option:hover:not([data-active="true"]):not([aria-selected="true"]) { color: var(--rui-color-link); }
 :host([data-rui-theme="corporate"]) .rui-segmented-control-option[data-active="true"],
 :host([data-rui-theme="corporate"]) .rui-segmented-control-option[aria-selected="true"] { background: #fff; color: #0b2a63; }
 
 /* ---- Links — interactive blue; UI block never darkens on hover/active, it only
-   adds an underline. Focus draws an outline "chip" that expands past the glyphs. */
-:host([data-rui-theme="corporate"]) .rui-link { color: var(--rui-color-accent); font-weight: 400; text-decoration: none; }
+   adds an underline. Focus draws an outline "chip" that expands past the glyphs.
+   Every accent-as-TEXT declaration in this block reads --rui-color-link, which
+   defaults to the accent — so corporate-4 #1474c4 is unchanged — but keeps the
+   text side separate from the accent's fill/border duties. */
+:host([data-rui-theme="corporate"]) .rui-link { color: var(--rui-color-link); font-weight: 400; text-decoration: none; }
 /* UI block ".link--action" is an un-underlined interactive-blue link with a
    leading chevron glyph (link.scss) — not a navy underlined link. */
 :host([data-rui-theme="corporate"]) .rui-action-link {
-  color: var(--rui-color-accent);
+  color: var(--rui-color-link);
   text-decoration: none;
   line-height: 20px;
 }
@@ -4570,7 +5574,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 :host([data-rui-theme="corporate"]) .rui-action-link:hover { color: #095bb1; text-decoration: underline; }
 :host([data-rui-theme="corporate"]) .rui-link:hover,
-:host([data-rui-theme="corporate"]) .rui-link:active { color: var(--rui-color-accent); text-decoration: underline; }
+:host([data-rui-theme="corporate"]) .rui-link:active { color: var(--rui-color-link); text-decoration: underline; }
 :host([data-rui-theme="corporate"]) .rui-link:focus-visible {
   outline: 2px solid var(--rui-color-accent); outline-offset: 2px; border-radius: 2px;
 }
@@ -4583,7 +5587,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-select,
 :host([data-rui-theme="corporate"]) .rui-textarea {
   background: transparent;
-  border: 1px solid #718095;                  /* neutral-5 · --secondary-shape-color */
+  border: var(--rui-border-width) solid #718095;                  /* neutral-5 · --secondary-shape-color */
   border-radius: var(--rui-radius-input);     /* 8px */
   color: var(--rui-color-text);
   box-sizing: border-box;
@@ -4645,7 +5649,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 :host([data-rui-theme="corporate"]) .rui-search-bar-submit { border-radius: 999px; } /* embeds a real .rui-button-like pill */
 :host([data-rui-theme="corporate"]) .rui-number-input-button,
-:host([data-rui-theme="corporate"]) .rui-password-input-toggle { color: var(--rui-color-accent); }
+:host([data-rui-theme="corporate"]) .rui-password-input-toggle { color: var(--rui-color-link); }
 :host([data-rui-theme="corporate"]) .rui-number-input-button:hover:not(:disabled),
 :host([data-rui-theme="corporate"]) .rui-password-input-toggle:hover { color: #095bb1; }
 /* form labels — Open Sans Semibold, primary-text-color (form/label.scss) */
@@ -4921,7 +5925,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   box-shadow: inset 0 -1px 0 0 var(--rui-color-border);   /* neutral-3 */
 }
 :host([data-rui-theme="corporate"]) .rui-table td {
-  border-bottom: 1px solid var(--rui-color-border-subtle); color: var(--rui-color-text);   /* neutral-2 */
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle); color: var(--rui-color-text);   /* neutral-2 */
 }
 :host([data-rui-theme="corporate"]) .rui-table tbody tr:hover td { background: #dbedf8; }   /* corporate-1 */
 :host([data-rui-theme="corporate"]) .rui-table-caption { color: var(--rui-color-text); text-transform: uppercase; }
@@ -4931,7 +5935,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
    active, and active-hover states). */
 /* UI block rounds pagination links with the DEFAULT 16px radius, not the 8px small one
    (pagination.scss:84). */
-:host([data-rui-theme="corporate"]) .rui-pagination-button { color: var(--rui-color-accent); border-radius: var(--rui-radius-lg); border-color: transparent; }
+:host([data-rui-theme="corporate"]) .rui-pagination-button { color: var(--rui-color-link); border-radius: var(--rui-radius-lg); border-color: transparent; }
 :host([data-rui-theme="corporate"]) .rui-pagination-button:hover:not([disabled]):not([data-active="true"]),
 :host([data-rui-theme="corporate"]) .rui-pagination-button[data-active="true"],
 :host([data-rui-theme="corporate"]) .rui-pagination-button[data-active="true"]:hover {
@@ -4978,8 +5982,11 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   background: var(--rui-color-info);          /* activating-4 #08a5c5 */
   border-radius: 0;                            /* clipped by the trough, per UI block */
 }
-:host([data-rui-theme="corporate"]) /* LoadingDots — three dots pulsing in sequence (a quieter alternative to the
-   Spinner's rotating ring). Each dot fades out and back on a staggered delay. */
+/* LoadingDots — three dots pulsing in sequence (a quieter alternative to the
+   Spinner's rotating ring). Each dot fades out and back on a staggered delay.
+   The comment used to sit between a stray :host([data-rui-theme="corporate"])
+   and this selector, which silently scoped the component's own layout rule to
+   one theme — every other theme rendered the dots as an inline box with no gap. */
 .rui-loading-dots { display: inline-flex; align-items: center; gap: var(--rui-spacing-s); }
 .rui-loading-dots-track { display: inline-flex; align-items: center; gap: 6px; }
 .rui-loading-dots-dot {
@@ -4991,8 +5998,17 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 .rui-loading-dots-dot:nth-child(2) { animation-delay: 0.3s; }
 .rui-loading-dots-dot:nth-child(3) { animation-delay: 0.5s; }
+/* The enum is xs|sm|md|lg|xl and includes a neutral tone; only sm/lg and the four
+   semantic tones existed, so xs/xl/neutral silently fell through to the default. */
+.rui-loading-dots[data-size="xs"] .rui-loading-dots-dot { width: 5px; height: 5px; }
 .rui-loading-dots[data-size="sm"] .rui-loading-dots-dot { width: 7px; height: 7px; }
 .rui-loading-dots[data-size="lg"] .rui-loading-dots-dot { width: 13px; height: 13px; }
+.rui-loading-dots[data-size="xl"] .rui-loading-dots-dot { width: 16px; height: 16px; }
+/* primary is the documented DEFAULT of the shared TONE_ENUM (content.ts:36) and
+   still had no rule of its own; it resolves to the same colour the base dot uses. */
+.rui-loading-dots[data-tone="primary"] .rui-loading-dots-dot { background: var(--rui-color-primary); }
+.rui-loading-dots[data-tone="default"] .rui-loading-dots-dot { background: var(--rui-color-primary); }
+.rui-loading-dots[data-tone="neutral"] .rui-loading-dots-dot { background: var(--rui-color-text-muted); }
 .rui-loading-dots[data-tone="success"] .rui-loading-dots-dot { background: var(--rui-color-success); }
 .rui-loading-dots[data-tone="warning"] .rui-loading-dots-dot { background: var(--rui-color-warning); }
 .rui-loading-dots[data-tone="danger"] .rui-loading-dots-dot { background: var(--rui-color-danger); }
@@ -5003,10 +6019,16 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   50% { background-color: transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .rui-carousel-track { transition: none; }
   .rui-loading-dots-dot { animation-duration: 2.6s; }
 }
 
-.rui-spinner-ring { border-color: #dbedf8; border-top-color: var(--rui-color-accent); }
+/* An unscoped .rui-spinner-ring rule was stranded here in the corporate theme
+   section, leaking a hardcoded pale blue #dbedf8 ring into every theme. It has
+   now been deleted rather than re-tokenized, because it was also DEAD: the real
+   Spinner rule further down declares the border shorthand, which resets
+   border-color, and it wins on source order. If the corporate theme wants an
+   accent-coloured ring, it needs a :host([data-rui-theme="corporate"]) rule. */
 /* UI block's quotabar takes a semantic fill per state; success is the one tone the
    corporate block was missing, so a success quota bar fell back to the default
    activating cyan (quotabar.scss:101-103 -> default.scss:175 = success-4). */
@@ -5015,34 +6037,34 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-progress-ring[data-tone="success"] .rui-progress-ring-bar,
 :host([data-rui-theme="corporate"]) .rui-gauge[data-tone="success"] .rui-gauge-value,
 :host([data-rui-theme="corporate"]) .rui-gauge[data-tone="success"] .rui-gauge-arc {
-  background: #0fa954; border-color: #0fa954; stroke: #0fa954; color: #0fa954; /* success-shape-color */
+  border-color: #0fa954; stroke: #0fa954; color: #0fa954; /* success-shape-color */
 }
 :host([data-rui-theme="corporate"]) .rui-progress[data-tone="warning"] .rui-progress-bar,
 :host([data-rui-theme="corporate"]) .rui-progress-segment[data-tone="warning"][data-filled="true"],
 :host([data-rui-theme="corporate"]) .rui-progress-ring[data-tone="warning"] .rui-progress-ring-bar,
 :host([data-rui-theme="corporate"]) .rui-gauge[data-tone="warning"] .rui-gauge-value,
 :host([data-rui-theme="corporate"]) .rui-gauge[data-tone="warning"] .rui-gauge-arc {
-  background: #ffaa00; border-color: #ffaa00; stroke: #ffaa00; color: #ffaa00; /* warning-shape-color */
+  border-color: #ffaa00; stroke: #ffaa00; color: #ffaa00; /* warning-shape-color */
 }
 :host([data-rui-theme="corporate"]) .rui-progress[data-tone="danger"] .rui-progress-bar,
 :host([data-rui-theme="corporate"]) .rui-progress-segment[data-tone="danger"][data-filled="true"],
 :host([data-rui-theme="corporate"]) .rui-progress-ring[data-tone="danger"] .rui-progress-ring-bar,
 :host([data-rui-theme="corporate"]) .rui-gauge[data-tone="danger"] .rui-gauge-value,
 :host([data-rui-theme="corporate"]) .rui-gauge[data-tone="danger"] .rui-gauge-arc {
-  background: #ff6159; border-color: #ff6159; stroke: #ff6159; color: #ff6159; /* critical-shape-color */
+  border-color: #ff6159; stroke: #ff6159; color: #ff6159; /* critical-shape-color */
 }
 
 /* ---- Price tag — UI block's savings badge is a solid ORANGE chip with dark navy
    text and a 4px radius; not a rounded semantic-danger pill. */
 :host([data-rui-theme="corporate"]) .rui-pricetag-off {
   background: #ffaa00; color: #001b41; border-radius: var(--rui-radius-xs);
-  font-size: 12px; line-height: 20px; padding: 0 6px; font-weight: 600;
+  font-size: var(--rui-font-size-sm); line-height: 20px; padding: 0 6px; font-weight: 600;
 }
 
 /* ---- Badge — small SOLID semantic chip, 2px radius (UI block xxsmall), 14px
    body-copy size, regular no-variant fill = neutral-solid grey. */
 :host([data-rui-theme="corporate"]) .rui-badge {
-  border-radius: 2px; font-weight: 600; font-size: 14px; line-height: 20px;
+  border-radius: 2px; font-weight: 600; font-size: var(--rui-font-size-base); line-height: 20px;
   padding: 0 6px; letter-spacing: 0; background: var(--rui-color-border); color: var(--rui-color-text);
 }
 :host([data-rui-theme="corporate"]) .rui-badge[data-variant="primary"] { background: #0b2a63; color: #fff; }
@@ -5087,7 +6109,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-button-group > .rui-button-group-item[data-pos="only"] { border-radius: 24px; }
 :host([data-rui-theme="corporate"]) .rui-button-group > .rui-button-group-item[data-pos="middle"]:not([data-variant="secondary"]):not([data-variant="outline"]):not([data-variant="ghost"]),
 :host([data-rui-theme="corporate"]) .rui-button-group > .rui-button-group-item[data-pos="end"]:not([data-variant="secondary"]):not([data-variant="outline"]):not([data-variant="ghost"]) {
-  border-left: 1px solid var(--rui-color-border); /* neutral-3 divider on filled buttons */
+  border-left: var(--rui-border-width) solid var(--rui-color-border); /* neutral-3 divider on filled buttons */
 }
 
 /* ---- InputGroup — same shell as a lone UI block input: transparent fill, 1px
@@ -5095,7 +6117,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
    (never a soft glow). */
 :host([data-rui-theme="corporate"]) .rui-input-group {
   background: transparent;
-  border: 1px solid #718095;                   /* neutral-5 · --secondary-shape-color */
+  border: var(--rui-border-width) solid #718095;                   /* neutral-5 · --secondary-shape-color */
   border-radius: var(--rui-radius-input);      /* 8px */
 }
 :host([data-rui-theme="corporate"]) .rui-input-group:focus-within,
@@ -5104,19 +6126,38 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   outline: 1px solid var(--rui-color-focus-ring);
   box-shadow: none;
 }
-:host([data-rui-theme="corporate"]) .rui-input-group-icon { color: var(--rui-color-accent); }
+/* Host-scoped mirrors, or the corporate at-rest/hover border above out-specifies
+   the base disabled + invalid rules and the states render as a normal field. */
+:host([data-rui-theme="corporate"]) .rui-input-group[data-invalid="true"],
+:host([data-rui-theme="corporate"]) .rui-input-group[data-invalid="true"]:hover,
+:host([data-rui-theme="corporate"]) .rui-input-group[data-invalid="true"]:focus-within {
+  border-color: var(--rui-color-danger);
+  outline-color: var(--rui-color-danger);
+}
+:host([data-rui-theme="corporate"]) .rui-input-group[data-disabled="true"]:hover,
+:host([data-rui-theme="corporate"]) .rui-input-group[data-disabled="true"]:focus-within {
+  border-color: var(--rui-color-border);
+  outline: none;
+}
+:host([data-rui-theme="corporate"]) .rui-input-group-icon { color: var(--rui-color-link); }
 /* The group owns the chrome — strip the nested control's own border/outline.
    Needs the host-scoped selector to out-specify the corporate .rui-input rule
    (which would otherwise draw a second box inside the shell). */
-:host([data-rui-theme="corporate"]) .rui-input-group-field > .rui-input,
-:host([data-rui-theme="corporate"]) .rui-input-group-field > .rui-select,
-:host([data-rui-theme="corporate"]) .rui-input-group-field > .rui-textarea,
-:host([data-rui-theme="corporate"]) .rui-input-group-field > .rui-input:hover,
-:host([data-rui-theme="corporate"]) .rui-input-group-field > .rui-select:hover,
-:host([data-rui-theme="corporate"]) .rui-input-group-field > .rui-textarea:hover,
-:host([data-rui-theme="corporate"]) .rui-input-group-field > .rui-input:focus,
-:host([data-rui-theme="corporate"]) .rui-input-group-field > .rui-select:focus,
-:host([data-rui-theme="corporate"]) .rui-input-group-field > .rui-textarea:focus {
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-input,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-select,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-textarea,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-number-input,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-combobox-trigger,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-input:hover,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-select:hover,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-textarea:hover,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-number-input:hover,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-combobox-trigger:hover,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-input:focus,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-select:focus,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-textarea:focus,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-number-input:focus,
+:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-combobox-trigger:focus {
   border: none; border-radius: 0; background: transparent; box-shadow: none; outline: none;
 }
 
@@ -5143,7 +6184,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
    wash, and the chevron + label switching to interactive blue on hover. */
 :host([data-rui-theme="corporate"]) .rui-action-stripe {
   background: var(--rui-color-surface);
-  border-bottom: 1px solid #bcc8d4;            /* neutral-3 · tertiary-shape-color */
+  border-bottom: var(--rui-border-width) solid #bcc8d4;            /* neutral-3 · tertiary-shape-color */
   padding: 14px 15px 16px;                     /* action-stripe 14/0/16 + stripes 15px sides */
   align-items: center;
 }
@@ -5212,7 +6253,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 /* ---- CardSection — UI block card__section: white fill with a 2px semantic rule
    above and below (the tint stays white; the RULES carry the colour) and the
    body text taking the semantic text shade. */
-:host([data-rui-theme="corporate"]) .rui-card-section { background: var(--rui-color-surface); padding: 16px 20px; }
+:host([data-rui-theme="corporate"]) .rui-card-section { background: var(--rui-color-surface); padding-block: 16px; }
 :host([data-rui-theme="corporate"]) .rui-card-section[data-tone="activating"] { border-top-color: #08a5c5; border-bottom-color: #08a5c5; color: #005b72; }
 :host([data-rui-theme="corporate"]) .rui-card-section[data-tone="success"]    { border-top-color: #0fa954; border-bottom-color: #0fa954; color: #096b35; }
 :host([data-rui-theme="corporate"]) .rui-card-section[data-tone="warning"]    { border-top-color: #ffaa00; border-bottom-color: #ffaa00; color: #8e4e00; }
@@ -5226,9 +6267,8 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 
 /* ---- Tag / chip — same soft tinted treatment (Aktion's internal chip used
    by ProfileCard/MediaCard/KanbanCard); kept in sync with Pill above. */
-:host([data-rui-theme="corporate"]) .rui-tag,
-:host([data-rui-theme="corporate"]) .rui-chip {
-  border-radius: 999px; border: none; font-weight: 400; font-size: 12px;
+:host([data-rui-theme="corporate"]) .rui-tag {
+  border-radius: 999px; border: none; font-weight: 400; font-size: var(--rui-font-size-sm);
   line-height: 20px; padding: 2px 6px; background: #f4f7fa; color: #465a75;   /* neutral-1 / neutral-6 */
 }
 :host([data-rui-theme="corporate"]) .rui-tag[data-variant="primary"] { background: #dbedf8; color: #095bb1; }
@@ -5236,7 +6276,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-tag[data-variant="warning"] { background: #ffedca; color: #8e4e00; }
 :host([data-rui-theme="corporate"]) .rui-tag[data-variant="danger"]  { background: #ffe4e2; color: #c80a00; }
 :host([data-rui-theme="corporate"]) .rui-filter-chip {
-  border-radius: 999px; background: #f4f7fa; color: #465a75; border: none; font-size: 12px;
+  border-radius: 999px; background: #f4f7fa; color: #465a75; border: none; font-size: var(--rui-font-size-sm);
 }
 :host([data-rui-theme="corporate"]) .rui-filter-chip:hover { background: #dbe2e8; }
 :host([data-rui-theme="corporate"]) .rui-filter-chip:focus-within { outline: 2px solid var(--rui-color-accent); outline-offset: 2px; }
@@ -5248,14 +6288,14 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 
 /* ---- Tabs — muted default label; selected/hover both turn interactive-blue
    with a blue underline (UI Block never uses dark-navy for the active tab). */
-:host([data-rui-theme="corporate"]) .rui-tab-list { border-bottom: 1px solid var(--rui-color-border); }
+:host([data-rui-theme="corporate"]) .rui-tab-list { border-bottom: var(--rui-border-width) solid var(--rui-color-border); }
 :host([data-rui-theme="corporate"]) .rui-tab-trigger {
   color: var(--rui-color-text); font-weight: 600; font-family: var(--rui-font-family-heading);
   border-bottom: 3px solid transparent;
 }
 :host([data-rui-theme="corporate"]) .rui-tab-trigger:hover,
 :host([data-rui-theme="corporate"]) .rui-tab-trigger[aria-selected="true"] {
-  color: var(--rui-color-accent); border-bottom-color: var(--rui-color-accent);
+  color: var(--rui-color-link); border-bottom-color: var(--rui-color-accent);
 }
 
 /* ---- Accordion — 15px outer radius (16-1), primary-text-color header,
@@ -5263,7 +6303,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
    left-bar status variants (a real UI Block feature Aktion had zero support for). */
 :host([data-rui-theme="corporate"]) .rui-accordion { border: none; border-radius: calc(var(--rui-radius-lg) - 1px); overflow: hidden; box-shadow: none; gap: unset; }
 :host([data-rui-theme="corporate"]) .rui-accordion-item {
-  border: none; border-bottom: 1px solid #bcc8d4; border-radius: 0;
+  border: none; border-bottom: var(--rui-border-width) solid #bcc8d4; border-radius: 0;
   background: var(--rui-color-surface); box-shadow: none;
   position: relative; overflow: hidden;
 }
@@ -5308,7 +6348,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   color: var(--rui-color-text);
 }
 :host([data-rui-theme="corporate"]) .rui-accordion-trigger:hover,
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-state="open"] .rui-accordion-trigger { background: transparent; color: var(--rui-color-accent); }
+:host([data-rui-theme="corporate"]) .rui-accordion-item[data-state="open"] .rui-accordion-trigger { background: transparent; color: var(--rui-color-link); }
 :host([data-rui-theme="corporate"]) .rui-accordion-trigger:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--rui-color-accent); }
 :host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="success"] { box-shadow: inset 8px 0 0 0 #12cf76; }
 :host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="success"]:hover,
@@ -5329,7 +6369,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 /* ---- Breadcrumb — every crumb (incl. separators, current) reads at the same
    default-text-color / normal weight; hover only underlines; focus draws a
    crisp outline. UI Block never mutes earlier crumbs or bolds the current one. */
-:host([data-rui-theme="corporate"]) .rui-breadcrumb-list { font-size: 16px; color: var(--rui-color-text); }
+:host([data-rui-theme="corporate"]) .rui-breadcrumb-list { font-size: var(--rui-font-size-lg); color: var(--rui-color-text); }
 :host([data-rui-theme="corporate"]) .rui-breadcrumb-separator { color: var(--rui-color-text); }
 :host([data-rui-theme="corporate"]) .rui-breadcrumb-link { color: var(--rui-color-text); }
 :host([data-rui-theme="corporate"]) .rui-breadcrumb-link:hover { color: var(--rui-color-text); text-decoration: underline; }
@@ -5357,15 +6397,15 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-context-menu-pop .rui-menu-item:focus-visible,
 :host([data-rui-theme="corporate"]) .rui-dropdown-menu-content .rui-menu-item:hover:not(:disabled),
 :host([data-rui-theme="corporate"]) .rui-dropdown-menu-content .rui-menu-item:focus-visible {
-  background: transparent; border-left-color: var(--rui-color-accent); color: var(--rui-color-accent);
+  background: transparent; border-left-color: var(--rui-color-accent); color: var(--rui-color-link);
 }
 :host([data-rui-theme="corporate"]) .rui-menu-item[data-variant="danger"]:hover:not(:disabled),
 :host([data-rui-theme="corporate"]) .rui-menu-item[data-variant="danger"]:focus-visible {
-  background: transparent; border-left-color: var(--rui-color-danger); color: var(--rui-color-danger);
+  background: transparent; border-left-color: var(--rui-color-danger); color: var(--rui-color-danger-text);
 }
 :host([data-rui-theme="corporate"]) .rui-menu-item:disabled { opacity: 0.5; }
 :host([data-rui-theme="corporate"]) .rui-context-menu-target .rui-icon-button {
-  border-radius: 999px; color: var(--rui-color-accent);
+  border-radius: 999px; color: var(--rui-color-link);
 }
 :host([data-rui-theme="corporate"]) .rui-context-menu-target .rui-icon-button:hover:not(:disabled),
 :host([data-rui-theme="corporate"]) .rui-context-menu-target .rui-icon-button:focus-visible,
@@ -5383,6 +6423,10 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-banner[data-tone="success"] { background: #c7fae2; }
 :host([data-rui-theme="corporate"]) .rui-banner[data-tone="warning"] { background: #ffedca; }
 :host([data-rui-theme="corporate"]) .rui-banner[data-tone="danger"]  { background: #ffe4e2; }
+/* info is the corporate stripe's own pale blue (same as the untoned default);
+   default is the neutral grey band. */
+:host([data-rui-theme="corporate"]) .rui-banner[data-tone="info"]    { background: #dbedf8; }
+:host([data-rui-theme="corporate"]) .rui-banner[data-tone="default"] { background: #f4f7fa; }
 
 /* ---- Callout / Alert / Note (UI Block Message) ------------------------------
    Matched to UI Block's Message ANATOMY, which differs from Aktion's default in
@@ -5397,15 +6441,13 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
    of flow and only the title is indented — same result, no DOM fork.
    ------------------------------------------------------------------------- */
 /* OUTER = UI Block's .message: chrome only, and it CLIPS.
-   .message{background:#fff;border:1px solid #97a3b4;border-radius:16px;
+   .message{background:#fff;border: var(--rui-border-width) solid #97a3b4;border-radius:16px;
             margin-bottom:32px;overflow:hidden;display:block} */
-:host([data-rui-theme="corporate"]) .rui-callout,
-:host([data-rui-theme="corporate"]) .rui-alert,
-:host([data-rui-theme="corporate"]) .rui-note {
+:host([data-rui-theme="corporate"]) .rui-callout {
   display: block;
   padding: 0;
   background: var(--rui-color-surface);
-  border: 1px solid #97a3b4;                   /* neutral-4 · --neutral-shape-color */
+  border: var(--rui-border-width) solid #97a3b4;                   /* neutral-4 · --neutral-shape-color */
   border-radius: var(--rui-radius-lg);         /* 16px */
   color: var(--rui-color-text);
   box-shadow: none;                            /* the bar belongs to the inner section */
@@ -5430,14 +6472,12 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="danger"] .rui-callout-section,
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="error"] .rui-callout-section   { box-shadow: inset 9px 0 0 -1px #ff6159; }
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="neutral"] .rui-callout-section { box-shadow: inset 9px 0 0 -1px #97a3b4; }
-/* Alert/Note have no section element, so they keep the bar on the box itself. */
-:host([data-rui-theme="corporate"]) .rui-alert,
-:host([data-rui-theme="corporate"]) .rui-note { padding: 28px 30px; position: relative; box-shadow: inset 9px 0 0 -1px #97a3b4; }
-:host([data-rui-theme="corporate"]) .rui-alert[data-variant="info"]    { box-shadow: inset 9px 0 0 -1px #08a5c5; }
-:host([data-rui-theme="corporate"]) .rui-alert[data-variant="success"] { box-shadow: inset 9px 0 0 -1px #0fa954; }
-:host([data-rui-theme="corporate"]) .rui-alert[data-variant="warning"] { box-shadow: inset 9px 0 0 -1px #ffaa00; }
-:host([data-rui-theme="corporate"]) .rui-alert[data-variant="danger"]  { box-shadow: inset 9px 0 0 -1px #ff6159; }
-:host([data-rui-theme="corporate"]) .rui-alert[data-variant="neutral"] { box-shadow: inset 9px 0 0 -1px #97a3b4; }
+/* compact still has to be denser than this theme's 28px/30px, and because the
+   section is display: block here the dismiss button cannot be pushed by
+   margin-left: auto — pin it to the section, which is already position: relative. */
+:host([data-rui-theme="corporate"]) .rui-callout[data-compact="true"] .rui-callout-section { padding: 10px 14px; }
+:host([data-rui-theme="corporate"]) .rui-callout-dismiss { position: absolute; top: 24px; right: 24px; margin: 0; }
+:host([data-rui-theme="corporate"]) .rui-callout[data-compact="true"] .rui-callout-dismiss { top: 6px; right: 10px; }
 
 /* The body becomes a plain block so the description is NOT indented. */
 :host([data-rui-theme="corporate"]) .rui-callout-body {
@@ -5455,7 +6495,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   height: 24px;
   border-radius: 0;
   background: transparent !important;
-  font-size: 22px;
+  font-size: var(--rui-font-size-title);
   line-height: 24px;
   align-items: center;
   justify-content: flex-start;
@@ -5463,10 +6503,9 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 
 /* Title: UI Block's third-level headline in the semantic colour, cleared past the
    icon. Description + footer stay at the container's left padding. */
-:host([data-rui-theme="corporate"]) .rui-callout-title,
-:host([data-rui-theme="corporate"]) .rui-alert-title {
+:host([data-rui-theme="corporate"]) .rui-callout-title {
   font-family: var(--rui-font-family);
-  font-size: 16px;
+  font-size: var(--rui-font-size-lg);
   line-height: 24px;
   font-weight: 600;
   /* UI Block's .headline--sub carries margin-top: -2px, and because its icon is an INLINE
@@ -5493,18 +6532,14 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 /* Semantic colour lands on the TITLE and the ICON, never on the body copy. */
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="info"] .rui-callout-title,
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="info"] .rui-callout-icon,
-:host([data-rui-theme="corporate"]) .rui-alert[data-variant="info"] .rui-alert-title    { color: #005b72; }
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="success"] .rui-callout-title,
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="success"] .rui-callout-icon,
-:host([data-rui-theme="corporate"]) .rui-alert[data-variant="success"] .rui-alert-title { color: #096b35; }
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="warning"] .rui-callout-title,
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="warning"] .rui-callout-icon,
-:host([data-rui-theme="corporate"]) .rui-alert[data-variant="warning"] .rui-alert-title { color: #8e4e00; }
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="danger"] .rui-callout-title,
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="danger"] .rui-callout-icon,
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="error"] .rui-callout-title,
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="error"] .rui-callout-icon,
-:host([data-rui-theme="corporate"]) .rui-alert[data-variant="danger"] .rui-alert-title  { color: #c80a00; }
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="neutral"] .rui-callout-title,
 :host([data-rui-theme="corporate"]) .rui-callout[data-variant="neutral"] .rui-callout-icon { color: #465a75; }
 
@@ -5576,8 +6611,6 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 
 /* ---- Dividers & separators — neutral-3 hairline (UI Block's universal divider
    shade — same token list.scss/table rows/menus all share). */
-:host([data-rui-theme="corporate"]) .rui-divider,
-:host([data-rui-theme="corporate"]) .rui-divider-line,
 :host([data-rui-theme="corporate"]) .rui-separator { background: var(--rui-color-border); }
 
 /* ---- Lists — hairline uses neutral-3 (not the lighter neutral-2 the base
@@ -5604,7 +6637,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   border-radius: 50%;
   background: #95caeb;                         /* corporate-2 · check-list-icon-background-color */
   color: #003d8f;                              /* corporate-6 · check-list-icon-color */
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   line-height: 20px;
   text-align: center;
   display: inline-flex !important;
@@ -5616,8 +6649,8 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="corporate"]) .rui-list-title { font-weight: 400; line-height: 24px; }
 :host([data-rui-theme="corporate"]) .rui-list-item { line-height: 24px; }   /* 1.717em at 14px */
 :host([data-rui-theme="corporate"]) .rui-list-description { font-size: var(--rui-font-size-sm); }
-:host([data-rui-theme="corporate"]) .rui-description-item { border-bottom: 1px solid var(--rui-color-border-subtle); } /* solid, not dashed — no dashed divider exists anywhere in UI Block */
-:host([data-rui-theme="corporate"]) .rui-text[data-variant="large"] { font-size: 16px; line-height: 24px; } /* paragraph--large */
+:host([data-rui-theme="corporate"]) .rui-description-item { border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle); } /* solid, not dashed — no dashed divider exists anywhere in UI Block */
+:host([data-rui-theme="corporate"]) .rui-text[data-variant="large"] { font-size: var(--rui-font-size-lg); line-height: 24px; } /* paragraph--large */
 
 /* ---- Navigation — active/hover items use a NAVY-at-opacity wash (not a flat
    pale-blue solid), text always stays dark navy (UI Block never recolors nav
@@ -5648,11 +6681,11 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   background: var(--rui-color-surface); border: none; box-shadow: 0 2px 8px 0 rgba(113, 128, 149, 0.5);
 }
 :host([data-rui-theme="corporate"]) .rui-sidebar-section-label {
-  color: var(--rui-color-text); font-size: 14px; font-weight: 600; text-transform: none; letter-spacing: 0;
+  color: var(--rui-color-text); font-size: var(--rui-font-size-base); font-weight: 600; text-transform: none; letter-spacing: 0;
 }
-:host([data-rui-theme="corporate"]) .rui-sidebar-item-icon { font-size: 20px; }
+:host([data-rui-theme="corporate"]) .rui-sidebar-item-icon { font-size: var(--rui-font-size-20); }
 :host([data-rui-theme="corporate"]) .rui-app-shell-topbar {
-  background: #003d8f; color: #fff; border-bottom: 1px solid #002659; box-shadow: 0 1px 1px -1px #3364a5;
+  background: #003d8f; color: #fff; border-bottom: var(--rui-border-width) solid #002659; box-shadow: 0 1px 1px -1px #3364a5;
 }
 :host([data-rui-theme="corporate"]) .rui-page-header { border-bottom: none; } /* flat — separates by colour alone, like cards */
 :host([data-rui-theme="corporate"]) .rui-page-header-title,
@@ -5714,7 +6747,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="modern"]) .rui-list-item,
 :host([data-rui-theme="modern"]) .rui-modal,
 :host([data-rui-theme="modern"]) .rui-code-block {
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   background: var(--rui-color-surface);
   box-shadow: var(--rui-shadow-sm);
 }
@@ -5729,7 +6762,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 :host([data-rui-theme="modern"]) .rui-card-title,
 :host([data-rui-theme="modern"]) .rui-section-title,
-:host([data-rui-theme="modern"]) .rui-header-title,
+:host([data-rui-theme="modern"]) .rui-page-header-title,
 :host([data-rui-theme="modern"]) .rui-text[data-variant="title"],
 :host([data-rui-theme="modern"]) .rui-text[data-variant="heading"],
 :host([data-rui-theme="modern"]) .rui-text[data-variant="large-heavy"] {
@@ -5740,7 +6773,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 :host([data-rui-theme="modern"]) .rui-button {
   background: var(--rui-color-primary);
   color: var(--rui-color-primary-text);
-  border: 1px solid transparent;
+  border: var(--rui-border-width) solid transparent;
   border-radius: var(--rui-radius-pill);
   font-weight: 600;
   box-shadow: 0 4px 14px rgba(17, 24, 39, 0.12);
@@ -5818,7 +6851,9 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 :host([data-rui-theme="modern"]) .rui-badge[data-variant="primary"] {
   background: color-mix(in srgb, var(--rui-color-accent) 14%, transparent);
-  color: var(--rui-color-accent);
+  /* The 14% wash stays keyed to the accent; the label on it does not — this
+     theme's accent is 3.66:1 against its own wash, the link token 4.58:1. */
+  color: var(--rui-color-link);
 }
 :host([data-rui-theme="modern"]) .rui-stat-value {
   color: var(--rui-color-text);
@@ -5830,14 +6865,14 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   letter-spacing: 0.01em;
 }
 :host([data-rui-theme="modern"]) .rui-link {
-  color: var(--rui-color-accent);
+  color: var(--rui-color-link);
   font-weight: 600;
 }
 :host([data-rui-theme="modern"]) .rui-table th {
   background: var(--rui-color-surface-muted);
   color: var(--rui-color-text-muted);
   font-weight: 600;
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   border-bottom-color: var(--rui-color-border);
@@ -5865,7 +6900,6 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   color: var(--rui-color-primary-text);
   font-weight: 700;
 }
-:host([data-rui-theme="modern"]) .rui-divider,
 :host([data-rui-theme="modern"]) .rui-separator {
   background: var(--rui-color-border);
 }
@@ -5889,14 +6923,20 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   outline: 2px solid color-mix(in srgb, var(--rui-color-primary) 60%, transparent);
   outline-offset: 2px;
 }
-.rui-dropdown-menu-trigger[data-state="open"] { z-index: 41; }
+/* disabled is functionally complete in source (no tabindex, no handlers, forced
+   closed, aria-disabled) but was visually identical to an enabled menu. */
+.rui-dropdown-menu[data-disabled="true"] .rui-dropdown-menu-trigger {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .rui-dropdown-menu-content {
   position: absolute;
-  z-index: 40;
+  z-index: var(--rui-z-dropdown);
   min-width: 200px;
   padding: 6px;
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   box-shadow: var(--rui-shadow-md);
   display: none;
@@ -5940,7 +6980,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   cursor: pointer;
   text-align: left;
   width: 100%;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   line-height: 1.2;
 }
 .rui-menu-item:hover:not(:disabled),
@@ -5949,14 +6989,20 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   outline: none;
 }
 .rui-menu-item:disabled { opacity: 0.55; cursor: not-allowed; }
-.rui-menu-item[data-variant="danger"] { color: var(--rui-color-danger); }
+.rui-menu-item[data-variant="danger"] { color: var(--rui-color-danger-text); }
 .rui-menu-item[data-variant="danger"]:hover:not(:disabled) {
   background: color-mix(in srgb, var(--rui-color-danger) 12%, transparent);
 }
 .rui-menu-item-icon { width: 14px; display: inline-flex; justify-content: center; }
+/* The role="group" / role="none" wrappers MUST be display: contents, or they
+   become flex items and break the panel's own column layout and gap. menu.ts
+   also sets these inline; this is the permanent home. */
+.rui-menu-group { display: contents; }
+.rui-menu-custom { display: contents; }
+.rui-menu-item-check { width: 14px; display: inline-flex; justify-content: center; }
 .rui-menu-item-label { flex: 1; min-width: 0; }
 .rui-menu-item-shortcut {
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   color: var(--rui-color-text-muted);
   font-family: var(--rui-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
@@ -5966,7 +7012,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   margin: 4px 0;
 }
 .rui-menu-label {
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -5993,15 +7039,14 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   outline: 2px solid color-mix(in srgb, var(--rui-color-primary) 60%, transparent);
   outline-offset: 2px;
 }
-.rui-popover-trigger[data-state="open"] { z-index: 41; }
 .rui-popover-content {
   position: absolute;
-  z-index: 40;
+  z-index: var(--rui-z-popover);
   width: 280px;
   max-width: min(360px, calc(100vw - 32px));
   padding: var(--rui-spacing-m);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   box-shadow: var(--rui-shadow-md);
   display: none;
@@ -6031,7 +7076,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 .rui-popover-title {
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   color: var(--rui-color-text);
 }
 .rui-popover-title-spacer { display: block; flex: 1; }
@@ -6047,7 +7092,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   align-items: center;
   justify-content: center;
   border-radius: var(--rui-radius-sm);
-  font-size: 18px;
+  font-size: var(--rui-font-size-18);
   line-height: 1;
   transition: background 150ms ease, color 150ms ease;
 }
@@ -6074,7 +7119,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 /* ----------------------------------------------------------------------- */
 .rui-toasts {
   position: fixed;
-  z-index: 60;
+  z-index: var(--rui-z-toast);
   display: flex;
   flex-direction: column;
   gap: var(--rui-spacing-s);
@@ -6087,14 +7132,25 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-toasts[data-position="top-center"] { top: 16px; left: 50%; transform: translateX(-50%); align-items: center; }
 .rui-toasts[data-position="bottom-right"] { bottom: 16px; right: 16px; align-items: flex-end; flex-direction: column-reverse; }
 .rui-toasts[data-position="bottom-left"] { bottom: 16px; left: 16px; align-items: flex-start; flex-direction: column-reverse; }
-.rui-toasts[data-position="bottom-center"] { bottom: 16px; left: 50%; transform: translateX(-50%); align-items: center; flex-direction: column-reverse; }
+/* The max cap summarises the toasts it hid; without this the +N row is bare
+   text floating in the stack. align-self overrides the per-position align-items. */
+.rui-toasts-overflow {
+  align-self: stretch;
+  padding: 4px 10px;
+  border-radius: var(--rui-radius-sm);
+  background: var(--rui-color-surface-muted);
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-11);
+  text-align: center;
+}
 .rui-toast {
   display: flex;
   align-items: flex-start;
   gap: var(--rui-spacing-s);
   padding: var(--rui-spacing-s) var(--rui-spacing-m);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   box-shadow: var(--rui-shadow-md);
   min-width: 240px;
@@ -6119,19 +7175,23 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  color: #ffffff;
+  font-size: var(--rui-font-size-sm);
+  /* The disc is filled with a theme token (muted by default, primary/success/
+     warning/danger per tone), and in the dark theme those tokens are LIGHT — a
+     literal #ffffff glyph disappeared into them. primary-text is the token that
+     tracks "readable on a filled brand surface" in both directions. */
+  color: var(--rui-color-primary-text);
   background: var(--rui-color-text-muted);
 }
 .rui-toast-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.rui-toast-title { font-weight: 600; font-size: 13px; }
-.rui-toast-message { color: var(--rui-color-text-muted); font-size: 12px; line-height: 1.45; }
+.rui-toast-title { font-weight: 600; font-size: var(--rui-font-size-13); }
+.rui-toast-message { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-sm); line-height: 1.45; }
 .rui-toast-action { margin-top: 6px; }
 .rui-toast-close {
   appearance: none;
   border: none;
   background: transparent;
-  font-size: 18px;
+  font-size: var(--rui-font-size-18);
   line-height: 1;
   color: var(--rui-color-text-muted);
   cursor: pointer;
@@ -6154,10 +7214,13 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   outline-offset: 1px;
 }
 .rui-toast[data-tone="primary"] .rui-toast-icon { background: var(--rui-color-primary); }
-.rui-toast[data-tone="success"] .rui-toast-icon { background: var(--rui-color-success); }
-.rui-toast[data-tone="warning"] .rui-toast-icon { background: var(--rui-color-warning); }
-.rui-toast[data-tone="danger"] .rui-toast-icon { background: var(--rui-color-danger); }
-.rui-toast[data-tone="info"] .rui-toast-icon { background: var(--rui-color-info); }
+/* primary-text is right for the primary/neutral discs but not for the status ones:
+   it is #ffffff in five themes, i.e. 2.54:1 on a success disc and 2.15:1 on a
+   warning one. Each toned disc names the ink that matches its own fill. */
+.rui-toast[data-tone="success"] .rui-toast-icon { background: var(--rui-color-success); color: var(--rui-color-on-success); }
+.rui-toast[data-tone="warning"] .rui-toast-icon { background: var(--rui-color-warning); color: var(--rui-color-on-warning); }
+.rui-toast[data-tone="danger"] .rui-toast-icon { background: var(--rui-color-danger); color: var(--rui-color-on-danger); }
+.rui-toast[data-tone="info"] .rui-toast-icon { background: var(--rui-color-info); color: var(--rui-color-on-info); }
 .rui-toast[data-tone="success"] { border-color: color-mix(in srgb, var(--rui-color-success) 36%, transparent); }
 .rui-toast[data-tone="warning"] { border-color: color-mix(in srgb, var(--rui-color-warning) 36%, transparent); }
 .rui-toast[data-tone="danger"] { border-color: color-mix(in srgb, var(--rui-color-danger) 36%, transparent); }
@@ -6172,9 +7235,9 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 /* ----------------------------------------------------------------------- */
 .rui-slider { display: flex; flex-direction: column; gap: var(--rui-spacing-xs); }
 .rui-slider-head { display: flex; justify-content: space-between; align-items: center; }
-.rui-slider-label { font-size: 13px; color: var(--rui-color-text); }
+.rui-slider-label { font-size: var(--rui-font-size-13); color: var(--rui-color-text); }
 .rui-slider-value {
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   font-weight: 600;
   color: var(--rui-color-primary);
   font-variant-numeric: tabular-nums;
@@ -6221,7 +7284,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-number-input {
   display: flex;
   align-items: stretch;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border-control, var(--rui-color-border));
   border-radius: var(--rui-radius-sm);
   background: var(--rui-color-surface);
   overflow: hidden;
@@ -6230,6 +7293,15 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-number-input:focus-within {
   border-color: var(--rui-color-primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-primary) 18%, transparent);
+}
+.rui-number-input-prefix,
+.rui-number-input-suffix {
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  white-space: nowrap;
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-sm);
 }
 .rui-number-input-button {
   appearance: none;
@@ -6241,17 +7313,17 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: var(--rui-font-size-lg);
   font-weight: 600;
   cursor: pointer;
   line-height: 1;
   transition: background 150ms ease, color 150ms ease;
 }
 .rui-number-input-button[data-direction="down"] {
-  border-right: 1px solid var(--rui-color-border);
+  border-right: var(--rui-border-width) solid var(--rui-color-border);
 }
 .rui-number-input-button[data-direction="up"] {
-  border-left: 1px solid var(--rui-color-border);
+  border-left: var(--rui-border-width) solid var(--rui-color-border);
 }
 .rui-number-input-button:hover:not(:disabled) {
   background: color-mix(in srgb, var(--rui-color-primary) 10%, var(--rui-color-surface-muted));
@@ -6286,16 +7358,16 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 /* DatePicker                                                              */
 /* ----------------------------------------------------------------------- */
 .rui-date-picker { display: flex; flex-direction: column; gap: var(--rui-spacing-xs); }
-.rui-date-picker-label { font-size: 13px; color: var(--rui-color-text); }
+.rui-date-picker-label { font-size: var(--rui-font-size-13); color: var(--rui-color-text); }
 .rui-date-picker-input {
   appearance: none;
   padding: 8px 12px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border-control, var(--rui-color-border));
   border-radius: var(--rui-radius-sm);
   background: var(--rui-color-surface);
   color: inherit;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
 .rui-date-picker-input:focus {
   outline: none;
@@ -6326,6 +7398,12 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   border-color: var(--rui-color-primary);
   background: color-mix(in srgb, var(--rui-color-primary) 5%, var(--rui-color-bg-subtle));
 }
+/* The only focusable element is the 1x1 clipped file input, so focus has to be
+   shown on the zone or a keyboard user tabs through with no indication at all. */
+.rui-file-upload-dropzone:focus-within {
+  border-color: var(--rui-color-focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 22%, transparent);
+}
 .rui-file-upload[data-disabled="true"] { opacity: 0.55; }
 .rui-file-upload[data-disabled="true"] .rui-file-upload-dropzone { cursor: not-allowed; }
 .rui-file-upload-dropzone.is-dragover {
@@ -6343,11 +7421,11 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   justify-content: center;
   background: color-mix(in srgb, var(--rui-color-primary) 14%, transparent);
   color: var(--rui-color-primary);
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
 }
 .rui-file-upload-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.rui-file-upload-label { font-weight: 600; font-size: 13px; }
-.rui-file-upload-hint { font-size: 12px; color: var(--rui-color-text-muted); }
+.rui-file-upload-label { font-weight: 600; font-size: var(--rui-font-size-13); }
+.rui-file-upload-hint { font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); }
 .rui-file-upload-input {
   position: absolute;
   width: 1px;
@@ -6364,7 +7442,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   flex-direction: column;
   gap: var(--rui-spacing-xs, 4px);
   padding: var(--rui-spacing-s) var(--rui-spacing-m);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   background: var(--rui-color-surface, var(--rui-color-bg-subtle));
 }
@@ -6373,12 +7451,21 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   align-items: center;
   gap: var(--rui-spacing-s);
 }
+.rui-file-upload-remove {
+  margin-left: auto;
+  flex: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  line-height: 1;
+  color: var(--rui-color-text-muted);
+}
 .rui-file-upload-thumbnail {
   width: 56px;
   height: 56px;
   object-fit: cover;
   border-radius: var(--rui-radius-sm);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   flex-shrink: 0;
 }
 .rui-file-upload-filename {
@@ -6397,9 +7484,26 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   position: relative;
   display: inline-flex;
   flex-direction: column;
-  min-width: 200px;
+  /* min() so the preferred 200px never becomes a floor that overflows a narrow
+     grid cell (and drags the panel out with it). */
+  min-width: min(200px, 100%);
 }
 .rui-combobox[data-disabled="true"] { opacity: 0.55; }
+/* The clear button is a direct child of a column flex root, so it would stack
+   under the trigger; lift it into the trigger, left of the chevron. */
+.rui-combobox-clear {
+  position: absolute;
+  top: 50%;
+  right: 30px;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  color: var(--rui-color-text-muted);
+}
+.rui-combobox-clear:hover { color: var(--rui-color-text); }
 .rui-combobox-trigger {
   appearance: none;
   display: inline-flex;
@@ -6408,11 +7512,11 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   gap: var(--rui-spacing-s);
   padding: 8px 12px;
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border-control, var(--rui-color-border));
   border-radius: var(--rui-radius-sm);
   color: inherit;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   cursor: pointer;
   text-align: left;
 }
@@ -6424,15 +7528,15 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 .rui-combobox-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rui-combobox-value[data-placeholder="true"] { color: var(--rui-color-text-muted); }
-.rui-combobox-chevron { color: var(--rui-color-text-muted); font-size: 11px; }
+.rui-combobox-chevron { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-11); }
 .rui-combobox-panel {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  z-index: 40;
+  z-index: var(--rui-z-dropdown);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   box-shadow: var(--rui-shadow-md);
   display: none;
@@ -6444,11 +7548,11 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-combobox[data-open="true"] .rui-combobox-panel { display: flex; }
 .rui-combobox-filter {
   appearance: none;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-sm);
   padding: 6px 10px;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   background: var(--rui-color-bg-subtle);
 }
 .rui-combobox-filter:focus {
@@ -6466,8 +7570,24 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   padding: 6px 10px;
   border-radius: var(--rui-radius-sm);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
+/* Group heading and unavailable option inside a picker panel. aria-disabled
+   rather than the disabled attribute keeps the row arrow-reachable and announced
+   as unavailable, so it needs its own visual treatment. */
+.rui-combobox-group {
+  padding: var(--rui-spacing-xs) var(--rui-spacing-s);
+  font-size: var(--rui-font-size-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--rui-color-text-muted);
+}
+.rui-combobox-option[data-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .rui-combobox-option:hover { background: var(--rui-color-surface-muted); }
 .rui-combobox-option[aria-selected="true"] {
   background: color-mix(in srgb, var(--rui-color-primary) 14%, transparent);
@@ -6477,8 +7597,13 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-combobox-empty {
   padding: 12px;
   color: var(--rui-color-text-muted);
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   text-align: center;
+}
+.rui-combobox-loading {
+  padding: var(--rui-spacing-s);
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-sm);
 }
 
 /* ----------------------------------------------------------------------- */
@@ -6488,16 +7613,21 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
 .rui-tree-node {
   display: flex;
   flex-direction: column;
 }
+/* flex, not block: the chevron button is a sibling of the row inside the summary,
+   and display: block stacked it above the row. The component also sets this
+   inline today; this is the permanent home. */
 .rui-tree-node-summary {
   list-style: none;
   cursor: pointer;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 .rui-tree-node-summary::-webkit-details-marker { display: none; }
 .rui-tree-node-row {
@@ -6521,8 +7651,25 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   color: var(--rui-color-primary);
   font-weight: 600;
 }
+/* disabled is already genuinely inert in source (no href, no onClick, non-button
+   tag, aria-disabled), but a permission-gated folder looked identical to a live
+   one, so the user had no way to tell why clicking did nothing. */
+.rui-tree-node-row[data-disabled="true"] { opacity: 0.5; cursor: default; pointer-events: none; }
+/* The toggle is a real button next to the row; strip its UA chrome. */
+.rui-tree-node-chevron-button {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: inherit;
+  cursor: pointer;
+}
 .rui-tree-node-chevron {
-  font-size: 10px;
+  font-size: var(--rui-font-size-10);
   color: var(--rui-color-text-muted);
   width: 14px;
   display: inline-flex;
@@ -6533,7 +7680,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   transform: rotate(90deg);
 }
 .rui-tree-node-chevron-spacer { width: 14px; }
-.rui-tree-node-icon { color: var(--rui-color-text-muted); font-size: 12px; }
+.rui-tree-node-icon { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-sm); }
 .rui-tree-node-row[data-active="true"] .rui-tree-node-icon { color: var(--rui-color-primary); }
 .rui-tree-node-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rui-tree-node-badge {
@@ -6541,7 +7688,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   color: var(--rui-color-text-muted);
   border-radius: 999px;
   padding: 1px 8px;
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   font-weight: 600;
 }
 .rui-tree-node-children {
@@ -6549,7 +7696,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   flex-direction: column;
   gap: 2px;
   padding-left: 16px;
-  border-left: 1px solid var(--rui-color-border-subtle);
+  border-left: var(--rui-border-width) solid var(--rui-color-border-subtle);
   margin-left: 8px;
   margin-top: 2px;
 }
@@ -6563,15 +7710,26 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   gap: var(--rui-spacing-l);
   padding: var(--rui-spacing-s) var(--rui-spacing-l);
   background: var(--rui-color-surface);
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md) var(--rui-radius-md) 0 0;
 }
+/* The frosted blur moved onto a ::before layer. backdrop-filter on the bar itself
+   made it the containing block for every fixed-position descendant, so a Modal in
+   the documented actions slot resolved its inset: 0 scrim against the ~56px
+   navbar strip instead of the viewport. */
 .rui-navbar[data-sticky="true"] {
   position: sticky;
   top: 0;
-  z-index: 30;
-  backdrop-filter: blur(8px);
+  z-index: var(--rui-z-sticky);
   background: color-mix(in srgb, var(--rui-color-surface) 92%, transparent);
+}
+.rui-navbar[data-sticky="true"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(8px);
+  z-index: -1;
+  pointer-events: none;
 }
 .rui-navbar[data-variant="transparent"] {
   background: transparent;
@@ -6579,11 +7737,17 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 .rui-navbar-brand {
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--rui-font-size-15);
   color: var(--rui-color-text);
   display: inline-flex;
   align-items: center;
   gap: var(--rui-spacing-s);
+  /* A long brand refused to shrink at 375px and pushed the item row onto extra
+     lines, which with sticky pinned a ~180px header over the content. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rui-navbar-items {
   display: flex;
@@ -6604,7 +7768,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   background: transparent;
   color: var(--rui-color-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   font-weight: 500;
   display: inline-flex;
   align-items: center;
@@ -6620,12 +7784,43 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   background: color-mix(in srgb, var(--rui-color-primary) 14%, transparent);
   color: var(--rui-color-primary);
 }
+/* disabled already drops the href, so the entry is neither clickable nor
+   focusable — this is the only thing that says so on screen. */
+.rui-navbar-item[data-disabled="true"] { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 .rui-navbar-item-icon { display: inline-flex; }
+/* Burger: hidden above the collapse breakpoint. Mirrors the .rui-navbar2-burger
+   pattern. Without these rules the button was permanently visible and the item
+   row never collapsed, so the collapsible prop toggled attributes nothing read. */
+.rui-navbar-burger {
+  display: none;
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--rui-color-text);
+  font: inherit;
+  font-size: var(--rui-font-size-18);
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: var(--rui-radius-sm);
+  cursor: pointer;
+  margin-left: auto;
+}
+.rui-navbar-burger:hover { background: var(--rui-color-surface-muted); }
+.rui-navbar-burger:focus-visible { outline: 2px solid var(--rui-color-focus-ring); outline-offset: 2px; }
+.rui-navbar-burger-icon { display: inline-flex; }
 
 /* Compact layout shifts for narrow viewports */
-@media (max-width: 640px) {
+${below("sm")} {
   .rui-navbar { flex-wrap: wrap; gap: var(--rui-spacing-s); }
   .rui-navbar-items { width: 100%; }
+  .rui-navbar[data-collapsible="true"] .rui-navbar-burger { display: inline-flex; }
+  .rui-navbar[data-collapsible="true"] .rui-navbar-items { display: none; }
+  .rui-navbar[data-collapsible="true"][data-menu-open="true"] .rui-navbar-items {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
 }
 
 /* ------------------------------------------------------------------------- *
@@ -6652,7 +7847,13 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-spinner[data-size="md"] .rui-spinner-ring { width: 16px; height: 16px; }
 .rui-spinner[data-size="lg"] .rui-spinner-ring { width: 22px; height: 22px; border-width: 2.5px; }
 .rui-spinner[data-size="xl"] .rui-spinner-ring { width: 32px; height: 32px; border-width: 3px; }
-.rui-spinner[data-tone="success"] .rui-spinner-ring { border-top-color: var(--rui-color-success); border-color: color-mix(in srgb, var(--rui-color-success) 25%, transparent); border-top-color: var(--rui-color-success); }
+/* default/primary/neutral are all in the shared TONE_ENUM (content.ts:36) —
+   primary is even the documented default — and none of the three had a rule, so
+   tone: "neutral" on a quiet inline spinner stayed brand-coloured. */
+.rui-spinner[data-tone="default"] .rui-spinner-ring,
+.rui-spinner[data-tone="primary"] .rui-spinner-ring { border-color: color-mix(in srgb, var(--rui-color-primary) 25%, transparent); border-top-color: var(--rui-color-primary); }
+.rui-spinner[data-tone="neutral"] .rui-spinner-ring { border-color: color-mix(in srgb, var(--rui-color-text-muted) 25%, transparent); border-top-color: var(--rui-color-text-muted); }
+.rui-spinner[data-tone="success"] .rui-spinner-ring { border-color: color-mix(in srgb, var(--rui-color-success) 25%, transparent); border-top-color: var(--rui-color-success); }
 .rui-spinner[data-tone="warning"] .rui-spinner-ring { border-color: color-mix(in srgb, var(--rui-color-warning) 25%, transparent); border-top-color: var(--rui-color-warning); }
 .rui-spinner[data-tone="danger"] .rui-spinner-ring { border-color: color-mix(in srgb, var(--rui-color-danger) 25%, transparent); border-top-color: var(--rui-color-danger); }
 .rui-spinner[data-tone="info"] .rui-spinner-ring { border-color: color-mix(in srgb, var(--rui-color-info) 25%, transparent); border-top-color: var(--rui-color-info); }
@@ -6668,6 +7869,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   vertical-align: middle;
   color: var(--rui-color-primary);
 }
+.rui-sparkline-empty { color: var(--rui-color-text-muted); }
 .rui-sparkline-line {
   stroke: currentColor;
   stroke-width: 1.5;
@@ -6690,9 +7892,13 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   align-items: center;
   gap: var(--rui-spacing-s, 8px);
 }
-.rui-stat-card[data-tone="success"] .rui-stat-value { color: var(--rui-color-success); }
-.rui-stat-card[data-tone="warning"] .rui-stat-value { color: var(--rui-color-warning); }
-.rui-stat-card[data-tone="danger"] .rui-stat-value { color: var(--rui-color-danger); }
+/* primary and info are in the shared SURFACE_TONES enum and rendered identically
+   to the default; the enum cannot shrink because ListItem shares it. */
+.rui-stat-card[data-tone="primary"] .rui-stat-value { color: var(--rui-color-primary); }
+.rui-stat-card[data-tone="info"] .rui-stat-value { color: var(--rui-color-info-text); }
+.rui-stat-card[data-tone="success"] .rui-stat-value { color: var(--rui-color-success-text); }
+.rui-stat-card[data-tone="warning"] .rui-stat-value { color: var(--rui-color-warning-text); }
+.rui-stat-card[data-tone="danger"] .rui-stat-value { color: var(--rui-color-danger-text); }
 
 /* MultiSelect ---------------------------------------------------------- */
 .rui-multiselect {
@@ -6708,7 +7914,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   justify-content: space-between;
   gap: var(--rui-spacing-s, 8px);
   padding: 6px var(--rui-spacing-s, 8px);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border-control, var(--rui-color-border));
   border-radius: var(--rui-radius-md, 8px);
   background: var(--rui-color-surface);
   color: var(--rui-color-text);
@@ -6765,9 +7971,9 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  z-index: 30;
+  z-index: var(--rui-z-dropdown);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   box-shadow: var(--rui-shadow-md);
   padding: var(--rui-spacing-xs, 4px);
@@ -6776,7 +7982,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-multiselect-filter {
   width: 100%;
   padding: 6px 8px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-sm, 6px);
   background: var(--rui-color-surface);
   color: var(--rui-color-text);
@@ -6814,14 +8020,14 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: 4px;
   flex-shrink: 0;
 }
 .rui-multiselect-option[data-selected="true"] .rui-multiselect-option-check {
   background: var(--rui-color-primary);
   border-color: var(--rui-color-primary);
-  color: var(--rui-color-on-primary, #fff);
+  color: var(--rui-color-primary-text);
 }
 .rui-multiselect-empty {
   padding: 12px;
@@ -6845,7 +8051,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   flex: 1;
   min-width: 0;
   padding: 8px var(--rui-spacing-s, 8px);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   background: var(--rui-color-surface);
   color: var(--rui-color-text);
@@ -6863,7 +8069,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   background: var(--rui-color-surface-muted);
   padding: 3px;
   border-radius: var(--rui-radius-md, 8px);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   gap: 2px;
 }
 .rui-segmented-control-option {
@@ -6889,6 +8095,10 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 .rui-segmented-control[data-size="sm"] .rui-segmented-control-option { padding: 2px 8px; font-size: 0.75rem; }
 .rui-segmented-control[data-size="lg"] .rui-segmented-control-option { padding: 6px 14px; font-size: 0.9375rem; }
+/* Group-level and per-option disabled both emit the attribute; nothing dimmed the
+   segment, so a locked option still looked clickable. */
+.rui-segmented-control-option:disabled { opacity: .45; cursor: not-allowed; }
+.rui-segmented-control-option:disabled:hover { color: var(--rui-color-text-muted); }
 
 /* Toolbar center slot -------------------------------------------------- */
 .rui-toolbar-center {
@@ -6928,7 +8138,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   display: flex;
   gap: var(--rui-spacing-s, 8px);
   padding: var(--rui-spacing-m, 12px) var(--rui-spacing-l, 16px);
-  border-top: 1px solid var(--rui-color-border);
+  border-top: var(--rui-border-width) solid var(--rui-color-border);
   background: var(--rui-color-surface);
   justify-content: flex-end;
   flex-wrap: wrap;
@@ -6950,14 +8160,19 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   font-size: 0.6875rem;
   font-weight: 600;
 }
+/* flex-direction: row is the point of the rule — the base .rui-tabs is a column,
+   so "sidebar-style tabs" rendered as a narrow strip ABOVE the panels with a
+   dangling right-hand border, and flex: 1 on the panels then ate the height. */
 .rui-tabs[data-orientation="vertical"] {
   display: flex;
+  flex-direction: row;
+  align-items: flex-start;
   gap: var(--rui-spacing-m, 12px);
 }
 .rui-tabs[data-orientation="vertical"] .rui-tab-list {
   flex-direction: column;
   border-bottom: 0;
-  border-right: 1px solid var(--rui-color-border);
+  border-right: var(--rui-border-width) solid var(--rui-color-border);
   padding-right: var(--rui-spacing-s, 8px);
   min-width: 140px;
 }
@@ -6977,11 +8192,18 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   height: 8px;
   border-radius: 4px;
   background: var(--rui-color-surface-muted);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
 }
 .rui-progress-segment[data-filled="true"] {
   background: var(--rui-color-primary);
   border-color: var(--rui-color-primary);
+}
+/* Same 22% tint the bar variant's buffer uses, so buffered reads identically in
+   both variants. Never collides with filled — the render only marks segments
+   past the filled ones. */
+.rui-progress-segment[data-buffered="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 22%, var(--rui-color-surface-muted));
+  border-color: color-mix(in srgb, var(--rui-color-primary) 32%, var(--rui-color-border));
 }
 .rui-progress[data-tone="success"] .rui-progress-segment[data-filled="true"] { background: var(--rui-color-success); border-color: var(--rui-color-success); }
 .rui-progress[data-tone="warning"] .rui-progress-segment[data-filled="true"] { background: var(--rui-color-warning); border-color: var(--rui-color-warning); }
@@ -7002,7 +8224,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   gap: var(--rui-spacing-s, 8px);
   padding: 4px 8px;
   background: var(--rui-color-surface-muted);
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
   border-top-left-radius: var(--rui-radius-md, 8px);
   border-top-right-radius: var(--rui-radius-md, 8px);
   font-size: 0.75rem;
@@ -7015,7 +8237,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   align-items: center;
   gap: 4px;
   background: transparent;
-  border: 1px solid transparent;
+  border: var(--rui-border-width) solid transparent;
   color: var(--rui-color-text-muted);
   padding: 2px 6px;
   border-radius: var(--rui-radius-sm, 6px);
@@ -7051,14 +8273,14 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-code-block-code { white-space: pre; }
 
 /* Syntax highlighting tokens (VIII.3) ----------------------------------- */
-.rui-hl-keyword { color: var(--rui-hl-keyword, #c678dd); font-weight: 600; }
-.rui-hl-string  { color: var(--rui-hl-string, #98c379); }
-.rui-hl-number  { color: var(--rui-hl-number, #d19a66); }
-.rui-hl-comment { color: var(--rui-hl-comment, #7f848e); font-style: italic; }
-.rui-hl-fn      { color: var(--rui-hl-fn, #61afef); }
-.rui-hl-punct   { color: var(--rui-hl-punct, #abb2bf); }
-.rui-hl-tag     { color: var(--rui-hl-tag, #e06c75); }
-.rui-hl-attr    { color: var(--rui-hl-attr, #d19a66); }
+.rui-hl-keyword { color: var(--rui-hl-keyword); font-weight: 600; }
+.rui-hl-string  { color: var(--rui-hl-string); }
+.rui-hl-number  { color: var(--rui-hl-number); }
+.rui-hl-comment { color: var(--rui-hl-comment); font-style: italic; }
+.rui-hl-fn      { color: var(--rui-hl-fn); }
+.rui-hl-punct   { color: var(--rui-hl-punct); }
+.rui-hl-tag     { color: var(--rui-hl-tag); }
+.rui-hl-attr    { color: var(--rui-hl-attr); }
 
 /* Skeleton variants ---------------------------------------------------- */
 .rui-skeleton[data-variant="card"],
@@ -7077,7 +8299,11 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-skeleton-shape[data-shape="circle"] { border-radius: 999px; }
 .rui-skeleton-shape[data-shape="rect"] { border-radius: var(--rui-radius-md, 8px); }
 .rui-skeleton-row { display: flex; gap: var(--rui-spacing-s, 8px); }
-@keyframes rui-skeleton-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+/* The duplicate rui-skeleton-shimmer keyframes that used to live here is gone.
+   Two definitions of one name shipped in the same sheet and the later silently
+   won, so the 200%/-200% travel declared next to .rui-skeleton-line — which is
+   sized background-size: 200% for exactly that travel — never took effect, and
+   editing that block appeared to do nothing. */
 @media (prefers-reduced-motion: reduce) {
   .rui-skeleton-shape, .rui-skeleton-line { animation-duration: 3s; }
 }
@@ -7119,6 +8345,10 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   background: var(--rui-color-surface);
   z-index: 1;
 }
+/* The base .rui-table th rule sets position: sticky unconditionally, so the
+   default sticky: false still produced a positioned header that painted over a
+   tooltip opened in the first data row. DataGrid already has this counterpart. */
+.rui-table-wrapper[data-sticky="false"] thead th { position: static; }
 .rui-table td[data-align="center"], .rui-table th[data-align="center"] { text-align: center; }
 .rui-table td[data-align="right"], .rui-table th[data-align="right"] { text-align: right; }
 .rui-table td[data-align="left"], .rui-table th[data-align="left"] { text-align: left; }
@@ -7131,7 +8361,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 .rui-table td[data-clickable="true"]:hover,
 .rui-data-grid-table td[data-clickable="true"]:hover {
-  background: var(--rui-color-surface-hover, rgba(0, 0, 0, 0.04));
+  background: var(--rui-color-surface-hover);
 }
 .rui-table td[data-clickable="true"]:focus-visible,
 .rui-data-grid-table td[data-clickable="true"]:focus-visible {
@@ -7140,11 +8370,16 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 
 /* Pagination summary + per-page selector ------------------------------ */
+/* Single root definition. display/align-items/gap/flex-wrap are the values that
+   already shipped (this rule won on source order); padding and border-radius are
+   carried over from the earlier duplicate, which had no competitor for them. */
 .rui-pagination {
   display: flex;
   align-items: center;
-  gap: var(--rui-spacing-m, 12px);
+  gap: var(--rui-spacing-m);
   flex-wrap: wrap;
+  padding: 4px;
+  border-radius: var(--rui-radius-sm);
 }
 .rui-pagination-summary {
   color: var(--rui-color-text-muted);
@@ -7167,7 +8402,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 .rui-pagination-per-page-select {
   padding: 4px 6px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-sm, 6px);
   background: var(--rui-color-surface);
   color: var(--rui-color-text);
@@ -7236,7 +8471,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 /* Standalone Toast positioning ---------------------------------------- */
 .rui-toast-standalone {
   position: fixed;
-  z-index: 1000;
+  z-index: var(--rui-z-toast);
   max-width: 360px;
 }
 .rui-toast-standalone[data-position="top-right"]    { top: 20px; right: 20px; }
@@ -7248,19 +8483,31 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 
 /* Rating half-step / custom icons ------------------------------------- */
 .rui-rating[data-half-step="true"] .rui-rating-star { cursor: crosshair; }
-.rui-rating-star[data-fill="half"] {
-  background: linear-gradient(90deg, var(--rui-color-primary) 50%, var(--rui-color-border) 50%);
+/* background-clip: text only shows through a transparent text fill, and the
+   opaque filled colour painted straight over the gradient — so a half read as a
+   whole for every icon family without a real half glyph. Scoped to synthetic
+   halves on purpose: the star family HAS a half glyph, and transparent fill
+   would erase it. */
+.rui-rating-star[data-fill="half"][data-half-glyph="synthetic"] {
+  background-image: linear-gradient(90deg,
+    var(--rui-rating-color) 50%, var(--rui-color-border) 50%);
   -webkit-background-clip: text;
   background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 /* Steps active state -------------------------------------------------- */
 .rui-steps-item[data-active="true"] {
   font-weight: 600;
 }
-.rui-steps-item[data-active="true"]::marker {
-  color: var(--rui-color-primary);
+/* The dead ::marker rule that used to sit here is gone — list-style: none means
+   there is no marker box, so the active accent never rendered. The badge is a
+   ::before, so the ring goes there instead. */
+.rui-steps-item[data-active="true"]::before {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-primary) 25%, transparent);
 }
+.rui-steps-item[data-active="true"] .rui-steps-title { color: var(--rui-color-text); }
 
 /* ====================================================================== */
 /* Advanced components (DataGrid, CalendarView, Carousel, Media, ...)    */
@@ -7280,9 +8527,9 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   align-items: center;
   padding: 10px 14px;
   background: color-mix(in srgb, var(--rui-color-primary) 8%, var(--rui-color-surface, #fff));
-  border: 1px solid color-mix(in srgb, var(--rui-color-primary) 25%, var(--rui-color-border));
+  border: var(--rui-border-width) solid color-mix(in srgb, var(--rui-color-primary) 25%, var(--rui-color-border));
   border-radius: var(--rui-radius-md, 8px);
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
 .rui-data-grid-bulk-count {
   font-weight: 600;
@@ -7292,7 +8539,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-data-grid-export {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 12px; border-radius: var(--rui-radius-md, 8px);
-  border: 1px solid var(--rui-color-border); background: var(--rui-color-surface);
+  border: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface);
   cursor: pointer; font-size: 0.85rem;
 }
 .rui-data-grid-export:hover { border-color: var(--rui-color-primary); color: var(--rui-color-primary); }
@@ -7306,7 +8553,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   position: relative;
   overflow: auto;
   max-width: 100%;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   background: var(--rui-color-surface, var(--rui-color-bg));
 }
@@ -7314,14 +8561,14 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
 }
 .rui-data-grid-caption {
   text-align: left;
   caption-side: top;
   padding: 12px 14px 8px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   color: var(--rui-color-text);
   background: var(--rui-color-surface, var(--rui-color-bg));
 }
@@ -7336,22 +8583,27 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--rui-color-text-muted);
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
   padding: 10px 12px;
   white-space: nowrap;
 }
 .rui-data-grid-table thead th[data-align="right"] { text-align: right; }
 .rui-data-grid-table thead th[data-align="center"] { text-align: center; }
 .rui-data-grid-table thead th[data-active="true"] { color: var(--rui-color-primary); }
+/* Frozen first column. The three sticky layers must be ordered
+   body-frozen < header-row < header-corner, or the frozen column paints over
+   the sticky header when you scroll down. It previously read 3 / 2 / 4, so the
+   body cells (3) beat the header (2) and slid across it. */
 .rui-data-grid[data-sticky-first="true"] tbody td:first-child,
 .rui-data-grid[data-sticky-first="true"] thead th:first-child {
   position: sticky;
   left: 0;
   background: var(--rui-color-surface, var(--rui-color-bg));
-  z-index: 3;
+  z-index: 1;
   box-shadow: 1px 0 0 var(--rui-color-border);
 }
-.rui-data-grid[data-sticky-first="true"] thead th:first-child { z-index: 4; }
+/* The corner cell is in both sticky axes, so it has to beat the header row. */
+.rui-data-grid[data-sticky-first="true"] thead th:first-child { z-index: 3; }
 .rui-data-grid[data-sticky-header="false"] thead th { position: static; }
 .rui-data-grid-cell-select {
   width: 36px;
@@ -7366,7 +8618,7 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 .rui-data-grid-table tbody td {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
   vertical-align: middle;
   color: var(--rui-color-text);
 }
@@ -7374,8 +8626,10 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 .rui-data-grid[data-density="compact"] .rui-data-grid-table tbody td { padding: 6px 10px; }
 .rui-data-grid-table tbody td[data-align="right"] { text-align: right; font-variant-numeric: tabular-nums; }
 .rui-data-grid-table tbody td[data-align="center"] { text-align: center; }
+/* text-align: right to match Table — swapping Table for DataGrid to gain sorting
+   used to silently left-align every money column. */
 .rui-data-grid-table tbody td[data-format="number"],
-.rui-data-grid-table tbody td[data-format="currency"] { font-variant-numeric: tabular-nums; }
+.rui-data-grid-table tbody td[data-format="currency"] { text-align: right; font-variant-numeric: tabular-nums; }
 .rui-data-grid-table tbody tr:last-child td { border-bottom: none; }
 .rui-data-grid[data-striped="true"] tbody tr:nth-child(even) td {
   background: color-mix(in srgb, var(--rui-color-text) 2%, transparent);
@@ -7402,20 +8656,20 @@ button.rui-person-chip:hover { background: color-mix(in srgb, var(--rui-color-pr
 }
 .rui-data-grid-sort:hover { color: var(--rui-color-primary); }
 .rui-data-grid-sort-icon {
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   opacity: 0.55;
 }
 th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-data-grid-filter-row td {
   padding: 6px 10px 10px;
   background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 2%, var(--rui-color-surface, #fff)));
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
 }
 .rui-data-grid-filter {
   width: 100%;
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   padding: 5px 10px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: 999px;
   background: var(--rui-color-surface, var(--rui-color-bg));
   color: inherit;
@@ -7426,24 +8680,27 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   text-align: center;
   padding: 36px 16px;
   color: var(--rui-color-text-muted);
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
 }
+/* A failed fetch has to read as an error, not as "no results". */
+.rui-data-grid-empty.rui-data-grid-error { color: var(--rui-color-danger-text); }
 .rui-data-grid-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   padding: 2px 4px;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
 .rui-data-grid-footer-summary { color: var(--rui-color-text-muted); }
+.rui-data-grid-per-page { font: inherit; padding: 2px 6px; }
 .rui-data-grid-footer-buttons {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 .rui-data-grid-page-button {
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   background: var(--rui-color-surface, var(--rui-color-bg));
   color: inherit;
   padding: 4px 10px;
@@ -7475,9 +8732,10 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   gap: 8px;
   padding: 0 4px;
 }
+.rui-calendar-nav { display: flex; align-items: center; gap: 4px; }
 .rui-calendar-title {
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--rui-font-size-15);
   color: var(--rui-color-text);
 }
 .rui-calendar-weekrow {
@@ -7488,7 +8746,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-calendar-weekday {
   padding: 6px 8px;
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -7500,7 +8758,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 1px;
   background: var(--rui-color-border);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   overflow: hidden;
 }
@@ -7527,12 +8785,24 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   background: color-mix(in srgb, var(--rui-color-text) 2%, var(--rui-color-surface, var(--rui-color-bg)));
 }
 .rui-calendar-day[data-today="true"] { box-shadow: inset 0 0 0 2px var(--rui-color-primary); }
+/* Day cells became div role=gridcell (so event chips could be real buttons
+   inside them) and lost the UA focus ring the old button had, leaving the
+   keyboard grid navigation invisible. */
+.rui-calendar-day:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: -2px;
+  z-index: 1;
+}
 .rui-calendar-day[data-selected="true"] {
   background: color-mix(in srgb, var(--rui-color-primary) 18%, var(--rui-color-surface, var(--rui-color-bg)));
+  /* Weight + ring so selection is not signalled by fill alone; today keeps the
+     same inset ring, so the two are told apart by the bolder number. */
+  font-weight: 700;
+  box-shadow: inset 0 0 0 2px var(--rui-color-primary);
 }
 .rui-calendar-daynumber {
   font-weight: 700;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   align-self: flex-start;
 }
 .rui-calendar-day-events {
@@ -7543,7 +8813,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-calendar-event {
   display: block;
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   padding: 2px 6px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--rui-color-primary) 18%, transparent);
@@ -7553,11 +8823,11 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   text-overflow: ellipsis;
   text-align: left;
 }
-.rui-calendar-event[data-tone="success"] { background: color-mix(in srgb, var(--rui-color-success, #10b981) 18%, transparent); color: var(--rui-color-success, #10b981); }
-.rui-calendar-event[data-tone="warning"] { background: color-mix(in srgb, var(--rui-color-warning, #f59e0b) 18%, transparent); color: var(--rui-color-warning, #f59e0b); }
-.rui-calendar-event[data-tone="danger"] { background: color-mix(in srgb, var(--rui-color-danger, #ef4444) 18%, transparent); color: var(--rui-color-danger, #ef4444); }
-.rui-calendar-event[data-tone="info"] { background: color-mix(in srgb, var(--rui-color-info, #06b6d4) 18%, transparent); color: var(--rui-color-info, #06b6d4); }
-.rui-calendar-event-more { font-size: 11px; color: var(--rui-color-text-muted); padding: 0 2px; }
+.rui-calendar-event[data-tone="success"] { background: color-mix(in srgb, var(--rui-color-success, #10b981) 18%, transparent); color: var(--rui-color-success-text); }
+.rui-calendar-event[data-tone="warning"] { background: color-mix(in srgb, var(--rui-color-warning, #f59e0b) 18%, transparent); color: var(--rui-color-warning-text); }
+.rui-calendar-event[data-tone="danger"] { background: color-mix(in srgb, var(--rui-color-danger, #ef4444) 18%, transparent); color: var(--rui-color-danger-text); }
+.rui-calendar-event[data-tone="info"] { background: color-mix(in srgb, var(--rui-color-info, #06b6d4) 18%, transparent); color: var(--rui-color-info-text); }
+.rui-calendar-event-more { font-size: var(--rui-font-size-11); color: var(--rui-color-text-muted); padding: 0 2px; }
 
 /* ActivityLog / AuditTrail ------------------------------------------- */
 .rui-activity-log,
@@ -7593,7 +8863,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   height: 32px;
   border-radius: 50%;
   background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 5%, var(--rui-color-surface, #fff)));
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -7635,16 +8905,22 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-activity-log-time,
 .rui-audit-trail-time {
   color: var(--rui-color-text-muted);
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   margin-left: auto;
   white-space: nowrap;
 }
 .rui-activity-log-description,
 .rui-audit-trail-description {
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   color: var(--rui-color-text-muted);
   margin: 0;
 }
+/* The audit variant's meta is monospace; the default variant's had no CSS at all,
+   so IP / browser / request id rendered as unstyled inline text in a non-audit
+   feed. Block + small + muted, without claiming the monospace chip. */
+.rui-activity-log-meta { display: block; font-size: var(--rui-font-size-11); color: var(--rui-color-text-muted); }
+.rui-activity-log-time,
+.rui-audit-trail-time { font-variant-numeric: tabular-nums; }
 .rui-audit-trail-meta {
   font-family: var(--rui-font-family-mono, ui-monospace, SFMono-Regular, monospace);
   font-size: 11.5px;
@@ -7659,7 +8935,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 /* ComparisonTable ---------------------------------------------------- */
 .rui-comparison-table {
   width: 100%;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   overflow: hidden;
   background: var(--rui-color-surface, var(--rui-color-bg));
@@ -7668,13 +8944,13 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
 }
 .rui-comparison-table th,
 .rui-comparison-table td {
   padding: 12px 14px;
   text-align: left;
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
   vertical-align: middle;
 }
 .rui-comparison-table tr:last-child td { border-bottom: none; }
@@ -7698,7 +8974,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-comparison-table-feature-label { font-weight: 600; }
 .rui-comparison-table-feature-hint {
   display: block;
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
   margin-top: 2px;
   font-weight: 400;
@@ -7708,11 +8984,11 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
 }
-.rui-comparison-yes { color: var(--rui-color-success, #10b981); font-size: 18px; }
-.rui-comparison-no { color: var(--rui-color-text-muted); font-size: 18px; }
+.rui-comparison-yes { color: var(--rui-color-success-text); font-size: var(--rui-font-size-18); }
+.rui-comparison-no { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-18); }
 
 /* InfiniteList ------------------------------------------------------- */
 .rui-infinite-list {
@@ -7732,7 +9008,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   gap: 6px;
   padding: 16px;
   color: var(--rui-color-text-muted);
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
 .rui-infinite-list-spin {
   animation: rui-spin 0.9s linear infinite;
@@ -7740,13 +9016,13 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 @keyframes rui-spin { to { transform: rotate(360deg); } }
 .rui-infinite-list-load-more {
   background: var(--rui-color-surface, var(--rui-color-bg));
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   color: inherit;
   padding: 6px 14px;
   border-radius: 999px;
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
 .rui-infinite-list-load-more:hover { border-color: var(--rui-color-primary); color: var(--rui-color-primary); }
 
@@ -7770,9 +9046,17 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   height: 100%;
   outline: none;
 }
+/* Restore a visible focus indicator: the rule above removes the UA outline
+   and nothing replaced it, leaving this surface with no focus affordance at
+   all for keyboard users (WCAG 2.4.7). */
+.rui-video-player-video:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring, var(--rui-color-primary));
+  outline-offset: 2px;
+}
+
 .rui-video-player-caption {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   color: var(--rui-color-text-muted);
 }
 .rui-audio-player {
@@ -7780,7 +9064,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   align-items: center;
   gap: 14px;
   padding: 12px 14px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   background: var(--rui-color-surface, var(--rui-color-bg));
 }
@@ -7789,9 +9073,10 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   align-items: center;
   gap: 10px;
   min-width: 0;
-  flex-shrink: 0;
+  flex: 0 1 auto;
 }
 .rui-audio-player-icon {
+  flex-shrink: 0;
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -7800,7 +9085,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: var(--rui-font-size-lg);
 }
 .rui-audio-player-text {
   display: flex;
@@ -7810,16 +9095,17 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-audio-player-title {
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .rui-audio-player-artist {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
 }
 .rui-audio-player-audio {
+  min-width: 180px;
   flex: 1;
   min-width: 0;
   height: 36px;
@@ -7834,6 +9120,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   gap: 10px;
 }
 .rui-carousel-frame {
+  touch-action: pan-y;  /* let vertical page scroll through the swipe handler */
   position: relative;
   width: 100%;
   overflow: hidden;
@@ -7845,7 +9132,8 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   width: 100%;
   height: 100%;
   transition: transform 0.4s ease;
-  will-change: transform;
+  /* will-change removed: it made the track a containing block, trapping
+     position: fixed descendants (audit D1084). */
 }
 .rui-carousel-slide {
   flex: 0 0 100%;
@@ -7883,7 +9171,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   right: 0;
   bottom: 0;
   padding: 14px 18px;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   color: #fff;
   background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.6) 100%);
   margin: 0;
@@ -7902,7 +9190,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   z-index: 1;
 }
 .rui-carousel-arrow:hover { background: rgba(0, 0, 0, 0.75); }
@@ -7914,6 +9202,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   gap: 6px;
 }
 .rui-carousel-dot {
+  position: relative;
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -7923,6 +9212,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   padding: 0;
   transition: background 120ms ease, transform 120ms ease;
 }
+.rui-carousel-empty { display: flex; align-items: center; justify-content: center; min-height: 120px; padding: 24px; border: 1px dashed var(--rui-color-border); border-radius: var(--rui-radius-md); color: var(--rui-color-text-muted); font-size: var(--rui-font-size-13); text-align: center; }
 .rui-carousel-dot[data-active="true"] {
   background: var(--rui-color-primary);
   transform: scale(1.3);
@@ -7939,7 +9229,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-gallery[data-columns="4"] { --rui-gallery-columns: 4; }
 .rui-gallery[data-columns="5"] { --rui-gallery-columns: 5; }
 .rui-gallery[data-columns="6"] { --rui-gallery-columns: 6; }
-@media (max-width: 720px) {
+${below("md")} {
   .rui-gallery { grid-template-columns: repeat(min(var(--rui-gallery-columns, 3), 2), 1fr); }
 }
 .rui-gallery-tile {
@@ -7947,15 +9237,17 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   overflow: hidden;
   border-radius: var(--rui-radius-md, 8px);
   background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 5%, var(--rui-color-surface, #fff)));
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   padding: 0;
   margin: 0;
-  cursor: pointer;
+  /* cursor moved to [data-clickable] — a non-clickable tile must not
+     advertise interactivity (audit D1094). */
   font: inherit;
   color: inherit;
   transition: transform 160ms ease, border-color 160ms ease;
 }
-.rui-gallery-tile:hover { transform: scale(1.02); border-color: var(--rui-color-primary); }
+.rui-gallery-tile[data-clickable="true"] { cursor: pointer; }
+.rui-gallery-tile[data-clickable="true"]:hover { transform: scale(1.02); border-color: var(--rui-color-primary); }
 .rui-gallery-tile img {
   width: 100%;
   height: 100%;
@@ -7978,17 +9270,18 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   bottom: 0;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
   color: #fff;
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   padding: 16px 10px 8px;
   text-align: left;
   pointer-events: none;
 }
+.rui-gallery-empty { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; min-height: 120px; padding: 24px; color: var(--rui-color-text-muted); font-size: var(--rui-font-size-13); text-align: center; }
 
 .rui-lightbox-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.85);
-  z-index: 9999;
+  z-index: var(--rui-z-top);
   display: none;
   align-items: center;
   justify-content: center;
@@ -8032,7 +9325,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: var(--rui-font-size-title);
   transition: background 120ms ease;
 }
 .rui-lightbox-arrow:hover,
@@ -8043,11 +9336,11 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-lightbox-caption {
   color: #fff;
   text-align: center;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
 }
 .rui-lightbox-counter {
   color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -8062,7 +9355,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   width: 100%;
   border-radius: var(--rui-radius-md, 8px);
   overflow: hidden;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 5%, var(--rui-color-surface, #fff)));
   position: relative;
 }
@@ -8079,7 +9372,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   align-items: center;
   justify-content: center;
   color: var(--rui-color-text-muted);
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
 .rui-map-markers {
   list-style: none;
@@ -8094,10 +9387,10 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: 999px;
   background: var(--rui-color-surface, var(--rui-color-bg));
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
 }
 .rui-map-marker-icon { color: var(--rui-color-primary); }
 .rui-map-caption {
@@ -8108,7 +9401,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 
 /* Editors: RichTextEditor / CodeEditor ----------------------------- */
 .rui-rich-text {
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   overflow: hidden;
   background: var(--rui-color-surface, var(--rui-color-bg));
@@ -8121,7 +9414,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   flex-wrap: wrap;
   gap: 2px;
   padding: 6px 8px;
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
   background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 4%, var(--rui-color-surface, #fff)));
 }
 .rui-rich-text-tool {
@@ -8135,10 +9428,18 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   transition: background 120ms ease, color 120ms ease;
 }
-.rui-rich-text-tool:hover { background: color-mix(in srgb, var(--rui-color-text) 8%, transparent); color: var(--rui-color-text); }
+/* :not(:disabled) — a readonly/disabled editor renders every tool disabled, and
+   they were still lighting up under the pointer. */
+.rui-rich-text-tool:hover:not(:disabled) { background: color-mix(in srgb, var(--rui-color-text) 8%, transparent); color: var(--rui-color-text); }
+/* queryCommandState is reflected into aria-pressed on every tool; without a rule
+   a sighted user got no signal that Bold is active at the caret. */
+.rui-rich-text-tool[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 14%, transparent);
+  color: var(--rui-color-primary);
+}
 .rui-rich-text-content {
   padding: 14px 16px;
   outline: 0;
@@ -8147,6 +9448,14 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   overflow-y: auto;
   position: relative;
 }
+/* Restore a visible focus indicator: the rule above removes the UA outline
+   and nothing replaced it, leaving this surface with no focus affordance at
+   all for keyboard users (WCAG 2.4.7). */
+.rui-rich-text-content:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring, var(--rui-color-primary));
+  outline-offset: 2px;
+}
+
 .rui-rich-text-content[data-empty="true"]::before {
   content: attr(data-placeholder);
   color: var(--rui-color-text-muted);
@@ -8158,8 +9467,8 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-rich-text-content > :first-child { margin-top: 0; }
 .rui-rich-text-content > :last-child { margin-bottom: 0; }
 .rui-rich-text-content :is(h1,h2,h3) { margin: 0.6em 0 0.4em; line-height: 1.25; }
-.rui-rich-text-content h2 { font-size: 18px; font-weight: 700; }
-.rui-rich-text-content h3 { font-size: 16px; font-weight: 700; }
+.rui-rich-text-content h2 { font-size: var(--rui-font-size-18); font-weight: 700; }
+.rui-rich-text-content h3 { font-size: var(--rui-font-size-lg); font-weight: 700; }
 .rui-rich-text-content p { margin: 0 0 0.6em; line-height: 1.55; }
 .rui-rich-text-content blockquote {
   border-left: 3px solid var(--rui-color-border);
@@ -8170,12 +9479,12 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-rich-text-content :is(ul, ol) { padding-left: 20px; margin: 0 0 0.6em; }
 
 .rui-code-editor {
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   overflow: hidden;
   background: var(--rui-color-surface, var(--rui-color-bg));
   font-family: var(--rui-font-family-mono, ui-monospace, SFMono-Regular, monospace);
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   display: flex;
   flex-direction: column;
 }
@@ -8185,29 +9494,36 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   justify-content: space-between;
   padding: 6px 12px;
   background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 4%, var(--rui-color-surface, #fff)));
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
 }
 .rui-code-editor-language {
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--rui-color-text-muted);
 }
+/* minmax(0, …) rather than a bare 1fr: the grid item's automatic minimum is
+   auto, so a long unwrapped line would push the code out of the overflow:
+   hidden root. The component also sets min-width: 0 inline; stating it in the
+   track means a future child that forgets cannot regress it. */
 .rui-code-editor-body {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
 }
-.rui-code-editor[data-gutter="false"] .rui-code-editor-body { grid-template-columns: 1fr; }
+.rui-code-editor[data-gutter="false"] .rui-code-editor-body { grid-template-columns: minmax(0, 1fr); }
 .rui-code-editor-gutter {
   background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 3%, var(--rui-color-surface, #fff)));
   color: var(--rui-color-text-muted);
   padding: 12px 10px;
   text-align: right;
   user-select: none;
-  border-right: 1px solid var(--rui-color-border);
-  line-height: 1.6;
-  font-size: 12px;
+  border-right: var(--rui-border-width) solid var(--rui-color-border);
+  /* Must match the textarea EXACTLY, in absolute units — a unitless 1.6 resolves
+     against each element's own font-size, so a 12px gutter beside a 13px textarea
+     drifted a pixel per line and the numbers walked off their rows. */
+  line-height: 20px;
+  font-size: var(--rui-font-size-13);
   display: flex;
   flex-direction: column;
 }
@@ -8220,10 +9536,18 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   background: transparent;
   color: inherit;
   font: inherit;
-  line-height: 1.6;
+  line-height: 20px;
   white-space: pre;
   overflow-x: auto;
 }
+/* Restore a visible focus indicator: the rule above removes the UA outline
+   and nothing replaced it, leaving this surface with no focus affordance at
+   all for keyboard users (WCAG 2.4.7). */
+.rui-code-editor-textarea:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring, var(--rui-color-primary));
+  outline-offset: 2px;
+}
+
 
 /* ContextMenu / ColorPicker / PinInput etc ------------------------ */
 .rui-context-menu {
@@ -8237,10 +9561,10 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-context-menu-pop {
   position: absolute;
-  z-index: 50;
+  z-index: var(--rui-z-dropdown);
   min-width: 200px;
   background: var(--rui-color-surface, var(--rui-color-bg));
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   box-shadow: var(--rui-shadow-md, 0 12px 32px rgba(0, 0, 0, 0.18));
   padding: 4px;
@@ -8263,13 +9587,16 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   text-align: left;
   width: 100%;
 }
-.rui-context-menu-pop .rui-menu-item:hover { background: color-mix(in srgb, var(--rui-color-text) 6%, transparent); }
-.rui-context-menu-pop .rui-menu-item[data-variant="danger"] { color: var(--rui-color-danger, #ef4444); }
+/* This scoped rule dropped the :not(:disabled) guard the base .rui-menu-item:hover
+   rule has and won on source order, so a disabled item painted a hover
+   background even though no handler was ever attached. */
+.rui-context-menu-pop .rui-menu-item:hover:not(:disabled) { background: color-mix(in srgb, var(--rui-color-text) 6%, transparent); }
+.rui-context-menu-pop .rui-menu-item[data-variant="danger"] { color: var(--rui-color-danger-text); }
 .rui-context-menu-pop .rui-menu-item[disabled] { opacity: 0.5; cursor: not-allowed; }
 .rui-context-menu-pop .rui-menu-item-icon { color: var(--rui-color-text-muted); width: 16px; text-align: center; }
 .rui-context-menu-pop .rui-menu-item-shortcut {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   color: var(--rui-color-text-muted);
   font-family: var(--rui-font-family-mono, monospace);
 }
@@ -8286,7 +9613,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-color-picker[data-disabled="true"] { opacity: 0.6; }
 .rui-color-picker-label {
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   font-weight: 600;
   color: var(--rui-color-text);
 }
@@ -8298,7 +9625,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-color-picker-color {
   width: 40px;
   height: 36px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: 8px;
   padding: 2px;
   cursor: pointer;
@@ -8307,10 +9634,10 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-color-picker-hex {
   flex: 1;
   padding: 8px 12px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   font-family: var(--rui-font-family-mono, monospace);
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   background: var(--rui-color-surface, var(--rui-color-bg));
   color: inherit;
 }
@@ -8342,10 +9669,10 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   width: 44px;
   height: 52px;
   text-align: center;
-  font-size: 20px;
+  font-size: var(--rui-font-size-20);
   font-weight: 600;
   font-family: var(--rui-font-family-mono, monospace);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border-control, var(--rui-color-border));
   border-radius: var(--rui-radius-md, 8px);
   background: var(--rui-color-surface, var(--rui-color-bg));
   color: inherit;
@@ -8369,12 +9696,12 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-password-input-field {
   width: 100%;
   padding: 8px 40px 8px 12px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   background: var(--rui-color-surface, var(--rui-color-bg));
   color: inherit;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   outline: none;
 }
 .rui-password-input-field:focus { border-color: var(--rui-color-primary); }
@@ -8416,7 +9743,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-password-input-strength[data-score="3"] .rui-password-input-strength-bar[data-filled="true"] { background: color-mix(in srgb, var(--rui-color-success, #10b981) 70%, var(--rui-color-warning, #f59e0b)); }
 .rui-password-input-strength[data-score="4"] .rui-password-input-strength-bar[data-filled="true"] { background: var(--rui-color-success, #10b981); }
 .rui-password-input-strength-label {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
   min-width: 60px;
   text-align: right;
@@ -8428,7 +9755,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border-control, var(--rui-color-border));
   border-radius: var(--rui-radius-md, 8px);
   background: var(--rui-color-surface, var(--rui-color-bg));
   min-height: 40px;
@@ -8443,7 +9770,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   color: var(--rui-color-primary);
   padding: 3px 4px 3px 10px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   font-weight: 500;
 }
 .rui-tag-input-remove {
@@ -8451,7 +9778,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   background: transparent;
   cursor: pointer;
   color: inherit;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   padding: 0;
   width: 18px;
   height: 18px;
@@ -8482,26 +9809,26 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-mention-input-field {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   background: var(--rui-color-surface, var(--rui-color-bg));
   color: inherit;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   resize: vertical;
   outline: none;
 }
 .rui-mention-input-field:focus { border-color: var(--rui-color-primary); }
 .rui-mention-input-suggestions {
   position: absolute;
-  z-index: 50;
+  z-index: var(--rui-z-dropdown);
   left: 0;
   right: 0;
   top: 100%;
   margin-top: 4px;
   min-width: 220px;
   background: var(--rui-color-surface, var(--rui-color-bg));
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   box-shadow: var(--rui-shadow-md, 0 12px 32px rgba(0, 0, 0, 0.18));
   padding: 4px;
@@ -8521,7 +9848,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   cursor: pointer;
   color: inherit;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -8532,10 +9859,13 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   background: color-mix(in srgb, var(--rui-color-primary) 14%, transparent);
   color: var(--rui-color-text);
 }
+/* The searching / no-results row replaces the options, so it has to share their
+   padding and size instead of sitting flush against the panel edge. */
+.rui-mention-input-status { padding: 8px 12px; font-size: var(--rui-font-size-13); color: var(--rui-color-text-muted); }
 .rui-mention-input-option-label { font-weight: 500; }
 .rui-mention-input-option-handle {
   color: var(--rui-color-text-muted);
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   font-family: var(--rui-font-family-mono);
 }
 
@@ -8546,9 +9876,8 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   flex-direction: column;
   gap: 6px;
 }
-.rui-time-picker-label,
-.rui-datetime-picker-label {
-  font-size: 13px;
+.rui-time-picker-label {
+  font-size: var(--rui-font-size-13);
   font-weight: 600;
   color: var(--rui-color-text);
 }
@@ -8557,12 +9886,12 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-masked-input {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border-control, var(--rui-color-border));
   border-radius: var(--rui-radius-md, 8px);
   background: var(--rui-color-surface, var(--rui-color-bg));
   color: inherit;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   outline: none;
 }
 .rui-time-picker-input:focus,
@@ -8582,12 +9911,12 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-form-section-label {
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--rui-font-size-15);
   margin: 0;
   color: var(--rui-color-text);
 }
 .rui-form-section-helper {
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   color: var(--rui-color-text-muted);
   margin: 0;
 }
@@ -8597,7 +9926,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   gap: 12px;
 }
 .rui-fieldset {
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   padding: 12px 16px 16px;
   margin: 0;
@@ -8605,27 +9934,35 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   flex-direction: column;
   gap: 12px;
   background: var(--rui-color-surface, var(--rui-color-bg));
+  /* fieldset carries a UA min-inline-size: min-content, so a wide child (a Table)
+     stops it shrinking inside a grid track and the page scrolls sideways instead
+     of the table's own scroll wrapper taking over. */
+  min-width: 0;
 }
 .rui-fieldset-legend {
   font-weight: 700;
   padding: 0 6px;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   color: var(--rui-color-text);
 }
 .rui-fieldset-helper {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
   margin: 0;
 }
 .rui-validation-summary {
   padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--rui-color-danger, #ef4444) 30%, var(--rui-color-border));
+  border: var(--rui-border-width) solid color-mix(in srgb, var(--rui-color-danger, #ef4444) 30%, var(--rui-color-border));
   border-radius: var(--rui-radius-md, 8px);
   background: color-mix(in srgb, var(--rui-color-danger, #ef4444) 8%, var(--rui-color-surface, var(--rui-color-bg)));
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+/* The author-level display: flex above beats the UA [hidden] rule, so the
+   errors-empty branch rendered an empty danger-tinted box on every clean form.
+   Same guard .rui-error-banner[hidden] already uses. */
+.rui-validation-summary[hidden] { display: none; }
 .rui-validation-summary[data-tone="warning"] {
   border-color: color-mix(in srgb, var(--rui-color-warning, #f59e0b) 30%, var(--rui-color-border));
   background: color-mix(in srgb, var(--rui-color-warning, #f59e0b) 8%, var(--rui-color-surface, var(--rui-color-bg)));
@@ -8635,11 +9972,11 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   align-items: center;
   gap: 8px;
   font-weight: 700;
-  font-size: 14px;
-  color: var(--rui-color-danger, #ef4444);
+  font-size: var(--rui-font-size-base);
+  color: var(--rui-color-danger-text);
 }
-.rui-validation-summary[data-tone="warning"] .rui-validation-summary-title { color: var(--rui-color-warning, #f59e0b); }
-.rui-validation-summary-icon { font-size: 16px; }
+.rui-validation-summary[data-tone="warning"] .rui-validation-summary-title { color: var(--rui-color-warning-text); }
+.rui-validation-summary-icon { font-size: var(--rui-font-size-lg); }
 .rui-validation-summary-list {
   margin: 0;
   padding-left: 22px;
@@ -8649,6 +9986,10 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   flex-direction: column;
   gap: 3px;
 }
+/* Entries that carry a field render as jump links; the UA blue would not match
+   the plain-text entries sitting next to them in the same list. */
+.rui-validation-summary-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.rui-validation-summary-link:hover { text-decoration-thickness: 2px; }
 
 /* MultiStepForm ------------------------------------------------ */
 .rui-multi-step-form {
@@ -8679,7 +10020,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   margin: 0;
   padding: 0;
   background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 3%, var(--rui-color-surface, #fff)));
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   overflow: hidden;
 }
@@ -8690,14 +10031,14 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   padding: 12px 16px 12px 52px;
   position: relative;
   color: var(--rui-color-text-muted);
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
 .rui-multi-step-form-steps[data-layout="row"] .rui-steps-item {
-  border-right: 1px solid var(--rui-color-border);
+  border-right: var(--rui-border-width) solid var(--rui-color-border);
 }
 .rui-multi-step-form-steps[data-layout="row"] .rui-steps-item:last-child { border-right: none; }
 .rui-multi-step-form-steps[data-layout="column"] .rui-steps-item {
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
 }
 .rui-multi-step-form-steps[data-layout="column"] .rui-steps-item:last-child { border-bottom: none; }
 .rui-multi-step-form-steps .rui-steps-item::before {
@@ -8719,7 +10060,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-multi-step-form-steps .rui-steps-item[data-complete="true"]::before {
   background: var(--rui-color-success, #10b981);
-  color: #fff;
+  color: var(--rui-color-on-success);
 }
 .rui-multi-step-form-steps .rui-steps-item .rui-steps-title {
   font-weight: 700;
@@ -8728,7 +10069,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   line-height: 1.2;
 }
 .rui-multi-step-form-steps .rui-steps-item .rui-steps-details {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
   margin-top: 2px;
 }
@@ -8737,31 +10078,43 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   color: var(--rui-color-primary);
 }
 .rui-multi-step-form-steps .rui-steps-item[data-complete="true"] {
-  color: var(--rui-color-success, #10b981);
+  color: var(--rui-color-success-text);
 }
 .rui-multi-step-form-steps .rui-steps-item[data-complete="true"] .rui-steps-title::before {
   content: "✓ ";
   margin-right: 2px;
 }
+/* A completed step is now a real control (role=button + tabindex), but an li has
+   no affordance of its own — the caret cursor and the missing ring are the tell. */
+.rui-multi-step-form-steps .rui-steps-item[data-clickable="true"] { cursor: pointer; }
+.rui-multi-step-form-steps .rui-steps-item[data-clickable="true"]:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+}
+/* Both sit in the wizard's 1fr column-layout track, whose automatic minimum is
+   auto — a wide step (Table, pre, an API key) would size the track to its
+   min-content width and blow the whole wizard out of its container. */
 .rui-multi-step-form-body {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-width: 0;
 }
 .rui-multi-step-form-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  min-width: 0;
   padding-top: 8px;
-  border-top: 1px solid var(--rui-color-border);
+  border-top: var(--rui-border-width) solid var(--rui-color-border);
 }
 .rui-multi-step-form-progress {
   color: var(--rui-color-text-muted);
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   font-variant-numeric: tabular-nums;
 }
-@media (max-width: 720px) {
+${below("md")} {
   .rui-multi-step-form[data-layout="column"] {
     grid-template-columns: 1fr;
     grid-template-areas:
@@ -8771,38 +10124,10 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   }
 }
 
-/* Advanced charts (Area/Gauge/Heatmap/Radar/Scatter/Histogram) -- */
-.rui-chart { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-.rui-chart-title { font-size: 13px; font-weight: 600; color: var(--rui-color-text); }
-.rui-chart-svg { display: block; width: 100%; height: auto; }
-.rui-chart-label { font-size: 11px; fill: var(--rui-color-text-muted, #64748b); }
-.rui-chart-tick { font-size: 10.5px; fill: var(--rui-color-text-muted, #64748b); }
-.rui-chart-empty {
-  padding: 24px;
-  text-align: center;
-  color: var(--rui-color-text-muted);
-  font-size: 13px;
-}
-.rui-chart-legend {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  font-size: 12.5px;
-  color: var(--rui-color-text-muted);
-}
-.rui-chart-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.rui-chart-legend-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  display: inline-block;
-}
+/* Advanced charts (Area/Gauge/Heatmap/Radar/Scatter/Histogram) --
+   The .rui-chart* selectors that used to be re-declared here now live in the one
+   canonical Charts block near the top of the sheet. */
 
-.rui-area-chart,
 .rui-radar-chart,
 .rui-scatter-chart,
 .rui-histogram { width: 100%; }
@@ -8821,18 +10146,18 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   transition: stroke-dasharray 400ms ease;
 }
 .rui-gauge-value {
-  font-size: 22px;
+  font-size: var(--rui-font-size-title);
   font-weight: 700;
   color: var(--rui-color-text);
   margin-top: -6px;
 }
 .rui-gauge[data-tone="primary"] .rui-gauge-value { color: var(--rui-color-primary); }
-.rui-gauge[data-tone="success"] .rui-gauge-value { color: var(--rui-color-success, #10b981); }
-.rui-gauge[data-tone="warning"] .rui-gauge-value { color: var(--rui-color-warning, #f59e0b); }
-.rui-gauge[data-tone="danger"] .rui-gauge-value { color: var(--rui-color-danger, #ef4444); }
-.rui-gauge[data-tone="info"] .rui-gauge-value { color: var(--rui-color-info, #06b6d4); }
+.rui-gauge[data-tone="success"] .rui-gauge-value { color: var(--rui-color-success-text); }
+.rui-gauge[data-tone="warning"] .rui-gauge-value { color: var(--rui-color-warning-text); }
+.rui-gauge[data-tone="danger"] .rui-gauge-value { color: var(--rui-color-danger-text); }
+.rui-gauge[data-tone="info"] .rui-gauge-value { color: var(--rui-color-info-text); }
 .rui-gauge-caption {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
 }
 
@@ -8841,18 +10166,22 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* A 12- or 52-column matrix now sets --rui-heatmap-cols instead of wrapping into
+     phantom rows, but a 0 floor crushed those columns to a few px — well under the
+     32px the cells declare. A 28px floor plus this scroller lets it scroll. */
+  overflow-x: auto;
 }
 .rui-heatmap-row {
   display: grid;
-  grid-template-columns: 56px repeat(var(--rui-heatmap-cols, 7), minmax(0, 1fr));
+  grid-template-columns: 56px repeat(var(--rui-heatmap-cols, 7), minmax(28px, 1fr));
   gap: 4px;
 }
-.rui-heatmap-row-header { font-size: 11px; color: var(--rui-color-text-muted); }
+.rui-heatmap-row-header { font-size: var(--rui-font-size-11); color: var(--rui-color-text-muted); }
 .rui-heatmap-cell {
   padding: 8px 6px;
   border-radius: 4px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   font-weight: 600;
   background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 3%, var(--rui-color-surface, #fff)));
   color: var(--rui-color-text);
@@ -8866,7 +10195,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   background: transparent;
   color: var(--rui-color-text-muted);
   font-weight: 500;
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -8884,15 +10213,15 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   gap: 12px;
   padding: 40px 24px;
   background: var(--rui-color-surface, var(--rui-color-bg));
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
 }
-.rui-loading-state .rui-spinner { font-size: 32px; }
+.rui-loading-state .rui-spinner { font-size: var(--rui-font-size-32); }
 .rui-error-state-icon { color: var(--rui-color-danger, #ef4444); font-size: 36px; }
 .rui-success-state-icon { color: var(--rui-color-success, #10b981); font-size: 36px; }
 .rui-loading-state-title,
 .rui-error-state-title,
-.rui-success-state-title { font-size: 18px; font-weight: 700; margin: 0; color: var(--rui-color-text); }
+.rui-success-state-title { font-size: var(--rui-font-size-18); font-weight: 700; margin: 0; color: var(--rui-color-text); }
 .rui-loading-state-description,
 .rui-error-state-description,
 .rui-success-state-description { color: var(--rui-color-text-muted); margin: 0; max-width: 36em; line-height: 1.55; }
@@ -8911,14 +10240,14 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   gap: 6px;
 }
 .rui-onboarding-checklist-title {
-  font-size: 15px;
+  font-size: var(--rui-font-size-15);
   font-weight: 700;
   margin: 0;
   color: var(--rui-color-text);
 }
 .rui-onboarding-checklist-subtitle {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   color: var(--rui-color-text-muted);
 }
 .rui-onboarding-checklist-progress {
@@ -8940,7 +10269,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   transition: width 240ms ease;
 }
 .rui-onboarding-checklist-meta {
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -8959,7 +10288,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   background: var(--rui-color-surface, var(--rui-color-bg));
   transition: border-color 120ms ease;
@@ -8978,20 +10307,20 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   align-items: center;
   justify-content: center;
   color: var(--rui-color-text-muted);
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
 }
 .rui-onboarding-checklist-item[data-done="true"] .rui-onboarding-checklist-marker {
   background: var(--rui-color-success, #10b981);
-  color: #fff;
+  color: var(--rui-color-on-success);
 }
-.rui-onboarding-checklist-marker-icon { font-size: 14px; }
+.rui-onboarding-checklist-marker-icon { font-size: var(--rui-font-size-base); }
 .rui-onboarding-checklist-body {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
-.rui-onboarding-checklist-item-title { font-weight: 600; font-size: 14px; color: var(--rui-color-text); }
+.rui-onboarding-checklist-item-title { font-weight: 600; font-size: var(--rui-font-size-base); color: var(--rui-color-text); }
 .rui-onboarding-checklist-item-description { font-size: 12.5px; color: var(--rui-color-text-muted); margin: 0; }
 
 .rui-inbox-panel {
@@ -9010,7 +10339,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   cursor: pointer;
   color: var(--rui-color-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   padding: 0;
 }
 .rui-inbox-panel-mark-all:hover { text-decoration: underline; }
@@ -9018,7 +10347,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   padding: 28px;
   text-align: center;
   color: var(--rui-color-text-muted);
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
   background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 3%, var(--rui-color-surface, #fff)));
   border-radius: var(--rui-radius-md, 8px);
 }
@@ -9031,7 +10360,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -9049,7 +10378,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
-  z-index: 9100;
+  z-index: var(--rui-z-top);
   display: none;
   align-items: center;
   justify-content: center;
@@ -9058,7 +10387,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-tour[data-open="true"] { display: flex; }
 .rui-tour-card {
   background: var(--rui-color-surface, var(--rui-color-bg));
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   padding: 24px;
   box-shadow: var(--rui-shadow-md, 0 16px 40px rgba(0, 0, 0, 0.28));
@@ -9069,27 +10398,27 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   width: 100%;
 }
 .rui-tour-step {
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--rui-color-primary);
 }
 .rui-tour-title {
-  font-size: 18px;
+  font-size: var(--rui-font-size-18);
   font-weight: 700;
   margin: 0;
   color: var(--rui-color-text);
 }
 .rui-tour-description {
-  font-size: 14px;
+  font-size: var(--rui-font-size-base);
   color: var(--rui-color-text-muted);
   line-height: 1.55;
   margin: 0;
 }
 .rui-tour-target {
   font-family: var(--rui-font-family-mono, monospace);
-  font-size: 12px;
+  font-size: var(--rui-font-size-sm);
   padding: 6px 10px;
   background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 4%, var(--rui-color-surface, #fff)));
   border-radius: 6px;
@@ -9102,7 +10431,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   justify-content: flex-end;
   margin-top: 8px;
   padding-top: 12px;
-  border-top: 1px solid var(--rui-color-border);
+  border-top: var(--rui-border-width) solid var(--rui-color-border);
 }
 .rui-tour-footer > .rui-button:first-child { margin-right: auto; }
 
@@ -9110,7 +10439,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 9000;
+  z-index: var(--rui-z-top);
   display: none;
   align-items: center;
   justify-content: center;
@@ -9119,7 +10448,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-spotlight[data-open="true"] { display: flex; }
 .rui-spotlight-card {
   background: var(--rui-color-surface, var(--rui-color-bg));
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   padding: 22px 24px;
   box-shadow: var(--rui-shadow-md, 0 16px 40px rgba(0, 0, 0, 0.28));
@@ -9129,9 +10458,13 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   max-width: 420px;
   width: 100%;
 }
-.rui-spotlight-title { font-size: 16px; font-weight: 700; margin: 0; color: var(--rui-color-text); }
+.rui-spotlight-title { font-size: var(--rui-font-size-lg); font-weight: 700; margin: 0; color: var(--rui-color-text); }
 .rui-spotlight-description { font-size: 13.5px; color: var(--rui-color-text-muted); margin: 0; line-height: 1.55; }
 .rui-spotlight-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+/* Spotlight ring: the scrim is painted by the ring's outer box-shadow so
+   the highlighted target stays fully visible (audit D0938/P0941). */
+.rui-spotlight-ring { position: fixed; border-radius: var(--rui-radius-md, 8px); box-shadow: 0 0 0 3px var(--rui-color-primary), 0 0 0 9999px rgba(0, 0, 0, 0.5); pointer-events: none; }
+.rui-spotlight[data-ring="true"] { background: transparent; }
 
 /* Sticky / ResizablePanels / MasonryGrid / TopBar -------------- */
 .rui-sticky {
@@ -9147,19 +10480,15 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   gap: 0;
   min-height: 280px;
   width: 100%;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   overflow: hidden;
   background: var(--rui-color-surface, var(--rui-color-bg));
 }
-.rui-resizable-panel {
-  overflow: auto;
-  min-width: var(--rui-resizable-min, 240px);
-  padding: 12px;
-}
+.rui-resizable-panel { overflow: auto; min-width: 0; padding: 12px; }
+.rui-resizable-panel-primary { min-width: var(--rui-resizable-min, 240px); }
 .rui-resizable-panel-secondary {
-  border-left: 0;
-}
+  border-left: 0; min-width: var(--rui-resizable-min-secondary, 0); }
 .rui-resizable-divider {
   cursor: col-resize;
   background: var(--rui-color-border);
@@ -9186,6 +10515,14 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   column-count: var(--rui-masonry-columns, 3);
   column-gap: var(--rui-masonry-gap, var(--rui-spacing-m));
 }
+/* Responsive column counts (audit P0952). The component writes the
+   --rui-masonry-columns-* vars; each breakpoint falls back to the next
+   smaller one so a partial map still cascades sensibly. */
+.rui-masonry-grid[data-responsive-columns] { column-count: var(--rui-masonry-columns-base, 1); }
+${up("sm")} { .rui-masonry-grid[data-responsive-columns] { column-count: var(--rui-masonry-columns-sm, var(--rui-masonry-columns-base, 1)); } }
+${up("md")} { .rui-masonry-grid[data-responsive-columns] { column-count: var(--rui-masonry-columns-md, var(--rui-masonry-columns-sm, var(--rui-masonry-columns-base, 1))); } }
+${up("lg")} { .rui-masonry-grid[data-responsive-columns] { column-count: var(--rui-masonry-columns-lg, var(--rui-masonry-columns-md, var(--rui-masonry-columns-sm, var(--rui-masonry-columns-base, 1)))); } }
+${up("xl")} { .rui-masonry-grid[data-responsive-columns] { column-count: var(--rui-masonry-columns-xl, var(--rui-masonry-columns-lg, var(--rui-masonry-columns-md, var(--rui-masonry-columns-sm, var(--rui-masonry-columns-base, 1))))); } }
 .rui-masonry-grid[data-columns="1"] { --rui-masonry-columns: 1; }
 .rui-masonry-grid[data-columns="2"] { --rui-masonry-columns: 2; }
 .rui-masonry-grid[data-columns="3"] { --rui-masonry-columns: 3; }
@@ -9199,10 +10536,10 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   break-inside: avoid;
   margin-bottom: var(--rui-masonry-gap, var(--rui-spacing-m));
 }
-@media (max-width: 720px) {
+${below("md")} {
   .rui-masonry-grid { column-count: min(var(--rui-masonry-columns, 3), 2); }
 }
-@media (max-width: 480px) {
+${below("xs")} {
   .rui-masonry-grid { column-count: 1; }
 }
 
@@ -9212,15 +10549,15 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   gap: 14px;
   padding: 12px 16px;
   background: var(--rui-color-surface, var(--rui-color-bg));
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   flex-wrap: wrap;
 }
-.rui-topbar[data-sticky="true"] { position: sticky; top: 0; z-index: 30; border-radius: 0; border-left: 0; border-right: 0; }
+.rui-topbar[data-sticky="true"] { position: sticky; top: 0; z-index: var(--rui-z-sticky); border-radius: 0; border-left: 0; border-right: 0; }
 .rui-topbar-side { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .rui-topbar-title-block { display: flex; flex-direction: column; gap: 2px; }
-.rui-topbar-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--rui-color-text); }
-.rui-topbar-subtitle { margin: 0; font-size: 12px; color: var(--rui-color-text-muted); }
+.rui-topbar-title { margin: 0; font-size: var(--rui-font-size-lg); font-weight: 700; color: var(--rui-color-text); }
+.rui-topbar-subtitle { margin: 0; font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); }
 .rui-topbar-center { flex: 1; min-width: 200px; justify-content: center; }
 .rui-topbar-right { margin-left: auto; }
 
@@ -9229,12 +10566,12 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
-  z-index: 40;
+  z-index: var(--rui-z-overlay);
   display: none;
 }
 .rui-app-shell-toggle {
   background: transparent;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
   padding: 4px 10px;
   cursor: pointer;
@@ -9243,16 +10580,27 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   align-items: center;
   justify-content: center;
 }
-@media (max-width: 720px) {
+${below("md")} {
+  /* Animates left, not transform, and states an explicit width. transform on the
+     drawer made it the containing block for every position: fixed descendant, so
+     a Modal or Sheet declared in the Sidebar footer was positioned against the
+     drawer box — and while closed at translateX(-100%), entirely off-screen.
+     Without a width the fixed panel also shrink-wrapped its content (the nested
+     rail's width: 100% resolves to auto against a shrink-to-fit parent), so a
+     long brand string pushed it past the viewport edge and made the trailing
+     badges unreachable. */
   .rui-app-shell[data-collapsible="true"] .rui-app-shell-sidebar {
     position: fixed;
-    inset: 0 auto 0 0;
-    z-index: 50;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
+    top: 0;
+    bottom: 0;
+    left: calc(-1 * min(300px, 85vw));
+    right: auto;
+    width: min(300px, 85vw);
+    z-index: var(--rui-z-modal);
+    transition: left 0.25s ease;
   }
   .rui-app-shell[data-collapsible="true"][data-sidebar-open="true"] .rui-app-shell-sidebar {
-    transform: translateX(0);
+    left: 0;
   }
   .rui-app-shell[data-collapsible="true"][data-sidebar-open="true"] .rui-app-shell-scrim {
     display: block;
@@ -9282,6 +10630,21 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
     max-height: 100%;
     border-radius: 0;
   }
+  /* A desktop-collapsed shell viewed on a phone used to slide out a 64px icon
+     strip with a single brand letter and no label anywhere, while the scrim
+     dimmed the whole screen. The drawer always has room for the labels. */
+  .rui-app-shell[data-collapsible="true"] .rui-app-shell-sidebar .rui-sidebar[data-collapsed="true"] { width: 100%; }
+  .rui-app-shell[data-collapsible="true"] .rui-app-shell-sidebar .rui-sidebar[data-collapsed="true"] .rui-sidebar-tagline,
+  .rui-app-shell[data-collapsible="true"] .rui-app-shell-sidebar .rui-sidebar[data-collapsed="true"] .rui-sidebar-section-label,
+  .rui-app-shell[data-collapsible="true"] .rui-app-shell-sidebar .rui-sidebar[data-collapsed="true"] .rui-sidebar-item-label,
+  .rui-app-shell[data-collapsible="true"] .rui-app-shell-sidebar .rui-sidebar[data-collapsed="true"] .rui-sidebar-item-badge { display: revert; }
+  .rui-app-shell[data-collapsible="true"] .rui-app-shell-sidebar .rui-sidebar[data-collapsed="true"] .rui-sidebar-item { justify-content: flex-start; }
+  .rui-app-shell[data-collapsible="true"] .rui-app-shell-sidebar .rui-sidebar[data-collapsed="true"] .rui-sidebar-header { align-items: stretch; }
+  .rui-app-shell[data-collapsible="true"] .rui-app-shell-sidebar .rui-sidebar[data-collapsed="true"] .rui-sidebar-brand {
+    text-align: left;
+    font-size: var(--rui-font-size-base);
+    width: auto;
+  }
 }
 
 /* Collapsed Sidebar (icon rail) ------------------------------ */
@@ -9295,7 +10658,7 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
 .rui-sidebar[data-collapsed="true"] .rui-sidebar-header { align-items: center; }
 .rui-sidebar[data-collapsed="true"] .rui-sidebar-brand {
   text-align: center;
-  font-size: 18px;
+  font-size: var(--rui-font-size-18);
   line-height: 1;
   width: 100%;
 }
@@ -9315,15 +10678,45 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
 .rui-icon-button:hover:not(:disabled) { background: var(--rui-color-surface-muted); }
 .rui-icon-button:disabled { opacity: 0.5; cursor: not-allowed; }
 .rui-icon-button[data-variant="primary"] { background: var(--rui-color-primary); color: var(--rui-color-primary-text); }
+/* Mirrors the .rui-button variant ladder. Without these the enum's other six
+   values rendered byte-identically to the ghost default, so a destructive
+   row action looked exactly like a benign one. */
+.rui-icon-button[data-variant="secondary"] { background: var(--rui-color-surface); color: var(--rui-color-text); border-color: var(--rui-color-border); }
+.rui-icon-button[data-variant="secondary"]:hover:not(:disabled) { background: var(--rui-color-surface-muted); }
+.rui-icon-button[data-variant="outline"] { background: transparent; color: var(--rui-color-primary); border-color: color-mix(in srgb, var(--rui-color-primary) 55%, transparent); }
+.rui-icon-button[data-variant="outline"]:hover:not(:disabled) { background: color-mix(in srgb, var(--rui-color-primary) 10%, transparent); border-color: var(--rui-color-primary); }
+/* Same pairing as the danger Button — see the note there for why the hover
+   brightens instead of darkening. */
+.rui-icon-button[data-variant="danger"] { background: var(--rui-color-danger); color: var(--rui-color-on-danger); }
+.rui-icon-button[data-variant="danger"]:hover:not(:disabled) { background: color-mix(in srgb, var(--rui-color-danger) 85%, white); }
+.rui-icon-button[data-variant="link"] { background: transparent; color: var(--rui-color-primary); border-color: transparent; }
+.rui-icon-button[data-variant="link"]:hover:not(:disabled) { background: transparent; color: var(--rui-color-primary-hover); }
+/* "ghost" and "default" are both the base transparent look and "md" is the base
+   size. They are spelled out anyway so every value the enum advertises has a
+   rule of its own: the previous state — where four of the seven variants and two
+   of the five sizes matched nothing — is exactly how variant: "danger" came to
+   render identically to its benign neighbour. */
+.rui-icon-button[data-variant="ghost"] { background: transparent; color: var(--rui-color-text); border-color: transparent; }
+.rui-icon-button[data-variant="ghost"]:hover:not(:disabled) { background: var(--rui-color-surface-muted); }
+.rui-icon-button[data-variant="default"] { background: transparent; color: var(--rui-color-text); }
+.rui-icon-button[data-size="xs"] { padding: 2px; font-size: var(--rui-font-size-11); }
 .rui-icon-button[data-size="sm"] { padding: 4px; }
+.rui-icon-button[data-size="md"] { padding: 6px; }
 .rui-icon-button[data-size="lg"] { padding: 10px; }
+.rui-icon-button[data-size="xl"] { padding: 14px; font-size: var(--rui-font-size-18); }
+/* Toggle + loading states, and the href variant: :disabled cannot match an <a>,
+   so the anchor form needs the aria-disabled hook instead. */
+.rui-icon-button[data-active="true"] { background: var(--rui-color-surface-muted); color: var(--rui-color-primary); }
+.rui-icon-button[data-loading="true"] { cursor: progress; }
+.rui-icon-button-spinner { animation: rui-spin 0.8s linear infinite; }
+a.rui-icon-button[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 
 .rui-command-palette[data-open="false"] { display: none; }
 .rui-command-palette-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
-  z-index: 80;
+  z-index: var(--rui-z-overlay);
 }
 .rui-command-palette-panel {
   position: fixed;
@@ -9332,10 +10725,10 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   transform: translateX(-50%);
   width: min(560px, calc(100vw - 32px));
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   box-shadow: var(--rui-shadow-md);
-  z-index: 81;
+  z-index: var(--rui-z-modal);
   overflow: hidden;
 }
 .rui-command-palette-header {
@@ -9343,13 +10736,21 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
 }
 .rui-command-palette-input { flex: 1; border: 0; background: transparent; font: inherit; outline: none; }
-.rui-command-palette-shortcut { font-size: 12px; color: var(--rui-color-text-muted); }
+/* Restore a visible focus indicator: the rule above removes the UA outline
+   and nothing replaced it, leaving this surface with no focus affordance at
+   all for keyboard users (WCAG 2.4.7). */
+.rui-command-palette-input:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring, var(--rui-color-primary));
+  outline-offset: 2px;
+}
+
+.rui-command-palette-shortcut { font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); }
 .rui-command-palette-list { max-height: 320px; overflow: auto; padding: 6px; }
 .rui-command-palette-group {
-  font-size: 11px;
+  font-size: var(--rui-font-size-11);
   font-weight: 600;
   text-transform: uppercase;
   color: var(--rui-color-text-muted);
@@ -9370,7 +10771,14 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   font: inherit;
 }
 .rui-command-palette-item:hover { background: var(--rui-color-surface-muted); }
-.rui-command-palette-item-kbd { font-size: 11px; color: var(--rui-color-text-muted); }
+/* Roving arrow-key selection is driven by data-active + aria-activedescendant;
+   without a rule the keyboard cursor is invisible to sighted users. */
+.rui-command-palette-item[data-active="true"] {
+  background: var(--rui-color-surface-muted);
+  outline: 2px solid var(--rui-color-focus-ring, var(--rui-color-primary));
+  outline-offset: -2px;
+}
+.rui-command-palette-item-kbd { font-size: var(--rui-font-size-11); color: var(--rui-color-text-muted); }
 .rui-command-palette-empty { padding: 16px; text-align: center; color: var(--rui-color-text-muted); }
 
 .rui-filter-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -9382,8 +10790,8 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   padding: 2px 8px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--rui-color-primary) 12%, transparent);
-  border: 1px solid var(--rui-color-border);
-  font-size: 13px;
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  font-size: var(--rui-font-size-13);
 }
 .rui-filter-chip-remove {
   border: 0;
@@ -9397,12 +10805,16 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   background: transparent;
   color: var(--rui-color-primary);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
+/* The row is frozen while a filtered query is in flight; nothing said so. */
+.rui-filter-chips[data-disabled="true"] { opacity: 0.6; }
+.rui-filter-chip-remove:disabled,
+.rui-filter-chips-clear:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .rui-field-repeater { display: flex; flex-direction: column; gap: 12px; }
 .rui-field-repeater-row {
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   padding: 12px;
   background: var(--rui-color-surface);
@@ -9412,42 +10824,72 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px;
 }
-.rui-field-repeater-label { display: block; font-size: 12px; color: var(--rui-color-text-muted); margin-bottom: 4px; }
+.rui-field-repeater-label { display: block; font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); margin-bottom: 4px; }
 .rui-field-repeater-remove { margin-top: 8px; }
 
-.rui-virtual-list-scroller { position: relative; overflow: auto; border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-md); }
+.rui-virtual-list-scroller { position: relative; overflow: auto; border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-md); }
 .rui-virtual-list-item {
   display: flex;
   align-items: center;
   padding: 0 12px;
-  border-bottom: 1px solid var(--rui-color-border);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
   box-sizing: border-box;
 }
-.rui-virtual-grid-scroller { position: relative; border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-md); }
+.rui-virtual-grid-scroller { position: relative; border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-md); }
 .rui-virtual-grid-cell { display: flex; align-items: stretch; box-sizing: border-box; }
 .rui-virtual-grid-cell > * { width: 100%; }
+/* Empty / loading placeholders rendered as unpadded bare text against the
+   scroller's own border. */
+.rui-virtual-list-empty,
+.rui-virtual-grid-empty {
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--rui-color-text-muted);
+}
+/* Every new spinner icon was static — reuse the keyframes the other loaders use. */
+.rui-command-palette-spinner,
+.rui-virtual-list-spinner,
+.rui-virtual-grid-spinner { animation: rui-spin 0.8s linear infinite; }
 
 .rui-query-builder { display: flex; flex-direction: column; gap: 8px; }
 .rui-query-builder-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .rui-query-builder-remove,
 .rui-query-builder-add {
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   background: var(--rui-color-surface);
   border-radius: var(--rui-radius-sm);
   padding: 6px 10px;
   cursor: pointer;
 }
 
-.rui-diff-viewer { border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-md); overflow: hidden; font-family: var(--rui-font-family-mono, monospace); font-size: 12px; }
+.rui-diff-viewer { border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-md); overflow: hidden; font-family: var(--rui-font-family-mono, monospace); font-size: var(--rui-font-size-sm); }
 .rui-diff-viewer-panes { display: grid; grid-template-columns: 1fr 1fr; }
-.rui-diff-viewer-pane { margin: 0; padding: 12px; overflow: auto; max-height: 320px; }
-.rui-diff-viewer-left { border-right: 1px solid var(--rui-color-border); background: color-mix(in srgb, var(--rui-color-danger) 6%, var(--rui-color-surface)); }
-.rui-diff-viewer-right { background: color-mix(in srgb, var(--rui-color-success) 6%, var(--rui-color-surface)); }
+/* Split view is now paired cells in the one grid above, not two independently
+   scrolling pre blocks (they went off-by-one after the first insertion), so the
+   per-line cells carry the padding, divider and whitespace handling. pre-wrap
+   because collapsing whitespace loses the indentation in a code diff. */
+.rui-diff-viewer-cell { padding: 0 8px; white-space: pre-wrap; word-break: break-word; }
+.rui-diff-viewer-cell[data-side="left"] { border-right: var(--rui-border-width) solid var(--rui-color-border); }
+.rui-diff-viewer-filler { background: var(--rui-color-surface-muted); }
+.rui-diff-viewer-title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 8px;
+  font-weight: 600;
+  background: var(--rui-color-surface);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+}
+.rui-diff-line-num { display: inline-block; min-width: 3ch; margin-right: 8px; text-align: right; color: var(--rui-color-text-muted); user-select: none; }
+.rui-diff-line-text { white-space: pre-wrap; }
+.rui-diff-line-gap { padding: 4px 8px; text-align: center; color: var(--rui-color-text-muted); background: var(--rui-color-surface-muted); }
 .rui-diff-viewer-unified { margin: 0; padding: 12px; max-height: 320px; overflow: auto; }
 .rui-diff-line-add { background: color-mix(in srgb, var(--rui-color-success) 12%, transparent); }
 .rui-diff-line-remove { background: color-mix(in srgb, var(--rui-color-danger) 12%, transparent); }
 
-.rui-json-tree { font-family: var(--rui-font-family-mono, monospace); font-size: 12px; }
+.rui-json-tree { font-family: var(--rui-font-family-mono, monospace); font-size: var(--rui-font-size-sm); }
 .rui-json-tree-toggle {
   border: 0;
   background: transparent;
@@ -9457,14 +10899,35 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   padding: 2px 0;
 }
 .rui-json-tree-children[data-open="false"] { display: none; }
-.rui-json-tree-row { padding-left: 12px; }
+/* Nesting depth was only conveyed on the row, so children of children sat at the
+   same indent; and the rows are focusable treeitems with arrow-key traversal
+   that was completely invisible without a ring. */
+.rui-json-tree-children { padding-left: 12px; }
+.rui-json-tree-row { display: flex; align-items: center; gap: 4px; padding-left: 12px; }
+/* Only expandable rows toggle — a leaf treeitem is focusable but not clickable. */
+.rui-json-tree-row[aria-expanded] { cursor: pointer; }
+.rui-json-tree-row:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring, var(--rui-color-primary));
+  outline-offset: -2px;
+}
+.rui-json-tree-summary { color: var(--rui-color-text-muted); }
 .rui-json-tree-key { color: var(--rui-color-primary); }
 .rui-json-tree-leaf { color: var(--rui-color-text-muted); }
 
-.rui-gantt { border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-md); overflow: hidden; }
-.rui-gantt-row { display: grid; grid-template-columns: 140px 1fr; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--rui-color-border); }
-.rui-gantt-label { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rui-gantt-bars { position: relative; height: 24px; background: var(--rui-color-surface-muted); border-radius: var(--rui-radius-sm); }
+.rui-gantt { border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-md); overflow: hidden; }
+/* Same 140px 1fr template as .rui-gantt-row below, or the percent-positioned
+   ticks do not line up with the bars they label. -axis-ticks also has to be the
+   positioning context, otherwise the absolute ticks escape to whatever ancestor
+   happens to be positioned. */
+.rui-gantt-axis { display: grid; grid-template-columns: 140px 1fr; gap: 8px; align-items: end; padding: 6px 12px; border-bottom: var(--rui-border-width) solid var(--rui-color-border); }
+.rui-gantt-axis-ticks { position: relative; height: 16px; }
+.rui-gantt-tick { position: absolute; transform: translateX(-50%); font-size: var(--rui-font-size-11); color: var(--rui-color-text-muted); white-space: nowrap; }
+.rui-gantt-row { display: grid; grid-template-columns: 140px 1fr; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: var(--rui-border-width) solid var(--rui-color-border); }
+.rui-gantt-label { font-size: var(--rui-font-size-13); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Clips the track itself, not just the outer frame: a geometry slip would
+   otherwise paint leftward across the 140px label column and cover the name. */
+.rui-gantt-bars { position: relative; height: 24px; background: var(--rui-color-surface-muted); border-radius: var(--rui-radius-sm); overflow: hidden; }
+.rui-gantt-today { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--rui-color-danger); opacity: 0.8; }
 .rui-gantt-bar {
   position: absolute;
   top: 4px;
@@ -9473,16 +10936,43 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   background: var(--rui-color-primary);
   overflow: hidden;
 }
-.rui-gantt-bar-progress { height: 100%; background: color-mix(in srgb, #000 25%, var(--rui-color-primary)); }
+/* Mix toward the theme text colour rather than #000: a fixed darkening step
+   reduces contrast in a dark theme, where the progress fill needs to go
+   lighter than its track, not darker. */
+.rui-gantt-bar-progress { height: 100%; background: color-mix(in srgb, var(--rui-color-text) 25%, var(--rui-color-primary)); }
+/* tasks[].tone was emitted with one bar appearance behind it, so done / at-risk /
+   blocked were indistinguishable. */
+.rui-gantt-bar[data-tone="success"] { background: var(--rui-color-success); }
+.rui-gantt-bar[data-tone="warning"] { background: var(--rui-color-warning); }
+.rui-gantt-bar[data-tone="danger"] { background: var(--rui-color-danger); }
+.rui-gantt-bar[data-tone="info"] { background: var(--rui-color-info); }
+.rui-gantt-bar[data-tone="muted"] { background: var(--rui-color-text-muted); }
+/* A row whose dates could not be parsed draws no bar at all, so the label is the
+   only place left to say so. */
+.rui-gantt-row[data-invalid="true"] .rui-gantt-label { color: var(--rui-color-text-muted); font-style: italic; }
+.rui-gantt-row[role="button"] { cursor: pointer; }
+.rui-gantt-row[role="button"]:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring, var(--rui-color-primary));
+  outline-offset: -2px;
+}
 
 .rui-truncate-text { margin: 0; }
+/* The clamp lives here, not inline: an inline overflow/line-clamp beat every
+   stylesheet rule and could not be themed. Only the line count is inline, so
+   without this rule Truncate does not clamp at all. */
+.rui-truncate[data-expanded="false"] .rui-truncate-text {
+  display: -webkit-box;
+  -webkit-line-clamp: var(--rui-truncate-lines, 3);
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .rui-truncate-toggle {
   border: 0;
   background: transparent;
   color: var(--rui-color-primary);
   cursor: pointer;
   padding: 4px 0;
-  font-size: 13px;
+  font-size: var(--rui-font-size-13);
 }
 
 .rui-inline-edit { display: inline-flex; flex-direction: column; gap: 4px; }
@@ -9499,6 +10989,11 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
 .rui-inline-edit-input { display: none; }
 .rui-inline-edit[data-editing="true"] .rui-inline-edit-display { display: none; }
 .rui-inline-edit[data-editing="true"] .rui-inline-edit-input { display: block; }
+/* An empty value shows the placeholder (or an em dash) as the trigger text — it
+   has to read as placeholder, not as real content. */
+.rui-inline-edit-display[data-empty="true"] { color: var(--rui-color-text-muted); font-style: italic; }
+/* A permission-gated field must lose the dashed edit affordance above. */
+.rui-inline-edit[data-disabled="true"] .rui-inline-edit-display { border-color: transparent; cursor: default; }
 
 .rui-notification-bell { position: relative; display: inline-block; width: 30px; }
 .rui-notification-bell-trigger {
@@ -9518,8 +11013,8 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   padding: 0 4px;
   border-radius: 999px;
   background: var(--rui-color-danger);
-  color: #fff;
-  font-size: 10px;
+  color: var(--rui-color-on-danger);
+  font-size: var(--rui-font-size-10);
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -9532,29 +11027,72 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   right: 0;
   width: min(320px, 80vw);
   background: var(--rui-color-surface);
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
   box-shadow: var(--rui-shadow-md);
-  z-index: 40;
+  z-index: var(--rui-z-dropdown);
   max-height: 360px;
   overflow: auto;
 }
 .rui-notification-bell[data-open="true"] .rui-notification-bell-panel { display: block; }
+/* Stylesheet fallback for a left-placed bell: the floating layer handles the
+   promoted panel, but before promotion (or with no Popover support) the
+   hardcoded right: 0 pushes a 320px panel off the left edge of the screen. */
+.rui-notification-bell[data-align="left"] .rui-notification-bell-panel { left: 0; right: auto; }
+/* Rows are a button (onItemClick) or an anchor (items[].href) now, so the rule
+   has to undo the UA control chrome — centred text, grey fill, underlined blue —
+   and they are keyboard-focusable, so they need a ring. */
 .rui-notification-bell-item {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--rui-color-border);
+  border: 0;
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
 }
-.rui-notification-bell-item-title { font-weight: 600; font-size: 13px; }
+/* Element-scoped: a row with neither href nor onItemClick is still a plain div
+   and must not advertise a click. */
+a.rui-notification-bell-item,
+button.rui-notification-bell-item { cursor: pointer; }
+a.rui-notification-bell-item:hover,
+button.rui-notification-bell-item:hover { background: var(--rui-color-surface-muted); }
+.rui-notification-bell-item:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring, var(--rui-color-primary));
+  outline-offset: -2px;
+}
+.rui-notification-bell-item-title { font-weight: 600; font-size: var(--rui-font-size-13); }
 .rui-notification-bell-item-message,
-.rui-notification-bell-item-time { font-size: 12px; color: var(--rui-color-text-muted); }
+.rui-notification-bell-item-time { font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); }
+/* items[].unread and the mark-all-read footer had no rules at all, so a read and
+   an unread notification rendered identically. */
+.rui-notification-bell-item[data-unread="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 8%, transparent);
+  font-weight: 600;
+}
+.rui-notification-bell-footer { border-top: var(--rui-border-width) solid var(--rui-color-border); }
+.rui-notification-bell-mark {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--rui-color-primary);
+  cursor: pointer;
+  padding: 8px 12px;
+  font: inherit;
+}
 .rui-notification-bell-empty { padding: 16px; text-align: center; color: var(--rui-color-text-muted); }
+.rui-notification-bell-spinner { animation: rui-spin 0.8s linear infinite; }
 .rui-select-searchable { width: 100%; }
 
 /* Lightbox thumbnail ------------------------------------------------- */
 .rui-lightbox-thumb {
   display: inline-block;
   padding: 0;
-  border: 1px solid var(--rui-color-border);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   background: var(--rui-color-surface);
   border-radius: var(--rui-radius-md, 8px);
   overflow: hidden;
@@ -9667,10 +11205,12 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
   color: var(--rui-color-text);
 }
 .rui-heading[data-size="section"] { font-size: clamp(24px, 3.4vw, 38px); font-weight: 800; letter-spacing: -0.02em; margin: var(--rui-spacing-l) 0; }
-.rui-heading[data-size="lg"] { font-size: 24px; }
+.rui-heading[data-size="lg"] { font-size: var(--rui-font-size-24); }
 .rui-heading[data-size="md"] { font-size: 19px; }
-.rui-heading[data-size="sm"] { font-size: 16px; }
+.rui-heading[data-size="sm"] { font-size: var(--rui-font-size-lg); }
+.rui-heading[data-align="left"] { text-align: left; }
 .rui-heading[data-align="center"] { text-align: center; }
+.rui-heading[data-align="right"] { text-align: right; }
 .rui-eyebrow {
   display: inline-block;
   font-size: 12.5px;
@@ -9683,7 +11223,16 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
 /* ====================================================================== *
  * Section page-band (Part II.1)
  * ====================================================================== */
-.rui-section { padding: var(--rui-spacing-3xl) var(--rui-spacing-l); position: relative; }
+/* Single root definition: the flex-column half used to sit ~10600 lines earlier,
+   next to .rui-section-title. Both halves shipped (they never named the same
+   property), so merging them changes nothing. */
+.rui-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rui-spacing-s);
+  padding: var(--rui-spacing-3xl) var(--rui-spacing-l);
+  position: relative;
+}
 .rui-section[data-pad="none"] { padding: 0; }
 .rui-section[data-pad="xs"] { padding: var(--rui-spacing-l) var(--rui-spacing-l); }
 .rui-section[data-pad="sm"] { padding: var(--rui-spacing-xl) var(--rui-spacing-l); }
@@ -9705,6 +11254,20 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
 .rui-section-head .rui-eyebrow { margin-bottom: 12px; }
 .rui-section-head .rui-section-title { font-size: clamp(26px, 4vw, 42px); font-weight: 900; letter-spacing: -0.02em; margin: 0 0 12px; line-height: 1.1; color: var(--rui-color-text); }
 .rui-section-head .rui-section-sub { font-size: 17px; color: var(--rui-color-text-muted); margin: 0; line-height: 1.6; }
+/* With a trailing action row the head becomes two columns, so the 760px cap has
+   to move off the head and onto the text column or the CTA gets squeezed. */
+.rui-section-head[data-has-actions="true"] {
+  max-width: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--rui-spacing-l);
+}
+.rui-section-head-text { max-width: 760px; min-width: 0; }
+.rui-section-actions { flex: 0 0 auto; display: flex; align-items: center; gap: var(--rui-spacing-s); }
+${below("sm")} {
+  .rui-section-head[data-has-actions="true"] { flex-direction: column; }
+}
 
 /* ====================================================================== *
  * Overlay positioning (Part II.3)
@@ -9725,92 +11288,131 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
 /* ====================================================================== *
  * Marketing composites (Part VIII.1)
  * ====================================================================== */
-.rui-navbar2 { display: flex; align-items: center; gap: 20px; height: 64px; padding: 0 var(--rui-spacing-l); border-bottom: 1px solid var(--rui-color-border); background: color-mix(in srgb, var(--rui-color-bg) 78%, transparent); }
-.rui-navbar2[data-sticky="true"] { position: sticky; top: 0; z-index: 50; }
+.rui-navbar2 { display: flex; align-items: center; gap: 20px; height: 64px; padding: 0 var(--rui-spacing-l); border-bottom: var(--rui-border-width) solid var(--rui-color-border); background: color-mix(in srgb, var(--rui-color-bg) 78%, transparent); }
+.rui-navbar2[data-sticky="true"] { position: sticky; top: 0; z-index: var(--rui-z-sticky); }
 .rui-navbar2[data-blur="true"] { backdrop-filter: saturate(180%) blur(14px); -webkit-backdrop-filter: saturate(180%) blur(14px); }
 .rui-navbar2-links { display: flex; align-items: center; gap: 4px; }
 .rui-navbar2-links .rui-link { color: var(--rui-color-text-muted); font-weight: 500; padding: 8px 12px; border-radius: var(--rui-radius-sm); text-decoration: none; font-size: 14.5px; }
 .rui-navbar2-links .rui-link:hover { color: var(--rui-color-text); background: var(--rui-color-surface-muted); }
 .rui-navbar2-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.rui-navbar2-burger { display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-sm); background: transparent; color: var(--rui-color-text); cursor: pointer; font-size: 16px; }
+.rui-navbar2-burger { display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-sm); background: transparent; color: var(--rui-color-text); cursor: pointer; font-size: var(--rui-font-size-lg); }
 .rui-navbar2-burger:hover { background: var(--rui-color-surface-muted); }
 .rui-navbar2-burger:focus-visible { outline: 2px solid var(--rui-color-focus-ring); outline-offset: 2px; }
-@media (max-width: 760px) {
+${below("md")} {
   .rui-navbar2 { position: relative; }
   .rui-navbar2-links { display: none; }
   .rui-navbar2-burger { display: inline-flex; order: 99; }
   /* Burger-open: the links row becomes a dropdown panel under the bar. */
   .rui-navbar2[data-menu-open="true"] .rui-navbar2-links {
     display: flex; flex-direction: column; align-items: stretch; gap: 2px;
-    position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
+    position: absolute; top: 100%; left: 0; right: 0; z-index: var(--rui-z-dropdown);
     padding: 10px var(--rui-spacing-l) 14px;
-    background: var(--rui-color-bg); border-bottom: 1px solid var(--rui-color-border);
+    background: var(--rui-color-bg); border-bottom: var(--rui-border-width) solid var(--rui-color-border);
     box-shadow: var(--rui-shadow-lg);
   }
-  .rui-navbar2[data-menu-open="true"] .rui-navbar2-links .rui-link { padding: 11px 12px; font-size: 15px; }
+  .rui-navbar2[data-menu-open="true"] .rui-navbar2-links .rui-link { padding: 11px 12px; font-size: var(--rui-font-size-15); }
 }
 
-.rui-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -0.02em; color: var(--rui-color-text); text-decoration: none; }
+.rui-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: var(--rui-font-size-18); letter-spacing: -0.02em; color: var(--rui-color-text); text-decoration: none; }
 .rui-brand-logo { width: 32px; height: 32px; border-radius: var(--rui-radius-sm); object-fit: contain; }
-.rui-brand-version { font-size: 11px; font-weight: 700; color: var(--rui-color-text-muted); background: var(--rui-color-surface-muted); border: 1px solid var(--rui-color-border); padding: 2px 7px; border-radius: var(--rui-radius-pill); }
+.rui-brand-version { font-size: var(--rui-font-size-11); font-weight: 700; color: var(--rui-color-text-muted); background: var(--rui-color-surface-muted); border: var(--rui-border-width) solid var(--rui-color-border); padding: 2px 7px; border-radius: var(--rui-radius-pill); }
 
 .rui-logocloud { text-align: center; }
 .rui-logocloud-label { font-size: 12.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rui-color-text-muted); margin: 0 0 22px; }
 .rui-logocloud-row { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
-.rui-logochip { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; color: var(--rui-color-text); padding: 11px 18px; border-radius: var(--rui-radius-md); border: 1px solid var(--rui-color-border); background: var(--rui-color-surface); transition: transform .2s, box-shadow .2s; }
+.rui-logochip { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: var(--rui-font-size-15); color: var(--rui-color-text); padding: 11px 18px; border-radius: var(--rui-radius-md); border: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface); transition: transform .2s, box-shadow .2s; }
 .rui-logochip:hover { transform: translateY(-3px); box-shadow: var(--rui-shadow-md); }
-.rui-logochip .rui-icon { font-size: 20px; }
+.rui-logochip .rui-icon { font-size: var(--rui-font-size-20); }
+/* A full-resolution customer wordmark would otherwise blow the trust band apart. */
+.rui-logochip-logo { height: 22px; max-width: 110px; object-fit: contain; display: block; }
 
 .rui-metricstrip { display: grid; grid-template-columns: repeat(var(--ak-metric-cols, 4), minmax(0, 1fr)); gap: var(--rui-spacing-m); margin: var(--rui-spacing-l) 0; }
-@media (max-width: 720px) { .rui-metricstrip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.rui-metric { border: 1px solid var(--rui-color-border); background: var(--rui-color-surface); border-radius: var(--rui-radius-lg); padding: 26px 22px; position: relative; overflow: hidden; }
+${below("md")} { .rui-metricstrip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* No position/overflow: those were the leftovers of a removed gradient accent
+   bar, and the clip would cut off a popover placed inside a metric tile. */
+.rui-metric { border: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface); border-radius: var(--rui-radius-lg); padding: 26px 22px; }
 .rui-metric-value { font-size: clamp(28px, 4vw, 42px); font-weight: 900; letter-spacing: -0.03em; line-height: 1; }
 .rui-metric-value[data-gradient="true"] { background: var(--rui-gradient-brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.rui-metric-label { font-size: 14px; color: var(--rui-color-text-muted); margin-top: 6px; }
+.rui-metric-label { font-size: var(--rui-font-size-base); color: var(--rui-color-text-muted); margin-top: 6px; }
+.rui-metric-trend { font-size: var(--rui-font-size-13); font-weight: 650; margin-top: 8px; color: var(--rui-color-text-muted); }
+.rui-metric-trend[data-dir="up"] { color: var(--rui-color-success-text); }
+.rui-metric-trend[data-dir="down"] { color: var(--rui-color-danger-text); }
 
-.rui-codewindow { border: 1px solid var(--rui-color-border); border-radius: 22px; overflow: hidden; background: var(--rui-color-surface); box-shadow: var(--rui-shadow-lg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-.rui-window-bar { display: flex; align-items: center; gap: 8px; padding: 13px 18px; border-bottom: 1px solid var(--rui-color-border); background: var(--rui-color-surface-muted); }
+/* No overflow: hidden and no backdrop-filter. The filter did nothing over the
+   opaque surface but made the frame a containing block for position: fixed, so a
+   Modal or FAB in the live preview anchored to the window instead of the
+   viewport; the clip cut off any Dropdown/Select/Tooltip at the rounded edge.
+   The rounded look is preserved by clipping the two children instead. */
+.rui-codewindow { border: var(--rui-border-width) solid var(--rui-color-border); border-radius: 22px; overflow: visible; background: var(--rui-color-surface); box-shadow: var(--rui-shadow-lg); }
+.rui-codewindow > .rui-window-bar { border-radius: 21px 21px 0 0; }
+.rui-window-bar { display: flex; align-items: center; gap: 8px; padding: 13px 18px; border-bottom: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface-muted); }
 .rui-window-dots { display: flex; gap: 7px; }
 .rui-window-dots i { width: 12px; height: 12px; border-radius: 50%; display: block; }
 .rui-window-dots i:nth-child(1) { background: #ff5f57; } .rui-window-dots i:nth-child(2) { background: #febc2e; } .rui-window-dots i:nth-child(3) { background: #28c840; }
 .rui-window-file { margin-left: 8px; font-family: var(--rui-font-family-mono); font-size: 12.5px; color: var(--rui-color-text-muted); }
 .rui-window-status { margin-left: auto; display: inline-flex; align-items: center; }
-.rui-window-live { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--rui-color-success, #10b981); }
+.rui-window-live { display: inline-flex; align-items: center; gap: 7px; font-size: var(--rui-font-size-sm); font-weight: 600; color: var(--rui-color-success-text); }
 .rui-window-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rui-color-success, #10b981); animation: akLivePulse 1.8s infinite; }
 @keyframes akLivePulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,.55); } 70% { box-shadow: 0 0 0 9px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
 @media (prefers-reduced-motion: reduce) { .rui-window-live-dot { animation: none; } }
 .rui-codewindow-body { display: grid; grid-template-columns: 1fr; }
 .rui-codewindow-body[data-split="true"] { grid-template-columns: 1fr 1fr; }
-@media (max-width: 900px) { .rui-codewindow-body[data-split="true"] { grid-template-columns: 1fr; } }
+/* Bottom corners are rounded on the panes themselves rather than clipped by the
+   frame, so an overlay opened in the preview pane can still escape the window. */
+.rui-codewindow-body > .rui-codewindow-code { border-bottom-left-radius: 21px; border-bottom-right-radius: 21px; }
+.rui-codewindow-body[data-split="true"] > .rui-codewindow-code { border-bottom-right-radius: 0; }
+.rui-codewindow-body[data-split="true"] > .rui-codewindow-preview { border-bottom-right-radius: 21px; }
+${below("lg")} {
+  .rui-codewindow-body[data-split="true"] { grid-template-columns: 1fr; }
+  /* Stacked: the code pane is no longer the bottom row. */
+  .rui-codewindow-body[data-split="true"] > .rui-codewindow-code { border-bottom-left-radius: 0; }
+  .rui-codewindow-body[data-split="true"] > .rui-codewindow-preview { border-bottom-left-radius: 21px; }
+}
 .rui-codewindow-code { min-width: 0; background: #0e0b1c; }
 /* The internal CodeBlock is chromeless (header=false) — keep it transparent
    so the window's dark pane shows through, and give the code air. */
 .rui-codewindow-code .rui-code-block { background: transparent; height: 100%; }
-.rui-codewindow-code .rui-code-block-pre { padding: 22px; font-size: 13px; line-height: 1.75; color: #e6e3ff; }
-.rui-codewindow-preview { padding: 22px; min-width: 0; border-left: 1px solid var(--rui-color-border); background: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--rui-color-primary) 16%, transparent) 1px, transparent 0) 0 0 / 22px 22px, var(--rui-color-bg); }
+.rui-codewindow-code .rui-code-block-pre { padding: 22px; font-size: var(--rui-font-size-13); line-height: 1.75; color: #e6e3ff; }
+.rui-codewindow-preview { padding: 22px; min-width: 0; border-left: var(--rui-border-width) solid var(--rui-color-border); background: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--rui-color-primary) 16%, transparent) 1px, transparent 0) 0 0 / 22px 22px, var(--rui-color-bg); }
 .rui-codewindow-preview aktion-app { display: block; }
-@media (max-width: 900px) { .rui-codewindow-preview { border-left: none; border-top: 1px solid var(--rui-color-border); } }
-.rui-browserframe { border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-lg); overflow: hidden; background: var(--rui-color-surface); box-shadow: var(--rui-shadow-md); }
-.rui-browserframe-bar { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--rui-color-border); background: var(--rui-color-surface-muted); }
-.rui-browserframe-url { flex: 1; font-family: var(--rui-font-family-mono); font-size: 12px; color: var(--rui-color-text-muted); background: var(--rui-color-bg); border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-pill); padding: 4px 12px; text-align: center; }
-.rui-terminal { border-radius: var(--rui-radius-lg); overflow: hidden; border: 1px solid var(--rui-color-border); box-shadow: var(--rui-shadow-md); }
-.rui-terminal-body { background: #0e0b1c; color: #e6e3ff; font-family: var(--rui-font-family-mono); font-size: 13px; line-height: 1.8; padding: 18px 20px; white-space: pre-wrap; }
+${below("lg")} { .rui-codewindow-preview { border-left: none; border-top: var(--rui-border-width) solid var(--rui-color-border); } }
+/* The frame exists to wrap live UI demos, so it must not clip: overflow: hidden
+   reproduced the dropdown-clipping bug by construction for every Select /
+   Tooltip / DatePicker inside. Authors opt back into the screenshot look with
+   data-clip; the bar keeps its own rounded top so the frame still reads hard-edged. */
+.rui-browserframe { border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-lg); overflow: visible; background: var(--rui-color-surface); box-shadow: var(--rui-shadow-md); }
+.rui-browserframe[data-clip="true"] { overflow: hidden; }
+.rui-browserframe-bar { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface-muted); border-radius: calc(var(--rui-radius-lg) - var(--rui-border-width)) calc(var(--rui-radius-lg) - var(--rui-border-width)) 0 0; }
+.rui-browserframe-url { flex: 1; font-family: var(--rui-font-family-mono); font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); background: var(--rui-color-bg); border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-pill); padding: 4px 12px; text-align: center; }
+.rui-terminal { border-radius: var(--rui-radius-lg); overflow: hidden; border: var(--rui-border-width) solid var(--rui-color-border); box-shadow: var(--rui-shadow-md); }
+.rui-terminal-body { background: #0e0b1c; color: #e6e3ff; font-family: var(--rui-font-family-mono); font-size: var(--rui-font-size-13); line-height: 1.8; padding: 18px 20px; white-space: pre-wrap; }
+/* user-select: none is the whole point of the prompt marker — copying the block
+   has to yield just the commands, and the component cannot express that without
+   inlining a style on every line. */
+.rui-terminal-prompt { user-select: none; -webkit-user-select: none; color: var(--rui-color-primary); font-weight: 700; }
+.rui-terminal-line { display: inline; }
 
-.rui-swatch { border-radius: var(--rui-radius-md); padding: 18px; border: 1px solid var(--rui-color-border); min-height: 120px; display: flex; flex-direction: column; justify-content: flex-end; transition: transform .3s, box-shadow .3s; }
+.rui-swatch { border-radius: var(--rui-radius-md); padding: 18px; border: var(--rui-border-width) solid var(--rui-color-border); min-height: 120px; display: flex; flex-direction: column; justify-content: flex-end; transition: transform .3s, box-shadow .3s; }
 .rui-swatch:hover { transform: translateY(-4px); box-shadow: var(--rui-shadow-lg); }
+/* Swatch is a real button once onClick is given; the UA button defaults (auto
+   width, centred text, system font) break the tile layout. */
+button.rui-swatch { width: 100%; text-align: left; font: inherit; cursor: pointer; }
+.rui-swatch[data-selected="true"] { border-color: var(--rui-color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-primary) 45%, transparent); }
+.rui-swatch:focus-visible { outline: 2px solid var(--rui-color-primary); outline-offset: 2px; }
 .rui-swatch-dots { display: flex; gap: 6px; margin-bottom: 12px; }
 .rui-swatch-dots i { width: 16px; height: 16px; border-radius: 50%; display: block; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
-.rui-swatch-name { font-weight: 700; font-size: 15px; }
+.rui-swatch-name { font-weight: 700; font-size: var(--rui-font-size-15); }
 
-.rui-footer { border-top: 1px solid var(--rui-color-border); padding: var(--rui-spacing-2xl) var(--rui-spacing-l) var(--rui-spacing-xl); background: var(--rui-color-bg); }
+.rui-footer { border-top: var(--rui-border-width) solid var(--rui-color-border); padding: var(--rui-spacing-2xl) var(--rui-spacing-l) var(--rui-spacing-xl); background: var(--rui-color-bg); }
 .rui-footer-grid { display: grid; grid-template-columns: 2fr repeat(var(--ak-foot-cols, 3), 1fr); gap: 32px; max-width: 1180px; margin: 0 auto; }
-@media (max-width: 820px) { .rui-footer-grid { grid-template-columns: 1fr 1fr; } }
-.rui-footer-tagline { color: var(--rui-color-text-muted); font-size: 14px; margin-top: 12px; max-width: 36ch; line-height: 1.6; }
-.rui-footer-col h5 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--rui-color-text-muted); margin: 0 0 12px; }
+${below("lg")} { .rui-footer-grid { grid-template-columns: 1fr 1fr; } }
+.rui-footer-tagline { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-base); margin-top: 12px; max-width: 36ch; line-height: 1.6; }
+.rui-footer-social { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
+.rui-footer-col h5 { font-size: var(--rui-font-size-13); text-transform: uppercase; letter-spacing: 0.08em; color: var(--rui-color-text-muted); margin: 0 0 12px; }
 .rui-footer-col-links { display: flex; flex-direction: column; gap: 8px; }
 .rui-footer-col-links .rui-link { color: var(--rui-color-text-muted); font-size: 14.5px; text-decoration: none; }
 .rui-footer-col-links .rui-link:hover { color: var(--rui-color-text); }
-.rui-footer-legal { max-width: 1180px; margin: 32px auto 0; padding-top: 20px; border-top: 1px solid var(--rui-color-border); color: var(--rui-color-text-muted); font-size: 13.5px; }
+.rui-footer-legal { max-width: 1180px; margin: 32px auto 0; padding-top: 20px; border-top: var(--rui-border-width) solid var(--rui-color-border); color: var(--rui-color-text-muted); font-size: 13.5px; }
 
 /* Backdrop decoration (Part IV.1) */
 .rui-backdrop { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
@@ -9822,20 +11424,45 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
 @media (prefers-reduced-motion: reduce) { .rui-backdrop-blob { animation: none; } }
 
 /* ThemeToggle */
-.rui-theme-toggle { width: 40px; height: 40px; display: inline-grid; place-items: center; border-radius: var(--rui-radius-md); border: 1px solid var(--rui-color-border); background: var(--rui-color-surface); color: var(--rui-color-text-muted); cursor: pointer; transition: .2s; }
+.rui-theme-toggle { width: 40px; height: 40px; display: inline-grid; place-items: center; border-radius: var(--rui-radius-md); border: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface); color: var(--rui-color-text-muted); cursor: pointer; transition: .2s; }
 .rui-theme-toggle:hover { color: var(--rui-color-text); border-color: var(--rui-color-text-muted); }
 
 /* Utility display components */
-.rui-copy-button { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: var(--rui-radius-button); border: 1px solid var(--rui-color-border); background: var(--rui-color-surface); color: var(--rui-color-text); cursor: pointer; transition: .15s; }
+/* The button now ships next to its own live region inside a wrapper span, which
+   would otherwise be a plain inline box that mis-aligns inside a window bar. */
+.rui-copy-button-wrap { display: inline-flex; align-items: center; }
+.rui-copy-button[data-icon-only="true"] { padding: 7px; gap: 0; }
+.rui-copy-button { display: inline-flex; align-items: center; gap: 7px; font-size: var(--rui-font-size-13); font-weight: 600; padding: 7px 12px; border-radius: var(--rui-radius-button); border: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface); color: var(--rui-color-text); cursor: pointer; transition: .15s; }
 .rui-copy-button:hover { border-color: var(--rui-color-primary); }
-.rui-copy-button[data-copied="true"] { border-color: var(--rui-color-success, #10b981); color: var(--rui-color-success, #10b981); }
-.rui-copy-button[data-copied="true"] .rui-copy-button-icon { color: var(--rui-color-success, #10b981); }
-.rui-segmented { display: inline-flex; padding: 3px; gap: 2px; background: var(--rui-color-surface-muted); border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-md); }
-.rui-segmented button { border: none; background: transparent; color: var(--rui-color-text-muted); font-weight: 600; font-size: 13.5px; padding: 6px 14px; border-radius: calc(var(--rui-radius-md) - 3px); cursor: pointer; transition: .15s; }
-.rui-segmented button[aria-pressed="true"] { background: var(--rui-color-surface); color: var(--rui-color-text); box-shadow: var(--rui-shadow-sm); }
-.rui-fab { position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; border: none; background: var(--rui-color-primary); color: var(--rui-color-primary-text); font-size: 20px; cursor: pointer; box-shadow: var(--rui-shadow-lg); z-index: 1300; transition: transform .2s; }
+.rui-copy-button[data-copied="true"] { border-color: var(--rui-color-success, #10b981); color: var(--rui-color-success-text); }
+.rui-copy-button[data-copied="true"] .rui-copy-button-icon { color: var(--rui-color-success-text); }
+/* The legacy .rui-segmented block is gone: SegmentedControl emits both class
+   names, and .rui-segmented button (0,1,1) was out-specifying the themed
+   .rui-segmented-control-option, so the base metrics came from the unthemed
+   duplicate instead of the block all four themes actually target. */
+.rui-fab { position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; border: none; background: var(--rui-color-primary); color: var(--rui-color-primary-text); font-size: var(--rui-font-size-20); cursor: pointer; box-shadow: var(--rui-shadow-lg); z-index: var(--rui-z-sticky); transition: transform .2s; }
 .rui-fab:hover { transform: scale(1.06); }
-.rui-prose { color: var(--rui-color-text); line-height: 1.7; font-size: 16px; }
+/* position / extended / disabled were all emitted with nothing reading them, and
+   .rui-fab and .rui-backtotop resolved to byte-identical coordinates, so an app
+   with both rendered one reachable circle. */
+.rui-fab[data-position="bottom-left"] { left: 24px; right: auto; }
+.rui-fab[data-position="bottom-center"] { left: 50%; right: auto; transform: translateX(-50%); }
+.rui-fab[data-position="bottom-center"]:hover { transform: translateX(-50%) scale(1.06); }
+.rui-fab[data-extended="true"] {
+  width: auto;
+  height: 52px;
+  border-radius: var(--rui-radius-pill);
+  padding: 0 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.rui-fab-label { font-size: var(--rui-font-size-15); font-weight: 650; }
+.rui-fab:disabled { opacity: .5; cursor: not-allowed; box-shadow: var(--rui-shadow-md); }
+.rui-fab:disabled:hover { transform: none; }
+/* Keep the centring translate — a bare transform: none would slide it right. */
+.rui-fab[data-position="bottom-center"]:disabled:hover { transform: translateX(-50%); }
+.rui-prose { color: var(--rui-color-text); line-height: 1.7; font-size: var(--rui-font-size-lg); }
 .rui-prose h1, .rui-prose h2, .rui-prose h3 { font-family: var(--rui-font-family-heading); color: var(--rui-color-text); line-height: 1.25; margin: 1.6em 0 .6em; }
 .rui-prose h1 { font-size: 1.9em; } .rui-prose h2 { font-size: 1.5em; } .rui-prose h3 { font-size: 1.25em; }
 .rui-prose p { margin: 0 0 1em; }
@@ -9845,40 +11472,68 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
 .rui-prose blockquote { margin: 1em 0; padding: .4em 1.1em; border-left: 3px solid var(--rui-color-primary); color: var(--rui-color-text-muted); }
 .rui-prose code { font-family: var(--rui-font-family-mono); font-size: .9em; background: var(--rui-color-surface-muted); padding: .15em .4em; border-radius: var(--rui-radius-xs); }
 .rui-prose pre { background: var(--rui-color-surface-muted); padding: 1em; border-radius: var(--rui-radius-md); overflow: auto; }
-.rui-prose[data-size="lg"] { font-size: 18px; }
-.rui-prose[data-size="sm"] { font-size: 14px; }
+.rui-prose[data-size="lg"] { font-size: var(--rui-font-size-18); }
+.rui-prose[data-size="sm"] { font-size: var(--rui-font-size-base); }
 
 /* E-commerce / content / utility (Part VIII.2/3/8) */
 .rui-pricetag { display: inline-flex; align-items: baseline; gap: 8px; }
-.rui-pricetag-now { font-weight: 800; color: var(--rui-color-text); font-size: 18px; }
-.rui-pricetag[data-size="lg"] .rui-pricetag-now { font-size: 24px; }
-.rui-pricetag[data-size="sm"] .rui-pricetag-now { font-size: 15px; }
+.rui-pricetag-now { font-weight: 800; color: var(--rui-color-text); font-size: var(--rui-font-size-18); }
+.rui-pricetag[data-size="lg"] .rui-pricetag-now { font-size: var(--rui-font-size-24); }
+.rui-pricetag[data-size="sm"] .rui-pricetag-now { font-size: var(--rui-font-size-15); }
 .rui-pricetag-was { color: var(--rui-color-text-muted); text-decoration: line-through; font-size: .85em; }
-.rui-pricetag-off { font-size: 11px; font-weight: 700; color: var(--rui-color-danger); background: color-mix(in srgb, var(--rui-color-danger) 14%, transparent); padding: 2px 7px; border-radius: var(--rui-radius-pill); }
-.rui-qty { display: inline-flex; align-items: center; border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-md); overflow: hidden; }
+.rui-pricetag-off { font-size: var(--rui-font-size-11); font-weight: 700; color: var(--rui-color-danger-text); background: color-mix(in srgb, var(--rui-color-danger) 14%, transparent); padding: 2px 7px; border-radius: var(--rui-radius-pill); }
+/* Unstyled it matched the price weight and size, so a price plus period read as
+   two prices. em so it tracks the size variants above. */
+.rui-pricetag-period { font-size: .8em; font-weight: 600; color: var(--rui-color-text-muted); }
+.rui-qty { display: inline-flex; align-items: center; border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-md); overflow: hidden; }
 .rui-qty button { border: none; background: var(--rui-color-surface); color: var(--rui-color-text); width: 34px; height: 34px; font-size: 17px; cursor: pointer; transition: background .15s; }
 .rui-qty button:hover:not(:disabled) { background: var(--rui-color-surface-muted); }
 .rui-qty button:disabled { opacity: .4; cursor: not-allowed; }
 .rui-qty-value { min-width: 38px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
-.rui-product-card { border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-lg); overflow: hidden; background: var(--rui-color-surface); transition: transform .25s, box-shadow .25s; }
+/* size / disabled were emitted with nothing keying off them, and the value cell
+   is now a focusable role=spinbutton, so it needs a ring of its own. */
+.rui-qty[data-size="sm"] button { width: 28px; height: 28px; font-size: var(--rui-font-size-15); }
+.rui-qty[data-size="sm"] .rui-qty-value { min-width: 30px; font-size: var(--rui-font-size-13); }
+.rui-qty[data-size="lg"] button { width: 42px; height: 42px; font-size: 19px; }
+.rui-qty[data-size="lg"] .rui-qty-value { min-width: 46px; font-size: 17px; }
+.rui-qty[data-disabled="true"] { opacity: .6; }
+.rui-qty-value:focus-visible { outline: 2px solid var(--rui-color-primary); outline-offset: -2px; }
+/* overflow: visible — a variant Dropdown in the footer action slot is mainstream
+   for a product card, and hidden clipped it at the rounded edge. The media pane
+   already clips itself, so it just needs its own top corners. */
+.rui-product-card { border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-lg); overflow: visible; background: var(--rui-color-surface); transition: transform .25s, box-shadow .25s; }
 .rui-product-card:hover { transform: translateY(-4px); box-shadow: var(--rui-shadow-lg); }
-.rui-product-media { position: relative; aspect-ratio: 4/3; background: var(--rui-color-surface-muted); overflow: hidden; }
+.rui-product-card[data-sold-out="true"] { opacity: .6; }
+.rui-product-card[data-sold-out="true"]:hover { transform: none; box-shadow: none; }
+.rui-product-media { position: relative; aspect-ratio: 4/3; background: var(--rui-color-surface-muted); overflow: hidden; border-radius: calc(var(--rui-radius-lg) - var(--rui-border-width)) calc(var(--rui-radius-lg) - var(--rui-border-width)) 0 0; }
 .rui-product-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.rui-product-badge { position: absolute; top: 10px; left: 10px; font-size: 11px; font-weight: 700; color: #fff; background: var(--rui-color-danger); padding: 3px 9px; border-radius: var(--rui-radius-pill); }
+.rui-product-badge { position: absolute; top: 10px; left: 10px; font-size: var(--rui-font-size-11); font-weight: 700; color: var(--rui-color-on-danger); background: var(--rui-color-danger); padding: 3px 9px; border-radius: var(--rui-radius-pill); }
 .rui-product-body { padding: 14px 16px; }
-.rui-product-title { font-size: 15px; font-weight: 700; margin: 0 0 6px; color: var(--rui-color-text); }
-.rui-product-rating { display: flex; gap: 2px; color: var(--rui-color-warning); font-size: 12px; margin-bottom: 8px; }
+.rui-product-title { font-size: var(--rui-font-size-15); font-weight: 700; margin: 0 0 6px; color: var(--rui-color-text); }
+/* The title becomes an <a> or a <button> when href/onClick is given — strip the
+   UA chrome so it still reads as the heading it replaces. */
+.rui-product-title-link { color: inherit; text-decoration: none; background: none; border: 0; padding: 0; margin: 0; font: inherit; text-align: left; cursor: pointer; }
+.rui-product-title-link:hover { color: var(--rui-color-primary); }
+.rui-product-rating { display: flex; gap: 2px; color: var(--rui-color-warning); font-size: var(--rui-font-size-sm); margin-bottom: 8px; }
+.rui-product-reviews { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-sm); font-weight: 500; margin-left: 4px; }
 .rui-product-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
 .rui-product-add { border: none; width: 38px; height: 38px; border-radius: var(--rui-radius-md); background: var(--rui-color-primary); color: var(--rui-color-primary-text); cursor: pointer; display: grid; place-items: center; transition: filter .15s; }
 .rui-product-add:hover { filter: brightness(1.08); }
-.rui-toc { font-size: 14px; }
-.rui-toc-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--rui-color-text-muted); margin-bottom: 10px; }
+.rui-product-add:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+.rui-toc { font-size: var(--rui-font-size-base); }
+.rui-toc-title { font-size: var(--rui-font-size-sm); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--rui-color-text-muted); margin-bottom: 10px; }
 .rui-toc-list { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--rui-color-border); }
 .rui-toc-item a { display: block; padding: 5px 0 5px 14px; color: var(--rui-color-text-muted); text-decoration: none; border-left: 2px solid transparent; margin-left: -2px; transition: color .15s, border-color .15s; }
 .rui-toc-item a:hover { color: var(--rui-color-text); border-left-color: var(--rui-color-primary); }
 .rui-toc-item[data-level="2"] a { padding-left: 28px; }
 .rui-toc-item[data-level="3"] a { padding-left: 42px; }
-.rui-typing { display: inline-flex; align-items: center; gap: 8px; color: var(--rui-color-text-muted); font-size: 13px; }
+/* level is clamped to 1-4, so without this an h4 sat flush with an h1 and the
+   hierarchy the prop exists to convey collapsed. */
+.rui-toc-item[data-level="4"] a { padding-left: 56px; }
+/* The hover treatment already existed; this is what makes the tracked active
+   entry visible without pointing at it. */
+.rui-toc-item[data-active="true"] a { color: var(--rui-color-text); border-left-color: var(--rui-color-primary); font-weight: 600; }
+.rui-typing { display: inline-flex; align-items: center; gap: 8px; color: var(--rui-color-text-muted); font-size: var(--rui-font-size-13); }
 .rui-typing-dots { display: inline-flex; gap: 4px; }
 .rui-typing-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--rui-color-text-muted); display: block; animation: akTyping 1.2s infinite ease-in-out; }
 .rui-typing-dots i:nth-child(2) { animation-delay: .15s; }
@@ -9886,11 +11541,13 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
 @keyframes akTyping { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-5px); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .rui-typing-dots i { animation: none; } }
 .rui-countdown { display: inline-flex; gap: 10px; }
-.rui-countdown-unit { min-width: 56px; text-align: center; border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-md); padding: 10px 6px; background: var(--rui-color-surface); }
-.rui-countdown-value { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--rui-color-text); line-height: 1; }
-.rui-countdown-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--rui-color-text-muted); margin-top: 5px; }
+.rui-countdown-unit { min-width: 56px; text-align: center; border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-md); padding: 10px 6px; background: var(--rui-color-surface); }
+.rui-countdown-value { font-size: var(--rui-font-size-24); font-weight: 800; font-variant-numeric: tabular-nums; color: var(--rui-color-text); line-height: 1; }
+.rui-countdown-label { font-size: var(--rui-font-size-11); text-transform: uppercase; letter-spacing: .05em; color: var(--rui-color-text-muted); margin-top: 5px; }
 .rui-countdown-done { font-weight: 700; color: var(--rui-color-primary); padding: 10px; }
-.rui-backtotop { bottom: 24px; right: 24px; }
+/* Stacks one row above a FloatingActionButton instead of landing on top of it;
+   the horizontal edge comes from the shared .rui-fab[data-position] rules. */
+.rui-backtotop { bottom: 92px; }
 
 /* ====================================================================== *
  * Layout & motion (Parts II.2, III.2/5/6/7)
@@ -9899,14 +11556,34 @@ ${spacingAttrRules(".rui-masonry-grid", "data-gap", (v) => `--rui-masonry-gap: $
 .rui-split[data-align="center"] { align-items: center; }
 .rui-split[data-align="stretch"] { align-items: stretch; }
 .rui-split[data-divider="true"] { position: relative; }
-.rui-split[data-divider="true"] > .rui-split-pane:first-child { border-right: 1px solid var(--rui-color-border); padding-right: var(--rui-spacing-l); }
+.rui-split[data-divider="true"] > .rui-split-pane:first-child { border-right: var(--rui-border-width) solid var(--rui-color-border); padding-right: var(--rui-spacing-l); }
 .rui-split-pane[data-sticky="true"] { position: sticky; top: 88px; align-self: start; }
-@media (max-width: 768px) {
-  .rui-split[data-stack="md"], .rui-split[data-stack="lg"] { grid-template-columns: 1fr !important; }
-  .rui-split[data-stack="md"] > .rui-split-pane:first-child, .rui-split[data-stack="lg"] > .rui-split-pane:first-child { border-right: none; padding-right: 0; }
-  .rui-split-pane[data-sticky="true"] { position: static; }
+/* One threshold per stackAt level, so the enum's three values are three real
+   behaviours. Everything that only makes sense side-by-side — the first pane's
+   divider rule, its gutter padding, a sticky pane — has to be undone at the
+   same width that level collapses, and the reverseOnStack order swap can only
+   live in a media query or it would also flip the desktop layout. */
+${below("lg")} {
+  .rui-split[data-stack="lg"] { grid-template-columns: 1fr !important; }
+  .rui-split[data-stack="lg"] > .rui-split-pane:first-child { border-right: none; padding-right: 0; }
+  .rui-split[data-stack="lg"] .rui-split-pane[data-sticky="true"] { position: static; }
+  .rui-split[data-stack="lg"][data-reverse-stack="true"] > .rui-split-pane:first-child { order: 2; }
+  .rui-split[data-stack="lg"][data-reverse-stack="true"] > .rui-split-pane:last-child { order: 1; }
 }
-@media (max-width: 640px) { .rui-split[data-stack="sm"] { grid-template-columns: 1fr !important; } }
+${below("md")} {
+  .rui-split[data-stack="md"] { grid-template-columns: 1fr !important; }
+  .rui-split[data-stack="md"] > .rui-split-pane:first-child { border-right: none; padding-right: 0; }
+  .rui-split[data-stack="md"] .rui-split-pane[data-sticky="true"] { position: static; }
+  .rui-split[data-stack="md"][data-reverse-stack="true"] > .rui-split-pane:first-child { order: 2; }
+  .rui-split[data-stack="md"][data-reverse-stack="true"] > .rui-split-pane:last-child { order: 1; }
+}
+${below("sm")} {
+  .rui-split[data-stack="sm"] { grid-template-columns: 1fr !important; }
+  .rui-split[data-stack="sm"] > .rui-split-pane:first-child { border-right: none; padding-right: 0; }
+  .rui-split[data-stack="sm"] .rui-split-pane[data-sticky="true"] { position: static; }
+  .rui-split[data-stack="sm"][data-reverse-stack="true"] > .rui-split-pane:first-child { order: 2; }
+  .rui-split[data-stack="sm"][data-reverse-stack="true"] > .rui-split-pane:last-child { order: 1; }
+}
 
 /* Bento — track count and spans flow through custom properties (data-cols →
    --rui-bento-cols, BentoCell inline --rui-cell-col/row) so the responsive
@@ -9925,14 +11602,14 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
 .rui-bento-cell { min-width: 0; min-height: 0; display: flex; flex-direction: column; grid-column: span var(--rui-cell-col, 1); grid-row: span var(--rui-cell-row, 1); }
 .rui-bento-cell > * { flex: 1 1 auto; min-height: 0; }
 .rui-bento-cell[data-span="full"] { grid-column: 1 / -1; }
-@media (max-width: 920px) {
+${below("lg")} {
   .rui-bento[data-cols] { --rui-bento-cols: 2; }
   .rui-bento[data-cols] > .rui-bento-cell { grid-column: span 1; grid-row: span 1; }
   .rui-bento[data-cols] > .rui-bento-cell[data-span="wide"],
   .rui-bento[data-cols] > .rui-bento-cell[data-span="hero"],
   .rui-bento[data-cols] > .rui-bento-cell[data-span="full"] { grid-column: 1 / -1; }
 }
-@media (max-width: 640px) {
+${below("sm")} {
   .rui-bento[data-cols] { --rui-bento-cols: 1; }
 }
 
@@ -9952,7 +11629,9 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
   transition: opacity var(--rui-transition-ms, 280ms) cubic-bezier(.22,1,.36,1),
               transform var(--rui-transition-ms, 280ms) cubic-bezier(.22,1,.36,1);
 }
-.rui-transition[data-state="exit"] > * { opacity: 0; }
+/* pointer-events off while exiting: the child is invisible but still
+   hit-testable for the whole duration, which on an overlay is a click blocker. */
+.rui-transition[data-state="exit"] > * { opacity: 0; pointer-events: none; }
 .rui-transition[data-state="enter"] > * { opacity: 1; transform: none; }
 .rui-transition[data-preset="scale"][data-state="exit"] > * { transform: scale(.94); }
 .rui-transition[data-preset="slide-up"][data-state="exit"] > * { transform: translateY(12px); }
@@ -9972,26 +11651,41 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
   border: 0;
 }
 .rui-skip-link {
-  position: absolute;
+  /* fixed, not absolute: nothing in the tree establishes a positioned ancestor,
+     so absolute resolved against the initial containing block and put the
+     revealed link at top: 8px in DOCUMENT coordinates — on a scrolled page the
+     browser jumped to the top to show it, and inside any position: relative
+     wrapper it appeared mid-page. */
+  position: fixed;
   left: 8px; top: -48px;
-  z-index: 1500;
+  z-index: var(--rui-z-skip-link);
   padding: 8px 14px;
   background: var(--rui-color-primary);
-  color: var(--rui-color-primary-contrast, #fff);
-  border-radius: var(--rui-radius-md, 8px);
+  color: var(--rui-color-primary-text);
+  border-radius: var(--rui-radius-md);
   text-decoration: none;
   transition: top .15s ease;
 }
 .rui-skip-link:focus { top: 8px; outline: 2px solid var(--rui-color-primary); outline-offset: 2px; }
 .rui-live-region { font-size: .875rem; color: var(--rui-color-text-muted); }
 .rui-focus-trap { display: contents; }
+/* OnClick (role=button, tabindex=0) and OnKeyboard are display: contents, so they
+   generate no box and NEITHER the UA outline nor a theme ring can be painted on
+   the wrapper itself — focus landed on a clickable card with nothing on screen to
+   show it. Forwarding the ring to the child is the only way to show focus without
+   giving the wrapper a box, which would change layout. */
+.rui-wrapper[tabindex]:focus-visible { outline: none; }
+.rui-wrapper[tabindex]:focus-visible > * {
+  outline: 2px solid var(--rui-color-primary);
+  outline-offset: 2px;
+}
 
 /* Forced-colors / high-contrast (X.4): keep focus + borders visible when the
    OS high-contrast mode strips theme colors. */
 @media (forced-colors: active) {
-  .rui-button, .rui-card, .rui-input, .rui-badge, .rui-chip,
-  .rui-select, .rui-textarea, .rui-table, .rui-modal-panel {
-    border: 1px solid CanvasText;
+  .rui-button, .rui-card, .rui-input, .rui-badge, .rui-tag,
+  .rui-select, .rui-textarea, .rui-table, .rui-modal {
+    border: var(--rui-border-width) solid CanvasText;
   }
   .rui-button:focus-visible, .rui-input:focus-visible,
   .rui-nav-link:focus-visible, a:focus-visible, [tabindex]:focus-visible {
@@ -9999,26 +11693,37 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
     outline-offset: 2px;
   }
   .ak-anim, .rui-transition > * { forced-color-adjust: auto; }
+  /* Same trap as the soft-theme titles: these paint their glyphs by clipping a
+     background to the text and setting the fill transparent. Forced colors
+     replaces the background image, so without this they render as nothing.
+     Declared here rather than beside the components because this block is
+     downstream of them and the selectors weigh the same. */
+  .rui-gradient-text,
+  .rui-metric-value[data-gradient="true"] {
+    background: none;
+    color: CanvasText;
+    -webkit-text-fill-color: currentColor;
+  }
 }
 
 /* Wave-3 components (QR, reactions, cursor, tab bar, cart) ---------------- */
 .rui-qrcode { display: inline-block; line-height: 0; }
-.rui-qrcode-error { font-size: 0.8rem; color: var(--rui-color-danger); padding: 8px; }
+.rui-qrcode-error { font-size: 0.8rem; color: var(--rui-color-danger-text); padding: 8px; }
 .rui-reaction-picker { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .rui-reaction {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 3px 9px; border-radius: 999px;
-  border: 1px solid var(--rui-color-border); background: var(--rui-color-surface);
+  border: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface);
   cursor: pointer; font-size: 0.85rem; transition: background .12s, border-color .12s;
 }
 .rui-reaction:hover { background: color-mix(in srgb, var(--rui-color-primary) 6%, transparent); }
 .rui-reaction[data-active="true"] { border-color: var(--rui-color-primary); background: color-mix(in srgb, var(--rui-color-primary) 12%, transparent); }
 .rui-reaction-count { color: var(--rui-color-text-muted); font-variant-numeric: tabular-nums; }
-.rui-live-cursor { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1400; will-change: transform; }
+.rui-live-cursor { position: absolute; top: 0; left: 0; pointer-events: none; z-index: var(--rui-z-toast); will-change: transform; }
 .rui-live-cursor-label { position: absolute; top: 16px; left: 14px; padding: 1px 7px; border-radius: 6px; color: #fff; font-size: 0.72rem; white-space: nowrap; }
 .rui-tabbar {
   display: flex; align-items: stretch; justify-content: space-around;
-  border-top: 1px solid var(--rui-color-border); background: var(--rui-color-surface);
+  border-top: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface);
   padding-bottom: env(safe-area-inset-bottom);
 }
 .rui-tabbar-item {
@@ -10028,63 +11733,66 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
 }
 .rui-tabbar-item[data-active="true"] { color: var(--rui-color-primary); }
 .rui-tabbar-icon-wrap { position: relative; font-size: 1.15rem; line-height: 1; }
-.rui-tabbar-badge { position: absolute; top: -4px; right: -8px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--rui-color-danger); color: #fff; font-size: 0.6rem; display: flex; align-items: center; justify-content: center; }
+.rui-tabbar-badge { position: absolute; top: -4px; right: -8px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--rui-color-danger); color: var(--rui-color-on-danger); font-size: 0.6rem; display: flex; align-items: center; justify-content: center; }
 .rui-cart { display: flex; flex-direction: column; gap: 2px; }
 .rui-cart-empty { padding: 24px; text-align: center; color: var(--rui-color-text-muted); }
-.rui-cart-line { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rui-color-border); }
+.rui-cart-line { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: var(--rui-border-width) solid var(--rui-color-border); }
 .rui-cart-thumb { width: 48px; height: 48px; border-radius: var(--rui-radius-md, 8px); object-fit: cover; flex-shrink: 0; }
 .rui-cart-body { flex: 1; min-width: 0; }
 .rui-cart-name { font-weight: 500; }
 .rui-cart-price { color: var(--rui-color-text-muted); font-size: 0.85rem; }
 .rui-cart-qty { display: inline-flex; align-items: center; gap: 8px; }
-.rui-cart-qty-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--rui-color-border); background: var(--rui-color-surface); cursor: pointer; font-size: 1rem; line-height: 1; }
+.rui-cart-qty-btn { width: 26px; height: 26px; border-radius: 6px; border: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface); cursor: pointer; font-size: 1rem; line-height: 1; }
 .rui-cart-qty-value { min-width: 20px; text-align: center; font-variant-numeric: tabular-nums; }
 .rui-cart-line-total { font-weight: 600; min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
 .rui-cart-remove { border: none; background: none; cursor: pointer; color: var(--rui-color-text-muted); padding: 4px; }
-.rui-cart-remove:hover { color: var(--rui-color-danger); }
+.rui-cart-remove:hover { color: var(--rui-color-danger-text); }
 .rui-cart-foot { display: flex; justify-content: space-between; padding: 12px 0; font-weight: 600; }
 
-/* Donut legend + Calendar (charts / scheduling) -------------------------- */
-.rui-donut-chart { display: inline-flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.rui-donut-legend { display: flex; flex-direction: column; gap: 4px; }
-.rui-donut-legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
-.rui-donut-legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
-.rui-donut-legend-pct { color: var(--rui-color-text-muted); font-variant-numeric: tabular-nums; }
+/* Calendar (scheduling) ------------------------------------------------- */
 /* Calendar (VIII.6) — Google Calendar-style month grid. Its own rui-gcal
    namespace keeps it independent from CalendarView's rui-calendar styles. */
-.rui-gcal { width: 100%; border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-lg, 12px); background: var(--rui-color-surface); overflow: hidden; }
-.rui-gcal-toolbar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--rui-color-border); }
-.rui-gcal-today { font: inherit; font-size: 13px; font-weight: 600; color: var(--rui-color-text); background: var(--rui-color-surface); border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-pill, 99px); padding: 5px 14px; cursor: pointer; transition: background 120ms ease, border-color 120ms ease; }
+.rui-gcal { width: 100%; border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-lg, 12px); background: var(--rui-color-surface); overflow: hidden; }
+.rui-gcal-toolbar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: var(--rui-border-width) solid var(--rui-color-border); }
+.rui-gcal-today { font: inherit; font-size: var(--rui-font-size-13); font-weight: 600; color: var(--rui-color-text); background: var(--rui-color-surface); border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-pill, 99px); padding: 5px 14px; cursor: pointer; transition: background 120ms ease, border-color 120ms ease; }
 .rui-gcal-today:hover { background: var(--rui-color-surface-muted); border-color: var(--rui-color-text-muted); }
-.rui-gcal-nav { width: 30px; height: 30px; display: grid; place-items: center; border: none; background: transparent; color: var(--rui-color-text-muted); border-radius: 50%; cursor: pointer; font-size: 13px; transition: background 120ms ease, color 120ms ease; }
+.rui-gcal-nav { width: 30px; height: 30px; display: grid; place-items: center; border: none; background: transparent; color: var(--rui-color-text-muted); border-radius: 50%; cursor: pointer; font-size: var(--rui-font-size-13); transition: background 120ms ease, color 120ms ease; }
 .rui-gcal-nav:hover { background: var(--rui-color-surface-muted); color: var(--rui-color-text); }
-.rui-gcal-title { margin-left: 8px; font-size: 16px; font-weight: 600; color: var(--rui-color-text); letter-spacing: -0.01em; }
+.rui-gcal-title { margin-left: 8px; font-size: var(--rui-font-size-lg); font-weight: 600; color: var(--rui-color-text); letter-spacing: -0.01em; }
 .rui-gcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.rui-gcal-weekday { text-align: center; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: var(--rui-color-text-muted); padding: 8px 0 6px; border-bottom: 1px solid var(--rui-color-border-subtle, var(--rui-color-border)); }
-.rui-gcal-day { position: relative; min-height: clamp(64px, 9vw, 96px); padding: 4px 4px 6px; display: flex; flex-direction: column; align-items: stretch; gap: 2px; font: inherit; text-align: center; color: var(--rui-color-text); background: var(--rui-color-surface); border: none; border-bottom: 1px solid var(--rui-color-border-subtle, var(--rui-color-border)); border-right: 1px solid var(--rui-color-border-subtle, var(--rui-color-border)); cursor: pointer; transition: background 120ms ease; }
-/* The grid's first 7 children are the weekday headers, so the trailing cell
-   of each week row lands on nth-child(7n). */
-.rui-gcal-grid > .rui-gcal-day:nth-child(7n) { border-right: none; }
-.rui-gcal-grid > .rui-gcal-day:nth-last-child(-n + 7) { border-bottom: none; }
+.rui-gcal-weekday { text-align: center; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: var(--rui-color-text-muted); padding: 8px 0 6px; border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle, var(--rui-color-border)); }
+.rui-gcal-day { position: relative; min-height: clamp(64px, 9vw, 96px); padding: 4px 4px 6px; display: flex; flex-direction: column; align-items: stretch; gap: 2px; font: inherit; text-align: center; color: var(--rui-color-text); background: var(--rui-color-surface); border: none; border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle, var(--rui-color-border)); border-right: var(--rui-border-width) solid var(--rui-color-border-subtle, var(--rui-color-border)); cursor: pointer; transition: background 120ms ease; }
+/* Each week is now its own role="row" wrapper (display: contents), so no day is a
+   direct child of the grid any more: the trailing cell is the 7th child of its
+   ROW, and the bottom edge is every cell of the LAST row. */
+.rui-gcal-row > .rui-gcal-day:nth-child(7n) { border-right: none; }
+.rui-gcal-grid > .rui-gcal-row:last-child > .rui-gcal-day { border-bottom: none; }
 .rui-gcal-day:hover { background: color-mix(in srgb, var(--rui-color-primary) 5%, var(--rui-color-surface)); }
+/* minDate/maxDate/disabledDates render blocked cells with the native disabled
+   attribute plus data-disabled, but the base rule declares cursor: pointer and a
+   hover wash — so a blacked-out day looked selectable right up to the dead click. */
+.rui-gcal-day[data-disabled="true"] { cursor: not-allowed; background: var(--rui-color-surface-muted); }
+.rui-gcal-day[data-disabled="true"] .rui-gcal-daynum { color: var(--rui-color-text-muted); opacity: 0.45; }
+.rui-gcal-day[data-disabled="true"]:hover { background: var(--rui-color-surface-muted); }
 .rui-gcal-day[data-in-month="false"] .rui-gcal-daynum { color: var(--rui-color-text-muted); opacity: 0.55; }
-.rui-gcal-daynum { width: 24px; height: 24px; margin: 0 auto; display: grid; place-items: center; border-radius: 50%; font-size: 12px; font-weight: 500; line-height: 1; }
-.rui-gcal-day[data-today="true"] .rui-gcal-daynum { background: var(--rui-color-primary); color: var(--rui-color-primary-contrast, var(--rui-color-primary-text, #fff)); font-weight: 700; }
+.rui-gcal-daynum { width: 24px; height: 24px; margin: 0 auto; display: grid; place-items: center; border-radius: 50%; font-size: var(--rui-font-size-sm); font-weight: 500; line-height: 1; }
+.rui-gcal-day[data-today="true"] .rui-gcal-daynum { background: var(--rui-color-primary); color: var(--rui-color-primary-text); font-weight: 700; }
 .rui-gcal-day[data-selected="true"] { background: color-mix(in srgb, var(--rui-color-primary) 10%, var(--rui-color-surface)); }
 .rui-gcal-day[data-selected="true"]:not([data-today="true"]) .rui-gcal-daynum { background: color-mix(in srgb, var(--rui-color-primary) 18%, transparent); color: var(--rui-color-primary); font-weight: 700; }
 .rui-gcal-events { display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-height: 0; }
+/* Chips are only interactive when onEventClick is supplied. */
+.rui-gcal-chip[data-clickable="true"] { cursor: pointer; }
+.rui-gcal-chip[data-clickable="true"]:hover { filter: brightness(1.1); }
 .rui-gcal-chip { display: block; font-size: 10.5px; font-weight: 600; line-height: 1.6; padding: 0 6px; border-radius: 4px; background: var(--rui-gcal-chip, var(--rui-color-primary)); color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
 .rui-gcal-dots { display: flex; justify-content: center; gap: 3px; padding: 1px 0; }
 .rui-gcal-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--rui-color-primary); }
 .rui-gcal-more { font-size: 10.5px; font-weight: 600; color: var(--rui-color-text-muted); text-align: left; padding: 0 6px; }
-@media (max-width: 560px) {
+${below("sm")} {
   .rui-gcal-chip, .rui-gcal-more, .rui-gcal-dots { display: none; }
   .rui-gcal-day { min-height: 48px; }
   /* Collapse all event detail into a single presence dot per day. */
   .rui-gcal-events::after { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--rui-color-primary); margin: 1px auto 0; }
 }
-.rui-calendar-dot { position: absolute; bottom: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--rui-color-accent, var(--rui-color-primary)); }
-.rui-calendar-day[data-selected="true"] .rui-calendar-dot { background: #fff; }
 
 .rui-gesture { touch-action: pan-y; }
 .rui-parallax { display: block; }
@@ -10094,24 +11802,39 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
 .rui-lottie-empty { background: color-mix(in srgb, var(--rui-color-text-muted) 8%, transparent); border-radius: var(--rui-radius-md, 8px); }
 /* Interactive canvas / editors (VIII.7) */
 .rui-drawing-canvas, .rui-signature-pad { position: relative; display: inline-block; }
-.rui-canvas-surface { display: block; border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-md, 8px); background: var(--rui-color-surface); cursor: crosshair; }
-.rui-signature-pad .rui-canvas-surface { background: #fff; }
-.rui-signature-baseline { position: absolute; left: 16px; right: 16px; bottom: 44px; border-bottom: 1px dashed var(--rui-color-border); pointer-events: none; }
+.rui-canvas-surface { display: block; border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-md, 8px); background: var(--rui-color-surface); cursor: crosshair; }
+/* Deliberately light in every theme: signature ink is dark, so a dark pad
+   would be unusable. Expressed as a token so a theme can still override it
+   (e.g. a dark theme that also inverts the ink). */
+.rui-signature-pad .rui-canvas-surface { background: var(--rui-signature-surface, #fff); }
+/* The guide now hangs off .rui-signature-surface (the box around the canvas), not
+   off the pad root, so it no longer has to clear a toolbar. */
+.rui-signature-surface { position: relative; display: block; }
+.rui-signature-baseline { position: absolute; left: 16px; right: 16px; bottom: 14px; border-bottom: 1px dashed var(--rui-color-border); pointer-events: none; }
+/* Stated here as well as inline, so a consumer overriding the sheet still gets a
+   portal layer that stacks above ordinary content. */
+.rui-portal-layer { position: relative; z-index: var(--rui-z-popover); }
+/* Deliberately NOT display: contents. It would stop the wrapper introducing a
+   block box, but the wrapper is what carries aria-busy for the in-flight subtree,
+   and a box-less element's ARIA is unreliable across engines. A block box here is
+   the cheaper trade. */
+.rui-async { min-width: 0; }
 .rui-canvas-toolbar { display: flex; justify-content: flex-end; padding-top: 6px; }
-.rui-canvas-clear { padding: 4px 12px; border-radius: var(--rui-radius-md, 8px); border: 1px solid var(--rui-color-border); background: var(--rui-color-surface); cursor: pointer; font-size: 0.8rem; }
+.rui-canvas-clear { padding: 4px 12px; border-radius: var(--rui-radius-md, 8px); border: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface); cursor: pointer; font-size: 0.8rem; }
 .rui-canvas-clear:hover { border-color: var(--rui-color-primary); color: var(--rui-color-primary); }
-.rui-color-picker { display: inline-flex; flex-direction: column; gap: 8px; }
-.rui-color-picker-top { display: flex; align-items: center; gap: 8px; }
-.rui-color-picker-input { width: 40px; height: 32px; border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-md, 8px); padding: 0; background: none; cursor: pointer; }
-.rui-color-picker-value { font-family: var(--rui-font-mono, monospace); font-size: 0.85rem; color: var(--rui-color-text-muted); }
-.rui-color-picker-swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
-.rui-color-picker-swatch { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--rui-color-border); cursor: pointer; padding: 0; }
-.rui-color-picker-swatch[data-active="true"] { outline: 2px solid var(--rui-color-primary); outline-offset: 1px; }
+/* The stale duplicate ColorPicker block that used to sit here is gone. It
+   redefined the same selectors at equal specificity and won on source order:
+   the root flipped to inline-flex (which shrink-wrapped the hex field to
+   unusable), the swatch row flipped from a wrapping row of 24px circles to a
+   rigid repeat(8, 1fr) grid of squares (rendering a 12-colour palette as a
+   ragged 8 + 4), and the active swatch painted two competing indicators. Its
+   -top / -input / -value selectors were dead anyway — the component emits
+   -row / -color / -hex. The intended block lives with the other editor rules. */
 /* ErrorBoundary friendly card (XIV.4) */
-.rui-error-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px; text-align: center; border: 1px solid color-mix(in srgb, var(--rui-color-danger) 30%, var(--rui-color-border)); border-radius: var(--rui-radius-lg, 12px); background: color-mix(in srgb, var(--rui-color-danger) 5%, var(--rui-color-surface)); color: var(--rui-color-text); }
+.rui-error-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px; text-align: center; border: var(--rui-border-width) solid color-mix(in srgb, var(--rui-color-danger) 30%, var(--rui-color-border)); border-radius: var(--rui-radius-lg, 12px); background: color-mix(in srgb, var(--rui-color-danger) 5%, var(--rui-color-surface)); color: var(--rui-color-text); }
 .rui-error-card-icon { font-size: 1.6rem; color: var(--rui-color-danger); }
 .rui-error-card-title { font-weight: 600; }
-.rui-error-card-message { font-family: var(--rui-font-mono, monospace); font-size: 0.8rem; color: var(--rui-color-text-muted); word-break: break-word; }
+.rui-error-card-message { font-family: var(--rui-font-family-mono); font-size: 0.8rem; color: var(--rui-color-text-muted); word-break: break-word; }
 /* RouteView page transitions (IV.4) — the keyed wrapper replays on route change. */
 .rui-route-view { display: block; }
 .rui-route-page[data-anim] { animation: routeEnter var(--rui-route-ms, 300ms) cubic-bezier(.22,1,.36,1) both; }
@@ -10131,7 +11854,7 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
 @media (prefers-reduced-motion: reduce) { .rui-route-page { animation: none !important; } }
 
 .rui-sortable { display: flex; flex-direction: column; gap: var(--rui-spacing-s); }
-.rui-sortable-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-md); background: var(--rui-color-surface); }
+.rui-sortable-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-md); background: var(--rui-color-surface); }
 .rui-sortable-item.is-dragging { opacity: .5; }
 .rui-sortable-item.is-over { border-color: var(--rui-color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--rui-color-primary) 30%, transparent); }
 .rui-sortable-handle { cursor: grab; color: var(--rui-color-text-muted); }
@@ -10140,8 +11863,12 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
 .rui-draggable.is-dragging { opacity: .5; }
 .rui-dropzone { border: 2px dashed var(--rui-color-border); border-radius: var(--rui-radius-md); padding: var(--rui-spacing-l); text-align: center; color: var(--rui-color-text-muted); transition: border-color .15s, background .15s; }
 .rui-dropzone.is-over { border-color: var(--rui-color-primary); background: color-mix(in srgb, var(--rui-color-primary) 6%, transparent); }
+/* Both are functionally inert when disabled; the grab cursor and the dashed
+   invitation have to stop advertising an interaction that cannot happen. */
+.rui-draggable[data-disabled="true"] { cursor: default; opacity: .6; }
+.rui-dropzone[data-disabled="true"] { opacity: .6; border-style: solid; }
 
-.rui-reading-progress { position: fixed; top: 0; left: 0; right: 0; z-index: 1400; background: transparent; }
+.rui-reading-progress { position: fixed; top: 0; left: 0; right: 0; z-index: var(--rui-z-banner); background: transparent; }
 .rui-reading-progress-bar { height: 100%; width: 0; background: var(--rui-color-primary); transition: width .1s linear; }
 .rui-reading-progress-bar[data-gradient="true"] { background: var(--rui-gradient-brand); }
 
@@ -10155,7 +11882,7 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
 .rui-svg { display: inline-block; vertical-align: middle; }
 
 /* Sheets */
-.rui-sheet-root { position: fixed; inset: 0; z-index: 1300; pointer-events: none; }
+.rui-sheet-root { position: fixed; inset: 0; z-index: var(--rui-z-modal); pointer-events: none; }
 .rui-sheet-root[data-open="false"] { visibility: hidden; }
 .rui-sheet-backdrop { position: absolute; inset: 0; background: rgba(15,23,42,.45); opacity: 0; transition: opacity .25s; }
 .rui-sheet-root[data-open="true"] { pointer-events: auto; }
@@ -10166,94 +11893,222 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
 .rui-sheet-root[data-side="top"] .rui-sheet-panel { top: 0; left: 0; right: 0; max-height: 80vh; transform: translateY(-100%); }
 .rui-sheet-root[data-side="bottom"] .rui-sheet-panel { bottom: 0; left: 0; right: 0; max-height: 85vh; border-radius: var(--rui-radius-lg) var(--rui-radius-lg) 0 0; transform: translateY(100%); }
 .rui-sheet-root[data-open="true"] .rui-sheet-panel { transform: none; }
-.rui-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--rui-color-border); }
-.rui-sheet-title { font-size: 17px; font-weight: 700; margin: 0; }
-.rui-sheet-close { border: none; background: transparent; color: var(--rui-color-text-muted); cursor: pointer; font-size: 16px; width: 32px; height: 32px; border-radius: var(--rui-radius-sm); }
-.rui-sheet-close:hover { background: var(--rui-color-surface-muted); color: var(--rui-color-text); }
-.rui-sheet-body { padding: 18px; overflow-y: auto; flex: 1; }
-.rui-bottomsheet-grip { width: 40px; height: 4px; border-radius: 999px; background: var(--rui-color-border); margin: 10px auto 4px; }
+.rui-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: var(--rui-border-width) solid var(--rui-color-border); }
+/* Scoped under .rui-sheet-root, which only extras' Sheet/BottomSheet emits —
+   Drawer's root is .rui-sheet-overlay. Unscoped these sat after Drawer's own
+   mitigation at equal specificity and won it, so a Drawer heading rendered
+   17px/700 instead of 16px/600, its body padding lost the theme token, and its
+   close glyph shrank from 22px to 16px. */
+.rui-sheet-root .rui-sheet-title { font-size: 17px; font-weight: 700; margin: 0; }
+.rui-sheet-root .rui-sheet-close { border: none; background: transparent; color: var(--rui-color-text-muted); cursor: pointer; font-size: var(--rui-font-size-lg); width: 32px; height: 32px; border-radius: var(--rui-radius-sm); }
+.rui-sheet-root .rui-sheet-close:hover { background: var(--rui-color-surface-muted); color: var(--rui-color-text); }
+.rui-sheet-root .rui-sheet-body { padding: 18px; overflow-y: auto; flex: 1; }
+/* overscroll-behavior on both copies: once the sheet body reaches its end the
+   gesture used to chain to the document — the iOS "modal scrolls the page away
+   underneath" bug that the JS scroll lock alone does not cover. */
+.rui-sheet-body { overscroll-behavior: contain; }
+/* A 4px bar is not a touch target, so the grip is a 20px box drawing the bar
+   through ::before. touch-action: none is load-bearing: without it the browser's
+   own scroll gesture claims the pointer stream and cancels the drag on touch —
+   the only platform where drag-to-dismiss matters. */
+.rui-bottomsheet-grip {
+  width: 56px;
+  height: 20px;
+  margin: 6px auto 0;
+  background: none;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  cursor: grab;
+}
+.rui-bottomsheet-grip::before {
+  content: "";
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--rui-color-border);
+}
+.rui-bottomsheet-grip:active { cursor: grabbing; }
 .rui-bottomsheet .rui-sheet-title { padding: 6px 18px; }
 @media (prefers-reduced-motion: reduce) { .rui-sheet-panel, .rui-sheet-backdrop { transition: none; } }
 
 /* Confirm dialog */
-.rui-confirm-root { position: fixed; inset: 0; z-index: 1320; display: grid; place-items: center; pointer-events: none; }
+.rui-confirm-root { position: fixed; inset: 0; z-index: var(--rui-z-modal-top); display: grid; place-items: center; pointer-events: none; }
 .rui-confirm-root[data-open="false"] { visibility: hidden; }
 .rui-confirm-root[data-open="true"] { pointer-events: auto; }
 .rui-confirm-backdrop { position: absolute; inset: 0; background: rgba(15,23,42,.45); }
 .rui-confirm-card { position: relative; background: var(--rui-color-surface); border-radius: var(--rui-radius-lg); box-shadow: var(--rui-shadow-lg); padding: 24px; max-width: 400px; width: calc(100% - 40px); }
-.rui-confirm-title { font-size: 18px; font-weight: 800; margin: 0 0 8px; }
+.rui-confirm-title { font-size: var(--rui-font-size-18); font-weight: 800; margin: 0 0 8px; }
 .rui-confirm-message { color: var(--rui-color-text-muted); margin: 0 0 20px; line-height: 1.5; }
 .rui-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
-.rui-confirm-cancel, .rui-confirm-ok { border: 1px solid var(--rui-color-border); background: var(--rui-color-surface); color: var(--rui-color-text); font-weight: 600; padding: 8px 16px; border-radius: var(--rui-radius-button); cursor: pointer; }
+.rui-confirm-cancel, .rui-confirm-ok { border: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface); color: var(--rui-color-text); font-weight: 600; padding: 8px 16px; border-radius: var(--rui-radius-button); cursor: pointer; }
 .rui-confirm-cancel:hover { background: var(--rui-color-surface-muted); }
-.rui-confirm-ok { border: none; color: #fff; background: var(--rui-color-primary); }
-.rui-confirm-ok[data-tone="danger"] { background: var(--rui-color-danger); }
-.rui-confirm-ok[data-tone="warning"] { background: var(--rui-color-warning); }
+.rui-confirm-ok { border: none; color: var(--rui-color-primary-text); background: var(--rui-color-primary); }
+/* Only the fill was toned, so the label kept --rui-color-primary-text (#ffffff in
+   five themes): 3.76:1 on the danger fill and 2.15:1 on the warning one, on the
+   button that confirms a destructive action. */
+.rui-confirm-ok[data-tone="danger"] { background: var(--rui-color-danger); color: var(--rui-color-on-danger); }
+.rui-confirm-ok[data-tone="warning"] { background: var(--rui-color-warning); color: var(--rui-color-on-warning); }
+/* The tone glyph rides inside the heading; spacing + colour are what make danger
+   read at a glance rather than as decoration. */
+.rui-confirm-icon { margin-right: 8px; }
+.rui-confirm-card[data-tone="danger"] .rui-confirm-icon { color: var(--rui-color-danger); }
+.rui-confirm-card[data-tone="warning"] .rui-confirm-icon { color: var(--rui-color-warning); }
 
 /* Presence avatars */
 .rui-presence { display: inline-flex; align-items: center; }
-.rui-presence-avatar { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--rui-color-surface); margin-left: -10px; overflow: hidden; position: relative; background: var(--rui-color-surface-muted); display: grid; place-items: center; }
+/* padding/font reset: with onClick each avatar renders as a <button>, and the UA
+   padding and font would break the fixed circle around a 100%-sized img. */
+.rui-presence-avatar { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--rui-color-surface); margin-left: -10px; overflow: hidden; position: relative; background: var(--rui-color-surface-muted); display: grid; place-items: center; padding: 0; font: inherit; }
+button.rui-presence-avatar { cursor: pointer; }
+/* The size scale has to be declared before the first-child reset below: both tie
+   at 0,2,0 and source order decides, so the reset must come last to keep the
+   leading avatar flush. */
+.rui-presence[data-size="sm"] .rui-presence-avatar,
+.rui-presence[data-size="sm"] .rui-presence-more { width: 26px; height: 26px; margin-left: -8px; }
+.rui-presence[data-size="sm"] .rui-presence-initials { font-size: var(--rui-font-size-10); }
+.rui-presence[data-size="lg"] .rui-presence-avatar,
+.rui-presence[data-size="lg"] .rui-presence-more { width: 44px; height: 44px; margin-left: -12px; }
+.rui-presence[data-size="lg"] .rui-presence-initials { font-size: var(--rui-font-size-base); }
 .rui-presence-avatar:first-child { margin-left: 0; }
+.rui-presence[data-size] .rui-presence-avatar:first-child { margin-left: 0; }
 .rui-presence-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.rui-presence-initials { font-size: 12px; font-weight: 700; color: var(--rui-color-text-muted); }
+.rui-presence-initials { font-size: var(--rui-font-size-sm); font-weight: 700; color: var(--rui-color-text-muted); }
 .rui-presence-avatar[data-online="true"]::after { content: ""; position: absolute; bottom: 0; right: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--rui-color-success); border: 2px solid var(--rui-color-surface); }
-.rui-presence-more { width: 34px; height: 34px; border-radius: 50%; margin-left: -10px; background: var(--rui-color-surface-muted); border: 2px solid var(--rui-color-surface); display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--rui-color-text-muted); }
+.rui-presence-more { width: 34px; height: 34px; border-radius: 50%; margin-left: -10px; background: var(--rui-color-surface-muted); border: 2px solid var(--rui-color-surface); display: grid; place-items: center; font-size: var(--rui-font-size-sm); font-weight: 700; color: var(--rui-color-text-muted); }
 
 /* Share buttons */
 .rui-share { display: inline-flex; gap: 8px; }
-.rui-share-btn { width: 38px; height: 38px; display: grid; place-items: center; border-radius: var(--rui-radius-md); border: 1px solid var(--rui-color-border); background: var(--rui-color-surface); color: var(--rui-color-text-muted); cursor: pointer; text-decoration: none; transition: .15s; }
+.rui-share-btn { width: 38px; height: 38px; display: grid; place-items: center; border-radius: var(--rui-radius-md); border: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface); color: var(--rui-color-text-muted); cursor: pointer; text-decoration: none; transition: .15s; }
 .rui-share-btn:hover { color: var(--rui-color-text); border-color: var(--rui-color-primary); transform: translateY(-2px); }
+/* The button is a fixed 38x38 grid box, so showLabels text overflowed it. */
+.rui-share[data-labels="true"] { flex-wrap: wrap; }
+.rui-share[data-labels="true"] .rui-share-btn {
+  width: auto;
+  height: auto;
+  padding: 8px 12px;
+  grid-auto-flow: column;
+  gap: 8px;
+  justify-content: center;
+}
+.rui-share-label { font-size: var(--rui-font-size-13); font-weight: 600; white-space: nowrap; }
 
 /* Author byline */
 .rui-byline { display: inline-flex; align-items: center; gap: 12px; }
 .rui-byline-avatar { width: 44px; height: 44px; border-radius: 50%; overflow: hidden; background: var(--rui-color-surface-muted); display: grid; place-items: center; font-weight: 700; color: var(--rui-color-text-muted); }
 .rui-byline-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.rui-byline-initials { font-size: var(--rui-font-size-15); }
 .rui-byline-name { font-weight: 700; color: var(--rui-color-text); }
-.rui-byline-sub { font-size: 13px; color: var(--rui-color-text-muted); }
+.rui-byline-sub { font-size: var(--rui-font-size-13); color: var(--rui-color-text-muted); }
+.rui-byline-dot { opacity: .6; }
 
 /* Variant selector */
-.rui-variants-label { font-size: 13px; font-weight: 600; color: var(--rui-color-text-muted); margin-bottom: 8px; }
+.rui-variants-label { font-size: var(--rui-font-size-13); font-weight: 600; color: var(--rui-color-text-muted); margin-bottom: 8px; }
 .rui-variants-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.rui-variant { border: 1px solid var(--rui-color-border); background: var(--rui-color-surface); color: var(--rui-color-text); border-radius: var(--rui-radius-md); padding: 7px 14px; cursor: pointer; font-weight: 600; font-size: 13.5px; transition: .15s; }
+.rui-variant { border: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface); color: var(--rui-color-text); border-radius: var(--rui-radius-md); padding: 7px 14px; cursor: pointer; font-weight: 600; font-size: 13.5px; transition: .15s; }
 .rui-variant[data-selected="true"] { border-color: var(--rui-color-primary); box-shadow: 0 0 0 1px var(--rui-color-primary); }
 .rui-variant:focus-visible { outline: 2px solid var(--rui-color-focus-ring); outline-offset: 2px; }
-.rui-variants[data-kind="swatch"] .rui-variant { width: 34px; height: 34px; border-radius: 50%; padding: 0; }
+/* Out-of-stock variants carry a real disabled attribute; with no visual state a
+   sold-out size looked identical to an available one — the exact mistake the
+   picker exists to prevent. Swatches keep full opacity and take the conventional
+   diagonal strike instead, since fading a colour chip misreports the colour. */
+.rui-variant:disabled { opacity: .45; cursor: not-allowed; }
+.rui-variants[data-kind="swatch"] .rui-variant { width: 34px; height: 34px; border-radius: 50%; padding: 0; position: relative; }
+.rui-variants[data-kind="swatch"] .rui-variant:disabled { opacity: 1; }
+.rui-variants[data-kind="swatch"] .rui-variant:disabled::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background: linear-gradient(to top left,
+    transparent calc(50% - 1px),
+    var(--rui-color-text-muted) calc(50% - 1px),
+    var(--rui-color-text-muted) calc(50% + 1px),
+    transparent calc(50% + 1px));
+}
 .rui-variants[data-kind="swatch"] .rui-variant[data-selected="true"] { box-shadow: 0 0 0 2px var(--rui-color-surface), 0 0 0 4px var(--rui-color-primary); }
+/* The check glyph is what stops selection resting on colour + ring alone; it has
+   to hold up against an arbitrary author-supplied swatch colour. */
+.rui-variants[data-kind="swatch"] .rui-variant-check {
+  font-size: var(--rui-font-size-sm);
+  color: #fff;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, .6));
+  pointer-events: none;
+}
+/* size was emitted with the 34px swatch / 7px-14px pill padding hardcoded. */
+.rui-variants[data-size="sm"] .rui-variant { padding: 4px 10px; font-size: 12.5px; }
+.rui-variants[data-size="sm"][data-kind="swatch"] .rui-variant { width: 24px; height: 24px; padding: 0; }
 
 /* Order summary */
-.rui-order-summary { border: 1px solid var(--rui-color-border); border-radius: var(--rui-radius-lg); padding: 18px; background: var(--rui-color-surface); }
-.rui-order-line, .rui-order-sub, .rui-order-total { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 14px; }
+.rui-order-summary { border: var(--rui-border-width) solid var(--rui-color-border); border-radius: var(--rui-radius-lg); padding: 18px; background: var(--rui-color-surface); }
+.rui-order-line, .rui-order-sub, .rui-order-total { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: var(--rui-font-size-base); }
 .rui-order-line { color: var(--rui-color-text-muted); }
-.rui-order-lines { border-bottom: 1px solid var(--rui-color-border); margin-bottom: 8px; padding-bottom: 6px; }
-.rui-order-total { font-weight: 800; font-size: 17px; border-top: 1px solid var(--rui-color-border); margin-top: 6px; padding-top: 12px; }
+/* Without this a long product name in a 320px sidebar pushes the price past the
+   card padding: the label has to be allowed to shrink and wrap, the amount must
+   not. */
+.rui-order-line > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.rui-order-line > span:last-child { white-space: nowrap; flex: none; }
+.rui-order-qty { color: var(--rui-color-text-muted); font-variant-numeric: tabular-nums; }
+.rui-order-empty { color: var(--rui-color-text-muted); font-size: var(--rui-font-size-base); text-align: center; padding: 12px 0; }
+.rui-order-note { margin-top: 10px; font-size: var(--rui-font-size-sm); color: var(--rui-color-text-muted); line-height: 1.4; }
+.rui-order-skeleton { border-radius: var(--rui-radius-xs); }
+.rui-order-lines { border-bottom: var(--rui-border-width) solid var(--rui-color-border); margin-bottom: 8px; padding-bottom: 6px; }
+.rui-order-total { font-weight: 800; font-size: 17px; border-top: var(--rui-border-width) solid var(--rui-color-border); margin-top: 6px; padding-top: 12px; }
 
 /* ScrollSpy */
-.rui-scrollspy { font-size: 14px; }
-.rui-scrollspy-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--rui-color-text-muted); margin-bottom: 10px; }
+/* The description promises a sticky in-page nav; the whole base rule used to be
+   a font-size, so the nav scrolled away with the page and the active highlight it
+   maintains could never be seen. The offset comes from the top prop. */
+.rui-scrollspy {
+  font-size: var(--rui-font-size-base);
+  position: sticky;
+  top: var(--rui-scrollspy-top, 16px);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+.rui-scrollspy-title { font-size: var(--rui-font-size-sm); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--rui-color-text-muted); margin-bottom: 10px; }
 .rui-scrollspy-list { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--rui-color-border); }
 .rui-scrollspy-item a { display: block; padding: 5px 0 5px 14px; margin-left: -2px; border-left: 2px solid transparent; color: var(--rui-color-text-muted); text-decoration: none; transition: .15s; }
 .rui-scrollspy-item a:hover { color: var(--rui-color-text); }
 .rui-scrollspy-item a.is-active { color: var(--rui-color-primary); border-left-color: var(--rui-color-primary); font-weight: 600; }
 
 /* SpeedDial */
-.rui-speeddial { position: fixed; bottom: 24px; right: 24px; z-index: 1300; display: flex; flex-direction: column-reverse; align-items: center; gap: 12px; }
-.rui-speeddial-fab { width: 56px; height: 56px; border-radius: 50%; border: none; background: var(--rui-color-primary); color: var(--rui-color-primary-text); font-size: 20px; cursor: pointer; box-shadow: var(--rui-shadow-lg); display: grid; place-items: center; transition: transform .2s; }
-.rui-speeddial.is-open .rui-speeddial-fab { transform: rotate(45deg); }
-.rui-speeddial-menu { display: flex; flex-direction: column; gap: 10px; align-items: center; opacity: 0; pointer-events: none; transform: translateY(10px); transition: .2s; }
-.rui-speeddial.is-open .rui-speeddial-menu { opacity: 1; pointer-events: auto; transform: none; }
-.rui-speeddial-action { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--rui-color-border); background: var(--rui-color-surface); color: var(--rui-color-text); cursor: pointer; box-shadow: var(--rui-shadow-md); display: grid; place-items: center; }
+.rui-speeddial { position: fixed; bottom: 24px; right: 24px; z-index: var(--rui-z-sticky); display: flex; flex-direction: column-reverse; align-items: center; gap: 12px; }
+.rui-speeddial-fab { width: 56px; height: 56px; border-radius: 50%; border: none; background: var(--rui-color-primary); color: var(--rui-color-primary-text); font-size: var(--rui-font-size-20); cursor: pointer; box-shadow: var(--rui-shadow-lg); display: grid; place-items: center; transition: transform .2s; }
+/* Only the default plus glyph morphs into an x — rotating an ellipsis or a pencil
+   45 degrees is just a tilted icon. data-icon on the root is the gate. */
+.rui-speeddial[data-icon="plus"].is-open .rui-speeddial-fab { transform: rotate(45deg); }
+/* position is emitted as data-position; promoted overlays get insets inline, but
+   an engine that cannot promote fell back to the hardcoded bottom-right and two
+   dials stacked on each other. column for the top corners so the menu expands
+   downward instead of off-screen. */
+.rui-speeddial[data-position="bottom-left"] { right: auto; left: 24px; }
+.rui-speeddial[data-position="top-right"] { bottom: auto; top: 24px; flex-direction: column; }
+.rui-speeddial[data-position="top-left"] { bottom: auto; top: 24px; right: auto; left: 24px; flex-direction: column; }
+/* visibility, not just opacity, so the closed menu is out of the tab order on
+   engines that do not honour inert yet. */
+.rui-speeddial-menu { display: flex; flex-direction: column; gap: 10px; align-items: center; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(10px); transition: .2s; }
+.rui-speeddial.is-open .rui-speeddial-menu { opacity: 1; visibility: visible; pointer-events: auto; transform: none; }
+.rui-speeddial-action { width: 44px; height: 44px; border-radius: 50%; border: var(--rui-border-width) solid var(--rui-color-border); background: var(--rui-color-surface); color: var(--rui-color-text); cursor: pointer; box-shadow: var(--rui-shadow-md); display: grid; place-items: center; }
 .rui-speeddial-action:hover { border-color: var(--rui-color-primary); color: var(--rui-color-primary); }
 
 /* Confetti */
-.rui-confetti { position: fixed; inset: 0; pointer-events: none; z-index: 1500; overflow: hidden; }
+.rui-confetti { position: fixed; inset: 0; pointer-events: none; z-index: var(--rui-z-top); overflow: hidden; }
 .rui-confetti-piece { position: absolute; top: -12px; width: 9px; height: 9px; border-radius: 2px; animation-name: akConfetti; animation-timing-function: ease-in; animation-fill-mode: forwards; }
-@keyframes akConfetti { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(105vh) rotate(720deg); opacity: 0; } }
+/* Reads each piece's own --rot: keyframes that declare transform at both ends beat
+   an inline transform, so without this every particle spun in lockstep. */
+@keyframes akConfetti {
+  0%   { transform: translateY(0) rotate(var(--rot, 0deg)); opacity: 1; }
+  100% { transform: translateY(105vh) rotate(calc(var(--rot, 0deg) + 720deg)); opacity: 0; }
+}
 @media (prefers-reduced-motion: reduce) { .rui-confetti { display: none; } }
 
-/* Kbd shortcut */
-.rui-kbd-shortcut { display: inline-flex; align-items: center; gap: 4px; }
-.rui-kbd-key { font-family: var(--rui-font-family-mono); font-size: 11px; line-height: 1; padding: 4px 6px; border-radius: var(--rui-radius-xs); border: 1px solid var(--rui-color-border); border-bottom-width: 2px; background: var(--rui-color-surface-muted); color: var(--rui-color-text); }
-.rui-kbd-plus { color: var(--rui-color-text-muted); font-size: 11px; }
+/* Kbd shortcut — no rules of its own any more. KbdShortcut also emits
+   .rui-kbd-group / .rui-kbd / .rui-kbd-sep, which carry the canonical cap styling
+   and the data-size scale. The old .rui-kbd-key block sat later at equal
+   specificity and overrode .rui-kbd, so the same shortcut rendered 11px through
+   KbdShortcut and 12px through Kbd, with only one of the two getting the 2px
+   bottom border that makes the cap look pressed. */
 
 /* ===== Mobile (<640px) per-component layout fixes =====
    Desktop side-by-side / fixed-track layouts that cannot fit a phone. Placed
@@ -10262,7 +12117,7 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
    intentionally-scrollable components (code / data-grid / kanban / diff) keep
    scrolling, and off-canvas (sheet) / clipped (carousel) layouts are already
    correct, so they are deliberately left untouched. */
-@media (max-width: 639.98px) {
+${below("sm")} {
   /* SplitView: fixed 320px sidebar + content -> stack to one column */
   .rui-split-view { grid-template-columns: 1fr !important; }
   /* ResizablePanels: side-by-side panels -> stack; drop the drag divider */
@@ -10279,6 +12134,9 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
   /* DrawingCanvas / SignaturePad: scale the fixed-size canvas down to fit */
   .rui-drawing-canvas, .rui-signature-pad { display: block; max-width: 100%; }
   .rui-canvas-surface { max-width: 100%; height: auto; }
+  /* Combobox fills its cell rather than forcing a multi-column filter row wider
+     than the phone (MultiSelect already behaves this way). */
+  .rui-combobox { width: 100%; }
 }
 
 /* ===== Touch targets: comfortable tap sizes on touch / small screens =====
@@ -10288,7 +12146,10 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
    (a bare min-height would top-align the label). Deliberately excluded, since
    44px would break their layout: inline text links (rui-link / breadcrumb),
    dense data-grid controls, chip/tag remove buttons, and colour swatches. */
-@media (pointer: coarse), (max-width: 767.98px) {
+@media (pointer: coarse), ${belowCond("md")} {
+  .rui-carousel-dot::before { content: ""; position: absolute; inset: -8px; }
+  .rui-carousel-arrow { min-width: 44px; min-height: 44px; }
+
   .rui-button:not([data-variant="link"]):not([data-size="xs"]) {
     min-height: 44px;
     display: inline-flex;
@@ -10296,10 +12157,78 @@ ${spacingAttrRules(".rui-bento", "data-gap", (v) => `gap: ${v};`)}
     justify-content: center;
   }
   .rui-button[data-icon-only="true"]:not([data-size="xs"]) { min-width: 44px; }
-  .rui-icon-button { min-width: 44px; min-height: 44px; }
+  /* Same xs exemption .rui-button already has: a dense grid toolbar asks for xs
+     explicitly and 44px would break its layout. */
+  .rui-icon-button:not([data-size="xs"]) { min-width: 44px; min-height: 44px; }
   .rui-input, .rui-select { min-height: 44px; }
   .rui-sidebar-item, .rui-navbar-item, .rui-menu-item { min-height: 44px; }
   .rui-combobox-option { display: flex; align-items: center; min-height: 44px; }
   .rui-tab-trigger { min-height: 44px; display: inline-flex; align-items: center; }
+}
+
+/* ----------------------------------------------------------------------- */
+/* Reduced motion — blanket coverage (audit phase 10)                      */
+/* ----------------------------------------------------------------------- */
+/* The sheet has 41 keyframe animations but only 12 were behind a
+   prefers-reduced-motion query, so the looping loading indicators kept
+   animating for users who asked for less motion (WCAG 2.3.3).
+
+   Two different treatments on purpose:
+
+   1. LOOPING STATUS INDICATORS are slowed, not stopped. Freezing a spinner
+      makes the interface look hung — the exact defect the audit flagged on
+      Button(loading:), whose spinner glyph had no animation at all. A very slow
+      rotation still communicates "working" while removing the motion that
+      actually triggers discomfort.
+   2. ENTRANCE / DECORATIVE motion is disabled outright, and anything that
+      animates opacity or transform in is pinned to its final state so content
+      can never be left invisible or offset. This last rule matters beyond
+      accessibility: it is also the safety net for animations that never run to
+      completion (a background tab, an offscreen render), which is how the
+      Transition component ended up rendering an invisible child.
+
+   This block is last in the sheet so it wins on source order at equal
+   specificity. */
+@media (prefers-reduced-motion: reduce) {
+  .rui-spinner,
+  .rui-spinner-ring,
+  .rui-button-spinner,
+  .rui-loading-dots i,
+  /* The animation lives on the marker element, not on a pseudo-element — the old
+     ::after selector matched nothing, so this was the one looping animation in
+     the sheet that ignored the preference. */
+  .rui-status-dot[data-pulse="true"] .rui-status-dot-marker,
+  .rui-skeleton {
+    animation-duration: 6s !important;
+    animation-timing-function: linear !important;
+  }
+
+  .rui-progress[data-indeterminate="true"] .rui-progress-bar {
+    animation-duration: 6s !important;
+  }
+
+  /* Everything else: no entrance motion, and never leave content hidden. */
+  .rui-reveal,
+  .rui-transition > *,
+  .rui-flip-list > *,
+  .rui-parallax,
+  .rui-popover-content,
+  .rui-dropdown-menu-content,
+  .rui-tooltip-content,
+  .rui-hover-card-content,
+  .rui-toast,
+  .rui-modal,
+  .rui-sheet,
+  .rui-route-page {
+    animation: none !important;
+    transition: none !important;
+  }
+  .rui-reveal,
+  .rui-transition > *,
+  .rui-flip-list > * {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .rui-parallax { transform: none !important; }
 }
 `;

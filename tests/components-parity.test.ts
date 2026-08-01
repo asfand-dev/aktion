@@ -299,3 +299,64 @@ describe("LoadingDots", () => {
     expect(el?.getAttribute("data-tone")).toBe("success");
   });
 });
+
+describe("field `disabled` + temporal input types", () => {
+  it("disables a bare Input (no label/hint/error shell)", async () => {
+    const root = await render(`$app(Input({ id: "a", value: "x", disabled: true }))`);
+    const input = root.querySelector(".rui-input") as HTMLInputElement;
+    // The shell short-circuits when there is no label/hint/error, so `disabled`
+    // has to be applied before that early return.
+    expect(input.disabled).toBe(true);
+  });
+
+  it("disables an Input that DOES have a field shell", async () => {
+    const root = await render(
+      `$app(Input({ id: "b", label: "L", hint: "H", value: "x", disabled: true }))`,
+    );
+    expect((root.querySelector(".rui-input") as HTMLInputElement).disabled).toBe(true);
+    expect(root.querySelector(".rui-field")).toBeTruthy();
+  });
+
+  it("leaves a field editable when disabled is absent or false", async () => {
+    const root = await render(
+      `$app(Column([Input({ id: "c", value: "x" }), Input({ id: "d", value: "y", disabled: false })]))`,
+    );
+    const inputs = [...root.querySelectorAll(".rui-input")] as HTMLInputElement[];
+    expect(inputs.map((i) => i.disabled)).toEqual([false, false]);
+  });
+
+  it("disables a plain Select and a searchable one", async () => {
+    const root = await render(
+      `$app(Column([
+  Select({ id: "s1", value: "a", disabled: true, items: [SelectItem("a", "A")] }),
+  Select({ id: "s2", value: "a", disabled: true, searchable: true, items: [SelectItem("a", "A")] })
+]))`,
+    );
+    expect((root.querySelector("select.rui-select") as HTMLSelectElement).disabled).toBe(true);
+    // The searchable variant renders a Combobox; it must honour disabled too
+    // rather than hard-coding false. Assert on the TRIGGER specifically — the
+    // panel's filter input comes first in document order.
+    const combo = root.querySelector(".rui-select-searchable") as HTMLElement;
+    expect(combo).toBeTruthy();
+    expect(combo.getAttribute("data-disabled")).toBe("true");
+    const trigger = combo.querySelector(".rui-combobox-trigger") as HTMLButtonElement;
+    expect(trigger.disabled).toBe(true);
+  });
+
+  it("disables TextArea through the same shared shell", async () => {
+    const root = await render(`$app(TextArea({ id: "t", value: "x", disabled: true }))`);
+    expect((root.querySelector(".rui-textarea") as HTMLTextAreaElement).disabled).toBe(true);
+  });
+
+  it("accepts the temporal input types a maintenance window needs", async () => {
+    const root = await render(
+      `$app(Column([
+  Input({ id: "t1", type: "time", value: "02:00" }),
+  Input({ id: "t2", type: "datetime-local", value: "2026-07-29T02:00" }),
+  Input({ id: "t3", type: "date", value: "2026-07-29" })
+]))`,
+    );
+    const types = [...root.querySelectorAll(".rui-input")].map((i) => i.getAttribute("type"));
+    expect(types).toEqual(["time", "datetime-local", "date"]);
+  });
+});

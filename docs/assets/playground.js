@@ -32,7 +32,12 @@ import {
   namespaceCatalog,
   factoryResourceCatalog,
   routeMembers as runtimeRouteMembers,
+  i18nResultMembers,
+  universalPropCatalog,
   findBuiltinConfig,
+  SAFE_HOST_GLOBALS,
+  keywordDocs as runtimeKeywordDocs,
+  setGlobalAccessPolicy,
 } from "../../dist/aktion.js";
 
 // Public CDN URL embedded in standalone HTML exports so the downloaded file
@@ -46,6 +51,28 @@ const CDN_BUNDLE = "https://asfand-dev.github.io/aktion/dist/aktion.js";
 // `../../dist/devtools` → `../dist/devtools`. Imported lazily on first use so
 // the panel UI is only fetched when the user actually opens DevTools.
 const DEVTOOLS_BUNDLE = new URL("../../dist/devtools.js", import.meta.url).href;
+
+// `dist/language.js` is the DOM-free language + tooling surface. It carries the
+// two pieces of the language service the runtime bundle deliberately leaves
+// out — `getDiagnostics` (parse + schema errors PLUS the soft lint warnings:
+// unknown component, `$i18n` `t` shadowing) and `formatProgram` — so the
+// playground gets exactly the diagnostics the VS Code extension and the LSP
+// server get, rather than a hand-rolled subset. Loaded lazily on first lint so
+// the initial page load still only pays for `dist/aktion.js` + CodeMirror; if
+// the fetch fails the linter silently falls back to the runtime bundle's
+// `parse` + `validateProgramSchema` (see `lintSource`).
+const LANGUAGE_BUNDLE = new URL("../../dist/language.js", import.meta.url).href;
+
+let languageServicePromise = null;
+
+/** Resolve the lazily-imported language service, or `null` if it can't load. */
+function loadLanguageService() {
+  languageServicePromise ??= import(LANGUAGE_BUNDLE).catch((err) => {
+    console.warn("[playground] language service unavailable — diagnostics will omit lint warnings", err);
+    return null;
+  });
+  return languageServicePromise;
+}
 
 // ---------------------------------------------------------------------------
 // CodeMirror 6 — dynamic import from esm.sh
@@ -198,14 +225,16 @@ function addTodo() {
   $draft = ""
 }
 
-function Row(t) {
+// Named \`TodoRow\`, not \`Row\` — \`Row\` is a built-in Layout component and the
+// validator rejects a custom component that shadows a library name.
+function TodoRow(t) {
   return Card([Stack([
     Text(t.text),
     Button("Delete", { action: () => { $todos = $util.filter($todos, "id", "!=", t.id) }, variant: "ghost", size: "small" })
   ], { direction: "row", gap: "sm", align: "center", justify: "between" })])
 }
 
-list = $todos.map(t => Row(t))
+list = $todos.map(t => TodoRow(t))
 body = $todos.length > 0
   ? list
   : EmptyState("Nothing to do", { description: "Add a task above to get started.", icon: "list-check" })
@@ -670,6 +699,7 @@ $app(Grid([
   // ── NEW: realtime / websocket ─────────────────────────────────────────────
   realtime: {
     label: "Realtime — $socket + $sse",
+    group: "── New features ──",
     code: `// Highlights: $socket reactive WebSocket (status + auto-reconnect + send queue),
 // $sse SSE stream, polling $query, $mutation with optimistic update + invalidation.
 
@@ -730,7 +760,9 @@ $app(Stack([
         FormControl("Amount",  { field: NumberInput("amt", { value: $betAmt, min: 1, max: 10000 }) })
       ] }),
       Button("Place bet", { onClick: placeBet, variant: "primary", loading: $add.loading }),
-      $add.error ? Alert("Order failed", { tone: "danger" }) : null
+      // Callout is the library's alert primitive. Its FIRST positional slot is
+      // \`tone\`, not the title — so pass everything by name.
+      $add.error ? Callout({ title: "Order failed", tone: "danger" }) : null
     ])
   ], { columns: { sm: 1, md: 2 }, gap: "lg" }),
   Card([
@@ -751,6 +783,7 @@ $app(Stack([
   // ── NEW: $form + $util.rules ──────────────────────────────────────────────
   forms: {
     label: "Forms + validation ($form)",
+    group: "── New features ──",
     code: `// Highlights: $form engine (values / errors / touched / dirty / validating /
 // submitting / submit()), $util.rules validators incl. async uniqueness checks.
 
@@ -803,7 +836,7 @@ $app(Stack([
       Button("Submit", { onClick: () => form.submit(), variant: "primary", loading: form.submitting, disabled: form.submitting || form.validating }),
       Button("Reset",  { onClick: () => form.reset(), variant: "ghost", disabled: !form.dirty })
     ], { gap: "sm" }),
-    $done ? Alert(\`Welcome, \${$submitted}!\`, { tone: "success", icon: "circle-check" }) : null,
+    $done ? Callout({ title: \`Welcome, \${$submitted}!\`, tone: "success", icon: "circle-check" }) : null,
     Badge(\`\${Object.keys(form.errors).length} errors\`, { tone: Object.keys(form.errors).length === 0 ? "success" : "danger" })
   ])
 ]))`,
@@ -812,6 +845,7 @@ $app(Stack([
   // ── NEW: $store persist + undo/redo ───────────────────────────────────────
   persistUndo: {
     label: "Persist + undo/redo ($store)",
+    group: "── New features ──",
     code: `// Highlights: $store({ persist, history }) — survives reload + full undo/redo.
 
 doc = $store({
@@ -840,13 +874,18 @@ $app(Stack([
     Card([
       SectionHeader("Editor"),
       Column([
-        Input("title", { label: "Title",         value: doc.title, onInput: (v) => doc.setTitle(v) }),
-        TextArea("body", { label: "Body",         value: doc.body,  onInput: (v) => doc.setBody(v),  rows: 6 }),
+        Input("title", { label: "Title",         value: doc.title, onChange: (v) => doc.setTitle(v) }),
+        TextArea("body", { label: "Body",         value: doc.body,  onChange: (v) => doc.setBody(v),  rows: 6 }),
         Row([
-          Input("tag-input", { placeholder: "Add tag…", value: $newTag, size: "sm" }),
+          Input("tag-input", { placeholder: "Add tag…", value: $newTag }),
           Button("Add", { onClick: () => { doc.addTag($newTag); $newTag = "" }, size: "sm", variant: "secondary" })
         ], { gap: "sm" }),
-        Row(doc.tags.map(t => Tag(t, { onRemove: () => doc.removeTag(t) })), { gap: "xs", wrap: true })
+        // Badge has no built-in remove affordance, so pair each tag with its own
+        // ghost icon button rather than reaching for a nonexistent Tag component.
+        Row(doc.tags.map(t => Row([
+          Badge(t, { tone: "info" }),
+          Button("×", { onClick: () => doc.removeTag(t), variant: "ghost", size: "sm" })
+        ], { gap: "xs", align: "center" })), { gap: "xs", wrap: true })
       ], { gap: "md" })
     ]),
     Card([
@@ -862,6 +901,7 @@ $app(Stack([
   // ── NEW: sx + layout primitives ───────────────────────────────────────────
   sxLayout: {
     label: "sx + layout (Section/Split/Bento)",
+    group: "── New features ──",
     code: `// Highlights: Section page band, Split two-pane, Bento editorial grid,
 // sx with responsive maps + interaction states + gradients.
 
@@ -921,6 +961,7 @@ $app(Column([hero, features, sxDemo]))`,
   // ── NEW: infinite scroll ──────────────────────────────────────────────────
   infiniteScroll: {
     label: "Infinite scroll ($query infinite)",
+    group: "── New features ──",
     code: `// Highlights: $query infinite mode — loadMore on intersect,
 // $util.url.setQuery for query-param state, $util.onNavigate guard,
 // $util.derived computed value.
@@ -966,10 +1007,10 @@ $app(Stack([
   }),
   Toolbar({
     left: [
-      Input("search", { placeholder: "Search posts…", value: $search, onInput: updateSearch, size: "sm" })
+      Input("search", { placeholder: "Search posts…", value: $search, onChange: updateSearch })
     ],
     right: [
-      Select("sort", { value: $sort, size: "sm", items: [
+      Select("sort", { value: $sort, items: [
         SelectItem("newest","Newest"),
         SelectItem("popular","Most popular"),
         SelectItem("comments","Most comments")
@@ -1012,6 +1053,7 @@ $app(Stack([
   // ── NEW: dialogs, calendar & a11y ─────────────────────────────────────────
   dialogs: {
     label: "Dialogs, Calendar & a11y",
+    group: "── New features ──",
     code: `// Highlights: Sheet / BottomSheet / ConfirmDialog (Escape closes, focus is
 // trapped in the panel and restored on close), Calendar month grid with
 // arrow-key navigation, ThemeToggle, CopyButton, KbdShortcut.
@@ -1074,6 +1116,663 @@ $app(Stack([
   })
 ]))`,
   },
+
+  // ── NEW: the two most fundamental primitives ──────────────────────
+  httpEffect: {
+    label: "$http + $effect (poll, cleanup)",
+    group: "── Primitives & coverage ──",
+    code: `// Highlights: $http (the ONLY network primitive) + $effect with lifecycle deps
+// ("mount", "every(N)") and cleanup(). These are the two most fundamental
+// primitives in the language.
+
+// A reactive HTTP resource bag: .data / .loading / .error / .status / .headers /
+// .lastUpdated / .refetch() / .cancel(), plus a settable .onDone.
+$rates = $http({
+  url: "https://api.example.com/rates",
+  method: "GET",
+  query: { base: "EUR" },
+  headers: { accept: "application/json" }
+})
+
+$ticks = 0
+$paused = false
+
+// Deps mix $atoms with lifecycle strings. "mount" runs the body once on mount;
+// "every(5000)" re-runs it on a timer the runtime owns and tears down for you.
+$effect(() => {
+  if (!$paused) {
+    $ticks = $ticks + 1
+    $rates.refetch()
+  }
+}, ["mount", "every(5000)"])
+
+// A second effect showing cleanup(): anything you register here runs when the
+// effect re-runs or the app unmounts, so nothing leaks.
+$elapsed = 0
+$effect(() => {
+  id = setInterval(() => { $elapsed = $elapsed + 1 }, 1000)
+  cleanup(() => clearInterval(id))
+}, ["mount"])
+
+// $optimistic wraps a write that should show INSTANTLY: the state change lands
+// first, and the runtime rolls it back automatically if the callback throws or
+// its promise rejects. Use it for the write path; $http is the read path.
+$saves = 0
+function saveBase(next) {
+  $optimistic(() => {
+    $saves = $saves + 1
+    return $util.sleep(400).then(() => {
+      if (next === "XXX") { throw new Error("unknown currency") }
+    })
+  })
+}
+
+// \`debounce(N)\` / \`throttle(N)\` are the other lifecycle deps — this one only
+// fires 400ms after $paused stops changing.
+$effect(() => {
+  $console.log("paused →", $paused)
+}, [$paused, "debounce(400)"])
+
+$app(Stack([
+  PageHeader("Live FX rates", {
+    subtitle: \`Polled every 5s · \${$ticks} refreshes · up \${$elapsed}s\`,
+    status: Badge($rates.loading ? "Fetching" : "Idle", { tone: $rates.loading ? "warning" : "success", icon: "circle" }),
+    actions: [
+      Button($paused ? "Resume" : "Pause", { onClick: () => { $paused = !$paused }, variant: "secondary", icon: $paused ? "play" : "pause" }),
+      Button("Refetch now", { onClick: () => $rates.refetch(), variant: "primary", icon: "rotate", loading: $rates.loading }),
+      Button("Cancel", { onClick: () => $rates.cancel(), variant: "ghost", icon: "ban" }),
+      Button("Optimistic save", { onClick: () => saveBase("EUR"), variant: "ghost", icon: "bolt" }),
+      Button("Optimistic fail", { onClick: () => saveBase("XXX"), variant: "ghost", icon: "bolt-lightning" })
+    ]
+  }),
+  Stats([
+    StatCard("HTTP status", { value: \`\${$rates.status ?? "—"}\`, trend: "flat", icon: "signal" }),
+    StatCard("Last updated", { value: $rates.lastUpdated ? $util.relativeTime($rates.lastUpdated) : "never", trend: "flat", icon: "clock" }),
+    StatCard("Refreshes", { value: \`\${$ticks}\`, trend: "up", icon: "rotate" }),
+    StatCard("Optimistic saves", { value: \`\${$saves}\`, trend: "flat", icon: "bolt", hint: '"Optimistic fail" rolls this back' })
+  ]),
+  // Async() renders the right branch off any resource bag's loading/error/data.
+  Card([
+    CardHeader("Response", { subtitle: "Async() picks the branch from the bag" }),
+    Async($rates, {
+      loading: LoadingState("Contacting the API…"),
+      error:   ErrorState("Rates unavailable", { description: \`\${$rates.error}\` }),
+      empty:   EmptyState("No rates returned", { icon: "chart-line" }),
+      data:    JsonTree($rates.data, { expandedDepth: 2, maxHeight: 260 }),
+      retry:   () => $rates.refetch()
+    })
+  ])
+]))`,
+  },
+
+  // ── NEW: the per-instance hook family ─────────────────────────────
+  hooks: {
+    label: "Hooks — $state/$memo/$ref/$reducer/$id",
+    group: "── Primitives & coverage ──",
+    code: `// Highlights: the React-shaped hook family — $state, $memo, $ref, $reducer, $id
+// — and a custom \`$use*\` hook that composes them. Hooks are PER COMPONENT
+// INSTANCE: render the same component twice and each copy keeps its own state,
+// which is what makes them different from a module-level \`$atom\`.
+
+// A custom hook: any function whose name starts with \`$use\`. It may call other
+// hooks, and its caller gets a fresh copy of their state per instance.
+function $useCounter(start) {
+  const [count, setCount] = $state(start)
+  // $ref is a stable { current } box — writing .current does NOT re-render, so
+  // it is the place for bookkeeping the UI should not react to.
+  const renders = $ref(0)
+  renders.current = renders.current + 1
+  return {
+    count: count,
+    renders: renders.current,
+    increment: () => setCount(count + 1),
+    reset: () => setCount(start)
+  }
+}
+
+// $reducer is the [state, dispatch] form for state with several transitions.
+function cartReducer(state, action) {
+  if (action.type === "add") {
+    return { items: [...state.items, action.item] }
+  }
+  if (action.type === "clear") {
+    return { items: [] }
+  }
+  return state
+}
+
+function CounterCard(props) {
+  const counter = $useCounter(props.start)
+  // $id gives a stable, collision-free id per instance — exactly what you need
+  // to wire a label to an input inside a component rendered many times.
+  const fieldId = $id("counter")
+  // $memo only recomputes when a dep changes; the label is derived, not stored.
+  const label = $memo(() => \`\${counter.count} \${$util.plural(counter.count, "click", "clicks")}\`, [counter.count])
+  return Card([
+    CardHeader(props.title, { subtitle: \`instance id: \${fieldId}\` }),
+    Column([
+      Text(label, { variant: "large-heavy" }),
+      Text(\`rendered \${counter.renders}x · $ref does not trigger renders\`, { tone: "muted", variant: "small" }),
+      Row([
+        Button("Increment", { onClick: counter.increment, variant: "primary", icon: "plus" }),
+        Button("Reset", { onClick: counter.reset, variant: "ghost", icon: "rotate-left" })
+      ], { gap: "sm" })
+    ], { gap: "sm" })
+  ])
+}
+
+function CartCard() {
+  const [cart, dispatch] = $reducer(cartReducer, { items: [] })
+  return Card([
+    CardHeader("$reducer", { subtitle: "one function, many transitions" }),
+    Column([
+      Text(\`\${$util.count(cart.items)} in cart\`, { variant: "large-heavy" }),
+      BadgeList(cart.items.map(i => Badge(i, { tone: "primary", size: "sm" }))),
+      Row([
+        Button("Add coffee", { onClick: () => dispatch({ type: "add", item: "Coffee" }), variant: "primary", icon: "mug-hot" }),
+        Button("Add tea", { onClick: () => dispatch({ type: "add", item: "Tea" }), variant: "secondary", icon: "leaf" }),
+        Button("Clear", { onClick: () => dispatch({ type: "clear" }), variant: "ghost", icon: "trash" })
+      ], { gap: "sm", wrap: true })
+    ], { gap: "sm" })
+  ])
+}
+
+$app(Stack([
+  PageHeader("Hooks", {
+    subtitle: "$state · $memo · $ref · $reducer · $id — per-instance, like React",
+    status: Badge("Hooks", { tone: "info", icon: "code" })
+  }),
+  Callout({
+    title: "Two independent instances below",
+    description: "Both cards call the same $useCounter hook, yet their counts move independently — that is the difference between a hook and a module-level $atom.",
+    tone: "info",
+    icon: "lightbulb"
+  }),
+  Grid([
+    CounterCard({ title: "Counter A", start: 0 }),
+    CounterCard({ title: "Counter B", start: 10 }),
+    CartCard()
+  ], { columns: { sm: 1, md: 3 }, gap: "lg" })
+]))`,
+  },
+
+  // ── NEW: App shell + Navigation groups ───────────────────────────
+  appShell: {
+    label: "App shell + navigation ($router)",
+    group: "── Primitives & coverage ──",
+    code: `// Highlights: the App shell + Navigation groups — AppShell / Sidebar /
+// SidebarSection / SidebarItem, Navbar, Breadcrumb, Footer, SkipLink — driven by
+// $router, with imperative navigation via route.navigate().
+
+// Every arm of $router({...}) is a page. \`route\` is the reserved reactive handle:
+// route.path, route.params, route.query, route.pattern, route.navigate(path).
+pages = $router({
+  "/":              Overview(),
+  "/orders":        OrdersPage(),
+  "/orders/:id":    OrderDetail({ id: params.id }),
+  "/settings":      SettingsPage(),
+  default:          NotFound()
+})
+
+function Overview() {
+  return Column([
+    CardHeader("Overview", { subtitle: "Sidebar items navigate through the router" }),
+    Stats([
+      StatCard("Open orders", { value: "34", trend: "up",   delta: "+6", icon: "box" }),
+      StatCard("Revenue",     { value: "€48,230", trend: "flat", delta: "stable", icon: "sack-dollar" }),
+      StatCard("Refunds",     { value: "3", trend: "down", delta: "-2", icon: "rotate-left" })
+    ]),
+    Card([
+      CardHeader("Jump into a detail route"),
+      Row([
+        // route.navigate() is the imperative escape hatch when a click has to do
+        // something else first (save a draft, confirm, log an event).
+        Button("Order 1024", { onClick: () => route.navigate("/orders/1024"), variant: "primary", icon: "arrow-right" }),
+        Button("Order 1025", { onClick: () => route.navigate("/orders/1025"), variant: "secondary", icon: "arrow-right" })
+      ], { gap: "sm" })
+    ])
+  ], { gap: "lg" })
+}
+
+function OrdersPage() {
+  return Column([
+    Breadcrumb([
+      BreadcrumbItem("Home", { to: "/", icon: "house" }),
+      BreadcrumbItem("Orders")
+    ]),
+    CardHeader("Orders", { subtitle: \`pattern: \${route.pattern}\` }),
+    Table([
+      Col("Order", ["#1024", "#1025", "#1026"]),
+      Col("Customer", ["Asha", "Alex", "Wren"]),
+      Col("Total", ["€128.00", "€64.50", "€212.75"])
+    ]),
+    Row([NavLink("Open #1024", "/orders/1024", { variant: "pill", icon: "receipt" })], { gap: "sm" })
+  ], { gap: "lg" })
+}
+
+function OrderDetail(props) {
+  return Column([
+    Breadcrumb([
+      BreadcrumbItem("Home", { to: "/", icon: "house" }),
+      BreadcrumbItem("Orders", { to: "/orders" }),
+      BreadcrumbItem(\`#\${props.id}\`)
+    ]),
+    CardHeader(\`Order #\${props.id}\`, { subtitle: "params.id came from the /:id segment" }),
+    Card([DescriptionList([
+      DescriptionItem("Order id", props.id),
+      DescriptionItem("Status", "Fulfilled"),
+      DescriptionItem("Route path", route.path)
+    ])]),
+    Button("Back to orders", { onClick: () => route.navigate("/orders"), variant: "ghost", icon: "arrow-left" })
+  ], { gap: "lg" })
+}
+
+function SettingsPage() {
+  return Column([
+    CardHeader("Settings", { subtitle: "?tab= lands in route.query" }),
+    Card([Text(\`route.query.tab = \${route.query.tab ?? "(unset)"}\`)]),
+    Row([
+      Button("General", { onClick: () => route.navigate("/settings?tab=general"), variant: "secondary" }),
+      Button("Billing", { onClick: () => route.navigate("/settings?tab=billing"), variant: "secondary" })
+    ], { gap: "sm" })
+  ], { gap: "lg" })
+}
+
+function NotFound() {
+  return EmptyState("No such page", {
+    description: \`Nothing is mounted at \${route.path}.\`,
+    icon: "compass",
+    actions: [Button("Go home", { onClick: () => route.navigate("/"), variant: "primary" })]
+  })
+}
+
+nav = Sidebar([
+  SidebarItem("Overview", { to: "/", icon: "gauge-high" }),
+  SidebarSection("Commerce", [
+    SidebarItem("Orders", { to: "/orders", icon: "box", badge: "34" }),
+    SidebarItem("Refunds", { icon: "rotate-left", disabled: true })
+  ]),
+  SidebarSection("Workspace", [
+    SidebarItem("Settings", { to: "/settings", icon: "gear" }),
+    SidebarItem("Docs", { href: "https://example.com/docs", icon: "book" })
+  ])
+], {
+  brand: "Northwind",
+  tagline: "Operations console",
+  footer: [Avatar("Asha Kumar", { size: "sm" })]
+})
+
+$app(Column([
+  // SkipLink is the first focusable element on the page — press Tab to see it.
+  SkipLink("main-content", { label: "Skip to content" }),
+  Navbar({
+    brand: Brand("Northwind", { version: "v2.1" }),
+    items: [
+      NavbarItem("Overview", { to: "/", icon: "gauge-high" }),
+      NavbarItem("Orders", { to: "/orders", icon: "box" }),
+      NavbarItem("Settings", { to: "/settings", icon: "gear" })
+    ],
+    actions: [Button("New order", { variant: "primary", icon: "plus" })],
+    sticky: true,
+    collapsible: true
+  }),
+  AppShell(nav, [HTMLTag("div", { attributes: { id: "main-content" }, children: [pages] })], {
+    collapsible: true
+  }),
+  Footer({
+    brand: Brand("Northwind"),
+    tagline: "Built with Aktion",
+    columns: [
+      FooterColumn("Product", { links: [Link("Overview", { to: "/" }), Link("Orders", { to: "/orders" })] }),
+      FooterColumn("Support", { links: [Link("Docs", { href: "https://example.com/docs" })] })
+    ],
+    legal: "© 2026 Northwind"
+  })
+], { gap: "none" }))`,
+  },
+
+  // ── NEW: Advanced UI group ────────────────────────────────────
+  advancedUI: {
+    label: "Advanced UI power tools",
+    group: "── Primitives & coverage ──",
+    code: `// Highlights: the Advanced UI group — CommandPalette, JsonTree, DiffViewer,
+// QueryBuilder, Sortable and VirtualList. These are the "power tool" widgets:
+// each one replaces a few hundred lines of hand-rolled interaction code.
+
+$paletteOpen = false
+$lastCommand = "(none)"
+$rules = [{ field: "status", operator: "==", value: "open" }]
+$order = ["Draft the RFC", "Review with design", "Ship behind a flag", "Announce"]
+$picked = "(nothing yet)"
+
+// onReorder hands back (fromIndex, toIndex); the list itself stays yours to own.
+function reorder(from, to) {
+  moved = $order[from]
+  rest = $order.filter((item, i) => i !== from)
+  $order = [...rest.slice(0, to), moved, ...rest.slice(to)]
+}
+
+// 5,000 rows — VirtualList only ever renders the visible window.
+rows = $util.range(1, 5000).map(n => ({ id: n, label: \`Row \${n}\`, score: (n * 37) % 100 }))
+
+before = "function total(items) {\\n  let sum = 0\\n  for (const i of items) {\\n    sum += i.price\\n  }\\n  return sum\\n}"
+after  = "function total(items) {\\n  return items.reduce((sum, i) => sum + i.price, 0)\\n}"
+
+config = {
+  runtime: { version: "0.5.15", strict: true },
+  features: { router: "hash", i18n: ["en", "de", "fr"] },
+  limits: { requests: 60, budgetMs: 2000 }
+}
+
+$app(Stack([
+  PageHeader("Advanced UI", {
+    subtitle: "CommandPalette · JsonTree · DiffViewer · QueryBuilder · Sortable · VirtualList",
+    actions: [
+      Button("Open palette", { onClick: () => { $paletteOpen = true }, variant: "primary", icon: "terminal" })
+    ]
+  }),
+  // A modal command launcher. \`open\` is two-way: onClose is called with false.
+  CommandPalette([
+    { value: "new-order", label: "Create order", icon: "plus", hint: "O" },
+    { value: "invite", label: "Invite teammate", icon: "user-plus" },
+    { value: "export", label: "Export as CSV", icon: "file-csv" },
+    { value: "theme", label: "Toggle theme", icon: "circle-half-stroke" }
+  ], {
+    open: $paletteOpen,
+    placeholder: "Type a command…",
+    shortcut: "Cmd+K",
+    onSelect: (value) => { $lastCommand = value; $paletteOpen = false },
+    onClose: () => { $paletteOpen = false },
+    emptyLabel: "No commands match"
+  }),
+  Callout({ title: \`Last command: \${$lastCommand}\`, tone: "neutral", icon: "terminal", compact: true }),
+  Grid([
+    Card([
+      CardHeader("QueryBuilder", { subtitle: "structured filters, no free-text parsing" }),
+      QueryBuilder([
+        { value: "status", label: "Status", type: "enum", options: ["open", "closed", "archived"] },
+        { value: "total", label: "Total", type: "number" },
+        { value: "customer", label: "Customer", type: "string" }
+      ], {
+        value: $rules,
+        onChange: (next) => { $rules = next },
+        maxRules: 5
+      }),
+      Text(\`\${$util.count($rules)} \${$util.plural($util.count($rules), "rule", "rules")}\`, { tone: "muted", variant: "small" })
+    ]),
+    Card([
+      CardHeader("JsonTree", { subtitle: "collapsible object inspector" }),
+      JsonTree(config, { expandedDepth: 2, maxHeight: 240 })
+    ])
+  ], { columns: { sm: 1, md: 2 }, gap: "lg" }),
+  Card([
+    CardHeader("DiffViewer", { subtitle: "side-by-side or unified, with line numbers" }),
+    DiffViewer(before, after, {
+      mode: "split",
+      leftTitle: "Before",
+      rightTitle: "After",
+      lineNumbers: true,
+      maxHeight: 260
+    })
+  ]),
+  Grid([
+    Card([
+      CardHeader("Sortable", { subtitle: "drag OR arrow keys — reordering is keyboard-accessible" }),
+      Sortable($order.map(t => Row([Icon("grip-vertical", { size: "sm" }), Text(t)], { gap: "sm" })), {
+        onReorder: reorder,
+        ariaLabel: "Task order"
+      })
+    ]),
+    Card([
+      CardHeader("VirtualList", { subtitle: "5,000 rows, ~15 in the DOM" }),
+      VirtualList(rows, {
+        itemHeight: 40,
+        height: 260,
+        renderItem: (row, index) => Row([
+          Text(row.label),
+          Badge(\`\${row.score}\`, { tone: row.score > 66 ? "success" : row.score > 33 ? "warning" : "neutral", size: "sm" })
+        ], { gap: "sm", justify: "between" }),
+        onItemClick: (row) => { $picked = row.label },
+        empty: EmptyState("Nothing to show")
+      }),
+      Text(\`Clicked: \${$picked}\`, { tone: "muted", variant: "small" })
+    ])
+  ], { columns: { sm: 1, md: 2 }, gap: "lg" })
+]))`,
+  },
+
+  // ── NEW: Interop + Escape hatches ──────────────────────────────
+  interop: {
+    label: "Interop — Mount, WebComponent, $script",
+    group: "── Primitives & coverage ──",
+    code: `// Highlights: the two escape routes to the wider web platform —
+//   Mount(...)         wrap an imperative third-party JS widget
+//   WebComponent(...)  drive a real custom element (attributes/properties/events)
+// plus $script (load a third-party bundle once, reactively) and $head (document
+// title, meta, Open Graph, JSON-LD).
+
+// $head is reactive and composes across routes: the browser tab title and the
+// crawler-visible metadata both come from here. renderToString() emits it too,
+// so a server-rendered page is fully crawlable.
+$head({
+  title: "Interop demo",
+  titleTemplate: "%s — Aktion playground",
+  meta: { description: "Mount, WebComponent, $script and $head in one program." },
+  og: { title: "Aktion interop", type: "website", image: "https://example.com/card.png" },
+  twitter: { card: "summary_large_image" },
+  link: [{ rel: "canonical", href: "https://example.com/interop" }],
+  jsonLd: { "@type": "SoftwareApplication", name: "Aktion", applicationCategory: "DeveloperApplication" }
+})
+
+// $script loads an external bundle ONCE per src, app-wide, and hands back a
+// reactive { ready, loading, error, value } bag. \`global\` reads window[global]
+// into \`.value\`, which is how you get a handle on a UMD library.
+lib = $script({
+  src: "https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js",
+  global: "confetti"
+})
+
+$mountCount = 0
+$label = "Hello from Aktion"
+
+// Mount() is the imperative bridge: setup runs once with the host node, update
+// runs whenever \`props\` changes, cleanup runs on unmount. Everything the widget
+// touches stays inside the node the runtime owns.
+sparkline = Mount(
+  (node, props) => {
+    node.textContent = ""
+    const bar = document.createElement("div")
+    bar.style.cssText = "height:12px;border-radius:6px;background:linear-gradient(90deg,#6366f1,#a855f7);transition:width .3s"
+    node.appendChild(bar)
+    $mountCount = $mountCount + 1
+    return { bar: bar }
+  },
+  {
+    update: (instance, props) => { instance.bar.style.width = \`\${props.pct}%\` },
+    cleanup: (instance) => { instance.bar.remove() },
+    props: { pct: $pct },
+    deps: [$pct],
+    tag: "div",
+    onError: (err, stage) => $console.error("widget failed during", stage, err)
+  }
+)
+$pct = 40
+
+$app(Stack([
+  PageHeader("Interop", {
+    subtitle: "Mount · WebComponent · $script · $head",
+    status: Badge(lib.ready ? "confetti ready" : lib.loading ? "loading…" : "not loaded", {
+      tone: lib.ready ? "success" : lib.error ? "danger" : "warning",
+      icon: "cube"
+    })
+  }),
+  Grid([
+    Card([
+      CardHeader("Mount()", { subtitle: \`setup ran \${$mountCount}x · update on every $pct change\` }),
+      Column([
+        sparkline,
+        Slider("pct", { value: $pct, min: 0, max: 100, label: "Width" }),
+        Text("The bar is plain imperative DOM. Aktion owns the host node, so it is cleaned up for you.", { tone: "muted", variant: "small" })
+      ], { gap: "md" })
+    ]),
+    Card([
+      CardHeader("WebComponent()", { subtitle: "a real custom element, reactively driven" }),
+      Column([
+        // \`attributes\` are reactive strings; \`properties\` are assigned as real JS
+        // properties (for elements that take objects); \`on\` binds live listeners.
+        WebComponent("aktion-app", {
+          attributes: { theme: "soft" },
+          properties: { response: \`$app(Callout({ title: "\${$label}", tone: "info" }))\` },
+          on: { error: (e) => $console.warn("inner app error", e) }
+        }),
+        Input("label", { label: "Inner label", value: $label, onChange: (v) => { $label = v } }),
+        Text("An <aktion-app> nested inside an <aktion-app> — the element is just a custom element.", { tone: "muted", variant: "small" })
+      ], { gap: "md" })
+    ])
+  ], { columns: { sm: 1, md: 2 }, gap: "lg" }),
+  Card([
+    CardHeader("$script()", { subtitle: "gate a third-party widget on .ready" }),
+    Column([
+      Async(lib, {
+        loading: LoadingState("Fetching the confetti bundle…"),
+        error:   ErrorState("CDN unreachable", { description: "Deployed pages usually block cross-origin scripts — that is what \`.error\` is for." }),
+        data:    Text("Bundle loaded. \`lib.value\` is window.confetti.", { tone: "success" })
+      }),
+      Button("Celebrate", {
+        onClick: () => { if (lib.ready) { lib.value({ particleCount: 80, spread: 70 }) } },
+        variant: "primary",
+        icon: "star",
+        disabled: !lib.ready
+      })
+    ], { gap: "md" })
+  ]),
+  // The last-resort escape hatches: any HTML tag, and raw scoped CSS.
+  Card([
+    CardHeader("Escape hatches", { subtitle: "HTMLTag + Styles" }),
+    Styles(".pg-interop-note { border-left: 3px solid var(--color-primary); padding-left: 12px; font-style: italic }"),
+    HTMLTag("figure", { attributes: { class: "pg-interop-note" }, children: [
+      HTMLTag("blockquote", { children: ["Reach for these when nothing in the component library fits — not before."] }),
+      HTMLTag("figcaption", { children: ["Aktion docs, §Escape hatches"] })
+    ] })
+  ])
+]))`,
+  },
+
+  // ── NEW: i18n, toasts, events, observers ────────────────────────
+  i18nToasts: {
+    label: "$i18n + $toast + $emit + $dom",
+    group: "── Primitives & coverage ──",
+    code: `// Highlights: $i18n with ICU plurals and live language switching, the $toast
+// namespace + the Toasts stack, $emit for outbound CustomEvents, $dom.onIntersect
+// for viewport-driven work, and the HTMLTag / Styles escape hatches.
+
+$lang = "en"
+$cartCount = 0
+$seen = false
+$paneWidth = 0
+
+// $dom wraps the four browser observers (resize / intersection / mutation) plus a
+// one-shot measure(), and registers the teardown with the runtime so nothing
+// leaks across a re-render. Here: keep $paneWidth in sync with the app root.
+$effect(() => {
+  root = document.querySelector(".rui-root")
+  if (root) {
+    $dom.onResize(root, (size) => { $paneWidth = $util.round(size.width) })
+  }
+}, ["mount"])
+
+// $i18n is destructured — \`t\` is the translator, and \`currentLanguage\` bound to a
+// reactive atom is what makes the whole UI re-render on a language switch.
+const { t, getCurrentLanguage } = $i18n({
+  defaultLanguage: "en",
+  currentLanguage: $lang,
+  translations: {
+    title:   { en: "Localised checkout", de: "Lokalisierter Checkout", fr: "Paiement localisé" },
+    hello:   { en: "Hello, {name}!",     de: "Hallo, {name}!",         fr: "Bonjour, {name} !" },
+    // ICU plural: one message covers every count, including the zero case.
+    items:   {
+      en: "{count, plural, =0 {Your cart is empty} one {# item in your cart} other {# items in your cart}}",
+      de: "{count, plural, =0 {Ihr Warenkorb ist leer} one {# Artikel im Warenkorb} other {# Artikel im Warenkorb}}",
+      fr: "{count, plural, =0 {Votre panier est vide} one {# article dans votre panier} other {# articles dans votre panier}}"
+    },
+    add:     { en: "Add item",  de: "Artikel hinzufügen", fr: "Ajouter un article" },
+    clear:   { en: "Clear",     de: "Leeren",             fr: "Vider" },
+    checkout:{ en: "Check out", de: "Zur Kasse",          fr: "Commander" }
+  }
+})
+
+function addItem() {
+  $cartCount = $cartCount + 1
+  // $toast.* is imperative and needs no state of its own — the Toasts stack
+  // below renders $toast.items.
+  $toast.success(t("add"), { title: t("title"), duration: 2500 })
+}
+
+function clearCart() {
+  $cartCount = 0
+  $toast.warning(t("clear"), { duration: 2000 })
+}
+
+function checkout() {
+  if ($cartCount === 0) {
+    $toast.error(t("items", { count: 0 }))
+    return
+  }
+  $toast.info(t("checkout"))
+  // $emit dispatches a CustomEvent on the host <aktion-app> — this is how an
+  // embedding page hears about what happened inside the program.
+  $emit("checkout", { items: $cartCount, language: getCurrentLanguage() })
+}
+
+// OnIntersect is the declarative form of $dom.onIntersect — same observer, but
+// the wrapper owns the node so there is nothing to query for.
+banner = OnIntersect(
+  Card([CardHeader("Scroll target", { subtitle: $seen ? "seen — the observer fired" : "not seen yet" })]),
+  { onEnter: () => { $seen = true; $toast.show("Banner in view", { tone: "info" }) }, once: true }
+)
+
+$app(Stack([
+  // Raw CSS, scoped, with theme-token interpolation ({group.key} → var(--…)).
+  Styles(".pg-i18n-flag { font-size: 22px; line-height: 1 }", { scope: ".rui-app" }),
+  PageHeader(t("title"), {
+    subtitle: t("hello", { name: "Asha" }),
+    status: Badge(\`\${getCurrentLanguage()} · \${$paneWidth}px\`, { tone: "info", icon: "language" }),
+    actions: [
+      Select("lang", {
+        label: "Language",
+        value: $lang,
+        items: [SelectItem("en", "English"), SelectItem("de", "Deutsch"), SelectItem("fr", "Français")],
+        onChange: (v) => { $lang = v }
+      })
+    ]
+  }),
+  Card([
+    CardHeader(t("items", { count: $cartCount }), { subtitle: "one ICU string covers 0 / 1 / many" }),
+    Row([
+      // HTMLTag for a bare span the library has no component for.
+      HTMLTag("span", { attributes: { class: "pg-i18n-flag", "aria-hidden": "true" }, children: [$lang === "de" ? "🇩🇪" : $lang === "fr" ? "🇫🇷" : "🇬🇧"] }),
+      Button(t("add"), { onClick: addItem, variant: "primary", icon: "cart-plus" }),
+      Button(t("clear"), { onClick: clearCart, variant: "ghost", icon: "trash", disabled: $cartCount === 0 }),
+      Button(t("checkout"), { onClick: checkout, variant: "secondary", icon: "credit-card" })
+    ], { gap: "sm", wrap: true })
+  ]),
+  Card([
+    CardHeader("$toast.items", { subtitle: \`\${$util.count($toast.items)} live\` }),
+    Row([Button("Dismiss all", { onClick: () => $toast.clear(), variant: "ghost", icon: "xmark", size: "sm" })], { gap: "sm" })
+  ]),
+  // A bare \`$toast.success(...)\` is normally enough — the runtime auto-appends
+  // its own Toasts layer. READING \`$toast.items\` opts out of that so we can
+  // place the stack ourselves, which is what the two lines below do.
+  // Padding so there is something to scroll before the observer target.
+  HTMLTag("div", { attributes: { style: "height: 40vh" } }),
+  banner,
+  Toasts($toast.items.map(item => Toast(item.title ?? item.message, {
+    message: item.title ? item.message : "",
+    tone: item.tone,
+    onClose: () => $toast.dismiss(item.id)
+  })), { position: "bottom-right", max: 4 })
+]))`,
+  },
 };
 
 const DEFAULT_EXAMPLE = "chat";
@@ -1109,7 +1808,25 @@ const LS = {
   split: "rui:playground:split",
   splitV: "rui:playground:splitV",
   sidebarCollapsed: "rui:playground:sidebarCollapsed",
+  // `<aktion-app>` attributes driven from the Runtime toolbar group. The access
+  // policy is deliberately NOT persisted: a shared link must always open
+  // sandboxed, however the reader left the toggle last time.
+  strict: "rui:playground:strict",
+  rtl: "rui:playground:rtl",
+  showErrors: "rui:playground:showErrors",
 };
+
+/**
+ * `<aktion-app>` attributes the Runtime toolbar group drives, as
+ * `[localStorage key, attribute, button id]`. `rtl` is the odd one out: the
+ * element's attribute is `dir="rtl"`, a value attribute rather than a boolean
+ * one, so `applyRuntimeAttributes` special-cases it.
+ */
+const RUNTIME_FLAGS = [
+  [LS.strict, "strict", "pg-strict"],
+  [LS.rtl, "rtl", "pg-rtl"],
+  [LS.showErrors, "showerrors", "pg-showerrors"],
+];
 
 // The default entry module of a playground project. `app.aktion` is always
 // present and is where examples / shared snippets land. The file the linker
@@ -1133,20 +1850,6 @@ const lsWrite = (key, value) => {
 
 // ---------------------------------------------------------------------------
 // Multi-file project helpers
-
-/**
- * Normalize a user-entered file name into a project key: trim, strip leading
- * slashes, ensure a `.aktion` extension, and reject anything with traversal or
- * unsafe characters. Returns `null` for an invalid name.
- */
-function normalizeFileName(raw) {
-  let name = String(raw || "").trim().replace(/^\/+/, "");
-  if (!name) return null;
-  if (!/\.aktion$/i.test(name)) name += ".aktion";
-  if (name.includes("..")) return null;
-  if (!/^[A-Za-z0-9_][A-Za-z0-9_./-]*\.aktion$/i.test(name)) return null;
-  return name;
-}
 
 // CRC-32 (IEEE) table + helper, used by the store-only ZIP writer below.
 const CRC32_TABLE = (() => {
@@ -1424,15 +2127,47 @@ const RUNTIME_URL = new URL("../../dist/aktion.js", import.meta.url).href;
 let previewFrame = null;
 let previewApp = null; // the <aktion-app> inside the iframe (formerly #pg-target)
 let _frameReadyResolve;
-const frameReady = new Promise((resolve) => { _frameReadyResolve = resolve; });
+// Re-assignable, because the frame can be re-booted (the global-access-policy
+// toggle rebuilds it). Every `await frameReady` reads this binding at call time,
+// so it always waits on the CURRENT frame rather than a stale resolved promise.
+// Declared before `resetFrameReady()` runs — the function assigns to it, and a
+// `let x = resetFrameReady()` one-liner would touch `x` inside its own TDZ.
+let frameReady;
+resetFrameReady();
+
+function resetFrameReady() {
+  previewApp = null;
+  frameReady = new Promise((resolve) => { _frameReadyResolve = resolve; });
+  return frameReady;
+}
 
 // The live preview element the rest of the playground talks to. Null until the
 // iframe runtime upgrades <aktion-app>; callers await `frameReady` or use `?.`.
 const getTarget = () => previewApp;
 
-function initPreviewFrame() {
+/**
+ * (Re)build the preview iframe.
+ *
+ * `accessPolicy` is the runtime's {@link setGlobalAccessPolicy} argument for the
+ * program about to run inside it:
+ *   - `"all"` — the full `globalThis` surface, `eval`/`Function` included. The
+ *     right default for code the author typed themselves.
+ *   - `"safe"` — the runtime's vetted allow-list (data, formatting, encoding;
+ *     no code execution, DOM, network, or storage). Used automatically when the
+ *     program arrived through a SHARED LINK (`?code=` / `#code=`), i.e. from
+ *     whoever wrote the URL rather than from the person opening it.
+ *
+ * The policy is module state inside the runtime, and the preview loads its OWN
+ * copy of the runtime, so it has to be set in the frame — setting it in the
+ * parent would have no effect on the program. A second module script does it:
+ * module scripts are deferred and run in document order, and an `import` of an
+ * already-evaluated URL reuses the same instance, so this lands after the
+ * element is defined and before the parent ever calls `mountCompiled`.
+ */
+function initPreviewFrame(accessPolicy = "all") {
   previewFrame = $("pg-frame");
-  if (!previewFrame) return;
+  if (!previewFrame) return frameReady;
+  const ready = resetFrameReady();
   // `srcdoc` (not document.write) — the latter races the iframe's initial
   // about:blank and gets clobbered. srcdoc resolves relative URLs against the
   // parent base, so the absolute RUNTIME_URL loads the same dist build.
@@ -1445,6 +2180,8 @@ function initPreviewFrame() {
     // DevTools opens. Runs before the runtime module so early reads work too.
     "<script>(function(){try{var k='__AKTION_DEVTOOLS_HOOK__';Object.defineProperty(window,k,{configurable:true,get:function(){return window.parent[k];},set:function(v){window.parent[k]=v;}});}catch(e){}})();</script>",
     "<script type='module' src='" + RUNTIME_URL + "'></script>",
+    "<script type='module'>import { setGlobalAccessPolicy } from '" + RUNTIME_URL + "';"
+      + "setGlobalAccessPolicy(" + JSON.stringify(accessPolicy) + ");</script>",
     "</head><body><aktion-app id='pg-target' theme='light'></aktion-app></body></html>",
   ].join("");
   const onReady = () => {
@@ -1456,6 +2193,7 @@ function initPreviewFrame() {
     });
   };
   previewFrame.addEventListener("load", onReady, { once: true });
+  return ready;
 }
 
 function showToast(message, opts = {}) {
@@ -1563,15 +2301,6 @@ function buildStandaloneHtml(source, theme, title, runtimeJs) {
   ].join("\n");
 }
 
-/**
- * Build the runnable `index.html` for a project export. It loads the library
- * from the public CDN (kept lean — the bundle is NOT inlined) and renders the
- * linked program. The separate "Standalone HTML" download inlines everything.
- */
-function buildIndexHtml(source, theme, title) {
-  return buildStandaloneHtml(source, theme, title); // no runtimeJs → CDN <script>
-}
-
 async function downloadStandaloneHtml(source, theme, title) {
   const runtimeJs = await fetchRuntimeIife();
   const html = buildStandaloneHtml(source, theme, title, runtimeJs);
@@ -1599,39 +2328,35 @@ const KEYWORD_DOCS = langSpec.keywordDocs || {};
 /**
  * Reserved language keywords — surfaced in autocomplete so the LLM-author
  * (or a human) can discover the full grammar without leaving the editor.
- * Mirror the lexer's `KEYWORDS_AKTION` set plus the lifecycle string deps
- * (`"mount"`, `"unmount"`, `"every(N)"`) that appear inside effect() calls.
+ *
+ * DERIVED from `keywordDocs`, not hand-listed: a hand-listed copy silently lost
+ * `import` and `export` when multi-file projects landed — precisely the two
+ * keywords the playground's own file explorer exists to serve. Every entry that
+ * has a keyword doc therefore has a hover popup too, by construction.
+ *
+ * Two adjustments on top of the canonical map:
+ *   - `$`-sigil entries (`$emit`, `$effect`) and the reactive handles (`aktion`,
+ *     `route`) are NOT keywords — they live in `SPECIAL_IDENTIFIERS`;
+ *   - `KEYWORD_EXTRA_PROSE` re-attaches the hand-written Aktion-specific
+ *     guidance for the handful of keywords where it says more than the generic
+ *     grammar summary (`switch` and `for` both need "use `.map()` instead for
+ *     value-producing iteration", which the grammar doc has no room for).
  */
+const KEYWORD_EXTRA_PROSE = {
+  switch:  "Statement-form `switch (value) { case \"x\": A(); break; default: B() }`. Use inside a function body — wrap and `return` to pick a value.",
+  for:     "Statement-form `for (let x of xs) { … }` / `for (let i = 0; i < n; i += 1) { … }`. Use `xs.map(x => …)` for value-producing iteration.",
+  default: "Wildcard arm inside `$router({...})`, or the `default` case of a `switch`.",
+  return:  "Return from a `function` / `$effect` body.",
+};
+
 const LANGUAGE_KEYWORDS = [
-  { label: "function",  info: "Declare a function (component or callable action): `function Name(arg) { return ... }`." },
-  { label: "if",        info: "Expression-form `if (cond) { ... } else { ... }`." },
-  { label: "else",      info: "`else` arm of an `if` expression." },
-  { label: "switch",    info: "Statement-form `switch (value) { case \"x\": A(); break; default: B() }`. Use inside a function body — wrap and `return` to pick a value." },
-  { label: "case",      info: "Arm of a `switch` statement: `case \"x\": A(); break`." },
-  { label: "break",     info: "Terminate a `switch` arm or `for`/`while` loop." },
-  { label: "continue",  info: "Skip to the next iteration of a `for`/`while` loop." },
-  { label: "for",       info: "Statement-form `for (let x of xs) { … }` / `for (let i = 0; i < n; i += 1) { … }`. Use `xs.map(x => …)` for value-producing iteration." },
-  { label: "while",     info: "Statement-form `while (cond) { … }` — inside a function body." },
-  { label: "do",        info: "`do { … } while (cond)` — run the body once, then repeat while truthy." },
-  { label: "of",        info: "Used in `for (let x of xs) { ... }` (iterate VALUES)." },
-  { label: "in",        info: "`for (let k in obj) { ... }` (iterate KEYS) or `\"key\" in obj` membership test." },
-  { label: "let",       info: "Block-scoped mutable binding: `let x = …` (supports destructuring)." },
-  { label: "const",     info: "Block-scoped constant binding: `const x = …` (supports destructuring)." },
-  { label: "var",       info: "Function-scoped variable — `let` is preferred." },
-  { label: "try",       info: "`try { … } catch (err) { … } finally { … }` — inside a function body." },
-  { label: "catch",     info: "Handle an error thrown in the preceding `try` block: `catch (e) { … }`." },
-  { label: "finally",   info: "Run cleanup after `try` / `catch`, regardless of outcome." },
-  { label: "throw",     info: "`throw new Error(\"msg\")` — surfaces as a thrown JS error." },
-  { label: "new",       info: "`new Constructor(args)` — invoke a JS constructor (e.g. `new FormData()`, `new Date()`)." },
-  { label: "typeof",    info: "`typeof x` — JS type guard returning a string." },
-  { label: "instanceof",info: "`x instanceof Ctor` — prototype check." },
-  { label: "delete",    info: "`delete obj.prop` — remove a property from an object." },
-  { label: "void",      info: "`void expr` — evaluate an expression and yield `undefined`." },
-  { label: "await",     info: "Wait for an HTTP / promise inside a function body." },
-  { label: "async",     info: "Marks a function as async — accepted as a no-op modifier." },
-  { label: "return",    info: "Return from a `function` / `$effect` body." },
-  { label: "cleanup",   info: "Register a teardown handler inside a `$effect` body — e.g. `cleanup(() => clearInterval(id))`." },
-  { label: "default",   info: "Wildcard arm inside `$router({...})`." },
+  ...Object.entries(KEYWORD_DOCS)
+    .filter(([label]) => !label.startsWith("$") && label !== "aktion" && label !== "route")
+    .map(([label, doc]) => ({ label, info: KEYWORD_EXTRA_PROSE[label] || doc.summary })),
+  // `cleanup` is a call the runtime injects into every `$effect` body rather
+  // than a lexer keyword, so it has no `keywordDocs` entry — but authors reach
+  // for it exactly where they reach for the keywords, so keep it listed here.
+  { label: "cleanup", info: "Register a teardown handler inside a `$effect` body — e.g. `cleanup(() => clearInterval(id))`." },
 ];
 
 /**
@@ -1736,25 +2461,18 @@ const SPECIAL_IDENTIFIERS = [
 /**
  * Top-level multi-line snippets — surfaced via the `…` ellipsis suffix
  * so they show up alongside ordinary identifiers without polluting the
- * inline completion list. Pulled from `langSpec.snippets` plus the
- * language constructs (`function`, `effect`, `switch`, `$router`).
+ * inline completion list.
+ *
+ * These are the SUPPLEMENT to `langSpec.snippets`, not a replacement for it:
+ * only bare language constructs the canonical list has no counterpart for
+ * belong here. Anything that collides by name is dropped in favour of the
+ * canonical template (see `completions()`), so adding a duplicate here has no
+ * effect other than dead weight — the previous hand-written `router` / `action`
+ * / `effect` / `ternary` / `http` entries had SUPPRESSED their canonical
+ * counterparts, and the `effect` one was still teaching the legacy bare
+ * `effect(` form years after the runtime moved to `$effect(`.
  */
 const LANGUAGE_SNIPPETS = [
-  {
-    name: "router",
-    description: "Multi-page $router({...}) with NavLink nav.",
-    template:
-      'pages = $router({\n' +
-      '  "/":          ${1:Home()},\n' +
-      '  "/users/:id": ${2:UserPage({ id: params.id })},\n' +
-      '  default:      ${3:NotFound()}\n' +
-      '})\n\n' +
-      'nav = Stack([\n' +
-      '  NavLink("Home",  { to: "/",      variant: "ghost", exact: true }),\n' +
-      '  NavLink("Users", { to: "/users", variant: "ghost" })\n' +
-      '], { direction: "row", gap: "sm" })\n\n' +
-      '$app(Stack([nav, pages]))',
-  },
   {
     name: "function",
     description: "User-defined function (component or action) with explicit return.",
@@ -1762,23 +2480,6 @@ const LANGUAGE_SNIPPETS = [
       'function ${1:Name}(${2:prop}) {\n' +
       '  return ${3:Card([CardHeader(${2:prop})])}\n' +
       '}',
-  },
-  {
-    name: "action",
-    description: "Callable action — invoked via `{ action: name }` props.",
-    template:
-      'function ${1:save}(${2:payload}) {\n' +
-      '  $${3:result} = $http({ url: "https://api.example.com/${4:endpoint}", method: "POST", body: ${2:payload} })\n' +
-      '}',
-  },
-  {
-    name: "effect",
-    description: "Side-effect call — body callback plus dependency array.",
-    template:
-      'effect(() => {\n' +
-      '  ${2:// side effect body}\n' +
-      '  cleanup(() => { ${3:// teardown} })\n' +
-      '}, [$${1:dep}])',
   },
   {
     name: "switch",
@@ -1808,17 +2509,6 @@ const LANGUAGE_SNIPPETS = [
       '} else {\n' +
       '  ${3:fallback}\n' +
       '}',
-  },
-  {
-    name: "ternary",
-    description: "JS ternary — `cond ? a : b`. Use it on the RHS of an assignment.",
-    template: '${1:result} = ${2:cond} ? ${3:trueBranch} : ${4:falseBranch}',
-  },
-  {
-    name: "http",
-    description: "Reactive HTTP resource + onDone refresh.",
-    template:
-      '$${1:data} = $http({ url: "${2:https://api.example.com/items}", method: "${3:GET}" })',
   },
   {
     name: "http-write",
@@ -2351,8 +3041,12 @@ const ROUTE_MEMBERS = [
  * is NOT exhaustive: the runtime exposes the FULL JavaScript global surface
  * (any `window` / `globalThis` member — `document`, `fetch`, `crypto`,
  * `localStorage`, `Reflect`, `eval`, …) via a host passthrough, so anything
- * not listed here still works when typed. Keep in sync with the timer
- * handlers + `GLOBAL_NAMESPACES` + `lookupHostGlobal` in
+ * not listed here still works when typed.
+ *
+ * The curated entries below exist for their ergonomic snippet `apply`; the
+ * reconciliation pass then appends every name in the runtime's own
+ * `SAFE_HOST_GLOBALS` allow-list that isn't already covered (see step 5), so
+ * this is no longer a hand-maintained-sync contract with
  * `src/runtime/evaluator.ts`.
  */
 const CALLABLE_GLOBALS = [
@@ -2409,11 +3103,22 @@ const CALLABLE_GLOBALS = [
  * members (`$util.merge`, `$util.chunk`, …), factory resource bags
  * (e.g. `$script`), config-object keys (e.g. `$head`, `$script`), and `route`
  * handle members — deriving a reasonable snippet from each entry's signature.
- * Additive only: curated entries win, so this never regresses the ergonomic
- * templates while guaranteeing full coverage with zero hand-maintained drift.
+ *
+ * The split of ownership is deliberate and is what makes this drift-proof:
+ *   - the PLAYGROUND owns `apply` (the CodeMirror snippet template — the
+ *     ergonomic value a generic signature can't produce), and
+ *   - the RUNTIME owns `info` / `description` / `required` (the prose and the
+ *     flags). Those are OVERWRITTEN from the canonical entry on every load, not
+ *     merely added when absent.
+ * An earlier additive-by-name-only version let a curated description that had
+ * since become WRONG (`$util.filter` advertising an `in` comparator that does
+ * not exist, `$util.initials` documented as two-letter-only, `$util.geolocate`
+ * documented as taking no arguments) survive indefinitely, because the name was
+ * already present. Overwriting kills that whole failure class permanently.
+ *
  * Sources: `namespaceCatalog` / `factoryResourceCatalog` / `routeMembers` /
- * `findBuiltinConfig` in `src/language/namespaces.ts`, `builtinCatalog` in
- * `src/language/builtins.ts`.
+ * `i18nResultMembers` / `findBuiltinConfig` in `src/language/namespaces.ts`,
+ * `builtinCatalog` in `src/language/builtins.ts`.
  * ---------------------------------------------------------------------- */
 
 /** Turn a signature skeleton ("format(value, mode?)" / "scroll") into a CodeMirror snippet apply. */
@@ -2457,41 +3162,59 @@ function normalizeConfigType(rawType) {
   return { type: "object" };
 }
 
+/**
+ * Merge one canonical member list into a curated one: append what's missing,
+ * and refresh the prose of what's already there. The curated `apply` survives.
+ */
+function reconcileMembers(curated, canonical) {
+  const byName = new Map(curated.map((m) => [m.name, m]));
+  for (const m of canonical) {
+    if (m.kind === "namespace") continue;
+    const existing = byName.get(m.name);
+    if (existing) {
+      if (m.summary) existing.info = m.summary; // runtime owns the prose
+      continue;
+    }
+    const added = { name: m.name, apply: signatureToApply(m.signature, m.name), info: m.summary };
+    curated.push(added);
+    byName.set(m.name, added);
+  }
+  return curated;
+}
+
 // 1. `$`-namespaces ($util / $storage / $console / $toast / $dom): add the
-//    whole namespace if missing, then merge any members the curated list lacks.
+//    whole namespace if missing, then merge members + refresh their prose.
 for (const ns of namespaceCatalog) {
   let pgNs = GLOBAL_NAMESPACES.find((n) => n.name === ns.sigil);
   if (!pgNs) {
     pgNs = { name: ns.sigil, signature: namespaceSignature(ns), description: ns.summary, members: [] };
     GLOBAL_NAMESPACES.push(pgNs);
+  } else if (ns.summary) {
+    pgNs.description = ns.summary;
   }
-  const have = new Set(pgNs.members.map((m) => m.name));
-  for (const m of ns.members) {
-    if (m.kind === "namespace" || have.has(m.name)) continue;
-    pgNs.members.push({ name: m.name, apply: signatureToApply(m.signature, m.name), info: m.summary });
-  }
+  reconcileMembers(pgNs.members, ns.members);
 }
 
 // 2. Factory resource bags ($http / $query / $mutation / $socket / $sse /
-//    $form / $store / $script): add missing bags + members.
+//    $form / $store / $script): add missing bags + members, refresh prose.
 for (const f of factoryResourceCatalog) {
   let bag = FACTORY_RESOURCE_MEMBERS[f.factory];
   if (!bag) { bag = []; FACTORY_RESOURCE_MEMBERS[f.factory] = bag; }
-  const have = new Set(bag.map((m) => m.name));
-  for (const m of f.members) {
-    if (have.has(m.name)) continue;
-    bag.push({ name: m.name, apply: signatureToApply(m.signature, m.name), info: m.summary });
-  }
+  reconcileMembers(bag, f.members);
 }
 
-// 3. The reserved reactive `route` handle: merge any missing members.
-{
-  const have = new Set(ROUTE_MEMBERS.map((m) => m.name));
-  for (const m of runtimeRouteMembers) {
-    if (have.has(m.name)) continue;
-    ROUTE_MEMBERS.push({ name: m.name, apply: signatureToApply(m.signature, m.name), info: m.summary });
-  }
-}
+// 2b. `$i18n` is the one config-taking builtin whose result bag is DESTRUCTURED
+//     (`const { t } = $i18n({…})`) rather than bound whole, so it never appears
+//     in `factoryResourceCatalog`. Register it by hand from the canonical
+//     `i18nResultMembers` so `t.`/`setCurrentLanguage` still complete — see
+//     `scanFactoryResources`, which recognises the destructuring form.
+FACTORY_RESOURCE_MEMBERS.i18n = reconcileMembers(
+  FACTORY_RESOURCE_MEMBERS.i18n ?? [],
+  i18nResultMembers,
+);
+
+// 3. The reserved reactive `route` handle: merge members + refresh prose.
+reconcileMembers(ROUTE_MEMBERS, runtimeRouteMembers);
 
 // 4. Config-taking builtins ($http / $query / … / $script / $head / $theme /
 //    $i18n): add whole specs (e.g. $script, $head) + any missing config keys.
@@ -2503,14 +3226,55 @@ for (const b of langSpec.builtins) {
     spec = { name: b.sigil, signature: b.signature, description: b.summary, params: [] };
     BUILTIN_CONFIG_SPECS[b.sigil] = spec;
   }
-  const have = new Set(spec.params.map((p) => p.name));
+  const byName = new Map(spec.params.map((p) => [p.name, p]));
   for (const k of keys) {
-    if (have.has(k.name)) continue;
     const norm = normalizeConfigType(k.type);
-    const param = { name: k.name, type: norm.type, required: false, description: k.summary };
+    const existing = byName.get(k.name);
+    if (existing) {
+      if (k.summary) existing.description = k.summary;
+      // `required` only ever gets promoted here: the canonical ConfigKey list
+      // is still filling in its flags, so a curated `required: true` must not
+      // be demoted by a canonical entry that simply hasn't declared one yet.
+      if (k.required) existing.required = true;
+      continue;
+    }
+    const param = { name: k.name, type: norm.type, required: Boolean(k.required), description: k.summary };
     if (norm.enumValues) param.enumValues = norm.enumValues;
     spec.params.push(param);
+    byName.set(param.name, param);
   }
+}
+
+// 5. Vetted host globals. `SAFE_HOST_GLOBALS` is the allow-list the runtime
+//    itself enforces under `setGlobalAccessPolicy("safe")`, so it is the
+//    authoritative answer to "which JS globals is a program meant to reach?".
+//    Appending it here surfaces the whole family the curated list never
+//    mentioned — TextEncoder/TextDecoder, Blob/File/FormData/Headers, Symbol,
+//    WeakMap/WeakSet, the TypedArrays, Error/TypeError/RangeError/SyntaxError,
+//    ArrayBuffer/DataView.
+{
+  const have = new Set([
+    ...CALLABLE_GLOBALS.map((g) => g.label),
+    ...GLOBAL_NAMESPACES.map((n) => n.name),
+  ]);
+  for (const name of SAFE_HOST_GLOBALS) {
+    if (have.has(name)) continue;
+    CALLABLE_GLOBALS.push({ label: name, detail: "global", apply: name });
+  }
+}
+
+// 6. Reserved identifiers / Aktion globals: adopt the canonical SIGNATURE from
+//    `builtinCatalog` (these entries carried none, so hovering `$form` or
+//    `$router` showed prose with no call shape) and fall back to the canonical
+//    summary when there is no curated prose at all. The curated `info` is kept
+//    where it exists: it is deliberately longer than a one-line summary — it
+//    enumerates each factory's whole result bag — and the snippet `apply` is
+//    hand-tuned for CodeMirror.
+for (const ident of SPECIAL_IDENTIFIERS) {
+  const builtin = langSpec.builtins.find((b) => b.sigil === ident.label);
+  if (!builtin) continue;
+  if (builtin.signature) ident.signature = builtin.signature;
+  if (!ident.info && builtin.summary) ident.info = builtin.summary;
 }
 
 // Labels already surfaced by the curated lists — used so the builtin sweep in
@@ -2521,6 +3285,42 @@ const CURATED_BUILTIN_LABELS = new Set([
   ...CALLABLE_GLOBALS.map((g) => g.label),
   ...GLOBAL_NAMESPACES.map((n) => n.name),
 ]);
+
+/* -------------------------------------------------------------------------
+ * Universal props.
+ *
+ * `sx`, `animate`, `id`, `aria`, `data`, … are accepted by EVERY component, but
+ * none of the catalog entries declares them — the validator allows them
+ * through a separate allow-list, so anything derived from the component catalog
+ * (completion, hover, the status-bar arg pill) was blind to them. That made the
+ * two channels an author is MOST likely to reach for the only two that never
+ * completed. `universalPropCatalog` is the canonical list; nothing here
+ * hand-writes the names.
+ * ---------------------------------------------------------------------- */
+
+const UNIVERSAL_PARAMS = universalPropCatalog.map((p) => ({ ...p, universal: true }));
+const universalParamCache = new WeakMap();
+
+/**
+ * A component spec's own params PLUS the universal ones it doesn't already
+ * declare (a component that declares its own `data`/`style`/`id` wins, and
+ * `dataAttrs` is the alternate channel for exactly that case).
+ *
+ * Only the named-arg COMPLETION paths use this. Signature help, the hover popup
+ * and `makeInfoPopup` deliberately keep the component's own params: 13 extra
+ * universal rows on every single component would bury the actual API, and the
+ * value here is discoverability while typing a key, not documentation volume.
+ */
+function paramsWithUniversal(spec) {
+  if (!spec || !Array.isArray(spec.params)) return spec?.params ?? [];
+  let merged = universalParamCache.get(spec);
+  if (!merged) {
+    const own = new Set(spec.params.map((p) => p.name));
+    merged = [...spec.params, ...UNIVERSAL_PARAMS.filter((p) => !own.has(p.name))];
+    universalParamCache.set(spec, merged);
+  }
+  return merged;
+}
 
 // Build the inverse mapping (rui-* class → component name) for inspect mode.
 function kebab(name) {
@@ -2561,10 +3361,8 @@ function initPlayground(cm) {
     number: tags.number,
     atom: tags.atom,
     // Reserved control-flow / declaration keywords (`if`, `for`, `function`,
-    // `return`, `switch`, `try`, …). Mapped to `controlKeyword` so they get
-    // a distinct style from the `@builtin` functions (which use `keyword`).
+    // `return`, `switch`, `try`, …).
     keyword: tags.controlKeyword,
-    builtin: tags.keyword,
     state: tags.special(tags.variableName),
     component: tags.typeName,
     identifier: tags.variableName,
@@ -2583,10 +3381,9 @@ function initPlayground(cm) {
       return kind;
     },
     tokenTable,
-    languageData: {
-      commentTokens: { line: "//", block: { open: "/*", close: "*/" } },
-      closeBrackets: { brackets: ["(", "[", "{", '"', "'", "`"] },
-    },
+    // Straight from the canonical tokenizer (comment tokens, close-brackets,
+    // indentOnInput) rather than a hand-written copy that drifts.
+    languageData: baseTokenizer.languageData,
   });
 
   // Two palettes: the light one is tuned for white surfaces; the dark one
@@ -2632,6 +3429,16 @@ function initPlayground(cm) {
     lang.syntaxHighlighting(dark ? darkHighlightStyle : lightHighlightStyle);
 
   // ---- Autocomplete sources ----
+  //
+  // Several helpers below (`readCurrentArg`, `collectUsedNamedArgs`,
+  // `looksClosed`, `enclosingObjectOpen`, `scanCallArgShapes`,
+  // `findEnclosingCall`) each run a small string / comment / bracket-depth state
+  // machine over the document. They deliberately recognise ONLY the comment
+  // forms Aktion has — `getLanguageSpec().grammar.comments` is
+  // `{ line: "//", blockStart: "/*", blockEnd: "*/" }`. They used to also treat
+  // `#` as a line comment, which Aktion does not have: a single bare `#` outside
+  // a string silently killed completion, signature help and hover for the rest
+  // of the line. Do not re-add it.
 
   /**
    * Inspect the slice of the current argument from the last comma (or `(`)
@@ -2661,7 +3468,6 @@ function initPlayground(cm) {
         i++; continue;
       }
       if (ch === "/" && text[i + 1] === "/") { comment = "line"; i += 2; continue; }
-      if (ch === "#") { comment = "line"; i++; continue; }
       if (ch === "/" && text[i + 1] === "*") { comment = "block"; i += 2; continue; }
       if (ch === '"' || ch === "'" || ch === "`") { str = ch; i++; continue; }
       if (ch === "(" || ch === "[" || ch === "{") { depth++; i++; continue; }
@@ -2706,7 +3512,6 @@ function initPlayground(cm) {
         i++; continue;
       }
       if (ch === "/" && text[i + 1] === "/") { comment = "line"; i += 2; continue; }
-      if (ch === "#") { comment = "line"; i++; continue; }
       if (ch === "/" && text[i + 1] === "*") { comment = "block"; i += 2; continue; }
       if (ch === '"' || ch === "'" || ch === "`") { str = ch; i++; continue; }
       if (ch === "(" || ch === "[" || ch === "{") { depth++; i++; continue; }
@@ -2719,6 +3524,18 @@ function initPlayground(cm) {
     }
     consider(argStart, i);
     return used;
+  }
+
+  /**
+   * Ranking for a named-arg completion: required props first, then the
+   * component's own optional props, then the universal channels last. Universal
+   * props apply to everything, so surfacing them above a component's own API
+   * would be actively unhelpful — they are here for discoverability, not
+   * prominence.
+   */
+  function namedArgBoost(param) {
+    if (param.universal) return 10;
+    return param.required ? 50 : 30;
   }
 
   /**
@@ -2753,7 +3570,13 @@ function initPlayground(cm) {
       for (const p of params) {
         const li = document.createElement("li");
         const opt = p.required === false || p.required === undefined ? "?" : "";
-        li.innerHTML = `<code>${p.name}${opt}</code>: <span style="color:var(--doc-text-muted)">${p.type}</span>${p.description ? " — " + p.description : ""}`;
+        const name = document.createElement("code");
+        name.textContent = `${p.name}${opt}`;
+        const type = document.createElement("span");
+        type.style.color = "var(--doc-text-muted)";
+        type.textContent = p.type;
+        li.append(name, document.createTextNode(": "), type);
+        if (p.description) li.append(document.createTextNode(` — ${p.description}`));
         ul.append(li);
       }
       wrap.append(ul);
@@ -2822,7 +3645,7 @@ function initPlayground(cm) {
     // What did the user just type? `matchBefore` returns the longest
     // matching word + its absolute range, or null when the cursor sits
     // on whitespace and the trigger wasn't explicit.
-    const word = ctx.matchBefore(/[\w@$_]*/);
+    const word = ctx.matchBefore(/[\w$_]*/);
     if (!word) return null;
 
     // ---------- Context: import braces ----------
@@ -2900,7 +3723,7 @@ function initPlayground(cm) {
             }
             if (/^\s*$/.test(argText)) {
               const named = collectUsedNamedArgs(text, call, argBase);
-              const remainingParams = (spec.params || []).filter((p) => !named.has(p.name));
+              const remainingParams = paramsWithUniversal(spec).filter((p) => !named.has(p.name));
               return {
                 from: word.from,
                 options: [
@@ -2914,7 +3737,7 @@ function initPlayground(cm) {
                     label: `{ ${p.name}: … }`,
                     type: "property",
                     detail: p.type + (p.required ? "" : " (optional)"),
-                    boost: p.required ? 50 : 30,
+                    boost: namedArgBoost(p),
                     info: () => makeParamInfo(p),
                     apply: applyNamedArg(p, false),
                   })),
@@ -2966,15 +3789,16 @@ function initPlayground(cm) {
         //         `name: value` pair. A bare `name: value` directly as a call
         //         argument is a parse error, so we never emit that shape.
         const couldBeNamedArgName = !inPayloadObject && /^\s*[A-Za-z_]?[\w]*$/.test(argText);
-        if (couldBeNamedArgName && spec.params && spec.params.length > 0) {
+        const namedArgParams = paramsWithUniversal(spec);
+        if (couldBeNamedArgName && namedArgParams.length > 0) {
           const used = collectUsedNamedArgs(text, call, argBase);
-          const remaining = spec.params.filter((p) => !used.has(p.name));
+          const remaining = namedArgParams.filter((p) => !used.has(p.name));
           if (remaining.length > 0) {
             const options = remaining.map((p) => ({
               label: inObject ? `${p.name}:` : `{ ${p.name}: … }`,
               type: "property",
-              detail: p.type + (p.required ? "" : " (optional)"),
-              boost: p.required ? 50 : 30,
+              detail: p.universal ? `${p.type} (universal)` : p.type + (p.required ? "" : " (optional)"),
+              boost: namedArgBoost(p),
               info: () => makeParamInfo(p),
               apply: applyNamedArg(p, inObject),
             }));
@@ -3014,18 +3838,28 @@ function initPlayground(cm) {
     // globals so they're still discoverable when typed without the sigil and
     // CodeMirror fuzzy-matches them. (`@`-builtins were removed when the
     // runtime moved to the `$util` namespace, so nothing starts with `@`.)
-    const sigilOk = (label) => {
-      if (wordText.startsWith("@")) return label.startsWith("@");
-      if (wordText.startsWith("$")) return label.startsWith("$");
-      return !label.startsWith("@");
-    };
+    const sigilOk = (label) => !wordText.startsWith("$") || label.startsWith("$");
 
     // Components (with snippet-aware apply). Names are always bare, so they
     // drop out as soon as the user types a `$`.
+    //
+    // Nine canonical snippet names COLLIDE with component names (Card, Row,
+    // Center, Hero, PageHeader, Stats, KanbanBoard, FollowUpBlock, Form), and
+    // borrowing the snippet as the component's insert template is wrong in two
+    // distinct ways, so `snippetSuitsComponent` gates it:
+    //   - `Form` isn't a component snippet at all — its template is a `$form`
+    //     state binding, so accepting the Form COMPONENT completion used to
+    //     insert `form = $form({ … })`;
+    //   - the other eight are assignment-shaped (`card1 = Card([…])`), which is
+    //     a syntax error the moment the cursor is nested inside an array
+    //     literal: `Stack([ Ca|` completed to `Stack([ card1 = Card([…])`.
+    // The assignment-shaped templates stay reachable through the separate
+    // `Name…` snippet list below, where they are always at statement start.
+    const atStatementStart = /^\s*$/.test(text.slice(ctx.state.doc.lineAt(word.from).from, word.from));
     for (const c of langSpec.components) {
       if (!sigilOk(c.name)) continue;
       const snippet = langSpec.snippets.find((s) => s.name === c.name);
-      const apply = snippet
+      const apply = snippetSuitsComponent(snippet, atStatementStart)
         ? autocomplete.snippet(snippet.template)
         : autocomplete.snippet(componentCallTemplate(c));
       options.push({
@@ -3111,28 +3945,31 @@ function initPlayground(cm) {
       });
     }
 
-    // Multi-line snippets — language-level templates first, then the
-    // library's component-shaped snippets. Snippet names are bare.
-    for (const s of LANGUAGE_SNIPPETS) {
-      if (!sigilOk(s.name)) continue;
-      options.push({
-        label: s.name + "…",
-        type: "snippet",
-        detail: "language",
-        info: s.description,
-        apply: autocomplete.snippet(s.template),
-      });
-    }
+    // Multi-line snippets, canonical FIRST. `langSpec.snippets` is generated
+    // from the runtime, so where the two collide by name the canonical one is
+    // by definition the current spelling — the playground's hand-written copies
+    // are what rot. (Inverting this is what un-suppressed the canonical Router /
+    // Effect / Action / Ternary / Http snippets; the hand-written `effect` in
+    // particular still taught the legacy bare `effect(` form instead of
+    // `$effect(`.) Snippet names are bare.
+    const canonicalSnippetNames = new Set(langSpec.snippets.map((s) => s.name.toLowerCase()));
     for (const s of langSpec.snippets) {
       if (!sigilOk(s.name)) continue;
-      // Skip snippets that are already surfaced as `LANGUAGE_SNIPPETS`
-      // (router) — they share a name and the language version is more
-      // up-to-date.
-      if (LANGUAGE_SNIPPETS.some((ls) => ls.name === s.name.toLowerCase())) continue;
       options.push({
         label: s.name + "…",
         type: "snippet",
         detail: "snippet",
+        info: s.description,
+        apply: autocomplete.snippet(s.template),
+      });
+    }
+    for (const s of LANGUAGE_SNIPPETS) {
+      if (!sigilOk(s.name)) continue;
+      if (canonicalSnippetNames.has(s.name.toLowerCase())) continue;
+      options.push({
+        label: s.name + "…",
+        type: "snippet",
+        detail: "language",
         info: s.description,
         apply: autocomplete.snippet(s.template),
       });
@@ -3158,7 +3995,7 @@ function initPlayground(cm) {
       }
     }
 
-    return { from: word.from, options, validFor: /[\w@$_]*/ };
+    return { from: word.from, options, validFor: /[\w$_]*/ };
   }
 
   /**
@@ -3265,6 +4102,27 @@ function initPlayground(cm) {
     return `${spec.name}(${posStop}, ${stops.join(", ")})`;
   }
 
+  /**
+   * May a canonical snippet stand in as a COMPONENT completion's insert
+   * template? Only when it actually produces a call to that component in the
+   * position the cursor is in. Two disqualifiers:
+   *
+   *   1. The name is really a builtin's snippet, not the component's — every
+   *      config-taking builtin has a same-spelled snippet (`Form` → `$form`,
+   *      `Store` → `$store`, `Query`, `Mutation`, `Socket`, `Sse`, `Http`), and
+   *      those insert a state binding, not a component call. Detected against
+   *      `langSpec.builtins` rather than a hand-listed set of names.
+   *   2. The template is assignment-shaped (`card1 = Card([…])`). Perfectly
+   *      correct at statement start; a syntax error anywhere nested.
+   */
+  function snippetSuitsComponent(snippet, atStatementStart) {
+    if (!snippet) return false;
+    const sigil = `$${snippet.name.toLowerCase()}`;
+    if (langSpec.builtins.some((b) => b.sigil === sigil)) return false;
+    if (/^\s*[$\w]+\s*=/.test(snippet.template) && !atStatementStart) return false;
+    return true;
+  }
+
   function scanStateRefs(source) {
     const out = new Set();
     const re = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
@@ -3280,12 +4138,18 @@ function initPlayground(cm) {
    * the factory's member table so `receiver.` completes to the right bag
    * (`.data` / `.refetch()` for $http, `.values` / `.submit()` for $form,
    * `.status` / `.send()` for $socket, …).
+   *
+   * Matches the WHOLE-BAG binding form only (`name = $factory(…)`); the
+   * destructured form (`const { t } = $i18n(…)`, where each name is one MEMBER
+   * of the bag rather than the bag itself) is handled by
+   * `scanDestructuredMembers` — `t.` would be meaningless, but hovering `t`
+   * should still show `t(key, vars?)`.
    */
   function scanFactoryResources(source) {
     const out = new Map();
     // Alternation derived from the (reconciled) factory map so every factory —
     // including ones merged from the runtime, e.g. `$script` — is recognised.
-    const factoryAlt = Object.keys(FACTORY_RESOURCE_MEMBERS).join("|");
+    const factoryAlt = factoryAlternation();
     if (!factoryAlt) return out;
     const re = new RegExp(
       `(\\$?[A-Za-z_][\\w]*)\\s*=\\s*(?:await\\s+)?\\$(${factoryAlt})\\s*\\(`,
@@ -3293,6 +4157,43 @@ function initPlayground(cm) {
     );
     let m;
     while ((m = re.exec(source))) out.set(m[1], FACTORY_RESOURCE_MEMBERS[m[2]]);
+    return out;
+  }
+
+  /** `$http|$query|…` alternation, derived from the reconciled factory map. */
+  function factoryAlternation() {
+    return Object.keys(FACTORY_RESOURCE_MEMBERS).join("|");
+  }
+
+  /**
+   * Find every LOCAL name introduced by destructuring a factory result —
+   * `const { t, setCurrentLanguage } = $i18n({…})` — and map it to the canonical
+   * member spec it came from, so hover shows the member's real signature and
+   * summary instead of nothing. `$i18n` is the motivating case: it is the only
+   * config-taking builtin whose documented result bag is normally destructured.
+   */
+  function scanDestructuredMembers(source) {
+    const out = new Map();
+    const factoryAlt = factoryAlternation();
+    if (!factoryAlt) return out;
+    const re = new RegExp(
+      `\\{([^}]*)\\}\\s*=\\s*(?:await\\s+)?\\$(${factoryAlt})\\s*\\(`,
+      "g",
+    );
+    let m;
+    while ((m = re.exec(source))) {
+      const bag = FACTORY_RESOURCE_MEMBERS[m[2]] ?? [];
+      for (const part of m[1].split(",")) {
+        // `{ t, setCurrentLanguage: setLang }` → key `setCurrentLanguage` binds
+        // the LOCAL name `setLang`; hover keys off the local name.
+        const colon = part.indexOf(":");
+        const key = (colon < 0 ? part : part.slice(0, colon)).trim();
+        const local = (colon < 0 ? part : part.slice(colon + 1)).trim();
+        if (!/^[A-Za-z_$][\w$]*$/.test(key) || !/^[A-Za-z_$][\w$]*$/.test(local)) continue;
+        const member = bag.find((x) => x.name === key);
+        if (member) out.set(local, { ...member, factory: `$${m[2]}` });
+      }
+    }
     return out;
   }
 
@@ -3383,6 +4284,7 @@ function initPlayground(cm) {
     if (ident) {
       return {
         name: ident.label,
+        signature: ident.signature,
         description: ident.info,
         kind: ident.label.startsWith("$") ? "global" : "reserved",
       };
@@ -3480,7 +4382,6 @@ function initPlayground(cm) {
       if (comment === "block") { if (ch === "*" && text[i + 1] === "/") { comment = null; i += 2; continue; } i++; continue; }
       if (str) { if (ch === "\\") { i += 2; continue; } if (ch === str) str = null; i++; continue; }
       if (ch === "/" && text[i + 1] === "/") { comment = "line"; i += 2; continue; }
-      if (ch === "#") { comment = "line"; i++; continue; }
       if (ch === "/" && text[i + 1] === "*") { comment = "block"; i += 2; continue; }
       if (ch === '"' || ch === "'" || ch === "`") { str = ch; i++; continue; }
       if (ch === "(" || ch === "[" || ch === "{") { stack.push({ ch, index: i }); i++; continue; }
@@ -3521,7 +4422,6 @@ function initPlayground(cm) {
       if (comment === "block") { if (ch === "*" && text[i + 1] === "/") { comment = null; i += 2; continue; } i++; continue; }
       if (str) { if (ch === "\\") { i += 2; continue; } if (ch === str) str = null; i++; continue; }
       if (ch === "/" && text[i + 1] === "/") { comment = "line"; i += 2; continue; }
-      if (ch === "#") { comment = "line"; i++; continue; }
       if (ch === "/" && text[i + 1] === "*") { comment = "block"; i += 2; continue; }
       if (ch === '"' || ch === "'" || ch === "`") { str = ch; i++; continue; }
       if (ch === "(" || ch === "[") { depth++; i++; continue; }
@@ -3613,7 +4513,6 @@ function initPlayground(cm) {
         continue;
       }
       if (ch === "/" && text[i + 1] === "/") { comment = "line"; i += 2; continue; }
-      if (ch === "#") { comment = "line"; i += 1; continue; }
       if (ch === "/" && text[i + 1] === "*") { comment = "block"; i += 2; continue; }
       if (ch === '"' || ch === "'" || ch === "`") { str = ch; i++; continue; }
 
@@ -3684,14 +4583,14 @@ function initPlayground(cm) {
     return wrap;
   }
 
-  function buildSpecTooltipDom(spec, kind, activeIndex, namedArgName) {
+  function buildSpecTooltipDom(spec, activeIndex, namedArgName) {
     const wrap = document.createElement("div");
 
     const header = document.createElement("h4");
     const icon = document.createElement("i");
-    icon.className = kind === "builtin" ? "fa-solid fa-bolt" : "fa-solid fa-cube";
-    header.append(icon, document.createTextNode(` ${kind === "builtin" ? "@" : ""}${spec.name}`));
-    const groupLabel = kind === "builtin" ? spec.category : spec.group;
+    icon.className = "fa-solid fa-cube";
+    header.append(icon, document.createTextNode(` ${spec.name}`));
+    const groupLabel = spec.group;
     if (groupLabel) {
       const tag = document.createElement("span");
       tag.className = "pg-cm-group";
@@ -3722,7 +4621,7 @@ function initPlayground(cm) {
     const sig = document.createElement("code");
     sig.className = "pg-cm-sig";
     if (activeIdx !== null) {
-      sig.append(document.createTextNode(`${kind === "builtin" ? "@" : ""}${spec.name}(`));
+      sig.append(document.createTextNode(`${spec.name}(`));
       spec.params.forEach((p, idx) => {
         if (idx > 0) sig.append(document.createTextNode(", "));
         const text = p.required ? p.name : `${p.name}?`;
@@ -3892,30 +4791,62 @@ function initPlayground(cm) {
     editorView.focus();
   }
 
-  // ---- Linter: surface ParseError from runtime/parser + schema validator ----
-  // Schema diagnostics carry the §19 flexible-call checks (positional
-  // arity, enum values along the slot mapping), the canonical spacing-token
-  // enums, and the built-in-name collision error for custom components —
-  // the same list the <aktion-app> error banner shows.
-  const lintSource = lint.linter((view) => {
+  // ---- Linter: the runtime's own language service ----
+  // `getDiagnostics(source, library)` is exactly what the VS Code extension and
+  // the LSP server consume, so the playground reports the same three classes
+  // the rest of the toolchain does:
+  //   - parse errors,
+  //   - schema errors — the §19 flexible-call checks (positional arity, enum
+  //     values along the slot mapping), the canonical spacing-token enums, and
+  //     the built-in-name collision error for custom components (the same list
+  //     the <aktion-app> error banner shows),
+  //   - soft lint WARNINGS the schema validator structurally cannot see: a
+  //     PascalCase call that is neither a library component nor declared /
+  //     imported in the file (which otherwise renders nothing, silently), and a
+  //     lambda/loop variable shadowing the `t` destructured from `$i18n(...)`.
+  // Every diagnostic carries its own `severity`; nothing here hard-codes it, so
+  // the warning styling path in the error modal actually fires.
+  const lintSource = lint.linter(async (view) => {
     const text = view.state.doc.toString();
-    const program = parse(text);
-    let schemaErrors = [];
-    try {
-      schemaErrors = validateProgramSchema(program, defaultLibrary);
-    } catch { /* the validator must never break the editor */ }
-    const filtered = [...program.errors, ...schemaErrors];
-    parseErrors = filtered;
+    const svc = await loadLanguageService();
+    const diagnostics = collectDiagnostics(svc, text);
+    parseErrors = diagnostics;
     refreshStatusErrors();
-    return filtered.map((err) => {
+    return diagnostics.map((err) => {
       const line = Math.max(1, err.line || 1);
       const lineInfo = view.state.doc.line(Math.min(line, view.state.doc.lines));
       const fromCol = Math.max(0, (err.column || 1) - 1);
       const from = lineInfo.from + Math.min(fromCol, lineInfo.length);
       const to = lineInfo.to;
-      return { from, to, severity: "error", message: err.message };
+      return { from, to, severity: err.severity || "error", message: err.message };
     });
   }, { delay: 250 });
+
+  /**
+   * Diagnostics for one source string, normalised to
+   * `{ line, column, message, severity }`.
+   *
+   * `svc` is the lazily-loaded `dist/language.js`; when it is unavailable we
+   * degrade to the runtime bundle's `parse` + `validateProgramSchema` (errors
+   * only, no lint warnings) rather than leaving the editor with no linter at
+   * all. Both paths are fully guarded: `parse` THROWS on some malformed input
+   * (as opposed to collecting a `program.errors` entry) and an unguarded throw
+   * would take down the whole CodeMirror lint extension, and with it the gutter
+   * markers and the status pill.
+   */
+  function collectDiagnostics(svc, text) {
+    try {
+      if (svc) return svc.getDiagnostics(text, defaultLibrary);
+      const program = parse(text);
+      let schemaErrors = [];
+      try {
+        schemaErrors = validateProgramSchema(program, defaultLibrary);
+      } catch { /* the validator must never break the editor */ }
+      return [...program.errors, ...schemaErrors].map((err) => ({ ...err, severity: "error" }));
+    } catch (err) {
+      return [{ line: 1, column: 1, severity: "error", message: String(err?.message ?? err) }];
+    }
+  }
 
   // ---- Hover tooltip: show component/builtin info when hovering an identifier ----
   const hoverTooltipExt = view.hoverTooltip((cmView, pos) => {
@@ -3926,13 +4857,13 @@ function initPlayground(cm) {
     const prev = word.from > 0 ? text[word.from - 1] : "";
     // Pull the sigil into the name so `$util` / `$router` / `$http` resolve
     // as globals (CodeMirror's `wordAt` stops at the `$`).
-    const fromIdx = (prev === "@" || prev === "$") ? word.from - 1 : word.from;
+    const fromIdx = prev === "$" ? word.from - 1 : word.from;
     const rawName = text.slice(fromIdx, word.to);
 
     // Reserved-keyword popup: definition + syntax + example. Only when the
     // hovered word isn't sigil-prefixed (`$state` / `$global` are handled
     // elsewhere) and is a known keyword.
-    if (prev !== "@" && prev !== "$" && KEYWORD_DOCS[rawName]) {
+    if (prev !== "$" && KEYWORD_DOCS[rawName]) {
       const kwDoc = KEYWORD_DOCS[rawName];
       return {
         pos: word.from,
@@ -3956,7 +4887,7 @@ function initPlayground(cm) {
         create() {
           const dom = document.createElement("div");
           dom.className = "pg-cm-tooltip";
-          dom.append(buildSpecTooltipDom(resolved.spec, resolved.kind));
+          dom.append(buildSpecTooltipDom(resolved.spec));
           return { dom };
         },
       };
@@ -3979,6 +4910,29 @@ function initPlayground(cm) {
       };
     }
 
+    // A name destructured out of a factory result — the `t` of
+    // `const { t } = $i18n({…})`. Show the MEMBER's canonical signature and
+    // summary; without this the single most-used i18n binding hovers blank.
+    const destructured = scanDestructuredMembers(text).get(rawName);
+    if (destructured) {
+      return {
+        pos: fromIdx,
+        end: word.to,
+        above: true,
+        create() {
+          const dom = document.createElement("div");
+          dom.className = "pg-cm-tooltip";
+          dom.append(buildGlobalTooltipDom({
+            name: rawName,
+            signature: destructured.apply.replace(/\$\{\d+:([^}]*)\}/g, "$1"),
+            description: destructured.info,
+            kind: `${destructured.factory} result`,
+          }));
+          return { dom };
+        },
+      };
+    }
+
     // Not a component/global — fall back to "is this a named-arg key of
     // the enclosing call?". Lets users hover over `variant`, `tone`,
     // `icon`, etc. in `Button("Save", variant: "primary")` and see the
@@ -3991,7 +4945,29 @@ function initPlayground(cm) {
     const enclosingResolved = resolveSpec(enclosing.name);
     if (!enclosingResolved) return null;
     const param = enclosingResolved.spec.params.find((p) => p.name === rawName);
-    if (!param) return null;
+    if (!param) {
+      // `sx:` / `animate:` / `aria:` … — a universal channel rather than one of
+      // this component's own props, so it has its own small popup instead of the
+      // full component spec.
+      const universal = UNIVERSAL_PARAMS.find((p) => p.name === rawName);
+      if (!universal) return null;
+      return {
+        pos: word.from,
+        end: word.to,
+        above: true,
+        create() {
+          const dom = document.createElement("div");
+          dom.className = "pg-cm-tooltip";
+          dom.append(buildGlobalTooltipDom({
+            name: universal.name,
+            signature: `${universal.name}: ${universal.type}`,
+            description: universal.description,
+            kind: "universal prop",
+          }));
+          return { dom };
+        },
+      };
+    }
     return {
       pos: word.from,
       end: word.to,
@@ -4001,7 +4977,6 @@ function initPlayground(cm) {
         dom.className = "pg-cm-tooltip";
         dom.append(buildSpecTooltipDom(
           enclosingResolved.spec,
-          enclosingResolved.kind,
           undefined,
           rawName,
         ));
@@ -4080,7 +5055,6 @@ function initPlayground(cm) {
         dom.className = "pg-cm-tooltip";
         dom.append(buildSpecTooltipDom(
           resolved.spec,
-          resolved.kind,
           activeIndex,
           namedArgName,
         ));
@@ -4151,6 +5125,11 @@ function initPlayground(cm) {
   let visiblePaths = [];      // tree paths in render order (range-select / keyboard nav)
   let dragPaths = [];         // paths being dragged
   let projectDiagnostics = [];
+  // Errors reported by the runtime's own `error` event (render-time failures the
+  // static linter can't see). Its own slot, not a second writer of
+  // `parseErrors` — otherwise whichever of the two fired last would silently
+  // erase the other's diagnostics. `combinedErrors()` merges all three.
+  let runtimeErrors = [];
 
   // Persist the whole project. The legacy `LS.code` key is kept in sync with
   // the entry file so older single-file share/restore paths keep working.
@@ -4231,6 +5210,10 @@ function initPlayground(cm) {
         ...autocomplete.completionKeymap,
         ...search.searchKeymap,
         ...lint.lintKeymap,
+        // `foldGutter()` gives click-to-fold; `foldKeymap` is what makes folding
+        // reachable from the keyboard (Mod-Alt-[ / Mod-Alt-]). The gutter was
+        // installed without it, so folding was mouse-only.
+        ...lang.foldKeymap,
         // Accept the highlighted completion with Tab (in addition to Enter).
         // `acceptCompletion` returns false when no completion popup is open,
         // so Tab falls through to snippet-field navigation / indentation.
@@ -4329,19 +5312,25 @@ function initPlayground(cm) {
   // inner <aktion-app> — otherwise the initial program assignment would hit a
   // plain element and be lost. The renderer theme is (re)applied here too,
   // since `setRendererTheme` during init runs before the inner app exists.
-  initPreviewFrame();
-  frameReady.then(() => {
-    getTarget().setAttribute("theme", $("pg-theme").value || "light");
-    scheduleViewerUpdate(true);
-  });
+  //
+  // A program that arrived through a share link came from whoever wrote the URL,
+  // not from the person opening it, so it boots under the runtime's `"safe"`
+  // global-access policy — no `eval`, no `Function`, no `document`/`fetch`/
+  // `localStorage`. The Trusted toggle in the Runtime toolbar group re-boots the
+  // frame with the full surface once the reader has looked at the code.
+  let accessPolicy = initialCode.fromSharedLink ? "safe" : "all";
+  bootPreview();
 
   // ---- Initial UI ----
   applyViewMode(viewMode);
   applyRunModeUI(currentRunMode);
   applyInspectUI(inspectOn);
   applySidebarCollapsed(lsRead(LS.sidebarCollapsed, "false") === "true");
+  populateExampleSelect();
+  populateThemeSelect();
   $("pg-example").value = currentExample;
   setRendererTheme(lsRead(LS.theme, "light"));
+  applyAccessPolicyUI();
   renderFileExplorer();
   renderTabs();
   refreshStatusCursor();
@@ -4357,6 +5346,13 @@ function initPlayground(cm) {
   $("pg-theme").addEventListener("change", (e) => {
     setRendererTheme(e.target.value);
   });
+
+  // Runtime attribute toggles. Each flips one `<aktion-app>` attribute and then
+  // re-renders, because `strict` is read at render time rather than observed.
+  $("pg-strict").addEventListener("click", () => toggleRuntimeFlag(LS.strict, "strict"));
+  $("pg-rtl").addEventListener("click", () => toggleRuntimeFlag(LS.rtl, "rtl"));
+  $("pg-showerrors").addEventListener("click", () => toggleRuntimeFlag(LS.showErrors, "showerrors"));
+  $("pg-access").addEventListener("click", toggleAccessPolicy);
 
   // Mode buttons
   for (const btn of document.querySelectorAll(".pg-iconbtn[data-mode]")) {
@@ -4436,8 +5432,6 @@ function initPlayground(cm) {
   // Splitter drag
   initSplitter();
 
-  // Inspect mode handlers
-  initInspect();
 
   // ---- Functions defined within closure ----
 
@@ -4462,7 +5456,9 @@ function initPlayground(cm) {
       activeFile = ENTRY_FILE;
       freshModel();
       scheduleHydrateFromHash(shared);
-      return { code: files[ENTRY_FILE], example: "custom" };
+      // `fromSharedLink` drives the preview's global-access policy — see the
+      // `initPreviewFrame` call in the init block.
+      return { code: files[ENTRY_FILE], example: "custom", fromSharedLink: true };
     }
     // 2. Saved multi-file project — restore files, folders, tabs, expansion.
     const savedFiles = readSavedFiles();
@@ -4964,7 +5960,18 @@ function initPlayground(cm) {
       el.className = "pg-menu-item";
       el.setAttribute("role", "menuitem");
       if (item.disabled) el.setAttribute("aria-disabled", "true");
-      el.innerHTML = `<i class="fa-solid ${item.icon || "fa-circle"}"></i><span>${item.label}</span>${item.key ? `<span class="pg-menu-key">${item.key}</span>` : ""}`;
+      const mi = document.createElement("i");
+      mi.className = `fa-solid ${item.icon || "fa-circle"}`;
+      mi.setAttribute("aria-hidden", "true");
+      const mlabel = document.createElement("span");
+      mlabel.textContent = item.label;
+      el.append(mi, mlabel);
+      if (item.key) {
+        const key = document.createElement("span");
+        key.className = "pg-menu-key";
+        key.textContent = item.key;
+        el.append(key);
+      }
       if (!item.disabled) el.addEventListener("click", () => { closeContextMenu(); item.action(); });
       menu.append(el);
     }
@@ -5139,7 +6146,10 @@ function initPlayground(cm) {
       const linked = await linkCurrentProject();
       const theme = getTarget()?.getAttribute("theme") || "light";
       const title = `${EXAMPLES[currentExample]?.label ?? "Aktion app"} · Aktion`;
-      const indexHtml = await buildIndexHtml(linked.source || files[ENTRY_FILE] || "", theme, title);
+      // No 4th arg → the exported index.html loads the library from the public
+      // CDN instead of inlining it (the separate "Standalone HTML" download
+      // inlines everything). Synchronous — it just builds a string.
+      const indexHtml = buildStandaloneHtml(linked.source || files[ENTRY_FILE] || "", theme, title);
       // Files in their folder structure + empty-folder entries + a runnable index.html.
       const bundle = { ...files, "index.html": indexHtml };
       for (const dir of allFolders()) {
@@ -5202,6 +6212,57 @@ function initPlayground(cm) {
     }
   }
 
+  /**
+   * Build the example `<select>` from `EXAMPLES` itself.
+   *
+   * The options used to be hand-listed in playground.html, and the two lists
+   * drifted: `storageConsole` — the only example exercising `$storage` and
+   * `$console` — shipped in the bundle with no way to reach it from the UI for
+   * as long as nobody diffed them. Generating makes that class of drift
+   * structurally impossible. `group` on an EXAMPLES entry becomes an
+   * `<optgroup>` label; ungrouped entries stay at the top level, in declaration
+   * order.
+   */
+  function populateExampleSelect() {
+    const sel = $("pg-example");
+    sel.replaceChildren();
+    const groups = new Map(); // label → <optgroup>, created on first use
+    for (const [key, ex] of Object.entries(EXAMPLES)) {
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = ex.label || key;
+      if (!ex.group) {
+        sel.append(opt);
+        continue;
+      }
+      let group = groups.get(ex.group);
+      if (!group) {
+        group = document.createElement("optgroup");
+        group.label = ex.group;
+        groups.set(ex.group, group);
+        sel.append(group);
+      }
+      group.append(opt);
+    }
+  }
+
+  /**
+   * Build the renderer-theme `<select>` from `langSpec.themeNames`. Same reason
+   * as the example select: a seventh runtime theme would otherwise appear in
+   * autocomplete (which already reads `themeNames`) while being absent from the
+   * only UI that can actually preview it.
+   */
+  function populateThemeSelect() {
+    const sel = $("pg-theme");
+    sel.replaceChildren();
+    for (const name of langSpec.themeNames) {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+      sel.append(opt);
+    }
+  }
+
   function setRendererTheme(name) {
     // No-op on the inner app until the iframe is ready; the bootstrap
     // re-applies the persisted theme via `frameReady` once it exists.
@@ -5209,6 +6270,62 @@ function initPlayground(cm) {
     $("pg-theme").value = name;
     $("pg-pill-theme").textContent = name;
     lsWrite(LS.theme, name);
+  }
+
+  /* ---- Runtime attributes ------------------------------------------------
+   * `theme` used to be the ONLY `<aktion-app>` attribute the playground could
+   * set, which left `strict` — the dev-mode morph guard plus unresolved-
+   * identifier warnings, the most useful debugging aid in the runtime — and
+   * `dir="rtl"` unreachable even though THEME_CONFIG_SPEC documents
+   * `direction: ltr|rtl` right there in the editor.
+   *
+   * `router-mode`/`router-base` are deliberately NOT offered: the preview lives
+   * in an `about:srcdoc` document, which has no pushable URL, and the router
+   * reads those attributes once in `connectedCallback` rather than observing
+   * them. Hash routing (the default) works and the `routing` example uses it.
+   * ---------------------------------------------------------------------- */
+
+  /** Reflect the persisted runtime flags onto the preview element + toolbar. */
+  function applyRuntimeAttributes() {
+    for (const [key, attr, id] of RUNTIME_FLAGS) {
+      const on = lsRead(key, "false") === "true";
+      getTarget()?.toggleAttribute(attr === "rtl" ? "dir" : attr, on);
+      // `dir` is a value attribute, not a boolean one.
+      if (attr === "rtl" && on) getTarget()?.setAttribute("dir", "rtl");
+      $(id).setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+
+  function toggleRuntimeFlag(key, attr) {
+    lsWrite(key, lsRead(key, "false") === "true" ? "false" : "true");
+    applyRuntimeAttributes();
+    // `strict` is read during render (not observed), so force a re-render.
+    scheduleViewerUpdate(true, true);
+  }
+
+  /**
+   * Flip the preview between the full JS global surface and the runtime's vetted
+   * allow-list. The policy is module state inside the frame's runtime copy and
+   * there is no way to reach in and change it after the fact, so the toggle
+   * re-boots the frame — which also guarantees the program restarts from a clean
+   * slate under the new policy rather than half-way through its lifecycle.
+   */
+  function toggleAccessPolicy() {
+    accessPolicy = accessPolicy === "safe" ? "all" : "safe";
+    applyAccessPolicyUI();
+    reloadPreviewFrame();
+    showToast(
+      accessPolicy === "safe" ? "Preview sandboxed" : "Preview trusted",
+      { icon: accessPolicy === "safe" ? "lock" : "lock-open" },
+    );
+  }
+
+  function applyAccessPolicyUI() {
+    const sandboxed = accessPolicy === "safe";
+    const btn = $("pg-access");
+    btn.setAttribute("aria-pressed", sandboxed ? "true" : "false");
+    btn.querySelector("i").className = sandboxed ? "fa-solid fa-lock" : "fa-solid fa-lock-open";
+    $("pg-access-label").textContent = sandboxed ? "Sandboxed" : "Trusted";
   }
 
   function toggleRunMode() {
@@ -5350,19 +6467,40 @@ function initPlayground(cm) {
     }
   }
 
-  function loadExample(key, force) {
+  /**
+   * The `{ path → source }` project an example ships, normalising the two
+   * shapes: multi-file examples carry a `files` map, single-file ones a `code`
+   * string. `null` for an unknown key (e.g. the `"custom"` pseudo-example a
+   * shared link loads under).
+   */
+  function exampleFiles(key) {
     const ex = EXAMPLES[key];
-    if (!ex) return;
-    // Multi-file examples ship a `files` map; single-file ones ship `code`.
-    const nextFiles = ex.files
-      ? { ...ex.files }
-      : { [ENTRY_FILE]: ex.code };
-    if (nextFiles[ENTRY_FILE] === undefined) nextFiles[ENTRY_FILE] = "";
+    if (!ex) return null;
+    const out = ex.files ? { ...ex.files } : { [ENTRY_FILE]: ex.code };
+    if (out[ENTRY_FILE] === undefined) out[ENTRY_FILE] = "";
+    return out;
+  }
+
+  /** Do two `{ path → source }` maps have exactly the same files and contents? */
+  function sameProject(a, b) {
+    const aKeys = Object.keys(a);
+    if (aKeys.length !== Object.keys(b).length) return false;
+    return aKeys.every((k) => a[k] === b[k]);
+  }
+
+  function loadExample(key, force) {
+    const nextFiles = exampleFiles(key);
+    if (!nextFiles) return;
 
     syncActiveFile();
-    const isDirty =
-      files[ENTRY_FILE] !== EXAMPLES[currentExample]?.code &&
-      files[ENTRY_FILE] !== nextFiles[ENTRY_FILE];
+    // "Dirty" = the project no longer matches the example it was loaded from.
+    // Compare against `exampleFiles(currentExample)`, NOT `EXAMPLES[…].code`:
+    // multi-file examples carry only a `files` map, so reading `.code` gave
+    // `undefined` and the check was unconditionally true — switching away from
+    // "Multi-file modules" always prompted, even on a pristine project.
+    // Every file is compared, so editing a non-entry module counts as dirty too.
+    const current = exampleFiles(currentExample);
+    const isDirty = current !== null && !sameProject(files, current);
     if (isDirty && !force) {
       if (!window.confirm("Replace your current project with this example?")) {
         $("pg-example").value = currentExample;
@@ -5408,7 +6546,15 @@ function initPlayground(cm) {
       line: d.line,
       column: d.column,
       message: d.message,
+      // Linker diagnostics carry their own severity (a missing export is an
+      // error; an unused import is a warning) — keep it so the error modal can
+      // style them apart instead of promoting everything to red.
+      severity: d.severity || "error",
     }));
+    // Drop the previous render's runtime errors: the runtime only FIRES the
+    // `error` event when a render fails, so without this the list would be
+    // sticky and a fixed program would keep showing its old failure.
+    runtimeErrors = [];
     refreshStatusErrors();
     if (typeof target.mountCompiled === "function") {
       target.mountCompiled(
@@ -5423,16 +6569,24 @@ function initPlayground(cm) {
       // Fallback for an older bundle without mountCompiled.
       target.setResponse(linked.source);
     }
-    // The inspect index gets refreshed by the MutationObserver attached in
-    // `initInspect()` once the shadow DOM finishes updating.
+    // Rebuild the inspect index now that the DOM matches this source. The
+    // MutationObserver in `initInspect()` also triggers a rebuild, but it goes
+    // through `requestAnimationFrame` — which never fires in a background tab —
+    // so the source-changed path (the one that actually invalidates the AST→DOM
+    // mapping) does not depend on it. A timeout, not rAF, for the same reason.
+    setTimeout(refreshInspectIndex, 0);
   }, 250);
 
-  // Active-file parse errors (from the linter / runtime) plus the last run's
-  // cross-file linker diagnostics, deduped by position + message.
+  // Active-file diagnostics (from the linter), the last run's cross-file linker
+  // diagnostics and the last render's runtime errors, deduped by position +
+  // message. Three independent producers, three independent slots — merging
+  // here rather than letting whichever fired last overwrite the others.
+  // `severity` rides along so the error modal and the status pill can tell an
+  // error from a warning.
   function combinedErrors() {
     const seen = new Set();
     const out = [];
-    for (const err of [...parseErrors, ...projectDiagnostics]) {
+    for (const err of [...parseErrors, ...projectDiagnostics, ...runtimeErrors]) {
       const key = `${err.line}:${err.column}:${err.message}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -5444,15 +6598,25 @@ function initPlayground(cm) {
   refreshStatusErrors = () => {
     const btn = $("pg-status-errors");
     const text = $("pg-status-errors-text");
-    const errors = combinedErrors();
-    if (errors.length === 0) {
+    const all = combinedErrors();
+    const errors = all.filter((e) => (e.severity || "error") !== "warning");
+    const warnings = all.filter((e) => e.severity === "warning");
+    if (all.length === 0) {
       btn.dataset.tone = "success";
       btn.querySelector("i").className = "fa-solid fa-check";
       text.textContent = "No errors";
     } else {
-      btn.dataset.tone = "danger";
-      btn.querySelector("i").className = "fa-solid fa-triangle-exclamation";
-      text.textContent = `${errors.length} error${errors.length === 1 ? "" : "s"}`;
+      // Warnings alone must not read as a hard failure — they are silent
+      // footguns (an unknown component renders nothing) rather than a broken
+      // program, so they get their own tone and label.
+      btn.dataset.tone = errors.length > 0 ? "danger" : "warning";
+      btn.querySelector("i").className = errors.length > 0
+        ? "fa-solid fa-triangle-exclamation"
+        : "fa-solid fa-circle-exclamation";
+      const parts = [];
+      if (errors.length) parts.push(`${errors.length} error${errors.length === 1 ? "" : "s"}`);
+      if (warnings.length) parts.push(`${warnings.length} warning${warnings.length === 1 ? "" : "s"}`);
+      text.textContent = parts.join(", ");
     }
     if ($("pg-errors-backdrop") && !$("pg-errors-backdrop").hidden) {
       renderErrorList();
@@ -5496,9 +6660,13 @@ function initPlayground(cm) {
     const namedArgName = detectActiveNamedArg(text, call, sel.head);
     let param = null;
     if (namedArgName) {
-      param = resolved.spec.params.find((p) => p.name === namedArgName) ?? null;
+      // `paramsWithUniversal` so the pill also names `sx` / `animate` / `aria`,
+      // which no component declares but every component accepts.
+      param = paramsWithUniversal(resolved.spec).find((p) => p.name === namedArgName) ?? null;
     }
     if (!param && resolved.spec.params.length > 0) {
+      // Positional slots are the component's OWN params only — a universal prop
+      // can never occupy one.
       param = resolved.spec.params[
         Math.min(call.argIndex, resolved.spec.params.length - 1)
       ];
@@ -5556,9 +6724,14 @@ function initPlayground(cm) {
 
     const errors = combinedErrors();
     const total = errors.length;
-    title.textContent = total === 0
-      ? "No errors"
-      : `${total} error${total === 1 ? "" : "s"}`;
+    // Count the two severities separately: a program with only warnings still
+    // renders, and titling that "2 errors" is actively misleading.
+    const hard = errors.filter((e) => (e.severity || "error") !== "warning").length;
+    const soft = total - hard;
+    const titleParts = [];
+    if (hard) titleParts.push(`${hard} error${hard === 1 ? "" : "s"}`);
+    if (soft) titleParts.push(`${soft} warning${soft === 1 ? "" : "s"}`);
+    title.textContent = total === 0 ? "No errors" : titleParts.join(", ");
 
     if (total === 0) {
       lede.hidden = true;
@@ -5621,7 +6794,80 @@ function initPlayground(cm) {
   }
 
   function openHelp() {
+    renderMemberHelp();
     $("pg-modal-backdrop").hidden = false;
+  }
+
+  /**
+   * Write the help modal's "Member completion" paragraph from the RECONCILED
+   * catalogs, rather than leaving it as prose in the HTML.
+   *
+   * The hand-written version listed the `$http` / `$query` / `$socket` / `$form`
+   * / `$store` bags and then went stale the moment the runtime grew `$sse`,
+   * `$script`, `$dom`, `$toast`, `.pages`, `.validateField()`, `.setValues()`,
+   * `.clearHistory()` and `route.pattern` — the modal was documenting an editor
+   * that no longer existed. Generated, it cannot drift: it says exactly what the
+   * completion engine will actually offer.
+   */
+  function renderMemberHelp() {
+    const el = $("pg-help-members");
+    if (!el) return;
+    el.replaceChildren();
+    const lead = document.createElement("strong");
+    lead.textContent = "Member completion.";
+    el.append(lead, document.createTextNode(
+      " Type a dot after an object to see its members. Factory results — bind"
+      + " one with e.g. ",
+    ));
+    const example = document.createElement("code");
+    example.textContent = "$feed = $query({ … })";
+    el.append(example, document.createTextNode(" — complete to:"));
+
+    const list = document.createElement("ul");
+    list.style.margin = "6px 0 0";
+    list.style.paddingLeft = "18px";
+
+    const row = (label, members) => {
+      if (!members || members.length === 0) return;
+      const li = document.createElement("li");
+      const name = document.createElement("code");
+      name.textContent = label;
+      li.append(name, document.createTextNode(" → "));
+      members.forEach((m, i) => {
+        if (i > 0) li.append(document.createTextNode(", "));
+        const code = document.createElement("code");
+        code.textContent = `.${m.name}${m.apply && m.apply.includes("(") ? "()" : ""}`;
+        code.title = m.info || "";
+        li.append(code);
+      });
+      list.append(li);
+    };
+
+    for (const factory of Object.keys(FACTORY_RESOURCE_MEMBERS).sort()) {
+      row(`$${factory}`, FACTORY_RESOURCE_MEMBERS[factory]);
+    }
+    row("route", ROUTE_MEMBERS);
+    for (const ns of GLOBAL_NAMESPACES) {
+      // Namespaces carry up to ~120 members; name the first few and say so
+      // rather than printing the whole surface into a help modal.
+      const shown = ns.members.slice(0, 8);
+      const li = document.createElement("li");
+      const name = document.createElement("code");
+      name.textContent = ns.name;
+      li.append(name, document.createTextNode(" → "));
+      shown.forEach((m, i) => {
+        if (i > 0) li.append(document.createTextNode(", "));
+        const code = document.createElement("code");
+        code.textContent = `.${m.name}`;
+        code.title = m.info || "";
+        li.append(code);
+      });
+      if (ns.members.length > shown.length) {
+        li.append(document.createTextNode(` … and ${ns.members.length - shown.length} more`));
+      }
+      list.append(li);
+    }
+    el.append(list);
   }
   function closeHelp() {
     $("pg-modal-backdrop").hidden = true;
@@ -5695,65 +6941,86 @@ function initPlayground(cm) {
    * Rebuilt after every render via `refreshInspectIndex()`.
    */
   let inspectIndex = new WeakMap();
-  let inspectOrderedAst = [];
+
+  /**
+   * Bind inspect mode to ONE preview frame.
+   *
+   * Called from `bootPreview` on every frame boot, not once at init: the
+   * global-access-policy toggle rebuilds the iframe, which replaces its
+   * `contentDocument` and its shadow root — listeners and the MutationObserver
+   * bound to the previous ones are silently orphaned, and inspect mode stops
+   * responding with no visible error.
+   */
+  let inspectFrameHooked = false;
 
   function initInspect() {
     // The preview lives inside the iframe, so pointer events fire on its
     // document (they don't cross the frame boundary). Listen there and build
-    // the index from the inner app's shadow root once the frame is ready.
-    frameReady.then(() => {
-      const target = getTarget();
-      if (!target || !previewFrame) return;
-      const idoc = previewFrame.contentDocument;
+    // the index from the inner app's shadow root.
+    const target = getTarget();
+    if (!target || !previewFrame) return;
+    const idoc = previewFrame.contentDocument;
 
-      const onPointerMove = (e) => {
-        if (!inspectOn) return;
-        const path = e.composedPath();
-        const el = path.find((node) =>
-          node && node.nodeType === 1 && // Element (cross-realm: iframe nodes fail `instanceof Element`)
-          node !== target &&
-          node !== target.shadowRoot &&
-          node.tagName !== "AKTION-APP" &&
-          node.classList && node.classList.length > 0,
+    const onPointerMove = (e) => {
+      if (!inspectOn) return;
+      const path = e.composedPath();
+      const el = path.find((node) =>
+        node && node.nodeType === 1 && // Element (cross-realm: iframe nodes fail `instanceof Element`)
+        node !== target &&
+        node !== target.shadowRoot &&
+        node.tagName !== "AKTION-APP" &&
+        node.classList && node.classList.length > 0,
+      );
+      if (!el) return hideInspectOverlay();
+      const matched = matchComponentForElement(el);
+      if (!matched) return hideInspectOverlay();
+      showInspect(matched.element, matched.componentName, matched.astEntry);
+    };
+
+    const onClick = (e) => {
+      if (!inspectOn) return;
+      const path = e.composedPath();
+      const el = path.find((node) =>
+        node && node.nodeType === 1 && // Element (cross-realm: iframe nodes fail `instanceof Element`)
+        node.classList && node.classList.length > 0 &&
+        node.tagName !== "AKTION-APP",
+      );
+      if (!el) return;
+      const matched = matchComponentForElement(el);
+      if (!matched) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!matched.astEntry) {
+        // No line index — see `inspectSourceDoc`. Say so rather than doing
+        // nothing, which reads as inspect mode being broken.
+        showToast(
+          `${matched.componentName} — click-to-jump needs a single-file project`,
+          { icon: "circle-info" },
         );
-        if (!el) return hideInspectOverlay();
-        const matched = matchComponentForElement(el);
-        if (!matched) return hideInspectOverlay();
-        showInspect(matched.element, matched.componentName, matched.astEntry);
-      };
-
-      const onClick = (e) => {
-        if (!inspectOn) return;
-        const path = e.composedPath();
-        const el = path.find((node) =>
-          node && node.nodeType === 1 && // Element (cross-realm: iframe nodes fail `instanceof Element`)
-          node.classList && node.classList.length > 0 &&
-          node.tagName !== "AKTION-APP",
-        );
-        if (!el) return;
-        const matched = matchComponentForElement(el);
-        if (!matched || !matched.astEntry) return;
-        e.preventDefault();
-        e.stopPropagation();
-        jumpToLine(matched.astEntry.line);
-      };
-
-      idoc.addEventListener("pointermove", onPointerMove);
-      idoc.addEventListener("click", onClick, true);
-      // The pointer leaving the iframe altogether can't fire inside it — catch
-      // that from the parent side on the iframe element.
-      previewFrame.addEventListener("pointerleave", () => hideInspectOverlay());
-
-      // Re-index on shadow-DOM changes (a re-render swaps the tree).
-      if (target.shadowRoot) {
-        let raf = 0;
-        const mo = new MutationObserver(() => {
-          cancelAnimationFrame(raf);
-          raf = requestAnimationFrame(() => refreshInspectIndex());
-        });
-        mo.observe(target.shadowRoot, { childList: true, subtree: true });
+        return;
       }
-    });
+      jumpToLine(matched.astEntry.line);
+    };
+
+    idoc.addEventListener("pointermove", onPointerMove);
+    idoc.addEventListener("click", onClick, true);
+    // The pointer leaving the iframe altogether can't fire inside it — catch
+    // that from the parent side on the iframe ELEMENT, which survives a frame
+    // re-boot; bind it once so repeated boots don't stack listeners.
+    if (!inspectFrameHooked) {
+      inspectFrameHooked = true;
+      previewFrame.addEventListener("pointerleave", () => hideInspectOverlay());
+    }
+
+    // Re-index on shadow-DOM changes (a re-render swaps the tree).
+    if (target.shadowRoot) {
+      let raf = 0;
+      const mo = new MutationObserver(() => {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => refreshInspectIndex());
+      });
+      mo.observe(target.shadowRoot, { childList: true, subtree: true });
+    }
   }
 
   function matchComponentForElement(el) {
@@ -5800,7 +7067,14 @@ function initPlayground(cm) {
 
     tooltip.innerHTML = "";
     const h = document.createElement("h4");
-    h.innerHTML = `<i class="fa-solid fa-cube"></i> ${spec.name} <span style="font-weight:400; color:var(--doc-text-muted)">· ${spec.group}</span>`;
+    const hIcon = document.createElement("i");
+    hIcon.className = "fa-solid fa-cube";
+    hIcon.setAttribute("aria-hidden", "true");
+    const hGroup = document.createElement("span");
+    hGroup.style.fontWeight = "400";
+    hGroup.style.color = "var(--doc-text-muted)";
+    hGroup.textContent = `· ${spec.group}`;
+    h.append(hIcon, document.createTextNode(` ${spec.name} `), hGroup);
     tooltip.append(h);
     const sig = document.createElement("code");
     sig.className = "pg-inspect-sig";
@@ -5818,9 +7092,18 @@ function initPlayground(cm) {
       for (const p of spec.params) {
         const li = document.createElement("li");
         const opt = p.required ? "" : "?";
-        li.innerHTML =
-          `<code>${p.name}${opt}</code>: <span style="color:var(--doc-text-muted)">${p.type}</span>` +
-          (p.enumValues ? ` <small style="color:var(--doc-text-subtle)">${p.enumValues.join(" | ")}</small>` : "");
+        const name = document.createElement("code");
+        name.textContent = `${p.name}${opt}`;
+        const type = document.createElement("span");
+        type.style.color = "var(--doc-text-muted)";
+        type.textContent = p.type;
+        li.append(name, document.createTextNode(": "), type);
+        if (p.enumValues) {
+          const enums = document.createElement("small");
+          enums.style.color = "var(--doc-text-subtle)";
+          enums.textContent = ` ${p.enumValues.join(" | ")}`;
+          li.append(enums);
+        }
         ul.append(li);
       }
       tooltip.append(ul);
@@ -5851,57 +7134,78 @@ function initPlayground(cm) {
     $("pg-inspect-tooltip").hidden = true;
   }
 
+  /**
+   * The document whose LINE NUMBERS the inspect index can legitimately report,
+   * or `null` when there isn't one.
+   *
+   * Click-to-jump needs a source that is BOTH what the preview rendered AND what
+   * the editor is showing. Neither candidate satisfies that on its own:
+   *   - the active editor buffer is one file of a possibly multi-file project,
+   *     so in a multi-file project its call order doesn't match the render (the
+   *     bug this replaces: every mapping was computed against a file the preview
+   *     never rendered), and
+   *   - `linked.source` IS the rendered program, but the linker RE-EMITS it —
+   *     comments stripped, object literals reformatted, roughly double the line
+   *     count — so its line numbers point nowhere in the editor.
+   * The one case where both hold is a single-file project, so that is the only
+   * case that gets lines. Otherwise the index is built without them: hover still
+   * identifies the component (that comes from the CSS class, not the index) and
+   * the click handler explains why it can't jump.
+   */
+  function inspectSourceDoc() {
+    if (Object.keys(files).length !== 1) return null;
+    return editorView.state.doc.toString();
+  }
+
   function refreshInspectIndex() {
     const target = getTarget();
     if (!target || !target.shadowRoot) return;
     inspectIndex = new WeakMap();
-    const source = editorView.state.doc.toString();
-    const program = parse(source);
+    const source = inspectSourceDoc();
+    if (source === null) return;
+    let program;
+    try {
+      program = parse(source);
+    } catch {
+      return; // a half-typed program is not worth an exception here
+    }
 
-    // Walk AST in document order, collecting every Call expression whose
-    // callee is a known component name. The result is a flat list in source
-    // order, including nested calls.
+    // Walk the AST in document order, collecting every Call whose callee is a
+    // known component name. The result is a flat list in source order, nested
+    // calls included.
+    //
+    // The walk is GENERIC — every own object/array value of every node — rather
+    // than a switch over the node kinds someone remembered. A hand-written
+    // switch missed `MethodCall`, so `items.map(item => Card(...))` (the single
+    // most common Aktion idiom, used by a third of the examples) produced no
+    // mapping at all; it also missed `Lambda` bodies, `Template` expressions and
+    // `ComponentDeclaration`, which carries `body` rather than `expression`.
     const astOrdered = [];
-    const visit = (expr) => {
-      if (!expr || typeof expr !== "object") return;
-      if (expr.kind === "Call" && componentNames.has(expr.callee)) {
-        astOrdered.push({
-          name: expr.callee,
-          line: expr.loc?.line ?? 0,
-          column: expr.loc?.column ?? 0,
-        });
-        for (const a of expr.arguments) visit(a);
+    const seen = new Set();
+    const visit = (node) => {
+      if (!node || typeof node !== "object") return;
+      if (Array.isArray(node)) {
+        for (const item of node) visit(item);
         return;
       }
-      switch (expr.kind) {
-        case "Array":
-          for (const el of expr.elements) visit(el);
-          break;
-        case "Object":
-          for (const p of expr.properties) visit(p.value);
-          break;
-        case "Member":
-          visit(expr.object);
-          break;
-        case "Unary":
-          visit(expr.argument);
-          break;
-        case "Binary":
-          visit(expr.left); visit(expr.right);
-          break;
-        case "Ternary":
-          visit(expr.test); visit(expr.consequent); visit(expr.alternate);
-          break;
-        case "BuiltinCall":
-          for (const a of expr.arguments) visit(a);
-          break;
-        case "Call":
-          for (const a of expr.arguments) visit(a);
-          break;
+      if (seen.has(node)) return; // cheap cycle guard
+      seen.add(node);
+      if (node.kind === "Call" && componentNames.has(node.callee)) {
+        astOrdered.push({
+          name: node.callee,
+          line: node.loc?.line ?? 0,
+          column: node.loc?.column ?? 0,
+        });
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc") continue;
+        const value = node[key];
+        if (value && typeof value === "object") visit(value);
       }
     };
-    for (const stmt of program.statements) visit(stmt.expression);
-    inspectOrderedAst = astOrdered;
+    // A statement's payload is `expression` for assignments/bare expressions and
+    // `body` for a `function`/component declaration.
+    for (const stmt of program.statements) visit(stmt.expression ?? stmt.body ?? stmt);
 
     // Walk the rendered shadow DOM in document order; for each element whose
     // class matches a known component, pair it with the next matching AST
@@ -5922,7 +7226,12 @@ function initPlayground(cm) {
       }
       for (const child of node.children) walk(child);
     };
-    walk(target.shadowRoot);
+    // Start from the shadow root's CHILDREN, not the root: a ShadowRoot is a
+    // DocumentFragment (nodeType 11), so `walk(shadowRoot)` failed its own
+    // `nodeType !== 1` guard on the first line and returned immediately —
+    // leaving the index permanently empty, which is why inspect mode never
+    // showed a source line or jumped anywhere.
+    for (const child of target.shadowRoot.children) walk(child);
   }
 
   function jumpToLine(line) {
@@ -5957,16 +7266,48 @@ function initPlayground(cm) {
     return target.closest && target.closest(".cm-editor");
   }
 
-  // Subscribe to runtime error events as a redundant source for the linter
-  // (covers cases where the linter hasn't run yet). The §19.1 positional
-  // advisory is filtered out so the playground stays focused on real errors.
-  // The preview app lives in the iframe, so bind once it exists.
-  frameReady.then(() => {
-    getTarget().addEventListener("error", (e) => {
+  /**
+   * Boot (or re-boot) the preview iframe under the current `accessPolicy` and
+   * re-bind everything that hangs off the inner `<aktion-app>`.
+   *
+   * Called once at init and again whenever the global-access policy changes —
+   * the policy is module state inside the frame's own copy of the runtime, so it
+   * can only be changed by building a fresh frame. Everything the parent
+   * attaches to the element (theme, runtime attributes, the runtime `error`
+   * listener) has to be re-attached to the NEW element, which is why this lives
+   * in one place rather than being spread across the init block.
+   */
+  function bootPreview() {
+    initPreviewFrame(accessPolicy).then((app) => {
+      app.setAttribute("theme", $("pg-theme").value || "light");
+      applyRuntimeAttributes();
+      attachRuntimeErrorListener(app);
+      initInspect();
+      scheduleViewerUpdate(true, true);
+    });
+  }
+
+  function reloadPreviewFrame() {
+    bootPreview();
+  }
+
+  /**
+   * Subscribe to runtime error events — render-time failures the static linter
+   * structurally cannot see, plus a safety net for the window before the linter
+   * has run. They land in `runtimeErrors`, their OWN slot: writing them into
+   * `parseErrors` (which `lintSource` owns) meant whichever producer fired last
+   * erased the other's diagnostics, so the status pill and the gutter markers
+   * could disagree. The §19.1 positional advisory is filtered out so the
+   * playground stays focused on real errors.
+   */
+  function attachRuntimeErrorListener(app) {
+    app.addEventListener("error", (e) => {
       if (Array.isArray(e.detail?.errors)) {
-        parseErrors = e.detail.errors.filter((err) => !isPositionalAdvisory(err));
+        runtimeErrors = e.detail.errors
+          .filter((err) => !isPositionalAdvisory(err))
+          .map((err) => ({ ...err, severity: err.severity || "error" }));
         refreshStatusErrors();
       }
     });
-  });
+  }
 }

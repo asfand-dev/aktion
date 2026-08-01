@@ -2,7 +2,7 @@
  * Aktion language concepts — comprehensive coverage.
  *
  * Each `describe` block targets a single language pillar listed in the
- * coding-gen skill (`coding-gen-skill.md`) and walks one or more small
+ * Aktion agent skill (`skills/aktion/`) and walks one or more small
  * programs through `parse → planProgram → render` (or a smaller subset
  * when the concept is independent of the renderer). The goal is two-fold:
  *

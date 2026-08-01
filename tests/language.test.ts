@@ -37,7 +37,7 @@ describe("getLanguageSpec", () => {
     const variantParam = card?.params.find((p) => p.name === "variant");
     expect(variantParam?.required).toBe(false);
     expect(variantParam?.enumValues).toEqual(["default", "outlined", "elevated"]);
-    expect(card?.signature).toBe("Card(children, variant?)");
+    expect(card?.signature).toBe("Card(children, variant?, padding?, onClick?, href?)");
     expect(card?.group).toBe("Layout");
   });
 

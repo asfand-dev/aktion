@@ -91,6 +91,16 @@ const EVENT_PROPS = [
   "ontransitionend",
   // Media / misc
   "onerror",
+  // Media playback and resource loading. These were missing, so a handler
+  // assigned by AudioPlayer / VideoPlayer / Image / Gallery / FileUpload was
+  // dropped the first time the reconciler kept its node — the player stopped
+  // reflecting play/pause state, and an image's load/decode hook never fired
+  // again. Diffed the whole list against every `.onX =` assignment in
+  // src/library/components to find them.
+  "onload",
+  "onplay",
+  "onpause",
+  "onended",
 ] as const;
 
 type EventHandlerKey = (typeof EVENT_PROPS)[number];
@@ -172,10 +182,31 @@ function patchElement(oldEl: Element, newEl: Element): void {
  * leaving any attributes the imperative widget reflected onto itself
  * untouched.
  */
+/**
+ * Attributes owned by the floating layer (library/floating.ts) rather than by a
+ * component's render output, for as long as a panel is promoted.
+ *
+ * `floating.ts` writes `popover` (top-layer promotion), measured coordinates in
+ * `style`, and the collision-resolved side in `data-floating-side`. None of that
+ * appears in the freshly-rendered tree, so the strip pass below would remove all
+ * three on the next re-render — un-promoting an open dropdown out of the top
+ * layer and dropping it back into the clipping ancestor it was rescued from.
+ *
+ * `data-floating-side` doubles as the "currently promoted" sentinel: the
+ * floating layer adds it on open and removes it on close, and on close it also
+ * restores the element's original `style` attribute, so ownership returns to the
+ * render output automatically.
+ */
+const FLOATING_OWNED_ATTRS = new Set(["popover", "style", "data-floating-side"]);
+
+const isFloatingPromoted = (el: Element): boolean => el.hasAttribute("data-floating-side");
+
 function syncAttributesAdditive(oldEl: Element, newEl: Element): void {
+  const promoted = isFloatingPromoted(oldEl);
   const newAttrs = newEl.attributes;
   for (let i = 0; i < newAttrs.length; i += 1) {
     const attr = newAttrs[i]!;
+    if (promoted && FLOATING_OWNED_ATTRS.has(attr.name)) continue;
     if (oldEl.getAttribute(attr.name) !== attr.value) {
       oldEl.setAttribute(attr.name, attr.value);
     }
@@ -183,10 +214,14 @@ function syncAttributesAdditive(oldEl: Element, newEl: Element): void {
 }
 
 function syncAttributes(oldEl: Element, newEl: Element): void {
+  const promoted = isFloatingPromoted(oldEl);
   const oldAttrs = oldEl.attributes;
   for (let i = oldAttrs.length - 1; i >= 0; i -= 1) {
     const attr = oldAttrs[i]!;
     if (newEl.hasAttribute(attr.name)) continue;
+    // Keep an open floating panel promoted and positioned — see
+    // FLOATING_OWNED_ATTRS above.
+    if (promoted && FLOATING_OWNED_ATTRS.has(attr.name)) continue;
     // `<details>.open` is user-toggleable. Never strip it just because the
     // fresh render didn't emit it (it usually never does — the LLM only
     // sets the initial value via the `open` prop).
@@ -202,6 +237,10 @@ function syncAttributes(oldEl: Element, newEl: Element): void {
   const newAttrs = newEl.attributes;
   for (let i = 0; i < newAttrs.length; i += 1) {
     const attr = newAttrs[i]!;
+    // A promoted panel's `style` holds its measured viewport coordinates; the
+    // fresh render's `style` (usually absent or a static width) must not
+    // overwrite them or the panel jumps to the wrong place mid-interaction.
+    if (promoted && FLOATING_OWNED_ATTRS.has(attr.name)) continue;
     if (oldEl.getAttribute(attr.name) !== attr.value) {
       oldEl.setAttribute(attr.name, attr.value);
     }
@@ -244,7 +283,17 @@ function syncFormState(oldEl: Element, newEl: Element): void {
 }
 
 function syncInput(oldEl: HTMLInputElement, newEl: HTMLInputElement): void {
+  // A file input's FileList is user-owned and cannot be assigned. Writing "" to
+  // `value` is the one assignment the platform *does* allow, and it empties the
+  // selection — so the generic value sync below silently destroyed the user's
+  // chosen file on the next re-render. Never touch a file input.
+  if (oldEl.type === "file") return;
+
   if (oldEl.type === "checkbox" || oldEl.type === "radio") {
+    // Only sync when the render actually asserts a checked state. Without this
+    // guard an uncontrolled checkbox (no `checked` prop) resolved to
+    // `desired === false` on every re-render and silently un-ticked itself.
+    if (!newEl.hasAttribute("checked") && !newEl.checked) return;
     const desired = newEl.hasAttribute("checked") || newEl.checked;
     if (oldEl.checked !== desired) {
       oldEl.checked = desired;
@@ -260,7 +309,21 @@ function syncInput(oldEl: HTMLInputElement, newEl: HTMLInputElement): void {
   // which must be applied even while the field is focused. (On macOS, clicking
   // a button does not blur the input, so a focus-gated sync would silently
   // drop a programmatic `$input = ""`.)
-  const desired = newEl.getAttribute("value") ?? newEl.value ?? "";
+  //
+  // The guard alone was not enough, though. A component with no `value` prop
+  // still rendered `value=""`, so `desired` was "" and every re-render — from
+  // *any* state change anywhere in the app — wiped whatever the user had typed.
+  // That affected 18 components (Input, TextArea, Select, Checkbox, SearchBar,
+  // Slider, NumberInput, DatePicker, TagInput, PinInput, …): an onChange-only
+  // field cleared itself on every keystroke.
+  //
+  // The contract is now: **an absent `value` attribute means the render is not
+  // asserting a value**, so the live DOM value is left alone; an attribute that
+  // is present (including `value=""`) is a deliberate assertion and is applied.
+  // Components must therefore pass `null`, not `""`, for an unset value — `el()`
+  // skips null attributes. See `valueAttr()` in library/utils.ts.
+  if (!newEl.hasAttribute("value")) return;
+  const desired = newEl.getAttribute("value") ?? "";
   if (oldEl.value !== desired) {
     assignValuePreservingCaret(oldEl, desired);
   }

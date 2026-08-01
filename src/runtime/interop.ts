@@ -17,6 +17,7 @@
  */
 
 import type { EvaluationContext } from "./evaluator.js";
+import { getGlobalAccessPolicy } from "./evaluator.js";
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -75,6 +76,28 @@ function loadStylesheet(src: string, attributes: Record<string, unknown>): Promi
   });
 }
 
+/**
+ * Validate a `$script({ src })` URL.
+ *
+ * `$script` exists to load a real external script, so the only sensible
+ * schemes are `http(s)` and same-origin relative paths. `javascript:` and
+ * `data:`/`blob:` are never "an external script" — they are inline code
+ * wearing a URL, and they were previously assigned to `script.src` verbatim.
+ */
+export function sanitiseScriptSrc(raw: unknown): string {
+  const value = typeof raw === "string" ? raw.trim() : "";
+  if (!value) return "";
+  // eslint-disable-next-line no-control-regex
+  const cleaned = value.replace(/[\u0000-\u001F\u007F]/g, "");
+  if (!cleaned) return "";
+  if (cleaned.startsWith("//")) return "";
+  if (cleaned.startsWith("/") || cleaned.startsWith("./") || cleaned.startsWith("../")) return cleaned;
+  const scheme = /^([a-zA-Z][a-zA-Z0-9+.\-]*):/.exec(cleaned);
+  if (!scheme) return cleaned;
+  const lower = scheme[1]!.toLowerCase();
+  return lower === "http" || lower === "https" ? cleaned : "";
+}
+
 function loadScript(
   src: string,
   config: { global?: string; type?: string; attributes: Record<string, unknown> },
@@ -107,7 +130,7 @@ function loadScript(
  */
 export function createScriptResource(config: unknown, ctx: EvaluationContext): ScriptResource {
   const cfg = asRecord(config);
-  const src = typeof cfg.src === "string" ? cfg.src : "";
+  const src = sanitiseScriptSrc(cfg.src);
   const global = typeof cfg.global === "string" ? cfg.global : undefined;
   const type = typeof cfg.type === "string" ? cfg.type : undefined;
   const as = typeof cfg.as === "string" ? cfg.as.toLowerCase() : "";
@@ -117,7 +140,20 @@ export function createScriptResource(config: unknown, ctx: EvaluationContext): S
   const resource: ScriptResource = { ready: false, loading: false, error: null, value: null };
 
   if (!src) {
-    resource.error = new Error("[aktion] $script requires a `src`.");
+    resource.error = new Error(
+      "[aktion] $script requires a `src` that is an http(s) or same-origin URL.",
+    );
+    return resource;
+  }
+  // `$script` loads and runs remote code, so it is exactly what a host opting
+  // into a narrowed global surface is trying to prevent. Honouring the policy
+  // here is what makes `setGlobalAccessPolicy("safe")` mean "no code
+  // execution" rather than "no code execution except through this one API".
+  if (getGlobalAccessPolicy() !== "all") {
+    resource.error = new Error(
+      "[aktion] $script is disabled because a restricted global access policy is active " +
+      "(see setGlobalAccessPolicy). It loads and executes remote code.",
+    );
     return resource;
   }
   // No DOM (SSR / Node without a shim) — stay un-ready rather than throwing so

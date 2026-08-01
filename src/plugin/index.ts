@@ -13,7 +13,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { dirname, resolve as resolvePath } from "node:path";
+import { dirname, resolve as resolvePath, sep } from "node:path";
 import type { Plugin } from "vite";
 import {
   linkProgram,
@@ -28,6 +28,15 @@ export interface AktionPluginOptions {
   strict?: boolean;
   /** Specifier the emitted module imports the runtime helper from. Default: `"aktion-runtime"`. */
   runtimeModuleId?: string;
+  /**
+   * Allow `.aktion` imports to resolve outside the Vite project root.
+   *
+   * Off by default: an import is a filesystem read performed by the build (and,
+   * in `serve` mode, one whose result reaches the browser), so it is confined to
+   * the project. Enable only for a monorepo layout that genuinely imports
+   * `.aktion` files from a sibling package, and only for trusted sources.
+   */
+  allowOutsideRoot?: boolean;
 }
 
 /**
@@ -39,18 +48,27 @@ export interface AktionPluginOptions {
 export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
   const runtimeModuleId = options.runtimeModuleId ?? "aktion-runtime";
   let isServe = false;
+  let projectRoot = process.cwd();
 
   return {
     name: "aktion",
     enforce: "pre",
     configResolved(config) {
       isServe = config.command === "serve";
+      // Confine `.aktion` imports to the project. Without a root, a crafted
+      // import in a `.aktion` file reads any file the dev-server process can —
+      // and in `serve` mode its contents are then handed to the browser.
+      if (config.root) projectRoot = resolvePath(config.root);
     },
     transform(code, id) {
       if (!isAktionId(id)) return null;
       const cleanId = stripQuery(id);
 
-      const { program, diagnostics, dependencies } = linkProgram(code, cleanId, nodeResolver());
+      const { program, diagnostics, dependencies } = linkProgram(
+        code,
+        cleanId,
+        nodeResolver(options.allowOutsideRoot === true ? null : projectRoot),
+      );
 
       // Editing an imported module must re-trigger the entry's transform.
       for (const dep of dependencies) this.addWatchFile(dep);
@@ -97,18 +115,44 @@ function stripQuery(id: string): string {
   return h === -1 ? base : base.slice(0, h);
 }
 
-/** A `ModuleResolver` over the Node filesystem (absolute paths, sync reads). */
-function nodeResolver(): ModuleResolver {
+/**
+ * True when `candidate` is `root` or sits underneath it.
+ *
+ * The separator matters: a bare `startsWith(root)` also accepts a sibling whose
+ * name merely begins with the root's (`/srv/app` vs `/srv/app-secrets`).
+ */
+export function isInsideRoot(candidate: string, root: string): boolean {
+  const normalisedRoot = resolvePath(root);
+  const normalised = resolvePath(candidate);
+  if (normalised === normalisedRoot) return true;
+  return normalised.startsWith(normalisedRoot.endsWith(sep) ? normalisedRoot : normalisedRoot + sep);
+}
+
+/**
+ * A `ModuleResolver` over the Node filesystem (absolute paths, sync reads).
+ *
+ * When `root` is non-null every resolved path must stay inside it. `.aktion`
+ * files are project source, but they are also *data* that may have arrived with
+ * an untrusted repository — and a specifier like `../../../../etc/passwd` (or an
+ * absolute `/etc/passwd`) would otherwise be read and, under `vite dev`, served
+ * to the browser as part of the compiled module.
+ */
+function nodeResolver(root: string | null): ModuleResolver {
   return {
     resolve(spec, importerPath) {
       if (!spec.startsWith(".") && !spec.startsWith("/")) return null; // bare specifiers aren't project modules
       try {
-        return resolvePath(dirname(importerPath), spec);
+        const resolved = resolvePath(dirname(importerPath), spec);
+        if (root && !isInsideRoot(resolved, root)) return null;
+        return resolved;
       } catch {
         return null;
       }
     },
     load(path) {
+      if (root && !isInsideRoot(path, root)) {
+        throw new Error(`[aktion] refusing to read "${path}" — outside the project root`);
+      }
       return readFileSync(path, "utf8");
     },
   };

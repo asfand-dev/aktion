@@ -15,7 +15,7 @@
       } catch (_) {}
     })();
   </script>
-  <link rel="stylesheet" href="assets/site.css?v=2026.06.14" />
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
   <style>
     .lay-demo {
@@ -113,10 +113,10 @@
 
       <h2 id="mount">Mount &mdash; managed imperative widgets</h2>
       <p>
-        <code>Mount({ setup, update?, cleanup?, props?, tag?, sx? })</code> is the
-        managed host for any imperative widget. Aktion creates the host element;
-        you fill it and react to prop changes through a clean three-phase
-        lifecycle.
+        <code>Mount({ setup, update?, cleanup?, props?, tag?, deps?, onError? })</code>
+        is the managed host for any imperative widget. Aktion creates the host
+        element; you fill it and react to prop changes through a clean
+        three-phase lifecycle. <code>setup</code> is the only required prop.
       </p>
 <pre><code>chart = Mount({
   tag: "div",                          // host element (default "div")
@@ -124,15 +124,38 @@
   setup: (node, props) =&gt; {            // runs ONCE after the host attaches
     return new Chart(node, props.config)  //   → return the instance handle
   },
-  update: (instance, props) =&gt; {       // runs when `props` change (shallow-compared)
+  update: (instance, props) =&gt; {       // runs when `props` change (compared structurally)
     instance.data = props.data
     instance.update()
   },
   cleanup: (instance) =&gt; instance.destroy(),  // runs on unmount
+  onError: (err, stage) =&gt; $failed = true,    // stage is "setup" or "update"
   props: { config: $cfg, data: $series }      // reactive bag handed to setup/update
 })</code></pre>
+      <p>
+        Everything after <code>setup</code> is optional, but a widget that
+        allocates anything &mdash; a canvas context, a websocket, a global
+        listener &mdash; needs <code>cleanup</code> or it outlives the component.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Prop</th><th>Type</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>setup</code> <span class="req">required</span></td><td><code>callable</code></td><td><code>(node, props) =&gt; instance</code>. The return value is the instance handle passed to <code>update</code> / <code>cleanup</code>.</td></tr>
+          <tr><td><code>update</code></td><td><code>callable</code></td><td><code>(instance, props) =&gt; void</code>, run when <code>props</code> (or <code>deps</code>) change.</td></tr>
+          <tr><td><code>cleanup</code></td><td><code>callable</code></td><td><code>(instance) =&gt; void</code>, run when the component leaves the tree.</td></tr>
+          <tr><td><code>props</code></td><td><code>object</code></td><td>Reactive bag handed to <code>setup</code> / <code>update</code>. Bind <code>$state</code> here to drive the widget.</td></tr>
+          <tr><td><code>tag</code></td><td><code>string</code></td><td>Host element, one of <code>div</code>, <code>span</code>, <code>section</code>, <code>article</code>, <code>aside</code>, <code>figure</code>, <code>canvas</code>, <code>p</code>, <code>pre</code>, <code>form</code>. Anything else falls back to <code>div</code>. Default <code>"div"</code>.</td></tr>
+          <tr><td><code>deps</code></td><td><code>any[]</code></td><td>Explicit dependency list gating <code>update</code>. When present, <code>props</code> is ignored for the change check &mdash; see <a href="#mount-updates">When update runs</a>.</td></tr>
+          <tr><td><code>onError</code></td><td><code>callable</code></td><td><code>(err, stage) =&gt; void</code>, fired when <code>setup</code> or <code>update</code> throws. <code>stage</code> is <code>"setup"</code> or <code>"update"</code>. The error is also logged.</td></tr>
+        </tbody>
+      </table>
 
       <h3 id="mount-lifecycle">The lifecycle contract</h3>
+      <p>
+        All three hooks run on a microtask, never inside the reconcile pass, so
+        your widget code always sees an attached DOM node and can safely trigger
+        state changes of its own.
+      </p>
       <table class="signature-table">
         <thead><tr><th>Hook</th><th>Signature</th><th>When it runs</th></tr></thead>
         <tbody>
@@ -147,16 +170,17 @@
           <tr>
             <td><code>update</code></td>
             <td><code>(instance, props) =&gt; void</code></td>
-            <td>On every re-render where the <code>props</code> bag changed by a
-              <strong>shallow compare</strong> (<code>Object.is</code> per key).
-              Push the new data into the live widget. Deferred to a microtask, so
-              it runs after the reconcile pass.</td>
+            <td>On every re-render where <code>props</code> (or
+              <code>deps</code>) changed. Push the new data into the live widget.
+              Deferred to a microtask, so it runs after the reconcile pass.</td>
           </tr>
           <tr>
             <td><code>cleanup</code></td>
             <td><code>(instance) =&gt; void</code></td>
-            <td>Once, when the component leaves the render tree. Destroy the
-              widget / remove listeners so it can&rsquo;t leak.</td>
+            <td>Once, when the component leaves the render tree &mdash; and also
+              when a reactive <code>tag</code> changes, because that replaces the
+              host element. Destroy the widget / remove listeners so it
+              can&rsquo;t leak.</td>
           </tr>
         </tbody>
       </table>
@@ -169,14 +193,71 @@
         <li><strong>The host is never rebuilt.</strong> Because the host is
           preserved, re-renders never re-run <code>setup</code> or recreate the
           element &mdash; the widget instance lives for the whole session.</li>
-        <li><strong>Shallow compare.</strong> <code>{ data: $series }</code>
-          counts as changed only when <code>$series</code> is a new reference.
-          Replace arrays/objects immutably (e.g. <code>$series = [...]</code>) to
-          trigger an update.</li>
-        <li><code>tag</code> picks the host element (<code>"div"</code>,
-          <code>"canvas"</code>, <code>"section"</code>, &hellip;). Defaults to
-          <code>"div"</code>.</li>
+        <li><strong><code>setup</code> waits for a connected host.</strong> If a
+          commit hands the reconciler a host it discards in favour of an
+          incumbent element, <code>setup</code> simply retries on the next commit
+          rather than initialising your widget inside a detached node. Each host
+          carries a stable <code>data-rui-key</code> so the live element stays
+          findable.</li>
+        <li><strong>A throwing hook does not take the app down.</strong> The
+          error is logged and handed to <code>onError(err, stage)</code> if you
+          supplied one &mdash; render a fallback from state there rather than
+          letting a failed map or payment element leave an empty box.</li>
       </ul>
+
+      <h3 id="mount-updates">When update runs</h3>
+      <p>
+        The DSL rebuilds every object and array literal on each evaluation, so
+        comparing the <code>props</code> bag by reference would fire
+        <code>update</code> on every unrelated keystroke in the app. Aktion
+        compares it <strong>structurally, four levels deep</strong> instead:
+        plain objects and arrays are walked, and anything else &mdash; a widget
+        handle, a class instance, a DOM node &mdash; is compared by identity.
+      </p>
+<pre><code>$series = [12, 19, 7, 15]
+$clicks = 0
+
+function SalesChart() {
+  return Mount({
+    sx: { h: "240px" },
+    // `config` is a brand-new literal on every render. A reference compare
+    // would re-run `update` whenever $clicks changed; the structural compare
+    // sees identical contents and skips it.
+    props: { config: { type: "bar", data: { values: $series } } },
+    setup: (node, props) =&gt; new Chart(node, props.config),
+    update: (chart, props) =&gt; chart.setOption(props.config),
+    cleanup: (chart) =&gt; chart.destroy()
+  })
+}
+
+$app(Column([
+  SalesChart(),
+  Row([
+    // Re-renders the app, but the chart's props are unchanged → no `update`.
+    Button(`Unrelated re-render (${$clicks})`, { onClick: () =&gt; $clicks = $clicks + 1 }),
+    // New numbers inside `data.values` → `update` runs once.
+    Button("Shuffle data", { onClick: () =&gt; $series = $series.map(() =&gt; Math.round(Math.random() * 20)) })
+  ], { gap: "sm" })
+]))</code></pre>
+      <p>
+        Two cases defeat the structural compare, and both are what
+        <code>deps</code> is for: data nested deeper than four levels, and a
+        mutation made <em>in place</em> (<code>$series.push(1)</code>) that leaves
+        the structure comparing equal. Pass an explicit list and
+        <code>props</code> stops being consulted for the decision:
+      </p>
+<pre><code>chart = Mount({
+  setup: (node, props) =&gt; new Chart(node, props.config),
+  update: (chart, props) =&gt; chart.setOption(props.config),
+  cleanup: (chart) =&gt; chart.destroy(),
+  props: { config: $deeplyNestedConfig },
+  deps: [$revision]                     // bump $revision to force an update
+})</code></pre>
+      <p>
+        With <code>deps</code> present, <code>update</code> runs exactly when a
+        value in the list changes &mdash; <code>props</code> is still handed to
+        the callback, it just no longer decides whether the callback fires.
+      </p>
 
       <h3 id="mount-live">Live: a self-contained canvas</h3>
       <p>
@@ -260,10 +341,10 @@ $app(Column([
       <table class="signature-table">
         <thead><tr><th>Prop</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr><td><code>tag</code> <span class="req">required</span></td><td>The custom-element tag (<strong>must contain a hyphen</strong>). A hyphen-less name falls back to a <code>div</code> so a typo can&rsquo;t crash the page.</td></tr>
-          <tr><td><code>attributes</code> <span class="muted">(alias <code>attrs</code>)</span></td><td>Reactive attribute map. <code>$state</code> values update the element on change. <code>false</code> / <code>null</code> removes the attribute; <code>true</code> sets it empty. <code>on*</code> keys are ignored (use <code>on</code>).</td></tr>
-          <tr><td><code>properties</code> <span class="muted">(alias <code>props</code>)</span></td><td>JS properties assigned directly on the element &mdash; for components that take rich, non-string values (objects, arrays, functions).</td></tr>
-          <tr><td><code>on</code> <span class="muted">(alias <code>events</code>)</span></td><td>Event map <code>{ eventName: handler }</code>. Bound once to the live element; handlers always read the latest closure, so they see current state.</td></tr>
+          <tr><td><code>tag</code> <span class="req">required</span></td><td>The custom-element tag, <strong>positional</strong> and <strong>must contain a hyphen</strong> (<code>/^[a-z][a-z0-9]*(-[a-z0-9]+)+$/</code>). A hyphen-less name falls back to a <code>div</code> so a typo can&rsquo;t crash the page &mdash; and warns once on the console, because a silent empty box is impossible to diagnose.</td></tr>
+          <tr><td><code>attributes</code> <span class="muted">(alias <code>attrs</code>)</span></td><td>Reactive attribute map. <code>$state</code> values update the element on change. <code>false</code> / <code>null</code> / <code>undefined</code> removes the attribute; <code>true</code> sets it empty. <code>on*</code> keys are ignored (use <code>on</code>).</td></tr>
+          <tr><td><code>properties</code> <span class="muted">(alias <code>props</code>)</span></td><td>JS properties assigned directly on the element &mdash; for components that take rich, non-string values (objects, arrays, functions). Built-in DOM property names are refused; see <a href="#webcomponent-filtered">What is filtered</a>.</td></tr>
+          <tr><td><code>on</code> <span class="muted">(alias <code>events</code>)</span></td><td>Event map <code>{ eventName: handler }</code>. Bound once to the live element; handlers always read the latest closure, so they see current state. An entry that only appears on a later render is subscribed then.</td></tr>
           <tr><td><code>children</code></td><td>Light-DOM child nodes / text slotted inside the element.</td></tr>
         </tbody>
       </table>
@@ -276,6 +357,35 @@ $app(Column([
   properties: { cameraOrbit: $orbit },   // a rich, non-string property
   on: { "load": () =&gt; $loaded = true }
 })</code></pre>
+
+      <h3 id="webcomponent-filtered">What is filtered</h3>
+      <p>
+        <code>attributes</code> and <code>properties</code> both land on a real
+        DOM node, so both are filtered before they are applied. Your
+        element&rsquo;s own attributes and properties pass through untouched
+        &mdash; only names the platform already owns are affected.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Applies to</th><th>Filter</th></tr></thead>
+        <tbody>
+          <tr><td><code>attributes</code> + <code>properties</code></td><td>Keys starting with <code>on</code> are skipped. Bind events through <code>on</code> instead, where a handler is a real function rather than a string the host page evaluates.</td></tr>
+          <tr><td><code>attributes</code></td><td><code>srcdoc</code> is skipped. It is a whole HTML document; there is no partial way to accept one.</td></tr>
+          <tr><td><code>attributes</code></td><td>Six URL-valued attributes are sanitised: <code>href</code>, <code>action</code>, <code>formaction</code> and <code>ping</code> through the anchor <code>href</code> chokepoint, <code>src</code> and <code>poster</code> through the image chokepoint. A value that does not survive <em>removes</em> the attribute rather than setting it.</td></tr>
+          <tr><td><code>properties</code></td><td>Sixteen built-in DOM property names are blocked, matched case-insensitively: <code>innerHTML</code>, <code>outerHTML</code>, <code>insertAdjacentHTML</code>, <code>srcdoc</code>, <code>src</code>, <code>href</code>, <code>action</code>, <code>formaction</code>, <code>style</code>, <code>id</code>, <code>attributes</code>, <code>shadowRoot</code>, <code>contentEditable</code>, <code>constructor</code>, <code>__proto__</code>, <code>prototype</code>.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The practical consequence: set a URL through
+        <code>attributes: { src: $url }</code>, where it is sanitised, not
+        through <code>properties</code>, where it is refused. Style the element
+        with <a href="sx.html"><code>sx</code></a> rather than a
+        <code>style</code> property, and slot markup with
+        <code>children</code> rather than an <code>innerHTML</code> property
+        &mdash; <code>WebComponent("x", { properties: { innerHTML: &hellip; } })</code>
+        would otherwise be a direct script-execution sink. The reasoning behind
+        each list is on
+        <a href="security.html">Security &amp; the trust model</a>.
+      </p>
 
       <h2 id="script">$script &mdash; load an external SDK once</h2>
       <p>
@@ -290,17 +400,17 @@ $app(Column([
         <tbody>
           <tr><td><code>.ready</code></td><td><code>true</code> once the resource has loaded successfully &mdash; gate widgets on this.</td></tr>
           <tr><td><code>.loading</code></td><td><code>true</code> while it is still downloading.</td></tr>
-          <tr><td><code>.error</code></td><td>The load error, or <code>null</code> on success.</td></tr>
+          <tr><td><code>.error</code></td><td>The load error, or <code>null</code> on success. Set for a network failure, a <a href="#script-src">rejected <code>src</code></a>, and a <a href="#script-policy">restricted access policy</a>.</td></tr>
           <tr><td><code>.value</code></td><td>The resolved value: <code>window[global]</code> for a script with a <code>global</code> (e.g. <code>window.Stripe</code>), otherwise <code>true</code>. <code>null</code> until ready.</td></tr>
-          <tr><td><code>src</code> <span class="req">required</span></td><td>URL of the script or stylesheet. De-duplicated per src.</td></tr>
+          <tr><td><code>src</code> <span class="req">required</span></td><td>URL of the script or stylesheet, <code>http(s)</code> or same-origin &mdash; see <a href="#script-src">Which URLs are accepted</a>. De-duplicated per src for the lifetime of the document, across every program on the page.</td></tr>
           <tr><td><code>global</code></td><td>Name of the window global the script defines &mdash; read into <code>.value</code> once ready.</td></tr>
           <tr><td><code>type</code> / <code>as</code></td><td><code>type: "module"</code> for ESM; <code>as: "style"</code> forces a stylesheet (inferred for <code>.css</code> URLs).</td></tr>
-          <tr><td><code>attributes</code></td><td>Extra attributes for the injected <code>&lt;script&gt;</code> / <code>&lt;link&gt;</code> (e.g. <code>crossorigin</code>, <code>integrity</code>).</td></tr>
+          <tr><td><code>attributes</code></td><td>Extra attributes for the injected <code>&lt;script&gt;</code> / <code>&lt;link&gt;</code> (e.g. <code>crossorigin</code>, <code>integrity</code>). <code>on*</code> keys are skipped; <code>true</code> sets an empty attribute.</td></tr>
         </tbody>
       </table>
       <p>
         The canonical pattern is &ldquo;don&rsquo;t render the widget until its
-        SDK exists&rdquo;:
+        SDK exists&rdquo;, with an explicit branch for the failure case:
       </p>
 <pre><code>$maps = $script({ src: "https://maps.example.com/sdk.js", global: "MapSDK" })
 
@@ -314,11 +424,76 @@ function MapView() {
   })
 }</code></pre>
       <p>
-        On the server (<code>renderToString</code>) there is no DOM to inject
-        into, so the bag stays <code>{ ready: false }</code> and your UI falls
-        back to the loading branch &mdash; exactly what you want for an SSR
-        placeholder that hydrates on the client.
+        Branch on <code>.error</code> first, then <code>.ready</code>: every way
+        a load can fail &mdash; a network error, a rejected URL, a disabled
+        <code>$script</code> &mdash; sets <code>.error</code> and leaves
+        <code>.ready</code> false, so a program written this way degrades instead
+        of rendering nothing.
       </p>
+      <p>
+        On the server (<code>renderToString</code>) there is no DOM to inject
+        into, so the bag stays <code>{ ready: false, error: null }</code> and your
+        UI falls back to the loading branch &mdash; exactly what you want for an
+        SSR placeholder that hydrates on the client.
+      </p>
+
+      <h3 id="script-src">Which URLs are accepted</h3>
+      <p>
+        <code>$script</code> exists to load a real external file, so
+        <code>src</code> must be an <code>http:</code> / <code>https:</code> URL
+        or a same-origin path. Control characters are stripped before the check.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th><code>src</code></th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td><code>https://js.stripe.com/v3/</code></td><td>Accepted &mdash; <code>http:</code> and <code>https:</code> are the only permitted schemes.</td></tr>
+          <tr><td><code>/vendor/sdk.js</code>, <code>./sdk.js</code>, <code>../sdk.js</code></td><td>Accepted &mdash; same-origin relative paths.</td></tr>
+          <tr><td><code>//cdn.example.com/sdk.js</code></td><td><strong>Rejected.</strong> Protocol-relative URLs inherit the page&rsquo;s scheme and read as a path at a glance.</td></tr>
+          <tr><td><code>javascript:&hellip;</code>, <code>data:&hellip;</code>, <code>blob:&hellip;</code></td><td><strong>Rejected.</strong> These are inline code wearing a URL, not an external script.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        A rejected <code>src</code> does not throw. The bag comes back with
+        <code>ready: false</code> and <code>error</code> set to:
+      </p>
+<pre><code>[aktion] $script requires a `src` that is an http(s) or same-origin URL.</code></pre>
+      <p>
+        So the symptom is a widget stuck on its loading branch. When that
+        happens, read the bag&rsquo;s <code>.error</code> &mdash;
+        <code>$maps.error</code> above &mdash; before suspecting the network.
+      </p>
+
+      <h3 id="script-policy">$script and the global access policy</h3>
+      <p>
+        <code>$script</code> downloads and executes remote code, which is exactly
+        what a host narrowing the runtime&rsquo;s global surface is trying to
+        prevent. So it is <strong>disabled outright</strong> &mdash; not merely
+        restricted &mdash; whenever the host has called
+        <code>setGlobalAccessPolicy</code> with anything other than the default
+        <code>"all"</code>.
+      </p>
+<pre><code>// Host bootstrap, before mounting the app:
+import { setGlobalAccessPolicy } from "aktion-runtime";
+setGlobalAccessPolicy("safe");    // → every $script in every program now fails</code></pre>
+      <p>
+        No request is made and the bag returns immediately with
+        <code>ready: false</code> and this <code>error</code>:
+      </p>
+<pre><code>[aktion] $script is disabled because a restricted global access policy is active (see setGlobalAccessPolicy). It loads and executes remote code.</code></pre>
+      <div class="callout">
+        <h4>Why an integration can stop working</h4>
+        <p>
+          <strong>The policy is process-global.</strong> One
+          <code>setGlobalAccessPolicy</code> call anywhere in the host page
+          disables <code>$script</code> for every program on it, and nothing about
+          your program changed. If a previously working
+          <code>Mount</code>&nbsp;+&nbsp;<code>$script</code> pair suddenly never
+          leaves its skeleton, check the policy before anything else &mdash;
+          <a href="security.html">Security &amp; the trust model</a> covers when
+          you want it narrowed and what else it changes. Load the SDK from the
+          host page and hand it in through <code>props</code> if you need both.
+        </p>
+      </div>
 
       <h2 id="dom">$dom &mdash; managed observers</h2>
       <p>
@@ -332,14 +507,20 @@ function MapView() {
         <thead><tr><th>Method</th><th>What it does</th></tr></thead>
         <tbody>
           <tr><td><code>$dom.onResize(node, cb)</code></td><td>ResizeObserver &mdash; <code>cb({ width, height, entry })</code> on size change. Returns a disposer.</td></tr>
-          <tr><td><code>$dom.onIntersect(node, cb, options?)</code></td><td>IntersectionObserver &mdash; <code>cb(entry)</code> on visibility change. Options: <code>{ root?, rootMargin?, threshold? }</code>.</td></tr>
-          <tr><td><code>$dom.onMutation(node, cb, options?)</code></td><td>MutationObserver &mdash; <code>cb(mutations)</code>. Options: <code>{ childList?, attributes?, subtree?, characterData? }</code>.</td></tr>
-          <tr><td><code>$dom.measure(node)</code></td><td>One-shot read → <code>{ rect, scroll, viewport }</code> (bounding rect + scroll offsets + window size).</td></tr>
+          <tr><td><code>$dom.onIntersect(node, cb, options?)</code></td><td>IntersectionObserver &mdash; <code>cb(entry)</code> on visibility change. Options are passed straight through: <code>{ root?, rootMargin?, threshold? }</code>.</td></tr>
+          <tr><td><code>$dom.onMutation(node, cb, options?)</code></td><td>MutationObserver &mdash; <code>cb(mutations)</code>. Options default to <code>{ childList: true, attributes: true, subtree: false, characterData: false }</code>, so pass <code>{ subtree: true }</code> to watch descendants.</td></tr>
+          <tr><td><code>$dom.measure(node)</code></td><td>One-shot read → <code>{ rect, scroll, viewport }</code> (bounding rect + scroll offsets + window size). Returns <code>null</code> for a non-element.</td></tr>
         </tbody>
       </table>
       <p>
+        Each callback also re-renders the app, so writing state from inside one
+        is the normal way to surface a measurement. If the node is not an element
+        &mdash; or the browser lacks that observer &mdash; you get a no-op
+        disposer instead of an exception, so a defensive guard is unnecessary.
+      </p>
+      <p>
         Pair these with a node reference from
-        <a href="components.html#OnMount"><code>OnMount</code></a> or a
+        <a href="components.html#onmount"><code>OnMount</code></a> or a
         <code>Mount</code> host:
       </p>
       <div class="lay-demo">
@@ -351,26 +532,59 @@ $app(OnMount(
 ))</code></pre>
         <div class="lay-demo-preview"></div>
       </div>
-<pre><code>// Lazy-load an image / fire analytics when a section scrolls into view:
-$app(OnMount(Box([ Text("Reveal me") ]), {
-  onMount: (node) =&gt; $dom.onIntersect(node, (entry) =&gt; {
-    if (entry.isIntersecting) $seen = true
-  }, { threshold: 0.25 })
-}))
+<pre><code>$seen = false
 
-// One-shot measurement (no observer):
-size = $dom.measure(node)   // → { rect: {width,height,top,left,…}, scroll, viewport }</code></pre>
+// Lazy-load an image / fire analytics when a section scrolls into view:
+$app(OnMount(Box([ Text("Reveal me") ]), {
+  onMount: (node) =&gt; {
+    $dom.onIntersect(node, (entry) =&gt; {
+      if (entry.isIntersecting) $seen = true
+    }, { threshold: 0.25 })                  // fires once 25% is visible
+
+    // One-shot measurement, no observer:
+    size = $dom.measure(node)                // → { rect, scroll, viewport }
+  }
+}))</code></pre>
+      <p>
+        Declaring <code>$seen</code> up front matters: an undeclared identifier
+        reads as <code>null</code> rather than raising, so a typo in an observer
+        callback fails silently. <code>measure</code> is a plain read &mdash; call
+        it whenever you need current geometry instead of subscribing.
+      </p>
 
       <h2 id="preservation">How preservation works (and SSR)</h2>
       <p>
-        Every interop host carries <code>data-rui-preserve</code>. During
-        reconciliation Aktion treats such a node as a black box: it
-        <strong>never</strong> reconciles its children or resets form state, but
-        it <strong>does</strong> push its own attribute changes additively (so a
-        reactive <code>sx</code>, <code>class</code>, or <code>data-*</code> still
-        flows) and keeps event handlers current. That is what lets a chart keep
-        its canvas while you restyle its wrapper.
+        Every interop host carries <code>data-rui-preserve</code>. On each commit
+        Aktion re-renders the whole tree and reconciles it against the live DOM;
+        a node carrying that flag on <strong>either</strong> side of the diff
+        takes a reduced path instead of the normal one.
       </p>
+      <table class="signature-table">
+        <thead><tr><th>Normal element</th><th>Preserved host</th></tr></thead>
+        <tbody>
+          <tr><td>Attributes are made to match the fresh render &mdash; ones the fresh tree omits are <strong>removed</strong>.</td><td>Attributes are synced <strong>additively</strong>: new and changed ones are applied, and anything the widget reflected onto itself is left alone.</td></tr>
+          <tr><td>Children are reconciled against the fresh tree.</td><td>Children are <strong>never touched</strong>. The widget owns them.</td></tr>
+          <tr><td>Form state (<code>value</code>, <code>checked</code>) is synced.</td><td>Form state is <strong>never touched</strong> &mdash; a preserved control is the widget&rsquo;s to manage.</td></tr>
+          <tr><td>Event handlers are refreshed to the current closures.</td><td>Event handlers are refreshed the same way.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        That is what lets a chart keep its canvas while you restyle its wrapper:
+        a reactive <code>sx</code>, <code>class</code>, or <code>data-*</code>
+        still flows in, and nothing flows out.
+      </p>
+      <div class="callout">
+        <h4>Canvas dimensions are element-owned</h4>
+        <p>
+          <strong>Sizing a <code>&lt;canvas&gt;</code> in <code>setup</code> is
+          safe.</strong> The reconciler treats <code>width</code> /
+          <code>height</code> on a canvas as element-owned even outside a
+          preserved subtree, because removing them would reset the drawing buffer
+          to 300&times;150 <em>and</em> erase the bitmap. So
+          <code>node.width = 600</code> survives every later commit &mdash;
+          unless a fresh render explicitly sets different values.
+        </p>
+      </div>
       <p>
         Because the widget&rsquo;s DOM is built imperatively on the client,
         interop hosts render as an empty placeholder during
@@ -382,7 +596,7 @@ size = $dom.measure(node)   // → { rect: {width,height,top,left,…}, scroll, 
 
       <h2 id="recipes">Recipes</h2>
 
-      <h3>Monaco editor with two-way binding</h3>
+      <h3 id="monaco">Monaco editor with two-way binding</h3>
 <pre><code>$monaco = $script({ src: "https://cdn.example.com/monaco/loader.js", global: "monaco" })
 $code   = "function hi() {}"
 
@@ -401,7 +615,13 @@ function Editor() {
   })
 }</code></pre>
 
-      <h3>Stripe payment element</h3>
+      <p>
+        The <code>update</code> guard is the important line: without the
+        <code>props.value !== ed.getValue()</code> check, every keystroke would
+        write the editor&rsquo;s own value back into it and reset the caret.
+      </p>
+
+      <h3 id="stripe">Stripe payment element</h3>
 <pre><code>$stripe = $script({ src: "https://js.stripe.com/v3/", global: "Stripe" })
 
 function Checkout() {
@@ -419,19 +639,28 @@ function Checkout() {
     props: { pk: $publishableKey, secret: $clientSecret }
   })
 }</code></pre>
+      <p>
+        Returning the whole <code>{ stripe, elements, card }</code> triple is the
+        pattern to copy when teardown needs more than one handle &mdash;
+        <code>cleanup</code> receives exactly what <code>setup</code> returned.
+      </p>
 
       <h2 id="choosing">Mount vs. WebComponent vs. OnMount</h2>
+      <p>
+        All three hand you a live DOM node; they differ in how much bookkeeping
+        they do for you. Pick the least powerful one that fits.
+      </p>
       <table class="signature-table">
         <thead><tr><th>Use</th><th>When</th></tr></thead>
         <tbody>
           <tr><td><code>Mount</code></td><td>The library has an imperative JS API you call (<code>new Chart(node, …)</code>, <code>map.remove()</code>) and you want a managed setup/update/cleanup lifecycle.</td></tr>
           <tr><td><code>WebComponent</code></td><td>The widget is already a custom element &mdash; you just need to place the tag and bind reactive attributes / properties / events.</td></tr>
-          <tr><td><a href="components.html#OnMount"><code>OnMount</code></a></td><td>You only need a one-shot node reference for a small imperative tweak (focus, scroll, a measurement) &mdash; no lifecycle, no teardown bookkeeping.</td></tr>
+          <tr><td><a href="components.html#onmount"><code>OnMount</code></a></td><td>You only need a one-shot node reference for a small imperative tweak (focus, scroll, a measurement) &mdash; no lifecycle, no teardown bookkeeping.</td></tr>
         </tbody>
       </table>
 
       <h2 id="next">Next</h2>
-      <div class="demo-cards">
+      <div class="demo-grid">
         <a class="demo-card" href="side-effects.html">
           <span class="demo-tag">Behaviour</span>
           <h3>Side effects</h3>
@@ -453,7 +682,7 @@ function Checkout() {
       </div>
     </main>
   </div>
-  <script type="module" src="assets/site.js?v=2026.06.14"></script>
+  <script type="module" src="assets/site.js?v=2026.07.31"></script>
   <script type="module">
     import "../dist/aktion.js";
     const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";

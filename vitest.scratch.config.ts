@@ -1,0 +1,10 @@
+import { defineConfig } from "vitest/config";
+export default defineConfig({
+  test: {
+    environment: "happy-dom",
+    include: ["scratch-*.spec.ts"],
+    environmentOptions: {
+      happyDOM: { settings: { disableCSSFileLoading: true, disableCrossOriginPolicy: true, fetch: { disableSameOriginPolicy: true } } },
+    },
+  },
+});

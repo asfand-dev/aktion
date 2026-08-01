@@ -37,6 +37,18 @@ export interface ThemeTokens {
   colorSurfaceMuted: string;
   colorBorder: string;
   colorBorderSubtle: string;
+  /**
+   * Boundary colour for INTERACTIVE controls (input, select, textarea,
+   * checkbox, radio, switch track, picker triggers).
+   *
+   * Separate from `colorBorder` on purpose. `colorBorder` also draws hairlines,
+   * dividers and table row separators, which are decorative and are meant to be
+   * faint — it measures 1.17-1.70:1 against its surface in all six themes.
+   * WCAG 1.4.11 requires 3:1 for the boundary of a control the user has to
+   * find, so darkening `colorBorder` to satisfy that would make every divider
+   * in the library heavy. This token carries the accessible value instead.
+   */
+  colorBorderControl: string;
   colorText: string;
   colorTextMuted: string;
   colorPrimary: string;
@@ -46,12 +58,75 @@ export interface ThemeTokens {
   colorAccent: string;
   colorAccentHover: string;
   colorAccentText: string;
+  /**
+   * Interactive TEXT colour — links, link/ghost buttons, the selected tab label,
+   * pagination digits, a clickable row's leading icon.
+   *
+   * Optional, and derived from `colorAccent` by the `:host` block when a theme
+   * leaves it out. It exists because `colorAccent` has to serve two jobs at once:
+   * it is a FILL paired with `colorAccentText` (soft pairs mint `#5eead4` with
+   * `#0f3a35` ink) *and* it was painted as link text. Darkening the accent to
+   * clear the 4.5:1 text minimum would have broken the fill pairing, so the
+   * text-side value moved here instead. soft's mint measured 1.48:1 on its own
+   * white surface and glass's `#b58ee6` 2.63:1 — links were effectively invisible.
+   *
+   * A theme whose accent already clears 4.5:1 as text (light 6.29:1, dark
+   * 5.95:1, corporate 4.86:1) can omit both and inherit the derivation.
+   */
+  colorLink?: string;
+  colorLinkHover?: string;
   /** Focus ring color (CSS color). Defaults to primary. */
   colorFocusRing: string;
   colorSuccess: string;
   colorWarning: string;
   colorDanger: string;
   colorInfo: string;
+  /**
+   * Text-safe partners for the four status hues.
+   *
+   * The tokens above are tuned for FILLS and shapes, where 3:1 is the bar
+   * (WCAG 1.4.11). Used as `color:` on a light surface they are nowhere near the
+   * 4.5:1 body-text minimum — `#10b981` measures 2.54:1 on white, `#f59e0b`
+   * 2.15:1, soft's `#5eead4` 1.48:1 — and the sheet paints status *text* in
+   * roughly 45 places (Badge, Tag, Pill, Callout, StatCard value, MenuItem
+   * danger, field errors…). Those rules take these tokens instead.
+   *
+   * Optional so a partial `$theme({ colors: { success } })` still works; the
+   * `:host` block carries light-theme defaults. A theme that retints a status
+   * hue should retint its `*Text` partner with it.
+   */
+  colorSuccessText?: string;
+  colorWarningText?: string;
+  colorDangerText?: string;
+  colorInfoText?: string;
+  /**
+   * Ink for a label that sits ON a filled status surface — the ✓ in a completed
+   * Step, the glyph in a Callout/Toast icon disc, a danger Button or IconButton
+   * label, the count in a TabBar / NotificationBell / ProductBadge pill.
+   *
+   * The mirror image of the `*Text` tokens above: those are "the status hue,
+   * painted as text on a surface"; these are "text painted on the status hue".
+   * Every one of those places used a literal `#fff`, which fails in EVERY theme —
+   * white on `--rui-color-success` is 2.54:1, on warning 2.15:1, on info 2.43:1
+   * and on danger 3.76:1. (Not named `colorSuccessText`, which is already taken
+   * by the other direction; `colorPrimaryText`/`colorAccentText` are the naming
+   * precedent for "ink on this fill".)
+   *
+   * Values are per theme because the fills are: corporate's danger `#c80a00` is
+   * dark enough that white is the correct ink (6.00:1), while soft's pastel
+   * `#fda4af` needs a deep rose. No status fill had to be darkened — a
+   * hue-matched dark ink clears 4.5:1 on all four hues in all six themes.
+   */
+  colorOnSuccess?: string;
+  colorOnWarning?: string;
+  colorOnDanger?: string;
+  colorOnInfo?: string;
+  /**
+   * Hover wash for rows and cells that are clickable but own no surface.
+   * Optional — the `:host` default derives it from `colorText`/`colorSurface`,
+   * which is what the hardcoded `rgba(0, 0, 0, 0.04)` could not do.
+   */
+  colorSurfaceHover?: string;
   /* ----- Typography ------------------------------------------------- */
   fontFamily: string;
   /** Font stack used for headings (Card title, Page header, SectionHeader…). */
@@ -59,6 +134,23 @@ export interface ThemeTokens {
   fontFamilyMono: string;
   /** Root font size — body text defaults to this value. */
   fontSizeBase: string;
+  /**
+   * Additional type-scale rungs, all OPTIONAL.
+   *
+   * The sheet had 411 hardcoded px font-sizes across 25 distinct values, so a
+   * theme could not retune the type scale at all (token adoption was 4.6%).
+   * Squashing them onto the original five tokens would have changed the visual
+   * design, so the scale is widened to cover the values actually in use and the
+   * existing five keep their current values untouched.
+   */
+  fontSize10?: string;
+  fontSize11?: string;
+  fontSize13?: string;
+  fontSize15?: string;
+  fontSize18?: string;
+  fontSize20?: string;
+  fontSize24?: string;
+  fontSize32?: string;
   fontSizeSm: string;
   fontSizeLg: string;
   /** Font size for Card/Section headings. */
@@ -137,6 +229,20 @@ export interface ThemeTokens {
   zPopover?: string;
   zToast?: string;
   zTooltip?: string;
+  /* ----- Syntax highlighting (CodeBlock / CodeEditor) --------------- */
+  /**
+   * Optional. These were previously only `var(--rui-hl-keyword, #c678dd)`
+   * fallbacks, i.e. a One Dark palette hardcoded onto CodeBlock's *light*
+   * surface in five of six themes and unreachable from `$theme(...)`.
+   */
+  hlKeyword?: string;
+  hlString?: string;
+  hlNumber?: string;
+  hlComment?: string;
+  hlFn?: string;
+  hlTag?: string;
+  hlAttr?: string;
+  hlPunct?: string;
   /* ----- Chart palette --------------------------------------------- */
   chart1: string;
   chart2: string;
@@ -213,20 +319,53 @@ export const lightTheme: ThemeTokens = {
   colorSurface: "#ffffff",
   colorSurfaceMuted: "#f1f5f9",
   colorBorder: "#e2e8f0",
+  colorBorderControl: "#767f8c",
   colorBorderSubtle: "rgba(15, 23, 42, 0.08)",
   colorText: "#0f172a",
   colorTextMuted: "#475569",
-  colorPrimary: "#6366f1",
-  colorPrimaryHover: "#4f46e5",
+  // Was #6366f1 (indigo-500), which measures 4.47:1 on this theme's white
+  // surface — just under the 4.5:1 body-text minimum, and symmetric, so it
+  // failed BOTH as text (125 rules paint `color: var(--rui-color-primary)`) and
+  // for the #ffffff label on a primary button. #4f46e5 is indigo-600, the value
+  // this theme already used for `colorPrimaryHover`, so the brand hue is
+  // unchanged; hover steps down to indigo-700. #4f46e5 on white = 6.29:1.
+  colorPrimary: "#4f46e5",
+  colorPrimaryHover: "#4338ca",
   colorPrimaryText: "#ffffff",
-  colorAccent: "#6366f1",
-  colorAccentHover: "#4f46e5",
+  colorAccent: "#4f46e5",
+  colorAccentHover: "#4338ca",
   colorAccentText: "#ffffff",
-  colorFocusRing: "#6366f1",
+  colorFocusRing: "#4f46e5",
   colorSuccess: "#10b981",
   colorWarning: "#f59e0b",
   colorDanger: "#ef4444",
   colorInfo: "#06b6d4",
+  // Same hues, darkened until they clear 4.5:1 on both #ffffff and #f8fafc:
+  // 5.48 / 5.22 / 4.83 / 5.36:1 respectively (the fills above are 2.54 / 2.15 /
+  // 3.76 / 2.43:1, which is fine for a shape and not for a glyph).
+  colorSuccessText: "#047857",
+  colorWarningText: "#a35a00",
+  colorDangerText: "#d92d20",
+  colorInfoText: "#0e7490",
+  // Ink ON the fills above, where the literal #fff used to be: 6.17 / 6.97 /
+  // 4.91 / 6.08:1 against success / warning / danger / info respectively.
+  // Danger is the tight one — white is 3.76:1 and even #450a0a only reaches
+  // 4.29:1, so the ink has to be this dark to clear the bar without moving the
+  // hue itself (which draws borders, dots and progress bars elsewhere).
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#2c0606",
+  colorOnInfo: "#0c2b3a",
+  // Light syntax palette — CodeBlock's surface is --rui-color-surface-muted,
+  // which is light in every theme but dark. 4.6-11.7:1 on #f1f5f9.
+  hlKeyword: "#cf222e",
+  hlString: "#0a3069",
+  hlNumber: "#0550ae",
+  hlComment: "#57606a",
+  hlFn: "#6f42c1",
+  hlTag: "#116329",
+  hlAttr: "#953800",
+  hlPunct: "#475569",
   shadowSm: "0 1px 2px rgba(15, 23, 42, 0.06)",
   shadowMd: "0 6px 24px rgba(15, 23, 42, 0.08)",
   shadowLg: "0 18px 60px rgba(15, 23, 42, 0.12)",
@@ -253,6 +392,7 @@ export const darkTheme: ThemeTokens = {
   colorSurface: "#111827",
   colorSurfaceMuted: "#1e293b",
   colorBorder: "#1f2937",
+  colorBorderControl: "#5b6674",
   colorBorderSubtle: "rgba(248, 250, 252, 0.08)",
   colorText: "#f8fafc",
   colorTextMuted: "#94a3b8",
@@ -262,10 +402,35 @@ export const darkTheme: ThemeTokens = {
   colorAccent: "#818cf8",
   colorAccentHover: "#6366f1",
   colorAccentText: "#0b1220",
+  // colorLink derives from the accent, which is 5.95:1 on #111827 — fine. The
+  // HOVER does not: #6366f1 is 3.97:1 here, i.e. a link that fails the moment
+  // the pointer lands on it. On a dark surface hover has to BRIGHTEN, so this is
+  // indigo-300 rather than light's indigo-700 step: 8.90:1.
+  colorLinkHover: "#a5b4fc",
   colorFocusRing: "#818cf8",
+  // On #111827 the status fills are ALREADY text-safe — 6.99 / 8.26 / 4.71 /
+  // 7.31:1 — so the -Text partners are the hues themselves. Stated explicitly
+  // rather than inherited, because light's darkened values (#047857 = 1.75:1
+  // here) would be unreadable on a dark surface.
+  colorSuccessText: "#10b981",
+  colorWarningText: "#f59e0b",
+  colorDangerText: "#ef4444",
+  colorInfoText: "#06b6d4",
+  // colorOn* is NOT restated: this theme keeps light's four status FILLS, so
+  // light's inks are measured against exactly the same colours here.
   shadowSm: "0 1px 2px rgba(0, 0, 0, 0.4)",
   shadowMd: "0 8px 24px rgba(0, 0, 0, 0.4)",
   shadowLg: "0 22px 60px rgba(0, 0, 0, 0.55)",
+  // One Dark, which is what this palette was drawn for: 4.6-7.3:1 on the dark
+  // theme's #1e293b code surface. Comment lifted from #7f848e (3.90:1).
+  hlKeyword: "#c678dd",
+  hlString: "#98c379",
+  hlNumber: "#d19a66",
+  hlComment: "#9ca3af",
+  hlFn: "#61afef",
+  hlTag: "#e06c75",
+  hlAttr: "#d19a66",
+  hlPunct: "#abb2bf",
 };
 
 /**
@@ -279,20 +444,57 @@ export const softTheme: ThemeTokens = {
   colorSurface: "#ffffff",
   colorSurfaceMuted: "#f4ecff",
   colorBorder: "#ead8ff",
+  colorBorderControl: "#8d78a8",
   colorBorderSubtle: "rgba(168, 132, 232, 0.18)",
   colorText: "#3b1f56",
   colorTextMuted: "#7d6193",
-  colorPrimary: "#a78bfa",
-  colorPrimaryHover: "#8b5cf6",
+  // 2.72:1 on this theme's white surface, so it fails the 4.5:1 text minimum
+  // both in the 125 rules that paint it as a text colour and for the #ffffff
+  // label on a primary button. Deepening it to #7c4ddb (5.33:1, same lavender)
+  // is the fix, but tests/element.test.ts:282 pins this exact value as its probe
+  // for "applies CSS custom properties for built-in themes", so the change needs
+  // that assertion updated in the same commit. Left alone here deliberately.
+  // Darkened from #a78bfa / #8b5cf6. The old pair measured 2.72:1 on this
+  // theme's own white surface, which fails 4.5:1 in BOTH directions: 124 rules
+  // paint `color: var(--rui-color-primary)` as body text, and the same value is
+  // the fill behind the #ffffff label on every primary button. Same lavender
+  // hue, verified: 5.33:1 and 6.65:1.
+  colorPrimary: "#7c4ddb",
+  colorPrimaryHover: "#6d3fc4",
   colorPrimaryText: "#ffffff",
   colorAccent: "#5eead4",
   colorAccentHover: "#2dd4bf",
   colorAccentText: "#0f3a35",
-  colorFocusRing: "#a78bfa",
+  // The mint accent CANNOT double as link text: 1.48:1 on this theme's white
+  // surface and 1.36:1 on the page tint, i.e. unreadable. It stays exactly as it
+  // is, because it is also the FILL that carries the #0f3a35 ink above, and
+  // darkening it would break that pairing. The same mint hue at text depth
+  // carries the interactive text instead: 6.38:1 on #ffffff and 5.55:1 on
+  // #f4ecff, the deepest surface in the theme. Hover deepens (7.65 / 6.66:1).
+  colorLink: "#0b6b62",
+  colorLinkHover: "#075e56",
+  // Darkened from #a78bfa. The focus indicator is the border-colour change on
+  // this token, so it has to clear the 3:1 non-text contrast minimum (WCAG
+  // 1.4.11 / 2.4.11); the 22% box-shadow glow beside it is only ~1.2:1 and
+  // cannot carry the indicator.
+  colorFocusRing: "#8b66f8",   // 3.92:1 on #ffffff
   colorSuccess: "#5eead4",
   colorWarning: "#fcd34d",
   colorDanger: "#fda4af",
   colorInfo: "#93c5fd",
+  // The pastel status hues are 1.4-1.9:1 as text. Same hues at full depth:
+  // 5.47 / 5.50 / 6.29 / 6.70:1 on #ffffff, all >= 4.88:1 on the page tints.
+  colorSuccessText: "#0f766e",
+  colorWarningText: "#856400",
+  colorDangerText: "#be123c",
+  colorInfoText: "#1d4ed8",
+  // The pastel fills are the lightest in the library, so the ink on them is the
+  // theme's own deep tints: 8.47 / 9.87 / 8.27 / 8.15:1. onSuccess reuses the
+  // mint pairing that colorAccentText already established.
+  colorOnSuccess: "#0f3a35",
+  colorOnWarning: "#3d2600",
+  colorOnDanger: "#4c0519",
+  colorOnInfo: "#172554",
   fontFamily: "'Quicksand', 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
   fontFamilyHeading: "'Quicksand', 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
   fontFamilyMono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
@@ -310,6 +512,21 @@ export const softTheme: ThemeTokens = {
   spacingM: "18px",
   spacingL: "28px",
   spacingXl: "44px",
+  // The top two rungs are NOT inherited. Every theme spreads lightTheme, so a
+  // theme that rescaled xs-xl silently kept light's 48px/80px: soft went
+  // 44 -> 48 -> 80, a 4px step in a scale where every other rung roughly
+  // doubles, and Section(pad: "sm") landed almost on top of pad: "md".
+  // Continued at light's own xl x 1.5 / xl x 2.5 ratio.
+  spacing2xl: "66px",
+  spacing3xl: "110px",
+  // This theme had no gradient of its own, so it inherited light's
+  // indigo/violet/pink while the stylesheet separately inlined
+  // linear-gradient(135deg, #8b5cf6, #f9a8d4) for card and section titles.
+  // Both problems close here: the lavender-to-rose identity becomes the token
+  // (so $theme({ gradients: { brand } }) reaches the titles), and both stops
+  // clear 4.5:1 on this theme's white surface — 5.70:1 and 6.04:1, against
+  // 4.23:1 and 1.81:1 for the pair they replace.
+  gradientBrand: "linear-gradient(135deg, #7c3aed 0%, #be185d 100%)",
   chart1: "#a78bfa",
   chart2: "#5eead4",
   chart3: "#fcd34d",
@@ -333,20 +550,48 @@ export const glassTheme: ThemeTokens = {
   colorSurface: "rgba(255, 255, 255, 0.55)",
   colorSurfaceMuted: "rgba(255, 255, 255, 0.35)",
   colorBorder: "rgba(255, 255, 255, 0.70)",
+  colorBorderControl: "rgba(71, 85, 105, 0.85)",
   colorBorderSubtle: "rgba(255, 255, 255, 0.45)",
   colorText: "#33303a",
-  colorTextMuted: "#7c7585",
-  colorPrimary: "#f2826a",
-  colorPrimaryHover: "#ec6c50",
+  // Was #7c7585: 4.43:1 on #ffffff, 3.81:1 on the #eceef2 page and 3.62:1 on
+  // #e6e8ee — muted captions (StatCard, hints, table meta) were the single
+  // largest body of failing text in this theme. #5d5768 keeps the warm-grey
+  // hue at 6.93 / 5.97 / 5.66:1.
+  colorTextMuted: "#5d5768",
+  // Deepened from #f2826a (2.57:1 on white), which failed as text and for the
+  // #ffffff label on primary buttons. #af4027 is the same terracotta-coral hue
+  // at 5.86:1 on #ffffff and 4.78:1 on the darkest page tint. The frosted
+  // translucency that defines this theme is unaffected.
+  colorPrimary: "#af4027",
+  colorPrimaryHover: "#9c3722",
   colorPrimaryText: "#ffffff",
   colorAccent: "#b58ee6",
   colorAccentHover: "#a376e0",
   colorAccentText: "#ffffff",
-  colorFocusRing: "#f2826a",
+  // The lavender accent is 2.63:1 on #ffffff and 2.15:1 on the #e6e8ee page, so
+  // it fails as link text; it stays put because it is also a fill (and the
+  // gradientAccent stop). The same lavender at text depth takes over: 7.38:1 on
+  // #ffffff, 6.03:1 on #e6e8ee. Hover deepens, matching the primary's direction.
+  colorLink: "#6b3fa0",
+  colorLinkHover: "#552f80",
+  // Now the primary itself — it clears the 4.5:1 text bar, so it also clears the
+  // 3:1 the focus border needs (the 22% glow beside it is only ~1.2:1).
+  colorFocusRing: "#af4027",   // 5.86:1 on #ffffff
   colorSuccess: "#5bbf9b",
   colorWarning: "#f0b259",
   colorDanger: "#ef7b86",
   colorInfo: "#7fb0e8",
+  // Same hues at text depth: 6.46 / 6.75 / 6.07 / 6.29:1 on #ffffff and
+  // >= 4.68:1 on #e6e8ee (the fills are 1.9-2.7:1).
+  colorSuccessText: "#146b50",
+  colorWarningText: "#7f5200",
+  colorDangerText: "#b82c39",
+  colorInfoText: "#28629f",
+  // Ink on this theme's softer fills: 6.99 / 8.00 / 5.84 / 6.49:1.
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#4c0519",
+  colorOnInfo: "#172554",
   fontFamily: "'Poppins', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
   fontFamilyHeading: "'Poppins', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
   fontFamilyMono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
@@ -365,6 +610,9 @@ export const glassTheme: ThemeTokens = {
   spacingM: "18px",
   spacingL: "26px",
   spacingXl: "42px",
+  // See softTheme: light's 48px/80px would otherwise cap this theme's scale.
+  spacing2xl: "63px",
+  spacing3xl: "105px",
   gradientBrand: "linear-gradient(120deg, #f7a072 0%, #f2826a 45%, #c98bd6 100%)",
   gradientAccent: "linear-gradient(120deg, #b58ee6 0%, #8ec5e8 100%)",
   gradientWarm: "linear-gradient(120deg, #f9b079 0%, #f48aa6 100%)",
@@ -392,6 +640,7 @@ export const corporateTheme: ThemeTokens = {
   colorSurface: "#ffffff", // white · cards / tables / sheets / panels
   colorSurfaceMuted: "#f4f7fa", // neutral-1 · muted fills, hovered neutrals
   colorBorder: "#bcc8d4", // neutral-3 · --tertiary-shape-color (hairlines, dividers, table rows)
+  colorBorderControl: "#6b7a8a",
   colorBorderSubtle: "#dbe2e8", // neutral-2
   colorText: "#001b41", // corporate-8 · --default-text-color
   colorTextMuted: "#465a75", // neutral-6 · --secondary-text-color
@@ -406,6 +655,25 @@ export const corporateTheme: ThemeTokens = {
   colorWarning: "#ef8300", // warning-4 · accessible amber (badges use -3 #ffaa00)
   colorDanger: "#c80a00", // critical-5 · --critical-text-color
   colorInfo: "#08a5c5", // activating-4 · cyan --activating-shape-color
+  // The shape tokens above are 2.7-3.1:1 as text on white (danger already
+  // passes at 6.00:1). Same hues one step down the palette: 6.20 / 6.80 / 6.00 /
+  // 6.14:1 on #ffffff, >= 5.19:1 on #eaeff4.
+  colorSuccessText: "#0a7038",
+  colorWarningText: "#8a4b00",
+  colorDangerText: "#c80a00",
+  colorInfoText: "#066b80",
+  // Ink ON the fills. Danger is the one hue in the library dark enough that
+  // white is the RIGHT answer (#ffffff on critical-5 #c80a00 = 6.00:1); the other
+  // three need dark ink at 5.09 / 5.65 / 5.06:1.
+  // colorLink is left deriving from the accent on purpose: corporate-4 #1474c4 is
+  // the design system's own --interactive-text-color and measures 4.86:1 on the
+  // white surfaces links actually sit on (4.52:1 on the #f4f7fa page). It is
+  // 4.20:1 on the #eaeff4 bg-subtle tint — the one shortfall, left as-is because
+  // overriding it would break the verified parity of the resting link colour.
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#ffffff",
+  colorOnInfo: "#0c2b3a",
   /* Typography — Open Sans body, Overpass display, 14px/20px */
   fontFamily:
     "'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
@@ -484,20 +752,45 @@ export const modernTheme: ThemeTokens = {
   colorSurface: "#ffffff",
   colorSurfaceMuted: "#f6f7f9",
   colorBorder: "#ebedf1",
+  colorBorderControl: "#787d88",
   colorBorderSubtle: "rgba(17, 24, 39, 0.06)",
   colorText: "#111827",
-  colorTextMuted: "#6b7280",
+  // Was #6b7280: 4.83:1 on the white surface but 4.43:1 on the #f4f5f7 page and
+  // 4.23:1 on #eef0f3, and muted captions sit on the page as often as on a card.
+  // #585f6b is the same cool grey at 6.43 / 5.90 / 5.64:1.
+  colorTextMuted: "#585f6b",
   colorPrimary: "#111827",
   colorPrimaryHover: "#000000",
   colorPrimaryText: "#ffffff",
   colorAccent: "#7c5cfc",
   colorAccentHover: "#6a47f5",
   colorAccentText: "#ffffff",
+  // The violet accent is 4.38:1 on #ffffff and 3.84:1 on the #eef0f3 page — just
+  // under the text bar in both, and it is also the badge fill and the
+  // gradientAccent stop, so it stays. The link takes one step down the same
+  // ramp (the value this theme already uses for accentHover): 5.48:1 on #ffffff,
+  // 4.80:1 on #eef0f3; hover goes to 6.67 / 5.84:1.
+  colorLink: "#6a47f5",
+  colorLinkHover: "#5b34ec",
   colorFocusRing: "#7c5cfc",
   colorSuccess: "#22c55e",
   colorWarning: "#f59e0b",
   colorDanger: "#f43f5e",
   colorInfo: "#2563eb",
+  // 2.0-3.7:1 as text on this theme's surfaces; same hues at text depth give
+  // 6.20 / 5.77 / 6.29 / 6.70:1 on #ffffff and >= 5.05:1 on #eef0f3.
+  colorSuccessText: "#12702f",
+  colorWarningText: "#9a5400",
+  colorDangerText: "#be123c",
+  colorInfoText: "#1d4ed8",
+  // Ink ON the fills: 6.87 / 6.97 / 4.84:1. This theme's info is blue-600, dark
+  // enough that white is the better ink there (5.17:1 against 2.86:1 for a dark
+  // one). onDanger is rose-tinted to match #f43f5e rather than reusing light's
+  // red-tinted ink.
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#33061a",
+  colorOnInfo: "#ffffff",
   fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
   fontFamilyHeading: "'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
   fontFamilyMono: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
@@ -517,6 +810,9 @@ export const modernTheme: ThemeTokens = {
   spacingM: "16px",
   spacingL: "24px",
   spacingXl: "40px",
+  // See softTheme: light's 48px/80px would otherwise cap this theme's scale.
+  spacing2xl: "60px",
+  spacing3xl: "100px",
   buttonFontWeight: "600",
   buttonPaddingY: "10px",
   buttonPaddingX: "18px",
@@ -567,6 +863,7 @@ const TOKEN_TO_CSS: Record<keyof ThemeTokens, string> = {
   colorSurfaceMuted: "--rui-color-surface-muted",
   colorBorder: "--rui-color-border",
   colorBorderSubtle: "--rui-color-border-subtle",
+  colorBorderControl: "--rui-color-border-control",
   colorText: "--rui-color-text",
   colorTextMuted: "--rui-color-text-muted",
   colorPrimary: "--rui-color-primary",
@@ -575,15 +872,34 @@ const TOKEN_TO_CSS: Record<keyof ThemeTokens, string> = {
   colorAccent: "--rui-color-accent",
   colorAccentHover: "--rui-color-accent-hover",
   colorAccentText: "--rui-color-accent-text",
+  colorLink: "--rui-color-link",
+  colorLinkHover: "--rui-color-link-hover",
   colorFocusRing: "--rui-color-focus-ring",
   colorSuccess: "--rui-color-success",
   colorWarning: "--rui-color-warning",
   colorDanger: "--rui-color-danger",
   colorInfo: "--rui-color-info",
+  colorSuccessText: "--rui-color-success-text",
+  colorWarningText: "--rui-color-warning-text",
+  colorDangerText: "--rui-color-danger-text",
+  colorInfoText: "--rui-color-info-text",
+  colorOnSuccess: "--rui-color-on-success",
+  colorOnWarning: "--rui-color-on-warning",
+  colorOnDanger: "--rui-color-on-danger",
+  colorOnInfo: "--rui-color-on-info",
+  colorSurfaceHover: "--rui-color-surface-hover",
   fontFamily: "--rui-font-family",
   fontFamilyHeading: "--rui-font-family-heading",
   fontFamilyMono: "--rui-font-family-mono",
   fontSizeBase: "--rui-font-size-base",
+  fontSize10: "--rui-font-size-10",
+  fontSize11: "--rui-font-size-11",
+  fontSize13: "--rui-font-size-13",
+  fontSize15: "--rui-font-size-15",
+  fontSize18: "--rui-font-size-18",
+  fontSize20: "--rui-font-size-20",
+  fontSize24: "--rui-font-size-24",
+  fontSize32: "--rui-font-size-32",
   fontSizeSm: "--rui-font-size-sm",
   fontSizeLg: "--rui-font-size-lg",
   fontSizeHeading: "--rui-font-size-heading",
@@ -640,6 +956,14 @@ const TOKEN_TO_CSS: Record<keyof ThemeTokens, string> = {
   zPopover: "--rui-z-popover",
   zToast: "--rui-z-toast",
   zTooltip: "--rui-z-tooltip",
+  hlKeyword: "--rui-hl-keyword",
+  hlString: "--rui-hl-string",
+  hlNumber: "--rui-hl-number",
+  hlComment: "--rui-hl-comment",
+  hlFn: "--rui-hl-fn",
+  hlTag: "--rui-hl-tag",
+  hlAttr: "--rui-hl-attr",
+  hlPunct: "--rui-hl-punct",
   chart1: "--rui-chart-1",
   chart2: "--rui-chart-2",
   chart3: "--rui-chart-3",

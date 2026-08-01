@@ -1,0 +1,55 @@
+{
+  "name": "aktion-language-server",
+  "displayName": "Aktion Language Server",
+  "version": "0.5.15",
+  "description": "Standalone Language Server Protocol server for the Aktion DSL (.aktion): diagnostics, hover, completions, signature help, cross-file go-to-definition, references, rename, document symbols, formatting, semantic tokens, and snippets. Powers the JetBrains plugin and any LSP-capable editor (Neovim, Helix, Zed, Sublime, Emacs). Zero runtime dependencies.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "aktion-language-server": "./dist/server.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "aktion",
+    "lsp",
+    "language-server",
+    "generative-ui",
+    "dsl",
+    "jetbrains",
+    "neovim",
+    "zed",
+    "helix"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asfand-dev/aktion.git",
+    "directory": "editors/lsp"
+  },
+  "homepage": "https://asfand-dev.github.io/aktion/",
+  "bugs": {
+    "url": "https://github.com/asfand-dev/aktion/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "aktion-runtime": "^0.5.15"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.41",
+    "esbuild": "^0.21.0",
+    "typescript": "^5.6.3"
+  }
+}

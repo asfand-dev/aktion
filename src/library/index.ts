@@ -163,8 +163,13 @@ const components: ComponentSpec[] = [
   Truncate, InlineEdit, NotificationBell,
   // Aktion 0.5 standard helpers
   Async, Show, Portal, Redirect, Lazy, ErrorBoundary,
-  // Behavioural & styling wrappers
-  OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, OnMount, Css, Link,
+  // Behavioural & styling wrappers.
+  // `Link` is deliberately NOT repeated here: it is already registered above,
+  // with the Content primitives. Registering it twice made `components.length`
+  // (282) disagree with the number of distinct component names (281), which in
+  // turn made every count derived from the array — the prompt, the skill
+  // reference, the extension's description — off by one.
+  OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, OnMount, Css,
   // Marketing / landing / utility composites (suggestions-global Parts II, VIII)
   GradientText, Display, Heading, Eyebrow, Section, Overlay, OverlayItem,
   Brand, NavBar, Footer, FooterColumn, LogoCloud, LogoChip,
@@ -203,6 +208,10 @@ const componentGroups: ComponentGroup[] = [
       "Card", "CardHeader", "CardFooter", "CardSection", "Separator", "Tabs", "TabItem",
       "Accordion", "AccordionItem", "Modal", "Drawer", "Steps",
       "AspectRatio", "ScrollArea", "Sticky", "ResizablePanels", "MasonryGrid",
+    
+      // Previously ungrouped: without a group entry a component ships with no
+      // usage guidance in the generated prompt and is invisible in chat mode.
+      "Fragment", "Section", "Split", "Bento", "BentoCell", "Overlay", "OverlayItem",
     ],
     notes: [
       "- THREE primitives cover almost everything: `Column` (stack top→bottom), `Row` (left→right), and `Grid` (equal columns / card walls). Reach for these first.",
@@ -226,6 +235,10 @@ const componentGroups: ComponentGroup[] = [
       "Text", "Image", "Badge", "BadgeList", "Pill",
       "Callout", "Quote", "CodeBlock", "Skeleton", "Spinner", "LoadingDots",
       "Markdown", "Kbd", "Icon",
+    
+      // Previously ungrouped: without a group entry a component ships with no
+      // usage guidance in the generated prompt and is invisible in chat mode.
+      "TextContent", "GradientText", "Display", "Heading", "Eyebrow", "Prose", "RelativeTime", "Svg", "VisuallyHidden", "KbdShortcut", "CountUp", "CountdownTimer", "TableOfContents",
     ],
     notes: [
       "- Prefer `Markdown(...)` for rich paragraph text with inline formatting — the parser supports headings, blockquotes, fenced code, numbered/bullet lists, links, images, and bare-URL auto-linking.",
@@ -254,6 +267,10 @@ const componentGroups: ComponentGroup[] = [
       "DatePicker", "DateRangePicker", "TimePicker", "DateTimePicker",
       "FileUpload", "PinInput",
       "MultiStepForm",
+    
+      // Previously ungrouped: without a group entry a component ships with no
+      // usage guidance in the generated prompt and is invisible in chat mode.
+      "SegmentedControl", "QuantityStepper", "VariantSelector", "Swatch", "DrawingCanvas", "SignaturePad", "ReactionPicker",
     ],
     notes: [
       "- Each FormControl should be a separate reference for progressive streaming.",
@@ -284,7 +301,11 @@ const componentGroups: ComponentGroup[] = [
   },
   {
     name: "Data",
-    components: ["Table", "Col", "DataGrid", "List", "ListItem", "StatCard", "Stats", "Sparkline", "Tile", "Progress", "ProgressRing", "Pagination", "Tree", "TreeNode", "CalendarView", "ComparisonTable", "InfiniteList"],
+    components: ["Table", "Col", "DataGrid", "List", "ListItem", "StatCard", "Stats", "Sparkline", "Tile", "Progress", "ProgressRing", "Pagination", "Tree", "TreeNode", "CalendarView", "ComparisonTable", "InfiniteList",
+      // Previously ungrouped: without a group entry a component ships with no
+      // usage guidance in the generated prompt and is invisible in chat mode.
+      "VirtualGrid", "Metric", "MetricStrip", "Calendar", "OrderSummary", "Cart", "PriceTag",
+    ],
     notes: [
       "- Build columns using array pluck: `Col(\"Title\", data.rows.title, format?, align?)`.",
       "- For per-row controls inside a Col, use `for (let row of data.rows) { ... }` and reference `row.field` inline.",
@@ -323,6 +344,10 @@ const componentGroups: ComponentGroup[] = [
       "Avatar", "AvatarGroup", "PersonChip", "Tooltip", "HoverCard", "Popover",
       "Rating", "Toast", "Toasts",
       "VideoPlayer", "AudioPlayer", "Carousel", "Gallery", "Lightbox", "Map",
+    
+      // Previously ungrouped: without a group entry a component ships with no
+      // usage guidance in the generated prompt and is invisible in chat mode.
+      "TypingIndicator", "Confetti", "Lottie", "QRCode", "PresenceAvatars", "LiveCursor", "Backdrop",
     ],
     notes: [
       "- `Avatar(name, src?, size?, status?)` falls back to initials when the image is missing.",
@@ -339,7 +364,11 @@ const componentGroups: ComponentGroup[] = [
   },
   {
     name: "Navigation",
-    components: ["Breadcrumb", "BreadcrumbItem", "Navbar", "NavbarItem", "DropdownMenu", "MenuItem", "MenuSeparator", "MenuLabel"],
+    components: ["Breadcrumb", "BreadcrumbItem", "Navbar", "NavbarItem", "DropdownMenu", "MenuItem", "MenuSeparator", "MenuLabel",
+      // Previously ungrouped: without a group entry a component ships with no
+      // usage guidance in the generated prompt and is invisible in chat mode.
+      "NavBar", "TabBar", "BackToTop", "ScrollSpy", "Brand", "Footer", "FooterColumn", "SkipLink",
+    ],
     notes: [
       "- Use `Breadcrumb([\"Workspace\", \"Reports\", \"Q3\"])` at the top of every detail page so users see the path.",
       "- For per-item links, pass `BreadcrumbItem(label, href)` nodes instead of strings.",
@@ -370,6 +399,10 @@ const componentGroups: ComponentGroup[] = [
       "StatusDot", "PricingTable", "PricingCard",
       "LoadingState", "ErrorState", "SuccessState",
       "Tour", "Spotlight",
+    
+      // Previously ungrouped: without a group entry a component ships with no
+      // usage guidance in the generated prompt and is invisible in chat mode.
+      "LogoCloud", "LogoChip", "ProductCard", "ShareButtons", "AuthorByline", "CodeWindow", "BrowserFrame", "Terminal", "ThemeToggle", "CopyButton",
     ],
     notes: [
       "- Patterns are **opinionated composites** that pack an entire UI idiom into one component. Reach for them BEFORE composing equivalent layouts by hand with Card+Stack — the result will look more polished and require fewer tokens.",
@@ -397,7 +430,11 @@ const componentGroups: ComponentGroup[] = [
   },
   {
     name: "Editors & overlays",
-    components: ["RichTextEditor", "CodeEditor", "ContextMenu"],
+    components: ["RichTextEditor", "CodeEditor", "ContextMenu",
+      // Previously ungrouped: without a group entry a component ships with no
+      // usage guidance in the generated prompt and is invisible in chat mode.
+      "Sheet", "BottomSheet", "ConfirmDialog", "SpeedDial", "FloatingActionButton",
+    ],
     notes: [
       "- `RichTextEditor(id, value?, placeholder?, minHeight?)` is the contenteditable WYSIWYG editor — toolbar ships with bold/italic/underline/strike/heading/lists/link. Bind `value` to a `$variable` holding HTML.",
       "- `CodeEditor(id, value?, language?, placeholder?, minHeight?)` is a lightweight `<textarea>` with a synced line-number gutter and tab indentation. Use for snippet editors, prompt sandboxes, settings JSON.",
@@ -422,6 +459,10 @@ const componentGroups: ComponentGroup[] = [
       "IconButton", "CommandPalette", "FilterChips", "FilterPill", "FieldRepeater",
       "VirtualList", "QueryBuilder", "DiffViewer", "JsonTree", "Gantt",
       "Truncate", "InlineEdit", "NotificationBell",
+    
+      // Previously ungrouped: without a group entry a component ships with no
+      // usage guidance in the generated prompt and is invisible in chat mode.
+      "Reveal", "Transition", "FlipList", "Parallax", "ReadingProgress", "Sortable", "Draggable", "DropZone", "OnGesture",
     ],
     notes: [
       "- `IconButton(icon, label, action?, variant?, size?, disabled?)` — accessible icon-only control.",
@@ -438,7 +479,11 @@ const componentGroups: ComponentGroup[] = [
   },
   {
     name: "Routing",
-    components: ["NavLink"],
+    components: ["NavLink",
+      // Previously ungrouped: without a group entry a component ships with no
+      // usage guidance in the generated prompt and is invisible in chat mode.
+      "RouteView",
+    ],
     notes: [
       "- Declare routes with the `$router({...})` call form: `pages = $router({ \"/\": Dashboard(), \"/orders/:id\": OrderDetail({ id: params.id }), default: NotFound() })`. The matched arm's `params` object is in scope on the right-hand side; nest `$router` inside components for layout-preserving sub-routes.",
       "- `Redirect(path)` is a router-aware component: returning it from a route's body navigates and unmounts the rest of the subtree.",
@@ -448,7 +493,11 @@ const componentGroups: ComponentGroup[] = [
   },
   {
     name: "Helpers",
-    components: ["Async", "Show", "Portal", "Redirect", "Lazy", "ErrorBoundary"],
+    components: ["Async", "Show", "Portal", "Redirect", "Lazy", "ErrorBoundary",
+      // Previously ungrouped: without a group entry a component ships with no
+      // usage guidance in the generated prompt and is invisible in chat mode.
+      "LiveRegion", "FocusTrap",
+    ],
     notes: [
       "- `Async(resource, { loading:, error:, empty:, data: })` switches an `$http({...})` resource on its `state` field (`empty` shows for `null`/empty-array data).",
       "- `Show(when, { fallback?, children })` is sugar over `if (expr) { children } else { fallback }`.",

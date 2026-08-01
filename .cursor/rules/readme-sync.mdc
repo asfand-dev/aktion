@@ -45,9 +45,9 @@ project after this change? If yes, update the README.
 - Don't let `README.md` drift behind the code. If you ship a feature without
   documenting it here, the next contributor (and the LLM consumers reading
   this repo) will not know it exists.
-- Don't duplicate `coding-gen-skill.md` content into the README. Link to it
-  instead — they have different audiences (human integrators vs. LLMs
-  authoring full apps).
+- Don't duplicate `skills/aktion/` content into the README. Link to it instead —
+  they have different audiences (human integrators vs. AI agents authoring full
+  apps). See `.cursor/rules/aktion-skill-sync.mdc` for that skill's own rules.
 - Don't invent CDN URLs, theme names, or component names in the README —
   cross-check against `src/library/index.ts`, `src/theme/index.ts`, and
   `docs/live-demos.html` first.

@@ -24,7 +24,7 @@ export const NavLink: ComponentSpec = {
     { name: "label", type: "string", description: "Visible link text." },
     { name: "to", type: "string", description: "Target route path, e.g. \"/about\"." },
     {
-      name: "variant",
+      name: "variant", aliases: ["tone"],
       type: "string",
       optional: true,
       enum: ["default", "primary", "ghost", "pill"],
@@ -48,12 +48,19 @@ export const NavLink: ComponentSpec = {
       optional: true,
       description: "Called once on first hover/focus (warm a `$query` cache for the target route).",
     },
+    {
+      name: "disabled",
+      type: "boolean",
+      optional: true,
+      description: "Grey out the link and make it unclickable / unfocusable (a route the user cannot enter yet).",
+    },
   ],
   render: (_node, props, helpers) => {
     const label = asString(props.label, "");
     const to = asString(props.to, "/");
     const variant = asString(props.variant, "default");
     const exact = asBoolean(props.exact, false);
+    const disabled = asBoolean(props.disabled, false);
     const router = helpers.router;
     const currentPath = router.getPath();
 
@@ -71,7 +78,12 @@ export const NavLink: ComponentSpec = {
       "data-active": isActive ? "true" : "false",
       // Expose the active route to assistive tech, not just CSS.
       "aria-current": isActive ? "page" : null,
-      href: "#" + (to.startsWith("/") ? to : "/" + to),
+      // A disabled link drops its href so it is neither activatable nor a tab
+      // stop; `data-disabled` is the styling hook (and the house convention).
+      "data-disabled": disabled ? "true" : null,
+      "aria-disabled": disabled ? "true" : null,
+      tabindex: disabled ? "-1" : null,
+      href: disabled ? null : "#" + (to.startsWith("/") ? to : "/" + to),
     });
 
     const iconNode = renderIcon(props.icon, { className: "rui-nav-link-icon" });
@@ -81,24 +93,33 @@ export const NavLink: ComponentSpec = {
     // Prefetch-on-hover (IV.7): fire the author's `prefetch` callable once on
     // the first pointer-enter / focus so a `$query` for the target route can
     // warm its cache before the user clicks (the click then renders instantly).
-    if (typeof props.prefetch === "function") {
-      let warmed = false;
+    //
+    // Property handlers, not `addEventListener`: the morph reconciler keeps the
+    // live anchor and copies `onpointerenter`/`onfocus` onto it, so the handler
+    // always carries the current render's closure. A registered listener would
+    // stay frozen on the mount-time props — warming the cache for a filter the
+    // user has since changed. The once-only flag lives in instance state for
+    // the same reason: a plain local resets on every render.
+    if (!disabled && typeof props.prefetch === "function") {
+      const warmedSlot = helpers.useInstanceState<boolean>("rui-navlink-warmed", false);
       const warm = (): void => {
-        if (warmed) return;
-        warmed = true;
+        if (warmedSlot.get()) return;
+        warmedSlot.set(true);
         helpers.invoke(props.prefetch, to);
       };
-      anchor.addEventListener("pointerenter", warm, { once: true });
-      anchor.addEventListener("focus", warm, { once: true });
+      anchor.onpointerenter = warm;
+      anchor.onfocus = warm;
     }
 
-    anchor.onclick = (event) => {
-      if (event.defaultPrevented) return;
-      if (event.button !== 0) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      event.preventDefault();
-      router.navigate(to);
-    };
+    if (!disabled) {
+      anchor.onclick = (event) => {
+        if (event.defaultPrevented) return;
+        if (event.button !== 0) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        router.navigate(to);
+      };
+    }
 
     return anchor;
   },

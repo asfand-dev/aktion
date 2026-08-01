@@ -779,6 +779,12 @@ function parseImportStatement(ctx: ParserContext): Statement {
   const start = ctx.expect("Keyword", "import");
   ctx.expect("Punctuation", "{");
   const specifiers: ImportSpecifier[] = [];
+  // Newlines inside the specifier list are insignificant, exactly as they are
+  // inside an object literal. Without these skips a multi-line
+  // `import {\n  a,\n  b,\n} from "…"` threw, and because `parse()` records the
+  // error and recovers to the next line, the WHOLE import vanished silently —
+  // the program still "parsed", just with those bindings missing.
+  skipWhitespace(ctx);
   while (!ctx.isEnd() && !(ctx.peek().type === "Punctuation" && ctx.peek().value === "}")) {
     const importedTok = ctx.peek();
     let imported: string;
@@ -826,8 +832,11 @@ function parseImportStatement(ctx: ParserContext): Statement {
     }
 
     specifiers.push(isState ? { imported, local, isState: true } : { imported, local });
+    skipWhitespace(ctx);
     if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
       ctx.consume();
+      // Tolerate a trailing comma before the closing brace.
+      skipWhitespace(ctx);
       continue;
     }
     break;

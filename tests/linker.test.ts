@@ -170,3 +170,44 @@ describe("multi-file end-to-end render", () => {
     expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe("FromModule");
   });
 });
+
+describe("multi-line imports (regression)", () => {
+  it("parses a multi-line import list, with or without a trailing comma", () => {
+    // Newlines inside `{ … }` used to throw. `parse()` records the error and
+    // recovers to the next line, so the whole import statement VANISHED and the
+    // program still 'parsed' — just missing those bindings.
+    for (const src of [
+      'import {\n  a,\n  b,\n} from "./x.aktion"\n$app(Text("hi"))\n',
+      'import {\n  a,\n  b\n} from "./x.aktion"\n$app(Text("hi"))\n',
+      'import {\n  a as c,\n  $s as $t,\n} from "./x.aktion"\n$app(Text("hi"))\n',
+    ]) {
+      const program = parse(src);
+      expect(program.errors).toEqual([]);
+      const imports = program.statements.filter((s: Statement) => s.kind === "Import");
+      expect(imports).toHaveLength(1);
+    }
+  });
+
+  it("links a dependency imported across several lines", () => {
+    const files = {
+      "/app.aktion": 'import {\n  Greet,\n  Farewell,\n} from "./mod.aktion"\n$app(Column([Greet(), Farewell()]))\n',
+      "/mod.aktion": 'export function Greet() { return Text("hello") }\nexport function Farewell() { return Text("bye") }\n',
+    };
+    const result = linkProgram(files["/app.aktion"], "/app.aktion", memResolver(files));
+    expect(result.diagnostics).toEqual([]);
+    // The real symptom of the old bug: the module was never even visited.
+    expect(result.dependencies).toEqual(["/mod.aktion"]);
+  });
+
+  it("reports a DEPENDENCY's parse error instead of linking silently around it", () => {
+    // Only the entry's errors ride out on `program.errors`, so a broken
+    // dependency used to link clean with its statements quietly dropped.
+    const files = {
+      "/app.aktion": 'import { Broken } from "./bad.aktion"\n$app(Broken())\n',
+      "/bad.aktion": 'export function Broken() { return Text("x") }\nlet = = =\n',
+    };
+    const result = linkProgram(files["/app.aktion"], "/app.aktion", memResolver(files));
+    expect(result.diagnostics.length).toBeGreaterThan(0);
+    expect(result.diagnostics.some((d) => d.message.includes("/bad.aktion"))).toBe(true);
+  });
+});

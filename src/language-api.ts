@@ -21,6 +21,16 @@ export {
   type HoverInfo,
 } from "./tooling/language-service.js";
 
+/**
+ * Nearest-name ranking over the component library. `getDiagnostics` already
+ * folds the suggestion into the unknown-component warning's prose, but an editor
+ * that wants to offer the fix as an *applicable* action (a VS Code quick fix, an
+ * LSP `textDocument/codeAction`) needs the candidate names as data. Exported so
+ * no host re-implements edit distance over the catalogue — the rule is that
+ * downstream artifacts derive from this surface, never from their own copy.
+ */
+export { suggestComponent } from "./tooling/schema.js";
+
 export {
   getDefinition,
   getDefinitionTarget,
@@ -58,6 +68,7 @@ export {
   grammarSpec,
   keywordDocs,
   getComponentCatalog,
+  universalPropCatalog,
   getSnippets,
   builtinCatalog,
   findBuiltin,
@@ -92,3 +103,48 @@ export { formatProgram, type FormatResult } from "./tooling/formatter.js";
 
 export { defaultLibrary } from "./library/index.js";
 export type { ComponentLibrary } from "./library/types.js";
+
+/**
+ * The parser and the schema validator themselves. A Node host that lints or
+ * pre-compiles `.aktion` files (CI gates, the `tools/validate-aktion*.mjs`
+ * scripts, a bundler plugin) needs the raw program + errors, not just the
+ * editor-shaped projections above. Both are pure and DOM-free.
+ */
+export { parse } from "./parser/index.js";
+export type { Program, ParseError } from "./parser/types.js";
+export { validateProgram, validateProgramSchema } from "./library/validate.js";
+
+/**
+ * Built-in theme **data**. Only the token records and the pure resolver — not
+ * `applyTheme`/`applyPartialTheme`, which write CSS variables onto a host
+ * element and are therefore DOM-bound and stay on the package root. The records
+ * are plain objects, so a Node host (docs generator, theme editor, agent-skill
+ * reference) can read every token without a DOM.
+ */
+export {
+  builtInThemes,
+  builtInThemeFonts,
+  resolveTheme,
+  sanitiseThemeTokens,
+  type ThemeTokens,
+  type ThemeInput,
+  type ResolvedTheme,
+} from "./theme/index.js";
+
+/**
+ * Multi-file linking. `src/compiler/*` is deliberately free of `node:*` and of
+ * any DOM access, so it belongs on this surface: linking an import graph is a
+ * tooling concern, and without it a Node host cannot validate an app split
+ * across `import`ed modules (every imported name reads as unknown).
+ */
+export {
+  linkProgram,
+  linkProject,
+  resolveSpecifier,
+  createMemoryResolver,
+  type LinkResult,
+  type LinkDiagnostic,
+  type ModuleResolver,
+  type LinkProjectOptions,
+  type LinkProjectResult,
+} from "./compiler/index.js";
