@@ -318,16 +318,122 @@ describe("Kbd", () => {
 });
 
 describe("Breadcrumb", () => {
-  it("emphasises the last item as the current page", () => {
-    const items = ["Workspace", "Reports", "Q3"];
-    const node = Breadcrumb.render(
-      makeNode("Breadcrumb", [items]),
-      { items },
+  const renderCrumbs = (props: Record<string, unknown>): HTMLElement =>
+    Breadcrumb.render(
+      makeNode("Breadcrumb", [props.items]),
+      props,
       helpers,
     ) as HTMLElement;
+
+  it("emphasises the last item as the current page", () => {
+    const items = ["Workspace", "Reports", "Q3"];
+    const node = renderCrumbs({ items });
     const current = node.querySelector("[aria-current='page']");
     expect(current).not.toBeNull();
     expect(current?.textContent).toContain("Q3");
+  });
+
+  it("derives a cumulative route for every plain-string crumb but the leaf", () => {
+    // The string form used to render inert text, so a trail was decoration.
+    const node = renderCrumbs({ items: ["Workspace", "Reports", "Q3"] });
+    const hrefs = Array.from(node.querySelectorAll("a.rui-breadcrumb-link"))
+      .map((a) => a.getAttribute("href"));
+    expect(hrefs).toEqual(["#/workspace", "#/workspace/reports"]);
+    // The leaf is the page you are on — never a link.
+    expect(node.querySelector("[aria-current='page'] a")).toBeNull();
+  });
+
+  it("navigates through the router on a plain click", () => {
+    const router = new Router();
+    const navigate = vi.spyOn(router, "navigate").mockImplementation(noop);
+    const node = Breadcrumb.render(
+      makeNode("Breadcrumb", [["Workspace", "Reports", "Q3"]]),
+      { items: ["Workspace", "Reports", "Q3"] },
+      { ...helpers, router },
+    ) as HTMLElement;
+    const second = node.querySelectorAll("a.rui-breadcrumb-link")[1] as HTMLAnchorElement;
+    second.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(navigate).toHaveBeenCalledWith("/workspace/reports");
+  });
+
+  it("keeps the trail inert when autoLink is off", () => {
+    const node = renderCrumbs({ items: ["Workspace", "Reports", "Q3"], autoLink: false });
+    expect(node.querySelectorAll("a.rui-breadcrumb-link")).toHaveLength(0);
+  });
+
+  it("skips derivation when a label has no usable slug", () => {
+    // "///" slugifies to "", and a gap would silently produce the WRONG path
+    // for everything after it, so those crumbs stay inert.
+    const node = renderCrumbs({ items: ["///", "Reports", "Q3"] });
+    expect(node.querySelectorAll("a.rui-breadcrumb-link")).toHaveLength(0);
+  });
+
+  it("accepts {label, to} objects and prefers them over the derived path", () => {
+    const node = renderCrumbs({
+      items: [{ label: "Workspace", to: "/w/42" }, { label: "Reports" }, "Q3"],
+    });
+    const hrefs = Array.from(node.querySelectorAll("a.rui-breadcrumb-link"))
+      .map((a) => a.getAttribute("href"));
+    expect(hrefs).toEqual(["#/w/42", "#/workspace/reports"]);
+  });
+
+  it("sanitises a hostile href on an object crumb", () => {
+    const node = renderCrumbs({
+      items: [{ label: "Evil", href: "javascript:alert(1)" }, "Here"],
+    });
+    expect(node.querySelector("a.rui-breadcrumb-link")?.getAttribute("href")).toBe("#");
+  });
+
+  it("puts a home icon on the first crumb, and only the first", () => {
+    const node = renderCrumbs({ items: ["Workspace", "Reports", "Q3"] });
+    const icons = node.querySelectorAll(".rui-breadcrumb-icon");
+    expect(icons).toHaveLength(1);
+    expect(node.querySelector(".rui-breadcrumb-item")?.contains(icons[0]!)).toBe(true);
+  });
+
+  it("lets the home icon be disabled or swapped", () => {
+    const off = renderCrumbs({ items: ["Workspace", "Q3"], homeIcon: false });
+    expect(off.querySelectorAll(".rui-breadcrumb-icon")).toHaveLength(0);
+
+    // The attribute path stringifies booleans, so "false" must disable too.
+    const offAttr = renderCrumbs({ items: ["Workspace", "Q3"], homeIcon: "false" });
+    expect(offAttr.querySelectorAll(".rui-breadcrumb-icon")).toHaveLength(0);
+
+    const swapped = renderCrumbs({ items: ["Workspace", "Q3"], homeIcon: "compass" });
+    expect(swapped.querySelectorAll(".rui-breadcrumb-icon")).toHaveLength(1);
+  });
+
+  it("does not override an icon the first crumb already declares", () => {
+    const node = renderCrumbs({ items: [{ label: "Workspace", icon: "folder" }, "Q3"] });
+    const icon = node.querySelector(".rui-breadcrumb-icon");
+    expect(icon).not.toBeNull();
+    expect(icon?.className).not.toContain("fa-house");
+  });
+
+  it("still fires onItemClick alongside the navigation", () => {
+    const invoke = vi.fn();
+    const onItemClick = () => {/* callable marker */};
+    const node = Breadcrumb.render(
+      makeNode("Breadcrumb", [["Workspace", "Q3"]]),
+      { items: ["Workspace", "Q3"], onItemClick },
+      { ...helpers, invoke },
+    ) as HTMLElement;
+    const link = node.querySelector("a.rui-breadcrumb-link") as HTMLAnchorElement;
+    link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(invoke).toHaveBeenCalled();
+  });
+
+  it("keeps derived paths whole when maxItems collapses the middle", () => {
+    // The tail's path is built from the FULL label list, so collapsing must not
+    // shorten it to `/workspace/q3`.
+    const node = renderCrumbs({
+      items: ["Workspace", "Reports", "2026", "Q3", "Detail"],
+      maxItems: 3,
+    });
+    const hrefs = Array.from(node.querySelectorAll("a.rui-breadcrumb-link"))
+      .map((a) => a.getAttribute("href"));
+    expect(hrefs).toEqual(["#/workspace", "#/workspace/reports/2026/q3"]);
+    expect(node.querySelector(".rui-breadcrumb-ellipsis")).not.toBeNull();
   });
 });
 

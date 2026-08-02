@@ -7,9 +7,12 @@
 import { describe, expect, it } from "vitest";
 import {
   builtInThemes,
+  privateThemes,
+  findThemeByName,
   resolveTheme,
   applyTheme,
   lightTheme,
+  visionTheme,
 } from "../src/theme/index.js";
 import { componentStyles } from "../src/theme/styles.js";
 
@@ -82,31 +85,66 @@ describe("resolveTheme", () => {
     expect(builtInThemes.glass.fontFamily).not.toBe(lightTheme.fontFamily);
   });
 
-  it("ships corporate as an enterprise-console built-in (renamed from skyline)", () => {
-    const corporate = builtInThemes.corporate;
-    expect(corporate).toBeDefined();
-    // Corporate is a faithful re-creation of the UI block framework, so every
-    // token below is an UI block value rather than a hand-picked one:
+  it("keeps the UI block re-creation alive as the PRIVATE vision theme", () => {
+    // The UI block re-creation used to be called `corporate` (and `skyline`
+    // before that). It now answers to `vision` and lives in `privateThemes`, so
+    // every token below is still an UI block value rather than a hand-picked one:
     //   primary  = corporate-7 navy (--primary-button-background-color)
     //   radii    = UI block small / medium / default border-radius scale
     //   button   = --button-border-radius (the 24px pill)
-    // These replaced the pre-UI block values (#003580 / 4px / 6px) when the theme
-    // was rewritten against the real framework.
-    expect(corporate.colorPrimary).toBe("#0b2a63");
-    expect(corporate.radiusSm).toBe("8px");
-    expect(corporate.radiusMd).toBe("12px");
-    expect(corporate.radiusLg).toBe("16px");
-    expect(corporate.radiusButton).toBe("24px");
+    expect(visionTheme.colorPrimary).toBe("#0b2a63");
+    expect(visionTheme.radiusSm).toBe("8px");
+    expect(visionTheme.radiusMd).toBe("12px");
+    expect(visionTheme.radiusLg).toBe("16px");
+    expect(visionTheme.radiusButton).toBe("24px");
     // Primary brightens (not darkens) on hover — an UI block signature.
-    expect(corporate.colorPrimaryHover).toBe("#1474c4");
+    expect(visionTheme.colorPrimaryHover).toBe("#1474c4");
     // Distinct from light/dark so the theme actually adds value.
-    expect(corporate.colorBg).not.toBe(lightTheme.colorBg);
-    expect(corporate.fontFamily).not.toBe(lightTheme.fontFamily);
-    // Resolves cleanly through the public resolver under its new name.
-    expect(resolveTheme("corporate").name).toBe("corporate");
+    expect(visionTheme.colorBg).not.toBe(lightTheme.colorBg);
+    expect(visionTheme.fontFamily).not.toBe(lightTheme.fontFamily);
+    // Resolves like any built-in — privacy is about enumeration, not lookup.
+    const resolved = resolveTheme("vision");
+    expect(resolved.name).toBe("vision");
+    expect(resolved.tokens).toEqual(visionTheme);
+    // Case/whitespace are normalised on the way in, same as a public name.
+    expect(resolveTheme("  VISION ").name).toBe("vision");
     // The old "skyline" alias is gone.
     expect(builtInThemes.skyline).toBeUndefined();
     expect(resolveTheme("skyline").name).toBe("light");
+  });
+
+  it("keeps vision out of every surface that ENUMERATES themes", () => {
+    // The point of the private registry: `builtInThemes` is what the playground
+    // theme picker, the editor autocomplete, the VS Code metadata and the docs
+    // all read. If `vision` ever leaks into it, it becomes publicly listed
+    // everywhere at once.
+    expect(builtInThemes.vision).toBeUndefined();
+    expect(Object.keys(builtInThemes)).toEqual([
+      "light", "dark", "corporate", "soft", "glass", "modern",
+    ]);
+    expect(privateThemes.vision).toBe(visionTheme);
+    // …while a lookup still finds it.
+    expect(findThemeByName("vision")).toBe(visionTheme);
+    expect(findThemeByName("corporate")).toBe(builtInThemes.corporate);
+    expect(findThemeByName("nope")).toBeNull();
+  });
+
+  it("ships corporate as a teal-on-graphite enterprise workspace", () => {
+    const corporate = builtInThemes.corporate;
+    expect(corporate).toBeDefined();
+    // Its signature: one deep-teal brand hue on square-shouldered 8px controls.
+    expect(corporate.colorPrimary).toBe("#0f766e");
+    expect(corporate.radiusButton).toBe("8px");
+    expect(corporate.radiusInput).toBe("8px");
+    // Primary DARKENS on hover — the opposite of vision's brighten.
+    expect(corporate.colorPrimaryHover).toBe("#0b5f58");
+    // Distinct from light/dark, and from the theme that used to own the name.
+    expect(corporate.colorBg).not.toBe(lightTheme.colorBg);
+    expect(corporate.colorPrimary).not.toBe(visionTheme.colorPrimary);
+    expect(corporate.fontFamily).not.toBe(visionTheme.fontFamily);
+    expect(corporate.radiusButton).not.toBe(visionTheme.radiusButton);
+    // Still public, still resolvable under the name it always had.
+    expect(resolveTheme("corporate").name).toBe("corporate");
   });
 
   it("ships modern with an ink primary and pill buttons", () => {

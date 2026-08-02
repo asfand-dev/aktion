@@ -583,7 +583,7 @@ function setupCopyButtons() {
 const THEME_BG = {
   light: "#ffffff",
   dark: "#0b1220",
-  corporate: "linear-gradient(180deg, #eff2f7 0%, #e6ecf3 100%)",
+  corporate: "linear-gradient(180deg, #f0f5f4 0%, #eaeef0 100%)",
   soft: "#fdf6ff",
   glass: "linear-gradient(160deg, #eef0f3 0%, #e9e6ef 45%, #efe4ec 100%)",
   modern: "#f4f5f7",

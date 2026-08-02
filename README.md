@@ -1314,14 +1314,14 @@ Six themes are built in. Pick one with `theme="..."` or pass a custom token map.
 | ------------ | ------------------------------------------------------------------------------------------------- |
 | `light`      | Crisp default, indigo accent (`#4f46e5`).                                                         |
 | `dark`       | Standard dark surface, indigo accent.                                                             |
-| `corporate`  | Enterprise admin console — flat white surfaces on a pale blue-grey page, navy `#0b2a63` primary that *brightens* to `#1474c4` on hover, 24px pill buttons, borderless/shadowless cards, transparent inputs, borderless uppercase table headers. Blue is reserved for interactive elements; body and heading text stay dark navy `#001b41`. |
+| `corporate`  | Contemporary enterprise workspace — graphite `#f5f7f8` canvas, one deep teal `#0f766e` primary that *darkens* to `#0b5f58` on hover, square-shouldered 8px buttons and inputs, flat hairline cards that tint their border on hover, a 2px teal rail under the selected tab, sentence-case table headers, 15px Inter body under Space Grotesk headings. |
 | `soft`       | Soft, friendly, light & rounded. Violet primary + mint accent fill, generous radii, gentle shadows. |
 | `glass`      | Light glassmorphism — frosted translucent surfaces over an airy pastel gradient, warm terracotta primary. |
 | `modern`     | Clean modern SaaS dashboard — light, generous rounding, ink primary with fully pill-shaped buttons, soft shadows, vibrant charts. |
 
 **Theme fonts.** Selecting a built-in theme *by name* loads the web fonts that
-theme needs to look like itself. `corporate` pulls `Open Sans:400,600` and
-`Overpass:400,600` from Google Fonts — declared in the exported
+theme needs to look like itself. `corporate` pulls `Inter:400,500,600,700` and
+`Space Grotesk:500,600,700` from Google Fonts — declared in the exported
 `builtInThemeFonts` map and fetched by both `theme="corporate"` and
 `$theme({ name: "corporate" })`, with no `$theme({ fonts: … })` in the program.
 Every other built-in theme uses system fonts and issues no request. If your CSP
@@ -2006,7 +2006,7 @@ consumes from the CDN.
 | `theme-generator.html`              | Visual theme generator — tune colors, radius, typography, spacing, shadows, and a brand gradient with a live preview, then copy a ready-to-paste `$theme({…})` statement. |
 | `theme-customization.html`          | Token-by-token customization studio (now folded into `themes.html`, kept as a redirect for old links). |
 | `brand-themes.html`                 | One program rendered with six ready-made brand token maps — GitHub, Apple, Stripe, IONOS, Notion, Vercel — each shown as a flat `setTheme()` map and its grouped `$theme({…})` translation. |
-| `exos-parity.html`                  | Corporate-theme parity harness — the Aktion component set rendered side by side with the Exos/corporate design framework it mirrors. |
+| `exos-parity.html`                  | Design-framework parity harness — the Aktion component set rendered side by side with the Exos framework it mirrors. |
 | `exos-blocks.html`                  | Exos ↔ Aktion UI blocks — whole framework sections rebuilt as Aktion programs. |
 | `exos-micro-frontends-blocks.html`  | The DCD micro-frontend blocks rebuilt in Aktion.                                        |
 | `playground.html`                   | CodeMirror 6 editor with custom highlighting / autocomplete, live preview, share links, hover-over component info, and an inspection mode. |

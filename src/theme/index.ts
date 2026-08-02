@@ -4,13 +4,18 @@
  * Built-in themes:
  *   - "light"      (default)
  *   - "dark"
- *   - "corporate"  (navy + cyan, flat white surfaces,
- *                   pill buttons, tinted status pills — an admin-console look)
+ *   - "corporate"  (contemporary enterprise workspace: graphite neutrals, a
+ *                   deep teal brand hue, square-shouldered controls, crisp
+ *                   hairlines and tight shadows)
  *   - "soft"       (soft, friendly, light & rounded; lavender + mint)
  *   - "glass"      (light glassmorphism: frosted white surfaces over a soft
  *                   pastel gradient, airy and translucent)
  *   - "modern"     (clean modern SaaS: light, generous rounding, ink primary,
  *                   pill buttons, soft diffuse shadows, vibrant charts)
+ *
+ * Private themes (see `privateThemes`) resolve by name exactly like the ones
+ * above but are deliberately absent from `builtInThemes`, so they never reach
+ * `langSpec.themeNames`, the docs' theme pickers or the published reference.
  *
  * Consumers can also pass a JSON object via the `theme` attribute, call
  * `element.setTheme({...})`, or write a bare `$theme({...})` statement
@@ -626,13 +631,19 @@ export const glassTheme: ThemeTokens = {
 };
 
 /**
- * Corporate — enterprise cloud-console aesthetic. Deep navy primary, calm
+ * Vision — enterprise cloud-console aesthetic. Deep navy primary, calm
  * cyan accents, very pale blue page background, white surfaces with crisp
- * 1px borders, small radii, and a clean Inter type stack. The look should
+ * 1px borders, small radii, and Open Sans / Overpass type. The look should
  * feel at home in an admin panel: dense, scannable, minimal chrome.
- * (Formerly "skyline".)
+ *
+ * PRIVATE. Registered in `privateThemes`, not in `builtInThemes`, so
+ * `theme="vision"` and `$theme({ name: "vision" })` resolve normally while the
+ * name stays out of `langSpec.themeNames` — the single source the playground
+ * theme picker, the editor autocomplete and the generated docs all read from.
+ * (Formerly "skyline", then "corporate"; the `corporate` key now names the
+ * unrelated theme below.)
  */
-export const corporateTheme: ThemeTokens = {
+export const visionTheme: ThemeTokens = {
   ...lightTheme,
   /* Surface & semantic — palette */
   colorBg: "#f4f7fa", // neutral-1 · --default-background-color
@@ -829,12 +840,146 @@ export const modernTheme: ThemeTokens = {
 };
 
 /**
+ * Corporate — contemporary enterprise workspace.
+ *
+ * A single-hue system: graphite neutrals with a faint green cast, pure white
+ * surfaces, and one confident deep-teal brand colour that carries primary
+ * buttons, links, the focus ring and the first chart series. Controls are
+ * square-shouldered (8px, not pills), hairlines are crisp, shadows are tight
+ * and short-throw, and the type is Inter over a Space Grotesk display face at a
+ * 15px base — roomy enough to read all day, dense enough for a data console.
+ *
+ * Deliberately unlike its siblings: `modern` is ink + violet on pill buttons
+ * with 24px radii, `light` is indigo, `soft` pastel, `glass` translucent, and
+ * the private `vision` theme is navy + cyan pills. Teal on graphite with 8px
+ * corners is nobody else's territory.
+ *
+ * Contrast notes (WCAG AA, measured against `colorSurface` #ffffff, the page
+ * `colorBg` #f5f7f8 and the `colorBgSubtle` #eaeef0 tint, worst case listed):
+ *   primary #0f766e as text 4.69:1 · white on primary 5.47:1
+ *   textMuted 5.56:1 · borderControl 3.45:1 (>= the 3:1 shape bar)
+ *   status *Text tokens 5.08-5.83:1 · ink on every status fill >= 4.70:1
+ */
+export const corporateTheme: ThemeTokens = {
+  ...lightTheme,
+  /* ----- Surface & semantic ----- */
+  // Graphite with a whisper of green so the canvas agrees with the teal brand
+  // hue instead of fighting it (light's #f8fafc is blue-cast).
+  colorBg: "#f5f7f8",
+  colorBgSubtle: "#eaeef0",
+  colorSurface: "#ffffff",
+  colorSurfaceMuted: "#f2f5f6",
+  colorBorder: "#dfe5e8",
+  colorBorderSubtle: "rgba(13, 31, 34, 0.07)",
+  // 3.45:1 on the darkest of the three surfaces — the accessible boundary for
+  // inputs/checkboxes, kept separate from the decorative `colorBorder` hairline.
+  colorBorderControl: "#71818a",
+  colorText: "#0d1f22",
+  colorTextMuted: "#4d616a",
+  colorPrimary: "#0f766e",
+  // Primary DARKENS on hover (the private vision theme brightens — that is its
+  // signature, not a house rule).
+  colorPrimaryHover: "#0b5f58",
+  colorPrimaryText: "#ffffff",
+  // One step brighter than primary so tinted accents read as a second voice in
+  // the same family; still 5.01:1 under white ink as a fill.
+  colorAccent: "#0b7d72",
+  colorAccentHover: "#0a6a61",
+  colorAccentText: "#ffffff",
+  colorLink: "#0f766e",
+  colorLinkHover: "#115e59",
+  colorFocusRing: "#0f766e",
+  colorSuccess: "#16a34a",
+  colorWarning: "#f59e0b",
+  colorDanger: "#e11d48",
+  // Sky rather than cyan: a cyan info would collide with the teal brand hue and
+  // stop reading as a status at all.
+  colorInfo: "#0369a1",
+  colorSuccessText: "#0a7038",
+  colorWarningText: "#8a4b00",
+  colorDangerText: "#be123c",
+  colorInfoText: "#075985",
+  // Ink ON the fills. Success and warning are bright enough to need dark ink
+  // (4.75 / 6.97:1); the rose danger and the sky info are dark enough that white
+  // is the correct answer (4.70 / 5.93:1).
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#ffffff",
+  colorOnInfo: "#ffffff",
+  colorSurfaceHover: "rgba(15, 118, 110, 0.06)",
+  /* ----- Typography — Inter body, Space Grotesk display, 15px/1.55 ----- */
+  fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+  fontFamilyHeading:
+    "'Space Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyMono: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontSizeBase: "15px",
+  fontSizeSm: "13px",
+  fontSizeLg: "17px",
+  fontSizeHeading: "17px",
+  fontSizeTitle: "24px",
+  fontWeightBody: "400",
+  fontWeightHeading: "600",
+  lineHeightBody: "1.55",
+  lineHeightHeading: "1.25",
+  letterSpacingHeading: "-0.015em",
+  headingTextTransform: "none",
+  /* ----- Shape — square-shouldered, 8px controls ----- */
+  radiusXs: "3px",
+  radiusSm: "6px",
+  radiusMd: "10px",
+  radiusLg: "14px",
+  radiusPill: "999px",
+  radiusButton: "8px",
+  radiusInput: "8px",
+  borderWidth: "1px",
+  /* ----- Shadows — short throw, graphite-tinted, always paired with a hairline ----- */
+  shadowSm: "0 1px 2px rgba(13, 31, 34, 0.06), 0 1px 1px rgba(13, 31, 34, 0.04)",
+  shadowMd: "0 4px 16px rgba(13, 31, 34, 0.08), 0 1px 2px rgba(13, 31, 34, 0.05)",
+  shadowLg: "0 16px 48px rgba(13, 31, 34, 0.14), 0 2px 6px rgba(13, 31, 34, 0.06)",
+  /* ----- Spacing — 4 / 8 / 14 / 22 / 36 ----- */
+  spacingXs: "4px",
+  spacingS: "8px",
+  spacingM: "14px",
+  spacingL: "22px",
+  spacingXl: "36px",
+  // See softTheme: light's 48px/80px would otherwise cap this theme's scale.
+  spacing2xl: "56px",
+  spacing3xl: "88px",
+  /* ----- Gradients ----- */
+  gradientBrand: "linear-gradient(120deg, #0d1f22 0%, #0f766e 55%, #14b8a6 100%)",
+  gradientAccent: "linear-gradient(120deg, #0f766e 0%, #0369a1 100%)",
+  gradientWarm: "linear-gradient(120deg, #f59e0b 0%, #e11d48 100%)",
+  gradientCool: "linear-gradient(120deg, #0369a1 0%, #14b8a6 100%)",
+  gradientSuccess: "linear-gradient(120deg, #16a34a 0%, #14b8a6 100%)",
+  gradientDanger: "linear-gradient(120deg, #e11d48 0%, #9f1239 100%)",
+  /* ----- Buttons — compact, semibold, a hair of tracking ----- */
+  buttonFontWeight: "600",
+  buttonTextTransform: "none",
+  buttonLetterSpacing: "0.01em",
+  buttonPaddingY: "9px",
+  buttonPaddingX: "16px",
+  /* ----- Motion — decisive, with a fast-out easing curve ----- */
+  transitionDuration: "150ms",
+  motionFast: "110ms",
+  motionBase: "170ms",
+  motionSlow: "300ms",
+  motionEase: "cubic-bezier(0.2, 0, 0, 1)",
+  /* ----- Charts — brand teal first, then a wide-spread supporting set ----- */
+  chart1: "#0f766e",
+  chart2: "#0369a1",
+  chart3: "#f59e0b",
+  chart4: "#7c3aed",
+  chart5: "#e11d48",
+  chart6: "#65a30d",
+};
+
+/**
  * Web fonts a built-in theme needs in order to look like itself.
  *
  * Selecting a theme by name (`theme="corporate"` or `$theme({ name: ... })`)
  * previously loaded no fonts at all — only a program that spelled out
  * `$theme({ fonts: { import: [...] } })` triggered `loadFonts`. For the
- * corporate theme that meant every page rendered in `system-ui` instead of the
+ * vision theme that meant every page rendered in `system-ui` instead of the
  * UI block typefaces, so the whole UI block type ladder (and every font-weight
  * correction in the theme) was invisible outside the parity harnesses, which
  * load the fonts themselves.
@@ -842,11 +987,23 @@ export const modernTheme: ThemeTokens = {
  * UI block self-hosts OpenSansRegular / OpenSansSemibold / OverpassRegular /
  * OverpassSemibold and always asks for weight 400, taking its boldness from the
  * font FILE. The closest equivalent here is the same two families at 400 and 600.
+ *
+ * Keyed by theme name, private themes included — `loadBuiltInThemeFonts` looks
+ * a name up here directly, so a private theme still gets its typefaces.
  */
 export const builtInThemeFonts: Record<string, { import: string[] }> = {
-  corporate: { import: ["Open Sans:400,600", "Overpass:400,600"] },
+  corporate: { import: ["Inter:400,500,600,700", "Space Grotesk:500,600,700"] },
+  vision: { import: ["Open Sans:400,600", "Overpass:400,600"] },
 };
 
+/**
+ * The PUBLIC theme registry.
+ *
+ * This record is the single source of truth for every surface that enumerates
+ * themes: `langSpec.themeNames` (playground picker + editor autocomplete), the
+ * generated VS Code metadata, the agent-skill reference and the docs. Adding a
+ * key here publishes the theme; see `privateThemes` for the other case.
+ */
 export const builtInThemes: Record<string, ThemeTokens> = {
   light: lightTheme,
   dark: darkTheme,
@@ -855,6 +1012,33 @@ export const builtInThemes: Record<string, ThemeTokens> = {
   glass: glassTheme,
   modern: modernTheme,
 };
+
+/**
+ * Themes that RESOLVE by name but are not advertised anywhere.
+ *
+ * `theme="vision"`, `setTheme("vision")` and `$theme({ name: "vision" })` all
+ * behave exactly like a built-in — same token application, same
+ * `data-rui-theme` marker driving the per-theme CSS block, same web fonts —
+ * but the name is absent from `builtInThemes`, so nothing that enumerates
+ * themes (theme pickers, autocomplete, docs, README) can surface it.
+ *
+ * Deliberately NOT merged into `builtInThemes`: every enumerating surface reads
+ * that record, so one merge would undo the privacy in a dozen places at once.
+ */
+export const privateThemes: Record<string, ThemeTokens> = {
+  vision: visionTheme,
+};
+
+/**
+ * Look a theme name up across both registries. This — not `builtInThemes` — is
+ * what a *resolver* should consult; `builtInThemes` is for *enumeration*.
+ */
+export function findThemeByName(name: unknown): ThemeTokens | null {
+  if (typeof name !== "string") return null;
+  const key = name.trim().toLowerCase();
+  if (!key) return null;
+  return builtInThemes[key] ?? privateThemes[key] ?? null;
+}
 
 const TOKEN_TO_CSS: Record<keyof ThemeTokens, string> = {
   colorBg: "--rui-color-bg",
@@ -991,7 +1175,7 @@ export function resolveTheme(input: ThemeInput | null | undefined): ResolvedThem
         return { name: "light", tokens: lightTheme };
       }
     }
-    const tokens = builtInThemes[key];
+    const tokens = findThemeByName(key);
     if (tokens) return { name: key, tokens };
     return { name: "light", tokens: lightTheme };
   }

@@ -17,6 +17,65 @@ function routeHash(to: string): string {
   return `#${to.startsWith("/") ? to : `/${to}`}`;
 }
 
+/** Font Awesome name used for the leading crumb when `homeIcon` is left on. */
+const DEFAULT_HOME_ICON = "house";
+
+/**
+ * Label → URL segment. Kept deliberately conservative: letters, digits and
+ * single hyphens only, so a label with punctuation ("Q3 / 2026", "Réglages")
+ * cannot smuggle a path traversal or a query string into the derived route.
+ */
+function slugify(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Cumulative route for the crumb at `index` of a plain-string trail:
+ * `["Workspace", "Reports", "Q3"]` → `/workspace`, `/workspace/reports`.
+ *
+ * Returns "" when any segment up to `index` slugifies to nothing, because a
+ * gap would silently produce the WRONG path (`/workspace/q3`) rather than an
+ * obviously missing one — better to leave that crumb inert than to navigate
+ * somewhere the author never described.
+ */
+function derivedPath(labels: readonly string[], index: number): string {
+  const segments: string[] = [];
+  for (let i = 0; i <= index; i += 1) {
+    const slug = slugify(labels[i] ?? "");
+    if (!slug) return "";
+    segments.push(slug);
+  }
+  return `/${segments.join("/")}`;
+}
+
+/** Read `{ label, to, href, icon }` off a plain object crumb. */
+function asCrumbRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if ((value as { __kind?: string }).__kind === "Component") return null;
+  return value as Record<string, unknown>;
+}
+
+/**
+ * Give an already-rendered crumb a leading icon.
+ *
+ * `Breadcrumb` renders a `BreadcrumbItem(...)` child through `renderNode`, so
+ * there is no props object left to add `icon` to — the DOM is all that comes
+ * back. Injecting here keeps "the first crumb wears the home icon" true for
+ * every item form instead of only the ones this file builds itself.
+ */
+function prependCrumbIcon(crumbEl: HTMLElement, icon: string): void {
+  if (crumbEl.querySelector(".rui-breadcrumb-icon")) return;
+  const host = crumbEl.querySelector(
+    ".rui-breadcrumb-link, .rui-breadcrumb-current, .rui-breadcrumb-text",
+  );
+  const iconNode = renderIcon(icon, { className: "rui-breadcrumb-icon" });
+  if (!host || !iconNode) return;
+  host.insertBefore(iconNode, host.firstChild);
+}
+
 /** True when a plain primary click (no modifiers) — the one we may intercept. */
 function isPlainClick(event: Event): boolean {
   const evt = event as MouseEvent;
@@ -135,23 +194,46 @@ export const BreadcrumbItem: ComponentSpec = {
 export const Breadcrumb: ComponentSpec = {
   name: "Breadcrumb",
   description:
-    "Trail showing the user's location. Children may be " +
-    "BreadcrumbItem(label, { to?, href? }) nodes OR plain strings (the last " +
-    "string is the current page). Plain strings are text, not links — pass " +
-    "`onItemClick` to make them clickable, or use BreadcrumbItem nodes with " +
-    "`to` for real navigation. `maxItems` collapses the middle of a long " +
-    "trail behind an ellipsis.",
+    "Trail showing the user's location. Every crumb except the last one is a " +
+    "link that navigates. Items may be BreadcrumbItem(label, { to?, href? }) " +
+    "nodes, `{ label, to }` / `{ label, href }` objects, or plain strings — a " +
+    "string trail derives its own cumulative route from the labels " +
+    "(`[\"Workspace\", \"Reports\", \"Q3\"]` → `/workspace`, `/workspace/reports`), " +
+    "which `autoLink: false` turns off. The first crumb carries a home icon " +
+    "unless `homeIcon: false`; pass an icon name to change it. `maxItems` " +
+    "collapses the middle of a long trail behind an ellipsis.",
   props: [
-    { name: "items", type: "BreadcrumbItem[] | string[]" },
+    { name: "items", type: "BreadcrumbItem[] | string[] | {label, to}[]" },
     { name: "separator", type: "string", optional: true, description: "Default `/`" },
     { name: "maxItems", type: "number", optional: true, description: "Collapse the middle of the trail to an ellipsis once there are more items than this (keeps the first crumb and the tail)" },
-    { name: "onItemClick", type: "callable", optional: true, description: "Called with (index, label) when a plain-string crumb is clicked — makes the string form interactive without a URL" },
+    { name: "onItemClick", type: "callable", optional: true, description: "Called with (index, label) when a crumb is clicked — fires alongside any navigation" },
+    { name: "homeIcon", type: "boolean | string", optional: true, description: "Leading icon on the FIRST crumb — `true` (default) uses `house`, `false` removes it, a string picks another Font Awesome name" },
+    { name: "autoLink", type: "boolean", optional: true, description: "Derive a cumulative route from plain-string labels so they navigate (default `true`). Set `false` for a trail that is pure text unless an item names its own `to`/`href`" },
   ],
   render: (_node, props, helpers) => {
     const items = asArray<unknown>(props.items);
     const separator = asString(props.separator, "/");
     const maxItems = Math.max(0, Math.floor(asNumber(props.maxItems, 0)));
     const onItemClick = typeof props.onItemClick === "function" ? props.onItemClick : null;
+    // Default ON for both: the component's job is navigation, and a trail whose
+    // crumbs do not go anywhere is decoration.
+    const autoLink = asBoolean(props.autoLink, true);
+    // `homeIcon: "compass"` swaps the glyph; `false` (or "false" through the
+    // attribute path) removes it; anything else means the default house.
+    const homeIconProp = props.homeIcon;
+    const homeIconName =
+      homeIconProp === false || homeIconProp === "false"
+        ? ""
+        : typeof homeIconProp === "string" && homeIconProp.trim() !== ""
+          ? homeIconProp.trim()
+          : DEFAULT_HOME_ICON;
+    // Labels for the derived routes — read from the WHOLE trail, not just the
+    // crumbs `maxItems` leaves visible, so collapsing never shortens a path.
+    const labels = items.map((item) => {
+      const record = asCrumbRecord(item);
+      if (record) return asString(record.label ?? record.title);
+      return asString(item);
+    });
     const root = el("nav", { class: "rui-breadcrumb", "aria-label": "Breadcrumb" });
     const list = el("ol", { class: "rui-breadcrumb-list" });
 
@@ -182,18 +264,39 @@ export const Breadcrumb: ComponentSpec = {
         return;
       }
       const item = items[index];
+      const isLast = index === items.length - 1;
+      const isFirst = index === 0;
       if (item && typeof item === "object" && (item as { __kind?: string }).__kind === "Component") {
-        list.append(helpers.renderNode(item));
+        const rendered = helpers.renderNode(item) as HTMLElement;
+        // A BreadcrumbItem builds its own DOM, so the icon is applied after the
+        // fact (see prependCrumbIcon) rather than through props.
+        if (isFirst && homeIconName && rendered instanceof HTMLElement) {
+          prependCrumbIcon(rendered, homeIconName);
+        }
+        list.append(rendered);
         return;
       }
-      const label = asString(item);
-      const isLast = index === items.length - 1;
+
+      const record = asCrumbRecord(item);
+      const label = labels[index] ?? "";
+      const rawHref = record ? asString(record.href) : "";
+      const explicitTo = record ? asString(record.to ?? record.path) : "";
+      // Precedence: an author-supplied route beats an author-supplied URL beats
+      // the derived one. The derived path only fills the gap the string form
+      // used to leave — an inert crumb.
+      const to = explicitTo || (!rawHref && autoLink && !isLast ? derivedPath(labels, index) : "");
+      const icon = record && record.icon != null
+        ? record.icon
+        : (isFirst && homeIconName ? homeIconName : undefined);
+
       list.append(renderCrumb({
         label,
+        icon,
         current: isLast,
-        // A plain string carries no URL, so it gets no href — the previous
-        // `href="#"` was read by the hash router as "navigate to /", which
-        // threw the user out of the route they clicked in.
+        to: isLast ? "" : to,
+        // `sanitiseHref` neutralises a hostile `javascript:` URL coming from an
+        // LLM-authored item; `to` never needs it (it is always a `#/route`).
+        href: !isLast && rawHref ? sanitiseHref(rawHref) : "",
         onClick: !isLast && onItemClick
           ? () => helpers.invoke(onItemClick, index, label)
           : undefined,

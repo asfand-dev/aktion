@@ -371,7 +371,7 @@ const componentGroups: ComponentGroup[] = [
     ],
     notes: [
       "- Use `Breadcrumb([\"Workspace\", \"Reports\", \"Q3\"])` at the top of every detail page so users see the path.",
-      "- For per-item links, pass `BreadcrumbItem(label, href)` nodes instead of strings.",
+      "- Crumbs navigate by default: a string trail derives `/workspace`, `/workspace/reports`, … from its own labels, and the first crumb gets a home icon. Pass `{ label, to }` objects (or `BreadcrumbItem` nodes) when the real routes are not the slugified labels, `autoLink: false` for a trail that is pure text, and `homeIcon: false` to drop the icon.",
       "- `Navbar(brand?, items?, actions?, sticky?, variant?)` + `NavbarItem(label, to?, href?, icon?, active?, action?, external?)` produces a top navigation bar with brand on the left, links in the middle, and actions on the right — the canonical companion of `Sidebar` for marketing pages, docs, or any product surface without left-side nav.",
       "- `DropdownMenu(trigger, items, side?, align?, label?)` is the click-triggered dropdown menu — use it for user-profile menus, row \"…\" action menus, and any compact list of actions hanging off a single trigger. Children must be `MenuItem`, `MenuSeparator`, or `MenuLabel` entries.",
       "- `MenuItem(label, action?, icon?, shortcut?, variant?, disabled?)` renders a single row inside a `DropdownMenu`; use `variant=\"danger\"` for destructive actions and `MenuSeparator()`/`MenuLabel(label)` to group related items.",

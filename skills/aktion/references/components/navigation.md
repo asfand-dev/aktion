@@ -14,7 +14,7 @@ These are the library's own authoring notes — they encode the intended choice
 between similar components, which the prop tables below cannot express.
 
 - Use `Breadcrumb(["Workspace", "Reports", "Q3"])` at the top of every detail page so users see the path.
-- For per-item links, pass `BreadcrumbItem(label, href)` nodes instead of strings.
+- Crumbs navigate by default: a string trail derives `/workspace`, `/workspace/reports`, … from its own labels, and the first crumb gets a home icon. Pass `{ label, to }` objects (or `BreadcrumbItem` nodes) when the real routes are not the slugified labels, `autoLink: false` for a trail that is pure text, and `homeIcon: false` to drop the icon.
 - `Navbar(brand?, items?, actions?, sticky?, variant?)` + `NavbarItem(label, to?, href?, icon?, active?, action?, external?)` produces a top navigation bar with brand on the left, links in the middle, and actions on the right — the canonical companion of `Sidebar` for marketing pages, docs, or any product surface without left-side nav.
 - `DropdownMenu(trigger, items, side?, align?, label?)` is the click-triggered dropdown menu — use it for user-profile menus, row "…" action menus, and any compact list of actions hanging off a single trigger. Children must be `MenuItem`, `MenuSeparator`, or `MenuLabel` entries.
 - `MenuItem(label, action?, icon?, shortcut?, variant?, disabled?)` renders a single row inside a `DropdownMenu`; use `variant="danger"` for destructive actions and `MenuSeparator()`/`MenuLabel(label)` to group related items.
@@ -24,17 +24,19 @@ between similar components, which the prop tables below cannot express.
 ### Breadcrumb
 
 ```
-Breadcrumb(items, separator?, maxItems?, onItemClick?)
+Breadcrumb(items, separator?, maxItems?, onItemClick?, homeIcon?, autoLink?)
 ```
 
-Trail showing the user's location. Children may be BreadcrumbItem(label, { to?, href? }) nodes OR plain strings (the last string is the current page). Plain strings are text, not links — pass `onItemClick` to make them clickable, or use BreadcrumbItem nodes with `to` for real navigation. `maxItems` collapses the middle of a long trail behind an ellipsis.
+Trail showing the user's location. Every crumb except the last one is a link that navigates. Items may be BreadcrumbItem(label, { to?, href? }) nodes, `{ label, to }` / `{ label, href }` objects, or plain strings — a string trail derives its own cumulative route from the labels (`["Workspace", "Reports", "Q3"]` → `/workspace`, `/workspace/reports`), which `autoLink: false` turns off. The first crumb carries a home icon unless `homeIcon: false`; pass an icon name to change it. `maxItems` collapses the middle of a long trail behind an ellipsis.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
-| `items` | `BreadcrumbItem[] | string[]` | **yes** |  |
+| `items` | `BreadcrumbItem[] | string[] | {label, to}[]` | **yes** |  |
 | `separator` | `string` | no | Default `/` |
 | `maxItems` | `number` | no | Collapse the middle of the trail to an ellipsis once there are more items than this (keeps the first crumb and the tail) |
-| `onItemClick` | `callable` | no | Called with (index, label) when a plain-string crumb is clicked — makes the string form interactive without a URL |
+| `onItemClick` | `callable` | no | Called with (index, label) when a crumb is clicked — fires alongside any navigation |
+| `homeIcon` | `boolean | string` | no | Leading icon on the FIRST crumb — `true` (default) uses `house`, `false` removes it, a string picks another Font Awesome name |
+| `autoLink` | `boolean` | no | Derive a cumulative route from plain-string labels so they navigate (default `true`). Set `false` for a trail that is pure text unless an item names its own `to`/`href` |
 
 ### BreadcrumbItem
 

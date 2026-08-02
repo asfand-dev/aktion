@@ -805,7 +805,7 @@ a.rui-card {
   transition: color var(--rui-transition-duration) ease;
 }
 .rui-link:hover { color: var(--rui-color-link-hover); text-decoration: underline; }
-/* The only focus-visible rule for links was corporate-scoped, so on every other
+/* The only focus-visible rule for links was vision-scoped, so on every other
    theme a keyboard user got the UA ring alone — which text-decoration: none makes
    hard to locate (WCAG 2.4.7). The ring is the focus token rather than the accent
    because that is the one token guaranteed to clear 3:1 in every theme. */
@@ -1251,7 +1251,7 @@ a.rui-card {
 /* Mirrors UI block's .message / .message__section split: the OUTER element draws the
    chrome and clips, the INNER section lays out and pads. Keeping the two apart is what
    lets a themed left status bar be cut straight by the corner arc rather than curling
-   around the radius (see the corporate block). */
+   around the radius (see the vision block). */
 .rui-callout {
   display: block;
   border-radius: var(--rui-radius-md);
@@ -1454,7 +1454,7 @@ a.rui-card {
    "available after you pick a plan" section read as clickable. */
 .rui-accordion-item[data-disabled="true"] { opacity: 0.6; }
 .rui-accordion-item[data-disabled="true"] > .rui-accordion-trigger { cursor: not-allowed; }
-/* Semantic left stripe, mirroring the corporate theme's own accordion variants
+/* Semantic left stripe, mirroring the vision theme's own accordion variants
    so the prop is not a silent no-op in every other theme. */
 .rui-accordion-item[data-variant="success"] { box-shadow: inset 4px 0 0 0 var(--rui-color-success); }
 .rui-accordion-item[data-variant="warning"] { box-shadow: inset 4px 0 0 0 var(--rui-color-warning); }
@@ -1670,7 +1670,7 @@ a.rui-card {
    soft — the destructive action was the least readable button in the library. The
    ink token clears 4.5:1 on every theme's danger fill without moving the hue, which
    also draws borders, dots and progress bars. The hover BRIGHTENS rather than
-   darkens for the same reason corporate's does (critical-5 -> critical-4): mixing
+   darkens for the same reason vision's does (critical-5 -> critical-4): mixing
    toward black shrinks the gap to a dark ink, mixing toward white widens it. */
 .rui-button[data-variant="danger"] { background: var(--rui-color-danger); color: var(--rui-color-on-danger); }
 .rui-button[data-variant="danger"]:hover:not(:disabled) { background: color-mix(in srgb, var(--rui-color-danger) 85%, white); }
@@ -5065,7 +5065,9 @@ ${below("xs")} {
 :host([data-rui-theme="glass"]) .rui-separator { background: rgba(255, 255, 255, 0.6); }
 
 /* ============================================================================
-   Corporate — a faithful re-creation of the UI block design framework.
+   Vision — a faithful re-creation of the UI block design framework.
+   (Private theme: resolvable by name, deliberately absent from the public
+   theme registry, the theme picker and the docs.)
    Flat white surfaces on a blue-grey canvas (no card borders/shadows), navy
    PILL buttons (2px border) that BRIGHTEN to blue on hover and never recolor
    when disabled (opacity only), transparent inputs with a crisp blue
@@ -5085,11 +5087,11 @@ ${below("xs")} {
    4 #f50c00 · 5 #c80a00 | activating(cyan) 1 #d2f6fc · 3 #11c7e6 · 4 #08a5c5
    | promoting 1 #fae7fe.
    ============================================================================ */
-:host([data-rui-theme="corporate"]) {
+:host([data-rui-theme="vision"]) {
   background: var(--rui-color-bg);            /* neutral-1, flat — no gradient */
 }
-:host([data-rui-theme="corporate"][transparent]),
-:host([data-rui-theme="corporate"][transparent="true"]) {
+:host([data-rui-theme="vision"][transparent]),
+:host([data-rui-theme="vision"][transparent="true"]) {
   background: transparent;
 }
 
@@ -5099,25 +5101,25 @@ ${below("xs")} {
    large-heavy) is Overpass; third-level tier (16px: section/card headings)
    is Open Sans Semibold — UI block switches FAMILY at the third-level boundary,
    not just weight. */
-:host([data-rui-theme="corporate"]) .rui-page-header-title,
-:host([data-rui-theme="corporate"]) .rui-text[data-variant="title"],
-:host([data-rui-theme="corporate"]) .rui-text[data-variant="large-heavy"],
-:host([data-rui-theme="corporate"]) .rui-text[data-variant="heading"],
-:host([data-rui-theme="corporate"]) .rui-heading {
+:host([data-rui-theme="vision"]) .rui-page-header-title,
+:host([data-rui-theme="vision"]) .rui-text[data-variant="title"],
+:host([data-rui-theme="vision"]) .rui-text[data-variant="large-heavy"],
+:host([data-rui-theme="vision"]) .rui-text[data-variant="heading"],
+:host([data-rui-theme="vision"]) .rui-heading {
   color: var(--rui-color-text);               /* corporate-8 #001b41 · --default-text-color */
   font-family: var(--rui-font-family-heading); /* Overpass Semibold · second-level-headline-family */
   font-weight: 600;
   letter-spacing: 0;
 }
-:host([data-rui-theme="corporate"]) .rui-section-title,
-:host([data-rui-theme="corporate"]) .rui-section-header-title {
+:host([data-rui-theme="vision"]) .rui-section-title,
+:host([data-rui-theme="vision"]) .rui-section-header-title {
   color: var(--rui-color-text);
   font-family: var(--rui-font-family);        /* Open Sans Semibold · third-level-headline-family */
   font-weight: 600;
   letter-spacing: 0;
 }
 
-:host([data-rui-theme="corporate"]) .rui-page-header-title-line .rui-badge{
+:host([data-rui-theme="vision"]) .rui-page-header-title-line .rui-badge{
   margin-bottom: 16px;
 }
 
@@ -5128,8 +5130,8 @@ ${below("xs")} {
      L2  22px / 30px  Overpass Semibold  → card + section headlines
      L3  16px / 24px  Open Sans Semibold → sub-headings
    Aktion's own ladder is mapped onto those three rungs here. */
-:host([data-rui-theme="corporate"]) .rui-page-header-title,
-:host([data-rui-theme="corporate"]) .rui-heading[data-size="section"] {
+:host([data-rui-theme="vision"]) .rui-page-header-title,
+:host([data-rui-theme="vision"]) .rui-heading[data-size="section"] {
   font-family: var(--rui-font-family-heading);
   font-size: var(--rui-font-size-32);
   line-height: 42px;
@@ -5138,12 +5140,12 @@ ${below("xs")} {
   color: var(--rui-color-text);
   margin: 0 0 16px;
 }
-:host([data-rui-theme="corporate"]) .rui-heading[data-size="lg"] {
+:host([data-rui-theme="vision"]) .rui-heading[data-size="lg"] {
   font-family: var(--rui-font-family-heading);
   font-size: var(--rui-font-size-title); line-height: 30px; font-weight: 600; letter-spacing: 0;
 }
-:host([data-rui-theme="corporate"]) .rui-heading[data-size="md"],
-:host([data-rui-theme="corporate"]) .rui-heading[data-size="sm"] {
+:host([data-rui-theme="vision"]) .rui-heading[data-size="md"],
+:host([data-rui-theme="vision"]) .rui-heading[data-size="sm"] {
   font-family: var(--rui-font-family);         /* L3 drops to Open Sans Semibold */
   font-size: var(--rui-font-size-lg); line-height: 24px; font-weight: 600; letter-spacing: 0;
 }
@@ -5151,7 +5153,7 @@ ${below("xs")} {
    measured against the live framework (card.scss:578-583), not the
    third-level tier. Subheadline is third-level: 16px Open Sans SB / 24px.
    Neither is ever muted grey. */
-:host([data-rui-theme="corporate"]) .rui-card-title {
+:host([data-rui-theme="vision"]) .rui-card-title {
   color: #001b41;                              /* --default-text-color */
   font-family: var(--rui-font-family-heading); /* OverpassSemibold */
   font-size: var(--rui-font-size-title);
@@ -5159,7 +5161,7 @@ ${below("xs")} {
   font-weight: 600;
   margin-bottom: 12px;
 }
-:host([data-rui-theme="corporate"]) .rui-card-subtitle {
+:host([data-rui-theme="vision"]) .rui-card-subtitle {
   color: #001b41;
   font-family: var(--rui-font-family);         /* Open Sans Semibold tier */
   font-size: var(--rui-font-size-lg);
@@ -5168,7 +5170,7 @@ ${below("xs")} {
 }
 /* Card eyebrow (UI block "card__preheadline") — sits above the headline, plain
    14px/20px body text, never muted. */
-:host([data-rui-theme="corporate"]) .rui-card-eyebrow {
+:host([data-rui-theme="vision"]) .rui-card-eyebrow {
   color: #001b41;
   font-family: var(--rui-font-family);
   font-size: var(--rui-font-size-base);
@@ -5183,31 +5185,31 @@ ${below("xs")} {
    UI block's --card-shadow/--card-border resolve to none/0 unconditionally, so
    "elevated"/"outlined" modifiers (which Aktion invents, UI block has neither)
    are neutralised rather than left to add fake depth. */
-:host([data-rui-theme="corporate"]) .rui-card,
-:host([data-rui-theme="corporate"]) .rui-stat-card,
-:host([data-rui-theme="corporate"]) .rui-metric,
-:host([data-rui-theme="corporate"]) .rui-tile,
-:host([data-rui-theme="corporate"]) .rui-table-wrapper,
-:host([data-rui-theme="corporate"]) .rui-chart {
+:host([data-rui-theme="vision"]) .rui-card,
+:host([data-rui-theme="vision"]) .rui-stat-card,
+:host([data-rui-theme="vision"]) .rui-metric,
+:host([data-rui-theme="vision"]) .rui-tile,
+:host([data-rui-theme="vision"]) .rui-table-wrapper,
+:host([data-rui-theme="vision"]) .rui-chart {
   background: var(--rui-color-surface);
   border: none;
   box-shadow: none;
   border-radius: var(--rui-radius-lg);        /* 16px */
   transition: background var(--rui-transition-duration) ease-out, box-shadow 200ms ease-out;
 }
-:host([data-rui-theme="corporate"]) .rui-card[data-variant="elevated"],
-:host([data-rui-theme="corporate"]) .rui-card[data-variant="outlined"] { box-shadow: none; border: none; }
+:host([data-rui-theme="vision"]) .rui-card[data-variant="elevated"],
+:host([data-rui-theme="vision"]) .rui-card[data-variant="outlined"] { box-shadow: none; border: none; }
 
 /* UI block has no 500 rung at all -- its ladder is 400 (Regular file) and 600
    (SemiBold file). Aktion's base rules use 500 as a "medium" in several places,
    which renders as a weight UI block never produces. Pull those onto 400 where UI block
    uses body copy. Verified against the compiled CDN sheet: .pagination__list-item a
    and .tooltip__element both inherit the 400 default-font-regular. */
-:host([data-rui-theme="corporate"]) .rui-pagination-button,
-:host([data-rui-theme="corporate"]) .rui-pagination-current,
-:host([data-rui-theme="corporate"]) .rui-tooltip-content,
-:host([data-rui-theme="corporate"]) .rui-field-error,
-:host([data-rui-theme="corporate"]) .rui-data-grid-page-button { font-weight: 400; }
+:host([data-rui-theme="vision"]) .rui-pagination-button,
+:host([data-rui-theme="vision"]) .rui-pagination-current,
+:host([data-rui-theme="vision"]) .rui-tooltip-content,
+:host([data-rui-theme="vision"]) .rui-field-error,
+:host([data-rui-theme="vision"]) .rui-data-grid-page-button { font-weight: 400; }
 
 /* ---- Typography weight ladder — the systemic "reads bolder" cause ------
    UI block's reset puts h1-h6 at "font: inherit", so an UI block heading is weight 400 and
@@ -5218,34 +5220,34 @@ ${below("xs")} {
    800) on a dozen title roles -- roughly 21-30% more ink at the same size, which
    is what made every card, dialog and stripe read heavier than UI block.
    ------------------------------------------------------------------------- */
-:host([data-rui-theme="corporate"]) h1,
-:host([data-rui-theme="corporate"]) h2,
-:host([data-rui-theme="corporate"]) h3,
-:host([data-rui-theme="corporate"]) h4,
-:host([data-rui-theme="corporate"]) h5,
-:host([data-rui-theme="corporate"]) h6 { font-weight: inherit; }
+:host([data-rui-theme="vision"]) h1,
+:host([data-rui-theme="vision"]) h2,
+:host([data-rui-theme="vision"]) h3,
+:host([data-rui-theme="vision"]) h4,
+:host([data-rui-theme="vision"]) h5,
+:host([data-rui-theme="vision"]) h6 { font-weight: inherit; }
 
 /* UI block deliberately resets strong back to 400 and lets the SemiBold FILE carry the
    emphasis; with a weight-tagged family the equivalent is 600, not the UA's 700. */
-:host([data-rui-theme="corporate"]) strong,
-:host([data-rui-theme="corporate"]) b { font-weight: 600; }
+:host([data-rui-theme="vision"]) strong,
+:host([data-rui-theme="vision"]) b { font-weight: 600; }
 
 /* Every remaining title role onto the SemiBold rung. */
-:host([data-rui-theme="corporate"]) .rui-form-section-label,
-:host([data-rui-theme="corporate"]) .rui-topbar-title,
-:host([data-rui-theme="corporate"]) .rui-media-card-title,
-:host([data-rui-theme="corporate"]) .rui-product-title,
-:host([data-rui-theme="corporate"]) .rui-onboarding-checklist-title,
-:host([data-rui-theme="corporate"]) .rui-loading-state-title,
-:host([data-rui-theme="corporate"]) .rui-tour-title,
-:host([data-rui-theme="corporate"]) .rui-spotlight-title,
-:host([data-rui-theme="corporate"]) .rui-confirm-title { font-weight: 600; }
-:host([data-rui-theme="corporate"]) .rui-confirm-title { font-size: var(--rui-font-size-lg); line-height: 24px; }
+:host([data-rui-theme="vision"]) .rui-form-section-label,
+:host([data-rui-theme="vision"]) .rui-topbar-title,
+:host([data-rui-theme="vision"]) .rui-media-card-title,
+:host([data-rui-theme="vision"]) .rui-product-title,
+:host([data-rui-theme="vision"]) .rui-onboarding-checklist-title,
+:host([data-rui-theme="vision"]) .rui-loading-state-title,
+:host([data-rui-theme="vision"]) .rui-tour-title,
+:host([data-rui-theme="vision"]) .rui-spotlight-title,
+:host([data-rui-theme="vision"]) .rui-confirm-title { font-weight: 600; }
+:host([data-rui-theme="vision"]) .rui-confirm-title { font-size: var(--rui-font-size-lg); line-height: 24px; }
 
 /* UI block's FIRST-level headline is Overpass REGULAR at 400 -- the biggest overshoot
    was at the largest size, where it shows most. */
-:host([data-rui-theme="corporate"]) .rui-hero-title,
-:host([data-rui-theme="corporate"]) .rui-cover-title {
+:host([data-rui-theme="vision"]) .rui-hero-title,
+:host([data-rui-theme="vision"]) .rui-cover-title {
   font-family: var(--rui-font-family-heading);
   font-weight: 400;
   letter-spacing: 0;
@@ -5253,16 +5255,16 @@ ${below("xs")} {
 
 /* The page-header subheadline is the one role that was too LIGHT: it is UI block's
    SECOND-level role (OverpassSemibold), not regular. */
-:host([data-rui-theme="corporate"]) .rui-page-header-subtitle { font-weight: 600; }
+:host([data-rui-theme="vision"]) .rui-page-header-subtitle { font-weight: 600; }
 
 /* Sheet headline is the THIRD-level role, 16/24 SemiBold. Overrides a duplicate
    17px/700 declaration further down this sheet that would otherwise win on order. */
-:host([data-rui-theme="corporate"]) .rui-sheet-title {
+:host([data-rui-theme="vision"]) .rui-sheet-title {
   font-size: var(--rui-font-size-lg); line-height: 24px; font-weight: 600;
 }
 
 /* UI block never uppercases or letter-spaces a heading, and never exceeds SemiBold. */
-:host([data-rui-theme="corporate"]) .rui-footer-col h5 {
+:host([data-rui-theme="vision"]) .rui-footer-col h5 {
   font-weight: 600; text-transform: none; letter-spacing: 0;
   font-size: var(--rui-font-size-base);
 }
@@ -5271,29 +5273,29 @@ ${below("xs")} {
    the same glyphs at the same weight look thicker under macOS subpixel smoothing,
    which is part of why titles read heavier. Scoped to those roles only; UI block leaves
    card titles, buttons and body copy at the default. */
-:host([data-rui-theme="corporate"]) .rui-heading,
-:host([data-rui-theme="corporate"]) .rui-section-title,
-:host([data-rui-theme="corporate"]) .rui-page-header-title,
-:host([data-rui-theme="corporate"]) .rui-page-header-subtitle,
-:host([data-rui-theme="corporate"]) .rui-hero-title,
-:host([data-rui-theme="corporate"]) .rui-cover-title,
-:host([data-rui-theme="corporate"]) .rui-modal-title,
-:host([data-rui-theme="corporate"]) .rui-callout-title {
+:host([data-rui-theme="vision"]) .rui-heading,
+:host([data-rui-theme="vision"]) .rui-section-title,
+:host([data-rui-theme="vision"]) .rui-page-header-title,
+:host([data-rui-theme="vision"]) .rui-page-header-subtitle,
+:host([data-rui-theme="vision"]) .rui-hero-title,
+:host([data-rui-theme="vision"]) .rui-cover-title,
+:host([data-rui-theme="vision"]) .rui-modal-title,
+:host([data-rui-theme="vision"]) .rui-callout-title {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 /* Modal titles had no weight rule at all, so they took the UA's 700. */
-:host([data-rui-theme="corporate"]) .rui-modal-title { font-weight: 600; }
+:host([data-rui-theme="vision"]) .rui-modal-title { font-weight: 600; }
 
 /* Prose / rich-text / sidebar-section headings were all falling through to 700. */
-:host([data-rui-theme="corporate"]) .rui-prose h1,
-:host([data-rui-theme="corporate"]) .rui-prose h2,
-:host([data-rui-theme="corporate"]) .rui-prose h3,
-:host([data-rui-theme="corporate"]) .rui-rich-text h1,
-:host([data-rui-theme="corporate"]) .rui-rich-text h2,
-:host([data-rui-theme="corporate"]) .rui-rich-text h3,
-:host([data-rui-theme="corporate"]) .rui-sidebar-section-label { font-weight: 600; }
+:host([data-rui-theme="vision"]) .rui-prose h1,
+:host([data-rui-theme="vision"]) .rui-prose h2,
+:host([data-rui-theme="vision"]) .rui-prose h3,
+:host([data-rui-theme="vision"]) .rui-rich-text h1,
+:host([data-rui-theme="vision"]) .rui-rich-text h2,
+:host([data-rui-theme="vision"]) .rui-rich-text h3,
+:host([data-rui-theme="vision"]) .rui-sidebar-section-label { font-weight: 600; }
 
 /* ---- Overlay / navigation / menu type sizes ----------------------------
    Aktion's base rules put several chrome elements at 13px, but UI block has no 13px
@@ -5303,7 +5305,7 @@ ${below("xs")} {
 
 /* UI block's page-header subheadline is the SECOND-level headline: 22/30 Overpass
    Semibold, not body copy (page-header.scss:173-178 -> default.scss:35-36). */
-:host([data-rui-theme="corporate"]) .rui-page-header-subtitle {
+:host([data-rui-theme="vision"]) .rui-page-header-subtitle {
   font-family: var(--rui-font-family-heading);
   font-size: var(--rui-font-size-title);
   line-height: 30px;
@@ -5312,26 +5314,26 @@ ${below("xs")} {
 }
 
 /* UI block dialog headlines are .headline--sub = THIRD level, 16/24 (default.scss:38-39). */
-:host([data-rui-theme="corporate"]) .rui-modal-title {
+:host([data-rui-theme="vision"]) .rui-modal-title {
   font-size: var(--rui-font-size-lg);
   line-height: 24px;
 }
 
 /* Context-menu links and popover body copy are plain 14px default text
    (context-menu.scss:277-287, and UI block's popover title is .paragraph--bold). */
-:host([data-rui-theme="corporate"]) .rui-menu-item,
-:host([data-rui-theme="corporate"]) .rui-menu-item-label,
-:host([data-rui-theme="corporate"]) .rui-popover-title {
+:host([data-rui-theme="vision"]) .rui-menu-item,
+:host([data-rui-theme="vision"]) .rui-menu-item-label,
+:host([data-rui-theme="vision"]) .rui-popover-title {
   font-size: var(--rui-font-size-base);
 }
 
 /* Left navigation: first level 16px, second level 14px, both 22px line-height
    (left-navigation.scss:476-482 / 575-580 -> default.scss:487-488). */
-:host([data-rui-theme="corporate"]) .rui-sidebar-item {
+:host([data-rui-theme="vision"]) .rui-sidebar-item {
   font-size: var(--rui-font-size-lg);
   line-height: 22px;
 }
-:host([data-rui-theme="corporate"]) .rui-sidebar-section .rui-sidebar-item {
+:host([data-rui-theme="vision"]) .rui-sidebar-section .rui-sidebar-item {
   font-size: var(--rui-font-size-base);
   line-height: 22px;
 }
@@ -5352,11 +5354,11 @@ ${below("xs")} {
    On white that reads as a brighter, lower-contrast green than UI block's. Same
    distinction the Callout fix turned on: fills use level 3/4, text uses 5/6.
    ---------------------------------------------------------------------- */
-:host([data-rui-theme="corporate"]) .rui-text[data-color="success"] { color: #096b35; }   /* success-6 */
-:host([data-rui-theme="corporate"]) .rui-text[data-color="warning"] { color: #8e4e00; }   /* warning-6 */
-:host([data-rui-theme="corporate"]) .rui-text[data-color="danger"]  { color: #c80a00; }   /* critical-5 */
-:host([data-rui-theme="corporate"]) .rui-text[data-color="muted"]   { color: #465a75; }   /* neutral-6 */
-:host([data-rui-theme="corporate"]) .rui-text[data-color="primary"] { color: #1474c4; }   /* corporate-4 */
+:host([data-rui-theme="vision"]) .rui-text[data-color="success"] { color: #096b35; }   /* success-6 */
+:host([data-rui-theme="vision"]) .rui-text[data-color="warning"] { color: #8e4e00; }   /* warning-6 */
+:host([data-rui-theme="vision"]) .rui-text[data-color="danger"]  { color: #c80a00; }   /* critical-5 */
+:host([data-rui-theme="vision"]) .rui-text[data-color="muted"]   { color: #465a75; }   /* neutral-6 */
+:host([data-rui-theme="vision"]) .rui-text[data-color="primary"] { color: #1474c4; }   /* corporate-4 */
 
 /* ---- Field bylines (UI block input-byline) ----------------------------------
    UI block sets no font-size on .input-byline, so validation copy inherits the 14px
@@ -5364,15 +5366,15 @@ ${below("xs")} {
    base rule shrinks it to 12.5px/500 and uses the brighter critical fill colour,
    which reads as a different, smaller message than UI block's.
    ---------------------------------------------------------------------- */
-:host([data-rui-theme="corporate"]) .rui-field-error {
+:host([data-rui-theme="vision"]) .rui-field-error {
   font-size: var(--rui-font-size-base);        /* 14px, inherited in UI block */
   line-height: 24px;
   font-weight: 400;
   color: #c80a00;                              /* critical-5 · critical-text-color */
   margin-top: 6px;
 }
-:host([data-rui-theme="corporate"]) .rui-field-hint,
-:host([data-rui-theme="corporate"]) .rui-form-hint {
+:host([data-rui-theme="vision"]) .rui-field-hint,
+:host([data-rui-theme="vision"]) .rui-form-hint {
   font-size: var(--rui-font-size-base);
   line-height: 24px;
   margin-top: 6px;
@@ -5380,9 +5382,9 @@ ${below("xs")} {
 
 /* Truncated copy keeps the UI block 14/24 body rhythm, so a single clipped line is the
    same 24px tall as the paragraph it replaces (Aktion's base left it at 20px). */
-:host([data-rui-theme="corporate"]) .rui-truncate-text { line-height: 24px; }
+:host([data-rui-theme="vision"]) .rui-truncate-text { line-height: 24px; }
 
-:host([data-rui-theme="corporate"]) .rui-toolbar {
+:host([data-rui-theme="vision"]) .rui-toolbar {
   background: var(--rui-color-surface);        /* white, not bg-subtle */
   border: none;
   border-bottom: var(--rui-border-width) solid #bcc8d4;            /* neutral-3 · tertiary-shape-color */
@@ -5391,9 +5393,9 @@ ${below("xs")} {
   padding: 24px 16px;
   gap: 12px;
 }
-:host([data-rui-theme="corporate"]) button.rui-card:hover,
-:host([data-rui-theme="corporate"]) a.rui-card:hover,
-:host([data-rui-theme="corporate"]) .rui-card[data-clickable="true"]:hover {
+:host([data-rui-theme="vision"]) button.rui-card:hover,
+:host([data-rui-theme="vision"]) a.rui-card:hover,
+:host([data-rui-theme="vision"]) .rui-card[data-clickable="true"]:hover {
   background: #dbedf8;                         /* corporate-1 · --hovered-card-background-color */
 }
 
@@ -5404,7 +5406,7 @@ ${below("xs")} {
    left-aligned icon+text row, and the icon is a large bare glyph in
    interactive-blue with no background chip (tile.scss: font-size 64px /
    line-height 62.5px / margin 0 auto, colour --interactive-text-color). */
-:host([data-rui-theme="corporate"]) .rui-tile {
+:host([data-rui-theme="vision"]) .rui-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -5412,7 +5414,7 @@ ${below("xs")} {
   padding: 16px;
   gap: 0;
 }
-:host([data-rui-theme="corporate"]) .rui-tile-icon {
+:host([data-rui-theme="vision"]) .rui-tile-icon {
   background: transparent;
   color: var(--rui-color-link);
   width: auto;
@@ -5422,17 +5424,17 @@ ${below("xs")} {
   margin: 0 auto 4px;
   border-radius: 0;
 }
-:host([data-rui-theme="corporate"]) .rui-tile-body { align-items: center; text-align: center; }
-:host([data-rui-theme="corporate"]) .rui-tile-label { color: var(--rui-color-link); font-size: var(--rui-font-size-lg); line-height: 22px; margin: 4px auto; } /* interactive-text-color, third-level size */
-:host([data-rui-theme="corporate"]) .rui-tile-description { color: #001b41; font-size: var(--rui-font-size-base); line-height: 20px; margin: 4px auto; }           /* default-text-color, fourth-level size */
-:host([data-rui-theme="corporate"]) .rui-tile:hover { background: #dbedf8; transform: none; }            /* no lift — UI block tiles never move on hover */
-:host([data-rui-theme="corporate"]) .rui-tile:hover .rui-tile-icon { color: #095bb1; }                   /* hovered-interactive-text-color */
-:host([data-rui-theme="corporate"]) .rui-tile:hover .rui-tile-label,
-:host([data-rui-theme="corporate"]) .rui-tile:hover .rui-tile-description { color: #095bb1; }             /* hovered-interactive-text-color */
-:host([data-rui-theme="corporate"]) button.rui-tile:active,
-:host([data-rui-theme="corporate"]) a.rui-tile:active { transform: scale(0.98); }
-:host([data-rui-theme="corporate"]) button.rui-tile:focus-visible,
-:host([data-rui-theme="corporate"]) a.rui-tile:focus-visible {
+:host([data-rui-theme="vision"]) .rui-tile-body { align-items: center; text-align: center; }
+:host([data-rui-theme="vision"]) .rui-tile-label { color: var(--rui-color-link); font-size: var(--rui-font-size-lg); line-height: 22px; margin: 4px auto; } /* interactive-text-color, third-level size */
+:host([data-rui-theme="vision"]) .rui-tile-description { color: #001b41; font-size: var(--rui-font-size-base); line-height: 20px; margin: 4px auto; }           /* default-text-color, fourth-level size */
+:host([data-rui-theme="vision"]) .rui-tile:hover { background: #dbedf8; transform: none; }            /* no lift — UI block tiles never move on hover */
+:host([data-rui-theme="vision"]) .rui-tile:hover .rui-tile-icon { color: #095bb1; }                   /* hovered-interactive-text-color */
+:host([data-rui-theme="vision"]) .rui-tile:hover .rui-tile-label,
+:host([data-rui-theme="vision"]) .rui-tile:hover .rui-tile-description { color: #095bb1; }             /* hovered-interactive-text-color */
+:host([data-rui-theme="vision"]) button.rui-tile:active,
+:host([data-rui-theme="vision"]) a.rui-tile:active { transform: scale(0.98); }
+:host([data-rui-theme="vision"]) button.rui-tile:focus-visible,
+:host([data-rui-theme="vision"]) a.rui-tile:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--rui-color-focus-ring);
 }
@@ -5442,7 +5444,7 @@ ${below("xs")} {
    fills; ghost/link = blue text, no border, shorter box; disabled = SAME
    colour at opacity 0.62 (UI block never recolors disabled — verified: the only
    disabled rule in the entire framework is "opacity: 0.62; cursor: not-allowed"). */
-:host([data-rui-theme="corporate"]) .rui-button {
+:host([data-rui-theme="vision"]) .rui-button {
   /* 24px, not 999px: on a 36px-tall button both clamp to the same pill, but
      UI block deliberately keeps 24px so TALLER buttons (wrapped label, lg size,
      full-width) stay softly rounded instead of becoming a stadium. */
@@ -5459,54 +5461,54 @@ ${below("xs")} {
   box-shadow: none;
   transition: background var(--rui-transition-duration) ease-out, border-color var(--rui-transition-duration) ease-out, color var(--rui-transition-duration) ease-out;
 }
-:host([data-rui-theme="corporate"]) .rui-button:hover:not(:disabled) {
+:host([data-rui-theme="vision"]) .rui-button:hover:not(:disabled) {
   background: var(--rui-color-primary-hover);  /* corporate-4 — brighter */
   border-color: var(--rui-color-primary-hover);
   color: #fff;
   box-shadow: none;
 }
-:host([data-rui-theme="corporate"]) .rui-button:active:not(:disabled) { transform: none; }
-:host([data-rui-theme="corporate"]) .rui-button:focus-visible {
+:host([data-rui-theme="vision"]) .rui-button:active:not(:disabled) { transform: none; }
+:host([data-rui-theme="vision"]) .rui-button:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--rui-color-focus-ring);
 }
-:host([data-rui-theme="corporate"]) .rui-button:disabled {
+:host([data-rui-theme="vision"]) .rui-button:disabled {
   opacity: 0.62; /* button.scss:147-150 — never recolor, opacity only */
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="secondary"],
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="outline"] {
+:host([data-rui-theme="vision"]) .rui-button[data-variant="secondary"],
+:host([data-rui-theme="vision"]) .rui-button[data-variant="outline"] {
   background: transparent; border-color: var(--rui-color-primary); color: var(--rui-color-primary);
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="secondary"]:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="outline"]:hover:not(:disabled) {
+:host([data-rui-theme="vision"]) .rui-button[data-variant="secondary"]:hover:not(:disabled),
+:host([data-rui-theme="vision"]) .rui-button[data-variant="outline"]:hover:not(:disabled) {
   background: var(--rui-color-primary); border-color: var(--rui-color-primary); color: #fff;
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"],
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="link"] {
+:host([data-rui-theme="vision"]) .rui-button[data-variant="ghost"],
+:host([data-rui-theme="vision"]) .rui-button[data-variant="link"] {
   background: transparent; border-color: transparent; color: var(--rui-color-link);
   padding: 4px var(--rui-button-padding-x); min-height: 28px; /* ghost-button.scss: no border, shorter box */
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
+:host([data-rui-theme="vision"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
   background: #dbedf8; border-color: transparent; color: #095bb1;       /* corporate-1 / -5 */
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="link"]:hover:not(:disabled) {
+:host([data-rui-theme="vision"]) .rui-button[data-variant="link"]:hover:not(:disabled) {
   background: transparent; text-decoration: underline; color: #095bb1;
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"]:focus-visible,
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="link"]:focus-visible {
+:host([data-rui-theme="vision"]) .rui-button[data-variant="ghost"]:focus-visible,
+:host([data-rui-theme="vision"]) .rui-button[data-variant="link"]:focus-visible {
   box-shadow: 0 0 0 2px inset var(--rui-color-accent); /* ghost-button.scss: inset ring, no white gap (nothing to gap against) */
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"]:disabled,
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="link"]:disabled { opacity: 0.38; } /* ghost-button.scss:153-156 */
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="danger"] {
+:host([data-rui-theme="vision"]) .rui-button[data-variant="ghost"]:disabled,
+:host([data-rui-theme="vision"]) .rui-button[data-variant="link"]:disabled { opacity: 0.38; } /* ghost-button.scss:153-156 */
+:host([data-rui-theme="vision"]) .rui-button[data-variant="danger"] {
   background: #c80a00; border-color: #c80a00; color: #fff;              /* critical-5 */
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="danger"]:hover:not(:disabled) {
+:host([data-rui-theme="vision"]) .rui-button[data-variant="danger"]:hover:not(:disabled) {
   background: #f50c00; border-color: #f50c00;                           /* critical-4 */
 }
 /* UI block spaces a button's icon from its label by 8px (button.scss:477-490) and
    trails the loading spinner by 12px; icon-only buttons are a fixed 36×36. */
-:host([data-rui-theme="corporate"]) .rui-button-icon {
+:host([data-rui-theme="vision"]) .rui-button-icon {
   margin-right: 8px;
   /* UI block's button__icon is a 16x16 SVG. Aktion renders a font glyph, whose box is
      the glyph's own advance width (12.25 x 14) -- narrower, so the label crept
@@ -5515,53 +5517,53 @@ ${below("xs")} {
   display: inline-flex; align-items: center; justify-content: center;
   flex: 0 0 auto; font-size: var(--rui-font-size-lg); line-height: 16px;
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-icon-position="trailing"] .rui-button-icon { margin-right: 0; margin-left: 8px; }
-:host([data-rui-theme="corporate"]) .rui-button-spinner { margin-right: 8px; }
-:host([data-rui-theme="corporate"]) .rui-button[data-icon-only="true"] {
+:host([data-rui-theme="vision"]) .rui-button[data-icon-position="trailing"] .rui-button-icon { margin-right: 0; margin-left: 8px; }
+:host([data-rui-theme="vision"]) .rui-button-spinner { margin-right: 8px; }
+:host([data-rui-theme="vision"]) .rui-button[data-icon-only="true"] {
   width: 36px; height: 36px; padding: 0 9px;
   align-items: center; justify-content: center;
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-icon-only="true"] .rui-button-icon,
-:host([data-rui-theme="corporate"]) .rui-button[data-icon-only="true"] .rui-button-spinner { margin: 0; }
-:host([data-rui-theme="corporate"]) .rui-buttons { gap: 12px; }
-:host([data-rui-theme="corporate"]) .rui-icon-button,
-:host([data-rui-theme="corporate"]) .rui-fab { border-radius: 999px; color: var(--rui-color-link); }
-:host([data-rui-theme="corporate"]) .rui-icon-button:hover:not(:disabled) { background: #dbedf8; color: #095bb1; }
-:host([data-rui-theme="corporate"]) .rui-icon-button:disabled { opacity: 0.38; }
+:host([data-rui-theme="vision"]) .rui-button[data-icon-only="true"] .rui-button-icon,
+:host([data-rui-theme="vision"]) .rui-button[data-icon-only="true"] .rui-button-spinner { margin: 0; }
+:host([data-rui-theme="vision"]) .rui-buttons { gap: 12px; }
+:host([data-rui-theme="vision"]) .rui-icon-button,
+:host([data-rui-theme="vision"]) .rui-fab { border-radius: 999px; color: var(--rui-color-link); }
+:host([data-rui-theme="vision"]) .rui-icon-button:hover:not(:disabled) { background: #dbedf8; color: #095bb1; }
+:host([data-rui-theme="vision"]) .rui-icon-button:disabled { opacity: 0.38; }
 /* follow-up chips — navy pill outline that fills on hover, same focus ring as button */
-:host([data-rui-theme="corporate"]) .rui-follow-up-button {
+:host([data-rui-theme="vision"]) .rui-follow-up-button {
   background: transparent; border: 2px solid var(--rui-color-primary);
   color: var(--rui-color-primary); border-radius: 999px; font-weight: 600;
 }
-:host([data-rui-theme="corporate"]) .rui-follow-up-button:hover {
+:host([data-rui-theme="vision"]) .rui-follow-up-button:hover {
   background: var(--rui-color-primary); border-color: var(--rui-color-primary); color: #fff;
 }
-:host([data-rui-theme="corporate"]) .rui-follow-up-button:focus-visible {
+:host([data-rui-theme="vision"]) .rui-follow-up-button:focus-visible {
   outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--rui-color-focus-ring);
 }
 /* toggle (pressed button) & segmented control — pill shape, pale-blue hover wash */
-:host([data-rui-theme="corporate"]) .rui-toggle:hover:not([data-state="on"]) { background: #dbedf8; color: #095bb1; }
-:host([data-rui-theme="corporate"]) .rui-toggle[data-state="on"] { background: #dbedf8; color: #095bb1; border-color: transparent; }
-:host([data-rui-theme="corporate"]) .rui-segmented-control { border-radius: 999px; background: #f4f7fa; border-color: var(--rui-color-border); }
-:host([data-rui-theme="corporate"]) .rui-segmented-control-option { border-radius: 999px; color: var(--rui-color-text-muted); }
-:host([data-rui-theme="corporate"]) .rui-segmented-control-option:hover:not([data-active="true"]):not([aria-selected="true"]) { color: var(--rui-color-link); }
-:host([data-rui-theme="corporate"]) .rui-segmented-control-option[data-active="true"],
-:host([data-rui-theme="corporate"]) .rui-segmented-control-option[aria-selected="true"] { background: #fff; color: #0b2a63; }
+:host([data-rui-theme="vision"]) .rui-toggle:hover:not([data-state="on"]) { background: #dbedf8; color: #095bb1; }
+:host([data-rui-theme="vision"]) .rui-toggle[data-state="on"] { background: #dbedf8; color: #095bb1; border-color: transparent; }
+:host([data-rui-theme="vision"]) .rui-segmented-control { border-radius: 999px; background: #f4f7fa; border-color: var(--rui-color-border); }
+:host([data-rui-theme="vision"]) .rui-segmented-control-option { border-radius: 999px; color: var(--rui-color-text-muted); }
+:host([data-rui-theme="vision"]) .rui-segmented-control-option:hover:not([data-active="true"]):not([aria-selected="true"]) { color: var(--rui-color-link); }
+:host([data-rui-theme="vision"]) .rui-segmented-control-option[data-active="true"],
+:host([data-rui-theme="vision"]) .rui-segmented-control-option[aria-selected="true"] { background: #fff; color: #0b2a63; }
 
 /* ---- Links — interactive blue; UI block never darkens on hover/active, it only
    adds an underline. Focus draws an outline "chip" that expands past the glyphs.
    Every accent-as-TEXT declaration in this block reads --rui-color-link, which
    defaults to the accent — so corporate-4 #1474c4 is unchanged — but keeps the
    text side separate from the accent's fill/border duties. */
-:host([data-rui-theme="corporate"]) .rui-link { color: var(--rui-color-link); font-weight: 400; text-decoration: none; }
+:host([data-rui-theme="vision"]) .rui-link { color: var(--rui-color-link); font-weight: 400; text-decoration: none; }
 /* UI block ".link--action" is an un-underlined interactive-blue link with a
    leading chevron glyph (link.scss) — not a navy underlined link. */
-:host([data-rui-theme="corporate"]) .rui-action-link {
+:host([data-rui-theme="vision"]) .rui-action-link {
   color: var(--rui-color-link);
   text-decoration: none;
   line-height: 20px;
 }
-:host([data-rui-theme="corporate"]) .rui-action-link::before {
+:host([data-rui-theme="vision"]) .rui-action-link::before {
   content: "";
   display: inline-block;
   width: 0.36em;
@@ -5572,10 +5574,10 @@ ${below("xs")} {
   border-bottom: 2px solid currentColor;
   transform: rotate(-45deg);
 }
-:host([data-rui-theme="corporate"]) .rui-action-link:hover { color: #095bb1; text-decoration: underline; }
-:host([data-rui-theme="corporate"]) .rui-link:hover,
-:host([data-rui-theme="corporate"]) .rui-link:active { color: var(--rui-color-link); text-decoration: underline; }
-:host([data-rui-theme="corporate"]) .rui-link:focus-visible {
+:host([data-rui-theme="vision"]) .rui-action-link:hover { color: #095bb1; text-decoration: underline; }
+:host([data-rui-theme="vision"]) .rui-link:hover,
+:host([data-rui-theme="vision"]) .rui-link:active { color: var(--rui-color-link); text-decoration: underline; }
+:host([data-rui-theme="vision"]) .rui-link:focus-visible {
   outline: 2px solid var(--rui-color-accent); outline-offset: 2px; border-radius: 2px;
 }
 
@@ -5583,9 +5585,9 @@ ${below("xs")} {
    focus draw a crisp blue border + 1px outline (no soft glow). Invalid
    (data-invalid) fields stay critical-red on hover/focus too — UI block never
    lets the blue interaction state override an error border. */
-:host([data-rui-theme="corporate"]) .rui-input,
-:host([data-rui-theme="corporate"]) .rui-select,
-:host([data-rui-theme="corporate"]) .rui-textarea {
+:host([data-rui-theme="vision"]) .rui-input,
+:host([data-rui-theme="vision"]) .rui-select,
+:host([data-rui-theme="vision"]) .rui-textarea {
   background: transparent;
   border: var(--rui-border-width) solid #718095;                  /* neutral-5 · --secondary-shape-color */
   border-radius: var(--rui-radius-input);     /* 8px */
@@ -5593,12 +5595,12 @@ ${below("xs")} {
   box-sizing: border-box;
   transition: border-color var(--rui-transition-duration) ease-out, outline-color var(--rui-transition-duration) ease-out;
 }
-:host([data-rui-theme="corporate"]) .rui-input:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-select:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-textarea:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-input:focus,
-:host([data-rui-theme="corporate"]) .rui-select:focus,
-:host([data-rui-theme="corporate"]) .rui-textarea:focus {
+:host([data-rui-theme="vision"]) .rui-input:hover:not(:disabled),
+:host([data-rui-theme="vision"]) .rui-select:hover:not(:disabled),
+:host([data-rui-theme="vision"]) .rui-textarea:hover:not(:disabled),
+:host([data-rui-theme="vision"]) .rui-input:focus,
+:host([data-rui-theme="vision"]) .rui-select:focus,
+:host([data-rui-theme="vision"]) .rui-textarea:focus {
   border-color: var(--rui-color-focus-ring);  /* corporate-4 */
   outline: 1px solid var(--rui-color-focus-ring);
   box-shadow: none;
@@ -5607,69 +5609,69 @@ ${below("xs")} {
    (--input-text-height / --input-select-height = 36px), not by padding, so
    Aktion's padding-derived 38-39px boxes need pinning. The touch-target
    media query's min-height still wins on coarse pointers, as it should. */
-:host([data-rui-theme="corporate"]) .rui-input,
-:host([data-rui-theme="corporate"]) .rui-select { height: 36px; }
-:host([data-rui-theme="corporate"]) .rui-textarea:hover:not(:disabled) { background: #dbedf8; } /* textarea-only quirk: pale-blue tint on hover */
-:host([data-rui-theme="corporate"]) .rui-input:disabled,
-:host([data-rui-theme="corporate"]) .rui-select:disabled,
-:host([data-rui-theme="corporate"]) .rui-textarea:disabled { color: #718095; opacity: 1; cursor: not-allowed; } /* tertiary-text-color, no fade */
-:host([data-rui-theme="corporate"]) .rui-input::placeholder,
-:host([data-rui-theme="corporate"]) .rui-select::placeholder,
-:host([data-rui-theme="corporate"]) .rui-textarea::placeholder { color: var(--rui-color-text-muted); }
-:host([data-rui-theme="corporate"]) .rui-field[data-invalid="true"] .rui-input,
-:host([data-rui-theme="corporate"]) .rui-field[data-invalid="true"] .rui-select,
-:host([data-rui-theme="corporate"]) .rui-field[data-invalid="true"] .rui-textarea,
-:host([data-rui-theme="corporate"]) .rui-field[data-invalid="true"] .rui-number-input {
+:host([data-rui-theme="vision"]) .rui-input,
+:host([data-rui-theme="vision"]) .rui-select { height: 36px; }
+:host([data-rui-theme="vision"]) .rui-textarea:hover:not(:disabled) { background: #dbedf8; } /* textarea-only quirk: pale-blue tint on hover */
+:host([data-rui-theme="vision"]) .rui-input:disabled,
+:host([data-rui-theme="vision"]) .rui-select:disabled,
+:host([data-rui-theme="vision"]) .rui-textarea:disabled { color: #718095; opacity: 1; cursor: not-allowed; } /* tertiary-text-color, no fade */
+:host([data-rui-theme="vision"]) .rui-input::placeholder,
+:host([data-rui-theme="vision"]) .rui-select::placeholder,
+:host([data-rui-theme="vision"]) .rui-textarea::placeholder { color: var(--rui-color-text-muted); }
+:host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-input,
+:host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-select,
+:host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-textarea,
+:host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-number-input {
   border-color: #ff6159; /* critical-shape-color */
 }
-:host([data-rui-theme="corporate"]) .rui-field[data-invalid="true"] .rui-input:hover,
-:host([data-rui-theme="corporate"]) .rui-field[data-invalid="true"] .rui-input:focus,
-:host([data-rui-theme="corporate"]) .rui-field[data-invalid="true"] .rui-select:hover,
-:host([data-rui-theme="corporate"]) .rui-field[data-invalid="true"] .rui-select:focus,
-:host([data-rui-theme="corporate"]) .rui-field[data-invalid="true"] .rui-textarea:focus {
+:host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-input:hover,
+:host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-input:focus,
+:host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-select:hover,
+:host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-select:focus,
+:host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-textarea:focus {
   border-color: #ff6159; outline: 1px solid #ff6159; box-shadow: none;
 }
 /* composite / grid inputs that ship a pill radius or navy focus in the base → UI block 8px + blue focus */
-:host([data-rui-theme="corporate"]) .rui-data-grid-filter,
-:host([data-rui-theme="corporate"]) .rui-search-bar-input,
-:host([data-rui-theme="corporate"]) .rui-combobox-filter,
-:host([data-rui-theme="corporate"]) .rui-inline-edit-input,
-:host([data-rui-theme="corporate"]) .rui-search-bar,
-:host([data-rui-theme="corporate"]) .rui-number-input,
-:host([data-rui-theme="corporate"]) .rui-password-input-field {
+:host([data-rui-theme="vision"]) .rui-data-grid-filter,
+:host([data-rui-theme="vision"]) .rui-search-bar-input,
+:host([data-rui-theme="vision"]) .rui-combobox-filter,
+:host([data-rui-theme="vision"]) .rui-inline-edit-input,
+:host([data-rui-theme="vision"]) .rui-search-bar,
+:host([data-rui-theme="vision"]) .rui-number-input,
+:host([data-rui-theme="vision"]) .rui-password-input-field {
   border-radius: var(--rui-radius-input);
   border-color: #718095;
 }
-:host([data-rui-theme="corporate"]) .rui-data-grid-filter:focus,
-:host([data-rui-theme="corporate"]) .rui-combobox-filter:focus,
-:host([data-rui-theme="corporate"]) .rui-search-bar:focus-within,
-:host([data-rui-theme="corporate"]) .rui-number-input:focus-within,
-:host([data-rui-theme="corporate"]) .rui-password-input-field:focus-within {
+:host([data-rui-theme="vision"]) .rui-data-grid-filter:focus,
+:host([data-rui-theme="vision"]) .rui-combobox-filter:focus,
+:host([data-rui-theme="vision"]) .rui-search-bar:focus-within,
+:host([data-rui-theme="vision"]) .rui-number-input:focus-within,
+:host([data-rui-theme="vision"]) .rui-password-input-field:focus-within {
   border-color: var(--rui-color-focus-ring); outline: 1px solid var(--rui-color-focus-ring); box-shadow: none;
 }
-:host([data-rui-theme="corporate"]) .rui-search-bar-submit { border-radius: 999px; } /* embeds a real .rui-button-like pill */
-:host([data-rui-theme="corporate"]) .rui-number-input-button,
-:host([data-rui-theme="corporate"]) .rui-password-input-toggle { color: var(--rui-color-link); }
-:host([data-rui-theme="corporate"]) .rui-number-input-button:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-password-input-toggle:hover { color: #095bb1; }
+:host([data-rui-theme="vision"]) .rui-search-bar-submit { border-radius: 999px; } /* embeds a real .rui-button-like pill */
+:host([data-rui-theme="vision"]) .rui-number-input-button,
+:host([data-rui-theme="vision"]) .rui-password-input-toggle { color: var(--rui-color-link); }
+:host([data-rui-theme="vision"]) .rui-number-input-button:hover:not(:disabled),
+:host([data-rui-theme="vision"]) .rui-password-input-toggle:hover { color: #095bb1; }
 /* form labels — Open Sans Semibold, primary-text-color (form/label.scss) */
-:host([data-rui-theme="corporate"]) .rui-field-label,
-:host([data-rui-theme="corporate"]) .rui-form-label,
-:host([data-rui-theme="corporate"]) .rui-checkbox-label,
-:host([data-rui-theme="corporate"]) .rui-radio-label,
-:host([data-rui-theme="corporate"]) .rui-switch-label { color: #02102b; font-weight: 600; line-height: 22px; }
+:host([data-rui-theme="vision"]) .rui-field-label,
+:host([data-rui-theme="vision"]) .rui-form-label,
+:host([data-rui-theme="vision"]) .rui-checkbox-label,
+:host([data-rui-theme="vision"]) .rui-radio-label,
+:host([data-rui-theme="vision"]) .rui-switch-label { color: #02102b; font-weight: 600; line-height: 22px; }
 /* UI block sets no font-size on .label, so it inherits the 14px body size, with a 22px
    line-height and 12px/4px margins. Aktion's base
    rule shrinks field labels to 13px. Scoped to FIELD labels only -- checkbox, radio
    and switch labels are plain 14/21 body copy and keep their own weight rule below. */
-:host([data-rui-theme="corporate"]) .rui-field-label,
-:host([data-rui-theme="corporate"]) .rui-form-label {
+:host([data-rui-theme="vision"]) .rui-field-label,
+:host([data-rui-theme="vision"]) .rui-form-label {
   font-size: var(--rui-font-size-base);
   line-height: 22px;
   margin-bottom: 4px;
 }
-:host([data-rui-theme="corporate"]) .rui-field-hint,
-:host([data-rui-theme="corporate"]) .rui-form-hint { color: var(--rui-color-text); } /* input-byline has no muted-gray rule — reads as normal body text */
+:host([data-rui-theme="vision"]) .rui-field-hint,
+:host([data-rui-theme="vision"]) .rui-form-hint { color: var(--rui-color-text); } /* input-byline has no muted-gray rule — reads as normal body text */
 
 /* ---- Checkbox & radio — corporate-5 2px border. Hover fills a pale preview
    tint + outer glow ring (does NOT recolor the border); focus draws a solid
@@ -5680,9 +5682,9 @@ ${below("xs")} {
    base control is a 20px box visually shrunk to 16px by transform:scale(.8),
    with an 8px flex gap — noticeably smaller and tighter, which is why the two
    read differently. Cancel the scale, use the real 17px, and open the gap. */
-:host([data-rui-theme="corporate"]) .rui-checkbox input[type="checkbox"],
-:host([data-rui-theme="corporate"]) .rui-checkbox-item input[type="checkbox"],
-:host([data-rui-theme="corporate"]) .rui-radio input[type="radio"] {
+:host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"],
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme="vision"]) .rui-radio input[type="radio"] {
   /* content-box: 17px of box + 2px border each side = a 21px marker, and the
      label sits 32px from its left edge -> an 11px gap. */
   box-sizing: content-box;
@@ -5691,14 +5693,14 @@ ${below("xs")} {
   transform: none;
   border-width: 2px; border-color: #095bb1; background: transparent;   /* corporate-5 */
 }
-:host([data-rui-theme="corporate"]) .rui-checkbox,
-:host([data-rui-theme="corporate"]) .rui-checkbox-item,
-:host([data-rui-theme="corporate"]) .rui-radio { gap: 11px; align-items: flex-start; }
+:host([data-rui-theme="vision"]) .rui-checkbox,
+:host([data-rui-theme="vision"]) .rui-checkbox-item,
+:host([data-rui-theme="vision"]) .rui-radio { gap: 11px; align-items: flex-start; }
 /* UI block lays choices out INLINE, wrapping when they run out of room -- its labels are
    bare inline elements with margin-right: 11px, and the real fieldset markup shows
    several on one line. Aktion stacks them by default. Wrapping (not nowrap) keeps long
    option labels readable, which is how UI block behaves too. */
-:host([data-rui-theme="corporate"]) .rui-radio-group {
+:host([data-rui-theme="vision"]) .rui-radio-group {
   flex-direction: row; flex-wrap: wrap;
   column-gap: 11px;
   row-gap: 0;                                  /* the item line-height IS the row advance in UI block */
@@ -5707,28 +5709,28 @@ ${below("xs")} {
 /* CheckboxGroup stays STACKED. Each of its items carries a label plus a description
    block, and flowing those inline squashes them into narrow columns -- which UI block never
    does. Only bare radios flow inline. */
-:host([data-rui-theme="corporate"]) .rui-checkbox-group {
+:host([data-rui-theme="vision"]) .rui-checkbox-group {
   flex-direction: column; flex-wrap: nowrap;
   column-gap: 0; row-gap: 8px; align-items: stretch;
 }
 /* UI block never bolds a control's label. */
-:host([data-rui-theme="corporate"]) .rui-checkbox-label,
-:host([data-rui-theme="corporate"]) .rui-radio-label { font-weight: 400; line-height: 21px; }
+:host([data-rui-theme="vision"]) .rui-checkbox-label,
+:host([data-rui-theme="vision"]) .rui-radio-label { font-weight: 400; line-height: 21px; }
 /* the CSS-drawn tick has to be re-centred for the larger, unscaled box */
-:host([data-rui-theme="corporate"]) .rui-checkbox input[type="checkbox"]:checked::after,
-:host([data-rui-theme="corporate"]) .rui-checkbox-item input[type="checkbox"]:checked::after {
+:host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:checked::after,
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked::after {
   left: 6px; top: 2px; width: 4px; height: 8px; border-width: 0 2px 2px 0;
 }
 /* UI block's radio has no separate centre-dot element at all -- the whole "filled" look
    is the box-shadow rings below, painted directly on the input. Aktion's base theme
-   draws a small ::after dot on top of a solid "background" fill; once the corporate
+   draws a small ::after dot on top of a solid "background" fill; once the vision
    fill is the box-shadow technique instead, that leftover dot would sit inside the
    solid centre and read as a punched-out hole. Remove it. */
-:host([data-rui-theme="corporate"]) .rui-radio input[type="radio"]::after {
+:host([data-rui-theme="vision"]) .rui-radio input[type="radio"]::after {
   content: none;
 }
-:host([data-rui-theme="corporate"]) .rui-checkbox input[type="checkbox"],
-:host([data-rui-theme="corporate"]) .rui-checkbox-item input[type="checkbox"] { border-radius: 4px; }
+:host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"],
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"] { border-radius: 4px; }
 /* UI block keeps the box TRANSPARENT when checked and draws the fill as two stacked
    inset rings, so a 2px page-coloured gap separates the border from the blue centre:
      .input-checkbox:checked+label::before {
@@ -5738,8 +5740,8 @@ ${below("xs")} {
    Filling the box edge-to-edge (what this theme did before) loses that gap and is the
    single most visible checkbox difference. The tick is the PAGE background colour
    #f4f7fa, not pure white. */
-:host([data-rui-theme="corporate"]) .rui-checkbox input[type="checkbox"]:checked,
-:host([data-rui-theme="corporate"]) .rui-checkbox-item input[type="checkbox"]:checked {
+:host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:checked,
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked {
   background: transparent; border-color: #095bb1;
   box-shadow: 0 0 0 2px inset #f4f7fa, 0 0 0 10px inset #095bb1;
 }
@@ -5751,31 +5753,31 @@ ${below("xs")} {
    Same two-ring technique as the checkbox fix, but the spacer ring is WHITE here,
    not the page background -- that is what UI block's own compiled CSS specifies for
    radio (input-checkbox uses --default-background-color, input-radio uses --white). */
-:host([data-rui-theme="corporate"]) .rui-radio input[type="radio"]:checked {
+:host([data-rui-theme="vision"]) .rui-radio input[type="radio"]:checked {
   background: transparent; border-color: #095bb1;
   box-shadow: 0 0 0 2px inset #fff, 0 0 0 10px inset #095bb1;
 }
-:host([data-rui-theme="corporate"]) .rui-checkbox input[type="checkbox"]:checked::after,
-:host([data-rui-theme="corporate"]) .rui-checkbox-item input[type="checkbox"]:checked::after {
+:host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:checked::after,
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked::after {
   border-color: #f4f7fa;                       /* tick = --default-background-color */
 }
 /* Checked + disabled swaps both rings to inactive neutral -- UI block never just fades it:
    box-shadow: 0 0 0 2px inset #f4f7fa, 0 0 0 10px inset #bcc8d4 */
-:host([data-rui-theme="corporate"]) .rui-checkbox input[type="checkbox"]:checked:disabled,
-:host([data-rui-theme="corporate"]) .rui-checkbox-item input[type="checkbox"]:checked:disabled {
+:host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:checked:disabled,
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked:disabled {
   border-color: #bcc8d4;
   box-shadow: 0 0 0 2px inset #f4f7fa, 0 0 0 10px inset #bcc8d4;
 }
-:host([data-rui-theme="corporate"]) .rui-checkbox input[type="checkbox"]:hover,
-:host([data-rui-theme="corporate"]) .rui-checkbox-item input[type="checkbox"]:hover,
-:host([data-rui-theme="corporate"]) .rui-radio input[type="radio"]:hover {
+:host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:hover,
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:hover,
+:host([data-rui-theme="vision"]) .rui-radio input[type="radio"]:hover {
   border-color: #095bb1; /* unchanged on hover */
 }
 /* UI block keeps the 2px gap ring on hover too, so the pale-blue preview core is inset
    rather than flooding to the border:
    box-shadow: 0 0 0 2px inset #f4f7fa, 0 0 0 10px inset #95caeb, 0 0 0 8px #dbedf8 */
-:host([data-rui-theme="corporate"]) .rui-checkbox input[type="checkbox"]:not(:disabled):not(:checked):hover,
-:host([data-rui-theme="corporate"]) .rui-checkbox-item input[type="checkbox"]:not(:disabled):not(:checked):hover {
+:host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:not(:disabled):not(:checked):hover,
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:not(:disabled):not(:checked):hover {
   background: transparent;
   box-shadow: 0 0 0 2px inset #f4f7fa, 0 0 0 10px inset #95caeb, 0 0 0 8px #dbedf8;
 }
@@ -5785,11 +5787,11 @@ ${below("xs")} {
    for that property. Consolidated into one rule per state, using the radio's own
    ground truth (".input-radio:not(:disabled)+label:hover::before" / the ":checked"
    variant), including a 7px glow -- radio's is 7px, checkbox's is 8px, per UI block. */
-:host([data-rui-theme="corporate"]) .rui-radio input[type="radio"]:not(:disabled):not(:checked):hover {
+:host([data-rui-theme="vision"]) .rui-radio input[type="radio"]:not(:disabled):not(:checked):hover {
   background: transparent;
   box-shadow: 0 0 0 2px inset #fff, 0 0 0 10px inset #95caeb, 0 0 0 7px #dbedf8;
 }
-:host([data-rui-theme="corporate"]) .rui-radio input[type="radio"]:checked:not(:disabled):hover {
+:host([data-rui-theme="vision"]) .rui-radio input[type="radio"]:checked:not(:disabled):hover {
   box-shadow: 0 0 0 2px inset #fff, 0 0 0 10px inset #095bb1, 0 0 0 7px #dbedf8;
 }
 /* UI block gives a disabled radio no HOVER REACTION -- not no fill. The previous
@@ -5797,18 +5799,18 @@ ${below("xs")} {
    selected-but-disabled option look unselected the moment the pointer passed over it.
    The ":checked" variant is more specific (one extra pseudo-class) so it always wins
    over the plain ":disabled:hover" rule below, regardless of source order. */
-:host([data-rui-theme="corporate"]) .rui-radio input[type="radio"]:disabled:hover,
-:host([data-rui-theme="corporate"]) .rui-radio:hover input[type="radio"]:disabled {
+:host([data-rui-theme="vision"]) .rui-radio input[type="radio"]:disabled:hover,
+:host([data-rui-theme="vision"]) .rui-radio:hover input[type="radio"]:disabled {
   background: transparent; box-shadow: none; border-color: #bcc8d4;
 }
-:host([data-rui-theme="corporate"]) .rui-radio input[type="radio"]:checked:disabled:hover,
-:host([data-rui-theme="corporate"]) .rui-radio:hover input[type="radio"]:checked:disabled {
+:host([data-rui-theme="vision"]) .rui-radio input[type="radio"]:checked:disabled:hover,
+:host([data-rui-theme="vision"]) .rui-radio:hover input[type="radio"]:checked:disabled {
   box-shadow: 0 0 0 2px inset #fff, 0 0 0 10px inset #bcc8d4;
 }
 /* Unchecked keyboard focus shows the same pale-preview fill UI block gives on hover, plus
    the 4px outer ring (input-radio.scss's plain ":focus-visible", not the ":checked"
    variant below). */
-:host([data-rui-theme="corporate"]) .rui-radio input[type="radio"]:not(:checked):focus-visible {
+:host([data-rui-theme="vision"]) .rui-radio input[type="radio"]:not(:checked):focus-visible {
   border-color: #095bb1;
   box-shadow: 0 0 0 2px inset #fff, 0 0 0 10px inset #95caeb, 0 0 0 4px #1474c4;
   outline: none;
@@ -5818,7 +5820,7 @@ ${below("xs")} {
    so tabbing to an already-selected option made it look deselected. UI block restates
    the full solid-fill rings before adding the focus ring
    (.input-radio:checked:not(:disabled):focus-visible+label::before). */
-:host([data-rui-theme="corporate"]) .rui-radio input[type="radio"]:checked:focus-visible {
+:host([data-rui-theme="vision"]) .rui-radio input[type="radio"]:checked:focus-visible {
   border-color: #095bb1;
   box-shadow: 0 0 0 2px inset #fff, 0 0 0 10px inset #095bb1, 0 0 0 4px #1474c4;
   outline: none;
@@ -5828,29 +5830,29 @@ ${below("xs")} {
    .input-checkbox:checked:not(:disabled):focus-visible+label::before, which repeats both
    inset rings before adding the focus ring. The spacer ring is #f4f7fa
    (--default-background-color), never #fff. */
-:host([data-rui-theme="corporate"]) .rui-checkbox input[type="checkbox"]:not(:checked):focus-visible,
-:host([data-rui-theme="corporate"]) .rui-checkbox-item input[type="checkbox"]:not(:checked):focus-visible {
+:host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:not(:checked):focus-visible,
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:not(:checked):focus-visible {
   border-color: #095bb1;
   box-shadow: 0 0 0 2px inset #f4f7fa, 0 0 0 2px #f4f7fa, 0 0 0 4px #1474c4;
 }
-:host([data-rui-theme="corporate"]) .rui-checkbox input[type="checkbox"]:checked:focus-visible,
-:host([data-rui-theme="corporate"]) .rui-checkbox-item input[type="checkbox"]:checked:focus-visible {
+:host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:checked:focus-visible,
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked:focus-visible {
   border-color: #095bb1;
   box-shadow: 0 0 0 2px inset #f4f7fa, 0 0 0 10px inset #095bb1, 0 0 0 2px #f4f7fa, 0 0 0 4px #1474c4;
 }
-:host([data-rui-theme="corporate"]) .rui-checkbox input[type="checkbox"]:disabled,
-:host([data-rui-theme="corporate"]) .rui-checkbox-item input[type="checkbox"]:disabled,
-:host([data-rui-theme="corporate"]) .rui-radio input[type="radio"]:disabled {
+:host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:disabled,
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:disabled,
+:host([data-rui-theme="vision"]) .rui-radio input[type="radio"]:disabled {
   opacity: 1; border-color: var(--rui-color-border); /* inactive-neutral-shape-color, no fade */
 }
-:host([data-rui-theme="corporate"]) .rui-checkbox input[type="checkbox"]:checked:disabled,
-:host([data-rui-theme="corporate"]) .rui-checkbox-item input[type="checkbox"]:checked:disabled {
+:host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:checked:disabled,
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked:disabled {
   background: var(--rui-color-border); border-color: var(--rui-color-border);
 }
 /* Radio uses the same ring technique as its other states, not a plain solid fill --
    .input-radio:disabled+label::before{border-color:#bcc8d4;
      box-shadow:0 0 0 2px inset #fff,0 0 0 10px inset #bcc8d4} */
-:host([data-rui-theme="corporate"]) .rui-radio input[type="radio"]:checked:disabled {
+:host([data-rui-theme="vision"]) .rui-radio input[type="radio"]:checked:disabled {
   background: transparent; border-color: var(--rui-color-border);
   box-shadow: 0 0 0 2px inset #fff, 0 0 0 10px inset var(--rui-color-border);
 }
@@ -5861,7 +5863,7 @@ ${below("xs")} {
    radius, neutral-4 off / corporate-5 on, and a 15px square white thumb with an
    8px radius (NOT a circle). Aktion's default is a 36x20 pill track with a 16px
    round thumb — visibly chunkier and rounder. */
-:host([data-rui-theme="corporate"]) .rui-switch-track {
+:host([data-rui-theme="vision"]) .rui-switch-track {
   width: 37px;
   height: 15px;
   border-radius: 10px;
@@ -5872,11 +5874,11 @@ ${below("xs")} {
   box-sizing: content-box;
   background: #97a3b4;                         /* quaternary-background-color */
 }
-:host([data-rui-theme="corporate"]) .rui-switch-input:checked + .rui-switch-track {
+:host([data-rui-theme="vision"]) .rui-switch-input:checked + .rui-switch-track {
   background: #095bb1;                         /* hovered-interactive-text-color */
   border-color: transparent;
 }
-:host([data-rui-theme="corporate"]) .rui-switch-thumb {
+:host([data-rui-theme="vision"]) .rui-switch-thumb {
   width: 15px;
   height: 15px;
   top: 0;
@@ -5885,13 +5887,13 @@ ${below("xs")} {
   background: #fff;
   box-shadow: none;                            /* UI block's knob is flat; Aktion's base adds a drop shadow */
 }
-:host([data-rui-theme="corporate"]) .rui-switch-input:checked + .rui-switch-track .rui-switch-thumb {
+:host([data-rui-theme="vision"]) .rui-switch-input:checked + .rui-switch-track .rui-switch-thumb {
   transform: translateX(22px);                 /* UI block's __on grows to 22px */
 }
 /* UI block shows a white tick inside the track once ON (.input-switch__on::before,
    an icon-font glyph). Aktion has no such element, so it is drawn as a
    CSS checkmark on the track itself. */
-:host([data-rui-theme="corporate"]) .rui-switch-input:checked + .rui-switch-track::before {
+:host([data-rui-theme="vision"]) .rui-switch-input:checked + .rui-switch-track::before {
   content: "";
   position: absolute;
   left: 8px;
@@ -5903,17 +5905,17 @@ ${below("xs")} {
   transform: rotate(45deg);
   pointer-events: none;
 }
-:host([data-rui-theme="corporate"]) .rui-switch:hover .rui-switch-track { box-shadow: 0 0 0 7px #dbedf8; border-radius: 12px; }
-:host([data-rui-theme="corporate"]) .rui-switch-input:focus-visible + .rui-switch-track {
+:host([data-rui-theme="vision"]) .rui-switch:hover .rui-switch-track { box-shadow: 0 0 0 7px #dbedf8; border-radius: 12px; }
+:host([data-rui-theme="vision"]) .rui-switch-input:focus-visible + .rui-switch-track {
   box-shadow: 0 0 0 2px var(--rui-color-surface), 0 0 0 4px var(--rui-color-focus-ring);
 }
 
 /* ---- Table — flat & borderless; uppercase navy-bold header (UI block's
    fourth-level-headline style), hairline rows, pale-blue row hover, uppercase
    navy caption. */
-:host([data-rui-theme="corporate"]) .rui-table-wrapper { border: none; box-shadow: none; }
-:host([data-rui-theme="corporate"]) .rui-table { font-size: var(--rui-font-size-base); }
-:host([data-rui-theme="corporate"]) .rui-table th {
+:host([data-rui-theme="vision"]) .rui-table-wrapper { border: none; box-shadow: none; }
+:host([data-rui-theme="vision"]) .rui-table { font-size: var(--rui-font-size-base); }
+:host([data-rui-theme="vision"]) .rui-table th {
   /* UI block's header CELL is white (--secondary-table-search-background-color) and
      draws its hairline as an inset box-shadow, not a border (table.scss:
      ".table__header .table__cell" sets background #fff plus
@@ -5924,28 +5926,28 @@ ${below("xs")} {
   border-bottom: none;
   box-shadow: inset 0 -1px 0 0 var(--rui-color-border);   /* neutral-3 */
 }
-:host([data-rui-theme="corporate"]) .rui-table td {
+:host([data-rui-theme="vision"]) .rui-table td {
   border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle); color: var(--rui-color-text);   /* neutral-2 */
 }
-:host([data-rui-theme="corporate"]) .rui-table tbody tr:hover td { background: #dbedf8; }   /* corporate-1 */
-:host([data-rui-theme="corporate"]) .rui-table-caption { color: var(--rui-color-text); text-transform: uppercase; }
+:host([data-rui-theme="vision"]) .rui-table tbody tr:hover td { background: #dbedf8; }   /* corporate-1 */
+:host([data-rui-theme="vision"]) .rui-table-caption { color: var(--rui-color-text); text-transform: uppercase; }
 
 /* ---- Pagination — UI block's active/hover page is a flat NEUTRAL-GRAY pill with
    dark text, never blue/white (verified identical across default-hover,
    active, and active-hover states). */
 /* UI block rounds pagination links with the DEFAULT 16px radius, not the 8px small one
    (pagination.scss:84). */
-:host([data-rui-theme="corporate"]) .rui-pagination-button { color: var(--rui-color-link); border-radius: var(--rui-radius-lg); border-color: transparent; }
-:host([data-rui-theme="corporate"]) .rui-pagination-button:hover:not([disabled]):not([data-active="true"]),
-:host([data-rui-theme="corporate"]) .rui-pagination-button[data-active="true"],
-:host([data-rui-theme="corporate"]) .rui-pagination-button[data-active="true"]:hover {
+:host([data-rui-theme="vision"]) .rui-pagination-button { color: var(--rui-color-link); border-radius: var(--rui-radius-lg); border-color: transparent; }
+:host([data-rui-theme="vision"]) .rui-pagination-button:hover:not([disabled]):not([data-active="true"]),
+:host([data-rui-theme="vision"]) .rui-pagination-button[data-active="true"],
+:host([data-rui-theme="vision"]) .rui-pagination-button[data-active="true"]:hover {
   background: var(--rui-color-border);   /* neutral-3 · --tertiary-shape-color */
   border-color: transparent;
   color: var(--rui-color-text);          /* --default-text-color, NOT white/blue */
 }
-:host([data-rui-theme="corporate"]) .rui-pagination-per-page-select { border-color: #718095; }
-:host([data-rui-theme="corporate"]) .rui-pagination-per-page-select:hover,
-:host([data-rui-theme="corporate"]) .rui-pagination-per-page-select:focus-visible {
+:host([data-rui-theme="vision"]) .rui-pagination-per-page-select { border-color: #718095; }
+:host([data-rui-theme="vision"]) .rui-pagination-per-page-select:hover,
+:host([data-rui-theme="vision"]) .rui-pagination-per-page-select:focus-visible {
   border-color: var(--rui-color-focus-ring); outline: 1px solid var(--rui-color-focus-ring);
 }
 
@@ -5956,20 +5958,20 @@ ${below("xs")} {
    8px pill. quotabar.scss ".quotabar__bar": background #bcc8d4, height 12px,
    border-radius 4px, overflow hidden, margin-bottom 12px. The value fills
    the full height and is clipped by the trough, so it carries no radius. */
-:host([data-rui-theme="corporate"]) .rui-progress {
+:host([data-rui-theme="vision"]) .rui-progress {
   display: flex;
   flex-direction: column;
 }
 /* UI block's caption sits UNDER the bar, not above it (quotabar__text follows
    quotabar__bar), at full-strength navy rather than a muted grey. */
-:host([data-rui-theme="corporate"]) .rui-progress-head { order: 2; margin-top: 8px; }
-:host([data-rui-theme="corporate"]) .rui-progress-label,
-:host([data-rui-theme="corporate"]) .rui-progress-value {
+:host([data-rui-theme="vision"]) .rui-progress-head { order: 2; margin-top: 8px; }
+:host([data-rui-theme="vision"]) .rui-progress-label,
+:host([data-rui-theme="vision"]) .rui-progress-value {
   color: var(--rui-color-text);
   font-size: var(--rui-font-size-base);
   font-weight: 400;
 }
-:host([data-rui-theme="corporate"]) .rui-progress-track {
+:host([data-rui-theme="vision"]) .rui-progress-track {
   background: var(--rui-color-border);        /* neutral-3 #bcc8d4 */
   height: 12px;
   border-radius: var(--rui-radius-xs);        /* 4px */
@@ -5978,13 +5980,13 @@ ${below("xs")} {
 }
   /* UI block's quota bar fills with the ACTIVATING cyan (--activating-shape-color
    #08a5c5), not the navy primary — quotabar.scss ".quotabar__value". */
-:host([data-rui-theme="corporate"]) .rui-progress-bar {
+:host([data-rui-theme="vision"]) .rui-progress-bar {
   background: var(--rui-color-info);          /* activating-4 #08a5c5 */
   border-radius: 0;                            /* clipped by the trough, per UI block */
 }
 /* LoadingDots — three dots pulsing in sequence (a quieter alternative to the
    Spinner's rotating ring). Each dot fades out and back on a staggered delay.
-   The comment used to sit between a stray :host([data-rui-theme="corporate"])
+   The comment used to sit between a stray :host([data-rui-theme="vision"])
    and this selector, which silently scoped the component's own layout rule to
    one theme — every other theme rendered the dots as an inline box with no gap. */
 .rui-loading-dots { display: inline-flex; align-items: center; gap: var(--rui-spacing-s); }
@@ -6023,166 +6025,166 @@ ${below("xs")} {
   .rui-loading-dots-dot { animation-duration: 2.6s; }
 }
 
-/* An unscoped .rui-spinner-ring rule was stranded here in the corporate theme
+/* An unscoped .rui-spinner-ring rule was stranded here in the vision theme
    section, leaking a hardcoded pale blue #dbedf8 ring into every theme. It has
    now been deleted rather than re-tokenized, because it was also DEAD: the real
    Spinner rule further down declares the border shorthand, which resets
-   border-color, and it wins on source order. If the corporate theme wants an
-   accent-coloured ring, it needs a :host([data-rui-theme="corporate"]) rule. */
+   border-color, and it wins on source order. If the vision theme wants an
+   accent-coloured ring, it needs a :host([data-rui-theme="vision"]) rule. */
 /* UI block's quotabar takes a semantic fill per state; success is the one tone the
-   corporate block was missing, so a success quota bar fell back to the default
+   vision block was missing, so a success quota bar fell back to the default
    activating cyan (quotabar.scss:101-103 -> default.scss:175 = success-4). */
-:host([data-rui-theme="corporate"]) .rui-progress[data-tone="success"] .rui-progress-bar,
-:host([data-rui-theme="corporate"]) .rui-progress-segment[data-tone="success"][data-filled="true"],
-:host([data-rui-theme="corporate"]) .rui-progress-ring[data-tone="success"] .rui-progress-ring-bar,
-:host([data-rui-theme="corporate"]) .rui-gauge[data-tone="success"] .rui-gauge-value,
-:host([data-rui-theme="corporate"]) .rui-gauge[data-tone="success"] .rui-gauge-arc {
+:host([data-rui-theme="vision"]) .rui-progress[data-tone="success"] .rui-progress-bar,
+:host([data-rui-theme="vision"]) .rui-progress-segment[data-tone="success"][data-filled="true"],
+:host([data-rui-theme="vision"]) .rui-progress-ring[data-tone="success"] .rui-progress-ring-bar,
+:host([data-rui-theme="vision"]) .rui-gauge[data-tone="success"] .rui-gauge-value,
+:host([data-rui-theme="vision"]) .rui-gauge[data-tone="success"] .rui-gauge-arc {
   border-color: #0fa954; stroke: #0fa954; color: #0fa954; /* success-shape-color */
 }
-:host([data-rui-theme="corporate"]) .rui-progress[data-tone="warning"] .rui-progress-bar,
-:host([data-rui-theme="corporate"]) .rui-progress-segment[data-tone="warning"][data-filled="true"],
-:host([data-rui-theme="corporate"]) .rui-progress-ring[data-tone="warning"] .rui-progress-ring-bar,
-:host([data-rui-theme="corporate"]) .rui-gauge[data-tone="warning"] .rui-gauge-value,
-:host([data-rui-theme="corporate"]) .rui-gauge[data-tone="warning"] .rui-gauge-arc {
+:host([data-rui-theme="vision"]) .rui-progress[data-tone="warning"] .rui-progress-bar,
+:host([data-rui-theme="vision"]) .rui-progress-segment[data-tone="warning"][data-filled="true"],
+:host([data-rui-theme="vision"]) .rui-progress-ring[data-tone="warning"] .rui-progress-ring-bar,
+:host([data-rui-theme="vision"]) .rui-gauge[data-tone="warning"] .rui-gauge-value,
+:host([data-rui-theme="vision"]) .rui-gauge[data-tone="warning"] .rui-gauge-arc {
   border-color: #ffaa00; stroke: #ffaa00; color: #ffaa00; /* warning-shape-color */
 }
-:host([data-rui-theme="corporate"]) .rui-progress[data-tone="danger"] .rui-progress-bar,
-:host([data-rui-theme="corporate"]) .rui-progress-segment[data-tone="danger"][data-filled="true"],
-:host([data-rui-theme="corporate"]) .rui-progress-ring[data-tone="danger"] .rui-progress-ring-bar,
-:host([data-rui-theme="corporate"]) .rui-gauge[data-tone="danger"] .rui-gauge-value,
-:host([data-rui-theme="corporate"]) .rui-gauge[data-tone="danger"] .rui-gauge-arc {
+:host([data-rui-theme="vision"]) .rui-progress[data-tone="danger"] .rui-progress-bar,
+:host([data-rui-theme="vision"]) .rui-progress-segment[data-tone="danger"][data-filled="true"],
+:host([data-rui-theme="vision"]) .rui-progress-ring[data-tone="danger"] .rui-progress-ring-bar,
+:host([data-rui-theme="vision"]) .rui-gauge[data-tone="danger"] .rui-gauge-value,
+:host([data-rui-theme="vision"]) .rui-gauge[data-tone="danger"] .rui-gauge-arc {
   border-color: #ff6159; stroke: #ff6159; color: #ff6159; /* critical-shape-color */
 }
 
 /* ---- Price tag — UI block's savings badge is a solid ORANGE chip with dark navy
    text and a 4px radius; not a rounded semantic-danger pill. */
-:host([data-rui-theme="corporate"]) .rui-pricetag-off {
+:host([data-rui-theme="vision"]) .rui-pricetag-off {
   background: #ffaa00; color: #001b41; border-radius: var(--rui-radius-xs);
   font-size: var(--rui-font-size-sm); line-height: 20px; padding: 0 6px; font-weight: 600;
 }
 
 /* ---- Badge — small SOLID semantic chip, 2px radius (UI block xxsmall), 14px
    body-copy size, regular no-variant fill = neutral-solid grey. */
-:host([data-rui-theme="corporate"]) .rui-badge {
+:host([data-rui-theme="vision"]) .rui-badge {
   border-radius: 2px; font-weight: 600; font-size: var(--rui-font-size-base); line-height: 20px;
   padding: 0 6px; letter-spacing: 0; background: var(--rui-color-border); color: var(--rui-color-text);
 }
-:host([data-rui-theme="corporate"]) .rui-badge[data-variant="primary"] { background: #0b2a63; color: #fff; }
-:host([data-rui-theme="corporate"]) .rui-badge[data-variant="success"] { background: #12cf76; color: var(--rui-color-text); }
-:host([data-rui-theme="corporate"]) .rui-badge[data-variant="warning"] { background: #ffaa00; color: var(--rui-color-text); }
-:host([data-rui-theme="corporate"]) .rui-badge[data-variant="danger"]  { background: #ff6159; color: var(--rui-color-text); }
-:host([data-rui-theme="corporate"]) .rui-badge[data-variant="info"]    { background: #11c7e6; color: var(--rui-color-text); }
+:host([data-rui-theme="vision"]) .rui-badge[data-variant="primary"] { background: #0b2a63; color: #fff; }
+:host([data-rui-theme="vision"]) .rui-badge[data-variant="success"] { background: #12cf76; color: var(--rui-color-text); }
+:host([data-rui-theme="vision"]) .rui-badge[data-variant="warning"] { background: #ffaa00; color: var(--rui-color-text); }
+:host([data-rui-theme="vision"]) .rui-badge[data-variant="danger"]  { background: #ff6159; color: var(--rui-color-text); }
+:host([data-rui-theme="vision"]) .rui-badge[data-variant="info"]    { background: #11c7e6; color: var(--rui-color-text); }
 
 /* ---- Pill — the real UI block ".pill": 11px radius, 12px text, regular weight,
    2px/6px padding, 20px line-height, pale tint bg + dark semantic text. */
-:host([data-rui-theme="corporate"]) .rui-pill {
+:host([data-rui-theme="vision"]) .rui-pill {
   border-radius: 11px; border: none; font-weight: 400;
   font-size: var(--rui-font-size-sm);        /* 12px · --small-text-size */
   line-height: 20px; padding: 2px 6px;
   background: #f4f7fa; color: #465a75;       /* neutral-1 / neutral-6 */
 }
-:host([data-rui-theme="corporate"]) .rui-pill[data-tone="activating"] { background: #dbedf8; color: #095bb1; } /* corporate-1 / -5 */
-:host([data-rui-theme="corporate"]) .rui-pill[data-tone="corporate"]  { background: #dbedf8; color: #095bb1; }
-:host([data-rui-theme="corporate"]) .rui-pill[data-tone="success"]    { background: #c7fae2; color: #096b35; } /* success-1 / -6 */
-:host([data-rui-theme="corporate"]) .rui-pill[data-tone="warning"]    { background: #ffedca; color: #8e4e00; } /* warning-1 / -6 */
-:host([data-rui-theme="corporate"]) .rui-pill[data-tone="critical"]   { background: #ffe4e2; color: #c80a00; } /* critical-1 / -5 */
-:host([data-rui-theme="corporate"]) .rui-pill[data-tone="promoting"]  { background: #fae7fe; color: #6a1b8f; } /* promoting-1 / -6 */
+:host([data-rui-theme="vision"]) .rui-pill[data-tone="activating"] { background: #dbedf8; color: #095bb1; } /* corporate-1 / -5 */
+:host([data-rui-theme="vision"]) .rui-pill[data-tone="corporate"]  { background: #dbedf8; color: #095bb1; }
+:host([data-rui-theme="vision"]) .rui-pill[data-tone="success"]    { background: #c7fae2; color: #096b35; } /* success-1 / -6 */
+:host([data-rui-theme="vision"]) .rui-pill[data-tone="warning"]    { background: #ffedca; color: #8e4e00; } /* warning-1 / -6 */
+:host([data-rui-theme="vision"]) .rui-pill[data-tone="critical"]   { background: #ffe4e2; color: #c80a00; } /* critical-1 / -5 */
+:host([data-rui-theme="vision"]) .rui-pill[data-tone="promoting"]  { background: #fae7fe; color: #6a1b8f; } /* promoting-1 / -6 */
 
 /* ---- ButtonGroup — UI block rounds ONLY the outer corners (start
    "24px 0 0 24px", middle "0", end "0 24px 24px 0") and fully COLLAPSES the
    adjoining border on middle/end so neighbours share one edge. These need the
-   host-scoped selector because the corporate ".rui-button" radius would
+   host-scoped selector because the vision ".rui-button" radius would
    otherwise out-specify the group's own corner rules and leave every item a
    separate pill. Only the primary (filled) variant re-introduces a visible
    neutral-3 hairline, since navy-on-navy would otherwise merge. */
-:host([data-rui-theme="corporate"]) .rui-button-group > .rui-button-group-item[data-pos="start"] {
+:host([data-rui-theme="vision"]) .rui-button-group > .rui-button-group-item[data-pos="start"] {
   border-radius: 24px 0 0 24px;
 }
-:host([data-rui-theme="corporate"]) .rui-button-group > .rui-button-group-item[data-pos="middle"] {
+:host([data-rui-theme="vision"]) .rui-button-group > .rui-button-group-item[data-pos="middle"] {
   border-radius: 0;
   border-left-width: 0;
 }
-:host([data-rui-theme="corporate"]) .rui-button-group > .rui-button-group-item[data-pos="end"] {
+:host([data-rui-theme="vision"]) .rui-button-group > .rui-button-group-item[data-pos="end"] {
   border-radius: 0 24px 24px 0;
   border-left-width: 0;
 }
-:host([data-rui-theme="corporate"]) .rui-button-group > .rui-button-group-item[data-pos="only"] { border-radius: 24px; }
-:host([data-rui-theme="corporate"]) .rui-button-group > .rui-button-group-item[data-pos="middle"]:not([data-variant="secondary"]):not([data-variant="outline"]):not([data-variant="ghost"]),
-:host([data-rui-theme="corporate"]) .rui-button-group > .rui-button-group-item[data-pos="end"]:not([data-variant="secondary"]):not([data-variant="outline"]):not([data-variant="ghost"]) {
+:host([data-rui-theme="vision"]) .rui-button-group > .rui-button-group-item[data-pos="only"] { border-radius: 24px; }
+:host([data-rui-theme="vision"]) .rui-button-group > .rui-button-group-item[data-pos="middle"]:not([data-variant="secondary"]):not([data-variant="outline"]):not([data-variant="ghost"]),
+:host([data-rui-theme="vision"]) .rui-button-group > .rui-button-group-item[data-pos="end"]:not([data-variant="secondary"]):not([data-variant="outline"]):not([data-variant="ghost"]) {
   border-left: var(--rui-border-width) solid var(--rui-color-border); /* neutral-3 divider on filled buttons */
 }
 
 /* ---- InputGroup — same shell as a lone UI block input: transparent fill, 1px
    neutral-5 border, 8px radius, and a crisp blue border+outline on focus
    (never a soft glow). */
-:host([data-rui-theme="corporate"]) .rui-input-group {
+:host([data-rui-theme="vision"]) .rui-input-group {
   background: transparent;
   border: var(--rui-border-width) solid #718095;                   /* neutral-5 · --secondary-shape-color */
   border-radius: var(--rui-radius-input);      /* 8px */
 }
-:host([data-rui-theme="corporate"]) .rui-input-group:focus-within,
-:host([data-rui-theme="corporate"]) .rui-input-group:hover {
+:host([data-rui-theme="vision"]) .rui-input-group:focus-within,
+:host([data-rui-theme="vision"]) .rui-input-group:hover {
   border-color: var(--rui-color-focus-ring);
   outline: 1px solid var(--rui-color-focus-ring);
   box-shadow: none;
 }
-/* Host-scoped mirrors, or the corporate at-rest/hover border above out-specifies
+/* Host-scoped mirrors, or the vision at-rest/hover border above out-specifies
    the base disabled + invalid rules and the states render as a normal field. */
-:host([data-rui-theme="corporate"]) .rui-input-group[data-invalid="true"],
-:host([data-rui-theme="corporate"]) .rui-input-group[data-invalid="true"]:hover,
-:host([data-rui-theme="corporate"]) .rui-input-group[data-invalid="true"]:focus-within {
+:host([data-rui-theme="vision"]) .rui-input-group[data-invalid="true"],
+:host([data-rui-theme="vision"]) .rui-input-group[data-invalid="true"]:hover,
+:host([data-rui-theme="vision"]) .rui-input-group[data-invalid="true"]:focus-within {
   border-color: var(--rui-color-danger);
   outline-color: var(--rui-color-danger);
 }
-:host([data-rui-theme="corporate"]) .rui-input-group[data-disabled="true"]:hover,
-:host([data-rui-theme="corporate"]) .rui-input-group[data-disabled="true"]:focus-within {
+:host([data-rui-theme="vision"]) .rui-input-group[data-disabled="true"]:hover,
+:host([data-rui-theme="vision"]) .rui-input-group[data-disabled="true"]:focus-within {
   border-color: var(--rui-color-border);
   outline: none;
 }
-:host([data-rui-theme="corporate"]) .rui-input-group-icon { color: var(--rui-color-link); }
+:host([data-rui-theme="vision"]) .rui-input-group-icon { color: var(--rui-color-link); }
 /* The group owns the chrome — strip the nested control's own border/outline.
-   Needs the host-scoped selector to out-specify the corporate .rui-input rule
+   Needs the host-scoped selector to out-specify the vision .rui-input rule
    (which would otherwise draw a second box inside the shell). */
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-input,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-select,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-textarea,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-number-input,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-combobox-trigger,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-input:hover,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-select:hover,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-textarea:hover,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-number-input:hover,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-combobox-trigger:hover,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-input:focus,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-select:focus,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-textarea:focus,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-number-input:focus,
-:host([data-rui-theme="corporate"]) .rui-input-group-field .rui-combobox-trigger:focus {
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-input,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-select,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-textarea,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-number-input,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-combobox-trigger,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-input:hover,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-select:hover,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-textarea:hover,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-number-input:hover,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-combobox-trigger:hover,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-input:focus,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-select:focus,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-textarea:focus,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-number-input:focus,
+:host([data-rui-theme="vision"]) .rui-input-group-field .rui-combobox-trigger:focus {
   border: none; border-radius: 0; background: transparent; box-shadow: none; outline: none;
 }
 
 /* ---- FilterPill — UI block filter-pill: 11px radius, 12px text, neutral-1 fill
    with neutral-6 text; hover steps to neutral-2; active is corporate-1 with
    corporate-5 text, and active+hover deepens to corporate-2 / corporate-6. */
-:host([data-rui-theme="corporate"]) .rui-filter-pill {
+:host([data-rui-theme="vision"]) .rui-filter-pill {
   border: none; border-radius: 11px; padding: 2px 8px;
   font-size: var(--rui-font-size-sm); font-weight: 400;
   background: #f4f7fa; color: #465a75;         /* neutral-1 / neutral-6 */
 }
-:host([data-rui-theme="corporate"]) .rui-filter-pill:hover:not(:disabled) { background: #dbe2e8; } /* neutral-2 */
-:host([data-rui-theme="corporate"]) .rui-filter-pill:focus-visible {
+:host([data-rui-theme="vision"]) .rui-filter-pill:hover:not(:disabled) { background: #dbe2e8; } /* neutral-2 */
+:host([data-rui-theme="vision"]) .rui-filter-pill:focus-visible {
   outline: 2px solid var(--rui-color-accent); outline-offset: 2px;
 }
-:host([data-rui-theme="corporate"]) .rui-filter-pill[data-active="true"] {
+:host([data-rui-theme="vision"]) .rui-filter-pill[data-active="true"] {
   background: #dbedf8; color: #095bb1; border: none; font-weight: 400;  /* corporate-1 / -5 */
 }
-:host([data-rui-theme="corporate"]) .rui-filter-pill[data-active="true"]:hover:not(:disabled) {
+:host([data-rui-theme="vision"]) .rui-filter-pill[data-active="true"]:hover:not(:disabled) {
   background: #95caeb; color: #003d8f;         /* corporate-2 / -6 */
 }
 
 /* ---- ActionStripe — flat white row, hairline separator, pale-blue hover UI block
    wash, and the chevron + label switching to interactive blue on hover. */
-:host([data-rui-theme="corporate"]) .rui-action-stripe {
+:host([data-rui-theme="vision"]) .rui-action-stripe {
   background: var(--rui-color-surface);
   border-bottom: var(--rui-border-width) solid #bcc8d4;            /* neutral-3 · tertiary-shape-color */
   padding: 14px 15px 16px;                     /* action-stripe 14/0/16 + stripes 15px sides */
@@ -6191,7 +6193,7 @@ ${below("xs")} {
 /* UI block's stripe label is REGULAR weight (--default-font-regular = OpenSansRegular at
    400), not semibold. Aktion was setting 600, which is the single most visible
    difference in a stripe list -- every row read as a heading. */
-:host([data-rui-theme="corporate"]) .rui-action-stripe-label {
+:host([data-rui-theme="vision"]) .rui-action-stripe-label {
   font-weight: 400;
   font-size: var(--rui-font-size-base);
   line-height: 20px;
@@ -6199,14 +6201,14 @@ ${below("xs")} {
 /* The right-hand action is an UI block action LINK: corporate-4 blue, regular weight,
    14/20, with the chevron drawn as a ::before so it precedes the label. Aktion emits
    the value and then the chevron, so reorder them -- icon and body stay at order 0. */
-:host([data-rui-theme="corporate"]) .rui-action-stripe-value {
+:host([data-rui-theme="vision"]) .rui-action-stripe-value {
   color: #1474c4;                              /* interactive-text-color */
   font-weight: 400;
   font-size: var(--rui-font-size-base);
   line-height: 20px;
   order: 2;
 }
-:host([data-rui-theme="corporate"]) .rui-action-stripe-chevron { order: 1; margin-right: 6px; }
+:host([data-rui-theme="vision"]) .rui-action-stripe-chevron { order: 1; margin-right: 6px; }
 /* UI block's stripes are FULL-BLEED. Its .sheet has padding: 0 and overflow: hidden, so
    each .action-stripe spans the sheet's whole width, its own 15px padding sets the text
    inset, and the first/last stripes carry the sheet's 16px corner radius -- which is
@@ -6214,106 +6216,106 @@ ${below("xs")} {
    stripes were inset with white to the left of the bar and square corners. Cancel the
    card padding and hand the outer stripes the card's radius.
    .rui-spacing-l is the card's padding (20px in this theme). */
-:host([data-rui-theme="corporate"]) .rui-card > .rui-action-stripe {
+:host([data-rui-theme="vision"]) .rui-card > .rui-action-stripe {
   margin-left: calc(-1 * var(--rui-spacing-l));
   margin-right: calc(-1 * var(--rui-spacing-l));
   width: auto;
 }
 /* The bleed only reads right if the card clips -- that is what rounds the end of the
    8px semantic bar, exactly as UI block's overflow: hidden sheet does. */
-:host([data-rui-theme="corporate"]) .rui-card:has(> .rui-action-stripe) { overflow: hidden; }
+:host([data-rui-theme="vision"]) .rui-card:has(> .rui-action-stripe) { overflow: hidden; }
 /* UI block butts consecutive stripes directly together; Aktion's card is a flex column with
    a 12px gap. Pull each stripe up by the gap so neighbours touch, without collapsing the
    gaps around other card children (headers, footers, quota bars). */
-:host([data-rui-theme="corporate"]) .rui-card > .rui-action-stripe + .rui-action-stripe {
+:host([data-rui-theme="vision"]) .rui-card > .rui-action-stripe + .rui-action-stripe {
   margin-top: calc(-1 * var(--rui-spacing-m));
 }
-:host([data-rui-theme="corporate"]) .rui-card > .rui-action-stripe:first-child {
+:host([data-rui-theme="vision"]) .rui-card > .rui-action-stripe:first-child {
   border-top-left-radius: var(--rui-radius-lg);
   border-top-right-radius: var(--rui-radius-lg);
 }
-:host([data-rui-theme="corporate"]) .rui-card > .rui-action-stripe:last-child {
+:host([data-rui-theme="vision"]) .rui-card > .rui-action-stripe:last-child {
   border-bottom: none;
   border-bottom-left-radius: var(--rui-radius-lg);
   border-bottom-right-radius: var(--rui-radius-lg);
 }
-:host([data-rui-theme="corporate"]) .rui-action-stripe:hover:not([data-disabled="true"]) { background: #dbedf8; }
-:host([data-rui-theme="corporate"]) .rui-action-stripe:hover:not([data-disabled="true"]) .rui-action-stripe-label,
-:host([data-rui-theme="corporate"]) .rui-action-stripe:hover:not([data-disabled="true"]) .rui-action-stripe-icon { color: #095bb1; }
-:host([data-rui-theme="corporate"]) .rui-action-stripe-chevron {
+:host([data-rui-theme="vision"]) .rui-action-stripe:hover:not([data-disabled="true"]) { background: #dbedf8; }
+:host([data-rui-theme="vision"]) .rui-action-stripe:hover:not([data-disabled="true"]) .rui-action-stripe-label,
+:host([data-rui-theme="vision"]) .rui-action-stripe:hover:not([data-disabled="true"]) .rui-action-stripe-icon { color: #095bb1; }
+:host([data-rui-theme="vision"]) .rui-action-stripe-chevron {
   border-right-color: #1474c4; border-bottom-color: #1474c4; color: #1474c4;
 }
 /* UI block hover moves the whole link to the darker interactive shade and does NOT tint
    the row background (.action-stripe.__direct-selection--hover .link -> #095bb1). */
-:host([data-rui-theme="corporate"]) .rui-action-stripe:hover:not([data-disabled="true"]) .rui-action-stripe-value,
-:host([data-rui-theme="corporate"]) .rui-action-stripe:hover:not([data-disabled="true"]) .rui-action-stripe-chevron {
+:host([data-rui-theme="vision"]) .rui-action-stripe:hover:not([data-disabled="true"]) .rui-action-stripe-value,
+:host([data-rui-theme="vision"]) .rui-action-stripe:hover:not([data-disabled="true"]) .rui-action-stripe-chevron {
   color: #095bb1; border-right-color: #095bb1; border-bottom-color: #095bb1;
 }
 
 /* ---- CardSection — UI block card__section: white fill with a 2px semantic rule
    above and below (the tint stays white; the RULES carry the colour) and the
    body text taking the semantic text shade. */
-:host([data-rui-theme="corporate"]) .rui-card-section { background: var(--rui-color-surface); padding-block: 16px; }
-:host([data-rui-theme="corporate"]) .rui-card-section[data-tone="activating"] { border-top-color: #08a5c5; border-bottom-color: #08a5c5; color: #005b72; }
-:host([data-rui-theme="corporate"]) .rui-card-section[data-tone="success"]    { border-top-color: #0fa954; border-bottom-color: #0fa954; color: #096b35; }
-:host([data-rui-theme="corporate"]) .rui-card-section[data-tone="warning"]    { border-top-color: #ffaa00; border-bottom-color: #ffaa00; color: #8e4e00; }
-:host([data-rui-theme="corporate"]) .rui-card-section[data-tone="critical"]   { border-top-color: #ff6159; border-bottom-color: #ff6159; color: #c80a00; }
-:host([data-rui-theme="corporate"]) .rui-card-section[data-tone="neutral"]    { border-top-color: #97a3b4; border-bottom-color: #97a3b4; color: #465a75; }
-:host([data-rui-theme="corporate"]) .rui-card-section[data-tone="corporate"]  { border-top-color: #95caeb; border-bottom-color: #95caeb; color: #1474c4; }
-:host([data-rui-theme="corporate"]) .rui-card-section[data-tone="promoting"]  { border-top-color: #e480f8; border-bottom-color: #e480f8; color: #b410e7; }
+:host([data-rui-theme="vision"]) .rui-card-section { background: var(--rui-color-surface); padding-block: 16px; }
+:host([data-rui-theme="vision"]) .rui-card-section[data-tone="activating"] { border-top-color: #08a5c5; border-bottom-color: #08a5c5; color: #005b72; }
+:host([data-rui-theme="vision"]) .rui-card-section[data-tone="success"]    { border-top-color: #0fa954; border-bottom-color: #0fa954; color: #096b35; }
+:host([data-rui-theme="vision"]) .rui-card-section[data-tone="warning"]    { border-top-color: #ffaa00; border-bottom-color: #ffaa00; color: #8e4e00; }
+:host([data-rui-theme="vision"]) .rui-card-section[data-tone="critical"]   { border-top-color: #ff6159; border-bottom-color: #ff6159; color: #c80a00; }
+:host([data-rui-theme="vision"]) .rui-card-section[data-tone="neutral"]    { border-top-color: #97a3b4; border-bottom-color: #97a3b4; color: #465a75; }
+:host([data-rui-theme="vision"]) .rui-card-section[data-tone="corporate"]  { border-top-color: #95caeb; border-bottom-color: #95caeb; color: #1474c4; }
+:host([data-rui-theme="vision"]) .rui-card-section[data-tone="promoting"]  { border-top-color: #e480f8; border-bottom-color: #e480f8; color: #b410e7; }
 
 /* ---- Callout footer — UI block message__footer: 12px gap, 24px top margin. */
-:host([data-rui-theme="corporate"]) .rui-callout-footer { gap: 12px; margin-top: 24px; }
+:host([data-rui-theme="vision"]) .rui-callout-footer { gap: 12px; margin-top: 24px; }
 
 /* ---- Tag / chip — same soft tinted treatment (Aktion's internal chip used
    by ProfileCard/MediaCard/KanbanCard); kept in sync with Pill above. */
-:host([data-rui-theme="corporate"]) .rui-tag {
+:host([data-rui-theme="vision"]) .rui-tag {
   border-radius: 999px; border: none; font-weight: 400; font-size: var(--rui-font-size-sm);
   line-height: 20px; padding: 2px 6px; background: #f4f7fa; color: #465a75;   /* neutral-1 / neutral-6 */
 }
-:host([data-rui-theme="corporate"]) .rui-tag[data-variant="primary"] { background: #dbedf8; color: #095bb1; }
-:host([data-rui-theme="corporate"]) .rui-tag[data-variant="success"] { background: #c7fae2; color: #096b35; }
-:host([data-rui-theme="corporate"]) .rui-tag[data-variant="warning"] { background: #ffedca; color: #8e4e00; }
-:host([data-rui-theme="corporate"]) .rui-tag[data-variant="danger"]  { background: #ffe4e2; color: #c80a00; }
-:host([data-rui-theme="corporate"]) .rui-filter-chip {
+:host([data-rui-theme="vision"]) .rui-tag[data-variant="primary"] { background: #dbedf8; color: #095bb1; }
+:host([data-rui-theme="vision"]) .rui-tag[data-variant="success"] { background: #c7fae2; color: #096b35; }
+:host([data-rui-theme="vision"]) .rui-tag[data-variant="warning"] { background: #ffedca; color: #8e4e00; }
+:host([data-rui-theme="vision"]) .rui-tag[data-variant="danger"]  { background: #ffe4e2; color: #c80a00; }
+:host([data-rui-theme="vision"]) .rui-filter-chip {
   border-radius: 999px; background: #f4f7fa; color: #465a75; border: none; font-size: var(--rui-font-size-sm);
 }
-:host([data-rui-theme="corporate"]) .rui-filter-chip:hover { background: #dbe2e8; }
-:host([data-rui-theme="corporate"]) .rui-filter-chip:focus-within { outline: 2px solid var(--rui-color-accent); outline-offset: 2px; }
-:host([data-rui-theme="corporate"]) .rui-filter-chip-remove { color: inherit; }
-:host([data-rui-theme="corporate"]) .rui-filter-chip[data-active="true"],
-:host([data-rui-theme="corporate"]) .rui-filter-chip[aria-pressed="true"] { background: #dbedf8; color: #095bb1; }
-:host([data-rui-theme="corporate"]) .rui-filter-chip[data-active="true"]:hover,
-:host([data-rui-theme="corporate"]) .rui-filter-chip[aria-pressed="true"]:hover { background: #95caeb; color: #003d8f; }
+:host([data-rui-theme="vision"]) .rui-filter-chip:hover { background: #dbe2e8; }
+:host([data-rui-theme="vision"]) .rui-filter-chip:focus-within { outline: 2px solid var(--rui-color-accent); outline-offset: 2px; }
+:host([data-rui-theme="vision"]) .rui-filter-chip-remove { color: inherit; }
+:host([data-rui-theme="vision"]) .rui-filter-chip[data-active="true"],
+:host([data-rui-theme="vision"]) .rui-filter-chip[aria-pressed="true"] { background: #dbedf8; color: #095bb1; }
+:host([data-rui-theme="vision"]) .rui-filter-chip[data-active="true"]:hover,
+:host([data-rui-theme="vision"]) .rui-filter-chip[aria-pressed="true"]:hover { background: #95caeb; color: #003d8f; }
 
 /* ---- Tabs — muted default label; selected/hover both turn interactive-blue
    with a blue underline (UI Block never uses dark-navy for the active tab). */
-:host([data-rui-theme="corporate"]) .rui-tab-list { border-bottom: var(--rui-border-width) solid var(--rui-color-border); }
-:host([data-rui-theme="corporate"]) .rui-tab-trigger {
+:host([data-rui-theme="vision"]) .rui-tab-list { border-bottom: var(--rui-border-width) solid var(--rui-color-border); }
+:host([data-rui-theme="vision"]) .rui-tab-trigger {
   color: var(--rui-color-text); font-weight: 600; font-family: var(--rui-font-family-heading);
   border-bottom: 3px solid transparent;
 }
-:host([data-rui-theme="corporate"]) .rui-tab-trigger:hover,
-:host([data-rui-theme="corporate"]) .rui-tab-trigger[aria-selected="true"] {
+:host([data-rui-theme="vision"]) .rui-tab-trigger:hover,
+:host([data-rui-theme="vision"]) .rui-tab-trigger[aria-selected="true"] {
   color: var(--rui-color-link); border-bottom-color: var(--rui-color-accent);
 }
 
 /* ---- Accordion — 15px outer radius (16-1), primary-text-color header,
    colour-only hover (no background wash), inset focus ring, and semantic
    left-bar status variants (a real UI Block feature Aktion had zero support for). */
-:host([data-rui-theme="corporate"]) .rui-accordion { border: none; border-radius: calc(var(--rui-radius-lg) - 1px); overflow: hidden; box-shadow: none; gap: unset; }
-:host([data-rui-theme="corporate"]) .rui-accordion-item {
+:host([data-rui-theme="vision"]) .rui-accordion { border: none; border-radius: calc(var(--rui-radius-lg) - 1px); overflow: hidden; box-shadow: none; gap: unset; }
+:host([data-rui-theme="vision"]) .rui-accordion-item {
   border: none; border-bottom: var(--rui-border-width) solid #bcc8d4; border-radius: 0;
   background: var(--rui-color-surface); box-shadow: none;
   position: relative; overflow: hidden;
 }
 /* 15px, not 16px: UI Block uses calc(--default-border-radius - 1px) so the item's corner
    sits just inside the group's 1px edge. */
-:host([data-rui-theme="corporate"]) .rui-accordion-item:first-child {
+:host([data-rui-theme="vision"]) .rui-accordion-item:first-child {
   border-top-left-radius: calc(var(--rui-radius-lg) - 1px);
   border-top-right-radius: calc(var(--rui-radius-lg) - 1px);
 }
-:host([data-rui-theme="corporate"]) .rui-accordion-item:last-child {
+:host([data-rui-theme="vision"]) .rui-accordion-item:last-child {
   border-bottom: none;
   border-bottom-left-radius: calc(var(--rui-radius-lg) - 1px);
   border-bottom-right-radius: calc(var(--rui-radius-lg) - 1px);
@@ -6323,7 +6325,7 @@ ${below("xs")} {
    at right:16px / top:14px. Aktion hides its chevron unless the author opts in
    via data-show-arrow, which is the single biggest reason the two looked
    unrelated — force it on and give it UI Block's geometry. */
-:host([data-rui-theme="corporate"]) .rui-accordion-trigger {
+:host([data-rui-theme="vision"]) .rui-accordion-trigger {
   color: #02102b;                              /* primary-text-color */
   font-family: var(--rui-font-family);
   font-size: var(--rui-font-size-base);        /* 14px */
@@ -6333,7 +6335,7 @@ ${below("xs")} {
   position: relative;
   justify-content: flex-start;
 }
-:host([data-rui-theme="corporate"]) .rui-accordion-chevron {
+:host([data-rui-theme="vision"]) .rui-accordion-chevron {
   display: inline-block;                       /* UI Block always shows it */
   position: absolute;
   right: 16px;
@@ -6343,90 +6345,90 @@ ${below("xs")} {
   color: #02102b;
   opacity: 1;
 }
-:host([data-rui-theme="corporate"]) .rui-accordion-body {
+:host([data-rui-theme="vision"]) .rui-accordion-body {
   padding: 0 20px 18px;
   color: var(--rui-color-text);
 }
-:host([data-rui-theme="corporate"]) .rui-accordion-trigger:hover,
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-state="open"] .rui-accordion-trigger { background: transparent; color: var(--rui-color-link); }
-:host([data-rui-theme="corporate"]) .rui-accordion-trigger:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--rui-color-accent); }
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="success"] { box-shadow: inset 8px 0 0 0 #12cf76; }
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="success"]:hover,
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="success"][data-state="open"] { box-shadow: inset 8px 0 0 0 #0fa954; }
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="warning"] { box-shadow: inset 8px 0 0 0 #ffd176; }
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="warning"]:hover,
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="warning"][data-state="open"] { box-shadow: inset 8px 0 0 0 #ffaa00; }
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="danger"] { box-shadow: inset 8px 0 0 0 #ffa8a3; }
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="danger"]:hover,
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="danger"][data-state="open"] { box-shadow: inset 8px 0 0 0 #ff6159; }
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="neutral"] { box-shadow: inset 8px 0 0 0 var(--rui-color-border); }
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="neutral"]:hover,
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="neutral"][data-state="open"] { box-shadow: inset 8px 0 0 0 #97a3b4; }
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="info"] { box-shadow: inset 8px 0 0 0 #7fe4f6; }
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="info"]:hover,
-:host([data-rui-theme="corporate"]) .rui-accordion-item[data-variant="info"][data-state="open"] { box-shadow: inset 8px 0 0 0 var(--rui-color-info); }
+:host([data-rui-theme="vision"]) .rui-accordion-trigger:hover,
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-state="open"] .rui-accordion-trigger { background: transparent; color: var(--rui-color-link); }
+:host([data-rui-theme="vision"]) .rui-accordion-trigger:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--rui-color-accent); }
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="success"] { box-shadow: inset 8px 0 0 0 #12cf76; }
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="success"]:hover,
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="success"][data-state="open"] { box-shadow: inset 8px 0 0 0 #0fa954; }
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="warning"] { box-shadow: inset 8px 0 0 0 #ffd176; }
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="warning"]:hover,
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="warning"][data-state="open"] { box-shadow: inset 8px 0 0 0 #ffaa00; }
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="danger"] { box-shadow: inset 8px 0 0 0 #ffa8a3; }
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="danger"]:hover,
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="danger"][data-state="open"] { box-shadow: inset 8px 0 0 0 #ff6159; }
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="neutral"] { box-shadow: inset 8px 0 0 0 var(--rui-color-border); }
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="neutral"]:hover,
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="neutral"][data-state="open"] { box-shadow: inset 8px 0 0 0 #97a3b4; }
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="info"] { box-shadow: inset 8px 0 0 0 #7fe4f6; }
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="info"]:hover,
+:host([data-rui-theme="vision"]) .rui-accordion-item[data-variant="info"][data-state="open"] { box-shadow: inset 8px 0 0 0 var(--rui-color-info); }
 
 /* ---- Breadcrumb — every crumb (incl. separators, current) reads at the same
    default-text-color / normal weight; hover only underlines; focus draws a
    crisp outline. UI Block never mutes earlier crumbs or bolds the current one. */
-:host([data-rui-theme="corporate"]) .rui-breadcrumb-list { font-size: var(--rui-font-size-lg); color: var(--rui-color-text); }
-:host([data-rui-theme="corporate"]) .rui-breadcrumb-separator { color: var(--rui-color-text); }
-:host([data-rui-theme="corporate"]) .rui-breadcrumb-link { color: var(--rui-color-text); }
-:host([data-rui-theme="corporate"]) .rui-breadcrumb-link:hover { color: var(--rui-color-text); text-decoration: underline; }
-:host([data-rui-theme="corporate"]) .rui-breadcrumb-link:focus-visible { outline: 2px solid var(--rui-color-accent); outline-offset: 2px; border-radius: 2px; }
-:host([data-rui-theme="corporate"]) .rui-breadcrumb-current { color: var(--rui-color-text); font-weight: 400; }
-:host([data-rui-theme="corporate"]) .rui-page-header-crumb,
-:host([data-rui-theme="corporate"]) .rui-page-header-crumb-sep { color: var(--rui-color-text); font-weight: 400; }
-:host([data-rui-theme="corporate"]) .rui-page-header-crumb:focus-visible { outline: 2px solid var(--rui-color-accent); outline-offset: 1px; }
+:host([data-rui-theme="vision"]) .rui-breadcrumb-list { font-size: var(--rui-font-size-lg); color: var(--rui-color-text); }
+:host([data-rui-theme="vision"]) .rui-breadcrumb-separator { color: var(--rui-color-text); }
+:host([data-rui-theme="vision"]) .rui-breadcrumb-link { color: var(--rui-color-text); }
+:host([data-rui-theme="vision"]) .rui-breadcrumb-link:hover { color: var(--rui-color-text); text-decoration: underline; }
+:host([data-rui-theme="vision"]) .rui-breadcrumb-link:focus-visible { outline: 2px solid var(--rui-color-accent); outline-offset: 2px; border-radius: 2px; }
+:host([data-rui-theme="vision"]) .rui-breadcrumb-current { color: var(--rui-color-text); font-weight: 400; }
+:host([data-rui-theme="vision"]) .rui-page-header-crumb,
+:host([data-rui-theme="vision"]) .rui-page-header-crumb-sep { color: var(--rui-color-text); font-weight: 400; }
+:host([data-rui-theme="vision"]) .rui-page-header-crumb:focus-visible { outline: 2px solid var(--rui-color-accent); outline-offset: 1px; }
 
 /* ---- Context menu / dropdown menu — 2px accent border, 8px radius, tight
    menu shadow (not the 32px modal shadow); items highlight via a 3px LEFT
    border + text recolor, never a background wash. Trigger fills solid blue
    on open/hover (ghost-button-icon-only pattern). */
-:host([data-rui-theme="corporate"]) .rui-context-menu-pop,
-:host([data-rui-theme="corporate"]) .rui-dropdown-menu-content {
+:host([data-rui-theme="vision"]) .rui-context-menu-pop,
+:host([data-rui-theme="vision"]) .rui-dropdown-menu-content {
   border: 2px solid var(--rui-color-accent);
   border-radius: var(--rui-radius-sm);
   box-shadow: 0 2px 8px 0 rgba(113, 128, 149, 0.5);
 }
-:host([data-rui-theme="corporate"]) .rui-context-menu-pop .rui-menu-item,
-:host([data-rui-theme="corporate"]) .rui-dropdown-menu-content .rui-menu-item {
+:host([data-rui-theme="vision"]) .rui-context-menu-pop .rui-menu-item,
+:host([data-rui-theme="vision"]) .rui-dropdown-menu-content .rui-menu-item {
   border-left: 3px solid transparent; border-radius: 0; padding: 6px 16px 6px 13px;
 }
-:host([data-rui-theme="corporate"]) .rui-context-menu-pop .rui-menu-item:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-context-menu-pop .rui-menu-item:focus-visible,
-:host([data-rui-theme="corporate"]) .rui-dropdown-menu-content .rui-menu-item:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-dropdown-menu-content .rui-menu-item:focus-visible {
+:host([data-rui-theme="vision"]) .rui-context-menu-pop .rui-menu-item:hover:not(:disabled),
+:host([data-rui-theme="vision"]) .rui-context-menu-pop .rui-menu-item:focus-visible,
+:host([data-rui-theme="vision"]) .rui-dropdown-menu-content .rui-menu-item:hover:not(:disabled),
+:host([data-rui-theme="vision"]) .rui-dropdown-menu-content .rui-menu-item:focus-visible {
   background: transparent; border-left-color: var(--rui-color-accent); color: var(--rui-color-link);
 }
-:host([data-rui-theme="corporate"]) .rui-menu-item[data-variant="danger"]:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-menu-item[data-variant="danger"]:focus-visible {
+:host([data-rui-theme="vision"]) .rui-menu-item[data-variant="danger"]:hover:not(:disabled),
+:host([data-rui-theme="vision"]) .rui-menu-item[data-variant="danger"]:focus-visible {
   background: transparent; border-left-color: var(--rui-color-danger); color: var(--rui-color-danger-text);
 }
-:host([data-rui-theme="corporate"]) .rui-menu-item:disabled { opacity: 0.5; }
-:host([data-rui-theme="corporate"]) .rui-context-menu-target .rui-icon-button {
+:host([data-rui-theme="vision"]) .rui-menu-item:disabled { opacity: 0.5; }
+:host([data-rui-theme="vision"]) .rui-context-menu-target .rui-icon-button {
   border-radius: 999px; color: var(--rui-color-link);
 }
-:host([data-rui-theme="corporate"]) .rui-context-menu-target .rui-icon-button:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-context-menu-target .rui-icon-button:focus-visible,
-:host([data-rui-theme="corporate"]) .rui-context-menu-target .rui-icon-button[data-state="open"] {
+:host([data-rui-theme="vision"]) .rui-context-menu-target .rui-icon-button:hover:not(:disabled),
+:host([data-rui-theme="vision"]) .rui-context-menu-target .rui-icon-button:focus-visible,
+:host([data-rui-theme="vision"]) .rui-context-menu-target .rui-icon-button[data-state="open"] {
   background: var(--rui-color-accent); color: #fff; outline: none;
 }
 
 /* ---- Interception banner — UI Block's Interception Stripe is a full-bleed,
    edge-to-edge, flat pale-tinted strip: no radius, no border, no left bar
    (structurally the OPPOSITE of Message below). */
-:host([data-rui-theme="corporate"]) .rui-banner {
+:host([data-rui-theme="vision"]) .rui-banner {
   display: flex; align-items: center; gap: 8px; padding: 16px 24px;
   border-radius: 0; border: none; background: #dbedf8; color: var(--rui-color-text);
 }
-:host([data-rui-theme="corporate"]) .rui-banner[data-tone="success"] { background: #c7fae2; }
-:host([data-rui-theme="corporate"]) .rui-banner[data-tone="warning"] { background: #ffedca; }
-:host([data-rui-theme="corporate"]) .rui-banner[data-tone="danger"]  { background: #ffe4e2; }
-/* info is the corporate stripe's own pale blue (same as the untoned default);
+:host([data-rui-theme="vision"]) .rui-banner[data-tone="success"] { background: #c7fae2; }
+:host([data-rui-theme="vision"]) .rui-banner[data-tone="warning"] { background: #ffedca; }
+:host([data-rui-theme="vision"]) .rui-banner[data-tone="danger"]  { background: #ffe4e2; }
+/* info is the vision stripe's own pale blue (same as the untoned default);
    default is the neutral grey band. */
-:host([data-rui-theme="corporate"]) .rui-banner[data-tone="info"]    { background: #dbedf8; }
-:host([data-rui-theme="corporate"]) .rui-banner[data-tone="default"] { background: #f4f7fa; }
+:host([data-rui-theme="vision"]) .rui-banner[data-tone="info"]    { background: #dbedf8; }
+:host([data-rui-theme="vision"]) .rui-banner[data-tone="default"] { background: #f4f7fa; }
 
 /* ---- Callout / Alert / Note (UI Block Message) ------------------------------
    Matched to UI Block's Message ANATOMY, which differs from Aktion's default in
@@ -6443,7 +6445,7 @@ ${below("xs")} {
 /* OUTER = UI Block's .message: chrome only, and it CLIPS.
    .message{background:#fff;border: var(--rui-border-width) solid #97a3b4;border-radius:16px;
             margin-bottom:32px;overflow:hidden;display:block} */
-:host([data-rui-theme="corporate"]) .rui-callout {
+:host([data-rui-theme="vision"]) .rui-callout {
   display: block;
   padding: 0;
   background: var(--rui-color-surface);
@@ -6459,35 +6461,35 @@ ${below("xs")} {
    The -1px pull makes the bar cover the outer element's 1px border instead of leaving a
    grey hairline to its left, and because the OUTER clips, the bar's ends are cut straight
    by the corner arc rather than following the 16px radius. */
-:host([data-rui-theme="corporate"]) .rui-callout-section {
+:host([data-rui-theme="vision"]) .rui-callout-section {
   display: block;
   position: relative;
   margin-left: -1px;
   padding: 28px 30px;
   box-shadow: inset 9px 0 0 -1px #97a3b4;      /* default/neutral bar */
 }
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="info"] .rui-callout-section    { box-shadow: inset 9px 0 0 -1px #08a5c5; }
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="success"] .rui-callout-section { box-shadow: inset 9px 0 0 -1px #0fa954; }
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="warning"] .rui-callout-section { box-shadow: inset 9px 0 0 -1px #ffaa00; }
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="danger"] .rui-callout-section,
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="error"] .rui-callout-section   { box-shadow: inset 9px 0 0 -1px #ff6159; }
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="neutral"] .rui-callout-section { box-shadow: inset 9px 0 0 -1px #97a3b4; }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="info"] .rui-callout-section    { box-shadow: inset 9px 0 0 -1px #08a5c5; }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="success"] .rui-callout-section { box-shadow: inset 9px 0 0 -1px #0fa954; }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="warning"] .rui-callout-section { box-shadow: inset 9px 0 0 -1px #ffaa00; }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-section,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="error"] .rui-callout-section   { box-shadow: inset 9px 0 0 -1px #ff6159; }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="neutral"] .rui-callout-section { box-shadow: inset 9px 0 0 -1px #97a3b4; }
 /* compact still has to be denser than this theme's 28px/30px, and because the
    section is display: block here the dismiss button cannot be pushed by
    margin-left: auto — pin it to the section, which is already position: relative. */
-:host([data-rui-theme="corporate"]) .rui-callout[data-compact="true"] .rui-callout-section { padding: 10px 14px; }
-:host([data-rui-theme="corporate"]) .rui-callout-dismiss { position: absolute; top: 24px; right: 24px; margin: 0; }
-:host([data-rui-theme="corporate"]) .rui-callout[data-compact="true"] .rui-callout-dismiss { top: 6px; right: 10px; }
+:host([data-rui-theme="vision"]) .rui-callout[data-compact="true"] .rui-callout-section { padding: 10px 14px; }
+:host([data-rui-theme="vision"]) .rui-callout-dismiss { position: absolute; top: 24px; right: 24px; margin: 0; }
+:host([data-rui-theme="vision"]) .rui-callout[data-compact="true"] .rui-callout-dismiss { top: 6px; right: 10px; }
 
 /* The body becomes a plain block so the description is NOT indented. */
-:host([data-rui-theme="corporate"]) .rui-callout-body {
+:host([data-rui-theme="vision"]) .rui-callout-body {
   display: block;
   flex: none;
 }
 
 /* The icon: lifted out of flow, drawn as a bare semantic-coloured glyph on the
    title's line — no disc, no white knock-out. */
-:host([data-rui-theme="corporate"]) .rui-callout-icon {
+:host([data-rui-theme="vision"]) .rui-callout-icon {
   position: absolute;
   left: 30px;
   top: 28px;
@@ -6503,7 +6505,7 @@ ${below("xs")} {
 
 /* Title: UI Block's third-level headline in the semantic colour, cleared past the
    icon. Description + footer stay at the container's left padding. */
-:host([data-rui-theme="corporate"]) .rui-callout-title {
+:host([data-rui-theme="vision"]) .rui-callout-title {
   font-family: var(--rui-font-family);
   font-size: var(--rui-font-size-lg);
   line-height: 24px;
@@ -6520,9 +6522,9 @@ ${below("xs")} {
 /* .message__section > :last-child { margin-bottom: 0 } -- UI Block collapses the trailing
    margin inside the section, so a title-only or description-last Callout has no stray
    space above its bottom edge. */
-:host([data-rui-theme="corporate"]) .rui-callout-section > :last-child,
-:host([data-rui-theme="corporate"]) .rui-callout-body > :last-child { margin-bottom: 0; }
-:host([data-rui-theme="corporate"]) .rui-callout-description {
+:host([data-rui-theme="vision"]) .rui-callout-section > :last-child,
+:host([data-rui-theme="vision"]) .rui-callout-body > :last-child { margin-bottom: 0; }
+:host([data-rui-theme="vision"]) .rui-callout-description {
   color: var(--rui-color-text);                /* body copy stays navy */
   font-size: var(--rui-font-size-base);
   line-height: 20px;
@@ -6530,24 +6532,24 @@ ${below("xs")} {
   margin-bottom: 12px;                         /* .paragraph margin-bottom */
 }
 /* Semantic colour lands on the TITLE and the ICON, never on the body copy. */
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="info"] .rui-callout-title,
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="info"] .rui-callout-icon,
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="success"] .rui-callout-title,
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="success"] .rui-callout-icon,
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="warning"] .rui-callout-title,
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="warning"] .rui-callout-icon,
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="danger"] .rui-callout-title,
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="danger"] .rui-callout-icon,
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="error"] .rui-callout-title,
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="error"] .rui-callout-icon,
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="neutral"] .rui-callout-title,
-:host([data-rui-theme="corporate"]) .rui-callout[data-variant="neutral"] .rui-callout-icon { color: #465a75; }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="info"] .rui-callout-title,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="info"] .rui-callout-icon,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="success"] .rui-callout-title,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="success"] .rui-callout-icon,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="warning"] .rui-callout-title,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="warning"] .rui-callout-icon,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-title,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-icon,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="error"] .rui-callout-title,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="error"] .rui-callout-icon,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="neutral"] .rui-callout-title,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="neutral"] .rui-callout-icon { color: #465a75; }
 
 /* ---- Floating layers — dark (neutral-5, not near-navy) tooltip that WRAPS
    and centers; borderless popovers/hover-cards at the full 16px card radius
    + the lighter primary-shadow (context-menu/dropdown keep their own tighter
    rule above); borderless toast at 8px radius + UI Block's 16px/14px padding. */
-:host([data-rui-theme="corporate"]) .rui-tooltip-content {
+:host([data-rui-theme="vision"]) .rui-tooltip-content {
   background: #718095; color: #fff; border: none;                       /* neutral-5 · tertiary-background-color-inverted */
   border-radius: var(--rui-radius-sm);
   box-shadow: 0 2px 8px 0 rgba(113, 128, 149, 0.5);
@@ -6556,15 +6558,15 @@ ${below("xs")} {
      base. Aktion's base rule drops tooltips to 12px -- restore the UI Block size. */
   font-size: var(--rui-font-size-base);
 }
-:host([data-rui-theme="corporate"]) .rui-tooltip-arrow { background: #718095; }
-:host([data-rui-theme="corporate"]) .rui-popover-content,
-:host([data-rui-theme="corporate"]) .rui-hover-card-content {
+:host([data-rui-theme="vision"]) .rui-tooltip-arrow { background: #718095; }
+:host([data-rui-theme="vision"]) .rui-popover-content,
+:host([data-rui-theme="vision"]) .rui-hover-card-content {
   background: var(--rui-color-surface);
   border: none;                                    /* --card-border resolves to 0 none transparent */
   border-radius: var(--rui-radius-lg);              /* 16px, --default-border-radius */
   box-shadow: 0 2px 8px 0 rgba(113, 128, 149, 0.5); /* --primary-shadow */
 }
-:host([data-rui-theme="corporate"]) .rui-toast {
+:host([data-rui-theme="vision"]) .rui-toast {
   background: var(--rui-color-surface);
   border: none;                                     /* --semantic-container-border-width resolves to 0 */
   border-radius: var(--rui-radius-sm);               /* 8px, --small-border-radius */
@@ -6572,46 +6574,46 @@ ${below("xs")} {
   padding: 16px 14px;
   color: var(--rui-color-text);
 }
-:host([data-rui-theme="corporate"]) .rui-toast[data-tone] { border: none; }
+:host([data-rui-theme="vision"]) .rui-toast[data-tone] { border: none; }
 /* UI Block's snackbar is a SOLID semantic bar, not a white card with a tinted icon:
    background is the level-3 shade and the text stays navy, with no border
    (snackbar.scss:72-105 pulls in semantic-solid-backgrounds; utils.scss:337-372
-   -> default.scss:204-211). The corporate default above stays white so an
+   -> default.scss:204-211). The vision default above stays white so an
    untoned Toast still reads as a neutral card. */
-:host([data-rui-theme="corporate"]) .rui-toast[data-tone="success"]    { background: #12cf76; color: #001b41; }  /* success-3 */
-:host([data-rui-theme="corporate"]) .rui-toast[data-tone="warning"]    { background: #ffaa00; color: #001b41; }  /* warning-3 */
-:host([data-rui-theme="corporate"]) .rui-toast[data-tone="danger"],
-:host([data-rui-theme="corporate"]) .rui-toast[data-tone="error"]      { background: #ff6159; color: #001b41; }  /* critical-3 */
-:host([data-rui-theme="corporate"]) .rui-toast[data-tone="neutral"]    { background: #bcc8d4; color: #001b41; }  /* neutral-3 */
-:host([data-rui-theme="corporate"]) .rui-toast[data-tone="info"]       { background: #11c7e6; color: #001b41; }  /* activating-3 */
+:host([data-rui-theme="vision"]) .rui-toast[data-tone="success"]    { background: #12cf76; color: #001b41; }  /* success-3 */
+:host([data-rui-theme="vision"]) .rui-toast[data-tone="warning"]    { background: #ffaa00; color: #001b41; }  /* warning-3 */
+:host([data-rui-theme="vision"]) .rui-toast[data-tone="danger"],
+:host([data-rui-theme="vision"]) .rui-toast[data-tone="error"]      { background: #ff6159; color: #001b41; }  /* critical-3 */
+:host([data-rui-theme="vision"]) .rui-toast[data-tone="neutral"]    { background: #bcc8d4; color: #001b41; }  /* neutral-3 */
+:host([data-rui-theme="vision"]) .rui-toast[data-tone="info"]       { background: #11c7e6; color: #001b41; }  /* activating-3 */
 /* Only the corporate tone knocks its text out to white (utils.scss:374-377). */
-:host([data-rui-theme="corporate"]) .rui-toast[data-tone="primary"]    { background: #0b2a63; color: #fff; }     /* corporate-7 */
+:host([data-rui-theme="vision"]) .rui-toast[data-tone="primary"]    { background: #0b2a63; color: #fff; }     /* corporate-7 */
 /* The icon rides on the bar, so it inherits rather than keeping a tinted disc. */
-:host([data-rui-theme="corporate"]) .rui-toast[data-tone] .rui-toast-icon {
+:host([data-rui-theme="vision"]) .rui-toast[data-tone] .rui-toast-icon {
   background: transparent; color: inherit;
 }
 
 /* ---- Modal & sheet — flat white panel, no shadow of its own (separation
    comes purely from the pure-black 0.38-opacity backdrop, not a navy tint). */
-:host([data-rui-theme="corporate"]) .rui-modal,
-:host([data-rui-theme="corporate"]) .rui-sheet-panel {
+:host([data-rui-theme="vision"]) .rui-modal,
+:host([data-rui-theme="vision"]) .rui-sheet-panel {
   background: var(--rui-color-surface); border: none;
   border-radius: var(--rui-radius-lg); box-shadow: none;
 }
-:host([data-rui-theme="corporate"]) .rui-modal-overlay,
-:host([data-rui-theme="corporate"]) .rui-sheet-overlay,
-:host([data-rui-theme="corporate"]) .rui-sheet-backdrop { background: rgba(0, 0, 0, 0.38); }
+:host([data-rui-theme="vision"]) .rui-modal-overlay,
+:host([data-rui-theme="vision"]) .rui-sheet-overlay,
+:host([data-rui-theme="vision"]) .rui-sheet-backdrop { background: rgba(0, 0, 0, 0.38); }
 
 /* ---- Steps — filled navy step markers. */
-:host([data-rui-theme="corporate"]) .rui-steps-item::before { background: var(--rui-color-primary); color: #fff; border: none; font-weight: 600; }
+:host([data-rui-theme="vision"]) .rui-steps-item::before { background: var(--rui-color-primary); color: #fff; border: none; font-weight: 600; }
 
 /* ---- Avatar — pale-blue with navy initials. */
-:host([data-rui-theme="corporate"]) .rui-avatar,
-:host([data-rui-theme="corporate"]) .rui-avatar-fallback { background: #dbedf8; color: #0b2a63; }
+:host([data-rui-theme="vision"]) .rui-avatar,
+:host([data-rui-theme="vision"]) .rui-avatar-fallback { background: #dbedf8; color: #0b2a63; }
 
 /* ---- Dividers & separators — neutral-3 hairline (UI Block's universal divider
    shade — same token list.scss/table rows/menus all share). */
-:host([data-rui-theme="corporate"]) .rui-separator { background: var(--rui-color-border); }
+:host([data-rui-theme="vision"]) .rui-separator { background: var(--rui-color-border); }
 
 /* ---- Lists — hairline uses neutral-3 (not the lighter neutral-2 the base
    rule reaches for); icon/description sizes match UI Block's icon-list/paragraph
@@ -6620,7 +6622,7 @@ ${below("xs")} {
    border and no background of their own, only left padding for the marker
    (mixins/list.scss). Aktion's base list item is a bordered white card, which
    reads as a completely different component next to the real thing. */
-:host([data-rui-theme="corporate"]) .rui-list-item {
+:host([data-rui-theme="vision"]) .rui-list-item {
   border: none;
   background: transparent;
   border-radius: 0;
@@ -6630,7 +6632,7 @@ ${below("xs")} {
    with a corporate-6 check inside, sitting 8px from the label
    (check-list.scss: li padding-left 28px, ::before 20px at margin-left -28px).
    Without the disc the list read as a completely different component. */
-:host([data-rui-theme="corporate"]) .rui-list-icon {
+:host([data-rui-theme="vision"]) .rui-list-icon {
   width: 20px;
   height: 20px;
   flex: none;
@@ -6644,84 +6646,381 @@ ${below("xs")} {
   align-items: center;
   justify-content: center;
 }
-:host([data-rui-theme="corporate"]) .rui-list-item { gap: 8px; align-items: flex-start; }
-:host([data-rui-theme="corporate"]) .rui-list { gap: 8px; }
-:host([data-rui-theme="corporate"]) .rui-list-title { font-weight: 400; line-height: 24px; }
-:host([data-rui-theme="corporate"]) .rui-list-item { line-height: 24px; }   /* 1.717em at 14px */
-:host([data-rui-theme="corporate"]) .rui-list-description { font-size: var(--rui-font-size-sm); }
-:host([data-rui-theme="corporate"]) .rui-description-item { border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle); } /* solid, not dashed — no dashed divider exists anywhere in UI Block */
-:host([data-rui-theme="corporate"]) .rui-text[data-variant="large"] { font-size: var(--rui-font-size-lg); line-height: 24px; } /* paragraph--large */
+:host([data-rui-theme="vision"]) .rui-list-item { gap: 8px; align-items: flex-start; }
+:host([data-rui-theme="vision"]) .rui-list { gap: 8px; }
+:host([data-rui-theme="vision"]) .rui-list-title { font-weight: 400; line-height: 24px; }
+:host([data-rui-theme="vision"]) .rui-list-item { line-height: 24px; }   /* 1.717em at 14px */
+:host([data-rui-theme="vision"]) .rui-list-description { font-size: var(--rui-font-size-sm); }
+:host([data-rui-theme="vision"]) .rui-description-item { border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle); } /* solid, not dashed — no dashed divider exists anywhere in UI Block */
+:host([data-rui-theme="vision"]) .rui-text[data-variant="large"] { font-size: var(--rui-font-size-lg); line-height: 24px; } /* paragraph--large */
 
 /* ---- Navigation — active/hover items use a NAVY-at-opacity wash (not a flat
    pale-blue solid), text always stays dark navy (UI Block never recolors nav
    text on hover/active), and every state gets a visible focus ring. */
-:host([data-rui-theme="corporate"]) .rui-sidebar-item,
-:host([data-rui-theme="corporate"]) .rui-nav-link {
+:host([data-rui-theme="vision"]) .rui-sidebar-item,
+:host([data-rui-theme="vision"]) .rui-nav-link {
   color: var(--rui-color-text);
   border-color: transparent;
 }
-:host([data-rui-theme="corporate"]) .rui-sidebar-item:hover,
-:host([data-rui-theme="corporate"]) .rui-nav-link:hover,
-:host([data-rui-theme="corporate"]) .rui-navbar-item:hover {
+:host([data-rui-theme="vision"]) .rui-sidebar-item:hover,
+:host([data-rui-theme="vision"]) .rui-nav-link:hover,
+:host([data-rui-theme="vision"]) .rui-navbar-item:hover {
   background: rgba(0, 61, 143, 0.1); color: var(--rui-color-text); border-color: transparent;
 }
-:host([data-rui-theme="corporate"]) .rui-sidebar-item[data-active="true"],
-:host([data-rui-theme="corporate"]) .rui-nav-link[data-active="true"],
-:host([data-rui-theme="corporate"]) .rui-navbar-item[data-active="true"] {
+:host([data-rui-theme="vision"]) .rui-sidebar-item[data-active="true"],
+:host([data-rui-theme="vision"]) .rui-nav-link[data-active="true"],
+:host([data-rui-theme="vision"]) .rui-navbar-item[data-active="true"] {
   background: rgba(0, 61, 143, 0.15); color: var(--rui-color-text); border-color: transparent; border-radius: 12px;
 }
-:host([data-rui-theme="corporate"]) .rui-sidebar-item[data-active="true"]:hover,
-:host([data-rui-theme="corporate"]) .rui-nav-link[data-active="true"]:hover { background: rgba(0, 61, 143, 0.2); }
-:host([data-rui-theme="corporate"]) .rui-sidebar-item:active,
-:host([data-rui-theme="corporate"]) .rui-nav-link:active { background: rgba(0, 61, 143, 0.3); }
-:host([data-rui-theme="corporate"]) .rui-sidebar-item:focus-visible,
-:host([data-rui-theme="corporate"]) .rui-nav-link:focus-visible,
-:host([data-rui-theme="corporate"]) .rui-navbar-item:focus-visible { outline: 2px solid var(--rui-color-accent); outline-offset: 1px; }
-:host([data-rui-theme="corporate"]) .rui-sidebar {
+:host([data-rui-theme="vision"]) .rui-sidebar-item[data-active="true"]:hover,
+:host([data-rui-theme="vision"]) .rui-nav-link[data-active="true"]:hover { background: rgba(0, 61, 143, 0.2); }
+:host([data-rui-theme="vision"]) .rui-sidebar-item:active,
+:host([data-rui-theme="vision"]) .rui-nav-link:active { background: rgba(0, 61, 143, 0.3); }
+:host([data-rui-theme="vision"]) .rui-sidebar-item:focus-visible,
+:host([data-rui-theme="vision"]) .rui-nav-link:focus-visible,
+:host([data-rui-theme="vision"]) .rui-navbar-item:focus-visible { outline: 2px solid var(--rui-color-accent); outline-offset: 1px; }
+:host([data-rui-theme="vision"]) .rui-sidebar {
   background: var(--rui-color-surface); border: none; box-shadow: 0 2px 8px 0 rgba(113, 128, 149, 0.5);
 }
-:host([data-rui-theme="corporate"]) .rui-sidebar-section-label {
+:host([data-rui-theme="vision"]) .rui-sidebar-section-label {
   color: var(--rui-color-text); font-size: var(--rui-font-size-base); font-weight: 600; text-transform: none; letter-spacing: 0;
 }
-:host([data-rui-theme="corporate"]) .rui-sidebar-item-icon { font-size: var(--rui-font-size-20); }
-:host([data-rui-theme="corporate"]) .rui-app-shell-topbar {
+:host([data-rui-theme="vision"]) .rui-sidebar-item-icon { font-size: var(--rui-font-size-20); }
+:host([data-rui-theme="vision"]) .rui-app-shell-topbar {
   background: #003d8f; color: #fff; border-bottom: var(--rui-border-width) solid #002659; box-shadow: 0 1px 1px -1px #3364a5;
 }
-:host([data-rui-theme="corporate"]) .rui-page-header { border-bottom: none; } /* flat — separates by colour alone, like cards */
-:host([data-rui-theme="corporate"]) .rui-page-header-title,
-:host([data-rui-theme="corporate"]) .rui-section-header-title { color: var(--rui-color-text); }
+:host([data-rui-theme="vision"]) .rui-page-header { border-bottom: none; } /* flat — separates by colour alone, like cards */
+:host([data-rui-theme="vision"]) .rui-page-header-title,
+:host([data-rui-theme="vision"]) .rui-section-header-title { color: var(--rui-color-text); }
 
-/* ---- Loaders — skeleton shimmer needs actual contrast (corporate's bg and
+/* ---- Loaders — skeleton shimmer needs actual contrast (vision's bg and
    surface-muted tokens are identical, so the base gradient was invisible);
    spinner matches UI Block's 1s rotation and switches to a bright/grey ring
    depending on whether it sits on a filled or unfilled button. */
-:host([data-rui-theme="corporate"]) .rui-skeleton-line {
+:host([data-rui-theme="vision"]) .rui-skeleton-line {
   background: linear-gradient(90deg, #dbe2e8 0%, #f4f7fa 50%, #dbe2e8 100%);
   background-size: 200% 100%;
 }
-:host([data-rui-theme="corporate"]) .rui-spinner-ring { animation-duration: 1s; }
+:host([data-rui-theme="vision"]) .rui-spinner-ring { animation-duration: 1s; }
 /* UI Block's loading-circle: 10px dots (1em at font-size 10px), 0.6em apart, pulsing
    between interactive-blue and transparent on a 1.3s loop with 0/0.3/0.5s
    delays, in a 55px-min-width row (loading-circle.scss). */
-:host([data-rui-theme="corporate"]) .rui-loading-dots-track { min-width: 55px; gap: 6px; }
-:host([data-rui-theme="corporate"]) .rui-loading-dots-dot {
+:host([data-rui-theme="vision"]) .rui-loading-dots-track { min-width: 55px; gap: 6px; }
+:host([data-rui-theme="vision"]) .rui-loading-dots-dot {
   width: 10px; height: 10px;
-  animation-name: rui-loading-dots-pulse-corporate;
+  animation-name: rui-loading-dots-pulse-vision;
   animation-duration: 1.3s;
 }
-@keyframes rui-loading-dots-pulse-corporate {
+@keyframes rui-loading-dots-pulse-vision {
   0%, 100% { background-color: #1474c4; }
   50% { background-color: transparent; }
 }
-:host([data-rui-theme="corporate"]) .rui-button:not([data-variant="secondary"]):not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="link"]) .rui-spinner-ring,
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="danger"] .rui-spinner-ring {
+:host([data-rui-theme="vision"]) .rui-button:not([data-variant="secondary"]):not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="link"]) .rui-spinner-ring,
+:host([data-rui-theme="vision"]) .rui-button[data-variant="danger"] .rui-spinner-ring {
   border-color: rgba(255, 255, 255, 0.35); border-top-color: #fff;
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="secondary"] .rui-spinner-ring,
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="outline"] .rui-spinner-ring,
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"] .rui-spinner-ring,
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="link"] .rui-spinner-ring {
+:host([data-rui-theme="vision"]) .rui-button[data-variant="secondary"] .rui-spinner-ring,
+:host([data-rui-theme="vision"]) .rui-button[data-variant="outline"] .rui-spinner-ring,
+:host([data-rui-theme="vision"]) .rui-button[data-variant="ghost"] .rui-spinner-ring,
+:host([data-rui-theme="vision"]) .rui-button[data-variant="link"] .rui-spinner-ring {
   border-color: rgba(113, 128, 149, 0.25); border-top-color: #718095;
+}
+
+/* ============================================================================
+   Corporate — contemporary enterprise workspace.
+
+   Signatures, each one chosen to be somebody's opposite in this stylesheet:
+     - square-shouldered 8px controls, where modern is a 999px pill;
+     - flat cards that own a hairline and NO resting shadow, gaining a tinted
+       border plus a short-throw shadow on hover, where modern lifts on hover;
+     - a 2px teal rail marking the selected tab, active nav item and open
+       accordion, where modern fills a segmented pill;
+     - a single brand hue (teal) doing primary, link, focus and chart-1, so the
+       only other colour on screen is a status;
+     - Space Grotesk display type with negative tracking over a 15px Inter body.
+
+   Every rule below is a deliberate departure from the base sheet. Anything the
+   theme is happy with (spacing rhythm, icon sizing, layout) is left alone and
+   inherits from the tokens.
+   ============================================================================ */
+:host([data-rui-theme="corporate"]) {
+  /* A quiet brand wash anchoring the top of the page — no radial blobs, which
+     is the modern theme's move. */
+  background:
+    linear-gradient(180deg, rgba(15, 118, 110, 0.05) 0%, rgba(15, 118, 110, 0) 240px),
+    var(--rui-color-bg);
+}
+:host([data-rui-theme="corporate"][transparent]),
+:host([data-rui-theme="corporate"][transparent="true"]) {
+  background: transparent;
+}
+
+/* ---- Surfaces — hairline first, shadow only on interaction ---------------- */
+:host([data-rui-theme="corporate"]) .rui-card,
+:host([data-rui-theme="corporate"]) .rui-stat-card,
+:host([data-rui-theme="corporate"]) .rui-chart,
+:host([data-rui-theme="corporate"]) .rui-table-wrapper,
+:host([data-rui-theme="corporate"]) .rui-accordion-item,
+:host([data-rui-theme="corporate"]) .rui-code-block {
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: var(--rui-radius-lg);
+  background: var(--rui-color-surface);
+  box-shadow: none;
+}
+:host([data-rui-theme="corporate"]) .rui-card,
+:host([data-rui-theme="corporate"]) .rui-stat-card {
+  transition:
+    border-color var(--rui-motion-base, 170ms) var(--rui-motion-ease, ease),
+    box-shadow var(--rui-motion-base, 170ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme="corporate"]) .rui-card:hover,
+:host([data-rui-theme="corporate"]) .rui-stat-card:hover {
+  /* No translate: a console is a dense grid, and lifting one tile out of it
+     reads as breakage rather than as feedback. */
+  border-color: color-mix(in srgb, var(--rui-color-primary) 34%, var(--rui-color-border));
+  box-shadow: var(--rui-shadow-sm);
+}
+:host([data-rui-theme="corporate"]) .rui-modal {
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: var(--rui-radius-lg);
+  box-shadow: var(--rui-shadow-lg);
+}
+
+/* ---- Type — display face, negative tracking, teal eyebrows --------------- */
+:host([data-rui-theme="corporate"]) .rui-card-title,
+:host([data-rui-theme="corporate"]) .rui-section-title,
+:host([data-rui-theme="corporate"]) .rui-page-header-title,
+:host([data-rui-theme="corporate"]) .rui-text[data-variant="title"],
+:host([data-rui-theme="corporate"]) .rui-text[data-variant="heading"],
+:host([data-rui-theme="corporate"]) .rui-text[data-variant="large-heavy"] {
+  font-family: var(--rui-font-family-heading);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--rui-color-text);
+}
+:host([data-rui-theme="corporate"]) .rui-section-header-eyebrow {
+  color: var(--rui-color-primary);
+  letter-spacing: 0.1em;
+}
+:host([data-rui-theme="corporate"]) .rui-page-header {
+  border-bottom-width: 2px;
+  border-bottom-color: var(--rui-color-border);
+}
+
+/* ---- Buttons — 8px, flat, with a darker bottom edge that compresses on press
+   (the "keycap"). No lift, no glow: this is a control, not a call to action. */
+:host([data-rui-theme="corporate"]) .rui-button {
+  border-radius: var(--rui-radius-button);
+  font-weight: var(--rui-button-font-weight);
+  letter-spacing: var(--rui-button-letter-spacing);
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+  border: var(--rui-border-width) solid transparent;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+  transition:
+    background var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease),
+    border-color var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease),
+    box-shadow var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme="corporate"]) .rui-button:hover:not(:disabled) {
+  background: var(--rui-color-primary-hover);
+}
+:host([data-rui-theme="corporate"]) .rui-button:active:not(:disabled) {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+:host([data-rui-theme="corporate"]) .rui-button[data-variant="secondary"] {
+  background: var(--rui-color-surface);
+  color: var(--rui-color-text);
+  border-color: var(--rui-color-border-control);
+  box-shadow: none;
+}
+:host([data-rui-theme="corporate"]) .rui-button[data-variant="secondary"]:hover:not(:disabled) {
+  background: var(--rui-color-surface-muted);
+  border-color: var(--rui-color-primary);
+  color: var(--rui-color-primary);
+}
+:host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"],
+:host([data-rui-theme="corporate"]) .rui-button[data-variant="link"] {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--rui-color-link);
+}
+:host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-primary) 9%, transparent);
+}
+:host([data-rui-theme="corporate"]) .rui-button[data-variant="danger"] {
+  background: var(--rui-color-danger);
+  color: var(--rui-color-on-danger);
+}
+:host([data-rui-theme="corporate"]) .rui-button:disabled {
+  /* Opacity only — recolouring a disabled button loses which variant it was. */
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+/* ---- Fields — white box, accessible boundary, 3px halo on focus ---------- */
+:host([data-rui-theme="corporate"]) .rui-input,
+:host([data-rui-theme="corporate"]) .rui-select,
+:host([data-rui-theme="corporate"]) .rui-textarea {
+  background: var(--rui-color-surface);
+  border-color: var(--rui-color-border-control);
+  border-radius: var(--rui-radius-input);
+  transition:
+    border-color var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease),
+    box-shadow var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme="corporate"]) .rui-input:hover:not(:disabled),
+:host([data-rui-theme="corporate"]) .rui-select:hover:not(:disabled),
+:host([data-rui-theme="corporate"]) .rui-textarea:hover:not(:disabled) {
+  border-color: var(--rui-color-primary);
+}
+:host([data-rui-theme="corporate"]) .rui-input:focus,
+:host([data-rui-theme="corporate"]) .rui-select:focus,
+:host([data-rui-theme="corporate"]) .rui-textarea:focus {
+  border-color: var(--rui-color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-primary) 20%, transparent);
+}
+
+/* ---- Tabs — a 2px rail under the selected trigger, not a segmented pill --- */
+:host([data-rui-theme="corporate"]) .rui-tab-list {
+  gap: var(--rui-spacing-l);
+  padding: 0;
+  background: transparent;
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: 0;
+}
+:host([data-rui-theme="corporate"]) .rui-tab-trigger {
+  border: none;
+  border-radius: 0;
+  padding: 8px 0;
+  margin-bottom: -1px;
+  font-weight: 500;
+  color: var(--rui-color-text-muted);
+  border-bottom: 2px solid transparent;
+  background: transparent;
+}
+:host([data-rui-theme="corporate"]) .rui-tab-trigger:hover {
+  color: var(--rui-color-text);
+  border-bottom-color: var(--rui-color-border-control);
+}
+:host([data-rui-theme="corporate"]) .rui-tab-trigger[aria-selected="true"] {
+  color: var(--rui-color-primary);
+  font-weight: 600;
+  background: transparent;
+  border-bottom-color: var(--rui-color-primary);
+  box-shadow: none;
+}
+
+/* ---- Navigation — the same 2px rail, turned on its side ------------------ */
+:host([data-rui-theme="corporate"]) .rui-nav-link {
+  border-radius: var(--rui-radius-sm);
+  font-weight: 500;
+}
+:host([data-rui-theme="corporate"]) .rui-nav-link[data-active="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 10%, transparent);
+  color: var(--rui-color-primary);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--rui-color-primary);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  font-weight: 600;
+}
+:host([data-rui-theme="corporate"]) .rui-breadcrumb-link:hover {
+  color: var(--rui-color-link-hover);
+}
+
+/* ---- Chips — square shoulders, so a Badge never reads as a Button -------- */
+:host([data-rui-theme="corporate"]) .rui-tag,
+:host([data-rui-theme="corporate"]) .rui-badge,
+:host([data-rui-theme="corporate"]) .rui-pill {
+  border-radius: var(--rui-radius-sm);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+:host([data-rui-theme="corporate"]) .rui-badge[data-variant="primary"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 12%, transparent);
+  color: var(--rui-color-link);
+}
+
+/* ---- Data — sentence-case headers on a muted band, teal row wash ---------
+   Uppercase table headers are already the private vision theme's and modern's
+   signature; going sentence-case with a 2px rule is how this theme's tables
+   read as its own. */
+:host([data-rui-theme="corporate"]) .rui-table th {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text-muted);
+  font-weight: 600;
+  font-size: var(--rui-font-size-13);
+  text-transform: none;
+  letter-spacing: 0;
+  border-bottom: 2px solid var(--rui-color-border);
+}
+:host([data-rui-theme="corporate"]) .rui-table td {
+  border-bottom-color: var(--rui-color-border-subtle);
+}
+:host([data-rui-theme="corporate"]) .rui-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--rui-color-primary) 6%, transparent);
+}
+:host([data-rui-theme="corporate"]) .rui-stat-value {
+  font-family: var(--rui-font-family-heading);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--rui-color-text);
+}
+:host([data-rui-theme="corporate"]) .rui-stat-label {
+  color: var(--rui-color-text-muted);
+  text-transform: uppercase;
+  font-size: var(--rui-font-size-11);
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+/* ---- Messaging — a 3px status rail on a flat tint, no icon disc chrome --- */
+:host([data-rui-theme="corporate"]) .rui-callout {
+  border-radius: var(--rui-radius-md);
+  border-left-width: 3px;
+  border-left-color: var(--rui-color-primary);
+  background: var(--rui-color-surface-muted);
+}
+:host([data-rui-theme="corporate"]) .rui-callout[data-tone="success"] { border-left-color: var(--rui-color-success); }
+:host([data-rui-theme="corporate"]) .rui-callout[data-tone="warning"] { border-left-color: var(--rui-color-warning); }
+:host([data-rui-theme="corporate"]) .rui-callout[data-tone="danger"]  { border-left-color: var(--rui-color-danger); }
+:host([data-rui-theme="corporate"]) .rui-callout[data-tone="info"]    { border-left-color: var(--rui-color-info); }
+:host([data-rui-theme="corporate"]) .rui-banner {
+  border-radius: 0;
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+}
+
+/* ---- Progress, steps, separators ---------------------------------------- */
+:host([data-rui-theme="corporate"]) .rui-progress-bar {
+  background: var(--rui-gradient-accent);
+}
+:host([data-rui-theme="corporate"]) .rui-steps-item::before {
+  border-radius: var(--rui-radius-xs);
+  font-weight: 600;
+  font-family: var(--rui-font-family-heading);
+}
+:host([data-rui-theme="corporate"]) .rui-separator {
+  background: var(--rui-color-border);
+}
+:host([data-rui-theme="corporate"]) .rui-link {
+  color: var(--rui-color-link);
+  font-weight: 500;
+  text-underline-offset: 2px;
+}
+:host([data-rui-theme="corporate"]) .rui-follow-up-button {
+  border-radius: var(--rui-radius-button);
+  background: var(--rui-color-surface);
+  border-color: var(--rui-color-border-control);
+  color: var(--rui-color-text);
+  font-weight: 500;
+  box-shadow: none;
+}
+:host([data-rui-theme="corporate"]) .rui-follow-up-button:hover {
+  border-color: var(--rui-color-primary);
+  color: var(--rui-color-primary);
+  background: color-mix(in srgb, var(--rui-color-primary) 7%, transparent);
 }
 
 /* Modern — clean SaaS dashboard. Light off-white canvas with a whisper-faint

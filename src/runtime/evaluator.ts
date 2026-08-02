@@ -42,7 +42,7 @@ import { Util } from "./util.js";
 import { Style, Rules } from "./namespaces-extra.js";
 import { registerIcons } from "../icons/index.js";
 import { loadBuiltInThemeFonts, loadFonts } from "../theme/fonts.js";
-import { builtInThemes } from "../theme/index.js";
+import { findThemeByName } from "../theme/index.js";
 import { matchRoute, matchRoutePrefix, type Router, type NavigationGuard } from "./router.js";
 import { findComponent } from "../library/registry.js";
 import { findPositionalIndex, chooseNamedBagIndex, callArgShapes } from "../library/types.js";
@@ -3261,7 +3261,7 @@ function evaluateInvoke(
         // `$theme({ name: "corporate" })` must load that theme's web fonts too,
         // exactly as the `theme="..."` attribute path does.
         if (themeName) loadBuiltInThemeFonts(themeName);
-        const baseTokens = themeName ? builtInThemes[themeName] : null;
+        const baseTokens = themeName ? findThemeByName(themeName) : null;
         const merged = baseTokens ? { ...baseTokens, ...tokens } : tokens;
         return { kind: "Theme", tokens: merged } satisfies ThemeNode;
       }
@@ -5533,17 +5533,21 @@ const THEME_GROUP_PREFIX: Record<string, string> = {
 
 /**
  * Read the `name` metadata key off a `$theme({...})` config and return the
- * matching built-in theme key (`dark`, `corporate`, `soft`, `glass`,
- * `modern`, ...) when it names a real registered theme.
+ * matching registered theme key (`dark`, `corporate`, `soft`, `glass`,
+ * `modern`, ...) when it names a real theme.
  * Returns `null` for an absent / unknown name so the runtime falls back to
  * the active base theme rather than wiping it.
+ *
+ * Resolves through `findThemeByName`, not `builtInThemes`, so a private theme
+ * behaves identically to a published one here — privacy is about what gets
+ * ENUMERATED, not about what a program is allowed to ask for by name.
  */
 function resolveBuiltInThemeName(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const name = (value as Record<string, unknown>).name;
   if (typeof name !== "string") return null;
   const key = name.trim().toLowerCase();
-  return key in builtInThemes ? key : null;
+  return findThemeByName(key) ? key : null;
 }
 
 function collectThemeTokens(value: unknown): Record<string, string> {

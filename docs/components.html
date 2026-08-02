@@ -850,11 +850,18 @@ $app(Row([
 ], { gap: "md" }))`,
 
       // Navigation
-      Breadcrumb: `$app(Breadcrumb([
-  BreadcrumbItem("Home",        { href: "#", icon: "house" }),
-  BreadcrumbItem("Workspace",   { href: "#" }),
-  BreadcrumbItem("Engineering")
-]))`,
+      Breadcrumb: `$app(Column([
+  Text("Plain strings \u2014 each crumb derives its own route, the first gets the home icon:", { tone: "muted", variant: "small" }),
+  Breadcrumb(["Workspace", "Reports", "Q3"]),
+  Text("Objects, when the real routes are not the slugified labels:", { tone: "muted", variant: "small" }),
+  Breadcrumb([
+    { label: "Home", to: "/" },
+    { label: "Projects", to: "/projects" },
+    { label: "Atlas" }
+  ]),
+  Text("Pure text \u2014 no icon, no links:", { tone: "muted", variant: "small" }),
+  Breadcrumb(["Docs", "Components", "Breadcrumb"], { homeIcon: false, autoLink: false })
+], { gap: "md" }))`,
       BreadcrumbItem: `$app(Breadcrumb([
   BreadcrumbItem("Home",      { href: "#", icon: "house" }),
   BreadcrumbItem("Reports",   { href: "#" }),

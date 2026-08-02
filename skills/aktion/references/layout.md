@@ -114,7 +114,7 @@ on every one of them.**
 | --- | --- | --- |
 | `light` | Crisp default, indigo accent, soft shadows. | Most business apps, dashboards, settings. |
 | `dark` | Standard dark surface, indigo accent. | Night mode, code-heavy workflows, ops dashboards. |
-| `corporate` | Enterprise cloud-console aesthetic — deep navy primary, cyan accents, calm pale blue background. Loads Open Sans + Overpass. | Admin consoles, B2B portals, infra dashboards. |
+| `corporate` | Contemporary enterprise workspace — deep teal primary on a graphite canvas, square-shouldered 8px controls, flat hairline cards. Loads Inter + Space Grotesk. | Admin consoles, B2B portals, infra dashboards. |
 | `soft` | Friendly, light, rounded. Lavender + mint, generous radii. | Onboarding, wellness, education, consumer apps. |
 | `glass` | Light glassmorphism — frosted surfaces over an airy pastel gradient, warm coral accent. | Wellness, lifestyle, consumer dashboards, calm hero pages. |
 | `modern` | Clean modern SaaS — generous rounding, ink primary with pill buttons, vibrant charts. | Product dashboards, project/finance tools, contemporary B2B. |

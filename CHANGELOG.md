@@ -13,7 +13,48 @@ Published releases are listed at
 
 ## Unreleased
 
-_Nothing yet._
+### Changed
+
+- **The `corporate` theme is a new design.** It is now a contemporary
+  enterprise workspace: graphite `#f5f7f8` canvas, a single deep-teal `#0f766e`
+  brand hue carrying primary buttons / links / focus ring / `chart1`,
+  square-shouldered 8px buttons and inputs (down from the 24px pill), flat
+  hairline cards with no resting shadow that tint their border on hover, a 2px
+  teal rail under the selected tab, sentence-case table headers, and a 15px
+  Inter body under Space Grotesk headings. Its web fonts changed with it —
+  `builtInThemeFonts.corporate` is now `Inter:400,500,600,700` +
+  `Space Grotesk:500,600,700`. Primary now **darkens** on hover rather than
+  brightening. Anything pinning the previous navy values (`#0b2a63`,
+  `#1474c4`, `#f4f7fa`, `radiusButton: 24px`, `transitionDuration: 100ms`)
+  needs updating; the token *names* are unchanged, and the six built-in theme
+  names are unchanged.
+- **`Breadcrumb` crumbs navigate by default.** A plain-string trail used to
+  render inert text unless you passed `onItemClick` or swapped in
+  `BreadcrumbItem` nodes. Every crumb except the leaf is now a link: a string
+  trail derives its own cumulative route from the labels
+  (`["Workspace", "Reports", "Q3"]` → `/workspace`, `/workspace/reports`), and
+  `items` additionally accepts `{ label, to }` / `{ label, href }` objects
+  alongside the existing node and string forms. Two new props: `autoLink`
+  (default `true`) turns the derivation off, and `homeIcon` (default `true`)
+  controls the leading icon now drawn on the first crumb — `false` removes it,
+  a string picks a different Font Awesome name. A label that slugifies to
+  nothing leaves its crumb inert rather than inventing a wrong path.
+
+### Fixed
+
+- **Playground: the "Storage + console globals" example stored nothing.** Its
+  fields bound through `value: $name ?? ""` — an expression, not a `$variable`,
+  so two-way binding had no atom to write back to; typing never updated the
+  state and "Save" persisted an empty string. The fallbacks moved to the point
+  of initialisation (`$name = $storage.get(…) ?? ""`) so `value:` can be the
+  bare atom. Its "Reset everything" button also called `$storage.clear()`,
+  which empties the **whole origin** — in the playground that took the editor's
+  own saved files, theme and layout with it. It now removes just the three demo
+  keys.
+- Playground: the example picker is one flat list again. The
+  "New features" and "Primitives & coverage" tiers and their examples are gone
+  (`Advanced UI power tools` is kept, ungrouped), so the `<select>` no longer
+  renders `<optgroup>` dividers.
 
 ## 0.6.0 — 2026-07-31
 
