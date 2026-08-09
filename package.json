@@ -1,6 +1,6 @@
 {
   "name": "aktion-runtime",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Aktion is a single web component that turns a compact, streaming-first DSL into a rich, interactive UI inside its shadow DOM. Works in React, Vue, Angular, Svelte, plain HTML — or no framework at all.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -15,6 +15,10 @@
     "./test": {
       "types": "./dist/types/testing/index.d.ts",
       "import": "./dist/testing.js"
+    },
+    "./coverage": {
+      "types": "./dist/types/runtime/coverage.d.ts",
+      "import": "./dist/coverage.js"
     },
     "./devtools": {
       "types": "./dist/types/devtools/index.d.ts",
@@ -45,9 +49,10 @@
   },
   "scripts": {
     "dev": "npm run build && vite",
-    "build": "tsc -p tsconfig.build.json && vite build && vite build --config vite.testing.config.ts && vite build --config vite.devtools.config.ts && vite build --config vite.language.config.ts && vite build --config vite.plugin.config.ts && node scripts/emit-prompt.mjs && node scripts/emit-skill.mjs && node scripts/emit-entry.mjs",
+    "build": "tsc -p tsconfig.build.json && vite build && vite build --config vite.testing.config.ts && vite build --config vite.coverage.config.ts && vite build --config vite.devtools.config.ts && vite build --config vite.language.config.ts && vite build --config vite.plugin.config.ts && node scripts/emit-prompt.mjs && node scripts/emit-skill.mjs && node scripts/emit-entry.mjs",
     "build:lib": "vite build",
     "build:test": "vite build --config vite.testing.config.ts",
+    "build:coverage": "vite build --config vite.coverage.config.ts",
     "build:devtools": "vite build --config vite.devtools.config.ts",
     "build:language": "vite build --config vite.language.config.ts",
     "build:plugin": "vite build --config vite.plugin.config.ts",

@@ -451,3 +451,66 @@ $app(Container(Column([
   ]),
 ], { gap: "lg" }), { size: "md" }))
 ```
+
+## Testing a multi-file app
+
+`render(source)` takes a program **string**, which cannot express an app whose
+entry `import`s other modules — the linker resolves those at build time, so the
+entry's text is not a runnable program. Mount the compiled artefact instead.
+
+```ts
+import { describe, it, expect, afterEach, beforeAll, afterAll } from "vitest";
+import { renderCompiled, cleanup, coverage, json } from "aktion-runtime/test";
+import app from "../src/app.aktion";        // a CompiledProgram (Vite plugin)
+
+beforeAll(() => { coverage.start(); });
+afterEach(cleanup);
+afterAll(() => { writeFileSync("coverage/aktion.lcov", coverage.toLcov()); });
+
+it("lists the rows the API returned", async () => {
+  const screen = renderCompiled(app, {
+    route: "/clusters",
+    fetch: (url) => json({ items: [{ id: "1", properties: { name: "alpha" } }] }),
+  });
+
+  expect(await screen.findByRole("link", { name: "alpha" })).toBeDefined();
+  expect(screen.requests[0].url).toContain("/k8s?depth=3");
+});
+```
+
+Four things to get right, each of which silently produces a passing test that
+proves nothing otherwise:
+
+1. **`$state` names are mangled in a linked program.** The linker gives every
+   non-entry module private scope by renaming its atoms — `$filter` declared in
+   `lib/store.aktion` is `__a4_filter` in `serializeState()`, and the number comes
+   from import traversal order, so an added import renumbers it.
+   `screen.state.get("filter")` resolves the bare name for you; never hard-code
+   the prefix.
+2. **`getByRole(role, { name })` matches the accessible name EXACTLY.** Pass a
+   regex or `{ exact: false }` for a substring. Remember the name includes
+   visually-hidden text: an external `Link` is `"Learn more (opens in new tab)"`.
+3. **`state.set` is a reactive write; `state.hydrate` restores a host snapshot.**
+   Use `set` to simulate an interaction (derived atoms recompute, and the value is
+   still the program's own on a replan); use `hydrate` for SSR / resume tests.
+4. **Coverage of a `.aktion` file is interpreter-level, not V8.** The plugin emits
+   `JSON.parse("<AST>")`, so V8 reports ~100% for any DSL file. Exclude
+   `**/*.aktion` from the V8 report and gate on `coverage.report()` instead.
+   Outside a DOM — a Vitest `globalSetup`, a CI script — import the identical API
+   from `aktion-runtime/coverage`, which has no DOM dependency.
+
+To unit-test a helper module directly (rather than through the UI), compile an
+inline program that imports the real file. Coverage is keyed by path, so the hits
+land on that file:
+
+```ts
+import { compileAktionSource } from "aktion-runtime/vite";
+
+const probe = compileAktionSource(
+  `import { formatBytes } from "./src/lib/format.aktion"\n` +
+  `$app(Text(formatBytes(2048)))`,
+  "tests/probe.aktion",
+  { root: process.cwd() },
+);
+const screen = renderCompiled(probe);
+```

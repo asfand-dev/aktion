@@ -728,6 +728,7 @@ export const Select: ComponentSpec = {
     { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
     { name: "loading", type: "boolean", optional: true, description: "Options are still being fetched — disables the control and shows a loading option instead of an empty list" },
     { name: "onSearch", type: "callable", optional: true, description: "Called with the query ~200ms after typing stops, for server-side search (implies `searchable`; supply the matches as `items`)" },
+    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
   ],
   render: (node, props, helpers) => {
     // `onSearch` implies `searchable`. A native <select> has no query to report,
@@ -815,6 +816,7 @@ export const Checkbox: ComponentSpec = {
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the control (marks it invalid)" },
     { name: "hint", type: "string", optional: true, description: "Helper text rendered below the control" },
     { name: "indeterminate", type: "boolean", optional: true, description: "Tri-state \"partially checked\" dash (a parent of a partly-selected list)" },
+    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a checkbox in a table cell whose column header already carries the name" },
   ],
   render: (node, props, helpers) => {
     const disabled = asBoolean(props.disabled);
@@ -854,7 +856,17 @@ export const Checkbox: ComponentSpec = {
       event: "change",
       getValue: (n) => (n as HTMLInputElement).checked,
     });
-    const labelSpan = el("span", { class: "rui-checkbox-label" }, [asString(props.label)]);
+    // `labelHidden` keeps the label in the accessibility tree and takes it off
+    // the screen — the correct treatment for a checkbox in a grid cell, where the
+    // column header is the name and repeating it in every row is noise. It is
+    // NOT `display: none` / `aria-hidden`, either of which would leave the box
+    // unnamed for the users who most need the name. Same contract as the
+    // `labelHidden` on every field-shell input (see forms-shared.ts).
+    const labelSpan = el("span", {
+      class: asBoolean(props.labelHidden)
+        ? "rui-checkbox-label rui-visually-hidden"
+        : "rui-checkbox-label",
+    }, [asString(props.label)]);
     if (description) {
       // Same classes CheckBoxItem uses, so the existing two-line styling applies.
       const stack = el("span", { class: "rui-checkbox-item-text" });
@@ -933,6 +945,7 @@ export const CheckBoxGroup: ComponentSpec = {
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the group (marks it invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark the group required (adds a `*` to the heading)" },
     { name: "disabled", type: "boolean", optional: true, description: "Lock every item in the group" },
+    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
   ],
   render: (node, props, helpers) => {
     const groupName = asString(props.name);
@@ -1047,7 +1060,10 @@ export const Radio: ComponentSpec = {
     "option value. Always pass `label` — the question being answered " +
     "(\"Shipping method\") — and use `direction: \"row\"` for a Yes/No or " +
     "Monthly/Yearly pair. `items` accepts `SelectItem(value, label)` nodes, " +
-    "`{value, label, disabled}` objects and bare strings.",
+    "`{value, label, disabled}` objects and bare strings. Pass `slots` to hang " +
+    "a control off an option's own row (\"Fixed  [– 3 +]\", \"Card  [number]\") — " +
+    "one entry per item, aligned by index; the slot renders OUTSIDE the " +
+    "`<label>`, so clicking the control does not select the option.",
   props: [
     { name: "id", type: "string" },
     { name: "items", type: "SelectItem[]", description: "Options; SelectItem(value, label) nodes, {value, label, disabled} objects or bare strings" },
@@ -1059,17 +1075,27 @@ export const Radio: ComponentSpec = {
     { name: "required", type: "boolean", optional: true, description: "Mark the group required (adds a `*` to the label)" },
     { name: "disabled", type: "boolean", optional: true, description: "Lock every option in the group" },
     { name: "direction", type: "string", optional: true, enum: ["row", "column"], description: "Layout of the options (default `column`)" },
+    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
+    // Declared last: the controlled `value` channel reads its state ref from
+    // argMeta slot 2, so nothing may be inserted ahead of it.
+    { name: "slots", type: "Node[]", optional: true, description: "Per-option trailing content, aligned by index with `items` — rendered beside the option, outside its `<label>`, so a control in the slot stays independently clickable. Use `null` for an option that has none." },
   ],
   render: (node, props, helpers) => {
     const groupName = asString(props.id);
     const groupLabel = asString(props.label);
     const groupDisabled = asBoolean(props.disabled);
     const isRow = asString(props.direction, "column") === "row";
+    // A slot is a sibling of the option, not a child of it: an interactive
+    // control inside the `<label>` would select the radio on every click.
+    // Present-but-empty entries are kept so index alignment survives a caller
+    // that only decorates the second option.
+    const slots = props.slots === undefined || props.slots === null ? null : asArray<unknown>(props.slots);
     const root = el("div", {
       class: "rui-radio-group",
       role: "radiogroup",
       id: groupName ? `${groupName}-group` : null,
       "data-direction": isRow ? "row" : "column",
+      "data-slots": slots ? "true" : null,
       "data-disabled": groupDisabled ? "true" : null,
       // Named here so the group is not announced as an anonymous "radio group";
       // swapped for `aria-labelledby` when the shell renders a visible label.
@@ -1102,7 +1128,20 @@ export const Radio: ComponentSpec = {
       }) as HTMLInputElement;
       input.checked = isChecked;
       itemRoot.append(input, el("span", { class: "rui-radio-label" }, [item.label]));
-      root.append(itemRoot);
+      if (!slots) {
+        root.append(itemRoot);
+        return;
+      }
+
+      // `readRadioValue` scans for `input[type="radio"]:checked` anywhere under
+      // the group root, so the extra wrapper does not disturb the delegated
+      // change handler.
+      const row = el("div", { class: "rui-radio-row" }, [itemRoot]);
+      const slot = slots[idx];
+      if (slot !== undefined && slot !== null && slot !== false && slot !== "") {
+        row.append(el("div", { class: "rui-radio-slot" }, [helpers.renderNode(slot)]));
+      }
+      root.append(row);
     });
     // Delegation on the group root, wired as a property: a per-input
     // `addEventListener` froze every reused radio on its first render's
@@ -2090,6 +2129,7 @@ export const Combobox: ComponentSpec = {
     { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the selected value when focus leaves the control (validate-on-blur)" },
     { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
     { name: "creatable", type: "boolean", optional: true, description: "Offer the typed text itself as an option when it matches nothing (\"Create «acme-corp»\") so a value outside `items` can be selected" },
+    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -2475,6 +2515,7 @@ export const MultiSelect: ComponentSpec = {
     { name: "onSearch", type: "callable", optional: true, description: "Called with the query ~200ms after typing stops, for server-side search; disables local filtering" },
     { name: "loading", type: "boolean", optional: true, description: "Matches are being fetched — shows \"Loading…\" instead of the (lying) empty label" },
     { name: "creatable", type: "boolean", optional: true, description: "Offer the typed text itself as an option when it matches nothing (\"Create «backend»\") so a tag outside `items` can be added" },
+    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);

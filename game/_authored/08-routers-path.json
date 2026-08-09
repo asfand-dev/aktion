@@ -1,0 +1,656 @@
+{
+  "id": "routers-path",
+  "title": "Router's Path",
+  "subtitle": "Many pages, one program",
+  "icon": "route",
+  "difficulty": 4,
+  "estimateMin": 12,
+  "requires": [
+    "effects-lifecycle"
+  ],
+  "palette": {
+    "g1": "#fb923c",
+    "g2": "#fbbf24",
+    "g3": "#f59e0b"
+  },
+  "backdrop": {
+    "preset": "starfield"
+  },
+  "intro": {
+    "headline": "A whole app is still one program",
+    "body": "Nothing you have learned changes here. There is still exactly one `$app(...)`, still one file, still no build step. What changes is that one of the values inside it now depends on the URL.\n\n`$router({ ... })` takes an object whose keys are path patterns and whose values are trees. It matches the current URL against those keys **top to bottom**, stops at the first hit, and hands you back a single node. That node is ordinary — it drops into a `Column`, an `AppShell`, or straight into `$app`.\n\nThe URL itself is readable through a reserved handle called `route`, and writable through `$util.url`. Between those two you can put a page, a tab, a filter and a sort order all in the address bar, where a user can bookmark them.",
+    "code": "pages = $router({\n  \"/\":           Dashboard(),\n  \"/orders/:id\": OrderDetail({ id: params.id }),\n  default:       NotFound()\n})\n\n$app(pages)",
+    "codeCaption": "a three-page app, in full",
+    "infographic": {
+      "type": "flow",
+      "title": "What happens on every navigation",
+      "nodes": [
+        {
+          "label": "the URL",
+          "note": "#/orders/42"
+        },
+        {
+          "label": "$router({…})",
+          "note": "walks the table top-down",
+          "accent": true
+        },
+        {
+          "label": "first match",
+          "note": "\"/orders/:id\""
+        },
+        {
+          "label": "one node",
+          "note": "params.id is \"42\""
+        },
+        {
+          "label": "$app(pages)",
+          "note": "already mounted — only this pane changes"
+        }
+      ]
+    },
+    "objectives": [
+      "Map paths to trees with `$router({ ... })`",
+      "Capture segments with `:param` and read them from `params`",
+      "Keep a shell mounted while only the `outlet` swaps",
+      "Block or redirect a navigation with `$util.onNavigate`",
+      "Read the URL without tripping the `$effect` dependency rule"
+    ]
+  },
+  "stages": [
+    {
+      "id": "s1",
+      "title": "The table is the app",
+      "kicker": "the router",
+      "icon": "route",
+      "goal": "Declare a route table with $router({ ... }) and mount its result.",
+      "xp": 100,
+      "teach": {
+        "text": "A route table is a plain object literal. Keys are path patterns, values are the trees to render. `$router(...)` matches the current URL against it and returns **one node** — the arm that won.\n\nThat is the entire mechanism. There is no router provider to wrap the app in, no `<Routes>` element to nest, no registration step. `pages` is just a value, so it goes wherever a value goes.\n\n`default:` is the catch-all. Leave it out and an unmatched URL renders `null` — a blank page that the validator is perfectly happy with.",
+        "code": {
+          "src": "pages = $router({\n  \"/\":       Dashboard(),\n  \"/orders\": Orders(),\n  default:   NotFound()\n})\n\n$app(pages)",
+          "caption": "the table, then the mount"
+        },
+        "code2": {
+          "src": "$app(AppShell(nav, [pages]))",
+          "caption": "the result is an ordinary node — put it inside any shell"
+        },
+        "infographic": {
+          "type": "anatomy",
+          "title": "Reading one arm",
+          "code": "pages = $router({ \"/orders/:id\": OrderDetail({ id: params.id }), default: NotFound() })",
+          "parts": [
+            {
+              "match": "$router",
+              "key": "builtin",
+              "text": "carries the $ sigil like every builtin; you call it, never assign to it"
+            },
+            {
+              "match": "/orders/:id",
+              "key": "pattern",
+              "text": "one literal segment and one captured segment"
+            },
+            {
+              "match": "OrderDetail",
+              "key": "called",
+              "text": "arm values are trees, so the component is invoked with ()"
+            },
+            {
+              "match": "params.id",
+              "key": "capture",
+              "text": "`params` is in scope on the right-hand side of the arm that matched"
+            },
+            {
+              "match": "default",
+              "key": "fallback",
+              "text": "the catch-all; without it an unknown path renders nothing"
+            }
+          ]
+        },
+        "tips": [
+          "Name it whatever you like — `pages`, `view`, `screen`. Anything except `route`, which is already taken.",
+          {
+            "kind": "warn",
+            "text": "No `default:` means an unknown path renders `null`. The page goes blank and nothing warns you."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "quiz",
+        "title": "Which line declares a working route table?",
+        "prompt": "All four parse. Only one produces a router that renders a page.",
+        "options": [
+          {
+            "id": "a",
+            "code": "pages = $router({\n  \"/\": Dashboard(),\n  \"/orders\": Orders(),\n  default: NotFound()\n})"
+          },
+          {
+            "id": "b",
+            "code": "pages = $router([\n  { path: \"/\", element: Dashboard() }\n])",
+            "detail": "React Router's array-of-objects config. `$router` takes one object: pattern keys, tree values."
+          },
+          {
+            "id": "c",
+            "code": "pages = $router({\n  \"/\": Dashboard,\n  \"/orders\": Orders\n})",
+            "detail": "Function references, not trees. An arm value is a component that has already been called."
+          },
+          {
+            "id": "d",
+            "code": "$router = {\n  \"/\": Dashboard()\n}",
+            "detail": "`$router` is a reserved builtin. You call it; you never assign to it."
+          }
+        ],
+        "answer": "a"
+      },
+      "hints": [
+        "The argument is a single object literal, not an array of descriptors.",
+        "Look at what sits to the right of each colon — a tree, or a name that has not been called yet?"
+      ],
+      "explain": "The router is a matcher, not a container. It never renders anything itself: it walks your object, picks the first key whose pattern fits the URL, and returns that key's value. Because the value has to be a node, every arm calls its component — `Dashboard()`, not `Dashboard`. And because the result is just a node, there is no special place it has to live. `$app(pages)` and `$app(AppShell(nav, [pages]))` are equally valid.",
+      "afterCode": {
+        "src": "pages = $router({\n  \"/\": Dashboard(),\n  default: NotFound()\n})\n\n$app(pages)",
+        "caption": "the smallest complete router"
+      },
+      "codex": {
+        "term": "$router({ … })",
+        "def": "Builtin that matches the current URL against a table of path patterns and returns the first matching arm as a single node. `default:` is the catch-all."
+      },
+      "preview": {
+        "program": "$app(pages)\n\npages = $router({\n  \"/\": Dashboard(),\n  default: NotFound()\n})\n\nfunction Dashboard() {\n  return Column([\n    PageHeader(\"Dashboard\", { subtitle: \"Matched by the root arm\" }),\n    Card([Text(\"The router picked this arm and $app mounted the result.\")])\n  ])\n}\n\nfunction NotFound() {\n  return EmptyState(\"No such page\", { icon: \"compass\", description: route.path })\n}",
+        "caption": "live — one arm matched, one node came back"
+      }
+    },
+    {
+      "id": "s2",
+      "title": "Patterns and captures",
+      "kicker": "matching",
+      "icon": "target",
+      "goal": "Write literal, parameter and wildcard patterns, and read what they capture.",
+      "xp": 110,
+      "teach": {
+        "text": "Three kinds of key, matched segment by segment against the path:\n\n- **literal** — `\"/settings\"` matches that path and nothing else.\n- **parameter** — `\"/orders/:id\"` matches exactly one segment and captures it as `params.id`.\n- **trailing wildcard** — `\"/docs/*\"` swallows everything left and captures it as `params._`.\n\nInside the arm that matched, the bare name `params` is in scope. It is reserved, like `route` and `outlet` — you never declare it. Anywhere else in the program, read the same captures as `route.params.id`.\n\n**First match wins.** `\"/orders/new\"` and `\"/orders/:id\"` both fit `/orders/new`, so the literal has to be written *above* the parameter arm or it never gets a turn. Nothing sorts the table for you by specificity; position in the object is the priority.",
+        "code": {
+          "src": "pages = $router({\n  \"/\":            Dashboard(),\n  \"/orders/new\":  NewOrder(),\n  \"/orders/:id\":  OrderDetail({ id: params.id }),\n  \"/docs/*\":      Docs({ rest: params._ }),\n  default:        NotFound()\n})",
+          "caption": "literal above parameter, wildcard last"
+        },
+        "infographic": {
+          "type": "table",
+          "title": "What each key matches",
+          "headers": [
+            "Pattern",
+            "Matches",
+            "Captures"
+          ],
+          "rows": [
+            [
+              "\"/settings\"",
+              "/settings, and nothing else",
+              "nothing"
+            ],
+            [
+              "\"/orders/:id\"",
+              "/orders/42",
+              "params.id is \"42\""
+            ],
+            [
+              "\"/docs/*\"",
+              "/docs/guide/intro",
+              "params._ is \"guide/intro\""
+            ],
+            [
+              "default:",
+              "everything nothing else claimed",
+              "nothing"
+            ]
+          ]
+        },
+        "tips": [
+          "`params` only exists on the right-hand side of an arm. From a component or an action, read `route.params.id` instead.",
+          {
+            "kind": "warn",
+            "text": "A `:param` matches one segment, never a slash. `/users/7/edit` does not match `\"/users/:id\"` — it falls through to `default:`."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "fill-blanks",
+        "title": "Complete the route table",
+        "prompt": "Four slots. Four of the chips are habits from other frameworks — leave those in the bank.",
+        "display": "code",
+        "template": "pages = {{0}}({\n  \"/\": Dashboard(),\n  \"/orders/{{1}}\": OrderDetail({ id: {{2}}.id }),\n  \"/docs/*\": Docs({ rest: params._ }),\n  {{3}}: NotFound()\n})",
+        "bank": [
+          "$router",
+          ":id",
+          "params",
+          "default",
+          "$route",
+          "[id]",
+          "props",
+          "\"/404\""
+        ],
+        "answer": [
+          "$router",
+          ":id",
+          "params",
+          "default"
+        ]
+      },
+      "hints": [
+        "The builtin carries the `$` sigil, exactly like `$app` and `$http`.",
+        "A captured segment is a colon plus the name you read it back by.",
+        "The catch-all key is not a path at all — it is a bare identifier."
+      ],
+      "explain": "Patterns are matched positionally against path segments, which is why `:id` cannot span a slash and why `*` has to be last. The captures land in one reserved object: `params` inside the arm, `route.params` everywhere else. `\"/404\"` looks like a fallback and is not one — it only fires when the user literally visits `/404`, so an unmatched path still renders nothing.",
+      "afterCode": {
+        "src": "\"/orders/:id\": OrderDetail({ id: params.id })",
+        "caption": "capture on the left, read on the right"
+      },
+      "codex": {
+        "term": "params",
+        "def": "Reserved object holding the segments captured by the matched route pattern (`:id` becomes `params.id`, `*` becomes `params._`). In scope on the right of an arm; read it as `route.params` anywhere else."
+      }
+    },
+    {
+      "id": "s3",
+      "title": "The shell that stays",
+      "kicker": "nested routes",
+      "icon": "layers",
+      "goal": "Keep a layout mounted across navigations and swap only the outlet.",
+      "xp": 120,
+      "teach": {
+        "text": "A flat table rebuilds the entire page on every navigation — including the sidebar nobody asked to touch. An arm shaped `{ layout, routes }` fixes that: it matches as a **path prefix**, keeps the layout mounted, and slots the matched child into the reserved name `outlet`.\n\n`outlet` is in scope inside the `layout` expression and nowhere else. Child keys are matched against whatever is left of the path after the prefix, and `params` merges the parent's captures with the child's. Layouts compose, so a settings sub-shell is just another `{ layout, routes }` arm inside `routes`.\n\nBecause the shell survives the swap, so does everything living in it: the sidebar's scroll position, an open dropdown, a half-typed search box. That is the whole reason nested routes exist.\n\nLinks are the other half. `NavLink(label, { to })` and `SidebarItem(label, { to })` both navigate through the runtime router — no reload — and both derive their active state from `route.path`, so there is no `selected` flag to keep in sync.",
+        "code": {
+          "src": "pages = $router({\n  \"/app\": {\n    layout: AppShell(nav, outlet),\n    routes: {\n      \"/\":           Dashboard(),\n      \"/orders/:id\": OrderDetail({ id: params.id }),\n      default:       AppHome()\n    }\n  },\n  default: Landing()\n})",
+          "caption": "the shell is written once, above the match"
+        },
+        "code2": {
+          "src": "nav = Sidebar([\n  SidebarItem(\"Dashboard\", { to: \"/app\", icon: \"gauge\" }),\n  SidebarItem(\"Orders\", { to: \"/app/orders\", icon: \"receipt\" })\n], { brand: \"Acme\" })",
+          "caption": "`to` navigates; active state comes from the URL"
+        },
+        "infographic": {
+          "type": "layers",
+          "title": "What is mounted, and how often",
+          "layers": [
+            {
+              "label": "$app(pages)",
+              "note": "once, for the life of the program"
+            },
+            {
+              "label": "\"/app\": { layout, routes }",
+              "note": "matches /app and everything beneath it"
+            },
+            {
+              "label": "layout: AppShell(nav, outlet)",
+              "note": "built once — survives every child swap"
+            },
+            {
+              "label": "outlet",
+              "note": "the one hole the router is allowed to fill"
+            },
+            {
+              "label": "routes: \"/\", \"/orders/:id\"",
+              "note": "matched against the remaining path, rebuilt per navigation"
+            }
+          ]
+        },
+        "tips": [
+          "`outlet` is reserved, like `route` and `params`. Declaring it is the same class of mistake.",
+          "A `SidebarItem` with `to` renders a real anchor, so cmd-click still opens a new tab."
+        ]
+      },
+      "challenge": {
+        "type": "hotspot",
+        "title": "Find the seam",
+        "prompt": "A user sitting on `/app` clicks through to `/app/orders`. Every name in this arm is evaluated exactly once — except one, which the router empties and refills on every navigation. Click the marker sitting on that one.",
+        "help": "Hover a marker to read what that part does. Only one of the five is the hole.",
+        "code": "pages = $router({\n  \"/app\": {\n    layout: AppShell(nav, outlet),\n    routes: { \"/\": Dashboard(), \"/orders\": Orders() }\n  }\n})",
+        "points": [
+          {
+            "match": "\"/app\"",
+            "x": "13%",
+            "y": "31%",
+            "label": "1",
+            "tip": "the prefix — it decides whether this arm matches at all, not where the child lands",
+            "correct": false
+          },
+          {
+            "match": "layout",
+            "x": "16%",
+            "y": "44%",
+            "label": "2",
+            "tip": "the key that names the shell; whatever it holds is built once and stays mounted",
+            "correct": false
+          },
+          {
+            "match": "nav",
+            "x": "40%",
+            "y": "44%",
+            "label": "3",
+            "tip": "written inside the layout expression, so this sidebar survives every child swap",
+            "correct": false
+          },
+          {
+            "match": "outlet",
+            "x": "50%",
+            "y": "44%",
+            "label": "4",
+            "correct": true
+          },
+          {
+            "match": "Orders()",
+            "x": "79%",
+            "y": "57%",
+            "label": "5",
+            "tip": "a child arm — this is what gets dropped into the hole, not the hole itself",
+            "correct": false
+          }
+        ]
+      },
+      "hints": [
+        "Two of the five markers sit on keys. A key decides *what* matches; it is never the place the result goes.",
+        "Ask which of these names the router re-evaluates when the path changes. Everything written around that one is evaluated once.",
+        "It is reserved, like `route` and `params`, and it exists only inside `layout`."
+      ],
+      "explain": "Write it flat — `\"/app/orders/:id\": AppShell(nav, OrderDetail(...))` — and you get the same screenshot with none of the benefit: the shell is part of the arm, so every navigation tears it down and builds a fresh one. New sidebar, scroll reset to top, dropdown closed, search box empty. The `{ layout, routes }` shape lifts the shell above the match and marks the single hole the router may refill. That is also why `outlet` has to be a reserved name: the router needs to know where the hole is.",
+      "codex": {
+        "term": "outlet",
+        "def": "Reserved name available inside a nested route's `layout`. It resolves to the matched child, so the shell renders once and only the outlet swaps on navigation."
+      },
+      "preview": {
+        "program": "$app(AppShell(nav, [pages]))\n\nnav = Sidebar([\n  SidebarSection(\"Main\", [\n    SidebarItem(\"Dashboard\", { to: \"/\", icon: \"gauge\" }),\n    SidebarItem(\"Orders\", { to: \"/orders\", icon: \"receipt\", badge: \"12\" })\n  ])\n], { brand: \"Acme\", tagline: \"Ops console\" })\n\npages = $router({\n  \"/\": Dashboard(),\n  \"/orders\": Orders(),\n  default: Dashboard()\n})\n\nfunction Dashboard() {\n  return Column([\n    PageHeader(\"Dashboard\"),\n    Card([Text(\"Click Orders in the rail. Watch what does not move.\")])\n  ], { gap: \"md\" })\n}\n\nfunction Orders() {\n  return Column([\n    PageHeader(\"Orders\"),\n    Card([Text(\"Only this pane was rebuilt. The rail never unmounted.\")])\n  ], { gap: \"md\" })\n}",
+        "caption": "live — the shell sits above the router, so only the pane swaps. A `{ layout, routes }` arm does the same thing for one branch of the tree."
+      }
+    },
+    {
+      "id": "s4",
+      "title": "Path Finder",
+      "kicker": "arcade",
+      "icon": "compass",
+      "goal": "Feel first-match-wins instead of reading about it.",
+      "xp": 140,
+      "hearts": 3,
+      "teach": {
+        "text": "A URL arrives. The router walks your table from the top and stops at the **first** pattern that fits. Nothing is ranked or sorted by specificity — position in the object is the priority, and this table is written literals-first.\n\nTap the arm that would win. When no pattern can match, tap `default:` — that is the entire job it has.\n\nWatch the segment count: a `:param` eats exactly one segment, a `*` eats the rest.",
+        "tips": [
+          "Wait for the URL to finish typing. Taps before it lands do nothing.",
+          {
+            "kind": "warn",
+            "text": "`/users/7/edit` looks like it should hit `\"/users/:id\"`. It has one segment too many."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "arcade",
+        "title": "Catch the winning arm",
+        "prompt": "A URL types itself out. Tap the route arm the router would pick. If none can match, tap `default:`.",
+        "goal": "0 / 6",
+        "height": 340,
+        "note": "The table is written literals-first, so a literal beats a `:param` on the same path. Three wrong taps ends the run.",
+        "params": {
+          "target": 6,
+          "rounds": [
+            {
+              "url": "/",
+              "answer": "/",
+              "arms": [
+                "/",
+                "/orders",
+                "/docs/*",
+                "default:"
+              ]
+            },
+            {
+              "url": "/orders",
+              "answer": "/orders",
+              "arms": [
+                "/orders",
+                "/orders/:id",
+                "/users/:id",
+                "default:"
+              ]
+            },
+            {
+              "url": "/orders/42",
+              "answer": "/orders/:id",
+              "arms": [
+                "/orders",
+                "/orders/:id",
+                "/orders/new",
+                "default:"
+              ]
+            },
+            {
+              "url": "/orders/new",
+              "answer": "/orders/new",
+              "arms": [
+                "/orders/new",
+                "/orders/:id",
+                "/orders",
+                "default:"
+              ]
+            },
+            {
+              "url": "/users/7/edit",
+              "answer": "default:",
+              "arms": [
+                "/users/:id",
+                "/users",
+                "/orders/:id",
+                "default:"
+              ]
+            },
+            {
+              "url": "/docs/guide/intro",
+              "answer": "/docs/*",
+              "arms": [
+                "/docs/*",
+                "/docs/:id",
+                "/docs",
+                "default:"
+              ]
+            }
+          ]
+        },
+        "code": "const P = ctx.params;\nconst url = ctx.text('', { size: 19, color: ctx.colors.g1 });\nurl.anchor.set(.5); url.x = ctx.width / 2; url.y = 32;\nctx.stage.addChild(url);\nconst sub = ctx.text('the URL is arriving', { size: 11, color: ctx.colors.dim });\nsub.anchor.set(.5); sub.x = ctx.width / 2; sub.y = 56;\nctx.stage.addChild(sub);\nlet live = [], idx = 0, score = 0, miss = 0, typed = 0, full = '', armed = false, pending = 0;\nctx.api.setScore(0);\nctx.api.setGoal('0 / ' + P.target);\nfunction round() {\n  for (const c of live) c.destroy();\n  live = []; typed = 0; armed = false; pending = 0;\n  sub.text = 'the URL is arriving';\n  const r = P.rounds[idx % P.rounds.length];\n  idx++;\n  full = r.url;\n  const arms = r.arms.slice();\n  for (let i = arms.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const t = arms[i]; arms[i] = arms[j]; arms[j] = t; }\n  for (let i = 0; i < arms.length; i++) {\n    const c = ctx.chip(arms[i], { color: 0x121a2b, textColor: 0xdfe6ff, stroke: ctx.colors.g3, size: 13, minWidth: 132 });\n    c.x = -100 - i * ctx.rand(130, 220);\n    c.y = 100 + i * 46;\n    c.good = arms[i] === r.answer;\n    c.eventMode = 'static';\n    c.cursor = 'pointer';\n    c.on('pointertap', () => tap(c));\n    ctx.stage.addChild(c);\n    live.push(c);\n  }\n}\nfunction tap(c) {\n  if (!armed || pending) return;\n  if (c.good) {\n    score++;\n    ctx.api.setScore(score);\n    ctx.api.setGoal(score + ' / ' + P.target);\n    armed = false;\n    sub.text = 'matched';\n    gsap.to(c.scale, { x: 1.25, y: 1.25, duration: .12, onComplete: () => gsap.to(c.scale, { x: 1, y: 1, duration: .2, ease: 'back.out' }) });\n    if (score >= P.target) { ctx.api.win('First match wins - and you found it every time.'); return; }\n    pending = 34;\n  } else {\n    miss++;\n    c.eventMode = 'none';\n    gsap.to(c, { alpha: .2, duration: .25 });\n    sub.text = 'that arm cannot match - ' + (3 - miss) + ' left';\n    if (miss >= 3) ctx.api.fail('Three arms that could not match. A :param eats one segment, never a slash.');\n  }\n}\nround();\nctx.onTick((dt) => {\n  if (pending > 0) { pending -= dt; if (pending <= 0) { pending = 0; round(); } return; }\n  if (!armed) {\n    typed += .38 * dt;\n    const n = Math.min(full.length, typed | 0);\n    url.text = full.slice(0, n) + (n < full.length ? '_' : '');\n    if (n >= full.length) { armed = true; sub.text = 'tap the arm the router would pick'; }\n  }\n  for (let i = 0; i < live.length; i++) {\n    const c = live[i];\n    c.x += 1.45 * dt;\n    if (c.x > ctx.width + 100) c.x = -100;\n  }\n});",
+        "fallback": {
+          "type": "quiz",
+          "prompt": "First match wins. Which arm renders `/orders/new` in this table?",
+          "code": "pages = $router({\n  \"/orders/:id\": OrderDetail({ id: params.id }),\n  \"/orders/new\": NewOrder(),\n  default:       NotFound()\n})",
+          "options": [
+            {
+              "id": "a",
+              "code": "\"/orders/:id\"",
+              "detail": "It is written first, so it matches first — with params.id set to \"new\"."
+            },
+            {
+              "id": "b",
+              "code": "\"/orders/new\"",
+              "detail": "More specific, but listed second. The table is never re-sorted for you."
+            },
+            {
+              "id": "c",
+              "code": "default:",
+              "detail": "Only reached when nothing above it matched."
+            }
+          ],
+          "answer": "a"
+        }
+      },
+      "hints": [
+        "Count segments before you read names. `/a/b` can never match a two-part pattern with three parts.",
+        "`default:` is the right answer more often than it feels like it should be."
+      ],
+      "explain": "Matching is a linear scan, not a scoring function, and that is a deliberate trade: the table reads top to bottom exactly like an `if / else if` chain, so you can always tell which arm wins by reading. The cost is that ordering is now your job. Put every literal above the `:param` arm that would otherwise swallow it, and put `\"/docs/*\"` last, because a trailing wildcard matches everything under its prefix and nothing below it will ever run.",
+      "codex": {
+        "term": "First match wins",
+        "def": "The router scans the route table top to bottom and stops at the first pattern that fits. Literal arms must be written above the `:param` arms that would otherwise capture them."
+      }
+    },
+    {
+      "id": "s5",
+      "title": "The URL is state",
+      "kicker": "gotcha",
+      "icon": "shield",
+      "goal": "Read, write and guard the URL without breaking the parser.",
+      "xp": 130,
+      "teach": {
+        "text": "`route` is reserved, always in scope, and reactive: `route.path`, `route.params`, `route.query`, `route.pattern`, plus `route.navigate(\"/orders/42\")` for an imperative jump from an action. It is read-only and it is never on the left of an `=`.\n\n`$util.url` mirrors the same snapshot — `.path`, `.params`, `.query`, `.hash` — and adds the writers. `$util.url.setQuery(\"tab\", \"billing\")` and `$util.url.removeQuery(\"tab\")` edit the query string in place, so a tab, a sort order or a filter survives a reload and pastes into a chat window intact.\n\n`$util.onNavigate(({ to, from }) => ...)` runs before every route change — in-app navigation and browser back/forward alike. Return `false` to block, a path string to redirect, anything else to allow.\n\nAnd here is world seven's trap wearing routing clothes: **`route.path` is not a legal `$effect` dependency**. That array accepts `$`-atoms and the five lifecycle strings, nothing else, so `[route.path]` is a parse error with your name on it. Depend on `$util.url.path` instead — same value, and it is reachable through a `$` surface the dependency parser accepts.",
+        "code": {
+          "src": "$effect(() => {\n  $emit(\"page-view\", { path: $util.url.path })\n}, [$util.url.path])",
+          "caption": "the URL as a dependency the parser will take"
+        },
+        "code2": {
+          "src": "$util.onNavigate(({ to }) => $isLoggedIn || to === \"/login\" ? true : \"/login\")\n\nfunction selectTab(name) { $util.url.setQuery(\"tab\", name) }\n\nactiveTab = $util.url.query.tab ?? \"overview\"",
+          "caption": "a guard, and a tab that survives a reload"
+        },
+        "infographic": {
+          "type": "compare",
+          "title": "Same value, two dependency arrays",
+          "columns": [
+            {
+              "kind": "bad",
+              "title": "Parse error",
+              "code": "$effect(() => {\n  $emit(\"view\", route.path)\n}, [route.path])",
+              "note": "\"Unexpected Identifier route inside effect dependency array.\" The program does not compile at all."
+            },
+            {
+              "kind": "good",
+              "title": "Compiles and re-runs",
+              "code": "$effect(() => {\n  $emit(\"view\", $util.url.path)\n}, [$util.url.path])",
+              "note": "The reactive URL surface hangs off a $ namespace, which the dependency parser accepts."
+            }
+          ]
+        },
+        "tips": [
+          {
+            "kind": "danger",
+            "text": "`route = $router({ ... })` is the most expensive typo in this world. It parses, it validates, and it shadows the reserved handle — so `route.path` and `route.navigate` quietly stop existing. Name the table `pages`."
+          },
+          "`route.query` and `$util.url.query` read the same parsed query string. Only `$util.url` can write it."
+        ]
+      },
+      "challenge": {
+        "type": "order-lines",
+        "title": "How far does it get?",
+        "prompt": "Four lines about the URL, and only one of them is right. Order them by how far the program gets: on top the line that never compiles, then the line that compiles and renders nothing, then the line that runs perfectly and quietly breaks *other* lines, and at the bottom the line that simply works.",
+        "lines": [
+          {
+            "id": "dep",
+            "code": "$effect(() => { $emit(\"view\", route.path) }, [route.path])"
+          },
+          {
+            "id": "sigil",
+            "code": "Text($route.path)"
+          },
+          {
+            "id": "shadow",
+            "code": "route = $router({ \"/\": Home(), default: NotFound() })"
+          },
+          {
+            "id": "query",
+            "code": "$util.url.setQuery(\"tab\", \"billing\")"
+          }
+        ],
+        "answer": [
+          "dep",
+          "sigil",
+          "shadow",
+          "query"
+        ]
+      },
+      "hints": [
+        "Only one of the four cannot be compiled at all. Place that one first and the rest get easier.",
+        "The dependency array takes `$`-atoms and five lifecycle strings, nothing else. Count the sigils.",
+        "`$route` does not exist, so that line renders empty the first time it paints. The assignment paints perfectly — and takes `route.path` away from every other line in the program."
+      ],
+      "explain": "The three failures fail for three different reasons, which is why they are worth separating. `[route.path]` is rejected by the *parser* — dependencies are a closed grammar, so you get a real error at compile time. `route = $router(...)` is rejected by nobody: it is a legal assignment that happens to shadow a reserved name, so the router still works and every later `route.path` reads a field off your table instead. `$route.path` is the reverse mistake — the sigil belongs to builtins and state, not to the router handle, so `$route` resolves to nothing and the text renders empty. Reserved names are worth memorising precisely because two out of three failures never raise a word.",
+      "afterCode": {
+        "src": "pages = $router({ \"/\": Home(), default: NotFound() })\n\n$effect(() => { $emit(\"page-view\", { path: $util.url.path }) }, [$util.url.path])",
+        "caption": "the table is `pages`; the dependency is `$util.url.path`"
+      },
+      "codex": {
+        "term": "route handle",
+        "def": "Reserved, always in scope, reactive: `route.path`, `.params`, `.query`, `.pattern`, and `route.navigate(to)`. Never declare it, and never put it in an `$effect` dependency array — use `$util.url.path` there."
+      }
+    },
+    {
+      "id": "s6",
+      "title": "Ship the whole app",
+      "kicker": "produce",
+      "icon": "code",
+      "goal": "Write a multi-page Aktion program from an empty file.",
+      "xp": 160,
+      "teach": {
+        "text": "Everything that is left is a finishing touch on the same table:\n\n- `RouteView(pages, { routeKey: route.path, animation: \"fade\" })` replays an entrance animation on every change, and does what a real navigation does — scrolls to the top, moves focus to the new page, announces it to a screen reader.\n- `Redirect(\"/login\")` navigates and unmounts the rest of the subtree. Return it from an arm to gate a page.\n- `Lazy(loadReports, { fallback: Spinner() })` defers an arm until an async loader resolves.\n- `Link(child, { to })` turns any node — a card, a row, an icon — into a router-aware anchor, for when `NavLink` is too literal a link.\n\nTwo knobs live on the host page rather than in your program: `router-mode` is `\"hash\"` by default, which works on any static host, and `\"history\"` gives clean paths at the cost of a server rewrite. `scroll-restoration=\"auto\"` on `<aktion-app>` restores per-path scroll on back and forward.\n\nNow write the table yourself. `$app(pages)` is already on line one — references resolve across the whole program, so define `pages` below it.",
+        "code": {
+          "src": "pages = $router({\n  \"/\":        Dashboard(),\n  \"/reports\": Lazy(loadReports, { fallback: Spinner() }),\n  \"/admin\":   $isAdmin ? AdminHome() : Redirect(\"/login\"),\n  default:    NotFound()\n})\n\n$app(RouteView(pages, { routeKey: route.path, animation: \"fade\" }))",
+          "caption": "the finishing touches, all on the same table"
+        },
+        "tips": [
+          "An arm value is an expression, so a ternary works there — `$isAdmin ? AdminHome() : Redirect(\"/login\")` is a route guard in one line.",
+          {
+            "kind": "warn",
+            "text": "Call the table anything but `route`, and read captures with `params` inside the arm."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "type-code",
+        "title": "Write the router",
+        "prompt": "Build a two-page app: a root arm, a detail arm that captures `:id`, and a `default:` fallback. Read the captured segment through `params` and render something for each.",
+        "filename": "routes.aktion",
+        "starter": "$app(pages)\n\n",
+        "placeholder": "pages = $router({ … })",
+        "solution": "$app(pages)\n\npages = $router({\n  \"/\": Home(),\n  \"/orders/:id\": OrderDetail(params.id),\n  default: NotFound()\n})\n\nfunction Home() {\n  return Column([\n    PageHeader(\"Orders\"),\n    NavLink(\"Open order 42\", { to: \"/orders/42\" })\n  ])\n}\n\nfunction OrderDetail(id) {\n  return Column([\n    PageHeader(`Order ${id}`),\n    Card([Text(\"Captured from the :id segment.\")])\n  ])\n}\n\nfunction NotFound() {\n  return EmptyState(\"No such page\", { icon: \"compass\", description: route.path })\n}",
+        "validate": {
+          "must": [
+            "\\$router\\s*\\(",
+            "[\"']/[\"']\\s*:",
+            "/:\\w+[\"']\\s*:",
+            "\\bparams\\b",
+            "default\\s*:",
+            "\\$app\\s*\\("
+          ],
+          "mustWhy": [
+            "Every page table starts with `pages = $router({ … })`.",
+            "Add the root arm: `\"/\": Home()`.",
+            "Add a capturing arm, e.g. `\"/orders/:id\": OrderDetail(params.id)`.",
+            "Read the captured segment through `params` (or `route.params`).",
+            "Add `default:` so an unknown path renders something instead of nothing.",
+            "Nothing mounts without `$app(...)` — it is already on line one, keep it."
+          ],
+          "mustNot": [
+            "useParams",
+            "createBrowserRouter",
+            "<Route",
+            "element\\s*:",
+            "\\broute\\s*=[^=]"
+          ]
+        }
+      },
+      "hints": [
+        "Start with the table: `pages = $router({ ... })`, and let `$app(pages)` above it find it by name.",
+        "A capturing arm is `\"/orders/:id\": OrderDetail(params.id)` — colon on the left, `params` on the right.",
+        "Finish with `default: NotFound()`, and give `NotFound` a `return`."
+      ],
+      "explain": "That is a complete multi-page application: no route config file, no provider, no lazy-loading ceremony, no `Outlet` import. One object, one `$app(...)`, and the URL is now part of your state. Everything you learned in the earlier worlds still applies unchanged — the arms are ordinary trees, the components are ordinary functions, and `$effect` still refuses `route.path`.",
+      "codex": {
+        "term": "Multi-page Aktion",
+        "def": "One program, one `$app(...)`, and a `$router({ ... })` table whose arms are ordinary trees. The URL selects the arm; nothing else changes."
+      },
+      "preview": {
+        "program": "$app(Column([PageHeader(\"Router's Path\"), nav, view], { gap: \"md\" }))\n\nnav = Row([\n  NavLink(\"Home\", { to: \"/\", exact: true }),\n  NavLink(\"Order 42\", { to: \"/orders/42\" }),\n  NavLink(\"Nowhere\", { to: \"/nowhere\" })\n], { gap: \"sm\" })\n\nview = RouteView(pages, { routeKey: route.path, animation: \"fade\", scrollToTop: false })\n\npages = $router({\n  \"/\": Home(),\n  \"/orders/:id\": OrderDetail(params.id),\n  default: Missing()\n})\n\nfunction Home() {\n  return Card([Text(\"The root arm matched.\")])\n}\n\nfunction OrderDetail(id) {\n  return Card([Text(`Order ${id} - captured from the /orders/:id arm.`)])\n}\n\nfunction Missing() {\n  return EmptyState(\"No arm matched\", { icon: \"compass\", description: route.path })\n}",
+        "caption": "live — click the links. Nothing reloads, and the third one proves `default:` earns its keep."
+      }
+    }
+  ],
+  "outro": {
+    "headline": "Every path leads somewhere",
+    "body": "A route table, a reserved handle, a reserved outlet, and a guard. You can now split a program into as many pages as it needs without splitting it into as many files.",
+    "nextHint": "Next: forms and validation — turning everything the user types into state you can trust."
+  },
+  "badge": {
+    "name": "Pathfinder",
+    "icon": "compass",
+    "tagline": "Turned one program into a whole app."
+  }
+}

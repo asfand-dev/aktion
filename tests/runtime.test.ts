@@ -61,6 +61,33 @@ card = Card([CardHeader("Hi", "There")])
       });
     });
   });
+
+  // `delete obj[key]` is how the immutable-update idiom drops one entry from a
+  // keyed map (`const next = {...$edits}; delete next[id]; $edits = next`). A
+  // computed key parses to a Member with `computed` set and no `property`, and
+  // requiring `property` made the whole statement a silent no-op — the map kept
+  // the entry, with nothing reported.
+  it("deletes a computed member key, not just a static one", () => {
+    const { ctx, program } = buildContext(`
+edits = {a: 1, b: 2, c: 3}
+key = "b"
+function dropComputed() { const next = {...edits}; delete next[key]; return Object.keys(next).join(",") }
+function dropStatic() { const next = {...edits}; delete next.a; return Object.keys(next).join(",") }
+function dropLiteralKey() { const next = {...edits}; delete next["c"]; return Object.keys(next).join(",") }
+function dropOptionalNullish() { const missing = null; return delete missing?.[key] }
+computed = dropComputed()
+static_ = dropStatic()
+literal = dropLiteralKey()
+optional = dropOptionalNullish()
+`);
+    expect(program.errors).toEqual([]);
+    const read = (name: string) => ctx.bindings.get(name)?.();
+    expect(read("computed")).toBe("a,c");
+    expect(read("static_")).toBe("b,c");
+    expect(read("literal")).toBe("a,b");
+    // `delete a?.[k]` on a nullish base is a no-op that still reports success.
+    expect(read("optional")).toBe(true);
+  });
 });
 
 describe("Util namespace", () => {

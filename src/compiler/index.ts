@@ -19,6 +19,8 @@ export {
 
 export {
   linkProgram,
+  moduleLocalSymbol,
+  moduleLocalBaseName,
   type LinkResult,
   type LinkDiagnostic,
   type ModuleResolver,

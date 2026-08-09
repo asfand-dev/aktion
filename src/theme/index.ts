@@ -681,10 +681,13 @@ export const visionTheme: ThemeTokens = {
   // white surfaces links actually sit on (4.52:1 on the #f4f7fa page). It is
   // 4.20:1 on the #eaeff4 bg-subtle tint — the one shortfall, left as-is because
   // overriding it would break the verified parity of the resting link colour.
-  colorOnSuccess: "#04291e",
-  colorOnWarning: "#451a03",
+  colorOnSuccess: "#0a7038",
+  colorOnWarning: "#8a4b00",
+  // #ffffff, not the fill colour: this token is the ink drawn ON critical-5, and
+  // copying the fill here made every danger-filled surface invisible — a solid
+  // red ConfirmDialog button with a red label, a red badge with a red count.
   colorOnDanger: "#ffffff",
-  colorOnInfo: "#0c2b3a",
+  colorOnInfo: "#066b80",
   /* Typography — Open Sans body, Overpass display, 14px/20px */
   fontFamily:
     "'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",

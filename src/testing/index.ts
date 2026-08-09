@@ -30,6 +30,55 @@
 import { defineElement } from "../element.js";
 import type { ComponentSpec } from "../library/types.js";
 import type { ThemeInput } from "../theme/index.js";
+import type { CompiledProgram } from "../compiler/runtime.js";
+import { moduleLocalBaseName } from "../compiler/linker.js";
+import type { HttpInterceptors } from "../runtime/http.js";
+import * as coverageApi from "../runtime/coverage.js";
+
+/**
+ * DSL coverage for the program under test.
+ *
+ * `.aktion` files compile to a `JSON.parse` of their AST, so V8 and Istanbul see
+ * one executed line however much DSL is behind it — real coverage has to come
+ * from the interpreter. Turn it on once per test file and read it back at the
+ * end:
+ *
+ * ```ts
+ * import { coverage, renderCompiled } from "aktion-runtime/test";
+ * import app from "../src/app.aktion";
+ *
+ * beforeAll(() => { coverage.start(); });
+ * afterAll(() => {
+ *   const report = coverage.report();
+ *   writeFileSync("coverage/aktion.lcov", coverage.toLcov(report));
+ * });
+ * ```
+ *
+ * Measurement accumulates across every `render`/`renderCompiled` in the file, so
+ * each test contributes; call `coverage.reset()` to start over.
+ *
+ * @see {@link coverageApi.report} for what lines / functions / branches mean here.
+ */
+export const coverage = {
+  start: coverageApi.start,
+  stop: coverageApi.stop,
+  reset: coverageApi.reset,
+  isEnabled: coverageApi.isEnabled,
+  report: coverageApi.report,
+  merge: coverageApi.merge,
+  toLcov: coverageApi.toLcov,
+  formatSummary: coverageApi.formatSummary,
+};
+
+export type {
+  CoverageReport,
+  FileCoverageReport,
+  CoverageSummary,
+  CoverageMetric,
+  FunctionReport,
+  BranchReport,
+  BranchKind,
+} from "../runtime/coverage.js";
 
 /* -------------------------------------------------------------------------- */
 /*  Types                                                                      */
@@ -38,11 +87,14 @@ import type { ThemeInput } from "../theme/index.js";
 /** The public surface of the `<aktion-app>` element this library drives. */
 export type AktionApp = HTMLElement & {
   setResponse(text: string): void;
+  mountCompiled(compiled: CompiledProgram, state?: Record<string, unknown>): void;
   appendChunk(chunk: string): void;
   serializeState(): Record<string, unknown>;
   hydrateState(snapshot: Record<string, unknown>): void;
+  setState(name: string, value: unknown): void;
   setTheme(theme: ThemeInput): void;
   registerComponents(components: ComponentSpec[], rootName?: string): void;
+  registerHttpInterceptors(interceptors: HttpInterceptors): void;
   navigate(path: string): void;
   clear(): void;
   route: string;
@@ -97,6 +149,12 @@ export interface RenderOptions {
   container?: HTMLElement;
   /** Render the in-shadow parse-error banner (off by default). */
   showErrors?: boolean;
+  /**
+   * Host HTTP interceptors, installed before the program mounts — the same
+   * `registerHttpInterceptors(...)` a host page uses to inject an auth header.
+   * Pair with `fetch` to assert what the program actually put on the wire.
+   */
+  httpInterceptors?: HttpInterceptors;
 }
 
 export interface ComponentRenderOptions extends RenderOptions {
@@ -114,6 +172,13 @@ export interface WaitForOptions {
   timeout?: number;
   /** Poll interval in ms (default 20). */
   interval?: number;
+  /**
+   * Decide when the value counts as settled, replacing the default rule.
+   *
+   * Use it when the value you are waiting for is legitimately `0` or `""`:
+   * `waitFor(() => list.length, { until: (n) => n === 3 })`.
+   */
+  until?: (value: unknown) => boolean;
 }
 
 /** A string, regex, or predicate used to match an element's accessible text. */
@@ -157,6 +222,24 @@ export async function act<T>(fn: () => T | Promise<T>): Promise<T> {
  * Use it (or the `findBy*` queries built on it) to await async work —
  * `$http(...)` resolutions, `setTimeout`, debounced effects.
  */
+/**
+ * Has `fn`'s value arrived yet?
+ *
+ * `false` counts as NOT yet. The overwhelmingly common shape is a predicate —
+ * `waitFor(() => screen.requests.length > 0)` — and treating `false` as a result
+ * made every such wait return on its first tick, so the assertion after it ran
+ * against an unsettled DOM and the test passed or failed on timing. `null`,
+ * `undefined` and an empty array likewise mean "not yet".
+ *
+ * `0` and `""` DO count as settled: they are ordinary values, and a wait for a
+ * count that must reach zero should say so with `until`.
+ */
+function settled(value: unknown, until?: (value: unknown) => boolean): boolean {
+  if (until) return until(value);
+  if (value == null || value === false) return false;
+  return !(Array.isArray(value) && value.length === 0);
+}
+
 export async function waitFor<T>(
   fn: () => T,
   opts: WaitForOptions = {},
@@ -169,8 +252,7 @@ export async function waitFor<T>(
     await flush(2);
     try {
       const value = fn();
-      const empty = value == null || (Array.isArray(value) && value.length === 0);
-      if (!empty) return value;
+      if (settled(value, opts.until)) return value;
     } catch (err) {
       lastError = err;
     }
@@ -195,7 +277,15 @@ function textMatches(content: string, matcher: Matcher, exact: boolean, el: Elem
   return exact ? content === matcher : content.includes(matcher);
 }
 
-/** Implicit ARIA roles for the handful of elements Aktion renders most. */
+/**
+ * Implicit ARIA roles, per the HTML-AAM mapping.
+ *
+ * Covers the landmarks and table/list/form structure a real app renders, not just
+ * interactive controls: a `<nav aria-label="Breadcrumb">` has role `navigation`
+ * whether or not the author wrote it down, and a test that cannot ask for it by
+ * role has to reach for a class name instead — which is exactly the coupling
+ * role-based queries exist to avoid.
+ */
 function implicitRoles(el: Element): string[] {
   const tag = el.tagName.toLowerCase();
   const type = (el as HTMLInputElement).type;
@@ -207,17 +297,74 @@ function implicitRoles(el: Element): string[] {
     case "textarea":
       return ["textbox"];
     case "select":
+      // A `size`/`multiple` select is a listbox; a plain one is a combobox. Both
+      // are reported so either query finds it.
       return ["combobox", "listbox"];
+    case "option":
+      return ["option"];
+    case "optgroup":
+      return ["group"];
     case "h1": case "h2": case "h3": case "h4": case "h5": case "h6":
       return ["heading"];
     case "img":
-      return ["img"];
-    case "ul": case "ol":
+      // An empty `alt` marks a decorative image, which has no role at all.
+      return el.getAttribute("alt") === "" ? ["presentation"] : ["img"];
+    case "ul": case "ol": case "menu":
       return ["list"];
     case "li":
       return ["listitem"];
+    case "dl":
+      return ["list"];
     case "table":
       return ["table"];
+    case "thead": case "tbody": case "tfoot":
+      return ["rowgroup"];
+    case "tr":
+      return ["row"];
+    case "td":
+      return ["cell"];
+    case "th":
+      return ["columnheader", "rowheader"];
+    case "caption":
+      return ["caption"];
+    // --- Landmarks ---
+    case "nav":
+      return ["navigation"];
+    case "main":
+      return ["main"];
+    case "aside":
+      return ["complementary"];
+    case "form":
+      return ["form"];
+    case "search":
+      return ["search"];
+    case "header":
+      // `banner` / `contentinfo` only apply at the top level of the document; a
+      // `<header>` inside an article or section is a generic wrapper.
+      return el.closest("article, aside, main, nav, section") ? [] : ["banner"];
+    case "footer":
+      return el.closest("article, aside, main, nav, section") ? [] : ["contentinfo"];
+    case "section":
+      // Only a NAMED section is a region — an unnamed one is generic.
+      return accessibleNameAttrs(el) ? ["region"] : [];
+    case "dialog":
+      return ["dialog"];
+    case "details":
+      return ["group"];
+    case "summary":
+      return ["button"];
+    case "fieldset":
+      return ["group"];
+    case "legend":
+      return [];
+    case "progress":
+      return ["progressbar"];
+    case "meter":
+      return ["meter"];
+    case "output":
+      return ["status"];
+    case "hr":
+      return ["separator"];
     case "input":
       if (type === "checkbox") return ["checkbox"];
       if (type === "radio") return ["radio"];
@@ -231,9 +378,15 @@ function implicitRoles(el: Element): string[] {
   }
 }
 
+/** Whether the element carries an author-supplied name — decides `<section>`'s role. */
+function accessibleNameAttrs(el: Element): boolean {
+  return Boolean(el.getAttribute("aria-label") ?? el.getAttribute("aria-labelledby") ?? el.getAttribute("title"));
+}
+
 function rolesOf(el: Element): string[] {
   const explicit = el.getAttribute("role");
-  return explicit ? [explicit] : implicitRoles(el);
+  // `role` may list fallbacks (`role="switch checkbox"`); all of them count.
+  return explicit ? explicit.trim().split(/\s+/) : implicitRoles(el);
 }
 
 /** Compute a best-effort accessible name (aria-label → label → text → …). */
@@ -269,7 +422,7 @@ function accessibleName(el: Element): string {
   const value = (el as HTMLInputElement).value;
   if ((el.tagName === "INPUT" || el.tagName === "BUTTON") && value) return normalize(value);
 
-  return normalize(el.textContent);
+  return normalize(contentText(el));
 }
 
 function cssEscape(id: string): string {
@@ -359,8 +512,73 @@ function describeArgs(args: unknown[]): string {
     .join(", ");
 }
 
+/**
+ * Elements a user could perceive — everything except the nodes whose text
+ * content is code rather than content.
+ *
+ * A themed Aktion app puts a large `<style>` in its shadow root (and `Styles(…)`
+ * adds more), so an unfiltered `querySelectorAll("*")` makes CSS eligible for
+ * text queries: `getByText("cluster", { exact: false })` would match a
+ * stylesheet rule and report a duplicate match, or worse, pass for the wrong
+ * reason. Testing Library's DOM queries ignore these elements for the same
+ * reason; so do these.
+ */
+const NON_CONTENT_TAGS = new Set(["STYLE", "SCRIPT", "TEMPLATE", "LINK", "META", "TITLE"]);
+
 function allElements(root: ParentNode): Element[] {
-  return Array.from(root.querySelectorAll("*"));
+  const out: Element[] = [];
+  for (const el of Array.from(root.querySelectorAll("*"))) {
+    if (!NON_CONTENT_TAGS.has(el.tagName)) out.push(el);
+  }
+  return out;
+}
+
+/**
+ * The text of `el` as a user would read it, with the content of `<style>` /
+ * `<script>` descendants left out.
+ *
+ * Excluding those elements from the candidate list is not enough on its own:
+ * `textContent` on any ANCESTOR of the app's stylesheet still returns the whole
+ * sheet, so the root container would match half the CSS in the theme.
+ */
+/**
+ * The program's rendered markup — the shadow root's children minus the chrome
+ * the element itself injects.
+ *
+ * `firstElementChild.outerHTML` used to be the answer and no longer is: on a
+ * themed app the first child is the injected `<style>`, so `screen.html()`
+ * returned the whole stylesheet and never the UI. Dropping the non-content tags
+ * and the hidden error banner leaves exactly what the program produced, which is
+ * what a snapshot or a failure message should show.
+ */
+function renderedHtml(root: ParentNode): string {
+  const parts: string[] = [];
+  for (const node of Array.from(root.childNodes)) {
+    if (node.nodeType === 1) {
+      const el = node as Element;
+      if (NON_CONTENT_TAGS.has(el.tagName)) continue;
+      // The error banner is always present and `hidden` unless a program failed
+      // to parse; an empty banner is noise in every snapshot.
+      if (el.classList.contains("rui-error-banner") && el.hasAttribute("hidden")) continue;
+      parts.push(el.outerHTML);
+      continue;
+    }
+    if (node.nodeType === 3) {
+      const text = node.textContent ?? "";
+      if (text.trim() !== "") parts.push(text);
+    }
+  }
+  return parts.join("\n");
+}
+
+function contentText(el: Element): string {
+  if (NON_CONTENT_TAGS.has(el.tagName)) return "";
+  let out = "";
+  for (const child of Array.from(el.childNodes)) {
+    if (child.nodeType === 3) out += child.textContent ?? "";
+    else if (child.nodeType === 1) out += contentText(child as Element);
+  }
+  return out;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -394,8 +612,13 @@ function installFetchMock(handler: FetchHandler): InstalledFetch {
   const mock = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url;
     const method = (init?.method ?? (input as Request)?.method ?? "GET").toUpperCase();
+    // Header names are lowercased so assertions are stable: HTTP treats them
+    // case-insensitively, browsers normalise them, and `Headers.forEach` in
+    // happy-dom preserves the case the caller used — so
+    // `requests[0].headers["authorization"]` would otherwise pass or fail
+    // depending on which DOM the suite runs in.
     const headers: Record<string, string> = {};
-    new Headers(init?.headers).forEach((v, k) => { headers[k] = v; });
+    new Headers(init?.headers).forEach((v, k) => { headers[k.toLowerCase()] = v; });
     let body: unknown = init?.body;
     if (typeof body === "string") {
       try { body = JSON.parse(body); } catch { /* keep raw string */ }
@@ -415,6 +638,14 @@ function installFetchMock(handler: FetchHandler): InstalledFetch {
 /* -------------------------------------------------------------------------- */
 /*  The Screen                                                                 */
 /* -------------------------------------------------------------------------- */
+
+/** How to narrow a `*ByRole` query. */
+export interface RoleOptions {
+  /** Accessible name. A string matches exactly; use a regex for a substring. */
+  name?: Matcher;
+  /** Set `false` to match `name` as a substring. Ignored for regex/predicate matchers. */
+  exact?: boolean;
+}
 
 /** A captured DOM/custom event with its `detail` payload. */
 export interface CapturedEvent {
@@ -439,10 +670,14 @@ export interface Screen {
   findByText(matcher: Matcher, options?: TextMatchOptions, wait?: WaitForOptions): Promise<HTMLElement>;
   findAllByText(matcher: Matcher, options?: TextMatchOptions, wait?: WaitForOptions): Promise<HTMLElement[]>;
 
-  getByRole(role: string, options?: { name?: Matcher }): HTMLElement;
-  queryByRole(role: string, options?: { name?: Matcher }): HTMLElement | null;
-  getAllByRole(role: string, options?: { name?: Matcher }): HTMLElement[];
-  findByRole(role: string, options?: { name?: Matcher }, wait?: WaitForOptions): Promise<HTMLElement>;
+  /**
+   * Find by ARIA role, optionally narrowed by accessible name. A string `name`
+   * must match the whole name; pass a regex or `exact: false` for a substring.
+   */
+  getByRole(role: string, options?: RoleOptions): HTMLElement;
+  queryByRole(role: string, options?: RoleOptions): HTMLElement | null;
+  getAllByRole(role: string, options?: RoleOptions): HTMLElement[];
+  findByRole(role: string, options?: RoleOptions, wait?: WaitForOptions): Promise<HTMLElement>;
 
   getByLabelText(matcher: Matcher, options?: TextMatchOptions): HTMLElement;
   queryByLabelText(matcher: Matcher, options?: TextMatchOptions): HTMLElement | null;
@@ -505,15 +740,43 @@ export interface UserEvent {
   submit(form: Element): Promise<void>;
 }
 
+/**
+ * Read and write the program's reactive `$state`.
+ *
+ * Names are the ones the AUTHOR wrote. That distinction matters for a multi-file
+ * program: the linker gives every non-entry module private scope by renaming its
+ * atoms (`$stateFilter` declared in `lib/store.aktion` is `__a4_stateFilter` in
+ * `serializeState()`), and the numeric part comes from import traversal order, so
+ * it changes when an import is added. Tests that hard-code the mangled key break
+ * on an unrelated edit; these methods resolve `"stateFilter"` for you and throw a
+ * naming-collision error rather than guessing when two modules declare the same
+ * atom.
+ */
 export interface StateProbe {
-  /** Read one atom from the live snapshot (`serializeState()[name]`). */
+  /** Read one atom, by the name it was declared with. */
   get(name: string): unknown;
   /** Whether the atom currently exists. */
   has(name: string): boolean;
-  /** The full reactive snapshot — ideal for `toMatchSnapshot()`. */
+  /** The full reactive snapshot, with the runtime's own keys — for `toMatchSnapshot()`. */
   snapshot(): Record<string, unknown>;
-  /** Simulate a host-side write (`hydrateState`) and re-render. */
+  /**
+   * Write the atom and re-render — the same reactive write an `onClick` handler
+   * in the program performs. Derived atoms that read it recompute.
+   */
   set(name: string, value: unknown): Promise<void>;
+  /**
+   * Restore a snapshot the way a host does (`hydrateState`): the values are
+   * marked as coming from outside the program, so they survive the planner's
+   * reset of literal `$state` defaults on the next replan. Use `set` to simulate
+   * a user interaction; use this to test SSR / snapshot resume.
+   */
+  hydrate(snapshot: Record<string, unknown>): Promise<void>;
+  /**
+   * The runtime key backing `name` — the mangled symbol for a module-local atom,
+   * or `name` itself when it is already canonical. Useful in an error message, or
+   * to build a `hydrateState` payload by hand.
+   */
+  key(name: string): string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -529,6 +792,48 @@ const mounted = new Set<{ el: HTMLElement; fetchMock: InstalledFetch | null }>()
  * for anything that resolves after an effect, timer, or `$http(...)` request.
  */
 export function render(program: string, options: RenderOptions = {}): Screen {
+  return mount(options, (el) => { el.setResponse(program); });
+}
+
+/**
+ * Mount a **compiled** program — what `import app from "./app.aktion"` gives you
+ * once the `aktion-runtime/vite` plugin has linked the module graph.
+ *
+ * This is the entry point for testing a real app rather than a snippet.
+ * `render(source)` takes a string and re-parses it, which cannot express a
+ * multi-file program at all: `import`s are resolved by the linker at build time,
+ * so the string form of an entry module is not a runnable program. Passing the
+ * artefact keeps the test on exactly the AST that ships — same linking, same
+ * module scoping, same per-file source provenance that coverage reports against.
+ *
+ * ```ts
+ * import app from "../src/app.aktion";
+ *
+ * const screen = renderCompiled(app, {
+ *   route: "/clusters",
+ *   fetch: (url) => json({ items: [] }),
+ * });
+ * await screen.findByText("No clusters yet");
+ * ```
+ *
+ * Every `RenderOptions` field applies, and options are honoured in the same
+ * order as `render`: components and theme first, then seeded state, then the
+ * mount — so the program's first plan already sees them.
+ */
+export function renderCompiled(compiled: CompiledProgram, options: RenderOptions = {}): Screen {
+  return mount(options, (el) => { el.mountCompiled(compiled); });
+}
+
+/**
+ * Shared mount sequence for `render` / `renderCompiled`.
+ *
+ * The ordering matters and is the reason this is one function rather than two:
+ * host components and the theme have to be registered before the program plans,
+ * seeded state has to land before the first render so `$state` defaults do not
+ * overwrite it, and the fetch mock has to be installed before any `$http` on
+ * mount fires.
+ */
+function mount(options: RenderOptions, load: (el: AktionApp) => void): Screen {
   defineElement(); // idempotent — registers <aktion-app> if not already defined.
 
   const fetchMock = options.fetch ? installFetchMock(options.fetch) : null;
@@ -553,10 +858,20 @@ export function render(program: string, options: RenderOptions = {}): Screen {
   if (options.theme != null && typeof options.theme !== "string") {
     el.setTheme(options.theme);
   }
-  // Seed state so the very first plan sees injected props / spies.
-  if (options.state) el.hydrateState(options.state);
+  // Host interceptors must exist before the first request, which a program can
+  // fire during its very first plan.
+  if (options.httpInterceptors) el.registerHttpInterceptors(options.httpInterceptors);
 
-  el.setResponse(program);
+  load(el);
+
+  // Seed state AFTER loading, not before: both `setResponse` and
+  // `mountCompiled` begin by rebinding the state store to the new program,
+  // which clears every value — so anything hydrated earlier was silently
+  // dropped and `options.state` never reached the program. Loading only
+  // *schedules* the render, and `declare` never overwrites a name that already
+  // has a value, so seeding here still lands before the first plan and survives
+  // it.
+  if (options.state) el.hydrateState(options.state);
 
   const record = { el, fetchMock };
   mounted.add(record);
@@ -596,20 +911,25 @@ function buildScreen(
     (root, matcher, opts) => {
       const exact = opts?.exact ?? true;
       const hits = allElements(root).filter((node) =>
-        textMatches(normalize(node.textContent), matcher, exact, node),
+        textMatches(normalize(contentText(node)), matcher, exact, node),
       );
       return innermost(hits);
     },
   );
 
-  const byRole = makeQuerySet<[string, { name?: Matcher }?]>(
+  const byRole = makeQuerySet<[string, { name?: Matcher; exact?: boolean }?]>(
     "role",
     getRoot,
     (root, role, opts) =>
       allElements(root).filter((node) => {
         if (!rolesOf(node).includes(role)) return false;
         if (opts?.name == null) return true;
-        return textMatches(accessibleName(node), opts.name, false, node);
+        // A string `name` matches EXACTLY, as in Testing Library. Substring
+        // matching here is a trap in any real list: asking for the link named
+        // "prod-fra-platform" also returns "prod-fra-platform-2", and the query
+        // fails with "found 2 elements" long after the assertion was written.
+        // Pass a regex (or `exact: false`) when a substring is what you want.
+        return textMatches(accessibleName(node), opts.name, opts.exact ?? true, node);
       }),
   );
 
@@ -746,14 +1066,45 @@ function buildScreen(
     return match as HTMLElement;
   };
 
+  /**
+   * Map an author-written atom name onto the key the runtime actually uses.
+   *
+   * An exact hit wins — the entry module's atoms keep their names, and so does
+   * anything a test seeded by hand. Otherwise we look for the single module-local
+   * symbol whose base name matches. Two matches is a genuine ambiguity (the same
+   * atom name declared in two modules), and silently picking one would make a
+   * test assert against the wrong file's state, so it raises instead.
+   */
+  const resolveStateKey = (name: string): string => {
+    const snapshot = el.serializeState();
+    if (Object.prototype.hasOwnProperty.call(snapshot, name)) return name;
+    const matches = Object.keys(snapshot).filter((k) => moduleLocalBaseName(k) === name);
+    if (matches.length === 1) return matches[0]!;
+    if (matches.length > 1) {
+      throw new Error(
+        `State atom "${name}" is declared in more than one module (${matches.join(", ")}). ` +
+          `Use screen.state.snapshot() and pick the module-local key you mean.`,
+      );
+    }
+    return name;
+  };
+
   const state: StateProbe = {
-    get: (name) => el.serializeState()[name],
-    has: (name) => Object.prototype.hasOwnProperty.call(el.serializeState(), name),
+    get: (name) => el.serializeState()[resolveStateKey(name)],
+    has: (name) =>
+      Object.prototype.hasOwnProperty.call(el.serializeState(), resolveStateKey(name)),
     snapshot: () => el.serializeState(),
     set: async (name, value) => {
-      el.hydrateState({ [name]: value });
+      el.setState(resolveStateKey(name), value);
       await flush();
     },
+    hydrate: async (snapshot) => {
+      const mapped: Record<string, unknown> = {};
+      for (const [name, value] of Object.entries(snapshot)) mapped[resolveStateKey(name)] = value;
+      el.hydrateState(mapped);
+      await flush();
+    },
+    key: resolveStateKey,
   };
 
   const screen: Screen = {
@@ -836,10 +1187,10 @@ function buildScreen(
       mounted.delete(record);
     },
 
-    html: () => getRoot().firstElementChild?.outerHTML ?? Array.from(getRoot().childNodes).map((n) => (n as Element).outerHTML ?? n.textContent).join(""),
+    html: () => renderedHtml(getRoot()),
     debug: (node) => {
       // eslint-disable-next-line no-console
-      console.log(node ? (node as HTMLElement).outerHTML : Array.from(getRoot().childNodes).map((n) => (n as HTMLElement).outerHTML ?? n.textContent).join("\n"));
+      console.log(node ? (node as HTMLElement).outerHTML : renderedHtml(getRoot()));
     },
   };
 
@@ -871,9 +1222,9 @@ export interface WithinQueries {
   getByText(matcher: Matcher): HTMLElement;
   queryByText(matcher: Matcher): HTMLElement | null;
   getAllByText(matcher: Matcher): HTMLElement[];
-  getByRole(role: string, options?: { name?: Matcher }): HTMLElement;
-  queryByRole(role: string, options?: { name?: Matcher }): HTMLElement | null;
-  getAllByRole(role: string, options?: { name?: Matcher }): HTMLElement[];
+  getByRole(role: string, options?: RoleOptions): HTMLElement;
+  queryByRole(role: string, options?: RoleOptions): HTMLElement | null;
+  getAllByRole(role: string, options?: RoleOptions): HTMLElement[];
   getByTestId(id: string): HTMLElement;
   queryByTestId(id: string): HTMLElement | null;
 }
@@ -891,7 +1242,7 @@ function scopedTextMatches(value: string, matcher: Matcher, el?: Element): boole
  * matching siblings.
  */
 export function within(root: Element): WithinQueries {
-  const all = (): HTMLElement[] => Array.from(root.querySelectorAll<HTMLElement>("*"));
+  const all = (): HTMLElement[] => allElements(root) as HTMLElement[];
   const byText = (matcher: Matcher): HTMLElement[] =>
     all().filter((el) => {
       // Leaf-ish match: the element's own text (excluding nested element text noise)
@@ -900,24 +1251,25 @@ export function within(root: Element): WithinQueries {
         .map((n) => n.textContent ?? "")
         .join("")
         .trim();
-      const full = (el.textContent ?? "").trim();
+      const full = contentText(el).trim();
       return scopedTextMatches(own || full, matcher, el);
     });
-  const byRole = (role: string, name?: Matcher): HTMLElement[] =>
+  const byRole = (role: string, name?: Matcher, exact = true): HTMLElement[] =>
     all().filter((el) => {
-      const roles = [el.getAttribute("role"), ...implicitRoles(el)].filter(Boolean) as string[];
-      if (!roles.includes(role)) return false;
+      if (!rolesOf(el).includes(role)) return false;
       if (name == null) return true;
-      const accName = el.getAttribute("aria-label") ?? (el.textContent ?? "").trim();
-      return scopedTextMatches(accName, name, el);
+      const accName = el.getAttribute("aria-label") ?? contentText(el).trim();
+      // Exact by default, matching the unscoped `getByRole` — `within(row)` on a
+      // list is precisely where a substring hit on a sibling is most confusing.
+      return textMatches(accName, name, exact, el);
     });
   return {
     getByText: (m) => { const r = byText(m); if (!r[0]) throw new Error(`within: no element with text ${String(m)}`); return r[0]; },
     queryByText: (m) => byText(m)[0] ?? null,
     getAllByText: (m) => byText(m),
-    getByRole: (role, o) => { const r = byRole(role, o?.name); if (!r[0]) throw new Error(`within: no [role=${role}]`); return r[0]; },
-    queryByRole: (role, o) => byRole(role, o?.name)[0] ?? null,
-    getAllByRole: (role, o) => byRole(role, o?.name),
+    getByRole: (role, o) => { const r = byRole(role, o?.name, o?.exact); if (!r[0]) throw new Error(`within: no [role=${role}]`); return r[0]; },
+    queryByRole: (role, o) => byRole(role, o?.name, o?.exact)[0] ?? null,
+    getAllByRole: (role, o) => byRole(role, o?.name, o?.exact),
     getByTestId: (id) => { const el = root.querySelector<HTMLElement>(`[data-testid="${id}"]`); if (!el) throw new Error(`within: no [data-testid=${id}]`); return el; },
     queryByTestId: (id) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`),
   };

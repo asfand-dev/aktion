@@ -291,7 +291,7 @@ Tag/chip input — type a value, press Enter (or comma) to commit, click × on a
 ### Select
 
 ```
-Select(id, items, label?, placeholder?, value?, searchable?, onChange?, hint?, error?, required?, disabled?, onBlur?, onFocus?, loading?, onSearch?)
+Select(id, items, label?, placeholder?, value?, searchable?, onChange?, hint?, error?, required?, disabled?, onBlur?, onFocus?, loading?, onSearch?, labelHidden?)
 ```
 
 Dropdown select. Pass a `$variable` as `value` for two-way binding. Set `searchable: true` for a combobox-style filter UI on long option lists, or pass `onSearch` (which implies it) to fetch the matches from the server as the user types. `onChange(value)` fires with the newly-selected value. `items` accepts `SelectItem(value, label)` nodes, `{value, label}` objects and bare strings.
@@ -313,6 +313,7 @@ Dropdown select. Pass a `$variable` as `value` for two-way binding. Set `searcha
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `loading` | `boolean` | no | Options are still being fetched — disables the control and shows a loading option instead of an empty list |
 | `onSearch` | `callable` | no | Called with the query ~200ms after typing stops, for server-side search (implies `searchable`; supply the matches as `items`) |
+| `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
 
 ### SelectItem
 
@@ -332,7 +333,7 @@ Single option for a Select/Radio/Combobox list. Set `disabled` for an option tha
 ### Combobox
 
 ```
-Combobox(id, items, value?, placeholder?, emptyLabel?, disabled?, open?, onOpenChange?, onChange?, label?, hint?, error?, required?, loading?, onSearch?, clearable?, onBlur?, onFocus?, creatable?)
+Combobox(id, items, value?, placeholder?, emptyLabel?, disabled?, open?, onOpenChange?, onChange?, label?, hint?, error?, required?, loading?, onSearch?, clearable?, onBlur?, onFocus?, creatable?, labelHidden?)
 ```
 
 Searchable single-select dropdown — type to filter, click an option to choose. Use instead of `Select` when the list is long enough that scanning is faster than scrolling (countries, currencies, repos, users). Pass a `$variable` as `value` for two-way binding; the selected option's `value` is written to state on pick. Arrow keys / Home / End / Enter / Escape operate the list. Pass `onSearch` for a server-side type-ahead (called with the query ~200ms after typing stops; local filtering is then skipped — supply the matches as `items`), `loading` while those matches are in flight, `creatable` to accept a value that is not in the list, and `label`/`hint`/`error`/`required` for a labelled field.
@@ -358,11 +359,12 @@ Searchable single-select dropdown — type to filter, click an option to choose.
 | `onBlur` | `callable` | no | Called with the selected value when focus leaves the control (validate-on-blur) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `creatable` | `boolean` | no | Offer the typed text itself as an option when it matches nothing ("Create «acme-corp»") so a value outside `items` can be selected |
+| `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
 
 ### MultiSelect
 
 ```
-MultiSelect(id, items, value?, placeholder?, emptyLabel?, max?, disabled?, open?, onOpenChange?, onChange?, label?, hint?, error?, required?, min?, onSearch?, loading?, creatable?)
+MultiSelect(id, items, value?, placeholder?, emptyLabel?, max?, disabled?, open?, onOpenChange?, onChange?, label?, hint?, error?, required?, min?, onSearch?, loading?, creatable?, labelHidden?)
 ```
 
 Multi-option searchable dropdown. Type to filter, click an option to add/remove it from the bound array. Renders the selected options as removable chips inside the trigger. Pass a `$variable` (array of values) as `value` for two-way binding. Arrow keys / Home / End move through the list and Enter or Space toggles the highlighted option. `min`/`max` bound the selection size; `onSearch` turns filtering over to the server (called with the query ~200ms after typing stops — supply the matches as `items`, with `loading` while they are in flight), and `creatable` accepts a value that is not in the list.
@@ -387,11 +389,12 @@ Multi-option searchable dropdown. Type to filter, click an option to add/remove 
 | `onSearch` | `callable` | no | Called with the query ~200ms after typing stops, for server-side search; disables local filtering |
 | `loading` | `boolean` | no | Matches are being fetched — shows "Loading…" instead of the (lying) empty label |
 | `creatable` | `boolean` | no | Offer the typed text itself as an option when it matches nothing ("Create «backend»") so a tag outside `items` can be added |
+| `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
 
 ### Checkbox
 
 ```
-Checkbox(id, label, value?, onChange?, disabled?, description?, required?, error?, hint?, indeterminate?)
+Checkbox(id, label, value?, onChange?, disabled?, description?, required?, error?, hint?, indeterminate?, labelHidden?)
 ```
 
 Boolean checkbox. `onChange(checked)` fires with the new boolean state. Pass `required`/`error` for the "I accept the Terms" pattern, `description` for a secondary line, and `indeterminate` for a "select all" header over a partially-selected list.
@@ -408,11 +411,12 @@ Boolean checkbox. `onChange(checked)` fires with the new boolean state. Pass `re
 | `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
 | `hint` | `string` | no | Helper text rendered below the control |
 | `indeterminate` | `boolean` | no | Tri-state "partially checked" dash (a parent of a partly-selected list) |
+| `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a checkbox in a table cell whose column header already carries the name |
 
 ### CheckBoxGroup
 
 ```
-CheckBoxGroup(name, items, value?, onChange?, label?, hint?, error?, required?, disabled?)
+CheckBoxGroup(name, items, value?, onChange?, label?, hint?, error?, required?, disabled?, labelHidden?)
 ```
 
 Group of checkboxes. Value is an object keyed by item name. Pass a `$variable` for two-way binding. `onChange(value)` fires with the full updated object. `items` accepts `CheckBoxItem(label, name, …)` nodes and plain `{label, name, description, checked, disabled}` objects. Pass `label` for the group heading ("Permissions") and `error` for "Select at least one scope".
@@ -428,6 +432,7 @@ Group of checkboxes. Value is an object keyed by item name. Pass a `$variable` f
 | `error` | `string` | no | Validation error rendered below the group (marks it invalid) |
 | `required` | `boolean` | no | Mark the group required (adds a `*` to the heading) |
 | `disabled` | `boolean` | no | Lock every item in the group |
+| `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
 
 ### CheckBoxItem
 
@@ -449,10 +454,10 @@ Single option inside a CheckBoxGroup. `disabled` locks one option (a scope the c
 ### Radio
 
 ```
-Radio(id, items, value?, onChange?, label?, hint?, error?, required?, disabled?, direction?)
+Radio(id, items, value?, onChange?, label?, hint?, error?, required?, disabled?, direction?, labelHidden?, slots?)
 ```
 
-Radio button group. `onChange(value)` fires with the newly-selected option value. Always pass `label` — the question being answered ("Shipping method") — and use `direction: "row"` for a Yes/No or Monthly/Yearly pair. `items` accepts `SelectItem(value, label)` nodes, `{value, label, disabled}` objects and bare strings.
+Radio button group. `onChange(value)` fires with the newly-selected option value. Always pass `label` — the question being answered ("Shipping method") — and use `direction: "row"` for a Yes/No or Monthly/Yearly pair. `items` accepts `SelectItem(value, label)` nodes, `{value, label, disabled}` objects and bare strings. Pass `slots` to hang a control off an option's own row ("Fixed  [– 3 +]", "Card  [number]") — one entry per item, aligned by index; the slot renders OUTSIDE the `<label>`, so clicking the control does not select the option.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -466,11 +471,13 @@ Radio button group. `onChange(value)` fires with the newly-selected option value
 | `required` | `boolean` | no | Mark the group required (adds a `*` to the label) |
 | `disabled` | `boolean` | no | Lock every option in the group |
 | `direction` | `"row"` \| `"column"` | no | Layout of the options (default `column`) |
+| `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
+| `slots` | `Node[]` | no | Per-option trailing content, aligned by index with `items` — rendered beside the option, outside its `<label>`, so a control in the slot stays independently clickable. Use `null` for an option that has none. |
 
 ### Switch
 
 ```
-Switch(id, label?, value?, description?, disabled?, onChange?)
+Switch(id, label?, value?, description?, disabled?, onChange?, labelHidden?)
 ```
 
 Compact on/off toggle. Pass a `$variable` as `value` for two-way binding — prefer Switch over Checkbox when the control represents a setting. `onChange(checked)` fires with the new boolean.
@@ -483,6 +490,7 @@ Compact on/off toggle. Pass a `$variable` as `value` for two-way binding — pre
 | `description` | `string` | no |  |
 | `disabled` | `boolean` | no |  |
 | `onChange` | `callable` | no | Called with the new boolean value |
+| `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a switch in a table cell whose column header already carries the name |
 
 ### ToggleGroup
 

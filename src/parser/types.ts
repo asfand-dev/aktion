@@ -71,6 +71,19 @@ export interface BlockExpr {
 export interface SourceLocation {
   line: number;
   column: number;
+  /**
+   * Which module this node was authored in — an index into
+   * {@link Program.sources}.
+   *
+   * `parse()` never sets it (a single-file program has exactly one source, so
+   * the field would be noise on every node). The **linker** stamps it while it
+   * merges a multi-file graph, which is the only point where `line` alone stops
+   * identifying a position: after merging, line 42 exists once per module.
+   *
+   * Absent therefore means "source 0" — the entry — and every consumer should
+   * read it as `loc.source ?? 0`.
+   */
+  source?: number;
 }
 
 export interface LiteralExpr {
@@ -602,6 +615,16 @@ export interface Program {
    * still runs — these are advisory hints.
    */
   warnings?: ParseError[];
+  /**
+   * Module paths of a **linked** program, indexed by
+   * {@link SourceLocation.source}. Index 0 is always the entry module.
+   *
+   * Only the linker sets this; a `parse()`d single-file program leaves it
+   * undefined and its nodes all belong to the single file the caller already
+   * knows about. Tools that map a node back to a file should read
+   * `program.sources?.[node.loc?.source ?? 0]`.
+   */
+  sources?: string[];
 }
 
 export interface ParseError {

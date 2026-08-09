@@ -74,17 +74,22 @@ const MODES = {
 };
 
 const SUGGESTIONS = {
+  // Compact mode answers questions; it cannot build anything interactive. The
+  // suggestions are ordinary chat questions, chosen so each one lands on a
+  // different part of the Markdown → Aktion mapping.
   "chat-compact": [
-    { icon: "chart-line", title: "Show this week's sales as a chart", desc: "KPIs + line chart in a single card." },
-    { icon: "list-check", title: "Make me a todo list", desc: "Reactive add/delete with state." },
-    { icon: "circle-info", title: "Render a feature table", desc: "5 features compared across 3 plans." },
-    { icon: "comment", title: "Reply with a follow-up block", desc: "Three suggested next prompts." },
+    { icon: "circle-question", title: "Explain how HTTPS works", desc: "Prose, steps, and a callout." },
+    { icon: "scale-balanced", title: "Compare Postgres, MySQL and SQLite", desc: "Answered as a comparison table." },
+    { icon: "chart-line", title: "How have global EV sales grown since 2015?", desc: "Prose plus a line chart." },
+    { icon: "code", title: "Show me how to debounce a function in JS", desc: "Explanation with a code block." },
   ],
+  // Full mode still answers a question — the difference is the answer can hold
+  // state, so each of these needs the reader to poke at it to get the payoff.
   "chat-full": [
-    { icon: "gauge-high", title: "Build a sales dashboard", desc: "Metric grid + chart + kanban board." },
-    { icon: "calendar-days", title: "Weekly schedule view", desc: "Timeline + booking sheet." },
-    { icon: "table", title: "Live orders table", desc: "Sortable, filterable, with a detail sheet." },
-    { icon: "envelope", title: "Inbox with split view", desc: "List on the left, conversation on the right." },
+    { icon: "calculator", title: "Help me work out a mortgage payment", desc: "Answer with live sliders." },
+    { icon: "table", title: "Show the 2024 F1 results", desc: "Sortable, filterable table." },
+    { icon: "clock", title: "What time is it around the world?", desc: "Live clocks that keep ticking." },
+    { icon: "money-bill-trend-up", title: "Explain compound interest", desc: "Prose plus a chart you can adjust." },
   ],
   website: [
     { icon: "rocket", title: "SaaS landing page for an AI startup", desc: "Hero, features, pricing, testimonials." },
@@ -171,6 +176,8 @@ const els = {
   settingsBtn: $("cb-settings"),
   stage: $("cb-stage"),
   welcome: $("cb-welcome"),
+  welcomeTitle: $("cb-welcome-title"),
+  welcomeLead: $("cb-welcome-lead"),
   suggestions: $("cb-suggestions"),
   history: $("cb-history"),
   composer: $("cb-composer"),
@@ -628,7 +635,35 @@ function selectMode(mode) {
   showToast(`${MODES[mode].label} mode`, MODES[mode].icon);
 }
 
+/**
+ * Welcome copy per mode. The four modes ask for genuinely different things —
+ * compact answers a question, the other three build something — so a single
+ * "what should we build today?" mis-sells whichever mode is active.
+ */
+const WELCOME = {
+  "chat-compact": {
+    title: 'Ask anything, get a <span class="cb-grad-text">UI</span> back.',
+    lead: "Ask an ordinary question. Instead of a wall of Markdown, the answer streams back as components — headings, tables, charts, callouts, code.",
+  },
+  "chat-full": {
+    title: 'Answer it with something <span class="cb-grad-text">interactive</span>.',
+    lead: "The whole language is available, so a reply can hold state: filter a table, switch a tab, open a detail panel, fetch live data.",
+  },
+  website: {
+    title: 'What site should we <span class="cb-grad-text">design</span>?',
+    lead: "Describe the product or business and it streams back a full marketing page — navbar, hero, stacked sections, footer.",
+  },
+  app: {
+    title: 'What should we <span class="cb-grad-text">build</span> today?',
+    lead: "Describe an app and it streams back a working shell — sidebar, routed pages, wired actions, and realistic seed data.",
+  },
+};
+
 function renderSuggestions(mode) {
+  const copy = WELCOME[mode] || WELCOME["chat-compact"];
+  if (els.welcomeTitle) els.welcomeTitle.innerHTML = copy.title;
+  if (els.welcomeLead) els.welcomeLead.textContent = `${copy.lead} Click a suggestion below or type your own.`;
+
   const list = SUGGESTIONS[mode] || [];
   els.suggestions.innerHTML = "";
   for (const item of list) {

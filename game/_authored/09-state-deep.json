@@ -1,0 +1,902 @@
+{
+  "id": "state-deep",
+  "title": "Deep State",
+  "subtitle": "Hooks, stores, and what re-renders",
+  "icon": "cpu",
+  "difficulty": 4,
+  "estimateMin": 13,
+  "requires": [
+    "effects-lifecycle"
+  ],
+  "palette": {
+    "g1": "#818cf8",
+    "g2": "#6366f1",
+    "g3": "#a5b4fc"
+  },
+  "backdrop": {
+    "preset": "bloom"
+  },
+  "intro": {
+    "headline": "Not all state costs the same",
+    "body": "Every world so far has used one tier of state: a top-level `$name = value` atom. There are two more above it.\n\n**Hooks** give per-instance state — `$state`, `$memo`, `$ref`, `$reducer`, `$id`, plus any `$name` hook you write yourself. **Stores** give app-wide state with no prop drilling. Both mirror tools you already know, so the syntax will not surprise you.\n\nThe price will. Fine-grained, path-level tracking applies to top-level atoms *only*. Every other write — a hook setter, an `$http` settling, a timer tick, an `$effect` write, an `$emit` — re-executes **every** component body in the app.\n\nThat is not a bug to route around. It is a number to know before you pick a tier.",
+    "code": "$rows = []                        // one atom, path-tracked\nconst [tab, setTab] = $state(0)   // one per call site\ncart = $store({ items: [] })      // one for the whole app",
+    "codeCaption": "three tiers, three blast radii",
+    "infographic": {
+      "type": "flow",
+      "title": "What happens after a write",
+      "direction": "right",
+      "nodes": [
+        {
+          "label": "a write",
+          "note": "atom, setter, settle, tick"
+        },
+        {
+          "label": "attribute",
+          "note": "which path changed?",
+          "accent": true
+        },
+        {
+          "label": "select",
+          "note": "the readers, or all of them"
+        },
+        {
+          "label": "re-execute",
+          "note": "component bodies run"
+        },
+        {
+          "label": "morph",
+          "note": "only changed DOM is patched"
+        }
+      ]
+    },
+    "objectives": [
+      "Name what each of the five hooks hands back",
+      "Compose `$state` and `$memo` inside a component",
+      "Choose between a per-call-site atom, a hook, and a `$store`",
+      "Predict the blast radius of any write",
+      "Persist state with `$store({ persist })` and `$storage`"
+    ]
+  },
+  "stages": [
+    {
+      "id": "s1",
+      "title": "Five hooks, five shapes",
+      "kicker": "hooks",
+      "icon": "puzzle",
+      "goal": "Know what each built-in hook returns before you reach for it.",
+      "xp": 100,
+      "teach": {
+        "text": "A function whose name starts with `$` is a **hook**. Call it at the top of a component body and it holds state for *that instance* — the same role React's `use*` convention plays, with the same rules.\n\nThere are exactly five built-in ones, and they map one-to-one onto their React counterparts: `$state`, `$memo`, `$ref`, `$reducer`, `$id`. All five names are reserved.\n\nTwo rules come with them. Call hooks **unconditionally and in a stable order** — slots are matched by call order across renders. And hook state **resets when the instance leaves the tree**; a remounted component starts from its initial value again.\n\nWrite your own with `function $useThing(...)`. A custom hook's body runs inline in the calling component's hook scope, so its `$state` and `$memo` calls attach to that component, exactly like a React custom hook.",
+        "code": {
+          "src": "function Counter() {\n  const [count, setCount] = $state(0)\n  const label = $memo(() => `Count: ${count}`, [count])\n  return Stack([\n    Text(label),\n    Button(\"+1\", { onClick: () => setCount(c => c + 1) })\n  ])\n}\n\n$app(Counter())",
+          "caption": "the everyday pair"
+        },
+        "code2": {
+          "src": "function $useCounter(start) {\n  const [count, setCount] = $state(start)\n  return { count: count, increment: () => setCount(c => c + 1) }\n}\n\nfunction Counter(label) {\n  const c = $useCounter(0)\n  return Stack([Text(`${label}: ${c.count}`), Button(\"+1\", { onClick: c.increment })])\n}",
+          "caption": "your own hook shares the caller's slots"
+        },
+        "infographic": {
+          "type": "orbit",
+          "title": "The five built-in hooks",
+          "core": "hooks",
+          "satellites": [
+            {
+              "label": "$state",
+              "note": "[value, setValue]"
+            },
+            {
+              "label": "$memo",
+              "note": "a cached value"
+            },
+            {
+              "label": "$ref",
+              "note": "{ current } — no re-render"
+            },
+            {
+              "label": "$reducer",
+              "note": "[state, dispatch]"
+            },
+            {
+              "label": "$id",
+              "note": "a stable unique id"
+            }
+          ]
+        },
+        "tips": [
+          "`setValue(prev => next)` derives from the previous value; `setValue(next)` replaces it. The initializer runs once, on first render.",
+          {
+            "kind": "warn",
+            "text": "Omit `$memo`'s dependency array entirely and it recomputes on every render — which is the same as not memoising at all."
+          },
+          {
+            "kind": "danger",
+            "text": "A hook inside an `if` breaks slot matching. There is no lint rule here to save you."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "match-pairs",
+        "title": "What comes back?",
+        "prompt": "Match each hook call to the thing it hands you. Two hand back a pair you destructure, one hands back a mutable box you unwrap, and two hand back a plain value — which one it is decides how you write the left-hand side.",
+        "pairs": [
+          {
+            "left": {
+              "mono": "$state(0)",
+              "note": "like useState"
+            },
+            "right": {
+              "label": "A [value, setValue] pair — the setter also takes prev => next"
+            }
+          },
+          {
+            "left": {
+              "mono": "$memo(() => total(rows), [rows])",
+              "note": "like useMemo"
+            },
+            "right": {
+              "label": "A cached value, recomputed only when a listed dep changes"
+            }
+          },
+          {
+            "left": {
+              "mono": "$ref(null)",
+              "note": "like useRef"
+            },
+            "right": {
+              "label": "A stable { current } box — writing .current renders nothing"
+            }
+          },
+          {
+            "left": {
+              "mono": "$reducer(step, 0)",
+              "note": "like useReducer"
+            },
+            "right": {
+              "label": "A [state, dispatch] pair for many related transitions"
+            }
+          },
+          {
+            "left": {
+              "mono": "$id(\"email\")",
+              "note": "like useId"
+            },
+            "right": {
+              "label": "A stable unique id string, for wiring for / aria-* pairs"
+            }
+          }
+        ]
+      },
+      "hints": [
+        "Two of the five hand back a pair. One hands back a box, one a plain string, one a plain value.",
+        "`$ref` is the odd one out: it is the only hook whose write schedules no render at all.",
+        "`$id` exists so two instances of the same form never collide on the same DOM id."
+      ],
+      "explain": "Aktion could have invented its own subscription API for per-instance state. It deliberately did not. The five hooks map one-to-one onto `useState`, `useMemo`, `useRef`, `useReducer` and `useId`, so the rule you already carry — call them unconditionally, in a stable order, at the top of the body — transfers unchanged, for the same reason it exists there: slots are matched by call order across renders. The corollary transfers too, and it is the one people forget — hook state belongs to the instance, so it resets the moment that instance leaves the tree.",
+      "codex": {
+        "term": "$state(initial)",
+        "def": "The per-instance state hook. Returns [value, setValue]; the setter accepts a value or prev => next. Call it at the top of a component body, unconditionally and in a stable order."
+      }
+    },
+    {
+      "id": "s2",
+      "title": "Deps, or derive",
+      "kicker": "computing",
+      "icon": "refresh",
+      "goal": "Cache a computation with $memo — and know when $util.derived is the better tool.",
+      "xp": 110,
+      "hearts": 3,
+      "teach": {
+        "text": "`$memo(() => value, [deps])` caches a computation and recomputes it only when one of the listed deps changes, compared shallowly with `Object.is`.\n\nThat list is hand-maintained, and that is its weakness. Read one more value in the body, forget to list it, and the cached value silently goes stale — no error, no warning, just a number that stopped moving.\n\nSo `$memo` is the right tool when the inputs are ordinary values: component arguments, other hook results. A shallow compare is all it can see, and that is all those need.\n\nThe moment a `$` atom appears in the body, prefer `$util.derived(fn)`. It has no dependency array because it recomputes from whatever atoms the lambda actually reads — add a read and the dependency set updates itself.",
+        "code": {
+          "src": "function TipRow(lines) {\n  const [tip, setTip] = $state(0)\n  const total = $memo(() => $util.sum(lines) + tip, [lines, tip])\n  return Row([\n    Text(`Total ${total}`),\n    Button(\"Tip +1\", { onClick: () => setTip(t => t + 1) })\n  ])\n}",
+          "caption": "local values in, cached value out"
+        },
+        "infographic": {
+          "type": "compare",
+          "title": "Who owns the dependency list?",
+          "columns": [
+            {
+              "kind": "bad",
+              "title": "You do — and it drifts",
+              "code": "total = $memo(\n  () => $util.sum($lines) * $rate,\n  [$lines]\n)",
+              "note": "$rate is read but never listed. total freezes the first time the rate moves."
+            },
+            {
+              "kind": "good",
+              "title": "The body does",
+              "code": "total = $util.derived(\n  () => $util.sum($lines) * $rate\n)",
+              "note": "No list to maintain — it tracks every atom the lambda reads."
+            }
+          ]
+        },
+        "tips": [
+          "At the top level you rarely need either: `$open = $todos.filter(t => !t.done)` already auto-tracks every `$` it reads.",
+          {
+            "kind": "warn",
+            "text": "Args are compared shallowly too — passing a fresh inline lambda as a prop re-renders the child every time. Hoist the handler to a stable binding when that matters."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "fill-blanks",
+        "title": "Wire up the row",
+        "prompt": "Fill the four slots. The indent shows what sits inside what — the dependency array gets its own row because it is the memo's *second argument*, not part of the lambda above it. Two chips are what a React developer types on autopilot, one is an incomplete dependency list, and one calls the setter instead of passing it.",
+        "display": "tree",
+        "rows": [
+          {
+            "depth": 0,
+            "label": "function TipRow(lines) {"
+          },
+          {
+            "depth": 1,
+            "label": "const [tip, setTip] =",
+            "slot": 0,
+            "after": "(0)"
+          },
+          {
+            "depth": 1,
+            "label": "const total =",
+            "slot": 1,
+            "after": "(() => $util.sum(lines) + tip,"
+          },
+          {
+            "depth": 2,
+            "slot": 2,
+            "after": ")"
+          },
+          {
+            "depth": 1,
+            "label": "return Row(["
+          },
+          {
+            "depth": 2,
+            "label": "Text(`Total ${total}`),"
+          },
+          {
+            "depth": 2,
+            "label": "Button(\"Tip +1\", {"
+          },
+          {
+            "depth": 3,
+            "label": "onClick: () =>",
+            "slot": 3,
+            "after": "(t => t + 1)"
+          },
+          {
+            "depth": 2,
+            "label": "})"
+          },
+          {
+            "depth": 1,
+            "label": "])"
+          },
+          {
+            "depth": 0,
+            "label": "}"
+          }
+        ],
+        "bank": [
+          "$state",
+          "$memo",
+          "[lines, tip]",
+          "setTip",
+          "useState",
+          "useMemo",
+          "[tip]",
+          "setTip(tip + 1)"
+        ],
+        "answer": [
+          "$state",
+          "$memo",
+          "[lines, tip]",
+          "setTip"
+        ]
+      },
+      "hints": [
+        "Both hooks are `$`-prefixed. Nothing in Aktion is called `use` anything.",
+        "The memo body reads two things. List both, or the total goes stale the moment the lines change.",
+        "`onClick` wants a function to call later, not the result of calling one now."
+      ],
+      "nudges": [
+        "Check the dependency array against every name the lambda reads.",
+        "Slot 3 sits directly in front of `(t => t + 1)` — what goes there is the setter itself."
+      ],
+      "explain": "`$memo` earns its keep when the inputs are ordinary values, because a shallow `Object.is` compare is all it can see and all those need. The moment the inputs are reactive atoms, the dependency array becomes a second copy of information the body already contains — and second copies drift. `$util.derived(fn)` has no array because it subscribes to whatever atoms the lambda reads, so adding a read updates the dependency set for free. Per-instance caching over local values: `$memo`. A `$` in the body: `$util.derived`.",
+      "afterCode": {
+        "src": "const total = $memo(() => $util.sum(lines) + tip, [lines, tip])",
+        "caption": "every name the body reads appears in the list"
+      },
+      "codex": {
+        "term": "$memo(() => value, [deps])",
+        "def": "Per-instance cached value, recomputed only when a listed dependency changes (shallow Object.is). Omitting the array recomputes every render. For values built from `$` atoms, `$util.derived(fn)` tracks its own dependencies instead."
+      },
+      "preview": {
+        "program": "function TipRow(lines) {\n  const [tip, setTip] = $state(0)\n  const total = $memo(() => $util.sum(lines) + tip, [lines, tip])\n  return Card([\n    Text(`Total ${total}`, { variant: \"large-heavy\" }),\n    Button(\"Tip +1\", { onClick: () => setTip(t => t + 1), variant: \"primary\" })\n  ])\n}\n\n$app(Column([\n  PageHeader(\"Checkout\"),\n  TipRow([12, 8, 5])\n]))",
+        "caption": "the component you just assembled, running for real"
+      }
+    },
+    {
+      "id": "s3",
+      "title": "Who owns this?",
+      "kicker": "scope",
+      "icon": "layers",
+      "goal": "Place a piece of state in the right tier: per call site, or app-wide.",
+      "xp": 120,
+      "teach": {
+        "text": "The same three characters mean two different things depending on where you write them.\n\nAt the top level, `$draft = \"\"` is one atom for the whole program. Every component that reads it sees the same value.\n\nInside a component body, `$draft = \"\"` is private to that **call site**. Render `Counter()` twice and you get two independent atoms — instance state is addressed by where the call came from, not by the name. Pass `{ key: id }` at a call site when siblings reorder, so the state stays attached to the right one instead of to a source position that just moved.\n\nWhen unrelated components need the same value, neither answer fits — that is `$store({...})`. Non-function entries are reactive state; function entries are methods that receive the store handle `s` first. The handle is an app-global singleton with reference-stable methods, so any component reads `store.field` or calls `store.method(args)` directly, with no prop drilling.",
+        "code": {
+          "src": "function Counter(label) {\n  $n = 0\n  return Stack([\n    Text(`${label}: ${$n}`),\n    Button(\"inc\", { onClick: () => $n = $n + 1 })\n  ])\n}\n\n$app(Stack([Counter(\"A\"), Counter(\"B\")]))",
+          "caption": "two call sites, two independent atoms"
+        },
+        "code2": {
+          "src": "cart = $store({\n  items: [],\n  count: (s) => s.items.length,\n  add: (s, item) => { s.items = [...s.items, item] }\n})\n\nfunction AddLatte() { return Button(\"Add\", { onClick: () => cart.add({ price: 4.5 }) }) }\nfunction MiniCart() { return Text(`${cart.count()} items`) }",
+          "caption": "siblings with no relationship, one cart"
+        },
+        "infographic": {
+          "type": "layers",
+          "title": "Where state can live",
+          "layers": [
+            {
+              "label": "$store({ … })",
+              "note": "app-global singleton; any component reads it or calls its actions"
+            },
+            {
+              "label": "$name = value   (top level)",
+              "note": "one atom, shared by every reader, path-tracked"
+            },
+            {
+              "label": "$name = value   (component body)",
+              "note": "one atom per call site, still path-tracked"
+            },
+            {
+              "label": "$state / $ref / $reducer / $id",
+              "note": "per instance, composable, reset when the instance unmounts"
+            }
+          ]
+        },
+        "tips": [
+          "A store's `count: (s) => s.items.length` is a getter — you call it as `cart.count()`, with no argument.",
+          {
+            "kind": "warn",
+            "text": "Reaching for a store because two siblings need one value is usually a step too far. Try lifting the atom to the top level first."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "sort-bins",
+        "title": "File each declaration",
+        "prompt": "Every one of these declares state. File it by how many copies exist at runtime. Two chips carry the identical declaration and still land in different bins — only where it is written differs.",
+        "bins": [
+          {
+            "id": "instance",
+            "label": "One per call site",
+            "hint": "two renders, two independent values"
+          },
+          {
+            "id": "app",
+            "label": "One for the whole app",
+            "hint": "every reader sees the same value"
+          }
+        ],
+        "items": [
+          {
+            "label": "$draft = \"\" inside a component body",
+            "bin": "instance"
+          },
+          {
+            "label": "$draft = \"\" at the top level",
+            "bin": "app"
+          },
+          {
+            "label": "const [n, setN] = $state(0)",
+            "bin": "instance"
+          },
+          {
+            "label": "const box = $ref(null)",
+            "bin": "instance"
+          },
+          {
+            "label": "const [s, dispatch] = $reducer(step, 0)",
+            "bin": "instance"
+          },
+          {
+            "label": "const id = $id(\"email\")",
+            "bin": "instance"
+          },
+          {
+            "label": "cart = $store({ items: [] })",
+            "bin": "app"
+          },
+          {
+            "label": "prefs = $store({ persist: \"theme\", mode: \"dark\" })",
+            "bin": "app"
+          }
+        ]
+      },
+      "hints": [
+        "Only one thing separates the two `$draft` chips: indentation.",
+        "Every hook is per-instance by definition — that is the entire reason hooks exist.",
+        "`$store` is the tier you reach for precisely because no single component owns the value."
+      ],
+      "nudges": [
+        "A hook called inside a body cannot be shared — it has nowhere to be shared from.",
+        "Both `$store` chips belong together, whatever their config keys say."
+      ],
+      "explain": "Identity comes from the call site, not from the name. Two `Counter()` calls in the same tree produce two independent `$n` atoms because instance state is addressed by where the call came from — which is also the whole reason `key` exists. Reorder the siblings and source position alone would hand the wrong atom to the wrong row, so `key: task.id` pins the address to something stable. A top-level `$name` has no call site to be private to, so it is simply one value everyone shares, and a `$store` is the deliberate, named version of that for state no single component owns.",
+      "codex": {
+        "term": "Per-instance atom",
+        "def": "A `$name = value` written inside a component body. Each call site owns its own; two renders of the same component never share it. Add `key` at the call site so the state follows the item when siblings reorder."
+      },
+      "preview": {
+        "program": "$clicks = 0\n\nfunction Counter(label) {\n  $n = 0\n  return Card([\n    Text(`${label}: ${$n}`, { variant: \"large-heavy\" }),\n    Button(\"+1\", { onClick: () => { $n = $n + 1; $clicks = $clicks + 1 }, variant: \"primary\" })\n  ])\n}\n\n$app(Column([\n  PageHeader(\"Two call sites, two atoms\"),\n  Row([Counter(\"Left\"), Counter(\"Right\")], { gap: \"md\" }),\n  Text(`Shared clicks: ${$clicks}`)\n]))",
+        "caption": "live — the counters are independent, the total is not"
+      }
+    },
+    {
+      "id": "s4",
+      "title": "Render Blast",
+      "kicker": "arcade",
+      "icon": "flame",
+      "goal": "Feel the cost of a write instead of reading about it.",
+      "xp": 140,
+      "hearts": 3,
+      "teach": {
+        "text": "Every write has a **blast radius**: the set of component bodies that re-execute because of it.\n\nA top-level `$name = value` produces the smallest one the runtime can. It knows which path you wrote and which paths each body read, so only the overlap wakes up.\n\nEverything else is opaque to that tracker and falls back to the widest radius there is — every component body runs again. The morph reconciler still patches only the DOM that actually differs, so nothing flickers. The cost is in re-running your code, not in repainting the screen.\n\nFour component bodies hang off the root below. Read what each round needs, then fire the write with the smallest radius that still does the job.",
+        "infographic": {
+          "type": "meter",
+          "title": "Blast radius, relative",
+          "rows": [
+            {
+              "label": "$user.name = \"Alex\"",
+              "value": 14,
+              "note": "only bodies that read user.name"
+            },
+            {
+              "label": "cart.add(line)   ($store)",
+              "value": 22,
+              "note": "only bodies that read cart.items"
+            },
+            {
+              "label": "setName(\"Alex\")   ($state)",
+              "value": 100,
+              "note": "every component body"
+            },
+            {
+              "label": "$orders settling   ($http)",
+              "value": 100,
+              "note": "every component body"
+            },
+            {
+              "label": "ref.current = node   ($ref)",
+              "value": 0,
+              "note": "no render scheduled at all"
+            }
+          ]
+        },
+        "tips": [
+          "Radius zero is a real option — one of the five hooks never schedules a render.",
+          {
+            "kind": "warn",
+            "text": "A wide radius is not a bug. It is a bill. Pay it where the path is cold and refuse it where the path is hot."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "arcade",
+        "title": "Pick the tightest write",
+        "prompt": "Each round names something that must update. Fire the write with the smallest blast radius that actually delivers it. Three misses ends the run.",
+        "goal": "1 / 5",
+        "height": 340,
+        "note": "Tap a write to fire it. The glow shows which component bodies re-executed.",
+        "winNote": "Press Check to bank the XP.",
+        "params": {
+          "nodes": [
+            "Header",
+            "Profile",
+            "Cart",
+            "Chart"
+          ],
+          "rounds": [
+            {
+              "need": "Profile must show the new name",
+              "best": 1,
+              "options": [
+                {
+                  "label": "setName(\"Alex\")  ($state)",
+                  "hits": [
+                    0,
+                    1,
+                    2,
+                    3
+                  ],
+                  "why": "A hook setter is opaque to the tracker, so every body re-runs."
+                },
+                {
+                  "label": "$user.name = \"Alex\"",
+                  "hits": [
+                    1
+                  ],
+                  "why": "Path-level tracking: only bodies that read user.name re-run."
+                },
+                {
+                  "label": "$profile.refetch()",
+                  "hits": [
+                    0,
+                    1,
+                    2,
+                    3
+                  ],
+                  "why": "Same screen, four times the work - an $http settle is a full re-render."
+                }
+              ]
+            },
+            {
+              "need": "Cart total must update after a line is added",
+              "best": 2,
+              "options": [
+                {
+                  "label": "$emit(\"cart:add\", line)",
+                  "hits": [
+                    0,
+                    1,
+                    2,
+                    3
+                  ],
+                  "why": "$emit leaves for the host page and forces a full re-render on the way out."
+                },
+                {
+                  "label": "setCartVersion(v => v + 1)",
+                  "hits": [
+                    0,
+                    1,
+                    2,
+                    3
+                  ],
+                  "why": "Bumping a $state counter re-renders everything and adds nothing to the cart."
+                },
+                {
+                  "label": "cart.add(line)  ($store)",
+                  "hits": [
+                    2
+                  ],
+                  "why": "Store reads are fine-grained: only bodies that read cart.items re-run."
+                }
+              ]
+            },
+            {
+              "need": "Chart must redraw when its series changes",
+              "best": 0,
+              "options": [
+                {
+                  "label": "$series = next",
+                  "hits": [
+                    3
+                  ],
+                  "why": "A top-level atom write wakes only the readers of that path."
+                },
+                {
+                  "label": "dispatch(setSeries)  ($reducer)",
+                  "hits": [
+                    0,
+                    1,
+                    2,
+                    3
+                  ],
+                  "why": "A $reducer dispatch is as opaque as a $state setter - every body re-runs."
+                },
+                {
+                  "label": "$dash.refetch()",
+                  "hits": [
+                    0,
+                    1,
+                    2,
+                    3
+                  ],
+                  "why": "An $http lifecycle change cannot be attributed to a path. Full re-render."
+                }
+              ]
+            },
+            {
+              "need": "Hold the Chart's DOM node, rendering nothing",
+              "best": 2,
+              "options": [
+                {
+                  "label": "$node = node",
+                  "hits": [
+                    3
+                  ],
+                  "why": "It works, but a top-level atom still wakes every reader of that path."
+                },
+                {
+                  "label": "setNode(node)  ($state)",
+                  "hits": [
+                    0,
+                    1,
+                    2,
+                    3
+                  ],
+                  "why": "A full re-render to store a value that nothing renders."
+                },
+                {
+                  "label": "ref.current = node  ($ref)",
+                  "hits": [],
+                  "why": "A $ref write schedules no render at all. That is the whole point of the box."
+                }
+              ]
+            },
+            {
+              "need": "Profile and Cart each need their own private draft",
+              "best": 0,
+              "options": [
+                {
+                  "label": "$draft = \"\" inside the body",
+                  "hits": [
+                    1
+                  ],
+                  "why": "Per call site: two instances, two atoms, one body re-runs."
+                },
+                {
+                  "label": "$draft = \"\" at the top level",
+                  "hits": [
+                    1,
+                    2
+                  ],
+                  "why": "One shared atom - typing in Profile edits the Cart draft too."
+                },
+                {
+                  "label": "const [d, setD] = $state(\"\")",
+                  "hits": [
+                    0,
+                    1,
+                    2,
+                    3
+                  ],
+                  "why": "Per instance, yes - but every setD() call re-runs every body in the app."
+                }
+              ]
+            }
+          ]
+        },
+        "code": "const P = ctx.params;\nconst R = P.rounds;\nconst wires = new PIXI.Graphics();\nctx.stage.addChild(wires);\nconst root = ctx.chip('$app', { color: ctx.colors.g2, textColor: 0x04101a, size: 12 });\nroot.x = ctx.width / 2; root.y = 32;\nctx.stage.addChild(root);\nconst nodes = [];\nconst step = ctx.width / (P.nodes.length + 1);\nP.nodes.forEach((n, i) => {\n  const c = ctx.chip(n, { color: ctx.colors.dim, textColor: 0xeaeeff, size: 11, minWidth: 84 });\n  c.x = step * (i + 1); c.y = 88;\n  wires.moveTo(root.x, root.y + 16).lineTo(c.x, c.y - 17).stroke({ width: 1.5, color: ctx.colors.g3, alpha: 0.35 });\n  ctx.stage.addChild(c);\n  nodes.push(c);\n});\nconst all = nodes.map((n, i) => i);\nconst need = new PIXI.Text({ text: '', style: { fontFamily: 'JetBrains Mono, monospace', fontSize: 12, fill: ctx.colors.ink, align: 'center', wordWrap: true, wordWrapWidth: ctx.width - 56 } });\nneed.anchor.set(0.5); need.x = ctx.width / 2; need.y = 136;\nctx.stage.addChild(need);\nconst bar = new PIXI.Graphics();\nctx.stage.addChild(bar);\nlet idx = 0, score = 0, wrong = 0, left = 1, locked = true, chips = [];\nfunction blast(list, color) {\n  list.forEach((i) => {\n    const n = nodes[i];\n    const gl = ctx.glow(46, color, 1);\n    gl.x = n.x; gl.y = n.y;\n    ctx.stage.addChildAt(gl, 0);\n    gsap.to(gl, { alpha: 0, duration: 0.9, onComplete: () => gl.destroy() });\n    gsap.to(n.scale, { x: 1.18, y: 1.18, duration: 0.12, onComplete: () => gsap.to(n.scale, { x: 1, y: 1, duration: 0.3, ease: 'back.out' }) });\n  });\n}\nfunction next() {\n  chips.forEach((c) => c.destroy());\n  chips = [];\n  if (idx >= R.length) { bar.clear(); ctx.api.win('Smallest correct radius, every round.'); return; }\n  const r = R[idx];\n  need.text = 'NEEDED: ' + r.need;\n  ctx.api.setGoal((idx + 1) + ' / ' + R.length);\n  left = 1; locked = false;\n  r.options.forEach((o, i) => {\n    const c = ctx.chip(o.label, { color: ctx.colors.g3, textColor: 0x04101a, size: 11, minWidth: ctx.width - 88 });\n    c.x = ctx.width / 2; c.y = 186 + i * 42;\n    c.eventMode = 'static'; c.cursor = 'pointer';\n    c.hitArea = new PIXI.Rectangle(-c.chipWidth / 2, -c.chipHeight / 2, c.chipWidth, c.chipHeight);\n    c.on('pointertap', () => choose(i));\n    ctx.stage.addChild(c);\n    chips.push(c);\n  });\n}\nfunction miss(msg) {\n  wrong += 1;\n  need.text = msg;\n  if (wrong >= 3) { ctx.api.fail('Three loose writes. Radius is the whole game.'); return; }\n  gsap.delayedCall(1.5, () => { idx += 1; next(); });\n}\nfunction choose(i) {\n  if (locked) return;\n  locked = true;\n  const o = R[idx].options[i];\n  const good = i === R[idx].best;\n  blast(o.hits, good ? ctx.colors.good : ctx.colors.bad);\n  if (good) {\n    score += 1;\n    ctx.api.setScore(score);\n    need.text = o.why;\n    gsap.delayedCall(1.5, () => { idx += 1; next(); });\n  } else {\n    miss(o.why);\n  }\n}\nctx.onTick((dt) => {\n  if (locked) return;\n  left -= dt / 660;\n  bar.clear();\n  if (left > 0) bar.roundRect(44, 312, (ctx.width - 88) * left, 5, 3).fill({ color: left > 0.3 ? ctx.colors.g1 : ctx.colors.warn });\n  if (left <= 0) { locked = true; blast(all, ctx.colors.bad); miss('Too slow - the widest write fired itself.'); }\n});\nnext();",
+        "fallback": {
+          "type": "quiz",
+          "prompt": "A `Profile` component reads `$user.name`. Here are four things a rename handler might do. Which one re-executes the fewest component bodies?",
+          "options": [
+            {
+              "id": "a",
+              "code": "$user.name = \"Alex\"",
+              "detail": "A top-level atom write from a handler — the only write the runtime can attribute to a path, so only bodies that read user.name re-run."
+            },
+            {
+              "id": "b",
+              "code": "setName(\"Alex\")",
+              "detail": "The setter from a $state pair. Hook setters are not path-tracked — every body re-executes."
+            },
+            {
+              "id": "c",
+              "code": "$profile.refetch()",
+              "detail": "An $http lifecycle change re-renders the whole tree, then fetches the same name back."
+            },
+            {
+              "id": "d",
+              "code": "$emit(\"rename\", { name: \"Alex\" })",
+              "detail": "$emit dispatches a CustomEvent to the host page and forces a full re-render."
+            }
+          ],
+          "answer": "a"
+        }
+      },
+      "hints": [
+        "The glow after each pick shows exactly which bodies re-ran. Read it.",
+        "Two rounds have a right answer that is not the obvious atom write — check whether the requirement is about *where* the state lives.",
+        "One round can be answered with a radius of zero."
+      ],
+      "explain": "The point is not that hooks are slow. It is that they are *opaque*. A top-level atom write is the only write the runtime can attribute to a path, so it is the only one it can narrow. Everything else has to assume the worst and re-run every body — which is nothing on a settings panel and everything on a table that updates per keystroke. Pick the tier by how hot the path is, not by which API reads nicest.",
+      "codex": {
+        "term": "Blast radius",
+        "def": "The set of component bodies that re-execute because of one write. Top-level atom writes narrow it to the readers of that path; hook setters, HTTP settles, timer ticks, $effect writes and $emit widen it to all of them."
+      }
+    },
+    {
+      "id": "s5",
+      "title": "What the tracker can see",
+      "kicker": "cost model",
+      "icon": "target",
+      "goal": "Tell a write the tracker can pin to a path from one that re-renders everything.",
+      "xp": 130,
+      "hearts": 3,
+      "teach": {
+        "text": "The rule is short enough to memorise: **fine-grained, path-level tracking applies only to top-level `$name = value` atoms.**\n\nThese five all trigger a full re-render — every component body re-executes, and the morph reconciler patches only the DOM that changed:\n\n- hook setters — `$state`, `$memo`, `$ref`, `$reducer`\n- `$http` / `$query` / `$mutation` lifecycle changes\n- `setTimeout` / `setInterval` ticks\n- `$effect` writes\n- `$emit`\n\nThe fourth one is the trap. `$now = $util.now()` is an atom write and looks path-tracked — but written from inside an `$effect` it is not, and a one-second interval effect quietly re-runs your whole tree sixty times a minute.",
+        "code": {
+          "src": "$user = { name: \"Ada\", role: \"Engineer\" }\n\nfunction promote() { $user.role = \"Manager\" }   // wakes only readers of user.role\nfunction rename(next) { $user.name = next }      // wakes only readers of user.name",
+          "caption": "sibling paths never interfere"
+        },
+        "infographic": {
+          "type": "table",
+          "title": "One write, one radius",
+          "headers": [
+            "The write",
+            "What re-executes"
+          ],
+          "rows": [
+            [
+              "$user.name = \"Alex\"",
+              "only bodies that read user.name"
+            ],
+            [
+              "setName(\"Alex\")   ($state)",
+              "every component body"
+            ],
+            [
+              "dispatch(action)   ($reducer)",
+              "every component body"
+            ],
+            [
+              "$now = … inside an $effect",
+              "every component body"
+            ],
+            [
+              "$orders settling   ($http)",
+              "every component body"
+            ],
+            [
+              "ref.current = node   ($ref)",
+              "nothing — no render at all"
+            ]
+          ]
+        },
+        "tips": [
+          "Prefer plain `$name` atoms for hot-path state. Reach for hooks when you need per-instance isolation and can accept the cost.",
+          {
+            "kind": "danger",
+            "text": "A full re-render is not a repaint. Every body runs again, so anything expensive you left in a component body runs again too."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "hotspot",
+        "title": "The one that wakes everything",
+        "prompt": "All three tiers are on screen: `$user` is a top-level atom, `$draft` is an atom private to this call site, and `n` comes from a hook. Four tokens are marked. Click the one that, when it runs, re-executes **every** component body in the app.",
+        "code": "$user = { role: \"viewer\" }\nfunction RoleRow() {\n  $draft = \"editor\"\n  const [n, setN] = $state(0)\n  const save = () => {\n    $user.role = $draft; setN(1)\n  }\n  return Button($draft, { onClick: save })\n}",
+        "points": [
+          {
+            "match": "$state(0)",
+            "x": "41%",
+            "y": "41%",
+            "label": "1",
+            "tip": "the hook call itself — it opens one slot for this instance on first render",
+            "correct": false
+          },
+          {
+            "match": "$user.role",
+            "x": "19%",
+            "y": "59%",
+            "label": "2",
+            "tip": "a member write on a top-level atom, fired from a handler",
+            "correct": false
+          },
+          {
+            "match": "setN(1)",
+            "x": "50%",
+            "y": "59%",
+            "label": "3",
+            "tip": "the setter half of the $state pair, called with a new value",
+            "correct": true
+          },
+          {
+            "match": "$draft",
+            "nth": 3,
+            "x": "35%",
+            "y": "78%",
+            "label": "4",
+            "tip": "a read of the per-call-site atom this body renders",
+            "correct": false
+          }
+        ]
+      },
+      "hints": [
+        "One marker is a read, not a write. Reading an atom subscribes this body to a path; it never invalidates one.",
+        "One marker is an atom write, and an atom write is the only kind the runtime can pin to a path.",
+        "Two markers come from the same hook. Only one of them hands the runtime a new value."
+      ],
+      "nudges": [
+        "A hook setter is an opaque closure. It cannot name the path it changed, so there is nothing to narrow.",
+        "Declaring state costs nothing. Look for the token that changes it."
+      ],
+      "explain": "The tracker can only attribute a change to a path when it sees both sides — the path a body read, and the path a write touched. A top-level `$name = value` from a handler gives it both. A hook setter hands it an opaque closure. An `$http` settle arrives asynchronously, long after any read window closed. An `$effect` write happens outside the render pass. And `$emit` leaves the application entirely. With no path to compare, the runtime falls back to the only safe answer available: re-execute every body and let the morph reconciler work out which DOM actually differs. That is why the choice of tier is a performance decision, not a style one.",
+      "afterCode": {
+        "src": "$now = $util.now()\n$effect(() => { $now = $util.now() }, [\"every(1000)\"])",
+        "caption": "same statement, two very different bills"
+      },
+      "codex": {
+        "term": "Full re-render",
+        "def": "Every component body re-executes. Triggered by hook setters, $http/$query/$mutation lifecycle changes, timer ticks, $effect writes and $emit — everything except a top-level `$name = value` atom write. The morph reconciler still patches only the DOM that differs."
+      }
+    },
+    {
+      "id": "s6",
+      "title": "State that outlives the tab",
+      "kicker": "produce",
+      "icon": "code",
+      "goal": "Write a global store that survives a reload.",
+      "xp": 160,
+      "teach": {
+        "text": "Persistence in Aktion is a config key, not a code path.\n\nAdd `persist: \"key\"` to a store and its declared fields hydrate from `localStorage` on first render and write back on every change. `persistIn: \"session\"` swaps the backend to `sessionStorage`, which lives and dies with the tab. `history: true` — or `history: 50` for a depth cap — adds `undo()`, `redo()`, `clearHistory()` and the reactive `canUndo` / `canRedo` flags you can hang straight off a button's `disabled`.\n\n`persist`, `persistIn` and `history` are configuration. They are never exposed as state fields, so there is no `prefs.persist` to read.\n\nWhen you want to write a single value by hand, `$storage` is the namespace: `$storage.set(key, value)` and `$storage.get(key)` hit `localStorage`, `$storage.session.*` is per tab, and `$storage.cookies.*` takes `expires`, `maxAge`, `path`, `domain`, `secure` and `sameSite`. A missing key reads back as `null`.",
+        "code": {
+          "src": "prefs = $store({\n  persist: \"user-prefs\",\n  history: 25,\n  theme: \"dark\",\n  setTheme: (s, t) => { s.theme = t }\n})",
+          "caption": "state, one method, two config keys"
+        },
+        "code2": {
+          "src": "$storage.set(\"theme\", \"light\")\n$storage.session.set(\"tour-seen\", true)\n$storage.cookies.set(\"lang\", \"en\", { maxAge: 31536000, sameSite: \"Lax\" })",
+          "caption": "the imperative side door"
+        },
+        "tips": [
+          "The store binding does not need a `$` — `prefs = $store({...})` is the idiomatic form.",
+          "A method's first parameter is always the store handle. `add: (s, item) => { s.items = [...s.items, item] }` is called as `store.add(item)`.",
+          {
+            "kind": "warn",
+            "text": "Function entries are methods, not state. Only the non-function entries are persisted or snapshotted for undo."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "type-code",
+        "title": "Write it yourself",
+        "prompt": "Declare a store called `prefs` that persists under any key, holds a `theme` value, and exposes one method that sets it. Then render it: a heading, the current theme as text, and a button that calls the method. Everything hangs off one `$app(...)`.",
+        "filename": "prefs.aktion",
+        "starter": "prefs = $store({\n\n})\n",
+        "placeholder": "prefs = $store({ … })",
+        "solution": "prefs = $store({\n  persist: \"quest-prefs\",\n  theme: \"dark\",\n  setTheme: (s, t) => { s.theme = t }\n})\n\n$app(Column([\n  PageHeader(\"Settings\"),\n  Text(`Theme: ${prefs.theme}`),\n  Button(\"Use light\", { onClick: () => prefs.setTheme(\"light\"), variant: \"primary\" })\n]))",
+        "validate": {
+          "must": [
+            "\\$store\\s*\\(",
+            "persist\\s*:\\s*[\"'`]",
+            ":\\s*\\(\\s*[A-Za-z_$][^)]*\\)\\s*=>",
+            "\\$app\\s*\\("
+          ],
+          "mustWhy": [
+            "Shared state starts with a store — `prefs = $store({ ... })`.",
+            "Add `persist: \"any-key\"` so the value survives a reload.",
+            "A store method is a function entry that takes the store handle first — `setTheme: (s, t) => { s.theme = t }`.",
+            "Nothing renders without $app(...)."
+          ],
+          "mustNot": [
+            "useState",
+            "createContext",
+            "localStorage\\.",
+            "props\\.",
+            "\\$app[\\s\\S]*\\$app"
+          ]
+        }
+      },
+      "hints": [
+        "Non-function entries are state; function entries are methods. Both live in the same object literal.",
+        "`persist` sits beside `theme` inside the store config — it is not a second argument.",
+        "Read it back with `prefs.theme` and change it with `prefs.setTheme(\"light\")`."
+      ],
+      "nudges": [
+        "The method's first parameter is the store handle. Mutate through it: `s.theme = t`.",
+        "Use `$storage` only if you want the manual route — this task wants the store to do it."
+      ],
+      "explain": "The split between config keys and state fields is what makes hydration safe: everything in the persisted snapshot is state by construction, so the runtime can apply it blindly on first render without deciding what to skip. That is also why methods are excluded — they are reference-stable functions, not values, and a serialised copy of one would be meaningless. Reach past the store to `$storage` only for values that no component renders: a dismissed-banner flag, a last-visited path, a token. Anything the UI displays belongs in state that the UI is subscribed to.",
+      "codex": {
+        "term": "$store({ persist })",
+        "def": "A global store whose declared fields mirror to localStorage under the given key and hydrate on first render. `persistIn: \"session\"` uses sessionStorage instead; `history: true|N` adds undo()/redo() plus reactive canUndo/canRedo. All three are config keys, never state fields."
+      },
+      "preview": {
+        "program": "prefs = $store({\n  persist: \"quest-prefs\",\n  history: true,\n  theme: \"dark\",\n  setTheme: (s, t) => { s.theme = t }\n})\n\n$app(Column([\n  PageHeader(\"Settings\", { subtitle: \"Reload the page - the choice survives\" }),\n  Card([\n    Text(`Theme: ${prefs.theme}`, { variant: \"large-heavy\" }),\n    Row([\n      Button(\"Dark\", { onClick: () => prefs.setTheme(\"dark\") }),\n      Button(\"Light\", { onClick: () => prefs.setTheme(\"light\") }),\n      Button(\"Undo\", { onClick: () => prefs.undo(), disabled: !prefs.canUndo, variant: \"ghost\" })\n    ], { gap: \"sm\" })\n  ])\n]))",
+        "caption": "live — reload the page and the choice is still there"
+      }
+    }
+  ],
+  "outro": {
+    "headline": "You can price a write now",
+    "body": "Three tiers, one question: how many bodies re-run? Top-level atoms are the cheap tier and the sensible default. Hooks buy per-instance isolation and charge a full re-render for it. Stores buy reach across the tree. None of them is the right answer on its own — the right answer depends on how hot the path is.",
+    "nextHint": "Next: put this under load — lists, forms and data that change while you are watching."
+  },
+  "badge": {
+    "name": "Statewright",
+    "icon": "cpu",
+    "tagline": "Priced every write."
+  }
+}

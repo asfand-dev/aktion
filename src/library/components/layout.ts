@@ -789,18 +789,27 @@ export const Tabs: ComponentSpec = {
     "Pass a `$variable` as `value` for a controlled strip — it is kept in sync " +
     "both ways, so a button elsewhere on the page (or a route) can switch tabs " +
     "and a user click updates the variable; `defaultValue` is the initial tab " +
-    "only.",
+    "only. Set `fitted` for a strip that spans its container with equal-width " +
+    "triggers (the shape a two- or three-tab section header usually wants).",
   props: [
     { name: "items", type: "TabItem[]", description: "Tab definitions" },
     { name: "defaultValue", type: "string", optional: true, description: "Initially active tab value" },
     { name: "orientation", type: "string", optional: true, enum: ["horizontal", "vertical"], description: "Layout direction (default `horizontal`)" },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the newly-activated tab value when the user switches tabs" },
     { name: "value", type: "string", optional: true, description: "Active tab value — pass a `$variable` to control the strip from host state (written back when the user switches tabs)" },
+    // Declared last on purpose: the controlled `value` channel reads its state
+    // ref from argMeta slot 4, so nothing may be inserted ahead of it.
+    { name: "fitted", type: "boolean", optional: true, description: "Stretch the strip across its container and split it evenly between the triggers (ignored for `orientation=\"vertical\"`)" },
   ],
   render: (node, props, helpers) => {
     const items = asArray<unknown>(props.items);
     const orientation = asString(props.orientation, "horizontal");
-    const root = el("div", { class: "rui-tabs", "data-orientation": orientation });
+    const fitted = asBoolean(props.fitted);
+    const root = el("div", {
+      class: "rui-tabs",
+      "data-orientation": orientation,
+      "data-fitted": fitted ? "true" : null,
+    });
     const tablist = el("div", {
       class: "rui-tab-list",
       role: "tablist",
@@ -979,6 +988,7 @@ export const AccordionItem: ComponentSpec = {
     { name: "title", type: "string" },
     { name: "children", aliases: ["child"], type: "Node[]" },
     { name: "open", type: "boolean", optional: true },
+    { name: "subtitle", type: "string", optional: true, aliases: ["summary"], description: "Second line inside the trigger, under the title — a preview of what the collapsed section holds (\"Labels | Taints | Maintenance window\")" },
     { name: "showArrow", type: "boolean", optional: true, description: "Show a chevron icon on the right (default false). Inherits from parent Accordion when unset." },
     { name: "variant", type: "string", optional: true, enum: ACCORDION_VARIANTS, aliases: ["tone"], description: "Semantic left-edge stripe (success / warning / danger / neutral / info)" },
     { name: "disabled", type: "boolean", optional: true, description: "Section cannot be expanded (e.g. a step that is not available yet)" },
@@ -1018,7 +1028,17 @@ export const AccordionItem: ComponentSpec = {
     });
     if (isOpen) details.setAttribute("open", "");
     const summary = el("summary", { class: "rui-accordion-trigger" });
-    summary.append(el("span", { class: "rui-accordion-title" }, [asString(props.title)]));
+    const subtitle = asString(props.subtitle);
+    if (subtitle) {
+      // Title and subtitle share one flex child so the chevron still sits
+      // opposite the pair rather than opposite the title's own line.
+      summary.append(el("span", { class: "rui-accordion-heading" }, [
+        el("span", { class: "rui-accordion-title" }, [asString(props.title)]),
+        el("span", { class: "rui-accordion-subtitle" }, [subtitle]),
+      ]));
+    } else {
+      summary.append(el("span", { class: "rui-accordion-title" }, [asString(props.title)]));
+    }
     summary.append(el("span", { class: "rui-accordion-chevron", "aria-hidden": "true" }));
     if (disabled) {
       summary.setAttribute("aria-disabled", "true");
@@ -1038,12 +1058,21 @@ export const AccordionItem: ComponentSpec = {
       const live = (event.currentTarget ?? event.target) as HTMLDetailsElement;
       const nowOpen = live.open;
       live.setAttribute("data-state", nowOpen ? "open" : "closed");
-      // Only write back when the DOM has actually diverged from the render's
-      // assertion, so mirroring `data-rui-open` cannot bounce back as a state
-      // write and re-render loop.
-      if (stateName && live.getAttribute("data-rui-open") !== String(nowOpen)) {
-        helpers.setState(stateName, nowOpen);
-      }
+      // A CONTROLLED item mirrors a changed `open` prop onto the live element
+      // (below), and assigning `<details>.open` queues a `toggle` event of its
+      // own — the host's assertion coming straight back at it. Reporting that
+      // as a change is what turns one click into an endless open/close loop as
+      // soon as the handler inverts its copy of the state (`open = !open`)
+      // instead of adopting the value it was handed: every echo flips the host,
+      // the flip re-asserts, the assertion echoes again.
+      //
+      // An echo is recognised by the DOM already agreeing with what this render
+      // asked for, so NEITHER the write-back nor `onToggle` runs for it. An
+      // UNCONTROLLED item has no `data-rui-open` at all, so its toggles are
+      // always the user's and always reported.
+      const asserted = live.getAttribute("data-rui-open");
+      if (asserted !== null && asserted === String(nowOpen)) return;
+      if (stateName) helpers.setState(stateName, nowOpen);
       helpers.invoke(props.onToggle, nowOpen);
     };
 

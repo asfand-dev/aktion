@@ -24,7 +24,7 @@
  * source into a map and use the async `linkProject` in `./project.js`.
  */
 
-import { parse, collectPatternNames } from "../parser/index.js";
+import { parse, collectPatternNames, stampSourceIndex } from "../parser/index.js";
 import type {
   Program,
   Statement,
@@ -35,6 +35,40 @@ import type {
   DestructuringPattern,
   ImportStatement,
 } from "../parser/types.js";
+
+/**
+ * The symbol a module-local name is renamed to when it is merged into the linked
+ * program: `total` in module 3 becomes `__a3_total`.
+ *
+ * Exported because the mangling is observable — `serializeState()` returns these
+ * keys, so a test or devtool inspecting a multi-file program's `$state` sees
+ * `__a3_total`, not `total`. {@link moduleLocalBaseName} is the inverse, and is
+ * what lets a caller work in the names the author actually wrote.
+ */
+export function moduleLocalSymbol(moduleId: number, name: string): string {
+  return `__a${moduleId}_${name}`;
+}
+
+/** Pattern behind {@link moduleLocalSymbol}. Group 1 is the id, group 2 the name. */
+const MODULE_LOCAL_SYMBOL = /^__a(\d+)_(.+)$/;
+
+/**
+ * Recover the name an author wrote from a linker-renamed symbol, or `null` if
+ * `symbol` is not one.
+ *
+ * ```ts
+ * moduleLocalBaseName("__a3_total"); // "total"
+ * moduleLocalBaseName("total");      // null — an entry-module name, unrenamed
+ * ```
+ *
+ * Note the module id is not stable across edits: it comes from import traversal
+ * order, so a new import can renumber every module. Resolve by base name rather
+ * than hard-coding a mangled symbol.
+ */
+export function moduleLocalBaseName(symbol: string): string | null {
+  const match = MODULE_LOCAL_SYMBOL.exec(symbol);
+  return match ? match[2]! : null;
+}
 
 /** A single linker diagnostic. Positions are 1-indexed, matching `loc`. */
 export interface LinkDiagnostic {
@@ -169,8 +203,8 @@ export function linkProgram(
   // makes a single-file program a true no-op (its rename maps stay empty).
   for (const rec of modules.values()) {
     if (rec.path === entryPath) continue;
-    for (const name of rec.declaredPlain) rec.renamePlain.set(name, `__a${rec.id}_${name}`);
-    for (const name of rec.declaredState) rec.renameState.set(name, `__a${rec.id}_${name}`);
+    for (const name of rec.declaredPlain) rec.renamePlain.set(name, moduleLocalSymbol(rec.id, name));
+    for (const name of rec.declaredState) rec.renameState.set(name, moduleLocalSymbol(rec.id, name));
   }
   // Resolve imported aliases to the source module's renamed export.
   for (const rec of modules.values()) {
@@ -186,27 +220,50 @@ export function linkProgram(
             fail(rec.path, line, column, `"${stmt.source}" does not export \`$${spec.imported}\`.`);
             continue;
           }
-          rec.renameState.set(spec.local, src.renameState.get(spec.imported) ?? `__a${src.id}_${spec.imported}`);
+          rec.renameState.set(spec.local, src.renameState.get(spec.imported) ?? moduleLocalSymbol(src.id, spec.imported));
         } else {
           if (!src.exportedPlain.has(spec.imported)) {
             fail(rec.path, line, column, `"${stmt.source}" does not export \`${spec.imported}\`.`);
             continue;
           }
-          rec.renamePlain.set(spec.local, src.renamePlain.get(spec.imported) ?? `__a${src.id}_${spec.imported}`);
+          rec.renamePlain.set(spec.local, src.renamePlain.get(spec.imported) ?? moduleLocalSymbol(src.id, spec.imported));
         }
       }
     }
   }
 
   // Rename + merge in dependency order.
+  //
+  // Merging is where `loc.line` stops being a position: line 42 of the entry and
+  // line 42 of a helper module both land in one statement list. So each module's
+  // nodes are stamped with an index into `sources` on the way in — the only
+  // record of which file a node was authored in that survives the merge, and
+  // what lets diagnostics, source maps and coverage name a real file.
+  //
+  // The entry is pinned to index 0 (`order` is post-order, so it is last) — a
+  // stable convention consumers can rely on, and it keeps `loc.source ?? 0`
+  // correct for unstamped single-file programs.
   const merged: Statement[] = [];
+  const sources: string[] = [entryPath];
+  const sourceIndex = new Map<string, number>([[entryPath, 0]]);
+  for (const path of order) {
+    if (sourceIndex.has(path)) continue;
+    sourceIndex.set(path, sources.length);
+    sources.push(path);
+  }
+  // A single-file program needs no provenance: `line` still identifies a
+  // position on its own, and stamping would break the documented invariant that
+  // its merged AST deep-equals `parse(source)`.
+  const multiModule = sources.length > 1;
   for (const path of order) {
     const rec = modules.get(path)!;
     const renamer = makeRenamer(rec);
+    const index = sourceIndex.get(path)!;
     for (const stmt of rec.program.statements) {
       if (stmt.kind === "Import") continue; // dropped
       renamer.renameTopLevel(stmt);
       stripExported(stmt);
+      if (multiModule) stampSourceIndex(stmt, index);
       if (stmt.kind === "EffectDeclaration" && rec.path !== entryPath) {
         // De-collide location-named effects across IMPORTED files (linker-only).
         // The entry's effect names stay canonical (single-file = no-op).
@@ -218,9 +275,15 @@ export function linkProgram(
 
   const entryRec = modules.get(entryPath);
   // Shape matches `parse()` exactly (no `warnings` key) so a single-file
-  // program's merged AST deep-equals `parse(source)`.
+  // program's merged AST deep-equals `parse(source)` — `sources` is only added
+  // for a genuine multi-module graph, where that equivalence no longer applies.
+  const program: Program = {
+    statements: merged,
+    errors: entryRec ? entryRec.program.errors : [],
+  };
+  if (multiModule) program.sources = sources;
   return {
-    program: { statements: merged, errors: entryRec ? entryRec.program.errors : [] },
+    program,
     diagnostics,
     dependencies: order.filter((p) => p !== entryPath),
   };

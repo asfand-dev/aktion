@@ -247,15 +247,41 @@ describe("chat prompt — the read-only subset", () => {
     [...chatPrompt.matchAll(/^- ([A-Z][A-Za-z0-9_]*)\(/gm)].map((m) => m[1]!),
   );
 
-  it("includes the display components an answer actually needs", () => {
-    // Each of these was unreachable under the old hand-maintained allowlist,
-    // which pushed the model toward stitching Card + Text by hand.
-    for (const name of [
-      "Section", "Heading", "Display", "Eyebrow", "Prose", "Pill", "Metric",
-      "MetricStrip", "ComparisonTable", "PricingTable", "CodeWindow", "Terminal",
-      "TextContent", "GradientText", "RelativeTime", "TableOfContents",
-    ]) {
-      expect(chatNames.has(name), `${name} missing from chat mode`).toBe(true);
+  it("covers every shape a Markdown answer takes", () => {
+    // Chat mode exists to replace a Markdown reply. Each entry here is a
+    // Markdown construct (or something Markdown cannot express at all) paired
+    // with the component that has to be reachable to render it. A gap here is
+    // the failure the allowlist is meant to prevent: the model falls back to
+    // stitching Card + Text by hand, or emits literal Markdown syntax.
+    const shapes: Record<string, string> = {
+      heading: "Heading",
+      paragraph: "Markdown",
+      "short label": "Text",
+      "bullet list": "ListBlock",
+      "rich list": "List",
+      "numbered procedure": "Steps",
+      blockquote: "Quote",
+      "fenced code": "CodeBlock",
+      "shell session": "Terminal",
+      diff: "DiffViewer",
+      table: "Table",
+      "comparison matrix": "ComparisonTable",
+      "key/value pairs": "DescriptionList",
+      admonition: "Callout",
+      "thematic break": "Separator",
+      image: "Image",
+      "key figure": "StatCard",
+      "trend over time": "LineChart",
+      ranking: "BarChart",
+      proportion: "PieChart",
+      chronology: "Timeline",
+      "titled block": "SectionBlock",
+      "nothing found": "EmptyState",
+      "it failed": "ErrorState",
+      "suggested follow-ups": "FollowUpBlock",
+    };
+    for (const [shape, name] of Object.entries(shapes)) {
+      expect(chatNames.has(name), `no component for "${shape}" (${name} missing)`).toBe(true);
     }
   });
 
@@ -269,16 +295,34 @@ describe("chat prompt — the read-only subset", () => {
     }
   });
 
+  it("excludes marketing, storefront and app-shell furniture", () => {
+    // The denylist era left these reachable, and a model handed `Hero` and
+    // `PricingTable` answers a question with a landing page.
+    for (const name of [
+      "Hero", "PricingTable", "PricingCard", "LogoCloud", "LogoChip",
+      "Testimonial", "FeatureGrid", "Footer", "Brand", "ProductCard",
+      "PriceTag", "OrderSummary", "TableOfContents", "SkipLink", "Breadcrumb",
+      "FieldRepeater", "IconButton", "Bento", "PageHeader", "Banner",
+    ]) {
+      expect(chatNames.has(name), `${name} should not be in chat mode`).toBe(false);
+    }
+  });
+
   it("names only components that exist", () => {
     const known = new Set(defaultLibrary.components.map((c) => c.name));
     const unknown = [...chatNames].filter((n) => !known.has(n));
     expect(unknown).toEqual([]);
   });
 
-  it("covers most of the library's read-only surface", () => {
-    // A denylist should keep the large majority of components. If this drops, an
-    // exclusion list has grown too broad (or a group name was mistyped, which
-    // silently excludes nothing at all).
-    expect(chatNames.size).toBeGreaterThan(120);
+  it("stays a small, memorable vocabulary", () => {
+    // The catalogue is the bulk of this prompt. An allowlist that creeps back
+    // past ~70 names is drifting toward the denylist it replaced, where the
+    // component dump crowded out every instruction around it.
+    expect(chatNames.size).toBeGreaterThan(40);
+    expect(chatNames.size).toBeLessThan(70);
+  });
+
+  it("is a fraction of the full prompt", () => {
+    expect(chatPrompt.length).toBeLessThan(fullPrompt.length / 4);
   });
 });

@@ -206,10 +206,10 @@ Tiny inline trend chart for KPIs, table cells, and dashboards. Renders an SVG li
 ### Tile
 
 ```
-Tile(label, icon?, value?, description?, tone?, onClick?, href?, selected?)
+Tile(label, icon?, value?, description?, tone?, onClick?, href?, selected?, iconPosition?)
 ```
 
-Compact icon + label + optional value tile. Smaller and denser than `StatCard`, ideal for menu grids, quick-action panels, category directories, and category filters. Pair with `Grid` for uniform rows. Pass `href` for a directory tile that links to a route, and `selected` for the on-state of a filter tile.
+Compact icon + label + optional value tile. Smaller and denser than `StatCard`, ideal for menu grids, quick-action panels, category directories, and category filters. Pair with `Grid` for uniform rows. Pass `href` for a directory tile that links to a route, and `selected` for the on-state of a filter tile. `iconPosition: "end"` moves the mark to the trailing edge — the shape a choice card wants, where the copy reads first and the illustration sits opposite it.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -221,6 +221,7 @@ Compact icon + label + optional value tile. Smaller and denser than `StatCard`, 
 | `onClick` | `callable` | no |  |
 | `href` | `string` | no | Render the tile as a link to this URL |
 | `selected` | `boolean` | no | Mark the tile as currently applied/current (filter grids, category directories) |
+| `iconPosition` | `"start"` \| `"end"` | no | Which edge the icon sits on (default `start`) |
 
 ### Progress
 

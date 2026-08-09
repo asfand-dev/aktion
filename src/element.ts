@@ -480,6 +480,10 @@ export class AktionElement extends HTMLElement {
       library: this.library,
       http: this.http,
       strict: this.hasAttribute("strict"),
+      // Names the file a coverage report attributes a single-file / streamed
+      // program to. A linked multi-file program carries its own `sources` and
+      // ignores this.
+      coverageSourcePath: this.compiledSourceId ?? undefined,
       notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
     });
@@ -807,6 +811,23 @@ export class AktionElement extends HTMLElement {
    */
   hydrateState(snapshot: Readonly<Record<string, unknown>>): void {
     this.state.hydrate(snapshot);
+    this.scheduleRender();
+  }
+
+  /**
+   * Write one reactive atom, exactly as an `onClick` handler inside the program
+   * would.
+   *
+   * The difference from `hydrateState` is intent, and it is observable.
+   * Hydration says "this value came from OUTSIDE the program" — it survives the
+   * planner's reset of literal `$state` defaults on a replan, which is what SSR
+   * and snapshot restore need. A plain write does not claim that: the atom stays
+   * the program's own, so a replan restores its declared default. Use this to
+   * drive an app from a host control or a test; use `hydrateState` to restore a
+   * snapshot.
+   */
+  setState(name: string, value: unknown): void {
+    this.state.set(name, value as never);
     this.scheduleRender();
   }
 
@@ -1661,6 +1682,10 @@ export class AktionElement extends HTMLElement {
       library: this.library,
       http: this.http,
       strict: this.hasAttribute("strict"),
+      // Names the file a coverage report attributes a single-file / streamed
+      // program to. A linked multi-file program carries its own `sources` and
+      // ignores this.
+      coverageSourcePath: this.compiledSourceId ?? undefined,
       notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
     });

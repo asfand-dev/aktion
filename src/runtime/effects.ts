@@ -20,6 +20,7 @@
 import type {
   EffectDeclaration,
   Expression,
+  SourceLocation,
   Statement,
 } from "../parser/types.js";
 import type { EvaluationContext, ScopedEffectDecl } from "./evaluator.js";
@@ -28,6 +29,10 @@ import {
   resolveStateAlias,
   runControlFlowStatement,
 } from "./evaluator.js";
+import {
+  recordFunction as recordCoverageFunction,
+  recordLine as recordCoverageLine,
+} from "./coverage.js";
 import type { StateStore, StateValue } from "./state.js";
 import { anyPathAffects } from "./state.js";
 import { isDevtoolsActive, nowMs } from "../devtools/hook.js";
@@ -437,6 +442,7 @@ function runEffectBody(
   mounted: MountedEffect,
   options: EffectRunnerOptions,
 ): void {
+  if (ctx.coverage) recordCoverageFunction(ctx.coverage, decl.loc);
   // Walk the block body executing each statement. Effect bodies allow:
   //   - assignments (`$state = …`) — committed as state writes.
   //   - expression statements — evaluated for side effects.
@@ -502,6 +508,13 @@ function runStatement(
   mounted: MountedEffect,
   options: EffectRunnerOptions,
 ): unknown {
+  // Effect bodies bypass the evaluator's statement dispatch for the two most
+  // common kinds, so they need their own coverage hook — otherwise the inside of
+  // every `effect(() => { … })` reads as dead code.
+  if (ctx.coverage) {
+    const loc = (stmt as { loc?: SourceLocation }).loc;
+    if (loc) recordCoverageLine(ctx.coverage, loc);
+  }
   switch (stmt.kind) {
     case "ExpressionStatement": {
       const expr = stmt.expression;

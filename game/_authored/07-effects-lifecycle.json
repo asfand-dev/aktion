@@ -1,0 +1,659 @@
+{
+  "id": "effects-lifecycle",
+  "title": "Signal & Cleanup",
+  "subtitle": "Side effects that tidy up after themselves",
+  "icon": "clock",
+  "difficulty": 4,
+  "estimateMin": 12,
+  "requires": [
+    "data-stream"
+  ],
+  "palette": {
+    "g1": "#f472b6",
+    "g2": "#c084fc",
+    "g3": "#fb7185"
+  },
+  "backdrop": {
+    "preset": "orbit"
+  },
+  "intro": {
+    "headline": "Nothing happens until you say when",
+    "body": "Everything you have written so far *describes* a page. An effect is the other half: a body of work the runtime runs **for you**, on a schedule you declare rather than one you manage.\n\nThe whole design lives in the second argument. `$effect(() => { … }, [...deps])` — the list says when to run, and the runtime handles the rest: mounting, re-running, throttling, and tearing down the timers and listeners you opened.\n\nThat list is also the strictest thing in the language. It accepts `$`-atoms and exactly five string tokens. Everything else — including the one that looks most reasonable — is a parse error.",
+    "code": "$effect(() => { $emit(\"track\", { path: $util.url.path }) }, [$util.url.path])",
+    "codeCaption": "an effect, its trigger, and the surface that makes a URL change trackable",
+    "infographic": {
+      "type": "orbit",
+      "title": "Everything a dependency array accepts",
+      "core": "$effect",
+      "satellites": [
+        {
+          "label": "$atom",
+          "note": "re-run when that exact path changes"
+        },
+        {
+          "label": "\"mount\"",
+          "note": "once, on first render"
+        },
+        {
+          "label": "\"unmount\"",
+          "note": "once, on teardown"
+        },
+        {
+          "label": "\"every(N)\"",
+          "note": "the runtime owns the interval"
+        },
+        {
+          "label": "\"debounce(N)\"",
+          "note": "wait for quiet, then run once"
+        },
+        {
+          "label": "\"throttle(N)\"",
+          "note": "cap how often it may run"
+        }
+      ]
+    },
+    "objectives": [
+      "Run a side effect once, on mount",
+      "Rate-limit an effect with `\"debounce(N)\"`",
+      "Name every legal dependency — and reject `route.path`",
+      "Scope a timer to the thing that owns it",
+      "Emit a `track` event from an effect when the URL changes"
+    ]
+  },
+  "stages": [
+    {
+      "id": "s1",
+      "title": "Run this, when that",
+      "kicker": "the shape",
+      "icon": "bolt",
+      "goal": "Read $effect(fn, deps) and know when the body runs.",
+      "xp": 100,
+      "teach": {
+        "text": "An effect is not a component. It returns nothing, it never appears inside a tree, and you do not call it — you *declare* it and walk away.\n\n`$effect(() => { … }, [...deps])`. The first argument is the body. The second is the whole contract: a list of things that, when they happen, re-run that body.\n\nLeave the second argument off entirely and you get `[\"mount\"]` — run once, when the program mounts. That is the form you reach for to seed storage, register a global handler, or send a first analytics ping.\n\nEffects are also *where writes live*. You may never write reactive state while the UI is being built. Event handlers, actions, lambdas and effect bodies are the legal places.",
+        "code": {
+          "src": "$effect(() => { $console.log($count) }, [$count])\n\n$effect(() => { $seen = $storage.get(\"seen\") }, [\"mount\"])\n\n$effect(() => { $seen = $storage.get(\"seen\") })",
+          "caption": "the last two are the same effect — no deps means [\"mount\"]"
+        },
+        "infographic": {
+          "type": "timeline",
+          "title": "The life of an effect",
+          "steps": [
+            {
+              "label": "parse",
+              "note": "the effect is registered, not run"
+            },
+            {
+              "label": "mount",
+              "note": "\"mount\" effects and no-dep effects fire"
+            },
+            {
+              "label": "dep changes",
+              "note": "the body re-runs for that atom"
+            },
+            {
+              "label": "every(N)",
+              "note": "the runtime drives the interval"
+            },
+            {
+              "label": "unmount",
+              "note": "cleanup(fn) runs, timers are cleared"
+            }
+          ]
+        },
+        "tips": [
+          "`$effect` is a statement. Put it at the top level, or inside a component body — never inside a `Column([...])`.",
+          {
+            "kind": "warn",
+            "text": "An effect that writes state costs a **full re-render**: every component body re-executes. Only top-level `$name = value` atoms get path-level tracking."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "sequence-tap",
+        "title": "The life of an effect",
+        "prompt": "You never call an effect — you declare it and the runtime reaches each of these moments for you. Tap the six in the order they happen, from first render to last teardown. The timeline in the teach panel is the answer key.",
+        "help": "Each trigger is followed by what it causes. One wrong tap ends the attempt.",
+        "order": [
+          "the program mounts",
+          "no-dep and \"mount\" bodies run",
+          "a listed $atom changes",
+          "the effect that listed it re-runs",
+          "the program unmounts",
+          "cleanup(fn) runs, timers cleared"
+        ]
+      },
+      "hints": [
+        "Start where the teach panel's timeline starts and end where it ends.",
+        "The six are three pairs: something happens, then a body runs because of it.",
+        "mount, then a dependency change, then unmount — two taps each."
+      ],
+      "explain": "Nothing runs at the moment you write it. The runtime registers the effect and then waits for one of exactly two things: a lifecycle moment, or a change to something named in the dependency array. That is why `$effect(fn)` with no array is defined as `$effect(fn, [\"mount\"])` — the runtime substitutes the default rather than treating the list as empty, so the body runs exactly once, at the mount step, and never again. The teardown half is the one people forget: `cleanup(fn)` is not something you call, it is something you *register* from inside the body, and the runtime runs it on unmount along with clearing the timers that effect opened. One trap has no step on this timeline at all — `$effect(\"mount\", fn)` still parses, because nothing about the argument *types* is checked, so you get a silent no-op. When an effect never seems to fire, check the argument order before you check the deps.",
+      "afterCode": {
+        "src": "$effect(() => { $seen = $storage.get(\"seen\") })",
+        "caption": "runs once, on mount"
+      },
+      "codex": {
+        "term": "$effect(fn, deps)",
+        "def": "A declarative side effect. `fn` re-runs whenever a listed dependency fires; omit `deps` entirely and it runs once, on mount."
+      },
+      "preview": {
+        "program": "$mounted = \"no\"\n\n$app(Column([\n  PageHeader(\"Mount\", { subtitle: \"The effect below ran once, before you saw this.\" }),\n  Card([\n    SectionHeader(\"Did the mount effect run?\"),\n    Text($mounted, { variant: \"large-heavy\" }),\n    Text(\"An effect with no dependency array set that value.\")\n  ])\n]))\n\n$effect(() => { $mounted = \"yes - once, on mount\" })",
+        "caption": "live — the value you see was written by an effect, not by the tree"
+      }
+    },
+    {
+      "id": "s2",
+      "title": "The list is also a throttle",
+      "kicker": "rate limit",
+      "icon": "refresh",
+      "goal": "Add a rate-limit token so a per-keystroke effect fires once.",
+      "xp": 110,
+      "teach": {
+        "text": "A dependency array can hold more than triggers. Mix in a **modifier** and the same list that says *when* also says *how often*.\n\n`\"debounce(N)\"` holds the run back until the trigger has been quiet for N milliseconds — the autosave and search-as-you-type shape. `\"throttle(N)\"` caps the rate instead of waiting for silence. `\"every(N)\"` needs no trigger at all: the runtime owns that interval and disposes it for you.\n\nThe body still does ordinary work. `$http({...})` inside an effect issues a request and hands back a **bag** — `.data`, `.loading`, `.error`, `.refetch()` — never the payload. Rate-limiting the effect is what stops you opening one request per keypress.",
+        "code": {
+          "src": "$effect(() => { $hits = $http({ url: searchUrl, query: { q: $term } }) }, [$term, \"debounce(250)\"])\n\n$effect(() => { $health.refetch() }, [\"every(15000)\"])",
+          "caption": "one waits for quiet; the other needs no trigger at all"
+        },
+        "infographic": {
+          "type": "anatomy",
+          "title": "Reading a debounced effect",
+          "code": "$effect(() => {\n  $save = $http({ url: saveUrl, method: \"POST\", body: $draft })\n}, [$draft, \"debounce(500)\"])",
+          "parts": [
+            {
+              "match": "$effect",
+              "key": "statement",
+              "text": "returns nothing and never sits inside a tree"
+            },
+            {
+              "match": "$save = $http",
+              "key": "the bag",
+              "text": "$http gives you .data / .loading / .error / .refetch() — not the response"
+            },
+            {
+              "match": "[$draft",
+              "key": "trigger",
+              "text": "a $-atom: the body re-runs when this exact path changes"
+            },
+            {
+              "match": "\"debounce(500)\"",
+              "key": "modifier",
+              "text": "half a second of quiet typing, then one request"
+            }
+          ]
+        },
+        "tips": [
+          "The tokens are **strings**. `debounce(500)` without quotes is a function call to something that does not exist.",
+          {
+            "kind": "warn",
+            "text": "Without a modifier this effect fires on every keystroke, and each `$http` lifecycle change is a full re-render."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "fill-blanks",
+        "title": "Autosave the draft",
+        "prompt": "Save the draft half a second after the user stops typing. The indent shows you the shape: one argument is the body, the other is the array — and the array's two rows are the trigger and the rate limit. Four chips are wrong in a way that still looks like code, so leave them in the bank.",
+        "display": "tree",
+        "rows": [
+          {
+            "depth": 0,
+            "label": "$draft = \"\""
+          },
+          {
+            "depth": 0,
+            "slot": 0,
+            "after": "(() => {"
+          },
+          {
+            "depth": 1,
+            "label": "$save = $http({"
+          },
+          {
+            "depth": 2,
+            "label": "url: saveUrl, method: \"POST\", body: $draft"
+          },
+          {
+            "depth": 1,
+            "label": "})"
+          },
+          {
+            "depth": 0,
+            "label": "}, ["
+          },
+          {
+            "depth": 1,
+            "slot": 1,
+            "after": ","
+          },
+          {
+            "depth": 1,
+            "slot": 2
+          },
+          {
+            "depth": 0,
+            "label": "])"
+          }
+        ],
+        "bank": [
+          "$effect",
+          "$draft",
+          "\"debounce(500)\"",
+          "useEffect",
+          "draft",
+          "debounce(500)",
+          "500"
+        ],
+        "answer": [
+          "$effect",
+          "$draft",
+          "\"debounce(500)\""
+        ]
+      },
+      "hints": [
+        "Two rows are indented inside the array: the first says what wakes the effect, the second says how patiently.",
+        "Which chip carries the `$` sigil? Only a `$`-atom can be a trigger.",
+        "Look closely at the two debounce chips — one of them is a string."
+      ],
+      "explain": "The dependency array is doing two jobs at once, and that is the point of the design: there is no separate `useDebounce`, no `_.debounce` wrapper, no timer to clear. `$draft` says *what wakes the effect*; `\"debounce(500)\"` says *how patiently*. Drop the quotes and you are no longer passing a token — you are calling a function named `debounce`, which does not exist. Drop the sigil and `draft` is an ordinary binding the parser refuses to accept as a dependency at all.",
+      "afterCode": {
+        "src": "$effect(() => {\n  $save = $http({ url: saveUrl, method: \"POST\", body: $draft })\n}, [$draft, \"debounce(500)\"])",
+        "caption": "trigger plus modifier, one array"
+      },
+      "codex": {
+        "term": "\"debounce(N)\"",
+        "def": "A rate-limit token for an effect's dependency array: hold the run until the trigger has been quiet for N milliseconds. `\"throttle(N)\"` caps the rate instead of waiting for quiet."
+      },
+      "preview": {
+        "program": "$draft = \"\"\n$sent = \"(nothing sent yet)\"\n\n$app(Column([\n  PageHeader(\"Debounced\", { subtitle: \"The send line only moves 600ms after you stop typing.\" }),\n  Card([\n    Input(\"q\", { value: $draft, label: \"Search\", placeholder: \"Type quickly\" }),\n    Text(`Typed: ${$draft}`),\n    Text(`Would send: ${$sent}`, { variant: \"body-heavy\" })\n  ])\n]))\n\n$effect(() => { $sent = $draft }, [$draft, \"debounce(600)\"])",
+        "caption": "live — type fast and watch the second line lag behind"
+      }
+    },
+    {
+      "id": "s3",
+      "title": "Only two shapes get in",
+      "kicker": "the rule",
+      "icon": "shield",
+      "goal": "Admit $-atoms and the five tokens. Reject everything else.",
+      "xp": 120,
+      "hearts": 3,
+      "teach": {
+        "text": "The dependency array is checked by the **parser**, before a single line runs. It is not an expression that gets evaluated — it is a static list the planner reads to decide what to subscribe to.\n\nSo it knows exactly two shapes. A `$`-atom, optionally with a path into it (`$user.name` subscribes to that field alone). Or one of five strings: `\"mount\"`, `\"unmount\"`, `\"every(N)\"`, `\"debounce(N)\"`, `\"throttle(N)\"`.\n\nAnything else is a **parse error**, and the one that catches everybody is `route.path`. The `route` handle is reactive everywhere else in the program, so depending on it reads as obviously correct — and the parser answers with `Unexpected Identifier \"route\" inside effect dependency array.`\n\nTrack the URL through `$util.url` instead. It mirrors `route` — `.path`, `.params`, `.query`, `.hash` — and it starts with a `$`, which is the whole difference.",
+        "code": {
+          "src": "$effect(() => { $emit(\"track\", { path: $util.url.path }) }, [$util.url.path])",
+          "caption": "the same intent, written with a shape the parser accepts"
+        },
+        "infographic": {
+          "type": "table",
+          "title": "Rejected at parse time",
+          "headers": [
+            "Parse error",
+            "Write this instead"
+          ],
+          "rows": [
+            [
+              "[route.path]",
+              "[$util.url.path]"
+            ],
+            [
+              "[location.pathname]",
+              "[$util.url.path]"
+            ],
+            [
+              "[\"onMount\"]",
+              "[\"mount\"]"
+            ],
+            [
+              "[\"interval(1000)\"]",
+              "[\"every(1000)\"]"
+            ],
+            [
+              "[todos]",
+              "[$todos] — the sigil is the difference"
+            ]
+          ]
+        },
+        "tips": [
+          {
+            "kind": "danger",
+            "text": "`route.path` is the mistake that looks most reasonable, and it stops the whole program from parsing — not just the effect."
+          },
+          "`$util.url.path` is a real subscription, not a workaround: the URL surface is exposed under `$util` precisely so it can be a dependency."
+        ]
+      },
+      "challenge": {
+        "type": "switchboard",
+        "title": "The dependency gate",
+        "prompt": "Switch ON every entry the parser will accept inside an `$effect` dependency array. Leave the rest dark.",
+        "help": "Eight candidates. Five are legal. Turn on exactly those.",
+        "switches": [
+          {
+            "label": "$todos",
+            "detail": "a top-level reactive atom",
+            "on": true
+          },
+          {
+            "label": "\"mount\"",
+            "detail": "lifecycle token",
+            "on": true
+          },
+          {
+            "label": "route.path",
+            "detail": "the reserved router handle",
+            "on": false
+          },
+          {
+            "label": "$util.url.path",
+            "detail": "the reactive URL surface",
+            "on": true
+          },
+          {
+            "label": "\"debounce(300)\"",
+            "detail": "rate-limit modifier",
+            "on": true
+          },
+          {
+            "label": "$user.name",
+            "detail": "a path into an atom",
+            "on": true
+          },
+          {
+            "label": "\"onMount\"",
+            "detail": "a lifecycle name from another framework",
+            "on": false
+          },
+          {
+            "label": "location.pathname",
+            "detail": "an ordinary JavaScript global",
+            "on": false
+          }
+        ]
+      },
+      "hints": [
+        "Two shapes only: starts with `$`, or is one of five exact strings.",
+        "A path into an atom is still an atom — `$user.name` subscribes to that one field.",
+        "`route` is reactive everywhere else in the program. This is the one place it is not allowed."
+      ],
+      "explain": "The rule exists because the planner has to know the subscription graph *statically*, at parse time, before any of your code executes. A `$`-atom path is something it can resolve to a slot and watch. A recognised token is something it can wire to a lifecycle or a timer. `route.path` is neither — the router handle is populated at run time by whichever arm matched, so at plan time there is nothing to subscribe to. `$util.url` exists as a `$`-rooted mirror of exactly that data for exactly this reason: it puts URL state inside the shape the parser already understands.",
+      "codex": {
+        "term": "Dependency array",
+        "def": "The second argument to `$effect`. Accepts only `$`-atoms (paths into them included) and the strings \"mount\", \"unmount\", \"every(N)\", \"debounce(N)\", \"throttle(N)\". Anything else — notably `route.path` — is a parse error."
+      }
+    },
+    {
+      "id": "s4",
+      "title": "Dependency Gate",
+      "kicker": "arcade",
+      "icon": "target",
+      "goal": "Feel the rule instead of memorising it.",
+      "xp": 140,
+      "hearts": 3,
+      "teach": {
+        "text": "Candidate dependencies are orbiting the `$effect` core. Tap one to admit it through the gate.\n\n**Admit only what the parser would admit** — `$`-atoms and the five string tokens. Let everything else complete its orbit and drift away.\n\nOne illegal admission cracks the core and prints the real diagnostic. `route.path` looks perfect. It is the trap.",
+        "code": {
+          "src": "$effect(() => { … }, [$util.url.path])   // admitted\n$effect(() => { … }, [route.path])       // cracks the core",
+          "caption": "the same data, one legal shape"
+        },
+        "tips": [
+          "Legal tokens glow. Illegal ones are outlined in red — but read the label, not the colour.",
+          {
+            "kind": "warn",
+            "text": "Three legal dependencies drifting past unadmitted also ends the run."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "arcade",
+        "title": "Admit only what parses",
+        "prompt": "Tap eight legal dependencies into the `$effect` core. Admit one illegal token and the core cracks with the parser's own error message.",
+        "goal": "0 / 8",
+        "height": 340,
+        "note": "Tap a token to admit it. Anything you leave alone drifts away harmlessly.",
+        "winNote": "Press Check to bank the XP.",
+        "failNote": "Deps take $-atoms and the five string tokens only. Track the URL with $util.url.path.",
+        "params": {
+          "target": 8,
+          "maxLive": 4,
+          "legal": [
+            "$todos",
+            "$draft",
+            "$user.name",
+            "$util.url.path",
+            "\"mount\"",
+            "\"unmount\"",
+            "\"every(2000)\"",
+            "\"debounce(400)\"",
+            "\"throttle(200)\""
+          ],
+          "illegal": [
+            "route.path",
+            "route.path",
+            "route.path",
+            "route.params.id",
+            "route.query.tab",
+            "\"onMount\"",
+            "\"interval(1000)\"",
+            "location.pathname",
+            "todos"
+          ]
+        },
+        "code": "const P = ctx.params;\nconst cx = ctx.width / 2, cy = ctx.height / 2 - 4;\nconst R = Math.max(74, Math.min(cx - 84, 112));\n\nconst ring = new PIXI.Graphics();\nring.circle(cx, cy, R).stroke({ width: 1.5, color: ctx.colors.g3, alpha: .28 });\nring.circle(cx, cy, R + 30).stroke({ width: 1, color: ctx.colors.g3, alpha: .1 });\nctx.stage.addChild(ring);\n\nconst core = new PIXI.Container();\ncore.x = cx; core.y = cy;\ncore.addChild(ctx.glow(96, ctx.colors.g2, .85));\ncore.addChild(ctx.chip('$effect(fn, [ ])', { color: ctx.colors.g2, textColor: 0x1a0620, size: 13, minWidth: 140 }));\nctx.stage.addChild(core);\n\nconst gate = ctx.text('GATE', { size: 10, color: ctx.colors.g3 });\ngate.anchor.set(.5); gate.x = cx; gate.y = cy - R - 22;\nctx.stage.addChild(gate);\n\nconst banner = ctx.text('tap a token to admit it', { size: 11, color: ctx.colors.dim });\nbanner.anchor.set(.5); banner.x = cx; banner.y = ctx.height - 14;\nctx.stage.addChild(banner);\n\nlet score = 0, missed = 0, dead = false, t = 999;\nconst live = [];\nctx.api.setScore(0);\nctx.api.setGoal('0 / ' + P.target);\n\nfunction errFor(label) {\n  if (label.charAt(0) === '\"') return 'Unknown effect dependency string ' + label;\n  return 'Unexpected Identifier \"' + label.split('.')[0] + '\" inside effect dependency array';\n}\n\nfunction say(msg, color) { banner.text = msg; banner.style.fill = color; }\n\nfunction admit(tok) {\n  if (dead || tok.gone) return;\n  tok.gone = true;\n  const i = live.indexOf(tok);\n  if (i >= 0) live.splice(i, 1);\n  const n = tok.node;\n  n.eventMode = 'none';\n  if (tok.legal) {\n    score++;\n    ctx.api.setScore(score);\n    ctx.api.setGoal(score + ' / ' + P.target);\n    say('admitted  ' + tok.label, ctx.colors.g1);\n    gsap.to(n, { x: cx, y: cy, alpha: 0, duration: .32, ease: 'power2.in', onComplete: () => n.destroy() });\n    gsap.to(core.scale, { x: 1.15, y: 1.15, duration: .12, onComplete: () => gsap.to(core.scale, { x: 1, y: 1, duration: .26, ease: 'back.out' }) });\n    if (score >= P.target) { dead = true; ctx.api.win('Only atoms and tokens got through.'); }\n  } else {\n    dead = true;\n    const g = new PIXI.Graphics();\n    g.moveTo(-56, -20).lineTo(-16, 4).lineTo(-30, 22).stroke({ width: 3, color: ctx.colors.bad });\n    g.moveTo(14, -22).lineTo(34, 2).lineTo(20, 24).stroke({ width: 3, color: ctx.colors.bad });\n    core.addChild(g);\n    say(errFor(tok.label), ctx.colors.bad);\n    gsap.to(n, { x: cx, y: cy, alpha: 0, duration: .2, onComplete: () => n.destroy() });\n    ctx.api.fail(errFor(tok.label));\n  }\n}\n\nfunction spawn() {\n  const legal = Math.random() < .55;\n  const label = ctx.pick(legal ? P.legal : P.illegal);\n  const c = ctx.chip(label, { size: 12, color: legal ? ctx.colors.g1 : 0x241a33, textColor: legal ? 0x1a0620 : 0xf6ecff, stroke: legal ? 0 : ctx.colors.bad });\n  c.eventMode = 'static';\n  c.cursor = 'pointer';\n  c.hitArea = new PIXI.Rectangle(-c.chipWidth / 2 - 4, -c.chipHeight / 2 - 4, c.chipWidth + 8, c.chipHeight + 8);\n  c.alpha = 0;\n  const tok = { node: c, label: label, legal: legal, ang: ctx.rand(0, Math.PI * 2), spd: ctx.rand(.010, .015) * (Math.random() < .5 ? 1 : -1), life: 0, gone: false };\n  c.x = cx + Math.cos(tok.ang) * R;\n  c.y = cy + Math.sin(tok.ang) * R;\n  c.on('pointertap', () => admit(tok));\n  ctx.stage.addChild(c);\n  live.push(tok);\n  gsap.to(c, { alpha: 1, duration: .3 });\n}\n\nctx.onTick((dt) => {\n  if (dead) return;\n  t += dt;\n  if (t > 44 && live.length < P.maxLive) { t = 0; spawn(); }\n  for (let i = live.length - 1; i >= 0; i--) {\n    const tok = live[i];\n    tok.ang += tok.spd * dt;\n    tok.life += dt;\n    tok.node.x = cx + Math.cos(tok.ang) * R;\n    tok.node.y = cy + Math.sin(tok.ang) * R;\n    if (tok.life > 320) {\n      live.splice(i, 1);\n      tok.gone = true;\n      const n = tok.node;\n      gsap.to(n, { alpha: 0, duration: .3, onComplete: () => n.destroy() });\n      if (tok.legal) {\n        missed++;\n        say('a legal dependency drifted past  (' + missed + ' / 3)', ctx.colors.warn);\n        if (missed >= 3) { dead = true; ctx.api.fail('Three legal dependencies drifted past the gate.'); }\n      }\n    }\n  }\n});",
+        "fallback": {
+          "type": "quiz",
+          "prompt": "One of these dependency arrays stops the whole program from parsing. Which?",
+          "options": [
+            {
+              "id": "a",
+              "code": "$effect(() => { … }, [$term, \"debounce(300)\"])"
+            },
+            {
+              "id": "b",
+              "code": "$effect(() => { … }, [route.path])",
+              "detail": "`route` is reactive everywhere else, which is exactly why this looks right. Dependencies are a closed grammar checked at parse time, so the whole program fails with `Unexpected Identifier \"route\" inside effect dependency array`. Use `$util.url.path`."
+            },
+            {
+              "id": "c",
+              "code": "$effect(() => { … }, [$util.url.path])"
+            },
+            {
+              "id": "d",
+              "code": "$effect(() => { … }, [\"every(5000)\"])"
+            }
+          ],
+          "answer": "b"
+        }
+      },
+      "hints": [
+        "Sigil or quotes. If a label has neither, it does not get in.",
+        "`$util.url.path` starts with a `$`. `route.path` does not.",
+        "Only five strings are tokens — `\"onMount\"` and `\"interval(1000)\"` are inventions."
+      ],
+      "explain": "The gate is the parser. It is not asking whether the value is reactive — `route.path` genuinely is — it is asking whether the *written shape* is one it can resolve to a subscription before the program runs. That is why the fix is never \"make route reactive\"; it is \"name the same data through a `$` path\". `$util.url.path` is that path.",
+      "codex": {
+        "term": "Parse-time dependency check",
+        "def": "Effect dependencies are validated when the program is parsed, not when it runs — so an illegal entry fails the whole program rather than just skipping the effect."
+      }
+    },
+    {
+      "id": "s5",
+      "title": "Whoever declares it, owns it",
+      "kicker": "scope",
+      "icon": "layers",
+      "goal": "Put timers and listeners inside an effect so something tears them down.",
+      "xp": 130,
+      "hearts": 3,
+      "teach": {
+        "text": "An effect declared at the **top level** is global: it mounts when the program parses and tears down on the next response.\n\nAn effect declared **inside a component body** belongs to that instance. The runtime mounts it on that instance's first render and tears it down — running its `cleanup(fn)` handlers, clearing its timers, dropping its subscriptions — when the instance leaves the tree. Two call sites means two independent effects.\n\n`setTimeout` and `setInterval` are tracked by the runtime and cleared on re-plan or disconnect. That is a safety net, not a scope: a timer started outside every effect is armed again each time the surrounding body runs, and nothing removes it when a single instance unmounts. Put it in an effect.\n\n`$dom.onResize`, `$dom.onIntersect` and `$dom.onMutation` need no ceremony at all — those observers are auto-disposed.",
+        "code": {
+          "src": "$effect(() => {\n  const t = setInterval(() => { $ticks = $ticks + 1 }, 1000)\n  cleanup(() => clearInterval(t))\n}, [\"mount\"])",
+          "caption": "cleanup(fn) is in scope only inside an effect body"
+        },
+        "code2": {
+          "src": "$effect(() => { $ticks = $ticks + 1 }, [\"every(1000)\"])",
+          "caption": "same interval, owned and disposed by the runtime"
+        },
+        "infographic": {
+          "type": "compare",
+          "title": "Who clears this timer?",
+          "columns": [
+            {
+              "kind": "bad",
+              "title": "Outside every effect",
+              "code": "function Ticker() {\n  setInterval(tick, 1000)\n  return Text(`${$n}`)\n}",
+              "note": "Re-armed each time the body runs; nothing stops it when the instance unmounts."
+            },
+            {
+              "kind": "good",
+              "title": "Inside an effect",
+              "code": "function Ticker() {\n  $effect(() => { tick() }, [\"every(1000)\"])\n  return Text(`${$n}`)\n}",
+              "note": "Mounted once per instance, disposed the moment that instance leaves the tree."
+            }
+          ]
+        },
+        "tips": [
+          "`cleanup(fn)` is a name that only exists inside an `$effect` body — there is no top-level `cleanup`.",
+          {
+            "kind": "danger",
+            "text": "Every timer tick is a **full re-render**: each component body re-executes. A duplicated interval is not just a leak, it is compounding work."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "bug-hunt",
+        "title": "One statement has no owner",
+        "prompt": "This component validates cleanly and gets slower every second it stays on screen. Tap the token responsible.",
+        "code": "function LivePrice(symbol) {\n  [[setInterval]](() => { $tick = $tick + 1 }, 1000)\n\n  [[$effect]](() => {\n    $quote = $http({ url: `https://api.example.com/price/${symbol}` })\n  }, [$tick])\n\n  return [[Card]]([\n    SectionHeader(symbol),\n    [[Text]](`${$quote.data}`)\n  ])\n}",
+        "answer": 0,
+        "fixed": "function LivePrice(symbol) {\n  $effect(() => {\n    $quote = $http({ url: `https://api.example.com/price/${symbol}` })\n  }, [\"every(1000)\"])\n\n  return Card([\n    SectionHeader(symbol),\n    Text(`${$quote.data}`)\n  ])\n}"
+      },
+      "hints": [
+        "Three of the four tokens are inside something that owns them. One is not.",
+        "Ask what runs again when the component body re-executes — and what is left behind when the card unmounts.",
+        "The `$tick` atom only exists to drive a timer. The right fix deletes it."
+      ],
+      "explain": "`setInterval` sitting bare in a component body is outside every effect, so nothing scopes it. Each tick writes `$tick`, which is a full re-render, which re-executes `LivePrice`, which arms another interval — the cost compounds. And when the card leaves the tree the timers stay: the runtime's tracking clears them on re-plan and disconnect, not on the unmount of one instance. Moving the work into `$effect(..., [\"every(1000)\"])` fixes both problems at once and removes the `$tick` atom entirely, because the interval token *is* the trigger.",
+      "afterCode": {
+        "src": "$effect(() => {\n  $quote = $http({ url: priceUrl })\n}, [\"every(1000)\"])",
+        "caption": "one owner, one interval, disposed on unmount"
+      },
+      "codex": {
+        "term": "cleanup(fn)",
+        "def": "In scope only inside an `$effect` body. Registers a teardown the runtime runs when that effect's owner is disposed — the program on re-plan, or a component instance when it leaves the tree."
+      },
+      "preview": {
+        "program": "$ticks = 0\n\n$app(Column([\n  PageHeader(\"Heartbeat\", { subtitle: \"One interval token, no hand-written timer.\" }),\n  Card([\n    SectionHeader(\"Ticks since mount\"),\n    Text(`${$ticks}`, { variant: \"title\" }),\n    Text(\"The runtime owns this interval and clears it when the program goes away.\")\n  ])\n]))\n\n$effect(() => { $ticks = $ticks + 1 }, [\"every(1000)\"])",
+        "caption": "live — the runtime is driving this interval and will dispose it for you"
+      }
+    },
+    {
+      "id": "s6",
+      "title": "Tell the page outside",
+      "kicker": "produce",
+      "icon": "code",
+      "goal": "Emit a CustomEvent from an effect when the URL path changes.",
+      "xp": 160,
+      "teach": {
+        "text": "An Aktion program lives inside an `<aktion-app>` element on somebody else's page. `$emit(\"name\", { detail })` is how it talks back: a real `CustomEvent` dispatched on that host element, which the surrounding page listens for with `addEventListener`.\n\nCall it from any action, effect or lambda. Three names are reserved by the runtime — `assistant-message`, `error`, `route-change` — so pick your own.\n\nNow put the two halves together. Analytics wants a ping on every navigation. The trigger is the URL, which means `$util.url.path` in the dependency array, and reading the same path inside the body is what makes the emitted detail correct.\n\nWrite the whole program: a page, and an effect that emits.",
+        "code": {
+          "src": "function save() {\n  $emit(\"saved\", { id: $draft.id })\n}",
+          "caption": "the shape — an outbound event with a detail payload"
+        },
+        "infographic": {
+          "type": "meter",
+          "title": "How narrow is the update?",
+          "rows": [
+            {
+              "label": "$name = value (top-level atom)",
+              "value": 96,
+              "note": "path-tracked — only readers of that exact path recompute"
+            },
+            {
+              "label": "$state / $memo / $ref / $reducer setter",
+              "value": 22,
+              "note": "full re-render"
+            },
+            {
+              "label": "$http / $query / $mutation lifecycle",
+              "value": 22,
+              "note": "full re-render"
+            },
+            {
+              "label": "setTimeout / setInterval tick",
+              "value": 22,
+              "note": "full re-render"
+            },
+            {
+              "label": "an $effect write",
+              "value": 22,
+              "note": "full re-render"
+            },
+            {
+              "label": "$emit",
+              "value": 22,
+              "note": "full re-render"
+            }
+          ]
+        },
+        "tips": [
+          "`$emit` is on the full-re-render list too — emit on a real event, not on every keystroke.",
+          {
+            "kind": "warn",
+            "text": "`route.path` in the dependency array is a parse error. `$util.url.path` mirrors it and is legal."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "type-code",
+        "title": "Write it yourself",
+        "prompt": "Render any page from one `$app(...)`, then add an `$effect` that calls `$emit(\"track\", { path: … })` whenever the URL path changes. Read `$util.url.path` in the body *and* depend on it.",
+        "filename": "track.aktion",
+        "starter": "$app(Column([\n  PageHeader(\"Analytics\")\n]))\n\n",
+        "placeholder": "$effect(…)",
+        "solution": "$app(Column([\n  PageHeader(\"Analytics\"),\n  Card([Text(\"Every path change leaves this page as a CustomEvent.\")])\n]))\n\n$effect(() => {\n  $emit(\"track\", { path: $util.url.path })\n}, [$util.url.path])",
+        "validate": {
+          "must": [
+            "\\$app\\s*\\(",
+            "\\$effect\\s*\\(",
+            "\\$emit\\s*\\(\\s*[\"'`]track[\"'`]",
+            "\\$util\\.url\\.path[\\s\\S]*\\$util\\.url\\.path"
+          ],
+          "mustWhy": [
+            "Nothing renders without $app(...) — keep the starter and build under it.",
+            "The work belongs in an $effect, not in render position.",
+            "Emit an event literally named \"track\".",
+            "Read $util.url.path in the body, and list the same path as the dependency."
+          ],
+          "mustNot": [
+            "route\\.path",
+            "useEffect",
+            "addEventListener",
+            "setInterval"
+          ]
+        }
+      },
+      "hints": [
+        "The dependency array holds one entry, and it is not `route.path`.",
+        "The body reads the same path it depends on: `{ path: $util.url.path }`.",
+        "`$effect(() => { $emit(\"track\", { path: $util.url.path }) }, [$util.url.path])`"
+      ],
+      "explain": "This is the whole world in one statement. The dependency array names a legal, `$`-rooted path so the planner can subscribe to it before the program runs; the body does the side-effecting work; and `$emit` carries the result out of the shadow root to whatever page is hosting you. No listener to register, no listener to remove — the effect is declared, and the runtime disposes it with the program. The same two lines with `route.path` in the array would not have parsed at all.",
+      "afterCode": {
+        "src": "$effect(() => {\n  $emit(\"track\", { path: $util.url.path })\n}, [$util.url.path])",
+        "caption": "the shape to remember"
+      },
+      "codex": {
+        "term": "$emit(\"name\", { detail })",
+        "def": "Dispatches a CustomEvent on the host `<aktion-app>` so the surrounding page can react. Callable from any action, effect or lambda; `assistant-message`, `error` and `route-change` are reserved names."
+      }
+    }
+  ],
+  "outro": {
+    "headline": "Your effects clean up after themselves",
+    "body": "You can now say *when* work runs, *how often* it is allowed to run, and *who* is responsible for stopping it. The dependency array is the smallest surface in Aktion and the one it is strictest about — two shapes, no exceptions, checked before a line executes.",
+    "nextHint": "Next: forms and validation — where the effect you just learned becomes the thing that saves a draft."
+  },
+  "badge": {
+    "name": "Signalkeeper",
+    "icon": "clock",
+    "tagline": "Ran the side effects. Cleared every timer."
+  }
+}

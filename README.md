@@ -2006,9 +2006,6 @@ consumes from the CDN.
 | `theme-generator.html`              | Visual theme generator — tune colors, radius, typography, spacing, shadows, and a brand gradient with a live preview, then copy a ready-to-paste `$theme({…})` statement. |
 | `theme-customization.html`          | Token-by-token customization studio (now folded into `themes.html`, kept as a redirect for old links). |
 | `brand-themes.html`                 | One program rendered with six ready-made brand token maps — GitHub, Apple, Stripe, IONOS, Notion, Vercel — each shown as a flat `setTheme()` map and its grouped `$theme({…})` translation. |
-| `exos-parity.html`                  | Design-framework parity harness — the Aktion component set rendered side by side with the Exos framework it mirrors. |
-| `exos-blocks.html`                  | Exos ↔ Aktion UI blocks — whole framework sections rebuilt as Aktion programs. |
-| `exos-micro-frontends-blocks.html`  | The DCD micro-frontend blocks rebuilt in Aktion.                                        |
 | `playground.html`                   | CodeMirror 6 editor with custom highlighting / autocomplete, live preview, share links, hover-over component info, and an inspection mode. |
 | `visual-editor.html`                | Drag-and-drop visual editor for the full 281-component library. Three canvas modes (Raw Edit / Visual Edit / Preview), an Outline tab for top-level entity navigation, typed prop editors, cross-entity selection, and import / export of `.aktion` + self-contained HTML via an editable Source drawer. |
 | `chat-bot.html`                     | OpenRouter-powered streaming chat with four generation modes (Chat Compact, Chat Full, Website Builder, App Builder), image / PDF attachment support, and download-as-standalone-HTML. |
@@ -2027,7 +2024,10 @@ grouped by folder:
 | `demos/mini-apps/`    | Complete interactive apps — trackers, dashboards, storefronts, live-API browsers, marketing pages. |
 | `demos/blocks/`       | Single-file, drop-in functional sections (login card, pricing plans, checkout form, …). |
 | `demos/components/`   | Reusable `function` component showcases grouped by type (buttons, inputs, charts, …). |
-| `demos/industry-specific/` | Full per-industry surfaces with reusable building blocks (finance, healthcare, SaaS, e-commerce, AI, real estate, …). |
+| `demos/websites/`     | Whole marketing sites — agency, SaaS, portfolio, restaurant, conference, product launch, magazine. Navbar + sections + footer, no app shell. |
+| `demos/dashboards/`   | Console surfaces — analytics, access admin, SRE, finance, CRM, helpdesk, logistics. Every KPI computed from the data it sits above. |
+| `demos/commerce/`     | The buying journey — shop, product detail, checkout, order tracking, marketplace, billing. Every total recomputes from state. |
+| `demos/ai-apps/`      | LLM product surfaces — chat assistant, prompt playground, RAG search, agent trace inspector, model comparison, content studio. Model responses are simulated locally. |
 
 All programs are served by one runner shell,
 `docs/demos/index.html?app=<folder>/<file>.aktion` (defaults to
@@ -2090,7 +2090,7 @@ The full catalog with zoomed-out live preview cards lives at
 │   ├── language-api.ts        #   aktion-runtime/language entry (DOM-free)
 │   └── index.ts               #   Public entry point
 ├── docs/                      # Static documentation site (HTML + CSS + JS)
-│   └── demos/                 #   Bundled .aktion demo programs (mini-apps / blocks / components / industry-specific)
+│   └── demos/                 #   Bundled .aktion demo programs (mini-apps / blocks / components / websites / dashboards / commerce / ai-apps)
 ├── editors/
 │   ├── vscode/                #   VS Code / Cursor / Open VSX extension (in-process)
 │   ├── lsp/                   #   aktion-language-server — standalone LSP server

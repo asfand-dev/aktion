@@ -1,0 +1,689 @@
+{
+  "id": "master-trials",
+  "title": "Master Trials",
+  "subtitle": "Everything the validator cannot catch",
+  "icon": "crown",
+  "difficulty": 5,
+  "estimateMin": 13,
+  "requires": [
+    "forms-forge",
+    "theme-polish",
+    "routers-path"
+  ],
+  "palette": {
+    "g1": "#facc15",
+    "g2": "#fb7185",
+    "g3": "#f97316"
+  },
+  "backdrop": {
+    "preset": "orbit"
+  },
+  "intro": {
+    "headline": "Clean diagnostics are not a passing grade",
+    "body": "Every program in this world validates. `getDiagnostics` returns nothing, the editor shows no squiggles, and the page still does the wrong thing.\n\nThat is not a hole in the tooling. A linter checks *shapes* — is this a real component, is this prop spelled right, is this enum value legal. It cannot check *intent*. It does not know which currency your invoices are in, that a bracket on its own line was meant to index the line above it, or that you re-passed a value the component had already worked out for itself.\n\nSix trials. Each one is a program you would sign off on in review. None of them behaves the way it reads.\n\nThe scaffolding is thinner here. The distractors are things you have already been taught are correct — in a different position.",
+    "code": "$app(Column([\n  PageHeader(\"Orders\", { breadcrumbs: [\"Home\", \"Orders\"] }),\n  Button(\"Save\", \"primary\")\n]))",
+    "codeCaption": "zero diagnostics, two silent defects",
+    "infographic": {
+      "type": "orbit",
+      "title": "Six ways to pass and still be wrong",
+      "core": "validator: clean",
+      "satellites": [
+        {
+          "label": "defaults",
+          "note": "you re-passed what the component derived"
+        },
+        {
+          "label": "formats",
+          "note": "money printed in the wrong currency"
+        },
+        {
+          "label": "reactivity",
+          "note": "correct, and redraws the whole tree"
+        },
+        {
+          "label": "line breaks",
+          "note": "a bracket started a new statement"
+        },
+        {
+          "label": "slots",
+          "note": "the argument bound to the next prop along"
+        },
+        {
+          "label": "bags",
+          "note": "the handle is not the payload"
+        }
+      ]
+    },
+    "objectives": [
+      "Stop re-passing values a component already derives",
+      "Print money and dates in the currency and precision you meant",
+      "Tell a path-tracked write from a full re-render",
+      "Judge a whole program as shipping or silently broken, at speed",
+      "Find the line break that quietly split one statement into two"
+    ]
+  },
+  "stages": [
+    {
+      "id": "s1",
+      "title": "The work already done",
+      "kicker": "defaults",
+      "icon": "eye",
+      "goal": "Stop passing components the values they had already worked out.",
+      "xp": 140,
+      "teach": {
+        "text": "A large part of this library's design is **inference**. The minimal call is already rich: a component reads its own arguments and picks the icon, the trail, the box, the layer.\n\nSo passing what it would have inferred is never an error — it is a *replacement*. You swap a derived value for a hard-coded one that no longer follows the data, and nothing anywhere tells you.\n\nTwo of these are worse than redundant. `Toasts(...)` in the tree is not additive: rendering `$toast.items` yourself makes the auto-layer **step aside**, so a mistake in your mapping means no toasts at all. And an `AspectRatio` around an `Image` that already carries `ratio` gives you a box inside a box.\n\nThe cure is not memorising every default. It is reading the signature before you reach for a prop.",
+        "code": {
+          "src": "$app(Column([\n  PageHeader(\"Orders\", { breadcrumbs: [\"Home\", \"Orders\"] }),\n  Toolbar([SearchBar(\"q\", { placeholder: \"Search orders\" })]),\n  AspectRatio(\"16:9\", [Image(src, { ratio: \"16:9\", alt: \"Warehouse\" })]),\n  Toasts($toast.items.map(t => Toast({ title: t.message, tone: t.tone })))\n]))",
+          "caption": "four lines of work the library had already finished"
+        },
+        "code2": {
+          "src": "$app(Column([\n  PageHeader(\"Orders\"),\n  Toolbar({ searchable: true, searchPlaceholder: \"Search orders\" }),\n  Image(src, { ratio: \"16:9\", alt: \"Warehouse\" })\n]))",
+          "caption": "identical page, and the toasts still appear"
+        },
+        "infographic": {
+          "type": "table",
+          "title": "What you paid for twice",
+          "headers": [
+            "The call you already made",
+            "What it had already done"
+          ],
+          "rows": [
+            [
+              "PageHeader(\"Orders\")",
+              "Derived a Home / Orders trail"
+            ],
+            [
+              "StatCard(\"Revenue\", { value })",
+              "Chose the sack-dollar icon from the label"
+            ],
+            [
+              "Image(src, { ratio: \"16:9\" })",
+              "Constrained its own box"
+            ],
+            [
+              "$toast.success(\"Saved\")",
+              "Rendered its own stacked layer"
+            ]
+          ]
+        },
+        "tips": [
+          "`breadcrumbs: false` is the documented way to *remove* the trail. An array replaces it; there is no way to ask for the derived one back.",
+          {
+            "kind": "warn",
+            "text": "`Toolbar({ searchable: true })` mounts a `SearchBar` at the *start* of the left slot and wires `searchValue` / `onSearch`. Your own `left` children are appended after it — so passing both gives you two search fields side by side."
+          },
+          {
+            "kind": "danger",
+            "text": "Rendering `$toast.items` into a `Toasts(...)` opts out of the automatic layer. Get the mapping wrong and every toast in the app silently stops appearing."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "match-pairs",
+        "title": "What did it already do?",
+        "prompt": "Six minimal calls. Match each to the work it had already done before you passed it anything else.",
+        "pairs": [
+          {
+            "left": {
+              "mono": "PageHeader(\"Orders\")",
+              "note": "no breadcrumbs argument"
+            },
+            "right": {
+              "label": "Derived a Home / Orders trail. Pass breadcrumbs: false to suppress it, or an array to replace it."
+            }
+          },
+          {
+            "left": {
+              "mono": "StatCard(\"Revenue\", { value: \"$48k\" })",
+              "note": "no icon argument"
+            },
+            "right": {
+              "label": "Picked the sack-dollar icon out of the word Revenue. Customers would have got users."
+            }
+          },
+          {
+            "left": {
+              "mono": "Image(src, { ratio: \"16:9\" })",
+              "note": "no wrapper"
+            },
+            "right": {
+              "label": "Constrained its own box and reserved the space, so an outer AspectRatio is a second box around the first."
+            }
+          },
+          {
+            "left": {
+              "mono": "$toast.success(\"Saved\")",
+              "note": "nothing added to the tree"
+            },
+            "right": {
+              "label": "Rendered its own stacked layer. Putting a Toasts(...) in the tree makes that layer step aside."
+            }
+          },
+          {
+            "left": {
+              "mono": "Toolbar({ searchable: true })",
+              "note": "no children"
+            },
+            "right": {
+              "label": "Mounted a SearchBar into its own left slot, already wired to searchValue and onSearch."
+            }
+          },
+          {
+            "left": {
+              "mono": "Avatar(\"Ada Lovelace\")",
+              "note": "no src"
+            },
+            "right": {
+              "label": "Drew a deterministic illustration seeded by the name. fallback: \"initials\" gets the two-letter pill instead."
+            }
+          }
+        ]
+      },
+      "hints": [
+        "Every right-hand card describes something that happened *because of the first argument*.",
+        "Two of them describe a layer or a box that a second call would duplicate rather than add to.",
+        "The label is the seed: `\"Revenue\"` chooses an icon, `\"Ada Lovelace\"` chooses an illustration."
+      ],
+      "nudges": [
+        "Read each right-hand card and ask which single argument could possibly have produced it.",
+        "The toast card is the one that talks about a layer stepping aside — nothing else in the list has a layer."
+      ],
+      "explain": "None of these components is being clever for its own sake — each is removing a decision you would otherwise have to make identically on every page. That is exactly why over-passing is dangerous: the derived value tracks the data, and your hard-coded one does not. Rename the page and a derived breadcrumb follows; a literal `[\"Home\", \"Orders\"]` array does not, and no validator on earth can tell that the trail is now lying about where the user is.",
+      "afterCode": {
+        "src": "$app(Column([\n  PageHeader(\"Orders\"),\n  Toolbar({ searchable: true }),\n  Image(src, { ratio: \"16:9\", alt: \"Warehouse\" })\n]))",
+        "caption": "read the signature before you reach for a prop"
+      },
+      "codex": {
+        "term": "Derived default",
+        "def": "A value a component works out from the arguments it was already given — PageHeader's breadcrumbs, StatCard's icon, Avatar's illustration, the $toast layer. Passing your own replaces it; it never merges."
+      },
+      "preview": {
+        "program": "function save() { $toast.success(\"Draft saved\") }\n\n$app(Column([\n  PageHeader(\"Orders\"),\n  Toolbar({ searchable: true, searchPlaceholder: \"Search orders\" }),\n  Image(\"https://picsum.photos/800/450\", { ratio: \"16:9\", alt: \"Warehouse\" }),\n  Button(\"Save\", { onClick: save })\n]))",
+        "caption": "live — the breadcrumbs, the search field and the toast layer were never written"
+      }
+    },
+    {
+      "id": "s2",
+      "title": "Formatting that lies",
+      "kicker": "output",
+      "icon": "chart",
+      "goal": "Make a table print the currency, precision and date you actually meant.",
+      "xp": 150,
+      "teach": {
+        "text": "`Col(header, values, { format })` accepts exactly four format values: `text`, `number`, `currency`, `date`. Write `\"datetime\"` there and the validator stops you — this is one of the few traps in this world it *does* catch.\n\nWhat it cannot catch is the column that formats perfectly and shows the wrong number. `format: \"currency\"` defaults to **USD**. An invoice table for a German shop validates, renders, and quotes every amount in dollars. Pass `currency: \"EUR\"` — and `locale` if you want the separators and digit grouping to match.\n\nDates have the mirror problem. `$util.formatDate(value)` with no second argument defaults to the pattern `\"MMM D\"` — `\"Mar 12\"`. No year. On a page listing three years of invoices that is not a formatting preference, it is a data loss.\n\n`$util.formatDate` takes a token pattern (`\"YYYY-MM-DD\"`, `\"MMM D\"`) *or* a named mode (`\"relative\"`, `\"date\"`, `\"time\"`, `\"datetime\"`, `\"iso\"`). Those named modes are the ones `Col`'s `format` does not share — do not assume a value legal in one is legal in the other.",
+        "code": {
+          "src": "Col(\"Amount\", rows.map(r => r.amount), { format: \"currency\" })\n\nCol(\"Issued\", rows.map(r => $util.formatDate(r.issued)))",
+          "caption": "both validate; both print something you did not mean"
+        },
+        "infographic": {
+          "type": "anatomy",
+          "title": "Every part of this line is a decision",
+          "code": "Col(\"Amount\", rows.map(r => r.amount), { format: \"currency\" })",
+          "parts": [
+            {
+              "match": "Col(",
+              "key": "one form",
+              "text": "one positional plus a trailing object — never split an object between the two roles"
+            },
+            {
+              "match": "\"Amount\"",
+              "key": "header",
+              "text": "the first slot is the visible column header, not a key into the row"
+            },
+            {
+              "match": "r.amount",
+              "key": "values",
+              "text": "a column of values, not the row array — Col takes one column at a time"
+            },
+            {
+              "match": "format: \"currency\"",
+              "key": "the silent one",
+              "text": "renders USD until you add a currency code; no diagnostic knows which currency you meant"
+            }
+          ]
+        },
+        "tips": [
+          "`currency` is an ISO 4217 code — `EUR`, `GBP`, `CHF`. `locale` is a BCP-47 tag — `de-DE`, `en-GB`.",
+          {
+            "kind": "warn",
+            "text": "`$util.formatDate(value)` with no pattern is `\"MMM D\"`. Always pass the pattern when the year matters."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "fill-blanks",
+        "title": "Bill in euros, date in full",
+        "prompt": "A German shop's invoice table. Issued dates must print as `2026-03-12`, and every amount is in euros. Three of the six chips are the mistakes that still validate.",
+        "display": "code",
+        "code": "rows = [\n  { id: \"INV-2041\", issued: \"2026-03-12T09:14:00Z\", amount: 480.5 },\n  { id: \"INV-2042\", issued: \"2026-03-14T17:02:00Z\", amount: 1290 }\n]",
+        "template": "$app(Card([\n  SectionHeader(\"Invoices\"),\n  Table([\n    Col(\"Invoice\", rows.map(r => r.id)),\n    Col(\"Issued\", rows.map(r => $util.formatDate(r.issued, {{0}}))),\n    Col(\"Amount\", rows.map(r => r.amount), { format: {{1}}, currency: {{2}} })\n  ])\n]))",
+        "bank": [
+          "\"YYYY-MM-DD\"",
+          "\"currency\"",
+          "\"EUR\"",
+          "\"datetime\"",
+          "\"USD\"",
+          "\"money\""
+        ],
+        "answer": [
+          "\"YYYY-MM-DD\"",
+          "\"currency\"",
+          "\"EUR\""
+        ]
+      },
+      "hints": [
+        "One chip is a format name that does not exist at all. One is legal in `$util.formatDate` but not in `Col`. One is the default you are trying to escape.",
+        "`2026-03-12` is a token pattern, not a named mode.",
+        "The third slot is a three-letter ISO code, and it is not the one the component would have picked."
+      ],
+      "nudges": [
+        "Slot 1 is a `Col` format. Only four values are legal there — and the one that looks most descriptive is not among them.",
+        "If you leave the currency slot to the component, every amount on this page is quoted in dollars."
+      ],
+      "explain": "The default is the danger. `format: \"currency\"` had to pick *some* currency, and USD is as arbitrary as any — but arbitrary and silent is the worst combination, because the column looks flawless. `\"money\"` and `\"datetime\"` are both rejected by the validator, which is why they are the *safe* mistakes: you find out immediately. The one that costs you a customer call is the euro invoice priced in dollars, formatted beautifully, with a clean build.",
+      "afterCode": {
+        "src": "Col(\"Amount\", rows.map(r => r.amount), {\n  format: \"currency\",\n  currency: \"EUR\",\n  locale: \"de-DE\"\n})",
+        "caption": "say the currency and the locale out loud"
+      },
+      "codex": {
+        "term": "Silent format default",
+        "def": "`Col`'s `format: \"currency\"` renders USD unless a `currency` code is given, and `$util.formatDate(v)` with no pattern renders `\"MMM D\"`. Both validate; both print something other than what you meant."
+      },
+      "preview": {
+        "program": "rows = [\n  { id: \"INV-2041\", issued: \"2026-03-12T09:14:00Z\", amount: 480.5 },\n  { id: \"INV-2042\", issued: \"2026-03-14T17:02:00Z\", amount: 1290 }\n]\n\n$app(Card([\n  SectionHeader(\"Invoices\"),\n  Table([\n    Col(\"Invoice\", rows.map(r => r.id)),\n    Col(\"Issued\", rows.map(r => $util.formatDate(r.issued, \"YYYY-MM-DD\"))),\n    Col(\"Amount\", rows.map(r => r.amount), { format: \"currency\", currency: \"EUR\", locale: \"de-DE\" })\n  ])\n]))",
+        "caption": "live — euros, German grouping, full dates"
+      }
+    },
+    {
+      "id": "s3",
+      "title": "Correct, and slow",
+      "kicker": "reactivity",
+      "icon": "cpu",
+      "goal": "Tell a path-tracked write from one that re-executes the whole program.",
+      "xp": 150,
+      "teach": {
+        "text": "Fine-grained, path-level tracking is real — and it applies to exactly one thing: **top-level `$name = value` atoms**. Read `$user.name` and you are subscribed to `user.name` alone; writing `$user.role` will not wake you.\n\nEverything else on the reactive surface triggers a **full re-render**: every component body in the program re-executes. The morph reconciler still patches only the DOM that actually changed, so you never *see* it — which is precisely why nobody catches it in review.\n\nThe full-re-render list is short and worth memorising: hook setters (`$state`, `$memo`, `$ref`, `$reducer`), `$http` / `$query` / `$mutation` lifecycle changes, `setTimeout` and `setInterval` ticks, writes performed inside an `$effect`, and `$emit`.\n\nNone of that makes hooks wrong. They buy per-instance isolation, and per-instance isolation is worth paying for. It makes them a *choice* — so for hot-path state that many nodes read, reach for a plain `$name` atom first.",
+        "code": {
+          "src": "$count = 0\n\nfunction Counter() {\n  const [n, setN] = $state(0)\n  return Row([\n    Button(`atom ${$count}`, { onClick: () => { $count += 1 } }),\n    Button(`hook ${n}`, { onClick: () => setN(n + 1) })\n  ])\n}\n\n$app(Column([Counter(), Counter()]))",
+          "caption": "left button: the readers of $count. right button: everything."
+        },
+        "infographic": {
+          "type": "compare",
+          "title": "Same counter, different blast radius",
+          "columns": [
+            {
+              "kind": "good",
+              "title": "Path-tracked",
+              "code": "$count = 0\n\nButton(`Seen ${$count}`, {\n  onClick: () => { $count += 1 }\n})",
+              "note": "Only the nodes that read $count recompute."
+            },
+            {
+              "kind": "bad",
+              "title": "Whole tree",
+              "code": "function Counter() {\n  const [n, setN] = $state(0)\n  return Button(`Seen ${n}`, {\n    onClick: () => setN(n + 1)\n  })\n}",
+              "note": "Every component body in the program re-executes. Worth it only for the isolation."
+            }
+          ]
+        },
+        "tips": [
+          "`$util.derived(() => …)` is usually the better computed value: it recomputes from the atoms its body reads, with no dependency list to get wrong.",
+          {
+            "kind": "warn",
+            "text": "A write inside an `$effect` re-renders everything — even when the thing it writes is a plain top-level atom. The atom is not what makes it cheap; the caller is."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "sort-bins",
+        "title": "How far does the update travel?",
+        "prompt": "File each update by its blast radius. Both bins produce a correct screen — only one of them is surgical.",
+        "bins": [
+          {
+            "id": "path",
+            "label": "Path-tracked",
+            "hint": "only the readers of that exact path recompute"
+          },
+          {
+            "id": "full",
+            "label": "Full re-render",
+            "hint": "every component body re-executes"
+          }
+        ],
+        "items": [
+          {
+            "label": "$count += 1 from a Button's onClick",
+            "bin": "path"
+          },
+          {
+            "label": "$user.role = \"editor\" inside an action",
+            "bin": "path"
+          },
+          {
+            "label": "$filters.status written by a bound Select",
+            "bin": "path"
+          },
+          {
+            "label": "setN(n + 1) from const [n, setN] = $state(0)",
+            "bin": "full"
+          },
+          {
+            "label": "an $http request landing in $orders",
+            "bin": "full"
+          },
+          {
+            "label": "a setInterval tick writing $now",
+            "bin": "full"
+          },
+          {
+            "label": "a write performed inside an $effect body",
+            "bin": "full"
+          },
+          {
+            "label": "$emit(\"order-saved\", { id })",
+            "bin": "full"
+          }
+        ]
+      },
+      "hints": [
+        "Three of the eight are ordinary writes to a top-level `$name` atom from a handler. Those are the cheap ones.",
+        "Ask who is doing the writing, not what is being written — a hook, a resource, a timer, an effect, or an emit.",
+        "The `$effect` item is the one people always file wrongly: the target is an atom, but the caller is an effect."
+      ],
+      "nudges": [
+        "A hook exists to give each call site its own copy. That isolation is what costs the full pass.",
+        "`$emit` leaves the program entirely — the runtime cannot know what the host page did with it, so it re-plans."
+      ],
+      "explain": "This is the only trial in the world where the wrong answer produces a *correct* screen. That is what makes it expensive: the morph reconciler patches only the DOM that really changed, so a program re-executing every body on every keystroke looks and behaves identical to a surgical one until the tree is large enough for a user to feel it. Knowing which lever you pulled is the whole skill — and it is a decision you make when you type `$state` instead of `$name`, not something you can profile your way out of later.",
+      "codex": {
+        "term": "Blast radius",
+        "def": "Path-level tracking covers only top-level `$name = value` atoms. Hook setters, resource lifecycle changes, timer ticks, writes inside `$effect`, and `$emit` all re-execute every component body — correctly, but wholesale."
+      }
+    },
+    {
+      "id": "s4",
+      "title": "Final Trial",
+      "kicker": "arcade",
+      "icon": "flame",
+      "goal": "Judge whole programs at speed: ships, or silently broken.",
+      "xp": 190,
+      "hearts": 3,
+      "teach": {
+        "text": "Six programs scroll past. Every one of them passes `getDiagnostics`. Three do exactly what they read like. Three do not.\n\n**Tag each before it leaves the screen.** Three lives — a wrong call costs one, and so does letting a program scroll away untagged.\n\nAll three clean ones are designed to look broken. A camelCase function still renders; case is a readability convention, not a mechanism. A function that reuses a built-in's name inside its own body *wraps* that built-in rather than recursing — the name resolves to the built-in in there. And a statement whose line **ends on an operator** keeps going onto the next line, so a split expression is still one expression.\n\nRead the second argument, read the line breaks, and read whether a name is a bag or a payload.",
+        "tips": [
+          "Tap SHIPS or SILENTLY BROKEN. Letting a card slide off the left edge counts as a miss.",
+          {
+            "kind": "warn",
+            "text": "Three of the six are safe programs wearing a broken program's clothes. Do not tag on shape alone."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "arcade",
+        "title": "Ships, or silently broken",
+        "prompt": "Six programs. All six validate. Tag each one before it leaves the screen — three lives.",
+        "goal": "0 / 6",
+        "height": 360,
+        "note": "Tap SHIPS or SILENTLY BROKEN. A program that scrolls off untagged costs a life.",
+        "params": {
+          "lives": 3,
+          "speed": 1.7,
+          "programs": [
+            {
+              "lines": [
+                "function myCard(t) {",
+                "  return Card([Text(t)])",
+                "}",
+                "$app(Column([myCard(\"Shipped\")]))"
+              ],
+              "broken": false,
+              "why": "That one shipped. Case is a readability convention — a camelCase function that returns a tree renders."
+            },
+            {
+              "lines": [
+                "$app(Column([",
+                "  Button(\"Save\", \"primary\")",
+                "]))"
+              ],
+              "broken": true,
+              "why": "\"primary\" landed in the second positional slot, which is onClick. No variant was ever set."
+            },
+            {
+              "lines": [
+                "top = rows.sort(byTotal)",
+                "  [0]",
+                "Text(`Biggest: ${top.id}`)"
+              ],
+              "broken": true,
+              "why": "A [ starting a line does not continue the statement above it. top is the whole sorted array."
+            },
+            {
+              "lines": [
+                "total = $util.sum(lines) +",
+                "  shipping",
+                "Text(`Total ${total}`)"
+              ],
+              "broken": false,
+              "why": "That one shipped. The line ends on an operator, so the statement continues onto the next line."
+            },
+            {
+              "lines": [
+                "$orders = $http({ url: API })",
+                "Text(`${$orders.length} orders`)"
+              ],
+              "broken": true,
+              "why": "$orders is the resource bag. It has no .length — the rows are in $orders.data."
+            },
+            {
+              "lines": [
+                "function Badge(label) {",
+                "  return Badge(label, { tone: \"success\" })",
+                "}"
+              ],
+              "broken": false,
+              "why": "That one shipped. Inside its own body the name resolves to the built-in, so it wraps rather than recurses."
+            }
+          ]
+        },
+        "code": "const P = ctx.params;\nconst progs = P.programs;\nlet idx = -1, lives = P.lives, tagged = 0, right = 0, card = null, judged = false;\nctx.app.stage.eventMode = 'static';\nfunction hud() { ctx.api.setScore(right); ctx.api.setGoal(tagged + ' / ' + progs.length + '   lives ' + lives); }\nfunction makeCard(p) {\n  const c = new PIXI.Container();\n  const texts = p.lines.map((ln, i) => { const t = ctx.text(ln, { size: 13, mono: true, color: ctx.colors.ink }); t.x = 18; t.y = 16 + i * 20; return t; });\n  let w = 210;\n  for (const t of texts) if (t.width > w) w = t.width;\n  const bw = Math.min(ctx.width - 16, w + 36), bh = 32 + p.lines.length * 20;\n  const g = new PIXI.Graphics();\n  g.roundRect(0, 0, bw, bh, 14).fill({ color: 0x0b1220, alpha: .94 }).stroke({ width: 2, color: ctx.colors.g2, alpha: .75 });\n  c.addChild(g);\n  for (const t of texts) c.addChild(t);\n  c.cardW = bw; c.cardH = bh; c.broken = p.broken; c.why = p.why;\n  return c;\n}\nfunction next() {\n  if (card) { card.destroy({ children: true }); card = null; }\n  idx++; judged = false;\n  if (idx >= progs.length) { ctx.api.win('Six programs, read the way the runtime reads them.'); return; }\n  card = makeCard(progs[idx]);\n  card.x = ctx.width + 10; card.y = 30;\n  ctx.stage.addChild(card);\n}\nfunction settle(ok, why) {\n  tagged++;\n  if (ok) right++; else lives--;\n  hud();\n  const flash = new PIXI.Graphics();\n  flash.roundRect(0, 0, card.cardW, card.cardH, 14).fill({ color: ok ? ctx.colors.good : ctx.colors.bad, alpha: .3 });\n  card.addChild(flash);\n  const dead = lives <= 0;\n  gsap.to(card, { alpha: 0, duration: .3, onComplete: () => { if (dead) ctx.api.fail(why); else next(); } });\n}\nfunction judge(saysBroken) {\n  if (!card || judged) return;\n  judged = true;\n  settle(saysBroken === card.broken, card.why);\n}\nfunction btn(label, color, xf, onTap) {\n  const b = ctx.chip(label, { color: color, textColor: 0x04101a, size: 12, minWidth: 148 });\n  b.x = ctx.width * xf; b.y = ctx.height - 26;\n  b.eventMode = 'static'; b.cursor = 'pointer';\n  b.on('pointertap', onTap);\n  ctx.stage.addChild(b);\n}\nbtn('SHIPS', ctx.colors.good, .27, () => judge(false));\nbtn('SILENTLY BROKEN', ctx.colors.bad, .73, () => judge(true));\nctx.onTick((dt) => {\n  if (!card || judged) return;\n  card.x -= (P.speed || 1.7) * dt;\n  if (card.x + card.cardW < -10) { judged = true; settle(false, 'That one scrolled past untagged.'); }\n});\nnext();\nhud();\n",
+        "fallback": {
+          "type": "quiz",
+          "prompt": "All four of these validate. Exactly one behaves differently from how it reads. Which?",
+          "options": [
+            {
+              "id": "a",
+              "code": "function myCard(t) {\n  return Card([Text(t)])\n}",
+              "detail": "Case is a convention only — a camelCase function that returns a tree renders."
+            },
+            {
+              "id": "b",
+              "code": "top = rows.sort(byTotal)\n  [0]",
+              "detail": "A line starting with `[` opens a new statement, so `top` is the whole sorted array."
+            },
+            {
+              "id": "c",
+              "code": "total = $util.sum(lines) +\n  shipping",
+              "detail": "The line ends on an operator, so the statement continues."
+            },
+            {
+              "id": "d",
+              "code": "function Badge(label) {\n  return Badge(label, { tone: \"success\" })\n}",
+              "detail": "Inside its own body the name resolves to the built-in, so this wraps rather than recurses."
+            }
+          ],
+          "answer": "b"
+        }
+      },
+      "hints": [
+        "Anything whose second argument is a bare string is worth a hard look — the second slot is rarely the prop you want.",
+        "A line that *starts* with an operator continues the one above it. A line that starts with a bracket does not.",
+        "All three clean programs look wrong at a glance. Two of them are about a name — its case, and whose name it is; the third is a line break that really does continue, because the line ends on an operator."
+      ],
+      "nudges": [
+        "Take the misses. A wrong tag and a missed card cost the same, and reading carefully beats tagging early.",
+        "For each card, ask the same three questions: which slot, which line, bag or payload."
+      ],
+      "explain": "Reviewing at speed is the real skill this world is testing, because in practice nobody sits with one program for ten minutes — they scan a diff. The three broken cards each fail on a different axis: an argument bound one slot along, a statement split by a line break, and a handle mistaken for its payload. The three clean cards each *look* like a rule violation and are not. Once you have the shape of both groups, a diff stops being a wall of text and starts being six questions with yes or no answers.",
+      "codex": {
+        "term": "Silent defect",
+        "def": "A program that passes every diagnostic and behaves differently from how it reads. The three recurring shapes: an argument in the wrong positional slot, a line break that split one statement into two, and a resource bag used as its own payload."
+      }
+    },
+    {
+      "id": "s5",
+      "title": "The bracket that started over",
+      "kicker": "parsing",
+      "icon": "warn",
+      "goal": "Find the line break that quietly split one statement into two.",
+      "xp": 160,
+      "hearts": 3,
+      "teach": {
+        "text": "A statement continues onto the next line when it **ends on an operator** — `.` `?.` `?` `:` `&&` `||` `??` `==` `!=` `===` `!==` `<` `>` `<=` `>=` `instanceof` `in` `+` `-` `*` `/` `%` `**` and the bitwise and shift operators. A line that *begins* with one of those continues too, which is why the fluent chain style works:\n\nA line that begins with `(` or `[` does **not**. The statement above it is already complete, so the bracket opens a brand new one — a grouping expression or an array literal, evaluated and thrown away.\n\nThat is the whole trap. `.sort(byTotal)` on its own line attaches. `[0]` on its own line does not. The binding gets the value of the line above it, the index is discarded, and every downstream property read comes back undefined.\n\n**Break after the operator, never before the bracket.**",
+        "code": {
+          "src": "recent = rows\n  .filter(o => o.status === \"open\")\n  .slice(0, 5)\n\nfirst = rows.sort(byTotal)\n  [0]",
+          "caption": "the first continues; the second is two statements"
+        },
+        "infographic": {
+          "type": "flow",
+          "title": "How the next line is decided",
+          "direction": "down",
+          "nodes": [
+            {
+              "label": "line ends",
+              "note": "the tokeniser looks at both sides of the break"
+            },
+            {
+              "label": "operator on either side?",
+              "note": ". ?. ? : && || ?? + - * / == ..."
+            },
+            {
+              "label": "yes: one statement",
+              "note": "the fluent chain keeps flowing"
+            },
+            {
+              "label": "( or [ starts the line",
+              "note": "NEW STATEMENT",
+              "accent": true
+            },
+            {
+              "label": "commit",
+              "note": "the line above stands alone, complete and wrong"
+            }
+          ]
+        },
+        "tips": [
+          "This is not an Aktion invention — it is how the same code reads in a strict JS subset with no semicolons.",
+          {
+            "kind": "danger",
+            "text": "The discarded line is a legal expression statement, so there is nothing for the validator to complain about. The only symptom is `undefined` further down the page."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "bug-hunt",
+        "title": "One token, one blank card",
+        "prompt": "This program validates and renders `Biggest order: undefined`. Tap the token that ends the statement early.",
+        "code": "$orders = $http({ url: API })\n\nbyTotal = (a, b) => b.total - a.total\n\ntop = $orders.data.[[slice]]()\n  .[[sort]](byTotal)\n  [[ [0] ]]\n\n$app(Column([\n  [[PageHeader]](\"Orders\", { breadcrumbs: false }),\n  Card([Text(`Biggest order: ${top.[[id]]}`)])\n]))",
+        "answer": 2,
+        "fixed": "$orders = $http({ url: API })\n\nbyTotal = (a, b) => b.total - a.total\n\ntop = $orders.data.slice().sort(byTotal)[0]\n\n$app(Column([\n  PageHeader(\"Orders\", { breadcrumbs: false }),\n  Card([Text(`Biggest order: ${top.id}`)])\n]))"
+      },
+      "hints": [
+        "Two of the three lines in that chain attach to the line above. One does not.",
+        "`slice` and `sort` are both preceded by a dot at the start of their line. What precedes the third?",
+        "`top` ends up holding the whole sorted array, so `top.id` is undefined — which token stopped the index from attaching?"
+      ],
+      "nudges": [
+        "`PageHeader` and `id` are innocent — `breadcrumbs: false` is the documented opt-out and `top.id` is exactly what you would write if `top` were a row.",
+        "Look at the first character of each continuation line, not at the names."
+      ],
+      "explain": "Three lines, two of which continue and one of which does not, and the difference is a single leading character. `.sort` begins with an operator so the parser keeps the statement open; `[0]` begins with a bracket so the parser closes the statement and starts an array literal that nothing consumes. `top` is therefore the sorted array — a perfectly valid, perfectly useless value that has no `id`. The fix is not a semicolon (there are none here); it is putting the index on the same line, or breaking after an operator instead.",
+      "afterCode": {
+        "src": "top = $orders.data.slice().sort(byTotal)[0]",
+        "caption": "one line, one statement, one row"
+      },
+      "codex": {
+        "term": "Leading-bracket break",
+        "def": "A line beginning with `(` or `[` never continues the line above it — the statement is already complete and the bracket opens a new one. Break after an operator instead; `.method()` and `+ value` both continue."
+      }
+    },
+    {
+      "id": "s6",
+      "title": "Signed off",
+      "kicker": "produce",
+      "icon": "trophy",
+      "goal": "Write a page that survives every trial in this world.",
+      "xp": 200,
+      "teach": {
+        "text": "One page, written under every rule this world has taught.\n\nIt needs a `PageHeader` whose derived breadcrumb trail you have deliberately turned **off** rather than replaced, and a `Card` holding a line of body text and a save button that is genuinely primary and genuinely wired.\n\nThat button is the whole exam. `Button(label, onClick?, variant?, …)` — the second positional slot is `onClick`. Two adjacent strings will validate and set no variant at all, so the props you want go in a trailing object.\n\nNothing else belongs in this program. No `Toasts(...)`, no `AspectRatio`, no breadcrumb array you would have to maintain by hand.\n\nIf the real Aktion language service is reachable it will check your program for real — and, as this whole world has been about, a clean result from it is where the review starts, not where it ends.",
+        "code": {
+          "src": "function save() { $toast.success(\"…\") }\n\n$app(Column([\n  PageHeader(\"…\", { breadcrumbs: false, subtitle: \"…\" }),\n  Card([\n    Text(\"…\"),\n    Button(\"…\", { variant: \"primary\", onClick: save })\n  ])\n]))",
+          "caption": "the shape, not the answer"
+        },
+        "tips": [
+          {
+            "kind": "warn",
+            "text": "Declare the action before or after `$app` as you like — names resolve from the whole top-level scope. Just make sure `onClick` receives a callable, not a call."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "type-code",
+        "title": "Write it clean",
+        "prompt": "An order detail page. A `PageHeader` with the auto breadcrumbs suppressed, then a `Card` containing a `Text` line and a Save `Button` that is `variant: \"primary\"` and has a real `onClick`. Nothing redundant.",
+        "filename": "order-detail.aktion",
+        "starter": "function save() { $toast.success(\"Draft saved\") }\n\n$app(",
+        "placeholder": "$app(Column([…]))",
+        "solution": "function save() { $toast.success(\"Draft saved\") }\n\n$app(Column([\n  PageHeader(\"Order A-1188\", { breadcrumbs: false, subtitle: \"Placed 12 March\" }),\n  Card([\n    Text(\"Two items, shipped 14 March\"),\n    Button(\"Save\", { variant: \"primary\", onClick: save })\n  ])\n]))",
+        "validate": {
+          "must": [
+            "\\$app\\s*\\(",
+            "PageHeader\\s*\\(",
+            "breadcrumbs\\s*:\\s*false",
+            "variant\\s*:\\s*[\"']primary[\"']",
+            "onClick\\s*:"
+          ],
+          "mustWhy": [
+            "Nothing renders without $app(...).",
+            "The page needs a PageHeader with a title.",
+            "Suppress the derived trail with breadcrumbs: false — do not replace it with an array.",
+            "Set variant: \"primary\" by name; the second positional slot is not variant.",
+            "The Button needs an onClick that receives a callable."
+          ],
+          "mustNot": [
+            "Button\\s*\\(\\s*[\"'][^\"']*[\"']\\s*,\\s*[\"']",
+            "Toasts\\s*\\(",
+            "AspectRatio\\s*\\(",
+            "route\\.path"
+          ]
+        }
+      },
+      "hints": [
+        "Start from `$app(Column([ … ]))` and put exactly two children inside it.",
+        "`breadcrumbs: false` and `subtitle` both live in the same trailing object on `PageHeader`.",
+        "`Button(\"Save\", { variant: \"primary\", onClick: save })` — one positional, one object, and `save` passed by name."
+      ],
+      "nudges": [
+        "If you wrote `Button(\"Save\", \"primary\")` the string went into the onClick slot. Move it into a trailing object.",
+        "`onClick: save()` calls the function while the UI is being built. Pass `save` without the parentheses."
+      ],
+      "explain": "Every decision in those eight lines is one this world argued for. `breadcrumbs: false` says you thought about the trail and chose to remove it, where an array would have said you thought about it and chose to freeze it. The trailing object on `Button` puts `variant` where `variant` lives instead of one slot along. And nothing redundant means the `$toast` layer, the search field, the image box and the breadcrumb trail are all still the library's problem rather than yours. A program that reads exactly as it runs is the only kind worth signing off — and no validator will ever tell you that you have written one.",
+      "codex": {
+        "term": "Reads-as-it-runs",
+        "def": "The bar this world sets: a program whose behaviour a reader can predict from the source alone. Every argument in the slot it names, every statement ending where it looks like it ends, and no value re-passed that the component had already derived."
+      },
+      "preview": {
+        "program": "function save() { $toast.success(\"Draft saved\") }\n\n$app(Column([\n  PageHeader(\"Order A-1188\", { breadcrumbs: false, subtitle: \"Placed 12 March\" }),\n  Card([\n    Text(\"Two items, shipped 14 March\"),\n    Button(\"Save\", { variant: \"primary\", onClick: save })\n  ])\n]))",
+        "caption": "live — press Save, and watch where the toast comes from"
+      }
+    }
+  ],
+  "outro": {
+    "headline": "You read programs the way the runtime does",
+    "body": "Clean diagnostics were never the finish line. You can now spot the argument that bound one slot along, the line break that split a statement, the format that quietly chose a currency for you, the update that redraws everything, and the component you were fighting instead of using.",
+    "nextHint": "Nothing left to unlock. Go and review someone else's Aktion — you will find at least one of these six in the first file you open."
+  },
+  "badge": {
+    "name": "Master of Trials",
+    "icon": "crown",
+    "tagline": "Caught what the validator could not."
+  }
+}

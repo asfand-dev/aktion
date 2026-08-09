@@ -1,0 +1,625 @@
+{
+  "id": "data-stream",
+  "title": "Data Stream",
+  "subtitle": "Fetching without a single loading boolean",
+  "icon": "cloud",
+  "difficulty": 3,
+  "estimateMin": 12,
+  "requires": [
+    "flow-control"
+  ],
+  "palette": {
+    "g1": "#22d3ee",
+    "g2": "#0ea5e9",
+    "g3": "#67e8f9"
+  },
+  "backdrop": {
+    "preset": "circuit"
+  },
+  "intro": {
+    "headline": "The binding is the bag, not the body",
+    "body": "In every framework you have used, fetching meant three moving parts you owned yourself: a piece of state for the rows, a boolean for the spinner, and an effect to keep them in sync. Aktion gives you **one** binding that owns all three.\n\n`$orders = $http({ url })` does not return the rows. It cannot — the statement finishes long before the network does. What it returns is a *reactive resource bag*: a handle whose `.data`, `.loading` and `.error` fill in later, and whose every field is reactive, so anything that read `.data` redraws itself the moment the response lands.\n\nThat one design decision removes `await`, `.then`, `isLoading`, and the dependency array all at once. What is left is deciding *which* branch to render — and there is a component for that too.",
+    "code": "$orders = $http({ url: \"https://api.example.com/orders\" })\n\n$app(Async($orders, {\n  loading: LoadingState(\"Loading orders…\"),\n  error:   ErrorState(\"Could not reach the server\"),\n  empty:   EmptyState(\"No orders yet\"),\n  data:    Table([Col(\"Order\", $orders.data.map(o => o.id))])\n}))",
+    "codeCaption": "a fetch, four states, zero booleans",
+    "infographic": {
+      "type": "orbit",
+      "title": "Everything that hangs off one $http binding",
+      "core": "$http({ url })",
+      "satellites": [
+        {
+          "label": ".data",
+          "note": "the parsed body — null until it lands"
+        },
+        {
+          "label": ".loading",
+          "note": "true while in flight"
+        },
+        {
+          "label": ".error",
+          "note": "null, or { status, body }"
+        },
+        {
+          "label": ".status",
+          "note": "the HTTP status code"
+        },
+        {
+          "label": ".headers",
+          "note": "response headers as an object"
+        },
+        {
+          "label": ".lastUpdated",
+          "note": "epoch-ms of the last success"
+        },
+        {
+          "label": ".refetch()",
+          "note": "re-issue the same request"
+        },
+        {
+          "label": ".cancel()",
+          "note": "abort what is in flight"
+        },
+        {
+          "label": ".onDone",
+          "note": "settable settle callback"
+        }
+      ]
+    },
+    "objectives": [
+      "Tell a resource bag apart from the payload inside it",
+      "Cover four request states with one `Async(...)` call",
+      "Choose between `$http`, `$query` and `$mutation`",
+      "Refresh a list after a write using `.onDone`",
+      "Write a complete fetching page from an empty file"
+    ]
+  },
+  "stages": [
+    {
+      "id": "s1",
+      "title": "The bag, not the body",
+      "kicker": "resources",
+      "icon": "cloud",
+      "goal": "$http returns a reactive handle; the payload lives in .data.",
+      "xp": 100,
+      "teach": {
+        "text": "`$http({ url, method, headers, body, query })` is the base HTTP resource. `$query` and `$mutation` take the same config shape and differ only in *when* the request fires, so learning this one call teaches all three. The `url` is absolute — there is no `baseURL` and no per-call host default. `method` defaults to `GET`.\n\nWhat it hands back is a *resource bag*. The binding names the request; the response lives one member deeper. Read `.data` for the parsed body, `.loading` for the in-flight flag, `.error` for the failure, and call `.refetch()` to run the whole thing again.\n\nEvery one of those members is reactive. You never copy `.data` into your own state — doing so is how the two drift apart.",
+        "code": {
+          "src": "$orders = $http({\n  url:   \"https://api.example.com/orders\",\n  query: { limit: 20 }\n})\n\n// $orders.data        the parsed body — null until it lands\n// $orders.loading     true while the request is in flight\n// $orders.error       null on success; { status, body } on a 4xx/5xx\n// $orders.status      200, 404, …\n// $orders.refetch()   run the identical request again",
+          "caption": "one binding, nine reactive members"
+        },
+        "infographic": {
+          "type": "anatomy",
+          "title": "Reading a fetch",
+          "code": "$orders = $http({ url: \"https://api.example.com/orders\" })",
+          "parts": [
+            {
+              "match": "$orders",
+              "key": "the bag",
+              "text": "a handle carrying .data / .loading / .error — never the rows themselves"
+            },
+            {
+              "match": "$http",
+              "key": "the base call",
+              "text": "$query and $mutation take the same config shape; they differ in when they fire"
+            },
+            {
+              "match": "url:",
+              "key": "absolute",
+              "text": "the whole address every time — no baseURL. Cross-cutting headers go through $util.onRequest"
+            },
+            {
+              "match": "api.example.com",
+              "key": "fires on mount",
+              "text": "the request leaves once, when the binding mounts"
+            }
+          ]
+        },
+        "tips": [
+          "`GET` is the default, so a read never needs a `method` key.",
+          {
+            "kind": "warn",
+            "text": "`.data` is `null` until the first response arrives. Guard it with `?.` — or let `Async` do the guarding for you."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "match-pairs",
+        "title": "Where are the rows?",
+        "prompt": "The request has landed. Match the binding and each member of its bag to what that name actually holds.",
+        "code": "$orders = $http({ url: \"https://api.example.com/orders\" })",
+        "codeCaption": "one binding, nine members — five of them below",
+        "pairs": [
+          {
+            "left": {
+              "mono": "$orders",
+              "note": "what the statement returns"
+            },
+            "right": {
+              "label": "The resource bag itself — a handle with no .map and no .length"
+            }
+          },
+          {
+            "left": {
+              "mono": "$orders.data",
+              "note": "one member deeper"
+            },
+            "right": {
+              "label": "The parsed body — decoded already, so there is no .json() to call"
+            }
+          },
+          {
+            "left": {
+              "mono": "$orders.loading"
+            },
+            "right": {
+              "label": "true only while the request is in flight"
+            }
+          },
+          {
+            "left": {
+              "mono": "$orders.error"
+            },
+            "right": {
+              "label": "null on success; { status, body } on a 4xx or 5xx"
+            }
+          },
+          {
+            "left": {
+              "mono": "$orders.refetch()"
+            },
+            "right": {
+              "label": "Re-issues the identical request"
+            }
+          }
+        ]
+      },
+      "hints": [
+        "The binding names the request. The response is one member deeper.",
+        "Nine members hang off the bag. Exactly one of them is the decoded body.",
+        "One row is the handle and one is the payload it carries. Telling those two apart is the whole lesson."
+      ],
+      "explain": "`$http` cannot return the payload, because at the instant the statement runs there is no payload — the request has not left the browser. The only thing it *can* return immediately is a handle whose fields fill in later. Making that handle reactive is what buys you everything else: when the runtime writes `.data`, every component that read `.data` re-renders itself, so there is nothing left for an `await` or a `.then` to do. The awaiting is the bag's job; yours is only to read the right member.",
+      "codex": {
+        "term": "Resource bag",
+        "def": "What every Aktion data builtin returns: a reactive handle exposing .data, .error, .status, .loading, .headers, .lastUpdated, .refetch(), .cancel() and a settable .onDone. The payload lives in .data."
+      },
+      "preview": {
+        "program": "$todos = $http({ url: \"https://jsonplaceholder.typicode.com/todos\", query: { _limit: 3 } })\n\n$app(Column([\n  PageHeader(\"One binding, many members\", { subtitle: \"$todos is the bag. The rows live in $todos.data.\" }),\n  Card([\n    Text(`$todos.loading  ->  ${$todos.loading}`),\n    Text(`$todos.status   ->  ${$todos.status}`),\n    Text(`$todos.data     ->  ${$todos.data ? $todos.data.length + \" rows\" : \"null\"}`)\n  ])\n]))",
+        "caption": "live — watch loading flip and .data fill in"
+      }
+    },
+    {
+      "id": "s2",
+      "title": "Four states, one call",
+      "kicker": "branching",
+      "icon": "layers",
+      "goal": "Cover loading, error, empty and data with a single Async(...).",
+      "xp": 110,
+      "teach": {
+        "text": "A request is in exactly one of four states, and a real screen has to say something sensible in all four. `Async(resource, { loading, error, empty, data })` switches on the bag's own state and renders the matching slot.\n\nThe resource is the **positional** argument; the four slots are ordinary props in the trailing object. Leave a slot out and that branch simply renders nothing — it never falls through to `data`.\n\nThe slot worth the whole component is `empty`. It fires for `null` **and** for an empty array, which is precisely the case a hand-rolled ternary forgets. Pass `retry` as well and the error branch grows a Retry button.",
+        "code": {
+          "src": "Async($orders, {\n  loading: LoadingState(\"Loading orders…\"),\n  error:   ErrorState(\"Could not load orders\"),\n  empty:   EmptyState(\"No orders yet\"),\n  data:    Table([Col(\"Order\", $orders.data.map(o => o.id))]),\n  retry:   () => $orders.refetch()\n})",
+          "caption": "resource positional, slots named"
+        },
+        "infographic": {
+          "type": "compare",
+          "title": "The branch a ternary always drops",
+          "columns": [
+            {
+              "kind": "bad",
+              "title": "Hand-rolled",
+              "code": "$orders.loading\n  ? Spinner()\n  : Table([Col(\"Order\", $orders.data.map(o => o.id))])",
+              "note": "No error branch at all, and an empty array renders a headed table with no rows and no explanation."
+            },
+            {
+              "kind": "good",
+              "title": "Async",
+              "code": "Async($orders, {\n  loading: Spinner(),\n  error:   ErrorState(\"Could not load orders\"),\n  empty:   EmptyState(\"No orders yet\"),\n  data:    Table([Col(\"Order\", $orders.data.map(o => o.id))])\n})",
+              "note": "One call, four mutually exclusive branches — and empty covers null as well as []."
+            }
+          ]
+        },
+        "tips": [
+          "`Async` is a component from the Helpers group, not a builtin — no `$` sigil.",
+          {
+            "kind": "warn",
+            "text": "Handed a plain array or object instead of a bag, `Async` treats it as already-resolved data. Handy in tests, confusing when you meant to pass the bag."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "fill-blanks",
+        "title": "Cover every state",
+        "prompt": "Fill the five slots. Three chips in the bank are names from other frameworks — leave those where they are.",
+        "display": "code",
+        "template": "{{0}}($orders, {\n  {{1}}: LoadingState(\"Loading orders…\"),\n  {{2}}: ErrorState(\"Could not reach the server\"),\n  {{3}}: EmptyState(\"No orders yet\"),\n  {{4}}: Table([Col(\"Order\", $orders.data.map(o => o.id))])\n})",
+        "bank": [
+          "Async",
+          "loading",
+          "error",
+          "empty",
+          "data",
+          "Suspense",
+          "pending",
+          "fallback"
+        ],
+        "answer": [
+          "Async",
+          "loading",
+          "error",
+          "empty",
+          "data"
+        ]
+      },
+      "hints": [
+        "The wrapper takes the resource positionally and everything else in the trailing object.",
+        "The four slot names are literally the four states a request can be in.",
+        "`empty` is the one nobody writes by hand — it catches `null` and `[]` alike."
+      ],
+      "explain": "`Async` earns its place by making the four branches mutually exclusive *by construction*. You cannot render a spinner and a table at once, and you cannot silently fall through to `data` on failure, because the switch reads the bag's own state rather than a boolean you maintained. The `empty` slot is the real payoff: a request that succeeds with `[]` is a success, so `loading` is false and `error` is null, and every hand-written ternary sends it straight into the data branch. The user then stares at a table header with nothing under it and no idea whether it is broken or genuinely empty.",
+      "afterCode": {
+        "src": "Async($orders, {\n  loading: LoadingState(\"Loading orders…\"),\n  error:   ErrorState(\"Could not reach the server\"),\n  empty:   EmptyState(\"No orders yet\"),\n  data:    Table([Col(\"Order\", $orders.data.map(o => o.id))])\n})",
+        "caption": "the shape to remember"
+      },
+      "codex": {
+        "term": "Async(resource, {…})",
+        "def": "Helper component that switches a resource bag onto one of four slots — loading, error, empty, data. `empty` covers both null and empty-array payloads; `retry` adds a Retry button to the error branch."
+      },
+      "preview": {
+        "program": "$todos = $http({ url: \"https://jsonplaceholder.typicode.com/todos\", query: { _limit: 4 } })\n\n$app(Column([\n  PageHeader(\"Four states, one call\", { subtitle: \"Whatever you see below, Async chose it\" }),\n  Async($todos, {\n    loading: LoadingState(\"Loading todos…\"),\n    error: ErrorState(\"No network — and this is exactly the branch .error drives\"),\n    empty: EmptyState(\"Nothing came back\"),\n    data: List($todos.data.map(t => ListItem(t.title)))\n  })\n]))",
+        "caption": "live — offline players land in the error slot, which is the point"
+      }
+    },
+    {
+      "id": "s3",
+      "title": "The binding is not the rows",
+      "kicker": "gotcha",
+      "icon": "warn",
+      "goal": "Spot the single most common Aktion data bug.",
+      "xp": 120,
+      "hearts": 3,
+      "teach": {
+        "text": "Here is the bug that ships more often than any other in this language, and it is one character wide.\n\n`$orders` is a handle. It has `.data`, `.loading`, `.error`, `.status`, `.headers`, `.lastUpdated`, `.refetch()`, `.cancel()` and `.onDone` — and nothing else. It has no `.map`, no `.length`, no `.filter`, because **it is not the array**.\n\nNothing catches it for you. `$orders.map(...)` is a syntactically perfect expression; the validator has no idea that `map` is not a member of a bag. It fails at runtime, inside the branch that only renders once data arrives — which is why it usually gets past review.",
+        "infographic": {
+          "type": "flow",
+          "title": "Why the binding cannot be the rows",
+          "direction": "down",
+          "nodes": [
+            {
+              "label": "$orders = $http({…})",
+              "note": "the statement returns now"
+            },
+            {
+              "label": ".data === null",
+              "note": "nothing has arrived yet"
+            },
+            {
+              "label": "request in flight",
+              "note": ".loading === true"
+            },
+            {
+              "label": "response lands",
+              "note": "the runtime writes .data",
+              "accent": true
+            },
+            {
+              "label": "readers re-render",
+              "note": "everything that read .data"
+            }
+          ]
+        },
+        "tips": [
+          {
+            "kind": "danger",
+            "text": "`$name = $http(...)` names the *request*. The response is always one member deeper."
+          },
+          "If a member reads like something you would call on an array, you wanted `.data` first."
+        ]
+      },
+      "challenge": {
+        "type": "bug-hunt",
+        "title": "One token, one empty table",
+        "prompt": "This program validates cleanly and throws the moment the response arrives. Tap the token responsible.",
+        "code": "$orders = [[$http]]({ url: \"https://api.example.com/orders\", method: [[\"GET\"]] })\n\n$app(Column([\n  PageHeader(\"Orders\"),\n  [[Async]]($orders, {\n    loading: LoadingState(\"Loading…\"),\n    data: Table([Col(\"Order\", [[$orders]].map(o => o.id))])\n  }),\n  Button(\"Reload\", { onClick: () => [[$orders.refetch]]() })\n]))",
+        "answer": 3,
+        "fixed": "$orders = $http({ url: \"https://api.example.com/orders\", method: \"GET\" })\n\n$app(Column([\n  PageHeader(\"Orders\"),\n  Async($orders, {\n    loading: LoadingState(\"Loading…\"),\n    data: Table([Col(\"Order\", $orders.data.map(o => o.id))])\n  }),\n  Button(\"Reload\", { onClick: () => $orders.refetch() })\n]))"
+      },
+      "hints": [
+        "Four of the five marked tokens are doing exactly what they should.",
+        "One line treats a handle as if it were already an array.",
+        "The `data` slot does hold the rows — but only if you ask the bag for them by name."
+      ],
+      "explain": "This bug is common because it is *right everywhere else*. In plain JS, `const orders = await fetch(url).then(r => r.json())` really does hand you the rows, so `orders.map(...)` is correct. Aktion removes the `await`, and the price of removing it is that the statement has to return before the data exists — so the binding must be a handle and the rows must live behind a member. Note the token that is only cosmetic: `method: \"GET\"` is redundant, since GET is the default, but redundant is not wrong. The bug is the one that asks a handle to behave like an array.",
+      "afterCode": {
+        "src": "Table([Col(\"Order\", $orders.data.map(o => o.id))])",
+        "caption": ".data first, then the array methods"
+      },
+      "codex": {
+        "term": "Bag vs payload",
+        "def": "`$x = $http({…})` binds the resource handle; `$x.data` is the parsed body. `$x.map(...)` or `$x.length` is always a bug — the bag is not the array."
+      }
+    },
+    {
+      "id": "s4",
+      "title": "Bag Sorter",
+      "kicker": "arcade",
+      "icon": "bolt",
+      "goal": "Catch only the members that really exist on an $http bag.",
+      "xp": 140,
+      "hearts": 3,
+      "teach": {
+        "text": "A request has settled and its bag is spilling members. **Catch the real ones. Let the impostors fall.**\n\nThe entire surface of an `$http` bag is nine names: `.data` `.loading` `.error` `.status` `.headers` `.lastUpdated` `.refetch()` `.cancel()` `.onDone`.\n\nEverything else falling past you is muscle memory from `fetch()` or a request library. Catch three impostors and the run ends.",
+        "tips": [
+          "Move the pointer — or drag on a touch screen — to slide the bag.",
+          {
+            "kind": "warn",
+            "text": "`body` is a real name in the data layer, but it is a *request config key* you pass in. It never comes back out on the bag."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "arcade",
+        "title": "Catch the real members",
+        "prompt": "Catch eight members that genuinely exist on an `$http` bag. Three impostors caught and the run is over.",
+        "goal": "0 / 8",
+        "height": 340,
+        "note": "Move the pointer to slide the bag. Missing a real member costs nothing — only catching a fake one does.",
+        "winNote": "Press Check to bank the XP.",
+        "params": {
+          "target": 8,
+          "real": [
+            ".data",
+            ".loading",
+            ".error",
+            ".status",
+            ".headers",
+            ".lastUpdated",
+            ".refetch()",
+            ".cancel()",
+            ".onDone"
+          ],
+          "fake": [
+            ".json()",
+            ".payload",
+            ".body",
+            ".ok",
+            ".then()",
+            ".rows",
+            ".response"
+          ]
+        },
+        "code": "const P = ctx.params;\nconst pad = ctx.chip('$orders', { color: ctx.colors.g2, textColor: 0x04101a, minWidth: 180, size: 13 });\npad.y = ctx.height - 30;\npad.x = ctx.width / 2;\nctx.stage.addChild(pad);\nctx.app.stage.eventMode = 'static';\nctx.app.stage.hitArea = new PIXI.Rectangle(0, 0, ctx.width, ctx.height);\nctx.app.stage.on('pointermove', (e) => { pad.x = Math.max(80, Math.min(ctx.width - 80, e.global.x)); });\nlet score = 0, lives = 3, t = 40;\nconst live = [];\nconst paint = () => ctx.api.setGoal(score + ' / ' + P.target + '  ·  lives ' + lives);\npaint();\nctx.onTick((dt) => {\n  t += dt;\n  if (t > 40) {\n    t = 0;\n    const isReal = Math.random() < 0.58;\n    const name = isReal ? ctx.pick(P.real) : ctx.pick(P.fake);\n    const c = ctx.chip(name, { color: isReal ? ctx.colors.g1 : ctx.colors.dim, textColor: isReal ? 0x04101a : 0xdfe6ff, size: 13 });\n    c.x = ctx.rand(70, ctx.width - 70);\n    c.y = -20;\n    c.isReal = isReal;\n    ctx.stage.addChild(c);\n    live.push(c);\n  }\n  for (let i = live.length - 1; i >= 0; i--) {\n    const c = live[i];\n    c.y += 2.5 * dt;\n    const hit = c.y > pad.y - 22 && c.y < pad.y + 22 && Math.abs(c.x - pad.x) < 108;\n    if (hit) {\n      const wasReal = c.isReal;\n      live.splice(i, 1);\n      c.destroy();\n      if (wasReal) {\n        score++;\n        ctx.api.setScore(score);\n        paint();\n        gsap.to(pad.scale, { x: 1.18, y: 1.18, duration: .12, onComplete: () => gsap.to(pad.scale, { x: 1, y: 1, duration: .2, ease: 'back.out' }) });\n        if (score >= P.target) { ctx.api.win('Every one of those is on a real $http bag.'); return; }\n      } else {\n        lives--;\n        paint();\n        if (lives <= 0) { ctx.api.fail('That member does not exist on an $http bag. The body is already decoded into .data.'); return; }\n      }\n      continue;\n    }\n    if (c.y > ctx.height + 30) {\n      live.splice(i, 1);\n      c.destroy();\n    }\n  }\n});",
+        "fallback": {
+          "type": "quiz",
+          "prompt": "Three of these are members of an `$http` resource bag. Which one is not?",
+          "shuffle": true,
+          "options": [
+            {
+              "id": "a",
+              "code": "$orders.headers"
+            },
+            {
+              "id": "b",
+              "code": "$orders.cancel()"
+            },
+            {
+              "id": "c",
+              "code": "$orders.json()"
+            },
+            {
+              "id": "d",
+              "code": "$orders.lastUpdated"
+            }
+          ],
+          "answer": "c"
+        }
+      },
+      "hints": [
+        "Nine members exist. If you cannot find it in the teach panel, let it drop.",
+        "Anything you would call on a `fetch()` Response object is an impostor here."
+      ],
+      "explain": "The bag's surface is small on purpose, and deliberately *not* `fetch`'s. There is no `.json()` because the decoding already happened — `.data` is the parsed body, not a stream you still have to drain. There is no `.ok` because `.error` is `null` on success and `{ status, body }` on a non-2xx, which carries strictly more information for the same read. And there is no `.then` because a bag is not a promise: it is reactive state that mutates in place, so its readers re-render themselves instead of waiting on it. Every time you reach for a `fetch` member, that is the tell that you are still thinking in awaits.",
+      "codex": {
+        "term": "$http bag surface",
+        "def": "Exactly nine members: data, error, status, loading, headers, lastUpdated, refetch(), cancel(), onDone. No .json(), no .ok, no .then — the body is decoded into .data before you see it."
+      }
+    },
+    {
+      "id": "s5",
+      "title": "Three doors",
+      "kicker": "choosing",
+      "icon": "grid",
+      "goal": "Pick between $http, $query and $mutation on purpose.",
+      "xp": 130,
+      "teach": {
+        "text": "`$http` is the primitive. Two specialisations sit on top of it, and the difference between them is *when* a request fires and *how often*.\n\n`$query({ url, key, ttl, refetchInterval, refetchOnFocus, refetchOnReconnect })` is a **cached, deduplicated read**. Identical queries — same `key`, or the same method plus url plus query plus body — share one in-flight request and one bag, so four components asking for the same list fetch once. Add `infinite: { param, limit, mode, select }` and the bag grows `.loadMore()` and `.hasMore`; pass `gql` with `variables` and it POSTs a GraphQL document.\n\n`$mutation({ url, method, optimistic, invalidates })` is a **deferred write**. It fires nothing on render — the request goes out only when you call `.mutate(overrides)`. `method` defaults to `POST`, `optimistic` applies the change instantly and rolls it back if the write fails, and `invalidates: [\"orders\"]` refetches every cached query whose key contains that substring. `$util.invalidate(keys)` does the same on demand from anywhere.\n\nTwo more read the same way. `$socket` and `$sse` return bags with `.status`, `.connected`, `.last`, `.messages` and `.close()`.",
+        "code": {
+          "src": "$orders = $query({\n  url: \"https://api.example.com/orders\",\n  key: \"orders\",\n  ttl: 30000\n})\n\n$archive = $mutation({\n  url: \"https://api.example.com/orders/archive\",\n  invalidates: [\"orders\"]\n})\n\nButton(\"Archive\", { onClick: () => $archive.mutate({ body: { id: $selected } }) })",
+          "caption": "a cached read and a deferred write that refreshes it"
+        },
+        "infographic": {
+          "type": "table",
+          "title": "Same config shape, three behaviours",
+          "headers": [
+            "$http",
+            "$query",
+            "$mutation"
+          ],
+          "rows": [
+            [
+              "fires on mount",
+              "fires on mount, then caches",
+              "fires on .mutate()"
+            ],
+            [
+              "GET by default",
+              "GET by default",
+              "POST by default"
+            ],
+            [
+              "one bag per binding",
+              "one bag per key",
+              "one bag, fired many times"
+            ],
+            [
+              ".refetch() .cancel()",
+              ".loadMore() .hasMore",
+              ".mutate() .reset()"
+            ]
+          ]
+        },
+        "tips": [
+          "`$query` is `$http` plus an identity. Without a shared identity there is no cache to hit and nothing to invalidate.",
+          {
+            "kind": "warn",
+            "text": "`$mutation` on its own does nothing at all. If your write never reaches the server, check that something actually calls `.mutate()`."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "sequence-tap",
+        "title": "Which door fires when?",
+        "prompt": "The page mounts, a second component asks for the same list, then the user clicks Archive. Tap the six beats in the order they happen.",
+        "code": "$orders = $query({\n  url: \"https://api.example.com/orders\",\n  key: \"orders\",\n  ttl: 30000\n})\n\n$archive = $mutation({\n  url: \"https://api.example.com/orders/archive\",\n  invalidates: [\"orders\"]\n})",
+        "codeCaption": "one cached read, one deferred write",
+        "help": "One wrong tap ends the attempt — read the whole row first.",
+        "order": [
+          "$query fires on mount",
+          "A second reader shares that bag — no new request",
+          "Click: $archive.mutate() fires the write",
+          "The POST comes back 2xx",
+          "invalidates: [\"orders\"] matches the key",
+          "The cached $query refetches"
+        ]
+      },
+      "hints": [
+        "One of the three never fires on its own — that is its entire reason for existing, so it cannot open the sequence.",
+        "A cache can only be shared after something has filled it.",
+        "`invalidates` only means something if something else is caching, so it belongs to the writer, pointing at the reader — and it fires on success, after the write settles."
+      ],
+      "explain": "The split is about triggering, not about verbs — `$http` will happily POST and `$query` will happily hit a search endpoint. What separates them is when the request goes out. `$http` fires once per binding, every binding, which is perfect for a one-off read and wasteful when four components want the same list. `$query` adds an identity, so those four bindings collapse into one request and one bag — and that identity is what makes `ttl`, `refetchInterval` and `invalidates` meaningful at all, since you cannot invalidate a cache that does not exist. `$mutation` inverts the trigger for a blunt reason: a read that fires on render is convenient, but a write that fires on render would POST again on every re-render. Hiding it behind `.mutate()` is not sugar, it is the only safe default.",
+      "codex": {
+        "term": "$query vs $mutation",
+        "def": "$query is a cached, deduplicated read that fires on mount (key, ttl, refetchInterval, infinite). $mutation is a deferred write that fires only on .mutate(), defaults to POST, and can carry optimistic and invalidates."
+      }
+    },
+    {
+      "id": "s6",
+      "title": "Write, then refresh",
+      "kicker": "produce",
+      "icon": "code",
+      "goal": "Join a write back to the read it invalidates.",
+      "xp": 160,
+      "teach": {
+        "text": "A write does not update a list. They are two independent resources that happen to point at the same URL, and the read has no idea the write happened.\n\n`.onDone` is the join. It is a settable property on every request bag, and it fires each time *that* request settles — on success and on failure alike. Assign it inside the action, immediately after you fire the write:\n\nThat is the whole pattern. `$mutation` expresses the same idea declaratively with `invalidates: [\"orders\"]`, and `$optimistic(() => { … })` wraps a local write so the UI moves at once and rolls itself back automatically if the callback throws or the promise it returns rejects.",
+        "code": {
+          "src": "$orders = $http({ url: \"https://api.example.com/orders\" })\n\nfunction save() {\n  $result = $http({ url: \"https://api.example.com/orders\", method: \"POST\", body: $draft })\n  $result.onDone = () => {\n    $orders.refetch()\n    $toast.success(\"Saved\")\n  }\n}",
+          "caption": "fire the write, then let its settle event refresh the read"
+        },
+        "code2": {
+          "src": "$app(Column([\n  PageHeader(\"Orders\"),\n  Async($orders, {\n    loading: LoadingState(\"Loading orders…\"),\n    error:   ErrorState(\"Could not reach the server\"),\n    empty:   EmptyState(\"No orders yet\"),\n    data:    Table([Col(\"Order\", $orders.data.map(o => o.id))])\n  }),\n  Button(\"Save\", { onClick: save })\n]))",
+          "caption": "and the page that renders it"
+        },
+        "infographic": {
+          "type": "timeline",
+          "title": "One click, five beats",
+          "steps": [
+            {
+              "label": "onClick: save",
+              "note": "the camelCase action runs"
+            },
+            {
+              "label": "$result = $http({ method: \"POST\" })",
+              "note": "the write leaves"
+            },
+            {
+              "label": "$result.onDone",
+              "note": "fires on every settle — success or error"
+            },
+            {
+              "label": "$orders.refetch()",
+              "note": "the read re-issues itself"
+            },
+            {
+              "label": "$orders.data updates",
+              "note": "the table redraws, unasked"
+            }
+          ]
+        },
+        "tips": [
+          "`.onDone` fires on *every* settle of that bag, including a `.refetch()` — keep the callback idempotent.",
+          {
+            "kind": "warn",
+            "text": "Assign `.onDone` right after the request is created. Assigning it to a bag that has already settled is a no-op for that first response."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "type-code",
+        "title": "Write it yourself",
+        "prompt": "Fetch orders into `$orders`. Render them with `Async` — all four slots. Add a `Save` button whose action POSTs `$draft` and refetches `$orders` from that request's `.onDone`.",
+        "filename": "orders.aktion",
+        "starter": "$draft = { item: \"Widget\" }\n\n",
+        "placeholder": "$orders = $http({ … })",
+        "solution": "$draft = { item: \"Widget\" }\n$orders = $http({ url: \"https://api.example.com/orders\" })\n\nfunction save() {\n  $result = $http({ url: \"https://api.example.com/orders\", method: \"POST\", body: $draft })\n  $result.onDone = () => {\n    $orders.refetch()\n    $toast.success(\"Saved\")\n  }\n}\n\n$app(Column([\n  PageHeader(\"Orders\"),\n  Async($orders, {\n    loading: LoadingState(\"Loading orders…\"),\n    error:   ErrorState(\"Could not reach the server\"),\n    empty:   EmptyState(\"No orders yet\"),\n    data:    Table([Col(\"Order\", $orders.data.map(o => o.id))])\n  }),\n  Button(\"Save\", { onClick: save })\n]))",
+        "validate": {
+          "must": [
+            "\\$orders\\s*=\\s*\\$http\\s*\\(",
+            "Async\\s*\\(\\s*\\$orders",
+            "empty\\s*:",
+            "\\$orders\\.data",
+            "method\\s*:\\s*[\"'`]POST[\"'`]",
+            "onDone\\s*=",
+            "\\$orders\\.refetch\\s*\\(\\s*\\)",
+            "\\$app\\s*\\("
+          ],
+          "mustWhy": [
+            "Bind the list first: $orders = $http({ url: … }).",
+            "Branch the four states with Async($orders, { … }).",
+            "Async needs all four slots. `empty` is the one people drop.",
+            "The rows live in $orders.data — the bag itself has no .map.",
+            "The write needs method: \"POST\"; GET is the default.",
+            "Join the write to the read by assigning its .onDone callback.",
+            "Inside .onDone, refresh the list with $orders.refetch().",
+            "Nothing renders without $app(...)."
+          ],
+          "mustNot": [
+            "useState",
+            "useEffect",
+            "await\\s+\\$http",
+            "\\.then\\s*\\(",
+            "\\$orders\\.map\\s*\\(",
+            "\\bfetch\\s*\\("
+          ]
+        }
+      },
+      "hints": [
+        "Two `$http` calls: one at the top level for the list, one inside the action for the write.",
+        "A camelCase `function` is an action — that is what makes it usable as `onClick: save`.",
+        "`$result.onDone = () => { $orders.refetch() }` is the entire join."
+      ],
+      "explain": "Nothing in the runtime connects a POST to a GET for you, and that is deliberate — the same URL can serve a dozen unrelated reads, so the runtime refuses to guess which ones your write invalidated. `.onDone` is how you state the relationship, and it firing on failure as well as success is a feature: a save that failed should still resync the table rather than leave a row on screen that was never written. Look at what you did not write, though. No `isSaving` flag, no `setOrders(await res.json())`, no dependency array, no cleanup. The read owns its own loading state, the write owns its own, and `Async` reads both without being told.",
+      "afterCode": {
+        "src": "$result = $http({ url, method: \"POST\", body: $draft })\n$result.onDone = () => {\n  $orders.refetch()\n  $toast.success(\"Saved\")\n}",
+        "caption": "the join, in four lines"
+      },
+      "codex": {
+        "term": ".onDone",
+        "def": "Settable callback on any request bag, fired each time that request settles — success or error. The idiomatic place to refetch a list after a write."
+      },
+      "preview": {
+        "program": "$orders = $http({ url: \"https://jsonplaceholder.typicode.com/todos\", query: { _limit: 5 } })\n\nfunction reload() {\n  $orders.refetch()\n  $toast.success(\"Refetched\")\n}\n\n$app(Column([\n  PageHeader(\"Orders\", { subtitle: \"One read, four states, one refresh\" }),\n  Async($orders, {\n    loading: LoadingState(\"Loading orders…\"),\n    error: ErrorState(\"Could not reach the server\"),\n    empty: EmptyState(\"No orders yet\"),\n    data: Table([\n      Col(\"Id\", $orders.data.map(o => o.id)),\n      Col(\"Task\", $orders.data.map(o => o.title))\n    ])\n  }),\n  Button(\"Refetch\", { onClick: reload, variant: \"primary\", icon: \"rotate-right\" })\n]))",
+        "caption": "live — press Refetch and watch .data replace itself"
+      }
+    }
+  ],
+  "outro": {
+    "headline": "No loading booleans were harmed",
+    "body": "You never declared `isLoading`, never called `setState` inside a `.then`, and never awaited a request. The bag holds the state, `Async` reads it, `$query` shares it, `$mutation` defers it, and `.onDone` joins a write back to the read it invalidated. That is the whole data layer.",
+    "nextHint": "Next: forms — `$form` turns this same bag idea into values, errors, touched flags and a submit that validates itself."
+  },
+  "badge": {
+    "name": "Streamkeeper",
+    "icon": "cloud",
+    "tagline": "Fetched without a single loading flag."
+  }
+}

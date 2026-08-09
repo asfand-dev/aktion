@@ -281,12 +281,42 @@ describe("StateStore — declaration and reset contracts", () => {
     expect(store.get("name")).toBe("Ada");
   });
 
+  it("hydrate() announces changed names and marks them host-supplied", async () => {
+    const store = new StateStore();
+    store.declare("count", 1);
+    const batches: string[][] = [];
+    store.subscribe((changed) => batches.push([...changed]));
+
+    store.hydrate({ count: 7, extra: "x" });
+    await tick();
+    expect(batches).toEqual([["count", "extra"]]);
+    expect(store.wasHydrated("count")).toBe(true);
+    expect(store.wasHydrated("extra")).toBe(true);
+
+    // Re-hydrating identical values is silent — no spurious re-render.
+    store.hydrate({ count: 7 });
+    await tick();
+    expect(batches).toHaveLength(1);
+  });
+
+  it("rebind() forgets which names were host-supplied", async () => {
+    const store = new StateStore();
+    store.hydrate({ seeded: 1 });
+    expect(store.wasHydrated("seeded")).toBe(true);
+    store.rebind([]);
+    expect(store.wasHydrated("seeded")).toBe(false);
+  });
+
   it("reset() of a name that has no declared default is a no-op (no undefined sentinel)", async () => {
     const store = new StateStore();
     store.declare("count", 1);
     // A hydrated atom the program never declared — an SSR / resumability seed,
     // or `Util.reset($typo)` naming a variable that does not exist.
     store.hydrate({ ghost: 5 });
+    // `hydrate` announces its writes (a host-supplied value has to reach
+    // subscribers or the UI keeps showing the old one), so let that batch flush
+    // before subscribing — this test is about `reset`, not hydration.
+    await tick();
     const batches: string[][] = [];
     store.subscribe((changed) => batches.push([...changed]));
 

@@ -373,6 +373,7 @@ export const Switch: ComponentSpec = {
     { name: "description", type: "string", optional: true },
     { name: "disabled", type: "boolean", optional: true },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new boolean value" },
+    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a switch in a table cell whose column header already carries the name" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -431,8 +432,15 @@ export const Switch: ComponentSpec = {
     const description = asString(props.description);
     root.append(input, track);
     if (label || description) {
+      // `labelHidden` takes the label off the screen but leaves it in the
+      // accessibility tree, so a switch in a grid cell is still named by its
+      // column header without repeating that word in every row. Same contract as
+      // the field-shell inputs (see forms-shared.ts) — never `display: none`.
+      const labelClass = asBoolean(props.labelHidden)
+        ? "rui-switch-label rui-visually-hidden"
+        : "rui-switch-label";
       const meta = el("span", { class: "rui-switch-meta" });
-      if (label) meta.append(el("span", { class: "rui-switch-label" }, [label]));
+      if (label) meta.append(el("span", { class: labelClass }, [label]));
       if (description) meta.append(el("span", { class: "rui-switch-description" }, [description]));
       root.append(meta);
     }

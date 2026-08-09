@@ -1426,6 +1426,21 @@ a.rui-card {
   color: var(--rui-color-primary);
   border-bottom-color: var(--rui-color-primary);
 }
+/* fitted: the strip spans its container and the triggers share it equally, so a
+   two-tab strip reads as two halves of one surface rather than two labels tucked
+   into the left corner. Wrapping and horizontal scroll are both off — a fitted
+   strip divides the row it has, so there is nothing to wrap onto or scroll to. */
+.rui-tabs[data-fitted="true"] .rui-tab-list { flex-wrap: nowrap; overflow-x: visible; gap: 0; }
+.rui-tabs[data-fitted="true"] .rui-tab-trigger {
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Vertical tabs are already full-width by their own layout, so fitted is a no-op
+   there rather than a competing flex direction. */
+.rui-tabs[data-orientation="vertical"][data-fitted="true"] .rui-tab-trigger { flex: 0 0 auto; justify-content: flex-start; }
 .rui-tab-panels { display: block; }
 .rui-tab-content { display: flex; flex-direction: column; gap: var(--rui-spacing-m); }
 .rui-tab-content[data-active="false"] { display: none; }
@@ -1462,6 +1477,16 @@ a.rui-card {
 .rui-accordion-item[data-variant="info"] { box-shadow: inset 4px 0 0 0 var(--rui-color-info); }
 .rui-accordion-item[data-variant="neutral"] { box-shadow: inset 4px 0 0 0 var(--rui-color-border); }
 .rui-accordion-title { flex: 1; min-width: 0; }
+/* Two-line trigger: the title keeps its weight, the subtitle is the quieter
+   preview of what the collapsed section holds. */
+.rui-accordion-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rui-accordion-heading .rui-accordion-title { flex: 0 0 auto; }
+.rui-accordion-subtitle {
+  font-weight: 400;
+  font-size: var(--rui-font-size-sm);
+  line-height: 1.4;
+  color: var(--rui-color-text-muted);
+}
 /* Chevron: hidden by default; revealed when wrapper or item opts in via data-show-arrow="true". */
 .rui-accordion-chevron {
   display: none;
@@ -1564,6 +1589,13 @@ a.rui-card {
   line-height: 1.4;
 }
 .rui-radio-group { display: flex; flex-direction: column; gap: var(--rui-spacing-xs); }
+/* Per-option trailing content (Radio slots). The option keeps its own label
+   box; the slot sits beside it so a control in there is clickable without
+   selecting the radio. A group that has slots always stacks — the rows are
+   tall enough that flowing them inline would interleave the controls. */
+.rui-radio-group[data-slots="true"] { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+.rui-radio-row { display: flex; align-items: center; gap: var(--rui-spacing-m); flex-wrap: wrap; }
+.rui-radio-slot { display: flex; align-items: center; gap: var(--rui-spacing-m); min-width: 0; }
 
 /* Custom Checkbox & Radio control styling.
  * Hides the native input visually but keeps it focusable; renders the
@@ -4167,6 +4199,10 @@ a.rui-tile:hover {
   color: var(--rui-color-text-muted);
   line-height: 1.45;
 }
+/* Choice-card shape: the copy reads first and the mark sits opposite it, so the
+   body takes the slack rather than the gap. */
+.rui-tile[data-icon-position="end"] { justify-content: space-between; }
+.rui-tile[data-icon-position="end"] .rui-tile-body { flex: 1 1 auto; }
 ${tonedScope(".rui-tile")} .rui-tile-icon { background: color-mix(in srgb, var(--rui-tone-color) 18%, transparent); color: var(--rui-tone-color); }
 
 /* Notification */
@@ -5285,6 +5321,12 @@ ${below("xs")} {
   -moz-osx-font-smoothing: grayscale;
 }
 
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="success"] .rui-callout-title { color: var(--rui-color-success-text); }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-title { color: var(--rui-color-danger-text); }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="warning"] .rui-callout-title { color: var(--rui-color-warning-text); }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="info"] .rui-callout-title { color: var(--rui-color-info-text); }
+
+
 /* Modal titles had no weight rule at all, so they took the UA's 700. */
 :host([data-rui-theme="vision"]) .rui-modal-title { font-weight: 600; }
 
@@ -5431,6 +5473,50 @@ ${below("xs")} {
 :host([data-rui-theme="vision"]) .rui-tile:hover .rui-tile-icon { color: #095bb1; }                   /* hovered-interactive-text-color */
 :host([data-rui-theme="vision"]) .rui-tile:hover .rui-tile-label,
 :host([data-rui-theme="vision"]) .rui-tile:hover .rui-tile-description { color: #095bb1; }             /* hovered-interactive-text-color */
+/* An end-positioned icon is a different block from the centred menu tile
+   above: a choice card, where the copy is left-aligned body text and the
+   illustration sits opposite it. Undo the column/centre treatment for that
+   shape only. */
+:host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"] {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  gap: 16px;
+  padding: 12px 16px;
+  /* Flat surfaces above strip every tile's border, but on a choice card the
+     border IS the affordance — it is what says "this is one of a set you pick
+     from" and what the selected state changes colour. */
+  border: 2px solid var(--rui-color-border);
+  border-radius: var(--rui-radius-md);
+}
+:host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"] .rui-tile-body {
+  align-items: flex-start; text-align: left; flex: 1 1 auto; gap: 2px;
+}
+:host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"] .rui-tile-label {
+  color: var(--rui-color-text);
+  font-size: var(--rui-font-size-base);
+  line-height: 21px;
+  font-weight: 400;
+  margin: 0;
+}
+:host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"] .rui-tile-description {
+  color: var(--rui-color-text-muted); line-height: 20px; margin: 0;
+}
+:host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"] .rui-tile-icon {
+  margin: 0; font-size: 28px; line-height: 1;
+}
+:host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"]:hover { background: var(--rui-color-surface); }
+:host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"]:hover .rui-tile-label { color: var(--rui-color-text); }
+:host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"]:hover .rui-tile-description { color: var(--rui-color-text-muted); }
+:host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"][data-selected="true"] {
+  border-color: var(--rui-color-link);
+  box-shadow: none;
+  background: var(--rui-color-surface);
+}
+:host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"][data-selected="true"] .rui-tile-label {
+  color: var(--rui-color-text); font-weight: 400;
+}
 :host([data-rui-theme="vision"]) button.rui-tile:active,
 :host([data-rui-theme="vision"]) a.rui-tile:active { transform: scale(0.98); }
 :host([data-rui-theme="vision"]) button.rui-tile:focus-visible,
@@ -5706,6 +5792,13 @@ ${below("xs")} {
   row-gap: 0;                                  /* the item line-height IS the row advance in UI block */
   align-items: flex-start;
 }
+/* ...except when the options carry slots: a row with a stepper hanging off it
+   is a block, not a word, so those stack and the option's own control lines up
+   with the middle of the slot rather than with the top of the text. */
+:host([data-rui-theme="vision"]) .rui-radio-group[data-slots="true"] {
+  flex-direction: column; flex-wrap: nowrap; row-gap: 10px; align-items: stretch;
+}
+:host([data-rui-theme="vision"]) .rui-radio-group[data-slots="true"] .rui-radio { align-items: center; }
 /* CheckboxGroup stays STACKED. Each of its items carries a label plus a description
    block, and flowing those inline squashes them into narrow columns -- which UI block never
    does. Only bare radios flow inline. */
@@ -6339,11 +6432,23 @@ ${below("xs")} {
   display: inline-block;                       /* UI Block always shows it */
   position: absolute;
   right: 16px;
-  top: 14px;                                   /* production says 14px, not 18px */
+  top: 22px;                                   /* production says 14px, not 18px */
   font-size: var(--rui-font-size-base);
   line-height: 24px;
   color: #02102b;
   opacity: 1;
+}
+/* A two-line trigger is twice as tall, so the chevron's pinned top would land
+   on the title rather than between the two lines — centre it instead. */
+/* Nudged with top rather than a translate: the chevron IS its transform (a
+   rotated corner), so overriding that property squares it off. */
+:host([data-rui-theme="vision"]) .rui-accordion-trigger:has(.rui-accordion-heading) .rui-accordion-chevron {
+  top: calc(50% - 4px);
+}
+:host([data-rui-theme="vision"]) .rui-accordion-subtitle {
+  font-size: var(--rui-font-size-base);
+  line-height: 21px;
+  color: var(--rui-color-text-muted);
 }
 :host([data-rui-theme="vision"]) .rui-accordion-body {
   padding: 0 20px 18px;
@@ -6406,12 +6511,26 @@ ${below("xs")} {
   background: transparent; border-left-color: var(--rui-color-danger); color: var(--rui-color-danger-text);
 }
 :host([data-rui-theme="vision"]) .rui-menu-item:disabled { opacity: 0.5; }
-:host([data-rui-theme="vision"]) .rui-context-menu-target .rui-icon-button {
+/* UI Block rules its menu entries apart. Adjacent-sibling so the first entry has
+   no rule against the panel border, and so a MenuSeparator (which draws its own)
+   is not doubled. */
+:host([data-rui-theme="vision"]) .rui-context-menu-pop .rui-menu-item + .rui-menu-item,
+:host([data-rui-theme="vision"]) .rui-dropdown-menu-content .rui-menu-item + .rui-menu-item {
+  border-top: var(--rui-border-width) solid var(--rui-color-border-subtle);
+}
+/* Both menu flavours share the trigger treatment: a ghost icon-only control that
+   fills solid blue while its menu is open. DropdownMenu marks its own trigger
+   with the same data-state attribute, so it gets the same rule, not a copy. */
+:host([data-rui-theme="vision"]) .rui-context-menu-target .rui-icon-button,
+:host([data-rui-theme="vision"]) .rui-dropdown-menu-trigger .rui-icon-button {
   border-radius: 999px; color: var(--rui-color-link);
 }
 :host([data-rui-theme="vision"]) .rui-context-menu-target .rui-icon-button:hover:not(:disabled),
 :host([data-rui-theme="vision"]) .rui-context-menu-target .rui-icon-button:focus-visible,
-:host([data-rui-theme="vision"]) .rui-context-menu-target .rui-icon-button[data-state="open"] {
+:host([data-rui-theme="vision"]) .rui-context-menu-target .rui-icon-button[data-state="open"],
+:host([data-rui-theme="vision"]) .rui-dropdown-menu-trigger[data-state="open"] .rui-icon-button,
+:host([data-rui-theme="vision"]) .rui-dropdown-menu-trigger .rui-icon-button:hover:not(:disabled),
+:host([data-rui-theme="vision"]) .rui-dropdown-menu-trigger .rui-icon-button:focus-visible {
   background: var(--rui-color-accent); color: #fff; outline: none;
 }
 
@@ -6514,9 +6633,9 @@ ${below("xs")} {
      glyph inside the headline the line box stretches to 30px. Aktion positions the icon
      absolutely, so match the box explicitly -- otherwise every Callout ends up 4px
      shorter than the UI Block original. */
-  margin-top: -2px;
+  margin-top: 0px;
   min-height: 30px;
-  padding-left: 30px;                          /* clears the absolutely-placed icon */
+  padding-left: 35px;                          /* clears the absolutely-placed icon */
   margin-bottom: 12px;                         /* headline--sub margin-bottom */
 }
 /* .message__section > :last-child { margin-bottom: 0 } -- UI Block collapses the trailing
@@ -6531,19 +6650,6 @@ ${below("xs")} {
   padding-left: 0;
   margin-bottom: 12px;                         /* .paragraph margin-bottom */
 }
-/* Semantic colour lands on the TITLE and the ICON, never on the body copy. */
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="info"] .rui-callout-title,
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="info"] .rui-callout-icon,
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="success"] .rui-callout-title,
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="success"] .rui-callout-icon,
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="warning"] .rui-callout-title,
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="warning"] .rui-callout-icon,
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-title,
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-icon,
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="error"] .rui-callout-title,
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="error"] .rui-callout-icon,
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="neutral"] .rui-callout-title,
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="neutral"] .rui-callout-icon { color: #465a75; }
 
 /* ---- Floating layers — dark (neutral-5, not near-navy) tooltip that WRAPS
    and centers; borderless popovers/hover-cards at the full 16px card radius
@@ -8478,6 +8584,15 @@ ${below("sm")} {
 .rui-tabs[data-orientation="vertical"] .rui-tab-trigger {
   justify-content: flex-start;
   text-align: left;
+  /* The accent moves to the LEADING edge. A bottom rule under a stacked item
+     reads as a divider between two items rather than as "this one is current",
+     and it collided with the list's own right-hand border. */
+  border-bottom: none;
+  margin-bottom: 0;
+  border-left: 2px solid transparent;
+}
+.rui-tabs[data-orientation="vertical"] .rui-tab-trigger[aria-selected="true"] {
+  border-left-color: var(--rui-color-primary);
 }
 .rui-tabs[data-orientation="vertical"] .rui-tab-panels { flex: 1; }
 
@@ -8886,6 +9001,7 @@ ${below("sm")} {
   padding: 10px 12px;
   white-space: nowrap;
 }
+.rui-data-grid-table thead th[data-align="left"] { text-align: left; }
 .rui-data-grid-table thead th[data-align="right"] { text-align: right; }
 .rui-data-grid-table thead th[data-align="center"] { text-align: center; }
 .rui-data-grid-table thead th[data-active="true"] { color: var(--rui-color-primary); }
@@ -8923,12 +9039,20 @@ ${below("sm")} {
 }
 .rui-data-grid[data-density="compact"] .rui-data-grid-table thead th,
 .rui-data-grid[data-density="compact"] .rui-data-grid-table tbody td { padding: 6px 10px; }
-.rui-data-grid-table tbody td[data-align="right"] { text-align: right; font-variant-numeric: tabular-nums; }
-.rui-data-grid-table tbody td[data-align="center"] { text-align: center; }
 /* text-align: right to match Table — swapping Table for DataGrid to gain sorting
    used to silently left-align every money column. */
 .rui-data-grid-table tbody td[data-format="number"],
 .rui-data-grid-table tbody td[data-format="currency"] { text-align: right; font-variant-numeric: tabular-nums; }
+/* Col(align:) is the author's explicit answer, so it has to out-rank the
+   format-derived default above — hence these come AFTER it (same specificity,
+   later wins). Table already worked this way; DataGrid declared its align rules
+   first and had no left rule at all, so a numeric column that asked for
+   align: left was silently right-aligned. That is the shape a count column
+   wants: "2 groups" is a label with a number in it, not money to compare down
+   the column. Keep tabular-nums on the right-aligned case only. */
+.rui-data-grid-table tbody td[data-align="left"] { text-align: left; font-variant-numeric: normal; }
+.rui-data-grid-table tbody td[data-align="right"] { text-align: right; font-variant-numeric: tabular-nums; }
+.rui-data-grid-table tbody td[data-align="center"] { text-align: center; }
 .rui-data-grid-table tbody tr:last-child td { border-bottom: none; }
 .rui-data-grid[data-striped="true"] tbody tr:nth-child(even) td {
   background: color-mix(in srgb, var(--rui-color-text) 2%, transparent);

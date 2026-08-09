@@ -1,0 +1,748 @@
+{
+  "id": "layout-architect",
+  "title": "Layout Architect",
+  "subtitle": "Dense, production-grade pages in one line each",
+  "icon": "grid",
+  "difficulty": 2,
+  "estimateMin": 12,
+  "requires": [
+    "component-forge"
+  ],
+  "palette": {
+    "g1": "#38bdf8",
+    "g2": "#22d3ee",
+    "g3": "#60a5fa"
+  },
+  "backdrop": {
+    "preset": "bloom"
+  },
+  "intro": {
+    "headline": "Stop building sections. Start placing them.",
+    "body": "Most layout code is people rebuilding the same four things: a page title with actions, a strip of numbers, a filter bar, a board. Aktion ships those as **pattern composites** — one call each, already dense, already responsive, already themed.\n\nUnderneath them are the primitives: `Column`, `Row`, `Grid` and a small cast of wrappers. You need them, but you should reach for them *second*. A page hand-composed out of `Card` and `Stack` reads as a wireframe; the same page built from composites reads as a product.\n\nThis world is the difference between a screen that validates and a screen that looks finished.",
+    "code": "$app(Column([\n  PageHeader(\"Engineering Q3\", { subtitle: \"12 active · 4 at risk\" }),\n  Toolbar({ searchable: true, right: [Button(\"New project\", { variant: \"primary\" })] }),\n  Stats([\n    StatCard(\"Active\", { value: \"12\" }),\n    StatCard(\"At risk\", { value: \"4\", trend: \"up\", delta: \"+2\", tone: \"warning\" })\n  ]),\n  Card([\n    SectionHeader(\"Recent activity\"),\n    Timeline([TimelineItem(\"Order #1204 shipped\", { time: \"2h ago\", icon: \"truck\", tone: \"success\" })])\n  ])\n], { gap: \"lg\" }))",
+    "codeCaption": "four finished sections, four calls",
+    "infographic": {
+      "type": "layers",
+      "title": "Reach downwards, not upwards",
+      "layers": [
+        {
+          "label": "AppShell · Container · Section",
+          "note": "the surface the page sits on"
+        },
+        {
+          "label": "PageHeader · Stats · Toolbar · KanbanBoard",
+          "note": "composites — one call, one whole section"
+        },
+        {
+          "label": "Column · Row · Grid",
+          "note": "primitives — the glue between sections"
+        },
+        {
+          "label": "Card · Box · Separator · Spacer",
+          "note": "surfaces and spacing, last"
+        }
+      ]
+    },
+    "objectives": [
+      "Pick `Column`, `Row` or `Grid` without thinking twice",
+      "Commit a whole page section with one composite call",
+      "Tell `Badge` from `Pill`, and `Callout` from `CardSection`",
+      "Make a layout responsive with `{ base, md, lg }` and nothing else",
+      "Ship a page dense enough that it looks designed"
+    ]
+  },
+  "stages": [
+    {
+      "id": "s1",
+      "title": "Three primitives, one job each",
+      "kicker": "primitives",
+      "icon": "layers",
+      "goal": "Pick Column, Row or Grid on reflex — and know the one case that needs Stack.",
+      "xp": 100,
+      "teach": {
+        "text": "Three containers do almost all the work. `Column` stacks children top to bottom and stretches them to full width — the default shape of a page body and of a card body. `Row` lays them left to right, keeps every child at its **natural** width, and centres them vertically. `Grid` gives cells that share one width.\n\n`Stack` is the low-level flex box underneath both. Reach for it only when the *direction itself* has to change across breakpoints — because a `row` Stack grows its children equally by default (`uniform` is true for row stacks). Hand it a search field and two buttons and you get three identical thirds.\n\nSpacing is a token, never a pixel: `none · 3xs · 2xs · xs · sm · md · lg · xl · 2xl · 3xl`. The rhythm that reads as designed is `lg` between top-level sections, `md` inside a card, `sm` between tightly related controls.\n\nThe rest of the set fills the gaps: `Center` for both-axis centring, `Container` for a readable max width, `Box` when a `Card` is too heavy, `Section` for a full-bleed page band, `Split` for two panes, `Spacer()` to push siblings apart, `Separator` to draw a line.",
+        "code": {
+          "src": "Column([header, kpis, table], { gap: \"lg\" })\n\nRow([SearchBar(\"q\"), Spacer(), Button(\"New order\")], { gap: \"sm\" })\n\nGrid(cards, { columns: 4, gap: \"md\" })",
+          "caption": "top-to-bottom · left-to-right · equal cells"
+        },
+        "code2": {
+          "src": "Stack([filters, results], {\n  direction: { base: \"column\", md: \"row\" },\n  gap: \"lg\"\n})",
+          "caption": "the one job Row and Column cannot do"
+        },
+        "infographic": {
+          "type": "table",
+          "title": "What people reach for, and what they meant",
+          "headers": [
+            "Reached for",
+            "Actually wanted"
+          ],
+          "rows": [
+            [
+              "Stack(items, { direction: \"row\" })",
+              "Row(items, { gap }) — natural widths, vertically centred"
+            ],
+            [
+              "Row(tiles, { wrap: true })",
+              "Grid(tiles, { columns, gap }) — cells share one width"
+            ],
+            [
+              "Column(items, { direction: \"row\" })",
+              "Row(items) — Column has no direction; it is always vertical"
+            ],
+            [
+              "Box([...], { padding: \"lg\" })",
+              "Card([...]) once the chunk is a real page section"
+            ]
+          ]
+        },
+        "tips": [
+          "`Grid` with no `columns` auto-fits as many equal columns as fit at `minChildWidth` (220px by default) — usually exactly what a KPI wall wants.",
+          "Make one child of a `Row` expand with `StackItem(child, { grow: 1 })`; a bare `Spacer()` between two children pushes them to opposite edges.",
+          {
+            "kind": "warn",
+            "text": "`Column` accepts a `direction` prop the way any object accepts any key — and renders vertically regardless. It is dropped on the floor."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "match-pairs",
+        "title": "What each call actually renders",
+        "prompt": "Five calls, five different shapes on screen. Match each one to what it really puts in front of the user.",
+        "pairs": [
+          {
+            "left": {
+              "mono": "Row([SearchBar(\"q\"), Spacer(), Button(\"New order\")])"
+            },
+            "right": {
+              "label": "The field at its own natural width, the button shoved to the far right edge"
+            }
+          },
+          {
+            "left": {
+              "mono": "Stack([SearchBar(\"q\"), Button(\"New order\")], { direction: \"row\" })"
+            },
+            "right": {
+              "label": "One line, two identical halves — the field comes out as wide as the button"
+            }
+          },
+          {
+            "left": {
+              "mono": "Grid(tiles, { columns: 3, gap: \"md\" })"
+            },
+            "right": {
+              "label": "Equal thirds, three across, wrapping onto a new row as the tiles run past three"
+            }
+          },
+          {
+            "left": {
+              "mono": "Column([SearchBar(\"q\"), Button(\"New order\")], { direction: \"row\" })"
+            },
+            "right": {
+              "label": "Two full-width rows stacked vertically — the prop never arrives anywhere"
+            }
+          },
+          {
+            "left": {
+              "mono": "Stack([filters, results], { direction: { base: \"column\", md: \"row\" } })"
+            },
+            "right": {
+              "label": "Stacked on a phone, side by side from 768px up"
+            }
+          }
+        ]
+      },
+      "hints": [
+        "Start with the two that hand every child an identical width — one of them asks for it out loud, the other does it by default.",
+        "Only one call in the left column is documented as 'natural width, vertically centred'.",
+        "`Spacer()` between two children is what pushes them to opposite edges. A `direction` on a `Column` does nothing at all."
+      ],
+      "nudges": [
+        "Ask what each container does to a child's width before you ask what direction it flows in.",
+        "One call names a prop its component does not have — and renders exactly as if you had left it off."
+      ],
+      "explain": "`Row` exists precisely so children keep their natural size — a search field stays a search field, a button stays button-sized. `Stack` in `row` mode is the same flex box with `uniform` defaulting to true, which is the whole reason `Row` is a separate component. `Grid(columns: 3)` asks for equal thirds out loud, and `Column` never flows horizontally no matter what you pass it. Same short cast of children, five completely different shapes.",
+      "afterCode": {
+        "src": "Row([SearchBar(\"q\"), Spacer(), Button(\"Filter\"), Button(\"New order\", { variant: \"primary\" })], { gap: \"sm\" })",
+        "caption": "the shape to remember"
+      },
+      "codex": {
+        "term": "Row vs Stack",
+        "def": "`Row` keeps children at their natural width and centres them vertically. `Stack(direction: \"row\")` is the same box with `uniform: true`, stretching every child to an equal share — use it only when the direction must change across breakpoints."
+      }
+    },
+    {
+      "id": "s2",
+      "title": "One call, one whole section",
+      "kicker": "composites",
+      "icon": "grid",
+      "goal": "Reach for a pattern composite before you open a single Card.",
+      "xp": 110,
+      "teach": {
+        "text": "Before you compose anything by hand, check whether the library already owns the idiom. `PageHeader` is a page title with breadcrumbs, a status slot and an actions row. `Stats` is a KPI strip. `Toolbar` is a search-and-filters bar. `EmptyState`, `Timeline`, `DescriptionList`, `KanbanBoard`, `FeatureGrid`, `PricingTable`, `Hero`, `SectionHeader` — each of them commits a finished visual section in one line.\n\nThey are not shortcuts. They are tuned: spacing rhythm, responsive behaviour, iconography, heading levels and semantic tone all come with them. A hand-rolled equivalent gets none of that and will drift away from every other page in the app.\n\nThe rule of thumb for how many sections a page needs: a dashboard wants **six** named sections, a detail, settings, list or landing page wants **five**. Two components stacked vertically is a wireframe, not a product — if a draft is short, add a complementary section rather than padding the ones you have.",
+        "code": {
+          "src": "PageHeader(\"Orders\", { subtitle: \"1,204 this month\", actions: [Button(\"Export\", { icon: \"download\" })] })\n\nToolbar({ searchable: true, right: [Button(\"New order\", { variant: \"primary\" })] })\n\nStats([StatCard(\"Revenue\", { value: \"$48,120\", trend: \"up\", delta: \"+12%\" })])\n\nEmptyState(\"No orders yet\", { description: \"They land here the moment one arrives.\" })",
+          "caption": "four sections, four calls"
+        },
+        "infographic": {
+          "type": "compare",
+          "title": "The same page header, twice",
+          "columns": [
+            {
+              "kind": "bad",
+              "title": "Hand-composed",
+              "code": "Card([\n  Row([\n    Column([\n      Text(\"Orders\", { variant: \"title\" }),\n      Text(\"1,204 this month\", { tone: \"muted\" })\n    ]),\n    Spacer(),\n    Button(\"Export\")\n  ])\n])",
+              "note": "Nine lines, no breadcrumbs, no status slot, no heading level — and it will drift from every other page."
+            },
+            {
+              "kind": "good",
+              "title": "The composite",
+              "code": "PageHeader(\"Orders\", {\n  subtitle: \"1,204 this month\",\n  actions: [Button(\"Export\")]\n})",
+              "note": "One call. Breadcrumbs, the status slot and the actions row arrive with it."
+            }
+          ]
+        },
+        "tips": [
+          "`Grid`, `Column` and `Row` still matter — they are the glue *between* composites, not a replacement for them.",
+          "`columns`, `gap`, `padding`, `align`, `justify` and `direction` all accept a `{ base, sm, md, lg, xl }` map instead of a value."
+        ]
+      },
+      "challenge": {
+        "type": "fill-blanks",
+        "title": "Compose the orders page",
+        "prompt": "Four nodes are missing from the page tree. Three want the composite that owns that section; the fourth has to survive a 390px phone, so a bare number will not do.",
+        "display": "tree",
+        "rows": [
+          {
+            "depth": 0,
+            "label": "$app(Column([ … ], { gap: \"lg\" }))"
+          },
+          {
+            "depth": 1,
+            "slot": 0,
+            "after": "(\"Orders\", { subtitle: \"1,204 this month\" })"
+          },
+          {
+            "depth": 1,
+            "slot": 1,
+            "after": "({ searchable: true, right: [Button(\"New order\")] })"
+          },
+          {
+            "depth": 1,
+            "slot": 2,
+            "after": "([ … ])"
+          },
+          {
+            "depth": 2,
+            "label": "StatCard(\"Revenue\", { value: \"$48,120\", delta: \"+12%\" })"
+          },
+          {
+            "depth": 2,
+            "label": "StatCard(\"Refunds\", { value: \"18\", tone: \"warning\" })"
+          },
+          {
+            "depth": 1,
+            "label": "Grid(orderCards, { columns:",
+            "slot": 3,
+            "after": ", gap: \"lg\" })"
+          }
+        ],
+        "bank": [
+          "PageHeader",
+          "Toolbar",
+          "Stats",
+          "{ base: 1, md: 2, lg: 4 }",
+          "CardHeader",
+          "Row",
+          "Column",
+          "4"
+        ],
+        "answer": [
+          "PageHeader",
+          "Toolbar",
+          "Stats",
+          "{ base: 1, md: 2, lg: 4 }"
+        ]
+      },
+      "hints": [
+        "Three of the four slots are pattern composites — each one commits a whole section on its own.",
+        "`CardHeader` opens a card. The thing that opens a *page* has a different name.",
+        "A responsive prop takes an object keyed by breakpoint: `{ base: …, md: …, lg: … }`."
+      ],
+      "nudges": [
+        "Two chips in the bank are the hand-rolled versions of composites already in the bank.",
+        "`4` is a legal value for `columns` — it is just wrong for a grid that has to reflow."
+      ],
+      "explain": "Every one of those three composites exists because the same section gets rebuilt on every page of every app. Using them is not laziness — it is how the pages stay consistent with each other, and how you get breadcrumbs, status slots, responsive wrapping and correct heading levels without asking. The `Grid` is the only place a primitive belongs here: it is the glue between the section composites, and a `{ base, md, lg }` map is how it survives a phone.",
+      "afterCode": {
+        "src": "Grid(orderCards, { columns: { base: 1, md: 2, lg: 4 }, gap: \"lg\" })",
+        "caption": "one column on a phone, four on a desktop"
+      },
+      "codex": {
+        "term": "Pattern composite",
+        "def": "An opinionated component that commits a whole visual section in one call — PageHeader, Stats, Toolbar, EmptyState, Timeline, DescriptionList, KanbanBoard, FeatureGrid, PricingTable, Hero. Reach for one before composing the same thing out of Card and Stack."
+      },
+      "preview": {
+        "program": "$app(Column([\n  PageHeader(\"Orders\", { subtitle: \"1,204 this month\", actions: [Button(\"Export\", { icon: \"download\", variant: \"secondary\" })] }),\n  Toolbar({ searchable: true, searchPlaceholder: \"Search orders…\", right: [Button(\"New order\", { variant: \"primary\", icon: \"plus\" })] }),\n  Stats([\n    StatCard(\"Revenue\", { value: \"$48,120\", trend: \"up\", delta: \"+12%\" }),\n    StatCard(\"Refunds\", { value: \"18\", trend: \"down\", delta: \"-2%\", tone: \"warning\" }),\n    StatCard(\"Customers\", { value: \"892\", trend: \"up\", delta: \"+8%\" })\n  ]),\n  Grid([\n    Card([SectionHeader(\"By channel\", { eyebrow: \"Last 30 days\" }), Text(\"Direct 48% · Search 32% · Social 20%\")]),\n    Card([SectionHeader(\"Fulfilment\", { status: Pill(\"Live\", { tone: \"success\" }) }), Text(\"Median 1.4 days\")])\n  ], { columns: { base: 1, md: 2 }, gap: \"lg\" }),\n  Card([\n    SectionHeader(\"Recent activity\"),\n    Timeline([\n      TimelineItem(\"Order shipped\", { time: \"2h ago\", icon: \"truck\", tone: \"success\" }),\n      TimelineItem(\"Refund issued\", { time: \"5h ago\", icon: \"rotate-left\", tone: \"warning\" })\n    ])\n  ])\n], { gap: \"lg\" }))",
+        "caption": "six named sections — live, from the real runtime"
+      }
+    },
+    {
+      "id": "s3",
+      "title": "Two chips and two bands",
+      "kicker": "near neighbours",
+      "icon": "target",
+      "goal": "Choose between components the validator is happy to let you confuse.",
+      "xp": 120,
+      "hearts": 3,
+      "teach": {
+        "text": "Some components are near-identical in the prop table and completely different on screen. The schema validator accepts all of them, so this one is on you.\n\n`Badge` is the **solid, high-attention chip** — \"Recommended\", \"Save 50%\", \"Most popular\". `Pill` is the **soft tinted state label** for the current state of a thing — \"SSL active\", \"pending\", \"broken\". Reach for `Pill` when the text describes *what something is right now*, and `Badge` when it is trying to catch an eye.\n\n`Callout` is a standalone bordered notice that stands on its own between two sections. `CardSection` is a full-bleed tinted band that lives **inside** a `Card`, grouping and colouring part of that card's content edge to edge. If it needs its own border, it is a `Callout`; if it needs to be part of a card, it is a `CardSection`.\n\nThe same trap runs through the rest of the library: `Spinner` is a rotating ring for a whole panel, `LoadingDots` a quieter inline pulse. `Buttons` is a gapped row, `ButtonGroup` an edge-to-edge joined control, `SegmentedControl` a single-select pill track. `ActionStripe` is an always-interactive navigation row, `ListItem` a presentational row, `Tile` a grid unit.",
+        "code": {
+          "src": "Badge(\"Recommended\", { tone: \"primary\" })\n\nPill(\"SSL active\", { tone: \"success\" })\n\nCallout(\"Your trial ends in 3 days\", { tone: \"warning\", description: \"Add a card to keep the workspace open.\" })\n\nCard([\n  SectionHeader(\"Danger zone\"),\n  CardSection([Text(\"Deleting this project cannot be undone.\")], { tone: \"critical\" })\n])",
+          "caption": "chip, state label, notice, band"
+        },
+        "infographic": {
+          "type": "meter",
+          "title": "How loud is it?",
+          "rows": [
+            {
+              "label": "Badge",
+              "value": 92,
+              "note": "solid chip — \"Recommended\", \"Save 50%\""
+            },
+            {
+              "label": "Callout",
+              "value": 74,
+              "note": "bordered notice standing on its own"
+            },
+            {
+              "label": "CardSection",
+              "value": 52,
+              "note": "tinted band, edge to edge inside one Card"
+            },
+            {
+              "label": "Pill",
+              "value": 28,
+              "note": "soft state label — \"SSL active\", \"pending\""
+            }
+          ]
+        },
+        "tips": [
+          "`Pill` and `CardSection` share an enterprise state vocabulary that `Badge` and `Callout` do not have: `activating`, `critical`, `promoting`, `corporate` (alongside the usual `neutral`, `success`, `warning`).",
+          {
+            "kind": "warn",
+            "text": "`Callout` lists `tone` first in its signature — `Callout(tone, title, …)` — but the argument tagged *positional* is `title`. So `Callout(\"Trial ends\", { tone: \"warning\" })` is the call you want; never rely on position for the tone."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "sort-bins",
+        "title": "File each job under its component",
+        "prompt": "Eight jobs, four components that all render coloured text on a tinted background. Drop each job on the one that owns it.",
+        "bins": [
+          {
+            "id": "badge",
+            "label": "Badge",
+            "hint": "solid, high-attention chip"
+          },
+          {
+            "id": "pill",
+            "label": "Pill",
+            "hint": "soft tinted state label"
+          },
+          {
+            "id": "callout",
+            "label": "Callout",
+            "hint": "standalone bordered notice"
+          },
+          {
+            "id": "cardsection",
+            "label": "CardSection",
+            "hint": "full-bleed tinted band inside a Card"
+          }
+        ],
+        "items": [
+          {
+            "label": "\"Most popular\" over a pricing tier",
+            "bin": "badge"
+          },
+          {
+            "label": "\"Save 50%\" across a product image",
+            "bin": "badge"
+          },
+          {
+            "label": "\"pending\" in a table cell",
+            "bin": "pill"
+          },
+          {
+            "label": "\"SSL active\" beside a domain name",
+            "bin": "pill"
+          },
+          {
+            "label": "A bordered \"Your trial ends in 3 days\" notice between two sections",
+            "bin": "callout"
+          },
+          {
+            "label": "A dismissible \"This cannot be undone\" alert on its own",
+            "bin": "callout"
+          },
+          {
+            "label": "An edge-to-edge red strip closing the settings card",
+            "bin": "cardsection"
+          },
+          {
+            "label": "A tinted \"Activating…\" band grouping three rows of one card",
+            "bin": "cardsection"
+          }
+        ]
+      },
+      "hints": [
+        "Two of the four are chips you drop inline. Two of them are whole bands.",
+        "Ask of every chip: is this the *state of a thing*, or is it shouting for attention?",
+        "One of the four can only ever exist inside a `Card`."
+      ],
+      "nudges": [
+        "\"pending\" and \"SSL active\" describe what something currently is. That is one specific component.",
+        "If the notice has its own border and sits between sections, it is not part of any card."
+      ],
+      "explain": "None of these four is a styling variant of the others — they encode *how much attention the thing deserves* and *where it structurally belongs*. Get it wrong and the page still renders and still validates; it just reads wrong, because a solid `Badge` on every row's status turns a calm table into a fairground. Passing `tone`, never a colour, is what lets all four re-skin themselves across the six built-in themes.",
+      "codex": {
+        "term": "Badge vs Pill",
+        "def": "`Badge` is the solid, high-attention chip (\"Recommended\", \"Save 50%\"). `Pill` is the soft tinted label for the current state of a thing (\"SSL active\", \"pending\"), with the extra tones `activating`, `critical`, `promoting`, `corporate`."
+      },
+      "preview": {
+        "program": "$app(Column([\n  SectionHeader(\"Two chips and two bands\", { eyebrow: \"near neighbours\" }),\n  Row([\n    Badge(\"Recommended\", { tone: \"primary\" }),\n    Badge(\"Save 50%\", { tone: \"danger\" }),\n    Pill(\"SSL active\", { tone: \"success\" }),\n    Pill(\"pending\", { tone: \"warning\" })\n  ], { gap: \"sm\", wrap: true }),\n  Callout(\"Your trial ends in 3 days\", { tone: \"warning\", description: \"A standalone bordered notice — it stands on its own between two sections.\" }),\n  Card([\n    SectionHeader(\"Danger zone\"),\n    Text(\"Normal card content sits here.\"),\n    CardSection([Text(\"Deleting this project cannot be undone.\")], { tone: \"critical\" })\n  ])\n], { gap: \"lg\" }))",
+        "caption": "the difference is obvious once it is rendered"
+      }
+    },
+    {
+      "id": "s4",
+      "title": "Blueprint",
+      "kicker": "arcade",
+      "icon": "bolt",
+      "goal": "Fill every region of a dashboard with the composite that finishes it.",
+      "xp": 140,
+      "hearts": 3,
+      "teach": {
+        "text": "A dashboard wireframe is on the table. One region lights up at a time and tells you what it needs.\n\n**Tap the composite that owns that job** before the bar runs out. Get it right and the region fills in dense — a heading bar, a body, a footer rule. Get it wrong, or run out of time, and the region renders as a single thin line: exactly what a page looks like when you hand-compose a section that already exists.\n\nFive filled regions clears the stage. Three sparse ones ends the run.",
+        "tips": [
+          "Read the *job*, not the words. \"key / value summary of one record\" is a `DescriptionList` even though nothing says list.",
+          {
+            "kind": "warn",
+            "text": "Two composites are page-level and two are content-level. `PageHeader` never fills a toolbar region, and `Toolbar` never replaces a page header."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "arcade",
+        "title": "Fill the wireframe",
+        "prompt": "Each region names what it needs. Tap the one-line composite that fills it before the bar empties.",
+        "goal": "0 / 5",
+        "height": 360,
+        "note": "Tap a composite chip. A wrong pick renders the region visibly sparse — and it stays that way.",
+        "winNote": "Press Check to bank the XP.",
+        "params": {
+          "target": 5,
+          "seconds": 5.5,
+          "regions": [
+            {
+              "need": "title + breadcrumbs + a right-aligned actions row",
+              "answer": "PageHeader"
+            },
+            {
+              "need": "four KPIs in one strip, with trend and delta",
+              "answer": "Stats"
+            },
+            {
+              "need": "search + filters + the primary action, above a table",
+              "answer": "Toolbar"
+            },
+            {
+              "need": "four columns of draggable task cards",
+              "answer": "KanbanBoard"
+            },
+            {
+              "need": "a key / value summary of one record",
+              "answer": "DescriptionList"
+            },
+            {
+              "need": "the list came back empty - say so, with a CTA",
+              "answer": "EmptyState"
+            }
+          ],
+          "options": [
+            "PageHeader",
+            "Stats",
+            "Toolbar",
+            "KanbanBoard",
+            "DescriptionList",
+            "EmptyState"
+          ]
+        },
+        "code": "const P = ctx.params;\nconst W = ctx.width, H = ctx.height;\nconst R = P.regions;\nconst g = new PIXI.Graphics();\nctx.stage.addChild(g);\nconst kicker = ctx.text('THIS REGION NEEDS', { size: 10, color: ctx.colors.dim, weight: '700' });\nkicker.anchor.set(.5); kicker.x = W / 2; kicker.y = 24;\nctx.stage.addChild(kicker);\nconst need = ctx.text(R[0].need, { size: 14, color: ctx.colors.ink });\nneed.anchor.set(.5); need.x = W / 2; need.y = 43;\nctx.stage.addChild(need);\nconst state = [];\nfor (let i = 0; i < R.length; i++) state.push(0);\nlet idx = 0, score = 0, misses = 0, t = P.seconds, done = false;\nfunction draw() {\n  g.clear();\n  g.roundRect(16, 12, W - 32, H - 128, 10).stroke({ width: 1, color: ctx.colors.dim, alpha: .45 });\n  for (let i = 0; i < R.length; i++) {\n    const y = 64 + i * 24;\n    const live = i === idx && !done;\n    g.roundRect(30, y, W - 60, 20, 5).fill({ color: 0x0a1523, alpha: live ? .95 : .55 }).stroke({ width: live ? 2 : 1, color: live ? ctx.colors.g1 : ctx.colors.dim, alpha: live ? 1 : .35 });\n    if (state[i] === 1) {\n      g.roundRect(38, y + 5, 42, 4, 2).fill({ color: ctx.colors.g2 });\n      g.roundRect(88, y + 5, W - 190, 4, 2).fill({ color: ctx.colors.g3, alpha: .75 });\n      g.roundRect(38, y + 12, W - 140, 3, 2).fill({ color: ctx.colors.g1, alpha: .4 });\n    } else if (state[i] === -1) {\n      g.roundRect(38, y + 9, 54, 2, 1).fill({ color: ctx.colors.bad, alpha: .85 });\n    }\n  }\n  if (!done) {\n    g.roundRect(30, H - 106, W - 60, 3, 2).fill({ color: ctx.colors.dim, alpha: .3 });\n    const w = Math.max(0, (W - 60) * (t / P.seconds));\n    g.roundRect(30, H - 106, w, 3, 2).fill({ color: t < P.seconds * .35 ? ctx.colors.warn : ctx.colors.g2 });\n  }\n}\nfunction advance() {\n  ctx.api.setGoal(score + ' / ' + P.target);\n  if (score >= P.target) { done = true; draw(); ctx.api.win('Every region filled by a single composite.'); return; }\n  if (misses >= 3) { done = true; draw(); ctx.api.fail('Three regions shipped sparse. Reach for the composite that owns the job.'); return; }\n  idx++;\n  if (idx >= R.length) { done = true; draw(); ctx.api.fail('Out of regions - two of them rendered as wireframe.'); return; }\n  t = P.seconds;\n  need.text = R[idx].need;\n  draw();\n}\nfunction pick(name, chip) {\n  if (done) return;\n  gsap.to(chip.scale, { x: 1.1, y: 1.1, duration: .1, onComplete: () => gsap.to(chip.scale, { x: 1, y: 1, duration: .18, ease: 'back.out' }) });\n  if (name === R[idx].answer) { state[idx] = 1; score++; ctx.api.setScore(score); }\n  else { state[idx] = -1; misses++; }\n  advance();\n}\nconst cw = (W - 44) / 3;\nP.options.forEach((name, i) => {\n  const c = ctx.chip(name, { color: 0x101d33, textColor: 0xd8e6ff, stroke: ctx.colors.g3, size: 12, minWidth: cw - 12 });\n  c.x = 22 + cw * (i % 3) + cw / 2;\n  c.y = H - 76 + Math.floor(i / 3) * 34;\n  c.eventMode = 'static';\n  c.cursor = 'pointer';\n  c.hitArea = new PIXI.Rectangle(-cw / 2, -15, cw, 30);\n  c.on('pointertap', () => pick(name, c));\n  ctx.stage.addChild(c);\n});\nctx.api.setScore(0);\nctx.api.setGoal('0 / ' + P.target);\ndraw();\nctx.onTick((dt) => {\n  if (done) return;\n  t -= dt / 60;\n  if (t <= 0) { state[idx] = -1; misses++; advance(); return; }\n  draw();\n});",
+        "fallback": {
+          "type": "quiz",
+          "prompt": "A region above a table needs a search field, two filter chips and one primary action. Which single call fills it?",
+          "options": [
+            {
+              "id": "a",
+              "code": "Toolbar({ searchable: true, right: [Button(\"New order\", { variant: \"primary\" })] })"
+            },
+            {
+              "id": "b",
+              "code": "Row([SearchBar(\"q\"), Button(\"Open\"), Button(\"Paid\"), Spacer(), Button(\"New order\")])",
+              "detail": "It renders — it is just the hand-rolled version of a composite that already exists, and it does not wrap onto rows on a narrow viewport the way Toolbar does."
+            },
+            {
+              "id": "c",
+              "code": "PageHeader(\"Orders\", { actions: [Button(\"New order\")] })",
+              "detail": "PageHeader is the page title block. It never replaces a Toolbar, and a Toolbar never replaces it."
+            },
+            {
+              "id": "d",
+              "code": "Navbar(\"Orders\", { actions: [Button(\"New order\")] })",
+              "detail": "Navbar is site-level navigation for a marketing or docs page, not a filter bar above a table."
+            }
+          ],
+          "answer": "a"
+        }
+      },
+      "hints": [
+        "Six regions, six composites, one each — nothing is used twice.",
+        "\"four KPIs in one strip\" is the single most common dashboard section; it has a component named after it.",
+        "If a region describes an *absence* of data, there is a composite whose entire job is that."
+      ],
+      "explain": "Every wrong pick left a region that renders a single line — which is exactly what a hand-composed section looks like next to a composite one. The reason the density targets in the skill exist (six sections for a dashboard, five for a detail page) is that a page reads as unfinished long before it reads as broken, and no validator will ever tell you so. The composites are how you hit those targets without writing a hundred lines.",
+      "codex": {
+        "term": "Density target",
+        "def": "The minimum number of named sections a page type needs to read as finished: six for a dashboard, five for a detail, settings, list or landing page, three for a zero state. Short of the target, add a complementary section rather than padding the ones you have."
+      }
+    },
+    {
+      "id": "s5",
+      "title": "One layout, every viewport",
+      "kicker": "responsive",
+      "icon": "compass",
+      "goal": "Read a breakpoint map the way the runtime does — which props take one, and where each key takes over.",
+      "xp": 120,
+      "teach": {
+        "text": "There is no breakpoint prop, no media-query escape hatch and no mobile variant of any component. Six layout props take a **map** wherever they take a value: `gap`, `padding`, `align`, `justify`, `columns` and `direction`.\n\nThe keys are `base`, `sm`, `md`, `lg`, `xl` — 640, 768, 1024 and 1280 pixels, with `base` as the mobile-first floor. Values cascade upwards, so a breakpoint you leave out inherits the one below it: `{ base: 1, lg: 4 }` is one column all the way to 1024px and four beyond it.\n\nThis is where `Stack` finally earns its place. It is the only primitive whose `direction` you can map, which is why a filter rail that becomes a top strip on a phone is a `Stack` and not a `Row`.",
+        "code": {
+          "src": "Grid(cards, { columns: { base: 1, md: 2, lg: 4 }, gap: { base: \"sm\", lg: \"lg\" } })",
+          "caption": "one column on a phone, four on a desktop"
+        },
+        "code2": {
+          "src": "Stack([filters, results], { direction: { base: \"column\", md: \"row\" }, gap: \"lg\" })",
+          "caption": "stacked on a phone, side by side from 768px up"
+        },
+        "infographic": {
+          "type": "anatomy",
+          "title": "Reading a breakpoint map",
+          "code": "Grid(cards, { columns: { base: 1, md: 2, lg: 4 }, gap: \"lg\" })",
+          "parts": [
+            {
+              "match": "columns",
+              "key": "mappable",
+              "text": "one of the six props that take a map instead of a value"
+            },
+            {
+              "match": "base: 1",
+              "key": "the floor",
+              "text": "mobile-first — everything narrower than 640px gets this"
+            },
+            {
+              "match": "md: 2",
+              "key": "768px up",
+              "text": "takes over at md and holds until the next named key"
+            },
+            {
+              "match": "lg: 4",
+              "key": "1024px up",
+              "text": "the widest rule here, so xl inherits it too"
+            },
+            {
+              "match": "gap:",
+              "key": "still a value",
+              "text": "a map is per-prop and optional — mix values and maps freely"
+            }
+          ]
+        },
+        "tips": [
+          "Leave breakpoints out on purpose. `{ base: 1, lg: 4 }` is usually better than spelling out all five.",
+          {
+            "kind": "danger",
+            "text": "Unknown breakpoint keys are silently ignored so a typo cannot crash the page. `{ mobile: 1, desktop: 4 }` matches nothing, is treated as a plain value, and quietly gives you the component default."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "order-lines",
+        "title": "Four columns, but when?",
+        "prompt": "Five Grid calls, all of them legal, all of them asking for four columns. Order them by the viewport width at which each one first actually renders four — narrowest at the top, never at the bottom.",
+        "lines": [
+          {
+            "id": "plain",
+            "code": "Grid(cards, { columns: 4 })"
+          },
+          {
+            "id": "sm",
+            "code": "Grid(cards, { columns: { base: 1, sm: 4 } })"
+          },
+          {
+            "id": "md",
+            "code": "Grid(cards, { columns: { base: 1, md: 4 } })"
+          },
+          {
+            "id": "xl",
+            "code": "Grid(cards, { columns: { base: 1, xl: 4 } })"
+          },
+          {
+            "id": "typo",
+            "code": "Grid(cards, { columns: { base: 1, desktop: 4 } })"
+          }
+        ],
+        "answer": [
+          "plain",
+          "sm",
+          "md",
+          "xl",
+          "typo"
+        ]
+      },
+      "hints": [
+        "Two of the five have no breakpoint doing any work at all: one is four columns at every width, the other is four columns at none.",
+        "`sm` is 640, `md` is 768, `lg` is 1024, `xl` is 1280 — the key names *are* the ladder, and a key you leave out inherits the one below it.",
+        "`desktop` is not one of the five keys. Nothing throws; it simply never matches, so `base` holds all the way up."
+      ],
+      "nudges": [
+        "Ask of each line: at what width does that `4` first take effect — and does it ever?",
+        "A bare `columns: 4` is not a phone layout. It is four columns at 320px too."
+      ],
+      "explain": "The six mappable props are exactly the ones that describe space and arrangement, and the runtime turns each map into real CSS custom properties inside media queries — no JavaScript resize listener, no re-render on rotate. Props that describe what a component *is* rather than how much room it has — `variant`, `size`, or a CSS length like `minChildWidth` — take a single value and nothing else. Each key holds until the next named one takes over, which is why `{ base: 1, xl: 4 }` is one column all the way to 1280px. And because a map is just an object, the runtime cannot tell a typo'd key from a deliberate omission: it ignores what it does not recognise. That is the whole story of the last line: `base` matches and `desktop` does not, so the grid holds one column at 4K exactly as calmly as it does at 320px.",
+      "afterCode": {
+        "src": "Stack([filters, results], { direction: { base: \"column\", md: \"row\" }, gap: { base: \"sm\", lg: \"lg\" } })",
+        "caption": "two maps, zero media queries"
+      },
+      "codex": {
+        "term": "Responsive prop map",
+        "def": "`{ base, sm, md, lg, xl }` (640/768/1024/1280px) accepted by `gap`, `padding`, `align`, `justify`, `columns` and `direction`. Values cascade upwards; unrecognised keys are silently ignored."
+      }
+    },
+    {
+      "id": "s6",
+      "title": "Ship something dense",
+      "kicker": "produce",
+      "icon": "code",
+      "goal": "Write a page with five named sections and not one hard-coded colour.",
+      "xp": 160,
+      "teach": {
+        "text": "Two habits separate a page that looks designed from one that looks generated.\n\n**Do not fight the defaults.** These components already guess the obvious: `StatCard(\"Revenue\", …)` picks an icon from the label, `PageHeader(title)` derives `[\"Home\", title]` breadcrumbs (pass `breadcrumbs: false` to suppress them), `EmptyState(title)` picks an icon from the title, `Banner(title, { tone })` picks one from the tone, and `Image(src, { ratio: \"16:9\" })` constrains itself with no outer `AspectRatio`. Passing what they already infer adds noise, not control.\n\n**Never hard-code colour, spacing or typography.** Pass a semantic `tone` or `variant` — `default`, `primary`, `success`, `warning`, `danger`, `info` — and let the theme resolve it. The same program has to survive six built-in themes; a hex value survives none of them. (`tone` and `variant` are interchangeable on 41 component specs, and `children`/`child` on 57, so a plausible guess is rarely a build failure.)\n\nNow build one. Five named sections, all of it hanging off a single `$app(...)`.",
+        "code": {
+          "src": "$app(Column([\n  PageHeader(\"…\"),\n  Toolbar({ searchable: true }),\n  Stats([StatCard(\"…\", { value: \"…\" }), StatCard(\"…\", { value: \"…\" })]),\n  Card([SectionHeader(\"…\"), Timeline([TimelineItem(\"…\", { time: \"…\" })])])\n], { gap: \"lg\" }))",
+          "caption": "the shape, not the answer"
+        },
+        "infographic": {
+          "type": "flow",
+          "title": "The six sections of a dashboard",
+          "direction": "down",
+          "nodes": [
+            {
+              "label": "PageHeader",
+              "note": "title, breadcrumbs, actions"
+            },
+            {
+              "label": "Toolbar",
+              "note": "search and filters"
+            },
+            {
+              "label": "Stats",
+              "note": "the numbers",
+              "accent": true
+            },
+            {
+              "label": "Card + chart",
+              "note": "the shape of the numbers"
+            },
+            {
+              "label": "Card + Table",
+              "note": "the rows themselves"
+            },
+            {
+              "label": "Card + Timeline",
+              "note": "what just happened"
+            }
+          ]
+        },
+        "tips": [
+          "`SectionHeader` opens a section *inside* a Card; `PageHeader` opens the page. Using the second one twice is the fastest way to make a page look wrong.",
+          "If the language service is reachable, its real diagnostics appear under the editor as you type."
+        ]
+      },
+      "challenge": {
+        "type": "type-code",
+        "title": "Write the console page",
+        "prompt": "Write a project console in one `Column`: a `PageHeader`, a `Toolbar`, a `Stats` strip holding at least two `StatCard`s, and a `Card` containing a `SectionHeader` and a `Timeline`. Pass `tone` / `variant` for emphasis — never a colour.",
+        "filename": "console.aktion",
+        "starter": "$app(Column([\n\n], { gap: \"lg\" }))",
+        "placeholder": "$app(Column([ … ], { gap: \"lg\" }))",
+        "solution": "$app(Column([\n  PageHeader(\"Project console\", { subtitle: \"12 active · 4 at risk\" }),\n  Toolbar({ searchable: true, searchPlaceholder: \"Search projects…\", right: [Button(\"New project\", { variant: \"primary\", icon: \"plus\" })] }),\n  Stats([\n    StatCard(\"Active\", { value: \"12\", trend: \"flat\" }),\n    StatCard(\"At risk\", { value: \"4\", trend: \"up\", delta: \"+2\", tone: \"warning\" }),\n    StatCard(\"Shipped\", { value: \"8\", trend: \"up\", delta: \"+3\", tone: \"success\" })\n  ]),\n  Card([\n    SectionHeader(\"Recent activity\", { status: Pill(\"Live\", { tone: \"success\" }) }),\n    Timeline([\n      TimelineItem(\"Auth migration merged\", { time: \"2h ago\", icon: \"shield\", tone: \"success\" }),\n      TimelineItem(\"Mobile onboarding blocked\", { time: \"5h ago\", icon: \"triangle-exclamation\", tone: \"warning\" })\n    ])\n  ])\n], { gap: \"lg\" }))",
+        "validate": {
+          "must": [
+            "\\$app\\s*\\(",
+            "Column\\s*\\(\\s*\\[",
+            "PageHeader\\s*\\(",
+            "Toolbar\\s*\\(",
+            "Stats\\s*\\(\\s*\\[",
+            "StatCard\\s*\\([\\s\\S]*StatCard\\s*\\(",
+            "SectionHeader\\s*\\(",
+            "Timeline\\s*\\(\\s*\\["
+          ],
+          "mustWhy": [
+            "Nothing renders without $app(...) — start there.",
+            "The sections need a Column([ ... ]) to stack them.",
+            "Open the page with a PageHeader.",
+            "Add a Toolbar for search and the primary action.",
+            "Wrap the KPIs in Stats([ ... ]).",
+            "Stats needs at least two StatCard entries.",
+            "Open the card with a SectionHeader, not a second PageHeader.",
+            "Close with a Timeline([ ... ]) inside that Card."
+          ],
+          "mustNot": [
+            "#[0-9a-fA-F]{6}",
+            "className",
+            "<[A-Za-z]",
+            "useState",
+            "rgb\\("
+          ]
+        }
+      },
+      "hints": [
+        "Start from the outside in: `$app(Column([ … ], { gap: \"lg\" }))`, then drop one section per line.",
+        "`Stats` takes an array of `StatCard(label, { value })` — the icons pick themselves from the labels.",
+        "`Card([SectionHeader(\"Recent activity\"), Timeline([TimelineItem(\"…\", { time: \"2h ago\" })])])` is the last section."
+      ],
+      "nudges": [
+        "Every section is one call. If a line is getting long, it is probably the options object, not the structure.",
+        "Emphasis is `tone: \"warning\"` or `variant: \"primary\"`. If a hex value appears, the theme has lost."
+      ],
+      "explain": "Five sections, one root, and nothing in it that would break if the host switched to the `corporate` or `glass` theme tomorrow. Notice what you did not have to write: no breadcrumb markup, no icon choices, no grid maths for the KPI strip, no media queries, and no colours. That is the whole trade — the composites own the visual decisions so your program only has to say what the page is about.",
+      "codex": {
+        "term": "Tone-first authoring",
+        "def": "Emphasis is expressed with the semantic palette (`default`, `primary`, `success`, `warning`, `danger`, `info`) through `tone` or `variant`, never as a colour, spacing or font value — so one program renders correctly on all six built-in themes."
+      },
+      "preview": {
+        "program": "$app(Column([\n  PageHeader(\"Project console\", { subtitle: \"12 active · 4 at risk\", status: Badge(\"On track\", { tone: \"success\" }) }),\n  Toolbar({ searchable: true, searchPlaceholder: \"Search projects…\", right: [Button(\"New project\", { variant: \"primary\", icon: \"plus\" })] }),\n  Stats([\n    StatCard(\"Active\", { value: \"12\", trend: \"flat\" }),\n    StatCard(\"At risk\", { value: \"4\", trend: \"up\", delta: \"+2\", tone: \"warning\" }),\n    StatCard(\"Shipped\", { value: \"8\", trend: \"up\", delta: \"+3\", tone: \"success\" })\n  ]),\n  Card([\n    SectionHeader(\"Recent activity\", { status: Pill(\"Live\", { tone: \"success\" }) }),\n    Timeline([\n      TimelineItem(\"Auth migration merged\", { time: \"2h ago\", icon: \"shield\", tone: \"success\" }),\n      TimelineItem(\"Mobile onboarding blocked\", { time: \"5h ago\", icon: \"triangle-exclamation\", tone: \"warning\" })\n    ])\n  ])\n], { gap: \"lg\" }))",
+        "caption": "your page, rendered by the real Aktion runtime"
+      }
+    }
+  ],
+  "outro": {
+    "headline": "You place sections now, you don't build them",
+    "body": "Composites first, primitives as glue, tone instead of colour, and a breakpoint map wherever a value used to be. That is every dense page you will ever need to write.",
+    "nextHint": "Next: Flow Control — where expressions end, statements begin, and `if` refuses to sit on the right of an `=`."
+  },
+  "badge": {
+    "name": "Layout Architect",
+    "icon": "grid",
+    "tagline": "Shipped a page that looks finished."
+  }
+}

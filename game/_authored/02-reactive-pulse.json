@@ -1,0 +1,615 @@
+{
+  "id": "reactive-pulse",
+  "title": "Reactive Pulse",
+  "subtitle": "State that redraws itself",
+  "icon": "bolt",
+  "difficulty": 2,
+  "estimateMin": 11,
+  "requires": [
+    "first-light"
+  ],
+  "palette": {
+    "g1": "#fbbf24",
+    "g2": "#fb7185",
+    "g3": "#f97316"
+  },
+  "backdrop": {
+    "preset": "circuit"
+  },
+  "intro": {
+    "headline": "One sigil is the whole reactivity system",
+    "body": "Aktion has no `useState`, no `ref()`, no store to register and no re-render call. It has one rule: **a name that starts with `$` is reactive**.\n\nWrite `$count = 0` and every part of the tree that read `$count` updates the instant you write to it. `let`, `const` and `var` are all allowed in front and all change *nothing* — they are decoration on a naming rule.\n\nThis world is about making that state move: click handlers, named actions, inputs that bind themselves without a handler, and where an atom lives when you want two copies instead of one.",
+    "code": "$count = 0\n\n$app(Card([\n  Text(`Count: ${$count}`, { variant: \"title\" }),\n  Button(\"+1\", { onClick: () => $count += 1, variant: \"primary\" })\n]))",
+    "codeCaption": "a working counter, top to bottom",
+    "infographic": {
+      "type": "orbit",
+      "title": "Everything an atom does",
+      "core": "$count",
+      "satellites": [
+        {
+          "label": "read",
+          "note": "any expression that mentions it"
+        },
+        {
+          "label": "write",
+          "note": "$count = 5, or += inside a body"
+        },
+        {
+          "label": "bind",
+          "note": "value: $count wires an input both ways"
+        },
+        {
+          "label": "handle",
+          "note": "onClick: () => $count += 1"
+        },
+        {
+          "label": "notify",
+          "note": "only the readers of what changed"
+        }
+      ]
+    },
+    "objectives": [
+      "Tell reactive state from a plain binding at a glance",
+      "Wire a Button's `onClick` to a state write",
+      "Hand a named action to a handler instead of calling it",
+      "Bind an input to state without writing a handler",
+      "Give a component its own private state"
+    ]
+  },
+  "stages": [
+    {
+      "id": "s1",
+      "title": "One sigil, one rule",
+      "kicker": "state",
+      "icon": "bolt",
+      "goal": "Declare reactive state with $name = value — and know why let and const change nothing.",
+      "xp": 100,
+      "teach": {
+        "text": "Aktion has exactly one kind of reactive state: `$name = value`. There is nothing to import, nothing to wrap and no setter to remember.\n\nYou read and write it with the **same sigil**. `$count` is the value; `$count = 5` is the write. No `.value` unwrapping, no `setCount`.\n\n`let`, `const` and `var` are all accepted in front of a declaration and all change **nothing** — `const $mode = \"dark\"` is still reactive and still writable. The `$` is the mechanism; the keyword is decoration.\n\nWrites are tracked by path, so `$user.role = \"editor\"` only re-renders the parts of the tree that actually read `.role`.",
+        "code": {
+          "src": "$count = 0\n$user = { name: \"Ada\", role: \"admin\" }\n\n$count = $count + 1\n$user.role = \"editor\"",
+          "caption": "declare, then read and write under the same name"
+        },
+        "infographic": {
+          "type": "table",
+          "title": "What the runtime actually sees",
+          "headers": [
+            "Declaration",
+            "What you get"
+          ],
+          "rows": [
+            [
+              "$count = 0",
+              "Reactive atom — readers re-render on every write"
+            ],
+            [
+              "let $count = 0",
+              "Identical. The keyword is ignored."
+            ],
+            [
+              "const $mode = \"dark\"",
+              "Still reactive, and still writable"
+            ],
+            [
+              "count = 0",
+              "Plain binding — evaluated once, never re-renders"
+            ]
+          ]
+        },
+        "tips": [
+          "Path-level tracking is an atom-only privilege: it applies to `$name = value`, not to hook setters or resource bags.",
+          {
+            "kind": "warn",
+            "text": "`count = 0` is not an error. It is a perfectly good plain binding — it simply never updates the UI, and nothing warns you."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "quiz",
+        "title": "Which one is reactive?",
+        "prompt": "Four ways a developer might reach for state on their first day. Only one of them is something the UI will re-render for.",
+        "options": [
+          {
+            "id": "a",
+            "code": "$count = 0"
+          },
+          {
+            "id": "b",
+            "code": "let count = 0",
+            "detail": "Valid Aktion — a plain binding. `let` does not make anything reactive."
+          },
+          {
+            "id": "c",
+            "code": "const [count, setCount] = useState(0)",
+            "detail": "There is no `useState` in Aktion."
+          },
+          {
+            "id": "d",
+            "code": "reactive({ count: 0 })",
+            "detail": "No wrapper object. Reactivity is a naming rule, not a proxy."
+          }
+        ],
+        "answer": "a"
+      },
+      "hints": [
+        "Three of these come from another framework or declare an ordinary value.",
+        "Look at the first character of the name, not the keyword in front of it."
+      ],
+      "explain": "The `$` prefix is not a convention that a linter enforces — it is what the planner looks for when it decides which names to track. That is exactly why `let count = 0` is legal and inert while `let $count = 0` is reactive: the keyword is thrown away, the sigil is not. And because reads and writes use the same name, there is no setter to keep in sync and no stale-closure class of bug to reason about.",
+      "codex": {
+        "term": "$name = value",
+        "def": "The one reactive atom. The `$` prefix — not `let`/`const`/`var` — is what makes a name reactive; read and write it with the same sigil."
+      }
+    },
+    {
+      "id": "s2",
+      "title": "Wire the click",
+      "kicker": "handlers",
+      "icon": "spark",
+      "goal": "Hand a lambda to onClick and write state from inside it.",
+      "xp": 100,
+      "teach": {
+        "text": "An event handler is not special machinery. It is an ordinary prop holding an ordinary function. `Button` has `onClick`; give it a lambda and put the write inside.\n\nInside any imperative body — a lambda, an action, an effect — the **full assignment operator set** is available: `=`, `+=`, `-=`, `*=`, `/=`, `??=`, `++`, `--`. So `$count += 1` and `$count = $count + 1` are the same statement.\n\nReading the atom back into the tree needs no subscription. `Text(`Count: ${$count}`)` re-renders on every write purely because it mentioned `$count`.",
+        "code": {
+          "src": "$count = 0\n\n$app(Card([\n  Text(`Count: ${$count}`, { variant: \"title\" }),\n  Button(\"+1\", { onClick: () => $count += 1, variant: \"primary\" })\n]))",
+          "caption": "the whole counter — six lines, no wiring"
+        },
+        "infographic": {
+          "type": "anatomy",
+          "title": "Reading a handler",
+          "code": "Button(\"+1\", { onClick: () => $count += 1, variant: \"primary\" })",
+          "parts": [
+            {
+              "match": "\"+1\"",
+              "key": "positional",
+              "text": "the label — the one bare argument in a canonical call"
+            },
+            {
+              "match": "onClick",
+              "key": "handler prop",
+              "text": "wants a callable; lives in the trailing options object"
+            },
+            {
+              "match": "() =>",
+              "key": "lambda",
+              "text": "an imperative body, so assignment operators are legal inside"
+            },
+            {
+              "match": "+=",
+              "key": "write",
+              "text": "identical to $count = $count + 1"
+            },
+            {
+              "match": "variant",
+              "key": "sibling prop",
+              "text": "everything non-positional shares that one object"
+            }
+          ]
+        },
+        "tips": [
+          "`onClick` is the canonical prop name; the older `action` alias is still accepted.",
+          {
+            "kind": "warn",
+            "text": "`Button(\"+1\", () => $count += 1)` also works — the second positional slot *is* `onClick`. But `Button(\"+1\", \"primary\")` drops a string into that same slot: no handler, no variant, no complaint."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "fill-blanks",
+        "title": "Complete the counter",
+        "prompt": "Three slots: the label, the handler prop, and the write. Four of the chips are what a React or Vue developer types on reflex — leave those in the bank.",
+        "display": "code",
+        "template": "$count = 0\n\n$app(Card([\n  Text(`Count: ${$count}`, { variant: \"title\" }),\n  Button({{0}}, { {{1}}: () => {{2}} })\n]))",
+        "bank": [
+          "\"+1\"",
+          "onClick",
+          "$count += 1",
+          "onPress",
+          "@click",
+          "count += 1",
+          "setCount(count + 1)"
+        ],
+        "answer": [
+          "\"+1\"",
+          "onClick",
+          "$count += 1"
+        ]
+      },
+      "hints": [
+        "The bare positional argument of a `Button` is its label.",
+        "The prop is the DOM event name in camelCase — nothing is renamed.",
+        "The write has to name the atom, sigil and all."
+      ],
+      "explain": "A handler is a prop whose value happens to be callable, which is why a lambda, a named action and `() => doTwoThings()` all fit the same slot with no adapter. And because a lambda body is an imperative body, the compound operators are open to you: `$count += 1` compiles to `$count = $count + 1` and notifies every reader of `$count`. `count += 1` would compile fine too — and update nothing, because `count` was never an atom.",
+      "afterCode": {
+        "src": "Button(\"+1\", { onClick: () => $count += 1, variant: \"primary\" })",
+        "caption": "the shape to remember"
+      },
+      "codex": {
+        "term": "onClick",
+        "def": "A prop holding a callable. Any lambda or named action fits; inside the body you may write atoms with =, +=, -=, ??=, ++ and friends."
+      },
+      "preview": {
+        "program": "$count = 0\n\n$app(Card([\n  SectionHeader(\"Counter\"),\n  Text(`Count: ${$count}`, { variant: \"title\" }),\n  Buttons([\n    Button(\"+1\", { onClick: () => $count += 1, variant: \"primary\" }),\n    Button(\"Reset\", { onClick: () => $count = 0, variant: \"secondary\" })\n  ])\n]))",
+        "caption": "live — press the buttons"
+      }
+    },
+    {
+      "id": "s3",
+      "title": "Name it, don't call it",
+      "kicker": "actions",
+      "icon": "wand",
+      "goal": "Declare a camelCase action once and hand it to a handler by name.",
+      "xp": 110,
+      "teach": {
+        "text": "A `function` with a camelCase name is an **action**: a callable that does something, with an optional `return`. Case is only a readability convention — what decides its role is where you use it.\n\nThere are two ways to use one. As a handler, pass the **name**: `onClick: save`. As an expression, call it: `$greeting = greet(\"Ada\")`.\n\nActions are where imperative work belongs — several writes at once, and the feedback that goes with them. `$toast.success`, `$toast.error`, `$toast.info` and `$toast.warning` render their own stacked layer, so you never add a toast component to the tree.\n\nNeed to pass an argument to a handler? Wrap it in a lambda: `onClick: () => remove(item.id)`.",
+        "code": {
+          "src": "$draft = \"\"\n$saved = \"\"\n\nfunction save() {\n  $saved = $draft\n  $draft = \"\"\n  $toast.success(\"Draft saved\")\n}\n\n$app(Card([\n  Input(\"draft\", { value: $draft, placeholder: \"Write something\" }),\n  Buttons([Button(\"Save\", { onClick: save, variant: \"primary\" })])\n]))",
+          "caption": "declare once, hand it over by name"
+        },
+        "infographic": {
+          "type": "compare",
+          "title": "The parentheses decide everything",
+          "columns": [
+            {
+              "kind": "bad",
+              "title": "Called while the tree is built",
+              "code": "Button(\"Save\", { onClick: save() })",
+              "note": "The object literal is evaluated now, so save() runs now and the button receives whatever it returned."
+            },
+            {
+              "kind": "good",
+              "title": "Handed over",
+              "code": "Button(\"Save\", { onClick: save })",
+              "note": "The button holds the function and calls it when the user clicks."
+            }
+          ]
+        },
+        "tips": [
+          "An action may `return` a value, which is what lets you use the same declaration as an expression: `$greeting = greet(\"Ada\")`.",
+          "`$toast` is one of exactly five namespaces — `$util`, `$storage`, `$console`, `$toast`, `$dom`."
+        ]
+      },
+      "challenge": {
+        "type": "switchboard",
+        "title": "Which ones actually handle a click?",
+        "prompt": "`save` is an action declared above. Switch ON every value that leaves the Button with a working click handler.",
+        "help": "Switch ON the ones that work. Leave the rest OFF.",
+        "switches": [
+          {
+            "label": "onClick: save",
+            "detail": "the action's name",
+            "on": true
+          },
+          {
+            "label": "onClick: save()",
+            "detail": "the action's name, with parentheses",
+            "on": false
+          },
+          {
+            "label": "onClick: () => save()",
+            "detail": "a lambda that calls it",
+            "on": true
+          },
+          {
+            "label": "onClick: () => { $draft = \"\"; $toast.info(\"Cleared\") }",
+            "detail": "a block body with two statements",
+            "on": true
+          },
+          {
+            "label": "onClick: \"save\"",
+            "detail": "the action's name, as a string",
+            "on": false
+          },
+          {
+            "label": "onClick: $count",
+            "detail": "a reactive atom",
+            "on": false
+          }
+        ]
+      },
+      "hints": [
+        "Ask of each one: at the moment this object literal is built, what value lands in the slot?",
+        "Two of them put something in the slot that cannot be called at all.",
+        "`save` is a function. `save()` is whatever `save` gave back."
+      ],
+      "explain": "`onClick` wants a callable, and an object literal is evaluated the moment the tree is built — not when the user clicks. So `save` puts the function in the slot, while `save()` runs the action right there during render and stores its return value, which is usually nothing: the side effect fires at the wrong time *and* the button ends up with no handler. A string and a number are not callable either. Wrapping in a lambda is how you delay a call you need to pass arguments to: `onClick: () => remove(id)`.",
+      "codex": {
+        "term": "Action",
+        "def": "A camelCase `function name(args) { … }` — a callable effect with an optional return. Pass it to a handler by name (`onClick: save`), or call it as an expression (`$x = greet(\"Ada\")`)."
+      }
+    },
+    {
+      "id": "s4",
+      "title": "Sigil Storm",
+      "kicker": "arcade",
+      "icon": "flame",
+      "goal": "Sort names by the only thing that decides.",
+      "xp": 130,
+      "hearts": 3,
+      "teach": {
+        "text": "Names fall down the middle, one at a time. Steer each one into the bin it belongs in.\n\n**Left is reactive. Right is inert.** A name is reactive if — and only if — it starts with `$`. `let $draft` goes left. `const rows` goes right. The keyword in front is noise every single time, and that is the whole point of the run.\n\nEight sorted correctly clears the stage. Three misfiles ends it.",
+        "tips": [
+          "Move the pointer left or right to steer the falling name.",
+          {
+            "kind": "warn",
+            "text": "`profile.email` and `$profile.email` both appear. Only the second one is an address the runtime can write to."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "arcade",
+        "title": "Reactive left, inert right",
+        "prompt": "Steer each falling name into its bin. The `$` prefix is the only thing that decides — `let` and `const` are decoration.",
+        "goal": "0 / 8",
+        "height": 360,
+        "note": "Move the pointer (or drag) to steer the falling name. It lands wherever it crosses the line.",
+        "winNote": "Press Check to bank the XP.",
+        "params": {
+          "target": 8,
+          "reactive": [
+            "$count",
+            "let $draft",
+            "const $mode",
+            "$user.role",
+            "$rows",
+            "$profile.email"
+          ],
+          "inert": [
+            "count",
+            "let total",
+            "const rows",
+            "var flag",
+            "label",
+            "profile.email"
+          ]
+        },
+        "code": "const P = ctx.params;\nconst laneY = ctx.height - 56;\nconst binL = ctx.chip('REACTIVE', { color: ctx.colors.g1, textColor: 0x04101a, size: 12, minWidth: 132 });\nconst binR = ctx.chip('INERT', { color: ctx.colors.dim, textColor: 0xdfe6ff, size: 12, minWidth: 132 });\nconst rail = new PIXI.Graphics();\nctx.stage.addChild(rail, binL, binR);\nlet aim = ctx.width / 2, score = 0, strikes = 0, done = false, tok = null;\nctx.app.stage.on('pointermove', (e) => { aim = e.global.x; });\nctx.app.stage.on('pointerdown', (e) => { aim = e.global.x; });\nfunction layout() {\n  const m = ctx.width / 2;\n  binL.x = m / 2; binL.y = ctx.height - 24;\n  binR.x = m + m / 2; binR.y = ctx.height - 24;\n  rail.clear();\n  rail.moveTo(m, 10).lineTo(m, laneY).stroke({ width: 2, color: ctx.colors.g3, alpha: .3 });\n  rail.moveTo(14, laneY).lineTo(ctx.width - 14, laneY).stroke({ width: 1, color: ctx.colors.ink, alpha: .2 });\n}\nfunction spawn() {\n  const hot = Math.random() < .5;\n  tok = ctx.chip(ctx.pick(hot ? P.reactive : P.inert), { color: ctx.colors.g2, textColor: 0x04101a, size: 14 });\n  tok.hot = hot;\n  tok.x = ctx.width / 2;\n  tok.y = -22;\n  ctx.stage.addChild(tok);\n}\nlayout();\nctx.api.setGoal('0 / ' + P.target);\nspawn();\nctx.onTick((dt) => {\n  if (done || !tok) return;\n  layout();\n  const m = ctx.width / 2;\n  tok.x += (aim - tok.x) * Math.min(0.9, 0.16 * dt);\n  tok.x = Math.max(54, Math.min(ctx.width - 54, tok.x));\n  tok.y += (1.6 + score * 0.14) * dt;\n  if (tok.y < laneY) return;\n  const left = tok.x < m;\n  const ok = left === tok.hot;\n  const bin = left ? binL : binR;\n  gsap.to(bin.scale, { x: 1.14, y: 1.14, duration: .1, onComplete: () => gsap.to(bin.scale, { x: 1, y: 1, duration: .22, ease: 'back.out' }) });\n  const puff = ctx.glow(42, ok ? ctx.colors.good : ctx.colors.bad, .95);\n  puff.x = tok.x; puff.y = laneY;\n  ctx.stage.addChild(puff);\n  gsap.to(puff, { alpha: 0, duration: .55, onComplete: () => { if (!puff.destroyed) puff.destroy(); } });\n  const name = tok.label;\n  tok.destroy();\n  tok = null;\n  if (ok) { score++; ctx.api.setScore(score); ctx.api.setGoal(score + ' / ' + P.target); }\n  else { strikes++; }\n  if (!ok && strikes >= 3) { done = true; ctx.api.fail('Three misfiled. ' + name + ' belonged in the other bin - only the $ decides.'); return; }\n  if (score >= P.target) { done = true; ctx.api.win('Sorted. let and const are noise; the sigil is the mechanism.'); return; }\n  spawn();\n});",
+        "fallback": {
+          "type": "quiz",
+          "prompt": "Which of these declares something the UI will re-render for?",
+          "options": [
+            {
+              "id": "a",
+              "code": "let $draft = \"\""
+            },
+            {
+              "id": "b",
+              "code": "const total = 0",
+              "detail": "`const` does not make it reactive, and neither does anything else here."
+            },
+            {
+              "id": "c",
+              "code": "let count = 0",
+              "detail": "A plain binding — evaluated once."
+            },
+            {
+              "id": "d",
+              "code": "state.count = 0",
+              "detail": "There is no store object to write into. State is a name, not a container."
+            }
+          ],
+          "answer": "a"
+        }
+      },
+      "hints": [
+        "Ignore every keyword. Read the first character of the name itself.",
+        "A member chain counts as reactive only when its root is an atom."
+      ],
+      "explain": "Every run of this drills one decision: the sigil, and nothing else. It matters because the failure is silent — `let count = 0` and `let $count = 0` look almost identical in a diff, both validate, and only one of them makes the page move. When a value in Aktion mysteriously refuses to update, the first thing to check is whether it ever carried the `$`.",
+      "codex": {
+        "term": "Reactive vs inert",
+        "def": "Only a `$`-prefixed name (or a member chain rooted at one) is tracked. `let`/`const`/`var` never affect it — a plain name is a one-shot binding."
+      }
+    },
+    {
+      "id": "s5",
+      "title": "Bound both ways",
+      "kicker": "binding",
+      "icon": "refresh",
+      "goal": "Wire an input to state with no handler at all.",
+      "xp": 120,
+      "teach": {
+        "text": "Pass a `$variable` as an input's `value` and the runtime wires it **both ways**: typing writes the atom, writing the atom updates the field. No handler, no `e.target.value`, no controlled-component ceremony.\n\nA member chain rooted at an atom behaves the same way, so `value: $profile.email` binds one field of one object — and only the readers of `.email` re-render.\n\nThe binding is a consequence of *what you passed*, not of a special prop. Put a plain string in that slot and the field renders it and drops every keystroke.\n\n`onChange(value)` is still there when you need to *do* something as well as store it. It receives the new value directly — already unwrapped — and works alongside a binding or instead of one.",
+        "code": {
+          "src": "$profile = { email: \"\", updates: false }\n\n$app(Card([\n  FormControl(\"Email\", Input(\"email\", { value: $profile.email })),\n  Switch(\"updates\", { label: \"Send me product updates\", value: $profile.updates }),\n  Text(`We will write to ${$profile.email}`)\n]))",
+          "caption": "not one handler in the file"
+        },
+        "code2": {
+          "src": "Input(\"q\", {\n  value: $search,\n  onChange: (v) => $console.log(v)\n})",
+          "caption": "onChange receives the value, not an event"
+        },
+        "infographic": {
+          "type": "flow",
+          "title": "One keystroke, round trip",
+          "direction": "right",
+          "nodes": [
+            {
+              "label": "keystroke",
+              "note": "the user types"
+            },
+            {
+              "label": "value: $profile.email",
+              "note": "an atom, so an address",
+              "accent": true
+            },
+            {
+              "label": "$profile.email",
+              "note": "the runtime writes it"
+            },
+            {
+              "label": "readers re-render",
+              "note": "path-tracked — only .email"
+            }
+          ]
+        },
+        "tips": [
+          "`Input`, `Select`, `Checkbox`, `Switch`, `Slider`, `MultiSelect`, `CheckBoxGroup`, `DatePicker` and the rest of the form group all bind this way.",
+          {
+            "kind": "warn",
+            "text": "`value: \"ada@example.com\"` is a literal, not an address. The field shows it, the user types over it, and nothing is stored."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "hotspot",
+        "title": "What makes it two-way?",
+        "prompt": "One token in this call is both *read* and *written* by the runtime. Click the marker sitting on it.",
+        "code": "Input(\"email\", {\n  value: $profile.email,\n  onChange: (v) => $console.log(v)\n})",
+        "points": [
+          {
+            "match": "\"email\"",
+            "x": "28%",
+            "y": "14%",
+            "label": "1",
+            "tip": "the field id — a string, and only ever a string",
+            "correct": false
+          },
+          {
+            "match": "value",
+            "x": "13%",
+            "y": "38%",
+            "label": "2",
+            "tip": "the prop name — a plain literal would fit here too",
+            "correct": false
+          },
+          {
+            "match": "$profile.email",
+            "x": "43%",
+            "y": "38%",
+            "label": "3",
+            "tip": "a member chain rooted at an atom — an address, not a value",
+            "correct": true
+          },
+          {
+            "match": "onChange",
+            "x": "18%",
+            "y": "63%",
+            "label": "4",
+            "tip": "fires on every keystroke, but stores nothing by itself",
+            "correct": false
+          }
+        ]
+      },
+      "hints": [
+        "Two-way means the runtime needs somewhere to put what the user typed.",
+        "Three of these markers sit on things that would be identical if the field were read-only.",
+        "Which token names an address rather than a value?"
+      ],
+      "explain": "Binding is not a prop, a directive or a modifier — it is inferred from the argument. When the value in an input slot is an atom, or a member chain rooted at one, the runtime has an address it can write to, so it installs the write for you. Hand it a literal and there is nowhere to put the keystroke. That is also why `onChange` is genuinely optional here: it is a notification, not the storage mechanism, and it hands you the value already unwrapped so there is no `e.target.value` to remember.",
+      "afterCode": {
+        "src": "Input(\"email\", { value: $profile.email })",
+        "caption": "a bound field, complete"
+      },
+      "codex": {
+        "term": "Implicit two-way binding",
+        "def": "Passing a `$atom` (or a member chain rooted at one) as an input's `value` wires reads and writes both ways — no handler required. `onChange(value)` is optional and additive."
+      },
+      "preview": {
+        "program": "$profile = { email: \"\", updates: false }\n\n$app(Card([\n  SectionHeader(\"Notifications\"),\n  FormControl(\"Email\", Input(\"email\", { value: $profile.email, placeholder: \"ada@example.com\" })),\n  Switch(\"updates\", { label: \"Send me product updates\", value: $profile.updates }),\n  Text($profile.email ? `We will write to ${$profile.email}` : \"No address yet\", { tone: \"muted\" })\n]))",
+        "caption": "live — type in the field and watch the line below"
+      }
+    },
+    {
+      "id": "s6",
+      "title": "Two counters, two states",
+      "kicker": "produce",
+      "icon": "code",
+      "goal": "Give a component its own private state and prove it by rendering two.",
+      "xp": 150,
+      "teach": {
+        "text": "Where you declare an atom decides who shares it.\n\nAt the **top level**, `$count = 0` is one atom for the whole program. Every reader and every writer touches the same value.\n\nInside a **component body**, `$n = 0` is a declaration *per instance*. Two call sites get two independent atoms: the initializer runs once when that instance first mounts, and later re-renders keep whatever has been written since.\n\nWrite a `Counter(label)` that holds its own count, then render two of them side by side. If they move together, the atom is in the wrong place.",
+        "code": {
+          "src": "function Counter(label) {\n  $n = 0\n  return Card([\n    Text(`${label}: ${$n}`),\n    Button(\"+1\", { onClick: () => $n += 1 })\n  ])\n}",
+          "caption": "one atom per call site — the shape, not the answer"
+        },
+        "infographic": {
+          "type": "layers",
+          "title": "Who owns which atom",
+          "layers": [
+            {
+              "label": "$total = 0",
+              "note": "top level — one atom, shared by every reader in the program"
+            },
+            {
+              "label": "Counter(\"Left\")",
+              "note": "its own $n, from the same line of source"
+            },
+            {
+              "label": "Counter(\"Right\")",
+              "note": "its own $n — a second instance, a second atom"
+            }
+          ]
+        },
+        "tips": [
+          "Always end a component with an explicit `return`. A body that falls through renders nothing, silently.",
+          {
+            "kind": "warn",
+            "text": "Instance identity comes from the call site. When siblings can reorder, pin it with the universal `{ key: id }` prop — every component call accepts one — so each instance keeps hold of its own atom."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "type-code",
+        "title": "Write it yourself",
+        "prompt": "Write a `Counter(label)` component that declares its own count atom, renders the label with the count, and has a `+1` button. Then render **two** of them in a `Row`, all under one `$app(...)`.",
+        "filename": "counters.aktion",
+        "starter": "function Counter(label) {\n\n}\n",
+        "placeholder": "$app(Row([Counter(\"Left\"), Counter(\"Right\")]))",
+        "solution": "function Counter(label) {\n  $n = 0\n  return Card([\n    Text(`${label}: ${$n}`, { variant: \"large-heavy\" }),\n    Button(\"+1\", { onClick: () => $n += 1, variant: \"primary\" })\n  ])\n}\n\n$app(Row([Counter(\"Left\"), Counter(\"Right\")], { gap: \"md\" }))",
+        "validate": {
+          "must": [
+            "function\\s+Counter\\s*\\(",
+            "\\$\\w+\\s*=\\s*0",
+            "return\\s",
+            "onClick",
+            "Counter\\s*\\(\\s*[\"'`][\\s\\S]*Counter\\s*\\(\\s*[\"'`]",
+            "\\$app\\s*\\("
+          ],
+          "mustWhy": [
+            "Start with `function Counter(label) { … }`.",
+            "Declare the count atom inside the body — `$n = 0`.",
+            "A component that never returns renders nothing.",
+            "The `+1` button needs an `onClick` that writes the atom.",
+            "Render two counters so you can see that they are independent.",
+            "Nothing renders without `$app(...)`."
+          ],
+          "mustNot": [
+            "useState",
+            "className",
+            "document\\.",
+            "<[A-Za-z]"
+          ]
+        }
+      },
+      "hints": [
+        "The atom goes on the first line of the body, before the `return`.",
+        "`$n += 1` inside the lambda is enough — no props, no store, no context.",
+        "`$app(Row([Counter(\"Left\"), Counter(\"Right\")]))` — build the component above it."
+      ],
+      "explain": "The rule is *where*, not *how*. The very same statement means two different things depending on its position: at the top level it declares one shared atom, inside a component body it declares one atom per instance. That is why `Counter(\"Left\")` and `Counter(\"Right\")` count separately with no props, no context and no store — and why lifting that one line out to the top level would silently make both buttons drive the same number. Choosing the scope *is* the state-management decision in Aktion; there is no second API for it.",
+      "afterCode": {
+        "src": "function Counter(label) {\n  $n = 0\n  return Card([\n    Text(`${label}: ${$n}`),\n    Button(\"+1\", { onClick: () => $n += 1 })\n  ])\n}\n\n$app(Row([Counter(\"Left\"), Counter(\"Right\")], { gap: \"md\" }))",
+        "caption": "two instances, two atoms"
+      },
+      "codex": {
+        "term": "Per-instance state",
+        "def": "A `$name = value` inside a component body is private to that instance — two call sites get two independent atoms. The identical line at the top level is one shared atom."
+      },
+      "preview": {
+        "program": "function Counter(label) {\n  $n = 0\n  return Card([\n    Text(`${label}: ${$n}`, { variant: \"large-heavy\" }),\n    Button(\"+1\", { onClick: () => $n += 1, variant: \"primary\" })\n  ])\n}\n\n$app(Row([Counter(\"Left\"), Counter(\"Right\")], { gap: \"md\" }))",
+        "caption": "live — press one and watch the other stay put"
+      }
+    }
+  ],
+  "outro": {
+    "headline": "The page moves now",
+    "body": "One sigil declares it, a lambda writes it, a bound input keeps it in sync, and where you declare it decides who shares it. That is the entire reactive model — there is no second half waiting for you.",
+    "nextHint": "Next: components — turning these atoms and actions into pieces you can hand to someone else."
+  },
+  "badge": {
+    "name": "Pulsekeeper",
+    "icon": "bolt",
+    "tagline": "Made the UI move."
+  }
+}

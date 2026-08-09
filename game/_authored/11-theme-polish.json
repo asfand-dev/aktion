@@ -1,0 +1,599 @@
+{
+  "id": "theme-polish",
+  "title": "Theme & Polish",
+  "subtitle": "One program, six themes, zero hard-coded colours",
+  "icon": "paint",
+  "difficulty": 2,
+  "estimateMin": 12,
+  "requires": [
+    "layout-architect"
+  ],
+  "palette": {
+    "g1": "#f0abfc",
+    "g2": "#e879f9",
+    "g3": "#d946ef"
+  },
+  "backdrop": {
+    "preset": "bloom"
+  },
+  "intro": {
+    "headline": "The theme decides. Your program only names meaning.",
+    "body": "Six themes ship in the box — `light`, `dark`, `corporate`, `soft`, `glass`, `modern` — and the host picks one. Your program does not get a vote, and that is the feature.\n\nSo you never write a colour. You write `tone: \"success\"` and `variant: \"primary\"` and `gap: \"lg\"`, and the active theme resolves each of those into a real value. The same file that looks like a bank on `corporate` looks like a frosted pastel app on `glass`, with nothing edited.\n\nWhen you *do* want to brand something, there is exactly one place for it: a `$theme({ ... })` statement. That is the only line in an Aktion program where a hex literal belongs.",
+    "code": "$theme({ name: \"corporate\" })\n\n$app(Card([\n  Badge(\"Active\", { tone: \"success\" }),\n  Button(\"Renew\", { variant: \"primary\", icon: \"circle-check\" })\n]))",
+    "codeCaption": "no colour in the tree — correct on all six themes",
+    "infographic": {
+      "type": "orbit",
+      "title": "What $theme accepts",
+      "core": "$theme",
+      "satellites": [
+        {
+          "label": "colors",
+          "note": "primary, surface, danger, …"
+        },
+        {
+          "label": "radius",
+          "note": "xs sm md lg pill button input"
+        },
+        {
+          "label": "font",
+          "note": "family, sizes, weights"
+        },
+        {
+          "label": "spacing",
+          "note": "xs s m l xl 2xl 3xl"
+        },
+        {
+          "label": "gradients",
+          "note": "brand, accent, warm, cool, success, danger"
+        },
+        {
+          "label": "icons",
+          "note": "your own inline SVG by name"
+        }
+      ]
+    },
+    "objectives": [
+      "Brand a whole program with one `$theme({ ... })` statement",
+      "Pick the semantic value over the hex, every single time",
+      "Write icon strings Font Awesome actually resolves",
+      "Keep a page correct across six themes and two reading directions",
+      "Know when `Styles` and `HTMLTag` are the answer — and when they are the bug"
+    ]
+  },
+  "stages": [
+    {
+      "id": "s1",
+      "title": "The theme is a builtin",
+      "kicker": "tokens",
+      "icon": "paint",
+      "goal": "Rebrand a whole program with one $theme({ ... }) statement.",
+      "xp": 100,
+      "teach": {
+        "text": "`$theme({ ... })` is a **builtin statement**, like `$app`. It is not a component, there is no provider to wrap your tree in, and it never appears inside one.\n\n`name` selects one of the six built-in palettes as the base — `light`, `dark`, `corporate`, `soft`, `glass`, `modern`. Everything else you pass layers on top of it. Selecting a theme by name also loads whatever web fonts that theme needs to look like itself.\n\nOnly the **structured** shape is accepted. Every top-level key must be a token group — `colors`, `radius`, `font`, `spacing`, `shadows`, `gradients`, `zIndex`, `motion`, `fonts`, `icons` — or the metadata keys `name` and `direction`.",
+        "code": {
+          "src": "$theme({\n  name: \"corporate\",\n  colors: { primary: \"#635bff\", primaryHover: \"#4f46e5\" },\n  radius: { button: \"999px\" },\n  font: { weightHeading: \"600\" }\n})",
+          "caption": "the one place a literal value belongs"
+        },
+        "infographic": {
+          "type": "layers",
+          "title": "How one tone becomes a colour",
+          "layers": [
+            {
+              "label": "tone: \"success\"",
+              "note": "all your component ever says"
+            },
+            {
+              "label": "--rui-color-success",
+              "note": "the CSS variable it reads"
+            },
+            {
+              "label": "$theme({ colors: … })",
+              "note": "your in-program override, if any"
+            },
+            {
+              "label": "name: \"corporate\"",
+              "note": "the base palette underneath"
+            }
+          ]
+        },
+        "tips": [
+          "Removing the `$theme(...)` line snaps the page straight back to the host's theme. Nothing else changes.",
+          {
+            "kind": "warn",
+            "text": "The flat shape was removed in 0.5. `$theme({ colorPrimary: \"#0f766e\" })` is a hard schema error — group it as `{ colors: { primary: \"#0f766e\" } }`."
+          },
+          {
+            "kind": "danger",
+            "text": "A typo *inside* a group is ignored in silence. `colors: { primry: \"#0f766e\" }` never warns and never applies."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "hotspot",
+        "title": "One hex is the brand. One is a bug.",
+        "prompt": "The same hex appears twice in this program. One sits in the only place a colour literal belongs; the other is wrong on five of the six themes. Click the marker on the one that breaks.",
+        "code": "$theme({ colors: { primary: \"#635bff\" } })\n\n$app(Card([\n  Badge(\"Active\", { tone: \"success\" }),\n  Text(\"Renews\", { sx: { color: \"#635bff\" } })\n]))",
+        "codeCaption": "the same hex, in two very different places",
+        "help": "Four markers, one click, then press Check.",
+        "points": [
+          {
+            "match": "colors",
+            "x": "24%",
+            "y": "17%",
+            "label": "1",
+            "tip": "a token group - the only top-level shape $theme accepts, and what makes the value beside it legal",
+            "correct": false
+          },
+          {
+            "match": "\"#635bff\"",
+            "nth": 1,
+            "x": "56%",
+            "y": "17%",
+            "label": "2",
+            "tip": "inside a token group: this hex defines the token every component then reads",
+            "correct": false
+          },
+          {
+            "match": "tone",
+            "x": "53%",
+            "y": "56%",
+            "label": "3",
+            "tip": "a meaning, not a value - it resolves through --rui-color-success, a different green on every theme",
+            "correct": false
+          },
+          {
+            "match": "\"#635bff\"",
+            "nth": 2,
+            "x": "62%",
+            "y": "69%",
+            "label": "4",
+            "tip": "a raw colour pinned onto one node - it validates, then ignores every theme after this one",
+            "correct": true
+          }
+        ]
+      },
+      "hints": [
+        "Two markers sit on the same hex. What separates them is which statement they are inside.",
+        "Inside `$theme` a hex *defines* a token. Anywhere below `$app` a hex *replaces* one — and only for as long as the theme stays put.",
+        "`tone: \"success\"` is never the answer here. That is the shape this whole world is teaching you to keep."
+      ],
+      "explain": "`$theme` is a statement, not a node, because theming is not something a subtree opts into — it is a property of the whole document. That is also why the structured form is enforced: the group names are the contract the runtime maps onto `--rui-*` variables. The flat form was removed precisely because `colorPrimary` and `primaryColor` and `colourPrimary` all looked equally plausible to a generator, and the wrong one failed in silence. Now the *shape* fails loudly, and only a typo inside a group can fail quietly.",
+      "afterCode": {
+        "src": "$theme({ name: \"corporate\" })",
+        "caption": "the smallest useful rebrand there is"
+      },
+      "codex": {
+        "term": "$theme({ … })",
+        "def": "A builtin statement — never a component — that merges structured token groups (colors, radius, font, spacing, …) on top of the active base theme. Write it at the top level, before $app."
+      },
+      "preview": {
+        "program": "$theme({ name: \"corporate\" })\n\n$app(Column([\n  PageHeader(\"Invoices\", { subtitle: \"One program. The theme decides how it looks.\" }),\n  Card([\n    Row([\n      Badge(\"Paid\", { tone: \"success\" }),\n      Badge(\"Overdue\", { tone: \"danger\" })\n    ], { gap: \"sm\" }),\n    Text(\"Nothing in this program names a colour.\", { variant: \"body\", tone: \"muted\" })\n  ])\n]))",
+        "caption": "the corporate palette, chosen by one line"
+      }
+    },
+    {
+      "id": "s2",
+      "title": "Semantic, never literal",
+      "kicker": "tokens",
+      "icon": "wand",
+      "goal": "Pass meaning — tone, variant, gap — and let the theme resolve it.",
+      "xp": 110,
+      "teach": {
+        "text": "Every visual choice in the library is an **enum of meanings**, not a value. You say what a thing *is* and the theme says what it looks like.\n\nThe ones you will reach for daily:\n\n- `Badge` tone: neutral · primary · success · warning · danger · info\n- `Pill` tone: neutral · activating · success · warning · critical · promoting · corporate\n- `Text` variant: small · small-heavy · body · body-heavy · large · large-heavy · heading · title\n- `Button` variant: primary · secondary · outline · ghost · link · danger\n- `gap` and `padding`: none · 3xs · 2xs · xs · sm · md · lg · xl · 2xl · 3xl\n\nA wrong enum value is a schema error you will see immediately. A hard-coded value is worse: `sx: { bg: \"#10b981\" }` validates perfectly and then looks wrong on five of the six themes.",
+        "code": {
+          "src": "Badge(\"Active\", { tone: \"success\" })\nPill(\"SSL activating\", { tone: \"activating\" })\nButton(\"Renew\", { variant: \"primary\" })\nRow([left, right], { gap: \"sm\" })",
+          "caption": "four decisions, zero values"
+        },
+        "infographic": {
+          "type": "compare",
+          "title": "Same badge, six themes",
+          "columns": [
+            {
+              "kind": "bad",
+              "title": "Validates, still wrong",
+              "code": "Badge(\"Active\", {\n  sx: { bg: \"#10b981\" }\n})",
+              "note": "Tuned on light. Muddy on corporate, invisible on glass — and no error anywhere."
+            },
+            {
+              "kind": "good",
+              "title": "What you meant",
+              "code": "Badge(\"Active\", {\n  tone: \"success\"\n})",
+              "note": "Resolves through --rui-color-success. Correct on all six, forever."
+            }
+          ]
+        },
+        "tips": [
+          "`Badge` and `Pill` do **not** share a tone list. `Badge` is the solid chip: neutral · primary · success · warning · danger · info. `Pill` is the soft state chip, and its own scale swaps in `activating`, `critical` and `promoting` (it also accepts danger / error / info / primary as synonyms, so only the three state tones are exclusive to it).",
+          "Need the resolved value inside a computed string? `$util.style.token(\"colors.primary\")` returns `var(--rui-color-primary)`, and `$util.style.alpha(\"primary\", 0.12)` tints it — both still theme-safe. `.cx`, `.gradient`, `.clamp` and `.toStyle` round out that namespace.",
+          {
+            "kind": "danger",
+            "text": "`Styles(css)` and `HTMLTag(tag, { … })` are documented last resorts, for markup the catalogue genuinely cannot express. Reaching for either one to set a colour is how a program stops surviving theme changes."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "fill-blanks",
+        "title": "Fill in the meanings",
+        "prompt": "Five slots, one semantic value each. Four chips in the bank are values a real developer types on the first try — leave those where they are.",
+        "display": "code",
+        "template": "$app(Card([\n  SectionHeader(\"Billing\", { eyebrow: \"Account\" }),\n  Text(\"Your plan renews on 12 May\", { variant: {{0}} }),\n  Row([\n    Badge(\"Active\", { tone: {{1}} }),\n    Pill(\"SSL activating\", { tone: {{2}} })\n  ], { gap: {{3}} }),\n  Button(\"Manage plan\", { variant: {{4}} })\n]))",
+        "bank": [
+          "\"body\"",
+          "\"success\"",
+          "\"activating\"",
+          "\"sm\"",
+          "\"primary\"",
+          "\"#10b981\"",
+          "\"14px\"",
+          "\"medium\"",
+          "\"pending\""
+        ],
+        "answer": [
+          "\"body\"",
+          "\"success\"",
+          "\"activating\"",
+          "\"sm\"",
+          "\"primary\""
+        ]
+      },
+      "hints": [
+        "Start with the two that only have one sensible reading: the Button's variant and the Badge's tone.",
+        "`Pill` is the *state* chip. A certificate that is still being issued is not `pending` in this library — check the tone list.",
+        "The gap scale runs `none · 3xs · 2xs · xs · sm · md · lg · xl · 2xl · 3xl`. A pixel value is not on it, and neither is `medium` — the token for that size is two letters long."
+      ],
+      "explain": "Semantic props are a promise in both directions. You promise never to say what the pixel is; the theme promises the meaning will always read correctly — right contrast, right weight, right radius, on whichever of the six palettes the host chose. That is why `\"#10b981\"` in a `tone` slot is a hard error but `sx: { bg: \"#10b981\" }` is not: the first is a category mistake the schema can see, the second is a legal escape hatch you are simply not supposed to use for this. The library cannot stop you hard-coding. It can only make the semantic path shorter, which it does.",
+      "afterCode": {
+        "src": "Row([\n  Badge(\"Active\", { tone: \"success\" }),\n  Pill(\"SSL activating\", { tone: \"activating\" })\n], { gap: \"sm\" })",
+        "caption": "the shape to remember"
+      },
+      "codex": {
+        "term": "Semantic value",
+        "def": "A prop that names meaning (`tone: \"success\"`, `variant: \"ghost\"`, `gap: \"lg\"`) instead of a value. The active theme resolves it, so the same program is correct on every theme."
+      },
+      "preview": {
+        "program": "$app(Card([\n  SectionHeader(\"Billing\", { eyebrow: \"Account\" }),\n  Text(\"Your plan renews on 12 May\", { variant: \"body\", tone: \"muted\" }),\n  Row([\n    Badge(\"Active\", { tone: \"success\" }),\n    Pill(\"SSL activating\", { tone: \"activating\" })\n  ], { gap: \"sm\" }),\n  Buttons([\n    Button(\"Manage plan\", { variant: \"primary\" }),\n    Button(\"Cancel\", { variant: \"ghost\" })\n  ])\n]))",
+        "caption": "live — every colour on screen came from the theme"
+      }
+    },
+    {
+      "id": "s3",
+      "title": "Names, not glyphs",
+      "kicker": "icons",
+      "icon": "star",
+      "goal": "Write icon strings the runtime can actually resolve.",
+      "xp": 110,
+      "teach": {
+        "text": "The runtime loads Font Awesome 6.7.2 for you — into the document and into every instance's shadow root. Host pages add nothing.\n\nAn icon string is the Font Awesome name **with the `fa-` prefix stripped**: `\"house\"`, `\"chart-line\"`, `\"sack-dollar\"`, `\"triangle-exclamation\"`. The default variant is `solid`. For the other weights, either prefix the name — `\"regular:star\"`, `\"brands:github\"` — or pass `variant`.\n\nOne string, one rule, everywhere. `Icon(name, { variant, size })` renders a standalone glyph, and every `icon:` prop in the library — `Button`, `Badge`, `StatCard`, `NavLink`, `Banner`, `ListItem`, `EmptyState` — takes exactly the same thing.\n\nNever an emoji. A name must be ASCII kebab-case, so a pasted glyph fails the check and falls through a legacy path that prints it as **plain text** inside the icon slot — no error, and nothing that `variant`, `size` or `color` can reach. It is text sitting where an icon should be.",
+        "code": {
+          "src": "Icon(\"chart-line\", { size: \"lg\" })\nIcon(\"star\", { variant: \"regular\" })\nIcon(\"brands:github\")\n\nStatCard(\"Revenue\", { value: \"$48k\", icon: \"sack-dollar\" })\nNavLink(\"Profile\", { to: \"/profile\", icon: \"user\" })",
+          "caption": "the same string in five different slots"
+        },
+        "infographic": {
+          "type": "table",
+          "title": "Translating from the Font Awesome docs",
+          "headers": [
+            "What the docs show you",
+            "What the prop wants"
+          ],
+          "rows": [
+            [
+              "fa-house",
+              "house"
+            ],
+            [
+              "fa-solid fa-chart-line",
+              "chart-line"
+            ],
+            [
+              "far fa-star",
+              "regular:star"
+            ],
+            [
+              "fab fa-github",
+              "brands:github"
+            ],
+            [
+              "a glyph pasted from a design file",
+              "the Font Awesome name for it"
+            ]
+          ]
+        },
+        "tips": [
+          "`size` on `Icon` is the usual token scale: `xs` · `sm` · `md` · `lg` · `xl`.",
+          "Icons are decorative and hidden from screen readers by default. Pass `label` when the glyph carries the only meaning in its slot — a tick that means \"verified\", a padlock beside a plan name.",
+          {
+            "kind": "warn",
+            "text": "`Icon(\"fa-house\")` raises no error at all. It is a perfectly good string; it is just not a name the icon font knows, so you get an empty box."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "switchboard",
+        "title": "Which strings resolve?",
+        "prompt": "Switch ON every string that a component's icon prop will turn into a real glyph. Leave the rest off.",
+        "help": "Switch ON every string an icon prop actually resolves. Leave the rest OFF.",
+        "switches": [
+          {
+            "label": "\"house\"",
+            "detail": "the plain name, solid by default",
+            "on": true
+          },
+          {
+            "label": "\"chart-line\"",
+            "detail": "hyphenated names are the norm in FA 6",
+            "on": true
+          },
+          {
+            "label": "\"regular:star\"",
+            "detail": "the variant prefix form",
+            "on": true
+          },
+          {
+            "label": "\"brands:github\"",
+            "detail": "brand marks live behind the brands variant",
+            "on": true
+          },
+          {
+            "label": "\"sack-dollar\"",
+            "detail": "a real FA 6 free name",
+            "on": true
+          },
+          {
+            "label": "\"fa-house\"",
+            "detail": "copied straight from the docs",
+            "on": false
+          },
+          {
+            "label": "\"fa-solid fa-chart-line\"",
+            "detail": "that is the CSS class list, not a name",
+            "on": false
+          },
+          {
+            "label": "\"a pasted emoji glyph\"",
+            "detail": "not ASCII, so it is printed as plain text instead of resolving",
+            "on": false
+          }
+        ]
+      },
+      "hints": [
+        "Five of the eight are legal. Two of the illegal ones are the same mistake made twice, at different lengths.",
+        "The prefix rule cuts both ways: `fa-` always comes off, and `regular:` / `brands:` may go on.",
+        "Anything that looks like it was copied out of an HTML `class` attribute is wrong."
+      ],
+      "explain": "Icons are strings rather than imports so a generated program stays a flat, reviewable document — no bundler, no icon registry, no tree-shaking config. The cost of that is exactly this class of typo, which is why the prefix rule is absolute: strip `fa-`, and use `variant` or a `regular:` / `brands:` prefix for anything that is not solid. The runtime does strip invisible Unicode modifiers from icon strings, so a legacy leftover can still resolve — do not read that as emoji support. It is not.",
+      "codex": {
+        "term": "Icon name",
+        "def": "A Font Awesome 6 name with the `fa-` prefix removed (\"house\", \"chart-line\"), optionally prefixed with a variant (\"regular:star\", \"brands:github\"). Never an emoji."
+      }
+    },
+    {
+      "id": "s4",
+      "title": "Token Match",
+      "kicker": "arcade",
+      "icon": "flame",
+      "goal": "Feel what a hard-coded value costs when the theme changes.",
+      "xp": 140,
+      "hearts": 3,
+      "teach": {
+        "text": "Values fall in **pairs**. Each pair is the same decision written twice — once as a semantic token, once as the literal it happens to equal on today's theme.\n\n**Always take the token.** Take a hex and the host switches to a different base theme, which is entirely its right — and the little preview card in the corner shows you what that costs.\n\nThree flips and the run is over. Bank eight tokens to clear it.",
+        "tips": [
+          "The two chips in a pair are equivalent right now. That is the trap — they stop being equivalent the moment the theme moves.",
+          {
+            "kind": "warn",
+            "text": "`#10b981` really is the success colour on `light` and `dark`. On `corporate` success is `#16a34a`, and on `soft` it is `#5eead4`. Nothing warns you."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "arcade",
+        "title": "Take the token, never the value",
+        "prompt": "Semantic tokens and raw values fall side by side. Catch eight tokens. Catch a value and the theme flips under you.",
+        "goal": "0 / 8",
+        "height": 340,
+        "note": "Move the pointer to slide the collector. Watch the preview card top-left when you take a raw value.",
+        "winNote": "Press Check to bank the XP.",
+        "params": {
+          "target": 8,
+          "tokens": [
+            "tone: \"success\"",
+            "variant: \"primary\"",
+            "gap: \"lg\"",
+            "tone: \"danger\"",
+            "radius: \"pill\"",
+            "tone: \"warning\"",
+            "shadow: \"md\"",
+            "tone: \"info\""
+          ],
+          "hexes": [
+            "#10b981",
+            "#4f46e5",
+            "20px",
+            "#ef4444",
+            "999px",
+            "#f59e0b",
+            "0 6px 24px",
+            "#06b6d4"
+          ]
+        },
+        "code": "const P = ctx.params;\nconst themes = [[0x0b1220, 0xf8fafc, 0x818cf8], [0xf5f7f8, 0x0d1f22, 0x0f766e], [0xfdf6ff, 0x3b1f56, 0x7c4ddb], [0xeceef2, 0x33303a, 0xaf4027]];\nlet ti = 0, score = 0, flips = 0, t = 40, pair = 0;\nconst card = new PIXI.Graphics();\ncard.x = 16; card.y = 14;\nctx.stage.addChild(card);\nconst cap = ctx.text('live preview', { size: 10, color: ctx.colors.dim });\ncap.x = 16; cap.y = 84;\nctx.stage.addChild(cap);\nfunction paint(broken) {\n  const th = themes[ti];\n  card.clear();\n  card.roundRect(0, 0, 132, 64, 10).fill({ color: th[0] }).stroke({ width: 2, color: broken ? ctx.colors.bad : th[2], alpha: 0.9 });\n  card.roundRect(12, 12, 76, 7, 3).fill({ color: th[1], alpha: 0.75 });\n  card.roundRect(12, 25, 50, 6, 3).fill({ color: th[1], alpha: 0.3 });\n  card.roundRect(12, 40, 58, 14, 7).fill({ color: broken ? 0xf43f5e : th[2] });\n}\npaint(false);\nconst pad = ctx.chip('semantic only', { color: ctx.colors.g1, minWidth: 156, size: 12 });\npad.y = ctx.height - 26;\npad.x = ctx.width / 2;\nctx.stage.addChild(pad);\nconst onMove = (e) => { pad.x = Math.max(84, Math.min(ctx.width - 84, e.global.x)); };\nctx.app.stage.on('pointermove', onMove);\nctx.onDestroy(() => ctx.app.stage.off('pointermove', onMove));\nctx.api.setGoal('0 / ' + P.target);\nconst live = [];\nctx.onTick((dt) => {\n  t += dt;\n  if (t > 58) {\n    t = 0;\n    const i = pair % P.tokens.length;\n    pair++;\n    const left = Math.random() < 0.5;\n    const lanes = [ctx.width * 0.3, ctx.width * 0.7];\n    const add = (label, good, x) => {\n      const c = ctx.chip(label, { color: 0x1b2030, textColor: 0xe4ebff, stroke: ctx.colors.g3, size: 12 });\n      c.x = x; c.y = -18; c.good = good;\n      ctx.stage.addChild(c); live.push(c);\n    };\n    add(P.tokens[i], true, lanes[left ? 0 : 1]);\n    add(P.hexes[i], false, lanes[left ? 1 : 0]);\n  }\n  for (let k = live.length - 1; k >= 0; k--) {\n    const c = live[k];\n    c.y += 2.2 * dt;\n    const hit = c.y > pad.y - 20 && c.y < pad.y + 20 && Math.abs(c.x - pad.x) < 88;\n    if (!hit) {\n      if (c.y > ctx.height + 24) { live.splice(k, 1); c.destroy(); }\n      continue;\n    }\n    live.splice(k, 1);\n    c.destroy();\n    if (c.good) {\n      score++;\n      ctx.api.setScore(score);\n      ctx.api.setGoal(score + ' / ' + P.target);\n      gsap.to(pad.scale, { x: 1.16, y: 1.16, duration: 0.1, onComplete: () => gsap.to(pad.scale, { x: 1, y: 1, duration: 0.22, ease: 'back.out' }) });\n      if (score >= P.target) { ctx.api.win('Every value stayed semantic. That page survives all six themes.'); return; }\n    } else {\n      flips++;\n      ti = (ti + 1) % themes.length;\n      paint(true);\n      gsap.delayedCall(0.55, () => paint(false));\n      ctx.api.setGoal(score + ' / ' + P.target + '  -  ' + (3 - flips) + ' flips left');\n      if (flips >= 3) { ctx.api.fail('Three hard-coded values, three themes they were wrong on.'); return; }\n    }\n  }\n});",
+        "fallback": {
+          "type": "quiz",
+          "prompt": "All three of these paint the badge green on the `light` theme. Which one is still right on `corporate` and `glass`?",
+          "options": [
+            {
+              "id": "a",
+              "code": "Badge(\"Live\", { tone: \"success\" })",
+              "detail": "Resolves through `--rui-color-success`, which is a different green on every theme — and correct on all of them."
+            },
+            {
+              "id": "b",
+              "code": "Badge(\"Live\", { sx: { bg: \"#10b981\" } })",
+              "detail": "`sx.bg` accepts a raw colour, so this validates — and then ignores every theme after this one."
+            },
+            {
+              "id": "c",
+              "code": "Badge(\"Live\", { style: \"background: #10b981\" })",
+              "detail": "The universal `style` passthrough. Same problem, one layer further from anything the theme can reach."
+            }
+          ],
+          "answer": "a"
+        }
+      },
+      "hints": [
+        "Both chips in a pair look identical, so you have to read them. A token names a meaning — it has a prop name and a colon (`tone:`, `variant:`, `gap:`). A value is the thing that meaning happens to resolve to today.",
+        "Let a pair fall if you cannot reach the right half in time. A miss costs nothing; a wrong catch costs a flip."
+      ],
+      "explain": "A hard-coded value is not wrong when you write it — that is the entire problem. It is wrong later, on somebody else's theme, in a screenshot you never see. `#10b981` genuinely is `colorSuccess` on `light` and `dark`; it is `#16a34a` on `corporate` and `#5eead4` on `soft`, and a badge that insists on the first one reads as a slightly-off green on four themes out of six. The semantic token is not extra ceremony over the hex — it is the only version of the decision that stays true.",
+      "codex": {
+        "term": "Design token",
+        "def": "A named slot in the theme (colorSuccess, radiusButton, spacingL) that every component reads through a `--rui-*` CSS variable. Name the token; never copy the value it currently holds."
+      }
+    },
+    {
+      "id": "s5",
+      "title": "Polish outside the tree",
+      "kicker": "gotcha",
+      "icon": "warn",
+      "goal": "Reach $head during rendering, and keep the translator binding intact.",
+      "xp": 120,
+      "hearts": 3,
+      "teach": {
+        "text": "Three parts of a polished page are not components at all.\n\n`$head({ ... })` sets the document title, meta description, canonical links, Open Graph and Twitter cards, and JSON-LD. It is **reactive** — it re-applies when the state it reads changes. But it only ever runs when the renderer *reaches* it, which means it belongs **inside a component body**, above the `return`. A `$head(...)` parked at the top level of the file parses cleanly and never fires.\n\n`dir=\"rtl\"`, `\"ltr\"` or `\"auto\"` goes on the host `<aktion-app>` element, not in your code. The runtime reflects it onto the render root and the whole tree flips — text direction, flex order, logical spacing — with zero program changes. (`$theme({ direction: \"rtl\" })` exists too, but it is metadata only — it records the intent and flips nothing.)\n\n`$i18n({ ... })` returns `{ t, setCurrentLanguage, getCurrentLanguage }`. `t(key, vars)` interpolates `{name}` placeholders and understands ICU plural and select forms. Drive `currentLanguage` from a reactive atom and the page re-translates itself.",
+        "code": {
+          "src": "function OrdersPage() {\n  $head({ title: t(\"title\"), meta: { description: t(\"blurb\") } })\n  return Column([PageHeader(t(\"title\"))])\n}\n\n$app(OrdersPage())",
+          "caption": "inside the body, above the return"
+        },
+        "infographic": {
+          "type": "flow",
+          "title": "Why a top-level $head never fires",
+          "direction": "down",
+          "nodes": [
+            {
+              "label": "$app(OrdersPage())",
+              "note": "the root call runs"
+            },
+            {
+              "label": "OrdersPage()",
+              "note": "its body executes"
+            },
+            {
+              "label": "$head({ … })",
+              "note": "reached here, so it applies",
+              "accent": true
+            },
+            {
+              "label": "document title",
+              "note": "and re-applies when state changes"
+            }
+          ]
+        },
+        "tips": [
+          "ICU forms work inside a translation string: `{ n, plural, =0{No items} one{1 item} other{# items} }`.",
+          {
+            "kind": "warn",
+            "text": "Do not shadow the binding you destructured out of `$i18n` — usually `t`. A parameter or loop variable named `t` makes every `t(\"key\")` in that scope call the local instead of the translator. This one *is* linted, as a warning."
+          },
+          "Per-route `$head` calls compose, with the later one winning. That is how a layout sets the site suffix and a page sets its own title."
+        ]
+      },
+      "challenge": {
+        "type": "bug-hunt",
+        "title": "The tab title never changes",
+        "prompt": "This program renders perfectly. The browser tab still says the host page's title. Tap the token responsible.",
+        "code": "$lang = \"en\"\n\nconst { t } = $i18n({\n  defaultLanguage: \"en\",\n  currentLanguage: $lang,\n  translations: {\n    title: { en: \"Orders\", de: \"Bestellungen\" }\n  }\n})\n\n[[$head]]({ title: t(\"title\") })\n\nfunction OrdersPage() {\n  return Column([\n    PageHeader([[t]](\"title\")),\n    Badge(\"Live\", { tone: [[\"success\"]] }),\n    Icon([[\"chart-line\"]])\n  ])\n}\n\n$app(OrdersPage())",
+        "answer": 0,
+        "fixed": "$lang = \"en\"\n\nconst { t } = $i18n({\n  defaultLanguage: \"en\",\n  currentLanguage: $lang,\n  translations: {\n    title: { en: \"Orders\", de: \"Bestellungen\" }\n  }\n})\n\nfunction OrdersPage() {\n  $head({ title: t(\"title\") })\n  return Column([\n    PageHeader(t(\"title\")),\n    Badge(\"Live\", { tone: \"success\" }),\n    Icon(\"chart-line\")\n  ])\n}\n\n$app(OrdersPage())"
+      },
+      "hints": [
+        "Three of the four spans are ordinary and correct. The fourth is the right call in the wrong *place*.",
+        "The page body is fine. Only the thing outside the page is wrong.",
+        "Which of these has to be *reached by the renderer* before it does anything?"
+      ],
+      "explain": "`$head` is not a declaration the runtime scans for — it is a call, and a call only has an effect when something executes it. `$app(OrdersPage())` executes `OrdersPage`, so anything in that body runs; a statement sitting at the top level of the file next to the `$i18n` bundle is just a value the program builds and drops. That is also what makes `$head` reactive and route-aware for free: it re-runs whenever the component that contains it re-renders, so a title built from `$lang` or a route param stays in sync with no extra wiring. Move it inside the body and the same line starts working.",
+      "afterCode": {
+        "src": "function OrdersPage() {\n  $head({ title: t(\"title\") })\n  return Column([PageHeader(t(\"title\"))])\n}",
+        "caption": "reached during rendering, so it fires"
+      },
+      "codex": {
+        "term": "$head({ … })",
+        "def": "Reactive document head — title, meta, og, links, JSON-LD. It must be reached during rendering, so call it inside a component body; a top-level $head(...) parses and never runs."
+      }
+    },
+    {
+      "id": "s6",
+      "title": "Ship it themed",
+      "kicker": "produce",
+      "icon": "code",
+      "goal": "Write a branded page with no colour literal anywhere in the tree.",
+      "xp": 150,
+      "teach": {
+        "text": "Put the whole world together. One `$theme({ ... })` that selects a base palette **by name**, then a page built entirely out of semantic values.\n\nYou need a `Badge` with a `tone`, a `Button` with a `variant`, and a Font Awesome `icon` name somewhere. What you must not have is a single hex, a `Styles(...)`, an `HTMLTag(...)`, or an `fa-` prefix.\n\nIf the real Aktion language service is reachable it will check your program for real and print its diagnostics under the editor — including any enum value you invented.",
+        "code": {
+          "src": "$theme({\n  name: \"…\"\n})\n\n$app(Column([\n  PageHeader(\"…\"),\n  Card([ … ])\n]))",
+          "caption": "the shape, not the answer"
+        }
+      },
+      "challenge": {
+        "type": "type-code",
+        "title": "Write it yourself",
+        "prompt": "Brand a page with `$theme`, selecting one of the six built-in themes by `name`. Then render a `Card` inside `$app(...)` containing a `Badge` with a semantic `tone`, and a `Button` with a `variant` and an `icon`. No hex, no `fa-`, no escape hatches.",
+        "filename": "branded.aktion",
+        "starter": "",
+        "placeholder": "$theme({ name: \"…\" })\n\n$app(…)",
+        "solution": "$theme({\n  name: \"corporate\",\n  radius: { button: \"999px\" }\n})\n\n$app(Column([\n  PageHeader(\"Domains\", { subtitle: \"Nothing here names a colour\" }),\n  Card([\n    Row([\n      Badge(\"Active\", { tone: \"success\" }),\n      Pill(\"SSL activating\", { tone: \"activating\" })\n    ], { gap: \"sm\" }),\n    Text(\"Renews 12 May\", { variant: \"small\", tone: \"muted\" }),\n    Buttons([Button(\"Renew\", { variant: \"primary\", icon: \"circle-check\" })])\n  ])\n]))",
+        "validate": {
+          "must": [
+            "\\$theme\\s*\\(",
+            "name\\s*:\\s*[\"'](light|dark|corporate|soft|glass|modern)[\"']",
+            "\\$app\\s*\\(",
+            "Card\\s*\\(\\s*\\[",
+            "tone\\s*:\\s*[\"'][a-z-]+[\"']",
+            "variant\\s*:\\s*[\"'][a-z-]+[\"']",
+            "icon\\s*:\\s*[\"'][a-z0-9:-]+[\"']"
+          ],
+          "mustWhy": [
+            "Start with the brand: a $theme({ ... }) statement.",
+            "Select one of the six built-ins by name: light, dark, corporate, soft, glass or modern.",
+            "Nothing renders without $app(...).",
+            "Put the content in a Card([ ... ]).",
+            "Give the Badge a semantic tone — success, warning, danger, info, primary or neutral.",
+            "Give the Button a variant — primary, secondary, outline, ghost, link or danger.",
+            "Add a Font Awesome icon name, with the fa- prefix stripped."
+          ],
+          "mustNot": [
+            "#[0-9a-fA-F]{3,8}",
+            "fa-[a-z]",
+            "Styles\\s*\\(",
+            "HTMLTag\\s*\\(",
+            "colorPrimary",
+            "className"
+          ]
+        }
+      },
+      "hints": [
+        "Two statements: `$theme({ name: \"corporate\" })` on top, then `$app(...)`.",
+        "`Badge(\"Active\", { tone: \"success\" })` and `Button(\"Renew\", { variant: \"primary\", icon: \"circle-check\" })` are both complete calls — you only have to nest them.",
+        "If the validator complains about something that should not be there, look for a `#`. A colour literal is only legal inside the `$theme` groups, and you do not need one here."
+      ],
+      "explain": "That program has no opinion about colour, spacing, radius or type — and that is exactly why it looks deliberate. Change `corporate` to `glass` and every surface, shadow, radius and font swaps together, because each one came from the same token map instead of six independent guesses. This is the payoff for the whole world: a program you can hand to any host, on any theme, in any reading direction, and it stays right without you being there.",
+      "codex": {
+        "term": "Theme-neutral program",
+        "def": "A program whose tree contains no colour, spacing or type literal — only semantic props — so it renders correctly under any of the six base themes and either reading direction."
+      },
+      "preview": {
+        "program": "$theme({\n  name: \"corporate\",\n  radius: { button: \"999px\" }\n})\n\n$app(Column([\n  PageHeader(\"Domains\", { subtitle: \"Nothing here names a colour\" }),\n  Card([\n    Row([\n      Badge(\"Active\", { tone: \"success\" }),\n      Pill(\"SSL activating\", { tone: \"activating\" })\n    ], { gap: \"sm\" }),\n    Text(\"Renews 12 May\", { variant: \"small\", tone: \"muted\" }),\n    Buttons([Button(\"Renew\", { variant: \"primary\", icon: \"circle-check\" })])\n  ])\n]))",
+        "caption": "live — one name away from looking like a completely different product"
+      }
+    }
+  ],
+  "outro": {
+    "headline": "It looks right because you never said how it should look",
+    "body": "One `$theme` statement for the brand, semantic props everywhere else, Font Awesome names for icons, `$head` inside a component body, and `dir` on the host. That is the whole polish layer — and none of it is a value you had to guess.",
+    "nextHint": "Next: take a themed page and put it on a real network — loading, errors and refetch."
+  },
+  "badge": {
+    "name": "Tokenwright",
+    "icon": "paint",
+    "tagline": "Six themes, one program, no hexes."
+  }
+}

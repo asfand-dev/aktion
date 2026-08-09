@@ -58,6 +58,14 @@
     "workout-log.aktion",
     "world-clock.aktion"
   ],
+  "ai-apps": [
+    "agent-run-inspector.aktion",
+    "chat-assistant.aktion",
+    "content-studio.aktion",
+    "knowledge-search.aktion",
+    "model-comparison.aktion",
+    "prompt-playground.aktion"
+  ],
   "blocks": [
     "appointment-booking.aktion",
     "chat-widget.aktion",
@@ -85,6 +93,14 @@
     "team-directory.aktion",
     "testimonial-slider.aktion"
   ],
+  "commerce": [
+    "checkout-flow.aktion",
+    "marketplace-browse.aktion",
+    "order-tracking.aktion",
+    "product-detail.aktion",
+    "shop-home.aktion",
+    "subscription-billing.aktion"
+  ],
   "components": [
     "buttons.aktion",
     "cards.aktion",
@@ -101,21 +117,22 @@
     "social.aktion",
     "utility.aktion"
   ],
-  "industry-specific": [
-    "ai.aktion",
-    "cloud-computing.aktion",
-    "cryptocurrency.aktion",
-    "ecommerce.aktion",
-    "education.aktion",
-    "entertainment.aktion",
-    "finance.aktion",
-    "food.aktion",
-    "healthcare.aktion",
-    "marketing.aktion",
-    "personal-portfolio.aktion",
-    "real-estate.aktion",
-    "saas.aktion",
-    "stocks.aktion",
-    "travel.aktion"
+  "dashboards": [
+    "access-console.aktion",
+    "analytics-overview.aktion",
+    "devops-monitoring.aktion",
+    "finance-controller.aktion",
+    "logistics-ops.aktion",
+    "sales-crm.aktion",
+    "support-helpdesk.aktion"
+  ],
+  "websites": [
+    "agency-studio.aktion",
+    "blog-magazine.aktion",
+    "conference-event.aktion",
+    "developer-portfolio.aktion",
+    "product-launch.aktion",
+    "restaurant.aktion",
+    "saas-platform.aktion"
   ]
 }

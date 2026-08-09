@@ -135,9 +135,16 @@
                   different scope. Switch between them with the tabs above the chat.
                 </p>
                 <ul>
-                  <li><strong>Chat &middot; Compact</strong> &mdash; a read-only
-                    reply: layout, text, tables, charts, stats, follow-ups. No
-                    state, actions, or network calls. The cheapest prompt.</li>
+                  <li><strong>Chat &middot; Compact</strong> &mdash; ask it a
+                    <em>question</em>, not for an app. It answers the way any
+                    assistant would, but emits the answer as components instead
+                    of Markdown: headings and prose become
+                    <code>Heading</code>/<code>Markdown</code>, a comparison
+                    becomes a <code>Table</code>, a trend becomes a chart, a
+                    caveat becomes a <code>Callout</code>. Read-only &mdash; no
+                    state, actions, or network calls &mdash; and by far the
+                    cheapest prompt (~40k characters against ~255k for the
+                    others).</li>
                   <li><strong>Chat &middot; Full</strong> &mdash; the whole
                     language, so the reply can be interactive: reactive state,
                     actions, <code>$http</code>, routing.</li>
@@ -199,7 +206,7 @@
                      #cb-notes on the setup card; the full explanation lives
                      there and in llm-integration.html#modes. -->
                 <button class="cb-mode" data-mode="chat-compact" role="tab" aria-selected="true"
-                        title="Read-only reply — layout, text, tables, charts. No state or actions. Cheapest prompt.">
+                        title="Answers a question as UI instead of Markdown — headings, tables, charts, callouts. Read-only, and the cheapest prompt.">
                   <i class="fa-solid fa-comments"></i>
                   <span class="cb-mode-label">Chat <span class="cb-mode-sub">Compact</span></span>
                 </button>
@@ -262,11 +269,14 @@
                 <span class="cb-aurora-blob cb-aurora-blob--c"></span>
               </div>
               <span class="cb-welcome-eyebrow"><span class="cb-pulse-dot"></span> Live · streaming · generative UI</span>
-              <h2 id="cb-welcome-title">What should we <span class="cb-grad-text">build</span> today?</h2>
-              <p>
-                Describe any interface — a dashboard, a marketing site, a full
-                SaaS app — and watch the LLM stream it into a live UI. Click a
-                suggestion below or type your own prompt.
+              <!-- Title and lead are rewritten per mode by chat-bot.js; these
+                   are the Chat · Compact defaults, which is the mode the page
+                   opens in. -->
+              <h2 id="cb-welcome-title">Ask anything, get a <span class="cb-grad-text">UI</span> back.</h2>
+              <p id="cb-welcome-lead">
+                Ask an ordinary question. Instead of a wall of Markdown, the
+                answer streams back as components — headings, tables, charts,
+                callouts, code. Click a suggestion below or type your own.
               </p>
               <div class="cb-welcome-stats" aria-hidden="true">
                 <span class="cb-stat"><i class="fa-solid fa-bolt"></i> Realtime stream</span>
@@ -408,7 +418,7 @@
       } catch (_) {}
     })();
   </script>
-  <script type="module" src="assets/site.js?v=2026.07.31"></script>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
   <script type="module" src="assets/chat-bot.js?v=2026.05.22"></script>
 </body>
 </html>

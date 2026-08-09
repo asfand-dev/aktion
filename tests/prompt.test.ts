@@ -183,6 +183,7 @@ describe("generatePrompt", () => {
       expect(text).toContain("Aktion");
       expect(text).toContain("$app(");
       expect(text).toContain("## Syntax (read-only subset)");
+      expect(text).toContain("## Markdown → Aktion");
       expect(text).toContain("## Component library (read-only)");
       expect(text).toContain("## `$util` — runtime helper namespace");
       expect(text).toContain("## Hoisting & streaming (CRITICAL)");

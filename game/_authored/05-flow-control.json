@@ -1,0 +1,539 @@
+{
+  "id": "flow-control",
+  "title": "Flow Control",
+  "subtitle": "Statements, expressions, and the line between them",
+  "icon": "code",
+  "difficulty": 3,
+  "estimateMin": 12,
+  "requires": [
+    "layout-architect"
+  ],
+  "palette": {
+    "g1": "#4ade80",
+    "g2": "#a3e635",
+    "g3": "#34d399"
+  },
+  "backdrop": {
+    "preset": "stream"
+  },
+  "intro": {
+    "headline": "Some code makes a value. Some code makes things happen.",
+    "body": "Aktion is JavaScript, so it inherits JavaScript's oldest split: **expressions** produce a value, **statements** perform an action. In a browser you can ignore the difference for years. Here you cannot — because the right-hand side of every `=` is a value slot, and a UI is built almost entirely out of `=`.\n\n`if`, `switch`, `for`, `while`, `do...while` and `try` are statements. They are fully supported; they simply live in one place — an imperative body. That means a `function`, a lambda written with braces, or an `$effect` callback. Put one on the right of `=` and the parser stops you and names the construct.\n\nThat sounds restrictive until you see the replacements. A ternary branches. `.map` loops. A `switch` wrapped in a function and then called does multi-way dispatch. Every one of them is shorter than what it replaces.",
+    "code": "view = $tab == \"grid\" ? Grid(cards, { columns: 3 }) : List($rows.title)\n\nfunction viewFor(tab) {\n  switch (tab) {\n    case \"grid\": return Grid(cards, { columns: 3 })\n    default:     return List($rows.title)\n  }\n}",
+    "codeCaption": "the two ways to branch into a value",
+    "infographic": {
+      "type": "layers",
+      "title": "Three places code can live",
+      "layers": [
+        {
+          "label": "top level",
+          "note": "bindings, $app, and imperative statements that run once per plan"
+        },
+        {
+          "label": "expression position",
+          "note": "right of an equals sign, a call argument, an array element - values only"
+        },
+        {
+          "label": "imperative body",
+          "note": "function, braced lambda, $effect - the full statement surface"
+        }
+      ]
+    },
+    "objectives": [
+      "Name the six block constructs that cannot sit on the right of an `=`",
+      "Replace an `if` with a ternary and a `for` with `.map`",
+      "Wrap a `switch` in a function so it can produce a value",
+      "Break a long line without silently breaking the statement",
+      "Predict what `==`, `===` and `<` actually return"
+    ]
+  },
+  "stages": [
+    {
+      "id": "s1",
+      "title": "Statements are not values",
+      "kicker": "the boundary",
+      "icon": "target",
+      "goal": "Tell an expression from a statement before the parser has to.",
+      "xp": 100,
+      "teach": {
+        "text": "An **expression** evaluates to something: `2 + 2`, `$rows.length`, `cond ? a : b`, `Card([Text(\"hi\")])`. Anywhere a value is expected — right of `=`, inside a call, inside an array, inside a template hole — only expressions are allowed.\n\nA **statement** performs an action and evaluates to nothing. Six of them show up constantly in UI code: `if`, `switch`, `for` (including `for...of`), `while`, `do...while` and `try`. All six are fully supported — they run inside a `function` body, a lambda written with braces, or an `$effect` callback.\n\nMix the two up and the parser stops you and names the construct. Write `view = if (…)` and the error reads: `if` is a statement, not an expression — followed by the replacement to use.",
+        "code": {
+          "src": "function refresh(rows) {\n  if (rows.length === 0) return\n  for (const r of rows) { $seen = [...$seen, r.id] }\n}\n\ncount = $rows.length === 0 ? \"empty\" : $util.plural($rows.length, \"row\")",
+          "caption": "statements inside the body, an expression on the right of ="
+        },
+        "infographic": {
+          "type": "anatomy",
+          "title": "One line, two territories",
+          "code": "view = $tab == \"grid\" ? Grid(cards, { columns: 3 }) : List(rows)",
+          "parts": [
+            {
+              "match": "view",
+              "key": "statement",
+              "text": "The whole line is an assignment statement. A program is a list of these."
+            },
+            {
+              "match": "=",
+              "key": "the border",
+              "text": "Everything to the right of this has to be a value. A statement here is a parse error."
+            },
+            {
+              "match": "$tab == \"grid\"",
+              "key": "expression",
+              "text": "A comparison. It evaluates to true or false, so it is welcome on either side."
+            },
+            {
+              "match": "?",
+              "key": "ternary",
+              "text": "The only branch that produces a value. Both arms must be expressions too."
+            }
+          ]
+        },
+        "tips": [
+          "`for...of`, `for...in` and the classic three-part `for` are all statements — the loop keyword is what matters, not its shape.",
+          "Five of the six get the named diagnostic (`if`, `for`, `switch`, `while`, `try`). `do...while` in expression position falls out as a plain `Unexpected token Keyword \"do\"` — same rule, blunter message.",
+          {
+            "kind": "warn",
+            "text": "`let`, `const` and `var` are optional in Aktion and change nothing about this rule. `let x = if (c) {…}` fails exactly the same way."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "quiz",
+        "title": "Only one of these parses",
+        "prompt": "Each line tries to pick a view for the current tab. Three of them are parse errors. Which line does the parser accept?",
+        "options": [
+          {
+            "id": "a",
+            "code": "view = $tab == \"grid\" ? Grid(cards, { columns: 3 }) : List(rows)"
+          },
+          {
+            "id": "b",
+            "code": "view = if ($tab == \"grid\") { Grid(cards) } else { List(rows) }",
+            "detail": "The habit from every imperative language. `if` runs a branch; it never hands a value back."
+          },
+          {
+            "id": "c",
+            "code": "view = switch ($tab) { case \"grid\": Grid(cards); default: List(rows) }",
+            "detail": "`switch` is a statement too. It has to be wrapped in a function that returns from each arm."
+          },
+          {
+            "id": "d",
+            "code": "rows = for (const r of $items) { Row([Text(r.title)]) }",
+            "detail": "A loop evaluates to nothing at all. `.map` is the one that returns the array you wanted."
+          }
+        ],
+        "answer": "a"
+      },
+      "hints": [
+        "Three of these open with a keyword. The one that parses opens with a value.",
+        "Finish the sentence for each line: \"the value of this is …\". Three of them have no ending."
+      ],
+      "explain": "The parser refuses `if`, `switch` and `for` on the right of `=` for the same reason JavaScript does: they have no value to give you. `if` picks a branch and runs it; `for` runs a body N times; neither one hands anything back to the assignment waiting on the left. A ternary is a different animal — it *is* an expression, so it evaluates to whichever arm it picks, and that value lands in `view`. Because the diagnostic names both the construct and its replacement, this is a mistake you get to make exactly once.",
+      "codex": {
+        "term": "Expression vs statement",
+        "def": "An expression evaluates to a value and may sit anywhere a value is expected. A statement performs an action and may only sit in a body — a `function`, a braced lambda, or an `$effect`."
+      }
+    },
+    {
+      "id": "s2",
+      "title": "The three replacements",
+      "kicker": "rewrites",
+      "icon": "wand",
+      "goal": "Turn each rejected statement into the expression that replaces it.",
+      "xp": 110,
+      "teach": {
+        "text": "Every rejected form has a shorter replacement. Learn the three and the restriction stops costing you anything.\n\nA **ternary** replaces `if`. Both arms are expressions, so they can be component calls, and you can chain them (`a ? x : b ? y : z`) when there are three cases.\n\n**`.map`** replaces `for`. It is *the* idiom for turning data into UI — `$rows.map(r => Row([Text(r.title)]))` gives you the array that `Column` and `Grid` already expect. `.filter`, `.reduce` and `.flatMap` are all there too.\n\nFor genuine multi-way dispatch, **wrap the `switch` in a function** and `return` from each arm. A function call is an expression, so `view = viewFor($tab)` is perfectly legal — and the `switch` never leaves the body it belongs in. That last move is the general escape hatch: any statement can produce a value if you put it in a function and `return`.",
+        "code": {
+          "src": "banner = $error ? Callout($error, { tone: \"danger\" }) : Callout(\"All clear\", { tone: \"success\" })\nrows   = $orders.map(o => Text(o.title))",
+          "caption": "ternary for the branch, .map for the loop"
+        },
+        "code2": {
+          "src": "function viewFor(tab) {\n  switch (tab) {\n    case \"grid\": return Grid(cards, { columns: 3 })\n    case \"list\": return List($rows.title)\n    default:     return EmptyState(\"Pick a view\")\n  }\n}\n\nview = viewFor($tab)",
+          "caption": "the switch stays in a body; the call is the expression"
+        },
+        "infographic": {
+          "type": "table",
+          "title": "Rejected, and what replaces it",
+          "headers": [
+            "The parser rejects",
+            "Write this instead"
+          ],
+          "rows": [
+            [
+              "x = if (c) { a } else { b }",
+              "x = c ? a : b"
+            ],
+            [
+              "x = for (let r of rows) { Row(r) }",
+              "x = rows.map(r => Row(r))"
+            ],
+            [
+              "x = switch (v) { case \"a\": A }",
+              "function pick(v) { switch … } then x = pick(v)"
+            ],
+            [
+              "x = try { risky() } catch (e) { null }",
+              "return from inside a function body, then call it"
+            ]
+          ]
+        },
+        "tips": [
+          "Chained ternaries stay readable for two or three cases. Past that, reach for the wrapped `switch`.",
+          {
+            "kind": "warn",
+            "text": "`.forEach` returns `undefined`. If you want nodes back it has to be `.map`."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "fill-blanks",
+        "title": "Rewrite all three",
+        "prompt": "The same three branches, written as expressions. Fill each slot. Three chips in the bank are the statement forms you are replacing — leave those where they are.",
+        "display": "code",
+        "template": "banner = $error {{0}} Callout($error, { tone: \"danger\" }) {{1}} Callout(\"All clear\", { tone: \"success\" })\n\nrows = $orders{{2}}(o => Text(o.title))\n\nfunction viewFor(tab) {\n  {{3}} (tab) {\n    case \"grid\": return Grid(cards, { columns: 3 })\n    default:     return List($rows.title)\n  }\n}",
+        "bank": [
+          "?",
+          ":",
+          ".map",
+          "switch",
+          "if",
+          "else",
+          ".forEach"
+        ],
+        "answer": [
+          "?",
+          ":",
+          ".map",
+          "switch"
+        ]
+      },
+      "hints": [
+        "The two-character branch is `?` then `:` — condition first, then the true arm, then the false arm.",
+        "One array method returns a new array; the other returns nothing. You need the one that returns.",
+        "The last slot is the statement you are *allowed* to keep, because it is already inside a function body."
+      ],
+      "explain": "Nothing was lost in the rewrite. The ternary branches, `.map` loops, and the `switch` survives completely untouched — it just moved into a body where statements are legal, and the call `viewFor($tab)` became the expression that carries its result out. Note what makes the third one work: `return`. A `switch` cannot produce a value, but the function around it can, and a call is always an expression.",
+      "afterCode": {
+        "src": "banner = $error ? Callout($error, { tone: \"danger\" }) : Callout(\"All clear\", { tone: \"success\" })\nrows   = $orders.map(o => Text(o.title))\nview   = viewFor($tab)",
+        "caption": "three branches, not one statement on the right"
+      },
+      "codex": {
+        "term": "Wrapped switch",
+        "def": "A `switch` cannot produce a value, but a function can. Put the switch in a function body, `return` from each arm, and call it: `view = viewFor($tab)`."
+      },
+      "preview": {
+        "program": "$error = null\n$orders = [{ title: \"AK-1180\" }, { title: \"AK-1181\" }, { title: \"AK-1182\" }]\n\n$app(Column([\n  PageHeader(\"Orders\", { breadcrumbs: false }),\n  banner,\n  Card([SectionHeader(\"Open\"), Column(rows)])\n]))\n\nbanner = $error ? Callout($error, { tone: \"danger\" }) : Callout(\"All clear\", { tone: \"success\" })\nrows = $orders.map(o => Text(o.title))",
+        "caption": "the ternary and the .map, rendered for real"
+      }
+    },
+    {
+      "id": "s3",
+      "title": "Where a line ends",
+      "kicker": "continuations",
+      "icon": "eye",
+      "goal": "Know which leading token continues a statement — and which one silently starts a new one.",
+      "xp": 120,
+      "hearts": 3,
+      "teach": {
+        "text": "There are no semicolons, so the parser decides where a statement ends by peeking at the next line. If the first significant token there can only *extend* an expression, the line break is swallowed and the statement keeps building.\n\nThose tokens are the operators: `.` `?.` `?` `:` `&&` `||` `??` `==` `!=` `===` `!==` `<` `>` `<=` `>=` `instanceof` `in` `+` `-` `*` `/` `%` `**`, plus the bitwise and shift operators. That is what lets you split a long method chain or a multi-line ternary.\n\n**A `(` or `[` at the start of a line continues nothing.** Same rule as JavaScript's ASI. Break *after* the operator, never before the bracket — otherwise you end up with two statements that both parse, the second one does nothing, and not a single diagnostic fires.",
+        "code": {
+          "src": "rows = $orders\n  .filter(o => o.open)\n  .map(o => Text(o.title))\n\nlabel = \"Subtotal: \"\n  + $util.format(total, \"currency\")",
+          "caption": "a leading . and a leading + keep the statement alive"
+        },
+        "infographic": {
+          "type": "flow",
+          "title": "How the parser decides",
+          "direction": "down",
+          "nodes": [
+            {
+              "label": "end of line",
+              "note": "no semicolon to go on"
+            },
+            {
+              "label": "peek ahead",
+              "note": "skip the newlines, find the next real token"
+            },
+            {
+              "label": "an operator?",
+              "note": "dot, plus, question mark - swallow the break and keep going"
+            },
+            {
+              "label": "a ( or [ ?",
+              "note": "stop - this is a brand new statement",
+              "accent": true
+            }
+          ]
+        },
+        "tips": [
+          {
+            "kind": "danger",
+            "text": "`$app` alone on a line with `(Column([...]))` on the next validates cleanly and renders an empty page. It parses as two statements and the root is never called."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "bug-hunt",
+        "title": "One line break too many",
+        "prompt": "Four lines here open with a marked token. Three of them continue the statement above. Tap the one that quietly starts a new one — this program validates without a single warning and renders a blank page.",
+        "code": "$cart = [{ label: \"Chair\", price: 40 }, { label: \"Desk\", price: 120 }]\n\ntotal = $util.sum($cart.price)\n\nlabel = \"Subtotal: \"\n  [[+]] $util.format(total, \"currency\")\n\nrows = $cart\n  [[.filter]](item => item.price > 50)\n  [[.map]](item => Text(item.label))\n\n$app\n[[(]]Column([rows, Text(label)]))",
+        "answer": 3,
+        "fixed": "$cart = [{ label: \"Chair\", price: 40 }, { label: \"Desk\", price: 120 }]\n\ntotal = $util.sum($cart.price)\n\nlabel = \"Subtotal: \"\n  + $util.format(total, \"currency\")\n\nrows = $cart\n  .filter(item => item.price > 50)\n  .map(item => Text(item.label))\n\n$app(Column([rows, Text(label)]))"
+      },
+      "hints": [
+        "Three of the four marked tokens are operators. One of them is not.",
+        "Ask of each token: could this possibly *extend* the expression on the line above?",
+        "Read the last two lines out loud. Is `$app` actually being called at all?"
+      ],
+      "explain": "`+`, `.filter` and `.map` are all leading operators, and a leading operator tells the parser to swallow the line break and keep building the same expression — that is exactly how a fluent chain or a wrapped sum is meant to be written. `(` cannot extend anything, so the parser closes `$app` off as a bare expression statement and reads `(Column([...]))` as a second, separate statement. Both parse. Neither renders, because the root was never invoked. This is JavaScript's ASI footgun, inherited whole, and the fix is always the same shape: break *after* an operator, never before a bracket.",
+      "afterCode": {
+        "src": "$app(Column([rows, Text(label)]))",
+        "caption": "the call and its parentheses stay on one line"
+      },
+      "codex": {
+        "term": "Line continuation",
+        "def": "A statement continues onto the next line when that line starts with an operator (`.` `?.` `&&` `??` `?` `:` `+` `-` and friends). A leading `(` or `[` starts a new statement instead — so never break a call before its parentheses."
+      }
+    },
+    {
+      "id": "s4",
+      "title": "The Gate",
+      "kicker": "arcade",
+      "icon": "bolt",
+      "goal": "Route each fragment to the gate that will accept it.",
+      "xp": 140,
+      "hearts": 3,
+      "teach": {
+        "text": "Two gates. The left one is **expression position** — everything to the right of an `=`. The right one is an **imperative body**: a `function`, a braced lambda, an `$effect`.\n\nSteer each falling fragment into the gate that will take it. Statements only fit through `{ body }`. Send one to `= value` and it shatters with the parse error you would have earned.\n\nEight clean routes clears the stage. Three shattered fragments ends the run.",
+        "code": {
+          "src": "open = $rows.filter(r => r.open)\n\nfunction refresh() {\n  for (const r of $rows) { $seen = [...$seen, r.id] }\n}",
+          "caption": "the value gate on the left, the body gate on the right"
+        },
+        "tips": [
+          "Move the pointer (or drag) to steer the falling fragment left or right.",
+          {
+            "kind": "warn",
+            "text": "In real code an expression is welcome inside a body too. The gate that matters is the one that *rejects* — and only `= value` ever rejects anything."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "arcade",
+        "title": "Route the fragments",
+        "prompt": "Statements only fit through `{ body }`. Expressions belong at `= value`. Route eight in a row.",
+        "goal": "0 / 8",
+        "height": 340,
+        "note": "Move the pointer to steer the falling fragment. A statement sent to the value gate shatters.",
+        "winNote": "Press Check to bank the XP.",
+        "params": {
+          "target": 8,
+          "expr": [
+            "cond ? A() : B()",
+            "$rows.map(r => Row(r))",
+            "$rows.filter(r => r.open)",
+            "viewFor($tab)",
+            "$user?.name ?? fallback",
+            "$rows.length",
+            "$cart.price",
+            "$n + 1"
+          ],
+          "stmt": [
+            "if (cond) { … }",
+            "for (const r of $rows) { … }",
+            "switch ($tab) { … }",
+            "while (n > 0) { … }",
+            "try { … } catch (e) { … }",
+            "do { … } while (cond)"
+          ]
+        },
+        "code": "const P = ctx.params;\nconst gateY = ctx.height - 34;\nconst valueGate = ctx.chip('= value', { color: ctx.colors.g1, textColor: 0x04101a, minWidth: 128, size: 13 });\nvalueGate.x = ctx.width * 0.26; valueGate.y = gateY;\nconst bodyGate = ctx.chip('{ body }', { color: ctx.colors.g3, textColor: 0x04101a, minWidth: 128, size: 13 });\nbodyGate.x = ctx.width * 0.74; bodyGate.y = gateY;\nconst seam = new PIXI.Graphics();\nseam.moveTo(ctx.width / 2, 18).lineTo(ctx.width / 2, gateY - 24).stroke({ width: 2, color: ctx.colors.dim, alpha: 0.28 });\nctx.stage.addChild(seam, valueGate, bodyGate);\nlet routed = 0, wrong = 0, done = false, chip = null, isStmt = false;\nctx.api.setGoal('0 / ' + P.target);\nfunction spawn() {\n  isStmt = Math.random() < 0.5;\n  chip = ctx.chip(isStmt ? ctx.pick(P.stmt) : ctx.pick(P.expr), { color: isStmt ? ctx.colors.g2 : ctx.colors.g1, textColor: 0x04101a, size: 12 });\n  chip.x = ctx.width / 2;\n  chip.y = -16;\n  ctx.stage.addChild(chip);\n}\nfunction shatter(x, y, msg) {\n  for (let i = 0; i < 9; i++) {\n    const s = new PIXI.Graphics();\n    s.roundRect(-3, -3, 6, 6, 1).fill({ color: ctx.colors.bad });\n    s.x = x; s.y = y;\n    ctx.stage.addChild(s);\n    gsap.to(s, { x: x + ctx.rand(-80, 80), y: y + ctx.rand(-46, 30), alpha: 0, duration: 0.55, onComplete: () => s.destroy() });\n  }\n  const note = ctx.text(msg, { size: 11, color: ctx.colors.bad, mono: true });\n  note.anchor.set(0.5);\n  note.x = ctx.width / 2;\n  note.y = y - 30;\n  ctx.stage.addChild(note);\n  gsap.to(note, { alpha: 0, y: note.y - 20, duration: 1.2, onComplete: () => note.destroy() });\n}\nctx.app.stage.eventMode = 'static';\nctx.app.stage.hitArea = new PIXI.Rectangle(0, 0, ctx.width, ctx.height);\nctx.app.stage.on('pointermove', (e) => { if (chip) chip.x = Math.max(90, Math.min(ctx.width - 90, e.global.x)); });\nspawn();\nctx.onTick((dt) => {\n  if (done || !chip) return;\n  chip.y += 1.9 * dt;\n  if (chip.y < gateY - 20) return;\n  const toValue = chip.x < ctx.width / 2;\n  const ok = toValue !== isStmt;\n  const gate = toValue ? valueGate : bodyGate;\n  const dead = chip;\n  chip = null;\n  if (ok) {\n    routed++;\n    ctx.api.setScore(routed);\n    ctx.api.setGoal(routed + ' / ' + P.target);\n    gsap.to(gate.scale, { x: 1.16, y: 1.16, duration: 0.1, onComplete: () => gsap.to(gate.scale, { x: 1, y: 1, duration: 0.22, ease: 'back.out' }) });\n    gsap.to(dead, { alpha: 0, duration: 0.28, onComplete: () => dead.destroy() });\n  } else {\n    wrong++;\n    shatter(dead.x, dead.y, toValue ? 'that is a statement - the value gate shatters' : 'that one produces a value - send it to = value');\n    dead.destroy();\n  }\n  if (routed >= P.target) { done = true; ctx.api.win('Every fragment through a gate that accepts it.'); return; }\n  if (wrong >= 3) { done = true; ctx.api.fail('Three parse errors. Keywords go through { body } only.'); return; }\n  spawn();\n});\n",
+        "fallback": {
+          "type": "quiz",
+          "prompt": "The value gate accepts exactly one of these. Which fragment is legal on the right-hand side of `=`?",
+          "options": [
+            {
+              "id": "a",
+              "code": "$orders.filter(o => o.open).map(o => Row(o))"
+            },
+            {
+              "id": "b",
+              "code": "if ($orders.length) { OrderList() } else { EmptyState(\"None\") }",
+              "detail": "`if` runs a branch. It has no value to assign."
+            },
+            {
+              "id": "c",
+              "code": "for (const o of $orders) { Row(o) }",
+              "detail": "A loop produces nothing. `.map` produces the array."
+            },
+            {
+              "id": "d",
+              "code": "switch ($tab) { case \"grid\": Grid(cards) }",
+              "detail": "Legal inside a function body, never on the right of an equals sign."
+            }
+          ],
+          "answer": "a"
+        }
+      },
+      "hints": [
+        "Anything that opens with a keyword — `if`, `for`, `switch`, `while`, `do`, `try` — is a statement.",
+        "Anything with `?` and `:`, `.map`, `??`, or a bare call is an expression.",
+        "If it can finish the sentence \"the value of this is …\", steer it left."
+      ],
+      "explain": "The gate is not a metaphor for style — it is literally what the parser does. When it reads `x =` it switches into expression mode, and the only thing it will accept there is something that can produce a value. A keyword like `for` in that position has nowhere to go, so the parse stops and names the construct. Inside a body the parser is in statement mode, where expressions and statements are both welcome. That asymmetry is why every replacement in this world works the same way: move the statement into a body, and carry its result out through a `return`.",
+      "codex": {
+        "term": "Expression position",
+        "def": "Any slot where the parser expects a value: right of `=`, a call argument, an array element, a ternary arm, a template hole. Statements are rejected there and nowhere else."
+      }
+    },
+    {
+      "id": "s5",
+      "title": "What the operators actually return",
+      "kicker": "semantics",
+      "icon": "puzzle",
+      "goal": "Predict the result of ==, === and < before you run them.",
+      "xp": 120,
+      "hearts": 3,
+      "teach": {
+        "text": "Comparison in Aktion is JavaScript's, coercion and all, because the runtime hands the operands to the engine.\n\n`==` and `!=` are **abstract**: `1 == \"1\"` is `true`, `0 == false` is `true`, and the one you actually want — `x == null` — is `true` for both `null` and `undefined`. `===` and `!==` stay strict. Use `== null` deliberately as a two-in-one guard, and `===` everywhere else.\n\nRelational `<` and `>` compare alphabetic strings lexicographically, so `arr.sort((a, b) => a.name > b.name ? 1 : -1)` orders correctly. `Date` operands coerce through `valueOf`, so `new Date(a) > new Date(b)` compares the instants rather than silently comparing two zeroes.\n\nOne documented divergence to keep in your head: **two numeric strings compare numerically**, so `\"5\" < \"10\"` is `true` in Aktion and `false` in plain JavaScript. Convenient when API data arrives as strings — surprising if you assume pure JS.",
+        "code": {
+          "src": "guard  = $draft == null ? \"nothing saved\" : \"draft ready\"\nbyName = $people.sort((a, b) => a.name > b.name ? 1 : -1)\nnewest = new Date($a.created) > new Date($b.created)",
+          "caption": "one abstract guard, one lexicographic sort, one date compare"
+        },
+        "infographic": {
+          "type": "compare",
+          "title": "Two guards that are not the same",
+          "columns": [
+            {
+              "kind": "good",
+              "title": "Catches both",
+              "code": "$draft == null",
+              "note": "true for null AND undefined - the guard you almost always want"
+            },
+            {
+              "kind": "bad",
+              "title": "Catches one",
+              "code": "$draft === null",
+              "note": "misses undefined, and an atom that was never assigned is undefined, not null"
+            }
+          ]
+        },
+        "tips": [
+          "`x == null` is the single place `==` beats `===`. Reach for it on purpose, not by accident.",
+          {
+            "kind": "warn",
+            "text": "Relational `<` and `>` are the one corner where Aktion deviates from JavaScript: two numeric strings compare by value."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "sequence-tap",
+        "title": "Which rule fires first",
+        "prompt": "Relational `<` does one thing to both operands, then tries three rules and stops at the first that fits. Tap all four in the order Aktion runs them — the order that makes `\"5\" < \"10\"` come out `true`.",
+        "help": "One chip is the preparation step every comparison starts with. The other three are the rules, and the first rule that fits decides the result.",
+        "code": "sortsRight = \"beta\" < \"gamma\"\nbyInstant  = new Date($a.created) > new Date($b.created)\nmixedPair  = $rows.length < \"10\"\napiStrings = \"5\" < \"10\"",
+        "codeCaption": "four comparisons, four different rules",
+        "order": [
+          "coerce each side with valueOf",
+          "two numeric strings? compare by value",
+          "two strings? compare letter by letter",
+          "nothing matched? compare as numbers"
+        ]
+      },
+      "hints": [
+        "Nothing can be tested until both sides are primitives — that is what makes `new Date(a) > new Date(b)` compare instants instead of two zeroes.",
+        "If the letter-by-letter rule ran first, `\"5\" < \"10\"` would be `false`, because `\"5\"` outranks `\"1\"`. It is `true`, so something has to run ahead of it.",
+        "One rule asks nothing at all — it just takes whatever the others did not claim. That can only be last."
+      ],
+      "explain": "`==` runs JavaScript's abstract-equality algorithm, which makes it exactly right once: `x == null` as a combined null-and-undefined guard. Everywhere else `===` saves you an argument in review. Relational `<` is the interesting one — each operand is coerced with the number hint first (that is what makes `Date` work), alphabetic strings then fall through to lexicographic order (that is what makes comparator sorts work), and one deliberate convenience survives on top: two numeric strings compare by value. Real JavaScript would tell you `\"5\" < \"10\"` is false. Aktion says true. Worth remembering the next time you sort an API payload that arrived as strings.",
+      "codex": {
+        "term": "== null",
+        "def": "Abstract equality against `null` is `true` for both `null` and `undefined` — the one place `==` beats `===`. Use it as a single guard for \"no value yet\"; use `===` everywhere else."
+      },
+      "preview": {
+        "program": "$draft = null\n\n$app(Column([\n  PageHeader(\"Draft\", { breadcrumbs: false }),\n  $draft == null\n    ? Callout(\"Nothing saved yet\", { tone: \"info\", description: \"== null catches null and undefined in one guard.\" })\n    : Card([Text($draft)])\n]))",
+        "caption": "a ternary split across lines by its ? and : operators"
+      }
+    },
+    {
+      "id": "s6",
+      "title": "Dispatch on a tab",
+      "kicker": "produce",
+      "icon": "code",
+      "goal": "Write a multi-way dispatch with no statement on the right of an equals sign.",
+      "xp": 160,
+      "teach": {
+        "text": "Everything from this world comes together in one small program.\n\n`$tab` holds the current view. A `switch` decides which component to build — so it goes inside a function that `return`s from every arm, and the call becomes the expression. The grid arm builds its children with `.map`, because a `for` loop cannot hand you an array.\n\nTwo shortcuts are worth using while you are here. `$rows.length` works on any array. And reading a plain property off an array **plucks** it: `$rows.title` gives you `[\"Invoice\", \"Receipt\"]` — exactly the shape `List` and `Col` want, with no lambda at all. `.first` and `.last` sit on the same path.",
+        "code": {
+          "src": "function viewFor(tab) {\n  switch (tab) {\n    case \"grid\": return Grid(cards, { columns: 3 })\n    default:     return List(labels)\n  }\n}\n\n$app(Column([viewFor($tab)]))",
+          "caption": "the shape, not the answer — you still have to build cards and labels"
+        },
+        "tips": [
+          "Every arm needs its own `return`. An arm that falls through gives the caller `undefined` and renders nothing.",
+          "`default:` is the arm that keeps the page alive when `$tab` holds something you did not plan for."
+        ]
+      },
+      "challenge": {
+        "type": "type-code",
+        "title": "Write the dispatch",
+        "prompt": "`$tab` and `$rows` are declared for you. Write `function viewFor(tab)` whose `switch` returns a `Grid` of `Card`s for `\"grid\"` — built with `.map` — and a `List` for everything else. Then render `viewFor($tab)` from a single `$app(...)`.",
+        "filename": "dispatch.aktion",
+        "starter": "$tab = \"list\"\n$rows = [{ title: \"Invoice\" }, { title: \"Receipt\" }]\n\n",
+        "placeholder": "function viewFor(tab) { … }",
+        "solution": "$tab = \"list\"\n$rows = [{ title: \"Invoice\" }, { title: \"Receipt\" }]\n\nfunction viewFor(tab) {\n  switch (tab) {\n    case \"grid\": return Grid($rows.map(r => Card([Text(r.title)])), { columns: 3 })\n    default:     return List($rows.title)\n  }\n}\n\n$app(Column([\n  PageHeader(\"Documents\", { breadcrumbs: false }),\n  viewFor($tab)\n]))",
+        "validate": {
+          "must": [
+            "function\\s+viewFor\\s*\\(",
+            "switch\\s*\\(",
+            "return\\s",
+            "\\.map\\s*\\(",
+            "viewFor\\s*\\(\\s*\\$tab\\s*\\)",
+            "\\$app\\s*\\("
+          ],
+          "mustWhy": [
+            "Wrap the switch in a function called viewFor — that is what lets it produce a value.",
+            "The dispatch itself is a switch. It is legal here because it sits inside a body.",
+            "Each arm has to return its component; an arm that falls through renders nothing.",
+            "Build the grid children with .map — a for loop cannot hand you an array.",
+            "Call viewFor($tab). The call is the expression that goes into the tree.",
+            "Nothing renders without $app(...)."
+          ],
+          "mustNot": [
+            "=\\s*switch",
+            "=\\s*if\\s*\\(",
+            "=\\s*for\\s*\\(",
+            "useState",
+            "className",
+            "<[A-Za-z]"
+          ]
+        }
+      },
+      "hints": [
+        "Start with `function viewFor(tab) {`, then `switch (tab) {` inside it.",
+        "Every `case` needs its own `return`, and `default:` catches the rest.",
+        "`Grid($rows.map(r => Card([Text(r.title)])), { columns: 3 })` is the grid arm; `List($rows.title)` is the list arm."
+      ],
+      "explain": "Look at where the `switch` ended up: inside a body, exactly where statements are allowed, with its value escaping through `return`. `viewFor($tab)` is then an ordinary call — an expression — so it drops straight into the tree next to `PageHeader`. That single move covers every statement you will ever want a value out of. And `List($rows.title)` is the array-pluck shortcut doing the work of `.map(r => r.title)`: reading a plain property off an array maps it across the items, which is why column-oriented components like `Col` and `List` read so cleanly.",
+      "afterCode": {
+        "src": "function viewFor(tab) {\n  switch (tab) {\n    case \"grid\": return Grid($rows.map(r => Card([Text(r.title)])), { columns: 3 })\n    default:     return List($rows.title)\n  }\n}\n\n$app(Column([viewFor($tab)]))",
+        "caption": "a statement, safely producing a value"
+      },
+      "codex": {
+        "term": "Array pluck",
+        "def": "Reading a non-array property off an array maps it across the items: `$rows.title` is `[\"Invoice\", \"Receipt\"]`. `.length`, `.first` and `.last` are shortcuts on the same path."
+      },
+      "preview": {
+        "program": "$tab = \"list\"\n$rows = [{ title: \"Invoice\" }, { title: \"Receipt\" }]\n\nfunction viewFor(tab) {\n  switch (tab) {\n    case \"grid\": return Grid($rows.map(r => Card([Text(r.title)])), { columns: 3 })\n    default:     return List($rows.title)\n  }\n}\n\n$app(Column([\n  PageHeader(\"Documents\", { breadcrumbs: false }),\n  viewFor($tab)\n]))",
+        "caption": "live — a switch producing a value, rendered by the real runtime"
+      }
+    }
+  ],
+  "outro": {
+    "headline": "The line between them is visible now",
+    "body": "Expressions go anywhere. Statements go in a body. Every construct the parser rejects on the right of `=` has a shorter replacement — a ternary, a `.map`, or a function that wraps the statement and returns from it. And when a program parses but renders nothing, check where your line breaks fell before you check anything else.",
+    "nextHint": "Next up: reactive data — `$http` and its relatives hand back a bag rather than a payload, and every branch you just learned goes to work on `.loading`, `.error` and `.data`."
+  },
+  "badge": {
+    "name": "Gatekeeper",
+    "icon": "puzzle",
+    "tagline": "Knows which side of the equals sign a line belongs on."
+  }
+}

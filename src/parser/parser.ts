@@ -17,6 +17,7 @@
  */
 
 import { tokenize, type Token } from "./lexer.js";
+import { walkNode } from "./walk.js";
 import type {
   Program,
   Statement,
@@ -33,6 +34,7 @@ import type {
   DestructuringPattern,
   LambdaParam,
   ImportSpecifier,
+  SourceLocation,
 } from "./types.js";
 
 export function parse(source: string): Program {
@@ -968,17 +970,57 @@ function consumeNewlinesIfNext(
   return true;
 }
 
+/**
+ * Position a `Binary`/`Ternary` node at its OPERATOR token.
+ *
+ * The operands already carry their own `loc`, so pointing the composite node at
+ * `?` / `&&` / `+` is what makes it locatable at all — and these are the nodes
+ * that branch, which is what coverage and diagnostics need to name. Nesting the
+ * left operand means `a && b && c` yields distinct locations per operator.
+ */
+function operatorLoc(tok: Token): SourceLocation {
+  return { line: tok.line, column: tok.column };
+}
+
+/**
+ * Assignment wrapper used to parse a `${...}` interpolation as a standalone
+ * program. Its length is the column offset every node in the sub-tree carries.
+ */
+const TEMPLATE_SUB_PREFIX = "__rui_tmpl__ = ";
+
+/**
+ * Move a sub-parsed interpolation's locations from the synthetic one-line
+ * program they were parsed in to where the `${` really sits in the source.
+ *
+ * `line`/`column` are the lexer's position for the `$` of `${`, so the expression
+ * itself starts two columns later. A node on the sub-program's first line has
+ * both coordinates shifted (its column is relative to the wrapper prefix); a
+ * node on a later line — a multi-line interpolation — only needs the line
+ * shifted, since its column is already relative to a real line start.
+ */
+function rebaseTemplateLocations(root: Expression, line: number, column: number): void {
+  const exprStartColumn = column + "${".length;
+  walkNode(root, ({ node }) => {
+    const loc = (node as { loc?: SourceLocation }).loc;
+    if (!loc) return;
+    if (loc.line === 1) {
+      loc.column = exprStartColumn + (loc.column - (TEMPLATE_SUB_PREFIX.length + 1));
+    }
+    loc.line = line + (loc.line - 1);
+  });
+}
+
 function parseTernary(ctx: ParserContext): Expression {
   const test = parseLogicalOr(ctx);
   if (consumeNewlinesIfNext(ctx, (t) => t.type === "Punctuation" && t.value === "?")) {
-    ctx.consume();
+    const question = ctx.consume();
     skipWhitespace(ctx);
     const consequent = parseExpression(ctx);
     skipWhitespace(ctx);
     ctx.expect("Punctuation", ":");
     skipWhitespace(ctx);
     const alternate = parseExpression(ctx);
-    return { kind: "Ternary", test, consequent, alternate };
+    return { kind: "Ternary", test, consequent, alternate, loc: operatorLoc(question) };
   }
   return test;
 }
@@ -991,10 +1033,10 @@ function parseLogicalOr(ctx: ParserContext): Expression {
       (t) => t.type === "Operator" && (t.value === "||" || t.value === "??"),
     )
   ) {
-    const op = ctx.consume().value as "||" | "??";
+    const tok = ctx.consume();
     skipWhitespace(ctx);
     const right = parseLogicalAnd(ctx);
-    left = { kind: "Binary", operator: op, left, right };
+    left = { kind: "Binary", operator: tok.value as "||" | "??", left, right, loc: operatorLoc(tok) };
   }
   return left;
 }
@@ -1002,10 +1044,10 @@ function parseLogicalOr(ctx: ParserContext): Expression {
 function parseLogicalAnd(ctx: ParserContext): Expression {
   let left = parseBitwiseOr(ctx);
   while (consumeNewlinesIfNext(ctx, (t) => t.type === "Operator" && t.value === "&&")) {
-    ctx.consume();
+    const tok = ctx.consume();
     skipWhitespace(ctx);
     const right = parseBitwiseOr(ctx);
-    left = { kind: "Binary", operator: "&&", left, right };
+    left = { kind: "Binary", operator: "&&", left, right, loc: operatorLoc(tok) };
   }
   return left;
 }
@@ -1014,10 +1056,10 @@ function parseLogicalAnd(ctx: ParserContext): Expression {
 function parseBitwiseOr(ctx: ParserContext): Expression {
   let left = parseBitwiseXor(ctx);
   while (consumeNewlinesIfNext(ctx, (t) => t.type === "Operator" && t.value === "|")) {
-    ctx.consume();
+    const tok = ctx.consume();
     skipWhitespace(ctx);
     const right = parseBitwiseXor(ctx);
-    left = { kind: "Binary", operator: "|", left, right };
+    left = { kind: "Binary", operator: "|", left, right, loc: operatorLoc(tok) };
   }
   return left;
 }
@@ -1026,10 +1068,10 @@ function parseBitwiseOr(ctx: ParserContext): Expression {
 function parseBitwiseXor(ctx: ParserContext): Expression {
   let left = parseBitwiseAnd(ctx);
   while (consumeNewlinesIfNext(ctx, (t) => t.type === "Operator" && t.value === "^")) {
-    ctx.consume();
+    const tok = ctx.consume();
     skipWhitespace(ctx);
     const right = parseBitwiseAnd(ctx);
-    left = { kind: "Binary", operator: "^", left, right };
+    left = { kind: "Binary", operator: "^", left, right, loc: operatorLoc(tok) };
   }
   return left;
 }
@@ -1038,10 +1080,10 @@ function parseBitwiseXor(ctx: ParserContext): Expression {
 function parseBitwiseAnd(ctx: ParserContext): Expression {
   let left = parseEquality(ctx);
   while (consumeNewlinesIfNext(ctx, (t) => t.type === "Operator" && t.value === "&")) {
-    ctx.consume();
+    const tok = ctx.consume();
     skipWhitespace(ctx);
     const right = parseEquality(ctx);
-    left = { kind: "Binary", operator: "&", left, right };
+    left = { kind: "Binary", operator: "&", left, right, loc: operatorLoc(tok) };
   }
   return left;
 }
@@ -1056,10 +1098,16 @@ function parseEquality(ctx: ParserContext): Expression {
         (t.value === "==" || t.value === "!=" || t.value === "===" || t.value === "!=="),
     )
   ) {
-    const op = ctx.consume().value as "==" | "!=" | "===" | "!==";
+    const tok = ctx.consume();
     skipWhitespace(ctx);
     const right = parseComparison(ctx);
-    left = { kind: "Binary", operator: op, left, right };
+    left = {
+      kind: "Binary",
+      operator: tok.value as "==" | "!=" | "===" | "!==",
+      left,
+      right,
+      loc: operatorLoc(tok),
+    };
   }
   return left;
 }
@@ -1073,17 +1121,29 @@ function parseComparison(ctx: ParserContext): Expression {
         (t) => t.type === "Operator" && (t.value === ">" || t.value === "<" || t.value === ">=" || t.value === "<="),
       )
     ) {
-      const op = ctx.consume().value as ">" | "<" | ">=" | "<=";
+      const tok = ctx.consume();
       skipWhitespace(ctx);
       const right = parseShift(ctx);
-      left = { kind: "Binary", operator: op, left, right };
+      left = {
+        kind: "Binary",
+        operator: tok.value as ">" | "<" | ">=" | "<=",
+        left,
+        right,
+        loc: operatorLoc(tok),
+      };
       continue;
     }
     if (consumeNewlinesIfNext(ctx, (t) => t.type === "Keyword" && (t.value === "instanceof" || t.value === "in"))) {
-      const op = ctx.consume().value as "instanceof" | "in";
+      const tok = ctx.consume();
       skipWhitespace(ctx);
       const right = parseShift(ctx);
-      left = { kind: "Binary", operator: op, left, right };
+      left = {
+        kind: "Binary",
+        operator: tok.value as "instanceof" | "in",
+        left,
+        right,
+        loc: operatorLoc(tok),
+      };
       continue;
     }
     break;
@@ -1100,10 +1160,16 @@ function parseShift(ctx: ParserContext): Expression {
       (t) => t.type === "Operator" && (t.value === "<<" || t.value === ">>" || t.value === ">>>"),
     )
   ) {
-    const op = ctx.consume().value as "<<" | ">>" | ">>>";
+    const tok = ctx.consume();
     skipWhitespace(ctx);
     const right = parseAdditive(ctx);
-    left = { kind: "Binary", operator: op, left, right };
+    left = {
+      kind: "Binary",
+      operator: tok.value as "<<" | ">>" | ">>>",
+      left,
+      right,
+      loc: operatorLoc(tok),
+    };
   }
   return left;
 }
@@ -1113,10 +1179,10 @@ function parseAdditive(ctx: ParserContext): Expression {
   while (
     consumeNewlinesIfNext(ctx, (t) => t.type === "Operator" && (t.value === "+" || t.value === "-"))
   ) {
-    const op = ctx.consume().value as "+" | "-";
+    const tok = ctx.consume();
     skipWhitespace(ctx);
     const right = parseMultiplicative(ctx);
-    left = { kind: "Binary", operator: op, left, right };
+    left = { kind: "Binary", operator: tok.value as "+" | "-", left, right, loc: operatorLoc(tok) };
   }
   return left;
 }
@@ -1129,10 +1195,16 @@ function parseMultiplicative(ctx: ParserContext): Expression {
       (t) => t.type === "Operator" && (t.value === "*" || t.value === "/" || t.value === "%"),
     )
   ) {
-    const op = ctx.consume().value as "*" | "/" | "%";
+    const tok = ctx.consume();
     skipWhitespace(ctx);
     const right = parseExponent(ctx);
-    left = { kind: "Binary", operator: op, left, right };
+    left = {
+      kind: "Binary",
+      operator: tok.value as "*" | "/" | "%",
+      left,
+      right,
+      loc: operatorLoc(tok),
+    };
   }
   return left;
 }
@@ -1141,10 +1213,10 @@ function parseMultiplicative(ctx: ParserContext): Expression {
 function parseExponent(ctx: ParserContext): Expression {
   const left = parseUnary(ctx);
   if (consumeNewlinesIfNext(ctx, (t) => t.type === "Operator" && t.value === "**")) {
-    ctx.consume();
+    const tok = ctx.consume();
     skipWhitespace(ctx);
     const right = parseExponent(ctx);
-    return { kind: "Binary", operator: "**", left, right };
+    return { kind: "Binary", operator: "**", left, right, loc: operatorLoc(tok) };
   }
   return left;
 }
@@ -1538,9 +1610,14 @@ function parsePrimary(ctx: ParserContext): Expression {
       } else {
         flushChunk();
       }
-      const sub = parse(`__rui_tmpl__ = ${part.source}`);
+      const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`);
       const firstStmt = sub.statements[0];
       if (firstStmt && firstStmt.kind === "Assignment") {
+        // The interpolation was parsed as its own one-line program, so every
+        // node inside it claims line 1 — which would put `${expr}` hits and
+        // diagnostics on the first line of whatever file it came from. The
+        // lexer recorded where the `${` actually is; rebase onto that.
+        rebaseTemplateLocations(firstStmt.expression, part.line, part.column);
         expressions.push(firstStmt.expression);
       } else {
         expressions.push({ kind: "Literal", value: "" });

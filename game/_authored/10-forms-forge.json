@@ -1,0 +1,668 @@
+{
+  "id": "forms-forge",
+  "title": "Form Forge",
+  "subtitle": "Validation without a validation library",
+  "icon": "form",
+  "difficulty": 3,
+  "estimateMin": 12,
+  "requires": [
+    "state-deep"
+  ],
+  "palette": {
+    "g1": "#2dd4bf",
+    "g2": "#14b8a6",
+    "g3": "#5eead4"
+  },
+  "backdrop": {
+    "preset": "stream"
+  },
+  "intro": {
+    "headline": "The form engine ships with the language",
+    "body": "There is no Formik here, no react-hook-form, no resolver package to pick. `$form({ ... })` is a builtin, and it takes exactly three keys: `values`, `rules`, `onSubmit`.\n\nIt hands back a **bag** — the same shape you already know from `$http` and `$query`, with different members. `signup.values.email` is what the user typed. `signup.errors.email` is why it is wrong. `signup.submitting` is true until your write settles.\n\nThe validators are builtins too. `$util.rules.required()`, `.email()`, `.min(18)`, `.pattern(re)`, `.asyncCustom(fn)` — composable functions of one value, stacked per field in an array.\n\nThis world is where the one-argument-form rule bites hardest, because an input has a lot of positional slots and only one of them is `value`.",
+    "code": "signup = $form({\n  values: { email: \"\" },\n  rules: { email: [$util.rules.required(), $util.rules.email()] },\n  onSubmit: (values) => $save.mutate({ body: values })\n})",
+    "codeCaption": "state, validation and submission in one statement",
+    "infographic": {
+      "type": "flow",
+      "title": "What $form owns",
+      "nodes": [
+        {
+          "label": "values",
+          "note": "the clean snapshot"
+        },
+        {
+          "label": "rules",
+          "note": "validators per field"
+        },
+        {
+          "label": ".errors",
+          "note": "filled by touch / validate"
+        },
+        {
+          "label": "submit()",
+          "note": "only when valid",
+          "accent": true
+        },
+        {
+          "label": "onSubmit(values)",
+          "note": "your write"
+        }
+      ]
+    },
+    "objectives": [
+      "Read values, errors and submit state off the `$form` bag",
+      "Two-way bind an input and label it with `FormControl`",
+      "Spot the positional slot that silently swallows your binding",
+      "Match each `$util.rules` validator to the value it can read",
+      "Write a validated sign-up form from an empty file"
+    ]
+  },
+  "stages": [
+    {
+      "id": "s1",
+      "title": "The engine returns a bag",
+      "kicker": "the form engine",
+      "icon": "book",
+      "goal": "Read values, errors and submit state off the $form bag.",
+      "xp": 100,
+      "teach": {
+        "text": "`$form({ ... })` accepts exactly three config keys. **`values`** is the initial snapshot — also the shape `reset()` restores. **`rules`** maps a field name to an array of validators. **`onSubmit`** is called with the values, and only once they pass.\n\nWhat comes back is not your data. It is a managed bag, exactly like `$http` and `$query` return a bag: `signup.values.email` is the live value, `signup.errors.email` is the message, and `signup.touched`, `signup.dirty`, `signup.valid`, `signup.submitting` and `signup.validating` are reactive reads you can put straight in the tree.\n\nThe methods live on the same object: `field(name)`, `touch(name)`, `validate()`, `validateField(name)`, `setField(name, v)`, `setValues({...})`, `reset()`, and `submit()` — whose alias is `handleSubmit()`.\n\nThe library's own examples bind it to a plain name, not an atom: `signup = $form({ ... })`. The bag's members carry the reactivity.",
+        "code": {
+          "src": "signup = $form({\n  values: { name: \"\", email: \"\", plan: \"team\" },\n  rules: {\n    name: [$util.rules.required()],\n    email: [$util.rules.required(), $util.rules.email()]\n  },\n  onSubmit: (values) => $console.log(values)\n})",
+          "caption": "three keys in"
+        },
+        "code2": {
+          "src": "signup.values.email      // what the user typed\nsignup.errors.email      // the message, or undefined\nsignup.valid             // the last pass found nothing\nsignup.submitting        // true until onSubmit settles\nsignup.handleSubmit()    // touch all, validate, then onSubmit",
+          "caption": "one bag out"
+        },
+        "infographic": {
+          "type": "orbit",
+          "title": "The $form bag",
+          "core": "$form({ … })",
+          "satellites": [
+            {
+              "label": ".values",
+              "note": "live field values"
+            },
+            {
+              "label": ".errors",
+              "note": "one message per field"
+            },
+            {
+              "label": ".touched",
+              "note": "interacted with yet"
+            },
+            {
+              "label": ".valid",
+              "note": "last pass found nothing"
+            },
+            {
+              "label": ".submitting",
+              "note": "true until onSubmit settles"
+            },
+            {
+              "label": ".submit()",
+              "note": "touch, validate, onSubmit"
+            }
+          ]
+        },
+        "tips": [
+          "If you already learned `$orders = $http({...})` then `$orders.data`, this is the identical move with different members.",
+          {
+            "kind": "warn",
+            "text": "There is no `.data` on a form bag. Values live under `.values`, and only under `.values`."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "match-pairs",
+        "title": "Reach into the bag",
+        "prompt": "Six reads off the one bag this form returned. The small note under each is the name that does **not** exist here — the mono line above it is the real member. Match each real member to what it actually hands you. Three of the six are booleans, and only one of those three is about a single field.",
+        "code": "signup = $form({\n  values: { name: \"\", email: \"\" },\n  rules: {\n    name: [$util.rules.required()],\n    email: [$util.rules.required(), $util.rules.email(), $util.rules.asyncCustom(isTaken)]\n  },\n  onSubmit: (values) => $console.log(values)\n})",
+        "codeCaption": "one bag, six ways in",
+        "pairs": [
+          {
+            "left": {
+              "mono": "signup.values.email",
+              "note": "not signup.email"
+            },
+            "right": {
+              "label": "The text in the box right now — the input reads it to paint itself and writes back through it on every keystroke."
+            }
+          },
+          {
+            "left": {
+              "mono": "signup.errors.email",
+              "note": "not signup.data.email"
+            },
+            "right": {
+              "label": "The message left by the last rule that failed on this one field, or nothing at all."
+            }
+          },
+          {
+            "left": {
+              "mono": "signup.touched.email",
+              "note": "not signup.isTouched"
+            },
+            "right": {
+              "label": "Whether the user has been in this one box yet. Set by touch(name), and by submit() for every field at once."
+            }
+          },
+          {
+            "left": {
+              "mono": "signup.validating",
+              "note": "not isValidating"
+            },
+            "right": {
+              "label": "True while an asyncCustom rule is still in flight — the wait before the engine can even decide whether the form is valid."
+            }
+          },
+          {
+            "left": {
+              "mono": "signup.submitting",
+              "note": "not isSubmitting"
+            },
+            "right": {
+              "label": "True from the submit() call until an async onSubmit settles — the flag that keeps the button disabled."
+            }
+          },
+          {
+            "left": {
+              "mono": "signup.field(\"email\")",
+              "note": "not getFieldProps"
+            },
+            "right": {
+              "label": "A whole prop set in one call: value, error, name, onChange and onBlur, ready to spread onto an input."
+            }
+          }
+        ]
+      },
+      "hints": [
+        "Every note names something from another library, or a shortcut that collapses the bag. The mono line above it is real; the only question is what it holds.",
+        "Two of the six are the in-flight flags, and they are not the same wait: one is the rules still running, the other is your write still running.",
+        "Exactly one of the six is a method call, and a method that takes a field name cannot be handing back a single boolean."
+      ],
+      "explain": "Every data builtin in Aktion returns a bag rather than the payload, and `$form` is no exception — it just has form-shaped members instead of network-shaped ones. That indirection is what makes `signup.errors.email` reactive: the input writes through `.values`, validation writes through `.errors`, and every reader of either re-renders on its own. Collapsing the bag into the values (the `signup.email` shortcut) would leave nowhere for the error, the touched flag, or the submit state to live.",
+      "codex": {
+        "term": "$form({ values, rules, onSubmit })",
+        "def": "The managed form engine. Returns a bag: .values / .errors / .touched / .dirty / .valid / .submitting / .validating, plus field() / touch() / setField() / validate() / submit() / reset()."
+      }
+    },
+    {
+      "id": "s2",
+      "title": "Bind a field, label a field",
+      "kicker": "two-way",
+      "icon": "target",
+      "goal": "Wire a form value into an input and wrap it in a labelled control.",
+      "xp": 110,
+      "teach": {
+        "text": "Two-way binding in Aktion is a *value*, not an event. Pass a `$variable` — or a member chain rooted in one, like `signup.values.email` — as an input's `value` prop, and the input both reads and writes it. No handler, no setter, no `e.target.value`.\n\nEvery input also accepts `onChange(value)`, which fires with the freshly-read value on every change. Use it **alongside** the binding when you need to do more than write state — debounce a search, persist a setting, kick off a fetch.\n\n`FormControl(label, field, hint?, error?, required?, for?)` wraps exactly one control with its label, and associates the two for you. `FormSection(label, children, helper?, level?)` groups related controls — reach for it instead of hand-building `Card` plus `SectionHeader`.\n\nFor the accessible `<fieldset>` around a radio set or a checkbox group, use `FieldSet(legend, children, helper?, disabled?, error?, required?)` instead; its `error` is a group-level message rather than one field's.",
+        "code": {
+          "src": "FormSection(\"About you\", [\n  FormControl(\"Name\", Input(\"name\", {\n    value: signup.values.name,\n    error: signup.errors.name,\n    onBlur: () => signup.touch(\"name\")\n  })),\n  FormControl(\"Work email\", Input(\"email\", {\n    type: \"email\",\n    value: signup.values.email,\n    error: signup.errors.email\n  }))\n])",
+          "caption": "label, control, binding, error — four props, no handlers"
+        },
+        "infographic": {
+          "type": "anatomy",
+          "title": "One labelled, bound field",
+          "code": "FormControl(\"Work email\", Input(\"email\", { value: signup.values.email }))",
+          "parts": [
+            {
+              "match": "FormControl",
+              "key": "wrapper",
+              "text": "label plus one control, wired together for you"
+            },
+            {
+              "match": "\"Work email\"",
+              "key": "positional 1",
+              "text": "the visible label — always a string"
+            },
+            {
+              "match": "Input",
+              "key": "positional 2",
+              "text": "the `field` slot (its documented alias is `control`)"
+            },
+            {
+              "match": "value:",
+              "key": "the binding",
+              "text": "a member chain rooted in the bag: reads and writes it"
+            }
+          ]
+        },
+        "tips": [
+          "`onBlur: () => signup.touch(\"email\")` is the validate-on-blur idiom — `touch` marks the field and validates just that one.",
+          "`FormControl(\"Plan\", { field: Select(...) })` and `FormControl(\"Plan\", { control: Select(...) })` are the same call — `control` is a documented alias for the `field` slot."
+        ]
+      },
+      "challenge": {
+        "type": "fill-blanks",
+        "title": "Wire the email field",
+        "prompt": "Complete the labelled, bound, validated field. Three chips are things a React developer reaches for by reflex — leave those in the bank.",
+        "display": "code",
+        "template": "FormSection(\"About you\", [\n  FormControl(\"Work email\", {{0}}(\"email\", {\n    type: {{1}},\n    value: {{2}},\n    error: {{3}}\n  }))\n])",
+        "bank": [
+          "Input",
+          "\"email\"",
+          "signup.values.email",
+          "signup.errors.email",
+          "TextField",
+          "signup.email",
+          "signup.touched.email"
+        ],
+        "answer": [
+          "Input",
+          "\"email\"",
+          "signup.values.email",
+          "signup.errors.email"
+        ]
+      },
+      "hints": [
+        "The control is the library's plain text input, and its `type` is one of the documented strings.",
+        "The value comes out of `.values`; the message comes out of `.errors`. Same field name on both.",
+        "`signup.touched.email` is a boolean, not a message — it can never be the `error` prop."
+      ],
+      "nudges": [
+        "Two of the four slots differ only in which bag member you reach for.",
+        "`TextField` is Material UI. The component here is the one-word one."
+      ],
+      "explain": "Binding by value is what removes the handler. The input reads `signup.values.email` to paint itself and writes back through the same path on every keystroke, so there is no `onChange` to forget and no state that can drift from the DOM. Passing `error` from `signup.errors.email` closes the loop the other way: the moment a rule fails, the message is already in the tree, because it is a reactive read like any other.",
+      "afterCode": {
+        "src": "FormControl(\"Work email\", Input(\"email\", {\n  type: \"email\",\n  value: signup.values.email,\n  error: signup.errors.email\n}))",
+        "caption": "the shape to remember"
+      },
+      "codex": {
+        "term": "FormControl(label, field)",
+        "def": "Labelled wrapper around ONE control; the label is associated with the nested field automatically. Optional slots follow in order: hint, error, required, for."
+      },
+      "preview": {
+        "program": "signup = $form({\n  values: { email: \"\" },\n  rules: { email: [$util.rules.required(), $util.rules.email()] },\n  onSubmit: (v) => $toast.success(\"Subscribed \" + v.email)\n})\n\n$app(Card([\n  SectionHeader(\"Newsletter\"),\n  FormSection(\"About you\", [\n    FormControl(\"Work email\", Input(\"email\", { type: \"email\", placeholder: \"ada@acme.com\", value: signup.values.email, error: signup.errors.email, onBlur: () => signup.touch(\"email\") }))\n  ]),\n  Buttons([Button(\"Subscribe\", { variant: \"primary\", action: () => signup.handleSubmit() })])\n]))",
+        "caption": "live — blur the empty field and watch the rule fire"
+      }
+    },
+    {
+      "id": "s3",
+      "title": "The second slot is placeholder",
+      "kicker": "gotcha",
+      "icon": "warn",
+      "goal": "Recognise a binding that landed in the wrong positional slot.",
+      "xp": 120,
+      "hearts": 3,
+      "teach": {
+        "text": "Pick **one** argument form per call: one positional plus a trailing object, all-positional, or a single all-named object. Never split an object between roles.\n\nThat rule is famous for `Button(\"Save\", \"primary\")`, where `\"primary\"` binds to the second positional slot — `onClick` — instead of `variant`. Forms are where it costs you most, because the inputs have long signatures and `value` is nowhere near the front:\n\n- `Input(id, placeholder, type, validations, value, onChange, ...)`\n- `FormControl(label, field, hint, error, required, for)`\n- `SelectItem(value, label, disabled, group)`\n\nSo `Input(\"email\", $email)` puts your atom in the **placeholder**. It parses. It validates. It renders a grey hint that happens to be empty, and nothing is bound. And `FormControl(\"Email\", Input(...), true)` sets the *hint* to `true`, not `required`.\n\nWhenever the prop you want is not the one immediately after the first, use the trailing object.",
+        "code": {
+          "src": "Input(\"email\", $email)                 // $email → placeholder\nInput(\"email\", { value: $email })      // $email → value\n\nSelectItem(\"free\", \"Free\")             // value first, then label\nSelectItem(\"Free\", \"free\")             // reversed: submits \"Free\"",
+          "caption": "same call, different slot"
+        },
+        "infographic": {
+          "type": "compare",
+          "title": "Where the atom lands",
+          "columns": [
+            {
+              "kind": "bad",
+              "title": "Silently wrong",
+              "code": "Input(\"email\", $email)",
+              "note": "Positional 2 is `placeholder`. The validator is happy and the field is unbound."
+            },
+            {
+              "kind": "good",
+              "title": "What you meant",
+              "code": "Input(\"email\", { value: $email })",
+              "note": "One positional, then a trailing object — which reaches any prop by name."
+            }
+          ]
+        },
+        "tips": [
+          {
+            "kind": "danger",
+            "text": "Nothing in the toolchain flags this. The program validates, renders, and quietly drops every keystroke."
+          },
+          "Two positionals plus a trailing object is fine too — `Col(\"Total\", rows.total, { format: \"currency\" })`. What is never fine is splitting one prop set across both."
+        ]
+      },
+      "challenge": {
+        "type": "bug-hunt",
+        "title": "Find the unbound field",
+        "prompt": "This program validates cleanly and renders a complete form. One field silently ignores everything the user types. Tap the token responsible.",
+        "code": "$plan = \"free\"\n$email = \"\"\n\n$app(Card([\n  FormSection(\"Account\", [\n    FormControl(\"Plan\", [[Select]](\"plan\", {\n      items: [\n        [[SelectItem]](\"free\", \"Free\"),\n        SelectItem(\"pro\", \"Pro\")\n      ],\n      value: $plan\n    })),\n    FormControl(\"Work email\", Input(\"email\", [[$email]]))\n  ]),\n  Buttons([\n    [[Button]](\"Save\", { variant: \"primary\" })\n  ])\n]))",
+        "answer": 2,
+        "fixed": "$plan = \"free\"\n$email = \"\"\n\n$app(Card([\n  FormSection(\"Account\", [\n    FormControl(\"Plan\", Select(\"plan\", {\n      items: [\n        SelectItem(\"free\", \"Free\"),\n        SelectItem(\"pro\", \"Pro\")\n      ],\n      value: $plan\n    })),\n    FormControl(\"Work email\", Input(\"email\", { value: $email }))\n  ]),\n  Buttons([\n    Button(\"Save\", { variant: \"primary\" })\n  ])\n]))"
+      },
+      "hints": [
+        "Three of the four tokens are called correctly. Compare each against its documented signature.",
+        "`SelectItem(value, label)` — value first — so that one is right. `Select` takes its options as `items`.",
+        "Count the positional slots on `Input` before you get to `value`. There are four in front of it."
+      ],
+      "nudges": [
+        "The bug is not a misspelled component. Every name here exists.",
+        "Which argument is sitting in a slot that expects a string of hint text?"
+      ],
+      "explain": "`Input(\"email\", $email)` reads like binding and behaves like a placeholder, because binding in Aktion is nothing more than which slot the value lands in. The parser cannot help: an atom is a perfectly legal placeholder, so there is no type to reject. This is the same defect as `Button(\"Save\", \"primary\")` — a call that is structurally correct and semantically wrong — and the fix is the same: the moment the prop you want is not the very next positional, switch to a trailing object.",
+      "afterCode": {
+        "src": "FormControl(\"Work email\", Input(\"email\", { value: $email }))",
+        "caption": "one positional, then a named object"
+      },
+      "codex": {
+        "term": "Positional slot binding",
+        "def": "Arguments bind to a signature's props in order. `Input`'s second slot is `placeholder`, not `value` — so anything you want past the first positional goes in a trailing object."
+      }
+    },
+    {
+      "id": "s4",
+      "title": "Field Assembly",
+      "kicker": "arcade",
+      "icon": "bolt",
+      "goal": "Feel which validator can actually read which value.",
+      "xp": 140,
+      "hearts": 3,
+      "teach": {
+        "text": "A validator is a function of one value. `$util.rules` builds them: `required()`, `email()`, `url()`, `min(n)`, `max(n)`, `minLength(n)`, `maxLength(n)`, `pattern(re)`, `oneOf([...])`, `matches(other)`, `custom(fn)`, `asyncCustom(fn)`.\n\nTwo of those pairs are one word apart and read completely different things. **`min(n)` and `max(n)` compare a number.** **`minLength(n)` and `maxLength(n)` count the characters in a string.** Put `min(8)` on a password and you have written a numeric bound over a string, not the length check you meant.\n\nA form is assembling itself below. Rule chips arrive one at a time — **tap the field each one can actually read.** A rule that expects an address has nothing to check inside `18`.\n\nRules stack, so a field's entry is an array: `age` wants both a floor and a ceiling.",
+        "code": {
+          "src": "rules: {\n  email: [$util.rules.required(), $util.rules.email()],\n  age: [$util.rules.min(18), $util.rules.max(120)],\n  password: [$util.rules.minLength(8)],\n  website: [$util.rules.url()]\n}",
+          "caption": "the board you are about to build"
+        },
+        "tips": [
+          "Tap a field to attach the rule waiting at the bottom. Three wrong attachments end the run.",
+          {
+            "kind": "warn",
+            "text": "`.min` is not `.minLength`. Both validate cleanly and one of them guards nothing."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "arcade",
+        "title": "Attach every rule",
+        "prompt": "Each field takes only the rules that can read its value — `age` takes two. Tap the field the waiting rule belongs on.",
+        "goal": "0 / 5",
+        "height": 340,
+        "note": "Tap a field card to attach the rule waiting at the bottom. Three misses end the run.",
+        "params": {
+          "fields": [
+            {
+              "id": "email",
+              "label": "email  ·  ada@acme.com"
+            },
+            {
+              "id": "age",
+              "label": "age  ·  18"
+            },
+            {
+              "id": "website",
+              "label": "website  ·  https://acme.dev"
+            },
+            {
+              "id": "password",
+              "label": "password  ·  free text"
+            }
+          ],
+          "rules": [
+            {
+              "label": ".email()",
+              "field": "email",
+              "why": "wants a string that parses as an address."
+            },
+            {
+              "label": ".min(18)",
+              "field": "age",
+              "why": "compares a NUMBER against 18."
+            },
+            {
+              "label": ".url()",
+              "field": "website",
+              "why": "wants a string that parses as an http(s) URL."
+            },
+            {
+              "label": ".max(120)",
+              "field": "age",
+              "why": "compares a NUMBER against 120."
+            },
+            {
+              "label": ".minLength(8)",
+              "field": "password",
+              "why": "counts the CHARACTERS in a string."
+            }
+          ]
+        },
+        "code": "const P = ctx.params;\nconst head = ctx.text('tap the field each rule belongs on', { size: 12, color: ctx.colors.dim });\nhead.anchor.set(0.5); head.x = ctx.width / 2; head.y = 16;\nctx.stage.addChild(head);\nconst why = ctx.text('', { size: 11, color: ctx.colors.warn });\nwhy.anchor.set(0.5); why.x = ctx.width / 2; why.y = ctx.height - 10;\nctx.stage.addChild(why);\nconst cellW = ctx.width / 2;\nP.fields.forEach((f, i) => {\n  const c = ctx.chip(f.label, { color: 0x0c2a31, textColor: 0xd7fbf4, stroke: ctx.colors.g2, minWidth: Math.min(200, cellW - 26), size: 12, padY: 12, radius: 12 });\n  c.x = cellW * (i % 2) + cellW / 2;\n  c.y = 58 + Math.floor(i / 2) * 86;\n  c.homeX = c.x;\n  c.fid = f.id;\n  c.slots = 0;\n  c.eventMode = 'static';\n  c.cursor = 'pointer';\n  c.on('pointertap', () => drop(c));\n  ctx.stage.addChild(c);\n});\nlet idx = 0, done = 0, miss = 0, hand = null, busy = false;\nctx.api.setGoal('0 / ' + P.rules.length);\nfunction spawn() {\n  const r = P.rules[idx];\n  if (!r) return;\n  const c = ctx.chip(r.label, { color: ctx.colors.g1, textColor: 0x04211d, size: 14, padY: 10, radius: 11 });\n  c.x = ctx.width / 2;\n  c.y = ctx.height - 38;\n  c.rule = r;\n  ctx.stage.addChild(c);\n  gsap.fromTo(c.scale, { x: 0.6, y: 0.6 }, { x: 1, y: 1, duration: 0.3, ease: 'back.out' });\n  hand = c;\n}\nfunction drop(card) {\n  if (busy || !hand) return;\n  const r = hand.rule;\n  if (r.field === card.fid) {\n    busy = true;\n    const chip = hand;\n    hand = null;\n    const ty = card.y + 26 + card.slots * 17;\n    card.slots += 1;\n    gsap.to(chip, { x: card.x, y: ty, duration: 0.34, ease: 'back.out' });\n    gsap.to(chip.scale, { x: 0.6, y: 0.6, duration: 0.34 });\n    gsap.to(card.scale, { x: 1.07, y: 1.07, duration: 0.12, onComplete: () => gsap.to(card.scale, { x: 1, y: 1, duration: 0.2, ease: 'back.out' }) });\n    done += 1;\n    idx += 1;\n    why.text = '';\n    ctx.api.setScore(done);\n    ctx.api.setGoal(done + ' / ' + P.rules.length);\n    if (done >= P.rules.length) { ctx.api.win('Every rule landed on a field whose value it can actually read.'); return; }\n    gsap.delayedCall(0.42, () => { busy = false; spawn(); });\n  } else {\n    miss += 1;\n    why.text = r.label + ' ' + r.why;\n    const x0 = card.homeX;\n    gsap.to(card, { x: x0 - 9, duration: 0.06, onComplete: () => gsap.to(card, { x: x0 + 9, duration: 0.09, onComplete: () => gsap.to(card, { x: x0, duration: 0.14, ease: 'back.out' }) }) });\n    gsap.fromTo(hand.scale, { x: 1.16, y: 1.16 }, { x: 1, y: 1, duration: 0.28, ease: 'back.out' });\n    if (miss >= 3) ctx.api.fail('Three rules attached to a field they cannot read. Match the validator to the value type.');\n  }\n}\nspawn();",
+        "fallback": {
+          "type": "quiz",
+          "prompt": "The `age` field holds a number. Which validator enforces \"18 or older\"?",
+          "options": [
+            {
+              "id": "a",
+              "code": "$util.rules.min(18)",
+              "detail": "`.min(n)` / `.max(n)` are the numeric bounds — exactly what a numeric age field needs."
+            },
+            {
+              "id": "b",
+              "code": "$util.rules.minLength(18)",
+              "detail": "Counts characters in a string — it would demand an 18-character age."
+            },
+            {
+              "id": "c",
+              "code": "$util.rules.required(18)",
+              "detail": "`required()` takes an optional message, not a bound."
+            },
+            {
+              "id": "d",
+              "code": "$util.rules.oneOf(18)",
+              "detail": "`oneOf` takes an ARRAY of allowed values."
+            }
+          ],
+          "answer": "a"
+        }
+      },
+      "hints": [
+        "Two of the five rules belong on the same field. Look for the pair that share a shape.",
+        "Ask what the validator is handed: a number, or a string of characters?"
+      ],
+      "explain": "A validator never sees the field, only the value — so `min(8)` on a password is a numeric bound handed a string, which is not the length check anyone reading the line assumes it is. That is the whole failure mode: picking the near-miss rule leaves you with a form that parses, validates, submits, and guards something other than what you meant. `min` / `max` are numeric bounds; `minLength` / `maxLength` are character counts; `pattern` and `custom` cover everything neither of them can express.",
+      "codex": {
+        "term": "$util.rules.min vs .minLength",
+        "def": "`.min(n)` / `.max(n)` compare a NUMBER. `.minLength(n)` / `.maxLength(n)` count characters in a STRING. Choosing the wrong one validates cleanly and enforces nothing."
+      }
+    },
+    {
+      "id": "s5",
+      "title": "What submit actually does",
+      "kicker": "submitting",
+      "icon": "puzzle",
+      "goal": "Wire a submit that validates, writes, and reports — without re-checking anything by hand.",
+      "xp": 130,
+      "teach": {
+        "text": "`signup.submit()` — alias `handleSubmit()` — does three things in order: marks every field touched, runs the rules, and calls `onSubmit(values)` **only if nothing failed**. Async rules built with `$util.rules.asyncCustom(fn)` are awaited before that decision, and `signup.validating` is true while they are in flight.\n\nSo `onSubmit` never runs on invalid values. Re-checking them inside it is dead code.\n\nThe write itself is a separate builtin. `$mutation({ url, method })` returns a deferred bag that fires on `.mutate(overrides)`; its accepted keys are `url`, `method`, `body`, `headers`, `query`, `optimistic`, `invalidates`, `gql`, `variables` — there is no `onSuccess`. The settle hook is the bag's own `.onDone`, and that is where the toast, the reset and any refetch belong.\n\nWhile it runs, `signup.submitting` and `$save.loading` are the two flags that keep the button honest.",
+        "code": {
+          "src": "$save = $mutation({ url: \"https://api.example.com/signup\", method: \"POST\" })\n$save.onDone = () => { $toast.success(\"Welcome aboard\"); signup.reset() }\n\nfunction onSubmit(values) {\n  $save.mutate({ body: values })\n}\n\nButton(\"Create account\", {\n  variant: \"primary\",\n  loading: $save.loading,\n  disabled: signup.submitting,\n  action: () => signup.handleSubmit()\n})",
+          "caption": "form validates, mutation writes, onDone reports"
+        },
+        "infographic": {
+          "type": "timeline",
+          "title": "One click through the engine",
+          "steps": [
+            {
+              "label": "handleSubmit()",
+              "note": "the button calls it"
+            },
+            {
+              "label": "touch all",
+              "note": "every field marked touched"
+            },
+            {
+              "label": "validate",
+              "note": "sync rules fill .errors"
+            },
+            {
+              "label": "await async",
+              "note": ".validating stays true"
+            },
+            {
+              "label": "onSubmit(values)",
+              "note": "only when valid"
+            },
+            {
+              "label": ".onDone",
+              "note": "toast, reset, refetch"
+            }
+          ]
+        },
+        "tips": [
+          "`ValidationSummary(signup.errors)` renders the whole error set as a panel at the top of the form — hand it the bag member directly.",
+          {
+            "kind": "warn",
+            "text": "`action: signup.handleSubmit()` submits while the tree is being built. The arrow is not optional."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "switchboard",
+        "title": "Build the submit path",
+        "prompt": "Switch ON every line that belongs in a correct submit path. Leave the ones that are wrong, redundant, or from another library switched off.",
+        "help": "Four of the eight belong. Every one of the other four validates cleanly.",
+        "switches": [
+          {
+            "label": "onSubmit: (values) => $save.mutate({ body: values })",
+            "detail": "$form calls onSubmit only after every rule has passed.",
+            "on": true
+          },
+          {
+            "label": "$save.onDone = () => { $toast.success(\"Saved\"); signup.reset() }",
+            "detail": "onDone fires when the mutation settles — the home for the toast and the reset.",
+            "on": true
+          },
+          {
+            "label": "Button(\"Create\", { action: () => signup.handleSubmit() })",
+            "detail": "Wrapped in an arrow, so it runs on the click.",
+            "on": true
+          },
+          {
+            "label": "email: [$util.rules.required(), $util.rules.asyncCustom(isFree)]",
+            "detail": "$form awaits async rules before deciding; .validating is true while they run.",
+            "on": true
+          },
+          {
+            "label": "Button(\"Create\", { action: signup.handleSubmit() })",
+            "detail": "The parentheses call it while the tree is being built, not when the button is pressed.",
+            "on": false
+          },
+          {
+            "label": "email: [$util.rules.required, $util.rules.email]",
+            "detail": "Each rule is a factory. Uncalled, you hand $form the factory instead of the validator it returns.",
+            "on": false
+          },
+          {
+            "label": "$save = $mutation({ url: \"…\", onSuccess: reload })",
+            "detail": "React Query's key. $mutation accepts url, method, body, headers, query, optimistic, invalidates, gql, variables — and reports through .onDone.",
+            "on": false
+          },
+          {
+            "label": "onSubmit: (values) => { if (!values.email) return }",
+            "detail": "Re-checking by hand. onSubmit does not run at all unless the rules already passed.",
+            "on": false
+          }
+        ]
+      },
+      "hints": [
+        "Two of the four wrong ones differ from a right one by a single pair of parentheses — in opposite directions.",
+        "One switch names a config key that `$mutation` does not accept. Check the documented key list.",
+        "If `onSubmit` runs at all, validation already succeeded."
+      ],
+      "nudges": [
+        "Compare the two `Button(\"Create\", ...)` lines character by character.",
+        "`$util.rules.required` and `$util.rules.required()` are different values. One is a validator."
+      ],
+      "explain": "The engine's contract is what makes the wrong four wrong. Because `submit()` touches, validates and awaits before it ever calls you, `onSubmit` is a place for the *write* and nothing else — a guard clause there is unreachable, and a rule you forgot to call is a factory sitting in an array where a `(value) => message | null` should be. The two parenthesis mistakes are mirror images: one call missing (the rule) and one call too many (the handler), and neither raises a diagnostic. Reporting hangs off `.onDone` because the mutation, not the form, is the thing that settles.",
+      "codex": {
+        "term": "form.submit() / handleSubmit()",
+        "def": "Touch every field, validate (awaiting async rules), then call onSubmit(values) only when valid. `.submitting` stays true until an async onSubmit settles."
+      },
+      "preview": {
+        "program": "$saved = null\n\nfunction onSubmit(values) {\n  $save.mutate({ body: values })\n}\n\n$save = $mutation({ url: \"https://api.example.com/signup\", method: \"POST\" })\n$save.onDone = () => { $saved = \"Welcome aboard, check your inbox.\"; signup.reset() }\n\nsignup = $form({\n  values: { name: \"\", email: \"\" },\n  rules: {\n    name: [$util.rules.required()],\n    email: [$util.rules.required(), $util.rules.email()]\n  },\n  onSubmit: onSubmit\n})\n\n$app(Card([\n  SectionHeader(\"Create your account\"),\n  Show($saved, { children: Callout(\"Saved\", { tone: \"success\", description: $saved, compact: true }) }),\n  ValidationSummary(signup.errors),\n  FormSection(\"About you\", [\n    FormControl(\"Name\", Input(\"name\", { value: signup.values.name, error: signup.errors.name, onBlur: () => signup.touch(\"name\") })),\n    FormControl(\"Work email\", Input(\"email\", { type: \"email\", value: signup.values.email, error: signup.errors.email, onBlur: () => signup.touch(\"email\") }))\n  ]),\n  Buttons([\n    Button(\"Create account\", { variant: \"primary\", loading: $save.loading, disabled: signup.submitting, action: () => signup.handleSubmit() }),\n    Button(\"Reset\", { variant: \"ghost\", action: () => signup.reset() })\n  ])\n]))",
+        "caption": "live — press Create on an empty form and watch the summary fill"
+      }
+    },
+    {
+      "id": "s6",
+      "title": "Forge one from nothing",
+      "kicker": "produce",
+      "icon": "code",
+      "goal": "Write a complete, validated, labelled form with no scaffold.",
+      "xp": 160,
+      "teach": {
+        "text": "Everything is on the table now: the engine, the bag, the binding, the labels, the rules and the submit.\n\nWrite a sign-up form. Declare a `$form` with `name` and `email`, make both required, add the email format rule, wrap each input in a `FormControl` inside a `FormSection`, and give it a primary button that calls the form's submit.\n\nRemember the two traps this world is built on: the binding goes in a **trailing object** under `value`, and every rule is a **factory you have to call**.\n\nIf the real Aktion language service is reachable, it checks your program for real and prints its diagnostics under the editor.",
+        "code": {
+          "src": "signup = $form({\n  values: { … },\n  rules: { … },\n  onSubmit: (values) => …\n})\n\n$app(Card([\n  FormSection(\"…\", [ … ]),\n  Buttons([ … ])\n]))",
+          "caption": "the shape, not the answer"
+        },
+        "tips": [
+          "`$toast.success(\"…\")` is a fine `onSubmit` while you have no server to write to."
+        ]
+      },
+      "challenge": {
+        "type": "type-code",
+        "title": "Write the form",
+        "prompt": "Build a sign-up form: a `$form` over `name` and `email`, `required` on both plus the email format rule, each field bound and wrapped in a `FormControl` inside a `FormSection`, and a primary Button that calls the form's submit.",
+        "filename": "signup.aktion",
+        "starter": "",
+        "placeholder": "signup = $form({ … })",
+        "solution": "signup = $form({\n  values: { name: \"\", email: \"\" },\n  rules: {\n    name: [$util.rules.required()],\n    email: [$util.rules.required(), $util.rules.email()]\n  },\n  onSubmit: (values) => $toast.success(\"Welcome, \" + values.name)\n})\n\n$app(Card([\n  SectionHeader(\"Create your account\"),\n  FormSection(\"About you\", [\n    FormControl(\"Name\", Input(\"name\", { value: signup.values.name, error: signup.errors.name, onBlur: () => signup.touch(\"name\") })),\n    FormControl(\"Work email\", Input(\"email\", { type: \"email\", value: signup.values.email, error: signup.errors.email, onBlur: () => signup.touch(\"email\") }))\n  ]),\n  Buttons([Button(\"Create account\", { variant: \"primary\", disabled: signup.submitting, action: () => signup.handleSubmit() })])\n]))",
+        "validate": {
+          "must": [
+            "\\$app\\s*\\(",
+            "\\$form\\s*\\(",
+            "values\\s*:",
+            "rules\\s*:",
+            "\\$util\\.rules\\.required\\s*\\(",
+            "\\$util\\.rules\\.email\\s*\\(",
+            "onSubmit\\s*:",
+            "FormSection\\s*\\(",
+            "FormControl\\s*\\(",
+            "value\\s*:\\s*[A-Za-z_$][\\w$]*\\.values\\.",
+            "(handleSubmit|submit)\\s*\\(\\s*\\)"
+          ],
+          "mustWhy": [
+            "Nothing renders without $app(...) — everything hangs off it.",
+            "Declare the engine: name = $form({ ... }).",
+            "$form needs a `values` key — the initial snapshot of the fields.",
+            "$form needs a `rules` key — that is where the validators go.",
+            "Both fields are mandatory: $util.rules.required(). Remember the parentheses.",
+            "The email field needs $util.rules.email() as well.",
+            "Give the form an `onSubmit` so valid values have somewhere to go.",
+            "Group the fields with FormSection(\"…\", [ … ]).",
+            "Wrap each input in a FormControl so it gets a label.",
+            "Bind each input with `value: <form>.values.<field>` inside a trailing object.",
+            "The button has to call the form's submit — handleSubmit() or submit()."
+          ],
+          "mustNot": [
+            "useState",
+            "useForm",
+            "Formik",
+            "yup",
+            "className",
+            "<[A-Za-z]"
+          ]
+        }
+      },
+      "hints": [
+        "Open with the engine: `signup = $form({ values: { name: \"\", email: \"\" }, rules: { … }, onSubmit: … })`.",
+        "Every validator is a factory — `$util.rules.required()`, with the parentheses.",
+        "A field is `FormControl(\"Name\", Input(\"name\", { value: signup.values.name, error: signup.errors.name }))`."
+      ],
+      "explain": "That is a production sign-up form: labelled, bound, validated, accessible, and submitting through one call — with no dependency beyond the runtime you already have. Nothing here is form-specific machinery you had to build. The engine owns the values and the rules, the bag makes every part of that reactive, and the components read straight off it. Point `onSubmit` at a `$mutation` instead of a toast and the same file is talking to a server.",
+      "codex": {
+        "term": "Managed form",
+        "def": "$form owns values + rules + submission; FormControl labels each bound input; $util.rules supplies the validators. No third-party form library involved."
+      },
+      "preview": {
+        "program": "signup = $form({\n  values: { name: \"\", email: \"\" },\n  rules: {\n    name: [$util.rules.required()],\n    email: [$util.rules.required(), $util.rules.email()]\n  },\n  onSubmit: (values) => $toast.success(\"Welcome, \" + values.name)\n})\n\n$app(Card([\n  SectionHeader(\"Create your account\"),\n  FormSection(\"About you\", [\n    FormControl(\"Name\", Input(\"name\", { value: signup.values.name, error: signup.errors.name, onBlur: () => signup.touch(\"name\") })),\n    FormControl(\"Work email\", Input(\"email\", { type: \"email\", value: signup.values.email, error: signup.errors.email, onBlur: () => signup.touch(\"email\") }))\n  ]),\n  Buttons([Button(\"Create account\", { variant: \"primary\", disabled: signup.submitting, action: () => signup.handleSubmit() })])\n]))",
+        "caption": "live — the program you just wrote, running for real"
+      }
+    }
+  ],
+  "outro": {
+    "headline": "The form library was already installed",
+    "body": "One builtin owns the values, the rules and the submit. One bag makes all of it reactive. One rule about positional slots is the only thing standing between you and a form that silently drops every keystroke.",
+    "nextHint": "Next: take these values somewhere — $mutation, optimistic writes, and the resource bags that talk to a server."
+  },
+  "badge": {
+    "name": "Formwright",
+    "icon": "shield",
+    "tagline": "Made a form validate itself."
+  }
+}

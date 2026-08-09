@@ -127,8 +127,16 @@
       document.body.setAttribute("data-embed", "");
     }
 
+    // Folder and file slugs are kebab-case. Words that are acronyms in prose
+    // stay acronyms in the label, so `ai-apps` reads "AI Apps" rather than
+    // "Ai Apps" — the same map the gallery uses.
+    const ACRONYMS = {
+      ai: "AI", api: "API", bmi: "BMI", crm: "CRM", cta: "CTA", devops: "DevOps",
+      faq: "FAQ", github: "GitHub", iot: "IoT", json: "JSON", qr: "QR",
+      saas: "SaaS", seo: "SEO", ui: "UI", ux: "UX",
+    };
     const titleCase = (slug) =>
-      slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      slug.split("-").map((w) => ACRONYMS[w] ?? w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
     const programName = (file) => titleCase(file.replace(/\.aktion$/, ""));
 
     // The static host cannot list directories, so the picker is populated

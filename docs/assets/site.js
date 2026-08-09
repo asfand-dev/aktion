@@ -56,6 +56,7 @@ const NAV_GROUPS = [
       { href: "javascript-interactions.html", label: "JavaScript" },
       { href: "side-effects.html", label: "Side effects" },
       { href: "interop.html", label: "Third-party widgets" },
+      { href: "custom-components.html", label: "Custom components" },
       { href: "head.html", label: "Document head" },
       { href: "routing.html", label: "Routing" },
       { href: "testing.html", label: "Testing" },
@@ -96,7 +97,7 @@ const NAV_GROUPS = [
 ];
 
 const PRIMARY_TABS = [
-  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "language-reference.html", "modules.html", "layout.html", "sx.html", "hooks.html", "stores.html", "forms.html", "actions.html", "http.html", "javascript-interactions.html", "side-effects.html", "interop.html", "head.html", "routing.html", "testing.html", "devtools.html", "reactivity.html", "performance.html", "troubleshooting.html", "errors.html", "typescript.html", "accessibility.html", "security.html", "deployment.html", "llm-integration.html"] },
+  { href: "index.html",       label: "Docs",       matches: ["index.html", "get-started.html", "frameworks.html", "migration-guide.html", "language.html", "language-reference.html", "modules.html", "layout.html", "sx.html", "hooks.html", "stores.html", "forms.html", "actions.html", "http.html", "javascript-interactions.html", "side-effects.html", "interop.html", "custom-components.html", "head.html", "routing.html", "testing.html", "devtools.html", "reactivity.html", "performance.html", "troubleshooting.html", "errors.html", "typescript.html", "accessibility.html", "security.html", "deployment.html", "llm-integration.html"] },
   { href: "components.html",  label: "Components", matches: ["components.html"] },
   { href: "themes.html",      label: "Themes",     matches: ["themes.html", "theme-generator.html", "brand-themes.html"] },
   { href: "live-demos.html", label: "Demos",       matches: ["live-demos.html"] },
@@ -130,6 +131,7 @@ const PAGE_KEYWORDS = {
   "javascript-interactions.html": "script @js useeffect hooks",
   "side-effects.html": "side effects $effect dependency array mount unmount every debounce throttle cleanup interval timer polling subscription watcher useeffect lifecycle teardown scheduling",
   "interop.html": "mount webcomponent web component custom element $script $dom interop third-party imperative widget chart map editor monaco stripe mapbox leaflet chartjs echarts d3 tiptap prosemirror video captcha resizeobserver intersectionobserver mutationobserver measure onresize onintersect onmutation data-rui-preserve external script loader sdk lifecycle setup update cleanup",
+  "custom-components.html": "custom components componentspec register registercomponents props propspec render renderhelpers el helper asstring asarray asboolean asnumber useinstancestate registerdisposer invoke bindstate slots children callable positional aliases override extend library",
   "head.html": "head document head $head title meta description canonical open graph og twitter card jsonld json-ld structured data schema.org seo social preview link rel htmlattrs lang dir robots noindex titletemplate ssr crawlable rendertostring sitemap marketing pdp",
   "routing.html": "routes navlink navigate hash router",
   "testing.html": "testing test render screen getbytext getbyrole fireevent userevent click type vitest jest assertion mock fetch http snapshot serializestate findby waitfor unit integration tdd react testing library rtl spy state events emit",
@@ -762,16 +764,27 @@ async function buildDeepIndex() {
     // the same helper reproduces those ids exactly (`Navbar` → `#navbar`,
     // `NavBar` → `#navbar-2`). `Link` is registered twice, so the duplicate is
     // skipped rather than given a phantom `#link-2` that no card carries.
+    // The gallery's own catalogue carries the plain-English summary and the
+    // search synonyms ("alert" → Callout, "typeahead" → Combobox). Fold them in
+    // so the palette finds a component by what it DOES, not just by its name.
+    // Optional: if the module is missing the index still works off the specs.
+    let cat = null;
+    try {
+      cat = await import(/* @vite-ignore */ new URL("./component-catalog.js", import.meta.url).href);
+    } catch { /* fall back to the authored descriptions */ }
+
     const componentIds = new Set();
     const seenNames = new Set();
     for (const component of mod?.defaultLibrary?.components ?? []) {
       if (seenNames.has(component.name)) continue;
       seenNames.add(component.name);
+      const summary = cat?.SUMMARIES?.[component.name] || component.description || "";
+      const tags = cat?.TAGS?.[component.name] ?? [];
       entries.push({
         href: `components.html#${uniqueSlug(component.name, componentIds)}`,
         title: component.name,
         group: "Components",
-        keywords: `component ${component.name} ${component.description || ""}`.toLowerCase(),
+        keywords: `component ${component.name} ${summary} ${tags.join(" ")}`.toLowerCase(),
         section: true,
       });
     }

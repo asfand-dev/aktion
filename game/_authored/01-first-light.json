@@ -1,0 +1,471 @@
+{
+  "id": "first-light",
+  "title": "First Light",
+  "subtitle": "Your first Aktion program, from nothing",
+  "icon": "spark",
+  "difficulty": 1,
+  "estimateMin": 8,
+  "requires": [],
+  "palette": {
+    "g1": "#5eead4",
+    "g2": "#818cf8",
+    "g3": "#38bdf8"
+  },
+  "backdrop": {
+    "preset": "stream"
+  },
+  "intro": {
+    "headline": "A program is a list of statements. That's it.",
+    "body": "Aktion looks like JavaScript because it *is* a strict subset of it — `function`, `if`, arrow functions, object literals, all the operators you already know. What it adds is a rule about where the UI comes from.\n\nEvery program renders from one place: `$app(...)`. The runtime streams your statements in, top to bottom, committing each line the moment it arrives — so the page shell appears before its contents finish loading.\n\nIn this world you will write a complete, valid Aktion program without learning a single new keyword.",
+    "code": "$app(Column([\n  PageHeader(\"Orders\"),\n  Text(\"Everything shipped this month\")\n]))",
+    "codeCaption": "a whole program",
+    "infographic": {
+      "type": "flow",
+      "title": "How a line becomes pixels",
+      "nodes": [
+        {
+          "label": "statement",
+          "note": "one per line"
+        },
+        {
+          "label": "parse",
+          "note": "strict JS subset"
+        },
+        {
+          "label": "plan",
+          "note": "names resolve"
+        },
+        {
+          "label": "$app(…)",
+          "note": "the one root",
+          "accent": true
+        },
+        {
+          "label": "commit",
+          "note": "streamed to the DOM"
+        }
+      ]
+    },
+    "objectives": [
+      "Find the render root in any program",
+      "Build a component tree with `Column` and `Text`",
+      "Order a program so the shell streams first",
+      "Spot the two roots that *look* right and aren't",
+      "Write a valid program from an empty file"
+    ]
+  },
+  "stages": [
+    {
+      "id": "s1",
+      "title": "The one entry point",
+      "kicker": "the root",
+      "icon": "target",
+      "goal": "Every Aktion program renders from exactly one $app(...).",
+      "xp": 100,
+      "teach": {
+        "text": "There is no `main`, no `export default`, no `ReactDOM.render`. There is `$app(...)`, and there is **exactly one per program**.\n\nWhatever you pass it becomes the page. It accepts a single node, an array of nodes rendered as siblings, or several nodes as separate arguments.\n\nEverything else in the file — variables, functions, effects — exists to feed that one call.",
+        "code": {
+          "src": "$app(Text(\"Hello, Aktion\"))\n\n$app([Text(\"one\"), Text(\"two\")])\n\n$app(Text(\"one\"), Text(\"two\"))",
+          "caption": "three ways to call it, one per program"
+        },
+        "tips": [
+          "`$app` is a *builtin*, not a component — it never appears inside a tree.",
+          {
+            "kind": "warn",
+            "text": "`aktion = Column([...])` is the pre-0.5 root form. The parser still tolerates it, so the validator stays silent — but nothing renders."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "quiz",
+        "title": "Which line renders the page?",
+        "prompt": "One of these puts UI on the screen. The other three are ordinary statements that happen to build components.",
+        "options": [
+          {
+            "id": "a",
+            "code": "$app(Column([Text(\"Hi\")]))"
+          },
+          {
+            "id": "b",
+            "code": "page = Column([Text(\"Hi\")])",
+            "detail": "A perfectly valid statement — it just names a tree."
+          },
+          {
+            "id": "c",
+            "code": "aktion = Column([Text(\"Hi\")])",
+            "detail": "The legacy root form. Parses, renders nothing."
+          },
+          {
+            "id": "d",
+            "code": "render(Column([Text(\"Hi\")]))",
+            "detail": "There is no `render` in Aktion."
+          }
+        ],
+        "answer": "a"
+      },
+      "hints": [
+        "Three of these are assignments. Only one is a call to a builtin.",
+        "Look for the `$` sigil — builtins always carry it."
+      ],
+      "explain": "`$app(...)` is the reserved entry point and the only thing that mounts UI. `page = ...` builds a tree and parks it under a name — useful, but inert until `$app` receives it. `aktion = ...` is the pre-0.5 root that the parser still accepts, which makes it the most dangerous of the three: it validates cleanly and renders nothing.",
+      "codex": {
+        "term": "$app(…)",
+        "def": "The reserved render root. Exactly one per program; whatever you pass it becomes the page."
+      },
+      "preview": {
+        "program": "$app(Column([\n  PageHeader(\"Hello, Aktion\", { subtitle: \"This whole page is one statement.\" })\n]))"
+      }
+    },
+    {
+      "id": "s2",
+      "title": "Trees, not markup",
+      "kicker": "composition",
+      "icon": "layers",
+      "goal": "Build UI by nesting component calls inside arrays.",
+      "xp": 100,
+      "teach": {
+        "text": "There is no JSX and no template syntax. A UI is a **function call whose arguments are more function calls**.\n\nContainers take an array of children. Leaves take their content. That is the entire composition model:",
+        "code": {
+          "src": "$app(Column([\n  PageHeader(\"Inbox\"),\n  Card([\n    Text(\"3 unread\"),\n    Button(\"Mark all read\")\n  ])\n]))",
+          "caption": "arrays nest as deep as you like"
+        },
+        "infographic": {
+          "type": "anatomy",
+          "title": "Reading a tree",
+          "code": "$app(Column([PageHeader(\"Inbox\"), Card([Text(\"3 unread\")])]))",
+          "parts": [
+            {
+              "match": "$app",
+              "key": "root",
+              "text": "the one call that mounts the page"
+            },
+            {
+              "match": "Column",
+              "key": "container",
+              "text": "stacks its children vertically"
+            },
+            {
+              "match": "[PageHeader",
+              "key": "array",
+              "text": "children always arrive as an array"
+            },
+            {
+              "match": "Card",
+              "key": "nesting",
+              "text": "a container inside a container — no depth limit"
+            }
+          ]
+        },
+        "tips": [
+          "PascalCase names are components; they return trees.",
+          "Reach for a pattern composite like `PageHeader` before hand-building the same thing out of `Row` + `Text`."
+        ]
+      },
+      "challenge": {
+        "type": "fill-blanks",
+        "title": "Complete the program",
+        "prompt": "Drop the right tokens into the slots. Two of the chips are things a React developer would reach for — leave those in the bank.",
+        "display": "code",
+        "template": "{{0}}(Column([\n  {{1}}(\"Welcome back\"),\n  {{2}}(\"You have 3 new orders\")\n]))",
+        "bank": [
+          "$app",
+          "PageHeader",
+          "Text",
+          "render",
+          "div",
+          "$render"
+        ],
+        "answer": [
+          "$app",
+          "PageHeader",
+          "Text"
+        ]
+      },
+      "hints": [
+        "The outermost call is always the same one.",
+        "`PageHeader` is the page-level title composite; `Text` is the plain paragraph."
+      ],
+      "explain": "Composition is just nesting calls. `Column` takes an array, and each entry in that array is another component call. Note what is *not* here: no wrapper element, no `className`, no fragment. The tree is the markup.",
+      "afterCode": {
+        "src": "$app(Column([\n  PageHeader(\"Welcome back\"),\n  Text(\"You have 3 new orders\")\n]))",
+        "caption": "the shape to remember"
+      },
+      "codex": {
+        "term": "Component tree",
+        "def": "Nested component calls where containers take an array of children. No JSX, no templates — just calls."
+      },
+      "preview": {
+        "program": "$app(Column([\n  PageHeader(\"Welcome back\", { subtitle: \"You have 3 new orders\" }),\n  Card([Text(\"Everything on this card came from four lines of Aktion.\")])\n]))"
+      }
+    },
+    {
+      "id": "s3",
+      "title": "Shell first, leaves later",
+      "kicker": "streaming",
+      "icon": "clock",
+      "goal": "Put $app(...) at the top and reference names defined below it.",
+      "xp": 110,
+      "teach": {
+        "text": "The renderer commits each statement **as it streams in**. So the order you write things changes what the user sees first.\n\nNames resolve from the whole top-level scope, not from source order — so `$app` can reference a `header` that is defined ten lines further down. That is the point: call `$app(...)` first and the page shell appears immediately, then each detail fills in as its line arrives.\n\nWriting `$app` last means the user stares at nothing until the entire program has downloaded.",
+        "code": {
+          "src": "$app(Column([header, stats, table]))\n\nheader = PageHeader(\"Orders\")\nstats  = Stats([StatCard(\"Revenue\", { value: \"$48k\" })])\ntable  = Card([Text(\"…\")])",
+          "caption": "forward references are the idiom, not a hack"
+        },
+        "infographic": {
+          "type": "compare",
+          "title": "Same program, different first paint",
+          "columns": [
+            {
+              "kind": "bad",
+              "title": "Root last",
+              "code": "header = PageHeader(\"Orders\")\nlist   = Card([…])\n$app(Column([header, list]))",
+              "note": "Nothing on screen until the last line lands."
+            },
+            {
+              "kind": "good",
+              "title": "Root first",
+              "code": "$app(Column([header, list]))\nheader = PageHeader(\"Orders\")\nlist   = Card([…])",
+              "note": "Shell paints immediately; leaves attach as they arrive."
+            }
+          ]
+        },
+        "tips": [
+          {
+            "kind": "warn",
+            "text": "This is a *streaming* concern, not a correctness one. Both orders produce the same final page — one just feels instant."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "order-lines",
+        "title": "Order the program",
+        "prompt": "Arrange these four statements so the page shell commits as early as possible, then each section fills in.",
+        "lines": [
+          {
+            "id": "app",
+            "code": "$app(Column([header, kpis, board]))"
+          },
+          {
+            "id": "header",
+            "code": "header = PageHeader(\"Engineering Q3\")"
+          },
+          {
+            "id": "kpis",
+            "code": "kpis = Stats([StatCard(\"Active\", { value: \"12\" })])"
+          },
+          {
+            "id": "board",
+            "code": "board = Card([Text(\"4 at risk\")])"
+          }
+        ],
+        "answer": [
+          "app",
+          "header",
+          "kpis",
+          "board"
+        ]
+      },
+      "hints": [
+        "Which single line is the one the reconciler needs before it can attach anything?",
+        "After the root, keep the sections in the order they appear on screen."
+      ],
+      "explain": "Hoisting is what makes this work — references resolve from the entire top-level scope, so `$app` naming `header` before `header` exists is not a forward-declaration trick, it's the normal way to write Aktion. Root first gives the reconciler a shell to attach streamed leaves to.",
+      "codex": {
+        "term": "Streaming order",
+        "def": "Statements commit as they arrive. Call $app(...) first and forward-reference the sections below it so the shell paints immediately."
+      }
+    },
+    {
+      "id": "s4",
+      "title": "Root Lock",
+      "kicker": "arcade",
+      "icon": "bolt",
+      "goal": "Feel the streaming rule instead of reading it.",
+      "xp": 130,
+      "hearts": 3,
+      "teach": {
+        "text": "Statements are falling. The bar at the bottom is the render root.\n\n**Catch `$app(page)` before anything else.** A leaf that lands before the shell has nothing to attach to — which is exactly what happens in a real program when you put `$app` last.\n\nOnce the root is locked, bank five more statements to clear the stage.",
+        "tips": [
+          "Move the mouse — or drag on a touch screen — to slide the bar."
+        ]
+      },
+      "challenge": {
+        "type": "arcade",
+        "title": "Catch the root first",
+        "prompt": "Catch `$app(page)` first, then bank five more statements. Anything you catch before the root ends the run.",
+        "goal": "root first",
+        "height": 340,
+        "note": "Move the pointer to slide the render root. Missed statements just fall away — only order matters.",
+        "params": {
+          "lines": [
+            "header = PageHeader(…)",
+            "kpis = Stats([…])",
+            "table = Card([…])",
+            "footer = Text(…)",
+            "toolbar = Toolbar({…})",
+            "chart = LineChart({…})"
+          ]
+        },
+        "code": "const P = ctx.params;\nconst shell = ctx.chip('render root', { color: ctx.colors.g2, minWidth: 180, size: 13 });\nshell.y = ctx.height - 30;\nshell.x = ctx.width / 2;\nctx.stage.addChild(shell);\nctx.app.stage.on('pointermove', (e) => { shell.x = Math.max(70, Math.min(ctx.width - 70, e.global.x)); });\nlet rooted = false, banked = 0, t = 30, spawned = 0;\nconst live = [];\nctx.api.setGoal('catch $app(page) first');\nctx.onTick((dt) => {\n  t += dt;\n  if (t > 44) {\n    t = 0;\n    const wantRoot = !rooted && spawned % 3 === 1;\n    const label = wantRoot ? '$app(page)' : ctx.pick(P.lines);\n    const c = ctx.chip(label, { color: wantRoot ? ctx.colors.g1 : ctx.colors.g3, textColor: 0x04101a, size: 13 });\n    c.x = ctx.rand(70, ctx.width - 70);\n    c.y = -20;\n    c.isRoot = wantRoot;\n    ctx.stage.addChild(c);\n    live.push(c);\n    spawned++;\n  }\n  for (let i = live.length - 1; i >= 0; i--) {\n    const c = live[i];\n    c.y += 2.3 * dt;\n    const hit = c.y > shell.y - 22 && c.y < shell.y + 22 && Math.abs(c.x - shell.x) < 105;\n    if (hit) {\n      live.splice(i, 1);\n      if (c.isRoot) {\n        rooted = true;\n        ctx.api.setGoal('root locked - bank 5 statements');\n        gsap.to(shell.scale, { x: 1.3, y: 1.3, duration: .12, onComplete: () => gsap.to(shell.scale, { x: 1, y: 1, duration: .2, ease: 'back.out' }) });\n      } else if (!rooted) {\n        c.destroy();\n        ctx.api.fail('A leaf landed before the shell. $app(...) has to commit first.');\n        return;\n      } else {\n        banked++;\n        ctx.api.setScore(banked);\n        if (banked >= 5) ctx.api.win('Shell first, leaves after. That is streaming.');\n      }\n      c.destroy();\n      continue;\n    }\n    if (c.y > ctx.height + 30) {\n      live.splice(i, 1);\n      c.destroy();\n    }\n  }\n});",
+        "fallback": {
+          "type": "quiz",
+          "prompt": "Why does putting `$app(...)` on the first line matter?",
+          "options": [
+            {
+              "id": "a",
+              "label": "The page shell commits immediately, and later statements attach to it as they stream in.",
+              "detail": ""
+            },
+            {
+              "id": "b",
+              "label": "Names defined below it would otherwise be undefined.",
+              "detail": "References resolve from the whole top-level scope — order does not affect resolution."
+            },
+            {
+              "id": "c",
+              "label": "The parser requires it.",
+              "detail": "It does not; $app can sit anywhere."
+            }
+          ],
+          "answer": "a"
+        }
+      },
+      "hints": [
+        "The gold chip is the root. Everything cyan is a leaf.",
+        "Miss the root on purpose if you have to — it comes back around."
+      ],
+      "explain": "In a real streaming render this is exactly the failure: `$app` arrives last, so every earlier statement is a component with nowhere to mount, and the user watches a blank page until the final byte. Root first, always.",
+      "codex": {
+        "term": "Commit-as-you-stream",
+        "def": "The renderer attaches each statement the moment it parses, so the shell must arrive before the leaves that hang off it."
+      }
+    },
+    {
+      "id": "s5",
+      "title": "The root that isn't",
+      "kicker": "gotcha",
+      "icon": "warn",
+      "goal": "Recognise the two roots that validate but render nothing.",
+      "xp": 120,
+      "teach": {
+        "text": "The schema validator is good at unknown props and misspelled components. It is powerless against a program that is *structurally fine and semantically wrong*.\n\nTwo failures produce a completely blank page with a completely clean validator:\n\n- **`aktion = ...`** — the pre-0.5 root binding. Still parses. Never renders.\n- **A component with no `return`** — the body runs, builds nothing, renders nothing.\n\nBoth of these are silent. When a page is mysteriously empty, check for them first.",
+        "infographic": {
+          "type": "table",
+          "title": "Silent failures",
+          "headers": [
+            "Looks fine",
+            "What actually happens"
+          ],
+          "rows": [
+            [
+              "aktion = Column([…])",
+              "Legacy root — parses, renders nothing"
+            ],
+            [
+              "function Card(t) { Text(t) }",
+              "No return — renders nothing"
+            ],
+            [
+              "$app(a)  …  $app(b)",
+              "Two roots — only one program allowed"
+            ]
+          ]
+        },
+        "tips": [
+          {
+            "kind": "danger",
+            "text": "A missing `return` is the single most common cause of \"my component disappeared\"."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "bug-hunt",
+        "title": "Find the silent failure",
+        "prompt": "This program validates cleanly and renders an empty page. Tap the token responsible.",
+        "code": "function Greeting(name) {\n  [[Text]](`Hello, ${name}`)\n}\n\n[[aktion]] = Column([\n  [[Greeting]](\"Ada\"),\n  [[Text]](\"Welcome back\")\n])",
+        "answer": 1,
+        "fixed": "function Greeting(name) {\n  return Text(`Hello, ${name}`)\n}\n\n$app(Column([\n  Greeting(\"Ada\"),\n  Text(\"Welcome back\")\n]))"
+      },
+      "hints": [
+        "Both bugs are here, but only one is the token that stops *anything at all* from mounting.",
+        "Ask which name the runtime actually looks for when it decides what to render."
+      ],
+      "explain": "`aktion = ...` is the pre-0.5 root form. The parser tolerates it for backwards compatibility, so nothing complains — but the runtime mounts `$app(...)` and only `$app(...)`, so the page stays empty. (The missing `return` in `Greeting` is a real second bug; fix that too, and note that it would have cost you only that one component instead of the whole page.)",
+      "afterCode": {
+        "src": "$app(Column([\n  Greeting(\"Ada\"),\n  Text(\"Welcome back\")\n]))",
+        "caption": "the root the runtime looks for"
+      },
+      "codex": {
+        "term": "Legacy root binding",
+        "def": "`aktion = ...` is the pre-0.5 render root. It still parses, so the validator stays quiet — but only `$app(...)` mounts."
+      }
+    },
+    {
+      "id": "s6",
+      "title": "From an empty file",
+      "kicker": "produce",
+      "icon": "code",
+      "goal": "Write a complete, valid Aktion program with no scaffold.",
+      "xp": 150,
+      "teach": {
+        "text": "Everything you need is now on the table: one root, nested calls, arrays for children.\n\nWrite a program that renders a page with a heading and a line of body text. Any components from the library are fair game — `PageHeader`, `Card`, `Text`, `Button`, `Callout` all work — as long as the whole thing hangs off a single `$app(...)`.\n\nIf the real Aktion language service is reachable, it will check your program for real and print its diagnostics under the editor.",
+        "code": {
+          "src": "$app(Column([\n  PageHeader(\"…\"),\n  Text(\"…\")\n]))",
+          "caption": "the shape, not the answer"
+        }
+      },
+      "challenge": {
+        "type": "type-code",
+        "title": "Write it yourself",
+        "prompt": "Render a page: a `PageHeader` with any title, and a `Text` under it. Everything must be inside one `$app(...)` and stacked in a `Column`.",
+        "filename": "hello.aktion",
+        "starter": "",
+        "placeholder": "$app(…)",
+        "solution": "$app(Column([\n  PageHeader(\"Orders\"),\n  Text(\"Everything shipped this month\")\n]))",
+        "validate": {
+          "must": [
+            "\\$app\\s*\\(",
+            "Column\\s*\\(\\s*\\[",
+            "PageHeader\\s*\\(\\s*[\"'`]",
+            "Text\\s*\\(\\s*[\"'`]"
+          ],
+          "mustWhy": [
+            "Nothing renders without $app(...) — start there.",
+            "The two pieces need a Column([ ... ]) to stack them.",
+            "Add a PageHeader with a title string.",
+            "Add a Text with some body copy."
+          ],
+          "mustNot": [
+            "aktion\\s*=",
+            "<[A-Za-z]",
+            "React",
+            "className"
+          ]
+        }
+      },
+      "hints": [
+        "Open with `$app(` and close it at the very end.",
+        "`Column` takes one argument: an array.",
+        "`$app(Column([PageHeader(\"…\"), Text(\"…\")]))` — fill in the strings."
+      ],
+      "explain": "That is a complete, shippable Aktion program. No build step, no imports, no component registration — the library is already in scope and `$app` is the only ceremony. Every world from here on adds behaviour to this same shape.",
+      "codex": {
+        "term": "Minimal program",
+        "def": "One `$app(...)` wrapping a container wrapping components. Nothing else is required."
+      },
+      "preview": {
+        "program": "$app(Column([\n  PageHeader(\"Orders\", { subtitle: \"Everything shipped this month\" }),\n  Card([Text(\"You just wrote this. It is running for real.\")])\n]))"
+      }
+    }
+  ],
+  "outro": {
+    "headline": "You can write Aktion now",
+    "body": "One root, nested calls, arrays for children, shell first. Everything else in this arcade is behaviour layered onto that shape.",
+    "nextHint": "Next: Reactive Pulse — make the page change without writing a single re-render."
+  },
+  "badge": {
+    "name": "First Light",
+    "icon": "spark",
+    "tagline": "Rendered a page from nothing."
+  }
+}

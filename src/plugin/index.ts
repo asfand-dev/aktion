@@ -17,7 +17,9 @@ import { dirname, resolve as resolvePath, sep } from "node:path";
 import type { Plugin } from "vite";
 import {
   linkProgram,
+  defineCompiledProgram,
   COMPILED_PROGRAM_VERSION,
+  type CompiledProgram,
   type ModuleResolver,
   type LinkDiagnostic,
 } from "../compiler/index.js";
@@ -73,17 +75,7 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
       // Editing an imported module must re-trigger the entry's transform.
       for (const dep of dependencies) this.addWatchFile(dep);
 
-      // A linked program with no `aktion` entry binding renders nothing.
-      const warnings: LinkDiagnostic[] = [...diagnostics];
-      if (!hasEntryBinding(program)) {
-        warnings.push({
-          line: 1,
-          column: 1,
-          severity: "warning",
-          message:
-            "No top-level `aktion = …` entry binding found — this program renders nothing.",
-        });
-      }
+      const warnings = collectDiagnostics(program, diagnostics);
 
       const fatal = warnings.find((d) => d.severity === "error" || (options.strict && d.severity === "warning"));
       if (fatal) {
@@ -105,6 +97,98 @@ export function isAktionId(id: string): boolean {
 }
 
 export { aktionPlugin as default };
+
+/* -------------------------------------------------------------------------- */
+/*  Compiling outside a Vite build                                             */
+/* -------------------------------------------------------------------------- */
+
+export interface CompileOptions {
+  /**
+   * Directory `.aktion` imports are confined to. Defaults to the entry's own
+   * directory — widen it to your project root when modules import across it.
+   * Pass `null` to lift the restriction entirely (trusted sources only).
+   */
+  root?: string | null;
+  /** Reject on any linker warning, not just errors. */
+  strict?: boolean;
+}
+
+/**
+ * Link a `.aktion` file from disk into a {@link CompiledProgram}, without a
+ * bundler.
+ *
+ * The Vite plugin is normally what produces this artefact, which leaves anything
+ * outside a Vite build — a test runner, an SSR pass, a CLI, a lint rule —
+ * reimplementing the linker call and its resolver. Both are here already, so both
+ * are exported.
+ *
+ * ```ts
+ * import { compileAktionFile } from "aktion-runtime/vite";
+ * import { renderCompiled } from "aktion-runtime/test";
+ *
+ * const app = compileAktionFile("src/app.aktion", { root: "src" });
+ * const screen = renderCompiled(app);
+ * ```
+ *
+ * Node-only (it reads the filesystem) — this module never enters a browser
+ * bundle.
+ *
+ * @throws If a module cannot be resolved or loaded, or the graph has a parse
+ *   error. The message lists every diagnostic with its position.
+ */
+export function compileAktionFile(entryPath: string, options: CompileOptions = {}): CompiledProgram {
+  const absolute = resolvePath(entryPath);
+  return compileAktionSource(readFileSync(absolute, "utf8"), absolute, options);
+}
+
+/**
+ * Link an in-memory program whose imports resolve against the real filesystem,
+ * relative to `virtualPath`.
+ *
+ * This is what makes a *helper module* directly testable. A `.aktion` library
+ * file exports functions that only a program can call, so exercising one used to
+ * mean adding a fixture file per case. Instead, write the program inline:
+ *
+ * ```ts
+ * const probe = compileAktionSource(
+ *   `import { formatBytes } from "../src/lib/format.aktion"\n` +
+ *   `$app(Text(formatBytes(2048)))`,
+ *   "tests/inline.aktion",
+ *   { root: process.cwd() },
+ * );
+ * ```
+ *
+ * Because coverage is keyed by module path, hits from a probe like this land on
+ * the real `format.aktion` — so unit-testing a helper counts towards its file's
+ * coverage exactly as calling it through the UI does.
+ *
+ * `virtualPath` need not exist; only its directory is used, to resolve relative
+ * specifiers.
+ */
+export function compileAktionSource(
+  source: string,
+  virtualPath: string,
+  options: CompileOptions = {},
+): CompiledProgram {
+  const absolute = resolvePath(virtualPath);
+  const root = options.root === null ? null : resolvePath(options.root ?? dirname(absolute));
+  const { program, diagnostics } = linkProgram(source, absolute, nodeResolver(root));
+
+  const fatal = collectDiagnostics(program, diagnostics).filter(
+    (d) => d.severity === "error" || (options.strict === true && d.severity === "warning"),
+  );
+  if (fatal.length > 0) {
+    const detail = fatal.map((d) => `  ${d.line}:${d.column} ${d.message}`).join("\n");
+    throw new Error(`[aktion] failed to compile ${absolute}:\n${detail}`);
+  }
+
+  return defineCompiledProgram({
+    __aktionCompiled: COMPILED_PROGRAM_VERSION,
+    program,
+    source,
+    path: absolute,
+  });
+}
 
 // ---- internals ----
 
@@ -158,8 +242,44 @@ function nodeResolver(root: string | null): ModuleResolver {
   };
 }
 
+/**
+ * True when the program declares a UI root the element can render.
+ *
+ * Two forms count: the current `$app(...)` statement and the legacy
+ * `aktion = ...` assignment it replaced. Checking only the legacy form made
+ * every modern program warn "renders nothing" on each build — and turned into a
+ * hard error under `strict: true`, which is exactly backwards.
+ */
+/**
+ * Every diagnostic for a linked program: the linker's own, plus the checks that
+ * belong to compiling rather than linking.
+ *
+ * Shared by the Vite `transform` and {@link compileAktionSource} so `strict`
+ * means the same thing whichever way a program is compiled — the entry-binding
+ * warning used to exist only inside `transform`, which made a program that
+ * "renders nothing" compile silently outside a build.
+ */
+function collectDiagnostics(program: Program, linkDiagnostics: LinkDiagnostic[]): LinkDiagnostic[] {
+  const out: LinkDiagnostic[] = [...linkDiagnostics];
+  if (!hasEntryBinding(program)) {
+    out.push({
+      line: 1,
+      column: 1,
+      severity: "warning",
+      message:
+        "No top-level `$app(…)` entry found — this program renders nothing.",
+    });
+  }
+  return out;
+}
+
 function hasEntryBinding(program: Program): boolean {
-  return program.statements.some((s) => s.kind === "Assignment" && s.identifier === "aktion");
+  return program.statements.some((s) => {
+    if (s.kind === "Assignment") return s.identifier === "aktion";
+    if (s.kind !== "ExpressionStatement") return false;
+    const expr = s.expression;
+    return expr.kind === "Invoke" && expr.callee.kind === "StateRef" && expr.callee.name === "app";
+  });
 }
 
 /**

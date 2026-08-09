@@ -21,7 +21,16 @@ import type {
   ObjectExpr,
   SwitchCase,
   DestructuringPattern,
+  SourceLocation,
 } from "../parser/types.js";
+import {
+  isEnabled as isCoverageEnabled,
+  registerProgram as registerCoverageProgram,
+  recordLine as recordCoverageLine,
+  recordFunction as recordCoverageFunction,
+  recordBranch as recordCoverageBranch,
+  type CoverageScope,
+} from "./coverage.js";
 import type { StateStore, StateValue } from "./state.js";
 import { pathsOverlap } from "./state.js";
 import type { HttpRuntime } from "./http.js";
@@ -1087,6 +1096,24 @@ export interface EvaluationContext {
    * enforcement entirely — only do this in trusted offline pipelines.
    */
   budget?: RuntimeBudget;
+  /**
+   * Coverage recorder for this program, or `undefined` (the default) when
+   * coverage is off.
+   *
+   * Present only while a test harness has called `coverage.start()`;
+   * `planProgram` attaches it. Every instrumentation site is guarded by
+   * `if (ctx.coverage)`, so a normal render pays one property read per
+   * evaluated node and allocates nothing. The scope carries the map from
+   * `loc.source` to per-file accumulators, which is what makes attribution
+   * exact for a linked multi-file program.
+   */
+  coverage?: CoverageScope;
+  /**
+   * File name to report coverage under when the program carries no `sources`
+   * — a single-file program, or one mounted from a string. Ignored for a linked
+   * multi-file program, whose own `Program.sources` is authoritative.
+   */
+  coverageSourcePath?: string;
 }
 
 /**
@@ -1102,6 +1129,12 @@ export interface CreateContextOptions {
   onEmit?: (eventName: string, detail: unknown) => void;
   /** Enable dev/strict-mode warnings for silent failures. */
   strict?: boolean;
+  /**
+   * File name coverage reports use for a program with no `Program.sources`
+   * (single-file, or mounted from a string). See
+   * `EvaluationContext.coverageSourcePath`.
+   */
+  coverageSourcePath?: string;
   /**
    * Runtime safety budget for this context.
    *   - omitted (default): a fresh budget with `DEFAULT_RUNTIME_BUDGET` limits.
@@ -1144,6 +1177,11 @@ export function createContext(
     onEmit: options.onEmit,
     strict: options.strict,
     strictWarned: new Set(),
+    // Declared up-front (not assigned later) so the context keeps one hidden
+    // class: `ctx.coverage` is read on the hottest path in the evaluator, and a
+    // property added after construction would turn that read megamorphic.
+    coverage: undefined,
+    coverageSourcePath: options.coverageSourcePath,
     disposers: [],
     timers: { timeouts: new Set(), intervals: new Set() },
     budget: options.budget === null ? undefined : (options.budget ?? createRuntimeBudget()),
@@ -1283,6 +1321,24 @@ function stateRefForArg(
  * build lazy bindings for every assignment so forward references resolve.
  */
 export function planProgram(program: Program, ctx: EvaluationContext): void {
+  // Attach the coverage recorder before anything is evaluated, so the very
+  // first plan is measured. Registration is idempotent per AST, so a replan
+  // (state hydration, hot edit, `registerComponents`) neither double-counts the
+  // denominator nor loses the hits collected so far.
+  if (isCoverageEnabled()) {
+    ctx.coverage = registerCoverageProgram(program, ctx.coverageSourcePath);
+  }
+  // A top-level declaration is "executed" when the program plans — the same
+  // convention Istanbul uses for a JS function declaration. Without this, the
+  // `function Foo()` line of a component that IS rendered would read as
+  // uncovered, because only its body ever reaches the evaluator.
+  if (ctx.coverage) {
+    for (const stmt of program.statements) {
+      const loc = (stmt as { loc?: SourceLocation }).loc;
+      if (loc) recordCoverageLine(ctx.coverage, loc);
+    }
+  }
+
   // First pass: declare state defaults so `$vars` resolve immediately.
   // Every `$x = expr` declares a single-tier reactive atom; the initial
   // value is computed via best-effort literal evaluation so partial
@@ -1616,8 +1672,14 @@ function runTopLevelImperativeStatements(program: Program, ctx: EvaluationContex
   }
   if (!hasImperative) return;
 
+  // Reset literal `$state` to its declared value so imperative setup is
+  // reproducible across replans (`while (i > 0) { $items = [...$items, …] }`
+  // must not accumulate). An atom the HOST seeded is exempt: `hydrateState`,
+  // `loadSnapshot`, SSR hydration and a test's seeded state all express intent
+  // the program's own default should not override.
   for (const stmt of program.statements) {
     if (stmt.kind === "Assignment" && stmt.isState && isPureLiteralExpression(stmt.expression)) {
+      if (ctx.state.wasHydrated(stmt.identifier)) continue;
       ctx.state.set(stmt.identifier, evaluateLiteral(stmt.expression) as never);
     }
   }
@@ -1839,6 +1901,10 @@ function evaluateLiteral(expr: Expression): unknown {
 }
 
 export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
+  // The single choke point every expression passes through, which is what makes
+  // one guard here enough to see the whole executed program. `ctx.coverage` is
+  // undefined unless a test harness turned coverage on.
+  if (ctx.coverage && expr.loc) recordCoverageLine(ctx.coverage, expr.loc);
   switch (expr.kind) {
     case "Literal": return expr.value;
     case "Identifier": {
@@ -2035,11 +2101,27 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       // value (mirrors JS `delete obj.prop` which removes the binding).
       if (expr.operator === "delete") {
         const target = expr.argument;
-        if (target.kind === "Member" && target.property) {
+        if (target.kind === "Member") {
           const object = evaluate(target.object, ctx);
+          // `delete a?.b` on a nullish base is a no-op that reports success.
+          if (target.optional && object == null) return true;
           if (object && typeof object === "object") {
-            try { delete (object as Record<string, unknown>)[target.property]; return true; }
-            catch { return false; }
+            // A COMPUTED key (`delete obj[id]`) parses to a Member with
+            // `computed` set and NO `property`, so requiring `property` made the
+            // whole statement a silent no-op — and that is the form the
+            // immutable-update idiom uses to drop one entry from a keyed map:
+            //   const next = {...$edits}; delete next[id]; $edits = next
+            // Every per-id draft buffer written that way kept the entry it meant
+            // to remove, with nothing reported.
+            const rawKey = target.computed
+              ? evaluate(target.computed, ctx)
+              : (target.property ?? "");
+            try {
+              delete (object as Record<string, unknown>)[
+                typeof rawKey === "symbol" ? (rawKey as unknown as string) : String(rawKey)
+              ];
+              return true;
+            } catch { return false; }
           }
         }
         return false;
@@ -2055,9 +2137,10 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
         default: return value;
       }
     }
-    case "Binary": return evaluateBinary(expr.operator, expr.left, expr.right, ctx);
+    case "Binary": return evaluateBinary(expr.operator, expr.left, expr.right, ctx, expr.loc);
     case "Ternary": {
       const test = evaluate(expr.test, ctx);
+      if (ctx.coverage) recordCoverageBranch(ctx.coverage, expr.loc, test ? 0 : 1);
       return test ? evaluate(expr.consequent, ctx) : evaluate(expr.alternate, ctx);
     }
     case "Call": return evaluateComponentCall(expr.callee, expr.arguments, ctx, expr.loc);
@@ -2090,6 +2173,10 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       // long gone by then.
       const capturedLoopVars = new Map(ctx.loopVars);
       return (...callArgs: unknown[]) => {
+        // A lambda counts as covered when it is CALLED, not when the enclosing
+        // expression built the closure — an event handler that never fires is
+        // exactly the kind of dead code a coverage gate should surface.
+        if (ctx.coverage) recordCoverageFunction(ctx.coverage, expr.loc);
         const restoreLoopVars = new Map(ctx.loopVars);
         const restoreAliases = ctx.stateAliases.slice();
         // Restore the captured loop vars + alias frames for the body.
@@ -2168,13 +2255,18 @@ export class ReturnSignal {
  * JS — use the ternary operator when you need a value).
  */
 function runIfStatement(
-  stmt: { test: Expression; consequent: BlockExpr; alternate?: Statement | BlockExpr },
+  stmt: { test: Expression; consequent: BlockExpr; alternate?: Statement | BlockExpr; loc?: SourceLocation },
   ctx: EvaluationContext,
 ): void {
   if (evaluate(stmt.test, ctx)) {
+    if (ctx.coverage) recordCoverageBranch(ctx.coverage, stmt.loc, 0);
     runBlockStatements(stmt.consequent.body, ctx);
     return;
   }
+  // Arm 1 covers the `else` AND the implicit fall-through of an `if` with no
+  // `else` — both are "the condition was false", which is the path a test can
+  // fail to exercise.
+  if (ctx.coverage) recordCoverageBranch(ctx.coverage, stmt.loc, 1);
   if (stmt.alternate) {
     if ((stmt.alternate as { kind?: string }).kind === "IfStatement") {
       runIfStatement(stmt.alternate as { test: Expression; consequent: BlockExpr; alternate?: Statement | BlockExpr }, ctx);
@@ -2188,13 +2280,15 @@ function runIfStatement(
 
 /** Run a `switch (val) { case X: …; break; default: … }` STATEMENT. */
 function runSwitchStatement(
-  stmt: { discriminant: Expression; cases: ReadonlyArray<SwitchCase> },
+  stmt: { discriminant: Expression; cases: ReadonlyArray<SwitchCase>; loc?: SourceLocation },
   ctx: EvaluationContext,
 ): void {
   const value = evaluate(stmt.discriminant, ctx);
   let matched = false;
   try {
-    for (const c of stmt.cases) {
+    for (let i = 0; i < stmt.cases.length; i += 1) {
+      const c = stmt.cases[i]!;
+      const wasMatched = matched;
       if (!matched) {
         if (c.test === null) {
           matched = true;
@@ -2202,6 +2296,9 @@ function runSwitchStatement(
           matched = true;
         }
       }
+      // One arm per case, credited to the case that MATCHED — not to the ones a
+      // fall-through then ran, which would report untested cases as covered.
+      if (matched && !wasMatched && ctx.coverage) recordCoverageBranch(ctx.coverage, stmt.loc, i);
       if (matched) {
         runBlockStatements(c.body, ctx);
       }
@@ -2511,6 +2608,12 @@ export function runControlFlowStatement(stmt: Statement, ctx: EvaluationContext)
 }
 
 function runStatementInBlock(stmt: Statement, ctx: EvaluationContext): void {
+  // Statement counterpart to the guard in `evaluate` — a `for`/`if`/`return`
+  // line has no expression of its own to attribute the hit to.
+  if (ctx.coverage) {
+    const loc = (stmt as { loc?: SourceLocation }).loc;
+    if (loc) recordCoverageLine(ctx.coverage, loc);
+  }
   switch (stmt.kind) {
     case "ExpressionStatement":
       evaluate(stmt.expression, ctx);
@@ -3430,6 +3533,13 @@ function evaluateBlock(
   const localDecls: LocalDeclSnapshot[] = [];
   try {
     for (const stmt of block.body) {
+      // Blocks run their own statement dispatch and only delegate control flow
+      // to `runStatementInBlock`, so the hook there would miss every plain
+      // statement in a function body — which is most of a real program.
+      if (ctx.coverage) {
+        const loc = (stmt as { loc?: SourceLocation }).loc;
+        if (loc) recordCoverageLine(ctx.coverage, loc);
+      }
       switch (stmt.kind) {
         case "ExpressionStatement":
           result = evaluate(stmt.expression, ctx);
@@ -3581,20 +3691,36 @@ function evaluateBinary(
   leftExpr: Expression,
   rightExpr: Expression,
   ctx: EvaluationContext,
+  loc?: SourceLocation,
 ): unknown {
+  // The three short-circuiting operators are real branches: arm 0 is "stopped at
+  // the left operand", arm 1 is "the right-hand side ran". `loc` is the operator
+  // token, so `a || b || c` reports one branch per `||`.
   if (op === "&&") {
     const left = evaluate(leftExpr, ctx);
-    if (!left) return left;
+    if (!left) {
+      if (ctx.coverage) recordCoverageBranch(ctx.coverage, loc, 0);
+      return left;
+    }
+    if (ctx.coverage) recordCoverageBranch(ctx.coverage, loc, 1);
     return evaluate(rightExpr, ctx);
   }
   if (op === "||") {
     const left = evaluate(leftExpr, ctx);
-    if (left) return left;
+    if (left) {
+      if (ctx.coverage) recordCoverageBranch(ctx.coverage, loc, 0);
+      return left;
+    }
+    if (ctx.coverage) recordCoverageBranch(ctx.coverage, loc, 1);
     return evaluate(rightExpr, ctx);
   }
   if (op === "??") {
     const left = evaluate(leftExpr, ctx);
-    if (left !== null && left !== undefined) return left;
+    if (left !== null && left !== undefined) {
+      if (ctx.coverage) recordCoverageBranch(ctx.coverage, loc, 0);
+      return left;
+    }
+    if (ctx.coverage) recordCoverageBranch(ctx.coverage, loc, 1);
     return evaluate(rightExpr, ctx);
   }
 
@@ -4194,6 +4320,7 @@ function invokeComponentDecl(
   ctx: EvaluationContext,
   loc?: { line: number; column: number },
 ): unknown {
+  if (ctx.coverage) recordCoverageFunction(ctx.coverage, decl.loc);
   // Split positional vs. named for the slot-aware UserComponentNode. The
   // named-props block is the *last* ObjectExpr in `args` (rightmost),
   // which lets users write `Foo("hi", {x: 1})` (trailing) or
@@ -4497,6 +4624,7 @@ function runActionDeclSync(
   args: unknown[],
   ctx: EvaluationContext,
 ): unknown {
+  if (ctx.coverage) recordCoverageFunction(ctx.coverage, decl.loc);
   // A PascalCase component declaration mirrored into the action map keeps
   // the same wrapper semantics when its body runs as an action: a self-call
   // inside the body resolves to the shadowed built-in, not back to itself.
@@ -4849,6 +4977,7 @@ function invokeHookDecl(
   argExprs: Expression[],
   ctx: EvaluationContext,
 ): unknown {
+  if (ctx.coverage) recordCoverageFunction(ctx.coverage, decl.loc);
   const args: unknown[] = [];
   for (const arg of argExprs) {
     if (arg.kind === "Spread") {

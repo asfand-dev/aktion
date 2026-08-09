@@ -290,10 +290,10 @@ Visual divider between content sections. Supports horizontal or vertical orienta
 ### Tabs
 
 ```
-Tabs(items, defaultValue?, orientation?, onChange?, value?)
+Tabs(items, defaultValue?, orientation?, onChange?, value?, fitted?)
 ```
 
-Tabbed container. Children must be TabItem components. Supports `orientation="vertical"` for sidebar-style tabs and built-in keyboard navigation (←/→ or ↑/↓, Home, End). Provide `onChange` to react when the user switches tabs (called with the new tab's value). Pass a `$variable` as `value` for a controlled strip — it is kept in sync both ways, so a button elsewhere on the page (or a route) can switch tabs and a user click updates the variable; `defaultValue` is the initial tab only.
+Tabbed container. Children must be TabItem components. Supports `orientation="vertical"` for sidebar-style tabs and built-in keyboard navigation (←/→ or ↑/↓, Home, End). Provide `onChange` to react when the user switches tabs (called with the new tab's value). Pass a `$variable` as `value` for a controlled strip — it is kept in sync both ways, so a button elsewhere on the page (or a route) can switch tabs and a user click updates the variable; `defaultValue` is the initial tab only. Set `fitted` for a strip that spans its container with equal-width triggers (the shape a two- or three-tab section header usually wants).
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -302,6 +302,7 @@ Tabbed container. Children must be TabItem components. Supports `orientation="ve
 | `orientation` | `"horizontal"` \| `"vertical"` | no | Layout direction (default `horizontal`) |
 | `onChange` | `callable` | no | Called with the newly-activated tab value when the user switches tabs |
 | `value` | `string` | no | Active tab value — pass a `$variable` to control the strip from host state (written back when the user switches tabs) |
+| `fitted` | `boolean` | no | Stretch the strip across its container and split it evenly between the triggers (ignored for `orientation="vertical"`) |
 
 ### TabItem
 
@@ -338,7 +339,7 @@ Accordion container. Children must be AccordionItem components. Set `showArrow: 
 ### AccordionItem
 
 ```
-AccordionItem(title, children, open?, showArrow?, variant?, disabled?, onToggle?)
+AccordionItem(title, children, open?, subtitle?, showArrow?, variant?, disabled?, onToggle?)
 ```
 
 Single accordion section. Pass a `$variable` as `open` to control it from host state (a "Collapse all" button then works); `onToggle` fires with the new open state, which is where lazy-loading a section's content belongs. `variant` paints a semantic left-edge stripe for check-list style accordions, and `disabled` marks a section that cannot be opened yet.
@@ -348,6 +349,7 @@ Single accordion section. Pass a `$variable` as `open` to control it from host s
 | `title` | `string` | **yes** |  |
 | `children` | `Node[]` | **yes** |  |
 | `open` | `boolean` | no |  |
+| `subtitle` | `string` | no | Second line inside the trigger, under the title — a preview of what the collapsed section holds ("Labels \| Taints \| Maintenance window") |
 | `showArrow` | `boolean` | no | Show a chevron icon on the right (default false). Inherits from parent Accordion when unset. |
 | `variant` | `"success"` \| `"warning"` \| `"danger"` \| `"neutral"` \| `"info"` | no | Semantic left-edge stripe (success / warning / danger / neutral / info) |
 | `disabled` | `boolean` | no | Section cannot be expanded (e.g. a step that is not available yet) |

@@ -82,6 +82,19 @@ export class StateStore {
   private rendering = false;
   /** Set when a write was suppressed during the render pass (for diagnostics). */
   private renderWriteOccurred = false;
+  /**
+   * Atoms the HOST supplied rather than the program — via `hydrateState`,
+   * `loadSnapshot`, SSR hydration, or a test's seeded state.
+   *
+   * The plan needs to tell the two apart. A program whose top level is
+   * imperative is re-planned by resetting its literal `$state` to the declared
+   * default, so that a `while` loop appending to `$items` produces the same
+   * result on every plan instead of accumulating. That reset must not reach a
+   * value the host injected on purpose — doing so silently discarded seeded
+   * state for any program containing a top-level `if`/`for`/`while`. Cleared by
+   * `rebind`, since a new program's seeding is a new question.
+   */
+  private hydratedNames = new Set<string>();
 
   declare(name: string, defaultValue: StateValue): void {
     this.defaults.set(name, defaultValue);
@@ -201,10 +214,32 @@ export class StateStore {
    * not yet been `declare`d are still written so they show up the
    * moment the program declares them.
    */
+  /**
+   * Write host-supplied values into the store and announce them as changes.
+   *
+   * Announcing matters: a host that calls `hydrateState` after the first render
+   * — restoring a snapshot, or a test driving a screen into a state — is making
+   * a state change like any other, and subscribers (the computed-state
+   * derivations, the renderer's dependency gate) have to see it or the new value
+   * sits in the store while the UI keeps showing the old one. Only genuinely
+   * changed names are announced, so re-hydrating an identical snapshot is free.
+   */
   hydrate(snapshot: Readonly<Record<string, StateValue>>): void {
     for (const [name, value] of Object.entries(snapshot)) {
+      this.hydratedNames.add(name);
+      if (this.values.has(name) && this.values.get(name) === value) continue;
       this.values.set(name, value);
+      this.enqueueChange(name);
     }
+  }
+
+  /**
+   * Whether `name` was supplied by the host rather than the program — see
+   * {@link hydratedNames}. Consulted by the planner before it resets a literal
+   * `$state` back to its declared default.
+   */
+  wasHydrated(name: string): boolean {
+    return this.hydratedNames.has(name);
   }
 
   reset(...names: string[]): void {
@@ -240,6 +275,7 @@ export class StateStore {
     this.values.clear();
     this.defaults.clear();
     this.pendingChanges.clear();
+    this.hydratedNames.clear();
     for (const [name, value] of declarations) {
       this.defaults.set(name, value);
       this.values.set(name, value);

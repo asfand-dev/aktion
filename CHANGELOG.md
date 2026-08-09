@@ -13,6 +13,30 @@ Published releases are listed at
 
 ## Unreleased
 
+### Added
+
+- **`labelHidden` now works on every field-shell control.** `Checkbox` and
+  `Switch` gained it (their visible label is an inline sibling of the control, so
+  the field shell never saw it), and `Select`, `Combobox`, `MultiSelect`,
+  `CheckBoxGroup` and `Radio` now **declare** it — all five already routed
+  through `withFieldShell`, which has implemented `labelHidden` since it was
+  introduced, but an undeclared prop is dropped before the render sees it, so
+  passing it did nothing. The label is moved off-screen with
+  `rui-visually-hidden` and stays in the accessibility tree — never
+  `display: none` or `aria-hidden`, which would take the name away from the users
+  who need it. This is the prop a control in a table cell wants: the column
+  header already carries the name, and repeating it in every row is noise.
+
+- **`Tabs` gained a `fitted` prop.** `Tabs(items, { fitted: true })` stretches
+  the strip across its container and splits it evenly between the triggers, with
+  each label centred in its share — the shape a two- or three-tab section header
+  usually wants, and previously only reachable by styling `.rui-tab-trigger`
+  from outside. Wrapping and horizontal scroll are off while fitted (a divided
+  row has nothing to wrap onto), and it is a no-op for
+  `orientation="vertical"`, which is already full-width. Unset, tabs keep their
+  existing left-aligned, content-width layout — no attribute is emitted, so
+  nothing changes for existing strips.
+
 ### Changed
 
 - **The `corporate` theme is a new design.** It is now a contemporary
@@ -42,6 +66,44 @@ Published releases are listed at
 
 ### Fixed
 
+- **`delete obj[key]` did nothing.** A computed key parses to a `Member` node
+  with `computed` set and **no `property`**, and the evaluator's `delete` branch
+  required `property` — so every computed delete returned `false` and removed
+  nothing, silently. That is the exact form the immutable-update idiom uses to
+  drop one entry from a keyed map:
+
+  ```js
+  const next = {...$edits}
+  delete next[id]
+  $edits = next
+  ```
+
+  Every per-id draft buffer written that way kept the entry it meant to remove,
+  with no error and no warning. `delete obj.prop` (static) always worked, which is
+  what made it easy to miss. `delete a?.[k]` on a nullish base now also returns
+  `true` without throwing, matching JavaScript.
+- **`DataGrid`: `Col(align:)` could not beat a numeric column's default.** The
+  base sheet right-aligns `td[data-format="number"|"currency"]` so a money column
+  reads as money — but it declared that rule *after* the `data-align` rules and
+  had no `td[data-align="left"]` rule at all, so a numeric column that explicitly
+  asked for `align: "left"` was silently right-aligned and there was nothing an
+  app stylesheet could do about it at equal specificity. The three `data-align`
+  rules now come last (and `left` exists), so an explicit `align` out-ranks the
+  format-derived default in the direction the author asked for —
+  matching how `Table` has always behaved. That is the shape a **count** column
+  wants: "12 members" is a label with a number in it, not a figure to compare
+  down the column. `font-variant-numeric: tabular-nums` still rides only on the
+  right-aligned case. A grid that relied on `format: "number"` for right
+  alignment and did not set `align` is unaffected. `thead th[data-align="left"]`
+  was added for the same reason.
+- **`vision`: text on every danger-filled surface was invisible.**
+  `colorOnDanger` — the ink drawn *on* the critical fill — was set to the fill
+  colour itself (`#c80a00`), so a solid-red `ConfirmDialog` button rendered a red
+  label on red, and the same applied to danger badges, toast and callout icon
+  discs, the Steps error marker and `TabBar`'s count. It is now `#ffffff`, which
+  is what the comment beside it already documented as correct (6.00:1 on
+  critical-5). Themes that were relying on the invisible value to hide a label
+  need to set `colorOnDanger` explicitly.
 - **Playground: the "Storage + console globals" example stored nothing.** Its
   fields bound through `value: $name ?? ""` — an expression, not a `$variable`,
   so two-way binding had no atom to write back to; typing never updated the
@@ -273,22 +335,6 @@ and removes three theme CSS variables.
 
 ### Changed
 
-- **The `corporate` theme was rewritten to the Exos design language.** Same
-  theme name, entirely different output: flat white surfaces with no card
-  borders or shadows, navy `#0b2a63` primary that *brightens* to `#1474c4` on
-  hover (it used to darken), `#1474c4` accent and focus ring, 24px pill
-  buttons with 4/20 padding, 8px inputs that are transparent until hovered,
-  borderless tables with an uppercase navy header, and blue reserved for
-  interactive elements only (body, heading and nav text stay `#001b41`). No
-  new `ThemeTokens` keys were needed: the theme now *sets* tokens it used to
-  inherit from `light` — the full Open Sans / Overpass type ladder
-  (14/12/16/16/22px sizes, 400/600 weights, 1.4286 body line-height),
-  `radiusXs`–`radiusLg`
-  4/8/12/16px, `radiusPill`, `radiusButton` 24px, `radiusInput` 8px,
-  `borderWidth`, six brand gradients, button padding and weight,
-  100/80/120/240ms `ease-out` motion, softer `rgba(113,128,149,0.5)` shadows,
-  `spacingM` 12px, and a new chart palette. Anything pinning corporate's old
-  hex values or radii must be updated.
 - **Brand hues changed in four of the six themes** to clear WCAG contrast:
   `light` primary/accent/focus `#6366f1` → `#4f46e5` (hover `#4338ca`);
   `soft` `#a78bfa` → `#7c4ddb` with a new mint `colorLink` `#0b6b62` and a

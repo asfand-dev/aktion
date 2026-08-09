@@ -125,6 +125,7 @@ function buildChatPrompt(library: ComponentLibrary, options: PromptOptions): str
   const sections: string[] = [];
   sections.push(chatHeader(options.preamble));
   sections.push(chatSyntax());
+  sections.push(chatMarkdownMapping());
   sections.push(chatComponentLibrary(library));
   sections.push(chatUtil());
   if (options.tools && options.tools.length > 0) {
@@ -1228,62 +1229,48 @@ $app(Column([
 /* -------------------------------------------------------------------------- */
 
 /**
- * Chat mode ships a READ-ONLY subset: a chat reply renders once and has no
- * session to drive, so forms, editors, routers, and imperative interop have no
- * meaning there.
+ * Chat mode has exactly one job: turn the Markdown answer an assistant would
+ * otherwise write into a rich, READ-ONLY reply. So the catalogue it teaches is
+ * an explicit ALLOWLIST — one component per shape a good answer takes, plus the
+ * shapes Markdown cannot express at all (charts, KPI tiles, timelines, diffs).
  *
- * This is expressed as a DENYLIST over the library's own groups rather than an
- * allowlist of names, because an allowlist fails in the silent direction. The
- * previous 86-name allowlist had not tracked two waves of component additions,
- * so roughly 80 legitimately read-only display components — `Section`,
- * `Heading`, `Pill`, `Metric`, `PricingTable`, `CodeWindow`, `Prose`,
- * `ComparisonTable`, … — were unreachable in chat mode, which pushed the model
- * toward stitching `Card` + `Text` by hand. With a denylist, a newly added
- * display component is available by default and only an explicitly interactive
- * one has to be named.
+ * A denylist was tried first and failed in the expensive direction: it left 135
+ * components reachable and the catalogue alone ate 71k of the prompt's 77k
+ * characters, most of it teaching landing-page furniture (`Hero`,
+ * `PricingTable`, `LogoCloud`, `Testimonial`, `ProductCard`, …). Every one of
+ * those is budget spent on something the model should not do, and a standing
+ * invitation to answer a question with a marketing page.
+ *
+ * The cost of an allowlist is that a newly added display component is invisible
+ * here until someone adds it. That is the right failure: chat replies want a
+ * small, memorable vocabulary, not everything the library can render.
+ *
+ * Grouped by the job each one does, so the line stays easy to argue about.
  */
-const CHAT_EXCLUDED_GROUPS: ReadonlySet<string> = new Set([
-  "Forms",
-  "Editors & overlays",
-  "App shell",
-  "Routing",
-  "Helpers",
-  "Behaviour wrappers",
-  "Interop",
-  "Escape hatches",
-]);
-
-/**
- * Interactive stragglers inside the groups we otherwise keep. Each one either
- * needs a live session (overlays, palettes, tours), mutates state, or hosts a
- * third-party widget.
- */
-const CHAT_EXCLUDED_COMPONENTS: ReadonlySet<string> = new Set([
-  // Overlays and transient surfaces — nothing can open them in a chat reply.
-  "Modal", "Drawer", "Sheet", "BottomSheet", "ConfirmDialog", "Popover",
-  "HoverCard", "DropdownMenu", "MenuItem", "MenuSeparator", "MenuLabel",
-  "ContextMenu", "CommandPalette", "Lightbox", "Toast", "Toasts", "Backdrop",
-  "SpeedDial", "FloatingActionButton", "Tour", "Spotlight", "Confetti",
-  // Paging / windowing / infinite loading — all need interaction to be useful.
-  "Pagination", "DataGrid", "InfiniteList", "VirtualList", "VirtualGrid",
-  "Carousel", "Gallery", "MasonryGrid", "ResizablePanels", "ScrollSpy",
-  // Drag, gesture, and canvas input.
-  "Sortable", "Draggable", "DropZone", "OnGesture", "DrawingCanvas",
-  "SignaturePad", "ReactionPicker", "QuantityStepper", "VariantSelector",
-  // Session-bound chrome and utilities.
-  "ThemeToggle", "CopyButton", "ShareButtons", "BackToTop", "NotificationBell",
-  "InlineEdit", "FilterChips", "FilterPill", "QueryBuilder", "InboxPanel",
-  "OnboardingChecklist", "KanbanBoard", "KanbanColumn", "KanbanCard",
-  "Toolbar", "TopBar", "Navbar", "NavbarItem", "NavBar", "TabBar", "Sticky",
-  "LiveCursor", "PresenceAvatars", "Lottie", "Map", "VideoPlayer", "AudioPlayer",
-  "Calendar", "CalendarView", "Gantt", "Reveal", "Parallax", "ReadingProgress",
-  "Transition", "FlipList", "Overlay", "OverlayItem", "RouteView", "Cart",
+const CHAT_COMPONENTS: ReadonlySet<string> = new Set([
+  // Structure — the containers a reply is built from.
+  "Column", "Row", "Grid", "Stack", "Card", "CardHeader", "Separator",
+  "Tabs", "TabItem", "Accordion", "AccordionItem",
+  // Prose — the Markdown constructs, one for one.
+  "Text", "Heading", "Markdown", "Quote", "Callout", "CodeBlock", "Terminal",
+  "DiffViewer", "Badge", "Pill", "Icon", "Kbd", "Image", "Avatar",
+  // Tabular and list data.
+  "Table", "Col", "ComparisonTable", "List", "ListItem",
+  "DescriptionList", "DescriptionItem", "Steps",
+  // Figures Markdown cannot express.
+  "Stats", "StatCard", "Progress",
+  "BarChart", "LineChart", "PieChart", "RadarChart", "ScatterChart",
+  "Histogram", "Heatmap", "Gauge", "Series",
+  "Timeline", "TimelineItem",
+  // Chat-native blocks, including the follow-up prompts the host renders.
+  "SectionBlock", "ListBlock", "FollowUpBlock", "FollowUpItem",
+  // The two states a reply legitimately reports.
+  "EmptyState", "ErrorState",
 ]);
 
 /** True when a component may appear in the chat-mode catalogue. */
-function isChatComponent(groupName: string, componentName: string): boolean {
-  if (CHAT_EXCLUDED_GROUPS.has(groupName)) return false;
-  return !CHAT_EXCLUDED_COMPONENTS.has(componentName);
+function isChatComponent(_groupName: string, componentName: string): boolean {
+  return CHAT_COMPONENTS.has(componentName);
 }
 
 function chatHeader(preamble: string | undefined): string {
@@ -1291,7 +1278,42 @@ function chatHeader(preamble: string | undefined): string {
     "You respond in Aktion — a declarative language that is a strict subset of JavaScript. The host renders your reply as a rich, read-only UI. Output ONLY Aktion: no markdown, prose, or JSON.";
   return `${lead}
 
-Register the UI root with \`$app(...)\` on the first line (typically \`$app(Column([...]))\`). This is read-only display mode — use only the layout, content, data, chart, and feedback components listed below. Do NOT emit state writes, actions, effects, HTTP, routing, form controls, or clickable buttons. The single exception is \`FollowUpBlock\`, which the host renders as suggested follow-up prompts.`;
+Register the UI root with \`$app(...)\` on the first line (typically \`$app(Column([...]))\`). Answer the question exactly as you otherwise would — same substance, same length, same care — but emit that answer as components instead of Markdown prose.
+
+This is read-only display mode. Do NOT emit state writes, actions, effects, HTTP, routing, form controls, or clickable buttons. The single exception is \`FollowUpBlock\`, which the host renders as suggested follow-up prompts.`;
+}
+
+/**
+ * The highest-value section in this prompt. The model already knows how to
+ * write a good Markdown answer; the only new skill is the substitution, so it
+ * is taught as a substitution table rather than as prose about composition.
+ * Placed directly after the header, before the catalogue it indexes into.
+ */
+function chatMarkdownMapping(): string {
+  return `## Markdown → Aktion
+
+Compose the answer you would have written, then emit each piece as its component. Never put Markdown syntax inside a string — \`Text("## Results")\` renders the literal hashes.
+
+| You would have written | Emit instead |
+| --- | --- |
+| \`# Title\` / \`## Section\` | \`Heading("Title", { level: 2 })\`, or \`SectionBlock("Section", { children: [...] })\` for a titled block with body |
+| A paragraph | \`Text("…")\` for a sentence or two; \`Markdown("…")\` when the prose itself carries **bold**, inline code, links, or nested lists |
+| \`- bullet\` / \`1. step\` | \`ListBlock(["…", "…"])\` (\`ordered: true\` for numbers); \`List([ListItem(…)])\` when each row needs an icon, badge, or description |
+| A numbered procedure | \`Steps([{ title, details }])\` — clearer than a numbered list for anything the reader follows in order |
+| \`> quote\` | \`Quote("…", { cite: "…" })\` |
+| A fenced code block | \`CodeBlock(source, { language: "ts", filename: "…" })\`; \`Terminal(lines)\` for shell sessions, \`DiffViewer(before, after)\` for before/after |
+| A Markdown table | \`Table([Col("Header", values)])\` — column-oriented; \`ComparisonTable\` for a feature-by-option matrix |
+| **Note:** / **Warning:** | \`Callout("Heads up", { tone: "warning", description: "…" })\` — the positional slot is the TITLE, not the body |
+| \`key: value\` lines | \`DescriptionList([DescriptionItem("Key", "Value")])\` |
+| A bolded figure inside a sentence | \`StatCard\` / \`Stats\` — lift the number out of the prose |
+| \`---\` | \`Separator()\` |
+| \`![alt](url)\` | \`Image(url, { alt: "…" })\` |
+| Describing a trend, split, or ranking in words | A chart — \`LineChart\` over time, \`BarChart\` to rank, \`PieChart\` for a breakdown |
+| Recounting dates or a history in words | \`Timeline([TimelineItem(…)])\` |
+| "I couldn't find anything" | \`EmptyState\` |
+| "That failed because…" | \`ErrorState\` |
+
+Group related pieces in a \`Card\` with a \`CardHeader\`. Put long supporting detail behind \`Accordion\` and parallel alternatives behind \`Tabs\`, so a long answer stays scannable instead of becoming a wall.`;
 }
 
 function chatSyntax(): string {
@@ -1304,8 +1326,8 @@ A program is a flat list of \`name = expression\` statements in standard JavaScr
 
 ### Component calls
 - **Case doesn't matter** — \`Card\` and \`card\` are equivalent.
-- **Always invoke with parentheses** — \`Column([Header(), Body()])\`, never \`Column([Header, Body])\`; write \`Hero()\` even with no args.
-- **Canonical call: one positional arg, the rest in a trailing object** — \`Callout("info", { title: "Heads up", icon: "circle-info" })\`, \`Badge("Live", { tone: "success" })\`. All-positional (signature order) and all-named (single \`{ }\` object) calls also work.
+- **Always invoke with parentheses** — \`Column([Header(), Body()])\`, never \`Column([Header, Body])\`; write \`Separator()\` even with no args.
+- **Canonical call: the prop tagged \`(positional)\` goes bare, everything else in a trailing object** — \`Callout("Heads up", { tone: "info", icon: "circle-info" })\`, \`Badge("Live", { tone: "success" })\`. The tagged prop is not always the first one listed: \`Callout\`'s is \`title\`, \`CodeBlock\`'s is \`codeString\`. All-positional (signature order) and all-named (single \`{ }\` object) calls also work.
 
 ### Build UI from data — JS is fully supported
 \`.map\` / \`.filter\` arrays into nodes (\`rows.map(r => ListItem(r.title))\`), ternaries for branching, and the array-pluck shortcut \`rows.title\` → \`[each row.title]\` to feed columns (\`Col("Title", rows.title)\`) and chart series (\`PieChart(rows.label, rows.value)\`). \`if\` / \`for\` are statements — not usable on the right of \`=\`.
@@ -1324,7 +1346,7 @@ function chatComponentLibrary(library: ComponentLibrary): string {
   const byName = new Map(library.components.map((c) => [c.name, c]));
   const lines: string[] = [
     "## Component library (read-only)",
-    "Use only these components. Each signature lists props in declaration order; optional props end with `?`. Pass the positional prop bare, then all other props in a trailing `{ prop: value }` object.",
+    "This is the complete vocabulary for a chat reply — a name that does not appear here does not exist in this mode and renders nothing at all. Each signature lists props in declaration order; optional props end with `?`. Pass the positional prop bare, then all other props in a trailing `{ prop: value }` object.",
   ];
   for (const group of groups) {
     const filtered = group.components.filter((name) => isChatComponent(group.name, name));
@@ -1379,7 +1401,7 @@ tbl    = Table([
   Col("Users (M)",  langs.users, { format: "number" }),
   Col("First seen", langs.year,  { format: "number" })
 ])
-totals = Callout("info", { title: \`Tracking \${langs.length} languages · \${$util.sum(langs.users)}M users\`, icon: "chart-line", compact: true })
+totals = Callout(\`Tracking \${langs.length} languages · \${$util.sum(langs.users)}M users\`, { tone: "info", icon: "chart-line", compact: true })
 follow = FollowUpBlock(["Sort by users", "Show as a chart"])
 
 langs = [
@@ -1387,14 +1409,34 @@ langs = [
   { name: "JavaScript", users: 14.2, year: 1995 },
   { name: "TypeScript", users: 8.5,  year: 2012 }
 ]`,
+    `// An explanatory answer — the common case. Prose stays prose; only the
+// parts that are genuinely a list, a warning or a snippet become components.
+$app(Column([intro, steps, warn, snippet, follow], { gap: "md" }))
+intro   = Markdown("A **debounce** delays a function until the calls stop arriving. It is the right tool for search-as-you-type, autosave, and resize handlers — anywhere the last call is the only one that matters.")
+steps   = Steps([
+  { title: "Start a timer", details: "Each call clears the pending timer and schedules a new one." },
+  { title: "Wait for quiet", details: "Nothing runs while calls keep arriving." },
+  { title: "Fire once",     details: "The timer survives the quiet period and the function runs." }
+])
+warn    = Callout("Not the same as throttle", { tone: "warning", description: "Debounce drops the intermediate calls. Use throttle when you need a steady sample rate instead." })
+snippet = CodeBlock(code, { language: "js", filename: "debounce.js" })
+follow  = FollowUpBlock(["Show the throttle version", "How do I cancel a pending call?"])
+
+code = "const debounce = (fn, ms) => {\\n  let t\\n  return (...args) => {\\n    clearTimeout(t)\\n    t = setTimeout(() => fn(...args), ms)\\n  }\\n}"`,
+    `// A short factual answer. Do not over-build: no Card, no header, no sections.
+$app(Column([answer, follow], { gap: "sm" }))
+answer = Text("Mount Everest is 8,849 m (29,032 ft) above sea level — remeasured jointly by Nepal and China in 2020.")
+follow = FollowUpBlock(["How does that compare to K2?", "How long does the climb take?"])`,
   ];
 }
 
 function chatImportantRules(): string {
   return `## Important rules
 
-- **Match the component to the content** — tables for comparisons, charts for trends, \`Callout\`/\`Banner\` for highlights, \`Markdown\` for paragraph prose, \`Text\` for short labels, \`Hero\`/\`PageHeader\` for titles, \`Stats\` for KPI strips.
-- **Lead with a clear title**, and use **realistic data** — believable names, numbers, dates; never Lorem Ipsum.
+- **The answer comes first, the layout second.** Say everything you would have said. A prettier reply that dropped half the explanation is a worse reply.
+- **Match the component to the content** — see the Markdown → Aktion table above. \`Table\` for comparisons, a chart for trends, \`Callout\` for warnings and asides, \`Markdown\` for real paragraphs, \`Text\` for short labels, \`Heading\`/\`SectionBlock\` for titles, \`Stats\` for KPI strips.
+- **Scale the structure to the question.** A one-line factual answer is \`Text\` plus \`FollowUpBlock\` — do not wrap it in a Card, a header and three sections. Reach for \`Card\`/\`SectionBlock\` only once the reply has genuinely separate parts.
+- **Never invent data to fill a component.** Only chart or tabulate numbers you actually have; if the answer is prose, \`Markdown\` is the right answer.
 - **Template literals** for any string mixing copy with values.
 - **End conversational replies with \`FollowUpBlock([...])\`** — 2–4 short next-prompt suggestions.
 - **Compose freely** — vary the structure and component mix to fit each request rather than reaching for the same template every time.`;
@@ -1404,7 +1446,7 @@ function chatFinalVerification(): string {
   return `## Final verification
 
 1. \`$app(...)\` is first; every referenced name is defined below and reachable from the root.
-2. Every component is invoked with \`()\` — \`Hero()\`, never bare \`Hero\`.
+2. Every component is invoked with \`()\` — \`Separator()\`, never bare \`Separator\`. Every name appears verbatim in the catalogue above; an unlisted name renders NOTHING, silently.
 3. Only the read-only display components above — no forms, clickable buttons, state writes, actions, effects, HTTP, or routing.
 4. Tables are column-oriented (\`Table([Col("Label", arr)])\`, cells may be components via \`rows.map(r => Badge(r.status))\`); charts take numeric arrays (array-pluck \`rows.value\`).
 5. Prefer one positional arg per call with everything else in a trailing \`{ }\` object; no statement split across lines outside an unmatched bracket.`;

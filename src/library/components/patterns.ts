@@ -1981,7 +1981,9 @@ export const Tile: ComponentSpec = {
     "`StatCard`, ideal for menu grids, quick-action panels, category " +
     "directories, and category filters. Pair with `Grid` for uniform rows. " +
     "Pass `href` for a directory tile that links to a route, and `selected` " +
-    "for the on-state of a filter tile.",
+    "for the on-state of a filter tile. `iconPosition: \"end\"` moves the mark " +
+    "to the trailing edge — the shape a choice card wants, where the copy " +
+    "reads first and the illustration sits opposite it.",
   props: [
     { name: "label", type: "string" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name shown in a colored disc" },
@@ -1991,6 +1993,8 @@ export const Tile: ComponentSpec = {
     { name: "onClick", type: "callable", optional: true, aliases: ["action", "onclick"] },
     { name: "href", type: "string", optional: true, description: "Render the tile as a link to this URL" },
     { name: "selected", type: "boolean", optional: true, aliases: ["active"], description: "Mark the tile as currently applied/current (filter grids, category directories)" },
+    // Appended, never inserted: a positional call fills slots in declaration order.
+    { name: "iconPosition", type: "string", optional: true, enum: ["start", "end"], description: "Which edge the icon sits on (default `start`)" },
   ],
   render: (_node, props, helpers) => {
     const isClickable = typeof props.onClick === "function";
@@ -2010,7 +2014,8 @@ export const Tile: ComponentSpec = {
       "aria-current": tag === "a" && selected ? "page" : null,
     });
     const iconNode = renderIcon(props.icon, { className: "rui-tile-icon" });
-    if (iconNode) root.append(iconNode);
+    const iconAtEnd = asString(props.iconPosition, "start") === "end";
+    if (iconNode && !iconAtEnd) root.append(iconNode);
     const body = el("div", { class: "rui-tile-body" });
     body.append(el("div", { class: "rui-tile-label" }, [asString(props.label)]));
     const value = asString(props.value);
@@ -2018,6 +2023,12 @@ export const Tile: ComponentSpec = {
     const description = asString(props.description);
     if (description) body.append(el("div", { class: "rui-tile-description" }, [description]));
     root.append(body);
+    // DOM order, not `row-reverse`: the reading order and the tab order have to
+    // match what is painted, and a reversed flex row breaks both.
+    if (iconNode && iconAtEnd) {
+      root.setAttribute("data-icon-position", "end");
+      root.append(iconNode);
+    }
     if (isClickable) {
       root.onclick = () => helpers.invoke(props.onClick);
     }

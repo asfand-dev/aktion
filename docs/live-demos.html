@@ -164,6 +164,17 @@
         </p>
       </header>
 
+      <h2 id="all">Every demo</h2>
+      <p>
+        All 111 programs, grouped by folder &mdash; open a section to mount its
+        previews. The per&#8209;section counts are read from
+        <code>demos/manifest.json</code>, so this list is whatever is on disk.
+        Everything below the gallery explains how the demos are built and how to
+        run them yourself.
+      </p>
+
+      <div id="demo-sections"></div>
+
       <h2 id="what">What these demos are</h2>
       <p>
         One demo is one file. There is no build step, no JavaScript glue and no
@@ -477,15 +488,6 @@ npx http-server site -p 4321    # or: npx serve site</code></pre>
         </p>
       </div>
 
-      <h2 id="all">Every demo</h2>
-      <p>
-        All 111 programs, grouped by folder. Open a section to mount its
-        previews; the per&#8209;section counts are read from
-        <code>demos/manifest.json</code>, so this list is whatever is on disk.
-      </p>
-
-      <div id="demo-sections"></div>
-
       <h2 id="next">Next</h2>
       <div class="demo-grid">
         <a class="demo-card" href="playground.html">
@@ -510,18 +512,43 @@ npx http-server site -p 4321    # or: npx serve site</code></pre>
     </main>
   </div>
 
-  <script type="module" src="assets/site.js?v=2026.07.31"></script>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
   <script type="module">
     const root = document.getElementById("demo-sections");
 
+    // Folder and file slugs are kebab-case. Words that are acronyms in prose
+    // stay acronyms in the label, so `ai-apps` reads "AI Apps" rather than
+    // "Ai Apps" — the same map the runner shell uses.
+    const ACRONYMS = {
+      ai: "AI", api: "API", bmi: "BMI", crm: "CRM", cta: "CTA", devops: "DevOps",
+      faq: "FAQ", github: "GitHub", iot: "IoT", json: "JSON", qr: "QR",
+      saas: "SaaS", seo: "SEO", ui: "UI", ux: "UX",
+    };
     const titleCase = (slug) =>
-      slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      slug.split("-").map((w) => ACRONYMS[w] ?? w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
     const programName = (file) => titleCase(file.replace(/\.aktion$/, ""));
 
-    const manifest = await fetch("demos/manifest.json").then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status} fetching demos/manifest.json`);
-      return r.json();
-    });
+    // The gallery is now the first thing on the page, so a failed manifest
+    // fetch has to say so. Opening the file over `file://` is the usual cause
+    // and it fails silently otherwise — an empty page with no explanation.
+    let manifest;
+    try {
+      const response = await fetch("demos/manifest.json");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      manifest = await response.json();
+    } catch (err) {
+      root.innerHTML = `
+        <div class="callout warn">
+          <h4>The demo list could not be loaded</h4>
+          <p>
+            <code>demos/manifest.json</code> did not load (<code>${String(err.message || err)}</code>).
+            Browsers block that fetch over <code>file://</code> &mdash; serve the
+            folder over HTTP instead. See
+            <a href="#local">Running them locally</a>.
+          </p>
+        </div>`;
+      throw err;
+    }
 
     // Slow auto-scroll of a hovered preview. The embedded runner scrolls its
     // own `.runner-stage`; we ping-pong through it so the whole program is

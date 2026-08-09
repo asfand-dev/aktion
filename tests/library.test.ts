@@ -2812,6 +2812,25 @@ describe("new components — phase 1-4 rollout", () => {
     expect(firstBadge?.textContent).toBe("3");
   });
 
+  it("Tabs marks a fitted strip and leaves the default alone", () => {
+    const t1 = makeNode("TabItem", ["one", "One", []]);
+    const t2 = makeNode("TabItem", ["two", "Two", []]);
+    const fitted = Tabs.render(
+      makeNode("Tabs", [[t1, t2], "one", "horizontal", null, "", true]),
+      { items: [t1, t2], defaultValue: "one", fitted: true },
+      helpers,
+    ) as HTMLElement;
+    const plain = Tabs.render(
+      makeNode("Tabs", [[t1, t2], "one"]),
+      { items: [t1, t2], defaultValue: "one" },
+      helpers,
+    ) as HTMLElement;
+    expect(fitted.getAttribute("data-fitted")).toBe("true");
+    // Absent rather than "false": the equal-width rules hang off the attribute,
+    // so an unset prop must not match them.
+    expect(plain.hasAttribute("data-fitted")).toBe(false);
+  });
+
   it("Button normalises size tokens to the canonical vocabulary", () => {
     const sm = Button.render(
       makeNode("Button", ["Save", null, "primary", "button", "sm"]),
@@ -3362,6 +3381,70 @@ describe("Accordion showArrow", () => {
     ) as HTMLElement;
     expect(node.getAttribute("data-show-arrow")).toBe("true");
     expect(node.querySelector(".rui-accordion-chevron")).not.toBeNull();
+  });
+});
+
+describe("AccordionItem toggle reporting", () => {
+  const renderItem = async (open: boolean, onToggle: (v: unknown) => void, stateRef?: string) => {
+    const { AccordionItem } = await import("../src/library/components/layout.js");
+    const localHelpers: RenderHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => { if (typeof fn === "function") (fn as (...a: unknown[]) => void)(...args); },
+      setState: (name: string, value: unknown) => { onToggle({ setState: name, value }); },
+    };
+    return AccordionItem.render(
+      makeNode("AccordionItem", ["Advanced", [], open], stateRef ? [{}, {}, { stateRef }] : []),
+      { title: "Advanced", children: [], open, onToggle },
+      localHelpers,
+    ) as HTMLDetailsElement;
+  };
+
+  it("reports a USER toggle that diverges from the asserted open state", async () => {
+    const seen: unknown[] = [];
+    const details = await renderItem(false, (v) => seen.push(v));
+    document.body.append(details);
+    // What a click does: the browser flips `open`, which fires `toggle`.
+    details.open = true;
+    expect(seen).toEqual([true]);
+    expect(details.getAttribute("data-state")).toBe("open");
+    details.remove();
+  });
+
+  // Regression: a controlled item mirrors a changed `open` prop onto the live
+  // element, and assigning `<details>.open` queues a `toggle` of its own. That
+  // echo used to be reported as a change, so a handler written as
+  // `open = !open` flipped the host on every echo — one click became an endless
+  // open/close loop that locked up the page.
+  it("does NOT report an echo of the state this render already asserted", async () => {
+    const seen: unknown[] = [];
+    const details = await renderItem(true, (v) => seen.push(v));
+    document.body.append(details);
+    expect(details.getAttribute("data-rui-open")).toBe("true");
+    // The element is already open because the render asserted it — the toggle
+    // event carries no news.
+    details.dispatchEvent(new Event("toggle"));
+    expect(seen).toEqual([]);
+    details.remove();
+  });
+
+  it("still reports every toggle for an UNCONTROLLED item", async () => {
+    const { AccordionItem } = await import("../src/library/components/layout.js");
+    const seen: unknown[] = [];
+    const localHelpers: RenderHelpers = {
+      ...helpers,
+      invoke: (fn: unknown, ...args: unknown[]) => { if (typeof fn === "function") (fn as (...a: unknown[]) => void)(...args); },
+    };
+    const details = AccordionItem.render(
+      makeNode("AccordionItem", ["Advanced", []]),
+      { title: "Advanced", children: [], onToggle: (v: unknown) => seen.push(v) },
+      localHelpers,
+    ) as HTMLDetailsElement;
+    document.body.append(details);
+    expect(details.getAttribute("data-rui-open")).toBeNull();
+    details.open = true;
+    details.open = false;
+    expect(seen).toEqual([true, false]);
+    details.remove();
   });
 });
 

@@ -1,0 +1,599 @@
+{
+  "id": "component-forge",
+  "title": "Component Forge",
+  "subtitle": "Your own components, and the argument trap",
+  "icon": "puzzle",
+  "difficulty": 3,
+  "estimateMin": 12,
+  "requires": [
+    "reactive-pulse"
+  ],
+  "palette": {
+    "g1": "#a78bfa",
+    "g2": "#f472b6",
+    "g3": "#c084fc"
+  },
+  "backdrop": {
+    "preset": "orbit"
+  },
+  "intro": {
+    "headline": "A component is a function that returns a tree",
+    "body": "There is no component class, no registration step, and no `props` object. You write an ordinary JavaScript function, its parameters are ordinary parameters with ordinary defaults, and whatever it `return`s becomes UI.\n\nThat simplicity moves the difficulty somewhere unexpected: to the **call site**. Because arguments can be passed by position *or* by name, one call can be structurally perfect and semantically wrong — and the validator will not say a word.\n\n`Button(\"Save\", \"primary\")` is that call. This world is about writing components, and about never being fooled by that line again.",
+    "code": "function Chip(label, tone = \"neutral\") {\n  return Badge(label, { tone })\n}\n\n$app(Column([\n  Chip(\"Shipped\", \"success\"),\n  Chip(\"Draft\")\n]))",
+    "codeCaption": "declare it, then call it two different ways",
+    "infographic": {
+      "type": "flow",
+      "title": "From declaration to pixels",
+      "nodes": [
+        {
+          "label": "function Chip(…)",
+          "note": "a plain JS function"
+        },
+        {
+          "label": "return",
+          "note": "the only way out",
+          "accent": true
+        },
+        {
+          "label": "Chip(\"Shipped\")",
+          "note": "a call site"
+        },
+        {
+          "label": "one form per call",
+          "note": "positional or named"
+        },
+        {
+          "label": "a tree",
+          "note": "rendered under $app"
+        }
+      ]
+    },
+    "objectives": [
+      "Declare a component with real JS parameters and defaults",
+      "End every component with an explicit `return`",
+      "Choose one of the three call forms and stay inside it",
+      "Say where `\"primary\"` lands in `Button(\"Save\", \"primary\")`",
+      "Extend a built-in component instead of replacing it"
+    ]
+  },
+  "stages": [
+    {
+      "id": "s1",
+      "title": "Declare and return",
+      "kicker": "declaration",
+      "icon": "code",
+      "goal": "A component is a function whose return value is a tree.",
+      "xp": 100,
+      "teach": {
+        "text": "`function Name(params) { return Tree }`. That is the entire declaration syntax. No decorator, no `defineComponent`, no export.\n\nThe rule that catches everyone is the last word of it: **always end with an explicit `return`**. A body that builds a `Badge(...)` and then falls off the end really did build the node — and then discarded it. Nothing throws, nothing warns, the page is just missing a piece.\n\nThe mirror-image mistake is returning the name instead of a call. `return Badge` hands back the function itself; the renderer has no instruction to invoke it, so again: nothing.",
+        "code": {
+          "src": "function Chip(label, tone = \"neutral\") {\n  return Badge(label, { tone })\n}",
+          "caption": "declaration, parameters, return — nothing else is required"
+        },
+        "infographic": {
+          "type": "table",
+          "title": "What the last statement decides",
+          "headers": [
+            "The body ends with",
+            "What reaches the page"
+          ],
+          "rows": [
+            [
+              "return Badge(label)",
+              "the Badge"
+            ],
+            [
+              "Badge(label)",
+              "nothing — the node is built, then dropped"
+            ],
+            [
+              "return Badge",
+              "nothing — a bare name is a value, not a call"
+            ]
+          ]
+        },
+        "tips": [
+          "Case is a readability convention only. `function chip(...)` renders exactly the same as `function Chip(...)`.",
+          {
+            "kind": "danger",
+            "text": "A component with no `return` renders nothing and reports nothing. Check for it first whenever a component vanishes."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "match-pairs",
+        "title": "Four Chips, four outcomes",
+        "prompt": "All four of these declare something called `Chip`. Exactly one puts a pill on the screen; the other three are silent no-ops, and no two of them fail the same way. Match each declaration to what it actually does.",
+        "pairs": [
+          {
+            "left": {
+              "mono": "function Chip(label) { return Badge(label) }",
+              "note": "calls, then returns"
+            },
+            "right": {
+              "label": "A pill on the page — the node is built and then escapes the body"
+            }
+          },
+          {
+            "left": {
+              "mono": "function Chip(label) { Badge(label) }",
+              "note": "no return"
+            },
+            "right": {
+              "label": "The node really is built, then dropped when the body ends"
+            }
+          },
+          {
+            "left": {
+              "mono": "function Chip(label) { return Badge }",
+              "note": "returns a name"
+            },
+            "right": {
+              "label": "The component itself is handed back, and the renderer never calls it"
+            }
+          },
+          {
+            "left": {
+              "mono": "Chip = { props: [\"label\"], render: (p) => … }",
+              "note": "an options object, Vue-style"
+            },
+            "right": {
+              "label": "A plain object — there is no registry to declare a component to"
+            }
+          }
+        ]
+      },
+      "hints": [
+        "Two of the four really do build a Badge node. Only one of those hands it back.",
+        "A component is a function. What must a function do for a value to escape its body?",
+        "Pair the one that works first, then separate the other three by *why* they fail: no `return`, a name instead of a call, or not a function at all."
+      ],
+      "explain": "A component is not a special kind of object — it is a plain function whose return value happens to be a tree. That is exactly why the missing `return` is invisible: the body ran, `Badge(...)` really did produce a node, and then the function ended and threw it away. Nothing is wrong enough to report. `return Badge` fails for the mirror reason: a bare name is the function itself, and the renderer never calls what it is handed. And the object-literal form has no meaning at all here — with no component registry, an object named `Chip` is just an object.",
+      "afterCode": {
+        "src": "function Chip(label, tone = \"neutral\") {\n  return Badge(label, { tone })\n}",
+        "caption": "the shape to remember"
+      },
+      "codex": {
+        "term": "Component declaration",
+        "def": "`function Name(p) { return Tree }` — a plain JS function that returns a component tree. No `return` means no output and no error."
+      }
+    },
+    {
+      "id": "s2",
+      "title": "The signature is the API",
+      "kicker": "parameters",
+      "icon": "grid",
+      "goal": "Props are real JS parameters with real JS defaults — there is no props object.",
+      "xp": 110,
+      "teach": {
+        "text": "Because a call site is an ordinary function call, the parameters are ordinary parameters. Give them JavaScript defaults with `=`, destructure them if you like, and read them by name inside the body.\n\nThere is nothing to reach into: `props.tone` cannot work because nothing ever builds a `props`. Read the parameter list and you know every prop the component takes and which one is positional.\n\nState declared inside the body belongs to the *instance*, not the program. `$n = 0` in a component body is a declaration: the initializer runs once when that instance mounts, and every later re-render keeps whatever the user, an action, or an effect has written since.",
+        "code": {
+          "src": "function Chip(label, tone = \"neutral\") {\n  return Badge(label, { tone })\n}\n\nfunction Panel({ title, tone = \"info\" }) {\n  return Card([SectionHeader(title), Badge(title, { tone })])\n}",
+          "caption": "plain params, JS defaults, destructuring — all standard"
+        },
+        "code2": {
+          "src": "function Counter(label = \"Count\") {\n  $n = 0\n  return Card([\n    SectionHeader(label),\n    Text(`${$n}`, { variant: \"title\" }),\n    Button(\"+1\", { onClick: () => $n = $n + 1 })\n  ])\n}\n\n$app(Row([Counter(), Counter(\"Second\")], { gap: \"md\" }))",
+          "caption": "two call sites, two independent $n atoms"
+        },
+        "infographic": {
+          "type": "anatomy",
+          "title": "Reading a signature",
+          "code": "function Chip(label, tone = \"neutral\") { return Badge(label, { tone }) }",
+          "parts": [
+            {
+              "match": "Chip",
+              "key": "name",
+              "text": "Case is convention. What makes it a component is that it returns a tree."
+            },
+            {
+              "match": "label, tone",
+              "key": "parameters",
+              "text": "Real JS parameters. There is no props object to reach into."
+            },
+            {
+              "match": "\"neutral\"",
+              "key": "default",
+              "text": "A plain JS default, used whenever the caller omits that argument."
+            },
+            {
+              "match": "return",
+              "key": "the exit",
+              "text": "Leave this off and the component renders nothing, silently."
+            }
+          ]
+        },
+        "tips": [
+          "Destructured parameters work: `function Panel({ title, tone = \"info\" })` is a valid signature.",
+          {
+            "kind": "warn",
+            "text": "`$n = 0` inside a body is a declaration, not an assignment that runs on every render. Two call sites get two independent atoms."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "fill-blanks",
+        "title": "Declare it, then call it",
+        "prompt": "Three slots: give `tone` a default, let the tree out, and call the component you just declared. Four of the chips are habits from other frameworks — leave them in the bank.",
+        "display": "code",
+        "template": "function Chip(label, tone {{0}} \"neutral\") {\n  {{1}} Badge(label, { tone })\n}\n\n$app(Column([\n  Chip(\"Shipped\", \"success\"),\n  {{2}}(\"Draft\")\n]))",
+        "bank": [
+          "=",
+          "return",
+          "Chip",
+          ":",
+          "default:",
+          "props.tone",
+          "render"
+        ],
+        "answer": [
+          "=",
+          "return",
+          "Chip"
+        ]
+      },
+      "hints": [
+        "Parameters are ordinary JavaScript. How do you give an ordinary JS parameter a default?",
+        "There is no props object — `label` and `tone` are already in scope inside the body.",
+        "The last slot sits in call position. It needs the name declared at the top of the file."
+      ],
+      "explain": "There is no props object because there is no framework layer standing between the call and the function — `Chip(\"Shipped\", \"success\")` is just a call, so `label` and `tone` are just parameters and `= \"neutral\"` is just a JavaScript default. `default:` and `props.` are shapes from Vue and React that have nothing to bind to here. The payoff is that a component's signature is its complete, readable API: no separate prop declaration can drift out of sync with it.",
+      "codex": {
+        "term": "Parameter defaults",
+        "def": "Component props are real JS parameters with real JS defaults (`tone = \"neutral\"`). There is no props object; destructured parameters work too."
+      },
+      "preview": {
+        "program": "function Chip(label, tone = \"neutral\") {\n  return Badge(label, { tone })\n}\n\n$app(Column([\n  PageHeader(\"One declaration, three call sites\", { breadcrumbs: false }),\n  Card([\n    SectionHeader(\"function Chip(label, tone = \\\"neutral\\\")\"),\n    Row([\n      Chip(\"Shipped\", \"success\"),\n      Chip(\"Delayed\", \"warning\"),\n      Chip(\"Draft\")\n    ], { gap: \"sm\" })\n  ])\n]))",
+        "caption": "the third pill never passed a tone — it took the default"
+      }
+    },
+    {
+      "id": "s3",
+      "title": "One call, one form",
+      "kicker": "the argument trap",
+      "icon": "warn",
+      "goal": "Pick one of the three argument forms per call, and know what position binds.",
+      "xp": 130,
+      "hearts": 3,
+      "teach": {
+        "text": "Every call picks exactly one of three forms:\n\n- **canonical** — `Component(positional, { prop: value })`\n- **all-positional** — `Component(a, b, c)`, binding in signature order\n- **all-named** — `Component({ prop: value })`\n\nAll-positional is the sharp one. An unnamed argument binds to the *next prop in the signature*, whatever that happens to be. `Badge(label, tone, icon, size)` puts tone second, so `Badge(\"Live\", \"success\")` is correct. `Button(label, onClick, variant, type, size, …)` puts **onClick** second — so `Button(\"Save\", \"primary\")` hands the string to the click handler, renders the default style, and validates cleanly.\n\nNever split one object between the two roles. Some components take a *leading* props object because their children are the trailing positional — `Grid({ columns: 12 }, [CardA(), CardB()])` — but that is still one form, not a mix of two.",
+        "code": {
+          "src": "Button(\"Save\", { variant: \"primary\" })      // canonical\nStatCard(\"Revenue\", \"$48k\", \"up\")           // all-positional\nButton({ label: \"Save\", variant: \"primary\" }) // all-named",
+          "caption": "three forms, three calls — never two forms in one call"
+        },
+        "infographic": {
+          "type": "compare",
+          "title": "Same button, different destination",
+          "columns": [
+            {
+              "kind": "bad",
+              "title": "Slot two is onClick",
+              "code": "Button(\"Save\", \"primary\")",
+              "note": "Signature: label, onClick, variant. \"primary\" becomes the handler — default styling, dead click, clean validator."
+            },
+            {
+              "kind": "good",
+              "title": "Named, so order stops mattering",
+              "code": "Button(\"Save\", { variant: \"primary\" })",
+              "note": "One positional, every other prop named in the trailing object."
+            }
+          ]
+        },
+        "tips": [
+          "All-positional is safe only when the props you want are adjacent and leading — `StatCard(\"Revenue\", \"$48k\", \"up\")` is fine.",
+          {
+            "kind": "danger",
+            "text": "Never split one object between the two roles. One call, one form."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "switchboard",
+        "title": "Which calls do what they say?",
+        "prompt": "Every one of these passes the validator. Switch ON only the calls where each argument actually lands on the prop the author meant.",
+        "help": "Read the signature in your head before you flip anything. Leave the misrouted calls off.",
+        "switches": [
+          {
+            "label": "Button(\"Save\", { variant: \"primary\" })",
+            "detail": "canonical: one positional, every other prop in the trailing object",
+            "on": true
+          },
+          {
+            "label": "Button(\"Save\", \"primary\")",
+            "detail": "Button(label, onClick, variant, …)",
+            "on": false
+          },
+          {
+            "label": "Badge(\"Live\", \"success\")",
+            "detail": "Badge(label, tone, icon, size)",
+            "on": true
+          },
+          {
+            "label": "Button({ label: \"Save\", variant: \"primary\" })",
+            "detail": "all-named: one object, every prop by name",
+            "on": true
+          },
+          {
+            "label": "StatCard(\"Revenue\", \"up\")",
+            "detail": "StatCard(label, value, trend, delta, …)",
+            "on": false
+          },
+          {
+            "label": "Grid({ columns: 3 }, [Card([Text(\"A\")]), Card([Text(\"B\")])])",
+            "detail": "leading props object, children as the trailing positional",
+            "on": true
+          }
+        ]
+      },
+      "hints": [
+        "For each call, say the signature out loud and ask what prop slot two is.",
+        "`Button(label, onClick, variant, …)` versus `Badge(label, tone, …)`. Only one of those makes a second positional string safe.",
+        "`StatCard(label, value, trend, …)` — a two-argument call never reaches `trend`."
+      ],
+      "explain": "Position is meaningful, so an unnamed argument binds to whatever prop comes next in the declaration order — nothing about the string `\"primary\"` marks it as a variant. `Badge(\"Live\", \"success\")` and `Button(\"Save\", \"primary\")` are structurally identical calls; only the two signatures differ, and that difference is the whole bug. `StatCard(\"Revenue\", \"up\")` fails the same way one slot earlier: the tile renders with the value \"up\" and no trend. The canonical form exists precisely to make a call immune to its signature's order — name the prop and position stops mattering.",
+      "afterCode": {
+        "src": "Button(\"Save\", { variant: \"primary\", onClick: save })",
+        "caption": "when in doubt, name it"
+      },
+      "codex": {
+        "term": "The three call forms",
+        "def": "`C(positional, { props })`, `C(a, b, c)` in signature order, or `C({ props })`. Pick one per call; never split an object between the two roles."
+      },
+      "preview": {
+        "program": "$app(Column([\n  PageHeader(\"Same label, two argument forms\", { breadcrumbs: false }),\n  Card([\n    SectionHeader(\"Button(\\\"Save\\\", \\\"primary\\\")\", { subtitle: \"all-positional: slot two is onClick\" }),\n    Button(\"Save\", \"primary\"),\n    Text(\"Plain button. The variant never arrived.\", { tone: \"muted\", variant: \"small\" })\n  ]),\n  Card([\n    SectionHeader(\"Button(\\\"Save\\\", { variant: \\\"primary\\\" })\", { subtitle: \"canonical: one positional, one trailing object\" }),\n    Button(\"Save\", { variant: \"primary\" }),\n    Text(\"Solid brand button, exactly as written.\", { tone: \"muted\", variant: \"small\" })\n  ])\n]))",
+        "caption": "live — two buttons, one difference, no error message"
+      }
+    },
+    {
+      "id": "s4",
+      "title": "The Forge",
+      "kicker": "arcade",
+      "icon": "flame",
+      "goal": "Route every argument token into the role that actually binds it.",
+      "xp": 140,
+      "hearts": 3,
+      "teach": {
+        "text": "A call site is being forged: `Button(  __  , {  __  })`. Argument tokens are falling into it.\n\n**Tap a lane to route the lowest token.** A token that carries its own name (`variant: \"primary\"`) belongs in the options object. The label `\"Save\"` belongs in the positional slot.\n\nThe bare `\"primary\"` belongs in neither. Send it to the positional lane and you will watch it wire itself to `onClick`. Let it fall instead — it only becomes a variant once you give it its name back.",
+        "tips": [
+          "Anything with a colon in it is a named prop.",
+          {
+            "kind": "warn",
+            "text": "Three misroutes ends the run. Letting a token fall costs nothing."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "arcade",
+        "title": "Route the tokens",
+        "prompt": "Named tokens go in the options object. The label goes in the positional slot. The bare `\"primary\"` goes nowhere — let it fall.",
+        "goal": "0 / 8",
+        "height": 340,
+        "note": "Tap a lane at the bottom to route the lowest falling token.",
+        "winNote": "Press Check to bank the XP.",
+        "params": {
+          "target": 8,
+          "positional": "\"Save\"",
+          "trap": "\"primary\"",
+          "options": [
+            "variant: \"primary\"",
+            "onClick: save",
+            "icon: \"floppy-disk\"",
+            "loading: $saving",
+            "size: \"lg\""
+          ]
+        },
+        "code": "const P = ctx.params;\nconst head = ctx.text('Button(  __  ,  {  __  })', { size: 14, mono: true, color: ctx.colors.g1 });\nhead.anchor.set(0.5); head.x = ctx.width / 2; head.y = 16;\nctx.stage.addChild(head);\nconst note = ctx.text('tap a lane to route the lowest token', { size: 11, mono: true, color: ctx.colors.dim });\nnote.anchor.set(0.5); note.x = ctx.width / 2; note.y = 36;\nctx.stage.addChild(note);\nlet score = 0, strikes = 0, t = 40;\nconst live = [];\nctx.api.setGoal('0 / ' + P.target);\nfunction route(kind, d) {\n  let best = null;\n  for (let i = 0; i < live.length; i++) { if (!best || live[i].y > best.y) best = live[i]; }\n  if (!best) return;\n  live.splice(live.indexOf(best), 1);\n  const lane = best.lane;\n  best.destroy();\n  gsap.to(d.scale, { x: 1.14, y: 1.14, duration: .1, onComplete: () => gsap.to(d.scale, { x: 1, y: 1, duration: .18, ease: 'back.out' }) });\n  if (lane === kind) {\n    score++;\n    ctx.api.setScore(score);\n    ctx.api.setGoal(score + ' / ' + P.target);\n    note.text = kind === 'pos' ? 'bound to slot 1 - the label' : 'bound by name, order irrelevant';\n    if (score >= P.target) ctx.api.win('Every token in the role that binds it. One call, one form.');\n    return;\n  }\n  strikes++;\n  if (lane === 'none' && kind === 'pos') note.text = 'onClick = \"primary\" - the button now does nothing';\n  else if (lane === 'none') note.text = 'a bare string is not a key/value pair - let it fall';\n  else if (kind === 'pos') note.text = 'that token carries a name - it belongs in the object';\n  else note.text = 'the label is the positional slot, not a named prop';\n  if (strikes >= 3) ctx.api.fail(note.text);\n}\nfunction dock(label, cx, kind) {\n  const d = ctx.chip(label, { color: kind === 'pos' ? ctx.colors.g1 : ctx.colors.g2, textColor: 0x180b28, size: 12, minWidth: 140 });\n  d.x = cx; d.y = ctx.height - 24;\n  d.eventMode = 'static';\n  d.cursor = 'pointer';\n  d.on('pointertap', () => route(kind, d));\n  ctx.stage.addChild(d);\n  return d;\n}\ndock('positional', ctx.width * 0.27, 'pos');\ndock('{ options }', ctx.width * 0.73, 'opt');\nctx.onTick((dt) => {\n  t += dt;\n  if (t > 54) {\n    t = 0;\n    const r = Math.random();\n    const lane = r < 0.2 ? 'none' : (r < 0.46 ? 'pos' : 'opt');\n    const tok = lane === 'none' ? P.trap : (lane === 'pos' ? P.positional : ctx.pick(P.options));\n    const c = ctx.chip(tok, { color: ctx.colors.g3, textColor: 0x180b28, size: 12 });\n    c.x = ctx.rand(90, ctx.width - 90);\n    c.y = -18;\n    c.lane = lane;\n    ctx.stage.addChild(c);\n    live.push(c);\n  }\n  for (let i = live.length - 1; i >= 0; i--) {\n    const c = live[i];\n    c.y += 1.45 * dt;\n    if (c.y > ctx.height - 48) {\n      live.splice(i, 1);\n      if (c.lane === 'none') note.text = 'let it fall - a bare string has no slot here';\n      c.destroy();\n    }\n  }\n});",
+        "fallback": {
+          "type": "quiz",
+          "prompt": "`Button(\"Save\", \"primary\")` renders a plain default button. Where did `\"primary\"` actually go?",
+          "options": [
+            {
+              "id": "a",
+              "label": "Into the second positional slot — which the signature declares as `onClick`.",
+              "code": "Button(label, onClick, variant, …)"
+            },
+            {
+              "id": "b",
+              "label": "Into `variant`, but `\"primary\"` is not a valid variant value.",
+              "detail": "`\"primary\"` is a perfectly valid variant. It simply never reached that prop."
+            },
+            {
+              "id": "c",
+              "label": "Nowhere — arguments past the first are ignored unless they are named.",
+              "detail": "Nothing is ignored. Every positional argument binds to the next prop in the signature."
+            },
+            {
+              "id": "d",
+              "label": "Into `type`, the third prop in the signature.",
+              "detail": "Off by one — the order is label, onClick, variant, type."
+            }
+          ],
+          "answer": "a"
+        }
+      },
+      "hints": [
+        "A colon means the token names its own destination.",
+        "The bare `\"primary\"` has no home in this call. Do nothing and it falls away for free.",
+        "Tap the lane, not the token — the lowest token is the one that gets routed."
+      ],
+      "explain": "Routing is the whole model. A token that carries a name can sit anywhere inside the options object, because the name — not the position — decides what it binds to. A token with no name is bound by position alone, so it lands wherever the signature says the next slot is. That is why `\"primary\"` on its own has nowhere to go in a `Button` call: as a positional it becomes the click handler, and inside an object it is not a key/value pair at all. Giving it back its name is the entire fix.",
+      "codex": {
+        "term": "Positional slot",
+        "def": "An unnamed argument binds to the next prop in the component's signature — so `Button(\"Save\", \"primary\")` sets onClick, not variant."
+      }
+    },
+    {
+      "id": "s5",
+      "title": "The prop that wasn't",
+      "kicker": "silent flip",
+      "icon": "eye",
+      "goal": "Spot a named prop that quietly became a positional argument.",
+      "xp": 130,
+      "hearts": 3,
+      "teach": {
+        "text": "When you call **your own** component with a trailing object, the runtime has to decide what that object is: a bag of named props, or just a value you happen to be passing.\n\nIts rule is mechanical. If any key in the object matches a parameter name, it is treated as named props. If **no** key matches, the whole object is forwarded as a positional argument instead.\n\nThat rule is what makes an opaque data payload or a slots bag work at all. The price is that a misspelled prop name is not an error — it is a differently shaped argument, arriving in the next positional slot. Built-in components validate their prop names, so a typo there is caught; your own components have no prop list to check against.",
+        "code": {
+          "src": "function Chip(label, tone = \"info\") {\n  return Badge(label, { tone })\n}\n\nChip(\"Shipped\", { tint: \"success\" })\n// no key matches label or tone\n// so tone = { tint: \"success\" }",
+          "caption": "one wrong letter, no diagnostic"
+        },
+        "infographic": {
+          "type": "timeline",
+          "title": "How the trailing object is classified",
+          "steps": [
+            {
+              "label": "call parsed",
+              "note": "Chip(\"Shipped\", { tint: \"success\" })"
+            },
+            {
+              "label": "keys collected",
+              "note": "tint"
+            },
+            {
+              "label": "matched against params",
+              "note": "label? no. tone? no."
+            },
+            {
+              "label": "not a props bag",
+              "note": "so it is a value, not named props"
+            },
+            {
+              "label": "forwarded positionally",
+              "note": "tone = { tint: \"success\" }"
+            }
+          ]
+        },
+        "tips": [
+          {
+            "kind": "warn",
+            "text": "This flip applies to *your* components. Built-ins reject unknown prop names outright — `Badge(\"Live\", { tint: \"success\" })` is a validation error."
+          },
+          "The runtime's strict mode logs a warning when it forwards an unmatched object. The default mode stays silent."
+        ]
+      },
+      "challenge": {
+        "type": "bug-hunt",
+        "title": "It renders. It is still wrong.",
+        "prompt": "Every pill appears, nothing throws, the validator is clean — and one badge has lost its colour. Tap the token responsible.",
+        "code": "function Chip(label, [[tone]] = \"info\") {\n  return [[Badge]](label, { tone })\n}\n\n$app(Column([\n  Chip(\"Shipped\", { [[tint]]: \"success\" }),\n  Chip(\"Refunded\", [[\"danger\"]]),\n  [[Chip]](\"Paid\")\n]))",
+        "answer": 2,
+        "fixed": "function Chip(label, tone = \"info\") {\n  return Badge(label, { tone })\n}\n\n$app(Column([\n  Chip(\"Shipped\", { tone: \"success\" }),\n  Chip(\"Refunded\", \"danger\"),\n  Chip(\"Paid\")\n]))"
+      },
+      "hints": [
+        "The program renders and nothing throws. So look for a name that matches nothing.",
+        "Check every key of an options object against the parameter list directly above it.",
+        "`tone` is a parameter of `Chip`. Is `tint`?"
+      ],
+      "explain": "The runtime cannot tell a props bag from a payload by shape alone, so it uses the only signal available: do the keys name parameters? `tint` names neither `label` nor `tone`, so the object is classified as a value and slides into the second positional slot — `tone` becomes `{ tint: \"success\" }`, and `Badge` receives an object where a tone string belongs. The other three spans are all legal on purpose: `Chip(\"Refunded\", \"danger\")` is an all-positional call, `Chip(\"Paid\")` takes the default, and `Badge` inside the body is just the library component. This is the cost of the rule that lets you pass an opaque slots object at all — and it is why a prop typo on your own components is worth reading for twice.",
+      "afterCode": {
+        "src": "Chip(\"Shipped\", { tone: \"success\" })",
+        "caption": "one key, matching one parameter"
+      },
+      "codex": {
+        "term": "Named-to-positional flip",
+        "def": "If a trailing object's keys match none of a custom component's parameters, it is forwarded as a positional argument instead of raising an error."
+      }
+    },
+    {
+      "id": "s6",
+      "title": "Extend, don't replace",
+      "kicker": "produce",
+      "icon": "wand",
+      "goal": "Wrap a built-in component by reusing its own name.",
+      "xp": 160,
+      "teach": {
+        "text": "Declaring a component with a built-in's name is normally rejected — a program containing two different `Badge`s is unreadable. There is exactly one exception, and it is the useful one.\n\n**If the body calls that same name, the declaration is a wrapper.** Inside its own body, the name resolves to the *built-in*, so the outermost call is yours and the innermost is the library's. It extends instead of recursing, and it terminates at depth one.\n\nWrite a `Badge` that pins every pill to the success tone, then render two of them. Same call sites everywhere else in the program — new behaviour.",
+        "code": {
+          "src": "function Badge(label) {\n  return Badge(label, { tone: \"success\" })\n}",
+          "caption": "the inner Badge is the library's, not this one"
+        },
+        "infographic": {
+          "type": "layers",
+          "title": "Where each name resolves",
+          "layers": [
+            {
+              "label": "Badge(\"Shipped\")",
+              "note": "call site — resolves to your declaration"
+            },
+            {
+              "label": "function Badge(label)",
+              "note": "your wrapper: adds the tone"
+            },
+            {
+              "label": "Badge(label, { tone: \"success\" })",
+              "note": "inside the body, the name is the built-in"
+            },
+            {
+              "label": "the library pill",
+              "note": "renders once — no recursion"
+            }
+          ]
+        },
+        "tips": [
+          "A `function` declared inside another component's body is scoped to it — component-local helpers never leak to the rest of the program.",
+          {
+            "kind": "warn",
+            "text": "The exception is narrow. Reuse a built-in's name *only* when your body calls that same name; any other shadowing is a validator error."
+          }
+        ]
+      },
+      "challenge": {
+        "type": "type-code",
+        "title": "Wrap the built-in",
+        "prompt": "Extend the library `Badge` so every badge in this program renders with `tone: \"success\"`, then use it twice inside one `$app(...)`, stacked in a `Column`.",
+        "filename": "badge.aktion",
+        "starter": "",
+        "placeholder": "function Badge(label) { … }",
+        "solution": "function Badge(label) {\n  return Badge(label, { tone: \"success\" })\n}\n\n$app(Column([\n  Badge(\"Shipped\"),\n  Badge(\"Paid\")\n]))",
+        "validate": {
+          "must": [
+            "function\\s+Badge\\s*\\(",
+            "return\\s+Badge\\s*\\(",
+            "tone\\s*:\\s*[\"'`]success[\"'`]",
+            "Column\\s*\\(\\s*\\[",
+            "\\$app\\s*\\("
+          ],
+          "mustWhy": [
+            "Declare the wrapper with the built-in's own name: `function Badge(label)`.",
+            "The body has to call `Badge(...)` — that inner call is what makes it a wrapper instead of an error.",
+            "Pin the tone in the trailing object: `{ tone: \"success\" }`.",
+            "Stack the two badges in a `Column([ ... ])`.",
+            "Nothing renders without `$app(...)`."
+          ],
+          "mustNot": [
+            "props\\.",
+            "className",
+            "React",
+            "SuccessBadge"
+          ]
+        }
+      },
+      "hints": [
+        "You are allowed to reuse the name `Badge` — on exactly one condition.",
+        "Inside the body of `function Badge(...)`, the name `Badge` means the library one.",
+        "`function Badge(label) { return Badge(label, { tone: \"success\" }) }`, then call it twice inside `$app(Column([...]))`."
+      ],
+      "explain": "The validator's rule is a readability rule, not a technical limit: a shadowing declaration is rejected unless its body calls the shadowed name, because that pattern is unmistakably a wrapper rather than a replacement. The runtime cooperates by resolving the name to the built-in while it is evaluating the declaration's own body, which is what stops the wrapper recursing to the depth limit. A renamed wrapper — `SuccessBadge` — works equally well and is often clearer; the reason to keep the name is that every existing call site inherits the new behaviour with no edits.",
+      "afterCode": {
+        "src": "function Badge(label) {\n  return Badge(label, { tone: \"success\" })\n}",
+        "caption": "outermost call yours, innermost call the library's"
+      },
+      "codex": {
+        "term": "Wrapper pattern",
+        "def": "A custom component may reuse a built-in's name only if its body calls that name — inside its own body the name resolves to the built-in, so it extends rather than recurses."
+      },
+      "preview": {
+        "program": "function Badge(label) {\n  return Badge(label, { tone: \"success\" })\n}\n\n$app(Column([\n  PageHeader(\"Badge, extended\", { breadcrumbs: false }),\n  Card([\n    SectionHeader(\"Every Badge in this program is a success pill\"),\n    Row([Badge(\"Shipped\"), Badge(\"Paid\"), Badge(\"Delivered\")], { gap: \"sm\" })\n  ])\n]))",
+        "caption": "live — three call sites, none of them passing a tone"
+      }
+    }
+  ],
+  "outro": {
+    "headline": "The call site stopped being a guess",
+    "body": "A component is a function that returns a tree, its parameters are its API, and every call picks one form and stays in it. `Button(\"Save\", \"primary\")` will not fool you twice — and neither will a trailing object whose keys match nothing.",
+    "nextHint": "Next: data — turning a URL into a reactive bag your components can read while it loads."
+  },
+  "badge": {
+    "name": "Forgemaster",
+    "icon": "puzzle",
+    "tagline": "Routed every argument to the slot it meant."
+  }
+}
