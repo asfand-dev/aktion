@@ -291,7 +291,7 @@ Tag/chip input — type a value, press Enter (or comma) to commit, click × on a
 ### Select
 
 ```
-Select(id, items, label?, placeholder?, value?, searchable?, onChange?, hint?, error?, required?, disabled?, onBlur?, onFocus?, loading?, onSearch?, labelHidden?)
+Select(id, items, label?, placeholder?, value?, searchable?, onChange?, hint?, error?, required?, disabled?, onBlur?, onFocus?, loading?, onSearch?, labelHidden?, emptyLabel?)
 ```
 
 Dropdown select. Pass a `$variable` as `value` for two-way binding. Set `searchable: true` for a combobox-style filter UI on long option lists, or pass `onSearch` (which implies it) to fetch the matches from the server as the user types. `onChange(value)` fires with the newly-selected value. `items` accepts `SelectItem(value, label)` nodes, `{value, label}` objects and bare strings.
@@ -314,6 +314,7 @@ Dropdown select. Pass a `$variable` as `value` for two-way binding. Set `searcha
 | `loading` | `boolean` | no | Options are still being fetched — disables the control and shows a loading option instead of an empty list |
 | `onSearch` | `callable` | no | Called with the query ~200ms after typing stops, for server-side search (implies `searchable`; supply the matches as `items`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
+| `emptyLabel` | `string` | no | Shown in place of the options when there are none — the difference between "this list is genuinely empty" and "something failed to load". Defaults to "No options" |
 
 ### SelectItem
 

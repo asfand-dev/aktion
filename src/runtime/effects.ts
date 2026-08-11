@@ -538,9 +538,25 @@ function runStatement(
       return evaluate(expr, ctx);
     }
     case "Assignment": {
+      // `$state = …` is a state write; `const rows = …` is a local.
+      //
+      // This used to treat EVERY assignment as a state write, which meant a
+      // `const` declared in an effect body was filed under `ctx.state` instead
+      // of being bound — so the next line read it back as undefined, with no
+      // error anywhere. Effect bodies that were one `if` worked; the moment a
+      // body pulled a value into a name first, it silently computed on nothing.
+      //
+      // `isState` is the flag the parser already sets from the `$` sigil, and
+      // the block runner below has always used it. Non-state assignments are
+      // delegated there so a local inside an effect binds exactly the way it
+      // does inside an `if`, a `for` body, or a function.
+      if (!stmt.isState) {
+        runControlFlowStatement(stmt, ctx);
+        return undefined;
+      }
+
       const value = evaluate(stmt.expression, ctx);
       if (stmt.identifier && stmt.identifier !== "") {
-        // Treat any assignment inside an effect body as a state write.
         // Route through the per-instance alias stack so writes from
         // inside a function body hit the right per-instance slot (§7).
         const target = resolveStateAlias(ctx, stmt.identifier);

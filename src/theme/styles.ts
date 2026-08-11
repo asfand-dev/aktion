@@ -4767,14 +4767,7 @@ ${below("md")} {
   .rui-form-actions .rui-button,
   .rui-form-actions .rui-buttons { flex: 1 1 auto; }
   .rui-buttons[data-direction="row"] .rui-button { flex: 1 1 auto; }
-  /* Row stacks collapse to columns on phones unless the author opted into
-     wrapping (a horizontal scroll list, etc.) — wrap=true keeps the row
-     layout because the user explicitly asked for it. */
-  .rui-stack[data-direction="row"]:not([data-wrap="true"]),
-  .rui-stack[data-direction="row-reverse"]:not([data-wrap="true"]) {
-    flex-direction: column;
-    align-items: stretch;
-  }
+
   /* Hero collapses to a single column so the title stays readable. */
   .rui-hero[data-has-image="true"] { grid-template-columns: 1fr; }
   .rui-hero-media { justify-content: center; }
@@ -5321,6 +5314,17 @@ ${below("xs")} {
   -moz-osx-font-smoothing: grayscale;
 }
 
+:host([data-rui-theme="vision"]) .rui-multiselect-trigger {
+  padding: 6px 16px;
+  font-size: var(--rui-font-size-base);
+}
+
+:host([data-rui-theme="vision"]) .rui-input,
+:host([data-rui-theme="vision"]) .rui-select, 
+:host([data-rui-theme="vision"]) .rui-textarea {
+  padding: 6px 12px;
+}
+
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="success"] .rui-callout-title { color: var(--rui-color-success-text); }
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-title { color: var(--rui-color-danger-text); }
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="warning"] .rui-callout-title { color: var(--rui-color-warning-text); }
@@ -5468,7 +5472,7 @@ ${below("xs")} {
 }
 :host([data-rui-theme="vision"]) .rui-tile-body { align-items: center; text-align: center; }
 :host([data-rui-theme="vision"]) .rui-tile-label { color: var(--rui-color-link); font-size: var(--rui-font-size-lg); line-height: 22px; margin: 4px auto; } /* interactive-text-color, third-level size */
-:host([data-rui-theme="vision"]) .rui-tile-description { color: #001b41; font-size: var(--rui-font-size-base); line-height: 20px; margin: 4px auto; }           /* default-text-color, fourth-level size */
+:host([data-rui-theme="vision"]) .rui-tile-description { color: #001b41; font-size: var(--rui-font-size-sm); line-height: 20px; margin: 4px auto; }           /* default-text-color, fourth-level size */
 :host([data-rui-theme="vision"]) .rui-tile:hover { background: #dbedf8; transform: none; }            /* no lift — UI block tiles never move on hover */
 :host([data-rui-theme="vision"]) .rui-tile:hover .rui-tile-icon { color: #095bb1; }                   /* hovered-interactive-text-color */
 :host([data-rui-theme="vision"]) .rui-tile:hover .rui-tile-label,
@@ -8309,7 +8313,7 @@ ${below("sm")} {
 .rui-multiselect {
   position: relative;
   width: 100%;
-  font-size: 0.875rem;
+  font-size: var(--rui-font-size-base);
 }
 .rui-multiselect-trigger {
   width: 100%;

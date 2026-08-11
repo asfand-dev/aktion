@@ -729,6 +729,10 @@ export const Select: ComponentSpec = {
     { name: "loading", type: "boolean", optional: true, description: "Options are still being fetched — disables the control and shows a loading option instead of an empty list" },
     { name: "onSearch", type: "callable", optional: true, description: "Called with the query ~200ms after typing stops, for server-side search (implies `searchable`; supply the matches as `items`)" },
     { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
+    // Appended, not inserted: `value` is read from positional slot 4 by
+    // `bindToStateAtArg`, so anything placed ahead of it silently breaks
+    // two-way binding at every existing call site.
+    { name: "emptyLabel", type: "string", optional: true, description: "Shown in place of the options when there are none — the difference between \"this list is genuinely empty\" and \"something failed to load\". Defaults to \"No options\"" },
   ],
   render: (node, props, helpers) => {
     // `onSearch` implies `searchable`. A native <select> has no query to report,
@@ -756,7 +760,9 @@ export const Select: ComponentSpec = {
     }
     // `<optgroup>` buckets, created on first use so option order is preserved.
     const groups = new Map<string, HTMLElement>();
+    let optionCount = 0;
     const placeOption = (option: HTMLElement): void => {
+      optionCount += 1;
       const group = option.getAttribute("data-group");
       if (!group) { select.append(option); return; }
       let bucket = groups.get(group);
@@ -786,6 +792,17 @@ export const Select: ComponentSpec = {
           "data-group": item.group || null,
         }, [item.label]));
       }
+    }
+    // A dropdown that opens onto nothing reads as a broken control, not as an
+    // empty list — which is exactly the wrong impression for a picker whose
+    // options come from an API that legitimately answered with none. Combobox
+    // and MultiSelect have said so via `emptyLabel` all along; this is the same
+    // affordance on the native branch. Only when NOT loading: `loading` already
+    // renders its own option and means something different.
+    if (optionCount === 0 && !loading) {
+      select.append(el("option", { value: "", disabled: "", selected: "" }, [
+        asString(props.emptyLabel) || "No options",
+      ]));
     }
     select.value = asString(props.value);
     bindToStateAtArg(select, node, 4, helpers);
@@ -3130,7 +3147,7 @@ function renderSearchableSelect(
       items: props.items,
       value: props.value,
       placeholder: props.placeholder,
-      emptyLabel: "No matches",
+      emptyLabel: asString(props.emptyLabel) || "No matches",
       // Every prop the author declared has to reach the Combobox or it is
       // silently dropped: `onChange` never fired (so a dependent Select stayed
       // empty), and the label / required marker / error text vanished the moment
@@ -3152,6 +3169,9 @@ function renderSearchableSelect(
       // someone added `searchable: true`.
       onBlur: props.onBlur,
       onFocus: props.onFocus,
+      // Same class of bug as the five above: a label the author had hidden
+      // reappeared the moment the Select became searchable.
+      labelHidden: props.labelHidden,
     },
     helpers,
   ) as HTMLElement;
