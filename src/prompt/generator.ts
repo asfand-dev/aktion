@@ -534,7 +534,7 @@ Register a program-level error sink: \`fn({ error, source })\` fires when a user
 Register a navigation guard: \`fn({ to, from })\` runs before every route change (in-app \`navigate(...)\` and browser back/forward). Return \`false\` to block, a path string to redirect, or nothing to allow. \`$util.onNavigate(null)\` clears it.
 
 ### \`$util.onRequest(fn)\` / \`$util.onResponse(fn)\`
-Cross-cutting HTTP interceptors for every \`$http\` / \`$query\` / \`$mutation\` request (VI.5). \`$util.onRequest(req => ({ headers: { Authorization: "Bearer " + $token } }))\` returns a partial that is merged over the request (headers shallow-merged) — ideal for auth tokens. \`$util.onResponse(async (res, retry) => …)\` can inspect/replace the response or \`await retry()\` to re-issue once (e.g. after refreshing a token on a 401). They reset on each new program.`;
+Cross-cutting HTTP interceptors for every \`$http\` / \`$query\` / \`$mutation\` request (VI.5). \`$util.onRequest(req => ({ headers: { Authorization: "Bearer " + $token } }))\` returns a partial that is merged over the request (headers shallow-merged) — ideal for auth tokens. \`$util.onResponse((res, retry) => …)\` can inspect/replace the response or \`return retry()\` to re-issue once (e.g. after refreshing a token on a 401) — the client awaits what the interceptor RETURNS, while \`await\` inside an Aktion body never suspends. They reset on each new program.`;
 }
 
 function fullEffects(): string {

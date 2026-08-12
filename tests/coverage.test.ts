@@ -475,3 +475,60 @@ describe("report filtering", () => {
     expect(filtered.summary.lines.pct).toBe(100);
   });
 });
+
+describe("DSL coverage — brace lines are not instrumented", () => {
+  it("a fully exercised if/else reports 100% lines", async () => {
+    // `} else {` is a BLOCK, not a statement: the evaluator runs a block's
+    // statements, never the block itself, so instrumenting its brace line put a
+    // line in the denominator that no test could ever hit. Every program using a
+    // braced if/else was capped below 100% with nothing in `uncoveredLines` to
+    // explain it beyond a closing brace.
+    const screen = render(
+      [
+        "function pick(n) {",
+        "  if (n > 0) {",
+        "    return 'pos'",
+        "  } else {",
+        "    return 'neg'",
+        "  }",
+        "}",
+        "$app(Text(`${pick(1)} ${pick(-1)}`))",
+      ].join("\n"),
+    );
+    await screen.flush();
+
+    const report = coverage.report();
+    expect(report.files[0]!.uncoveredLines).toEqual([]);
+    expect(report.summary.lines.pct).toBe(100);
+    // Both arms still count as branches — only the LINE bookkeeping changed.
+    expect(report.summary.branches.pct).toBe(100);
+  });
+
+  it("still reports the else arm as an uncovered BRANCH when only one path runs", async () => {
+    const screen = render(
+      [
+        "function pick(n) {",
+        "  if (n > 0) {",
+        "    return 'pos'",
+        "  } else {",
+        "    return 'neg'",
+        "  }",
+        "}",
+        "$app(Text(pick(1)))",
+      ].join("\n"),
+    );
+    await screen.flush();
+
+    const report = coverage.report();
+    expect(report.summary.lines.covered).toBeLessThan(report.summary.lines.total);
+    expect(report.summary.branches.pct).toBe(50);
+  });
+
+  it("keeps a line that a real statement shares with a block", async () => {
+    const screen = render(["$n = 0", "if ($n === 0) { $n = 1 }", '$app(Text(`n=${$n}`))'].join("\n"));
+    await screen.flush();
+
+    const report = coverage.report();
+    expect(report.files[0]!.lines[2]).toBeGreaterThan(0);
+  });
+});

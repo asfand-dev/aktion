@@ -224,14 +224,15 @@ export const keywordDocs: Record<string, KeywordDoc> = {
     example: "const [first, ...rest] = $items",
   },
   await: {
-    summary: "Await a promise inside an action/effect body (or expression).",
+    summary:
+      "Parses, but NEVER suspends — bodies are not async functions. In expression position the value is the PROMISE, not what it resolves to, so `if (await p)` is always true; as a bare statement it is dropped. Chain `.then(...)` instead, or use `$http(...).onDone`.",
     syntax: "await expression",
-    example: "let res = await $http({ url: \"https://api.example.com\" })",
+    example: '$util.copy($url).then(ok => { if (ok) $toast.success("Copied") })',
   },
   async: {
-    summary: "Marks a function as async — accepted as a no-op modifier.",
+    summary: "Marks a function as async — accepted as a no-op modifier; it does NOT make the body suspend.",
     syntax: "async function name() { ... }",
-    example: "async function load() {\n  let data = await fetch()\n}",
+    example: 'function load() {\n  fetch("/api/ping").then(res => { $status = res.status })\n}',
   },
   return: {
     summary: "Return a value from a component / action / helper body.",

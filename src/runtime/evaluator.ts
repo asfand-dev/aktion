@@ -5106,10 +5106,11 @@ function evaluateBuiltinCall(
   if (name === "__rui_prefix__") {
     return evaluateSyntheticPrefix(args, ctx);
   }
-  // `await expr` in expression position. The surrounding action / effect
-  // runner already awaits thenables produced by an assignment / await
-  // statement, so this expression is a structural marker that yields the
-  // argument unchanged. (No event loop is available inside `evaluate`.)
+  // `await expr` in expression position — a structural marker that yields the
+  // argument unchanged. There is no event loop inside `evaluate` and the
+  // declaration runners are synchronous, so nothing unwraps the thenable: the
+  // caller receives the PROMISE. Callers that need the resolved value chain
+  // `.then(...)`; see the `await` entry in the language catalog.
   if (name === "__rui_await__") {
     return args[0] ? evaluate(args[0], ctx) : undefined;
   }

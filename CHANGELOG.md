@@ -15,6 +15,23 @@ Published releases are listed at
 
 ### Added
 
+- **`aktion/test` exposes the full query matrix.** `queryAllByRole`,
+  `findAllByRole`, `getAllByLabelText`, `queryAllByLabelText`, `findByLabelText`,
+  `getAllByPlaceholderText`, `queryAllByPlaceholderText`, `getAllByTestId`,
+  `queryAllByTestId`, `findByTestId`, `findAllByTestId`, `findAllByLabelText`,
+  `findByPlaceholderText` and `findAllByPlaceholderText` are now on `Screen`, so
+  every query family really does come in the documented six flavours.
+  All of them were already built by the query engine and simply not surfaced, so
+  the asymmetry was arbitrary: `getAllByRole` existed while `queryAllByRole` did
+  not, which forced `try { getAllByRole(…) } catch { [] }` to assert that a role
+  is *absent* — the one thing a `queryAll*` is for.
+
+- **`screen.state.planned`** reports whether the program has planned yet.
+  `render` / `renderCompiled` only *schedule* the first render (Aktion plans on
+  the microtask queue), so every `StateProbe` method is answering about an empty
+  store until one flush has happened. This makes that observable instead of
+  something to infer from a surprising result.
+
 - **`labelHidden` now works on every field-shell control.** `Checkbox` and
   `Switch` gained it (their visible label is an inline sibling of the control, so
   the field shell never saw it), and `Select`, `Combobox`, `MultiSelect`,
@@ -65,6 +82,54 @@ Published releases are listed at
   nothing leaves its crumb inert rather than inventing a wrong path.
 
 ### Fixed
+
+- **The language catalog taught `await` as if it worked.** `docs/javascript-interactions.html`
+  has always said "`await` parses, but it never suspends" — while the keyword entry in
+  `src/language/grammar.ts` and the `$util.copy` / `$util.sleep` / `fetch` /
+  `$util.onResponse` examples all showed `let ok = await …`. That catalog is what the
+  generated system prompt, the LLM skill and the editor tooling serve, so the wrong
+  idiom propagated into generated programs — and it is silently wrong in the worst way:
+  the value is the PROMISE, so `if (await $util.copy(x))` is ALWAYS true and a
+  clipboard failure reports success. Every one of those examples now chains `.then(...)`,
+  and the `await` / `async` entries state what actually happens. The runtime is
+  unchanged; only what it promises is. The comments in `parser.ts` and `evaluator.ts`
+  claiming "the surrounding action / effect runner unwraps any thenable" were wrong too
+  (`runActionDeclSync` is fully synchronous) and now say so.
+
+- **Coverage counted `} else {` as a line no test could ever hit.** A `Block` is
+  not a statement — the evaluator runs a block's statements, never the block — but
+  it carries the `loc` of the brace that opens it, and `registerProgram` put that
+  line in the denominator. So every program using a braced `if/else` was capped
+  below 100% lines, with nothing in `uncoveredLines` to explain it beyond a closing
+  brace. `Block` nodes no longer contribute lines (an instrumented JavaScript file
+  does not count that line either); the statements inside are instrumented as
+  themselves, and both arms still count as BRANCHES, so a genuinely untaken `else`
+  is still reported.
+
+- **`screen.waitForState(name)` could never settle in a multi-file program.** It
+  read `serializeState()[name]` raw while every other `StateProbe` method resolved
+  the author's name to the runtime key first. The linker gives each non-entry
+  module private scope by renaming its atoms — `$newUserEmail` declared in
+  `lib/store.aktion` is `__a5_newUserEmail` in the snapshot — so the raw lookup was
+  `undefined` on every poll and the wait could only ever time out. It now resolves
+  through `state.key(name)` on each poll, which also covers the case the function
+  exists for: the atom not being declared yet when the wait starts.
+
+- **`screen.state.set(...)` before the first flush wrote to the wrong atom, silently.**
+  `render` returns before the program has planned, so the store is empty, so
+  `resolveStateKey` could not see the module-local symbol and handed back the bare
+  name — and the write then *declared a new top-level atom nothing reads*. The
+  program's own atom kept its default and the test failed somewhere else entirely.
+  It now throws with the fix in the message (await a flush, or seed through
+  `render(…, { state })` / `state.hydrate(…)`, which are designed for pre-plan use
+  and are unaffected).
+
+- **`cleanup()` leaked the route into the next test.** `location.hash` is document
+  state, not element state, so a `route` passed to `render` — or a path the program
+  navigated to — outlived the element. The next `render()` *without* a `route`
+  therefore started wherever the previous test finished, and a suite passed or failed
+  on its own ordering. Each mount now captures the hash and `unmount()` / `cleanup()`
+  restore it, innermost mount first.
 
 - **`delete obj[key]` did nothing.** A computed key parses to a `Member` node
   with `computed` set and **no `property`**, and the evaluator's `delete` branch

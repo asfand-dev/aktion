@@ -248,7 +248,14 @@ export function registerProgram(program: Program, path?: string): CoverageScope 
     const loc = (node as { loc?: SourceLocation }).loc;
     if (!loc) return;
     const file = files[loc.source ?? 0] ?? files[0]!;
-    if (!file.lines.has(loc.line)) file.lines.set(loc.line, 0);
+    // A `Block` is not a statement, and its `loc` is the BRACE that opens it —
+    // which for an `else` arm is the `} else {` line and for nothing else is a
+    // line of its own. The evaluator runs a block's statements, never the block,
+    // so instrumenting it added a line to the denominator that no test could ever
+    // hit: every program using a braced `if/else` was capped below 100% lines with
+    // no way to see why. An instrumented JavaScript file does not count that line
+    // either, and the statements INSIDE the block are instrumented as themselves.
+    if (node.kind !== "Block" && !file.lines.has(loc.line)) file.lines.set(loc.line, 0);
 
     const fnName = functionName(node);
     if (fnName !== null) {

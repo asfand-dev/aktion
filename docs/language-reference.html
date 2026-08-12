@@ -1187,12 +1187,12 @@
             kind: "Hook",
             signature: "$util.onResponse((response, retry) => response)",
             description:
-              "Register an in-program HTTP response interceptor. Return a replacement response or nothing to pass through; await retry() to re-issue the request once (e.g. after refreshing a token on a 401).",
+              "Register an in-program HTTP response interceptor. Return a replacement response or nothing to pass through; return retry() to re-issue the request once (the client awaits what you return; `await` inside a body does not suspend).",
             params: [
               { name: "fn", type: "(response, retry) => response", desc: "Receives the response and a one-shot retry()." },
             ],
             returns: { type: "void", desc: "" },
-            example: '$util.onResponse(async (res, retry) =>\n  res.status === 401 ? (await refresh(), retry()) : res)',
+            example: '$util.onResponse((res, retry) =>\n  res.status === 401 ? retry() : res)',
           },
           {
             anchor: "util-rt-invalidate",
@@ -1218,7 +1218,7 @@
               { name: "vibrate(pattern?)", type: "(number|number[]) => boolean", desc: "Haptics; pattern is ms or an on/off array (default 10)." },
               { name: "share(data)", type: "({title?,text?,url?}) => Promise<boolean>", desc: "Native share sheet." },
               { name: "readClipboard()", type: "() => Promise<string>", desc: "Read clipboard text (\"\" if denied)." },
-              { name: "copy(text)", type: "(string) => boolean", desc: "Write text to the clipboard." },
+              { name: "copy(text)", type: "(string) => Promise<boolean>", desc: "Write text to the clipboard; resolves true only when the write succeeded." },
               { name: "geolocate(options?)", type: "() => Promise<{lat,lng,accuracy}|null>", desc: "Current position." },
               { name: "isOnline()", type: "() => boolean", desc: "Network status." },
               { name: "deviceType()", type: '() => "mobile"|"tablet"|"desktop"', desc: "Best-effort device class." },
@@ -1346,8 +1346,8 @@
       ]],
       ["Ids & timing", [
         ["uuid", "$util.uuid()", "string", "A random RFC-4122 v4 UUID (crypto when available).", [], 'let id = $util.uuid()'],
-        ["copy", "$util.copy(text)", "Promise<boolean>", "Write text to the clipboard — async; resolves true only when the write actually succeeds (permission can deny it).", [["text", "string", "Text to copy."]], 'ok = await $util.copy($shareUrl)\nif (ok) $toast.success("Copied!")'],
-        ["sleep", "$util.sleep(ms)", "Promise<void>", "Awaitable pause (capped at 60s) — for staged async flows and demos.", [["ms", "number", "Delay in milliseconds."]], 'await $util.sleep(300)'],
+        ["copy", "$util.copy(text)", "Promise<boolean>", "Write text to the clipboard. Returns a PROMISE resolving true only when the write actually succeeds (permission can deny it) — `await` never suspends in Aktion, so read it with `.then(...)`.", [["text", "string", "Text to copy."]], '$util.copy($shareUrl).then(ok => {\n  if (ok) $toast.success("Copied!")\n})'],
+        ["sleep", "$util.sleep(ms)", "Promise<void>", "Pause, capped at 60s — for staged async flows and demos. Returns a promise; continue in `.then(...)`, since `await` never suspends.", [["ms", "number", "Delay in milliseconds."]], '$util.sleep(300).then(() => { $ready = true })'],
         ["debounceFn", "$util.debounceFn(fn, wait?)", "function", "Wrap a function so it fires wait ms after the last call.", [["fn", "function", "The function."], ["wait", "number", "Delay ms (default 250).", true]], 'onType = $util.debounceFn((q) => $search = q, 300)'],
         ["throttleFn", "$util.throttleFn(fn, wait?)", "function", "Wrap a function so it fires at most once per wait ms — leading edge plus one trailing fire with the latest args, so the final call is never dropped.", [["fn", "function", "The function."], ["wait", "number", "Window ms (default 250).", true]], 'onScroll = $util.throttleFn(() => measure(), 100)'],
       ]],
@@ -1361,7 +1361,7 @@
       ["Array", "object", "Array constructor and statics — Array.from, Array.isArray.", 'Array.from({ length: 3 }, (_, i) => i)'],
       ["Date", "object", "Date object for timestamps and formatting.", 'let now = new Date()'],
       ["Intl", "object", "Internationalisation — NumberFormat, DateTimeFormat.", 'new Intl.NumberFormat("en-US").format(1234)'],
-      ["fetch", "function", "Raw network request — prefer $http for reactive data.", 'let res = await fetch("/api/ping")'],
+      ["fetch", "function", "Raw network request — prefer $http for reactive data.", 'fetch("/api/ping").then(res => { $status = res.status })'],
       ["crypto", "object", "Web Crypto — random UUIDs and more.", 'let id = crypto.randomUUID()'],
       ["navigator", "object", "Browser navigator — clipboard, language, online status.", 'navigator.clipboard.writeText(url)'],
       ["alert / confirm / prompt", "function", "Browser dialogs.", 'if (confirm("Delete this?")) remove()'],

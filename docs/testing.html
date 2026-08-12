@@ -105,7 +105,7 @@ export default defineConfig({
 <pre><code>import { afterEach } from "vitest";
 import { cleanup } from "aktion-runtime/test";
 
-afterEach(cleanup);   // unmounts every screen + restores any mocked fetch</code></pre>
+afterEach(cleanup);   // unmounts every screen, restores mocked fetch + the route</code></pre>
 
       <h2 id="first-test">Your first test</h2>
       <p>
@@ -378,9 +378,34 @@ expect(within(row).getByRole("button", { name: "Delete" })).toBeTruthy()</code><
           <tr><td><code>screen.state.has(name)</code></td><td>Whether the atom exists yet.</td></tr>
           <tr><td><code>screen.state.snapshot()</code></td><td>The whole state object &mdash; great for <code>toMatchSnapshot()</code>.</td></tr>
           <tr><td><code>screen.state.set(name, value)</code></td><td>Simulate a host-side write (<code>hydrateState</code>) and re-render.</td></tr>
+          <tr><td><code>screen.state.key(name)</code></td><td>The runtime key backing <code>name</code> &mdash; the mangled symbol for a module-local atom.</td></tr>
+          <tr><td><code>screen.state.planned</code></td><td>Whether the program has planned yet, so its atoms exist.</td></tr>
           <tr><td><code>screen.waitForState(name, predicate?)</code></td><td>Await an atom until <code>predicate(value)</code> holds (or it becomes non-null).</td></tr>
         </tbody>
       </table>
+      <p>
+        Names are the ones the <strong>author</strong> wrote. In a multi-file
+        program the linker gives every non-entry module private scope by renaming
+        its atoms &mdash; <code>$count</code> declared in
+        <code>lib/store.aktion</code> is <code>__a1_count</code> in
+        <code>snapshot()</code>, and the numeric part changes when an unrelated
+        import is added. Every member above resolves that for you; hard-coding the
+        mangled key is what breaks.
+      </p>
+      <div class="callout" data-variant="warning">
+        <p>
+          <strong>Flush before you read or write state.</strong>
+          <code>render</code> / <code>renderCompiled</code> only <em>schedule</em>
+          the first render &mdash; Aktion plans on the microtask queue &mdash; so
+          until one <code>await flush()</code> (or any <code>findBy*</code>) has
+          happened the store is still empty and <code>state.planned</code> is
+          <code>false</code>. <code>state.set</code> called that early throws, rather
+          than declaring an unrelated top-level atom the program never reads. To seed
+          a value <em>before</em> the first plan, use
+          <code>render(&hellip;, { state })</code> or
+          <code>screen.state.hydrate(&hellip;)</code>, which are built for it.
+        </p>
+      </div>
 <pre><code>// Seed initial state, then assert a derived/computed atom.
 const screen = render(`
   $price = 0
@@ -692,7 +717,7 @@ test("renders the headline on the server", () =&gt; {
           <tr><td><code>coverage</code></td><td>DSL coverage: <code>start</code>, <code>stop</code>, <code>reset</code>, <code>report</code>, <code>merge</code>, <code>toLcov</code>, <code>formatSummary</code>.</td></tr>
           <tr><td><code>within(node)</code></td><td>Return the query suite scoped to a subtree.</td></tr>
           <tr><td><code>axe(node)</code></td><td>Audit a subtree and return an array of a11y violations.</td></tr>
-          <tr><td><code>cleanup()</code></td><td>Unmount every screen + restore mocked <code>fetch</code> (wire into <code>afterEach</code>).</td></tr>
+          <tr><td><code>cleanup()</code></td><td>Unmount every screen, restore mocked <code>fetch</code> and put <code>location.hash</code> back (wire into <code>afterEach</code>).</td></tr>
           <tr><td><code>flush(times?)</code></td><td>Drain the microtask queue so the render cascade settles.</td></tr>
           <tr><td><code>act(fn)</code></td><td>Run a reactive-write block, then flush.</td></tr>
           <tr><td><code>waitFor(fn, opts?)</code></td><td>Poll until <code>fn</code> settles or times out. <code>null</code>, <code>false</code> and <code>[]</code> retry; pass <code>until</code> to decide yourself.</td></tr>
@@ -725,7 +750,7 @@ test("renders the headline on the server", () =&gt; {
         <li><strong>Assert on what the user sees first.</strong> Reach for <code>screen.state</code> when the behaviour is genuinely invisible (a computed total, a flag), not as a shortcut around the DOM.</li>
         <li><strong>Use <code>findBy*</code> for anything async.</strong> Never <code>setTimeout</code> in a test &mdash; <code>findBy*</code> / <code>waitFor</code> retry deterministically.</li>
         <li><strong>One behaviour per test.</strong> Render, do one thing, assert the consequence &mdash; the counter test above is the shape to copy.</li>
-        <li><strong>Wire <code>afterEach(cleanup)</code> once</strong> per file so a leaked element or mocked <code>fetch</code> can&rsquo;t bleed into the next test.</li>
+        <li><strong>Wire <code>afterEach(cleanup)</code> once</strong> per file so a leaked element, a mocked <code>fetch</code> or the route a test navigated to can&rsquo;t bleed into the next one. <code>location.hash</code> is document state, not element state &mdash; without the restore, a later <code>render()</code> with no <code>route</code> starts wherever the previous test finished, and the suite&rsquo;s result depends on its own ordering.</li>
         <li><strong>Prefer real interactions to direct state writes.</strong> <code>screen.click("Save")</code> exercises the handler, the action, and the re-render; <code>state.set(...)</code> only seeds a value.</li>
       </ul>
 

@@ -1228,12 +1228,12 @@ function parseUnary(ctx: ParserContext): Expression {
     const argument = parseUnary(ctx);
     return { kind: "Unary", operator: tok.value as "!" | "-" | "+" | "~", argument };
   }
-  // `await expr` as an expression — `let user = await fetch(...)`. The
-  // expression itself is a pass-through; the surrounding action / effect
-  // runner unwraps any thenable returned by the assignment expression,
-  // so this keyword works inside action / effect bodies the way JS
-  // authors expect. In purely synchronous contexts it short-circuits to
-  // the raw value (mirroring how `await` on a non-thenable is a no-op).
+  // `await expr` as an expression. The keyword is accepted so
+  // JavaScript-shaped output still parses, but it does NOT suspend: bodies
+  // run synchronously (`runActionDeclSync`), and nothing unwraps the thenable.
+  // The value is therefore the PROMISE, which is why `if (await p)` is always
+  // true. Documented under "await parses, but it never suspends"; authors
+  // should chain `.then(...)` or use `$http(...).onDone` instead.
   if (tok.type === "Keyword" && tok.value === "await") {
     ctx.consume();
     const argument = parseUnary(ctx);

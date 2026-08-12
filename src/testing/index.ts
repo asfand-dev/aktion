@@ -677,16 +677,30 @@ export interface Screen {
   getByRole(role: string, options?: RoleOptions): HTMLElement;
   queryByRole(role: string, options?: RoleOptions): HTMLElement | null;
   getAllByRole(role: string, options?: RoleOptions): HTMLElement[];
+  queryAllByRole(role: string, options?: RoleOptions): HTMLElement[];
   findByRole(role: string, options?: RoleOptions, wait?: WaitForOptions): Promise<HTMLElement>;
+  findAllByRole(role: string, options?: RoleOptions, wait?: WaitForOptions): Promise<HTMLElement[]>;
 
   getByLabelText(matcher: Matcher, options?: TextMatchOptions): HTMLElement;
   queryByLabelText(matcher: Matcher, options?: TextMatchOptions): HTMLElement | null;
+  getAllByLabelText(matcher: Matcher, options?: TextMatchOptions): HTMLElement[];
+  queryAllByLabelText(matcher: Matcher, options?: TextMatchOptions): HTMLElement[];
+  findByLabelText(matcher: Matcher, options?: TextMatchOptions, wait?: WaitForOptions): Promise<HTMLElement>;
+  findAllByLabelText(matcher: Matcher, options?: TextMatchOptions, wait?: WaitForOptions): Promise<HTMLElement[]>;
 
   getByPlaceholderText(matcher: Matcher, options?: TextMatchOptions): HTMLElement;
   queryByPlaceholderText(matcher: Matcher, options?: TextMatchOptions): HTMLElement | null;
+  getAllByPlaceholderText(matcher: Matcher, options?: TextMatchOptions): HTMLElement[];
+  queryAllByPlaceholderText(matcher: Matcher, options?: TextMatchOptions): HTMLElement[];
+  findByPlaceholderText(matcher: Matcher, options?: TextMatchOptions, wait?: WaitForOptions): Promise<HTMLElement>;
+  findAllByPlaceholderText(matcher: Matcher, options?: TextMatchOptions, wait?: WaitForOptions): Promise<HTMLElement[]>;
 
   getByTestId(id: string): HTMLElement;
   queryByTestId(id: string): HTMLElement | null;
+  getAllByTestId(id: string): HTMLElement[];
+  queryAllByTestId(id: string): HTMLElement[];
+  findByTestId(id: string, wait?: WaitForOptions): Promise<HTMLElement>;
+  findAllByTestId(id: string, wait?: WaitForOptions): Promise<HTMLElement[]>;
 
   // --- Interaction (auto-flush) ---
   readonly user: UserEvent;
@@ -755,6 +769,16 @@ export interface UserEvent {
 export interface StateProbe {
   /** Read one atom, by the name it was declared with. */
   get(name: string): unknown;
+  /**
+   * Whether the program has planned, so its atoms exist and can be resolved.
+   *
+   * `render`/`renderCompiled` only SCHEDULE the first render (Aktion plans on the
+   * microtask queue), so every method here is answering about an empty store
+   * until one flush has happened. Await `screen.flush()` — or any `findBy*` —
+   * before reading or writing state. A program that declares no `$state` at all
+   * never reports `true`, and has nothing to probe either.
+   */
+  readonly planned: boolean;
   /** Whether the atom currently exists. */
   has(name: string): boolean;
   /** The full reactive snapshot, with the runtime's own keys — for `toMatchSnapshot()`. */
@@ -783,7 +807,14 @@ export interface StateProbe {
 /*  render()                                                                   */
 /* -------------------------------------------------------------------------- */
 
-const mounted = new Set<{ el: HTMLElement; fetchMock: InstalledFetch | null }>();
+interface MountRecord {
+  el: HTMLElement;
+  fetchMock: InstalledFetch | null;
+  /** Put `location.hash` back if this mount (or the program) changed it. */
+  restoreHash: (() => void) | null;
+}
+
+const mounted = new Set<MountRecord>();
 
 /**
  * Mount an Aktion program in a real `<aktion-app>` and return a `Screen`
@@ -838,6 +869,21 @@ function mount(options: RenderOptions, load: (el: AktionApp) => void): Screen {
 
   const fetchMock = options.fetch ? installFetchMock(options.fetch) : null;
 
+  // The hash is DOCUMENT state, not element state, so a route this mount sets —
+  // or that the program navigates to — outlives the element unless it is put
+  // back. Left alone, the next `render()` WITHOUT a `route` starts on whatever
+  // path the previous test finished on, and a suite passes or fails on its own
+  // ordering. Captured here, restored by `unmount` / `cleanup`.
+  let restoreHash: (() => void) | null = null;
+  if (typeof window !== "undefined" && window.location) {
+    const before = window.location.hash;
+    restoreHash = () => {
+      if (window.location.hash !== before) {
+        try { window.location.hash = before; } catch { /* ignore in restricted envs */ }
+      }
+    };
+  }
+
   if (options.route != null && typeof window !== "undefined" && window.location) {
     const path = options.route.startsWith("/") ? options.route : `/${options.route}`;
     try { window.location.hash = `#${path}`; } catch { /* ignore in restricted envs */ }
@@ -873,7 +919,7 @@ function mount(options: RenderOptions, load: (el: AktionApp) => void): Screen {
   // it.
   if (options.state) el.hydrateState(options.state);
 
-  const record = { el, fetchMock };
+  const record: MountRecord = { el, fetchMock, restoreHash };
   mounted.add(record);
 
   return buildScreen(el, record, fetchMock, options.captureEvents ?? []);
@@ -895,7 +941,7 @@ export function renderComponent(expression: string, options: ComponentRenderOpti
 
 function buildScreen(
   el: AktionApp,
-  record: { el: HTMLElement; fetchMock: InstalledFetch | null },
+  record: MountRecord,
   fetchMock: InstalledFetch | null,
   captureEvents: string[],
 ): Screen {
@@ -1089,12 +1135,42 @@ function buildScreen(
     return name;
   };
 
+  /**
+   * Has the program declared its reactive state yet?
+   *
+   * The store is empty until the first plan runs, and the plan is what declares
+   * every atom — so an empty store means there is no atom for `state.set` to
+   * resolve a name against. Deliberately NOT inferred from the DOM: the element
+   * creates its root container synchronously on connect, so "the shadow root has
+   * content" is already true before anything has been planned.
+   */
+  const planned = (): boolean => Object.keys(el.serializeState()).length > 0;
+
   const state: StateProbe = {
     get: (name) => el.serializeState()[resolveStateKey(name)],
+    get planned() {
+      return planned();
+    },
     has: (name) =>
       Object.prototype.hasOwnProperty.call(el.serializeState(), resolveStateKey(name)),
     snapshot: () => el.serializeState(),
     set: async (name, value) => {
+      // `set` is "the reactive write an onClick handler performs", and a handler
+      // can only run once the program has planned. Called before that — the
+      // common slip, because `render` returns before the first microtask — the
+      // store is empty, so `resolveStateKey` cannot see the module-local symbol
+      // (`__a5_userSearch`) the author means and hands back the bare name. The
+      // write then DECLARES a new top-level atom nothing reads, the program's own
+      // atom keeps its default, and the test fails somewhere else entirely. Say
+      // so here instead.
+      if (!planned()) {
+        throw new Error(
+          `screen.state.set(${JSON.stringify(name)}) ran before the program planned, so the atom does not exist yet ` +
+            `and the write would silently create an unrelated one. Await screen.flush() (or a findBy* query) first, ` +
+            `or seed the value with render(..., { state }) / screen.state.hydrate(...), which are designed for it.`,
+        );
+      }
+
       el.setState(resolveStateKey(name), value);
       await flush();
     },
@@ -1122,14 +1198,28 @@ function buildScreen(
     getByRole: byRole.getBy,
     queryByRole: byRole.queryBy,
     getAllByRole: byRole.getAllBy,
+    queryAllByRole: byRole.queryAllBy,
     findByRole: (r, o, w) => byRole.findBy(r, o, w),
+    findAllByRole: (r, o, w) => byRole.findAllBy(r, o, w),
 
     getByLabelText: byLabel.getBy,
     queryByLabelText: byLabel.queryBy,
+    getAllByLabelText: byLabel.getAllBy,
+    queryAllByLabelText: byLabel.queryAllBy,
+    findByLabelText: (m, o, w) => byLabel.findBy(m, o, w),
+    findAllByLabelText: (m, o, w) => byLabel.findAllBy(m, o, w),
     getByPlaceholderText: byPlaceholder.getBy,
     queryByPlaceholderText: byPlaceholder.queryBy,
+    getAllByPlaceholderText: byPlaceholder.getAllBy,
+    queryAllByPlaceholderText: byPlaceholder.queryAllBy,
+    findByPlaceholderText: (m, o, w) => byPlaceholder.findBy(m, o, w),
+    findAllByPlaceholderText: (m, o, w) => byPlaceholder.findAllBy(m, o, w),
     getByTestId: byTestId.getBy,
     queryByTestId: byTestId.queryBy,
+    getAllByTestId: byTestId.getAllBy,
+    queryAllByTestId: byTestId.queryAllBy,
+    findByTestId: (id, w) => byTestId.findBy(id, w),
+    findAllByTestId: (id, w) => byTestId.findAllBy(id, w),
 
     user,
     click: async (target) => {
@@ -1143,9 +1233,16 @@ function buildScreen(
     fireEvent: fire,
 
     state,
+    // Resolves the author's name to the runtime key on EVERY poll, exactly as
+    // `state.get` does. Reading `serializeState()[name]` raw looks equivalent and
+    // is not: in a multi-file program the linker renames every non-entry module's
+    // atoms (`$newUserEmail` in `lib/store.aktion` is `__a5_newUserEmail`), so the
+    // raw read was `undefined` forever and the wait could only ever time out.
+    // Re-resolving per poll also covers the case this function exists for — the
+    // atom not being declared yet when the wait starts.
     waitForState: (name, predicate, wait) =>
       waitFor(() => {
-        const value = el.serializeState()[name];
+        const value = el.serializeState()[state.key(name)];
         const ok = predicate ? predicate(value) : value != null;
         return ok ? (value as unknown) : null;
       }, wait),
@@ -1184,6 +1281,7 @@ function buildScreen(
     unmount: () => {
       el.remove();
       fetchMock?.restore();
+      record.restoreHash?.();
       mounted.delete(record);
     },
 
@@ -1198,13 +1296,17 @@ function buildScreen(
 }
 
 /**
- * Unmount every screen created since the last cleanup and restore any mocked
- * `fetch`. Call from your runner's `afterEach` for isolated tests.
+ * Unmount every screen created since the last cleanup, restore any mocked
+ * `fetch`, and put `location.hash` back where each mount found it. Call from
+ * your runner's `afterEach` for isolated tests.
  */
 export function cleanup(): void {
-  for (const record of [...mounted]) {
+  // Newest first, so a stack of nested mounts unwinds to the outermost mount's
+  // hash rather than to the innermost one's.
+  for (const record of [...mounted].reverse()) {
     try { record.el.remove(); } catch { /* ignore */ }
     record.fetchMock?.restore();
+    record.restoreHash?.();
     mounted.delete(record);
   }
 }
