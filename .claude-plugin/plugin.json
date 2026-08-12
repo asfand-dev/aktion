@@ -1,0 +1,24 @@
+{
+  "$schema": "https://www.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "aktion",
+  "displayName": "Aktion",
+  "description": "Write applications in Aktion, a declarative DSL that renders to a live UI from one web component. Adds /aktion, which builds a complete app from a one-line request, checks it against the 281-component schema, and leaves you a runnable page.",
+  "version": "0.6.3",
+  "author": {
+    "name": "asfand-dev",
+    "url": "https://github.com/asfand-dev"
+  },
+  "homepage": "https://asfand-dev.github.io/aktion/",
+  "repository": "https://github.com/asfand-dev/aktion",
+  "license": "MIT",
+  "keywords": [
+    "aktion",
+    "dsl",
+    "generative-ui",
+    "web-component",
+    "ui",
+    "frontend",
+    "dashboard",
+    "llm"
+  ]
+}

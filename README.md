@@ -1937,6 +1937,55 @@ host performs the path resolution and file reads.
 knowledge base an LLM coding agent loads when it writes or edits `.aktion`
 source. It replaces the former single-file `coding-gen-skill.md`.
 
+Installed, it gives you a `/aktion` command that writes a whole app:
+
+```
+/aktion an expenses dashboard with monthly totals, a category breakdown, and a filterable transaction table
+```
+
+The agent picks the right composites, writes `app.aktion`, runs it through the
+schema validator, fixes what the validator reports, and leaves you a page you
+can open. Claude also loads the skill on its own whenever a request involves
+`.aktion` files.
+
+### Install
+
+**Claude Code** — add the marketplace, then install the plugin:
+
+```bash
+claude plugin marketplace add asfand-dev/aktion
+claude plugin install aktion@aktion-tools
+```
+
+Or from inside a session, `/plugin marketplace add asfand-dev/aktion` followed
+by `/plugin install aktion@aktion-tools`. If the install summary says
+`Run /reload-plugins to activate.`, run that.
+
+**claude.ai and Claude Desktop** — zip the skill directory and add it from the
+skills settings on claude.ai, or **Customize** in the Desktop app sidebar:
+
+```bash
+cd skills && zip -r aktion-skill.zip aktion
+```
+
+The frontmatter deliberately stays inside the six fields the
+[Agent Skills spec](https://agentskills.io) allows, so the same `SKILL.md` loads
+in Claude Code, on claude.ai, and through the Skills API without edits. The
+schema validator needs a local Node runtime, so on claude.ai the skill teaches
+and writes but does not self-check — use the Claude Code plugin when you want
+the validation gate.
+
+**Local development** — load the working tree directly, no install:
+
+```bash
+claude --plugin-dir .
+```
+
+See [`PUBLISHING.md`](./PUBLISHING.md) for how the plugin is packaged and
+released.
+
+### How it is built
+
 | Part | Source |
 | ---- | ------ |
 | [`SKILL.md`](./skills/aktion/SKILL.md), `references/layout.md`, `references/language.md`, `references/patterns.md`, `references/gotchas.md` | Hand-written. These carry judgement — layout density, pattern-first composition, the traps the schema validator cannot catch. |

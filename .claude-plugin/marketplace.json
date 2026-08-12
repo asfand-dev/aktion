@@ -1,0 +1,34 @@
+{
+  "$schema": "https://www.schemastore.org/claude-code-marketplace.json",
+  "name": "aktion-tools",
+  "description": "The Aktion DSL toolchain for Claude Code — author, validate, and preview Aktion applications.",
+  "owner": {
+    "name": "asfand-dev",
+    "url": "https://github.com/asfand-dev"
+  },
+  "plugins": [
+    {
+      "name": "aktion",
+      "source": "./",
+      "displayName": "Aktion",
+      "description": "Write applications in Aktion, a declarative DSL that renders to a live UI from one web component. Adds /aktion, which builds a complete app from a one-line request, checks it against the 281-component schema, and leaves you a runnable page.",
+      "version": "0.6.3",
+      "category": "development",
+      "tags": [
+        "ui",
+        "dsl",
+        "generative-ui",
+        "web-components",
+        "frontend",
+        "codegen"
+      ],
+      "author": {
+        "name": "asfand-dev",
+        "url": "https://github.com/asfand-dev"
+      },
+      "homepage": "https://asfand-dev.github.io/aktion/",
+      "repository": "https://github.com/asfand-dev/aktion",
+      "license": "MIT"
+    }
+  ]
+}
