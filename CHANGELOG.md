@@ -5,6 +5,15 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-08-13
+
+### Expanded Unit Test Coverage
+
+- Added dedicated unit tests for 8 previously uncovered source modules: lexer, streaming frontier, grammar/stream tokenizer, HTML sanitizer, reactive environment manager, delta protocol, AST inspector, and floating positioning layer.
+- Grew the test suite from 119 to 127 test files (2,567 to 2,801 individual tests), covering all non-trivial source files.
+
+---
+
 ## 2026-08-12
 
 ### Claude Plugin & v0.6.3 Release

@@ -90,8 +90,8 @@ Runtime helper + reactive-environment namespace.
 | `percent` | method | `percent(value, decimals?)` | Locale percent string (0.42 → "42%"). |
 | `bytes` | method | `bytes(value)` | Human-readable byte size (1536 → "1.5 KB"). |
 | `relativeTime` | method | `relativeTime(value)` | "3 minutes ago" / "in 2 days" via Intl. |
-| `copy` | method | `copy(text)` | Copy to the clipboard. Returns a PROMISE that resolves true only when the write succeeds — `await` never suspends in Aktion, so read it with `$util.copy(x).then(ok => …)`. |
-| `sleep` | method | `sleep(ms?)` | Pause, capped at 60s. Returns a promise — `await` never suspends, so continue in `$util.sleep(ms).then(() => …)`. |
+| `copy` | method | `copy(text)` | Copy to the clipboard — async; resolves true only when the write succeeds (`await $util.copy(x)`). |
+| `sleep` | method | `sleep(ms?)` | Awaitable pause: `await $util.sleep(ms)` (capped at 60s). |
 | `uuid` | method | `uuid()` | Random UUID v4 string. |
 | `debounceFn` | method | `debounceFn(fn, wait?)` | Wrap a function so it fires `wait` ms after the LAST call. |
 | `throttleFn` | method | `throttleFn(fn, wait?)` | Wrap a function to fire at most once per `wait` ms (leading + one trailing). |
@@ -99,7 +99,7 @@ Runtime helper + reactive-environment namespace.
 | `onError` | method | `onError(fn)` | Program-level error sink — fires with { error, source } when an action throws. |
 | `onNavigate` | method | `onNavigate(fn)` | Navigation guard: return false to block, a path string to redirect, anything else to allow. |
 | `onRequest` | method | `onRequest(fn)` | HTTP request interceptor — a partial return merges over every outgoing request. |
-| `onResponse` | method | `onResponse(fn)` | HTTP response interceptor — replace the response, or `return retry()` to re-issue once (the client awaits what you return; `await` inside the body does not suspend). |
+| `onResponse` | method | `onResponse(fn)` | HTTP response interceptor — replace the response or `await retry()`. |
 | `invalidate` | method | `invalidate(keys)` | Refetch every cached $query whose key contains one of the substrings. |
 | `scroll` | property | `scroll` | Reactive scroll: .x / .y / .progress (0–1) / .direction ("up"\|"down"). |
 | `viewport` | property | `viewport` | Reactive viewport: .width / .height. |
