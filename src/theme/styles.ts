@@ -6029,6 +6029,70 @@ ${below("xs")} {
 :host([data-rui-theme="vision"]) .rui-table tbody tr:hover td { background: #dbedf8; }   /* corporate-1 */
 :host([data-rui-theme="vision"]) .rui-table-caption { color: var(--rui-color-text); text-transform: uppercase; }
 
+/* ---- DataGrid — the same treatment as Table above.
+   These are two different tables in the markup ('.rui-table' vs
+   '.rui-data-grid-table'), and only the plain one was dressed — so swapping a
+   Table for a DataGrid to gain sorting silently reverted the head to the base
+   theme's small grey uppercase label on a tinted fill, and every app that did
+   it had to restate the Exos head in its own stylesheet. Same rules, same
+   reasons; the head fill goes through '--rui-dg-head-bg' so the overlaid
+   column-settings button and the scroll-edge fades follow it. */
+:host([data-rui-theme="vision"]) .rui-data-grid { --rui-dg-head-bg: var(--rui-color-surface); }
+:host([data-rui-theme="vision"]) .rui-data-grid-scroll { border: none; box-shadow: none; }
+:host([data-rui-theme="vision"]) .rui-data-grid-table { font-size: var(--rui-font-size-base); }
+:host([data-rui-theme="vision"]) .rui-data-grid-table thead th {
+  color: var(--rui-color-text); font-weight: 600;
+  font-size: var(--rui-font-size-base); text-transform: uppercase; letter-spacing: 0;
+  border-bottom: none;
+  box-shadow: inset 0 -1px 0 0 var(--rui-color-border);   /* neutral-3 */
+}
+:host([data-rui-theme="vision"]) .rui-data-grid-table tbody td {
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle); color: var(--rui-color-text);
+}
+:host([data-rui-theme="vision"]) .rui-data-grid[data-highlight-hover="true"] tbody tr:hover td,
+:host([data-rui-theme="vision"]) .rui-data-grid[data-highlight-hover="true"] tbody tr:hover td[data-pinned="true"] {
+  background: #dbedf8;   /* corporate-1 */
+}
+:host([data-rui-theme="vision"]) .rui-data-grid-caption { color: var(--rui-color-text); text-transform: uppercase; }
+:host([data-rui-theme="vision"]) .rui-data-grid-filter-row td,
+:host([data-rui-theme="vision"]) .rui-data-grid-filter-row td[data-pinned="true"] {
+  background: var(--rui-color-surface);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+}
+/* Column settings: the same ghost-icon-fills-blue trigger the theme gives every
+   other menu opener, and the 2px accent border its menu panels wear. */
+:host([data-rui-theme="vision"]) .rui-data-grid-col-menu-btn {
+  border-radius: 999px; color: var(--rui-color-link);
+}
+:host([data-rui-theme="vision"]) .rui-data-grid-col-menu-btn:hover,
+:host([data-rui-theme="vision"]) .rui-data-grid-col-menu-btn:focus-visible,
+:host([data-rui-theme="vision"]) .rui-data-grid-col-menu-btn[aria-expanded="true"] {
+  background: var(--rui-color-accent); color: #fff; outline: none;
+}
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel {
+  border: 2px solid var(--rui-color-accent);
+  border-radius: var(--rui-radius-sm);
+  box-shadow: 0 2px 8px 0 rgba(113, 128, 149, 0.5);
+}
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel-row:hover { background: #dbedf8; }
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel-reset { color: var(--rui-color-link); font-weight: 600; }
+/* Flat theme: the chevrons take the same hairline-on-white treatment as the
+   pagination controls rather than a floating drop shadow. */
+:host([data-rui-theme="vision"]) .rui-data-grid-scroll-arrow {
+  background: var(--rui-color-surface);
+  border-color: var(--rui-color-border);
+  color: var(--rui-color-link);
+  box-shadow: var(--rui-shadow-sm);
+}
+:host([data-rui-theme="vision"]) .rui-data-grid-scroll-arrow:hover {
+  background: var(--rui-color-accent); border-color: var(--rui-color-accent); color: #fff;
+}
+:host([data-rui-theme="vision"]) .rui-data-grid-resize-handle:hover::after,
+:host([data-rui-theme="vision"]) .rui-data-grid-resize-handle:focus-visible::after,
+:host([data-rui-theme="vision"]) .rui-data-grid-resize-handle.rui-data-grid-resize-active::after {
+  background: var(--rui-color-accent);
+}
+
 /* ---- Pagination — UI block's active/hover page is a flat NEUTRAL-GRAY pill with
    dark text, never blue/white (verified identical across default-hover,
    active, and active-hover states). */
@@ -8937,6 +9001,12 @@ ${below("sm")} {
   flex-direction: column;
   gap: 12px;
   width: 100%;
+  /* One source for the header band's fill: the header cells paint it, and so do
+     the two things that overlay them (the column-settings button and the edge
+     fades behind the scroll arrows). A theme that restyles the head only has to
+     move this token. */
+  --rui-dg-head-bg: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 4%, var(--rui-color-surface, #fff)));
+  --rui-dg-menu-w: 28px;
 }
 .rui-data-grid-bulk {
   display: flex;
@@ -8967,6 +9037,15 @@ ${below("sm")} {
   gap: 8px;
   flex-wrap: wrap;
 }
+/* The non-scrolling frame. Anything pinned to an edge of the visible port —
+   scroll arrows, the column-settings button, the edge fades — is positioned
+   against THIS box, because an absolutely-positioned child of a scroll
+   container is positioned against its content and therefore scrolls away. */
+.rui-data-grid-viewport {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
 .rui-data-grid-scroll {
   position: relative;
   overflow: auto;
@@ -8975,12 +9054,32 @@ ${below("sm")} {
   border-radius: var(--rui-radius-md, 8px);
   background: var(--rui-color-surface, var(--rui-color-bg));
 }
+.rui-data-grid-scroll:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: -2px;
+}
 .rui-data-grid-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   font-size: var(--rui-font-size-base);
 }
+/* Fixed layout is what makes a drag-resize honest: the declared column width
+   wins over the content's natural width, so a narrowed column truncates instead
+   of shoving its neighbours sideways. Only switched on once every column has a
+   measured width ('data-fixed-layout') — see 'measureColumns'. */
+.rui-data-grid[data-fixed-layout="true"] .rui-data-grid-table { table-layout: fixed; }
+.rui-data-grid[data-resizable="true"] .rui-data-grid-table thead th,
+.rui-data-grid[data-resizable="true"] .rui-data-grid-table tbody td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The clip has to reach the cell's own content too: a flex Row inside a cell
+   would otherwise refuse to shrink past its children and spill out again. */
+.rui-data-grid[data-resizable="true"] .rui-data-grid-table tbody td > * { min-width: 0; max-width: 100%; }
+/* Slack absorber (see 'buildColGroup'). Zero-width whenever the columns already
+   fill the port, so it is invisible in every normal state. */
+.rui-data-grid-filler { padding: 0 !important; width: auto; }
 .rui-data-grid-caption {
   text-align: left;
   caption-side: top;
@@ -8993,7 +9092,7 @@ ${below("sm")} {
 .rui-data-grid-table thead th {
   position: sticky;
   top: 0;
-  background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 4%, var(--rui-color-surface, #fff)));
+  background: var(--rui-dg-head-bg);
   z-index: 2;
   text-align: left;
   font-weight: 600;
@@ -9190,13 +9289,23 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   box-shadow: 1px 0 0 var(--rui-color-border);
 }
 .rui-data-grid-table thead th[data-pinned="true"] { z-index: 4; }
-.rui-data-grid[data-striped="true"] tbody tr:nth-child(even) td[data-pinned="true"],
-.rui-data-grid[data-striped="true"] tbody tr:nth-child(even) td.rui-data-grid-col-menu-cell {
+/* A pinned cell has to be opaque, but it must be opaque in ITS OWN row's colour —
+   inheriting the plain surface left a pale stripe down the pinned columns of the
+   header and the filter row, which read as a rendering seam. */
+.rui-data-grid-table thead th[data-pinned="true"] { background: var(--rui-dg-head-bg); }
+.rui-data-grid-filter-row td[data-pinned="true"] {
+  background: var(--rui-color-surface-muted, color-mix(in srgb, var(--rui-color-text) 2%, var(--rui-color-surface, #fff)));
+}
+.rui-data-grid[data-striped="true"] tbody tr:nth-child(even) td[data-pinned="true"] {
   background: color-mix(in srgb, var(--rui-color-text) 2%, var(--rui-color-surface, var(--rui-color-bg)));
 }
-.rui-data-grid-table tbody tr[data-selected="true"] td[data-pinned="true"],
-.rui-data-grid-table tbody tr[data-selected="true"] td.rui-data-grid-col-menu-cell {
+.rui-data-grid-table tbody tr[data-selected="true"] td[data-pinned="true"] {
   background: color-mix(in srgb, var(--rui-color-primary) 10%, var(--rui-color-surface, var(--rui-color-bg)));
+}
+/* Hover has to reach a pinned cell too, or the pinned block stays inert while
+   the rest of the row lights up. */
+.rui-data-grid[data-highlight-hover="true"] tbody tr:hover td[data-pinned="true"] {
+  background: color-mix(in srgb, var(--rui-color-text) 4%, var(--rui-color-surface, var(--rui-color-bg)));
 }
 
 /* DataGrid — toolbar & global search */
@@ -9240,46 +9349,74 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-data-grid-search-input::placeholder { color: var(--rui-color-text-muted); }
 
-/* DataGrid — column settings menu */
-.rui-data-grid-col-menu-wrap {
-  position: relative;
-}
-.rui-data-grid-col-menu-cell {
-  width: 32px;
-  min-width: 32px;
-  max-width: 32px;
-  padding: 0 !important;
-  text-align: center;
-  vertical-align: middle;
-  position: sticky;
+/* DataGrid — column settings.
+   An overlay on the header band, NOT a column: it is a child of the
+   (non-scrolling) viewport, so it takes part in no table layout — the last
+   column keeps its natural width — and it stays pinned to the right edge while
+   the columns scroll under it. Only ever covers the header, never a data cell,
+   and the header's last cell reserves room for it below. */
+.rui-data-grid-col-menu {
+  position: absolute;
+  top: 0;
   right: 0;
-  z-index: 3;
-  background: var(--rui-color-surface, var(--rui-color-bg));
+  z-index: 6;
+  height: var(--rui-dg-head-h, 40px);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 4px;
+  padding-left: 14px;
+  /* Fades the header label out from under the button instead of chopping it. */
+  background: linear-gradient(to right, transparent, var(--rui-dg-head-bg) 60%);
+  /* The fade must not swallow clicks meant for the header cell underneath it —
+     the last column's sort button reaches to within a few pixels of here. Only
+     the controls themselves take pointer input. */
+  pointer-events: none;
 }
-th.rui-data-grid-col-menu-cell { border-bottom: none; z-index: 5; }
-td.rui-data-grid-col-menu-cell { border: none; }
+.rui-data-grid-col-menu-btn,
+.rui-data-grid-col-panel { pointer-events: auto; }
+/* When the right-hand chevron is showing as well, the scrim has to reach far
+   enough left to sit behind both controls — otherwise the chevron floats on top
+   of a header label with nothing to explain it. */
+.rui-data-grid[data-col-menu="true"] .rui-data-grid-viewport[data-overflow-x="true"]:not([data-at-end]) .rui-data-grid-col-menu {
+  padding-left: calc(var(--rui-dg-menu-w) + 24px);
+}
+/* Reserve room in the HEADER only. Body cells are untouched, so the column's
+   content width and its alignment with every other column are unaffected —
+   under fixed layout this changes no width at all, it just keeps the label from
+   sliding under the button. */
+.rui-data-grid[data-col-menu="true"] .rui-data-grid-table thead th[data-last="true"] {
+  padding-right: calc(var(--rui-dg-menu-w) + 14px);
+}
 .rui-data-grid-col-menu-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--rui-dg-menu-w);
+  height: var(--rui-dg-menu-w);
   padding: 0;
   border-radius: var(--rui-radius-sm, 4px);
   border: none;
   background: transparent;
   cursor: pointer;
-  color: var(--rui-color-text-secondary, var(--rui-color-text));
+  color: var(--rui-color-text-muted, var(--rui-color-text));
   font-size: 0.9rem;
-  opacity: 0.6;
-  transition: opacity 0.15s, color 0.15s;
+  transition: color 0.15s, background 0.15s;
 }
-.rui-data-grid-col-menu-btn:hover {
-  opacity: 1;
+.rui-data-grid-col-menu-btn:hover,
+.rui-data-grid-col-menu-btn[aria-expanded="true"] {
   color: var(--rui-color-primary);
-  background: var(--rui-color-bg-hover, rgba(0,0,0,0.05));
+  background: color-mix(in srgb, var(--rui-color-primary) 10%, transparent);
+}
+.rui-data-grid-col-menu-btn:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 1px;
 }
 .rui-data-grid-col-panel {
+  /* Closed by default, and by ATTRIBUTE rather than inline style: the floating
+     layer promotes this panel with the popover API, and an inline
+     'display: none' would outrank '[popover]''s own visibility. */
+  display: none;
   position: absolute;
   right: 0;
   top: calc(100% + 4px);
@@ -9290,8 +9427,9 @@ td.rui-data-grid-col-menu-cell { border: none; }
   background: var(--rui-color-surface, #fff);
   border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-md, 8px);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  box-shadow: var(--rui-shadow-lg, 0 4px 16px rgba(0,0,0,0.12));
 }
+.rui-data-grid-col-panel[data-open="true"] { display: flex; flex-direction: column; }
 .rui-data-grid-col-panel-head {
   display: flex;
   align-items: center;
@@ -9376,26 +9514,37 @@ td.rui-data-grid-col-menu-cell { border: none; }
   line-height: 1;
   display: flex;
   align-items: center;
+  opacity: 0.7;
 }
-.rui-data-grid-col-panel-pin:hover { color: var(--rui-color-primary); }
+.rui-data-grid-col-panel-pin:hover { color: var(--rui-color-primary); opacity: 0.9; }
 .rui-data-grid-col-panel-pin[data-active="true"] {
   color: var(--rui-color-primary);
-  background: color-mix(in srgb, var(--rui-color-primary) 10%, transparent);
+  opacity: 1;
 }
 
 /* DataGrid — column resize handle.
    The visible bar is 3px via ::after, but the click target is 12px wide so the
    user does not have to hit a 3px sliver. The bar appears on header-row hover
-   (not just handle hover) so all dividers light up at once. */
+   (not just handle hover) so all dividers light up at once. The grab area stops
+   short of the cell's bottom edge so it cannot swallow a click meant for the
+   sort button of the column next door. */
 .rui-data-grid-resize-handle {
   position: absolute;
   top: 0;
-  right: -5px;
+  /* Wholly INSIDE its own header cell. It used to straddle the boundary
+     ('right: -6px'), and both halves of that were unreachable: each 'th' is
+     sticky, so it is its own stacking context and the NEXT header cell — later in
+     the document, same z-index — painted over the overhang, swallowing every
+     pointerdown aimed at the divider. The clip that makes a resized cell
+     truncate then cut the overhang off visually as well. The grab area now
+     reaches 12px to the LEFT of the boundary and the bar sits on it. */
+  right: 0;
   bottom: 0;
   width: 12px;
   cursor: col-resize;
   z-index: 4;
   user-select: none;
+  touch-action: none;
   background: transparent;
 }
 .rui-data-grid-resize-handle::after {
@@ -9403,9 +9552,8 @@ td.rui-data-grid-col-menu-cell { border: none; }
   position: absolute;
   top: 4px;
   bottom: 4px;
-  left: 50%;
+  right: 0;
   width: 3px;
-  margin-left: -1.5px;
   border-radius: 2px;
   background: transparent;
   transition: background 0.15s;
@@ -9416,38 +9564,86 @@ td.rui-data-grid-col-menu-cell { border: none; }
   background: var(--rui-color-border);
 }
 .rui-data-grid-resize-handle:hover::after,
+.rui-data-grid-resize-handle:focus-visible::after,
 .rui-data-grid-resize-handle.rui-data-grid-resize-active::after {
   background: var(--rui-color-primary);
+  width: 3px;
 }
+.rui-data-grid-resize-handle:focus-visible { outline: none; }
+/* While a drag is live the pointer is captured, so the bar is the only feedback
+   the user gets — keep it lit across the whole header height. */
+.rui-data-grid-resize-handle.rui-data-grid-resize-active::after { top: 0; bottom: 0; }
+/* The last column's divider sits under the settings overlay, which is
+   'pointer-events: none' apart from its button — so the divider stays grabbable.
+   ('right: 0' resolves against the cell's padding box, so the reserve the header
+   adds for the button does not move the handle inwards.) */
 
-/* DataGrid — scroll arrows */
-.rui-data-grid-scroll-arrow {
+/* DataGrid — scroll hint.
+   Two things say "there is more sideways": a soft fade at whichever edge has
+   content behind it, and a small chevron parked in the HEADER band. The chevron
+   deliberately never sits over a data cell — it is 20px, vertically centred on
+   the header row, and inset far enough to land in the first/last cell's own
+   padding. Both edges can show at once when the table is scrolled to neither
+   end. */
+.rui-data-grid-viewport::before,
+.rui-data-grid-viewport::after {
+  content: "";
   position: absolute;
-  top: 50%;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 3;
+}
+.rui-data-grid-viewport::before {
+  left: 0;
+  background: linear-gradient(to right, color-mix(in srgb, var(--rui-color-text) 12%, transparent), transparent);
+}
+.rui-data-grid-viewport::after {
+  right: 0;
+  background: linear-gradient(to left, color-mix(in srgb, var(--rui-color-text) 12%, transparent), transparent);
+}
+.rui-data-grid-viewport[data-overflow-x="true"]:not([data-at-start])::before { opacity: 1; }
+.rui-data-grid-viewport[data-overflow-x="true"]:not([data-at-end])::after { opacity: 1; }
+.rui-data-grid-scroll-arrow {
+  display: none;
+  position: absolute;
+  top: calc(var(--rui-dg-head-h, 40px) / 2);
   transform: translateY(-50%);
-  z-index: 5;
-  border: none;
+  z-index: 7;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: 999px;
   cursor: pointer;
-  padding: 6px 4px;
-  border-radius: var(--rui-radius-sm, 4px);
-  font-size: 16px;
+  font-size: 11px;
   line-height: 1;
   color: var(--rui-color-text-muted);
-  background: color-mix(in srgb, var(--rui-color-surface, #fff) 85%, transparent);
-  backdrop-filter: blur(4px);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-  opacity: 0.7;
-  transition: opacity 0.15s, background 0.15s;
-  display: none;
+  background: var(--rui-color-surface, #fff);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--rui-color-text) 18%, transparent);
+  transition: color 0.15s, border-color 0.15s;
 }
 .rui-data-grid-scroll-arrow:hover {
-  opacity: 1;
-  background: var(--rui-color-surface, #fff);
   color: var(--rui-color-primary);
+  border-color: var(--rui-color-primary);
 }
-.rui-data-grid-scroll-arrow-left { left: 4px; }
-.rui-data-grid-scroll-arrow-right { right: 4px; }
-.rui-data-grid-scroll-arrow-icon { font-size: 14px; }
+.rui-data-grid-viewport[data-overflow-x="true"]:not([data-at-start]) .rui-data-grid-scroll-arrow-left,
+.rui-data-grid-viewport[data-overflow-x="true"]:not([data-at-end]) .rui-data-grid-scroll-arrow-right {
+  display: inline-flex;
+}
+.rui-data-grid-scroll-arrow-left { left: 3px; }
+.rui-data-grid-scroll-arrow-right { right: 3px; }
+/* The settings button owns the top-right corner, so the right chevron steps
+   aside rather than stacking on top of it. */
+.rui-data-grid[data-col-menu="true"] .rui-data-grid-scroll-arrow-right {
+  right: calc(var(--rui-dg-menu-w) + 8px);
+}
+.rui-data-grid-scroll-arrow-icon { font-size: 10px; }
 
 /* CalendarView -------------------------------------------------------- */
 .rui-calendar {

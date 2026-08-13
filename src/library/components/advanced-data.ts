@@ -28,10 +28,10 @@
 
 import type { ComponentSpec, RenderHelpers } from "../types.js";
 import {
-  el, asArray, asString, asBoolean, asNumber, renderIcon, fillTableCell,
+  el, asArray, asColumnNodes, asString, asBoolean, asNumber, renderIcon, fillTableCell,
   isComponentNode, sanitiseCssLength, sanitiseHref, sanitiseImageSrc, valueAttr,
 } from "../utils.js";
-import { deferToPaint } from "../floating.js";
+import { closeFloating, deferToPaint, isFloating, openFloating, updateFloating } from "../floating.js";
 // One formatter for both grids. It lived here as a second copy, and the copies
 // drifted the moment `Col(currency:)` arrived — the same column rendered EUR in
 // a `Table` and USD in a `DataGrid`.
@@ -79,7 +79,7 @@ interface ColDef {
 }
 
 function readDataGridCols(raw: unknown): ColDef[] {
-  return asArray<{ args?: unknown[] }>(raw).map((node, idx) => {
+  return asColumnNodes<{ args?: unknown[] }>(raw).map((node, idx) => {
     const args = node.args ?? [];
     const header = asString(args[0]);
     const currency = currencyCode(args[8]);
@@ -270,6 +270,35 @@ function initColumnConfig(
   return config;
 }
 
+/**
+ * Fold the CURRENT column set back into a stored configuration.
+ *
+ * `initColumnConfig` runs once per instance (it is the `useInstanceState`
+ * seed), so a grid whose `columns` array grows later — a new `Col` appended by
+ * the author, a column that only exists once data arrives — kept an `order`
+ * that never mentioned the new key, and `effectiveCols` drops any key it does
+ * not find in `order`: the column silently never rendered. Unknown keys are
+ * appended (author order), keys that no longer exist are forgotten so a stale
+ * `localStorage` payload cannot keep resurrecting them.
+ */
+function reconcileColumnConfig(cols: ColDef[], config: ColumnConfig): ColumnConfig {
+  const keys = cols.map((c) => c.key);
+  const known = new Set(keys);
+  const kept = config.order.filter((k) => known.has(k));
+  const added = keys.filter((k) => !kept.includes(k));
+  if (added.length === 0 && kept.length === config.order.length) return config;
+  const prune = (set: Set<string>): Set<string> => new Set([...set].filter((k) => known.has(k)));
+  const widths: Record<string, string> = {};
+  for (const [k, v] of Object.entries(config.widths)) { if (known.has(k)) widths[k] = v; }
+  for (const c of cols) { if (!(c.key in widths) && c.width) widths[c.key] = c.width; }
+  return {
+    order: [...kept, ...added],
+    hidden: prune(config.hidden),
+    pinned: prune(config.pinned),
+    widths,
+  };
+}
+
 /** Produce the display-order list of visible columns, pinned first. */
 function effectiveCols(cols: ColDef[], config: ColumnConfig): ColDef[] {
   const byKey = new Map(cols.map((c) => [c.key, c]));
@@ -289,49 +318,54 @@ function configToStorage(config: ColumnConfig): PersistedGridConfig {
 }
 
 /* ----------------------------------------------------------------------- *
- * Scroll arrows — overlay buttons for horizontal scrollability
+ * Column geometry
  * ----------------------------------------------------------------------- */
 
-function installScrollArrows(scrollEl: HTMLElement): void {
-  const left = el("button", {
-    type: "button",
-    class: "rui-data-grid-scroll-arrow rui-data-grid-scroll-arrow-left",
-    "aria-label": "Scroll left",
-    "aria-hidden": "true",
-    tabindex: "-1",
-  });
-  const lIcon = renderIcon("chevron-left", { className: "rui-data-grid-scroll-arrow-icon" });
-  if (lIcon) left.append(lIcon); else left.textContent = "‹";
+/** Must match `.rui-data-grid-cell-select` / `-cell-rownum` in the stylesheet. */
+const LEAD_SELECT_WIDTH = 36;
+const LEAD_ROWNUM_WIDTH = 42;
 
-  const right = el("button", {
-    type: "button",
-    class: "rui-data-grid-scroll-arrow rui-data-grid-scroll-arrow-right",
-    "aria-label": "Scroll right",
-    "aria-hidden": "true",
-    tabindex: "-1",
-  });
-  const rIcon = renderIcon("chevron-right", { className: "rui-data-grid-scroll-arrow-icon" });
-  if (rIcon) right.append(rIcon); else right.textContent = "›";
+/**
+ * Sticky-offset keys for the two leading cells. The `@@` prefix keeps them clear
+ * of a column key, which is an author-supplied header string.
+ */
+const LEAD_SELECT_KEY = "@@select";
+const LEAD_ROWNUM_KEY = "@@rownum";
 
-  const STEP = 200;
-  left.onclick = () => scrollEl.scrollBy({ left: -STEP, behavior: "smooth" });
-  right.onclick = () => scrollEl.scrollBy({ left: STEP, behavior: "smooth" });
-
-  scrollEl.append(left, right);
-
-  const sync = (): void => {
-    const { scrollLeft, scrollWidth, clientWidth } = scrollEl;
-    const overflows = scrollWidth > clientWidth + 1;
-    left.style.display = overflows && scrollLeft > 1 ? "" : "none";
-    right.style.display = overflows && scrollLeft < scrollWidth - clientWidth - 1 ? "" : "none";
-  };
-  sync();
-  scrollEl.addEventListener("scroll", sync, { passive: true });
-  if (typeof ResizeObserver !== "undefined") {
-    const ro = new ResizeObserver(sync);
-    ro.observe(scrollEl);
-  }
+/**
+ * Escape a value for use inside an `[attr="…"]` selector.
+ *
+ * Column keys are author strings (a `Col`'s header), so a header carrying a
+ * quote or a backslash — `Size ("GB")` — produced an invalid selector and threw
+ * on every resize / repaint that looked a column up by key.
+ */
+function attrSelectorValue(raw: string): string {
+  const escaper = (globalThis as { CSS?: { escape?: (v: string) => string } }).CSS?.escape;
+  if (typeof escaper === "function") return escaper(raw);
+  return raw.replace(/["\\]/g, "\\$&");
 }
+
+/**
+ * State the grid derives from the LIVE DOM rather than from props: whether the
+ * scroll port overflows horizontally, which edge it is parked at, and how tall
+ * the header band is.
+ *
+ * It has to round-trip through `useInstanceState` instead of living only as
+ * attributes on the node, because the morph reconciler strips any attribute the
+ * freshly-rendered tree does not also carry — an imperative
+ * `setAttribute("data-overflow-x")` would survive exactly until the next
+ * unrelated re-render, at which point the scroll arrows would vanish until the
+ * user happened to scroll again.
+ */
+interface ScrollHintState {
+  overflows: boolean;
+  atStart: boolean;
+  atEnd: boolean;
+  /** Height of the header's label row, in px (0 = not measured yet). */
+  headHeight: number;
+}
+
+const INITIAL_HINT: ScrollHintState = { overflows: false, atStart: true, atEnd: true, headHeight: 0 };
 
 export const DataGrid: ComponentSpec = {
   name: "DataGrid",
@@ -345,8 +379,15 @@ export const DataGrid: ComponentSpec = {
     "(string[]) and `$page` (number) when the host needs to read or drive " +
     "them, or use `onSort` / `onSelectionChange` for server-side work. " +
     "Use `loading` / `error` for query states. " +
-    "Set `columnMenu=true` to let the user hide, reorder, and pin columns. " +
-    "Set `resizable=true` to let the user drag column borders to resize. " +
+    "Set `columnMenu=true` to let the user hide, reorder, and pin columns — the " +
+    "button is pinned to the top-right of the header and stays put while the " +
+    "grid scrolls sideways, without taking a column of its own. " +
+    "Set `resizable=true` to let the user drag column borders to resize; the " +
+    "first drag pins the columns at the widths they are already rendered at and " +
+    "switches to a fixed layout, so a narrowed column truncates instead of " +
+    "pushing its neighbours around. " +
+    "`scrollArrows=false` turns off the small chevrons that appear in the " +
+    "header band when there are columns to scroll to. " +
     "Pass `persistKey` to save the user's column layout to localStorage. " +
     "Set `wrapCells=false` for single-line cells with ellipsis + hover tooltip. " +
     "Use INSTEAD of `Table` when you need any of those interactions.",
@@ -377,15 +418,18 @@ export const DataGrid: ComponentSpec = {
     { name: "onSelectionChange", type: "callable", optional: true, description: "Callable fired with the array of selected row ids" },
     { name: "perPageOptions", type: "number[]", optional: true, description: "Page sizes offered in a footer dropdown, e.g. [20, 50, 100]" },
     { name: "onPerPageChange", type: "callable", optional: true, description: "Callable fired with the newly chosen page size" },
-    // Slots 26–33: advanced column management features. All optional.
+    // Slots 26–34: advanced column management features. All optional.
+    // APPEND-ONLY: positional args are resolved by index, so a new prop goes at
+    // the END of this list — inserting one silently re-points every prop after it.
     { name: "persistKey", type: "string", optional: true, description: "localStorage key — when set, column widths, order, visibility, and pinning survive page refreshes. Each table should use a unique key." },
-    { name: "resizable", type: "boolean", optional: true, description: "Let the user drag column header borders to resize columns. Double-click a handle to auto-fit." },
-    { name: "columnMenu", type: "boolean", optional: true, description: "Show a column settings button for hiding, reordering, and pinning columns." },
+    { name: "resizable", type: "boolean", optional: true, description: "Let the user drag column header borders to resize columns. Double-click a handle (or press Home on it) to auto-fit. The first drag switches the table to a fixed layout so resized cells truncate instead of overflowing." },
+    { name: "columnMenu", type: "boolean", optional: true, description: "Show a column settings button for hiding, reordering, and pinning columns. Overlays the top-right of the header instead of occupying a column, so cell widths are unaffected." },
     { name: "globalSearch", type: "string", optional: true, description: "Global search term that filters across all columns — bind a $variable for two-way control." },
     { name: "onGlobalSearch", type: "callable", optional: true, description: "Callable fired with the search term when the global search input changes." },
     { name: "wrapCells", type: "boolean", optional: true, description: "Default cell content wrapping. `false` = single line with ellipsis and hover tooltip; `true` = allow wrapping. Per-column `Col(wrap:)` overrides." },
     { name: "rowNumbers", type: "boolean", optional: true, description: "Show a leading row-number column." },
     { name: "highlightOnHover", type: "boolean", optional: true, description: "Highlight rows on mouse hover (default true)." },
+    { name: "scrollArrows", type: "boolean", optional: true, description: "Show small chevron buttons in the header band while there are columns hidden to the left / right (default true). They sit in the header, never over a data cell." },
   ],
   render: (node, props, helpers) => {
     const allCols = readDataGridCols(props.columns);
@@ -421,6 +465,7 @@ export const DataGrid: ComponentSpec = {
     const columnMenuEnabled = asBoolean(props.columnMenu);
     const showRowNumbers = asBoolean(props.rowNumbers);
     const highlightOnHover = props.highlightOnHover === undefined ? true : asBoolean(props.highlightOnHover);
+    const scrollArrows = props.scrollArrows === undefined ? true : asBoolean(props.scrollArrows);
     const wrapCellsProp = props.wrapCells;
     const wrapCellsDefault: string | null =
       wrapCellsProp === undefined || wrapCellsProp === null
@@ -441,8 +486,31 @@ export const DataGrid: ComponentSpec = {
       initColumnConfig(allCols, persisted),
     );
     const colConfigPanelOpen = helpers.useInstanceState<boolean>("colConfigOpen", false);
+    /** Last-known column panel node — it may have been reparented (see findLive). */
+    const livePanelSlot = helpers.useInstanceState<HTMLElement | null>("livePanel", null);
+    /**
+     * Widths the grid measured for itself, kept apart from `config.widths` (which
+     * is the author's `Col(width:)` plus anything the user dragged, and the only
+     * half that persists). Fixed table layout needs a number for every column;
+     * these are the numbers the browser itself came up with on the first paint,
+     * so switching layout modes is invisible.
+     */
+    const autoWidthSlot = helpers.useInstanceState<Record<string, string>>("autoWidths", {});
+    const hintSlot = helpers.useInstanceState<ScrollHintState>("scrollHint", INITIAL_HINT);
+    /** Measured `left` per sticky column, keyed by column key (see LEAD_*_KEY). */
+    const stickyLeftSlot = helpers.useInstanceState<Record<string, number>>("stickyLeft", {});
+    /** The mounted viewport + its ResizeObserver — only reachable after paint. */
+    const liveViewSlot = helpers.useInstanceState<HTMLElement | null>("liveViewport", null);
+    const observerSlot = helpers.useInstanceState<{ ro: ResizeObserver; node: HTMLElement } | null>("resizeObserver", null);
 
-    const getColConfig = (): ColumnConfig => colConfigSlot.get();
+    const getColConfig = (): ColumnConfig => {
+      const stored = colConfigSlot.get();
+      const merged = reconcileColumnConfig(allCols, stored);
+      // A write here is safe mid-render: `useInstanceState.set` never schedules
+      // a render, it only updates the cell the next read sees.
+      if (merged !== stored) colConfigSlot.set(merged);
+      return merged;
+    };
     const updateColConfig = (patch: Partial<ColumnConfig>): void => {
       const current = getColConfig();
       const next = { ...current, ...patch };
@@ -452,6 +520,35 @@ export const DataGrid: ComponentSpec = {
 
     /** Visible columns in display order. */
     const cols = effectiveCols(allCols, getColConfig());
+
+    const isColResizable = (col: ColDef): boolean =>
+      col.resizable === undefined ? gridResizable : col.resizable;
+    /**
+     * Any resizable column puts the whole table into fixed layout.
+     *
+     * This is the difference between a resize that works and one that only looks
+     * like it does. Under the default `table-layout: auto` a column's used width
+     * is never smaller than its content's min-content width, so dragging a
+     * border inwards left the column where it was, pushed the inline
+     * `width`/`max-width` past the content, and the content spilled across the
+     * neighbouring cell. Fixed layout makes the declared width authoritative and
+     * the overflow clip (below) turns the excess into an ellipsis.
+     */
+    const fixedLayout = allCols.some(isColResizable);
+
+    /** The width this column should render at, or `""` for "let the browser pick". */
+    const widthFor = (col: ColDef, config: ColumnConfig): string =>
+      config.widths[col.key] || autoWidthSlot.get()[col.key] || "";
+
+    /**
+     * Fixed layout is only safe once every visible column has a number; until
+     * then the browser would share the table evenly between them, which is not
+     * what any of these grids look like. So the first paint runs in auto layout,
+     * `measureColumns` records what the browser chose, and the render after that
+     * flips the flag — the two look identical.
+     */
+    const layoutMeasured = fixedLayout && cols.length > 0
+      && cols.every((c) => widthFor(c, getColConfig()) !== "");
 
     const readSort = (): { key: string; dir: "asc" | "desc" } => {
       const fromProps = props.sort && typeof props.sort === "object" ? props.sort as SortInput : null;
@@ -542,30 +639,138 @@ export const DataGrid: ComponentSpec = {
       "data-allow-overflow": allowOverflow ? "true" : null,
       "data-highlight-hover": highlightOnHover ? "true" : "false",
       "data-nowrap": wrapCellsDefault === "false" ? "true" : null,
+      "data-resizable": fixedLayout ? "true" : null,
+      // Emitted from state, never only imperatively: morph strips attributes the
+      // fresh tree omits (see ScrollHintState).
+      "data-fixed-layout": layoutMeasured ? "true" : null,
+      "data-col-menu": columnMenuEnabled ? "true" : null,
     });
 
+    /**
+     * The grid this event came from. Falls back to the last-mounted viewport
+     * before the render-time `wrapper`, which after the first render is a
+     * detached copy the reconciler threw away — a handler that resolved to it
+     * would repaint nothing.
+     */
     const liveScope = (origin: Element | null | undefined): Element =>
-      origin?.closest(".rui-data-grid") ?? wrapper;
+      origin?.closest(".rui-data-grid")
+      ?? liveViewSlot.get()?.closest(".rui-data-grid")
+      ?? wrapper;
 
     const bodyOf = (scope: Element): HTMLElement | null =>
       scope.querySelector<HTMLElement>(".rui-data-grid-table > tbody");
 
+    /**
+     * Inline style for a cell that may be pinned. The `left` comes from the last
+     * measurement (see `syncStickyOffsets`) so a re-render paints the pinned
+     * block in the right place immediately, rather than snapping into position a
+     * frame later.
+     */
+    const stickyStyle = (key: string, pinned: boolean): string | null => {
+      if (!pinned) return null;
+      const left = stickyLeftSlot.get()[key];
+      return left === undefined ? "position:sticky" : `position:sticky;left:${Math.round(left)}px`;
+    };
+
     /* ---- builders (one per region, shared by render + live repaint) ---- */
 
-    const buildColTh = (col: ColDef, colIdx: number, config: ColumnConfig, pinnedOff: number): HTMLElement => {
-      const colWidth = config.widths[col.key] || col.width;
+    /**
+     * The `<col>` element for a key, in the live table.
+     *
+     * A width lives in exactly one place — the column element — so a resize can
+     * neither leave the header and the body disagreeing nor forget the filter
+     * row (which the previous per-`td` write did: it only touched `tbody`, so
+     * every filter box stayed at its old width and the whole row skewed).
+     */
+    const liveColEl = (scope: Element, key: string): HTMLElement | null =>
+      scope.querySelector<HTMLElement>(
+        `.rui-data-grid-table > colgroup > col[data-col-key="${attrSelectorValue(key)}"]`,
+      );
+
+    const buildColGroup = (visCols: ColDef[], config: ColumnConfig): HTMLElement => {
+      const group = el("colgroup");
+      if (selectable) {
+        group.append(el("col", { class: "rui-data-grid-col-lead", style: `width:${LEAD_SELECT_WIDTH}px` }));
+      }
+      if (showRowNumbers) {
+        group.append(el("col", { class: "rui-data-grid-col-lead", style: `width:${LEAD_ROWNUM_WIDTH}px` }));
+      }
+      for (const col of visCols) {
+        const w = widthFor(col, config);
+        group.append(el("col", { "data-col-key": col.key, style: w ? `width:${w}` : null }));
+      }
+      // Slack absorber. Under fixed layout a table asked to fill 100% shares any
+      // leftover space out over ALL columns proportionally — so dragging one
+      // border would quietly widen every other column, and the column you were
+      // dragging would not end up at the width you dropped it at. A final
+      // width-less column takes the leftover instead, and collapses to zero the
+      // moment the columns are wide enough to need scrolling.
+      if (fixedLayout) group.append(el("col", { class: "rui-data-grid-col-filler" }));
+      return group;
+    };
+
+    /**
+     * `<td>`/`<th>` counterpart of the filler `<col>`.
+     *
+     * `role="presentation"` as well as `aria-hidden`: this cell exists purely to
+     * give the layout somewhere to put its leftover pixels, so it must not be
+     * reported as a seventh column to a screen reader — nor to a test that counts
+     * the columns.
+     */
+    const fillerCell = (tag: "th" | "td"): HTMLElement =>
+      el(tag, { class: "rui-data-grid-filler", "aria-hidden": "true", role: "presentation" });
+
+    /**
+     * One edge chevron. Deliberately small and parked in the header band: the
+     * brief was an indicator that does not sit on top of the data, and the header
+     * is the one row of the table whose content is a short label with padding
+     * either side of it.
+     */
+    const buildScrollArrow = (side: "left" | "right"): HTMLElement => {
+      const btn = el("button", {
+        type: "button",
+        class: `rui-data-grid-scroll-arrow rui-data-grid-scroll-arrow-${side}`,
+        "aria-label": side === "left" ? "Scroll columns left" : "Scroll columns right",
+        // Redundant with the (focusable, arrow-key scrollable) scroll port, so
+        // it stays out of the tab order and out of the accessibility tree.
+        "aria-hidden": "true",
+        tabindex: "-1",
+      });
+      const icon = renderIcon(side === "left" ? "chevron-left" : "chevron-right", {
+        className: "rui-data-grid-scroll-arrow-icon",
+      });
+      if (icon) btn.append(icon); else btn.textContent = side === "left" ? "‹" : "›";
+      btn.onclick = (event) => {
+        event.stopPropagation();
+        const view = (event.currentTarget as Element).closest(".rui-data-grid-viewport");
+        const scroller = view?.querySelector<HTMLElement>(".rui-data-grid-scroll");
+        if (!scroller) return;
+        // Most of a screenful, so a click always reveals something new but never
+        // skips a column whole.
+        const step = Math.max(120, Math.round(scroller.clientWidth * 0.75));
+        scroller.scrollBy({ left: side === "left" ? -step : step, behavior: "smooth" });
+      };
+      return btn;
+    };
+
+    const commitWidth = (key: string, px: string): void => {
+      const cfg = getColConfig();
+      updateColConfig({ widths: { ...cfg.widths, [key]: px } });
+    };
+
+    const buildColTh = (col: ColDef, colIdx: number, config: ColumnConfig, isLast: boolean): HTMLElement => {
       const isPinned = config.pinned.has(col.key);
-      const colResizable = col.resizable !== undefined ? col.resizable : gridResizable;
       const th = el("th", {
         scope: "col",
         "data-col-key": col.key,
         "data-align": col.align || null,
         "data-sortable": col.sortable ? "true" : null,
         "data-first": colIdx === 0 ? "true" : null,
+        "data-last": isLast ? "true" : null,
         "data-wrap": col.wrap,
         "data-pinned": isPinned ? "true" : null,
         title: col.headerTooltip || null,
-        style: buildCellStyle(colWidth, isPinned, pinnedOff),
+        style: stickyStyle(col.key, isPinned),
       });
       if (col.sortable) {
         const btn = el("button", { type: "button", class: "rui-data-grid-sort" });
@@ -575,75 +780,105 @@ export const DataGrid: ComponentSpec = {
       } else {
         th.append(document.createTextNode(col.header));
       }
-      if (colResizable) {
-        const handle = el("div", {
-          class: "rui-data-grid-resize-handle",
-          "data-resize-col": col.key,
-        });
+      if (isColResizable(col)) {
+        const colKey = col.key;
         const minW = parsePx(col.minWidth) || 50;
         const maxW = parsePx(col.maxWidth) || 2000;
-        const colKey = col.key;
+        const handle = el("div", {
+          class: "rui-data-grid-resize-handle",
+          "data-resize-col": colKey,
+          role: "separator",
+          "aria-orientation": "vertical",
+          "aria-label": `Resize ${col.header}`,
+          tabindex: "0",
+        });
 
-        const applySizeToCells = (scope: Element, key: string, px: string): void => {
+        /**
+         * Column width from the live header cell — the only trustworthy source.
+         * Pins every column at its rendered width first, so the drag starts from
+         * a layout where a declared width is actually authoritative.
+         */
+        const currentWidth = (handleEl: Element): number => {
+          freezeColumnWidths(liveScope(handleEl));
+          const liveTh = handleEl.parentElement as HTMLElement | null;
+          return liveTh ? liveTh.getBoundingClientRect().width : minW;
+        };
+        const setWidth = (handleEl: Element, next: number): string => {
+          const px = `${Math.round(Math.max(minW, Math.min(maxW, next)))}px`;
+          const colEl = liveColEl(liveScope(handleEl), colKey);
+          if (colEl) colEl.style.width = px;
+          return px;
+        };
+        /**
+         * Widest rendered content in the column. `scrollWidth` on a clipped cell
+         * reports the FULL content box, which is exactly what auto-fit wants —
+         * and why the cells have to be `overflow: hidden` for this to work.
+         */
+        const autoFitWidth = (handleEl: Element): number => {
+          const scope = liveScope(handleEl);
+          freezeColumnWidths(scope);
+          const liveTh = handleEl.parentElement as HTMLElement | null;
+          let widest = liveTh ? liveTh.scrollWidth : 0;
           scope.querySelectorAll<HTMLElement>(
-            `.rui-data-grid-table tbody td[data-col-key="${key}"]`,
-          ).forEach((td) => {
-            td.style.width = px;
-            td.style.maxWidth = px;
-            td.style.minWidth = px;
-          });
+            `.rui-data-grid-table > tbody > tr > td[data-col-key="${attrSelectorValue(colKey)}"]`,
+          ).forEach((td) => { widest = Math.max(widest, td.scrollWidth); });
+          return widest + 2;
         };
 
-        handle.onmousedown = (event) => {
+        // Pointer events rather than mouse events, so the same code drives a touch
+        // drag. The move/up pair goes on the DOCUMENT, not on the handle: the
+        // pointer leaves a 12px handle immediately, and `setPointerCapture` is a
+        // best-effort optimisation that can refuse (a synthetic pointer, a
+        // pointerId that is no longer active) — with the listeners on the handle
+        // alone, a drag that lost the capture silently stopped tracking.
+        handle.onpointerdown = (event) => {
+          if (event.pointerType === "mouse" && event.button !== 0) return;
           event.preventDefault();
           event.stopPropagation();
-          const liveTh = (event.currentTarget as Element).parentElement as HTMLElement;
-          if (!liveTh) return;
-          const startX = event.clientX;
-          const startW = liveTh.getBoundingClientRect().width;
           const liveHandle = event.currentTarget as HTMLElement;
+          const startX = event.clientX;
+          const startW = currentWidth(liveHandle);
+          const pointerId = event.pointerId;
           liveHandle.classList.add("rui-data-grid-resize-active");
-          const onMove = (ev: MouseEvent): void => {
-            const delta = ev.clientX - startX;
-            const newW = Math.max(minW, Math.min(maxW, startW + delta));
-            const px = `${Math.round(newW)}px`;
-            liveTh.style.width = px;
-            liveTh.style.maxWidth = px;
-            liveTh.style.minWidth = px;
-            applySizeToCells(liveScope(liveTh), colKey, px);
+          try { liveHandle.setPointerCapture(pointerId); } catch { /* not capturable */ }
+          let last = `${Math.round(startW)}px`;
+          const onMove = (ev: PointerEvent): void => {
+            last = setWidth(liveHandle, startW + (ev.clientX - startX));
           };
           const onUp = (): void => {
             liveHandle.classList.remove("rui-data-grid-resize-active");
-            document.removeEventListener("mousemove", onMove);
-            document.removeEventListener("mouseup", onUp);
-            const finalW = `${Math.round(liveTh.getBoundingClientRect().width)}px`;
-            const cfg = getColConfig();
-            updateColConfig({ widths: { ...cfg.widths, [colKey]: finalW } });
+            document.removeEventListener("pointermove", onMove);
+            document.removeEventListener("pointerup", onUp);
+            document.removeEventListener("pointercancel", onUp);
+            try { liveHandle.releasePointerCapture(pointerId); } catch { /* already released */ }
+            commitWidth(colKey, last);
           };
-          document.addEventListener("mousemove", onMove);
-          document.addEventListener("mouseup", onUp);
+          document.addEventListener("pointermove", onMove);
+          document.addEventListener("pointerup", onUp);
+          document.addEventListener("pointercancel", onUp);
         };
 
         handle.ondblclick = (event) => {
           event.preventDefault();
           event.stopPropagation();
-          const liveTh = (event.currentTarget as Element).parentElement as HTMLElement;
-          if (!liveTh) return;
-          const scope = liveScope(liveTh);
-          let maxContent = liveTh.scrollWidth;
-          scope.querySelectorAll<HTMLElement>(
-            `.rui-data-grid-table tbody td[data-col-key="${colKey}"]`,
-          ).forEach((td) => {
-            maxContent = Math.max(maxContent, td.scrollWidth);
-          });
-          const fitW = Math.max(minW, Math.min(maxW, maxContent + 8));
-          const px = `${fitW}px`;
-          liveTh.style.width = px;
-          liveTh.style.maxWidth = px;
-          liveTh.style.minWidth = px;
-          applySizeToCells(scope, colKey, px);
-          const cfg = getColConfig();
-          updateColConfig({ widths: { ...cfg.widths, [colKey]: px } });
+          const liveHandle = event.currentTarget as HTMLElement;
+          commitWidth(colKey, setWidth(liveHandle, autoFitWidth(liveHandle)));
+        };
+
+        // Resizing has to be reachable without a pointer (WCAG 2.1.1).
+        handle.onkeydown = (event) => {
+          const liveHandle = event.currentTarget as HTMLElement;
+          const step = event.shiftKey ? 48 : 12;
+          if (event.key === "ArrowLeft") {
+            commitWidth(colKey, setWidth(liveHandle, currentWidth(liveHandle) - step));
+          } else if (event.key === "ArrowRight") {
+            commitWidth(colKey, setWidth(liveHandle, currentWidth(liveHandle) + step));
+          } else if (event.key === "Home" || event.key === "Enter") {
+            commitWidth(colKey, setWidth(liveHandle, autoFitWidth(liveHandle)));
+          } else {
+            return;
+          }
+          event.preventDefault();
         };
 
         th.append(handle);
@@ -651,11 +886,11 @@ export const DataGrid: ComponentSpec = {
       return th;
     };
 
-    const buildFilterTd = (col: ColDef, filters: Record<string, string>, isPinned: boolean, pinnedOff: number): HTMLElement => {
+    const buildFilterTd = (col: ColDef, filters: Record<string, string>, isPinned: boolean): HTMLElement => {
       const td = el("td", {
         "data-col-key": col.key,
         "data-pinned": isPinned ? "true" : null,
-        style: isPinned ? `position:sticky;left:${pinnedOff}px` : null,
+        style: stickyStyle(col.key, isPinned),
       });
       if (col.filterable) {
         const input = el("input", {
@@ -676,36 +911,111 @@ export const DataGrid: ComponentSpec = {
       return td;
     };
 
+    /**
+     * Everything about the header that a repaint could have to rebuild: which
+     * columns are shown, in what order, pinned or not, and how wide.
+     */
+    const columnSignature = (config: ColumnConfig, visCols: ColDef[]): string => [
+      config.order.join(""),
+      [...config.hidden].sort().join(""),
+      [...config.pinned].sort().join(""),
+      visCols.map((c) => `${c.key}=${widthFor(c, config)}`).join(""),
+    ].join("");
+
+    /**
+     * Rebuild the header + filter rows, but ONLY when the column layout actually
+     * changed.
+     *
+     * This guard is load-bearing, not an optimisation. `repaint` runs on every
+     * filter keystroke, and an unconditional rebuild destroyed and recreated the
+     * very `<input>` the user was typing into — so the caret jumped out after the
+     * first character and the filter was unusable. The signature is stored on the
+     * node (and re-emitted by the next render from the same state), so a keystroke
+     * finds it unchanged and leaves the live inputs alone.
+     */
     const syncColumns = (scope: Element): void => {
       const config = getColConfig();
       const visCols = effectiveCols(allCols, config);
+      const signature = columnSignature(config, visCols);
+      if (scope.getAttribute("data-col-sig") === signature) return;
+      scope.setAttribute("data-col-sig", signature);
+
+      const table = scope.querySelector<HTMLElement>(".rui-data-grid-table");
+      const group = table?.querySelector<HTMLElement>(":scope > colgroup");
+      if (table && group) group.replaceWith(buildColGroup(visCols, config));
 
       const headRow = scope.querySelector<HTMLElement>(".rui-data-grid-table > thead > tr:first-child");
       if (headRow) {
         headRow.querySelectorAll("th[data-col-key]").forEach((n) => n.remove());
-        const menuCell = headRow.querySelector(".rui-data-grid-col-menu-cell") as Element | null;
-        let pinnedOff = 0;
+        const filler = headRow.querySelector(".rui-data-grid-filler");
         visCols.forEach((col, c) => {
-          const th = buildColTh(col, c, config, pinnedOff);
-          headRow.insertBefore(th, menuCell);
-          if (config.pinned.has(col.key)) pinnedOff += parsePx(config.widths[col.key] || col.width) || 150;
+          headRow.insertBefore(buildColTh(col, c, config, c === visCols.length - 1), filler);
         });
       }
 
       const filterRow = scope.querySelector<HTMLElement>(".rui-data-grid-filter-row");
       if (filterRow) {
         filterRow.querySelectorAll("td[data-col-key]").forEach((n) => n.remove());
-        const menuTd = columnMenuEnabled
-          ? filterRow.querySelector(".rui-data-grid-col-menu-cell") as Element | null
-          : null;
+        const filler = filterRow.querySelector(".rui-data-grid-filler");
         const filters = filterSlot.get();
-        let filterPinOff = 0;
         for (const col of visCols) {
-          const isPinned = config.pinned.has(col.key);
-          filterRow.insertBefore(buildFilterTd(col, filters, isPinned, filterPinOff), menuTd);
-          if (isPinned) filterPinOff += parsePx(config.widths[col.key] || col.width) || 150;
+          filterRow.insertBefore(buildFilterTd(col, filters, config.pinned.has(col.key)), filler);
         }
       }
+    };
+
+    /**
+     * Re-measure the `left` offset of every sticky (pinned) cell from the live
+     * header and store it, so the next render can emit it inline.
+     *
+     * The offsets used to be summed from the DECLARED widths with a flat 150px
+     * guess for any column that had none, so two pinned columns overlapped
+     * unless the author happened to declare widths — and the leading
+     * checkbox / row-number cells were left out of the sum entirely, so a pinned
+     * column slid in underneath them. Position within a row is identical for the
+     * header, the filter row and every body row, so one measured plan drives all
+     * three.
+     */
+    const syncStickyOffsets = (scope: Element): void => {
+      const config = getColConfig();
+      if (config.pinned.size === 0) return;
+      const headRow = scope.querySelector<HTMLElement>(".rui-data-grid-table > thead > tr:first-child");
+      if (!headRow) return;
+      const leadCount = (selectable ? 1 : 0) + (showRowNumbers ? 1 : 0);
+      const next: Record<string, number> = {};
+      const plan: Array<number | null> = [];
+      let offset = 0;
+      (Array.from(headRow.children) as HTMLElement[]).forEach((cell, index) => {
+        // Leading checkbox / row-number cells travel with the pinned block, or
+        // the first pinned column scrolls in over the top of them.
+        const isLead = index < leadCount;
+        const key = isLead
+          ? (index === 0 && selectable ? LEAD_SELECT_KEY : LEAD_ROWNUM_KEY)
+          : cell.getAttribute("data-col-key");
+        if (!key || !(isLead || cell.getAttribute("data-pinned") === "true")) {
+          plan.push(null);
+          return;
+        }
+        next[key] = offset;
+        plan.push(offset);
+        offset += cell.getBoundingClientRect().width;
+      });
+      stickyLeftSlot.set(next);
+      const apply = (row: Element): void => {
+        const rowCells = Array.from(row.children) as HTMLElement[];
+        plan.forEach((left, index) => {
+          const cell = rowCells[index];
+          if (!cell) return;
+          if (left === null) {
+            cell.style.removeProperty("left");
+            return;
+          }
+          cell.style.position = "sticky";
+          cell.style.left = `${Math.round(left)}px`;
+        });
+      };
+      scope.querySelectorAll(".rui-data-grid-table > thead > tr").forEach(apply);
+      scope.querySelectorAll(".rui-data-grid-table > tbody > tr").forEach(apply);
     };
 
     const buildRows = (target: HTMLElement, m: GridModel): void => {
@@ -713,7 +1023,7 @@ export const DataGrid: ComponentSpec = {
       const config = getColConfig();
       const visCols = effectiveCols(allCols, config);
       const leadCols = (selectable ? 1 : 0) + (showRowNumbers ? 1 : 0);
-      const span = leadCols + Math.max(visCols.length, 1) + (columnMenuEnabled ? 1 : 0);
+      const span = leadCols + Math.max(visCols.length, 1) + (fixedLayout ? 1 : 0);
       const placeholder = (extraClass: string, children: Array<Node | string>): void => {
         const tr = el("tr");
         tr.append(el("td", {
@@ -744,8 +1054,13 @@ export const DataGrid: ComponentSpec = {
           "data-row-id": id,
           "data-selected": isSelected ? "true" : null,
         });
+        const leadPinned = config.pinned.size > 0;
         if (selectable) {
-          const cellTd = el("td", { class: "rui-data-grid-cell-select" });
+          const cellTd = el("td", {
+            class: "rui-data-grid-cell-select",
+            "data-pinned": leadPinned ? "true" : null,
+            style: stickyStyle(LEAD_SELECT_KEY, leadPinned),
+          });
           const cb = el("input", {
             type: "checkbox",
             class: "rui-data-grid-checkbox",
@@ -765,25 +1080,28 @@ export const DataGrid: ComponentSpec = {
           tr.append(cellTd);
         }
         if (showRowNumbers) {
-          const numTd = el("td", { class: "rui-data-grid-cell-rownum" });
+          const numTd = el("td", {
+            class: "rui-data-grid-cell-rownum",
+            "data-pinned": leadPinned ? "true" : null,
+            style: stickyStyle(LEAD_ROWNUM_KEY, leadPinned),
+          });
           numTd.textContent = String((m.page - 1) * m.perPage + vi + 1);
           tr.append(numTd);
         }
         const rowObj: Record<string, unknown> = {};
         for (const cc of allCols) rowObj[cc.key] = cc.values[r];
 
-        let pinnedOffset = 0;
         visCols.forEach((col, c) => {
-          const colWidth = config.widths[col.key] || col.width;
           const isPinned = config.pinned.has(col.key);
           const cellWrap = col.wrap ?? wrapCellsDefault;
           const td = el("td", {
             "data-format": col.format,
             "data-align": col.align || null,
             "data-first": c === 0 ? "true" : null,
+            "data-last": c === visCols.length - 1 ? "true" : null,
             "data-wrap": cellWrap,
             "data-pinned": isPinned ? "true" : null,
-            style: buildCellStyle(colWidth, isPinned, pinnedOffset),
+            style: stickyStyle(col.key, isPinned),
           });
           td.setAttribute("data-col-key", col.key);
           fillTableCell(td, col, col.values[r], r, helpers, col.fmt, rowObj);
@@ -792,9 +1110,8 @@ export const DataGrid: ComponentSpec = {
             if (text) td.title = text;
           }
           tr.append(td);
-          if (isPinned) pinnedOffset += parsePx(colWidth) || 150;
         });
-        if (columnMenuEnabled) tr.append(el("td", { class: "rui-data-grid-col-menu-cell" }));
+        if (fixedLayout) tr.append(fillerCell("td"));
         if (typeof props.onRowClick === "function") {
           tr.setAttribute("data-clickable", "true");
           tr.tabIndex = 0;
@@ -909,8 +1226,109 @@ export const DataGrid: ComponentSpec = {
       if (region.textContent !== next) region.textContent = next;
     };
 
-    const repaint = (origin: Element | null, m: GridModel = readModel()): void => {
-      const scope = liveScope(origin);
+    /**
+     * Record what the browser is doing with the scroll port: does it overflow
+     * sideways, which edge is it parked at, how tall is the header band. Drives
+     * the scroll arrows, the fade at each scrollable edge, and the vertical
+     * placement of both the arrows and the column-menu button.
+     *
+     * Writes the numbers into instance state as well as onto the node, so the
+     * next render re-emits them (morph strips attributes the fresh tree omits).
+     */
+    const syncScrollHint = (view: HTMLElement): void => {
+      const scroller = view.querySelector<HTMLElement>(".rui-data-grid-scroll");
+      if (!scroller) return;
+      const headRow = view.querySelector<HTMLElement>(".rui-data-grid-table > thead > tr:first-child");
+      const headHeight = headRow ? Math.round(headRow.getBoundingClientRect().height) : 0;
+      const slack = scroller.scrollWidth - scroller.clientWidth;
+      const overflows = slack > 1;
+      const left = scroller.scrollLeft;
+      const next: ScrollHintState = {
+        overflows,
+        atStart: !overflows || left <= 1,
+        atEnd: !overflows || left >= slack - 1,
+        headHeight: headHeight || hintSlot.get().headHeight,
+      };
+      const prev = hintSlot.get();
+      hintSlot.set(next);
+      if (
+        prev.overflows === next.overflows && prev.atStart === next.atStart
+        && prev.atEnd === next.atEnd && prev.headHeight === next.headHeight
+        && view.hasAttribute("data-measured")
+      ) return;
+      applyHint(view, next);
+    };
+
+    /** The one place hint state becomes DOM, shared by render and the live sync. */
+    const applyHint = (view: HTMLElement, hint: ScrollHintState): void => {
+      view.setAttribute("data-measured", "true");
+      const flag = (name: string, on: boolean): void => {
+        if (on) view.setAttribute(name, "true"); else view.removeAttribute(name);
+      };
+      flag("data-overflow-x", hint.overflows);
+      flag("data-at-start", hint.atStart);
+      flag("data-at-end", hint.atEnd);
+      if (hint.headHeight > 0) view.style.setProperty("--rui-dg-head-h", `${hint.headHeight}px`);
+      const scroller = view.querySelector<HTMLElement>(".rui-data-grid-scroll");
+      // A scroll port that can only be reached with a pointer fails WCAG 2.1.1;
+      // making it focusable lets the arrow keys scroll it. Only while it actually
+      // overflows, so a grid that fits adds no stray tab stop.
+      if (!scroller) return;
+      if (hint.overflows) scroller.setAttribute("tabindex", "0");
+      else scroller.removeAttribute("tabindex");
+    };
+
+    /**
+     * Freeze the columns at the widths they are currently rendered at and switch
+     * the table to fixed layout. Called at the START of a resize interaction, not
+     * on load.
+     *
+     * Doing it on load looked tidier and was wrong twice over: the first paint
+     * happens before the webfont has swapped in, so every column was measured
+     * against the fallback face and came out a few pixels narrow — enough to
+     * truncate "Hibernating" in a column that had always fit — and it imposed a
+     * layout change on grids nobody ever resizes. Measuring on the first drag
+     * instead means the numbers come from a settled layout, and the flip is
+     * invisible because the widths it pins are the ones already on screen.
+     */
+    const freezeColumnWidths = (scope: Element): void => {
+      if (!fixedLayout) return;
+      const config = getColConfig();
+      const auto = { ...autoWidthSlot.get() };
+      let changed = false;
+      scope.querySelectorAll<HTMLElement>(
+        ".rui-data-grid-table > thead > tr:first-child > th[data-col-key]",
+      ).forEach((th) => {
+        const key = th.getAttribute("data-col-key") ?? "";
+        if (!key || config.widths[key] || auto[key]) return;
+        // Ceil, not round: half a pixel short of the content is a truncated cell.
+        const width = Math.ceil(th.getBoundingClientRect().width);
+        if (width <= 0) return;
+        auto[key] = `${width}px`;
+        changed = true;
+        const colEl = liveColEl(scope, key);
+        if (colEl) colEl.style.width = `${width}px`;
+      });
+      if (!changed) return;
+      autoWidthSlot.set(auto);
+      const grid = scope.closest(".rui-data-grid") ?? scope;
+      grid.setAttribute("data-fixed-layout", "true");
+      // The signature the header was built with no longer describes it.
+      grid.setAttribute(
+        "data-col-sig",
+        columnSignature(getColConfig(), effectiveCols(allCols, getColConfig())),
+      );
+    };
+
+    /**
+     * Paint one grid subtree. `scope` is explicit because the two callers mean
+     * different trees: a handler acts on the LIVE grid, while the end of `render`
+     * acts on the fresh copy it is about to hand to the reconciler. Resolving the
+     * render-time call through `liveScope` instead would fill the live tree and
+     * hand back an empty one — which the reconciler then faithfully applied,
+     * blanking every row.
+     */
+    const paint = (scope: Element, m: GridModel): void => {
       syncColumns(scope);
       const body = bodyOf(scope);
       if (body) buildRows(body, m);
@@ -918,7 +1336,29 @@ export const DataGrid: ComponentSpec = {
       applySelection(scope, m.selected);
       syncFooter(scope, m);
       syncStatus(scope, m);
+      // Measurement only means anything against a laid-out tree. During a render
+      // `scope` is the detached fresh copy, so the post-paint pass below owns it.
+      const view = scope.querySelector<HTMLElement>(".rui-data-grid-viewport");
+      if (view?.isConnected) {
+        syncStickyOffsets(scope);
+        syncScrollHint(view);
+      }
     };
+
+    const repaint = (origin: Element | null, m: GridModel = readModel()): void =>
+      paint(liveScope(origin), m);
+
+    /**
+     * Re-establish an OPEN column panel after a re-render, assigned by the column
+     * menu below when it exists.
+     *
+     * The panel is promoted into the top layer while open, and promotion lives in
+     * attributes the freshly-rendered tree does not carry (`popover`, the measured
+     * `style`) — so a re-render triggered by anything else, a five-second refetch
+     * included, dropped the panel out of the top layer and left it collapsed
+     * behind the table. Re-opening it after paint is what makes it survive.
+     */
+    let restoreColMenu: (() => void) | null = null;
 
     /* ---- writes ------------------------------------------------------- */
 
@@ -1011,7 +1451,28 @@ export const DataGrid: ComponentSpec = {
       style: SR_ONLY,
     }));
 
-    const tableWrap = el("div", { class: "rui-data-grid-scroll" });
+    /**
+     * A NON-scrolling frame around the scroll port.
+     *
+     * Everything that has to stay put while the columns scroll under it — the two
+     * scroll arrows, the column-settings button, the edge fades — is a child of
+     * this element rather than of the scroller. An absolutely-positioned child of
+     * a scroll container is positioned against its *content*, so the arrows used
+     * to travel out of view with the first column the moment you scrolled, which
+     * is precisely when they were needed.
+     */
+    const hint = hintSlot.get();
+    const viewport = el("div", {
+      class: "rui-data-grid-viewport",
+      "data-overflow-x": hint.overflows ? "true" : null,
+      "data-at-start": hint.atStart ? "true" : null,
+      "data-at-end": hint.atEnd ? "true" : null,
+      style: hint.headHeight > 0 ? `--rui-dg-head-h:${hint.headHeight}px` : null,
+    });
+    const tableWrap = el("div", {
+      class: "rui-data-grid-scroll",
+      tabindex: hint.overflows ? "0" : null,
+    });
     if (allowOverflow) {
       tableWrap.style.overflow = "visible";
       wrapper.style.overflowX = "auto";
@@ -1023,11 +1484,18 @@ export const DataGrid: ComponentSpec = {
     if (loading) table.setAttribute("aria-busy", "true");
     const caption = asString(props.caption);
     if (caption) table.append(el("caption", { class: "rui-data-grid-caption" }, [caption]));
+    table.append(buildColGroup(cols, getColConfig()));
 
     const thead = el("thead");
     const headRow = el("tr");
     if (selectable) {
-      const th = el("th", { class: "rui-data-grid-cell-select", scope: "col" });
+      const leadPinned = getColConfig().pinned.size > 0;
+      const th = el("th", {
+        class: "rui-data-grid-cell-select",
+        scope: "col",
+        "data-pinned": leadPinned ? "true" : null,
+        style: stickyStyle(LEAD_SELECT_KEY, leadPinned),
+      });
       const cb = el("input", {
         type: "checkbox",
         class: "rui-data-grid-checkbox",
@@ -1047,48 +1515,82 @@ export const DataGrid: ComponentSpec = {
       headRow.append(th);
     }
     if (showRowNumbers) {
+      const leadPinned = getColConfig().pinned.size > 0;
       headRow.append(el("th", {
         class: "rui-data-grid-cell-rownum",
         scope: "col",
+        "data-pinned": leadPinned ? "true" : null,
+        style: stickyStyle(LEAD_ROWNUM_KEY, leadPinned),
       }, ["#"]));
     }
 
     const config = getColConfig();
-    let pinnedOffset = 0;
     cols.forEach((col, c) => {
-      const th = buildColTh(col, c, config, pinnedOffset);
-      headRow.append(th);
-      if (config.pinned.has(col.key)) pinnedOffset += parsePx(config.widths[col.key] || col.width) || 150;
+      headRow.append(buildColTh(col, c, config, c === cols.length - 1));
     });
+    if (fixedLayout) headRow.append(fillerCell("th"));
 
-    // Column menu icon — sits as the last header cell
+    /*
+     * Column settings — an OVERLAY on the header, not a column of its own.
+     *
+     * It used to be a real `<th>` plus one empty `<td>` per row, which cost every
+     * grid a 32px column: `width: 100%` then had 32px less to share out, so the
+     * last column's cells were narrower than the header suggested and the whole
+     * table sat visibly off its own grid. As a `position: absolute` child of the
+     * (non-scrolling) viewport it takes part in no layout at all, stays put while
+     * the columns scroll under it, and only ever covers the header band — never a
+     * data cell. The header's last cell reserves room for it in CSS via
+     * `[data-col-menu]`, which under fixed layout does not change any width.
+     */
     if (columnMenuEnabled) {
-      const menuTh = el("th", {
-        class: "rui-data-grid-col-menu-cell",
-        scope: "col",
-      });
-      const menuWrap = el("div", { class: "rui-data-grid-col-menu-wrap" });
+      const menuWrap = el("div", { class: "rui-data-grid-col-menu" });
       const menuBtn = el("button", {
         type: "button",
         class: "rui-data-grid-col-menu-btn",
         "aria-label": "Column settings",
-        "aria-expanded": "false",
+        "aria-haspopup": "dialog",
+        "aria-expanded": colConfigPanelOpen.get() ? "true" : "false",
       });
       const gearIcon = renderIcon("sliders", { className: "rui-data-grid-col-menu-icon" });
-      if (gearIcon) menuBtn.append(gearIcon);
+      if (gearIcon) menuBtn.append(gearIcon); else menuBtn.textContent = "☰";
 
+      // Visibility is an ATTRIBUTE, not an inline `display`: the floating layer
+      // promotes this panel with the popover API, and `[popover]` is
+      // `display: none` until shown — an inline `display: none` would win and the
+      // panel would open into nothing.
       const panel = el("div", {
         class: "rui-data-grid-col-panel",
-        style: "display:none",
+        role: "dialog",
+        "aria-label": "Column settings",
+        "data-open": colConfigPanelOpen.get() ? "true" : "false",
       });
 
-      const closePanel = (): void => {
+      /**
+       * The live button + panel. On the popover path the panel is still a child
+       * of the menu; on the reparenting fallback the floating layer has moved it
+       * out of the grid entirely, so the last-known node is remembered instead of
+       * re-queried.
+       */
+      const findLive = (origin: Element | null): { btn: HTMLElement | null; panel: HTMLElement | null } => {
+        const menu = liveScope(origin).querySelector(".rui-data-grid-col-menu");
+        const inPlace = menu?.querySelector<HTMLElement>(".rui-data-grid-col-panel") ?? null;
+        const remembered = livePanelSlot.get();
+        const live = inPlace ?? (remembered?.isConnected ? remembered : null);
+        if (live) livePanelSlot.set(live);
+        return {
+          btn: menu?.querySelector<HTMLElement>(".rui-data-grid-col-menu-btn") ?? null,
+          panel: live,
+        };
+      };
+
+      const closePanel = (origin?: Element | null): void => {
         colConfigPanelOpen.set(false);
-        const liveWrap = wrapper.querySelector(".rui-data-grid-col-menu-wrap");
-        const livePanel = liveWrap?.querySelector(".rui-data-grid-col-panel") as HTMLElement | null;
-        const liveBtn = liveWrap?.querySelector(".rui-data-grid-col-menu-btn") as HTMLElement | null;
-        if (livePanel) livePanel.style.display = "none";
-        if (liveBtn) liveBtn.setAttribute("aria-expanded", "false");
+        const live = findLive(origin ?? null);
+        if (live.panel) {
+          closeFloating(live.panel);
+          live.panel.setAttribute("data-open", "false");
+        }
+        live.btn?.setAttribute("aria-expanded", "false");
       };
 
       const rebuildColPanel = (panelEl: HTMLElement): void => {
@@ -1104,6 +1606,10 @@ export const DataGrid: ComponentSpec = {
         resetBtn.onclick = (ev) => {
           ev.stopPropagation();
           colConfigSlot.set(initColumnConfig(allCols, null));
+          // Also forget the widths the grid measured for itself, so the table goes
+          // back to auto layout and re-derives them from the container it is in
+          // NOW rather than the one it was in when resizing first started.
+          autoWidthSlot.set({});
           if (persistKey) {
             try { localStorage.removeItem(`aktion-datagrid-${persistKey}`); } catch { /* noop */ }
           }
@@ -1115,7 +1621,7 @@ export const DataGrid: ComponentSpec = {
           class: "rui-data-grid-col-panel-close",
           "aria-label": "Close column settings",
         }, ["\u00D7"]);
-        closeBtn.onclick = (ev) => { ev.stopPropagation(); closePanel(); };
+        closeBtn.onclick = (ev) => { ev.stopPropagation(); closePanel(ev.currentTarget as Element); };
         actions.append(resetBtn, closeBtn);
         panelHead.append(actions);
         panelEl.append(panelHead);
@@ -1224,55 +1730,115 @@ export const DataGrid: ComponentSpec = {
         panelEl.append(list);
       };
 
+      const openPanel = (origin: Element | null): void => {
+        const live = findLive(origin);
+        if (!live.panel || !live.btn) return;
+        colConfigPanelOpen.set(true);
+        // `data-open` first: a hidden panel measures 0×0, which would defeat both
+        // the flip decision and the height cap in the floating layer.
+        live.panel.setAttribute("data-open", "true");
+        live.btn.setAttribute("aria-expanded", "true");
+        rebuildColPanel(live.panel);
+        // Promoted out of every clipping ancestor. The panel hangs off the header
+        // band of a scroll box inside (usually) an `overflow: hidden` card, so in
+        // place it was amputated on two counts.
+        openFloating(live.panel, {
+          anchor: live.btn,
+          side: "bottom",
+          align: "end",
+          offset: 4,
+          layer: "dropdown",
+          maxHeight: "viewport",
+        });
+      };
+
+      // Called after every paint: promotion is not expressible in the rendered
+      // tree, so an open panel has to be put back into the top layer once the
+      // reconciler has finished with it.
+      restoreColMenu = () => {
+        if (!colConfigPanelOpen.get()) return;
+        const live = findLive(null);
+        if (!live.panel || !live.btn) return;
+        if (isFloating(live.panel)) updateFloating(live.panel);
+        else openPanel(live.btn);
+      };
+
       menuBtn.onclick = (event) => {
         event.stopPropagation();
-        const isOpen = !colConfigPanelOpen.get();
-        colConfigPanelOpen.set(isOpen);
-        const live = (event.currentTarget as Element).closest(".rui-data-grid-col-menu-wrap");
-        const livePanel = live?.querySelector(".rui-data-grid-col-panel") as HTMLElement | null;
-        if (livePanel) {
-          livePanel.style.display = isOpen ? "" : "none";
-          (event.currentTarget as HTMLElement).setAttribute("aria-expanded", isOpen ? "true" : "false");
-        }
-        if (isOpen && livePanel) rebuildColPanel(livePanel);
+        const origin = event.currentTarget as Element;
+        if (colConfigPanelOpen.get()) closePanel(origin);
+        else openPanel(origin);
+      };
+      menuBtn.onkeydown = (event) => {
+        if (event.key !== "Escape" || !colConfigPanelOpen.get()) return;
+        event.stopPropagation();
+        closePanel(event.currentTarget as Element);
       };
       menuWrap.append(menuBtn);
 
       menuWrap.onmousedown = (ev) => ev.stopPropagation();
       panel.onclick = (ev) => ev.stopPropagation();
+      panel.onkeydown = (event) => {
+        if (event.key !== "Escape") return;
+        event.stopPropagation();
+        const live = findLive(event.currentTarget as Element);
+        closePanel(event.currentTarget as Element);
+        live.btn?.focus();
+      };
 
       const closeOnOutside = (event: MouseEvent): void => {
         if (!colConfigPanelOpen.get()) return;
         const path = event.composedPath?.() ?? [];
         for (const node of path) {
-          if (node instanceof Element && node.classList?.contains("rui-data-grid-col-menu-wrap")) return;
+          if (!(node instanceof Element)) continue;
+          // Both classes, because a promoted panel is no longer a descendant of
+          // the menu on the reparenting fallback path.
+          if (node.classList?.contains("rui-data-grid-col-menu")
+            || node.classList?.contains("rui-data-grid-col-panel")) return;
         }
         closePanel();
       };
       if (typeof document !== "undefined") {
         document.addEventListener("mousedown", closeOnOutside);
-        helpers.registerDisposer(() => document.removeEventListener("mousedown", closeOnOutside), "col-menu-outside");
+        helpers.registerDisposer(() => {
+          document.removeEventListener("mousedown", closeOnOutside);
+          closeFloating(livePanelSlot.get());
+        }, "col-menu-outside");
       }
 
+      // Built as part of the RENDER, not only on open. The rows are ordinary
+      // children, so the reconciler keeps them in step; building them only in the
+      // click handler meant the next re-render found a panel the fresh tree said
+      // was empty and dutifully emptied it.
+      rebuildColPanel(panel);
       menuWrap.append(panel);
-      menuTh.append(menuWrap);
-      headRow.append(menuTh);
+      viewport.append(menuWrap);
     }
 
     thead.append(headRow);
 
     if (cols.some((c) => c.filterable)) {
       const filters = filterSlot.get();
+      const leadPinned = config.pinned.size > 0;
       const filterRow = el("tr", { class: "rui-data-grid-filter-row" });
-      if (selectable) filterRow.append(el("td", { class: "rui-data-grid-cell-select" }));
-      if (showRowNumbers) filterRow.append(el("td", { class: "rui-data-grid-cell-rownum" }));
-      let filterPinOff = 0;
-      for (const col of cols) {
-        const isPinned = config.pinned.has(col.key);
-        filterRow.append(buildFilterTd(col, filters, isPinned, filterPinOff));
-        if (isPinned) filterPinOff += parsePx(config.widths[col.key] || col.width) || 150;
+      if (selectable) {
+        filterRow.append(el("td", {
+          class: "rui-data-grid-cell-select",
+          "data-pinned": leadPinned ? "true" : null,
+          style: stickyStyle(LEAD_SELECT_KEY, leadPinned),
+        }));
       }
-      if (columnMenuEnabled) filterRow.append(el("td", { class: "rui-data-grid-col-menu-cell" }));
+      if (showRowNumbers) {
+        filterRow.append(el("td", {
+          class: "rui-data-grid-cell-rownum",
+          "data-pinned": leadPinned ? "true" : null,
+          style: stickyStyle(LEAD_ROWNUM_KEY, leadPinned),
+        }));
+      }
+      for (const col of cols) {
+        filterRow.append(buildFilterTd(col, filters, config.pinned.has(col.key)));
+      }
+      if (fixedLayout) filterRow.append(fillerCell("td"));
       thead.append(filterRow);
     }
     table.append(thead);
@@ -1280,15 +1846,20 @@ export const DataGrid: ComponentSpec = {
     const tbody = el("tbody");
     table.append(tbody);
     tableWrap.append(table);
-    wrapper.append(tableWrap);
+    viewport.append(tableWrap);
 
-    // Scroll arrows for horizontal overflow
-    if (!allowOverflow) {
-      deferToPaint(() => {
-        const live = tableWrap.isConnected ? tableWrap : null;
-        if (live) installScrollArrows(live);
-      });
+    /*
+     * Scroll affordances. Rendered as part of the tree rather than appended after
+     * paint: the reconciler drops any live child the fresh tree does not also
+     * carry, so imperatively-added arrows survived exactly one render and then
+     * disappeared for good. Which edge (if either) is shown is pure CSS off the
+     * viewport's `data-at-start` / `data-at-end` flags.
+     */
+    if (scrollArrows && !allowOverflow) {
+      viewport.append(buildScrollArrow("left"), buildScrollArrow("right"));
     }
+
+    wrapper.append(viewport);
 
     const model = readModel();
 
@@ -1334,25 +1905,60 @@ export const DataGrid: ComponentSpec = {
       wrapper.append(footer);
     }
 
-    repaint(null, model);
+    paint(wrapper, model);
+
+    /*
+     * Everything that needs a laid-out tree.
+     *
+     * On the first render this very `viewport` is the one that gets mounted; on
+     * every later one the reconciler kept the previous node and threw this copy
+     * away — hence the instance slot, which is also what lets the observer
+     * survive (and be disconnected) across re-renders.
+     */
+    deferToPaint(() => {
+      const live = viewport.isConnected ? viewport : liveViewSlot.get();
+      if (!live?.isConnected) return;
+      liveViewSlot.set(live);
+      syncStickyOffsets(live.closest(".rui-data-grid") ?? live);
+      syncScrollHint(live);
+      restoreColMenu?.();
+
+      const scroller = live.querySelector<HTMLElement>(".rui-data-grid-scroll");
+      if (!scroller) return;
+      // A property assignment, not `addEventListener`: the reconciler copies
+      // `onscroll` from the fresh node onto the kept one, so re-renders replace
+      // the handler instead of stacking a new one on every tick.
+      scroller.onscroll = () => syncScrollHint(live);
+
+      const existing = observerSlot.get();
+      if (existing && existing.node !== live) {
+        existing.ro.disconnect();
+        observerSlot.set(null);
+      }
+      if (observerSlot.get() || typeof ResizeObserver === "undefined") return;
+      const ro = new ResizeObserver(() => syncScrollHint(live));
+      try {
+        ro.observe(scroller);
+        const table = live.querySelector(".rui-data-grid-table");
+        // The port and the content resize independently: a narrowed pane changes
+        // one, a new column changes the other, and either can start or stop the
+        // overflow.
+        if (table) ro.observe(table);
+      } catch { /* detached — the scroll handler still keeps up */ }
+      observerSlot.set({ ro, node: live });
+      helpers.registerDisposer(() => {
+        ro.disconnect();
+        observerSlot.set(null);
+      }, "rui-data-grid-observer");
+    });
+
     return wrapper;
   },
 };
 
 /* ----------------------------------------------------------------------- *
- * DataGrid helpers — cell styles, pixel parsing
+ * DataGrid helpers — pixel parsing
  * ----------------------------------------------------------------------- */
-
-function buildCellStyle(width: string, pinned: boolean, pinnedOffset: number): string | null {
-  const parts: string[] = [];
-  if (width) {
-    parts.push(`width:${width};max-width:${width};min-width:${width}`);
-  }
-  if (pinned) {
-    parts.push(`position:sticky;left:${pinnedOffset}px`);
-  }
-  return parts.length > 0 ? parts.join(";") : null;
-}
 
 function parsePx(value: string): number {
   if (!value) return 0;

@@ -347,6 +347,25 @@ export function isComponentNode(value: unknown): boolean {
   return kind === "Component" || kind === "UserComponent";
 }
 
+/**
+ * The `Col(...)` nodes of a table, with the holes taken out.
+ *
+ * A conditional column is the obvious way to write "only show Options to someone
+ * who can use them":
+ *
+ *   Table([Col("Name", names), canEdit ? Col("", ids, …) : null])
+ *
+ * The `null` reached the column readers as a real array entry, and the first
+ * `col.args` read threw a TypeError — so the whole table rendered as
+ * `[render error in Table]` rather than as a table with one fewer column. Both
+ * table components funnel their `columns` prop through here.
+ */
+export function asColumnNodes<T extends { args?: unknown[] }>(raw: unknown): T[] {
+  return asArray<unknown>(raw).filter(
+    (node): node is T => node !== null && node !== undefined && typeof node === "object",
+  );
+}
+
 /** Subset of `RenderHelpers` the table cell builder needs. */
 export interface CellRenderHelpers {
   renderNode: (node: unknown) => Node;

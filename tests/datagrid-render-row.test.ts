@@ -103,8 +103,8 @@ describe("DataGrid pinned filter row cells", () => {
   });
 });
 
-describe("DataGrid menu cell is sticky right", () => {
-  it("menu header cell has rui-data-grid-col-menu-cell class for sticky positioning", async () => {
+describe("DataGrid column menu is an overlay, not a column", () => {
+  it("pins the button to the header without adding a cell to any row", async () => {
     const screen = render([
       ROWS,
       "$app(DataGrid([",
@@ -113,8 +113,21 @@ describe("DataGrid menu cell is sticky right", () => {
       "], { columnMenu: true }))",
     ].join("\n"));
     await settle();
-    const menuTh = screen.shadowRoot.querySelector("th.rui-data-grid-col-menu-cell") as HTMLElement;
-    expect(menuTh).toBeTruthy();
+    const root = screen.shadowRoot;
+    // The button lives in the non-scrolling viewport, so it survives a sideways
+    // scroll and costs the table no width.
+    const menu = root.querySelector(".rui-data-grid-viewport > .rui-data-grid-col-menu");
+    expect(menu).toBeTruthy();
+    expect(root.querySelector(".rui-data-grid-col-menu-btn")).toBeTruthy();
+    expect(root.querySelector(".rui-data-grid")!.getAttribute("data-col-menu")).toBe("true");
+    // Two columns in, two cells out — the menu is not one of them.
+    expect(root.querySelectorAll(".rui-data-grid-table > thead > tr:first-child > th")).toHaveLength(2);
+    const firstRow = root.querySelector(".rui-data-grid-table > tbody > tr")!;
+    expect(firstRow.querySelectorAll("td")).toHaveLength(2);
+    // And the reserve for the button is charged to the header cell only.
+    expect(
+      root.querySelector('.rui-data-grid-table > thead th[data-last="true"]'),
+    ).toBeTruthy();
   });
 });
 
@@ -150,11 +163,16 @@ describe("DataGrid column menu close button", () => {
     const menuBtn = screen.shadowRoot.querySelector(".rui-data-grid-col-menu-btn") as HTMLElement;
     menuBtn.click();
     await settle();
+    // Open/closed is an attribute, not an inline display: the floating layer
+    // promotes the panel with the popover API, which owns `display`.
     const panel = screen.shadowRoot.querySelector(".rui-data-grid-col-panel") as HTMLElement;
-    expect(panel.style.display).not.toBe("none");
+    expect(panel.getAttribute("data-open")).toBe("true");
     const closeBtn = screen.shadowRoot.querySelector(".rui-data-grid-col-panel-close") as HTMLElement;
     closeBtn.click();
     await settle();
-    expect(panel.style.display).toBe("none");
+    expect(panel.getAttribute("data-open")).toBe("false");
+    expect(
+      screen.shadowRoot.querySelector(".rui-data-grid-col-menu-btn")!.getAttribute("aria-expanded"),
+    ).toBe("false");
   });
 });

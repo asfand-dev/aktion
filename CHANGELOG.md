@@ -7,6 +7,61 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-08-13
 
+### DataGrid Column Tooling — Corrections
+
+The column menu, drag-resize and scroll arrows added earlier today each worked in
+isolation but interfered with the table around them. This pass reworks how all
+three attach to the grid.
+
+- **Breaking (visual):** the column-settings button is no longer a table column.
+  It overlays the top-right of the header instead, so it costs the table no width,
+  the last column's cells are as wide as its header again, and every row is one
+  cell shorter. A stylesheet that targeted `.rui-data-grid-col-menu-cell` should
+  target `.rui-data-grid-col-menu` (the overlay) instead, and `th:last-child` /
+  `td:last-child` rules now land on the last real column — new `[data-last="true"]`
+  attributes are available on both the header and body cells of that column.
+- Fixed drag-resize moving the wrong thing. Widths are now declared once in a
+  `<colgroup>` and the table switches to a fixed layout on the first drag, so a
+  narrowed column truncates (with an ellipsis for plain text; a clean clip for a
+  cell built out of components). Previously the width was written onto every body
+  cell under the default auto layout, where the content's own minimum width wins:
+  the column refused to shrink and its text ran across the neighbouring cell.
+  As a side-effect the filter row now resizes with its column instead of skewing
+  out of line, and the grid keeps its column widths while data changes.
+- A `resizable` grid ends every row with one empty, `aria-hidden`,
+  `role="presentation"` filler cell. It absorbs whatever width the columns do not
+  use, which is what keeps a drag exact — without it, fixed layout shares the
+  leftover space out over every column, so narrowing one widened all the others.
+  It is zero-width whenever the columns already fill the grid.
+- Column resizing is now operable by keyboard (focus a divider, then arrow keys,
+  or Home to auto-fit) and by touch, and no longer breaks on a column whose header
+  contains a quote.
+- Fixed the scroll arrows disappearing for good after any unrelated re-render, and
+  the arrows travelling out of view exactly when they were needed. They are now
+  part of the rendered tree and anchored to a non-scrolling frame around the
+  scroll port.
+- Redesigned the scroll hint: a 20px chevron in the header band at each end that
+  has content behind it, plus a soft fade at that edge. It no longer sits on top of
+  any data cell. New `scrollArrows` prop (default `true`) turns it off.
+- The scroll port is now keyboard-focusable while it overflows, so the columns can
+  be reached with the arrow keys and not only with a pointer (WCAG 2.1.1).
+- Fixed the column-settings panel being clipped by the grid's own scroll box (and
+  by any `overflow: hidden` card around it). It is promoted out of every clipping
+  ancestor like every other menu in the library, and closes on Escape.
+- Fixed typing in a column filter losing the caret after the first character: the
+  header was rebuilt on every repaint, which replaced the input being typed into.
+- Fixed a column added after the first render never appearing, and a stale saved
+  layout being able to keep a column that no longer exists.
+- Fixed pinned columns overlapping each other, and sliding underneath the
+  selection checkbox / row-number cells. Offsets are measured from the live header
+  rather than guessed at 150px per column.
+- Fixed `Table` and `DataGrid` failing to render at all when a column was
+  conditional — `permitted ? Col(...) : null` now simply omits that column.
+- The `vision` theme now dresses `DataGrid` the way it already dressed `Table`
+  (white header cell, navy uppercase label, hairline rows, pale-blue row hover),
+  and styles the new column-menu button, settings panel and scroll chevrons in its
+  own idiom. Apps no longer need to restate the head treatment themselves.
+
 ### DataGrid UX Refinements
 
 - Fixed pinned cells on striped and selected rows showing content bleed-through during horizontal scrolling. Pinned cells now use opaque backgrounds instead of semi-transparent tints, so scrolled content behind them is fully hidden.

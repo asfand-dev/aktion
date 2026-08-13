@@ -5,7 +5,7 @@
 
 import type { ComponentSpec } from "../types.js";
 import {
-  el, asArray, asString, asBoolean, asNumber, renderIcon, fillTableCell,
+  el, asArray, asColumnNodes, asString, asBoolean, asNumber, renderIcon, fillTableCell,
   isComponentNode, sanitiseHref, sanitiseCssLength, spacingCssValue, SPACING_TOKENS,
 } from "../utils.js";
 import { renderInlineSparkline } from "./patterns.js";
@@ -93,7 +93,7 @@ export const Table: ComponentSpec = {
     { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`) applied to every `number`/`currency`/`date` column that does not set its own `locale` — an invoice table formats in the customer's locale, not the browser's." },
   ],
   render: (_node, props, helpers) => {
-    const cols = asArray<{ args?: unknown[] }>(props.columns);
+    const cols = asColumnNodes<{ args?: unknown[] }>(props.columns);
     const density = asString(props.density, "comfortable");
     const striped = asBoolean(props.striped);
     const loading = asBoolean(props.loading);
