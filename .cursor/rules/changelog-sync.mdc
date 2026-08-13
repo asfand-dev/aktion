@@ -1,0 +1,86 @@
+---
+description: Keep CHANGELOG.md up to date whenever code changes are made
+globs:
+alwaysApply: true
+---
+
+# Keep CHANGELOG.md in sync with code changes
+
+`CHANGELOG.md` is the public-facing record of every notable change in this
+project. It is written in plain English for the open-source community — not
+for internal developers — so entries must be clear, concise, and
+non-technical where possible.
+
+## Format
+
+Each entry is grouped under a **date heading** (`## YYYY-MM-DD`) and
+contains a short **section title** (`### Title`) summarising the theme of
+the changes, followed by bullet points describing what was added, changed,
+or fixed.
+
+```markdown
+## 2026-08-13
+
+### Short Descriptive Title
+
+- Added a new `Foo` component for displaying bar charts.
+- Fixed a bug where clicking "Save" did nothing on the settings page.
+- Updated the `corporate` theme colours for better contrast.
+```
+
+## Rules
+
+1. **Every notable change gets a changelog entry.** If your change is
+   user-facing — a new feature, a bug fix, a breaking change, a removed
+   feature, or a significant refactor — add it to `CHANGELOG.md` in the
+   same commit.
+
+2. **Use today's date.** Add your entry under today's date heading. If the
+   heading already exists, append to it. If not, create a new one at the
+   **top** of the file (below the introductory paragraph).
+
+3. **Write in plain English.** Describe *what changed and why it matters*,
+   not *which files were edited*. Avoid jargon. The audience is an
+   open-source user reading the changelog to decide whether to upgrade.
+
+4. **Keep entries concise.** One to two sentences per bullet. Link to
+   issues or PRs if helpful, but the bullet should stand on its own.
+
+5. **Group related changes.** If a single effort touched multiple things
+   (e.g. a new component plus its documentation), combine them under one
+   descriptive section title rather than listing each file change.
+
+6. **Call out breaking changes.** Start the bullet with **Breaking:** if
+   the change requires users to update their code.
+
+7. **Skip internal-only changes.** Pure refactors with no user-visible
+   effect, lockfile-only updates, CI config tweaks, and test-only changes
+   do not need a changelog entry unless they fix a user-reported issue.
+
+## What counts as "notable"
+
+| Change type | Add to changelog? |
+|---|---|
+| New component, prop, builtin, or theme | Yes |
+| Bug fix affecting user behaviour | Yes |
+| Breaking change (renamed API, removed feature, changed default) | Yes — mark as **Breaking** |
+| Security fix | Yes |
+| Documentation improvement (new page, major rewrite) | Yes, briefly |
+| Version bump / release | Yes (note the version) |
+| Dependency upgrade (user-visible, e.g. Vite major version) | Yes |
+| Internal refactor with no visible effect | No |
+| Test-only changes | No |
+| Lockfile-only updates | No |
+| CI / build config tweaks | No |
+
+## Don't
+
+- Don't forget to update `CHANGELOG.md` — it is the first place users and
+  contributors look to understand what changed.
+- Don't write entries in developer-speak. "Refactored the morph reconciler's
+  attribute sync pass" means nothing to a user — say "Fixed open menus
+  closing unexpectedly during re-renders" instead.
+- Don't duplicate the git commit message verbatim. The changelog is a
+  curated summary, not a commit log.
+- Don't backfill entries for old commits. Only document changes as they
+  happen.
