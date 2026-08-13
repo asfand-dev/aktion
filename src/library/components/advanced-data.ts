@@ -66,6 +66,16 @@ interface ColDef {
   headerTooltip: string;
   /** This column's formatter, bound to its own `currency`. */
   fmt: (value: unknown, format: string) => string;
+  /** Col-level initially-hidden flag. */
+  initiallyHidden: boolean;
+  /** Col-level pin position (`"left"` or `""`). */
+  pinned: string;
+  /** Col-level resize override (true/false/undefined for grid default). */
+  resizable: boolean | undefined;
+  /** CSS min-width for resize, already sanitised. */
+  minWidth: string;
+  /** CSS max-width for resize, already sanitised. */
+  maxWidth: string;
 }
 
 function readDataGridCols(raw: unknown): ColDef[] {
@@ -74,6 +84,7 @@ function readDataGridCols(raw: unknown): ColDef[] {
     const header = asString(args[0]);
     const currency = currencyCode(args[8]);
     const rawWrap = args[10];
+    const rawResizable = args[15];
     return {
       header,
       values: asArray<unknown>(args[1]),
@@ -90,6 +101,11 @@ function readDataGridCols(raw: unknown): ColDef[] {
       // Filtering, sorting and the CSV export all read through this, so a money
       // column exports and sorts on exactly the string the user can see.
       fmt: (value: unknown, format: string): string => formatCell(value, format, currency),
+      initiallyHidden: asBoolean(args[13]),
+      pinned: asString(args[14]) === "left" ? "left" : "",
+      resizable: rawResizable === undefined || rawResizable === null ? undefined : asBoolean(rawResizable),
+      minWidth: sanitiseCssLength(args[16], ""),
+      maxWidth: sanitiseCssLength(args[17], ""),
     };
   });
 }
@@ -182,6 +198,141 @@ interface GridModel {
   selected: Set<string>;
 }
 
+/* ----------------------------------------------------------------------- *
+ * Persistence — read / write column configuration to localStorage
+ * ----------------------------------------------------------------------- */
+
+const STORAGE_VERSION = 1;
+
+interface PersistedGridConfig {
+  v: number;
+  order?: string[];
+  hidden?: string[];
+  pinned?: string[];
+  widths?: Record<string, string>;
+}
+
+function readPersistedConfig(key: string): PersistedGridConfig | null {
+  try {
+    const raw = localStorage.getItem(`aktion-datagrid-${key}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedGridConfig;
+    if (!parsed || typeof parsed !== "object" || parsed.v !== STORAGE_VERSION) return null;
+    return parsed;
+  } catch { return null; }
+}
+
+function persistConfig(key: string, config: PersistedGridConfig): void {
+  try {
+    localStorage.setItem(`aktion-datagrid-${key}`, JSON.stringify(config));
+  } catch { /* storage full or blocked */ }
+}
+
+/* ----------------------------------------------------------------------- *
+ * Column configuration — ordering, visibility, pinning, widths
+ * ----------------------------------------------------------------------- */
+
+interface ColumnConfig {
+  order: string[];
+  hidden: Set<string>;
+  pinned: Set<string>;
+  widths: Record<string, string>;
+}
+
+/** Merge column spec defaults with user overrides and optional persisted state. */
+function initColumnConfig(
+  cols: ColDef[],
+  persisted: PersistedGridConfig | null,
+): ColumnConfig {
+  const defaultOrder = cols.map((c) => c.key);
+  const config: ColumnConfig = {
+    order: defaultOrder,
+    hidden: new Set(cols.filter((c) => c.initiallyHidden).map((c) => c.key)),
+    pinned: new Set(cols.filter((c) => c.pinned === "left").map((c) => c.key)),
+    widths: {},
+  };
+  for (const c of cols) { if (c.width) config.widths[c.key] = c.width; }
+  if (!persisted) return config;
+  if (persisted.order) {
+    const colKeys = new Set(defaultOrder);
+    const validOrder = persisted.order.filter((k) => colKeys.has(k));
+    const missing = defaultOrder.filter((k) => !validOrder.includes(k));
+    config.order = [...validOrder, ...missing];
+  }
+  if (persisted.hidden) config.hidden = new Set(persisted.hidden.filter((k) => cols.some((c) => c.key === k)));
+  if (persisted.pinned) config.pinned = new Set(persisted.pinned.filter((k) => cols.some((c) => c.key === k)));
+  if (persisted.widths) {
+    for (const [k, v] of Object.entries(persisted.widths)) {
+      const sanitised = sanitiseCssLength(v, "");
+      if (sanitised && cols.some((c) => c.key === k)) config.widths[k] = sanitised;
+    }
+  }
+  return config;
+}
+
+/** Produce the display-order list of visible columns, pinned first. */
+function effectiveCols(cols: ColDef[], config: ColumnConfig): ColDef[] {
+  const byKey = new Map(cols.map((c) => [c.key, c]));
+  return config.order
+    .filter((k) => !config.hidden.has(k) && byKey.has(k))
+    .map((k) => byKey.get(k)!);
+}
+
+function configToStorage(config: ColumnConfig): PersistedGridConfig {
+  return {
+    v: STORAGE_VERSION,
+    order: config.order,
+    hidden: Array.from(config.hidden),
+    pinned: Array.from(config.pinned),
+    widths: config.widths,
+  };
+}
+
+/* ----------------------------------------------------------------------- *
+ * Scroll arrows — overlay buttons for horizontal scrollability
+ * ----------------------------------------------------------------------- */
+
+function installScrollArrows(scrollEl: HTMLElement): void {
+  const left = el("button", {
+    type: "button",
+    class: "rui-data-grid-scroll-arrow rui-data-grid-scroll-arrow-left",
+    "aria-label": "Scroll left",
+    "aria-hidden": "true",
+    tabindex: "-1",
+  });
+  const lIcon = renderIcon("chevron-left", { className: "rui-data-grid-scroll-arrow-icon" });
+  if (lIcon) left.append(lIcon); else left.textContent = "‹";
+
+  const right = el("button", {
+    type: "button",
+    class: "rui-data-grid-scroll-arrow rui-data-grid-scroll-arrow-right",
+    "aria-label": "Scroll right",
+    "aria-hidden": "true",
+    tabindex: "-1",
+  });
+  const rIcon = renderIcon("chevron-right", { className: "rui-data-grid-scroll-arrow-icon" });
+  if (rIcon) right.append(rIcon); else right.textContent = "›";
+
+  const STEP = 200;
+  left.onclick = () => scrollEl.scrollBy({ left: -STEP, behavior: "smooth" });
+  right.onclick = () => scrollEl.scrollBy({ left: STEP, behavior: "smooth" });
+
+  scrollEl.append(left, right);
+
+  const sync = (): void => {
+    const { scrollLeft, scrollWidth, clientWidth } = scrollEl;
+    const overflows = scrollWidth > clientWidth + 1;
+    left.style.display = overflows && scrollLeft > 1 ? "" : "none";
+    right.style.display = overflows && scrollLeft < scrollWidth - clientWidth - 1 ? "" : "none";
+  };
+  sync();
+  scrollEl.addEventListener("scroll", sync, { passive: true });
+  if (typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(sync);
+    ro.observe(scrollEl);
+  }
+}
+
 export const DataGrid: ComponentSpec = {
   name: "DataGrid",
   description:
@@ -194,6 +345,10 @@ export const DataGrid: ComponentSpec = {
     "(string[]) and `$page` (number) when the host needs to read or drive " +
     "them, or use `onSort` / `onSelectionChange` for server-side work. " +
     "Use `loading` / `error` for query states. " +
+    "Set `columnMenu=true` to let the user hide, reorder, and pin columns. " +
+    "Set `resizable=true` to let the user drag column borders to resize. " +
+    "Pass `persistKey` to save the user's column layout to localStorage. " +
+    "Set `wrapCells=false` for single-line cells with ellipsis + hover tooltip. " +
     "Use INSTEAD of `Table` when you need any of those interactions.",
   props: [
     { name: "columns", type: "Col[]", description: "Columns; pass sortable=true / filterable=true on each Col." },
@@ -222,24 +377,30 @@ export const DataGrid: ComponentSpec = {
     { name: "onSelectionChange", type: "callable", optional: true, description: "Callable fired with the array of selected row ids" },
     { name: "perPageOptions", type: "number[]", optional: true, description: "Page sizes offered in a footer dropdown, e.g. [20, 50, 100]" },
     { name: "onPerPageChange", type: "callable", optional: true, description: "Callable fired with the newly chosen page size" },
+    // Slots 26–33: advanced column management features. All optional.
+    { name: "persistKey", type: "string", optional: true, description: "localStorage key — when set, column widths, order, visibility, and pinning survive page refreshes. Each table should use a unique key." },
+    { name: "resizable", type: "boolean", optional: true, description: "Let the user drag column header borders to resize columns. Double-click a handle to auto-fit." },
+    { name: "columnMenu", type: "boolean", optional: true, description: "Show a column settings button for hiding, reordering, and pinning columns." },
+    { name: "globalSearch", type: "string", optional: true, description: "Global search term that filters across all columns — bind a $variable for two-way control." },
+    { name: "onGlobalSearch", type: "callable", optional: true, description: "Callable fired with the search term when the global search input changes." },
+    { name: "wrapCells", type: "boolean", optional: true, description: "Default cell content wrapping. `false` = single line with ellipsis and hover tooltip; `true` = allow wrapping. Per-column `Col(wrap:)` overrides." },
+    { name: "rowNumbers", type: "boolean", optional: true, description: "Show a leading row-number column." },
+    { name: "highlightOnHover", type: "boolean", optional: true, description: "Highlight rows on mouse hover (default true)." },
   ],
   render: (node, props, helpers) => {
-    const cols = readDataGridCols(props.columns);
-    const rowCount = Math.max(0, ...cols.map((c) => c.values.length));
+    const allCols = readDataGridCols(props.columns);
+    const rowCount = Math.max(0, ...allCols.map((c) => c.values.length));
     const rowIds = asArray<unknown>(props.rowIds);
     const idFor = (rowIdx: number): string => asString(rowIds[rowIdx] ?? rowIdx);
 
-    // Two-way bindings are read from the DECLARED slot index — scanning
-    // argMeta for the first `$`-bound arg would write to the wrong prop.
     const sortStateName = node.argMeta?.[3]?.stateRef;
     const selectedStateName = node.argMeta?.[4]?.stateRef;
     const pageStateName = node.argMeta?.[6]?.stateRef;
     const perPageStateName = node.argMeta?.[7]?.stateRef;
+    const globalSearchStateName = node.argMeta?.[29]?.stateRef;
 
     const selectable = asBoolean(props.selectable) || selectedStateName !== undefined;
     const allowOverflow = asBoolean(props.allowOverflow);
-    // A sticky header needs a scrollport; `allowOverflow` deliberately removes
-    // it, so the two cannot both be on.
     const stickyHeader = allowOverflow
       ? false
       : (props.stickyHeader === undefined ? true : asBoolean(props.stickyHeader));
@@ -254,15 +415,43 @@ export const DataGrid: ComponentSpec = {
       .map((v) => Math.floor(asNumber(v, 0)))
       .filter((n) => n > 0);
 
-    // Local UI state lives in instance slots (not closures) so it survives an
-    // unrelated re-render. Each slot also acts as the fallback for its prop:
-    // `sortable` / `selectable` / pagination used to render controls that did
-    // nothing at all unless the author happened to bind a `$variable`.
+    // New advanced feature props
+    const persistKey = asString(props.persistKey);
+    const gridResizable = asBoolean(props.resizable);
+    const columnMenuEnabled = asBoolean(props.columnMenu);
+    const showRowNumbers = asBoolean(props.rowNumbers);
+    const highlightOnHover = props.highlightOnHover === undefined ? true : asBoolean(props.highlightOnHover);
+    const wrapCellsProp = props.wrapCells;
+    const wrapCellsDefault: string | null =
+      wrapCellsProp === undefined || wrapCellsProp === null
+        ? null
+        : asBoolean(wrapCellsProp) ? "true" : "false";
+
+    // --- instance state -------------------------------------------------
     const filterSlot = helpers.useInstanceState<Record<string, string>>("filters", {});
     const sortSlot = helpers.useInstanceState<SortInput | null>("sort", null);
     const selectedSlot = helpers.useInstanceState<string[] | null>("selected", null);
     const pageSlot = helpers.useInstanceState<number | null>("page", null);
     const perPageSlot = helpers.useInstanceState<number | null>("perPage", null);
+    const globalSearchSlot = helpers.useInstanceState<string>("globalSearch", "");
+
+    const persisted = persistKey ? readPersistedConfig(persistKey) : null;
+    const colConfigSlot = helpers.useInstanceState<ColumnConfig>(
+      "colConfig",
+      initColumnConfig(allCols, persisted),
+    );
+    const colConfigPanelOpen = helpers.useInstanceState<boolean>("colConfigOpen", false);
+
+    const getColConfig = (): ColumnConfig => colConfigSlot.get();
+    const updateColConfig = (patch: Partial<ColumnConfig>): void => {
+      const current = getColConfig();
+      const next = { ...current, ...patch };
+      colConfigSlot.set(next);
+      if (persistKey) persistConfig(persistKey, configToStorage(next));
+    };
+
+    /** Visible columns in display order. */
+    const cols = effectiveCols(allCols, getColConfig());
 
     const readSort = (): { key: string; dir: "asc" | "desc" } => {
       const fromProps = props.sort && typeof props.sort === "object" ? props.sort as SortInput : null;
@@ -280,15 +469,21 @@ export const DataGrid: ComponentSpec = {
       const local = perPageStateName ? null : perPageSlot.get();
       return Math.max(1, Math.floor(asNumber(local ?? props.perPage, 20)));
     };
+    const readGlobalSearch = (): string => {
+      if (globalSearchStateName) return asString(props.globalSearch).trim().toLowerCase();
+      return (globalSearchSlot.get() || asString(props.globalSearch)).trim().toLowerCase();
+    };
 
     /** Recompute everything from props + the current local state. */
     const readModel = (): GridModel => {
       const filters = filterSlot.get();
       const { key: sortKey, dir: sortDir } = readSort();
+      const gSearch = readGlobalSearch();
       const indices: number[] = [];
       for (let r = 0; r < rowCount; r += 1) {
         let keep = true;
-        for (const c of cols) {
+        // Per-column filters
+        for (const c of allCols) {
           if (!c.filterable) continue;
           const term = (filters[c.key] ?? "").trim().toLowerCase();
           if (!term) continue;
@@ -297,10 +492,21 @@ export const DataGrid: ComponentSpec = {
             break;
           }
         }
+        // Global search: match against any column
+        if (keep && gSearch) {
+          let gMatch = false;
+          for (const c of allCols) {
+            if (c.fmt(c.values[r], c.format).toLowerCase().includes(gSearch)) {
+              gMatch = true;
+              break;
+            }
+          }
+          if (!gMatch) keep = false;
+        }
         if (keep) indices.push(r);
       }
       if (sortKey) {
-        const sortCol = cols.find((c) => c.key === sortKey);
+        const sortCol = allCols.find((c) => c.key === sortKey);
         if (sortCol && sortCol.sortable) {
           indices.sort((a, b) => {
             const cmp = compareCells(sortCol.values[a], sortCol.values[b], sortCol.format);
@@ -313,8 +519,6 @@ export const DataGrid: ComponentSpec = {
       const totalPages = Math.max(1, Math.ceil(total / perPage));
       const rawPageSrc = pageStateName ? props.page : (pageSlot.get() ?? props.page);
       const rawPage = Math.max(1, Math.floor(asNumber(rawPageSrc, 1)));
-      // Clamp: filtering down to 3 rows while the user sits on page 5 must not
-      // render an empty slice with a "Showing 81–100 of 143" footer.
       const page = Math.min(rawPage, totalPages);
       return {
         indices,
@@ -336,14 +540,10 @@ export const DataGrid: ComponentSpec = {
       "data-sticky-header": stickyHeader ? "true" : "false",
       "data-sticky-first": stickyFirst ? "true" : "false",
       "data-allow-overflow": allowOverflow ? "true" : null,
+      "data-highlight-hover": highlightOnHover ? "true" : "false",
+      "data-nowrap": wrapCellsDefault === "false" ? "true" : null,
     });
 
-    /**
-     * The grid this handler belongs to. `event.currentTarget` is always a live
-     * node, so `closest` finds the mounted grid even though the tree this
-     * closure was built in has been discarded. On first paint `wrapper` IS the
-     * live tree, which is why it is the fallback.
-     */
     const liveScope = (origin: Element | null | undefined): Element =>
       origin?.closest(".rui-data-grid") ?? wrapper;
 
@@ -352,9 +552,168 @@ export const DataGrid: ComponentSpec = {
 
     /* ---- builders (one per region, shared by render + live repaint) ---- */
 
+    const buildColTh = (col: ColDef, colIdx: number, config: ColumnConfig, pinnedOff: number): HTMLElement => {
+      const colWidth = config.widths[col.key] || col.width;
+      const isPinned = config.pinned.has(col.key);
+      const colResizable = col.resizable !== undefined ? col.resizable : gridResizable;
+      const th = el("th", {
+        scope: "col",
+        "data-col-key": col.key,
+        "data-align": col.align || null,
+        "data-sortable": col.sortable ? "true" : null,
+        "data-first": colIdx === 0 ? "true" : null,
+        "data-wrap": col.wrap,
+        "data-pinned": isPinned ? "true" : null,
+        title: col.headerTooltip || null,
+        style: buildCellStyle(colWidth, isPinned, pinnedOff),
+      });
+      if (col.sortable) {
+        const btn = el("button", { type: "button", class: "rui-data-grid-sort" });
+        btn.append(el("span", {}, [col.header]));
+        btn.onclick = (event) => writeSort(col.key, event.currentTarget as Element);
+        th.append(btn);
+      } else {
+        th.append(document.createTextNode(col.header));
+      }
+      if (colResizable) {
+        const handle = el("div", {
+          class: "rui-data-grid-resize-handle",
+          "data-resize-col": col.key,
+        });
+        const minW = parsePx(col.minWidth) || 50;
+        const maxW = parsePx(col.maxWidth) || 2000;
+        const colKey = col.key;
+
+        const applySizeToCells = (scope: Element, key: string, px: string): void => {
+          scope.querySelectorAll<HTMLElement>(
+            `.rui-data-grid-table tbody td[data-col-key="${key}"]`,
+          ).forEach((td) => {
+            td.style.width = px;
+            td.style.maxWidth = px;
+            td.style.minWidth = px;
+          });
+        };
+
+        handle.onmousedown = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const liveTh = (event.currentTarget as Element).parentElement as HTMLElement;
+          if (!liveTh) return;
+          const startX = event.clientX;
+          const startW = liveTh.getBoundingClientRect().width;
+          const liveHandle = event.currentTarget as HTMLElement;
+          liveHandle.classList.add("rui-data-grid-resize-active");
+          const onMove = (ev: MouseEvent): void => {
+            const delta = ev.clientX - startX;
+            const newW = Math.max(minW, Math.min(maxW, startW + delta));
+            const px = `${Math.round(newW)}px`;
+            liveTh.style.width = px;
+            liveTh.style.maxWidth = px;
+            liveTh.style.minWidth = px;
+            applySizeToCells(liveScope(liveTh), colKey, px);
+          };
+          const onUp = (): void => {
+            liveHandle.classList.remove("rui-data-grid-resize-active");
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+            const finalW = `${Math.round(liveTh.getBoundingClientRect().width)}px`;
+            const cfg = getColConfig();
+            updateColConfig({ widths: { ...cfg.widths, [colKey]: finalW } });
+          };
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+        };
+
+        handle.ondblclick = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const liveTh = (event.currentTarget as Element).parentElement as HTMLElement;
+          if (!liveTh) return;
+          const scope = liveScope(liveTh);
+          let maxContent = liveTh.scrollWidth;
+          scope.querySelectorAll<HTMLElement>(
+            `.rui-data-grid-table tbody td[data-col-key="${colKey}"]`,
+          ).forEach((td) => {
+            maxContent = Math.max(maxContent, td.scrollWidth);
+          });
+          const fitW = Math.max(minW, Math.min(maxW, maxContent + 8));
+          const px = `${fitW}px`;
+          liveTh.style.width = px;
+          liveTh.style.maxWidth = px;
+          liveTh.style.minWidth = px;
+          applySizeToCells(scope, colKey, px);
+          const cfg = getColConfig();
+          updateColConfig({ widths: { ...cfg.widths, [colKey]: px } });
+        };
+
+        th.append(handle);
+      }
+      return th;
+    };
+
+    const buildFilterTd = (col: ColDef, filters: Record<string, string>, isPinned: boolean, pinnedOff: number): HTMLElement => {
+      const td = el("td", {
+        "data-col-key": col.key,
+        "data-pinned": isPinned ? "true" : null,
+        style: isPinned ? `position:sticky;left:${pinnedOff}px` : null,
+      });
+      if (col.filterable) {
+        const input = el("input", {
+          type: "search",
+          class: "rui-data-grid-filter",
+          placeholder: `Filter ${col.header}`,
+          "aria-label": `Filter ${col.header}`,
+          value: valueAttr(filters[col.key]),
+        });
+        input.oninput = (event) => {
+          const target = event.currentTarget as HTMLInputElement;
+          filterSlot.set({ ...filterSlot.get(), [col.key]: target.value });
+          writePage(1);
+          repaint(target);
+        };
+        td.append(input);
+      }
+      return td;
+    };
+
+    const syncColumns = (scope: Element): void => {
+      const config = getColConfig();
+      const visCols = effectiveCols(allCols, config);
+
+      const headRow = scope.querySelector<HTMLElement>(".rui-data-grid-table > thead > tr:first-child");
+      if (headRow) {
+        headRow.querySelectorAll("th[data-col-key]").forEach((n) => n.remove());
+        const menuCell = headRow.querySelector(".rui-data-grid-col-menu-cell") as Element | null;
+        let pinnedOff = 0;
+        visCols.forEach((col, c) => {
+          const th = buildColTh(col, c, config, pinnedOff);
+          headRow.insertBefore(th, menuCell);
+          if (config.pinned.has(col.key)) pinnedOff += parsePx(config.widths[col.key] || col.width) || 150;
+        });
+      }
+
+      const filterRow = scope.querySelector<HTMLElement>(".rui-data-grid-filter-row");
+      if (filterRow) {
+        filterRow.querySelectorAll("td[data-col-key]").forEach((n) => n.remove());
+        const menuTd = columnMenuEnabled
+          ? filterRow.querySelector(".rui-data-grid-col-menu-cell") as Element | null
+          : null;
+        const filters = filterSlot.get();
+        let filterPinOff = 0;
+        for (const col of visCols) {
+          const isPinned = config.pinned.has(col.key);
+          filterRow.insertBefore(buildFilterTd(col, filters, isPinned, filterPinOff), menuTd);
+          if (isPinned) filterPinOff += parsePx(config.widths[col.key] || col.width) || 150;
+        }
+      }
+    };
+
     const buildRows = (target: HTMLElement, m: GridModel): void => {
       target.replaceChildren();
-      const span = (selectable ? 1 : 0) + Math.max(cols.length, 1);
+      const config = getColConfig();
+      const visCols = effectiveCols(allCols, config);
+      const leadCols = (selectable ? 1 : 0) + (showRowNumbers ? 1 : 0);
+      const span = leadCols + Math.max(visCols.length, 1) + (columnMenuEnabled ? 1 : 0);
       const placeholder = (extraClass: string, children: Array<Node | string>): void => {
         const tr = el("tr");
         tr.append(el("td", {
@@ -376,13 +735,11 @@ export const DataGrid: ComponentSpec = {
         }
         return;
       }
-      for (const r of m.visible) {
+      for (let vi = 0; vi < m.visible.length; vi += 1) {
+        const r = m.visible[vi]!;
         const id = idFor(r);
         const isSelected = m.selected.has(id);
         const tr = el("tr", {
-          // `rowIds` is what makes the reconciler MOVE a row instead of
-          // rewriting its cells — without it, sorting rewrites the record
-          // under a focused in-cell input.
           "data-rui-key": id,
           "data-row-id": id,
           "data-selected": isSelected ? "true" : null,
@@ -407,24 +764,39 @@ export const DataGrid: ComponentSpec = {
           cellTd.append(cb);
           tr.append(cellTd);
         }
-        // Reconstruct the row (header-keyed) once so each cell's `render` /
-        // `onClick` can read sibling columns regardless of the sort order (#11).
+        if (showRowNumbers) {
+          const numTd = el("td", { class: "rui-data-grid-cell-rownum" });
+          numTd.textContent = String((m.page - 1) * m.perPage + vi + 1);
+          tr.append(numTd);
+        }
         const rowObj: Record<string, unknown> = {};
-        for (const cc of cols) rowObj[cc.key] = cc.values[r];
-        cols.forEach((col, c) => {
+        for (const cc of allCols) rowObj[cc.key] = cc.values[r];
+
+        let pinnedOffset = 0;
+        visCols.forEach((col, c) => {
+          const colWidth = config.widths[col.key] || col.width;
+          const isPinned = config.pinned.has(col.key);
+          const cellWrap = col.wrap ?? wrapCellsDefault;
           const td = el("td", {
             "data-format": col.format,
             "data-align": col.align || null,
             "data-first": c === 0 ? "true" : null,
-            "data-wrap": col.wrap,
-            style: col.width ? `width:${col.width};max-width:${col.width};` : null,
+            "data-wrap": cellWrap,
+            "data-pinned": isPinned ? "true" : null,
+            style: buildCellStyle(colWidth, isPinned, pinnedOffset),
           });
+          td.setAttribute("data-col-key", col.key);
           fillTableCell(td, col, col.values[r], r, helpers, col.fmt, rowObj);
+          if (cellWrap === "false" && !col.render && !isComponentNode(col.values[r])) {
+            const text = td.textContent ?? "";
+            if (text) td.title = text;
+          }
           tr.append(td);
+          if (isPinned) pinnedOffset += parsePx(colWidth) || 150;
         });
+        if (columnMenuEnabled) tr.append(el("td", { class: "rui-data-grid-col-menu-cell" }));
         if (typeof props.onRowClick === "function") {
           tr.setAttribute("data-clickable", "true");
-          // A clickable row must be reachable without a mouse.
           tr.tabIndex = 0;
           const fire = (event: Event): boolean => {
             const target2 = event.target as Element | null;
@@ -442,11 +814,10 @@ export const DataGrid: ComponentSpec = {
       }
     };
 
-    /** Sort affordances: `aria-sort`, the active flag, and the arrow icon. */
     const syncHeader = (scope: Element, m: GridModel): void => {
       scope.querySelectorAll<HTMLElement>(".rui-data-grid-table thead th[data-col-key]").forEach((th) => {
         const key = th.getAttribute("data-col-key") ?? "";
-        const col = cols.find((c) => c.key === key);
+        const col = allCols.find((c) => c.key === key);
         if (!col?.sortable) return;
         const active = key === m.sortKey;
         if (active) th.setAttribute("data-active", "true"); else th.removeAttribute("data-active");
@@ -463,7 +834,6 @@ export const DataGrid: ComponentSpec = {
       });
     };
 
-    /** Row / select-all / bulk-bar state for an explicit selection set. */
     const applySelection = (scope: Element, selected: Set<string>): void => {
       let onPage = 0;
       let selectedOnPage = 0;
@@ -483,9 +853,6 @@ export const DataGrid: ComponentSpec = {
         const some = selectedOnPage > 0 && !every;
         all.checked = every;
         if (every) all.setAttribute("checked", ""); else all.removeAttribute("checked");
-        // `indeterminate` is a property, so morph cannot carry it across a
-        // re-render — `aria-checked="mixed"` is the part assistive tech reads
-        // and it survives as an attribute.
         all.indeterminate = some;
         all.setAttribute("aria-checked", some ? "mixed" : every ? "true" : "false");
         if (some) all.setAttribute("data-indeterminate", "true"); else all.removeAttribute("data-indeterminate");
@@ -495,9 +862,6 @@ export const DataGrid: ComponentSpec = {
         const count = selected.size;
         const label = bulk.querySelector(".rui-data-grid-bulk-count");
         if (label) label.textContent = `${count} selected`;
-        // The bar is always rendered so it can appear/disappear without a
-        // re-render; `display` is what actually hides it (the class sets
-        // `display: flex`, which beats the UA's `[hidden]` rule).
         bulk.hidden = count === 0;
         bulk.style.display = count === 0 ? "none" : "";
       }
@@ -512,7 +876,7 @@ export const DataGrid: ComponentSpec = {
         const end = Math.min(m.total, m.page * m.perPage);
         summary.textContent = m.total === 0 ? emptyLabel : `Showing ${start}–${end} of ${m.total}`;
       }
-      const buttons = footer.querySelector<HTMLElement>(".rui-data-grid-footer-buttons");
+      const buttons = scope.querySelector<HTMLElement>(".rui-data-grid-footer-buttons");
       if (buttons) {
         const paged = m.totalPages > 1;
         buttons.hidden = !paged;
@@ -534,10 +898,6 @@ export const DataGrid: ComponentSpec = {
       if (select && select.value !== String(m.perPage)) select.value = String(m.perPage);
     };
 
-    /**
-     * Filtering, sorting and paging all change what is on screen without any
-     * visible text saying so — this is the only thing that announces it.
-     */
     const syncStatus = (scope: Element, m: GridModel): void => {
       const region = scope.querySelector(".rui-data-grid-status");
       if (!region) return;
@@ -549,9 +909,9 @@ export const DataGrid: ComponentSpec = {
       if (region.textContent !== next) region.textContent = next;
     };
 
-    /** Repaint every derived region of the live grid from one model. */
     const repaint = (origin: Element | null, m: GridModel = readModel()): void => {
       const scope = liveScope(origin);
+      syncColumns(scope);
       const body = bodyOf(scope);
       if (body) buildRows(body, m);
       syncHeader(scope, m);
@@ -580,16 +940,11 @@ export const DataGrid: ComponentSpec = {
       if (selectedStateName) helpers.setState(selectedStateName, next);
       else selectedSlot.set(next);
       helpers.invoke(props.onSelectionChange, next);
-      // `next` (not the model) — a bound write is not visible in `props`
-      // until the re-render lands.
       applySelection(liveScope(origin), new Set(next));
     };
 
     /* ---- static structure -------------------------------------------- */
 
-    // Bulk-edit toolbar. Rendered whenever a toolbar was supplied and hidden
-    // while nothing is selected, so selecting a row can reveal it without a
-    // re-render (a bound `selectedIds` re-renders anyway).
     const toolbarChildren = asArray<unknown>(props.toolbar);
     if (toolbarChildren.length > 0) {
       const bar = el("div", { class: "rui-data-grid-bulk" });
@@ -600,20 +955,53 @@ export const DataGrid: ComponentSpec = {
       wrapper.append(bar);
     }
 
-    // Export-to-CSV button (VIII.5). Exports every filtered+sorted row (not
-    // just the current page), using the column headers + formatted values.
-    if (asBoolean(props.exportable)) {
-      const exportBar = el("div", { class: "rui-data-grid-toolbar" });
-      const btn = el("button", { type: "button", class: "rui-data-grid-export" });
-      const icon = renderIcon("download", { className: "rui-data-grid-export-icon" });
-      if (icon) btn.append(icon);
-      btn.append(el("span", {}, ["Export CSV"]));
-      btn.onclick = () => {
-        const csv = buildDataGridCsv(cols, readModel().indices);
-        downloadCsv(csv, asString(props.exportFilename, "data.csv") || "data.csv");
-      };
-      exportBar.append(btn);
-      wrapper.append(exportBar);
+    // Combined toolbar row: global search + export
+    const hasToolbar = asBoolean(props.exportable)
+      || typeof props.globalSearch === "string" || globalSearchStateName;
+    if (hasToolbar) {
+      const toolbarRow = el("div", { class: "rui-data-grid-toolbar" });
+
+      // Global search
+      if (typeof props.globalSearch === "string" || globalSearchStateName) {
+        const searchWrap = el("div", { class: "rui-data-grid-global-search" });
+        const searchIcon = renderIcon("magnifying-glass", { className: "rui-data-grid-search-icon" });
+        if (searchIcon) searchWrap.append(searchIcon);
+        const searchInput = el("input", {
+          type: "search",
+          class: "rui-data-grid-search-input",
+          placeholder: "Search all columns…",
+          "aria-label": "Search all columns",
+          value: valueAttr(readGlobalSearch()),
+        });
+        searchInput.oninput = (event) => {
+          const target = event.currentTarget as HTMLInputElement;
+          const term = target.value;
+          if (globalSearchStateName) helpers.setState(globalSearchStateName, term);
+          else globalSearchSlot.set(term);
+          helpers.invoke(props.onGlobalSearch, term);
+          writePage(1);
+          repaint(target);
+        };
+        searchWrap.append(searchInput);
+        toolbarRow.append(searchWrap);
+      }
+
+      const toolbarActions = el("div", { class: "rui-data-grid-toolbar-actions" });
+
+      if (asBoolean(props.exportable)) {
+        const btn = el("button", { type: "button", class: "rui-data-grid-export" });
+        const icon = renderIcon("download", { className: "rui-data-grid-export-icon" });
+        if (icon) btn.append(icon);
+        btn.append(el("span", {}, ["Export CSV"]));
+        btn.onclick = () => {
+          const csv = buildDataGridCsv(cols, readModel().indices);
+          downloadCsv(csv, asString(props.exportFilename, "data.csv") || "data.csv");
+        };
+        toolbarActions.append(btn);
+      }
+
+      toolbarRow.append(toolbarActions);
+      wrapper.append(toolbarRow);
     }
 
     wrapper.append(el("span", {
@@ -625,16 +1013,9 @@ export const DataGrid: ComponentSpec = {
 
     const tableWrap = el("div", { class: "rui-data-grid-scroll" });
     if (allowOverflow) {
-      // Overlays opened inside a cell (a row-actions menu, a Tooltip) are
-      // clipped by the scroll box on BOTH axes. Hand the horizontal scroll to
-      // the outer wrapper so the cell content has somewhere to go.
       tableWrap.style.overflow = "visible";
       wrapper.style.overflowX = "auto";
     } else {
-      // `stickyHeader` is documented default-true but a `position: sticky` th
-      // needs an ancestor that actually scrolls, and the stylesheet gives the
-      // scroll box no height. Cap it here (Table hardcodes 60vh for the same
-      // reason).
       const cap = sanitiseCssLength(props.maxHeight, stickyHeader ? "70vh" : "");
       if (cap) tableWrap.style.maxHeight = cap;
     }
@@ -665,61 +1046,233 @@ export const DataGrid: ComponentSpec = {
       th.append(cb);
       headRow.append(th);
     }
-    cols.forEach((col, c) => {
-      const th = el("th", {
+    if (showRowNumbers) {
+      headRow.append(el("th", {
+        class: "rui-data-grid-cell-rownum",
         scope: "col",
-        "data-col-key": col.key,
-        "data-align": col.align || null,
-        "data-sortable": col.sortable ? "true" : null,
-        "data-first": c === 0 ? "true" : null,
-        // `Col`'s width / wrap / headerTooltip apply in both grids — a prop that
-        // only works in one of two interchangeable components is a trap.
-        "data-wrap": col.wrap,
-        title: col.headerTooltip || null,
-        style: col.width ? `width:${col.width};max-width:${col.width};` : null,
-      });
-      if (col.sortable) {
-        const btn = el("button", { type: "button", class: "rui-data-grid-sort" });
-        btn.append(el("span", {}, [col.header]));
-        btn.onclick = (event) => writeSort(col.key, event.currentTarget as Element);
-        th.append(btn);
-      } else {
-        th.append(document.createTextNode(col.header));
-      }
+      }, ["#"]));
+    }
+
+    const config = getColConfig();
+    let pinnedOffset = 0;
+    cols.forEach((col, c) => {
+      const th = buildColTh(col, c, config, pinnedOffset);
       headRow.append(th);
+      if (config.pinned.has(col.key)) pinnedOffset += parsePx(config.widths[col.key] || col.width) || 150;
     });
+
+    // Column menu icon — sits as the last header cell
+    if (columnMenuEnabled) {
+      const menuTh = el("th", {
+        class: "rui-data-grid-col-menu-cell",
+        scope: "col",
+      });
+      const menuWrap = el("div", { class: "rui-data-grid-col-menu-wrap" });
+      const menuBtn = el("button", {
+        type: "button",
+        class: "rui-data-grid-col-menu-btn",
+        "aria-label": "Column settings",
+        "aria-expanded": "false",
+      });
+      const gearIcon = renderIcon("sliders", { className: "rui-data-grid-col-menu-icon" });
+      if (gearIcon) menuBtn.append(gearIcon);
+
+      const panel = el("div", {
+        class: "rui-data-grid-col-panel",
+        style: "display:none",
+      });
+
+      const closePanel = (): void => {
+        colConfigPanelOpen.set(false);
+        const liveWrap = wrapper.querySelector(".rui-data-grid-col-menu-wrap");
+        const livePanel = liveWrap?.querySelector(".rui-data-grid-col-panel") as HTMLElement | null;
+        const liveBtn = liveWrap?.querySelector(".rui-data-grid-col-menu-btn") as HTMLElement | null;
+        if (livePanel) livePanel.style.display = "none";
+        if (liveBtn) liveBtn.setAttribute("aria-expanded", "false");
+      };
+
+      const rebuildColPanel = (panelEl: HTMLElement): void => {
+        panelEl.replaceChildren();
+        const cfg0 = getColConfig();
+        const panelHead = el("div", { class: "rui-data-grid-col-panel-head" });
+        panelHead.append(el("span", { class: "rui-data-grid-col-panel-title" }, ["Columns"]));
+        const actions = el("span", { style: "display:flex;align-items:center;gap:4px" });
+        const resetBtn = el("button", {
+          type: "button",
+          class: "rui-data-grid-col-panel-reset",
+        }, ["Reset"]);
+        resetBtn.onclick = (ev) => {
+          ev.stopPropagation();
+          colConfigSlot.set(initColumnConfig(allCols, null));
+          if (persistKey) {
+            try { localStorage.removeItem(`aktion-datagrid-${persistKey}`); } catch { /* noop */ }
+          }
+          rebuildColPanel(panelEl);
+          repaint(ev.currentTarget as Element);
+        };
+        const closeBtn = el("button", {
+          type: "button",
+          class: "rui-data-grid-col-panel-close",
+          "aria-label": "Close column settings",
+        }, ["\u00D7"]);
+        closeBtn.onclick = (ev) => { ev.stopPropagation(); closePanel(); };
+        actions.append(resetBtn, closeBtn);
+        panelHead.append(actions);
+        panelEl.append(panelHead);
+
+        const list = el("div", { class: "rui-data-grid-col-panel-list" });
+        let dragSrcKey: string | null = null;
+
+        for (const key of cfg0.order) {
+          const colDef = allCols.find((cd) => cd.key === key);
+          if (!colDef) continue;
+          const isHidden = cfg0.hidden.has(key);
+          const isPinnedCol = cfg0.pinned.has(key);
+
+          const row = el("div", {
+            class: "rui-data-grid-col-panel-row",
+            draggable: "true",
+            "data-col-key": key,
+          });
+
+          row.append(el("span", {
+            class: "rui-data-grid-col-panel-handle",
+            "aria-hidden": "true",
+          }, ["⠿"]));
+
+          const cb = el("input", {
+            type: "checkbox",
+            class: "rui-data-grid-col-panel-cb",
+            checked: isHidden ? null : "",
+            "aria-label": `Show ${colDef.header}`,
+          });
+          cb.onclick = (ev) => {
+            ev.stopPropagation();
+            const target2 = ev.currentTarget as HTMLInputElement;
+            const cfg = getColConfig();
+            const nextHidden = new Set(cfg.hidden);
+            if (target2.checked) nextHidden.delete(key); else nextHidden.add(key);
+            updateColConfig({ hidden: nextHidden });
+            repaint(target2);
+          };
+          row.append(cb);
+
+          row.append(el("span", {
+            class: "rui-data-grid-col-panel-label",
+          }, [colDef.header]));
+
+          const pinBtn = el("button", {
+            type: "button",
+            class: "rui-data-grid-col-panel-pin",
+            "aria-label": isPinnedCol ? `Unpin ${colDef.header}` : `Pin ${colDef.header}`,
+            "data-active": isPinnedCol ? "true" : null,
+          });
+          const pinIcon = renderIcon("thumbtack", { className: "rui-data-grid-col-panel-pin-icon" });
+          if (pinIcon) pinBtn.append(pinIcon);
+          pinBtn.onclick = (ev) => {
+            ev.stopPropagation();
+            const cfg = getColConfig();
+            const nextPinned = new Set(cfg.pinned);
+            if (isPinnedCol) nextPinned.delete(key); else nextPinned.add(key);
+            updateColConfig({ pinned: nextPinned });
+            rebuildColPanel(panelEl);
+            repaint(ev.currentTarget as Element);
+          };
+          row.append(pinBtn);
+
+          row.ondragstart = (ev) => {
+            dragSrcKey = key;
+            (ev.currentTarget as HTMLElement).classList.add("rui-data-grid-col-dragging");
+            if (ev.dataTransfer) ev.dataTransfer.effectAllowed = "move";
+          };
+          row.ondragend = (ev) => {
+            (ev.currentTarget as HTMLElement).classList.remove("rui-data-grid-col-dragging");
+            dragSrcKey = null;
+            list.querySelectorAll(".rui-data-grid-col-dragover").forEach((e) =>
+              e.classList.remove("rui-data-grid-col-dragover"));
+          };
+          row.ondragover = (ev) => {
+            ev.preventDefault();
+            if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+          };
+          row.ondragenter = (ev) => {
+            ev.preventDefault();
+            (ev.currentTarget as HTMLElement).classList.add("rui-data-grid-col-dragover");
+          };
+          row.ondragleave = (ev) => {
+            (ev.currentTarget as HTMLElement).classList.remove("rui-data-grid-col-dragover");
+          };
+          row.ondrop = (ev) => {
+            ev.preventDefault();
+            (ev.currentTarget as HTMLElement).classList.remove("rui-data-grid-col-dragover");
+            const dropKey = (ev.currentTarget as HTMLElement).getAttribute("data-col-key");
+            if (!dragSrcKey || !dropKey || dragSrcKey === dropKey) return;
+            const cfg = getColConfig();
+            const order = [...cfg.order];
+            const srcIdx = order.indexOf(dragSrcKey);
+            const dstIdx = order.indexOf(dropKey);
+            if (srcIdx < 0 || dstIdx < 0) return;
+            order.splice(srcIdx, 1);
+            order.splice(dstIdx, 0, dragSrcKey);
+            updateColConfig({ order });
+            rebuildColPanel(panelEl);
+            repaint(ev.currentTarget as Element);
+          };
+
+          list.append(row);
+        }
+        panelEl.append(list);
+      };
+
+      menuBtn.onclick = (event) => {
+        event.stopPropagation();
+        const isOpen = !colConfigPanelOpen.get();
+        colConfigPanelOpen.set(isOpen);
+        const live = (event.currentTarget as Element).closest(".rui-data-grid-col-menu-wrap");
+        const livePanel = live?.querySelector(".rui-data-grid-col-panel") as HTMLElement | null;
+        if (livePanel) {
+          livePanel.style.display = isOpen ? "" : "none";
+          (event.currentTarget as HTMLElement).setAttribute("aria-expanded", isOpen ? "true" : "false");
+        }
+        if (isOpen && livePanel) rebuildColPanel(livePanel);
+      };
+      menuWrap.append(menuBtn);
+
+      menuWrap.onmousedown = (ev) => ev.stopPropagation();
+      panel.onclick = (ev) => ev.stopPropagation();
+
+      const closeOnOutside = (event: MouseEvent): void => {
+        if (!colConfigPanelOpen.get()) return;
+        const path = event.composedPath?.() ?? [];
+        for (const node of path) {
+          if (node instanceof Element && node.classList?.contains("rui-data-grid-col-menu-wrap")) return;
+        }
+        closePanel();
+      };
+      if (typeof document !== "undefined") {
+        document.addEventListener("mousedown", closeOnOutside);
+        helpers.registerDisposer(() => document.removeEventListener("mousedown", closeOnOutside), "col-menu-outside");
+      }
+
+      menuWrap.append(panel);
+      menuTh.append(menuWrap);
+      headRow.append(menuTh);
+    }
+
     thead.append(headRow);
 
-    // Filter row (only if any column is filterable)
     if (cols.some((c) => c.filterable)) {
       const filters = filterSlot.get();
       const filterRow = el("tr", { class: "rui-data-grid-filter-row" });
       if (selectable) filterRow.append(el("td", { class: "rui-data-grid-cell-select" }));
-      cols.forEach((col) => {
-        const td = el("td");
-        if (col.filterable) {
-          const input = el("input", {
-            type: "search",
-            class: "rui-data-grid-filter",
-            placeholder: `Filter ${col.header}`,
-            "aria-label": `Filter ${col.header}`,
-            // `valueAttr`, not `asString`: an absent filter must emit no
-            // `value` attribute at all or morph clears what the user typed.
-            value: valueAttr(filters[col.key]),
-          });
-          input.oninput = (event) => {
-            const target = event.currentTarget as HTMLInputElement;
-            filterSlot.set({ ...filterSlot.get(), [col.key]: target.value });
-            // Fewer matches can put the current page past the end, so the
-            // page resets with the filter — otherwise the grid shows "No
-            // results" while the matches sit on page 1.
-            writePage(1);
-            repaint(target);
-          };
-          td.append(input);
-        }
-        filterRow.append(td);
-      });
+      if (showRowNumbers) filterRow.append(el("td", { class: "rui-data-grid-cell-rownum" }));
+      let filterPinOff = 0;
+      for (const col of cols) {
+        const isPinned = config.pinned.has(col.key);
+        filterRow.append(buildFilterTd(col, filters, isPinned, filterPinOff));
+        if (isPinned) filterPinOff += parsePx(config.widths[col.key] || col.width) || 150;
+      }
+      if (columnMenuEnabled) filterRow.append(el("td", { class: "rui-data-grid-col-menu-cell" }));
       thead.append(filterRow);
     }
     table.append(thead);
@@ -729,11 +1282,16 @@ export const DataGrid: ComponentSpec = {
     tableWrap.append(table);
     wrapper.append(tableWrap);
 
+    // Scroll arrows for horizontal overflow
+    if (!allowOverflow) {
+      deferToPaint(() => {
+        const live = tableWrap.isConnected ? tableWrap : null;
+        if (live) installScrollArrows(live);
+      });
+    }
+
     const model = readModel();
 
-    // Footer: rendered whenever the data could ever need paging (or a page-size
-    // control), and its contents are hidden/shown per model — filtering must
-    // not delete the footer, it must update it.
     if (perPageOptions.length > 0 || rowCount > model.perPage) {
       const footer = el("div", { class: "rui-data-grid-footer" });
       footer.append(el("span", { class: "rui-data-grid-footer-summary" }));
@@ -751,7 +1309,6 @@ export const DataGrid: ComponentSpec = {
           if (perPageStateName) helpers.setState(perPageStateName, size);
           else perPageSlot.set(size);
           helpers.invoke(props.onPerPageChange, size);
-          // A bigger page size can leave the current page beyond the last one.
           writePage(1);
           repaint(target);
         };
@@ -777,12 +1334,31 @@ export const DataGrid: ComponentSpec = {
       wrapper.append(footer);
     }
 
-    // First paint runs through the very same builders as every later update,
-    // so the two can never drift apart.
     repaint(null, model);
     return wrapper;
   },
 };
+
+/* ----------------------------------------------------------------------- *
+ * DataGrid helpers — cell styles, pixel parsing
+ * ----------------------------------------------------------------------- */
+
+function buildCellStyle(width: string, pinned: boolean, pinnedOffset: number): string | null {
+  const parts: string[] = [];
+  if (width) {
+    parts.push(`width:${width};max-width:${width};min-width:${width}`);
+  }
+  if (pinned) {
+    parts.push(`position:sticky;left:${pinnedOffset}px`);
+  }
+  return parts.length > 0 ? parts.join(";") : null;
+}
+
+function parsePx(value: string): number {
+  if (!value) return 0;
+  const match = /^(\d+(?:\.\d+)?)px$/i.exec(value.trim());
+  return match ? Number(match[1]) : 0;
+}
 
 /* ----------------------------------------------------------------------- *
  * CalendarView — month/week calendar grid

@@ -9145,6 +9145,310 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   color: var(--rui-color-text-muted);
 }
 
+/* DataGrid — highlight on hover */
+.rui-data-grid[data-highlight-hover="true"] tbody tr:hover td {
+  background: var(--rui-color-surface-muted);
+}
+.rui-data-grid[data-highlight-hover="false"] tbody tr:hover td {
+  background: inherit;
+}
+
+/* DataGrid — row numbers */
+.rui-data-grid-cell-rownum {
+  width: 42px;
+  padding-left: 12px;
+  padding-right: 4px;
+  color: var(--rui-color-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+}
+
+/* DataGrid — cell truncation (wrapCells=false) */
+.rui-data-grid[data-nowrap="true"] .rui-data-grid-table tbody td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.rui-data-grid[data-nowrap="true"] .rui-data-grid-table tbody td[data-wrap="true"] {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  max-width: none;
+}
+
+/* DataGrid — pinned columns: sticky with a subtle shadow separator.
+   Pinned cells must be fully opaque so scrolled content doesn't bleed through,
+   including on striped/selected rows that normally use semi-transparent tints. */
+.rui-data-grid-table th[data-pinned="true"],
+.rui-data-grid-table td[data-pinned="true"] {
+  position: sticky;
+  z-index: 2;
+  background: var(--rui-color-surface, var(--rui-color-bg));
+  box-shadow: 1px 0 0 var(--rui-color-border);
+}
+.rui-data-grid-table thead th[data-pinned="true"] { z-index: 4; }
+.rui-data-grid[data-striped="true"] tbody tr:nth-child(even) td[data-pinned="true"],
+.rui-data-grid[data-striped="true"] tbody tr:nth-child(even) td.rui-data-grid-col-menu-cell {
+  background: color-mix(in srgb, var(--rui-color-text) 2%, var(--rui-color-surface, var(--rui-color-bg)));
+}
+.rui-data-grid-table tbody tr[data-selected="true"] td[data-pinned="true"],
+.rui-data-grid-table tbody tr[data-selected="true"] td.rui-data-grid-col-menu-cell {
+  background: color-mix(in srgb, var(--rui-color-primary) 10%, var(--rui-color-surface, var(--rui-color-bg)));
+}
+
+/* DataGrid — toolbar & global search */
+.rui-data-grid-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.rui-data-grid-toolbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rui-data-grid-global-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: var(--rui-radius-md, 8px);
+  background: var(--rui-color-surface);
+  max-width: 320px;
+  flex: 1;
+}
+.rui-data-grid-search-icon {
+  color: var(--rui-color-text-muted);
+  flex: 0 0 auto;
+  font-size: 13px;
+}
+.rui-data-grid-search-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: var(--rui-font-size-13);
+  color: var(--rui-color-text);
+  width: 100%;
+  min-width: 0;
+}
+.rui-data-grid-search-input::placeholder { color: var(--rui-color-text-muted); }
+
+/* DataGrid — column settings menu */
+.rui-data-grid-col-menu-wrap {
+  position: relative;
+}
+.rui-data-grid-col-menu-cell {
+  width: 32px;
+  min-width: 32px;
+  max-width: 32px;
+  padding: 0 !important;
+  text-align: center;
+  vertical-align: middle;
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: var(--rui-color-surface, var(--rui-color-bg));
+}
+th.rui-data-grid-col-menu-cell { border-bottom: none; z-index: 5; }
+td.rui-data-grid-col-menu-cell { border: none; }
+.rui-data-grid-col-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--rui-radius-sm, 4px);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--rui-color-text-secondary, var(--rui-color-text));
+  font-size: 0.9rem;
+  opacity: 0.6;
+  transition: opacity 0.15s, color 0.15s;
+}
+.rui-data-grid-col-menu-btn:hover {
+  opacity: 1;
+  color: var(--rui-color-primary);
+  background: var(--rui-color-bg-hover, rgba(0,0,0,0.05));
+}
+.rui-data-grid-col-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 260px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--rui-color-surface, #fff);
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: var(--rui-radius-md, 8px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.rui-data-grid-col-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+}
+.rui-data-grid-col-panel-title {
+  font-weight: 600;
+  font-size: var(--rui-font-size-13);
+}
+.rui-data-grid-col-panel-reset {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  color: var(--rui-color-primary);
+  padding: 2px 6px;
+  border-radius: var(--rui-radius-sm, 4px);
+}
+.rui-data-grid-col-panel-reset:hover { background: color-mix(in srgb, var(--rui-color-primary) 8%, transparent); }
+.rui-data-grid-col-panel-close {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--rui-color-text-muted, #888);
+  padding: 2px 4px;
+  border-radius: var(--rui-radius-sm, 4px);
+  margin-left: 4px;
+}
+.rui-data-grid-col-panel-close:hover { color: var(--rui-color-text); background: color-mix(in srgb, var(--rui-color-text) 6%, transparent); }
+.rui-data-grid-col-panel-list {
+  padding: 4px 0;
+}
+.rui-data-grid-col-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: grab;
+  transition: background 0.15s;
+  user-select: none;
+}
+.rui-data-grid-col-panel-row:hover { background: var(--rui-color-surface-muted); }
+.rui-data-grid-col-panel-row.rui-data-grid-col-dragging { opacity: 0.4; }
+.rui-data-grid-col-panel-row.rui-data-grid-col-dragover {
+  border-top: 2px solid var(--rui-color-primary);
+}
+.rui-data-grid-col-panel-handle {
+  color: var(--rui-color-text-muted);
+  font-size: 14px;
+  cursor: grab;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+.rui-data-grid-col-panel-cb {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--rui-color-primary);
+  cursor: pointer;
+}
+.rui-data-grid-col-panel-label {
+  flex: 1;
+  font-size: var(--rui-font-size-13);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rui-data-grid-col-panel-pin {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--rui-radius-sm, 4px);
+  color: var(--rui-color-text-muted);
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+.rui-data-grid-col-panel-pin:hover { color: var(--rui-color-primary); }
+.rui-data-grid-col-panel-pin[data-active="true"] {
+  color: var(--rui-color-primary);
+  background: color-mix(in srgb, var(--rui-color-primary) 10%, transparent);
+}
+
+/* DataGrid — column resize handle.
+   The visible bar is 3px via ::after, but the click target is 12px wide so the
+   user does not have to hit a 3px sliver. The bar appears on header-row hover
+   (not just handle hover) so all dividers light up at once. */
+.rui-data-grid-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 0;
+  width: 12px;
+  cursor: col-resize;
+  z-index: 4;
+  user-select: none;
+  background: transparent;
+}
+.rui-data-grid-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 50%;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.rui-data-grid-table thead th { position: relative; }
+/* Show the bar when any part of the header row is hovered */
+.rui-data-grid-table thead tr:hover .rui-data-grid-resize-handle::after {
+  background: var(--rui-color-border);
+}
+.rui-data-grid-resize-handle:hover::after,
+.rui-data-grid-resize-handle.rui-data-grid-resize-active::after {
+  background: var(--rui-color-primary);
+}
+
+/* DataGrid — scroll arrows */
+.rui-data-grid-scroll-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  border: none;
+  cursor: pointer;
+  padding: 6px 4px;
+  border-radius: var(--rui-radius-sm, 4px);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--rui-color-text-muted);
+  background: color-mix(in srgb, var(--rui-color-surface, #fff) 85%, transparent);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  opacity: 0.7;
+  transition: opacity 0.15s, background 0.15s;
+  display: none;
+}
+.rui-data-grid-scroll-arrow:hover {
+  opacity: 1;
+  background: var(--rui-color-surface, #fff);
+  color: var(--rui-color-primary);
+}
+.rui-data-grid-scroll-arrow-left { left: 4px; }
+.rui-data-grid-scroll-arrow-right { right: 4px; }
+.rui-data-grid-scroll-arrow-icon { font-size: 14px; }
+
 /* CalendarView -------------------------------------------------------- */
 .rui-calendar {
   display: flex;

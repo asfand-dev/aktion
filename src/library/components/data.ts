@@ -49,6 +49,12 @@ export const Col: ComponentSpec = {
     { name: "wrap", type: "boolean", optional: true, description: "Let long cell text wrap onto several lines instead of pushing the table into horizontal scroll." },
     { name: "headerTooltip", type: "string", optional: true, aliases: ["hint"], description: "Explanation shown on hover/focus of the header cell — e.g. `MRR = monthly recurring revenue`." },
     { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) used by `format: \"number\"|\"currency\"|\"date\"` for separators, digit grouping and date order. Defaults to the Table's `locale`, then the viewer's browser." },
+    // Slots 13–17: DataGrid advanced features. Table ignores these.
+    { name: "initiallyHidden", type: "boolean", optional: true, aliases: ["colHidden"], description: "DataGrid: initially hide this column. The user can reveal it from the column settings panel." },
+    { name: "pinned", type: "string", optional: true, enum: ["left", "right"], description: "DataGrid: pin this column to the left (or right) edge so it stays visible during horizontal scrolling." },
+    { name: "resizable", type: "boolean", optional: true, description: "DataGrid: per-column override for resizing. Takes precedence over the grid-level `resizable` prop." },
+    { name: "minWidth", type: "string", optional: true, description: "DataGrid: minimum width when the column is resized (`80px`, `5rem`)." },
+    { name: "maxWidth", type: "string", optional: true, description: "DataGrid: maximum width when the column is resized (`400px`, `50%`)." },
   ],
   // Cols are read positionally inside Table.render — this render is a fallback.
   render: (_node, props) => {

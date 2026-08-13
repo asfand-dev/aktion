@@ -7,6 +7,37 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-08-13
 
+### DataGrid UX Refinements
+
+- Fixed pinned cells on striped and selected rows showing content bleed-through during horizontal scrolling. Pinned cells now use opaque backgrounds instead of semi-transparent tints, so scrolled content behind them is fully hidden.
+- Added a close button (×) to the column settings panel header, next to the existing "Reset" button. The panel can now be dismissed without clicking outside.
+- Fixed filter row cells for pinned columns not being sticky — filter inputs now stay in place during horizontal scrolling, matching the header and body cell behavior.
+- The column menu icon is now pinned to the right edge of the header row so it remains visible during horizontal scrolling on narrow viewports.
+- Improved column resize handles: the clickable area is now 12px wide (up from 4px) and all resize dividers light up when hovering anywhere on the header row, making them discoverable at a glance.
+- Fixed resize reliability: the drag handler now resolves the live DOM element from the event instead of a closure-captured reference, so resizing works consistently after re-renders.
+- Moved the column settings button from the toolbar into the header row as a compact icon-only button, keeping the grid chrome minimal.
+- Fixed column hiding not hiding headers: hiding a column via the column settings panel now correctly removes both the header cell and the filter cell, not just the body cells.
+- Fixed the column settings panel closing unexpectedly when toggling visibility or pinning. The panel now stays open until the user clicks outside it.
+- Upgraded the DataGrid example in the component catalog to three tabbed demos: Basic (sort, filter, selection), Advanced (pinning, resizing, column menu, global search, persistence), and Inventory (export, row numbers, hover highlights).
+- Fixed the column settings menu not closing when re-clicking the button or clicking outside. The root cause was shadow DOM event retargeting — the close handler now uses `composedPath()` and mousedown propagation is stopped at the menu wrapper level.
+- Fixed pinned columns being moved to the front of the table — pinned columns now stay at their original position and become sticky during horizontal scroll without changing order.
+- Fixed pinned column headers not being sticky — the header cell now has `position: sticky` with the correct z-index (higher than body cells) and a border shadow for visual separation.
+- Added 22 unit tests covering column hiding/showing, menu panel persistence, menu toggle, column pinning position/stickiness, global search, row numbers, resize handles, cell wrapping, hover highlights, menu placement, `initiallyHidden`, and SSR with advanced props.
+
+### DataGrid Advanced Column Management
+
+- Added column hiding/showing: set `columnMenu=true` to reveal a settings panel where users can toggle column visibility.
+- Added column reordering: drag-and-drop columns in the settings panel to rearrange them.
+- Added column pinning: pin columns to the left edge so they stay visible during horizontal scrolling. Set `Col(pinned: "left")` or toggle from the settings panel.
+- Added column resizing: set `resizable=true` to let users drag column header borders. Double-click to auto-fit. Per-column `Col(resizable:)` overrides the grid-level setting. New `Col(minWidth:)` and `Col(maxWidth:)` props constrain the range.
+- Added horizontal scroll arrows: small overlay buttons appear on the edges of horizontally scrollable grids, making scroll affordance visible without blocking data.
+- Added cell truncation with tooltips: set `wrapCells=false` for single-line cells with ellipsis. Hovering reveals the full content. Custom component cells render normally. Per-column `Col(wrap:)` overrides.
+- Added global search: pass `globalSearch` (bind a `$variable`) to show a cross-column search bar that filters across all columns.
+- Added row numbers: set `rowNumbers=true` for a leading row-number column.
+- Added `highlightOnHover` prop (default true) to control row hover highlighting.
+- Added localStorage persistence: set `persistKey="myTable"` to save column widths, order, visibility, and pinning across page refreshes.
+- All new features are opt-in via new props — existing DataGrid usage is unaffected.
+
 ### Expanded Unit Test Coverage
 
 - Added dedicated unit tests for 8 previously uncovered source modules: lexer, streaming frontier, grammar/stream tokenizer, HTML sanitizer, reactive environment manager, delta protocol, AST inspector, and floating positioning layer.

@@ -1226,11 +1226,37 @@ $app(Table([
   "DataGrid": `$page = 1
 $sort = { key: "Score", direction: "desc" }
 $selectedIds = []
-$app(DataGrid([
+$search = ""
+
+basic = DataGrid([
   Col("Name",  { values: ["Ada Lovelace", "Grace Hopper", "Linus Torvalds", "Margaret Hamilton"], sortable: true, filterable: true }),
   Col("Team",  { values: ["Compilers", "Apollo", "Kernel", "Apollo"], sortable: true, filterable: true }),
   Col("Score", { values: [98, 96, 92, 94], align: "right", format: "number", sortable: true })
-], { rowIds: [1, 2, 3, 4], caption: "Top contributors", sort: $sort, selectedIds: $selectedIds, selectable: true, page: $page, perPage: 3 }))`,
+], { rowIds: [1, 2, 3, 4], caption: "Top contributors", sort: $sort, selectedIds: $selectedIds, selectable: true, page: $page, perPage: 3 })
+
+advanced = DataGrid([
+  Col("Employee",   { values: ["Alice Chen", "Bob Martinez", "Carol White", "Dan Lee", "Eve Park", "Frank Jones"], sortable: true, filterable: true, pinned: "left" }),
+  Col("Department", { values: ["Engineering", "Design", "Marketing", "Engineering", "Sales", "Design"], sortable: true, filterable: true }),
+  Col("Role",       { values: ["Staff Engineer", "Lead Designer", "Content Strategist", "Senior Engineer", "Account Executive", "UX Researcher"], sortable: true }),
+  Col("Salary",     { values: [145000, 118000, 92000, 128000, 105000, 110000], format: "currency", align: "right", sortable: true }),
+  Col("Start Date", { values: ["2021-03-15", "2022-07-01", "2023-01-10", "2020-11-28", "2023-06-05", "2022-09-12"], format: "date", sortable: true }),
+  Col("Rating",     { values: [4.8, 4.5, 4.2, 4.7, 3.9, 4.6], format: "number", align: "right", sortable: true })
+], { rowIds: [1, 2, 3, 4, 5, 6], resizable: true, columnMenu: true, globalSearch: $search, persistKey: "demo-advanced", wrapCells: false, striped: true, density: "compact" })
+
+rich = DataGrid([
+  Col("#",        { values: [101, 102, 103, 104, 105], sortable: true, width: "60px" }),
+  Col("Product",  { values: ["Wireless Headphones", "Ergonomic Keyboard", "USB-C Hub (7-port)", "Noise-Cancelling Mic", "Webcam 4K Ultra HD"], sortable: true, filterable: true }),
+  Col("Category", { values: ["Audio", "Peripherals", "Accessories", "Audio", "Video"], sortable: true, filterable: true }),
+  Col("Price",    { values: [79.99, 149.00, 49.99, 129.95, 199.00], format: "currency", align: "right", sortable: true }),
+  Col("Stock",    { values: [342, 28, 156, 0, 73], format: "number", align: "right", sortable: true }),
+  Col("Status",   { values: ["In Stock", "Low Stock", "In Stock", "Out of Stock", "In Stock"], filterable: true })
+], { rowIds: ["p1", "p2", "p3", "p4", "p5"], caption: "Product inventory", exportable: true, rowNumbers: true, highlightOnHover: true, density: "comfortable" })
+
+$app(Tabs([
+  TabItem("basic",    { label: "Basic",    children: [basic] }),
+  TabItem("advanced", { label: "Advanced", children: [advanced] }),
+  TabItem("rich",     { label: "Inventory", children: [rich] })
+]))`,
   "List": `$app(List([
   ListItem("Tasks",    { meta: "3 active",   icon: "list-check" }),
   ListItem("Calendar", { meta: "2 events",   icon: "calendar" }),
@@ -2146,8 +2172,9 @@ $app(SplitView([primary], { detail: [detail], primaryWidth: "280px" }))`,
   IconButton("trash", { label: "Delete", variant: "danger", size: "md" }),
   IconButton("ellipsis-vertical", { label: "More", variant: "ghost", size: "md" })
 ], { direction: "row", gap: "sm", align: "center" }))`,
-  "CommandPalette": `$open = true
-$app(CommandPalette([
+  "CommandPalette": `$open = false
+btn = Box(Button("Open Command Palette", () => $open = true))
+cp = CommandPalette([
   {label: "New project", value: "new", group: "Actions", shortcut: "Cmd+N"},
   {label: "Open file", value: "open", group: "Actions", shortcut: "Cmd+O"},
   {label: "Search docs", value: "search", group: "Navigation", shortcut: "/"},
@@ -2158,7 +2185,8 @@ $app(CommandPalette([
   shortcut: "Cmd+K",
   onSelect: (v) => { $toast.show("Ran " + v) },
   onClose: () => { $open = false }
-}))`,
+})
+$app(btn, cp)`,
   "FilterChips": `$chips = ["status:active", "team:platform", "priority:high", "region:eu-west"]
 $app(FilterChips($chips, {
   onRemove: (value) => { $chips = $chips.filter(c => c !== value) },

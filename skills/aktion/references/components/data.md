@@ -16,7 +16,7 @@ between similar components, which the prop tables below cannot express.
 - Build columns using array pluck: `Col("Title", data.rows.title, format?, align?)`.
 - For per-row controls inside a Col, use `for (let row of data.rows) { ... }` and reference `row.field` inline.
 - `Table(cols, caption?, density?, striped?, sticky?, emptyLabel?)` — pass `density="compact"` for dense data, `sticky=true` to pin the header in a scrolling parent, and `emptyLabel` for the zero-state cell.
-- `DataGrid(cols, rowIds?, caption?, sort, selectedIds, selectable?, page, perPage?, …)` is the advanced Table — adds sortable headers (`sortable=true` on Col), per-column filter chips (`filterable=true`), checkbox row selection bound to `$selectedIds`, sticky header / first column, pagination, and an optional bulk-action toolbar. Reach for this whenever a user needs to sort, filter, or page through a list.
+- `DataGrid(cols, rowIds?, caption?, sort, selectedIds, selectable?, page, perPage?, …)` is the advanced Table — adds sortable headers (`sortable=true` on Col), per-column filter chips (`filterable=true`), checkbox row selection bound to `$selectedIds`, sticky header / first column, pagination, and an optional bulk-action toolbar. Set `columnMenu=true` to let users hide / reorder / pin columns; `resizable=true` for draggable column widths; `persistKey="myTable"` to save the layout in localStorage. `wrapCells=false` renders single-line cells with ellipsis + hover tooltip. `globalSearch` adds a cross-column search bar. `rowNumbers=true` shows a leading number column. Reach for this whenever a user needs to sort, filter, or page through a list.
 - `CalendarView(value?, month?, events?, view?, firstDay?, onSelect?)` renders a full-month (or week) calendar grid for scheduling apps — distinct from the `DatePicker` input. Bind `value` to a `$variable` for the selected ISO date.
 - `ComparisonTable(columns, rows, highlightColumn?)` is the generic counterpart of `PricingTable` — pass rows of `{label, values, hint?, group?}`. Use for feature comparisons, spec sheets, plan grids.
 - `InfiniteList(items, onLoadMore?, loading?, hasMore?)` is a scroll-to-load list; the action fires when the sentinel scrolls into view.
@@ -57,7 +57,7 @@ Tabular data view. Children must be Col components. `density="compact"` tightens
 ### Col
 
 ```
-Col(header, values, format?, align?, sortable?, filterable?, render?, onClick?, currency?, width?, wrap?, headerTooltip?, locale?)
+Col(header, values, format?, align?, sortable?, filterable?, render?, onClick?, currency?, width?, wrap?, headerTooltip?, locale?, initiallyHidden?, pinned?, resizable?, minWidth?, maxWidth?)
 ```
 
 Single column inside a Table or DataGrid. Use `align` for per-column text alignment, `format` for cell rendering (`text|number|currency|date`), `currency` for the money code used by `format: "currency"`, `locale` for the BCP-47 tag those formats are rendered in, and `width`/`wrap` to stop one long column from forcing the whole table into horizontal scroll. `values` may be plain values OR an array of component nodes — e.g. `Col("Status", rows.map(r => Badge(r.status)))` or `Col("Actions", rows.map(r => Button("Edit")))` — each component renders directly in its cell. Pass `render: (value, index, row) => …` for the same effect when you prefer to keep `values` as the raw row data (return a component, string, or array). `row` is the whole row (header-keyed) and stays correct even when DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. Pass `onClick: (value, index, row) => …` to make the whole cell clickable (pointer + keyboard). `sortable` and `filterable` only take effect inside `DataGrid` (Table ignores them).
@@ -77,14 +77,19 @@ Single column inside a Table or DataGrid. Use `align` for per-column text alignm
 | `wrap` | `boolean` | no | Let long cell text wrap onto several lines instead of pushing the table into horizontal scroll. |
 | `headerTooltip` | `string` | no | Explanation shown on hover/focus of the header cell — e.g. `MRR = monthly recurring revenue`. |
 | `locale` | `string` | no | BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) used by `format: "number"\|"currency"\|"date"` for separators, digit grouping and date order. Defaults to the Table's `locale`, then the viewer's browser. |
+| `initiallyHidden` | `boolean` | no | DataGrid: initially hide this column. The user can reveal it from the column settings panel. |
+| `pinned` | `"left"` \| `"right"` | no | DataGrid: pin this column to the left (or right) edge so it stays visible during horizontal scrolling. |
+| `resizable` | `boolean` | no | DataGrid: per-column override for resizing. Takes precedence over the grid-level `resizable` prop. |
+| `minWidth` | `string` | no | DataGrid: minimum width when the column is resized (`80px`, `5rem`). |
+| `maxWidth` | `string` | no | DataGrid: maximum width when the column is resized (`400px`, `50%`). |
 
 ### DataGrid
 
 ```
-DataGrid(columns, rowIds?, caption?, sort?, selectedIds?, selectable?, page?, perPage?, emptyLabel?, onRowClick?, toolbar?, density?, striped?, stickyHeader?, stickyFirstColumn?, exportable?, exportFilename?, loading?, error?, loadingLabel?, maxHeight?, allowOverflow?, onSort?, onSelectionChange?, perPageOptions?, onPerPageChange?)
+DataGrid(columns, rowIds?, caption?, sort?, selectedIds?, selectable?, page?, perPage?, emptyLabel?, onRowClick?, toolbar?, density?, striped?, stickyHeader?, stickyFirstColumn?, exportable?, exportFilename?, loading?, error?, loadingLabel?, maxHeight?, allowOverflow?, onSort?, onSelectionChange?, perPageOptions?, onPerPageChange?, persistKey?, resizable?, columnMenu?, globalSearch?, onGlobalSearch?, wrapCells?, rowNumbers?, highlightOnHover?)
 ```
 
-Advanced data table with sortable headers, per-column filter chips, row selection (checkboxes), sticky header / first column, optional pagination, an optional bulk-action toolbar slot, and click-to-act rows. Columns are Col(header, values, format?, align?, sortable?, filterable?) entries. Sorting, selection and pagination work on their own; bind `$sort` (`{key, direction}` object), `$selectedIds` (string[]) and `$page` (number) when the host needs to read or drive them, or use `onSort` / `onSelectionChange` for server-side work. Use `loading` / `error` for query states. Use INSTEAD of `Table` when you need any of those interactions.
+Advanced data table with sortable headers, per-column filter chips, row selection (checkboxes), sticky header / first column, optional pagination, an optional bulk-action toolbar slot, and click-to-act rows. Columns are Col(header, values, format?, align?, sortable?, filterable?) entries. Sorting, selection and pagination work on their own; bind `$sort` (`{key, direction}` object), `$selectedIds` (string[]) and `$page` (number) when the host needs to read or drive them, or use `onSort` / `onSelectionChange` for server-side work. Use `loading` / `error` for query states. Set `columnMenu=true` to let the user hide, reorder, and pin columns. Set `resizable=true` to let the user drag column borders to resize. Pass `persistKey` to save the user's column layout to localStorage. Set `wrapCells=false` for single-line cells with ellipsis + hover tooltip. Use INSTEAD of `Table` when you need any of those interactions.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -114,6 +119,14 @@ Advanced data table with sortable headers, per-column filter chips, row selectio
 | `onSelectionChange` | `callable` | no | Callable fired with the array of selected row ids |
 | `perPageOptions` | `number[]` | no | Page sizes offered in a footer dropdown, e.g. [20, 50, 100] |
 | `onPerPageChange` | `callable` | no | Callable fired with the newly chosen page size |
+| `persistKey` | `string` | no | localStorage key — when set, column widths, order, visibility, and pinning survive page refreshes. Each table should use a unique key. |
+| `resizable` | `boolean` | no | Let the user drag column header borders to resize columns. Double-click a handle to auto-fit. |
+| `columnMenu` | `boolean` | no | Show a column settings button for hiding, reordering, and pinning columns. |
+| `globalSearch` | `string` | no | Global search term that filters across all columns — bind a $variable for two-way control. |
+| `onGlobalSearch` | `callable` | no | Callable fired with the search term when the global search input changes. |
+| `wrapCells` | `boolean` | no | Default cell content wrapping. `false` = single line with ellipsis and hover tooltip; `true` = allow wrapping. Per-column `Col(wrap:)` overrides. |
+| `rowNumbers` | `boolean` | no | Show a leading row-number column. |
+| `highlightOnHover` | `boolean` | no | Highlight rows on mouse hover (default true). |
 
 ### List
 
