@@ -6082,7 +6082,6 @@ ${below("xs")} {
   background: var(--rui-color-surface);
   border-color: var(--rui-color-border);
   color: var(--rui-color-link);
-  box-shadow: var(--rui-shadow-sm);
 }
 :host([data-rui-theme="vision"]) .rui-data-grid-scroll-arrow:hover {
   background: var(--rui-color-accent); border-color: var(--rui-color-accent); color: #fff;
@@ -9625,7 +9624,6 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   line-height: 1;
   color: var(--rui-color-text-muted);
   background: var(--rui-color-surface, #fff);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--rui-color-text) 18%, transparent);
   transition: color 0.15s, border-color 0.15s;
 }
 .rui-data-grid-scroll-arrow:hover {

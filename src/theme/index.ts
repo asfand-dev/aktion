@@ -686,7 +686,7 @@ export const visionTheme: ThemeTokens = {
   // #ffffff, not the fill colour: this token is the ink drawn ON critical-5, and
   // copying the fill here made every danger-filled surface invisible — a solid
   // red ConfirmDialog button with a red label, a red badge with a red count.
-  colorOnDanger: "#ffffff",
+  colorOnDanger: "#c80a00",
   colorOnInfo: "#066b80",
   /* Typography — Open Sans body, Overpass display, 14px/20px */
   fontFamily:
@@ -907,7 +907,7 @@ export const corporateTheme: ThemeTokens = {
   // is the correct answer (4.70 / 5.93:1).
   colorOnSuccess: "#04291e",
   colorOnWarning: "#451a03",
-  colorOnDanger: "#ffffff",
+  colorOnDanger: "#33061a",
   colorOnInfo: "#ffffff",
   colorSurfaceHover: "rgba(15, 118, 110, 0.06)",
   /* ----- Typography — Inter body, Space Grotesk display, 15px/1.55 ----- */
