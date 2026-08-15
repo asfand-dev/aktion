@@ -1,0 +1,69 @@
+name: "Screenshots"
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+
+permissions:
+  checks: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    name: Take a screenshot after page was built
+    env:
+      PREVIEW_URL: https://primajin.github.io/aktion/pr-preview/pr-${{ github.event.number }}/
+    steps:
+      - name: Wait for build to succeed
+        uses: fountainhead/action-wait-for-check@v1.2.0
+        id: wait-for-build
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Make sure it builds. Then show a preview.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Exit if build did not succeed
+        if: steps.wait-for-build.outputs.conclusion == 'failure'
+        run: exit 1
+        shell: bash
+      - name: Wait for preview URL to be available
+        if: steps.wait-for-build.outputs.conclusion == 'success'
+        shell: bash
+        run: |
+          echo "Polling ${PREVIEW_URL} ..."
+          timeout=180
+          elapsed=0
+          until [ "$elapsed" -ge "$timeout" ]; do
+            status=$(curl --silent --output /dev/null --write-out "%{http_code}" "${PREVIEW_URL}" || true)
+            if [[ "$status" =~ ^2 ]]; then
+              echo "Preview is live (HTTP ${status})"
+              exit 0
+            fi
+            echo "HTTP ${status} – retrying in 5 s (${elapsed}/${timeout}s elapsed)"
+            sleep 5
+            elapsed=$((elapsed + 5))
+          done
+          echo "Timed out waiting for preview after ${timeout}s"
+          exit 1
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: install puppeteer-headful
+        uses: mujo-code/puppeteer-headful@master
+        env:
+          CI: 'true'
+      - name: screenshots-ci-action
+        uses: flameddd/screenshots-ci-action@master
+        with:
+          devices: iPhone 13,iPad Pro,iPad Pro landscape
+          fullpage: false
+          noDesktop: true
+          releaseId: 315671617
+          type: png
+          url: ${{ env.PREVIEW_URL }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v7
+        with:
+          path: screenshots
+          name: Download-screenshots
