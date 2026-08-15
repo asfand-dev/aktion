@@ -7,6 +7,11 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-08-15
 
+### Docs Runtime Version Sync
+
+- Added a docs version sync step that reads the current `package.json` version and updates version badges/snippets in the docs and flagship demos automatically.
+- Wired the sync into `build` and `build:docs`, so docs stop drifting to old values like `0.5.15` after a release bump.
+
 ### UI Providers Interoperability Layer
 
 - Added a formal interoperability interface (`UIProvider`) to allow external packages to replace Aktion's default component library.
