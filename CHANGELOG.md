@@ -7,6 +7,12 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-08-15
 
+### UI Providers Interoperability Layer
+
+- Added a formal interoperability interface (`UIProvider`) to allow external packages to replace Aktion's default component library.
+- Added a new `setUIProvider()` method on `<aktion-app>` to seamlessly swap the built-in UI layer for UI libraries like Material UI, Bootstrap, or ShadCN.
+- Added documentation for UI providers with examples on how to build connectors for React and plain-DOM UI libraries.
+
 ### Vite HMR for `.aktion` Files
 
 - Vite's dev server now watches all `*.aktion` files and triggers a full hot-reload whenever one changes, so edits to `.aktion` sources are reflected in the browser instantly.

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UI Providers · Aktion</title>
+  <meta name="description" content="Connect Aktion to external UI libraries like Material UI, Bootstrap, or ShadCN through the UIProvider interoperability layer." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body data-page="ui-providers">
+  <div id="app">
+    <header class="doc-header">
+      <div class="header-inner">
+        <div class="logo">
+          <a href="index.html">
+            <img src="assets/logo.png" alt="Aktion logo" width="32" height="32" />
+            <span>Aktion</span>
+          </a>
+        </div>
+        <nav class="primary-nav" id="primary-nav"></nav>
+        <div class="header-controls">
+          <button id="theme-toggle" class="icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode">
+            <i class="fa-solid fa-moon dark-icon"></i>
+            <i class="fa-solid fa-sun light-icon"></i>
+          </button>
+          <a href="https://github.com/asfand-dev/aktion" class="icon-btn" title="GitHub" target="_blank" rel="noopener">
+            <i class="fa-brands fa-github"></i>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-layout">
+      <nav class="doc-sidebar">
+        <div id="sidebar-nav"></div>
+      </nav>
+
+      <main class="doc-main">
+        <h1>UI Providers (Interoperability Layer)</h1>
+        
+        <p class="lead">
+          Aktion ships with a robust built-in UI library, but it doesn't lock you in. Using the <code>UIProvider</code> interoperability interface, you can completely swap Aktion's output to generate interfaces using Material UI, Bootstrap, ShadCN, or any other design system.
+        </p>
+
+        <p>
+          These connectors are shipped as standalone sibling packages (e.g., <code>@aktion/mui-provider</code>). Aktion parses the logic and state, while the provider maps those instructions into the actual components of your favorite UI library.
+        </p>
+
+        <h2 id="using-a-provider">Using a UI Provider</h2>
+        <p>To use an external UI library, import its provider and pass it to your <code>&lt;aktion-app&gt;</code> element via <code>setUIProvider()</code>.</p>
+
+        <pre><code>import { AktionElement } from "aktion";
+import { muiProvider } from "@aktion/mui-provider"; // Hypothetical package
+
+const app = document.querySelector("aktion-app");
+app.setUIProvider(muiProvider);
+
+// Now, rendering `Button("Click Me")` inside Aktion 
+// will output a Material UI &lt;Button&gt; node.</code></pre>
+
+        <h2 id="building-a-provider">Building a Provider</h2>
+        <p>A UI provider is simply an object implementing the <code>UIProvider</code> interface:</p>
+
+        <pre><code>export interface UIProvider {
+  name: string;
+  library: ComponentLibrary;
+  setup?: (root: ShadowRoot | Document | HTMLElement) => void;
+  teardown?: () => void;
+}</code></pre>
+
+        <p>
+          Here's a minimal example showing how you might build an adapter for <strong>Bootstrap</strong>:
+        </p>
+
+        <pre><code>import type { UIProvider, ComponentLibrary, ComponentSpec } from "aktion";
+
+const bootstrapComponents: ComponentSpec[] = [
+  {
+    name: "Button",
+    description: "A Bootstrap button",
+    props: [
+      { name: "label", type: "string", positional: true },
+      { name: "variant", type: "string", enum: ["primary", "secondary", "danger"] }
+    ],
+    render(node, props, helpers) {
+      const btn = document.createElement("button");
+      btn.className = `btn btn-${props.variant || "primary"}`;
+      btn.textContent = props.label as string;
+      
+      // Wire up Aktion events to standard DOM events
+      if (props.onClick) {
+        btn.addEventListener("click", (e) => helpers.invoke(props.onClick, e));
+      }
+      return btn;
+    }
+  }
+];
+
+export const bootstrapProvider: UIProvider = {
+  name: "Bootstrap",
+  library: {
+    root: "Container",
+    components: bootstrapComponents
+  },
+  setup(root) {
+    // Inject Bootstrap CSS into the Aktion shadow root
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css";
+    root.appendChild(link);
+  }
+};</code></pre>
+
+        <h2 id="react-integration">Integrating React libraries (like MUI)</h2>
+        <p>
+          Since React components don't return plain DOM nodes, your provider can render a React root into a container div:
+        </p>
+
+        <pre><code>import { createRoot } from "react-dom/client";
+import { Button as MuiButton } from "@mui/material";
+
+export const muiProvider: UIProvider = {
+  name: "MUI",
+  library: {
+    root: "Box",
+    components: [
+      {
+        name: "Button",
+        description: "MUI Button",
+        props: [{ name: "label", type: "string", positional: true }],
+        render(node, props, helpers) {
+          const container = document.createElement("div");
+          container.style.display = "inline-block";
+          
+          const root = createRoot(container);
+          root.render(
+            &lt;MuiButton onClick={() => helpers.invoke(props.onClick)}&gt;
+              {props.label as string}
+            &lt;/MuiButton&gt;
+          );
+          
+          helpers.registerDisposer(() => root.unmount());
+          return container;
+        }
+      }
+    ]
+  }
+};</code></pre>
+
+        <div class="doc-nav-links">
+          <a href="interop.html" class="nav-prev">
+            <span class="nav-dir">Previous</span>
+            <span class="nav-title">Third-party widgets</span>
+          </a>
+          <a href="custom-components.html" class="nav-next">
+            <span class="nav-dir">Next</span>
+            <span class="nav-title">Custom components</span>
+          </a>
+        </div>
+      </main>
+
+      <div class="doc-toc">
+        <div class="toc-inner">
+          <h3>On this page</h3>
+          <ul id="toc-list"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="assets/site.js"></script>
+</body>
+</html>

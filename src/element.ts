@@ -20,6 +20,7 @@
  *       `appendChunk(text)`              — append a streaming chunk and re-render
  *       `setTheme(theme)`                — apply a theme by name or token map
  *       `registerComponents(...)`        — extend the built-in library
+ *       `setUIProvider(provider)`        — replace the built-in library with an interoperability adapter (e.g., MUI, Bootstrap)
  *       `registerHttpInterceptors(...)`  — install `onRequest`/`onResponse`/`onError`
  *                                          hooks for the Aktion HTTP layer
  *       `getSystemPrompt(opts)`          — build a system prompt for the current library
@@ -61,7 +62,7 @@ import {
 import { HttpRuntime } from "./runtime/http.js";
 import { EffectRunner } from "./runtime/effects.js";
 import type { EvaluationContext } from "./runtime/evaluator.js";
-import type { ComponentLibrary, ComponentSpec } from "./library/types.js";
+import type { ComponentLibrary, ComponentSpec, UIProvider } from "./library/types.js";
 import { defaultLibrary, validateProgramSchema } from "./library/index.js";
 import { mergeLibraries } from "./library/registry.js";
 import { Renderer } from "./renderer/renderer.js";
@@ -322,6 +323,7 @@ export class AktionElement extends HTMLElement {
   private readonly state = new StateStore();
   private readonly router = new Router();
   private library: ComponentLibrary = defaultLibrary;
+  private currentUIProvider?: UIProvider;
   private readonly http = new HttpRuntime();
   private readonly effectRunner: EffectRunner;
   private renderer: Renderer;
@@ -1056,6 +1058,25 @@ export class AktionElement extends HTMLElement {
     // reapply any `$theme({...})` from the active program on top of the
     // freshly-painted base.
     this.scriptThemeKeys = [];
+    this.scheduleRender();
+  }
+
+  /**
+   * Completely replaces the built-in component library with an external one (e.g. MUI, Bootstrap).
+   * It gives a clear separation of concerns by delegating the UI representation to an implementation package.
+   */
+  setUIProvider(provider: UIProvider): void {
+    if (this.currentUIProvider?.teardown) {
+      this.currentUIProvider.teardown();
+    }
+    
+    this.currentUIProvider = provider;
+    this.library = provider.library;
+    this.renderer.setLibrary(this.library);
+
+    if (provider.setup) {
+      provider.setup(this.root);
+    }
     this.scheduleRender();
   }
 
