@@ -12,6 +12,8 @@ Each entry is dated and summarises what was added, changed, or fixed.
 - Added a formal interoperability interface (`UIProvider`) to allow external packages to replace Aktion's default component library.
 - Added a new `setUIProvider()` method on `<aktion-app>` to seamlessly swap the built-in UI layer for UI libraries like Material UI, Bootstrap, or ShadCN.
 - Added documentation for UI providers with examples on how to build connectors for React and plain-DOM UI libraries.
+- Added a new section on the homepage illustrating how Aktion orchestrates various design systems like Material UI, Bootstrap, and ShadCN.
+- Expanded UI Providers documentation with a guide on how to write and publish custom packages for in-house or external UI libraries.
 
 ### Vite HMR for `.aktion` Files
 

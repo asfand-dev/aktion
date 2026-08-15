@@ -158,6 +158,31 @@ export const muiProvider: UIProvider = {
   }
 };</code></pre>
 
+        
+        <h2 id="writing-own-packages">Writing your own packages</h2>
+        <p>
+          To distribute a UI Provider for an in-house framework or a public UI library, the best approach is to package it as a standalone npm module. Here is how to structure and write your own packages:
+        </p>
+
+        <ol>
+          <li>
+            <strong>Map Aktion components:</strong> Create a one-to-one mapping between Aktion's standard components (e.g., <code>Button</code>, <code>Card</code>, <code>Row</code>) and the target library's counterparts. 
+          </li>
+          <li>
+            <strong>Implement the interface:</strong> Define an object conforming to the <code>UIProvider</code> interface. Provide an array of <code>ComponentSpec</code> objects mapping Aktion props to your framework's expected properties.
+          </li>
+          <li>
+            <strong>Handle lifecycle and context:</strong> Use the <code>setup(root)</code> and <code>teardown()</code> methods of the <code>UIProvider</code> to inject required CSS variables, styles, font links, or context providers (e.g. React Providers) into the DOM.
+          </li>
+          <li>
+            <strong>Export the provider:</strong> Expose the fully configured provider from your package entry point (e.g. <code>export const myFrameworkProvider = { ... }</code>). 
+          </li>
+        </ol>
+
+        <p>
+          As an example, if you build an adapter for your company's internal design system, you could publish it as <code>@your-org/aktion-provider</code>. Your users will then only need to call <code>app.setUIProvider(yourOrgProvider)</code> to completely restyle their Aktion applications.
+        </p>
+
         <div class="doc-nav-links">
           <a href="interop.html" class="nav-prev">
             <span class="nav-dir">Previous</span>

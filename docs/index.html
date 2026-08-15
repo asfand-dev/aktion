@@ -1252,7 +1252,86 @@ statusBadges = Row([
       </div>
     </section>
 
-    <!-- ======================== FINAL CTA ======================== -->
+    
+    
+    <!-- ======================== ORCHESTRATION ======================== -->
+    <section class="section" style="background: var(--bg-2);">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="line"></span> Orchestration <span class="line"></span></span>
+          <h2>One language. <span class="grad-text">Any design system.</span></h2>
+          <p>Aktion acts as an orchestration layer. Write your UI logic once, and let Aktion map it to Material UI, Bootstrap, ShadCN, or your own in-house framework.</p>
+        </div>
+
+        <div class="reveal" style="display: flex; flex-direction: column; align-items: center; margin-top: 40px; margin-bottom: 60px;">
+          <!-- Top: Aktion -->
+          <div style="background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 16px 32px; font-weight: 700; font-size: 1.2rem; display: flex; align-items: center; gap: 12px; box-shadow: var(--shadow);">
+            <img src="assets/logo.png" width="24" height="24" alt="Aktion Logo" /> Aktion Core
+          </div>
+          
+          <!-- Fork lines -->
+          <div style="width: 2px; height: 30px; background: var(--border-strong);"></div>
+          <div style="width: 60%; height: 2px; background: var(--border-strong); display: flex; justify-content: space-between; max-width: 600px;">
+            <div style="width: 2px; height: 24px; background: var(--border-strong); transform: translateY(0);"></div>
+            <div style="width: 2px; height: 24px; background: var(--border-strong); transform: translateY(0);"></div>
+            <div style="width: 2px; height: 24px; background: var(--border-strong); transform: translateY(0);"></div>
+          </div>
+          
+          <!-- Bottom: Frameworks -->
+          <div style="display: flex; justify-content: space-between; width: 100%; max-width: 800px; margin-top: 24px; gap: 20px; flex-wrap: wrap;">
+            
+            <div class="demo-card" style="flex: 1; min-width: 200px; text-align: center;">
+              <div class="head" style="justify-content: center;"><i class="fa-brands fa-react" style="color: #61dafb"></i> Material UI</div>
+              <div class="body" style="padding: 24px 16px; font-size: 14px; color: var(--text-soft);">
+                Generates <code>@mui/material</code> React elements
+              </div>
+            </div>
+            
+            <div class="demo-card" style="flex: 1; min-width: 200px; text-align: center;">
+              <div class="head" style="justify-content: center;"><i class="fa-brands fa-bootstrap" style="color: #7952b3"></i> Bootstrap</div>
+              <div class="body" style="padding: 24px 16px; font-size: 14px; color: var(--text-soft);">
+                Generates standard <code>bootstrap</code> markup
+              </div>
+            </div>
+            
+            <div class="demo-card" style="flex: 1; min-width: 200px; text-align: center;">
+              <div class="head" style="justify-content: center;"><i class="fa-solid fa-code" style="color: #ffffff"></i> ShadCN</div>
+              <div class="body" style="padding: 24px 16px; font-size: 14px; color: var(--text-soft);">
+                Generates Tailwind + Radix markup
+              </div>
+            </div>
+            
+          </div>
+        </div>
+
+        <!-- Example Implementation -->
+        <div class="terminal reveal" style="max-width: 800px; margin: 0 auto;">
+          <div class="window-bar">
+            <span class="dots"><i></i><i></i><i></i></span>
+            <span class="file">card.js — same code, different output</span>
+          </div>
+          <div class="terminal-body"><span class="cm">// UI output changes based on the registered UI Provider</span><br>
+<span class="ok">$app</span>(<span class="ok">Card</span>([<br>
+&nbsp;&nbsp;<span class="ok">CardHeader</span>(<span style="color:#fca5a5">"Profile"</span>),<br>
+&nbsp;&nbsp;<span class="ok">Text</span>(<span style="color:#fca5a5">"Manage your details."</span>),<br>
+&nbsp;&nbsp;<span class="ok">Button</span>(<span style="color:#fca5a5">"Edit"</span>, { variant: <span style="color:#fca5a5">"primary"</span> })<br>
+]))<br>
+<br>
+<span class="cm">// Material UI Output:</span><br>
+<span class="cm">// &lt;Card&gt;&lt;CardHeader title="Profile"/&gt;&lt;CardContent&gt;&lt;Typography&gt;Manage your details.&lt;/Typography&gt;&lt;Button variant="contained"&gt;Edit&lt;/Button&gt;&lt;/CardContent&gt;&lt;/Card&gt;</span><br>
+<br>
+<span class="cm">// Bootstrap Output:</span><br>
+<span class="cm">// &lt;div class="card"&gt;&lt;div class="card-header"&gt;Profile&lt;/div&gt;&lt;div class="card-body"&gt;&lt;p class="card-text"&gt;Manage your details.&lt;/p&gt;&lt;button class="btn btn-primary"&gt;Edit&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;</span>
+          </div>
+        </div>
+        
+        <div style="text-align:center;margin-top:42px;" class="reveal">
+          <a class="btn btn-ghost" href="ui-providers.html"><i class="fa-solid fa-plug"></i> Learn how to build UI Providers</a>
+        </div>
+      </div>
+    </section>
+
+<!-- ======================== FINAL CTA ======================== -->
     <section class="section">
       <div class="wrap">
         <div class="cta reveal">
