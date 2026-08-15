@@ -5,6 +5,12 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-08-15
+
+### Vite HMR for `.aktion` Files
+
+- Vite's dev server now watches all `*.aktion` files and triggers a full hot-reload whenever one changes, so edits to `.aktion` sources are reflected in the browser instantly.
+
 ## 2026-08-13
 
 ### DataGrid Column Tooling — Corrections

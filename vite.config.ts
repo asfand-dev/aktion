@@ -1,9 +1,31 @@
 import { defineConfig } from "vite";
 import { resolve } from "node:path";
 import dts from "vite-plugin-dts";
+import type { Plugin } from "vite";
+
+function watchAktionFiles(): Plugin {
+  return {
+    name: "watch-aktion-files",
+    configureServer(server) {
+      server.watcher.add("**/*.aktion");
+      server.watcher.on("change", (file) => {
+        if (file.endsWith(".aktion")) {
+          server.ws.send({ type: "full-reload" });
+        }
+      });
+    },
+    handleHotUpdate({ file, server }) {
+      if (file.endsWith(".aktion")) {
+        server.ws.send({ type: "full-reload" });
+        return [];
+      }
+    },
+  };
+}
 
 export default defineConfig({
   plugins: [
+    watchAktionFiles(),
     dts({
       outDir: "dist/types",
       include: ["src/**/*"],
