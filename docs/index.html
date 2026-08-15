@@ -45,6 +45,14 @@
       --ak-blue:   #3b82f6;
 
       --grad-brand: linear-gradient(120deg, #6366f1 0%, #8b5cf6 45%, #ec4899 100%);
+      --grad-brand-loop: linear-gradient(90deg,
+        #6366f1 0%,
+        #8b5cf6 16.66%,
+        #ec4899 33.33%,
+        #6366f1 50%,
+        #8b5cf6 66.66%,
+        #ec4899 83.33%,
+        #6366f1 100%);
       --grad-cyan:  linear-gradient(120deg, #22d3ee 0%, #6366f1 100%);
       --grad-warm:  linear-gradient(120deg, #f59e0b 0%, #ec4899 100%);
       --grad-emerald: linear-gradient(120deg, #10b981 0%, #22d3ee 100%);
@@ -125,12 +133,12 @@
       background-clip: text;
       color: transparent;
     }
-    @keyframes gradShift { to { background-position: 220% center; } }
+    @keyframes gradShift { to { background-position: 100% center; } }
 
     /* Scroll progress indicator */
     #scrollProgress {
       position: fixed; top: 0; left: 0; height: 3px; width: 0; z-index: 100;
-      background: var(--grad-brand); background-size: 200% auto;
+      background: var(--grad-brand-loop); background-size: 200% 100%;
       box-shadow: 0 0 14px rgba(139,92,246,0.6); transition: width .08s linear;
       animation: gradShift 7s linear infinite;
     }
