@@ -77,6 +77,7 @@
       --shadow:    0 24px 60px -24px rgba(60,40,160,0.30);
       --shadow-sm: 0 8px 24px -10px rgba(60,40,160,0.22);
       --dot:       rgba(99,102,241,0.14);
+      --fork-line: #aeb4cc;
     }
     /* Dark theme */
     html[data-doc-theme='dark'] {
@@ -97,6 +98,7 @@
       --shadow:    0 30px 70px -28px rgba(0,0,0,0.8);
       --shadow-sm: 0 12px 30px -12px rgba(0,0,0,0.65);
       --dot:       rgba(139,92,246,0.18);
+      --fork-line: #4e5577;
     }
 
     * { box-sizing: border-box; }
@@ -1130,25 +1132,25 @@ function save() {
 settingsCard = Card([
   CardHeader("Settings"),
   Column([
-    FormControl("Plan", Select("plan-select", { 
-      items: planOptions, 
-      value: $plan 
+    FormControl("Plan", Select("plan-select", {
+      items: planOptions,
+      value: $plan
     })),
-    FormControl("Notifications", Switch("notify-switch", { 
-      label: "Email notifications", 
-      value: $notify 
+    FormControl("Notifications", Switch("notify-switch", {
+      label: "Email notifications",
+      value: $notify
     })),
-    FormControl("Volume", Slider("volume-slider", { 
-      value: $volume, 
-      min: 0, 
-      max: 100, 
-      showValue: true 
+    FormControl("Volume", Slider("volume-slider", {
+      value: $volume,
+      min: 0,
+      max: 100,
+      showValue: true
     })),
-    Button("Save changes", { 
-      onClick: save, 
-      variant: "primary", 
-      icon: "check", 
-      fullWidth: true 
+    Button("Save changes", {
+      onClick: save,
+      variant: "primary",
+      icon: "check",
+      fullWidth: true
     })
   ], { gap: "md" })
 ])
@@ -1252,8 +1254,6 @@ statusBadges = Row([
       </div>
     </section>
 
-    
-    
     <!-- ======================== ORCHESTRATION ======================== -->
     <section class="section" style="background: var(--bg-2);">
       <div class="wrap">
@@ -1263,68 +1263,70 @@ statusBadges = Row([
           <p>Aktion acts as an orchestration layer. Write your UI logic once, and let Aktion map it to Material UI, Bootstrap, ShadCN, or your own in-house framework.</p>
         </div>
 
-        <div class="reveal" style="display: flex; flex-direction: column; align-items: center; margin-top: 40px; margin-bottom: 60px;">
-          <!-- Top: Aktion -->
-          <div style="background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 16px 32px; font-weight: 700; font-size: 1.2rem; display: flex; align-items: center; gap: 12px; box-shadow: var(--shadow);">
-            <img src="assets/logo.png" width="24" height="24" alt="Aktion Logo" /> Aktion Core
+        <div class="terminal reveal" style="max-width: 860px; margin: 40px auto 0;">
+          <div class="window-bar">
+            <span class="dots"><i></i><i></i><i></i></span>
+            <span class="file">card.aktion — one quine, three outputs</span>
           </div>
-          
-          <!-- Fork lines -->
-          <div style="width: 2px; height: 30px; background: var(--border-strong);"></div>
-          <div style="width: 60%; height: 2px; background: var(--border-strong); display: flex; justify-content: space-between; max-width: 600px;">
-            <div style="width: 2px; height: 24px; background: var(--border-strong); transform: translateY(0);"></div>
-            <div style="width: 2px; height: 24px; background: var(--border-strong); transform: translateY(0);"></div>
-            <div style="width: 2px; height: 24px; background: var(--border-strong); transform: translateY(0);"></div>
-          </div>
-          
-          <!-- Bottom: Frameworks -->
-          <div style="display: flex; justify-content: space-between; width: 100%; max-width: 800px; margin-top: 24px; gap: 20px; flex-wrap: wrap;">
-            
-            <div class="demo-card" style="flex: 1; min-width: 200px; text-align: center;">
-              <div class="head" style="justify-content: center;"><i class="fa-brands fa-react" style="color: #61dafb"></i> Material UI</div>
-              <div class="body" style="padding: 24px 16px; font-size: 14px; color: var(--text-soft);">
-                Generates <code>@mui/material</code> React elements
-              </div>
-            </div>
-            
-            <div class="demo-card" style="flex: 1; min-width: 200px; text-align: center;">
-              <div class="head" style="justify-content: center;"><i class="fa-brands fa-bootstrap" style="color: #7952b3"></i> Bootstrap</div>
-              <div class="body" style="padding: 24px 16px; font-size: 14px; color: var(--text-soft);">
-                Generates standard <code>bootstrap</code> markup
-              </div>
-            </div>
-            
-            <div class="demo-card" style="flex: 1; min-width: 200px; text-align: center;">
-              <div class="head" style="justify-content: center;"><i class="fa-solid fa-code" style="color: #ffffff"></i> ShadCN</div>
-              <div class="body" style="padding: 24px 16px; font-size: 14px; color: var(--text-soft);">
-                Generates Tailwind + Radix markup
-              </div>
-            </div>
-            
+          <div class="terminal-body"><span class="cm">// Aktion quine (single source)</span><br>
+            <span class="ok">$app</span>(<span class="ok">Card</span>([<br>
+            &nbsp;&nbsp;<span class="ok">CardHeader</span>(<span style="color:#fca5a5">"Revenue dashboard"</span>),<br>
+            &nbsp;&nbsp;<span class="ok">Text</span>(<span style="color:#fca5a5">"Mapped through a UI provider."</span>),<br>
+            &nbsp;&nbsp;<span class="ok">Row</span>([<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span class="ok">Button</span>(<span style="color:#fca5a5">"Primary"</span>, { variant: <span style="color:#fca5a5">"primary"</span> }),<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span class="ok">Button</span>(<span style="color:#fca5a5">"Secondary"</span>, { variant: <span style="color:#fca5a5">"ghost"</span> })<br>
+            &nbsp;&nbsp;], { gap: <span style="color:#fca5a5">"sm"</span> })<br>
+            ]))<br>
+            <br><span class="cm">// Provider bundles are loaded via CDN, not npm install.</span>
           </div>
         </div>
 
-        <!-- Example Implementation -->
-        <div class="terminal reveal" style="max-width: 800px; margin: 0 auto;">
-          <div class="window-bar">
-            <span class="dots"><i></i><i></i><i></i></span>
-            <span class="file">card.js — same code, different output</span>
-          </div>
-          <div class="terminal-body"><span class="cm">// UI output changes based on the registered UI Provider</span><br>
-<span class="ok">$app</span>(<span class="ok">Card</span>([<br>
-&nbsp;&nbsp;<span class="ok">CardHeader</span>(<span style="color:#fca5a5">"Profile"</span>),<br>
-&nbsp;&nbsp;<span class="ok">Text</span>(<span style="color:#fca5a5">"Manage your details."</span>),<br>
-&nbsp;&nbsp;<span class="ok">Button</span>(<span style="color:#fca5a5">"Edit"</span>, { variant: <span style="color:#fca5a5">"primary"</span> })<br>
-]))<br>
-<br>
-<span class="cm">// Material UI Output:</span><br>
-<span class="cm">// &lt;Card&gt;&lt;CardHeader title="Profile"/&gt;&lt;CardContent&gt;&lt;Typography&gt;Manage your details.&lt;/Typography&gt;&lt;Button variant="contained"&gt;Edit&lt;/Button&gt;&lt;/CardContent&gt;&lt;/Card&gt;</span><br>
-<br>
-<span class="cm">// Bootstrap Output:</span><br>
-<span class="cm">// &lt;div class="card"&gt;&lt;div class="card-header"&gt;Profile&lt;/div&gt;&lt;div class="card-body"&gt;&lt;p class="card-text"&gt;Manage your details.&lt;/p&gt;&lt;button class="btn btn-primary"&gt;Edit&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;</span>
+        <div class="reveal" style="display:flex;flex-direction:column;align-items:center;margin-top:18px;margin-bottom:18px;">
+          <div style="width:2px;height:26px;background:var(--fork-line);"></div>
+          <div style="width:min(72%,680px);height:2px;background:var(--fork-line);display:flex;justify-content:space-between;">
+            <div style="width:2px;height:22px;background:var(--fork-line);"></div>
+            <div style="width:2px;height:22px;background:var(--fork-line);"></div>
+            <div style="width:2px;height:22px;background:var(--fork-line);"></div>
           </div>
         </div>
-        
+
+        <div style="display: flex; justify-content: space-between; width: 100%; max-width: 980px; margin: 12px auto 0; gap: 20px; flex-wrap: wrap;" class="reveal">
+          <div class="demo-card" style="flex: 1; min-width: 260px;">
+            <div class="head" style="justify-content: center;"><i class="fa-brands fa-react" style="color: #61dafb"></i> Material UI</div>
+            <div class="body" style="padding: 14px; font-size: 13px; color: var(--text-soft);">
+              <div style="margin-bottom:8px;"><code>@aktion/material-ui-provider</code></div>
+              <iframe title="Material UI card preview" data-home-preview="mui" sandbox="allow-scripts allow-same-origin" style="width:100%;height:165px;border:0;border-radius:10px;background:transparent;overflow:hidden;margin-bottom:10px;"></iframe>
+<pre style="margin:0;background:var(--code-bg);color:var(--code-text);padding:10px;border-radius:10px;overflow:auto;font-size:11px;line-height:1.45;">&lt;Card&gt;
+  &lt;CardHeader title="Revenue dashboard" /&gt;
+  &lt;CardContent&gt;&lt;Typography&gt;Mapped through a UI provider.&lt;/Typography&gt;&lt;/CardContent&gt;
+  &lt;CardActions&gt;&lt;Button variant="contained"&gt;Primary&lt;/Button&gt;&lt;/CardActions&gt;
+&lt;/Card&gt;</pre>
+            </div>
+          </div>
+          <div class="demo-card" style="flex: 1; min-width: 260px;">
+            <div class="head" style="justify-content: center;"><i class="fa-brands fa-bootstrap" style="color: #7952b3"></i> Bootstrap</div>
+            <div class="body" style="padding: 14px; font-size: 13px; color: var(--text-soft);">
+              <div style="margin-bottom:8px;"><code>@aktion/bootstrap-provider</code></div>
+              <iframe title="Bootstrap card preview" data-home-preview="bootstrap" sandbox="allow-scripts allow-same-origin" style="width:100%;height:165px;border:0;border-radius:10px;background:transparent;overflow:hidden;margin-bottom:10px;"></iframe>
+<pre style="margin:0;background:var(--code-bg);color:var(--code-text);padding:10px;border-radius:10px;overflow:auto;font-size:11px;line-height:1.45;">&lt;div class="card"&gt;
+  &lt;div class="card-header"&gt;Revenue dashboard&lt;/div&gt;
+  &lt;div class="card-body"&gt;&lt;button class="btn btn-primary btn-sm"&gt;Primary&lt;/button&gt;&lt;/div&gt;
+&lt;/div&gt;</pre>
+            </div>
+          </div>
+          <div class="demo-card" style="flex: 1; min-width: 260px;">
+            <div class="head" style="justify-content: center;"><i class="fa-solid fa-code" style="color: var(--text)"></i> ShadCN</div>
+            <div class="body" style="padding: 14px; font-size: 13px; color: var(--text-soft);">
+              <div style="margin-bottom:8px;"><code>@aktion/shadcn-provider</code></div>
+              <iframe title="ShadCN card preview" data-home-preview="shadcn" sandbox="allow-scripts allow-same-origin" style="width:100%;height:165px;border:0;border-radius:10px;background:transparent;overflow:hidden;margin-bottom:10px;"></iframe>
+<pre style="margin:0;background:var(--code-bg);color:var(--code-text);padding:10px;border-radius:10px;overflow:auto;font-size:11px;line-height:1.45;">&lt;Card&gt;
+  &lt;CardHeader&gt;&lt;CardTitle&gt;Revenue dashboard&lt;/CardTitle&gt;&lt;/CardHeader&gt;
+  &lt;CardFooter&gt;&lt;Button&gt;Primary&lt;/Button&gt;&lt;/CardFooter&gt;
+&lt;/Card&gt;</pre>
+            </div>
+          </div>
+        </div>
+
         <div style="text-align:center;margin-top:42px;" class="reveal">
           <a class="btn btn-ghost" href="ui-providers.html"><i class="fa-solid fa-plug"></i> Learn how to build UI Providers</a>
         </div>
@@ -1400,6 +1402,138 @@ statusBadges = Row([
 
     const docTheme = () => document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
 
+    function buildHomeProviderPreviews(theme) {
+      const isDark = theme === "dark";
+      const muiBg = "transparent";
+      const bootstrapBodyBg = "transparent";
+      const bootstrapCardClass = isDark ? "card shadow-sm border border-secondary bg-dark text-light" : "card shadow-sm border-0";
+      const bootstrapCardTextClass = isDark ? "text-light-emphasis" : "text-body-secondary";
+      const shadcnVars = isDark
+        ? `--background: 222.2 84% 4.9%;
+      --foreground: 210 40% 98%;
+      --card: 222.2 84% 4.9%;
+      --card-foreground: 210 40% 98%;
+      --border: 217.2 32.6% 17.5%;
+      --primary: 210 40% 98%;
+      --primary-foreground: 222.2 47.4% 11.2%;
+      --secondary: 217.2 32.6% 17.5%;
+      --secondary-foreground: 210 40% 98%;
+      --muted-foreground: 215 20.2% 65.1%;`
+        : `--background: 0 0% 100%;
+      --foreground: 222.2 84% 4.9%;
+      --card: 0 0% 100%;
+      --card-foreground: 222.2 84% 4.9%;
+      --border: 214.3 31.8% 91.4%;
+      --primary: 222.2 47.4% 11.2%;
+      --primary-foreground: 210 40% 98%;
+      --secondary: 210 40% 96.1%;
+      --secondary-foreground: 222.2 47.4% 11.2%;
+      --muted-foreground: 215.4 16.3% 46.9%;`;
+      const shadcnBodyBg = "transparent";
+
+      return {
+        mui: `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    html,body{margin:0;padding:0;background:${muiBg};font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+    body{overflow:hidden}
+    #root{margin:0;padding:0}
+  </style>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
+  <script src="https://unpkg.com/@mui/material@5/umd/material-ui.production.min.js"><\/script>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+    const { createElement: h } = React;
+    const { ThemeProvider, createTheme, CssBaseline, Card, CardContent, CardActions, Typography, Button, CardHeader } = MaterialUI;
+    const theme = createTheme({
+      palette: { mode: "${theme}", primary: { main: "#6366f1" } },
+      components: {
+        MuiCssBaseline: {
+          styleOverrides: {
+            html: { backgroundColor: "transparent" },
+            body: { backgroundColor: "transparent" },
+          },
+        },
+      },
+    });
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(
+      h(ThemeProvider, { theme },
+        h(CssBaseline),
+        h(Card, { sx: { maxWidth: 420, borderRadius: 3 } },
+          h(CardHeader, { title: "Revenue dashboard" }),
+          h(CardContent, null, h(Typography, { variant: "body2", color: "text.secondary" }, "Mapped through a UI provider.")),
+          h(CardActions, null, h(Button, { variant: "contained", size: "small" }, "Primary"))
+        )
+      )
+    );
+  <\/script>
+</body>
+</html>`,
+        bootstrap: `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+  <style>
+    html,body{margin:0;padding:0;background:${bootstrapBodyBg};}
+    body{overflow:hidden;padding:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+  </style>
+</head>
+<body>
+  <div class="${bootstrapCardClass}" style="max-width:420px;border-radius:14px;">
+    <div class="card-header">Revenue dashboard</div>
+    <div class="card-body">
+      <p class="card-text ${bootstrapCardTextClass} mb-3">Mapped through a UI provider.</p>
+      <button class="btn btn-primary btn-sm">Primary</button>
+    </div>
+  </div>
+</body>
+</html>`,
+        shadcn: `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"><\/script>
+  <style>
+    :root {
+      ${shadcnVars}
+      --radius: 0.65rem;
+    }
+    body{margin:0;padding:0;background:${shadcnBodyBg};font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;overflow:hidden}
+  </style>
+</head>
+<body>
+  <div class="rounded-[var(--radius)] border bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))] shadow-sm max-w-[420px] w-full box-border">
+    <div class="flex flex-col space-y-1.5 p-6 pb-2">
+      <h3 class="text-lg font-semibold leading-none tracking-tight">Revenue dashboard</h3>
+      <p class="text-sm text-[hsl(var(--muted-foreground))]">Mapped through a UI provider.</p>
+    </div>
+    <div class="p-6 pt-2 flex gap-2">
+      <button class="inline-flex h-9 items-center justify-center whitespace-nowrap rounded-md bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-[hsl(var(--primary-foreground))] shadow transition-colors cursor-pointer hover:opacity-90">Primary</button>
+    </div>
+  </div>
+</body>
+</html>`,
+      };
+    }
+
+    function renderHomeProviderPreviews() {
+      const previews = buildHomeProviderPreviews(docTheme());
+      for (const frame of document.querySelectorAll("iframe[data-home-preview]")) {
+        const key = frame.getAttribute("data-home-preview");
+        if (key && previews[key]) frame.srcdoc = previews[key];
+      }
+    }
+
     /* ---- mount every [data-demo] code block as a live aktion-app ---- */
     function mountDemos(root = document) {
       for (const pre of root.querySelectorAll("pre[data-demo]")) {
@@ -1425,7 +1559,9 @@ statusBadges = Row([
 
     // keep all previews in sync with the doc theme
     const syncTheme = () => document.querySelectorAll("aktion-app").forEach(a => a.setAttribute("theme", docTheme()));
+    renderHomeProviderPreviews();
     new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+    new MutationObserver(renderHomeProviderPreviews).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
 
     /* ---- streaming token animation ---- */
     const STREAM_SRC = `$app(Column([header, card, btn], { gap: "md" }))
@@ -1512,21 +1648,21 @@ card = Card([
 
 content = Column([header, toolbar, banner, dataGrid], { gap: "lg", padding: "lg" })
 
-header = PageHeader("Today's Orders List", { 
+header = PageHeader("Today's Orders List", {
   subtitle: "Here is the list of orders happened today",
   breadcrumbs: []
 })
 
 toolbar = Toolbar({
   left: [
-    SearchBar("search-orders", { 
-      placeholder: "Search ID or customer...", 
+    SearchBar("search-orders", {
+      placeholder: "Search ID or customer...",
       value: $search,
       sx: { minW: "300px" }
     })
   ],
   right: [
-    SegmentedControl(["All", "Pending", "Processing", "Shipped"], { 
+    SegmentedControl(["All", "Pending", "Processing", "Shipped"], {
       value: $statusFilter,
       onChange: v => { $statusFilter = v }
     })
@@ -1536,9 +1672,9 @@ toolbar = Toolbar({
 banner = Show($selectedIds.length > 0, {
   children: Banner(\`\${$selectedIds.length} orders selected\`, {
     tone: "primary",
-    action: Button("Mark as Shipped", { 
-      size: "sm", 
-      onClick: () => updateStatus("Shipped") 
+    action: Button("Mark as Shipped", {
+      size: "sm",
+      onClick: () => updateStatus("Shipped")
     })
   })
 })
@@ -1559,21 +1695,21 @@ columns = [
     Avatar(o.customer, { size: "xs" }),
     Text(o.customer)
   ], { gap: "sm" })), { sortable: true }),
-  Col("Status", filtered.map(o => Badge(o.status, { 
-    tone: o.status === "Shipped" ? "success" : 
-          o.status === "Processing" ? "primary" : 
-          o.status === "Cancelled" ? "danger" : "warning" 
+  Col("Status", filtered.map(o => Badge(o.status, {
+    tone: o.status === "Shipped" ? "success" :
+          o.status === "Processing" ? "primary" :
+          o.status === "Cancelled" ? "danger" : "warning"
   }))),
   Col("Priority", filtered.map(o => Row([
-    StatusDot(o.priority, { 
+    StatusDot(o.priority, {
       tone: o.priority === "High" ? "danger" : o.priority === "Medium" ? "warning" : "neutral",
       pulse: o.priority === "High"
     })
   ]))),
   Col("Total", filtered.map(o => o.total), { format: "currency", align: "right" }),
   Col("Placed", filtered.map(o => o.time), { align: "right" }),
-  Col("", filtered.map(o => IconButton("ellipsis-vertical", { 
-    label: "Actions", 
+  Col("", filtered.map(o => IconButton("ellipsis-vertical", {
+    label: "Actions",
     variant: "ghost",
     onClick: () => $toast.show("Action menu opened")
   })), { align: "center" })
@@ -1594,7 +1730,7 @@ function updateStatus(newStatus) {
   $toast.success(\`Updated \${$selectedIds.length} orders to \${newStatus}\`)
   $selectedIds = []
 }
-  
+
 $orders = [
   { id: "ORD-7281", customer: "Alex Rivera", items: 3, total: 124.50, status: "Processing", time: "2m ago", priority: "High" },
   { id: "ORD-7282", customer: "Sarah Chen", items: 1, total: 45.00, status: "Shipped", time: "5m ago", priority: "Medium" },
@@ -1604,7 +1740,7 @@ $orders = [
   { id: "ORD-7286", customer: "Emma Vogt", items: 4, total: 210.00, status: "Processing", time: "3h ago", priority: "Medium" },
   { id: "ORD-7287", customer: "Liam Neeson", items: 2, total: 55.40, status: "Shipped", time: "4h ago", priority: "High" }
 ]`
-      },  
+      },
       {
         title: "Scene Controller",
         prompt: "Set up a movie-night scene for the living room.",

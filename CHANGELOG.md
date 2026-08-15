@@ -7,10 +7,40 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-08-15
 
+### UI Providers Docs Refresh
+
+- Reworked the `UI Providers` page to use the same docs shell/layout as the rest of the documentation for consistent navigation, sidebar, and TOC behavior.
+- Added live provider preview cards that render Material UI, Bootstrap, and ShadCN-style output with their real runtime/CSS in isolated iframes.
+- Cross-linked `UI Providers` from both the migration guide and the third-party widgets guide so adapter workflows are discoverable from related integration docs.
+- Fixed inline iframe demo templates to avoid over-escaped HTML while still safely escaping embedded `</script>` boundaries.
+- Added a shared Aktion "source quine" with a forked mapping view and per-provider generated HTML/JSX snippets, and mirrored the same forked quine concept on the homepage orchestration section.
+- Updated provider demos to rely on CDN delivery paths (runtime/styles) rather than local package installation.
+- Simplified the `UI Providers` docs page to match the homepage's concise fork narrative and removed extra long-form provider implementation prose from that page.
+- Increased provider preview iframe height and adjusted the ShadCN footer button layout to prevent clipping/overlap in the embedded demo card.
+- Tuned provider preview sizing to `300px` iframe height and restored the ShadCN action row to a single-line (non-wrapping) button layout.
+- Set provider preview iframes back to `280px` and hid overflow to remove visible scrollbar artifacts in the embedded cards.
+- Added a subtle blurred color backdrop behind provider preview frames and made iframe demos follow the live docs light/dark theme toggle.
+- Moved the blur treatment into each iframe document body (instead of behind the iframe) so the glow is part of each provider preview surface itself.
+- Updated homepage and UI Providers fork connectors to use solid theme-aware line colors, and corrected the UI Providers fork geometry to match the homepage branch layout.
+- Added explicit hover/transition states to the ShadCN preview buttons so interaction feedback is visible inside the iframe demo.
+- Corrected the ShadCN preview button class contract to mirror real ShadCN interaction semantics (including pointer cursor and focus ring behavior) rather than relying on browser defaults.
+- Fixed docs topbar version drift by adding `docs/assets/site.js` to the docs-version sync script (the previous hardcoded `v0.5` badge now follows `package.json` automatically).
+- Trimmed the MUI iframe preview dependencies by removing unnecessary Emotion UMD script tags; the `@mui/material` UMD bundle in this setup only needs React + ReactDOM externals.
+- Added the same live provider preview iframes (MUI, Bootstrap, ShadCN) to the homepage orchestration fork cards, including light/dark theme synchronization.
+- Reduced homepage provider iframe height and flattened the preview layers by switching iframe and iframe-document backgrounds to transparent so the cards read as direct children of the orchestration cards.
+- Forced the homepage MUI iframe preview to keep a transparent page canvas in dark mode so it no longer shows an extra dark backing layer behind the card.
+- Tightened homepage provider previews further by reducing the iframe height to `175px`.
+- Mirrored the homepage preview treatment back to `UI Providers`: reduced iframe height to `175px`, flattened iframe surfaces, and made the embedded MUI/Bootstrap/ShadCN documents render on transparent backgrounds.
+- Removed the remaining iframe border chrome on the `UI Providers` previews and stripped iframe root/body padding so the embedded cards sit flush in their frames.
+- Increased the `UI Providers` preview iframe height to `215px` for a slightly roomier embedded card presentation.
+- Removed the remaining homepage iframe document padding as well, so MUI/Bootstrap/ShadCN cards now sit flush inside the homepage preview frames.
+- Tightened homepage provider preview height again, from `175px` down to `165px`.
+
 ### Docs Runtime Version Sync
 
 - Added a docs version sync step that reads the current `package.json` version and updates version badges/snippets in the docs and flagship demos automatically.
 - Wired the sync into `build` and `build:docs`, so docs stop drifting to old values like `0.5.15` after a release bump.
+- Expanded the sync coverage to include additional docs examples/snippets that still carried `0.5.x` values (`deployment`, component demos, and catalog snippets).
 
 ### UI Providers Interoperability Layer
 

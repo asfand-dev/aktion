@@ -26,6 +26,8 @@ const docsTargets = [
     path: resolve(root, "docs/deployment.html"),
     replacements: [
       { pattern: /(aktion@)\d+\.\d+\.\d+/, replacement: "$1__VERSION__" },
+      { pattern: /(aktion@)\d+\.\d+/, replacement: "$1__VERSION__" },
+      { pattern: /(Pin a version \(\s*<code>@)\d+\.\d+\.\d+(<\/code>\))/, replacement: "$1__VERSION__$2" },
     ],
   },
   {
@@ -39,6 +41,24 @@ const docsTargets = [
     path: resolve(root, "docs/demos/mini-apps/json-formatter.aktion"),
     replacements: [
       { pattern: /("version":\s*")\d+\.\d+\.\d+(")/, replacement: "$1__VERSION__$2" },
+    ],
+  },
+  {
+    path: resolve(root, "docs/demos/components/data-display.aktion"),
+    replacements: [
+      { pattern: /(version:\s*")\d+\.\d+\.\d+(")/, replacement: "$1__VERSION__$2" },
+    ],
+  },
+  {
+    path: resolve(root, "docs/assets/component-catalog.js"),
+    replacements: [
+      { pattern: /(version:\s*")\d+\.\d+\.\d+(")/, replacement: "$1__VERSION__$2" },
+    ],
+  },
+  {
+    path: resolve(root, "docs/assets/site.js"),
+    replacements: [
+      { pattern: /(topbar-version"\s*\},\s*")v\d+\.\d+(?:\.\d+)?(")/, replacement: "$1__V_TAG__$2" },
     ],
   },
 ];
