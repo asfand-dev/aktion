@@ -13,6 +13,7 @@ Each entry is dated and summarises what was added, changed, or fixed.
 - Reworked the `UI Providers` docs and homepage orchestration section with live CDN-backed provider previews, forked source/output examples, and theme-aware embedded demos.
 - Added docs version syncing from `package.json`, so version badges and snippets no longer drift after releases.
 - Improved docs polish with a seamless looping scroll-progress gradient.
+- Tightened embedded preview sandboxing by removing unnecessary `allow-same-origin` from demo iframes.
 - Vite now watches `*.aktion` files during development and triggers a hot reload when they change.
 
 ## 2026-08-13
