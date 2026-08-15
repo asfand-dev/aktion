@@ -1,0 +1,122 @@
+name: "Lint PR Title"
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+
+jobs:
+  sync-pr-title-with-commits:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    name: Promote PR title bump level to match highest commit bump level
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const PR_NUMBER = context.payload.pull_request.number;
+            const { owner, repo } = context.repo;
+
+            const isFork = context.payload.pull_request.head.repo.full_name !== context.payload.pull_request.base.repo.full_name;
+            if (isFork) {
+              core.info('PR is from a fork; skipping PR title sync because GITHUB_TOKEN cannot update fork PR titles.');
+              return;
+            }
+            const PATCH = 0;
+            const MINOR = 1;
+            const MAJOR = 2;
+
+            const MINOR_TYPES = new Set(['feat']);
+
+            function bumpLevelFromMessage(message) {
+              const lines = message.split('\n');
+              const firstLine = lines[0];
+
+              if (/^[a-z]+(?:\([^)]+\))?!:/i.test(firstLine)) return MAJOR;
+
+              if (lines.some(line => /^BREAKING[ -]CHANGE:/i.test(line.trim()))) return MAJOR;
+
+              const match = firstLine.match(/^([a-z]+)(?:\([^)]+\))?:/i);
+
+              if (match && MINOR_TYPES.has(match[1].toLowerCase())) return MINOR;
+
+              return PATCH;
+            }
+
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner,
+              repo,
+              pull_number: PR_NUMBER,
+            });
+
+            let maxBump = PATCH;
+
+            for (const { commit } of commits) {
+              const bump = bumpLevelFromMessage(commit.message);
+
+              if (bump > maxBump) maxBump = bump;
+              if (maxBump === MAJOR) break;
+            }
+
+            const currentTitle = context.payload.pull_request.title;
+            const titleMatch = currentTitle.match(/^([a-z]+)(\([^)]+\))?(!)?: (.+)$/i);
+
+            if (!titleMatch) {
+              core.warning(`PR title "${currentTitle}" does not follow Conventional Commits format — skipping sync`);
+              return;
+            }
+
+            const [, type, scope, bang, subject] = titleMatch;
+            const scopePart = scope || '';
+            const currentBump = bang ? MAJOR : (MINOR_TYPES.has(type.toLowerCase()) ? MINOR : PATCH);
+
+            if (maxBump <= currentBump) {
+              core.info(`No title update needed (title bump: ${currentBump}, max commit bump: ${maxBump})`);
+              return;
+            }
+
+            const newType = maxBump === MINOR ? 'feat' : type;
+            const newBang = maxBump >= MAJOR ? '!' : '';
+
+            const newTitle = `${newType}${scopePart}${newBang}: ${subject}`;
+
+            core.notice(`Updating PR title from "${currentTitle}" to "${newTitle}"`);
+
+            await github.rest.pulls.update({
+              owner,
+              repo,
+              pull_number: PR_NUMBER,
+              title: newTitle,
+            });
+
+  lint-pr-title:
+    runs-on: ubuntu-latest
+    needs: sync-pr-title-with-commits
+    if: always()
+    permissions:
+      pull-requests: read
+    name: Validate PR title follows Conventional Commits
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+            deps
+          requireScope: false
