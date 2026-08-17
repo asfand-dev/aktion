@@ -5,6 +5,77 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-08-16
+
+### Monorepo Module Resolution
+
+`.aktion` imports could only be relative, and only within the Vite project root.
+A shared `.aktion` library in a sibling package therefore needed either a
+`../../../..` chain plus `allowOutsideRoot: true` — which removes the containment
+boundary entirely — or a copy of the library per app. Both are now unnecessary.
+
+- Added `alias` to the Vite plugin and to `compileAktionFile` /
+  `compileAktionSource`, mapping a bare specifier prefix to a directory:
+  `aktion({ alias: { "@acme/ui": "…/libs/ui/src" } })` makes
+  `import { Button } from "@acme/ui/button.aktion"` resolve. The longest matching
+  prefix wins, and an aliased import cannot climb out of the directory its alias
+  names — so an alias widens resolution by exactly that directory rather than
+  lifting the boundary.
+- Added `roots`, for a sibling package imported by relative path instead of by
+  alias.
+- Added `aktion.config.json`. The plugin, the compile API and both validators now
+  look for the nearest one at or above the project root and read `alias` / `roots`
+  from it, so a repository declares its shared packages once instead of restating
+  them in every app's config and every CI command. A malformed config is ignored
+  rather than failing a build that never asked for one.
+- Import specifiers may now omit the extension: `"./lib/format"` finds
+  `lib/format.aktion`, and `"./lib"` finds `lib/index.aktion`. Previously only the
+  multi-module validator did this, so an extensionless import validated and then
+  failed to build.
+- Exported `createNodeResolver`, `loadAktionConfig` and `mergeResolveOptions` from
+  `aktion-runtime/vite`, so a build, a test and a CI validation share one answer to
+  "what does this specifier point at" instead of each implementing their own.
+- **Changed:** an unresolvable import now fails at resolve time with
+  `Cannot resolve import "./missing.aktion"` (naming the specifier the author
+  wrote) rather than at load time with `Failed to load imported module "<abs path>"`.
+
+### New Lint Warning: an Awaited Value Is the Promise
+
+`await` parses so that JavaScript-shaped source still compiles, but it does not
+suspend — bodies run synchronously and nothing unwraps the thenable, so the value
+of `await expr` is the promise. `const ok = await $util.copy(value)` is therefore
+always truthy, and the "copied to clipboard" branch runs even when the write
+failed. This was documented but silent: the parse succeeds, the schema check
+passes, and the program renders.
+
+- Added the `awaited-value` lint warning, reported by `getDiagnostics`,
+  `getLintWarnings` and both `tools/validate-aktion*.mjs` validators.
+- Only a **consumed** result is flagged — bound to a name, used as a condition, or
+  passed as an argument. A bare `await f()` statement whose value is discarded is
+  a readability marker with no wrong value attached, and is left alone.
+
+### Fixed: the Multi-Module Validator Never Reported Anything
+
+`tools/validate-aktion-app.mjs` called the three-argument `linkProgram` with two
+arguments, so it parsed the entry's *path string* as the program instead of the
+file's contents. That program has no imports and no component calls, so the tool
+printed `OK` and exited 0 for every input — including a file whose imports did not
+resolve and a file naming components that do not exist. Any CI gate built on it was
+passing vacuously.
+
+- Fixed the call, so the tool links and checks the real program.
+- The lint pass now runs. It needs source text rather than a `Program`, which the
+  linker does not return, so `printProgram` is now exported from
+  `aktion-runtime/language` and the merged program is re-emitted for it.
+- Added `--alias <prefix>=<dir>` and `--root <dir>` flags, and `aktion.config.json`
+  support, so the validator resolves imports exactly as the build does.
+- A missing entry file is now reported instead of passing.
+- Added `tests/validate-tools.test.ts`, which spawns both validators and asserts
+  they reject bad input. Neither tool had any test coverage, which is why this
+  survived.
+
+---
+
 ## 2026-08-13
 
 ### DataGrid Column Tooling — Corrections

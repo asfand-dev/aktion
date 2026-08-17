@@ -143,6 +143,32 @@ statement, or it never runs.
 
 ## JavaScript semantics
 
+### `await` never suspends — the value is the promise
+
+`await` is accepted so JavaScript-shaped source still parses, but bodies run
+synchronously and nothing unwraps the thenable. `await expr` yields `expr`
+**unchanged**, so an awaited value is a `Promise` — and a `Promise` is always
+truthy:
+
+```js
+// WRONG — the toast fires even when the clipboard write failed
+function copy(value) {
+  const copied = await $util.copy(value)
+  if (copied) { $toast.success("Copied") }
+}
+
+// RIGHT
+function copy(value) {
+  $util.copy(value).then(ok => { if (ok) { $toast.success("Copied") } })
+}
+```
+
+For a data builtin, use the bag's own callback instead — `$result.onDone = () => …`.
+
+This one **is** linted, as a warning, whenever the awaited value is consumed
+(bound, tested, or passed as an argument). A bare `await f()` statement whose
+result is discarded is not flagged.
+
 ### Equality and comparison match JavaScript
 
 - `==` / `!=` use abstract equality, so `x == null` matches `null` **and**

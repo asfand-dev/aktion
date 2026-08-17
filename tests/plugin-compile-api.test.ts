@@ -3,10 +3,16 @@
  * outside a Vite build (tests, SSR, CLIs).
  */
 import { describe, it, expect, afterAll } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { compileAktionFile, compileAktionSource } from "../src/plugin/index.js";
+import {
+  compileAktionFile,
+  compileAktionSource,
+  createNodeResolver,
+  loadAktionConfig,
+  mergeResolveOptions,
+} from "../src/plugin/index.js";
 import { isCompiledProgram } from "../src/compiler/index.js";
 import { renderCompiled, cleanup } from "../src/testing/index.js";
 
@@ -40,8 +46,12 @@ describe("compileAktionFile", () => {
   });
 
   it("reports an unresolved import as a thrown diagnostic", () => {
+    // The resolver checks the filesystem (it has to, to extension-complete
+    // `"./copy"` → `copy.aktion`), so a missing module fails at RESOLVE time and
+    // the diagnostic names the specifier the author wrote rather than an absolute
+    // path that was never on disk.
     const broken = write("broken.aktion", 'import { x } from "./missing.aktion"\n$app(Text("hi"))');
-    expect(() => compileAktionFile(broken)).toThrow(/Failed to load imported module/);
+    expect(() => compileAktionFile(broken)).toThrow(/Cannot resolve import "\.\/missing\.aktion"/);
   });
 
   it("reports a syntax error in a dependency", () => {
@@ -92,5 +102,133 @@ describe("compileAktionSource", () => {
     expect(() =>
       compileAktionSource('$app(Text("nowhere"))', join(dir, "does-not-exist.aktion")),
     ).not.toThrow();
+  });
+});
+
+/**
+ * Monorepo resolution: a shared `.aktion` package that lives outside the app
+ * being built, reached by an alias rather than a `../../../..` chain.
+ */
+describe("module resolution", () => {
+  const repo = mkdtempSync(join(tmpdir(), "aktion-repo-"));
+  const appSrc = join(repo, "app", "src");
+  const libSrc = join(repo, "libs", "ui", "src");
+  mkdirSync(appSrc, { recursive: true });
+  mkdirSync(libSrc, { recursive: true });
+
+  writeFileSync(
+    join(libSrc, "chrome.aktion"),
+    'export function Shared() {\n  return Badge("shared", {variant: "success"})\n}\n',
+    "utf8",
+  );
+  writeFileSync(
+    join(libSrc, "index.aktion"),
+    'export function Barrel() {\n  return Text("from the barrel")\n}\n',
+    "utf8",
+  );
+  writeFileSync(join(repo, "aktion.config.json"), JSON.stringify({ alias: { "@acme/ui": "./libs/ui/src" } }), "utf8");
+
+  afterAll(() => rmSync(repo, { recursive: true, force: true }));
+
+  const compileApp = (source: string, options = {}) =>
+    compileAktionSource(source, join(appSrc, "app.aktion"), { root: appSrc, ...options });
+
+  it("resolves an aliased specifier declared in aktion.config.json", () => {
+    const compiled = compileApp('import { Shared } from "@acme/ui/chrome.aktion"\n$app(Shared())');
+    expect(compiled.program.sources).toContain(join(libSrc, "chrome.aktion"));
+  });
+
+  it("resolves a bare alias to the target's index.aktion", () => {
+    const compiled = compileApp('import { Barrel } from "@acme/ui"\n$app(Barrel())');
+    expect(compiled.program.sources).toContain(join(libSrc, "index.aktion"));
+  });
+
+  it("completes a missing .aktion extension", () => {
+    const compiled = compileApp('import { Shared } from "@acme/ui/chrome"\n$app(Shared())');
+    expect(compiled.program.sources).toContain(join(libSrc, "chrome.aktion"));
+  });
+
+  it("refuses an aliased specifier that climbs out of its target", () => {
+    // An alias widens resolution by exactly the directory it names — `..` inside
+    // the remainder must not turn it into a way out of that directory.
+    expect(() =>
+      compileApp('import { x } from "@acme/ui/../../../etc/passwd"\n$app(Text("x"))'),
+    ).toThrow(/Cannot resolve import/);
+  });
+
+  it("still refuses a bare specifier with no alias", () => {
+    expect(() => compileApp('import { x } from "lodash"\n$app(Text("x"))')).toThrow(
+      /Cannot resolve import "lodash"/,
+    );
+  });
+
+  it("`config: false` pins resolution to the passed options alone", () => {
+    expect(() =>
+      compileApp('import { Shared } from "@acme/ui/chrome.aktion"\n$app(Shared())', { config: false }),
+    ).toThrow(/Cannot resolve import/);
+  });
+
+  it("an explicit `roots` entry admits a relative import across packages", () => {
+    const compiled = compileApp(
+      'import { Shared } from "../../libs/ui/src/chrome.aktion"\n$app(Shared())',
+      { config: false, roots: [libSrc] },
+    );
+    expect(compiled.program.sources).toContain(join(libSrc, "chrome.aktion"));
+  });
+
+  describe("loadAktionConfig", () => {
+    it("finds the nearest config above a path and absolutises its targets", () => {
+      const found = loadAktionConfig(appSrc);
+      expect(found?.configPath).toBe(join(repo, "aktion.config.json"));
+      expect(found?.alias?.["@acme/ui"]).toBe(libSrc);
+    });
+
+    it("returns null when no config exists above the path", () => {
+      expect(loadAktionConfig(tmpdir())).toBeNull();
+    });
+
+    it("returns null for a malformed config rather than failing the build", () => {
+      const broken = mkdtempSync(join(tmpdir(), "aktion-badcfg-"));
+      writeFileSync(join(broken, "aktion.config.json"), "{ not json", "utf8");
+      expect(loadAktionConfig(broken)).toBeNull();
+      rmSync(broken, { recursive: true, force: true });
+    });
+  });
+
+  describe("mergeResolveOptions", () => {
+    it("lets explicit options win over the discovered config", () => {
+      const merged = mergeResolveOptions(
+        { alias: { a: "/from-config", b: "/kept" }, roots: ["/r1"] },
+        { alias: { a: "/from-caller" }, roots: ["/r2"] },
+      );
+      expect(merged.alias).toEqual({ a: "/from-caller", b: "/kept" });
+      expect(merged.roots).toEqual(["/r1", "/r2"]);
+    });
+
+    it("passes the override through untouched when there is no config", () => {
+      const override = { alias: { a: "/x" } };
+      expect(mergeResolveOptions(null, override)).toBe(override);
+    });
+  });
+
+  describe("createNodeResolver", () => {
+    it("refuses to load a path outside every allowed root", () => {
+      const resolver = createNodeResolver({ root: appSrc });
+      expect(() => resolver.load(join(libSrc, "chrome.aktion"))).toThrow(/refusing to read/);
+    });
+
+    it("prefers the longest matching alias prefix", () => {
+      const nested = join(libSrc, "forms");
+      mkdirSync(nested, { recursive: true });
+      writeFileSync(join(nested, "field.aktion"), 'export function F() { return Text("f") }\n', "utf8");
+      const resolver = createNodeResolver({
+        root: appSrc,
+        alias: { "@acme/ui": libSrc, "@acme/ui/forms": nested },
+      });
+      // Under the short prefix this would be `<libSrc>/forms/forms/field.aktion`.
+      expect(resolver.resolve("@acme/ui/forms/field.aktion", join(appSrc, "app.aktion"))).toBe(
+        join(nested, "field.aktion"),
+      );
+    });
   });
 });

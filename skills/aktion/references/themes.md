@@ -59,7 +59,7 @@ A theme selected **by name** pulls in its own web fonts automatically.
 | `colorInfoText` | `#0e7490` | `#06b6d4` | `#075985` | `#1d4ed8` | `#28629f` | `#1d4ed8` |
 | `colorOnSuccess` | `#04291e` | `#04291e` | `#04291e` | `#0f3a35` | `#04291e` | `#04291e` |
 | `colorOnWarning` | `#451a03` | `#451a03` | `#451a03` | `#3d2600` | `#451a03` | `#451a03` |
-| `colorOnDanger` | `#2c0606` | `#2c0606` | `#ffffff` | `#4c0519` | `#4c0519` | `#33061a` |
+| `colorOnDanger` | `#2c0606` | `#2c0606` | `#33061a` | `#4c0519` | `#4c0519` | `#33061a` |
 | `colorOnInfo` | `#0c2b3a` | `#0c2b3a` | `#ffffff` | `#172554` | `#172554` | `#ffffff` |
 | `hlKeyword` | `#cf222e` | `#c678dd` | `#cf222e` | `#cf222e` | `#cf222e` | `#cf222e` |
 | `hlString` | `#0a3069` | `#98c379` | `#0a3069` | `#0a3069` | `#0a3069` | `#0a3069` |

@@ -151,6 +151,11 @@ export function getDiagnostics(
  *     `t("key")` call quietly invokes the loop item instead of the translator.
  *     Only fires when `$i18n` is actually destructured in the program, so a
  *     plain `arr.map(t => …)` elsewhere is never flagged.
+ *   - `awaited-value` — the RESULT of an `await` being used. `await` parses so
+ *     that JavaScript-shaped source still compiles, but it does not suspend:
+ *     bodies run synchronously and nothing unwraps the thenable, so the value is
+ *     the PROMISE. `const ok = await $util.copy(v)` is therefore always truthy.
+ *     A bare `await f()` whose value is discarded is not flagged — only a use.
  */
 export function getLintWarnings(source: string, library?: ComponentLibrary): Diagnostic[] {
   return lintProgram(parse(source), library);
@@ -163,7 +168,87 @@ function lintProgram(
   return [
     ...(library ? lintUnknownComponents(program, library) : []),
     ...lintShadowedI18n(program),
+    ...lintAwaitedValue(program),
   ];
+}
+
+/**
+ * Flag an `await` whose result is consumed.
+ *
+ * `await` is a structural marker (`__rui_await__`) that yields its argument
+ * unchanged — see the handler in `runtime/evaluator.ts`. Every consumer therefore
+ * receives the promise:
+ *
+ * ```js
+ * const copied = await $util.copy(value)   // a Promise — always truthy
+ * if (copied) { $toast.success("Copied") } // fires even when the copy failed
+ * ```
+ *
+ * The parse succeeds, the schema check passes, and the program renders — so
+ * nothing else in the toolchain can see this. Both DCD microfrontends shipped
+ * exactly the bug above.
+ *
+ * Only a CONSUMED result is flagged. `await somethingFireAndForget()` as its own
+ * statement is a readability marker with no wrong value attached to it, and
+ * warning on that would push authors to delete a harmless annotation.
+ */
+function lintAwaitedValue(program: ReturnType<typeof parse>): Diagnostic[] {
+  const warnings: Diagnostic[] = [];
+  const seen = new Set<string>();
+
+  const isAwait = (node: unknown): node is Record<string, unknown> => {
+    if (!node || typeof node !== "object" || Array.isArray(node)) return false;
+    const rec = node as Record<string, unknown>;
+    return rec["kind"] === "BuiltinCall" && rec["name"] === "__rui_await__";
+  };
+
+  const report = (node: Record<string, unknown>): void => {
+    const loc = node["loc"] as Position | undefined;
+    const line = loc?.line ?? 0;
+    const column = loc?.column ?? 0;
+    const key = `${line}:${column}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    warnings.push({
+      line,
+      column,
+      severity: "warning",
+      message:
+        "The result of `await` is the PROMISE, not the resolved value — `await` parses but " +
+        "never suspends, so this is always truthy. Chain `.then(value => …)` instead, or use " +
+        "the resource's own `.onDone` callback.",
+    });
+  };
+
+  /**
+   * `skip` is the await node that is allowed at this position because its value
+   * is discarded — the direct expression of a statement. Anything else that
+   * reaches an await is a consumer.
+   */
+  const visit = (node: unknown, skip: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child, skip);
+      return;
+    }
+
+    const rec = node as Record<string, unknown>;
+
+    if (isAwait(rec) && rec !== skip) {
+      report(rec);
+    }
+
+    // An ExpressionStatement's own expression is the one discarded position.
+    const nextSkip = rec["kind"] === "ExpressionStatement" ? rec["expression"] : skip;
+
+    for (const key of Object.keys(rec)) {
+      if (key === "loc") continue;
+      visit(rec[key], nextSkip);
+    }
+  };
+
+  visit(program.statements, null);
+  return warnings;
 }
 
 function lintShadowedI18n(program: ReturnType<typeof parse>): Diagnostic[] {

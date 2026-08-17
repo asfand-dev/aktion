@@ -101,6 +101,17 @@ export {
 
 export { formatProgram, type FormatResult } from "./tooling/formatter.js";
 
+/**
+ * Re-emit a `Program` as source.
+ *
+ * `linkProject` returns the merged source for its callers; `linkProgram` returns
+ * only the `Program`, which leaves a Node host that has just linked an import
+ * graph with no text to run the source-based lint pass (`getLintWarnings`) over.
+ * That is exactly what `tools/validate-aktion-app.mjs` needs, so the printer
+ * belongs on this surface too — it is pure and DOM-free.
+ */
+export { printProgram } from "./tooling/formatter.js";
+
 export { defaultLibrary } from "./library/index.js";
 export type { ComponentLibrary } from "./library/types.js";
 

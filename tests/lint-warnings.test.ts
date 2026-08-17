@@ -185,3 +185,73 @@ describe("lint warnings — unknown component", () => {
     expect(unknowns(src)).toHaveLength(2); // two distinct sites, one warning each
   });
 });
+
+/**
+ * `awaited-value` — the highest-consequence lint here, because the wrong value is
+ * a Promise, which is always truthy, so the buggy branch is the one that always
+ * runs. Both DCD microfrontends shipped `const copied = await $util.copy(v)` and
+ * toasted "Copied" on every failed clipboard write.
+ */
+describe("awaited-value", () => {
+  const awaits = (src: string): string[] =>
+    getLintWarnings(src)
+      .filter((d) => d.message.includes("`await`"))
+      .map((d) => d.message);
+
+  it("flags an awaited value bound to a name", () => {
+    const src = [
+      "function copy(v) {",
+      "  const copied = await $util.copy(v)",
+      '  if (copied) { $toast.success("Copied") }',
+      "}",
+      '$app(Button("Copy", { action: () => copy("x") }))',
+    ].join("\n");
+    expect(awaits(src)).toHaveLength(1);
+    expect(awaits(src)[0]).toMatch(/is the PROMISE/);
+  });
+
+  it("flags an awaited value used directly in a condition", () => {
+    const src = [
+      "function f(v) {",
+      '  if (await $util.copy(v)) { $toast.success("ok") }',
+      "}",
+      '$app(Button("Go", { action: () => f("x") }))',
+    ].join("\n");
+    expect(awaits(src)).toHaveLength(1);
+  });
+
+  it("flags an awaited value passed as an argument", () => {
+    const src = [
+      "function f(v) { $toast.success(await $util.copy(v)) }",
+      '$app(Button("Go", { action: () => f("x") }))',
+    ].join("\n");
+    expect(awaits(src)).toHaveLength(1);
+  });
+
+  it("does NOT flag an await whose value is discarded", () => {
+    // A bare `await f()` statement is a readability marker with no wrong value
+    // attached; warning on it would push authors to delete a harmless annotation.
+    const src = [
+      'function f(v) { await $util.copy(v) }',
+      '$app(Button("Go", { action: () => f("x") }))',
+    ].join("\n");
+    expect(awaits(src)).toEqual([]);
+  });
+
+  it("reports each awaited value once", () => {
+    const src = [
+      "function f(a, b) {",
+      "  const x = await $util.copy(a)",
+      "  const y = await $util.copy(b)",
+      "  return x && y",
+      "}",
+      '$app(Button("Go", { action: () => f("a", "b") }))',
+    ].join("\n");
+    expect(awaits(src)).toHaveLength(2);
+  });
+
+  it("says nothing about a program with no await at all", () => {
+    const src = '$app(Column([Text("hello")]))';
+    expect(awaits(src)).toEqual([]);
+  });
+});

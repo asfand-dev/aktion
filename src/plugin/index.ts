@@ -12,7 +12,7 @@
  * Node entry (`dist/plugin.{js,cjs}`) and never enters the browser bundle.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { dirname, resolve as resolvePath, sep } from "node:path";
 import type { Plugin } from "vite";
 import {
@@ -25,7 +25,50 @@ import {
 } from "../compiler/index.js";
 import type { Program } from "../parser/types.js";
 
-export interface AktionPluginOptions {
+/**
+ * How a `.aktion` import specifier becomes a file on disk.
+ *
+ * Shared by the Vite plugin, {@link compileAktionFile} / {@link compileAktionSource},
+ * and the `tools/validate-aktion*.mjs` validators, so that building a tree and
+ * validating it agree on what resolves. A validator that accepted an import the
+ * build then rejected — or the reverse — is worse than no validator.
+ *
+ * Every field can also be declared once per repository in an `aktion.config.json`
+ * (see {@link loadAktionConfig}), which is what a monorepo normally wants.
+ */
+export interface AktionResolveOptions {
+  /**
+   * Bare-specifier prefixes mapped to directories, so shared modules are imported
+   * by name instead of by a `../../../..` chain:
+   *
+   * ```ts
+   * aktion({ alias: { "@acme/ui": resolve(import.meta.dirname, "../../libs/ui/src") } })
+   * ```
+   * ```
+   * import { Button } from "@acme/ui/button.aktion"
+   * ```
+   *
+   * The longest matching prefix wins, so `@acme/ui/forms` can be aliased
+   * separately from `@acme/ui`. Each target directory becomes an allowed root,
+   * and an aliased import may not climb out of the target it matched — so an
+   * alias widens resolution by exactly the directory it names and no further.
+   */
+  alias?: Record<string, string>;
+  /**
+   * Extra directories `.aktion` imports may resolve into, on top of the project
+   * root. Use for a monorepo package that is imported by relative path rather
+   * than through an {@link alias}.
+   */
+  roots?: string[];
+  /**
+   * Suffixes tried when a specifier names no file directly.
+   * Default: `[".aktion", "/index.aktion"]`, so `"./lib/format"` finds
+   * `lib/format.aktion` and `"./lib"` finds `lib/index.aktion`.
+   */
+  extensions?: string[];
+}
+
+export interface AktionPluginOptions extends AktionResolveOptions {
   /** Treat linker warnings (e.g. a missing `aktion` entry) as build errors. Default: false. */
   strict?: boolean;
   /** Specifier the emitted module imports the runtime helper from. Default: `"aktion-runtime"`. */
@@ -35,10 +78,18 @@ export interface AktionPluginOptions {
    *
    * Off by default: an import is a filesystem read performed by the build (and,
    * in `serve` mode, one whose result reaches the browser), so it is confined to
-   * the project. Enable only for a monorepo layout that genuinely imports
-   * `.aktion` files from a sibling package, and only for trusted sources.
+   * the project. Prefer {@link AktionResolveOptions.alias} or
+   * {@link AktionResolveOptions.roots}, which widen resolution by a named
+   * directory instead of removing the boundary altogether; this flag remains for
+   * the case where the set of sibling packages is not known ahead of time.
    */
   allowOutsideRoot?: boolean;
+  /**
+   * Look for an `aktion.config.json` above the Vite project root and merge it
+   * under the options passed here. Default: true. Set `false` to pin resolution
+   * to this config object alone.
+   */
+  config?: boolean;
 }
 
 /**
@@ -51,6 +102,7 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
   const runtimeModuleId = options.runtimeModuleId ?? "aktion-runtime";
   let isServe = false;
   let projectRoot = process.cwd();
+  let resolution: AktionResolveOptions = options;
 
   return {
     name: "aktion",
@@ -61,6 +113,11 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
       // import in a `.aktion` file reads any file the dev-server process can —
       // and in `serve` mode its contents are then handed to the browser.
       if (config.root) projectRoot = resolvePath(config.root);
+      // A monorepo declares its shared `.aktion` packages once, in a config file
+      // the validators read too — so the build and `validate-aktion-app` cannot
+      // disagree about which imports exist.
+      resolution =
+        options.config === false ? options : mergeResolveOptions(loadAktionConfig(projectRoot), options);
     },
     transform(code, id) {
       if (!isAktionId(id)) return null;
@@ -69,7 +126,10 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
       const { program, diagnostics, dependencies } = linkProgram(
         code,
         cleanId,
-        nodeResolver(options.allowOutsideRoot === true ? null : projectRoot),
+        createNodeResolver({
+          ...resolution,
+          root: options.allowOutsideRoot === true ? null : projectRoot,
+        }),
       );
 
       // Editing an imported module must re-trigger the entry's transform.
@@ -102,7 +162,7 @@ export { aktionPlugin as default };
 /*  Compiling outside a Vite build                                             */
 /* -------------------------------------------------------------------------- */
 
-export interface CompileOptions {
+export interface CompileOptions extends AktionResolveOptions {
   /**
    * Directory `.aktion` imports are confined to. Defaults to the entry's own
    * directory — widen it to your project root when modules import across it.
@@ -111,6 +171,12 @@ export interface CompileOptions {
   root?: string | null;
   /** Reject on any linker warning, not just errors. */
   strict?: boolean;
+  /**
+   * Merge an `aktion.config.json` found above the entry. Default: true, so a
+   * test that compiles one module of a monorepo app resolves the same aliases
+   * the build does without restating them.
+   */
+  config?: boolean;
 }
 
 /**
@@ -172,7 +238,9 @@ export function compileAktionSource(
 ): CompiledProgram {
   const absolute = resolvePath(virtualPath);
   const root = options.root === null ? null : resolvePath(options.root ?? dirname(absolute));
-  const { program, diagnostics } = linkProgram(source, absolute, nodeResolver(root));
+  const resolution =
+    options.config === false ? options : mergeResolveOptions(loadAktionConfig(root ?? absolute), options);
+  const { program, diagnostics } = linkProgram(source, absolute, createNodeResolver({ ...resolution, root }));
 
   const fatal = collectDiagnostics(program, diagnostics).filter(
     (d) => d.severity === "error" || (options.strict === true && d.severity === "warning"),
@@ -212,33 +280,176 @@ export function isInsideRoot(candidate: string, root: string): boolean {
   return normalised.startsWith(normalisedRoot.endsWith(sep) ? normalisedRoot : normalisedRoot + sep);
 }
 
+/** Default suffixes tried when a specifier names no file directly. */
+const DEFAULT_EXTENSIONS = [".aktion", "/index.aktion"];
+
+/** True when `path` names an existing regular file. */
+function isFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * A `ModuleResolver` over the Node filesystem (absolute paths, sync reads).
  *
- * When `root` is non-null every resolved path must stay inside it. `.aktion`
- * files are project source, but they are also *data* that may have arrived with
- * an untrusted repository — and a specifier like `../../../../etc/passwd` (or an
- * absolute `/etc/passwd`) would otherwise be read and, under `vite dev`, served
- * to the browser as part of the compiled module.
+ * Exported because every Node host that touches the `.aktion` module graph — the
+ * Vite plugin, {@link compileAktionFile}, the `tools/validate-aktion*.mjs`
+ * validators, a CI gate, an SSR pass — needs the *same* answer to "what does this
+ * specifier point at". Reimplementing it per host is how a validator drifts into
+ * accepting imports the build rejects.
+ *
+ * Resolution order for a specifier:
+ *
+ *   1. the longest matching {@link AktionResolveOptions.alias} prefix, joined
+ *      with the remainder of the specifier;
+ *   2. otherwise a relative (`./`, `../`) or absolute (`/`) path against the
+ *      importer's directory;
+ *   3. otherwise unresolved — a bare specifier with no alias is not a project
+ *      module.
+ *
+ * The result is then extension-completed ({@link AktionResolveOptions.extensions})
+ * and must name a real file.
+ *
+ * **Containment.** When `root` is non-null every resolved path must sit inside
+ * `root`, one of {@link AktionResolveOptions.roots}, or an alias target. `.aktion`
+ * files are project source, but they are also *data* that may have arrived with an
+ * untrusted repository — and a specifier like `../../../../etc/passwd` (or an
+ * absolute `/etc/passwd`) would otherwise be read and, under `vite dev`, served to
+ * the browser as part of the compiled module. An aliased import is additionally
+ * confined to the target it matched, so declaring an alias widens resolution by
+ * exactly that directory.
  */
-function nodeResolver(root: string | null): ModuleResolver {
+export function createNodeResolver(
+  options: AktionResolveOptions & { root?: string | null } = {},
+): ModuleResolver {
+  const extensions = options.extensions ?? DEFAULT_EXTENSIONS;
+  // Longest prefix first, so `@acme/ui/forms` can be aliased apart from `@acme/ui`.
+  const aliases = Object.entries(options.alias ?? {})
+    .map(([prefix, target]) => [prefix, resolvePath(target)] as const)
+    .sort((a, b) => b[0].length - a[0].length);
+
+  const root = options.root === undefined ? process.cwd() : options.root;
+  const allowed =
+    root === null
+      ? null
+      : [resolvePath(root), ...(options.roots ?? []).map((r) => resolvePath(r)), ...aliases.map(([, t]) => t)];
+
+  const contained = (path: string): boolean => allowed === null || allowed.some((r) => isInsideRoot(path, r));
+
+  /** Extension-complete a base path; `null` when nothing on disk matches. */
+  const complete = (base: string): string | null => {
+    if (isFile(base)) return base;
+    for (const ext of extensions) {
+      if (isFile(base + ext)) return base + ext;
+    }
+    return null;
+  };
+
   return {
     resolve(spec, importerPath) {
-      if (!spec.startsWith(".") && !spec.startsWith("/")) return null; // bare specifiers aren't project modules
       try {
-        const resolved = resolvePath(dirname(importerPath), spec);
-        if (root && !isInsideRoot(resolved, root)) return null;
+        for (const [prefix, target] of aliases) {
+          if (spec !== prefix && !spec.startsWith(`${prefix}/`)) continue;
+          const rest = spec === prefix ? "" : spec.slice(prefix.length + 1);
+          const base = rest === "" ? target : resolvePath(target, rest);
+          // `rest` may contain `..`; an alias must not become a way out of the
+          // directory it names.
+          if (!isInsideRoot(base, target)) return null;
+          return complete(base);
+        }
+
+        // Bare specifiers with no alias aren't project modules.
+        if (!spec.startsWith(".") && !spec.startsWith("/")) return null;
+
+        const base = resolvePath(dirname(importerPath), spec);
+        const resolved = complete(base);
+        if (resolved === null || !contained(resolved)) return null;
         return resolved;
       } catch {
         return null;
       }
     },
     load(path) {
-      if (root && !isInsideRoot(path, root)) {
+      if (!contained(path)) {
         throw new Error(`[aktion] refusing to read "${path}" — outside the project root`);
       }
       return readFileSync(path, "utf8");
     },
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/*  aktion.config.json                                                         */
+/* -------------------------------------------------------------------------- */
+
+/** The subset of `aktion.config.json` that affects module resolution. */
+export interface AktionConfig extends AktionResolveOptions {
+  /** Absolute path of the file these values came from. */
+  configPath?: string;
+}
+
+/**
+ * Find the nearest `aktion.config.json` at or above `from` and read its
+ * resolution settings, with every `alias` target and `roots` entry resolved
+ * against the config file's own directory.
+ *
+ * One file at the top of a monorepo is what lets a build, a test, and
+ * `validate-aktion-app` agree on the import graph without each restating it:
+ *
+ * ```json
+ * { "alias": { "@acme/ui": "./libs/ui/src" } }
+ * ```
+ *
+ * Returns `null` when no config exists, when it is unreadable, or when it is not
+ * valid JSON — resolution then falls back to the caller's own options, which is
+ * the pre-config behaviour. A malformed config must not be able to fail a build
+ * that never asked for one.
+ */
+export function loadAktionConfig(from: string): AktionConfig | null {
+  let dir = isFile(from) ? dirname(resolvePath(from)) : resolvePath(from);
+
+  for (;;) {
+    const candidate = resolvePath(dir, "aktion.config.json");
+    if (isFile(candidate)) {
+      try {
+        const raw = JSON.parse(readFileSync(candidate, "utf8")) as AktionConfig;
+        const alias: Record<string, string> = {};
+        for (const [prefix, target] of Object.entries(raw.alias ?? {})) {
+          alias[prefix] = resolvePath(dir, target);
+        }
+        return {
+          configPath: candidate,
+          alias,
+          roots: (raw.roots ?? []).map((r) => resolvePath(dir, r)),
+          ...(raw.extensions ? { extensions: raw.extensions } : {}),
+        };
+      } catch {
+        return null;
+      }
+    }
+
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/**
+ * Overlay explicit options on a discovered config: `alias` merges key-wise with
+ * the caller winning, `roots` concatenate, `extensions` is replaced outright.
+ */
+export function mergeResolveOptions(
+  base: AktionResolveOptions | null,
+  override: AktionResolveOptions,
+): AktionResolveOptions {
+  if (!base) return override;
+  return {
+    alias: { ...base.alias, ...override.alias },
+    roots: [...(base.roots ?? []), ...(override.roots ?? [])],
+    extensions: override.extensions ?? base.extensions,
   };
 }
 
