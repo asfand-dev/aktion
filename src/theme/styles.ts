@@ -9588,7 +9588,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 .rui-data-grid-viewport::after {
   content: "";
   position: absolute;
-  top: 0;
+  top: 44px;
   bottom: 0;
   width: 24px;
   pointer-events: none;
