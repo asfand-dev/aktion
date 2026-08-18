@@ -686,7 +686,13 @@ export const visionTheme: ThemeTokens = {
   // #ffffff, not the fill colour: this token is the ink drawn ON critical-5, and
   // copying the fill here made every danger-filled surface invisible — a solid
   // red ConfirmDialog button with a red label, a red badge with a red count.
-  colorOnDanger: "#c80a00",
+  // (It held `#c80a00` — the fill — for a while, contradicting the note directly
+  // above it, and the whole family shipped red-on-red with it:
+  // `.rui-confirm-ok[data-tone="danger"]`, `.rui-button[data-variant="danger"]`,
+  // `.rui-icon-button[data-variant="danger"]`, the danger toast icon,
+  // `.rui-product-badge`, `.rui-tabbar-badge` and the error step marker all paint
+  // this token on `colorDanger`.) #ffffff on critical-5 #c80a00 is 6.00:1.
+  colorOnDanger: "#ffffff",
   colorOnInfo: "#066b80",
   /* Typography — Open Sans body, Overpass display, 14px/20px */
   fontFamily:

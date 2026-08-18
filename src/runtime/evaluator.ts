@@ -215,6 +215,11 @@ function buildToastLayer(ctx: EvaluationContext): ComponentNode | null {
  * author wiring a `Toasts(...)` anywhere. If the program reads `$toast.items`
  * itself (the long-hand pattern), it owns rendering and we don't inject — so
  * existing programs never double-render.
+ *
+ * The layer is always appended LAST, and the author's root always keeps slot 0
+ * — including when it is `null`. Instance identity is derived from a node's
+ * position in the tree (see `Renderer.render`), so moving the root between
+ * slots as toasts come and go would re-key every component in the program.
  */
 function installAppRootBinding(ctx: EvaluationContext, rootThunk: () => unknown): void {
   ctx.bindings.set("aktion", () => {
@@ -222,10 +227,7 @@ function installAppRootBinding(ctx: EvaluationContext, rootThunk: () => unknown)
     const root = rootThunk();
     if (ctx.toastManager && !ctx.toastItemsRead) {
       const layer = buildToastLayer(ctx);
-      if (layer) {
-        if (Array.isArray(root)) return [...root, layer];
-        return root == null ? layer : [root, layer];
-      }
+      if (layer) return Array.isArray(root) ? [...root, layer] : [root, layer];
     }
     return root;
   });

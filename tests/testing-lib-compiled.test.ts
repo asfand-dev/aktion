@@ -285,6 +285,35 @@ describe("role queries", () => {
     expect(within(row).getAllByRole("button", { name: "Delete", exact: false })).toHaveLength(2);
   });
 
+  it("scoped queryAll* answers [] instead of throwing, so absence is assertable", async () => {
+    // The scoped surface used to stop at `getAll*` (which throws on no match) and
+    // `query*` (one element or null), so `within(subtree)` could assert "exactly
+    // one" but never "none" — the shape every "this panel no longer offers X" test
+    // needs. `Screen` has had the `queryAll*` arm all along.
+    const screen = render(
+      [
+        "$app(Stack([",
+        '  Stack([Button("Keep"), Text("kept"), HTMLTag("span", { attributes: { "data-testid": "chip" } })], { className: "row" }),',
+        '  Button("Gone")',
+        "]))",
+      ].join("\n"),
+    );
+    await screen.flush();
+    const row = screen.shadowRoot.querySelector<HTMLElement>(".row")!;
+
+    expect(within(row).queryAllByRole("button", { name: "Gone" })).toStrictEqual([]);
+    expect(within(row).queryAllByRole("button", { name: "Keep" })).toHaveLength(1);
+    expect(within(row).queryAllByText("nowhere")).toStrictEqual([]);
+    expect(within(row).queryAllByText("kept")).toHaveLength(1);
+    expect(within(row).queryAllByTestId("missing")).toStrictEqual([]);
+    expect(within(row).queryAllByTestId("chip")).toHaveLength(1);
+    // `getBy*` still throws where `queryAll*` answers `[]` — that difference is
+    // the reason both exist. (The scoped `getAll*` does NOT throw; see the note
+    // on `WithinQueries`.)
+    expect(() => within(row).getByRole("button", { name: "Gone" })).toThrow();
+    expect(within(row).getAllByRole("button", { name: "Gone" })).toStrictEqual([]);
+  });
+
   it("treats a decorative image as presentational", async () => {
     const screen = render('$app(Image("/x.png", { alt: "" }))');
     await screen.flush();

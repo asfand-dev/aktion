@@ -5,6 +5,63 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-08-18
+
+### A Toast No Longer Resets the Rest of the Page
+
+Showing a toast quietly re-keyed every component in the program, so unrelated
+UI state elsewhere on the page snapped back to its defaults.
+
+- Fixed component-local UI state being discarded whenever a toast appeared or
+  auto-dismissed. Because the auto-injected toast stack is a sibling of the
+  program root, the root moved to a different position in the tree for as long
+  as a toast was on screen — and per-instance state is keyed by tree position,
+  so one `$toast.success("Saved")` reset the active `Tabs` pane to its
+  `defaultValue`, closed any open `Popover` / `DropdownMenu`, and dropped each
+  `DataGrid`'s sort, page and column layout. The UI root is now always rendered
+  at a fixed position, so a toast changes nothing but the toast.
+
+### Toolbar Actions Stay Right-Aligned
+
+- Fixed `Toolbar`'s `right` slot rendering hard LEFT once the bar wrapped onto
+  two rows — the common case being a long hint or filter row in `left`.
+  `justify-content` is resolved per flex line, so a right slot alone on the
+  second line was left at flex-start; it now takes an auto left margin (unless a
+  `center` slot is present, which still needs that space).
+
+### DataGrid Column Settings Actually Repaint the Table
+
+- Fixed hiding, pinning or reordering a column from the settings panel storing
+  the new layout while leaving the visible table unchanged. The panel is promoted
+  into the top layer, and where the `popover` API is missing the floating layer
+  reparents it out of the grid — its controls then could not find the grid to
+  repaint. Affects Safari < 17, Firefox < 125, and headless DOM implementations.
+- `persistKey` is now mirrored onto the grid as `data-persist-key`, so the
+  localStorage slot a grid uses is visible in DevTools — two grids sharing a key
+  silently fight over one saved layout, and nothing on screen looks wrong.
+
+### Scoped Test Queries Can Assert Absence
+
+- Added `queryAllByText`, `queryAllByRole` and `queryAllByTestId` to
+  `within(node)`. The scoped suite stopped at `getAll*` and the single-element
+  `query*`, so `within(panel)` could assert "exactly one" but never "none" — the
+  shape every "this region no longer offers X" test needs. `Screen` has had them
+  all along. Also documented the one place the scoped surface diverges from
+  `Screen`: its `getAll*` answers `[]` instead of throwing.
+
+### Readable Destructive Buttons in the Vision Theme
+
+- Fixed the `vision` theme drawing danger-toned ink in the danger FILL colour,
+  which made every danger-filled surface blank: a solid red `ConfirmDialog`
+  confirm button with a red label, a red badge with a red count, and the same
+  for the danger `Button` / `IconButton` variant, the danger toast icon and the
+  error step marker. The ink is now white on that fill (6.00:1).
+- Added a theme check that no `colorOn<Tone>` token may hold its own fill
+  colour, across the private theme registry as well as the public one — the
+  reason this one shipped unnoticed.
+
+---
+
 ## 2026-08-16
 
 ### Monorepo Module Resolution

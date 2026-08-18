@@ -1320,15 +1320,29 @@ export function json(data: unknown, status = 200): MockResult {
 /*  Scoped queries — `within(element)` (XIV.6)                                 */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The scoped query surface returned by {@link within}.
+ *
+ * ONE DELIBERATE DIVERGENCE FROM `Screen`: the scoped `getAll*` queries answer
+ * `[]` when nothing matches, where `Screen`'s throw. That is long-standing
+ * behaviour callers rely on to count occurrences inside a subtree, so it stays —
+ * but it means `getAll*` here is not the "assert at least one" query it is on
+ * `Screen`. Use `getBy*` for that, and `queryAll*` when the point IS that the
+ * subtree may hold none.
+ */
 export interface WithinQueries {
   getByText(matcher: Matcher): HTMLElement;
   queryByText(matcher: Matcher): HTMLElement | null;
   getAllByText(matcher: Matcher): HTMLElement[];
+  /** Every match, or `[]` — the assertion for "this subtree holds none of these". */
+  queryAllByText(matcher: Matcher): HTMLElement[];
   getByRole(role: string, options?: RoleOptions): HTMLElement;
   queryByRole(role: string, options?: RoleOptions): HTMLElement | null;
   getAllByRole(role: string, options?: RoleOptions): HTMLElement[];
+  queryAllByRole(role: string, options?: RoleOptions): HTMLElement[];
   getByTestId(id: string): HTMLElement;
   queryByTestId(id: string): HTMLElement | null;
+  queryAllByTestId(id: string): HTMLElement[];
 }
 
 function scopedTextMatches(value: string, matcher: Matcher, el?: Element): boolean {
@@ -1369,11 +1383,19 @@ export function within(root: Element): WithinQueries {
     getByText: (m) => { const r = byText(m); if (!r[0]) throw new Error(`within: no element with text ${String(m)}`); return r[0]; },
     queryByText: (m) => byText(m)[0] ?? null,
     getAllByText: (m) => byText(m),
+    // The `queryAll*` arm — the only way to assert a subtree does NOT contain
+    // something. It was missing here even though `Screen` has had it all along,
+    // so `within(panel)` could check "exactly one" but not "none". Identical to
+    // `getAll*` in this object by the divergence documented on WithinQueries; the
+    // name is what tells a reader which guarantee is being relied on.
+    queryAllByText: (m) => byText(m),
     getByRole: (role, o) => { const r = byRole(role, o?.name, o?.exact); if (!r[0]) throw new Error(`within: no [role=${role}]`); return r[0]; },
     queryByRole: (role, o) => byRole(role, o?.name, o?.exact)[0] ?? null,
     getAllByRole: (role, o) => byRole(role, o?.name, o?.exact),
+    queryAllByRole: (role, o) => byRole(role, o?.name, o?.exact),
     getByTestId: (id) => { const el = root.querySelector<HTMLElement>(`[data-testid="${id}"]`); if (!el) throw new Error(`within: no [data-testid=${id}]`); return el; },
     queryByTestId: (id) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`),
+    queryAllByTestId: (id) => [...root.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)],
   };
 }
 

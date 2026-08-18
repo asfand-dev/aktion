@@ -3526,7 +3526,21 @@ ${tonedScope(".rui-kanban-card")} { border-left: 3px solid var(--rui-tone-color)
   min-width: 0;
 }
 .rui-toolbar-left { flex: 1 1 auto; }
+/*
+ * An auto left margin, not just justify-content: space-between on the parent.
+ * The bar wraps (it has to — filters plus actions do not fit a narrow viewport),
+ * and justify-content resolves PER FLEX LINE: once the right slot wraps onto a
+ * line of its own it is the only item there, so space-between leaves it at
+ * flex-start and the "right" slot renders hard left. An auto margin absorbs the
+ * free space on whatever line the slot ends up on, so it sits right in both
+ * layouts. Skipped when a center slot is present — there the auto margin would
+ * eat the space that centres it.
+ *
+ * NO BACKTICKS IN HERE: this whole sheet is one JS template literal, so a
+ * backtick in a CSS comment closes it and the rest of the file parses as code.
+ */
 .rui-toolbar-right { flex-shrink: 0; }
+.rui-toolbar[data-has-center="false"] .rui-toolbar-right { margin-left: auto; }
 .rui-toolbar .rui-form-control { gap: 4px; }
 .rui-toolbar .rui-form-label { font-size: var(--rui-font-size-11); text-transform: uppercase; letter-spacing: 0.04em; color: var(--rui-color-text-muted); }
 .rui-toolbar .rui-input,

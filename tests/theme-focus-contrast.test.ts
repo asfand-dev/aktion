@@ -19,7 +19,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { builtInThemes } from "../src/theme/index.js";
+import { builtInThemes, privateThemes } from "../src/theme/index.js";
 
 /** WCAG relative luminance. */
 function luminance(hex: string): number {
@@ -101,5 +101,68 @@ describe("primary colour is usable as text", () => {
       if (ratio < 4.5) failures.push(`${name}: primary ${primary} on ${surface} = ${ratio.toFixed(2)}:1`);
     }
     expect(failures, failures.join("\n")).toEqual([]);
+  });
+});
+
+/**
+ * The `colorOn<Tone>` family is the ink drawn ON the matching `color<Tone>`
+ * fill. Every single usage in `styles.ts` pairs them directly —
+ * `background: var(--rui-color-danger); color: var(--rui-color-on-danger)` on
+ * the destructive confirm button, the danger `Button` / `IconButton` variant,
+ * the toast and callout icon chips, the notification badges and the error step
+ * marker. A token that holds the fill's OWN value therefore does not read as
+ * "low contrast": it is invisible, at exactly 1.00:1.
+ *
+ * `vision` shipped that. `colorOnDanger` held the fill's `#c80a00`, so its
+ * destructive confirm button was a solid red rectangle with a red label — and
+ * every other danger-filled surface went blank with it. The token's own comment
+ * already said "#ffffff, not the fill colour", so the note landed without the
+ * value. Nothing caught it, because the suites above enumerate `builtInThemes`
+ * and `vision` is private — hence the walk over BOTH registries here.
+ *
+ * KNOWN GAP, deliberately not asserted: several `colorOn<Tone>` pairs are
+ * legible but below the WCAG bar — `vision` measures 2.01:1 (success), 2.56:1
+ * (warning) and 2.10:1 (info), and `corporate` 3.78:1 (danger). Those fills are
+ * mid-tone, so neither dark nor white ink reaches 4.5:1 on them (white gives
+ * `vision` 3.08 / 2.65 / 2.92:1 — worse for warning), and `vision`'s values are
+ * pinned to the IONOS Exos palette. Closing them means re-picking the FILLS with
+ * that palette in hand, which is a design decision rather than a token typo.
+ */
+describe("ink on a semantic fill is legible", () => {
+  const PAIRS = [
+    ["colorOnSuccess", "colorSuccess"],
+    ["colorOnWarning", "colorWarning"],
+    ["colorOnDanger", "colorDanger"],
+    ["colorOnInfo", "colorInfo"],
+  ] as const;
+
+  const everyTheme = (): Array<[string, Record<string, unknown>]> =>
+    Object.entries({ ...builtInThemes, ...privateThemes }) as Array<[string, Record<string, unknown>]>;
+
+  it("no theme paints an on-<tone> ink in its own fill colour", () => {
+    const failures: string[] = [];
+    for (const [name, theme] of everyTheme()) {
+      for (const [inkToken, fillToken] of PAIRS) {
+        const ink = theme[inkToken];
+        const fill = theme[fillToken];
+        if (typeof ink !== "string" || typeof fill !== "string") continue;
+        if (ink.toLowerCase() === fill.toLowerCase()) {
+          failures.push(`${name}: ${inkToken} is a copy of ${fillToken} (${ink}) — the surface is invisible`);
+        }
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+
+  it("keeps vision's destructive surfaces readable at the 4.5:1 text bar", () => {
+    // Pinned rather than swept: `.rui-confirm-ok[data-tone="danger"]` and
+    // `.rui-button[data-variant="danger"]` render a LABEL on this fill, so the
+    // text threshold is the one that applies — and this is the pair that
+    // regressed. Both DCD consoles run on `vision`.
+    const vision = (privateThemes as unknown as Record<string, Record<string, unknown>>).vision!;
+    const ink = vision.colorOnDanger;
+    const fill = vision.colorDanger;
+    expect(isHex(ink) && isHex(fill)).toBe(true);
+    expect(contrast(ink as string, fill as string)).toBeGreaterThanOrEqual(4.5);
   });
 });

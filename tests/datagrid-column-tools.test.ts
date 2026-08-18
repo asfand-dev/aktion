@@ -15,7 +15,9 @@
  *   - `repaint` rebuilt the header on EVERY call, which destroyed and recreated
  *     the filter input the user was typing into;
  *   - the stored column order was seeded once, so a column added later was
- *     dropped entirely.
+ *     dropped entirely;
+ *   - and hiding / pinning / reordering from the settings panel repainted
+ *     nothing wherever the floating layer reparents the panel out of the grid.
  */
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -267,5 +269,130 @@ describe("DataGrid column configuration follows the current columns", () => {
     // The stored order was seeded on the first render and never revisited, so
     // this column used to be filtered straight back out again.
     expect(keys()).toEqual(["Name", "Age"]);
+  });
+});
+
+/**
+ * The settings panel drives the table from OUTSIDE it.
+ *
+ * The panel is promoted into the top layer while open, and where the `popover`
+ * API is missing the floating layer falls back to reparenting it out of the grid
+ * — Safari < 17, Firefox < 125, and the DOM implementation behind these very
+ * tests (the first case below asserts the reparenting, so this is not
+ * hypothetical). Its checkboxes and pin buttons therefore hand `repaint` an
+ * origin whose `closest(".rui-data-grid")` is null, and the grid has to be
+ * resolved some other way or the new column config is stored while the table in
+ * front of the user does not change.
+ *
+ * These cases pin the panel → live-table path end to end. The resolver's LAST
+ * fallback — the remembered live root, for a host where the deferred post-paint
+ * pass has not filled the viewport slot — is not reachable from here, because
+ * happy-dom fills that slot on the first flush; `apps/user-management`'s suite
+ * runs on jsdom, which does not, and it is where that arm actually failed.
+ */
+describe("DataGrid column settings panel drives the live table", () => {
+  const headers = (screen: ReturnType<typeof render>): string[] =>
+    [...screen.shadowRoot.querySelectorAll<HTMLElement>(
+      ".rui-data-grid-table thead th:not([role=\"presentation\"])",
+    )].map((th) => (th.textContent ?? "").trim());
+
+  async function openPanel(screen: ReturnType<typeof render>): Promise<HTMLElement> {
+    await screen.click(screen.getByRole("button", { name: "Column settings" }));
+    await settle();
+    return screen.getByRole("dialog", { name: "Column settings" });
+  }
+
+  it("takes a column out of the header when its checkbox is unchecked", async () => {
+    const screen = render(grid("{columnMenu: true, resizable: true}"));
+    await settle();
+    expect(headers(screen)).toStrictEqual(["Name", "Age"]);
+
+    const panel = await openPanel(screen);
+    // Reparented by the floating layer, which is the whole point of this suite.
+    expect(panel.closest(".rui-data-grid")).toBeNull();
+    await screen.click(screen.getByRole("checkbox", { name: "Show Age" }));
+    await settle();
+
+    expect(headers(screen)).toStrictEqual(["Name"]);
+    // The rows follow the header — a hidden column leaves no empty cell behind.
+    const firstRow = screen.shadowRoot.querySelector(".rui-data-grid-table tbody tr")!;
+    expect(firstRow.querySelectorAll("td[data-col-key]").length).toBe(1);
+  });
+
+  it("puts a re-checked column back", async () => {
+    const screen = render(grid("{columnMenu: true}"));
+    await settle();
+    await openPanel(screen);
+
+    await screen.click(screen.getByRole("checkbox", { name: "Show Age" }));
+    await settle();
+    expect(headers(screen)).toStrictEqual(["Name"]);
+
+    await screen.click(screen.getByRole("checkbox", { name: "Show Age" }));
+    await settle();
+    expect(headers(screen)).toStrictEqual(["Name", "Age"]);
+  });
+
+  it("Reset restores every column the panel hid", async () => {
+    const screen = render(grid("{columnMenu: true}"));
+    await settle();
+    const panel = await openPanel(screen);
+
+    await screen.click(screen.getByRole("checkbox", { name: "Show Age" }));
+    await settle();
+    expect(headers(screen)).toStrictEqual(["Name"]);
+
+    await screen.click(panel.querySelector<HTMLElement>(".rui-data-grid-col-panel-reset")!);
+    await settle();
+    expect(headers(screen)).toStrictEqual(["Name", "Age"]);
+  });
+
+  it("pins a column from the panel and marks the live header cell", async () => {
+    const screen = render(grid("{columnMenu: true}"));
+    await settle();
+    await openPanel(screen);
+
+    await screen.click(screen.getByRole("button", { name: "Pin Name" }));
+    await settle();
+
+    const nameTh = screen.shadowRoot.querySelector('th[data-col-key="Name"]')!;
+    expect(nameTh.getAttribute("data-pinned")).toBe("true");
+  });
+
+  it("names its storage slot in the DOM, so a shared key is visible", async () => {
+    const screen = render(grid('{columnMenu: true, persistKey: "tools-spec"}'));
+    await settle();
+
+    expect(screen.shadowRoot.querySelector(".rui-data-grid")!.getAttribute("data-persist-key"))
+      .toBe("tools-spec");
+
+    const plain = render(grid("{columnMenu: true}"));
+    await settle();
+    expect(plain.shadowRoot.querySelector(".rui-data-grid")!.hasAttribute("data-persist-key")).toBe(false);
+  });
+
+  it("persists what the panel changed under the persistKey", async () => {
+    localStorage.removeItem("aktion-datagrid-tools-spec");
+    const screen = render(grid('{columnMenu: true, persistKey: "tools-spec"}'));
+    await settle();
+    await openPanel(screen);
+
+    await screen.click(screen.getByRole("checkbox", { name: "Show Age" }));
+    await settle();
+
+    expect(JSON.parse(localStorage.getItem("aktion-datagrid-tools-spec") ?? "{}"))
+      .toMatchObject({ v: 1, hidden: ["Age"] });
+    localStorage.removeItem("aktion-datagrid-tools-spec");
+  });
+
+  it("starts from the persisted layout on the next mount", async () => {
+    localStorage.setItem("aktion-datagrid-tools-spec", JSON.stringify({
+      v: 1, order: ["Name", "Age"], hidden: ["Age"], pinned: [], widths: {},
+    }));
+    const screen = render(grid('{columnMenu: true, persistKey: "tools-spec"}'));
+    await settle();
+
+    expect(headers(screen)).toStrictEqual(["Name"]);
+    localStorage.removeItem("aktion-datagrid-tools-spec");
   });
 });

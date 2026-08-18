@@ -509,10 +509,31 @@ export class Renderer {
     this.options.state.setPath(root, path, value);
   }
 
+  /**
+   * Render a program's UI root.
+   *
+   * A non-array root is normalised to a one-slot list so the author's tree
+   * ALWAYS hangs off `$/0`, never off `$` itself. That single `/0` is load-
+   * bearing: `useInstanceState` is keyed by `instancePath`, and an instance
+   * path is the chain of positions from the root down (`$/0#Tabs@42:6`). A root
+   * that is bare one render and wrapped in a list the next therefore re-keys
+   * every component in the program at once, and `endRender` reclaims the old
+   * keys as dead — so component-local UI state (the active `Tabs` pane, an open
+   * `Popover`, a `DataGrid`'s sort / page / column layout) resets for reasons
+   * the author cannot see.
+   *
+   * The runtime does exactly that whenever it has a sibling layer to add beside
+   * the author's root: the auto-injected `$toast` stack turns `root` into
+   * `[root, layer]` for as long as a toast is on screen (see
+   * `installAppRootBinding`), so a single `$toast.success("Saved")` used to snap
+   * the active tab back to its `defaultValue` three components away. Normalising
+   * here fixes that for every present and future root-level layer rather than
+   * for one caller.
+   */
   render(value: unknown): Node {
     this.passDepth += 1;
     try {
-      return this.renderAt(value, ROOT_PATH);
+      return this.renderAt(Array.isArray(value) ? value : [value], ROOT_PATH);
     } finally {
       this.passDepth -= 1;
     }

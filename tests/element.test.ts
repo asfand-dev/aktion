@@ -353,6 +353,57 @@ aktion = Stack([tabs, counter])`);
     expect(overviewBtn?.getAttribute("aria-selected")).toBe("false");
   });
 
+  /**
+   * A toast is a SIBLING of the author's root, and the runtime appends it only
+   * while one is on screen — so the root itself used to sit at a different tree
+   * position with a toast up than without one. Instance paths are positional, so
+   * that re-keyed every component in the program and `endRender` reclaimed the
+   * old keys: one `$toast.success("Saved")` snapped the active tab back to
+   * `defaultValue`, closed open popovers, and reset every DataGrid's sort.
+   * `Renderer.render` now normalises the root to a one-slot list so its path is
+   * the same either way.
+   */
+  it("preserves the active tab when a toast is raised and again when it clears", async () => {
+    vi.useFakeTimers();
+    try {
+      const el = create() as HTMLElement & {
+        setResponse(text: string): void;
+        state: { set: (k: string, v: unknown) => void };
+      };
+      el.setResponse(`function notifySaved() {
+  $toast.success("Saved")
+}
+tabs = Tabs([
+  TabItem("overview", { label: "Overview", children: [Text("Overview pane")] }),
+  TabItem("details",  { label: "Details",  children: [Button("Save", { onClick: notifySaved })] })
+])
+aktion = Stack([tabs])`);
+      await vi.advanceTimersByTimeAsync(20);
+      const shadow = el.shadowRoot!;
+      const activeValue = () =>
+        shadow
+          .querySelector<HTMLButtonElement>('.rui-tab-trigger[aria-selected="true"]')
+          ?.getAttribute("data-value");
+
+      shadow.querySelector<HTMLButtonElement>('.rui-tab-trigger[data-value="details"]')!.click();
+      expect(activeValue()).toBe("details");
+
+      // Raising the toast adds the sibling layer beside the root.
+      shadow.querySelector<HTMLButtonElement>(".rui-button")!.click();
+      await vi.advanceTimersByTimeAsync(20);
+      expect(shadow.querySelector(".rui-toasts")).not.toBeNull();
+      expect(activeValue()).toBe("details");
+
+      // Auto-dismiss (4s) takes the layer away again — the other direction of
+      // the same shape change, and just as capable of re-keying the tree.
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(shadow.querySelector(".rui-toasts")).toBeNull();
+      expect(activeValue()).toBe("details");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps an open <details> open across re-renders", async () => {
     const el = create() as HTMLElement & {
       setResponse(text: string): void;

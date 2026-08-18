@@ -388,7 +388,9 @@ export const DataGrid: ComponentSpec = {
     "pushing its neighbours around. " +
     "`scrollArrows=false` turns off the small chevrons that appear in the " +
     "header band when there are columns to scroll to. " +
-    "Pass `persistKey` to save the user's column layout to localStorage. " +
+    "Pass `persistKey` to save the user's column layout to localStorage — give " +
+    "each grid its own key, and prefix it per app when several apps share an " +
+    "origin; the key is mirrored onto the grid as `data-persist-key`. " +
     "Set `wrapCells=false` for single-line cells with ellipsis + hover tooltip. " +
     "Use INSTEAD of `Table` when you need any of those interactions.",
   props: [
@@ -421,7 +423,7 @@ export const DataGrid: ComponentSpec = {
     // Slots 26–34: advanced column management features. All optional.
     // APPEND-ONLY: positional args are resolved by index, so a new prop goes at
     // the END of this list — inserting one silently re-points every prop after it.
-    { name: "persistKey", type: "string", optional: true, description: "localStorage key — when set, column widths, order, visibility, and pinning survive page refreshes. Each table should use a unique key." },
+    { name: "persistKey", type: "string", optional: true, description: "localStorage key — when set, column widths, order, visibility, and pinning survive page refreshes. Each table needs its own key, prefixed per app where several apps share an origin: two grids on one key fight over a single saved layout. Mirrored onto the grid element as `data-persist-key` so the slot is visible in DevTools." },
     { name: "resizable", type: "boolean", optional: true, description: "Let the user drag column header borders to resize columns. Double-click a handle (or press Home on it) to auto-fit. The first drag switches the table to a fixed layout so resized cells truncate instead of overflowing." },
     { name: "columnMenu", type: "boolean", optional: true, description: "Show a column settings button for hiding, reordering, and pinning columns. Overlays the top-right of the header instead of occupying a column, so cell widths are unaffected." },
     { name: "globalSearch", type: "string", optional: true, description: "Global search term that filters across all columns — bind a $variable for two-way control." },
@@ -644,6 +646,10 @@ export const DataGrid: ComponentSpec = {
       // fresh tree omits (see ScrollHintState).
       "data-fixed-layout": layoutMeasured ? "true" : null,
       "data-col-menu": columnMenuEnabled ? "true" : null,
+      // Which localStorage slot this grid's column layout is saved under, mirrored
+      // so it is inspectable: two grids that share a key silently fight over one
+      // layout, and without this the key is invisible in the DOM and in DevTools.
+      "data-persist-key": persistKey || null,
     });
 
     /**
@@ -651,11 +657,31 @@ export const DataGrid: ComponentSpec = {
      * before the render-time `wrapper`, which after the first render is a
      * detached copy the reconciler threw away — a handler that resolved to it
      * would repaint nothing.
+     *
+     * The resolved root is REMEMBERED, and that is what makes the column panel
+     * work. The panel is promoted into the top layer while open, and where the
+     * `popover` API is missing the floating layer falls back to REPARENTING it
+     * out of the grid (Safari < 17, Firefox < 125, and every DOM implementation
+     * used by a test runner). Its checkboxes, pin buttons and drag handlers then
+     * hand `repaint` an origin whose `closest(".rui-data-grid")` is null, and
+     * with `liveViewSlot` not yet filled the chain ended at the detached
+     * `wrapper` — so hiding, pinning or reordering a column wrote the new config
+     * and repainted nothing, silently, with the table unchanged in front of the
+     * user. The button that opens the panel IS inside the grid, so by the time
+     * the panel can be clicked the root has already been recorded.
      */
-    const liveScope = (origin: Element | null | undefined): Element =>
-      origin?.closest(".rui-data-grid")
-      ?? liveViewSlot.get()?.closest(".rui-data-grid")
-      ?? wrapper;
+    const liveRootSlot = helpers.useInstanceState<Element | null>("liveRoot", null);
+    const liveScope = (origin: Element | null | undefined): Element => {
+      const found = origin?.closest(".rui-data-grid")
+        ?? liveViewSlot.get()?.closest(".rui-data-grid");
+      if (found?.isConnected) {
+        liveRootSlot.set(found);
+        return found;
+      }
+
+      const remembered = liveRootSlot.get();
+      return remembered?.isConnected ? remembered : wrapper;
+    };
 
     const bodyOf = (scope: Element): HTMLElement | null =>
       scope.querySelector<HTMLElement>(".rui-data-grid-table > tbody");

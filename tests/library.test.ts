@@ -14,6 +14,7 @@ import {
   Slider, NumberInput, DatePicker, FileUpload, Combobox,
 } from "../src/library/components/forms.js";
 import { Tree, TreeNode } from "../src/library/components/data.js";
+import { componentStyles } from "../src/theme/styles.js";
 import {
   Hero, PageHeader, EmptyState, Timeline, TimelineItem,
   FeatureGrid, FeatureItem, KanbanBoard, KanbanColumn, KanbanCard,
@@ -914,6 +915,24 @@ describe("Rich layout patterns", () => {
     expect(node.classList.contains("rui-toolbar")).toBe(true);
     expect(node.querySelector(".rui-toolbar-left")?.childNodes.length).toBe(1);
     expect(node.querySelector(".rui-toolbar-right")?.childNodes.length).toBe(1);
+    // Marks the no-center layout, which is what lets the stylesheet give the
+    // right slot an auto left margin — see the alignment test below.
+    expect(node.getAttribute("data-has-center")).toBe("false");
+  });
+
+  it("Toolbar's right slot stays right-aligned once the bar wraps", () => {
+    // `.rui-toolbar` wraps, and `justify-content` resolves per FLEX LINE — so a
+    // right slot that wraps onto its own line is the only item there and
+    // space-between leaves it at flex-start, rendering the "right" slot hard
+    // left. That is what a long left slot (a hint sentence over a filter row)
+    // actually produces. The auto margin absorbs the free space on whatever line
+    // the slot lands on; it is suppressed when a center slot needs that space.
+    expect(componentStyles).toContain(
+      '.rui-toolbar[data-has-center="false"] .rui-toolbar-right { margin-left: auto; }',
+    );
+    expect(componentStyles).not.toContain(
+      '.rui-toolbar[data-has-center="true"] .rui-toolbar-right { margin-left: auto; }',
+    );
   });
 
   it("Sidebar renders brand, items, and footer", () => {
