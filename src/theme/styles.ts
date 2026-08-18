@@ -1403,7 +1403,6 @@ a.rui-card {
   gap: var(--rui-spacing-xs);
   border-bottom: var(--rui-border-width) solid var(--rui-color-border);
   flex-wrap: wrap;
-  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 .rui-tab-trigger {
