@@ -13,8 +13,9 @@
  *   - MultiStepForm — Steps + content + prev/next composite.
  */
 
-import type { ComponentSpec, RenderHelpers } from "../types.js";
+import type { ComponentSpec } from "../types.js";
 import {
+  autoId,
   el, asArray, asString, asBoolean, asNumber, renderIcon, valueAttr, sanitiseHref,
 } from "../utils.js";
 import { attachOnChange } from "./wrappers.js";
@@ -27,26 +28,7 @@ const PIN_TYPES = ["numeric", "alphanumeric"] as const;
  * Shared helpers
  * ----------------------------------------------------------------------- */
 
-let AUTO_ID_SEQ = 0;
 
-/**
- * Per-instance fallback id for components whose `id` prop may be omitted —
- * `validate.ts` never enforces required props, so `id` is absent often enough
- * to matter. Everything that has to point at the control by id (a `<label
- * for>`, `aria-describedby`, a `<datalist>` `list=`, the morph reconciler's
- * node key) breaks when the id is `""`, so mint a stable one instead.
- *
- * Stored in instance state, so it survives re-renders and stays unique per
- * mounted component.
- */
-function autoId(helpers: RenderHelpers, prefix: string): string {
-  const slot = helpers.useInstanceState<number>("autoId", 0);
-  if (slot.get() === 0) {
-    AUTO_ID_SEQ += 1;
-    slot.set(AUTO_ID_SEQ);
-  }
-  return `${prefix}-${slot.get()}`;
-}
 
 /**
  * `withFieldShell` writes `required` / `aria-invalid` / `aria-describedby` onto

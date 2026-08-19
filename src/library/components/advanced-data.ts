@@ -28,6 +28,7 @@
 
 import type { ComponentSpec, RenderHelpers } from "../types.js";
 import {
+  autoId,
   el, asArray, asColumnNodes, asString, asBoolean, asNumber, renderIcon, fillTableCell,
   isComponentNode, sanitiseCssLength, sanitiseHref, sanitiseImageSrc, valueAttr,
 } from "../utils.js";
@@ -1569,6 +1570,9 @@ export const DataGrid: ComponentSpec = {
      * `[data-col-menu]`, which under fixed layout does not change any width.
      */
     if (columnMenuEnabled) {
+      // Per-instance: two grids with column menus on one page must not emit the
+      // same DOM id, or their handles' `aria-describedby` both resolve to the first.
+      const reorderHintId = `${autoId(helpers, "rui-data-grid-col")}-reorder-hint`;
       const menuWrap = el("div", { class: "rui-data-grid-col-menu" });
       const menuBtn = el("button", {
         type: "button",
@@ -1653,7 +1657,167 @@ export const DataGrid: ComponentSpec = {
         panelEl.append(panelHead);
 
         const list = el("div", { class: "rui-data-grid-col-panel-list" });
-        let dragSrcKey: string | null = null;
+
+        /**
+         * Column reordering — pointer-driven, with the list displacing live under
+         * the cursor.
+         *
+         * This replaced HTML5 drag-and-drop, which was unusable here on four counts:
+         *
+         *  1. Drop semantics were direction-dependent. The commit spliced the key out
+         *     and re-inserted it AT the target's index, but removing it first shifts
+         *     every later index down by one — so dropping on a row landed the column
+         *     AFTER it when dragging down and BEFORE it when dragging up. Same
+         *     gesture, same target, two different results, and no way to tell which
+         *     you were about to get.
+         *  2. The only feedback was a 2px `border-top` on the hovered row, which
+         *     therefore pointed at the wrong gap half the time AND reflowed the list
+         *     by 2px every time it moved.
+         *  3. `dragenter` / `dragleave` bubble from the row's own children (handle,
+         *     checkbox, label, pin), so sweeping across a row toggled that highlight
+         *     several times per row — the "not smooth" part.
+         *  4. `dragstart` never called `dataTransfer.setData`, which Firefox requires
+         *     before it will start a drag at all.
+         *
+         * The replacement tracks the pointer directly: `toIndex` is derived from how
+         * far the row has travelled in whole row-heights, the dragged row follows the
+         * cursor, and the rows it passes slide out of its way — so the gap you see is
+         * exactly where the column lands, identically in both directions. Pointer
+         * capture keeps the gesture alive over the panel's edges (it lives in the top
+         * layer, promoted out of the grid), which native DnD could not do reliably
+         * across that boundary.
+         */
+        interface ColDragState {
+          key: string;
+          rows: HTMLElement[];
+          fromIndex: number;
+          toIndex: number;
+          rowH: number;
+          startY: number;
+          startScroll: number;
+          pointerId: number;
+          node: HTMLElement;
+          active: boolean;
+          lastY: number;
+        }
+        let colDrag: ColDragState | null = null;
+        // Below this the gesture is still a click, so the checkbox and pin button
+        // keep working and a twitchy mouse does not reorder anything.
+        const DRAG_THRESHOLD = 4;
+
+        /** Where the dragged row currently sits, in whole row-heights travelled. */
+        const dragTargetIndex = (d: ColDragState, dy: number): number => {
+          const raw = d.fromIndex + Math.round(dy / d.rowH);
+          return Math.max(0, Math.min(d.rows.length - 1, raw));
+        };
+
+        /** Lay the list out for "the dragged row is at `toIndex`". */
+        const applyDragOffsets = (d: ColDragState, dy: number): void => {
+          d.node.style.transform = `translateY(${dy}px)`;
+          for (const [i, r] of d.rows.entries()) {
+            if (i === d.fromIndex) continue;
+            let shift = 0;
+            if (d.fromIndex < d.toIndex && i > d.fromIndex && i <= d.toIndex) shift = -d.rowH;
+            else if (d.fromIndex > d.toIndex && i >= d.toIndex && i < d.fromIndex) shift = d.rowH;
+            r.style.transform = shift === 0 ? "" : `translateY(${shift}px)`;
+          }
+        };
+
+        /** Drop every inline style the drag added, committing nothing. */
+        const clearDragStyles = (d: ColDragState): void => {
+          for (const r of d.rows) {
+            r.style.transform = "";
+            r.classList.remove("rui-data-grid-col-dragging", "rui-data-grid-col-shifting");
+          }
+          list.classList.remove("rui-data-grid-col-reordering");
+        };
+
+        /**
+         * Edge auto-scroll. The panel is capped to the viewport by the floating
+         * layer, so on a short window a grid with a handful of columns already
+         * overflows — without this you simply cannot drag a column past the edge
+         * of what is on screen. Scrolling also moves the rows under a stationary
+         * cursor, so each step re-derives the offsets from the new scrollTop (the
+         * same term pointermove adds) rather than assuming the pointer moved.
+         */
+        const AUTO_SCROLL_ZONE = 28;
+        const AUTO_SCROLL_STEP = 12;
+        let autoScrollRaf = 0;
+        let autoScrollDir = 0;
+        const stopAutoScroll = (): void => {
+          if (autoScrollRaf !== 0) cancelAnimationFrame(autoScrollRaf);
+          autoScrollRaf = 0;
+          autoScrollDir = 0;
+        };
+        const stepAutoScroll = (): void => {
+          autoScrollRaf = 0;
+          const d = colDrag;
+          // `isConnected` is the unmount guard: if the grid goes away mid-drag
+          // nothing else stops this loop, and it would keep scheduling frames
+          // against a detached panel for the life of the page.
+          if (!d || !d.active || autoScrollDir === 0 || !panelEl.isConnected) { stopAutoScroll(); return; }
+          const before = panelEl.scrollTop;
+          panelEl.scrollTop = before + (autoScrollDir * AUTO_SCROLL_STEP);
+          if (panelEl.scrollTop !== before) {
+            const dy = (d.lastY - d.startY) + (panelEl.scrollTop - d.startScroll);
+            d.toIndex = dragTargetIndex(d, dy);
+            applyDragOffsets(d, dy);
+          }
+          autoScrollRaf = requestAnimationFrame(stepAutoScroll);
+        };
+        const updateAutoScroll = (clientY: number): void => {
+          const box = panelEl.getBoundingClientRect();
+          const dir = clientY < box.top + AUTO_SCROLL_ZONE ? -1
+            : clientY > box.bottom - AUTO_SCROLL_ZONE ? 1 : 0;
+          autoScrollDir = dir;
+          if (dir !== 0 && autoScrollRaf === 0 && typeof requestAnimationFrame === "function") {
+            autoScrollRaf = requestAnimationFrame(stepAutoScroll);
+          }
+        };
+
+        const endColDrag = (commit: boolean, origin: Element | null): void => {
+          const d = colDrag;
+          colDrag = null;
+          stopAutoScroll();
+          if (!d) return;
+          try { d.node.releasePointerCapture(d.pointerId); } catch { /* already gone */ }
+          if (!d.active) return;
+          clearDragStyles(d);
+          if (!commit || d.toIndex === d.fromIndex) return;
+          const cfg = getColConfig();
+          const order = [...cfg.order];
+          const srcIdx = order.indexOf(d.key);
+          if (srcIdx < 0) return;
+          // Splice out first, then insert at `toIndex` — `toIndex` is already an
+          // index into the list WITHOUT the dragged row, because that is exactly
+          // what the displaced rows on screen were showing.
+          order.splice(srcIdx, 1);
+          order.splice(d.toIndex, 0, d.key);
+          updateColConfig({ order });
+          rebuildColPanel(panelEl);
+          repaint(origin);
+        };
+
+        /** Move one column by `delta` places and keep focus on its handle. */
+        const nudgeColumn = (key: string, delta: number, origin: Element | null): void => {
+          const cfg = getColConfig();
+          const order = [...cfg.order];
+          const from = order.indexOf(key);
+          const to = from + delta;
+          if (from < 0 || to < 0 || to >= order.length) return;
+          order.splice(from, 1);
+          order.splice(to, 0, key);
+          updateColConfig({ order });
+          rebuildColPanel(panelEl);
+          repaint(origin);
+          // Matched by attribute value rather than interpolated into a selector:
+          // a column header is arbitrary user text and would need CSS escaping.
+          for (const r of panelEl.querySelectorAll<HTMLElement>(".rui-data-grid-col-panel-row")) {
+            if (r.getAttribute("data-col-key") !== key) continue;
+            r.querySelector<HTMLElement>(".rui-data-grid-col-panel-handle")?.focus();
+            break;
+          }
+        };
 
         for (const key of cfg0.order) {
           const colDef = allCols.find((cd) => cd.key === key);
@@ -1663,14 +1827,26 @@ export const DataGrid: ComponentSpec = {
 
           const row = el("div", {
             class: "rui-data-grid-col-panel-row",
-            draggable: "true",
             "data-col-key": key,
           });
 
-          row.append(el("span", {
+          // The handle is a real button, not an aria-hidden glyph: reordering was
+          // pointer-only, so a keyboard or screen-reader user could hide and pin
+          // columns but never move one. Arrow keys on the handle do the same job.
+          const handle = el("button", {
+            type: "button",
             class: "rui-data-grid-col-panel-handle",
-            "aria-hidden": "true",
-          }, ["⠿"]));
+            "aria-label": `Reorder ${colDef.header}`,
+            "aria-describedby": reorderHintId,
+          }, ["⠿"]);
+          handle.onkeydown = (ev) => {
+            const delta = ev.key === "ArrowUp" ? -1 : ev.key === "ArrowDown" ? 1 : 0;
+            if (delta === 0) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            nudgeColumn(key, delta, ev.currentTarget as Element);
+          };
+          row.append(handle);
 
           const cb = el("input", {
             type: "checkbox",
@@ -1712,48 +1888,83 @@ export const DataGrid: ComponentSpec = {
           };
           row.append(pinBtn);
 
-          row.ondragstart = (ev) => {
-            dragSrcKey = key;
-            (ev.currentTarget as HTMLElement).classList.add("rui-data-grid-col-dragging");
-            if (ev.dataTransfer) ev.dataTransfer.effectAllowed = "move";
+          row.onpointerdown = (ev) => {
+            if (ev.button !== 0) return;
+            const from = ev.target as Element | null;
+            // A press that starts on the checkbox or the pin must stay a click.
+            if (from?.closest?.("input, button:not(.rui-data-grid-col-panel-handle)")) return;
+            // Touch keeps the list scrollable: only the handle starts a drag there,
+            // and only the handle opts out of the browser's own panning.
+            if (ev.pointerType === "touch" && !from?.closest?.(".rui-data-grid-col-panel-handle")) return;
+            const node = ev.currentTarget as HTMLElement;
+            const rows = [...list.querySelectorAll<HTMLElement>(".rui-data-grid-col-panel-row")];
+            const fromIndex = rows.indexOf(node);
+            if (fromIndex < 0) return;
+            colDrag = {
+              key,
+              rows,
+              fromIndex,
+              toIndex: fromIndex,
+              rowH: node.getBoundingClientRect().height,
+              startY: ev.clientY,
+              startScroll: panelEl.scrollTop,
+              pointerId: ev.pointerId,
+              node,
+              active: false,
+              lastY: ev.clientY,
+            };
+            try { node.setPointerCapture(ev.pointerId); } catch { /* capture unsupported */ }
           };
-          row.ondragend = (ev) => {
-            (ev.currentTarget as HTMLElement).classList.remove("rui-data-grid-col-dragging");
-            dragSrcKey = null;
-            list.querySelectorAll(".rui-data-grid-col-dragover").forEach((e) =>
-              e.classList.remove("rui-data-grid-col-dragover"));
-          };
-          row.ondragover = (ev) => {
+          row.onpointermove = (ev) => {
+            const d = colDrag;
+            if (!d || d.pointerId !== ev.pointerId) return;
+            // The panel is the scroll box, so a scroll mid-drag moves the rows under
+            // a cursor that has not moved — count it as travel or the row lags.
+            const dy = (ev.clientY - d.startY) + (panelEl.scrollTop - d.startScroll);
+            if (!d.active) {
+              if (Math.abs(dy) < DRAG_THRESHOLD) return;
+              d.active = true;
+              list.classList.add("rui-data-grid-col-reordering");
+              d.node.classList.add("rui-data-grid-col-dragging");
+              for (const r of d.rows) if (r !== d.node) r.classList.add("rui-data-grid-col-shifting");
+            }
             ev.preventDefault();
-            if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+            d.lastY = ev.clientY;
+            d.toIndex = dragTargetIndex(d, dy);
+            applyDragOffsets(d, dy);
+            updateAutoScroll(ev.clientY);
           };
-          row.ondragenter = (ev) => {
-            ev.preventDefault();
-            (ev.currentTarget as HTMLElement).classList.add("rui-data-grid-col-dragover");
+          row.onpointerup = (ev) => {
+            if (!colDrag || colDrag.pointerId !== ev.pointerId) return;
+            endColDrag(true, ev.currentTarget as Element);
           };
-          row.ondragleave = (ev) => {
-            (ev.currentTarget as HTMLElement).classList.remove("rui-data-grid-col-dragover");
+          row.onpointercancel = (ev) => {
+            if (!colDrag || colDrag.pointerId !== ev.pointerId) return;
+            endColDrag(false, ev.currentTarget as Element);
           };
-          row.ondrop = (ev) => {
-            ev.preventDefault();
-            (ev.currentTarget as HTMLElement).classList.remove("rui-data-grid-col-dragover");
-            const dropKey = (ev.currentTarget as HTMLElement).getAttribute("data-col-key");
-            if (!dragSrcKey || !dropKey || dragSrcKey === dropKey) return;
-            const cfg = getColConfig();
-            const order = [...cfg.order];
-            const srcIdx = order.indexOf(dragSrcKey);
-            const dstIdx = order.indexOf(dropKey);
-            if (srcIdx < 0 || dstIdx < 0) return;
-            order.splice(srcIdx, 1);
-            order.splice(dstIdx, 0, dragSrcKey);
-            updateColConfig({ order });
-            rebuildColPanel(panelEl);
-            repaint(ev.currentTarget as Element);
+          // Losing capture for any other reason (the row being replaced, the
+          // browser taking the pointer back) would otherwise strand the drag
+          // mid-gesture with the rows still displaced and no way to finish it.
+          // Our own release inside `endColDrag` fires this too, but it has
+          // already cleared `colDrag` by then, so the re-entry is a no-op.
+          row.onlostpointercapture = (ev) => {
+            if (!colDrag || colDrag.pointerId !== ev.pointerId) return;
+            endColDrag(false, ev.currentTarget as Element);
+          };
+          row.onkeydown = (ev) => {
+            if (ev.key !== "Escape" || !colDrag) return;
+            // Abandon the drag without closing the whole panel.
+            ev.stopPropagation();
+            endColDrag(false, ev.currentTarget as Element);
           };
 
           list.append(row);
         }
         panelEl.append(list);
+        panelEl.append(el("span", {
+          id: reorderHintId,
+          class: "rui-data-grid-col-panel-hint",
+        }, ["Press the up and down arrow keys to move this column."]));
       };
 
       const openPanel = (origin: Element | null): void => {

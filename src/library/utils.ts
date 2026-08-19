@@ -2,6 +2,7 @@
  * DOM helpers shared by built-in components.
  */
 
+import type { RenderHelpers } from "./types.js";
 import { resolveIconClasses, getCustomIcon, type IconSize } from "../icons/index.js";
 import { sanitiseSvgMarkup } from "./svg-sanitizer.js";
 
@@ -476,6 +477,24 @@ export function fillTableCell(
  * a Font Awesome name (legacy emoji input). Returns `null` when the value
  * is empty / nullish so callers can short-circuit.
  */
+let AUTO_ID_SEQ = 0;
+
+/**
+ * A DOM id for a component that was not given one, stable across re-renders.
+ *
+ * Stored in instance state, so it survives re-renders and stays unique per
+ * mounted component — two instances of the same component on one page get
+ * different ids, which is what `aria-describedby` / `for=` need to stay valid.
+ */
+export function autoId(helpers: RenderHelpers, prefix: string): string {
+  const slot = helpers.useInstanceState<number>("autoId", 0);
+  if (slot.get() === 0) {
+    AUTO_ID_SEQ += 1;
+    slot.set(AUTO_ID_SEQ);
+  }
+  return `${prefix}-${slot.get()}`;
+}
+
 export function renderIcon(
   value: unknown,
   options: { className?: string; size?: IconSize | string; color?: string } = {},

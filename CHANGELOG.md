@@ -7,6 +7,49 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-08-19
 
+### Callout Renders Correctly on the Exos (`vision`) Theme
+
+- Fixed the icon on a `compact` Callout landing below and to the right of its
+  own text, overlapping the headline and spilling past the bottom border. On
+  this theme the icon is positioned into the panel's padding box, but `compact`
+  only shrank the padding — the icon stayed pinned to the roomier layout's
+  coordinates. The padding, the icon's position and the headline's indent are
+  now driven by one set of custom properties, so a density change moves all
+  three together. Nothing about the default (non-compact) Callout changes.
+- Fixed `hideIcon` (and `icon: false`) leaving the headline indented past an
+  icon that was never drawn. Callout now publishes `data-has-icon` on its root
+  element, so any theme can drop the indent without guessing from the DOM.
+- Fixed `danger`, `error` and `neutral` Callout icons being invisible. The theme
+  draws the icon as a bare glyph rather than a filled disc, but the glyph kept
+  the white ink meant for the disc it no longer sat on — white on a white card.
+  Each tone's icon now takes the same semantic colour as its headline.
+- Fixed an `error`-tone Callout drawing a red status bar above a default-coloured
+  headline; `error` now matches `danger`, as it already did everywhere else.
+
+### Smooth, Predictable Column Reordering in the DataGrid Column Menu
+
+- Reordering columns is now a pointer-driven drag: the row you grab follows the
+  cursor and the rows it passes slide out of its way, so the gap on screen is
+  exactly where the column will land. Previously the drop position depended on
+  which way you were dragging — releasing on a row put the column *after* it when
+  moving down but *before* it when moving up — and the only hint was a marker
+  that pointed at the wrong gap half the time, flickered as the cursor crossed
+  each row's contents, and nudged the whole list as it moved.
+- Columns can now be reordered from the keyboard: focus a row's drag handle and
+  press the up or down arrow keys. The handle is a real button with a label, so
+  reordering is reachable with a screen reader for the first time.
+- The list auto-scrolls when a drag reaches its top or bottom edge, so columns
+  can be moved across a menu taller than the window.
+- Dragging respects "reduced motion", cancels cleanly on `Escape`, and no longer
+  starts when the press lands on a row's checkbox or pin button.
+- Fixed reordering not starting at all in Firefox, which requires drag data to be
+  set before it will begin a native drag.
+
+### Fixed
+
+- The VS Code extension's version now matches the runtime again (0.6.4); it was
+  left at 0.6.3 by the last release, which broke the lockstep check.
+
 ### A First-Class `testId` Prop on Every Component
 
 - Every component now accepts `testId`, which writes `data-testid` on the

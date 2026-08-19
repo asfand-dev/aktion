@@ -5339,7 +5339,8 @@ ${below("xs")} {
 }
 
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="success"] .rui-callout-title { color: var(--rui-color-success-text); }
-:host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-title { color: var(--rui-color-danger-text); }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-title,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="error"] .rui-callout-title { color: var(--rui-color-danger-text); }
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="warning"] .rui-callout-title { color: var(--rui-color-warning-text); }
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="info"] .rui-callout-title { color: var(--rui-color-info-text); }
 
@@ -6645,6 +6646,22 @@ ${below("xs")} {
    .message{background:#fff;border: var(--rui-border-width) solid #97a3b4;border-radius:16px;
             margin-bottom:32px;overflow:hidden;display:block} */
 :host([data-rui-theme="vision"]) .rui-callout {
+  /* Section padding, icon offset and title indent are three views of ONE geometry:
+     the icon is absolutely positioned INTO the section's padding box, so its offsets
+     have to equal that padding, and the title has to be indented by exactly the
+     icon's width plus a gap. Compact only changes the numbers, so the numbers live
+     here and every rule below reads them. Overriding padding alone (which is what
+     shipped) left the icon pinned at the regular 28px/30px while the box shrank to
+     10px/14px: it landed below and right of the denser title, overlapping the
+     headline and spilling past the bottom border. */
+  --rui-callout-pad-block: 28px;
+  --rui-callout-pad-inline: 30px;
+  --rui-callout-icon-size: 24px;               /* svg-icon--larger */
+  --rui-callout-icon-font: var(--rui-font-size-title);
+  --rui-callout-icon-gap: 11px;                /* 24 + 11 = UI Block's 35px indent */
+  --rui-callout-line: 24px;                    /* the title's first line box */
+  --rui-callout-title-min: 30px;               /* headline--sub stretches to 30px */
+  --rui-callout-title-gap: 12px;               /* headline--sub margin-bottom */
   display: block;
   padding: 0;
   background: var(--rui-color-surface);
@@ -6664,7 +6681,7 @@ ${below("xs")} {
   display: block;
   position: relative;
   margin-left: -1px;
-  padding: 28px 30px;
+  padding: var(--rui-callout-pad-block) var(--rui-callout-pad-inline);
   box-shadow: inset 9px 0 0 -1px #97a3b4;      /* default/neutral bar */
 }
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="info"] .rui-callout-section    { box-shadow: inset 9px 0 0 -1px #08a5c5; }
@@ -6673,10 +6690,20 @@ ${below("xs")} {
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-section,
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="error"] .rui-callout-section   { box-shadow: inset 9px 0 0 -1px #ff6159; }
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="neutral"] .rui-callout-section { box-shadow: inset 9px 0 0 -1px #97a3b4; }
-/* compact still has to be denser than this theme's 28px/30px, and because the
-   section is display: block here the dismiss button cannot be pushed by
-   margin-left: auto — pin it to the section, which is already position: relative. */
-:host([data-rui-theme="vision"]) .rui-callout[data-compact="true"] .rui-callout-section { padding: 10px 14px; }
+/* Compact still has to be denser than this theme's 28px/30px, and it re-points the
+   whole geometry rather than just the padding — the icon and the title indent
+   follow on their own because they read the same tokens. */
+:host([data-rui-theme="vision"]) .rui-callout[data-compact="true"] {
+  --rui-callout-pad-block: 10px;
+  --rui-callout-pad-inline: 14px;
+  --rui-callout-icon-size: 18px;
+  --rui-callout-icon-font: var(--rui-font-size-base);
+  --rui-callout-icon-gap: 8px;
+  --rui-callout-title-min: var(--rui-callout-line);   /* one line, no headline stretch */
+  --rui-callout-title-gap: 4px;
+}
+/* The section is display: block here, so the dismiss button cannot be pushed over
+   by margin-left: auto — pin it to the section, which is already position: relative. */
 :host([data-rui-theme="vision"]) .rui-callout-dismiss { position: absolute; top: 24px; right: 24px; margin: 0; }
 :host([data-rui-theme="vision"]) .rui-callout[data-compact="true"] .rui-callout-dismiss { top: 6px; right: 10px; }
 
@@ -6690,17 +6717,32 @@ ${below("xs")} {
    title's line — no disc, no white knock-out. */
 :host([data-rui-theme="vision"]) .rui-callout-icon {
   position: absolute;
-  left: 30px;
-  top: 28px;
-  width: 24px;                                 /* svg-icon--larger */
-  height: 24px;
+  left: var(--rui-callout-pad-inline);
+  top: var(--rui-callout-pad-block);
+  width: var(--rui-callout-icon-size);
+  /* The box is as tall as the title's FIRST LINE, not as tall as the glyph, so
+     align-items:center optically centres the icon on the headline for any
+     icon/line combination instead of needing a hand-tuned top offset per size. */
+  height: var(--rui-callout-line);
   border-radius: 0;
   background: transparent !important;
-  font-size: var(--rui-font-size-title);
-  line-height: 24px;
+  font-size: var(--rui-callout-icon-font);
+  line-height: 1;
   align-items: center;
   justify-content: flex-start;
 }
+/* Removing the disc also removed what --rui-color-on-* was FOR: those tokens are
+   the knock-out ink for a filled medallion, so reading them on the bare card left
+   danger/error/neutral drawing a #ffffff glyph on a white surface -- a 1:1
+   contrast ratio, i.e. no visible icon at all. On this theme the icon is a semantic
+   glyph on the title's line, so it takes the title's own semantic text colour. */
+:host([data-rui-theme="vision"]) .rui-callout .rui-callout-icon              { color: var(--rui-color-text); }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="info"] .rui-callout-icon    { color: var(--rui-color-info-text); }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="success"] .rui-callout-icon { color: var(--rui-color-success-text); }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="warning"] .rui-callout-icon { color: var(--rui-color-warning-text); }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-icon,
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="error"] .rui-callout-icon   { color: var(--rui-color-danger-text); }
+:host([data-rui-theme="vision"]) .rui-callout[data-variant="neutral"] .rui-callout-icon { color: var(--rui-color-text); }
 
 /* Title: UI Block's third-level headline in the semantic colour, cleared past the
    icon. Description + footer stay at the container's left padding. */
@@ -6714,9 +6756,16 @@ ${below("xs")} {
      absolutely, so match the box explicitly -- otherwise every Callout ends up 4px
      shorter than the UI Block original. */
   margin-top: 0px;
-  min-height: 30px;
-  padding-left: 35px;                          /* clears the absolutely-placed icon */
-  margin-bottom: 12px;                         /* headline--sub margin-bottom */
+  min-height: var(--rui-callout-title-min);
+  /* Exactly clears the absolutely-placed icon: its width plus the gap. */
+  padding-left: calc(var(--rui-callout-icon-size) + var(--rui-callout-icon-gap));
+  margin-bottom: var(--rui-callout-title-gap); /* headline--sub margin-bottom */
+}
+/* hideIcon (and icon:false) leave no icon to clear, so the indent has to go with it --
+   otherwise the headline sits behind a gap nothing occupies. The render marks the root
+   rather than relying on :has(), so every theme gets the same hook. */
+:host([data-rui-theme="vision"]) .rui-callout[data-has-icon="false"] .rui-callout-title {
+  padding-left: 0;
 }
 /* .message__section > :last-child { margin-bottom: 0 } -- UI Block collapses the trailing
    margin inside the section, so a title-only or description-last Callout has no stray
@@ -9489,9 +9538,31 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   user-select: none;
 }
 .rui-data-grid-col-panel-row:hover { background: var(--rui-color-surface-muted); }
-.rui-data-grid-col-panel-row.rui-data-grid-col-dragging { opacity: 0.4; }
-.rui-data-grid-col-panel-row.rui-data-grid-col-dragover {
-  border-top: 2px solid var(--rui-color-primary);
+/* While a reorder is in flight the rows are moved by transform, so nothing in
+   this list may reflow: the dragged row tracks the pointer 1:1 (no transition,
+   or it would lag behind the cursor) and the rows it displaces glide by exactly
+   one row-height. The old rule instead drew a 2px border-top on whichever row
+   was hovered, which both nudged the list 2px every time it moved and pointed at
+   the wrong gap whenever the drag was going upwards. */
+.rui-data-grid-col-panel-list.rui-data-grid-col-reordering { cursor: grabbing; }
+.rui-data-grid-col-panel-row.rui-data-grid-col-shifting {
+  transition: transform 0.16s ease;
+}
+.rui-data-grid-col-panel-row.rui-data-grid-col-dragging {
+  position: relative;
+  z-index: 2;
+  cursor: grabbing;
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-md, 0 2px 8px rgba(0, 0, 0, 0.15));
+  border-radius: var(--rui-radius-sm, 4px);
+}
+/* The lifted row must not also take the hover tint, or it flips shade as the
+   pointer crosses the rows underneath it. */
+.rui-data-grid-col-panel-row.rui-data-grid-col-dragging:hover {
+  background: var(--rui-color-surface);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rui-data-grid-col-panel-row.rui-data-grid-col-shifting { transition: none; }
 }
 .rui-data-grid-col-panel-handle {
   color: var(--rui-color-text-muted);
@@ -9499,6 +9570,32 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   cursor: grab;
   flex: 0 0 auto;
   line-height: 1;
+  /* A real <button> now, so the keyboard can reorder too — strip the UA chrome. */
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font-family: inherit;
+  border-radius: var(--rui-radius-sm, 4px);
+  /* The handle is the touch drag affordance, so it — and only it — opts out of
+     the browser's panning; the rest of the row keeps scrolling the list. */
+  touch-action: none;
+}
+.rui-data-grid-col-panel-handle:focus-visible {
+  outline: 2px solid var(--rui-color-focus, var(--rui-color-primary));
+  outline-offset: 1px;
+  color: var(--rui-color-text);
+}
+/* Describes the arrow-key gesture to screen readers without taking layout. */
+.rui-data-grid-col-panel-hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 .rui-data-grid-col-panel-cb {
   flex: 0 0 auto;

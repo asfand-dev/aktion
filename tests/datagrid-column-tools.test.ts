@@ -396,3 +396,305 @@ describe("DataGrid column settings panel drives the live table", () => {
     localStorage.removeItem("aktion-datagrid-tools-spec");
   });
 });
+
+/**
+ * Column reordering.
+ *
+ * This ran on HTML5 drag-and-drop and was unusable. The headline defect was that
+ * the drop was direction-dependent: the commit spliced the key out of the order
+ * and re-inserted it AT the target's index, but removing it first shifts every
+ * later index down one — so dropping a column onto a row put it AFTER that row
+ * when dragging down and BEFORE it when dragging up. The only feedback was a
+ * `border-top` on the hovered row, which therefore pointed at the wrong gap half
+ * the time (and reflowed the list 2px every time it moved), `dragenter` /
+ * `dragleave` bubbling from the row's own children made the highlight flicker
+ * several times per row, and `dragstart` never called `dataTransfer.setData`,
+ * which Firefox requires before it will start a drag at all.
+ *
+ * It is now pointer-driven: `toIndex` is how many whole row-heights the row has
+ * travelled, the rows it passes slide out of the way, and the gap on screen is
+ * where the column lands — the same way in both directions.
+ */
+describe("DataGrid column reordering", () => {
+  const COLS = [
+    '  Col("Name", rows.map(r => r.name), "text", "left", true),',
+    '  Col("Age", rows.map(r => r.age), "number"),',
+    '  Col("City", rows.map(r => r.name), "text"),',
+    '  Col("Zip", rows.map(r => r.age), "number")',
+  ].join("\n");
+
+  const headers = (screen: ReturnType<typeof render>): string[] =>
+    [...screen.shadowRoot.querySelectorAll<HTMLElement>(
+      ".rui-data-grid-table thead th:not([role=\"presentation\"])",
+    )].map((th) => (th.textContent ?? "").trim());
+
+  const panelKeys = (screen: ReturnType<typeof render>): string[] =>
+    [...screen.shadowRoot.querySelectorAll(".rui-data-grid-col-panel-row")]
+      .map((r) => r.getAttribute("data-col-key") ?? "");
+
+  const rowFor = (screen: ReturnType<typeof render>, key: string): HTMLElement =>
+    [...screen.shadowRoot.querySelectorAll<HTMLElement>(".rui-data-grid-col-panel-row")]
+      .find((r) => r.getAttribute("data-col-key") === key)!;
+
+  async function open(screen: ReturnType<typeof render>): Promise<void> {
+    await screen.click(screen.getByRole("button", { name: "Column settings" }));
+    await settle();
+  }
+
+  /**
+   * jsdom lays nothing out, so every row measures 0×0 and the component's
+   * "how many row-heights have I travelled" maths has nothing to divide by.
+   * Stub the geometry: uniform ROW_H-tall rows stacked from the top.
+   */
+  const ROW_H = 32;
+  function stubGeometry(screen: ReturnType<typeof render>): void {
+    const rows = [...screen.shadowRoot.querySelectorAll<HTMLElement>(".rui-data-grid-col-panel-row")];
+    rows.forEach((row, i) => {
+      row.getBoundingClientRect = () => ({
+        top: i * ROW_H, bottom: (i + 1) * ROW_H, height: ROW_H,
+        left: 0, right: 200, width: 200, x: 0, y: i * ROW_H,
+        toJSON: () => ({}),
+      } as DOMRect);
+    });
+    const panel = screen.shadowRoot.querySelector<HTMLElement>(".rui-data-grid-col-panel")!;
+    panel.getBoundingClientRect = () => ({
+      top: 0, bottom: rows.length * ROW_H, height: rows.length * ROW_H,
+      left: 0, right: 200, width: 200, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect);
+  }
+
+  const pointer = (node: HTMLElement, type: string, clientY: number, pointerId = 1): void => {
+    node.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, composed: true,
+      pointerId, pointerType: "mouse", isPrimary: true,
+      button: 0, buttons: type === "pointerup" ? 0 : 1,
+      clientX: 20, clientY,
+    }));
+  };
+
+  /** Press on `key`'s row and drag it `deltaRows` places, then release. */
+  async function drag(
+    screen: ReturnType<typeof render>, key: string, deltaRows: number,
+  ): Promise<void> {
+    stubGeometry(screen);
+    const row = rowFor(screen, key);
+    const startY = row.getBoundingClientRect().top + (ROW_H / 2);
+    pointer(row, "pointerdown", startY);
+    pointer(row, "pointermove", startY + (Math.sign(deltaRows) * 8));
+    pointer(row, "pointermove", startY + (deltaRows * ROW_H));
+    pointer(row, "pointerup", startY + (deltaRows * ROW_H));
+    await settle();
+  }
+
+  it("lands the column exactly where the gap was, dragging DOWN", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+
+    await drag(screen, "Name", 2);
+
+    expect(panelKeys(screen)).toStrictEqual(["Age", "City", "Name", "Zip"]);
+    expect(headers(screen)).toStrictEqual(["Age", "City", "Name", "Zip"]);
+  });
+
+  it("lands the column exactly where the gap was, dragging UP", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+
+    await drag(screen, "Zip", -2);
+
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Zip", "Age", "City"]);
+  });
+
+  it("is symmetric — dragging n places down then n back up is a no-op", async () => {
+    // The whole point. The old splice-at-target-index commit could not do this:
+    // the same gesture in reverse landed the column one place off.
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+    const before = panelKeys(screen);
+
+    await drag(screen, "Name", 2);
+    expect(panelKeys(screen)).not.toStrictEqual(before);
+    await drag(screen, "Name", -2);
+
+    expect(panelKeys(screen)).toStrictEqual(before);
+  });
+
+  it("clamps at both ends instead of wrapping or throwing", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+
+    await drag(screen, "Name", -5);
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+
+    await drag(screen, "Zip", 5);
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+  });
+
+  it("treats a press that barely moves as a click, not a reorder", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+    stubGeometry(screen);
+
+    const row = rowFor(screen, "Name");
+    pointer(row, "pointerdown", 16);
+    pointer(row, "pointermove", 18);   // 2px — under the 4px threshold
+    pointer(row, "pointerup", 18);
+    await settle();
+
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+  });
+
+  it("does not arm a drag from the checkbox, so hiding a column still works", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+    stubGeometry(screen);
+
+    const cb = rowFor(screen, "Age").querySelector<HTMLElement>(".rui-data-grid-col-panel-cb")!;
+    pointer(cb, "pointerdown", 40);
+    pointer(cb, "pointermove", 90);
+    pointer(cb, "pointerup", 90);
+    await settle();
+
+    // No reorder happened…
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+    // …and the checkbox is still live.
+    await screen.click(screen.getByRole("checkbox", { name: "Show Age" }));
+    await settle();
+    expect(headers(screen)).toStrictEqual(["Name", "City", "Zip"]);
+  });
+
+  it("abandons an in-flight drag on Escape without committing or closing", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+    stubGeometry(screen);
+
+    const row = rowFor(screen, "Name");
+    pointer(row, "pointerdown", 16);
+    pointer(row, "pointermove", 16 + (2 * ROW_H));
+    expect(row.classList.contains("rui-data-grid-col-dragging")).toBe(true);
+
+    row.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Escape", bubbles: true, cancelable: true, composed: true,
+    }));
+    await settle();
+
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+    // Every inline transform the drag added is gone…
+    expect([...screen.shadowRoot.querySelectorAll<HTMLElement>(".rui-data-grid-col-panel-row")]
+      .every((r) => r.style.transform === "")).toBe(true);
+    // …and Escape did not bubble on to close the whole panel.
+    expect(screen.shadowRoot.querySelector(".rui-data-grid-col-panel")!.getAttribute("data-open"))
+      .toBe("true");
+  });
+
+  it("displaces the rows the dragged column passes, so the gap shows the landing slot", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+    stubGeometry(screen);
+
+    const row = rowFor(screen, "Name");
+    pointer(row, "pointerdown", 16);
+    pointer(row, "pointermove", 16 + 8);
+    pointer(row, "pointermove", 16 + (2 * ROW_H));
+
+    const transforms = [...screen.shadowRoot.querySelectorAll<HTMLElement>(
+      ".rui-data-grid-col-panel-row",
+    )].map((r) => r.style.transform);
+    // The dragged row tracks the pointer; the two it passed step up exactly one
+    // row-height each; the one beyond it does not move.
+    expect(transforms).toStrictEqual([
+      `translateY(${2 * ROW_H}px)`,
+      `translateY(-${ROW_H}px)`,
+      `translateY(-${ROW_H}px)`,
+      "",
+    ]);
+
+    pointer(row, "pointerup", 16 + (2 * ROW_H));
+    await settle();
+  });
+
+  it("reorders from the keyboard, which pointer-only dragging made impossible", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+
+    const handle = screen.getByRole("button", { name: "Reorder Name" });
+    handle.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "ArrowDown", bubbles: true, cancelable: true, composed: true,
+    }));
+    await settle();
+
+    expect(panelKeys(screen)).toStrictEqual(["Age", "Name", "City", "Zip"]);
+    expect(headers(screen)).toStrictEqual(["Age", "Name", "City", "Zip"]);
+    // Focus follows the column it moved, so the next arrow press keeps going.
+    expect(screen.shadowRoot.activeElement?.getAttribute("aria-label")).toBe("Reorder Name");
+  });
+
+  it("clamps keyboard reordering at the ends", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+
+    screen.getByRole("button", { name: "Reorder Name" }).dispatchEvent(new KeyboardEvent("keydown", {
+      key: "ArrowUp", bubbles: true, cancelable: true, composed: true,
+    }));
+    await settle();
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+  });
+
+  it("abandons the drag if the pointer capture is lost mid-gesture", async () => {
+    // Capture can go away without a pointerup — the row gets replaced, or the
+    // browser takes the pointer back. Without this the gesture is stranded: the
+    // rows stay displaced and there is no event left that would finish it.
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+    stubGeometry(screen);
+
+    const row = rowFor(screen, "Name");
+    pointer(row, "pointerdown", 16);
+    pointer(row, "pointermove", 16 + (2 * ROW_H));
+    expect(row.style.transform).not.toBe("");
+
+    pointer(row, "lostpointercapture", 16 + (2 * ROW_H));
+    await settle();
+
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+    expect([...screen.shadowRoot.querySelectorAll<HTMLElement>(".rui-data-grid-col-panel-row")]
+      .every((r) => r.style.transform === "")).toBe(true);
+  });
+
+  it("no longer opts the row into native drag-and-drop", async () => {
+    // A `draggable` ancestor would race the pointer handlers: the browser's own
+    // drag start cancels the pointer stream mid-gesture.
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+
+    for (const row of screen.shadowRoot.querySelectorAll(".rui-data-grid-col-panel-row")) {
+      expect(row.hasAttribute("draggable")).toBe(false);
+    }
+  });
+
+  it("describes the keyboard gesture on every handle", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+
+    const hint = screen.shadowRoot.querySelector(".rui-data-grid-col-panel-hint")!;
+    expect(hint.id).toMatch(/reorder-hint$/);
+    for (const handle of screen.shadowRoot.querySelectorAll(".rui-data-grid-col-panel-handle")) {
+      expect(handle.tagName).toBe("BUTTON");
+      expect(handle.getAttribute("aria-describedby")).toBe(hint.id);
+    }
+  });
+});

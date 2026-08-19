@@ -606,10 +606,21 @@ export const Callout: ComponentSpec = {
     // signal at all that anything happened.
     const announce = props.live === undefined ? true : asBoolean(props.live);
     const urgent = variant === "danger" || variant === "error" || variant === "warning";
+    // `icon: false` used to stringify to "false" -> `fa-false`: an invisible
+    // glyph that still occupied the 22px coloured medallion, so there was no
+    // way to render a Callout without one. Treat it as `hideIcon`.
+    const hideIcon = asBoolean(props.hideIcon) || props.icon === false;
+    const iconName = hideIcon ? "" : (asString(props.icon) || defaultCalloutIcon(variant));
+    const iconNode = iconName ? renderIcon(iconName, { className: "rui-callout-icon" }) : null;
     const root = el("div", {
       class: "rui-callout",
       "data-variant": variant,
       "data-compact": compact ? "true" : "false",
+      // Themes that place the icon out of flow have to indent the title past it,
+      // and that indent must disappear when there is no icon. Publishing the fact
+      // as an attribute keeps that a pure-CSS decision in every theme (and needs
+      // no `:has()`), instead of each theme guessing from the DOM.
+      "data-has-icon": iconNode ? "true" : "false",
       role: announce ? (urgent ? "alert" : "status") : null,
       "aria-live": announce ? (urgent ? "assertive" : "polite") : null,
       "aria-atomic": announce ? "true" : null,
@@ -625,12 +636,6 @@ export const Callout: ComponentSpec = {
     // arc instead of curling around the radius, and the -1px pull lets it cover the
     // outer border. A single element cannot do both, so the section is real markup.
     const section = el("div", { class: "rui-callout-section" });
-    // `icon: false` used to stringify to "false" → `fa-false`: an invisible
-    // glyph that still occupied the 22px coloured medallion, so there was no
-    // way to render a Callout without one. Treat it as `hideIcon`.
-    const hideIcon = asBoolean(props.hideIcon) || props.icon === false;
-    const iconName = hideIcon ? "" : (asString(props.icon) || defaultCalloutIcon(variant));
-    const iconNode = iconName ? renderIcon(iconName, { className: "rui-callout-icon" }) : null;
     if (iconNode) section.append(iconNode);
     const body = el("div", { class: "rui-callout-body" });
     body.append(el("div", { class: "rui-callout-title" }, [asString(props.title)]));
