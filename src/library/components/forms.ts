@@ -1788,7 +1788,9 @@ export const FileUpload: ComponentSpec = {
     "Styled file picker. Renders a click/drop area with a leading icon, " +
     "label, and helper text. Files cannot round-trip through `$variables` " +
     "(they are not serialisable), so pass a callable as `action` to handle " +
-    "the picked files via `ctx.query(\"#id\").files`. Set `maxSize` (in " +
+    "the picked files. Read one with `$util.readFile(files)` — pass the whole " +
+    "pick and it resolves the first file's text (or a data URL), resolving " +
+    "an empty string rather than rejecting on any failure. Set `maxSize` (in " +
     "bytes) to reject oversized files before the upload starts, `error` to " +
     "show why one was refused, and `progress` (0–100) while it transfers.",
   props: [

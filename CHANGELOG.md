@@ -7,6 +7,25 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-08-19
 
+### Reading a File the User Picked
+
+- Added `$util.readFile(pick, { as?, maxSize? })`. `FileUpload` hands the picked
+  files to an `action` callback and nowhere else — a `File` is not serialisable,
+  so it can never travel through a `$variable` — but until now there was no way
+  to then read one: `FileReader` is not a permitted host global under the `"safe"`
+  global-access policy, so any program that wanted the contents of a picked
+  `.pub`, `.csv` or `.json` had to run unrestricted. This is that read, as a
+  capability the runtime grants.
+- Pass the pick straight through (`$util.readFile(files)`) or a single `File` —
+  a `FileList`, an array and a lone file are all accepted, and the first readable
+  entry is used. `as` selects the representation: `"text"` (default, UTF-8),
+  `"dataUrl"` for an inline preview, or `"base64"` for a JSON body. `maxSize`
+  rejects a larger file without reading it.
+- It never rejects. Every failure — no file, an unreadable one, an over-size one,
+  a host with no reader — resolves an empty string, because `await` in Aktion does
+  not suspend, so a rejection would surface as an unhandled promise instead of at
+  the call site. Branch on an empty result.
+
 ### Callout Renders Correctly on the Exos (`vision`) Theme
 
 - Fixed the icon on a `compact` Callout landing below and to the right of its

@@ -750,10 +750,13 @@ $app(pages)
   `.email()`, `.min()`, `.pattern()`, `.custom()`, `.asyncCustom()` — awaited by
   `$form` —, `.validate()`, `.validateAll()`), **computed helper**
   (`$util.derived(fn)`), **side-effect hooks** (`$util.onError`, `$util.onNavigate`,
-  `$util.onRequest`, `$util.onResponse`, `$util.invalidate`), and **device/platform
-  helpers** (`$util.vibrate`, `.share`, `.readClipboard`, `.geolocate`, `.isOnline`,
-  `.deviceType`, `.worker(pureFn)`, `.registerServiceWorker`, `.webManifest`,
-  `.nativeShell`, `.isNativeApp`).
+  `$util.onRequest`, `$util.onResponse`, `$util.invalidate`), **file reading**
+  (`$util.readFile(pick, { as?, maxSize? })` — the vetted way to read what
+  `FileUpload` handed over; `as` is `"text"` (default), `"dataUrl"` or `"base64"`,
+  and every failure resolves an empty string rather than rejecting), and
+  **device/platform helpers** (`$util.vibrate`, `.share`, `.readClipboard`,
+  `.geolocate`, `.isOnline`, `.deviceType`, `.worker(pureFn)`,
+  `.registerServiceWorker`, `.webManifest`, `.nativeShell`, `.isNativeApp`).
 - **Escape hatches** — `HTMLTag(tag, { attributes?, children? })` for
   raw HTML elements and `Styles(css)` for raw CSS injected into the
   shadow root. Use only when the standard component library cannot

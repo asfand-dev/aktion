@@ -24,6 +24,7 @@ between similar components, which the prop tables below cannot express.
 - `Combobox(id, items, value?, placeholder?, emptyLabel?)` is the searchable single-select alternative to `Select` — type to filter long option lists (countries, currencies, users).
 - `MultiSelect(id, items, value?, placeholder?, emptyLabel?, max?)` is the multi-select equivalent — bind a `$variable` array as `value` for two-way binding, the trigger renders the picks as removable chips.
 - `FileUpload(id, { label?, hint?, accept?, multiple?, action? })` is the styled file picker; the picked files cannot pass through a `$variable`, so wire the `action` prop to a `function` declaration.
+- Read what was picked with `$util.readFile(files, { as? })` — pass the whole pick straight through, it resolves the first file's contents as text (or `"dataUrl"` / `"base64"`) and resolves `""` rather than rejecting on any failure. `FileReader` is NOT reachable under the `"safe"` global policy, so this is the vetted read.
 - A submit button should call an `action` that awaits the relevant `$mutation` resource, optionally refetches a `$query`, and resets the form `$variable`s (e.g. `$title = ""`).
 - Button `size` accepts both `sm|md|lg` (canonical) and the legacy `small|normal|large`. Pass `icon` for an inline leading icon.
 - `FormSection(label, children, helper?)` is the canonical wrapper for related fields. Reach for it INSTEAD of nesting fields in Card + SectionHeader by hand.
@@ -800,7 +801,7 @@ Combined date + time picker — wraps `<input type="datetime-local">`. Pass a `$
 FileUpload(id, label?, hint?, accept?, multiple?, onSelect?, icon?, disabled?, maxSize?, error?, progress?, onRemove?)
 ```
 
-Styled file picker. Renders a click/drop area with a leading icon, label, and helper text. Files cannot round-trip through `$variables` (they are not serialisable), so pass a callable as `action` to handle the picked files via `ctx.query("#id").files`. Set `maxSize` (in bytes) to reject oversized files before the upload starts, `error` to show why one was refused, and `progress` (0–100) while it transfers.
+Styled file picker. Renders a click/drop area with a leading icon, label, and helper text. Files cannot round-trip through `$variables` (they are not serialisable), so pass a callable as `action` to handle the picked files. Read one with `$util.readFile(files)` — pass the whole pick and it resolves the first file's text (or a data URL), resolving an empty string rather than rejecting on any failure. Set `maxSize` (in bytes) to reject oversized files before the upload starts, `error` to show why one was refused, and `progress` (0–100) while it transfers.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |

@@ -19,6 +19,97 @@ const toNumber = (v: unknown): number => {
 
 const toArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
+/**
+ * A `Blob`-ish value, structurally. Deliberately NOT `instanceof Blob`: a
+ * program may be handed a `File` from a different realm (an `<iframe>`'s picker,
+ * a jsdom test), where the constructor identity differs but the interface does
+ * not.
+ */
+type BlobLike = {
+  size?: number;
+  type?: string;
+  text?: () => Promise<string>;
+  arrayBuffer?: () => Promise<ArrayBuffer>;
+};
+
+const isBlobLike = (v: unknown): v is BlobLike =>
+  Boolean(v) && typeof v === "object" &&
+  (typeof (v as BlobLike).text === "function" || typeof (v as BlobLike).arrayBuffer === "function");
+
+/**
+ * The one file out of whatever `FileUpload` handed over.
+ *
+ * `onSelect` is invoked with the whole pick — a `FileList` in the browser, a
+ * plain array after a remove — so the overwhelmingly common call is
+ * `$util.readFile(files)` rather than `$util.readFile(files[0])`. Accepting both
+ * removes the single most likely mistake at the call site: indexing a `FileList`
+ * is fine, but forgetting to is silent, and `readFile(aFileList)` would
+ * otherwise resolve `""` as though the file were unreadable.
+ */
+const firstBlob = (input: unknown): BlobLike | null => {
+  if (isBlobLike(input)) return input;
+  if (Array.isArray(input)) {
+    const found = input.find((entry) => isBlobLike(entry));
+    return found ? (found as BlobLike) : null;
+  }
+  // `FileList` is array-LIKE, not an array: it has `length` + index access and
+  // nothing else, so neither branch above reaches it.
+  if (input && typeof input === "object" && typeof (input as { length?: unknown }).length === "number") {
+    const list = input as unknown as ArrayLike<unknown>;
+    for (let index = 0; index < list.length; index += 1) {
+      if (isBlobLike(list[index])) return list[index] as BlobLike;
+    }
+  }
+  return null;
+};
+
+/**
+ * Decode a blob as UTF-8 text.
+ *
+ * `Blob.prototype.text()` is the modern path and is what every current browser
+ * and jsdom provide. The `FileReader` fallback is for hosts that predate it;
+ * both are reached through this one function so a caller never has to know which
+ * it got.
+ */
+const blobToText = (blob: BlobLike): Promise<string> => {
+  if (typeof blob.text === "function") return blob.text().then((value) => String(value ?? ""));
+  if (typeof blob.arrayBuffer === "function" && typeof TextDecoder !== "undefined") {
+    return blob.arrayBuffer().then((buffer) => new TextDecoder().decode(new Uint8Array(buffer)));
+  }
+  return new Promise<string>((resolve, reject) => {
+    if (typeof FileReader === "undefined") { reject(new Error("no FileReader")); return; }
+    const reader = new FileReader();
+    reader.onload = () => { resolve(String(reader.result ?? "")); };
+    reader.onerror = () => { reject(reader.error ?? new Error("read failed")); };
+    reader.readAsText(blob as unknown as Blob);
+  });
+};
+
+/**
+ * Encode a blob as a `data:` URI.
+ *
+ * Built from `arrayBuffer()` + `btoa` rather than `FileReader.readAsDataURL`
+ * because the buffer path is available wherever `blobToText` is, keeps this
+ * helper synchronous in structure, and — unlike `FileReader` — cannot be left
+ * hanging by a host that never fires either callback. The chunked `btoa` is not
+ * an optimisation: `String.fromCharCode(...bytes)` on a multi-megabyte file
+ * spreads a million arguments onto the stack and throws `RangeError`.
+ */
+const blobToDataUrl = (blob: BlobLike): Promise<string> => {
+  if (typeof blob.arrayBuffer !== "function" || typeof btoa === "undefined") {
+    return Promise.reject(new Error("no arrayBuffer"));
+  }
+  return blob.arrayBuffer().then((buffer) => {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const CHUNK = 8192;
+    for (let at = 0; at < bytes.length; at += CHUNK) {
+      binary += String.fromCharCode(...bytes.subarray(at, at + CHUNK));
+    }
+    return `data:${blob.type || "application/octet-stream"};base64,${btoa(binary)}`;
+  });
+};
+
 const isObject = (v: unknown): v is Record<string, unknown> =>
   Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
@@ -663,6 +754,62 @@ export const Util = {
       const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { clipboard?: { readText?: () => Promise<string> } }) : null;
       if (!nav?.clipboard?.readText) return Promise.resolve("");
       return nav.clipboard.readText().catch(() => "");
+    } catch { return Promise.resolve(""); }
+  },
+  /**
+   * Read a file the user picked, and resolve with its contents.
+   *
+   * `FileUpload` is the only way a program receives a file, and its own note
+   * says why the file cannot travel through a `$variable`: a `File` is not
+   * serialisable, so it reaches the program as a callback argument and nowhere
+   * else. Until now there was no vetted way to then READ it — the only route was
+   * reaching for `FileReader` or `document` as a host global, which the `"safe"`
+   * global-access policy exists to forbid (`SAFE_HOST_GLOBALS` grants the inert
+   * `Blob`/`File` containers but no reader). So a program that wanted the
+   * contents of a picked `.pub`, `.csv` or `.json` had to be run under the
+   * unrestricted `"all"` policy. This is that read, as a capability the runtime
+   * grants rather than one the program smuggles in.
+   *
+   *   FileUpload("key-file", {accept: ".pub,text/plain", action: onPick})
+   *   function onPick(files) {
+   *     $util.readFile(files).then(text => { $keyBody = text.trim() })
+   *   }
+   *
+   * `file` may be a single `File`/`Blob`, or the whole pick as `FileUpload`
+   * hands it over (a `FileList` or an array) — in which case the FIRST readable
+   * entry is used. Loop the pick yourself for `multiple`.
+   *
+   * `options.as` selects the representation:
+   *   `"text"`     (default) the decoded UTF-8 text
+   *   `"dataUrl"`  a `data:<mime>;base64,…` URI, for an inline preview
+   *   `"base64"`   that URI's payload alone, for a JSON body
+   *
+   * `options.maxSize` rejects a larger file without reading it, in bytes.
+   * `FileUpload`'s own `maxSize` already screens the pick, so this is for the
+   * programmatic caller that did not come through the component.
+   *
+   * NEVER REJECTS. It resolves `""` for every failure — no file, an unreadable
+   * one, an over-size one, a host with no reader at all — because `await` in
+   * Aktion does not suspend, so an author writes `.then(...)` and a rejection
+   * would surface as an unhandled promise instead of at the call site. An empty
+   * string is also the honest answer: the program has no contents to work with.
+   * Branch on the result being empty, not on a `.catch`.
+   */
+  readFile: (file: unknown, options?: unknown): Promise<string> => {
+    try {
+      const blob = firstBlob(file);
+      if (!blob) return Promise.resolve("");
+      const opts = isObject(options) ? options : {};
+      const limit = Math.max(0, toNumber(opts.maxSize));
+      if (limit > 0 && typeof blob.size === "number" && blob.size > limit) return Promise.resolve("");
+      const as = typeof opts.as === "string" ? opts.as : "text";
+      if (as === "dataUrl" || as === "base64") {
+        return blobToDataUrl(blob).then(
+          (url) => (as === "base64" ? url.slice(url.indexOf(",") + 1) : url),
+          () => "",
+        );
+      }
+      return blobToText(blob).then((text) => text, () => "");
     } catch { return Promise.resolve(""); }
   },
   /** Current geolocation as a promise of { lat, lng, accuracy } (or null). */
