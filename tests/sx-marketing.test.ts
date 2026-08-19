@@ -141,6 +141,51 @@ describe("universal channel end-to-end (Part I.1)", () => {
     expect(node.classList.contains("ak-anim-fade-up")).toBe(true);
   });
 
+  it("applies testId to any component, including one that shadows `data`", async () => {
+    const el = create();
+    // QRCode's positional argument IS its `data` prop, so the universal `data`
+    // channel is unreachable there — the case `testId` exists for.
+    el.setResponse(`$app(Column([
+      Text("Hello", { testId: "greeting" }),
+      QRCode("https://example.com/join", { size: 160, testId: "join-qr" })
+    ]))`);
+    await settle();
+    expect(el.shadowRoot?.querySelector('[data-testid="greeting"]')).toBeTruthy();
+    expect(el.shadowRoot?.querySelector('[data-testid="join-qr"]')).toBeTruthy();
+  });
+
+  it("does NOT reach a user-declared component — the universal channel stops at the library", async () => {
+    // `UserComponentNode` has no `universal` field, so nothing applies the channel
+    // to a `function MyCard(...)`. Documented in skills/aktion/references/gotchas.md;
+    // locked here so a future change to user-component evaluation cannot silently
+    // start or stop honouring it without this failing.
+    const el = create();
+    el.setResponse(`
+function MyCard(title) { return Card([Text(title)]) }
+$app(MyCard("Weekly", { testId: "dropped" }))`);
+    await settle();
+    expect(el.shadowRoot?.querySelector('[data-testid="dropped"]')).toBeNull();
+
+    // The supported form: forward it onto a library component inside the body.
+    const forwarded = create();
+    forwarded.setResponse(`
+function MyCard(title, { testId }) { return Card([Text(title)], { testId }) }
+$app(MyCard("Weekly", { testId: "forwarded" }))`);
+    await settle();
+    expect(forwarded.shadowRoot?.querySelector('[data-testid="forwarded"]')).toBeTruthy();
+  });
+
+  it("applies testId to a fragment-returning component via the host span", async () => {
+    // `Show` returns a DocumentFragment; the renderer wraps it in
+    // `span.rui-universal-host` so the universal channel is not discarded.
+    const el = create();
+    el.setResponse(`$app(Show(true, [Text("Visible")], { testId: "shown" }))`);
+    await settle();
+    const host = el.shadowRoot?.querySelector('[data-testid="shown"]') as HTMLElement;
+    expect(host).toBeTruthy();
+    expect(host.textContent).toContain("Visible");
+  });
+
   it("a real slot named the same as a universal prop still wins (id is universal, sx is not a slot)", async () => {
     const el = create();
     el.setResponse(`$app(Column([Text("a")], { sx: { gap: "l" } }))`);

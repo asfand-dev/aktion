@@ -114,6 +114,14 @@ const UNIVERSAL_PROP_DOCS: Record<string, { type: string; description: string }>
   },
   tooltip: { type: "string", description: "Native hover tooltip (`title`) on the rendered root element." },
   hidden: { type: "boolean", description: "Remove the component from the accessibility tree and hide it visually." },
+  testId: {
+    type: "string",
+    description:
+      "End-to-end test hook: renders `data-testid` on the component's ROOT element. "
+      + "Works on every component, including the six that shadow the `data` channel. "
+      + "Prefer role/label queries; reach for this where they are genuinely ambiguous.",
+  },
+  testid: { type: "string", description: "Alias of `testId`." },
 };
 
 /**

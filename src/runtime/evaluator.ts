@@ -755,11 +755,12 @@ export interface ComponentNode {
    */
   explicitKey?: unknown;
   /**
-   * Universal style/behaviour channel (suggestions-global Part I). Named
-   * props (`sx`, `animate`, `id`, `anchor`, `className`, `style`, `aria`,
-   * `data`, `tooltip`, `hidden`) that every component implicitly accepts.
-   * They match no declared slot, so the evaluator collects them here and
-   * the renderer applies them to the rendered element after `render(...)`.
+   * Universal style/behaviour channel (suggestions-global Part I). The named
+   * props every component implicitly accepts — see `UNIVERSAL_PROP_NAMES` in
+   * `src/library/sx.ts` for the authoritative list, which this comment used to
+   * duplicate and fall behind. They match no declared slot, so the evaluator
+   * collects them here and the renderer applies them to the rendered element
+   * after `render(...)`.
    */
   universal?: Record<string, unknown>;
   /** Original AST for debugging/introspection. */

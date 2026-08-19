@@ -11,6 +11,7 @@ import {
   cleanup,
   flush,
   json,
+  within,
 } from "../src/testing/index.js";
 
 afterEach(() => {
@@ -31,6 +32,43 @@ describe("render + queries", () => {
     await flush();
     const btn = screen.getByRole("button", { name: "Save changes" });
     expect(btn.tagName).toBe("BUTTON");
+  });
+
+  it("getByTestId finds a component marked with the universal testId prop", async () => {
+    // Before `testId` existed the only way to put a test id on a component was
+    // `HTMLTag("span", { attributes: { "data-testid": "chip" } })` around it, or
+    // `data: { testid: … }` on the components that do not shadow `data`.
+    const screen = render(`$app(Button("Save", { testId: "save" }))`);
+    await flush();
+    const btn = screen.getByTestId("save");
+    expect(btn.tagName).toBe("BUTTON");
+    expect(btn.textContent).toContain("Save");
+  });
+
+  it("within() and Screen agree on test ids that are not bare identifiers", async () => {
+    // `testId` passes its value through verbatim, so a test id may legally hold
+    // spaces, dots, colons, slashes and non-ASCII text. Both query surfaces
+    // escape before building the selector — `Screen.getByTestId` always did,
+    // `within()` did not until this was fixed.
+    //
+    // Not covered here: a value holding a `"` or a `\\`. Those are exactly the
+    // characters escaping exists for, but jsdom's selector engine cannot match
+    // an attribute value containing either one even from a correctly escaped
+    // selector, so BOTH surfaces miss and the assertion would prove nothing.
+    // Verify that pair in a real browser.
+    const ids = ["row 3", "user.row:3", "grp/sub-1", "zeile-drei-ü"];
+    const buttons = ids.map((id, n) => `Button("B${n}", { testId: "${id}" })`).join(", ");
+    const screen = render(`$app(Card([${buttons}]))`);
+    await flush();
+    const card = screen.shadowRoot!.querySelector(".rui-card") as HTMLElement;
+    const scoped = within(card);
+    for (const [n, id] of ids.entries()) {
+      expect(scoped.getByTestId(id).textContent, id).toContain(`B${n}`);
+      expect(scoped.queryAllByTestId(id), id).toHaveLength(1);
+      expect(screen.getByTestId(id), id).toBe(scoped.getByTestId(id));
+    }
+
+    expect(scoped.queryByTestId("row 4")).toBeNull();
   });
 });
 

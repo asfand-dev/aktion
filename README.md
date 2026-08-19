@@ -143,7 +143,10 @@ Everything you need at runtime ships in a single bundle:
   accepts a `{ base, sm, md, lg, xl }` map that resolves to real `@media`
   breakpoints. The same universal channel carries
   `class`/`className`, `style`, `id`, `anchor`, `aria`, `data`, `tooltip`,
-  `hidden`, and two accessibility escape valves: `role` (allow-listed to 41 ARIA
+  `hidden`, a first-class end-to-end test hook `testId` (alias `testid`) that
+  renders `data-testid` on the component's root and works on every component,
+  the six that shadow `data` included — and two accessibility escape valves:
+  `role` (allow-listed to 41 ARIA
   roles — landmarks, live/status, common widgets, `none`/`presentation`;
   anything else is silently dropped, because a plausible-but-wrong role is worse
   than the original defect) and `dataAttrs` (`{ testid: "row" }` →

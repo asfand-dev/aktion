@@ -859,6 +859,7 @@ EVERY component accepts a universal style/behaviour channel as named props, in a
 - **\`id\` / \`anchor\`** — set the element id (smooth-scroll targets).
 - **\`className\` / \`class\` / \`style\`** — extra classes (either spelling) / a sanitised inline style string.
 - **\`aria: {…}\` / \`data: {…}\` / \`dataAttrs: {…}\` / \`role\` / \`tooltip\` / \`hidden\`** — accessibility & metadata passthrough. \`role\` overrides the component's own ARIA role. Use \`dataAttrs\` instead of \`data\` on the components that declare a \`data\` prop of their own (\`LineChart\`, \`JsonTree\`, \`Async\`, \`Draggable\`, \`Lottie\`, \`QRCode\`) — there, \`data:\` is the component's prop and the universal channel is otherwise unreachable.
+- **\`testId: "users-table"\`** (alias \`testid\`) — renders \`data-testid\` on the component's ROOT element, for end-to-end tests. Works on every component, the six \`data\`-shadowing ones included. Prefer role/label queries; add a \`testId\` only where they are genuinely ambiguous.
 
 \`\`\`
 Card([Text("Lift on hover")], { sx: { p: "lg", radius: "lg", bg: "surface", shadow: "md", hover: { lift: true } } })

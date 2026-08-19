@@ -5,6 +5,33 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-08-19
+
+### A First-Class `testId` Prop on Every Component
+
+- Every component now accepts `testId`, which writes `data-testid` on the
+  rendered root element. Reaching for a test hook used to mean
+  `data: { testid: "row" }` — a spelling that reads as incidental metadata, and
+  that does not work at all on the six components declaring a `data` prop of
+  their own (`LineChart`, `JsonTree`, `Async`, `Draggable`, `Lottie`, `QRCode`),
+  where the component's own prop shadows the universal channel. `testId` reaches
+  all of them, and wins when more than one spelling is present. The lowercase
+  `testid` is accepted as an alias.
+- The value is used exactly as written — there is no character allow-list, so a
+  test id may contain slashes, colons, spaces or non-ASCII text. A `data-testid`
+  is an attribute *value*, not a selector, so there is nothing to sanitise on the
+  way in; escaping belongs on the query side, which leads to the next entry.
+- `within(node).getByTestId(...)` and its `query`/`queryAll` siblings now escape
+  the id before building their CSS selector, the way `screen.getByTestId` always
+  did. Previously an id containing a quote or a backslash produced a broken
+  selector rather than a match.
+- Two things worth knowing. `testId` marks a component's **root** element: on a
+  form field that has a label, that root is the `.rui-field` wrapper rather than
+  the control inside it, so reach the control with
+  `within(getByTestId("email")).getByRole("textbox")`. And a component that
+  renders nothing — `Show(false, …)` with no fallback — has no element to carry
+  the attribute, so `queryByTestId` correctly answers `null`.
+
 ## 2026-08-18
 
 ### A Toast No Longer Resets the Rest of the Page

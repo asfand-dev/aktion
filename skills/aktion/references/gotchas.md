@@ -141,6 +141,64 @@ statement, or it never runs.
 
 ---
 
+## Test ids (`testId`)
+
+### `testId` marks the component ROOT, not necessarily the control
+
+`testId` (alias `testid`) renders `data-testid` on whatever a component returns as its
+outermost node. For a labelled form field that is the `.rui-field` wrapper `withFieldShell`
+builds, not the control inside it: an `Input` with none of `label`/`hint`/`error`/`required`
+returns the bare control as its own root, but supplying any one of those props swaps the root
+for the wrapper (`src/library/components/forms-shared.ts`). Reach the control itself with a
+scoped query:
+
+```js
+within(getByTestId("email")).getByRole("textbox")
+```
+
+### `Portal` drops it
+
+`Portal`'s render function (`src/library/components/helpers.ts`) returns an anchor —
+`el("span", { class: "rui-portal-anchor", ... })` — that stays connected where you wrote it,
+while the actual children live in a different element, `entry.container`
+(`class="rui-portal"`), mounted after paint into the `target` you named, or into the portal
+layer when no target resolves. Universal props passed to `Portal(...)` itself — `testId`,
+`sx`, `id`, everything — land on the anchor, not on the portalled content. Put `testId` on the
+child component being portalled instead of on `Portal`.
+
+### A user-declared component silently drops the whole universal channel
+
+`UserComponentNode` (`src/runtime/evaluator.ts`) has no `universal` field — only the library's
+`ComponentNode` does, and only a `ComponentNode` reaches `applyUniversal`. A `testId` handed
+to one of your own components is therefore just another argument, and nothing renders it. It
+does not even reliably become a *named* one: a trailing object whose keys match no parameter
+is forwarded **positionally** instead (see "A trailing object with no matching key becomes an
+opaque bag" above), so `MyCard({ testId: "x" })` binds the whole object to the first parameter.
+
+Forward it explicitly onto a library component inside the body, and call the component with
+its positional arguments first:
+
+```js
+function MyCard(title, { testId }) {
+  return Card([Text(title)], { testId })
+}
+
+MyCard("Weekly report", { testId: "weekly-card" })
+```
+
+You do not have to declare the parameter — once the positional parameters are filled, an
+extra named prop is also bound as a plain local — but declaring it documents the contract.
+
+### A reparented floating panel breaks a scoped `within()` query
+
+Where the `popover` API is unavailable — including headless test DOMs — `openFloating`
+(`src/library/floating.ts`) reparents a promoted panel (dropdown, popover, tooltip, `Combobox`
+list) out of its original subtree into a shared `.rui-layer` node. Not specific to `testId`:
+once a panel has moved, any universal attribute on an ancestor — `testId`, `id`, `className` —
+no longer scopes to it via `within(ancestor)`. Query the open panel directly instead.
+
+---
+
 ## JavaScript semantics
 
 ### `await` never suspends — the value is the promise

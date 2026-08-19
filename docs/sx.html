@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>The sx prop · Aktion</title>
-  <meta name="description" content="The universal sx prop accepted by every Aktion component — a bounded, theme-safe, XSS-safe styling channel. A complete reference for every key (spacing, sizing, color, border, flex/grid, position, typography, effects, background images), with responsive maps and which keys accept them, interaction states, the animate prop, the role and dataAttrs channels, a troubleshooting checklist for values that were dropped, copy-paste snippets, and live mini-UI examples." />
+  <meta name="description" content="The universal sx prop accepted by every Aktion component — a bounded, theme-safe, XSS-safe styling channel. A complete reference for every key (spacing, sizing, color, border, flex/grid, position, typography, effects, background images), with responsive maps and which keys accept them, interaction states, the animate prop, the role, dataAttrs and testId channels, a troubleshooting checklist for values that were dropped, copy-paste snippets, and live mini-UI examples." />
   <script>
     (function () {
       try {
@@ -695,6 +695,7 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
           <tr><td><code>role</code></td><td>Overrides the element&rsquo;s ARIA role. <strong>Allow&#8209;listed</strong> &mdash; see below.</td></tr>
           <tr><td><code>data</code></td><td>An object of <code>data-*</code> attributes, e.g. <code>{ testid: "row-1" }</code>. Keys are lower&#8209;cased and stripped to <code>a&ndash;z 0&ndash;9 -</code>; <code>null</code> values are skipped.</td></tr>
           <tr><td><code>dataAttrs</code></td><td>The same channel under a second name, for components that declare a <code>data</code> prop of their own. Wins when both are present.</td></tr>
+          <tr><td><code>testId</code></td><td>End&#8209;to&#8209;end test hook. Renders <code>data-testid</code> on the rendered root, value used verbatim (no character allow&#8209;list). Wins over <code>data</code>/<code>dataAttrs</code> when more than one is present. Alias: <code>testid</code>.</td></tr>
           <tr><td><code>tooltip</code></td><td>Sets the native <code>title</code> attribute.</td></tr>
           <tr><td><code>hidden</code></td><td><code>true</code> &rarr; adds the <code>hidden</code> attribute.</td></tr>
         </tbody>
@@ -702,7 +703,7 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
 <pre><code>Button("Close", {
   variant: "ghost", icon: "xmark",
   aria: { label: "Close dialog" },
-  data: { testid: "dialog-close" },
+  testId: "dialog-close",
   tooltip: "Esc",
   sx: { radius: "circle" }
 })</code></pre>
@@ -710,6 +711,17 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
         Universal props sit alongside a component&rsquo;s own props in the same options bag
         &mdash; there is no separate slot for them, and every component accepts all of them.
       </p>
+      <div class="callout">
+        <p>
+          <strong><code>testId</code> marks the component&rsquo;s ROOT element.</strong> On a
+          form field that renders a label, hint, error, or <code>required</code> marker, the root
+          is the <code>.rui-field</code> wrapper rather than the control inside it &mdash; an
+          unlabelled <code>Input</code> returns the bare control as its own root, but a labelled
+          one returns the wrapper (see <code>src/library/components/forms-shared.ts</code>).
+          Reach the control itself with a scoped query:
+          <code>within(getByTestId("email")).getByRole("textbox")</code>.
+        </p>
+      </div>
 
       <h3 id="role">Overriding the role</h3>
       <p>
@@ -739,11 +751,18 @@ Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code
         <code>data</code> prop of their own &mdash; the payload they render. On those six the
         component prop wins, so use <code>dataAttrs</code> for the attribute channel.
       </p>
-<pre><code>QRCode("https://example.com/join", { size: 160, dataAttrs: { testid: "join-qr" } })
-// the positional argument IS `data` (the QR payload); dataAttrs emits data-testid="join-qr"</code></pre>
+<pre><code>QRCode("https://example.com/join", { size: 160, dataAttrs: { analyticsId: "join" } })
+// the positional argument IS `data` (the QR payload); dataAttrs emits data-analyticsid="join"</code></pre>
       <p>
         On every other component the two spellings are interchangeable, and
         <code>dataAttrs</code> wins if you pass both.
+      </p>
+      <p>
+        A <strong>test id specifically no longer needs <code>dataAttrs</code> on these six</strong>
+        &mdash; <code>testId</code> is a separate universal channel that reaches the rendered root
+        directly, regardless of whether the component declares its own <code>data</code> prop.
+        <code>dataAttrs</code> remains the way to set any <em>other</em> <code>data-*</code>
+        attribute on them.
       </p>
 
       <h3 id="boxless">Elements with no box of their own</h3>
@@ -920,7 +939,7 @@ $app(Column([
           <tr>
             <td><code>data-*</code> attributes never appear</td>
             <td>The component declares a <code>data</code> prop of its own, which shadows the channel.</td>
-            <td>Use <code>dataAttrs</code> &mdash; see <a href="#data-attrs">the six components</a>.</td>
+            <td>Use <code>dataAttrs</code>, or <code>testId</code> if it&rsquo;s specifically a test hook &mdash; see <a href="#data-attrs">the six components</a>.</td>
           </tr>
           <tr>
             <td>A <code>role</code> is missing from the DOM</td>
@@ -987,7 +1006,7 @@ $app(Column([
           <tr><td>Glass panel</td><td><code>{ sx: { backdrop: "blur", bg: "rgba(255,255,255,.12)" } }</code></td></tr>
           <tr><td>Entrance animation</td><td><code>{ animate: "fade-up" }</code></td></tr>
           <tr><td>Fix a wrong role</td><td><code>{ role: "status" }</code></td></tr>
-          <tr><td>Test hook on a chart / QR code</td><td><code>{ dataAttrs: { testid: "chart" } }</code></td></tr>
+          <tr><td>Test hook on a chart / QR code</td><td><code>{ testId: "chart" }</code></td></tr>
         </tbody>
       </table>
 

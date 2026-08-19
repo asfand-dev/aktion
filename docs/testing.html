@@ -281,7 +281,7 @@ afterAll(() =&gt; {
           <tr><td><code>getByText(matcher)</code></td><td>The innermost element whose visible text matches.</td><td><code>getByText("Welcome back")</code></td></tr>
           <tr><td><code>getByLabelText(matcher)</code></td><td>A form field by its associated <code>&lt;label&gt;</code> / <code>aria-label</code>.</td><td><code>getByLabelText("Email")</code></td></tr>
           <tr><td><code>getByPlaceholderText(matcher)</code></td><td>An input by its placeholder.</td><td><code>getByPlaceholderText("Search…")</code></td></tr>
-          <tr><td><code>getByTestId(id)</code></td><td>An element by <code>data-testid</code> (escape hatch &mdash; prefer the above).</td><td><code>getByTestId("row-7")</code></td></tr>
+          <tr><td><code>getByTestId(id)</code></td><td>An element by <code>data-testid</code>. Still second choice after role / label / text, but backed by a first&#8209;class <code>testId</code> prop &mdash; see <a href="sx.html#universal">the universal props</a> for how to put one on a component.</td><td><code>getByTestId("row-7")</code></td></tr>
         </tbody>
       </table>
       <p>
@@ -289,6 +289,26 @@ afterAll(() =&gt; {
         default; pass <code>{ exact: false }</code> for a substring), a
         <code>RegExp</code>, or a predicate <code>(text, el) =&gt; boolean</code>.
       </p>
+      <h3 id="test-ids">Test ids: root elements and empty output</h3>
+      <p>
+        <code>getByTestId</code> only finds something once a component actually carries a
+        matching <code>data-testid</code> &mdash; give it one with the <code>testId</code> prop
+        (see <a href="sx.html#universal">the universal props</a>). Two things to know before you
+        rely on it:
+      </p>
+      <ul>
+        <li>
+          <strong>A test id marks the component&rsquo;s root.</strong> On a labelled form field
+          the root is the field wrapper, not the control inside it, so scope a second query to
+          reach the control: <code>within(getByTestId("email")).getByRole("textbox")</code>.
+        </li>
+        <li>
+          <strong>No element, no attribute.</strong> A component that renders nothing &mdash;
+          <code>Show(false, [...])</code> with no <code>fallback</code>, for example &mdash; has
+          no node to carry <code>data-testid</code>, so <code>queryByTestId</code> correctly
+          returns <code>null</code> rather than finding a hidden placeholder.
+        </li>
+      </ul>
       <h3 id="query-variants">Query variants</h3>
       <p>Every query comes in the familiar six flavours:</p>
       <table class="signature-table">

@@ -1393,9 +1393,16 @@ export function within(root: Element): WithinQueries {
     queryByRole: (role, o) => byRole(role, o?.name, o?.exact)[0] ?? null,
     getAllByRole: (role, o) => byRole(role, o?.name, o?.exact),
     queryAllByRole: (role, o) => byRole(role, o?.name, o?.exact),
-    getByTestId: (id) => { const el = root.querySelector<HTMLElement>(`[data-testid="${id}"]`); if (!el) throw new Error(`within: no [data-testid=${id}]`); return el; },
-    queryByTestId: (id) => root.querySelector<HTMLElement>(`[data-testid="${id}"]`),
-    queryAllByTestId: (id) => [...root.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)],
+    // `cssEscape` on the way into the selector, raw `id` in the error message —
+    // the message is prose, the selector is not. `Screen`'s own `byTestId` has
+    // always escaped; these three interpolated the id verbatim, so a test id
+    // holding a quote or a backslash built a broken selector or threw a
+    // `SyntaxError`. Unreachable while the only way to set one was
+    // `data: { testid }` (whose keys are stripped to `a-z0-9-`); the `testId`
+    // prop passes the value through verbatim, which makes it reachable.
+    getByTestId: (id) => { const el = root.querySelector<HTMLElement>(`[data-testid="${cssEscape(id)}"]`); if (!el) throw new Error(`within: no [data-testid=${id}]`); return el; },
+    queryByTestId: (id) => root.querySelector<HTMLElement>(`[data-testid="${cssEscape(id)}"]`),
+    queryAllByTestId: (id) => [...root.querySelectorAll<HTMLElement>(`[data-testid="${cssEscape(id)}"]`)],
   };
 }
 

@@ -2,7 +2,7 @@
  * `sx` — bounded, token-aware style-intent layer (suggestions-global Part I).
  *
  * Every component accepts a universal `sx` prop (plus `animate`, `id`,
- * `anchor`, `className`, `style`). These are NOT raw CSS: each value is a
+ * `anchor`, `className`, `style`, `testId`). These are NOT raw CSS: each value is a
  * design-token reference, a small enum, or a sanitised scalar, so the surface
  * stays theme-safe, XSS-safe, and enumerable by an LLM.
  *
@@ -683,6 +683,13 @@ export const UNIVERSAL_PROP_NAMES = new Set([
   // QRCode). On those, the component prop wins and the universal channel was
   // unreachable, so `data-*` attributes could not be set at all.
   "dataAttrs",
+  // A first-class spelling for the one `data-*` attribute every end-to-end test
+  // runner looks for. `data: { testid: … }` could already do this, but not on the
+  // six components that shadow `data`, and only if the author knew the attribute
+  // name. `testid` is accepted alongside `testId` for the same reason `class`
+  // sits beside `className`: both spellings are what people actually type, and an
+  // unknown prop is a hard validation error, not a warning.
+  "testId", "testid",
 ]);
 
 export interface UniversalProps {
@@ -699,6 +706,8 @@ export interface UniversalProps {
   role?: unknown;
   tooltip?: unknown;
   hidden?: unknown;
+  testId?: unknown;
+  testid?: unknown;
 }
 
 const CLASS_TOKEN = /^[A-Za-z_][\w-]*$/;
@@ -851,4 +860,17 @@ export function applyUniversal(node: Node, universal: UniversalProps | null | un
       if (key && v != null) elNode.setAttribute(`data-${key}`, asString(v));
     }
   }
+  // Applied AFTER the bag so the dedicated prop wins over a hand-written
+  // `data: { testid: … }`, matching the "more explicit spelling wins" rule
+  // `dataAttrs` already follows over `data`.
+  //
+  // The value is NOT restricted the way `id` is. An id has to be a CSS
+  // identifier because it feeds `#id` selectors, `getElementById` and
+  // `href="#…"`; a test id feeds `[data-testid="…"]`, where every runner
+  // (Playwright, Testing Library, Cypress) escapes the value for you. Dropping
+  // `user-row:asfand@example.com` for containing a colon would be a silent
+  // capability loss, so only the empty string is rejected. `setAttribute`
+  // escapes the value into the attribute, so there is no injection surface.
+  const testId = asString(universal.testId ?? universal.testid).trim();
+  if (testId) elNode.setAttribute("data-testid", testId);
 }
