@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Themes · Aktion</title>
+  <meta name="description" content="Ship Aktion apps with six polished built-in themes — light, dark, corporate, soft, glass, modern — switch with one attribute, and override any of the 113 design tokens in-program with $theme({...}): colours, radius, typography, spacing, shadows, gradients, layers, motion." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live layout demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+      background-blend-mode: normal;
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Visual filler so structural demos read clearly without real content. */
+    .demo-cheats code { white-space: nowrap; }
+  </style>
+</head>
+<body data-page="themes">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Theming</span>
+        <h1>Themes.</h1>
+        <p class="lead">
+          Every Aktion component is already wired to <strong>113 design
+          tokens</strong> &mdash; colours, radii, spacing, type, shadows,
+          gradients, z&#8209;index layers, and motion. Pick one of
+          <strong>six built&#8209;in themes</strong> with a single attribute, or
+          brand your own by overriding tokens in&#8209;program with
+          <strong><code>$theme({&hellip;})</code></strong>. No CSS files, no
+          stylesheet plumbing &mdash; just a token map.
+        </p>
+      </header>
+
+      <h2 id="how">How theming works</h2>
+      <p>
+        A theme is nothing more than a bundle of <strong>CSS custom properties</strong>
+        (<code>--rui-color-primary</code>, <code>--rui-radius-md</code>, &hellip;) written
+        onto the <code>&lt;aktion-app&gt;</code> host element. Every component reads
+        those variables, so changing a token reskins the whole tree instantly &mdash;
+        without re&#8209;rendering. There are three layers, and they compose:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Layer</th><th>Where it lives</th><th>Token shape</th><th>Scope</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Host base</strong></td>
+            <td><code>theme</code> attribute / <code>setTheme()</code> on the element</td>
+            <td>A built&#8209;in name (<code>"dark"</code>) or a <em>flat</em> token map (<code>{ colorPrimary: "&hellip;" }</code>)</td>
+            <td>Full replace &mdash; writes all 113 variables</td>
+          </tr>
+          <tr>
+            <td><strong>Per&#8209;response overlay</strong></td>
+            <td>A bare <code>$theme({&hellip;})</code> inside the program</td>
+            <td><em>Grouped</em> tokens (<code>{ colors: { primary } }</code>) layered on top of the base</td>
+            <td>Only the tokens you pass</td>
+          </tr>
+          <tr>
+            <td><strong>Per&#8209;node <code>sx</code></strong></td>
+            <td>The universal <code>sx</code> prop on one component</td>
+            <td>Token <em>references</em> (<code>bg: "surface"</code>, <code>bg: "gradient.brand"</code>)</td>
+            <td>That element only &mdash; wins over both layers above</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Because every layer resolves to the same <code>--rui-*</code> variables on one
+        shadow host, themes never leak between embeds and <code>sx</code> keeps tracking
+        the active theme instead of hard&#8209;coding a colour.
+      </p>
+      <div class="callout" data-variant="info">
+        <h4>Two token shapes, one system</h4>
+        <p>
+          The host paths (<code>theme</code> attribute, <code>setTheme()</code>) take
+          <strong>flat</strong> keys like <code>colorPrimary</code> / <code>radiusMd</code>.
+          The in&#8209;program <code>$theme({&hellip;})</code> takes <strong>grouped</strong>
+          keys like <code>colors.primary</code> / <code>radius.md</code>. Both end up as the
+          same <code>--rui-*</code> CSS variables &mdash; pick the shape that matches where
+          you're setting the theme. Only the flat shape reaches all 113 tokens; see
+          <a href="#flat-only">tokens with no <code>$theme</code> route</a>.
+        </p>
+      </div>
+
+      <h2 id="built-in">Built-in themes</h2>
+      <p>
+        Six themes come in the box. Select one with the <code>theme</code>
+        attribute on the host element &mdash; <code>light</code> is the default if
+        you omit it. Switching is instant: only the host's CSS variables change.
+      </p>
+      <pre><code>&lt;aktion-app theme="dark"&gt;&lt;/aktion-app&gt;</code></pre>
+      <p>
+        An unknown name does not throw &mdash; it silently falls back to
+        <code>light</code>, so a typo shows up as "my theme did nothing" rather than a
+        crash.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Theme</th><th>Feel</th><th>Reach for it when</th><th>Web fonts</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>light</code></td>
+            <td>Default. White surfaces, indigo <code>#4f46e5</code> primary, 6/10/16px radii, 1px <code>#e2e8f0</code> hairlines, flat shadows.</td>
+            <td>Neutral host embeds, docs, anything that must not have a personality of its own.</td>
+            <td>None (system&#8209;ui)</td>
+          </tr>
+          <tr>
+            <td><code>dark</code></td>
+            <td><code>#0b1220</code> page over <code>#111827</code> surfaces, <code>#f8fafc</code> text, indigo&#8209;300 <code>#818cf8</code> primary, One&nbsp;Dark syntax palette.</td>
+            <td>Dark host pages. Pair it with <code>app.setTheme(prefersDark ? "dark" : "light")</code>.</td>
+            <td>None</td>
+          </tr>
+          <tr>
+            <td><code>corporate</code></td>
+            <td>Contemporary enterprise workspace. Deep teal <code>#0f766e</code> primary that <em>darkens</em> to <code>#0b5f58</code> on hover, graphite <code>#f5f7f8</code> canvas, square&#8209;shouldered 8px buttons and inputs, flat hairline cards that tint on hover, a 2px teal rail under the selected tab, 15px Inter body under Space&nbsp;Grotesk headings.</td>
+            <td>Admin panels, consoles, dense scannable data UIs, internal tools.</td>
+            <td><strong>Yes</strong> &mdash; Inter + Space&nbsp;Grotesk</td>
+          </tr>
+          <tr>
+            <td><code>soft</code></td>
+            <td>Friendly and rounded. Lavender <code>#7c4ddb</code> primary with mint accent, <code>#fdf6ff</code> page, 12/20/28px radii, tinted shadows, cards lift on hover, a wider spacing ramp.</td>
+            <td>Consumer, wellness and education UIs &mdash; anything that should read as gentle.</td>
+            <td>Declares Quicksand/Nunito, does <em>not</em> load them</td>
+          </tr>
+          <tr>
+            <td><code>glass</code></td>
+            <td>Light glassmorphism. Translucent <code>rgba(255,255,255,0.55)</code> surfaces with real <code>backdrop-filter</code> blur over a pastel wash, white rim&#8209;light borders, terracotta primary.</td>
+            <td>Marketing, hero and showcase screens where the backdrop is part of the design.</td>
+            <td>Declares Poppins/Inter, does <em>not</em> load them</td>
+          </tr>
+          <tr>
+            <td><code>modern</code></td>
+            <td>Clean SaaS dashboard. Off&#8209;white <code>#f4f5f7</code> canvas, crisp white cards, ink <code>#111827</code> primary, violet accent, fully pill buttons (<code>radiusButton: 999px</code>), tightened heading tracking, vibrant charts.</td>
+            <td>Product dashboards, analytics, modern B2B SaaS.</td>
+            <td>Declares Plus&nbsp;Jakarta&nbsp;Sans/Inter, does <em>not</em> load them</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Retired names are gone for good: <code>neon</code> and <code>brutalist</code> were
+        removed, <code>skyline</code> became <code>corporate</code>, and
+        <code>pastel</code> became <code>soft</code>. Each of those now resolves to
+        <code>light</code>.
+      </p>
+
+      <h3 id="theme-signatures">What each theme actually changes</h3>
+      <p>
+        All six themes share the same token names, so a component never has to know
+        which one is active. These are the values that give each theme its character:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Token</th><th><code>light</code></th><th><code>dark</code></th><th><code>corporate</code></th><th><code>soft</code></th><th><code>glass</code></th><th><code>modern</code></th></tr></thead>
+        <tbody>
+          <tr><td><code>colorBg</code></td><td><code>#ffffff</code></td><td><code>#0b1220</code></td><td><code>#f5f7f8</code></td><td><code>#fdf6ff</code></td><td><code>#eceef2</code></td><td><code>#f4f5f7</code></td></tr>
+          <tr><td><code>colorSurface</code></td><td><code>#ffffff</code></td><td><code>#111827</code></td><td><code>#ffffff</code></td><td><code>#ffffff</code></td><td><code>rgba(255,255,255,.55)</code></td><td><code>#ffffff</code></td></tr>
+          <tr><td><code>colorText</code></td><td><code>#0f172a</code></td><td><code>#f8fafc</code></td><td><code>#0d1f22</code></td><td><code>#3b1f56</code></td><td><code>#33303a</code></td><td><code>#111827</code></td></tr>
+          <tr><td><code>colorPrimary</code></td><td><code>#4f46e5</code></td><td><code>#818cf8</code></td><td><code>#0f766e</code></td><td><code>#7c4ddb</code></td><td><code>#af4027</code></td><td><code>#111827</code></td></tr>
+          <tr><td><code>colorAccent</code></td><td><code>#4f46e5</code></td><td><code>#818cf8</code></td><td><code>#0b7d72</code></td><td><code>#5eead4</code></td><td><code>#b58ee6</code></td><td><code>#7c5cfc</code></td></tr>
+          <tr><td><code>radiusSm/Md/Lg</code></td><td>6/10/16</td><td>6/10/16</td><td>6/10/14</td><td>12/20/28</td><td>14/20/28</td><td>12/18/24</td></tr>
+          <tr><td><code>radiusButton</code></td><td><code>6px</code></td><td><code>6px</code></td><td><code>8px</code></td><td><code>16px</code></td><td><code>16px</code></td><td><code>999px</code></td></tr>
+          <tr><td><code>spacing</code> xs&hellip;3xl</td><td>4/8/12/20/32/48/80</td><td>same</td><td>4/8/14/22/36/56/88</td><td>6/12/18/28/44/66/110</td><td>6/12/18/26/42/63/105</td><td>5/10/16/24/40/60/100</td></tr>
+          <tr><td><code>buttonPaddingY/X</code></td><td>8/14</td><td>8/14</td><td><strong>9/16</strong></td><td>8/14</td><td>8/14</td><td>10/18</td></tr>
+          <tr><td><code>transitionDuration</code></td><td><code>120ms</code></td><td><code>120ms</code></td><td><code>150ms</code></td><td><code>120ms</code></td><td><code>120ms</code></td><td><code>120ms</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Only <code>corporate</code>, <code>soft</code>, <code>glass</code> and
+        <code>modern</code> also ship a block of theme&#8209;specific CSS on top of their
+        tokens &mdash; the glass blur, corporate's tab rail and flat hairline cards, the
+        hover lift on soft and modern cards. <code>light</code> and <code>dark</code> are purely
+        token&#8209;driven. That distinction matters for
+        <a href="#precedence">how you select a theme</a>.
+      </p>
+
+      <h3 id="theme-fonts">Fonts a theme brings with it</h3>
+      <p>
+        Selecting a theme <em>by name</em> also loads the web fonts it declares. Exactly
+        one built&#8209;in theme declares any:
+      </p>
+      <pre><code>builtInThemeFonts = {
+  corporate: { import: ["Inter:400,500,600,700", "Space Grotesk:500,600,700"] }
+}</code></pre>
+      <p>
+        So <code>&lt;aktion-app theme="corporate"&gt;</code> and
+        <code>$theme({ name: "corporate" })</code> both inject one de&#8209;duplicated
+        Google&nbsp;Fonts <code>&lt;link&gt;</code> into <code>document.head</code> before
+        painting the tokens. That is new: until this behaviour landed,
+        <code>theme="corporate"</code> rendered in <code>system-ui</code> and the theme's
+        whole type ladder was invisible.
+      </p>
+      <div class="callout">
+        <h4>Three caveats worth planning for</h4>
+        <p>
+          <strong>1. <code>setTheme("corporate")</code> does not load the fonts.</strong>
+          Only the <code>theme</code> attribute and <code>$theme({ name })</code> take that
+          path. If you switch themes imperatively and want the families too, set the
+          attribute (<code>app.setAttribute("theme", "corporate")</code>) or add a
+          <code>fonts</code> group of your own.
+        </p>
+        <p>
+          <strong>2. <code>soft</code>, <code>glass</code> and <code>modern</code> name
+          families they do not load.</strong> Their <code>fontFamily</code> starts with
+          Quicksand, Poppins and Plus&nbsp;Jakarta&nbsp;Sans respectively, but none is in
+          <code>builtInThemeFonts</code>, so they silently fall through to
+          <code>system-ui</code> unless the host page loads the family or the program adds
+          <code>$theme({ fonts: { import: ["Poppins:400,600"] } })</code>.
+        </p>
+        <p>
+          <strong>3. It is an outbound request.</strong> Allow
+          <code>fonts.googleapis.com</code> in <code>style-src</code> and
+          <code>fonts.gstatic.com</code> in <code>font-src</code> in your
+          <a href="deployment.html#csp">CSP</a>. Offline or air&#8209;gapped? Self&#8209;host
+          the families and set <code>font.family</code> / <code>font.familyHeading</code>
+          yourself instead of relying on the automatic load.
+        </p>
+      </div>
+      <p>
+        Set the theme imperatively too &mdash; handy for a user&#8209;facing theme
+        switcher in the host page:
+      </p>
+<pre><code>const app = document.querySelector("aktion-app");
+app.setTheme("dark");                       // a built-in name
+app.setTheme({ colorPrimary: "#7c3aed" });  // flat token overrides
+</code></pre>
+      <p>
+        Both calls repaint the base layer, which also resets the per&#8209;response
+        overlay tracker &mdash; the next render reapplies any <code>$theme({&hellip;})</code>
+        from the active program on top. This docs site has its own light/dark toggle in
+        the top bar, and the live demos below follow it.
+      </p>
+
+      <span id="customization"></span>
+      <h2 id="custom-tokens">Branding in&#8209;program with <code>$theme({&hellip;})</code></h2>
+      <p>
+        Inside a program, write a bare <code>$theme({&hellip;})</code> statement
+        (anywhere at the top level, alongside your <code>$app(&hellip;)</code> root).
+        The runtime writes those tokens to the host and reskins the UI instantly.
+        Tokens live in <strong>groups</strong>: override just
+        <code>colors.primary</code> and every button, badge, link, and focus ring
+        follows.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$theme({ colors: { primary: "#7c3aed", primaryHover: "#6d28d9" } })
+$app(Column([
+  Card([
+    CardHeader("Purple brand", { subtitle: "Only colors.primary changed" }),
+    Row([
+      Button("Primary", { variant: "primary" }),
+      Button("Ghost", { variant: "ghost" }),
+      Badge("New", { tone: "primary" })
+    ], { gap: "sm" })
+  ])
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Two tokens changed; everything else &mdash; surfaces, type, radii, shadows &mdash;
+        still comes from the host theme.
+      </p>
+      <p>
+        Combine groups. Here <code>colors</code> plus <code>radius</code> give a
+        mint&#8209;accented look with a bigger card radius and fully&#8209;rounded
+        buttons:
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$theme({
+  colors: { primary: "#0d9488", primaryHover: "#0f766e", accent: "#f59e0b" },
+  radius: { md: "18px", button: "999px" }
+})
+$app(Column([
+  Card([
+    CardHeader("Mint &amp; rounded"),
+    Text("Bigger card radius, pill-shaped buttons."),
+    Row([
+      Button("Save", { variant: "primary" }),
+      Button("Cancel", { variant: "secondary" }),
+      Badge("Beta", { tone: "warning" })
+    ], { gap: "sm" })
+  ])
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Typography is a group too. Override <code>font.family</code> and
+        <code>font.familyHeading</code> for a different voice &mdash; here a serif
+        editorial look with a crimson accent and sharp corners:
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$theme({
+  colors: { primary: "#dc2626", primaryHover: "#b91c1c" },
+  font:   { family: "Georgia, 'Times New Roman', serif", familyHeading: "Georgia, serif" },
+  radius: { md: "2px", button: "2px" }
+})
+$app(Column([
+  Card([
+    CardHeader("Editorial", { subtitle: "Serif type, crimson accent, sharp corners" }),
+    Text("$theme({...}) overrides only the tokens you pass — everything else inherits the host theme."),
+    Row([Button("Read more", { variant: "primary" }), Badge("Featured", { tone: "danger" })], { gap: "sm" })
+  ])
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Start from a built&#8209;in palette instead of <code>light</code> by adding the
+        <code>name</code> metadata key. It seeds the full token set from that theme, then
+        your groups layer on top:
+      </p>
+<pre><code>$theme({ name: "corporate", colors: { primary: "#0f766e" } })
+$app(Column([
+  Card([CardHeader("Console", { subtitle: "corporate base, one override" })])
+], { gap: "md" }))</code></pre>
+      <p>
+        An unknown <code>name</code> is ignored and seeds nothing, so the active base
+        theme survives a typo rather than being wiped.
+      </p>
+      <div class="callout" data-variant="warning">
+        <h4><code>$theme({ name })</code> is not the same as <code>theme="&hellip;"</code></h4>
+        <p>
+          The <code>theme</code> attribute and <code>setTheme()</code> write a
+          <code>data-rui-theme</code> marker onto the host, and that marker is what gates
+          each theme's extra CSS block. <code>$theme({ name })</code> copies the theme's
+          <strong>token values</strong> (and loads its fonts) but never touches the
+          marker.
+        </p>
+        <p>
+          So <code>$theme({ name: "glass" })</code> gives you glass's colours, radii and
+          shadows, but <em>not</em> the backdrop blur and rim lights &mdash; those live in
+          the <code>[data-rui-theme="glass"]</code> block. Same for corporate's ~70
+          selectors of console styling, soft's hover lift, and modern's card polish. A flat
+          token map resolves to the name <code>"custom"</code> and gets no block either.
+          <code>light</code> and <code>dark</code> are unaffected: they have no override
+          block at all. <strong>Want the full personality? Select the theme on the host,
+          then layer <code>$theme({&hellip;})</code> on top.</strong>
+        </p>
+      </div>
+
+      <h2 id="token-groups">Token group reference</h2>
+      <p>
+        Inside <code>$theme({&hellip;})</code> the top&#8209;level keys are
+        <strong>structured groups</strong>. Each group's camel&#8209;case keys flatten
+        to a predictable CSS variable: <code>colors.primary</code> &rarr;
+        <code>--rui-color-primary</code>, <code>radius.md</code> &rarr;
+        <code>--rui-radius-md</code>, <code>font.familyHeading</code> &rarr;
+        <code>--rui-font-family-heading</code>. Here is every group:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Group</th><th>CSS variable</th><th>Keys</th></tr></thead>
+        <tbody>
+          <tr><td><code>colors</code></td><td><code>--rui-color-*</code></td><td>31 keys &mdash; see the <a href="#colors">colour table below</a>.</td></tr>
+          <tr><td><code>radius</code></td><td><code>--rui-radius-*</code></td><td><code>xs</code> · <code>sm</code> · <code>md</code> · <code>lg</code> · <code>pill</code> · <code>button</code> · <code>input</code></td></tr>
+          <tr><td><code>spacing</code></td><td><code>--rui-spacing-*</code></td><td><code>3xs</code> · <code>2xs</code> · <code>xs</code> · <code>sm</code> · <code>md</code> · <code>lg</code> · <code>xl</code> · <code>2xl</code> · <code>3xl</code></td></tr>
+          <tr><td><code>font</code></td><td><code>--rui-font-*</code></td><td><code>family</code> · <code>familyHeading</code> · <code>familyMono</code> · <code>sizeBase</code> · <code>sizeSm</code> · <code>sizeLg</code> · <code>sizeHeading</code> · <code>sizeTitle</code> · <code>size10</code> · <code>size11</code> · <code>size13</code> · <code>size15</code> · <code>size18</code> · <code>size20</code> · <code>size24</code> · <code>size32</code> · <code>weightBody</code> · <code>weightHeading</code></td></tr>
+          <tr><td><code>shadows</code></td><td><code>--rui-shadow-*</code></td><td><code>sm</code> · <code>md</code> · <code>lg</code></td></tr>
+          <tr><td><code>gradients</code></td><td><code>--rui-gradient-*</code></td><td><code>brand</code> · <code>accent</code> · <code>warm</code> · <code>cool</code> · <code>success</code> · <code>danger</code></td></tr>
+          <tr><td><code>zIndex</code></td><td><code>--rui-z-*</code></td><td><code>base</code> · <code>raised</code> · <code>dropdown</code> · <code>sticky</code> · <code>banner</code> · <code>overlay</code> · <code>modal</code> · <code>popover</code> · <code>toast</code> · <code>tooltip</code></td></tr>
+          <tr><td><code>motion</code></td><td><code>--rui-motion-*</code></td><td><code>fast</code> · <code>base</code> · <code>slow</code> · <code>ease</code></td></tr>
+          <tr><td><code>fonts</code></td><td>&mdash;</td><td><code>import: ["Inter:400,700"]</code> &mdash; web&#8209;font loader (side effect, not a variable). <strong><code>import</code> is the only accepted key.</strong></td></tr>
+          <tr><td><code>icons</code></td><td>&mdash;</td><td><code>{ name: "&lt;svg&hellip;&gt;" }</code> &mdash; register inline SVG icons (side effect).</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Two metadata keys are accepted at the top level: <code>name</code> selects one
+        of the six built&#8209;in themes as the base palette before your overrides
+        layer on top, and <code>direction</code> (<code>"ltr"</code>/<code>"rtl"</code>)
+        is advisory metadata. Neither is emitted as a CSS variable. Flat keys
+        (<code>colorPrimary</code>) and free&#8209;form CSS variables are dropped at
+        runtime and reported by the schema validator with a migration hint &mdash; inside
+        <code>$theme({&hellip;})</code> always use the grouped shape.
+      </p>
+      <div class="callout" data-variant="warning">
+        <h4><code>fonts</code> loads families, <code>font</code> assigns them</h4>
+        <p>
+          The two group names are one letter apart and do different jobs.
+          <code>fonts: { import: [&hellip;] }</code> is a side effect that injects the
+          Google&nbsp;Fonts link; <code>font: { family: &hellip; }</code> sets the CSS
+          variable. <code>fonts: { family: &hellip; }</code> is <strong>silently
+          dropped</strong> &mdash; it flattens to a token that does not exist. Real brands
+          usually need both keys together:
+        </p>
+<pre><code>$theme({
+  fonts: { import: ["Inter:400,600", "Space Grotesk:600"] },
+  font: { family: "'Inter', system-ui, sans-serif", familyHeading: "'Space Grotesk', 'Inter', sans-serif" }
+})
+$app(Text("Corporate-like type", { variant: "title" }))</code></pre>
+        <p>
+          That pair is exactly what <code>theme="corporate"</code> does for you.
+        </p>
+      </div>
+
+      <h3 id="colors">Colour tokens</h3>
+      <p>
+        The <code>colors</code> group is the one you'll reach for most: 31 keys, of which
+        the <code>light</code> theme sets 28 and derives the last three. Defaults shown
+        are <code>light</code>'s.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Key</th><th>CSS variable</th><th>Default (light)</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code>bg</code></td><td><code>--rui-color-bg</code></td><td><code>#ffffff</code></td><td>Page background.</td></tr>
+          <tr><td><code>bgSubtle</code></td><td><code>--rui-color-bg-subtle</code></td><td><code>#f8fafc</code></td><td>Subtle page wash.</td></tr>
+          <tr><td><code>surface</code></td><td><code>--rui-color-surface</code></td><td><code>#ffffff</code></td><td>Cards, sheets, panels.</td></tr>
+          <tr><td><code>surfaceMuted</code></td><td><code>--rui-color-surface-muted</code></td><td><code>#f1f5f9</code></td><td>Inset / secondary surfaces.</td></tr>
+          <tr><td><code>surfaceHover</code></td><td><code>--rui-color-surface-hover</code></td><td><em>derived</em> &mdash; <code>color-mix(&hellip;)</code> of 6% text over surface</td><td>Hover tint for rows, menu items and clickable cards.</td></tr>
+          <tr><td><code>border</code></td><td><code>--rui-color-border</code></td><td><code>#e2e8f0</code></td><td>Hairlines, dividers, table row separators. Deliberately faint.</td></tr>
+          <tr><td><code>borderSubtle</code></td><td><code>--rui-color-border-subtle</code></td><td><code>rgba(15,23,42,.08)</code></td><td>The faintest divider.</td></tr>
+          <tr><td><code>borderControl</code></td><td><code>--rui-color-border-control</code></td><td><code>#767f8c</code></td><td><strong>Interactive</strong> control boundary &mdash; inputs, selects, textareas, checkboxes, radios, switch tracks, picker triggers. Holds 3:1 against the surface.</td></tr>
+          <tr><td><code>text</code></td><td><code>--rui-color-text</code></td><td><code>#0f172a</code></td><td>Primary body text.</td></tr>
+          <tr><td><code>textMuted</code></td><td><code>--rui-color-text-muted</code></td><td><code>#475569</code></td><td>Secondary / caption text.</td></tr>
+          <tr><td><code>primary</code></td><td><code>--rui-color-primary</code></td><td><code>#4f46e5</code></td><td>Brand colour &mdash; primary buttons, active states, and body text in 120+ rules.</td></tr>
+          <tr><td><code>primaryHover</code></td><td><code>--rui-color-primary-hover</code></td><td><code>#4338ca</code></td><td>Hover / pressed brand colour.</td></tr>
+          <tr><td><code>primaryText</code></td><td><code>--rui-color-primary-text</code></td><td><code>#ffffff</code></td><td>Text and icons on a primary fill.</td></tr>
+          <tr><td><code>accent</code></td><td><code>--rui-color-accent</code></td><td><code>#4f46e5</code></td><td>Secondary accent &mdash; chips, callouts, accent fills.</td></tr>
+          <tr><td><code>accentHover</code></td><td><code>--rui-color-accent-hover</code></td><td><code>#4338ca</code></td><td>Hover accent.</td></tr>
+          <tr><td><code>accentText</code></td><td><code>--rui-color-accent-text</code></td><td><code>#ffffff</code></td><td>Text on an accent fill.</td></tr>
+          <tr><td><code>link</code></td><td><code>--rui-color-link</code></td><td><em>derived</em> from <code>accent</code></td><td>Interactive <strong>text</strong> &mdash; links, link/ghost buttons, the selected tab label, pagination digits.</td></tr>
+          <tr><td><code>linkHover</code></td><td><code>--rui-color-link-hover</code></td><td><em>derived</em> from <code>accentHover</code></td><td>Hover state for the above.</td></tr>
+          <tr><td><code>focusRing</code></td><td><code>--rui-color-focus-ring</code></td><td><code>#4f46e5</code></td><td>Keyboard focus outline and border. Holds 3:1 against the surface.</td></tr>
+          <tr><td><code>success</code></td><td><code>--rui-color-success</code></td><td><code>#10b981</code></td><td>Positive status <em>fill</em>.</td></tr>
+          <tr><td><code>warning</code></td><td><code>--rui-color-warning</code></td><td><code>#f59e0b</code></td><td>Caution status <em>fill</em>.</td></tr>
+          <tr><td><code>danger</code></td><td><code>--rui-color-danger</code></td><td><code>#ef4444</code></td><td>Error / destructive status <em>fill</em>.</td></tr>
+          <tr><td><code>info</code></td><td><code>--rui-color-info</code></td><td><code>#06b6d4</code></td><td>Informational status <em>fill</em>.</td></tr>
+          <tr><td><code>successText</code></td><td><code>--rui-color-success-text</code></td><td><code>#047857</code></td><td>The success hue painted <em>as text</em>.</td></tr>
+          <tr><td><code>warningText</code></td><td><code>--rui-color-warning-text</code></td><td><code>#a35a00</code></td><td>The warning hue painted <em>as text</em>.</td></tr>
+          <tr><td><code>dangerText</code></td><td><code>--rui-color-danger-text</code></td><td><code>#d92d20</code></td><td>The danger hue painted <em>as text</em>.</td></tr>
+          <tr><td><code>infoText</code></td><td><code>--rui-color-info-text</code></td><td><code>#0e7490</code></td><td>The info hue painted <em>as text</em>.</td></tr>
+          <tr><td><code>onSuccess</code></td><td><code>--rui-color-on-success</code></td><td><code>#04291e</code></td><td>Ink painted <em>on</em> a success fill.</td></tr>
+          <tr><td><code>onWarning</code></td><td><code>--rui-color-on-warning</code></td><td><code>#451a03</code></td><td>Ink painted <em>on</em> a warning fill.</td></tr>
+          <tr><td><code>onDanger</code></td><td><code>--rui-color-on-danger</code></td><td><code>#2c0606</code></td><td>Ink painted <em>on</em> a danger fill.</td></tr>
+          <tr><td><code>onInfo</code></td><td><code>--rui-color-on-info</code></td><td><code>#0c2b3a</code></td><td>Ink painted <em>on</em> an info fill.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>link</code>, <code>linkHover</code> and <code>surfaceHover</code> are the
+        three optional keys <code>light</code> leaves out: the stylesheet derives them
+        from <code>accent</code>, <code>accentHover</code> and <code>surface</code>. Set
+        them when the derivation is wrong for your palette &mdash; <code>soft</code>,
+        <code>glass</code> and <code>modern</code> all ship an explicit
+        <code>link</code>, and <code>dark</code> overrides only
+        <code>linkHover</code> because hover has to <em>brighten</em> on a dark surface.
+      </p>
+
+      <h3 id="status-colors">Status colours come in threes</h3>
+      <p>
+        Each status hue is really three tokens, because the same green cannot legally do
+        all three jobs. This is the part of the token set people most often get wrong,
+        so it is worth learning once:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Token</th><th>Job</th><th>Contrast bar</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>colors.success</code></td>
+            <td>The <strong>fill</strong> or shape</td>
+            <td>3:1 against the surface (WCAG&nbsp;1.4.11)</td>
+            <td>The bar of a success <code>Progress</code>, a filled step dot</td>
+          </tr>
+          <tr>
+            <td><code>colors.successText</code></td>
+            <td>The hue used <strong>as text</strong></td>
+            <td>4.5:1 against the surface</td>
+            <td><code>Badge</code>, <code>Tag</code>, <code>Pill</code>, <code>Callout</code> copy, a <code>StatCard</code> value, field errors</td>
+          </tr>
+          <tr>
+            <td><code>colors.onSuccess</code></td>
+            <td>The ink <strong>on</strong> the fill</td>
+            <td>4.5:1 against the fill</td>
+            <td>The &#10003; inside a completed <code>Step</code>, a <code>Toast</code> icon disc, a danger <code>Button</code> label</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        The same triple exists for <code>warning</code>, <code>danger</code> and
+        <code>info</code>. Why it matters numerically: <code>#10b981</code> measures
+        2.54:1 on white, so it is a fine bar colour and an illegal text colour &mdash; and
+        the stylesheet paints status text in roughly 45 places.
+      </p>
+      <div class="callout">
+        <h4>Rule for theme authors</h4>
+        <p>
+          <strong>Retint a status hue &rarr; retint its <code>*Text</code> and
+          <code>on*</code> partners.</strong> Set <code>colors.success</code> alone and
+          your fills go brand&#8209;coloured while every success <em>label</em> stays on
+          the built&#8209;in teal. The partners are optional keys, so nothing breaks
+          &mdash; it just looks half&#8209;rebranded.
+        </p>
+      </div>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$theme({
+  colors: { success: "#0d9488", successText: "#0f766e", onSuccess: "#04291e" }
+})
+$app(Column([
+  Row([Badge("Passing", { tone: "success" }), Pill("SSL active", "success")], { gap: "sm" }),
+  Callout("Deploy finished", { tone: "success", description: "All checks green." })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        All three tokens move together, so the badge text, the pill tint and the callout
+        icon disc all land on the same teal.
+      </p>
+      <p>
+        <code>borderControl</code> follows the same logic one level up.
+        <code>colors.border</code> is intentionally faint (1.17&ndash;1.70:1 in every
+        built&#8209;in theme) because it also draws dividers and table separators;
+        darkening it would make the whole library heavy. <code>colors.borderControl</code>
+        carries the accessible 3:1 boundary for controls a user has to find. Retint both
+        when you rebrand. See <a href="accessibility.html">Accessibility</a> for the
+        contrast guarantees the themes are tested against.
+      </p>
+
+      <h3 id="shape-type">Radius, spacing, type &amp; shadows</h3>
+      <p>
+        These shape and rhythm tokens drive corner rounding, the spacing scale behind
+        <code>gap</code>/<code>padding</code> props and <code>sx</code>, the type ramp, and
+        elevation. Defaults are from the <code>light</code> theme.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Group</th><th>Key &rarr; default</th></tr></thead>
+        <tbody>
+          <tr><td><code>radius</code></td><td><code>xs</code> 4px · <code>sm</code> 6px · <code>md</code> 10px · <code>lg</code> 16px · <code>pill</code> 999px · <code>button</code> 6px · <code>input</code> 6px</td></tr>
+          <tr><td><code>spacing</code></td><td><code>3xs</code> 1px · <code>2xs</code> 2px · <code>xs</code> 4px · <code>sm</code> 8px · <code>md</code> 12px · <code>lg</code> 20px · <code>xl</code> 32px · <code>2xl</code> 48px · <code>3xl</code> 80px</td></tr>
+          <tr><td><code>font</code> sizes</td><td><code>sizeBase</code> 14px · <code>sizeSm</code> 12px · <code>sizeLg</code> 16px · <code>sizeHeading</code> 16px · <code>sizeTitle</code> 22px</td></tr>
+          <tr><td><code>font</code> numeric rungs</td><td><code>size10</code> 10px · <code>size11</code> 11px · <code>size13</code> 13px · <code>size15</code> 15px · <code>size18</code> 18px · <code>size20</code> 20px · <code>size24</code> 24px · <code>size32</code> 32px</td></tr>
+          <tr><td><code>font</code> weights</td><td><code>weightBody</code> 400 · <code>weightHeading</code> 700</td></tr>
+          <tr><td><code>font</code> families</td><td><code>family</code> / <code>familyHeading</code> system&#8209;ui stack · <code>familyMono</code> ui&#8209;monospace stack</td></tr>
+          <tr><td><code>shadows</code></td><td><code>sm</code> <code>0 1px 2px rgba(15,23,42,.06)</code> · <code>md</code> <code>0 6px 24px rgba(15,23,42,.08)</code> · <code>lg</code> <code>0 18px 60px rgba(15,23,42,.12)</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        The eight numeric rungs exist so a theme can retune the whole type scale, not
+        just the five named sizes. They carry the values the stylesheet used to hardcode,
+        so adopting them is a visual no&#8209;op until you change one.
+      </p>
+      <p>
+        <code>spacing</code> advertises t&#8209;shirt names but stores
+        <code>sm</code>/<code>md</code>/<code>lg</code> in the historical short variables,
+        so <code>spacing: { md: "16px" }</code> and <code>spacing: { m: "16px" }</code> both
+        write <code>--rui-spacing-m</code>. The stylesheet also publishes read&#8209;only
+        aliases <code>--rui-spacing-sm|md|lg</code> and <code>--rui-spacing-none: 0px</code>
+        if you need to <code>var()</code> them directly.
+      </p>
+
+      <h3 id="size-tokens">The size scale and its legacy spellings</h3>
+      <p>
+        One scale backs every spacing&#8209;ish prop (<code>gap</code>,
+        <code>padding</code>, <code>sx.p</code>, <code>sx.m</code>) and a shorter one backs
+        every component <code>size</code> prop. Six older spellings still work but are no
+        longer advertised in prop enums:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Scale</th><th>Canonical values</th><th>Also accepted</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Spacing (<code>gap</code>, <code>padding</code>, <code>sx</code>)</td>
+            <td><code>none</code> · <code>3xs</code> · <code>2xs</code> · <code>xs</code> · <code>sm</code> · <code>md</code> · <code>lg</code> · <code>xl</code> · <code>2xl</code> · <code>3xl</code></td>
+            <td><code>s</code>&rarr;<code>sm</code> · <code>m</code>&rarr;<code>md</code> · <code>l</code>&rarr;<code>lg</code></td>
+          </tr>
+          <tr>
+            <td>Component <code>size</code></td>
+            <td><code>xs</code> · <code>sm</code> · <code>md</code> · <code>lg</code> · <code>xl</code></td>
+            <td><code>s</code>/<code>small</code>&rarr;<code>sm</code> · <code>m</code>/<code>normal</code>&rarr;<code>md</code> · <code>l</code>/<code>large</code>&rarr;<code>lg</code></td>
+          </tr>
+        </tbody>
+      </table>
+<pre><code>$app(Column([
+  Row([
+    Button("Small", { size: "sm" }),
+    Button("Medium", { size: "md" }),   // md is the default
+    Button("Large", { size: "lg" })
+  ], { gap: "xs" }),
+  Column([Text("3xs gap"), Text("between these")], { gap: "3xs" }),
+  Column([Text("2xl gap"), Text("between these")], { gap: "2xl" })
+], { gap: "lg" }))</code></pre>
+      <p>
+        <code>none</code> always resolves to <code>0</code>, and an unrecognised value
+        falls back to the prop's default rather than leaking through as an unmatched
+        attribute &mdash; <code>size: "enormous"</code> renders as <code>md</code>.
+      </p>
+
+      <h3 id="flat-only">Tokens with no <code>$theme</code> route</h3>
+      <p>
+        25 of the 113 tokens have no structured group, because there is no
+        <code>buttons</code>, <code>charts</code> or <code>syntax</code> group to put them
+        in. Passing them inside <code>$theme({&hellip;})</code> does nothing. Reach them
+        with the <strong>flat</strong> host paths instead:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Family</th><th>Flat tokens</th><th>Default</th></tr></thead>
+        <tbody>
+          <tr><td>Buttons (5)</td><td><code>buttonFontWeight</code> · <code>buttonTextTransform</code> · <code>buttonLetterSpacing</code> · <code>buttonPaddingY</code> · <code>buttonPaddingX</code></td><td><code>600</code> · <code>none</code> · <code>0</code> · <code>8px</code> · <code>14px</code></td></tr>
+          <tr><td>Charts (6)</td><td><code>chart1</code> &hellip; <code>chart6</code></td><td><code>#6366f1 #10b981 #f59e0b #ef4444 #06b6d4 #8b5cf6</code></td></tr>
+          <tr><td>Syntax highlighting (8)</td><td><code>hlKeyword</code> · <code>hlString</code> · <code>hlNumber</code> · <code>hlComment</code> · <code>hlFn</code> · <code>hlTag</code> · <code>hlAttr</code> · <code>hlPunct</code></td><td>A light palette; <code>dark</code> swaps in One&nbsp;Dark</td></tr>
+          <tr><td>Type metrics (4)</td><td><code>lineHeightBody</code> · <code>lineHeightHeading</code> · <code>letterSpacingHeading</code> · <code>headingTextTransform</code></td><td><code>1.5</code> · <code>1.2</code> · <code>0</code> · <code>none</code></td></tr>
+          <tr><td>Misc (2)</td><td><code>borderWidth</code> · <code>transitionDuration</code></td><td><code>1px</code> · <code>120ms</code></td></tr>
+        </tbody>
+      </table>
+<pre><code>// Flat keys reach every token, including the 25 with no group.
+app.setTheme({ chart1: "#7c3aed", buttonPaddingX: "20px", transitionDuration: "80ms" });</code></pre>
+      <p>
+        The same map works on the attribute as JSON
+        (<code>theme='{"buttonPaddingX":"20px"}'</code>). If an override of yours is being
+        ignored, check this list first &mdash; a groupless token inside
+        <code>$theme({&hellip;})</code> is dropped without an error.
+      </p>
+
+      <h2 id="gradients-fonts-icons">Gradients, fonts &amp; custom icons</h2>
+      <p>
+        Three groups go beyond colours and radii. <strong>Gradients</strong> are named
+        and reusable, and they power <code>GradientText</code> and the
+        <code>sx.bg: "gradient.brand"</code> intent. <strong>Fonts</strong> load on demand
+        from a shorthand list. <strong>Icons</strong> register inline SVG under a name you
+        can use anywhere an icon name is accepted.
+      </p>
+
+      <h3 id="gradients">Gradients</h3>
+      <p>
+        A gradient value can take three shapes. All three are sanitised before they reach
+        CSS:
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$theme({
+  gradients: {
+    brand: ["#111827", "#7c5cfc"],                            // ≥2 stops → 120deg
+    cool: { stops: ["#2563eb", "#22d3ee"], angle: 135 },       // your own angle
+    warm: "linear-gradient(90deg, #f59e0b, #ec4899)"           // a raw gradient string
+  }
+})
+$app(Column([
+  Display([GradientText("Three gradient shapes", { gradient: "brand" })], { size: "lg" }),
+  Row([
+    Card([Text("cool")], { sx: { bg: "gradient.cool", p: "lg", radius: "lg", color: "#fff" } }),
+    Card([Text("warm")], { sx: { bg: "gradient.warm", p: "lg", radius: "lg", color: "#fff" } })
+  ], { gap: "md" })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        The six gradient names are fixed &mdash; <code>brand</code>,
+        <code>accent</code>, <code>warm</code>, <code>cool</code>, <code>success</code>,
+        <code>danger</code> &mdash; and <code>light</code>'s <code>brand</code> is
+        <code>linear-gradient(120deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)</code>.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Rule</th><th>Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td>Stop count</td><td>Fewer than <strong>2</strong> valid stops collapses the gradient to <code>""</code> and the token is dropped.</td></tr>
+          <tr><td>Angle</td><td><code>{ angle }</code> is rounded to a whole degree; the default is <code>120deg</code>.</td></tr>
+          <tr><td>Stop syntax</td><td>Each stop is ≤64 chars and must match <code>[a-zA-Z0-9#%.,()\s+-]</code> &mdash; hex, <code>rgb()</code>, <code>hsl()</code> and named colours all pass.</td></tr>
+          <tr><td>Raw string</td><td>Must start with <code>linear-</code>, <code>radial-</code> or <code>conic-gradient(</code> and stay ≤256 chars.</td></tr>
+          <tr><td>Always rejected</td><td><code>url(</code>, <code>expression(</code>, <code>javascript:</code>, <code>@import</code>, and anything that looks like a tag.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        A rejected stop is dropped silently rather than escaping into the stylesheet
+        &mdash; see <a href="security.html">Security</a> for the wider sanitiser story.
+      </p>
+
+      <h3 id="web-fonts">Web fonts</h3>
+      <p>
+        Add a <code>fonts</code> group with an <code>import</code> list of
+        <code>"Family:weights"</code> shorthands. Aktion injects one sanitised
+        Google&nbsp;Fonts <code>&lt;link rel="stylesheet"&gt;</code>, after which the family
+        is available to <code>font.family</code>:
+      </p>
+<pre><code>$theme({
+  fonts: { import: ["Inter:400,600,700", "JetBrains Mono", "Inter:400,500i"] },
+  font:  { family: "Inter, system-ui, sans-serif", familyMono: "'JetBrains Mono', ui-monospace, monospace" }
+})</code></pre>
+      <p>
+        Weights are optional (<code>"JetBrains Mono"</code> loads the default face) and an
+        <code>i</code> suffix means italic (<code>"Inter:400,500i"</code>). The loader is
+        idempotent and de&#8209;duplicates by URL, so repeating an import across renders
+        costs nothing.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Part</th><th>Accepted</th><th>Otherwise</th></tr></thead>
+        <tbody>
+          <tr><td>Family name</td><td>Letters, digits and spaces, 1&ndash;48 chars</td><td>Dropped</td></tr>
+          <tr><td>Weight</td><td>An integer 100&ndash;900, optionally suffixed <code>i</code></td><td>Dropped</td></tr>
+          <tr><td>Result</td><td>One <code>&hellip;/css2?&hellip;&amp;display=swap</code> link tagged <code>data-rui-font</code></td><td>&mdash;</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The strict grammar is deliberate: it means a family name coming from model output
+        cannot smuggle a foreign origin or a CSS payload into your page.
+      </p>
+
+      <h3 id="custom-icons">Custom icons</h3>
+      <p>
+        <strong>Custom icons</strong> register inline SVG under a name. Once registered,
+        that name works anywhere an icon name is accepted &mdash; the <code>icon</code> prop
+        on <code>Button</code>, <code>Icon("spark")</code>, list bullets, and so on:
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$theme({ icons: { spark: "&lt;svg viewBox='0 0 24 24'&gt;&lt;path d='M12 2l2 7 7 2-7 2-2 7-2-7-7-2 7-2z'/&gt;&lt;/svg&gt;" } })
+$app(Row([Button("Custom icon", { icon: "spark", variant: "primary" }), Icon("spark")], { gap: "sm" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        A registered name wins over the Font&nbsp;Awesome lookup, so you can also
+        <em>replace</em> a built&#8209;in icon. Custom SVG is sized to <code>1em</code> so it
+        matches the surrounding text. The host equivalent is
+        <code>app.registerIcons({&hellip;})</code>.
+      </p>
+
+      <h2 id="using-tokens">Using theme tokens in your UI</h2>
+      <p>
+        You rarely touch raw colours &mdash; components already speak the active theme. When
+        you do need to style something directly, reference tokens through the universal
+        <code>sx</code> prop so it tracks the theme instead of hard&#8209;coding values.
+        Colour tokens (<code>primary</code>, <code>surface</code>, <code>text-muted</code>,
+        &hellip;), gradient refs (<code>gradient.brand</code>), spacing tokens
+        (<code>md</code>, <code>lg</code>), and radii all resolve to the same
+        <code>--rui-*</code> variables your theme defines:
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$theme({ colors: { primary: "#0d9488" } })
+$app(Row([
+  Card([Text("Token-styled", { sx: { color: "primary", weight: "700" } })],
+    { sx: { bg: "surface", p: "lg", radius: "lg", shadow: "md" } }),
+  Card([Text("Gradient bg")],
+    { sx: { bg: "gradient.brand", p: "lg", radius: "lg", color: "#fff" } })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Because these are tokens, one <code>$theme({&hellip;})</code> override reskins every
+        usage at once. <code>$util.style.token("colors.primary")</code> gives you the same
+        <code>var(--rui-color-primary)</code> string if you need it in an expression. See
+        the <a href="sx.html">sx reference</a> and the
+        <a href="language-reference.html#universal-sx">universal props reference</a> for the
+        full surface.
+      </p>
+
+      <h2 id="layers">Layers, z-index &amp; motion</h2>
+      <p>
+        Two specialised groups make app&#8209;wide behaviour brandable.
+        <code>zIndex</code> tokens feed the <code>sx.zIndex</code> prop and every
+        overlay in the library, so one override re&#8209;orders your whole layering
+        stack:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th><code>zIndex</code> key</th><th>CSS variable</th><th>Default</th><th>Used by</th></tr></thead>
+        <tbody>
+          <tr><td><code>base</code></td><td><code>--rui-z-base</code></td><td><code>0</code></td><td>Normal flow.</td></tr>
+          <tr><td><code>raised</code></td><td><code>--rui-z-raised</code></td><td><code>10</code></td><td>Hover lifts, focused cards.</td></tr>
+          <tr><td><code>sticky</code></td><td><code>--rui-z-sticky</code></td><td><code>100</code></td><td>Sticky headers, FAB, speed dial.</td></tr>
+          <tr><td><code>banner</code></td><td><code>--rui-z-banner</code></td><td><code>300</code></td><td>Reading progress, page&#8209;top bars.</td></tr>
+          <tr><td><code>overlay</code></td><td><code>--rui-z-overlay</code></td><td><code>900</code></td><td>Scrims &mdash; must sit <em>under</em> what they dim.</td></tr>
+          <tr><td><code>dropdown</code></td><td><code>--rui-z-dropdown</code></td><td><code>1000</code></td><td>Menus, listboxes, autocompletes.</td></tr>
+          <tr><td><code>modal</code></td><td><code>--rui-z-modal</code></td><td><code>1100</code></td><td>Modal, sheet, drawer, command palette.</td></tr>
+          <tr><td><code>popover</code></td><td><code>--rui-z-popover</code></td><td><code>1350</code></td><td>Popovers anchored above a modal.</td></tr>
+          <tr><td><code>toast</code></td><td><code>--rui-z-toast</code></td><td><code>1400</code></td><td>Toast stack.</td></tr>
+          <tr><td><code>tooltip</code></td><td><code>--rui-z-tooltip</code></td><td><code>1500</code></td><td>Tooltips.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Five more layer variables exist in the stylesheet but are <strong>not
+        themeable</strong>, because a program should not be able to reorder them:
+        <code>--rui-z-header: 200</code>, <code>--rui-z-modal-top: 1200</code> (a dialog
+        that must beat another modal), <code>--rui-z-top: 1600</code> (lightbox, tour,
+        confetti), <code>--rui-z-skip-link: 1700</code> and
+        <code>--rui-z-max: 2147483000</code>. <code>zIndex: { header: &hellip; }</code> is
+        silently dropped.
+      </p>
+      <p>
+        <code>motion</code> tokens brand durations and easing. They are
+        <strong>optional and unset in every theme except <code>corporate</code></strong>
+        (<code>110ms</code> / <code>170ms</code> / <code>300ms</code> /
+        <code>cubic-bezier(0.2, 0, 0, 1)</code>); when a token is absent, components fall
+        back to their built&#8209;in timings.
+      </p>
+<pre><code>$theme({
+  zIndex: { modal: 2000, toast: 2100 },
+  motion: { fast: "100ms", base: "160ms", slow: "260ms", ease: "cubic-bezier(.2,.8,.2,1)" }
+})</code></pre>
+      <p>
+        The four keys are <code>fast</code>, <code>base</code>, <code>slow</code> and
+        <code>ease</code> &mdash; <code>motion.duration</code> is not one of them and does
+        nothing. The related <code>transitionDuration</code> token (the shared hover/focus
+        timing, <code>120ms</code>) has <a href="#flat-only">no group either</a>; set it
+        flat.
+      </p>
+
+      <h2 id="precedence">Per-response vs host theme</h2>
+      <p>
+        The layers compose cleanly. The <strong>host</strong> sets a base with the
+        <code>theme="&hellip;"</code> attribute (one of the six built&#8209;ins, or a flat
+        JSON token map) or with <code>setTheme()</code>. A program then layers a
+        <strong>per&#8209;response</strong> overlay by writing a bare
+        <code>$theme({&hellip;})</code> statement &mdash; it applies <em>only</em> the tokens
+        you pass, so everything else still inherits the host theme.
+      </p>
+      <p>
+        Delete the <code>$theme</code> line and the UI snaps straight back to the base
+        with no reload: the overlay's keys are tracked and cleared before every render.
+        Repainting the base (changing the attribute, or calling
+        <code>setTheme()</code>) resets that tracker, and the next render reapplies the
+        overlay on top. Because everything is scoped to one <code>&lt;aktion-app&gt;</code>
+        shadow host, themes never leak across embeds or responses.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>You want</th><th>Use</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>An app&#8209;wide look, including a theme's own CSS personality</td>
+            <td><code>theme="corporate"</code> or <code>setTheme("corporate")</code></td>
+            <td>Writes <code>data-rui-theme</code>, so the per&#8209;theme CSS block engages. The attribute also loads the theme's fonts.</td>
+          </tr>
+          <tr>
+            <td>A single response branded differently</td>
+            <td><code>$theme({ colors: {&hellip;} })</code></td>
+            <td>Partial overlay on the current base; reverts when the line goes away.</td>
+          </tr>
+          <tr>
+            <td>A groupless token (<code>chart1</code>, <code>buttonPaddingX</code>, <code>hl*</code>)</td>
+            <td><code>setTheme({&hellip;})</code> or JSON on the attribute</td>
+            <td>Only the flat shape covers all 113 tokens.</td>
+          </tr>
+          <tr>
+            <td>One element styled differently</td>
+            <td><code>sx</code> on that component</td>
+            <td>Inline styles win over both theme layers, and still reference tokens.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 id="host-api">Host and JavaScript API</h2>
+      <p>
+        Everything above is reachable from the host page. These are the attributes and
+        methods that matter for theming, plus the exported helpers if you are building
+        your own theme tooling.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Surface</th><th>Signature</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>theme</code> attribute</td>
+            <td><code>theme="dark"</code> · <code>theme='{"colorPrimary":"#7c3aed"}'</code></td>
+            <td>Observed, so changing it live re&#8209;applies. Accepts a built&#8209;in name or a flat JSON token map. Loads the theme's web fonts.</td>
+          </tr>
+          <tr>
+            <td><code>setTheme()</code></td>
+            <td><code>app.setTheme(name | flatTokens)</code></td>
+            <td>Same base layer, imperatively. Does <em>not</em> load built&#8209;in theme fonts.</td>
+          </tr>
+          <tr>
+            <td><code>registerIcons()</code></td>
+            <td><code>app.registerIcons({ spark: "&lt;svg&hellip;" })</code></td>
+            <td>Host equivalent of <code>$theme({ icons })</code>. A registered name beats the Font&nbsp;Awesome lookup.</td>
+          </tr>
+          <tr>
+            <td><code>dir</code> attribute</td>
+            <td><code>dir="ltr" | "rtl" | "auto"</code></td>
+            <td>The only thing that actually flips layout. See <a href="#rtl">below</a>.</td>
+          </tr>
+          <tr>
+            <td><code>margin</code> attribute</td>
+            <td><code>margin="12"</code> · <code>margin="1rem"</code> · <code>margin="0"</code></td>
+            <td>Sets <code>--rui-app-margin</code> (the app shell's padding, default <code>20px</code>). A bare number means pixels; a malformed value clears the override.</td>
+          </tr>
+          <tr>
+            <td><code>transparent</code> attribute</td>
+            <td><code>&lt;aktion-app transparent&gt;</code></td>
+            <td>Drops the host background so the app inherits the surrounding page's. Cards keep their own surface colours.</td>
+          </tr>
+        </tbody>
+      </table>
+<pre><code>import type { ThemeTokens } from "aktion-runtime";
+
+const app = document.querySelector("aktion-app")!;
+app.setTheme("corporate");                                     // built-in name
+app.setTheme({ colorPrimary: "#7c3aed", chart1: "#7c3aed" });  // flat keys reach chart*/button*/hl*
+</code></pre>
+      <p>
+        The bundle also exports the theme primitives themselves, so a theme editor or a
+        design&#8209;token pipeline can use the same code paths the element does:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Export</th><th>Signature</th><th>Use it for</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>resolveTheme</code></td>
+            <td><code>(input: string | Partial&lt;ThemeTokens&gt; | null) =&gt; { name, tokens }</code></td>
+            <td>Turn whatever the host passed into a full token set. A name looks up <code>builtInThemes</code>; a string starting with <code>{</code> is parsed as JSON; an object merges over <code>light</code> and comes back as <code>name: "custom"</code>. Unknown or malformed input returns <code>light</code> &mdash; it never throws.</td>
+          </tr>
+          <tr>
+            <td><code>applyTheme</code></td>
+            <td><code>(host, ResolvedTheme | ThemeTokens) =&gt; void</code></td>
+            <td>The full&#8209;replace layer. Writes all 113 variables (removing any the theme omits so <code>var(--x, fallback)</code> still resolves) and sets <code>data-rui-theme</code>.</td>
+          </tr>
+          <tr>
+            <td><code>applyPartialTheme</code></td>
+            <td><code>(host, partial) =&gt; ReadonlyArray&lt;keyof ThemeTokens&gt;</code></td>
+            <td>The composable overlay. Writes only the keys present, skips unknown keys, non&#8209;strings and <code>""</code>, and returns the keys it applied so you can undo exactly those. This is what <code>$theme({&hellip;})</code> uses.</td>
+          </tr>
+          <tr>
+            <td><code>clearTokenOverrides</code></td>
+            <td><code>(host, keys) =&gt; void</code></td>
+            <td>Remove the listed variables so the next paint falls back to the base theme. The other half of an <code>applyPartialTheme</code> round trip.</td>
+          </tr>
+          <tr>
+            <td><code>sanitiseThemeTokens</code></td>
+            <td><code>(input: unknown) =&gt; Partial&lt;ThemeTokens&gt;</code></td>
+            <td>Filter an arbitrary object down to real token keys before applying it. Stringifies numbers (<code>buttonFontWeight: 700</code> &rarr; <code>"700"</code>) and drops <code>null</code>, empty strings, arrays and unknown keys. The typo guard between model output and your host.</td>
+          </tr>
+          <tr>
+            <td><code>builtInThemes</code> · <code>builtInThemeFonts</code></td>
+            <td><code>Record&lt;string, ThemeTokens&gt;</code> · <code>Record&lt;string, { import: string[] }&gt;</code></td>
+            <td>Enumerate the six themes and their font declarations &mdash; how a theme picker builds its own list. Individual objects (<code>lightTheme</code>, <code>corporateTheme</code>, &hellip;) are exported too.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Server&#8209;side rendering does not emit token variables:
+        <code>renderToString</code> has no theme layer, so the browser element applies
+        them on hydration.
+      </p>
+
+      <h2 id="tone-variant">tone vs variant</h2>
+      <p>
+        Two prop vocabularies show up all over the library, and they are aliases of each
+        other almost everywhere. <strong><code>tone</code> means semantic colour</strong>
+        (<code>success</code>, <code>warning</code>, <code>danger</code>, &hellip;) and
+        <strong><code>variant</code> means visual style</strong> (<code>outline</code>,
+        <code>ghost</code>, <code>elevated</code>, &hellip;). 44 of the 281 components
+        declare one or both.
+      </p>
+<pre><code>$app(Row([
+  Badge("Live", { variant: "success" }),      // variant → the tone slot
+  Button("Save", { tone: "primary" }),        // tone → the variant slot
+  Callout("Deployed", { variant: "success" })
+], { gap: "sm" }))</code></pre>
+      <p>
+        All three validate and render: every <code>tone</code> prop carries
+        <code>variant</code> as an alias and vice versa, so guessing the other spelling is
+        no longer a hard error. The alias never invents enum values, though &mdash;
+        <code>Button</code> still rejects <code>variant: "success"</code> because
+        <code>success</code> is not one of its variants.
+      </p>
+      <div class="callout" data-variant="warning">
+        <h4>The exception: <code>Text</code> and <code>TextContent</code></h4>
+        <p>
+          On those two components the props are deliberately <em>not</em> bridged, because
+          they mean genuinely different things: <code>variant</code> is the typographic
+          role (<code>small</code>, <code>small-heavy</code>, <code>body</code>,
+          <code>body-heavy</code>, <code>large</code>, <code>large-heavy</code>,
+          <code>heading</code>, <code>title</code>) and <code>tone</code> is the colour
+          (<code>default</code>, <code>muted</code>, <code>primary</code>,
+          <code>success</code>, <code>warning</code>, <code>danger</code>). You often want
+          both at once:
+        </p>
+<pre><code>$app(Column([
+  Text("Caption", { variant: "small", tone: "muted" }),
+  Text("Section title", { variant: "heading" })
+], { gap: "xs" }))</code></pre>
+      </div>
+
+      <h2 id="dark-mode">Dark mode</h2>
+      <p>
+        There is a first&#8209;class built&#8209;in <code>dark</code> theme &mdash; no
+        token authoring required. Set it on the host and your whole tree picks up the
+        dark surfaces, text, borders, shadows and the One&nbsp;Dark syntax palette:
+      </p>
+      <pre><code>&lt;aktion-app theme="dark"&gt;&lt;/aktion-app&gt;</code></pre>
+      <p>
+        Layer a per&#8209;response <code>$theme({&hellip;})</code> on top of
+        <code>dark</code> to brand it &mdash; e.g. override <code>colors.primary</code>
+        while keeping the dark surfaces underneath. To follow the OS preference, read it in
+        the host page and call
+        <code>app.setTheme(prefersDark ? "dark" : "light")</code>. Neither theme has a
+        per&#8209;theme CSS block, so this is one of the two cases where
+        <code>$theme({ name: "dark" })</code> is equivalent to the attribute.
+      </p>
+
+      <h2 id="rtl">Right-to-left &amp; direction</h2>
+      <p>
+        Theming and layout are direction&#8209;aware. Set <code>dir="rtl"</code> (or
+        <code>"auto"</code>) on <code>&lt;aktion-app&gt;</code> to flip the whole tree;
+        logical <code>sx</code> props like <code>px</code>/<code>mx</code> and
+        <code>ps</code>/<code>pe</code> mirror automatically. The <code>direction</code> key
+        inside <code>$theme({&hellip;})</code> is advisory metadata only &mdash; use the
+        <code>dir</code> attribute to actually flip the layout.
+      </p>
+<pre><code>&lt;aktion-app theme="light" dir="rtl"&gt;&lt;/aktion-app&gt;</code></pre>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="theme-generator.html">
+          <span class="demo-tag">Theming</span>
+          <h3>Theme generator</h3>
+          <p>Tune tokens visually against a live UI, then copy the <code>$theme({&hellip;})</code> statement.</p>
+          <span class="demo-arrow">Open the generator &rarr;</span>
+        </a>
+        <a class="demo-card" href="brand-themes.html">
+          <span class="demo-tag">Demo</span>
+          <h3>Brand themes</h3>
+          <p>One program, six real brand palettes &mdash; and the flat token map behind each one.</p>
+          <span class="demo-arrow">Compare brands &rarr;</span>
+        </a>
+        <a class="demo-card" href="accessibility.html">
+          <span class="demo-tag">Quality</span>
+          <h3>Accessibility</h3>
+          <p>The contrast and focus guarantees every built-in theme is tested against.</p>
+          <span class="demo-arrow">Check contrast &rarr;</span>
+        </a>
+        <a class="demo-card" href="sx.html">
+          <span class="demo-tag">Core concepts</span>
+          <h3>The sx prop</h3>
+          <p>Reference theme tokens from any component instead of hard-coding a value.</p>
+          <span class="demo-arrow">Learn sx &rarr;</span>
+        </a>
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Component catalog</h3>
+          <p>Every component and prop, with live previews that respond to the active theme.</p>
+          <span class="demo-arrow">Browse components &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+  <script type="module">
+    // Render each .lay-demo code block as a live <aktion-app> beside it.
+    import "./dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      // setResponse once connected; guard so a single bad demo can't break the page.
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[layout demo] render failed", err);
+      }
+    }
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>

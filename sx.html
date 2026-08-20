@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The sx prop · Aktion</title>
+  <meta name="description" content="The universal sx prop accepted by every Aktion component — a bounded, theme-safe, XSS-safe styling channel. A complete reference for every key (spacing, sizing, color, border, flex/grid, position, typography, effects, background images), with responsive maps and which keys accept them, interaction states, the animate prop, the role, dataAttrs and testId channels, a troubleshooting checklist for values that were dropped, copy-paste snippets, and live mini-UI examples." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live sx demo: code on the left, rendered output on the right. */
+    .sx-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .sx-demo { grid-template-columns: 1fr; } }
+    .sx-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .sx-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+    }
+    @media (max-width: 880px) { .sx-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .sx-demo-preview aktion-app { display: block; }
+    .sx-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Token chips used in the value-reference tables. */
+    .tok {
+      display: inline-block;
+      font-family: var(--doc-mono, ui-monospace, monospace);
+      font-size: 12px;
+      padding: 1px 6px;
+      margin: 2px 3px 2px 0;
+      border: 1px solid var(--doc-border);
+      border-radius: 6px;
+      background: var(--doc-code-bg, rgba(0,0,0,.04));
+      white-space: nowrap;
+    }
+    [data-doc-theme="light"] .tok { background: var(--doc-code-bg-soft); }
+    .prop-table code { white-space: nowrap; }
+    .prop-table td:first-child { white-space: nowrap; }
+    .demo-cheats code { white-space: nowrap; }
+    /* Warning variant of the shared site.css callout. */
+    .callout.warn { background: rgba(245, 158, 11, 0.10); border-color: rgba(245, 158, 11, 0.30); }
+    .callout.warn h4 { color: #b45309; }
+  </style>
+</head>
+<body data-page="sx">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Core concepts</span>
+        <h1>The <code>sx</code> prop.</h1>
+        <p class="lead">
+          <strong>Every</strong> Aktion component accepts a universal
+          <code>sx</code> prop &mdash; a single, <strong>bounded</strong> styling
+          channel for one&#8209;off layout and visual tweaks. <code>sx</code> values are
+          <em>not</em> raw CSS: each one is a design&#8209;token reference, a small enum,
+          or a sanitised scalar. That keeps the surface <strong>theme&#8209;safe</strong>
+          (everything resolves through CSS variables), <strong>XSS&#8209;safe</strong>
+          (no arbitrary CSS injection), and <strong>enumerable</strong> (an LLM or an
+          editor can list every legal value). The same prop also accepts
+          <strong>responsive breakpoint maps</strong> and
+          <strong>interaction&#8209;state styling</strong>.
+        </p>
+      </header>
+
+      <h2 id="mental-model">Mental model</h2>
+      <p>
+        Reach for layout components (<code>Column</code>, <code>Row</code>,
+        <code>Grid</code>, <code>Box</code>&hellip; &mdash; see
+        <a href="layout.html">Layout</a>) first; they cover structure. Use
+        <code>sx</code> for the per&#8209;element polish on top: a little extra padding,
+        a tinted surface, a rounded corner, a hover lift, a sticky header.
+      </p>
+      <ul>
+        <li><strong>One prop, every component.</strong> A single internal hook
+          applies <code>sx</code> to the element a component renders &mdash; you never
+          edit individual component specs to style them.</li>
+        <li><strong>Tokens, not pixels.</strong> Prefer scale tokens
+          (<code>"lg"</code>, <code>"primary"</code>, <code>"md"</code>) so a theme
+          swap restyles everything at once. Raw lengths/colors are accepted where
+          it makes sense, but tokens travel better.</li>
+        <li><strong>Unknown keys and invalid values are ignored</strong> &mdash; never
+          injected. A typo silently no&#8209;ops rather than breaking the page, which is
+          also the one thing that can make <code>sx</code> puzzling:
+          <a href="#why-dropped">a checklist for a value that did nothing</a>.</li>
+      </ul>
+<pre><code>// sx is just another prop on the options bag.
+Card([Text("Hello")], { sx: { p: "lg", bg: "surface", radius: "lg", shadow: "md" } })
+
+// It composes with a component's own props:
+Button("Save", { variant: "primary", sx: { mt: "md", w: "full" } })</code></pre>
+
+      <div class="callout">
+        <p>
+          <strong>Escape hatches exist, but prefer <code>sx</code>.</strong> Raw
+          <code>className</code>/<code>style</code> are also accepted on every
+          component (see <a href="#universal">Universal props</a>), but they bypass
+          the token system and the safety guarantees. Use <code>sx</code> unless you
+          genuinely need a property it doesn&rsquo;t expose.
+        </p>
+      </div>
+
+      <h2 id="how-values-resolve">How a value resolves</h2>
+      <p>
+        For any <code>sx</code> key, the value is matched in this order, and the
+        first match wins:
+      </p>
+      <ol>
+        <li>A <strong>responsive map</strong> (<code>{ base, sm, md, lg, xl }</code>)
+          &mdash; each breakpoint resolves with the rules below and emits real
+          <code>@media</code> rules. <a href="#responsive">See responsive.</a></li>
+        <li>A <strong>token</strong> for that key (spacing scale, color name,
+          radius/shadow step, size keyword, z&#8209;index layer&hellip;) &rarr; resolves to a
+          themeable <code>--rui-*</code> CSS variable.</li>
+        <li>A <strong>sanitised scalar</strong> where allowed (a CSS length like
+          <code>"12px"</code>/<code>"60%"</code>, a raw color, or a number).</li>
+        <li>Otherwise the value is <strong>dropped</strong>.</li>
+      </ol>
+      <p>
+        Everything that survives step 2 or 3 becomes an <strong>inline style</strong> on the
+        element the component renders; responsive maps become atomic classes in a shared
+        stylesheet instead. That split decides what wins &mdash; see
+        <a href="#responsive-specificity">how responsive values beat component defaults</a>.
+      </p>
+      <p>
+        Nothing here ever concatenates your value into a stylesheet verbatim. Lengths and
+        colours go through a restricted alphabet with a 64&#8209;character cap first, which is
+        <a href="#why-dropped">why an exotic raw CSS value can vanish</a>.
+      </p>
+
+      <!-- ============================ SPACING ============================ -->
+      <h2 id="spacing">Spacing &mdash; padding, margin, gap</h2>
+      <p>
+        Spacing keys take a <strong>spacing&#8209;scale token</strong>, a
+        <strong>safe&#8209;area inset</strong>, or a CSS length. The scale mirrors a
+        Tailwind&#8209;ish mental model and resolves to <code>--rui-spacing-*</code>
+        variables, so it rescales with the theme.
+      </p>
+      <p>
+        <strong>Scale:</strong>
+        <span class="tok">none</span><span class="tok">3xs</span><span class="tok">2xs</span><span class="tok">xs</span><span class="tok">sm</span><span class="tok">md</span><span class="tok">lg</span><span class="tok">xl</span><span class="tok">2xl</span><span class="tok">3xl</span><span class="tok">auto</span>
+        &nbsp;(<code>none</code> = 0; a CSS length such as <code>"10px"</code> also works).
+      </p>
+      <p>
+        <strong>Safe&#8209;area insets</strong> (notches / home indicators):
+        <span class="tok">safe</span><span class="tok">safe-top</span><span class="tok">safe-right</span><span class="tok">safe-bottom</span><span class="tok">safe-left</span>
+        &mdash; <code>safe</code> is the all&#8209;around shorthand.
+      </p>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Key(s)</th><th>Sets</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>p</code></td><td>padding (all sides)</td><td><code>{ p: "lg" }</code></td></tr>
+          <tr><td><code>px</code> / <code>py</code></td><td>padding inline (L/R, logical) / block (T/B)</td><td><code>{ px: "xl", py: "sm" }</code></td></tr>
+          <tr><td><code>pt</code> <code>pr</code> <code>pb</code> <code>pl</code></td><td>padding top / right / bottom / left</td><td><code>{ pt: "md", pb: "lg" }</code></td></tr>
+          <tr><td><code>ps</code> / <code>pe</code></td><td>padding inline <em>start</em> / <em>end</em> (RTL&#8209;aware)</td><td><code>{ ps: "lg" }</code></td></tr>
+          <tr><td><code>m</code></td><td>margin (all sides)</td><td><code>{ m: "auto" }</code></td></tr>
+          <tr><td><code>mx</code> / <code>my</code></td><td>margin inline (logical) / block</td><td><code>{ mx: "auto" }</code></td></tr>
+          <tr><td><code>mt</code> <code>mr</code> <code>mb</code> <code>ml</code></td><td>margin top / right / bottom / left</td><td><code>{ mt: "xl" }</code></td></tr>
+          <tr><td><code>ms</code> / <code>me</code></td><td>margin inline start / end (RTL&#8209;aware)</td><td><code>{ me: "auto" }</code></td></tr>
+          <tr><td><code>gap</code></td><td>gap between fl/grid children</td><td><code>{ gap: "md" }</code></td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <p>
+          <strong>Logical properties mirror in RTL.</strong> <code>px</code>/<code>mx</code>
+          emit <code>padding-inline</code>/<code>margin-inline</code>, and
+          <code>ps&nbsp;pe&nbsp;ms&nbsp;me</code> target the inline <em>start</em>/<em>end</em>
+          sides. Under <code>dir="rtl"</code> they flip automatically &mdash; prefer them
+          over <code>pl</code>/<code>pr</code> for internationalised UIs.
+        </p>
+      </div>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live — padding, gap & auto margins</span>
+<pre><code>$app(Column([
+  Box([Text("p: none")], { sx: { p: "none", bg: "surface-muted", border: "subtle" } }),
+  Box([Text("p: sm")],   { sx: { p: "sm",   bg: "surface-muted", border: "subtle" } }),
+  Box([Text("p: lg")],   { sx: { p: "lg",   bg: "surface-muted", border: "subtle" } }),
+  Row([
+    Badge("left"),
+    Badge("pushed right", { tone: "primary", sx: { ms: "auto" } })
+  ])
+], { gap: "md" }))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <!-- ============================ SIZING ============================ -->
+      <h2 id="sizing">Sizing &mdash; width &amp; height</h2>
+      <p>
+        Sizing keys take a <strong>size keyword</strong> or a CSS length
+        (<code>"320px"</code>, <code>"60%"</code>, <code>"40ch"</code>&hellip;).
+      </p>
+      <p>
+        <strong>Keywords:</strong>
+        <span class="tok">full</span><span class="tok">half</span><span class="tok">screen</span><span class="tok">screen-w</span><span class="tok">screen-h</span><span class="tok">dvh</span><span class="tok">min</span><span class="tok">max</span><span class="tok">fit</span><span class="tok">auto</span>
+        &mdash; <code>full</code> = 100%, <code>dvh</code> = 100dvh (dynamic viewport
+        height, ideal for mobile full&#8209;height panels).
+      </p>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Key</th><th>Sets</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>w</code> / <code>h</code></td><td>width / height</td><td><code>{ w: "full", h: "240px" }</code></td></tr>
+          <tr><td><code>minW</code> / <code>maxW</code></td><td>min / max width</td><td><code>{ maxW: "640px" }</code></td></tr>
+          <tr><td><code>minH</code> / <code>maxH</code></td><td>min / max height</td><td><code>{ minH: "dvh" }</code></td></tr>
+        </tbody>
+      </table>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live — widths & a capped reading column</span>
+<pre><code>$app(Column([
+  Box([Text("w: full")], { sx: { w: "full", p: "sm", bg: "primary", color: "primary-text" } }),
+  Box([Text("w: half")], { sx: { w: "half", p: "sm", bg: "surface-muted", border: "subtle" } }),
+  Box([Text("w: 120px")], { sx: { w: "120px", p: "sm", bg: "surface-muted", border: "subtle" } }),
+  Box([Text("maxW 360px, centered with mx: auto — a comfortable reading column.")],
+    { sx: { maxW: "360px", mx: "auto", p: "md", bg: "surface", border: "default", radius: "md" } })
+], { gap: "md" }))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <!-- ============================ COLOR ============================ -->
+      <h2 id="color">Color &amp; surface</h2>
+      <p>
+        Color keys take a <strong>semantic color token</strong>, a
+        <strong>named gradient</strong> (<code>gradient.*</code>, for
+        <code>bg</code>), or a raw/sanitised color (<code>"#0ea5e9"</code>,
+        <code>"rgb(&hellip;)"</code>). Tokens resolve to <code>--rui-color-*</code>
+        variables so they follow the active theme and light/dark mode.
+      </p>
+      <p>
+        <strong>Color tokens:</strong>
+        <span class="tok">bg</span><span class="tok">bg-subtle</span><span class="tok">surface</span><span class="tok">surface-muted</span><span class="tok">border</span><span class="tok">border-subtle</span><span class="tok">text</span><span class="tok">text-muted</span><span class="tok">muted</span><span class="tok">primary</span><span class="tok">primary-hover</span><span class="tok">primary-text</span><span class="tok">accent</span><span class="tok">success</span><span class="tok">warning</span><span class="tok">danger</span><span class="tok">info</span><span class="tok">transparent</span><span class="tok">current</span>
+      </p>
+      <p>
+        <strong>Gradients</strong> (use as <code>bg: "gradient.&lt;name&gt;"</code>):
+        <span class="tok">gradient.brand</span><span class="tok">gradient.accent</span><span class="tok">gradient.warm</span><span class="tok">gradient.cool</span><span class="tok">gradient.success</span><span class="tok">gradient.danger</span>
+        &mdash; rebrandable via <code>$theme({ gradients: {&hellip;} })</code>.
+      </p>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Key</th><th>Sets</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>bg</code></td><td>background (token / <code>gradient.*</code> / raw)</td><td><code>{ bg: "primary" }</code></td></tr>
+          <tr><td><code>color</code></td><td>text color</td><td><code>{ color: "text-muted" }</code></td></tr>
+          <tr><td><code>borderColor</code></td><td>border color (pairs with <code>border</code>)</td><td><code>{ borderColor: "danger" }</code></td></tr>
+        </tbody>
+      </table>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live — semantic tokens & gradients</span>
+<pre><code>$app(Grid([
+  Box([Text("surface")], { sx: { p: "lg", bg: "surface", border: "subtle", radius: "md" } }),
+  Box([Text("primary")], { sx: { p: "lg", bg: "primary", color: "primary-text", radius: "md" } }),
+  Box([Text("success")], { sx: { p: "lg", bg: "success", color: "#fff", radius: "md" } }),
+  Box([Text("gradient.brand")], { sx: { p: "lg", bg: "gradient.brand", color: "#fff", radius: "md" } }),
+  Box([Text("gradient.cool")],  { sx: { p: "lg", bg: "gradient.cool",  color: "#fff", radius: "md" } }),
+  Box([Text("gradient.warm")],  { sx: { p: "lg", bg: "gradient.warm",  color: "#fff", radius: "md" } })
+], { columns: 3, gap: "md" }))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <!-- ============================ BORDER / RADIUS / SHADOW ============================ -->
+      <h2 id="border">Border, radius, shadow &amp; opacity</h2>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Key</th><th>Accepts</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>border</code></td><td><code>none</code> · <code>subtle</code> · <code>strong</code> · <code>true</code>/<code>default</code> · a color token/value</td><td><code>{ border: "subtle" }</code></td></tr>
+          <tr><td><code>radius</code></td><td><span class="tok">none</span><span class="tok">xs</span><span class="tok">sm</span><span class="tok">md</span><span class="tok">lg</span><span class="tok">pill</span><span class="tok">full</span><span class="tok">circle</span> or a length</td><td><code>{ radius: "lg" }</code></td></tr>
+          <tr><td><code>shadow</code></td><td><span class="tok">none</span><span class="tok">sm</span><span class="tok">md</span><span class="tok">lg</span></td><td><code>{ shadow: "md" }</code></td></tr>
+          <tr><td><code>opacity</code></td><td>a number <code>0</code>&ndash;<code>1</code></td><td><code>{ opacity: 0.6 }</code></td></tr>
+        </tbody>
+      </table>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live — radius ramp, shadows, opacity</span>
+<pre><code>$app(Column([
+  Row([
+    Box([Text("xs")],   { sx: { p: "md", bg: "surface", border: "subtle", radius: "xs" } }),
+    Box([Text("md")],   { sx: { p: "md", bg: "surface", border: "subtle", radius: "md" } }),
+    Box([Text("lg")],   { sx: { p: "md", bg: "surface", border: "subtle", radius: "lg" } }),
+    Box([Text("pill")], { sx: { p: "md", bg: "surface", border: "subtle", radius: "pill" } })
+  ], { gap: "md" }),
+  Row([
+    Box([Text("shadow sm")], { sx: { p: "md", bg: "surface", radius: "md", shadow: "sm" } }),
+    Box([Text("shadow md")], { sx: { p: "md", bg: "surface", radius: "md", shadow: "md" } }),
+    Box([Text("shadow lg")], { sx: { p: "md", bg: "surface", radius: "md", shadow: "lg" } }),
+    Box([Text("opacity .5")], { sx: { p: "md", bg: "primary", color: "primary-text", radius: "md", opacity: 0.5 } })
+  ], { gap: "md" })
+], { gap: "md" }))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <!-- ============================ FLEX / GRID ============================ -->
+      <h2 id="flex-grid">Flexbox &amp; grid</h2>
+      <p>
+        Layout components already wrap flex/grid for you, but <code>sx</code> lets
+        you turn any element into a flex or grid container and control its children
+        inline.
+      </p>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Key</th><th>Accepts</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>display</code></td><td><span class="tok">flex</span><span class="tok">grid</span><span class="tok">block</span><span class="tok">inline</span><span class="tok">inline-flex</span><span class="tok">inline-block</span><span class="tok">none</span><span class="tok">contents</span></td><td><code>{ display: "flex" }</code></td></tr>
+          <tr><td><code>direction</code></td><td><span class="tok">row</span><span class="tok">column</span><span class="tok">row-reverse</span><span class="tok">column-reverse</span></td><td><code>{ direction: "column" }</code></td></tr>
+          <tr><td><code>align</code></td><td><span class="tok">start</span><span class="tok">center</span><span class="tok">end</span><span class="tok">stretch</span><span class="tok">baseline</span> (align&#8209;items)</td><td><code>{ align: "center" }</code></td></tr>
+          <tr><td><code>justify</code></td><td><span class="tok">start</span><span class="tok">center</span><span class="tok">end</span><span class="tok">between</span><span class="tok">around</span><span class="tok">evenly</span><span class="tok">stretch</span></td><td><code>{ justify: "between" }</code></td></tr>
+          <tr><td><code>wrap</code></td><td><code>true</code> / <code>false</code></td><td><code>{ wrap: true }</code></td></tr>
+          <tr><td><code>grow</code> / <code>shrink</code></td><td>a number (flex&#8209;grow / flex&#8209;shrink)</td><td><code>{ grow: 1 }</code></td></tr>
+          <tr><td><code>basis</code></td><td>a size keyword or length (flex&#8209;basis)</td><td><code>{ basis: "200px" }</code></td></tr>
+          <tr><td><code>columns</code></td><td>a number &rarr; that many equal grid columns</td><td><code>{ display: "grid", columns: 3 }</code></td></tr>
+        </tbody>
+      </table>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live — a flex toolbar & a 3-column grid, inline</span>
+<pre><code>$app(Column([
+  Box([
+    Badge("Logo", { tone: "primary" }),
+    Badge("Docs"), Badge("Pricing"),
+    Box([Button("Sign in", { variant: "primary" })], { sx: { ms: "auto" } })
+  ], { sx: { display: "flex", align: "center", gap: "sm", p: "sm", bg: "surface", border: "subtle", radius: "md" } }),
+  Box([
+    Box([Text("A")], { sx: { p: "lg", bg: "surface-muted", radius: "sm" } }),
+    Box([Text("B")], { sx: { p: "lg", bg: "surface-muted", radius: "sm" } }),
+    Box([Text("C")], { sx: { p: "lg", bg: "surface-muted", radius: "sm" } })
+  ], { sx: { display: "grid", columns: 3, gap: "md" } })
+], { gap: "md" }))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <!-- ============================ POSITION ============================ -->
+      <h2 id="position">Position &amp; layering</h2>
+      <p>
+        Pin elements and control stacking order. <code>zIndex</code> takes a
+        <strong>layer token</strong> (recommended &mdash; consistent, themeable via
+        <code>$theme({ zIndex: {&hellip;} })</code>) or a number. Layer tokens resolve
+        through <code>--rui-z-*</code> variables.
+      </p>
+      <p>
+        <strong>Layer tokens (low &rarr; high):</strong>
+        <span class="tok">base</span><span class="tok">raised</span><span class="tok">sticky</span><span class="tok">banner</span><span class="tok">overlay</span><span class="tok">dropdown</span><span class="tok">modal</span><span class="tok">popover</span><span class="tok">toast</span><span class="tok">tooltip</span>
+      </p>
+      <p>
+        Pick the token that names your intent rather than a number, and the app stays
+        consistent with the library&rsquo;s own surfaces. The numbers behind the tokens are
+        the theme&rsquo;s <code>--rui-z-*</code> scale &mdash;
+        <a href="themes.html#layers">listed in full on the theming page</a> &mdash; so a
+        <code>$theme({ zIndex: {&hellip;} })</code> override moves your elements and the
+        library&rsquo;s together.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>Anchored popups do not compete for <code>z-index</code> any more.</strong>
+          Tooltips, dropdowns, popovers and picker lists are promoted into the browser top
+          layer, so they paint above everything regardless of these tokens &mdash; see
+          <a href="layout.html#floating">the floating layer</a>. Reach for a layer token when
+          <em>you</em> are stacking your own elements: a sticky table header, a custom
+          banner, a decorative ribbon.
+        </p>
+      </div>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Key</th><th>Accepts</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>position</code></td><td><span class="tok">relative</span><span class="tok">absolute</span><span class="tok">fixed</span><span class="tok">sticky</span><span class="tok">static</span></td><td><code>{ position: "sticky" }</code></td></tr>
+          <tr><td><code>top</code> <code>right</code> <code>bottom</code> <code>left</code></td><td>a size keyword or length</td><td><code>{ top: 0 }</code></td></tr>
+          <tr><td><code>inset</code></td><td><code>0</code> or a length (all four offsets)</td><td><code>{ inset: 0 }</code></td></tr>
+          <tr><td><code>zIndex</code></td><td>a layer token or a number</td><td><code>{ zIndex: "sticky" }</code></td></tr>
+        </tbody>
+      </table>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live — a corner badge via absolute positioning</span>
+<pre><code>$app(Box([
+  Box([Text("New")], { sx: {
+    position: "absolute", top: "8px", right: "8px", zIndex: "raised",
+    px: "sm", py: "3xs", bg: "danger", color: "#fff", radius: "pill", fontSize: "xs", weight: "700"
+  } }),
+  Image({ src: "https://picsum.photos/seed/sx/480/200", alt: "Cover" }),
+  Box([Text("Product card with a positioned ribbon")], { sx: { p: "md" } })
+], { sx: { position: "relative", maxW: "420px", bg: "surface", border: "subtle", radius: "lg", overflow: "hidden" } }))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <!-- ============================ TYPOGRAPHY ============================ -->
+      <h2 id="typography">Typography</h2>
+      <p>
+        For body text prefer the <code>Text</code> / <code>Display</code> /
+        <code>Heading</code> components and their <code>variant</code>s. Use these
+        <code>sx</code> keys for fine adjustments on any element.
+      </p>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Key</th><th>Accepts</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>fontSize</code></td><td><span class="tok">xs</span><span class="tok">sm</span><span class="tok">base</span><span class="tok">md</span><span class="tok">lg</span><span class="tok">xl</span><span class="tok">2xl</span><span class="tok">3xl</span><span class="tok">4xl</span> or a length</td><td><code>{ fontSize: "2xl" }</code></td></tr>
+          <tr><td><code>weight</code></td><td><span class="tok">100</span>&hellip;<span class="tok">900</span> · <span class="tok">normal</span> · <span class="tok">bold</span></td><td><code>{ weight: "700" }</code></td></tr>
+          <tr><td><code>textAlign</code></td><td><span class="tok">left</span><span class="tok">center</span><span class="tok">right</span><span class="tok">justify</span><span class="tok">start</span><span class="tok">end</span></td><td><code>{ textAlign: "center" }</code></td></tr>
+          <tr><td><code>textDecoration</code></td><td><span class="tok">underline</span><span class="tok">none</span><span class="tok">line-through</span><span class="tok">overline</span></td><td><code>{ textDecoration: "underline" }</code></td></tr>
+        </tbody>
+      </table>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live — size ramp, weight, alignment</span>
+<pre><code>$app(Column([
+  Text("fontSize 4xl / weight 800", { sx: { fontSize: "4xl", weight: "800" } }),
+  Text("fontSize xl / centered",    { sx: { fontSize: "xl", textAlign: "center" } }),
+  Text("muted & struck through",    { sx: { color: "text-muted", textDecoration: "line-through" } }),
+  Text("right-aligned link-ish",    { sx: { color: "primary", textDecoration: "underline", textAlign: "right" } })
+], { gap: "sm" }))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <!-- ============================ EFFECTS ============================ -->
+      <h2 id="effects">Effects &mdash; overflow, cursor, backdrop</h2>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Key</th><th>Accepts</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>overflow</code></td><td><span class="tok">hidden</span><span class="tok">auto</span><span class="tok">scroll</span><span class="tok">visible</span><span class="tok">clip</span></td><td><code>{ overflow: "hidden" }</code></td></tr>
+          <tr><td><code>cursor</code></td><td><span class="tok">pointer</span><span class="tok">default</span><span class="tok">not-allowed</span><span class="tok">grab</span><span class="tok">grabbing</span><span class="tok">text</span><span class="tok">move</span><span class="tok">wait</span><span class="tok">help</span><span class="tok">none</span></td><td><code>{ cursor: "pointer" }</code></td></tr>
+          <tr><td><code>backdrop</code></td><td><span class="tok">blur</span> &mdash; frosted&#8209;glass backdrop filter</td><td><code>{ backdrop: "blur" }</code></td></tr>
+        </tbody>
+      </table>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live — clipped scroll area & a glass panel</span>
+<pre><code>$app(Box([
+  Box([Column([
+    Text("Scrollable region (overflow: auto, capped height)."),
+    Text("Line 2"), Text("Line 3"), Text("Line 4"),
+    Text("Line 5"), Text("Line 6"), Text("Line 7")
+  ], { gap: "xs" })], { sx: { maxH: "120px", overflow: "auto", p: "md", bg: "surface", border: "subtle", radius: "md" } }),
+  Box([Text("backdrop: blur over a gradient")], {
+    sx: { mt: "md", p: "md", radius: "md", color: "#fff", backdrop: "blur", bg: "rgba(255,255,255,.12)" }
+  })
+], { sx: { p: "lg", bg: "gradient.cool", radius: "lg" } }))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <!-- ============================ BACKGROUND IMAGE ============================ -->
+      <h2 id="bg-image">Background images &amp; overlays</h2>
+      <p>
+        <code>bgImage</code> sets a background image; <code>bgOverlay</code> layers a
+        color or <code>gradient.*</code> wash on top (perfect for keeping hero text
+        readable). URLs are <strong>scheme&#8209;whitelisted</strong> &mdash; only
+        <code>http(s)</code>, root/relative paths, and <code>data:image/*</code> pass;
+        anything else (e.g. <code>javascript:</code>) is rejected.
+      </p>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Key</th><th>Accepts</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>bgImage</code></td><td>an <code>http(s)</code> / relative / <code>data:image</code> URL</td><td><code>{ bgImage: "/hero.jpg" }</code></td></tr>
+          <tr><td><code>bgOverlay</code></td><td>a color token/value or <code>gradient.*</code> wash</td><td><code>{ bgOverlay: "rgba(0,0,0,.45)" }</code></td></tr>
+          <tr><td><code>bgSize</code></td><td><span class="tok">cover</span> (default) · <span class="tok">contain</span></td><td><code>{ bgSize: "contain" }</code></td></tr>
+        </tbody>
+      </table>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live — hero banner with a readable overlay</span>
+<pre><code>$app(Box([Column([
+  Text("Ship UIs in one language", { sx: { fontSize: "3xl", weight: "800", color: "#fff" } }),
+  Text("A background image with a dark overlay keeps text legible.", { sx: { color: "rgba(255,255,255,.85)" } }),
+  Row([Button("Get started", { variant: "primary" })], { sx: { mt: "sm" } })
+], { gap: "sm" })], {
+  sx: {
+    p: "2xl", radius: "lg", minH: "260px",
+    display: "flex", direction: "column", justify: "center",
+    bgImage: "https://picsum.photos/seed/hero/1200/500",
+    bgOverlay: "rgba(15,23,42,.55)"
+  }
+}))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <!-- ============================ RESPONSIVE ============================ -->
+      <h2 id="responsive">Responsive maps</h2>
+      <p>
+        Most <code>sx</code> values can be a breakpoint map
+        <code>{ base, sm, md, lg, xl }</code> instead of a single value. These emit real
+        <code>@media (min-width: &hellip;)</code> rules &mdash; not just the resolved base
+        &mdash; so the style genuinely changes at the breakpoint.
+      </p>
+      <p>
+        It is <strong>mobile&#8209;first</strong>: <code>base</code> applies at every width, and
+        each larger key overrides from its min&#8209;width up. A map needs only <em>one</em> of
+        the five keys to count as one.
+      </p>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Key</th><th>Min&#8209;width</th></tr></thead>
+        <tbody>
+          <tr><td><code>base</code></td><td>0 (the default, no media query)</td></tr>
+          <tr><td><code>sm</code></td><td>640px</td></tr>
+          <tr><td><code>md</code></td><td>768px</td></tr>
+          <tr><td><code>lg</code></td><td>1024px</td></tr>
+          <tr><td><code>xl</code></td><td>1280px</td></tr>
+        </tbody>
+      </table>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live — resize the preview / window</span>
+<pre><code>$app(Box([Text("I'm full-width on mobile, 60% from md, and 40% from lg — with more padding as I grow.")], {
+  sx: {
+    bg: "surface", border: "subtle", radius: "lg",
+    w: { base: "100%", md: "60%", lg: "40%" },
+    p: { base: "sm", md: "lg", lg: "xl" },
+    textAlign: { base: "left", lg: "center" }
+  }
+}))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+      <p>
+        Three keys, three sets of <code>@media</code> rules, one element. Because
+        <code>base</code> is the only key without a media query, a map with no
+        <code>base</code> simply has no style below its smallest breakpoint.
+      </p>
+
+      <h3 id="responsive-keys">Which keys accept a map</h3>
+      <p>
+        The whole box model, the flex/grid controls, position, and the typography keys do.
+        Five keys do not, and a map passed to one of them <strong>collapses to its
+        <code>base</code> value</strong> rather than erroring &mdash; so the style still
+        renders, it just stops changing at the breakpoint.
+      </p>
+      <p>
+        <strong>Accept a map:</strong>
+        <span class="tok">p</span><span class="tok">px</span><span class="tok">py</span><span class="tok">pt</span><span class="tok">pr</span><span class="tok">pb</span><span class="tok">pl</span><span class="tok">ps</span><span class="tok">pe</span><span class="tok">m</span><span class="tok">mx</span><span class="tok">my</span><span class="tok">mt</span><span class="tok">mr</span><span class="tok">mb</span><span class="tok">ml</span><span class="tok">ms</span><span class="tok">me</span><span class="tok">gap</span><span class="tok">w</span><span class="tok">h</span><span class="tok">minW</span><span class="tok">maxW</span><span class="tok">minH</span><span class="tok">maxH</span><span class="tok">bg</span><span class="tok">color</span><span class="tok">radius</span><span class="tok">shadow</span><span class="tok">border</span><span class="tok">borderColor</span><span class="tok">opacity</span><span class="tok">display</span><span class="tok">direction</span><span class="tok">align</span><span class="tok">justify</span><span class="tok">wrap</span><span class="tok">grow</span><span class="tok">shrink</span><span class="tok">basis</span><span class="tok">columns</span><span class="tok">overflow</span><span class="tok">position</span><span class="tok">top</span><span class="tok">right</span><span class="tok">bottom</span><span class="tok">left</span><span class="tok">inset</span><span class="tok">zIndex</span><span class="tok">fontSize</span><span class="tok">weight</span><span class="tok">textAlign</span><span class="tok">textDecoration</span>
+      </p>
+      <p>
+        <strong>Do not &mdash; a map collapses to <code>base</code>:</strong>
+        <span class="tok">cursor</span><span class="tok">backdrop</span><span class="tok">bgImage</span><span class="tok">bgOverlay</span><span class="tok">bgSize</span>
+        &mdash; and the state channels <span class="tok">hover</span><span class="tok">focus</span><span class="tok">states</span>,
+        which take a style object of their own rather than a value.
+      </p>
+      <p>
+        If you need a background image only above a breakpoint, put the two variants on two
+        elements and toggle them with <code>display: { base: "none", md: "block" }</code>
+        &mdash; <code>display</code> <em>is</em> responsive.
+      </p>
+
+      <h3 id="responsive-specificity">Why a responsive value wins</h3>
+      <p>
+        A responsive key is not emitted inline. It becomes a deduplicated atomic class in one
+        shared stylesheet, and that class is written into the selector three times &mdash;
+        <code>.ak-rX.ak-rX.ak-rX</code>. That is deliberate: nearly every component styles
+        itself with an attribute selector such as
+        <code>.rui-stack[data-gap="md"]</code>, which outranks a single class, so a
+        single&#8209;class rule would lose and the map would silently do nothing.
+      </p>
+      <p>
+        The tripled class still loses to <code>!important</code> and to inline styles, which
+        is the intended order &mdash; a <em>non&#8209;responsive</em> <code>sx</code> value
+        <em>is</em> an inline style, so an explicit single value on the same element should
+        beat a breakpoint rule. If a map looks ignored, check whether something else on the
+        element already sets the same CSS property as a plain value, and fold it into the
+        map&rsquo;s <code>base</code> key instead.
+      </p>
+      <div class="callout warn">
+        <h4>Upgrading: maps that used to do nothing now apply</h4>
+        <p>
+          <strong>Re&#8209;check any responsive <code>sx</code> map you wrote against a
+          component&rsquo;s own prop.</strong> Before the specificity fix, a map like
+          <code>Row([&hellip;], { gap: "sm", sx: { gap: { md: "xl" } } })</code> was
+          overridden by the component&rsquo;s own <code>data-gap</code> rule and rendered as
+          if it were not there. It now takes effect at <code>md</code>, so a layout that
+          looked correct only because the map no&#8209;opped will change.
+        </p>
+      </div>
+
+      <!-- ============================ STATES ============================ -->
+      <h2 id="states">Interaction states</h2>
+      <p>
+        <code>sx</code> styles interaction states with <strong>no dynamic CSS
+        injection</strong> &mdash; two complementary forms:
+      </p>
+      <h3 id="state-shorthands">1. Quick effect shorthands</h3>
+      <p>
+        <code>hover</code> and <code>focus</code> accept a preset effect name (or an
+        object of <code>{ effect: true }</code>) that maps to a prebuilt utility
+        class:
+        <span class="tok">lift</span><span class="tok">grow</span><span class="tok">glow</span><span class="tok">bright</span><span class="tok">border</span><span class="tok">underline</span><span class="tok">scale</span>.
+      </p>
+<pre><code>Card([Text("Lift on hover")], { sx: { p: "lg", hover: "lift" } })
+Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code></pre>
+      <h3 id="state-objects">2. Arbitrary state styling with <code>states</code></h3>
+      <p>
+        For full control, <code>states</code> (or a rich object form of
+        <code>hover</code>/<code>focus</code>) compiles a small, <strong>bounded</strong>
+        style object into a scoped <code>:state</code> rule in the shared
+        stylesheet. Supported states:
+        <span class="tok">hover</span><span class="tok">focus</span><span class="tok">focus-visible</span><span class="tok">focus-within</span><span class="tok">active</span><span class="tok">disabled</span><span class="tok">checked</span><span class="tok">group-hover</span>.
+      </p>
+      <p>
+        Each state value accepts these bounded keys:
+        <span class="tok">bg</span><span class="tok">color</span><span class="tok">borderColor</span><span class="tok">shadow</span><span class="tok">radius</span><span class="tok">opacity</span><span class="tok">cursor</span><span class="tok">textDecoration</span><span class="tok">scale</span><span class="tok">translateX</span><span class="tok">translateY</span><span class="tok">rotate</span>.
+        A 150&nbsp;ms transition on background, color, shadow, transform, opacity and
+        border&#8209;color is added automatically, and
+        <code>prefers-reduced-motion</code> is respected.
+        <code>rotate</code> is capped at &plusmn;360 degrees.
+      </p>
+      <p>
+        Two states match more than their pseudo&#8209;class, because component libraries
+        express those conditions with attributes: <code>disabled</code> also fires on
+        <code>[disabled]</code> and <code>[data-disabled="true"]</code>, and
+        <code>checked</code> also fires on <code>[aria-checked="true"]</code>. So styling
+        <code>disabled</code> works on a custom control that is not a native
+        <code>&lt;button&gt;</code>.
+      </p>
+      <div class="callout">
+        <p>
+          <strong><code>group-hover</code></strong> fires when an ancestor carrying the
+          <code>ak-group</code> class is hovered &mdash; add it via
+          <code>{ className: "ak-group" }</code> on the parent to reveal/animate
+          children on parent hover.
+        </p>
+      </div>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live — hover & focus the cards / input</span>
+<pre><code>$app(Column([
+  Grid([
+    Card([Text("Hover: lift + shadow")], { sx: { p: "lg", states: { hover: { translateY: "-4px", shadow: "lg" } } } }),
+    Card([Text("Hover: scale + tint")],  { sx: { p: "lg", states: { hover: { scale: 1.04, bg: "surface-muted" } } } }),
+    Card([Text("Hover: rotate a touch")], { sx: { p: "lg", states: { hover: { rotate: 2, shadow: "md" } } } })
+  ], { columns: 3, gap: "md" }),
+  Input("email", { placeholder: "Focus me — border + glow",
+    sx: { states: { focus: { borderColor: "primary", shadow: "md" } } } }),
+  Box([
+    Text("Parent is .ak-group — hover anywhere on me"),
+    Box([Text("I appear on group hover")], { sx: { mt: "sm", opacity: 0.35, states: { "group-hover": { opacity: 1, color: "primary" } } } })
+  ], { className: "ak-group", sx: { p: "lg", bg: "surface", border: "subtle", radius: "lg", cursor: "pointer" } })
+], { gap: "md" }))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <!-- ============================ ANIMATE ============================ -->
+      <h2 id="animate">The sibling <code>animate</code> prop</h2>
+      <p>
+        Alongside <code>sx</code>, every component accepts <code>animate</code> for
+        entrance / loop motion. Pass a <strong>preset name</strong> or an object
+        <code>{ preset, delay?, duration?, repeat? }</code> (<code>delay</code> /
+        <code>duration</code> in ms; <code>repeat</code> a number or
+        <code>"infinite"</code>). Motion auto&#8209;respects
+        <code>prefers-reduced-motion</code>.
+      </p>
+      <p>
+        <strong>Presets:</strong>
+        <span class="tok">fade</span><span class="tok">fade-up</span><span class="tok">fade-down</span><span class="tok">fade-left</span><span class="tok">fade-right</span><span class="tok">zoom</span><span class="tok">zoom-in</span><span class="tok">slide-up</span><span class="tok">slide-down</span><span class="tok">slide-left</span><span class="tok">slide-right</span><span class="tok">pulse</span><span class="tok">float</span><span class="tok">shimmer</span><span class="tok">bounce</span><span class="tok">spin</span><span class="tok">ping</span><span class="tok">wiggle</span>
+      </p>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live — staggered entrance + a looping pulse</span>
+<pre><code>$app(Column([
+  Card([Text("fade-up, delay 0")],   { animate: { preset: "fade-up", delay: 0 } }),
+  Card([Text("fade-up, delay 120")], { animate: { preset: "fade-up", delay: 120 } }),
+  Card([Text("fade-up, delay 240")], { animate: { preset: "fade-up", delay: 240 } }),
+  Row([
+    Badge("Live", { tone: "success", animate: { preset: "pulse", repeat: "infinite" } }),
+    Text("loops forever")
+  ], { gap: "sm" })
+], { gap: "md" }))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <!-- ============================ UNIVERSAL ============================ -->
+      <h2 id="universal">The full universal channel</h2>
+      <p>
+        <code>sx</code> and <code>animate</code> are part of a small set of
+        <strong>universal props</strong> every component accepts in addition to its
+        own props:
+      </p>
+      <table class="signature-table prop-table">
+        <thead><tr><th>Prop</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>sx</code></td><td>The bounded, token&#8209;aware styling object documented on this page.</td></tr>
+          <tr><td><code>animate</code></td><td>Entrance / loop motion preset (see above).</td></tr>
+          <tr><td><code>id</code> / <code>anchor</code></td><td>Sets the element&rsquo;s <code>id</code> (validated identifier) &mdash; handy as a scroll anchor.</td></tr>
+          <tr><td><code>className</code> / <code>class</code></td><td><strong>Escape hatch.</strong> Adds sanitised CSS class tokens (string or array).</td></tr>
+          <tr><td><code>style</code></td><td><strong>Escape hatch.</strong> A sanitised inline&#8209;style string for the rare property <code>sx</code> doesn&rsquo;t cover.</td></tr>
+          <tr><td><code>aria</code></td><td>An object of ARIA attributes, e.g. <code>{ label: "Close", expanded: true }</code> &rarr; <code>aria-*</code>. Keys are lower&#8209;cased for you; letters and hyphens only.</td></tr>
+          <tr><td><code>role</code></td><td>Overrides the element&rsquo;s ARIA role. <strong>Allow&#8209;listed</strong> &mdash; see below.</td></tr>
+          <tr><td><code>data</code></td><td>An object of <code>data-*</code> attributes, e.g. <code>{ testid: "row-1" }</code>. Keys are lower&#8209;cased and stripped to <code>a&ndash;z 0&ndash;9 -</code>; <code>null</code> values are skipped.</td></tr>
+          <tr><td><code>dataAttrs</code></td><td>The same channel under a second name, for components that declare a <code>data</code> prop of their own. Wins when both are present.</td></tr>
+          <tr><td><code>testId</code></td><td>End&#8209;to&#8209;end test hook. Renders <code>data-testid</code> on the rendered root, value used verbatim (no character allow&#8209;list). Wins over <code>data</code>/<code>dataAttrs</code> when more than one is present. Alias: <code>testid</code>.</td></tr>
+          <tr><td><code>tooltip</code></td><td>Sets the native <code>title</code> attribute.</td></tr>
+          <tr><td><code>hidden</code></td><td><code>true</code> &rarr; adds the <code>hidden</code> attribute.</td></tr>
+        </tbody>
+      </table>
+<pre><code>Button("Close", {
+  variant: "ghost", icon: "xmark",
+  aria: { label: "Close dialog" },
+  testId: "dialog-close",
+  tooltip: "Esc",
+  sx: { radius: "circle" }
+})</code></pre>
+      <p>
+        Universal props sit alongside a component&rsquo;s own props in the same options bag
+        &mdash; there is no separate slot for them, and every component accepts all of them.
+      </p>
+      <div class="callout">
+        <p>
+          <strong><code>testId</code> marks the component&rsquo;s ROOT element.</strong> On a
+          form field that renders a label, hint, error, or <code>required</code> marker, the root
+          is the <code>.rui-field</code> wrapper rather than the control inside it &mdash; an
+          unlabelled <code>Input</code> returns the bare control as its own root, but a labelled
+          one returns the wrapper (see <code>src/library/components/forms-shared.ts</code>).
+          Reach the control itself with a scoped query:
+          <code>within(getByTestId("email")).getByRole("textbox")</code>.
+        </p>
+      </div>
+
+      <h3 id="role">Overriding the role</h3>
+      <p>
+        <code>role</code> exists for the case where a component&rsquo;s markup is right but
+        its semantics are not &mdash; a <code>Box</code> that is really a live status region,
+        a <code>Row</code> that is really a toolbar. It is <strong>allow&#8209;listed</strong>:
+        the value is trimmed and lower&#8209;cased, and anything not on the list is dropped
+        silently, because a plausible&#8209;but&#8209;wrong role is worse for a screen&#8209;reader
+        user than the original defect.
+      </p>
+      <p>
+        <strong>Accepted roles:</strong>
+        <span class="tok">banner</span><span class="tok">complementary</span><span class="tok">contentinfo</span><span class="tok">form</span><span class="tok">main</span><span class="tok">navigation</span><span class="tok">region</span><span class="tok">search</span><span class="tok">article</span><span class="tok">group</span><span class="tok">list</span><span class="tok">listitem</span><span class="tok">separator</span><span class="tok">heading</span><span class="tok">figure</span><span class="tok">note</span><span class="tok">definition</span><span class="tok">term</span><span class="tok">status</span><span class="tok">alert</span><span class="tok">log</span><span class="tok">timer</span><span class="tok">marquee</span><span class="tok">progressbar</span><span class="tok">meter</span><span class="tok">button</span><span class="tok">link</span><span class="tok">img</span><span class="tok">toolbar</span><span class="tok">tooltip</span><span class="tok">dialog</span><span class="tok">tab</span><span class="tok">tabpanel</span><span class="tok">tablist</span><span class="tok">menuitem</span><span class="tok">option</span><span class="tok">checkbox</span><span class="tok">radio</span><span class="tok">switch</span><span class="tok">none</span><span class="tok">presentation</span>
+      </p>
+<pre><code>Box([Text("Live figures")], { padding: "md", background: "muted", role: "status" })
+// roles that need owned children or matching ARIA state (grid, listbox, menu, …)
+// are deliberately absent — a bare role override cannot supply those</code></pre>
+      <p>
+        Composite roles are excluded on purpose. If you need one, use the component that
+        implements it &mdash; see <a href="accessibility.html">Accessibility</a>.
+      </p>
+
+      <h3 id="data-attrs">Six components need <code>dataAttrs</code></h3>
+      <p>
+        <code>LineChart</code>, <code>JsonTree</code>, <code>Async</code>,
+        <code>Draggable</code>, <code>Lottie</code> and <code>QRCode</code> all declare a
+        <code>data</code> prop of their own &mdash; the payload they render. On those six the
+        component prop wins, so use <code>dataAttrs</code> for the attribute channel.
+      </p>
+<pre><code>QRCode("https://example.com/join", { size: 160, dataAttrs: { analyticsId: "join" } })
+// the positional argument IS `data` (the QR payload); dataAttrs emits data-analyticsid="join"</code></pre>
+      <p>
+        On every other component the two spellings are interchangeable, and
+        <code>dataAttrs</code> wins if you pass both.
+      </p>
+      <p>
+        A <strong>test id specifically no longer needs <code>dataAttrs</code> on these six</strong>
+        &mdash; <code>testId</code> is a separate universal channel that reaches the rendered root
+        directly, regardless of whether the component declares its own <code>data</code> prop.
+        <code>dataAttrs</code> remains the way to set any <em>other</em> <code>data-*</code>
+        attribute on them.
+      </p>
+
+      <h3 id="boxless">Elements with no box of their own</h3>
+      <p>
+        A few component roots are <code>display: contents</code> &mdash; they exist in the
+        tree but generate no box, so <code>padding</code>, <code>background</code>,
+        <code>width</code>, a border, or an <code>animate</code> transform on them provably
+        cannot render. <code>Show</code>, <code>Async</code>, <code>Lazy</code> and
+        <code>Fragment</code> are a related case: they return a fragment rather than an
+        element, so there is nothing for the universal channel to land on at all.
+      </p>
+      <p>
+        Both are handled for you. A fragment&#8209;returning component gets a wrapper
+        <code>&lt;span class="rui-universal-host"&gt;</code> when &mdash; and only when &mdash;
+        the universal channel actually carries something, and a boxless root is promoted to
+        <code>display: block</code> when your <code>sx</code> asks for a box (or your
+        <code>animate</code> preset needs one). An empty output is left un&#8209;hosted, so a
+        false <code>Show</code> with no fallback still renders nothing rather than an empty
+        padded box.
+      </p>
+<pre><code>$open = false
+$app(Column([
+  Show($open, [Card([Text("Hosted in a span, so the padding and border render.")])], Text("Nothing yet."), {
+    sx: { p: "lg", bg: "surface-muted", radius: "lg" }
+  }),
+  Button("Toggle", { onClick: () =&gt; $open = !$open })
+], { gap: "md" }))</code></pre>
+      <p>
+        Two consequences worth knowing. Your <code>sx</code> styles the <em>host span</em>, not
+        the branch inside it. And the promotion only fills in a <code>display</code> you did not
+        set yourself: pass <code>display: "contents"</code> to keep the boxless behaviour, or
+        any other value to choose the box.
+      </p>
+      <p>
+        The one override is <code>hidden: true</code>, which always wins &mdash; the
+        browser&rsquo;s own <code>[hidden]</code> rule would otherwise lose to an author
+        <code>display: contents</code> and the element would stay visible. When you want the box
+        to be explicit in the code rather than inferred, wrap the group in a <code>Box</code>.
+      </p>
+
+      <!-- ============================ MINI UIs ============================ -->
+      <h2 id="mini-uis">Mini UIs built with <code>sx</code></h2>
+      <p>
+        Putting the keys together. Each of these is plain components +
+        <code>sx</code> &mdash; no stylesheet, no raw CSS.
+      </p>
+
+      <h3 id="mini-pricing">Pricing card</h3>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live</span>
+<pre><code>$app(Box([Column([
+  Row([
+    Text("Pro", { sx: { fontSize: "lg", weight: "700" } }),
+    Badge("Popular", { tone: "primary", sx: { ms: "auto" } })
+  ], { sx: { align: "center" } }),
+  Row([
+    Text("$29", { sx: { fontSize: "4xl", weight: "800" } }),
+    Text("/mo", { sx: { color: "text-muted", mb: "xs" } })
+  ], { sx: { align: "end", gap: "3xs" } }),
+  Separator(),
+  Column([
+    Row([Icon("check", { sx: { color: "success" } }), Text("Unlimited projects")], { sx: { gap: "sm", align: "center" } }),
+    Row([Icon("check", { sx: { color: "success" } }), Text("Priority support")], { sx: { gap: "sm", align: "center" } }),
+    Row([Icon("check", { sx: { color: "success" } }), Text("Custom domains")], { sx: { gap: "sm", align: "center" } })
+  ], { gap: "xs" }),
+  Button("Choose Pro", { variant: "primary", sx: { w: "full", mt: "sm" } })
+], { gap: "md" })], {
+  sx: { maxW: "320px", mx: "auto", p: "xl", bg: "surface", border: "subtle", radius: "lg", shadow: "md",
+        states: { hover: { translateY: "-4px", shadow: "lg" } } }
+}))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <h3 id="mini-banner">Notification banner</h3>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live</span>
+<pre><code>$app(Box([Row([
+  Box([Icon("circle-info", { sx: { color: "#fff" } })], {
+    sx: { p: "sm", bg: "rgba(255,255,255,.18)", radius: "circle" } }),
+  Column([
+    Text("Deployment complete", { sx: { color: "#fff", weight: "700" } }),
+    Text("Your changes are live on production.", { sx: { color: "rgba(255,255,255,.85)", fontSize: "sm" } })
+  ], { gap: "3xs" }),
+  Button("View", { variant: "ghost", sx: { ms: "auto", color: "#fff", states: { hover: { bg: "rgba(255,255,255,.15)" } } } })
+], { sx: { align: "center", gap: "md" } })], {
+  sx: { p: "md", radius: "lg", bg: "gradient.success" }, animate: "slide-down"
+}))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+
+      <h3 id="mini-glass">Glass profile card over a gradient</h3>
+      <div class="sx-demo">
+        <span class="sx-demo-label">Live</span>
+<pre><code>$app(Box([
+  Box([Column([
+    Avatar({ name: "Ada Lovelace", size: "lg" }),
+    Text("Ada Lovelace", { sx: { color: "#fff", weight: "700", fontSize: "lg" } }),
+    Text("Founder & Engineer", { sx: { color: "rgba(255,255,255,.8)", fontSize: "sm" } }),
+    Row([
+      Button("Follow", { variant: "primary" }),
+      Button("Message", { variant: "ghost", sx: { color: "#fff", borderColor: "rgba(255,255,255,.5)", border: "rgba(255,255,255,.5)" } })
+    ], { sx: { gap: "sm", mt: "sm" } })
+  ], { gap: "xs", align: "center" })], {
+    sx: { p: "xl", radius: "lg", maxW: "320px", mx: "auto",
+          bg: "rgba(255,255,255,.12)", backdrop: "blur", border: "rgba(255,255,255,.25)" }
+  })
+], { sx: { p: "2xl", bg: "gradient.brand", radius: "lg" } }))</code></pre>
+        <div class="sx-demo-preview"></div>
+      </div>
+      <div class="callout">
+        <h4>Before you hand&#8209;roll a chip</h4>
+        <p>
+          <strong><code>sx</code> can build a pill, but two components already are one.</strong>
+          <code>Badge(label, { tone, icon })</code> is the solid, high&#8209;attention chip
+          (&ldquo;Recommended&rdquo;, &ldquo;Save 50&nbsp;%&rdquo;).
+          <code>Pill(label, { tone, icon })</code> is the softer tinted label for the current
+          <em>state</em> of a thing &mdash; &ldquo;SSL active&rdquo;, &ldquo;pending&rdquo;,
+          &ldquo;broken&rdquo;.
+        </p>
+        <p>
+          Pill tones are
+          <code>neutral&nbsp;&middot;&nbsp;activating&nbsp;&middot;&nbsp;success&nbsp;&middot;&nbsp;warning&nbsp;&middot;&nbsp;critical&nbsp;&middot;&nbsp;promoting&nbsp;&middot;&nbsp;corporate</code>.
+          Both components follow the theme, both accept <code>sx</code>, and neither needs you
+          to pick a padding.
+        </p>
+      </div>
+
+      <!-- ============================ TROUBLESHOOTING ============================ -->
+      <h2 id="why-dropped">Why didn&rsquo;t my <code>sx</code> apply?</h2>
+      <p>
+        <code>sx</code> never throws and never warns: an unusable key or value is dropped so
+        the rest of the page still renders. That is the right trade for a channel an LLM
+        writes into, but it means a silent no&#8209;op is the failure mode you will meet.
+        Work down this table.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>A key does nothing at all</td>
+            <td>The key is not part of the bounded surface &mdash; a typo, or a CSS property <code>sx</code> does not expose.</td>
+            <td>Check it against the tables above. For a genuinely missing property use the <code>style</code> escape hatch.</td>
+          </tr>
+          <tr>
+            <td>The key is right, the value is ignored</td>
+            <td>The value is not a token or enum member for that key, and did not survive sanitisation.</td>
+            <td>Use a token, or a plain length / colour. Enum keys (<code>display</code>, <code>justify</code>, <code>shadow</code>&hellip;) accept <em>only</em> the listed values.</td>
+          </tr>
+          <tr>
+            <td>An exotic raw length or colour vanished</td>
+            <td>Lengths and colours pass a restricted alphabet with a 64&#8209;character cap before they reach an inline style.</td>
+            <td>Keep them short and plain. <code>clamp(1rem, 2vw, 2rem)</code> is fine; quotes, <code>;</code>, <code>url(&hellip;)</code> and <code>@import</code> are not. See <a href="security.html">Security</a>.</td>
+          </tr>
+          <tr>
+            <td>A whole <code>style</code> string vanished</td>
+            <td>The raw <code>style</code> channel is all&#8209;or&#8209;nothing: a string containing markup, <code>javascript:</code>, <code>expression(</code>, <code>@import</code>, or a <code>url(javascript:&hellip;)</code> / <code>url(data:text&hellip;)</code> is rejected whole, as is anything over 2048 characters.</td>
+            <td>Move what you can into <code>sx</code>; keep the leftover declaration minimal.</td>
+          </tr>
+          <tr>
+            <td>A responsive map never changes at the breakpoint</td>
+            <td>That key has no responsive resolver, so the map collapsed to its <code>base</code> value.</td>
+            <td>See <a href="#responsive-keys">which keys accept a map</a>.</td>
+          </tr>
+          <tr>
+            <td>A responsive map is overridden</td>
+            <td>Something on the same element sets the same CSS property inline, or with <code>!important</code>.</td>
+            <td>See <a href="#responsive-specificity">why a responsive value wins</a> &mdash; and what still beats it.</td>
+          </tr>
+          <tr>
+            <td>Padding or a background does nothing on <code>Show</code>, a route, or a transition wrapper</td>
+            <td>That root generates no box. It is promoted for you &mdash; unless your own <code>sx</code> declares a <code>display</code>.</td>
+            <td>Drop the <code>display</code> key, or set a non&#8209;<code>contents</code> one explicitly. See <a href="#boxless">boxless roots</a>.</td>
+          </tr>
+          <tr>
+            <td><code>data-*</code> attributes never appear</td>
+            <td>The component declares a <code>data</code> prop of its own, which shadows the channel.</td>
+            <td>Use <code>dataAttrs</code>, or <code>testId</code> if it&rsquo;s specifically a test hook &mdash; see <a href="#data-attrs">the six components</a>.</td>
+          </tr>
+          <tr>
+            <td>A <code>role</code> is missing from the DOM</td>
+            <td>The value is not on the allow&#8209;list.</td>
+            <td>Pick one of <a href="#role">the accepted roles</a>, or use the component that implements the semantics.</td>
+          </tr>
+          <tr>
+            <td>An <code>aria</code> key is missing</td>
+            <td>Keys are lower&#8209;cased, then must be 2&ndash;33 characters of letters and hyphens &mdash; a key containing a digit or an underscore is dropped.</td>
+            <td>Use the plain ARIA name. Case does not matter (<code>labelledBy</code> and <code>labelledby</code> both work) and the <code>aria-</code> prefix is optional.</td>
+          </tr>
+          <tr>
+            <td>No <code>@media</code> rules in a test environment</td>
+            <td>Responsive emission needs constructable stylesheets. Where they are unavailable, the map degrades to its <code>base</code> value inline.</td>
+            <td>Nothing &mdash; this is deliberate. Assert on the base value, or test breakpoints in a real browser.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ============================ SECURITY / NOTES ============================ -->
+      <h2 id="notes">Safety &amp; gotchas</h2>
+      <ul>
+        <li><strong>Bounded by design.</strong> <code>sx</code> never injects
+          arbitrary CSS. Values that don&rsquo;t resolve to a known token, enum,
+          sanitised length/color, or scalar are dropped &mdash; so a hostile or
+          mistaken value can&rsquo;t break out into the stylesheet. The per&#8209;sink
+          sanitisers and what each one accepts are documented on
+          <a href="security.html">Security</a>.</li>
+        <li><strong>Tokens beat raw values.</strong> A raw color or length works, but
+          it won&rsquo;t follow theme / dark&#8209;mode changes. Prefer
+          <code>"primary"</code> over a hex literal and <code>"lg"</code> over
+          <code>"24px"</code>.</li>
+        <li><strong>Responsive needs constructable stylesheets.</strong> In headless
+          DOMs that lack them, a breakpoint map gracefully falls back to emitting the
+          <code>base</code> value inline (no media queries) rather than failing.</li>
+        <li><strong><code>bgImage</code> is scheme&#8209;whitelisted.</strong> Only
+          <code>http(s)</code>, relative paths, and <code>data:image/*</code> are
+          allowed; <code>javascript:</code> / <code>blob:</code> / <code>data:text</code>
+          are rejected.</li>
+        <li><strong>State styling is bounded too.</strong> <code>states</code> only
+          accepts the listed style keys and the listed pseudo&#8209;states &mdash; anything
+          else is ignored.</li>
+        <li><strong>Use the escape hatches sparingly.</strong> <code>className</code> /
+          <code>style</code> exist for the rare gap, but they skip the token system;
+          reach for them last.</li>
+      </ul>
+
+      <!-- ============================ CHEAT SHEET ============================ -->
+      <h2 id="cheatsheet">Cheat sheet</h2>
+      <table class="signature-table demo-cheats">
+        <thead><tr><th>Goal</th><th>Snippet</th></tr></thead>
+        <tbody>
+          <tr><td>Padded surface card</td><td><code>{ sx: { p: "lg", bg: "surface", border: "subtle", radius: "lg" } }</code></td></tr>
+          <tr><td>Push to the right (in a Row)</td><td><code>{ sx: { ms: "auto" } }</code></td></tr>
+          <tr><td>Center horizontally</td><td><code>{ sx: { mx: "auto", maxW: "640px" } }</code></td></tr>
+          <tr><td>Full&#8209;width button</td><td><code>{ sx: { w: "full" } }</code></td></tr>
+          <tr><td>Hover lift</td><td><code>{ sx: { states: { hover: { translateY: "-4px", shadow: "lg" } } } }</code></td></tr>
+          <tr><td>Gradient background</td><td><code>{ sx: { bg: "gradient.brand", color: "#fff" } }</code></td></tr>
+          <tr><td>Hero with overlay</td><td><code>{ sx: { bgImage: "/h.jpg", bgOverlay: "rgba(0,0,0,.5)" } }</code></td></tr>
+          <tr><td>Responsive width</td><td><code>{ sx: { w: { base: "100%", md: "50%" } } }</code></td></tr>
+          <tr><td>Sticky header</td><td><code>{ sx: { position: "sticky", top: 0, zIndex: "sticky" } }</code></td></tr>
+          <tr><td>Inline 3&#8209;col grid</td><td><code>{ sx: { display: "grid", columns: 3, gap: "md" } }</code></td></tr>
+          <tr><td>Pill&#8209;shaped chip (or just use <code>Pill</code>)</td><td><code>{ sx: { px: "sm", py: "3xs", radius: "pill", bg: "danger", color: "#fff" } }</code></td></tr>
+          <tr><td>Glass panel</td><td><code>{ sx: { backdrop: "blur", bg: "rgba(255,255,255,.12)" } }</code></td></tr>
+          <tr><td>Entrance animation</td><td><code>{ animate: "fade-up" }</code></td></tr>
+          <tr><td>Fix a wrong role</td><td><code>{ role: "status" }</code></td></tr>
+          <tr><td>Test hook on a chart / QR code</td><td><code>{ testId: "chart" }</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="layout.html">
+          <span class="demo-tag">Core concepts</span>
+          <h3>Layout</h3>
+          <p>Structure first: Column, Row, Grid, cards, and the primitives <code>sx</code> polishes.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="themes.html">
+          <span class="demo-tag">Theming</span>
+          <h3>Themes &amp; tokens</h3>
+          <p>Every token an <code>sx</code> value resolves to, and how to rebrand them in one call.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Component catalog</h3>
+          <p>Every component and prop, with a live preview &mdash; all of them accept <code>sx</code>.</p>
+          <span class="demo-arrow">Browse components &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+  <script type="module">
+    // Render each .sx-demo code block as a live <aktion-app> beside it.
+    import "./dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".sx-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".sx-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[sx demo] render failed", err);
+      }
+    }
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".sx-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>

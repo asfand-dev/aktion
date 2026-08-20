@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Production &amp; deployment · Aktion</title>
+  <meta name="description" content="Shipping Aktion to production: SSR/hydration with serializeState, a complete Content-Security-Policy (no unsafe-eval required), integrity hashes, CDN caching, edge-function LLM streaming, rollback and version pinning, a DOM-free deploy smoke test, and error reporting hooks." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout.ok { border-left-color: #10b981; }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
+    .checklist { list-style: none; padding: 0; margin: 18px 0; }
+    .checklist li { position: relative; padding: 6px 0 6px 28px; border-bottom: 1px solid var(--doc-border); }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist li::before { content: "\2713"; position: absolute; left: 4px; top: 6px; color: #10b981; font-weight: 700; }
+  </style>
+</head>
+<body data-page="deployment">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Guide</span>
+        <h1>Production &amp; deployment.</h1>
+        <p class="lead">
+          Aktion is a self-contained web component, so shipping it is mostly
+          &ldquo;serve a static bundle and mount the element.&rdquo; The wrinkles
+          are SSR/hydration through the shadow DOM, Content-Security-Policy, and
+          wiring an LLM stream from your edge. This guide covers each.
+        </p>
+      </header>
+
+      <div class="callout">
+        <h4>The whole picture</h4>
+        <p>A production Aktion app has three moving parts: a <strong>static
+          bundle</strong> (the runtime) served from your host or a CDN, the
+          <strong><code>&lt;aktion-app&gt;</code> element</strong> mounted in your
+          page, and &mdash; for AI surfaces &mdash; an <strong>edge function</strong>
+          that proxies the LLM and streams tokens back. Everything below is about
+          wiring those three together safely.</p>
+      </div>
+
+      <h2 id="bundle">Serving the bundle</h2>
+      <p>
+        Run <code>npm run build</code> and serve <code>dist/</code> from any static
+        host &mdash; every artifact in <code>dist/</code> is self-contained,
+        including the CSS (it is injected into each instance&rsquo;s shadow root, so
+        the host page needs no extra stylesheet). Or load it from the CDN so it is
+        cached across pages and apps:
+      </p>
+<pre><code>&lt;script type="module" src="https://cdn.example.com/aktion@0.6.4/dist/aktion.js"&gt;&lt;/script&gt;
+&lt;aktion-app theme="dark"&gt;&lt;/aktion-app&gt;</code></pre>
+      <p>
+        Pin a version (<code>@0.6.4</code>) for reproducible builds and set a long
+        <code>Cache-Control</code> max-age on the immutable bundle.
+      </p>
+      <p>
+        Because the runtime is a plain static ES module, <strong>any static
+        host works</strong> &mdash; Netlify, Vercel, Cloudflare Pages, GitHub
+        Pages, S3 + CloudFront, or your own nginx. There is no server runtime to
+        provision for the UI itself; the only server-side piece you may need is the
+        edge function that proxies your model (see <a href="#edge">below</a>). For
+        mounting the element inside React, Vue, Svelte, or Angular, see
+        <a href="frameworks.html">Frameworks</a>.
+      </p>
+
+      <h3 id="build">Building with the Vite plugin</h3>
+      <p>
+        If your app <code>import</code>s <code>.aktion</code> files rather than
+        streaming program text, <code>aktion-runtime/vite</code> links the module
+        graph at build time. Its resolver <strong>confines every
+        <code>.aktion</code> import to the Vite project root</strong>: a specifier
+        that resolves outside <code>config.root</code> is refused instead of read,
+        because under <code>vite dev</code> the file&rsquo;s contents would be
+        handed straight to the browser.
+      </p>
+<pre><code>// vite.config.ts
+import { defineConfig } from "vite";
+import aktion from "aktion-runtime/vite";
+
+export default defineConfig({
+  plugins: [
+    // allowOutsideRoot defaults to false — imports stay inside config.root.
+    // strict defaults to false — turn it on to fail the build on linker warnings.
+    aktion({ allowOutsideRoot: true, strict: true }),
+  ],
+});</code></pre>
+      <p>
+        This is a <strong>breaking change for monorepos</strong>. A build that
+        imported a <code>.aktion</code> file from a sibling package now fails with
+        <code>[aktion] refusing to read "&hellip;" &mdash; outside the project
+        root</code> until you widen <code>root</code> or opt out with
+        <code>allowOutsideRoot: true</code> &mdash; and only do the latter for a
+        layout whose sources you trust. See <a href="modules.html">Modules</a> for
+        the import graph itself.
+      </p>
+
+      <h2 id="ssr">SSR &amp; hydration</h2>
+      <p>
+        For server-side rendering and static generation, import
+        <code>renderToString(program, { path, initialState })</code>. It returns
+        <strong>four</strong> fields, not two: <code>html</code>,
+        <code>state</code>, <code>head</code>, and <code>headAttrs</code> &mdash; so
+        one call gives you crawlable markup, a hydration snapshot, and everything
+        the page shell&rsquo;s <code>&lt;head&gt;</code> needs.
+      </p>
+<pre><code>import { renderToString } from "aktion-runtime";
+
+const { html, state, head, headAttrs } = renderToString(program, {
+  path: "/dashboard",            // seeds the router for the requested route
+  initialState: { user: me },    // pre-populate reactive atoms
+  container: true,               // true is the default — wraps output in one element
+});
+// html      → embed in your shell
+// state     → inline for the client to hydrate
+// head      → inject into the shell's &lt;head&gt;
+// headAttrs → spread onto &lt;html&gt;, e.g. { lang: "en", dir: "ltr" }</code></pre>
+      <p>
+        <code>head</code> and <code>headAttrs</code> carry whatever
+        <code>$head({...})</code> the program ran during <em>this</em> render
+        &mdash; title, meta, Open Graph and Twitter cards, links, JSON&#8209;LD.
+        Both come back empty when no <code>$head</code> ran.
+        <a href="head.html#ssr">Document head</a> is the reference for those two
+        fields and for the allow-lists that decide what survives into them.
+      </p>
+      <p>
+        <code>renderToStaticMarkup(program, opts)</code> returns the
+        <code>html</code> field on its own, for fully static pages with no
+        hydration.
+      </p>
+      <p>
+        Both functions need a DOM, so in a Node entry register
+        <code>happy-dom</code> or <code>jsdom</code> on <code>globalThis</code>
+        first &mdash; without one, <code>renderToString</code> throws rather than
+        quietly returning empty markup. For a DOM-free check that a program renders
+        at all, see <a href="#verify">Verify a deploy</a>.
+      </p>
+
+      <div class="callout warn">
+        <h4>SSR executes the program on your server</h4>
+        <p>
+          <strong>In the browser an untrusted program is same&#8209;origin XSS; on
+          your server the same program is remote code execution.</strong>
+          <code>renderToString</code> evaluates it, and by default an Aktion program
+          resolves unshadowed identifiers against <code>globalThis</code> &mdash;
+          which under Node means the filesystem, your internal network, and
+          <code>process.env</code>.
+        </p>
+        <p>
+          So if the program text is anything less than fully trusted &mdash; LLM
+          output, a tenant record, a user-editable template &mdash; call
+          <code>setGlobalAccessPolicy("safe")</code> in the server entry
+          <em>before</em> rendering, and run that entry as a separate
+          low&#8209;privilege process. See
+          <a href="security.html#node">Node-side tooling</a>.
+        </p>
+      </div>
+<pre><code>// Node SSR entry — set the policy once, before anything renders.
+import { setGlobalAccessPolicy, renderToString } from "aktion-runtime";
+
+setGlobalAccessPolicy("safe");   // process-global, not per-render
+const { html, state } = renderToString(programFromTheModel);</code></pre>
+      <p>
+        The policy is process-global, so one call at bootstrap covers every
+        subsequent render. Under <code>"safe"</code> a program can no longer reach
+        <code>eval</code>, <code>Function</code>, the DOM, bare <code>fetch</code>,
+        or <code>localStorage</code>; <code>$http</code> and <code>storage</code>
+        still work, so restrict outbound origins at the host too.
+      </p>
+      <p>
+        <strong>Escaping the hydration snapshot is your job.</strong>
+        <code>state</code> comes back as a plain object and the runtime does no
+        escaping for the <code>&lt;script&gt;</code> context. Emit it inside
+        <code>&lt;script type="application/json"&gt;</code> and
+        <code>JSON.parse</code> it on the client, or escape <code>&lt;</code>
+        yourself &mdash; a string atom containing <code>&lt;/script&gt;</code>
+        otherwise closes the tag early and turns your own markup into an injection
+        point.
+      </p>
+      <p>
+        On the client you can also persist and resume reactive state so a reload
+        (or the server-rendered shell) restores the app without re-running the LLM:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Method</th><th>Use</th></tr></thead>
+        <tbody>
+          <tr><td><code>serializeState()</code></td><td>Returns every reactive atom as a flat, JSON-friendly <code>{ name: value }</code> object &mdash; persist it (cookie, KV, <code>localStorage</code>) for SSR / resumption.</td></tr>
+          <tr><td><code>hydrateState(snapshot)</code></td><td>Applies a snapshot to the live store and schedules a re-render. Atoms not in the snapshot are untouched; names the program never declares are written but never read.</td></tr>
+          <tr><td><code>loadSnapshot({ programText, state })</code></td><td>Sets the program <strong>and</strong> the state in one shot, so the next render plans the program with the hydrated values already in place. Prefer this over two calls &mdash; see <a href="#rollback">Rollback</a>.</td></tr>
+        </tbody>
+      </table>
+<pre><code>// On unload / checkpoint — store the program text with the state.
+await fetch("/session", {
+  method: "PUT",
+  body: JSON.stringify({ programText: app.response, state: app.serializeState() }),
+});
+
+// On next load — restore both atomically.
+app.loadSnapshot(await loadSession());</code></pre>
+      <p>
+        <code>loadSnapshot</code> clears the previous program&rsquo;s defaults
+        before seeding, so an atom the old program declared cannot survive into the
+        new one with a stale default. Splitting the restore into
+        <code>setResponse</code> then <code>hydrateState</code> also works, but
+        renders once in between.
+      </p>
+
+      <h2 id="csp">Content-Security-Policy</h2>
+      <div class="callout ok">
+        <h4>You do not need <code>'unsafe-eval'</code></h4>
+        <p>
+          The runtime uses neither <code>eval</code> nor <code>new Function</code>
+          &mdash; there are zero occurrences of either in the shipped bundle. Action
+          and effect bodies are <strong>interpreted from the AST</strong> by a
+          tree-walking evaluator, not compiled to a function. So Aktion itself runs
+          happily under a <code>script-src</code> with no <code>'unsafe-eval'</code>.
+        </p>
+      </div>
+      <p>
+        The one case that still needs it is a <em>program</em> that calls
+        <code>eval</code> or <code>Function</code> itself, which the default
+        <code>"all"</code> global-access policy makes reachable. Closing that is what
+        <a href="security.html#policy"><code>setGlobalAccessPolicy("safe")</code></a>
+        is for &mdash; and it is precisely what makes dropping
+        <code>'unsafe-eval'</code> meaningful when program text is not fully trusted.
+      </p>
+      <p>
+        <code>script-src</code> is not the interesting directive here, though. The
+        runtime renders inline styles and can pull two external stylesheets, so a
+        policy that tightens only <code>script-src</code> yields an app with no
+        icons, no spacing, and a <code>corporate</code> theme stuck on
+        <code>system-ui</code>. Here is a policy that actually works:
+      </p>
+<pre><code>Content-Security-Policy:
+  default-src 'self';
+  script-src  'self' https://cdn.example.com;
+  style-src   'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com;
+  font-src    'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com;
+  img-src     'self' data: blob: https:;
+  connect-src 'self' https://api.your-llm.example.com;</code></pre>
+      <table class="signature-table">
+        <thead><tr><th>Directive</th><th>Why Aktion needs it</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>style-src 'unsafe-inline'</code></td>
+            <td>Two paths need it. Components emit inline <code>style</code> <em>attributes</em> for token-derived and measured values (<code>Container.maxWidth</code>, <code>Skeleton.height</code>, chart geometry, the floating layer's positioning), and the runtime injects <code>&lt;style&gt;</code> elements for theme tokens, the <code>Styles</code> component, and as the component-CSS fallback on engines without constructable stylesheets. A nonce or hash strategy for those elements is the stricter alternative. Where <code>style-src-attr</code> is supported you can scope the exemption to attributes only.</td>
+          </tr>
+          <tr>
+            <td><code>cdnjs.cloudflare.com</code> in <code>style-src</code> + <code>font-src</code></td>
+            <td>Font Awesome. The runtime injects the stylesheet on first <code>Icon</code> use, with SRI, <code>crossorigin="anonymous"</code>, and <code>referrerpolicy="no-referrer"</code>. Self-host the stylesheet instead if you cannot accept a third-party CDN.</td>
+          </tr>
+          <tr>
+            <td><code>fonts.googleapis.com</code> / <code>fonts.gstatic.com</code></td>
+            <td>Web fonts requested by <code>$theme({ fonts: { import: [&hellip;] } })</code>, and by the <code>corporate</code> built-in theme, which declares Open&nbsp;Sans and Overpass (see <a href="themes.html#built-in">built-in themes</a>). Omit both hosts if you use no web fonts.</td>
+          </tr>
+          <tr>
+            <td><code>img-src data: blob:</code></td>
+            <td><code>Image</code>, <code>Avatar</code>, <code>MediaCard</code> and friends accept <code>data:image/*</code> and <code>blob:</code> sources &mdash; the latter is how a local <code>FileUpload</code> preview renders. Narrow <code>https:</code> to the hosts you actually serve images from.</td>
+          </tr>
+          <tr>
+            <td><code>connect-src</code></td>
+            <td>Every <code>$http({...})</code> destination, plus your LLM streaming endpoint.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Aktion never injects a <code>&lt;script&gt;</code> element and never assigns
+        <code>innerHTML</code> on the live document, so <code>script-src</code> needs
+        neither <code>'unsafe-inline'</code> nor <code>'unsafe-eval'</code> &mdash;
+        keep both out. For what CSP does and does not buy you here, see
+        <a href="security.html">Security &amp; the trust model</a>: a restrictive CSP
+        hardens the <em>host page</em>, but it is not what keeps an untrusted
+        <em>program</em> contained. That is
+        <code>setGlobalAccessPolicy(&quot;safe&quot;)</code>&rsquo;s job.
+      </p>
+
+      <h3 id="csp-rollout">Rolling a policy out with Report-Only</h3>
+      <p>
+        Never enforce a new policy blind. Ship it first as
+        <code>Content-Security-Policy-Report-Only</code>: the browser evaluates
+        every directive and reports each violation, but blocks nothing &mdash; so a
+        directive you got wrong lands in your report endpoint instead of shipping a
+        blank page.
+      </p>
+<pre><code>Content-Security-Policy-Report-Only:
+  default-src 'self';
+  script-src  'self' https://cdn.example.com;
+  style-src   'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com;
+  font-src    'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com;
+  img-src     'self' data: blob: https:;
+  connect-src 'self' https://api.your-llm.example.com;
+  report-uri  /csp-report;</code></pre>
+      <p>
+        The two headers are independent, so you can keep a known-good enforcing
+        policy live while a tighter candidate runs in report-only beside it.
+        <code>report-uri</code> is the widely-implemented directive;
+        <code>report-to</code> plus a <code>Reporting-Endpoints</code> response
+        header is its modern replacement, and sending both is the usual hedge.
+      </p>
+      <ol>
+        <li>Deploy the candidate policy as <strong>report-only</strong> and leave
+          the enforcing header alone (or absent).</li>
+        <li>Exercise the app: mount it, switch themes, render an
+          <code>Icon</code>, upload a file, open every route, and let a generated
+          program run end to end. Icons, web fonts, and
+          <code>blob:</code> previews are the three that surface late.</li>
+        <li>Read the reports. Group by <code>effective-directive</code>; each
+          distinct <code>blocked-uri</code> is either a host you forgot or
+          something you did not intend to load.</li>
+        <li>Widen the policy for the legitimate ones only, then promote the header
+          to enforcing and keep report-only on the <em>next</em> candidate.</li>
+      </ol>
+      <p>
+        Expect <code>style-src</code> and <code>font-src</code> reports on the
+        first pass even from a correct app &mdash; both external stylesheets load
+        lazily, Font Awesome on the first <code>Icon</code> and Google Fonts on the
+        first theme that declares fonts, so neither appears until something
+        actually renders.
+      </p>
+
+      <h3 id="csp-declarative">Constraining the model to declarative output</h3>
+      <p>
+        Dropping <code>'unsafe-eval'</code> only breaks something if a
+        <em>generated</em> program calls <code>eval</code> or
+        <code>Function</code>. Two levers close that gap and they are not
+        interchangeable: the prompt <strong>asks</strong>, the policy
+        <strong>enforces</strong>.
+      </p>
+<pre><code>// 1. Ask — append hard rules to the generated system prompt.
+const prompt = app.getSystemPrompt({
+  additionalRules: [
+    "Never call eval, Function, or WebAssembly.",
+    "Never touch window, document, globalThis, localStorage, or fetch directly.",
+    "Use $http for network calls, storage for persistence, $effect for side effects.",
+  ],
+});
+
+// 2. Enforce — narrow what any program can reach, once at host bootstrap.
+import { setGlobalAccessPolicy } from "aktion-runtime";
+setGlobalAccessPolicy("safe");</code></pre>
+      <p>
+        <code>additionalRules</code> is appended to the prompt as an
+        &ldquo;Additional rules&rdquo; section, so the model sees it next to the
+        component catalogue. <code>getSystemPrompt(options)</code> is the
+        host-element method; <code>generatePrompt(library, options)</code> is the
+        standalone form.
+      </p>
+      <p>
+        Step 1 reduces how often the model reaches for a host global. Only step 2
+        makes it impossible &mdash; which is why a <code>script-src</code> without
+        <code>'unsafe-eval'</code> is meaningful with both in place and merely
+        optimistic with step 1 alone.
+      </p>
+      <div class="callout">
+        <h4>Check your own programs before you switch</h4>
+        <p><strong><code>$script</code> is the one feature the policy switches
+          off.</strong> <code>$script({ src })</code> is disabled outright under any
+          policy other than <code>"all"</code>: the resource comes back with an
+          <code>error</code> set and <code>ready</code> stays <code>false</code>, so
+          a program that gates on <code>ready</code> degrades rather than
+          crashing.</p>
+        <p>Everything else that stops working is listed in
+          <a href="security.html#policy-breaks">what breaks under
+          <code>safe</code></a>. The shortlist that bites a production app: bare
+          <code>fetch</code>, <code>localStorage</code>, <code>crypto</code>, and
+          <code>document</code>.</p>
+      </div>
+
+      <h2 id="integrity">Integrity &amp; pinning</h2>
+      <ul>
+        <li>Add a Subresource Integrity hash to the CDN <code>&lt;script&gt;</code>
+          (<code>integrity="sha384-…"</code> with <code>crossorigin="anonymous"</code>)
+          when loading from a third party.</li>
+        <li>Pin the exact version in the URL so a CDN update can never change your
+          runtime behaviour without a deploy.</li>
+        <li>External links rendered by the library already get
+          <code>rel="noopener noreferrer"</code>, and the href/image/CSS sanitizers
+          run regardless of CSP.</li>
+      </ul>
+
+      <h2 id="rollback">Rollback &amp; version pinning</h2>
+      <p>
+        An Aktion deploy has two independently versioned parts: the
+        <strong>runtime bundle</strong> and the <strong>program text</strong>. They
+        fail differently and they roll back differently, so pin and revert them
+        separately.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Part</th><th>Pin it by</th><th>Roll back by</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Runtime bundle</td>
+            <td>An exact version in the URL (<code>aktion@0.6.4.4.3</code>), never a range or a floating tag, plus an <code>integrity</code> hash when it is cross-origin.</td>
+            <td>Pointing the <code>&lt;script&gt;</code> back at the previous exact URL. Keep the old immutable path reachable &mdash; a long <code>Cache-Control</code> is what makes the rollback instant, and deleting the artefact is what makes it impossible.</td>
+          </tr>
+          <tr>
+            <td>Program text</td>
+            <td>Whatever store you keep it in &mdash; a git commit, a KV entry, a row id. Record the id you shipped.</td>
+            <td>Re-mounting the previous text with <code>setResponse</code> / <code>loadSnapshot</code>, or re-deploying the previous <code>.aktion</code> build.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Because the two are independent, always test the pair you intend to ship.
+        Rolling the bundle back <em>alone</em> is the trap.
+      </p>
+      <p>
+        A program that uses a component the older bundle does not have renders a
+        <code>Skeleton</code> placeholder instead of failing loudly, and a prop the
+        older bundle does not know is dropped with only a schema diagnostic. The UI
+        comes up &mdash; just with holes in it.
+      </p>
+
+      <h3 id="snapshot-compat">Do <code>serializeState()</code> snapshots survive a version bump?</h3>
+      <p>
+        A snapshot is a flat <code>{ atomName: value }</code> map of the reactive
+        atoms as they stood. There is no schema, no embedded version marker, and no
+        migration hook. So compatibility is not really a function of the
+        <em>runtime</em> version at all &mdash; it is a function of the
+        <strong>program</strong> that declared those atoms.
+      </p>
+      <p>
+        Rename <code>$user</code> to <code>$currentUser</code> and every stored
+        snapshot quietly stops restoring that value:
+        <code>hydrateState</code> writes the unrecognised name into the store, the
+        new program never reads it, and nothing warns. Change an atom&rsquo;s
+        <em>shape</em> &mdash; a string that becomes an object &mdash; and the old
+        value is restored as-is into code that no longer expects it.
+      </p>
+      <p>
+        The fix is to treat the snapshot and the program as one artefact: persist
+        them together and restore them together with
+        <code>loadSnapshot({ programText, state })</code>.
+      </p>
+      <p>
+        Stamp your own version or content hash on the stored payload, and discard
+        any snapshot whose stamp does not match the program you are about to mount.
+        A fresh render from defaults is a far better failure than half-restored
+        state.
+      </p>
+      <div class="callout">
+        <h4><code>COMPILED_PROGRAM_VERSION</code> guards a different artefact</h4>
+        <p><strong>It is not a state-snapshot version.</strong>
+          <code>COMPILED_PROGRAM_VERSION</code> (currently <code>1</code>) is the
+          schema version of the <em>compiled program</em> that
+          <code>linkProject()</code> and <code>compileLite()</code> produce and
+          <code>mountCompiled()</code> consumes.</p>
+        <p>Every artefact carries the stamp and <code>mountCompiled</code> checks
+          it: a payload built by an incompatible compiler is refused with a console
+          error rather than mounted as garbage. The constant is bumped only on a
+          breaking change to the <code>CompiledProgram</code> shape, and it says
+          nothing at all about <code>serializeState()</code> output.</p>
+      </div>
+      <p>
+        Practical consequence: if you cache linked artefacts (a build output, a KV
+        blob, a service-worker entry), key the cache on both the runtime version
+        and <code>COMPILED_PROGRAM_VERSION</code>. A stale artefact from an
+        incompatible compiler does not render a broken UI &mdash; it renders
+        nothing, with one line in the console.
+      </p>
+
+      <h2 id="edge">Edge-function LLM streaming</h2>
+      <p>
+        The common production shape is: the browser holds the
+        <code>&lt;aktion-app&gt;</code>, an edge function proxies the LLM (keeping
+        your API key server-side), and tokens are streamed back and fed to
+        <code>appendChunk</code>:
+      </p>
+<pre><code>const res = await fetch("/api/generate", { method: "POST", body: prompt });
+const reader = res.body.getReader();
+const decoder = new TextDecoder();
+for (;;) {
+  const { value, done } = await reader.read();
+  if (done) break;
+  app.appendChunk(decoder.decode(value, { stream: true }));
+}</code></pre>
+      <p>
+        See the <a href="llm-integration.html">LLM integration guide</a> for
+        provider-specific stream parsing and prompt selection.
+      </p>
+
+      <h2 id="telemetry">Error reporting &amp; telemetry</h2>
+      <ul>
+        <li>Listen for the host <code>error</code> event and forward
+          <code>e.detail.errors</code> to your error tracker (Sentry, etc.). See
+          <a href="errors.html#event">Error handling</a>.</li>
+        <li>Listen for <code>assistant-message</code> to capture round-trips back
+          to the model, and <code>route-change</code> for analytics page views.</li>
+        <li>Install <code>registerHttpInterceptors({ onRequest, onResponse, onError })</code>
+          to add auth headers, retry on 401, and log network timing centrally.</li>
+        <li>Keep the <code>strict</code> attribute on in staging so silent
+          fallbacks surface as console warnings before release.</li>
+      </ul>
+
+      <h2 id="verify">Verify a deploy</h2>
+      <p>
+        Two checks catch nearly every bad Aktion deploy. The first runs in CI
+        before you publish and needs no browser at all; the second runs against the
+        deployed origin and answers &ldquo;did the bundle actually load?&rdquo;
+      </p>
+
+      <h3 id="verify-renders">Does the program render? (CI, no DOM)</h3>
+      <p>
+        <code>renderToTextTree(program)</code> parses, schema-validates, and
+        <em>evaluates</em> a program into an indented text outline &mdash; without a
+        DOM, so plain <code>node</code> runs it with no <code>happy-dom</code> or
+        <code>jsdom</code> setup. <code>ok</code> is the machine signal,
+        <code>errors</code> explains a failure, and <code>text</code> is what you
+        want in the CI log.
+      </p>
+<pre><code>import { renderToTextTree } from "aktion-runtime";
+import { readFileSync } from "node:fs";
+
+const { ok, text, errors } = renderToTextTree(readFileSync("src/app.aktion", "utf8"));
+if (!ok) {
+  console.error(errors.join("\n"));
+  process.exit(1);
+}
+console.log(text);   // an indented outline: &lt;Column&gt; → &lt;Text&gt; → "Invoices"</code></pre>
+      <p>
+        It reports parse errors, schema violations, a program with no
+        <code>$app(...)</code> root, a root that renders nothing, a bare-string
+        root, and any throw out of the entry point or a user component. That last
+        set is exactly what a parse-only gate misses &mdash; a program can parse
+        perfectly and still render an empty tree:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Program</th><th><code>errors[0]</code></th></tr></thead>
+        <tbody>
+          <tr><td><code>$app(Card([Text("hi")], { gap: "md" }))</code></td><td><code>schema 1:6: Unknown prop "gap" on &lt;Card&gt;. Known props: children, variant, padding, onClick, href.</code></td></tr>
+          <tr><td><code>$x = 1</code></td><td><code>render: program has no UI root &mdash; add `$app(...)` (or `aktion = ...`).</code></td></tr>
+          <tr><td><code>$app(null)</code></td><td><code>render: the UI root is empty (renders nothing).</code></td></tr>
+          <tr><td><code>$app("hello")</code></td><td><code>render: the UI root is a bare string, not a component tree (root-not-renderable).</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Wire it as a build step over every program you ship. If your app is
+        multi-file, link it first &mdash; the Vite plugin does that for you, and
+        <a href="modules.html#entry">Modules</a> covers the entry-binding rule the
+        linker checks.
+      </p>
+
+      <h3 id="verify-live">Smoke-test the deployed page</h3>
+      <p>
+        A rendered deploy and a loaded deploy are different questions. The single
+        most common production failure is a bundle that 404s or is blocked by CSP,
+        which leaves <code>&lt;aktion-app&gt;</code> in the DOM as an inert unknown
+        element &mdash; no error, no banner, just nothing.
+      </p>
+<pre><code>// Run in the deployed page's console, or from Playwright / Puppeteer.
+const app = document.querySelector("aktion-app");
+console.log("upgraded:", !!app.shadowRoot);                        // false → bundle never loaded
+console.log("route:", app.route);                                  // router's current path
+console.log("atoms:", Object.keys(app.serializeState()).length);   // 0 → nothing planned
+app.addEventListener("error", (e) =&gt; console.error(e.detail.errors));</code></pre>
+      <p>
+        <code>app.shadowRoot</code> is the reliable liveness signal &mdash; the
+        element attaches an open shadow root in its constructor, so a truthy
+        <code>shadowRoot</code> proves the custom element was defined and upgraded.
+        Everything else can only be non-empty once a program has planned.
+      </p>
+      <ul>
+        <li>The bundle responds <strong>200</strong> with a JavaScript content type
+          and the immutable <code>Cache-Control</code> you intended &mdash; a
+          misconfigured host that serves <code>text/html</code> for a missing file
+          fails the module load with no network error.</li>
+        <li>The console carries <strong>no CSP violations</strong>. Icons and web
+          fonts load lazily, so click through at least one <code>Icon</code> and one
+          themed route before you call it clean (see
+          <a href="#csp-rollout">Report-Only</a>).</li>
+        <li>The <code>error</code> event fired zero times on first paint. Forward it
+          to your tracker permanently &mdash; see
+          <a href="#telemetry">telemetry</a>.</li>
+        <li>Session resumption round-trips:
+          <code>serializeState()</code> &rarr; persist &rarr;
+          <code>loadSnapshot()</code> restores the same UI (see
+          <a href="#rollback">Rollback</a>).</li>
+        <li><code>strict</code> is <strong>off</strong> in production and
+          <strong>on</strong> in staging. If your staging console is quiet with
+          <code>strict</code> on, the silent fallbacks
+          <a href="troubleshooting.html">troubleshooting</a> describes are not
+          firing.</li>
+      </ul>
+
+      <h2 id="checklist">Pre-launch checklist</h2>
+      <ul class="checklist">
+        <li>Runtime bundle is served with a <strong>pinned version</strong> and a long-lived <code>Cache-Control</code> (and an <code>integrity</code> hash if loaded cross-origin).</li>
+        <li><strong>Program-text trust is decided, not assumed.</strong> Leaving the default <code>"all"</code> policy means the program is as privileged as a <code>&lt;script&gt;</code> in your page; anything less than fully trusted needs <code>setGlobalAccessPolicy("safe")</code> plus a cross-origin sandboxed iframe (see <a href="security.html">Security</a>).</li>
+        <li>Any <strong>SSR entry</strong> that renders program text you did not author calls <code>setGlobalAccessPolicy("safe")</code> before the first <code>renderToString</code>, and runs in a low-privilege process (see <a href="#ssr">SSR</a>).</li>
+        <li><code>style-src</code> allows <code>'unsafe-inline'</code> (or carries a nonce/hash), and <code>font-src</code> covers any web fonts you use &mdash; <code>script-src</code> needs no <code>'unsafe-eval'</code> (see <a href="#csp">CSP</a>).</li>
+        <li>The policy shipped as <strong><code>Report-Only</code> first</strong> and its report endpoint was quiet before you promoted it to enforcing (see <a href="#csp-rollout">rollout</a>).</li>
+        <li><code>connect-src</code> lists every API the generated programs call.</li>
+        <li>The LLM API key lives <strong>server-side</strong> in an edge function; the browser never sees it.</li>
+        <li>The host <code>error</code> event is wired to your error tracker.</li>
+        <li><code>strict</code> stays <strong>on in staging</strong> and <strong>off in production</strong> (where partial output is expected).</li>
+        <li>Every program you ship passes a <code>renderToTextTree</code> gate in CI, and the deployed page passes the liveness check (see <a href="#verify">Verify a deploy</a>).</li>
+        <li>Session resumption is tested: <code>serializeState()</code> &rarr; persist &rarr; <code>loadSnapshot()</code> restores state on reload, and the stored payload carries the program text it belongs to (see <a href="#rollback">Rollback</a>).</li>
+        <li><strong>Rollback is rehearsed.</strong> The previous bundle URL is still reachable, the previous program text is still addressable, and you have reverted both together at least once.</li>
+      </ul>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="llm-integration.html">
+          <span class="demo-tag">Guide</span>
+          <h3>LLM integration</h3>
+          <p>Wire OpenAI / Anthropic / OpenRouter streams into <code>appendChunk</code>.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="errors.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Error handling</h3>
+          <p>The <code>error</code> event and the runtime guards.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="security.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Security &amp; the trust model</h3>
+          <p>Who is trusted, what <code>setGlobalAccessPolicy</code> buys you, and every sanitised sink.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+</body>
+</html>

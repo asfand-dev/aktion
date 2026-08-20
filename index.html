@@ -1,0 +1,2237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aktion — A new language for building UIs. Less code, any framework.</title>
+  <meta name="description" content="Aktion is a reactive UI language — a strict subset of JavaScript — that replaces your framework, component kit, router and i18n with one tag. 281 built-in components, 6 themes, fine-grained reactivity, full JS interop, and a fraction of the code. Can also be effectively used as a Micro-Frontend in React, Vue, Angular, Svelte, Next.js or any other Framework. LLM-friendly by design." />
+
+  <link rel="icon" type="image/png" href="assets/logo.png" />
+  <link rel="apple-touch-icon" href="assets/logo.png" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Aktion — A new language for building UIs" />
+  <meta property="og:description" content="A reactive UI language and runtime — a strict subset of JavaScript — that replaces your framework, component kit, router and i18n with one tag. Less code, any framework, LLM-friendly." />
+  <meta property="og:image" content="assets/logo.png" />
+
+  <script>
+    // Shared dark/light bootstrap with the docs (same localStorage key).
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+
+  <style>
+    /* ===================================================================
+       Design tokens
+       =================================================================== */
+    :root {
+      --ak-indigo: #6366f1;
+      --ak-violet: #8b5cf6;
+      --ak-pink:   #ec4899;
+      --ak-cyan:   #22d3ee;
+      --ak-emerald:#10b981;
+      --ak-amber:  #f59e0b;
+      --ak-blue:   #3b82f6;
+
+      --grad-brand: linear-gradient(120deg, #6366f1 0%, #8b5cf6 45%, #ec4899 100%);
+      --grad-brand-loop: linear-gradient(90deg,
+        #6366f1 0%,
+        #8b5cf6 16.66%,
+        #ec4899 33.33%,
+        #6366f1 50%,
+        #8b5cf6 66.66%,
+        #ec4899 83.33%,
+        #6366f1 100%);
+      --grad-cyan:  linear-gradient(120deg, #22d3ee 0%, #6366f1 100%);
+      --grad-warm:  linear-gradient(120deg, #f59e0b 0%, #ec4899 100%);
+      --grad-emerald: linear-gradient(120deg, #10b981 0%, #22d3ee 100%);
+
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --radius-sm: 10px;
+      --maxw: 1200px;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* Light theme */
+    html[data-doc-theme='light'] {
+      --bg:        #fbfaff;
+      --bg-2:      #ffffff;
+      --bg-soft:   #f3f1fc;
+      --surface:   rgba(255,255,255,0.7);
+      --surface-solid: #ffffff;
+      --border:    rgba(20,16,60,0.10);
+      --border-strong: rgba(20,16,60,0.16);
+      --text:      #14102b;
+      --text-soft: #443f63;
+      --text-mute: #6b6789;
+      --code-bg:   #0e0b1c;
+      --code-text: #e6e3ff;
+      --hero-glow: 0.55;
+      --nav-bg:    rgba(255,255,255,0.72);
+      --shadow:    0 24px 60px -24px rgba(60,40,160,0.30);
+      --shadow-sm: 0 8px 24px -10px rgba(60,40,160,0.22);
+      --dot:       rgba(99,102,241,0.14);
+      --fork-line: #aeb4cc;
+    }
+    /* Dark theme */
+    html[data-doc-theme='dark'] {
+      --bg:        #07060f;
+      --bg-2:      #0c0a18;
+      --bg-soft:   #120f24;
+      --surface:   rgba(20,17,40,0.55);
+      --surface-solid: #14112a;
+      --border:    rgba(255,255,255,0.09);
+      --border-strong: rgba(255,255,255,0.16);
+      --text:      #f3f1ff;
+      --text-soft: #c4c0e6;
+      --text-mute: #908bba;
+      --code-bg:   #08060f;
+      --code-text: #e6e3ff;
+      --hero-glow: 1;
+      --nav-bg:    rgba(10,8,22,0.66);
+      --shadow:    0 30px 70px -28px rgba(0,0,0,0.8);
+      --shadow-sm: 0 12px 30px -12px rgba(0,0,0,0.65);
+      --dot:       rgba(139,92,246,0.18);
+      --fork-line: #4e5577;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    h1,h2,h3,h4 { line-height: 1.1; letter-spacing: -0.02em; margin: 0; font-weight: 800; }
+    p { margin: 0; }
+    ::selection { background: rgba(139,92,246,0.35); color: #fff; }
+
+    .wrap { width: 100%; max-width: var(--maxw); margin-inline: auto; padding-inline: 24px; }
+
+    .grad-text {
+      background: var(--grad-brand);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    @keyframes gradShift { to { background-position: 100% center; } }
+
+    /* Scroll progress indicator */
+    #scrollProgress {
+      position: fixed; top: 0; left: 0; height: 3px; width: 0; z-index: 100;
+      background: var(--grad-brand-loop); background-size: 200% 100%;
+      box-shadow: 0 0 14px rgba(139,92,246,0.6); transition: width .08s linear;
+      animation: gradShift 7s linear infinite;
+    }
+
+    /* ===================================================================
+       Background decorations
+       =================================================================== */
+    #particles {
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      z-index: 0; pointer-events: none; opacity: var(--hero-glow);
+    }
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(var(--dot) 1px, transparent 1px),
+        linear-gradient(90deg, var(--dot) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 0%, transparent 70%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 0%, transparent 70%);
+    }
+    .blob {
+      position: fixed; border-radius: 50%; filter: blur(90px);
+      z-index: 0; pointer-events: none; opacity: calc(var(--hero-glow) * 0.7);
+      animation: floatBlob 18s var(--ease) infinite alternate;
+    }
+    .blob.b1 { width: 520px; height: 520px; top: -180px; left: -120px; background: radial-gradient(circle, #6366f1, transparent 70%); }
+    .blob.b2 { width: 460px; height: 460px; top: -80px; right: -140px; background: radial-gradient(circle, #ec4899, transparent 70%); animation-delay: -6s; }
+    .blob.b3 { width: 420px; height: 420px; top: 40%; left: 30%; background: radial-gradient(circle, #22d3ee, transparent 70%); animation-delay: -12s; opacity: calc(var(--hero-glow) * 0.4); }
+    @keyframes floatBlob {
+      0%   { transform: translate(0,0) scale(1); }
+      100% { transform: translate(60px, 50px) scale(1.15); }
+    }
+
+    .page { position: relative; z-index: 1; }
+
+    /* ===================================================================
+       Navigation
+       =================================================================== */
+    .nav {
+      position: sticky; top: 0; z-index: 50;
+      backdrop-filter: saturate(180%) blur(18px);
+      -webkit-backdrop-filter: saturate(180%) blur(18px);
+      background: var(--nav-bg);
+      border-bottom: 1px solid transparent;
+      transition: border-color .3s, background .3s;
+    }
+    .nav.scrolled { border-bottom-color: var(--border); box-shadow: var(--shadow-sm); }
+    .nav-inner { display: flex; align-items: center; gap: 28px; height: 66px; }
+    .brand { display: flex; align-items: center; gap: 11px; font-weight: 800; font-size: 18px; letter-spacing: -0.03em; }
+    .brand img { width: 34px; height: 34px; }
+    .brand .v { font-size: 11px; font-weight: 700; color: var(--text-mute); background: var(--bg-soft); border: 1px solid var(--border); padding: 2px 7px; border-radius: 99px; letter-spacing: .02em; }
+    .nav-links { display: flex; align-items: center; gap: 4px; margin-left: 8px; }
+    .nav-links a { font-size: 14.5px; font-weight: 500; color: var(--text-soft); padding: 8px 12px; border-radius: 9px; transition: .2s; }
+    .nav-links a:hover { color: var(--text); background: var(--bg-soft); }
+    .nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .icon-btn {
+      width: 40px; height: 40px; display: grid; place-items: center;
+      border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+      color: var(--text-soft); cursor: pointer; transition: .2s; font-size: 15px;
+    }
+    .icon-btn:hover { color: var(--text); border-color: var(--border-strong); transform: translateY(-1px); }
+    .btn {
+      display: inline-flex; align-items: center; gap: 9px; font-weight: 600; font-size: 14.5px;
+      padding: 11px 20px; border-radius: 11px; cursor: pointer; border: 1px solid transparent;
+      transition: transform .2s var(--ease), box-shadow .2s, filter .2s; white-space: nowrap;
+    }
+    .btn-primary { background: var(--grad-brand); color: #fff; box-shadow: 0 10px 28px -8px rgba(124,58,237,0.6); background-size: 160% 160%; }
+    .btn-primary:hover { transform: translateY(-2px); filter: brightness(1.08); box-shadow: 0 16px 36px -10px rgba(124,58,237,0.7); }
+    .btn-ghost { background: var(--surface); border-color: var(--border); color: var(--text); }
+    .btn-ghost:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+    .nav-burger { display: none; }
+
+    /* Mobile dropdown menu — hidden by default, shown via .is-open < 760px */
+    .mobile-menu {
+      position: absolute; top: 100%; left: 0; right: 0;
+      background: var(--surface-solid); border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow); display: none; z-index: 49;
+      max-height: calc(100vh - 66px); overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .mobile-menu-inner { display: flex; flex-direction: column; gap: 4px; padding-block: 14px 18px; }
+    .mobile-menu-inner a {
+      display: flex; align-items: center; gap: 12px; font-size: 16px; font-weight: 600;
+      color: var(--text-soft); padding: 13px 14px; border-radius: 11px; transition: .15s;
+    }
+    .mobile-menu-inner a:hover, .mobile-menu-inner a:focus-visible { color: var(--text); background: var(--bg-soft); }
+    .mobile-menu-inner a i { width: 20px; text-align: center; color: var(--text-mute); }
+    .mobile-menu-inner .mobile-menu-cta { justify-content: center; color: #fff; margin-top: 8px; }
+    .mobile-menu-inner .mobile-menu-cta i { color: #fff; }
+    .mobile-menu-backdrop {
+      position: fixed; inset: 0; z-index: 40; background: rgba(10,8,22,0.4);
+      backdrop-filter: blur(2px); opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    .mobile-menu-backdrop.is-open { opacity: 1; pointer-events: auto; }
+
+    /* ===================================================================
+       Hero
+       =================================================================== */
+    .hero { padding: 70px 0 40px; position: relative; }
+    .badge-pill {
+      display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600;
+      padding: 7px 7px 7px 14px; border-radius: 99px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text-soft); margin-bottom: 26px;
+      box-shadow: var(--shadow-sm); animation: fadeUp .7s var(--ease) both;
+    }
+    .badge-pill .tag { background: var(--grad-brand); color: #fff; padding: 3px 9px; border-radius: 99px; font-size: 11px; font-weight: 700; letter-spacing: .03em; }
+    .hero h1 {
+      font-size: clamp(38px, 6.4vw, 76px); font-weight: 900; letter-spacing: -0.035em;
+      max-width: 16ch; margin-bottom: 22px; animation: fadeUp .7s var(--ease) .05s both;
+    }
+    .hero .lead {
+      font-size: clamp(16px, 2vw, 21px); color: var(--text-soft); max-width: 60ch;
+      margin-bottom: 32px; animation: fadeUp .7s var(--ease) .12s both;
+    }
+    .hero-cta { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; animation: fadeUp .7s var(--ease) .18s both; }
+    .hero-note { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-mute); margin-top: 22px; animation: fadeUp .7s var(--ease) .24s both; }
+    .hero-note i { color: var(--ak-emerald); }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+
+    /* Hero showcase: code + live preview */
+    .showcase { margin-top: 64px; animation: fadeUp .8s var(--ease) .3s both; }
+    .window {
+      border-radius: var(--radius-lg); border: 1px solid var(--border);
+      background: var(--surface); backdrop-filter: blur(12px);
+      box-shadow: var(--shadow); overflow: hidden;
+    }
+    .window-bar {
+      display: flex; align-items: center; gap: 8px; padding: 13px 18px;
+      border-bottom: 1px solid var(--border); background: var(--bg-soft);
+    }
+    .window-bar .dots { display: flex; gap: 7px; }
+    .window-bar .dots i { width: 12px; height: 12px; border-radius: 50%; }
+    .window-bar .dots i:nth-child(1){ background:#ff5f57;} .window-bar .dots i:nth-child(2){ background:#febc2e;} .window-bar .dots i:nth-child(3){ background:#28c840;}
+    .window-bar .file { margin-left: 8px; font-family: var(--font-mono); font-size: 12.5px; color: var(--text-mute); }
+    .window-bar .live { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--ak-emerald); }
+    .window-bar .live .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ak-emerald); box-shadow: 0 0 0 0 rgba(16,185,129,.6); animation: pulse 1.8s infinite; }
+    @keyframes pulse { 0%{ box-shadow:0 0 0 0 rgba(16,185,129,.55);} 70%{ box-shadow:0 0 0 9px rgba(16,185,129,0);} 100%{ box-shadow:0 0 0 0 rgba(16,185,129,0);} }
+
+    .split { display: grid; grid-template-columns: 1fr 1fr; }
+    @media (max-width: 900px){ .split { grid-template-columns: 1fr; } }
+    .code-pane { background: var(--code-bg); padding: 22px 22px; overflow: auto; }
+    .code-pane pre { margin: 0; font-family: var(--font-mono); font-size: 13px; line-height: 1.75; color: var(--code-text); }
+    .preview-pane {
+      padding: 22px; min-width: 0; border-left: 1px solid var(--border);
+      background:
+        radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0) 0 0 / 22px 22px,
+        var(--bg-2);
+    }
+    @media (max-width: 900px){ .preview-pane { border-left: none; border-top: 1px solid var(--border); } }
+    .preview-pane aktion-app { display: block; }
+
+    /* token coloring (lightweight) */
+    .tk-sig { color: #c4b5fd; } .tk-fn { color: #7dd3fc; } .tk-str { color: #86efac; }
+    .tk-key { color: #f0abfc; } .tk-pun { color: #94a3b8; } .tk-num { color: #fdba74; }
+
+    /* ===================================================================
+       Marquee / works everywhere
+       =================================================================== */
+    .everywhere { padding: 56px 0 20px; text-align: center; }
+    .everywhere .klabel { font-size: 12.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--text-mute); margin-bottom: 28px; }
+    .logos { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
+    .logo-chip {
+      display: inline-flex; align-items: center; gap: 11px; font-weight: 600; font-size: 15px;
+      color: var(--text-soft); padding: 12px 20px; border-radius: 14px;
+      border: 1px solid var(--border); background: var(--surface); transition: .25s;
+    }
+    .logo-chip i { font-size: 22px; }
+    .logo-chip:hover { transform: translateY(-3px); border-color: var(--border-strong); color: var(--text); box-shadow: var(--shadow-sm); }
+    .fa-react { color: #61dafb; } .fa-vuejs { color: #42b883; } .fa-angular { color: #dd0031; }
+    .fa-html5 { color: #e34f26; } .fa-js { color: #f7df1e; } .fa-node { color: #539e43; }
+
+    /* ===================================================================
+       Section scaffolding
+       =================================================================== */
+    section { position: relative; }
+    .section { padding: 96px 0; }
+    .section-head { max-width: 720px; margin: 0 auto 60px; text-align: center; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase; color: var(--ak-violet); margin-bottom: 16px;
+    }
+    .eyebrow .line { width: 26px; height: 2px; background: var(--grad-brand); border-radius: 2px; }
+    .section-head h2 { font-size: clamp(28px, 4vw, 46px); font-weight: 900; margin-bottom: 18px; }
+    .section-head p { font-size: 17px; color: var(--text-soft); }
+
+    .reveal { opacity: 0; transform: translateY(34px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
+    .reveal.in { opacity: 1; transform: none; }
+
+    /* ===================================================================
+       Stats infographic
+       =================================================================== */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+    @media (max-width: 820px){ .stats { grid-template-columns: repeat(2, 1fr); } }
+    .stat {
+      border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-md);
+      padding: 28px 24px; position: relative; overflow: hidden; backdrop-filter: blur(8px);
+    }
+    .stat::before { content:""; position:absolute; inset:0 auto 0 0; width:10px; background: var(--grad-brand); }
+    .stat .num { font-size: clamp(30px, 4vw, 44px); font-weight: 900; letter-spacing: -0.03em; }
+    .stat .lbl { font-size: 14px; color: var(--text-mute); margin-top: 6px; }
+    .stat:nth-child(2)::before { background: var(--grad-cyan); }
+    .stat:nth-child(3)::before { background: var(--grad-emerald); }
+    .stat:nth-child(4)::before { background: var(--grad-warm); }
+
+    /* ===================================================================
+       Bento feature grid
+       =================================================================== */
+    .bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 18px; }
+    .card {
+      border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-lg);
+      padding: 30px; position: relative; overflow: hidden; backdrop-filter: blur(8px);
+      transition: transform .3s var(--ease), border-color .3s, box-shadow .3s;
+    }
+    .card:hover { transform: translateY(-5px); border-color: var(--border-strong); box-shadow: var(--shadow); }
+    /* cursor spotlight on interactive cards */
+    .card, .demo-card, .stat { --mx: 50%; --my: 50%; }
+    .card::after, .demo-card::after, .stat::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background: radial-gradient(220px circle at var(--mx) var(--my), rgba(139,92,246,0.12), transparent 62%);
+      opacity: 0; transition: opacity .35s var(--ease);
+    }
+    .card:hover::after, .demo-card:hover::after, .stat:hover::after { opacity: 1; }
+    .card .ic {
+      width: 50px; height: 50px; border-radius: 14px; display: grid; place-items: center;
+      font-size: 21px; color: #fff; margin-bottom: 18px; box-shadow: var(--shadow-sm);
+    }
+    .card h3 { font-size: 20px; margin-bottom: 10px; }
+    .card p { color: var(--text-soft); font-size: 15px; }
+    .card .glow { position: absolute; width: 200px; height: 200px; border-radius: 50%; filter: blur(60px); opacity: .18; top: -60px; right: -60px; pointer-events: none; }
+    .span-3 { grid-column: span 3; } .span-2 { grid-column: span 2; } .span-4 { grid-column: span 4; }
+    @media (max-width: 900px){ .bento { grid-template-columns: 1fr; } .span-3,.span-2,.span-4 { grid-column: auto; } }
+    .g-indigo { background: var(--grad-brand); } .g-cyan { background: var(--grad-cyan); }
+    .g-emerald { background: var(--grad-emerald); } .g-warm { background: var(--grad-warm); }
+    .g-blue { background: linear-gradient(120deg,#3b82f6,#6366f1); }
+    .g-amber { background: linear-gradient(120deg,#f59e0b,#f43f5e); }
+
+    .mini-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .mini-chips span { font-family: var(--font-mono); font-size: 12px; padding: 5px 10px; border-radius: 8px; background: var(--bg-soft); border: 1px solid var(--border); color: var(--text-soft); }
+
+    /* ===================================================================
+       Streaming infographic
+       =================================================================== */
+    .flow {
+      display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 18px;
+      border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-lg);
+      padding: 40px; backdrop-filter: blur(8px);
+    }
+    @media (max-width: 900px){
+      .flow { grid-template-columns: 1fr; padding: 28px 20px; gap: 8px; }
+      .flow .arrow { display: flex; justify-content: center; }
+      .flow .arrow i { animation: nudgeDown 1.4s var(--ease) infinite; }
+    }
+    .flow-node { text-align: center; }
+    .flow-node .ring {
+      width: 84px; height: 84px; margin: 0 auto 16px; border-radius: 22px; display: grid; place-items: center;
+      font-size: 30px; color: #fff; box-shadow: var(--shadow-sm); position: relative;
+    }
+    .flow-node h4 { font-size: 16px; margin-bottom: 6px; }
+    .flow-node p { font-size: 13.5px; color: var(--text-mute); }
+    .flow .arrow { font-size: 22px; color: var(--ak-violet); }
+    .flow .arrow i { animation: nudge 1.4s var(--ease) infinite; }
+    @keyframes nudge { 0%,100%{ transform: translateX(0);} 50%{ transform: translateX(6px);} }
+    @keyframes nudgeDown { 0%,100%{ transform: rotate(90deg) translateX(0);} 50%{ transform: rotate(90deg) translateX(6px);} }
+
+    /* token stream visual */
+    .stream-demo { margin-top: 26px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm); }
+    .stream-grid { display: grid; grid-template-columns: 1fr 1fr; }
+    @media (max-width: 760px){ .stream-grid { grid-template-columns: 1fr; } .btn-get-started { display: none; } }
+    .stream-code { background: var(--code-bg); color: var(--code-text); font-family: var(--font-mono); font-size: 12.5px; padding: 20px; min-height: 220px; }
+    .stream-code .ln { display: block; opacity: 0; transform: translateY(6px); }
+    .stream-out { padding: 20px; background: var(--bg-2); border-left: 1px solid var(--border); }
+    @media (max-width: 760px){ .stream-out { border-left: none; border-top: 1px solid var(--border); } }
+    .cursor { display:inline-block; width:8px; height:15px; background: var(--ak-violet); margin-left:2px; animation: blink 1s steps(2) infinite; vertical-align: middle; }
+    @keyframes blink { 0%,50%{ opacity:1;} 51%,100%{ opacity:0;} }
+
+    /* ===================================================================
+       Live chat streaming showcase (LLM → live UI)
+       =================================================================== */
+    .chat-stage { max-width: 1024px; margin: 0 auto; }
+    .chat-window { border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface-solid); box-shadow: var(--shadow); overflow: hidden; }
+    .chat-window .window-bar .file { color: var(--text-soft); font-family: var(--font-sans); font-size: 13.5px; font-weight: 600; }
+    .chat-body {
+      padding: 24px; display: flex; flex-direction: column; gap: 18px; min-height: 460px;
+      background:
+        radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0) 0 0 / 22px 22px,
+        var(--bg-2);
+    }
+    .chat-user {
+      align-self: flex-end; max-width: 82%; padding: 13px 18px; font-size: 15px; font-weight: 600;
+      color: #2a1c02; background: linear-gradient(125deg, #fbbf24, #f59e0b);
+      border-radius: 18px 18px 5px 18px; box-shadow: 0 10px 24px -12px rgba(245,158,11,.7);
+      animation: chatIn .4s var(--ease) both;
+    }
+    .chat-reply { display: flex; gap: 12px; align-items: flex-start; animation: chatIn .4s var(--ease) .05s both; }
+    .chat-avatar {
+      flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+      font-size: 15px; color: #2a1c02; background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      box-shadow: var(--shadow-sm);
+    }
+    .chat-intro {
+      background: var(--bg-soft); border: 1px solid var(--border); color: var(--text-soft);
+      padding: 12px 16px; border-radius: 5px 16px 16px 16px; font-size: 14.5px; line-height: 1.5;
+    }
+    .chat-render { animation: chatIn .45s var(--ease) both; margin-top: -18px;}
+    .chat-render aktion-app { display: block; }
+    .chat-typing {
+      display: inline-flex; align-items: center; gap: 5px; padding: 15px 16px;
+      background: var(--bg-soft); border: 1px solid var(--border);
+      border-radius: 5px 16px 16px 16px;
+    }
+    .chat-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-mute); animation: chatTyping 1.2s infinite ease-in-out; }
+    .chat-typing span:nth-child(2) { animation-delay: .15s; }
+    .chat-typing span:nth-child(3) { animation-delay: .3s; }
+    @keyframes chatTyping { 0%, 60%, 100% { transform: translateY(0); opacity: .35; } 30% { transform: translateY(-4px); opacity: 1; } }
+    @keyframes chatIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+    .chat-foot { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 14px 18px; border-top: 1px solid var(--border); background: var(--bg-soft); }
+    .chat-arrow {
+      width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--surface); color: var(--text-soft);
+      cursor: pointer; transition: .2s; font-size: 13px;
+    }
+    .chat-arrow:hover { color: var(--text); border-color: var(--border-strong); transform: translateY(-1px); }
+    .chat-dots { display: flex; align-items: center; gap: 8px; }
+    .chat-dots button {
+      width: 9px; height: 9px; padding: 0; border: none; border-radius: 99px; cursor: pointer;
+      background: var(--border-strong); transition: width .3s var(--ease), background .3s;
+    }
+    .chat-dots button:hover { background: var(--text-mute); }
+    .chat-dots button.active { width: 30px; background: var(--ak-amber); }
+
+    /* ===================================================================
+       Reactivity infographic
+       =================================================================== */
+    .react-split { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: center; }
+    @media (max-width: 900px){ .react-split { grid-template-columns: 1fr; } }
+    .feature-list { list-style: none; padding: 0; margin: 26px 0 0; display: grid; gap: 16px; }
+    .feature-list li { display: flex; gap: 14px; }
+    .feature-list .tick { flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--grad-emerald); color: #fff; font-size: 13px; box-shadow: var(--shadow-sm); }
+    .feature-list b { display: block; font-size: 15.5px; }
+    .feature-list span { color: var(--text-soft); font-size: 14.5px; }
+
+    .react-diagram { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-lg); padding: 30px; backdrop-filter: blur(8px); box-shadow: var(--shadow-sm); }
+
+    /* ===================================================================
+       Comparison table
+       =================================================================== */
+    .compare-wrap { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface); backdrop-filter: blur(8px); box-shadow: var(--shadow-sm); }
+    table.compare { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+    table.compare th, table.compare td { padding: 16px 18px; text-align: left; border-bottom: 1px solid var(--border); }
+    table.compare thead th { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-mute); background: var(--bg-soft); }
+    table.compare thead th.ak { color: var(--ak-violet); }
+    table.compare th.ak, table.compare td.ak { background: linear-gradient(180deg, rgba(139,92,246,0.08), rgba(236,72,153,0.04)); }
+    table.compare td.feat { font-weight: 600; color: var(--text); }
+    table.compare tr:last-child td { border-bottom: none; }
+    .yes { color: var(--ak-emerald); } .no { color: #ef4444; } .meh { color: var(--ak-amber); }
+    table.compare td i { font-size: 15px; }
+    .compare-scroll { overflow-x: auto; }
+
+    /* ===================================================================
+       Less-code side-by-side
+       =================================================================== */
+    .codecmp { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: stretch; }
+    @media (max-width: 900px){ .codecmp { grid-template-columns: 1fr; } }
+    .codecmp .window { display: flex; flex-direction: column; }
+    .codecmp .code-pane { flex: 1; }
+    .codecmp pre { white-space: pre-wrap; }
+    .lines { margin-left: auto; font-size: 11.5px; font-weight: 700; letter-spacing: .02em; padding: 3px 10px; border-radius: 99px; }
+    .lines-react { color: #f87171; background: rgba(248,113,113,0.14); border: 1px solid rgba(248,113,113,0.3); }
+    .lines-ak { color: #34d399; background: rgba(52,211,153,0.14); border: 1px solid rgba(52,211,153,0.3); }
+    .codecmp-foot { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: 26px; }
+    .metric { display: inline-flex; align-items: center; gap: 9px; font-size: 14.5px; color: var(--text-soft); font-weight: 500; padding: 12px 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+    .metric b { font-size: 22px; font-weight: 900; }
+    .tk-c { color: #64748b; } .tk-s { color: #86efac; } .tk-k { color: #c4b5fd; } .tk-f { color: #7dd3fc; } .tk-t { color: #f0abfc; }
+
+    /* ===================================================================
+       Component showcase
+       =================================================================== */
+    .demo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    @media (max-width: 980px){ .demo-grid { grid-template-columns: 1fr; } }
+    .demo-card { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--surface); transition: .3s; }
+    .demo-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: var(--border-strong); }
+    .demo-card .head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; color: var(--text-soft); background: var(--bg-soft); }
+    .demo-card .head i { color: var(--ak-violet); }
+    .demo-card .body { padding: 20px; background: var(--bg-2); }
+    .demo-card .body aktion-app { display: block; }
+
+    /* ===================================================================
+       Themes strip
+       =================================================================== */
+    .themes-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    @media (max-width: 900px){ .themes-row { grid-template-columns: repeat(2, 1fr); } }
+    .swatch { border-radius: var(--radius-md); padding: 22px; border: 1px solid var(--border); position: relative; overflow: hidden; min-height: 132px; display: flex; flex-direction: column; justify-content: flex-end; transition: .3s; }
+    .swatch:hover { transform: translateY(-4px) scale(1.01); box-shadow: var(--shadow); }
+    .swatch .name { font-weight: 700; font-size: 15px; }
+    .swatch .dots { display: flex; gap: 6px; margin-bottom: 12px; }
+    .swatch .dots i { width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+    .sw-light { background:#ffffff; color:#14102b; } .sw-light .name{color:#14102b;}
+    .sw-dark { background:#0e0b1c; color:#fff; }
+    .sw-corporate { background:linear-gradient(160deg,#0d1f22,#0f766e); color:#a7f3ea; }
+    .sw-soft { background:#fff5fb; color:#7c3aed; }
+    .sw-glass { background:linear-gradient(160deg,#eef0f3,#efe4ec); color:#33303a; }
+    .sw-modern { background:#f4f5f7; color:#111827; border:1px solid #ebedf1; }
+    .sw-custom { background: var(--grad-brand); color:#fff; }
+
+    /* ===================================================================
+       Developer / LLM section
+       =================================================================== */
+    .dev-split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+    @media (max-width: 900px){ .dev-split { grid-template-columns: 1fr; } }
+    .terminal { border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow); }
+    .terminal .window-bar { background: #161325; }
+    html[data-doc-theme='light'] .terminal .window-bar { background: #1b1730; }
+    .terminal .file { color: #cbd5e1 !important; }
+    .terminal-body { background: var(--code-bg); padding: 24px; font-family: var(--font-mono); font-size: 13px; line-height: 1.85; color: var(--code-text); }
+    .terminal-body .pr { color: #818cf8; } .terminal-body .ok { color: #4ade80; } .terminal-body .cm { color: #64748b; }
+
+    /* ===================================================================
+       Final CTA
+       =================================================================== */
+    .cta {
+      border-radius: 28px; padding: 64px 40px; text-align: center; position: relative; overflow: hidden;
+      background: linear-gradient(130deg, #4f46e5, #7c3aed 45%, #db2777);
+      box-shadow: 0 40px 90px -30px rgba(124,58,237,0.7);
+    }
+    .cta::before { content:""; position:absolute; inset:0; background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,.18) 1px, transparent 0); background-size: 26px 26px; opacity:.5; mask-image: radial-gradient(ellipse at center, #000, transparent 75%); }
+    .cta h2 { font-size: clamp(28px, 4vw, 46px); color: #fff; margin-bottom: 16px; position: relative; }
+    .cta p { color: rgba(255,255,255,0.9); font-size: 18px; max-width: 56ch; margin: 0 auto 30px; position: relative; }
+    .cta .hero-cta { justify-content: center; position: relative; }
+    .cta .btn-ghost { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.3); color: #fff; }
+    .cta .btn-white { background: #fff; color: #4f46e5; }
+    .cta .btn-white:hover { transform: translateY(-2px); }
+
+    .cta-snippet { margin-top: 30px; display: inline-flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 13.5px; color: #fff; background: rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.22); padding: 12px 16px; border-radius: 12px; position: relative; }
+    .cta-snippet button { background: rgba(255,255,255,0.16); border: none; color: #fff; cursor: pointer; border-radius: 8px; width: 30px; height: 30px; }
+    .cta-snippet button:hover { background: rgba(255,255,255,0.3); }
+
+    /* ===================================================================
+       Footer
+       =================================================================== */
+    footer { border-top: 1px solid var(--border); padding: 56px 0 40px; margin-top: 40px; }
+    .foot-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 36px; }
+    @media (max-width: 820px){ .foot-grid { grid-template-columns: 1fr 1fr; } }
+    .foot-brand p { color: var(--text-mute); font-size: 14px; margin-top: 14px; max-width: 34ch; }
+    .foot-col h5 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-mute); margin-bottom: 14px; }
+    .foot-col a { display: block; color: var(--text-soft); font-size: 14.5px; padding: 5px 0; transition: .2s; }
+    .foot-col a:hover { color: var(--text); transform: translateX(3px); }
+    .foot-bottom { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--text-mute); font-size: 13.5px; }
+    .foot-social { display: flex; gap: 10px; }
+
+    /* Burger nav up to 1080px: the full six-link nav needs ~1037px to fit, so
+       it overflows on tablets — show the dropdown menu instead below that. */
+    @media (max-width: 1080px){
+      .nav-links { display: none; }
+      .nav-burger { display: grid; }
+      .mobile-menu.is-open { display: block; }
+    }
+    @media (max-width: 760px){
+      .hero { padding: 48px 0 20px; }
+      .section { padding: 70px 0; }
+      .chat-body { min-height: 340px; padding: 18px; }
+      .cta { padding: 48px 24px; border-radius: 20px; }
+      .cta-snippet { font-size: 12px; gap: 8px; padding: 10px 12px; overflow-x: auto; max-width: 100%; }
+    }
+    @media (max-width: 480px){
+      .section { padding: 50px 0; }
+      .section-head { margin-bottom: 36px; }
+      .section-head p { font-size: 15px; }
+      .stats { grid-template-columns: 1fr; }
+      .themes-row { grid-template-columns: 1fr; }
+      .foot-grid { grid-template-columns: 1fr; }
+      .cta { padding: 36px 18px; border-radius: 16px; }
+      .cta-snippet { flex-wrap: wrap; justify-content: center; word-break: break-all; }
+      .stream-code { font-size: 11px; padding: 14px; min-height: 180px; }
+      .code-pane pre { font-size: 11.5px; }
+      .hero-note { font-size: 12px; flex-wrap: wrap; }
+      .badge-pill { font-size: 12px; }
+      .logo-chip { font-size: 13.5px; padding: 10px 14px; }
+    }
+    @media (prefers-reduced-motion: reduce){
+      * { animation: none !important; transition: none !important; }
+      .reveal { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="scrollProgress" aria-hidden="true"></div>
+  <canvas id="particles" aria-hidden="true"></canvas>
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="blob b1" aria-hidden="true"></div>
+  <div class="blob b2" aria-hidden="true"></div>
+  <div class="blob b3" aria-hidden="true"></div>
+
+  <div class="page">
+    <!-- ============================ NAV ============================ -->
+    <header class="nav" id="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="index.html">
+          <img src="assets/logo.png" alt="Aktion logo" />
+          <span>Aktion</span>
+          <span class="v">v0.6.4</span>
+        </a>
+        <nav class="nav-links">
+          <a href="get-started.html">Docs</a>
+          <a href="tutorial.html">Tutorial</a>
+          <a href="components.html">Components</a>
+          <a href="themes.html">Themes</a>
+          <a href="live-demos.html">Demos</a>
+          <a href="playground.html">Playground</a>
+        </nav>
+        <div class="nav-right">
+          <button class="icon-btn" id="themeToggle" aria-label="Toggle dark mode" title="Toggle theme">
+            <i class="fa-solid fa-moon"></i>
+          </button>
+          <a class="icon-btn" href="https://github.com/asfand-dev/aktion" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">
+            <i class="fa-brands fa-github"></i>
+          </a>
+          <a class="btn btn-primary btn-get-started" href="get-started.html"><i class="fa-solid fa-bolt"></i> Get started</a>
+          <button class="icon-btn nav-burger" id="burger" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu"><i class="fa-solid fa-bars"></i></button>
+        </div>
+      </div>
+      <!-- Mobile dropdown menu (shown < 760px when burger is tapped) -->
+      <div class="mobile-menu" id="mobileMenu">
+        <nav class="wrap mobile-menu-inner">
+          <a href="get-started.html"><i class="fa-solid fa-book"></i> Docs</a>
+          <a href="tutorial.html"><i class="fa-solid fa-gamepad"></i> Tutorial</a>
+          <a href="components.html"><i class="fa-solid fa-shapes"></i> Components</a>
+          <a href="themes.html"><i class="fa-solid fa-palette"></i> Themes</a>
+          <a href="live-demos.html"><i class="fa-solid fa-wand-magic-sparkles"></i> Demos</a>
+          <a href="playground.html"><i class="fa-solid fa-play"></i> Playground</a>
+          <a class="btn btn-primary mobile-menu-cta" href="get-started.html"><i class="fa-solid fa-bolt"></i> Get started</a>
+        </nav>
+      </div>
+    </header>
+    <div class="mobile-menu-backdrop" id="mobileMenuBackdrop" aria-hidden="true"></div>
+
+    <!-- ============================ HERO ============================ -->
+    <section class="hero">
+      <div class="wrap">
+        <span class="badge-pill">
+          <span class="tag">v0.6.4</span>
+          A new language for building user interfaces
+          <i class="fa-solid fa-arrow-right" style="font-size:11px;color:var(--text-mute)"></i>
+        </span>
+        <h1>Build complex UIs in <span class="grad-text">a fraction of the code</span>.</h1>
+        <p class="lead">
+          Aktion is a reactive UI language — a <strong>strict subset of JavaScript</strong> you
+          already know. It replaces your framework, component kit, router and i18n with
+          <strong>one tag</strong>: 281 built-in components, fine-grained reactivity, 6 themes,
+          and full JS interop — no JSX, no bundler, no boilerplate. Can also be effectively used
+          as a Micro-Frontend in React, Vue, Angular, Svelte, Next.js or any other Framework.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="get-started.html"><i class="fa-solid fa-rocket"></i> Start building</a>
+          <a class="btn btn-ghost" href="tutorial.html"><i class="fa-solid fa-gamepad"></i> Interactive tutorial</a>
+          <a class="btn btn-ghost" href="playground.html"><i class="fa-solid fa-play"></i> Open the playground</a>
+        </div>
+        <div class="hero-note">
+          <i class="fa-solid fa-circle-check"></i> Learn it in an afternoon · Runs in any framework · LLM-friendly by design
+        </div>
+
+        <!-- showcase window -->
+        <div class="showcase reveal">
+          <div class="window">
+            <div class="window-bar">
+              <span class="dots"><i></i><i></i><i></i></span>
+              <span class="file">reply.aktion</span>
+              <span class="live"><span class="dot"></span> Live render</span>
+            </div>
+            <div class="split">
+              <div class="code-pane">
+<pre data-demo>$app(Column([
+  PageHeader("Project Atlas", { subtitle: "12 active · 4 at risk", badge: Badge("On track", { tone: "success" }) }),
+  Grid([
+    StatCard("Revenue", { value: "$48.2k", trend: "up", delta: "+12%", icon: "sack-dollar" }),
+    StatCard("Users", { value: "12,540", trend: "up", delta: "+184", icon: "users" }),
+    StatCard("Churn", { value: "1.4%", trend: "down", delta: "-0.3%", icon: "arrow-trend-down" })
+  ], { gap: "md", minChildWidth: "150px" }),
+  Card([
+    CardHeader("Welcome back"),
+    Text("This dashboard streamed in as plain text and rendered as a live UI.")
+  ])
+], { gap: "lg" }))</pre>
+              </div>
+              <div class="preview-pane"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== WORKS EVERYWHERE ===================== -->
+    <section class="everywhere">
+      <div class="wrap">
+        <p class="klabel">One custom element · drop it anywhere</p>
+        <div class="logos reveal">
+          <span class="logo-chip"><i class="fa-brands fa-react"></i> React</span>
+          <span class="logo-chip"><i class="fa-brands fa-vuejs"></i> Vue</span>
+          <span class="logo-chip"><i class="fa-brands fa-angular"></i> Angular</span>
+          <span class="logo-chip"><i class="fa-brands fa-js"></i> Svelte</span>
+          <span class="logo-chip"><i class="fa-brands fa-html5"></i> Plain HTML</span>
+          <span class="logo-chip"><i class="fa-brands fa-node-js"></i> No framework</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== LESS CODE ======================== -->
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="line"></span> Less code, more shipping <span class="line"></span></span>
+          <h2>The same UI, <span class="grad-text">a fraction of the code</span>.</h2>
+          <p>No imports, no CSS files, no build config. Describe the interface as plain data and Aktion owns the DOM, the styling, and the updates.</p>
+        </div>
+
+        <div class="codecmp reveal">
+          <div class="window">
+            <div class="window-bar">
+              <span class="dots"><i></i><i></i><i></i></span>
+              <span class="file">Counter.jsx</span>
+              <span class="lines lines-react">React · 3 files</span>
+            </div>
+            <div class="code-pane">
+<pre><span class="tk-k">import</span> { useState } <span class="tk-k">from</span> <span class="tk-s">"react"</span>
+<span class="tk-k">import</span> <span class="tk-s">"./Counter.css"</span>
+
+<span class="tk-k">export function</span> <span class="tk-f">Counter</span>() {
+  <span class="tk-k">const</span> [count, setCount] = <span class="tk-f">useState</span>(0)
+  <span class="tk-k">return</span> (
+    &lt;<span class="tk-t">div</span> className=<span class="tk-s">"card"</span>&gt;
+      &lt;<span class="tk-t">h3</span>&gt;Counter&lt;/<span class="tk-t">h3</span>&gt;
+      &lt;<span class="tk-t">p</span> className=<span class="tk-s">"value"</span>&gt;{count}&lt;/<span class="tk-t">p</span>&gt;
+      &lt;<span class="tk-t">button</span> className=<span class="tk-s">"btn"</span>
+        onClick={() =&gt; <span class="tk-f">setCount</span>(c =&gt; c + 1)}&gt;
+        Increment
+      &lt;/<span class="tk-t">button</span>&gt;
+    &lt;/<span class="tk-t">div</span>&gt;
+  )
+}
+<span class="tk-c">/* + Counter.css + bundler + JSX build */</span></pre>
+            </div>
+          </div>
+
+          <div class="window">
+            <div class="window-bar">
+              <span class="dots"><i></i><i></i><i></i></span>
+              <span class="file">counter.aktion</span>
+              <span class="lines lines-ak">Aktion · 1 file</span>
+            </div>
+            <div class="code-pane">
+<pre><span class="tk-c">// no imports · no CSS · no build</span>
+$count = 0
+
+<span class="tk-f">$app</span>(<span class="tk-f">Card</span>([
+  <span class="tk-f">CardHeader</span>(<span class="tk-s">"Counter"</span>),
+  <span class="tk-f">Text</span>(<span class="tk-s">`${$count}`</span>),
+  <span class="tk-f">Button</span>(<span class="tk-s">"Increment"</span>, { onClick: () =&gt; { $count = $count + 1 } })
+]))</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="codecmp-foot reveal">
+          <span class="metric"><b class="grad-text">~60%</b> less code</span>
+          <span class="metric"><b class="grad-text">0</b> build config</span>
+          <span class="metric"><b class="grad-text">1</b> file, not three</span>
+          <span class="metric"><b class="grad-text">∞</b> styled &amp; themeable</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== FEATURES (BENTO) ======================== -->
+    <section class="section" id="features">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="line"></span> Why developers switch <span class="line"></span></span>
+          <h2>One language. <span class="grad-text">Everything a frontend needs.</span></h2>
+          <p>Components, state, routing, theming, i18n and data — built in, batteries included. No glueing together five libraries, no build pipeline, no boilerplate.</p>
+        </div>
+
+        <div class="bento">
+          <article class="card span-3 reveal">
+            <span class="glow g-indigo"></span>
+            <div class="ic g-indigo"><i class="fa-solid fa-feather"></i></div>
+            <h3>Looks like JavaScript — because it is</h3>
+            <p>Aktion is a <strong>strict subset of JS</strong> you already know: <code>function</code>, <code>for…of</code>, template literals, arrow functions, destructuring, optional chaining. Nothing new to memorize, no JSX.</p>
+            <div class="mini-chips"><span>subset of JS</span><span>no JSX</span><span>no build</span></div>
+          </article>
+
+          <article class="card span-3 reveal">
+            <span class="glow g-cyan"></span>
+            <div class="ic g-cyan"><i class="fa-solid fa-bolt"></i></div>
+            <h3>One reactive sigil — <code>$state</code></h3>
+            <p>Declare state with <code>$name = value</code>, read it in your tree, write it in a function. The runtime tracks dependencies automatically at <strong>path granularity</strong> — no hooks rules, no <code>useMemo</code> dance.</p>
+            <div class="mini-chips"><span>$count = 0</span><span>auto-tracked</span><span>fine-grained</span></div>
+          </article>
+
+          <article class="card span-2 reveal">
+            <span class="glow g-emerald"></span>
+            <div class="ic g-emerald"><i class="fa-solid fa-cubes"></i></div>
+            <h3>281 components</h3>
+            <p>Layout, forms, charts, tables, calendars, gestures, drawing canvases, marketing sections, and full patterns like dashboards and app shells — included, not installed.</p>
+          </article>
+
+          <article class="card span-2 reveal">
+            <span class="glow g-warm"></span>
+            <div class="ic g-warm"><i class="fa-solid fa-palette"></i></div>
+            <h3>6 themes + design tokens</h3>
+            <p>Switch palettes with one attribute, or brand the whole UI in-script with <code>$theme({…})</code> over 113 tokens.</p>
+          </article>
+
+          <article class="card span-2 reveal">
+            <span class="glow g-blue"></span>
+            <div class="ic g-blue"><i class="fa-solid fa-language"></i></div>
+            <h3>Built-in i18n</h3>
+            <p><code>$i18n({ translations })</code> gives you <code>t()</code>, language switching and <code>{name}</code> interpolation — no extra library.</p>
+          </article>
+
+          <article class="card span-2 reveal">
+            <span class="glow g-indigo"></span>
+            <div class="ic g-indigo"><i class="fa-solid fa-route"></i></div>
+            <h3>Router + global stores</h3>
+            <p><code>$router</code>, <code>NavLink</code> and params ship in the box, alongside <code>$store</code> for shared global state.</p>
+          </article>
+
+          <article class="card span-2 reveal">
+            <span class="glow g-amber"></span>
+            <div class="ic g-amber"><i class="fa-solid fa-puzzle-piece"></i></div>
+            <h3>Use any JS library</h3>
+            <p>The full JavaScript surface is in scope — <code>fetch</code>, <code>Intl</code>, <code>crypto</code>, <code>JSON</code>, <code>Date</code>, <code>Math</code> — plus a <code>$util</code> helper namespace. Bring your own logic.</p>
+          </article>
+
+          <article class="card span-2 reveal">
+            <span class="glow g-cyan"></span>
+            <div class="ic g-cyan"><i class="fa-solid fa-network-wired"></i></div>
+            <h3>One HTTP primitive</h3>
+            <p><code>$http({ url })</code> returns a reactive resource with <code>.data</code>, <code>.loading</code>, <code>.error</code> &amp; <code>.refetch()</code>.</p>
+          </article>
+
+          <article class="card span-3 reveal">
+            <span class="glow g-emerald"></span>
+            <div class="ic g-emerald"><i class="fa-solid fa-feather-pointed"></i></div>
+            <h3>Less code, easier to maintain</h3>
+            <p>A whole dashboard is a handful of plain-data calls. No flexbox bookkeeping, no component boilerplate, no global-CSS collisions — everything lives in an isolated Shadow DOM. Ship dramatically fewer lines and read them again next quarter.</p>
+            <div class="mini-chips"><span>shadow-DOM scoped</span><span>declarative</span><span>maintainable</span></div>
+          </article>
+
+          <article class="card span-3 reveal">
+            <span class="glow g-warm"></span>
+            <div class="ic g-warm"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+            <h3>LLM-friendly by design</h3>
+            <p>The same simplicity that makes Aktion fast for you makes it trivial for an AI to write. A built-in system-prompt generator and streaming renderer turn any model into a UI engine — but you never need an LLM to use Aktion.</p>
+            <div class="mini-chips"><span>getSystemPrompt()</span><span>streaming</span><span>optional</span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== LLM-NATIVE FLOW ======================== -->
+    <section class="section" style="background: var(--bg-2);">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="line"></span> AI-native, not AI-only <span class="line"></span></span>
+          <h2>And yes — <span class="grad-text">an LLM can write it too</span>.</h2>
+          <p>The same plain-data simplicity that speeds you up makes Aktion trivial for a model to generate. It streams token-by-token straight into the DOM — a free superpower, never a requirement.</p>
+        </div>
+
+        <div class="flow reveal">
+          <div class="flow-node">
+            <div class="ring g-blue"><i class="fa-solid fa-robot"></i></div>
+            <h4>1 · LLM streams</h4>
+            <p>The model emits Aktion text token by token.</p>
+          </div>
+          <div class="arrow"><i class="fa-solid fa-arrow-right-long"></i></div>
+          <div class="flow-node">
+            <div class="ring g-indigo"><i class="fa-solid fa-code"></i></div>
+            <h4>2 · Parser commits</h4>
+            <p>Each line is parsed and applied as it lands.</p>
+          </div>
+          <div class="arrow"><i class="fa-solid fa-arrow-right-long"></i></div>
+          <div class="flow-node">
+            <div class="ring g-emerald"><i class="fa-solid fa-display"></i></div>
+            <h4>3 · UI renders</h4>
+            <p>A React-like reconciler diffs &amp; paints live.</p>
+          </div>
+        </div>
+
+        <!-- token stream animation -->
+        <div class="stream-demo reveal">
+          <div class="stream-grid">
+            <div class="stream-code" id="streamCode" aria-hidden="true"></div>
+            <div class="stream-out">
+              <div class="window-bar" style="background:transparent;border:none;padding:0 0 14px;">
+                <span class="live"><span class="dot"></span> Rendering as it streams</span>
+              </div>
+              <div class="preview-pane" style="border:1px solid var(--border);border-radius:12px;background:var(--bg);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== LIVE CHAT STREAMING ===================== -->
+    <section class="section" style="background: var(--bg-2);">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="line"></span> Generative UI in chat <span class="line"></span></span>
+          <h2>Your assistant replies with <span class="grad-text">a real interface</span>.</h2>
+          <p>Instead of a wall of text, the model streams Aktion straight into the conversation — and it renders token-by-token as a live, interactive UI. Every card below is a real <code>&lt;aktion-app&gt;</code>, not a screenshot. Try the arrows.</p>
+        </div>
+
+        <div class="chat-stage reveal" id="chatStage">
+          <div class="chat-window">
+            <div class="window-bar">
+              <span class="dots"><i></i><i></i><i></i></span>
+              <span class="file" data-chat-title>Sprint Dashboard</span>
+              <span class="live" data-chat-status><span class="dot"></span> Live</span>
+            </div>
+            <div class="chat-body">
+              <div class="chat-user" data-chat-prompt hidden>Give me a quick read on this sprint.</div>
+              <div class="chat-reply" data-chat-loader hidden>
+                <span class="chat-avatar"><i class="fa-solid fa-star"></i></span>
+                <span class="chat-typing"><span></span><span></span><span></span></span>
+              </div>
+              <div class="chat-reply" data-chat-reply hidden>
+                <span class="chat-avatar"><i class="fa-solid fa-star"></i></span>
+                <span class="chat-intro" data-chat-intro>Here's where the sprint stands right now:</span>
+              </div>
+              <div class="chat-render" data-chat-render></div>
+            </div>
+            <div class="chat-foot">
+              <button class="chat-arrow" type="button" data-chat-prev aria-label="Previous example"><i class="fa-solid fa-chevron-left"></i></button>
+              <div class="chat-dots" data-chat-dots></div>
+              <button class="chat-arrow" type="button" data-chat-next aria-label="Next example"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== REACTIVITY ======================== -->
+    <section class="section">
+      <div class="wrap">
+        <div class="react-split">
+          <div class="reveal">
+            <span class="eyebrow"><span class="line"></span> Fine-grained reactivity</span>
+            <h2 style="font-size:clamp(26px,3.6vw,40px);font-weight:900;margin-bottom:16px;">Path-level tracking. <span class="grad-text">No wasted renders.</span></h2>
+            <p style="color:var(--text-soft);font-size:16px;">Reading <code>$user.name</code> subscribes to that path alone — a write to <code>$user.role</code> never re-renders, recomputes, or re-fires an effect that only read <code>name</code>.</p>
+            <ul class="feature-list">
+              <li><span class="tick"><i class="fa-solid fa-check"></i></span><div><b>Automatic dependency tracking</b><span>The <code>$</code> sigil is the only thing that makes a binding reactive.</span></div></li>
+              <li><span class="tick"><i class="fa-solid fa-check"></i></span><div><b>Two-way binding for free</b><span>Bind a value with <code>value: $form.email</code> and it just works.</span></div></li>
+              <li><span class="tick"><i class="fa-solid fa-check"></i></span><div><b>Declarative side effects</b><span><code>$effect(fn, [$dep, "mount", "debounce(300)"])</code> with lifecycle &amp; rate-limit triggers.</span></div></li>
+              <li><span class="tick"><i class="fa-solid fa-check"></i></span><div><b>State survives re-renders</b><span>Input focus, selection, scroll, and IME state are preserved by the reconciler.</span></div></li>
+            </ul>
+          </div>
+
+          <div class="react-diagram reveal">
+            <div class="window">
+              <div class="window-bar">
+                <span class="dots"><i></i><i></i><i></i></span>
+                <span class="file">counter.aktion</span>
+                <span class="live"><span class="dot"></span> Try it</span>
+              </div>
+              <div class="preview-pane" style="background:var(--bg-2);">
+<pre data-demo style="display:none">$count = 0
+$step = 1
+function inc() { $count = $count + $step }
+function dec() { $count = $count - $step }
+function reset() { $count = 0 }
+$app(Card([
+  CardHeader("Reactive counter", { subtitle: "State is the one piece of magic" }),
+  Center([Text(`${$count}`, { variant: "display-heavy" })]),
+  Row([
+    Button("−", { variant: "secondary", onClick: dec }),
+    Button("Reset", { variant: "ghost", onClick: reset }),
+    Button("+", { variant: "primary", onClick: inc })
+  ], { gap: "sm", justify: "center" })
+], { gap: "md" }))</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== COMPARISON ======================== -->
+    <section class="section" style="background: var(--bg-2);">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="line"></span> How it compares <span class="line"></span></span>
+          <h2>A real alternative to <span class="grad-text">React, Vue &amp; Angular</span>.</h2>
+          <p>Everything you normally bolt together — a framework, a component kit, a router, an i18n library, a styling system — built into one tag, with far less ceremony.</p>
+        </div>
+
+        <div class="compare-wrap reveal">
+          <div class="compare-scroll">
+            <table class="compare">
+              <thead>
+                <tr>
+                  <th>Capability</th>
+                  <th class="ak">Aktion</th>
+                  <th>React</th>
+                  <th>Vue</th>
+                  <th>Angular</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="feat">No build step / no JSX</td>
+                  <td class="ak"><i class="fa-solid fa-check yes"></i> One script tag</td>
+                  <td><i class="fa-solid fa-xmark no"></i> Bundler</td>
+                  <td><i class="fa-solid fa-xmark no"></i> Bundler</td>
+                  <td><i class="fa-solid fa-xmark no"></i> CLI + build</td>
+                </tr>
+                <tr>
+                  <td class="feat">Code to ship the same UI</td>
+                  <td class="ak"><i class="fa-solid fa-check yes"></i> ~60% less</td>
+                  <td><i class="fa-solid fa-xmark no"></i> Boilerplate</td>
+                  <td><i class="fa-solid fa-minus meh"></i> Moderate</td>
+                  <td><i class="fa-solid fa-xmark no"></i> Verbose</td>
+                </tr>
+                <tr>
+                  <td class="feat">Built-in i18n &amp; router</td>
+                  <td class="ak"><i class="fa-solid fa-check yes"></i> Included</td>
+                  <td><i class="fa-solid fa-xmark no"></i> Libraries</td>
+                  <td><i class="fa-solid fa-xmark no"></i> Libraries</td>
+                  <td><i class="fa-solid fa-check yes"></i> Built-in</td>
+                </tr>
+                <tr>
+                  <td class="feat">Components included</td>
+                  <td class="ak"><i class="fa-solid fa-check yes"></i> 270+ built-in</td>
+                  <td><i class="fa-solid fa-xmark no"></i> Bring your own</td>
+                  <td><i class="fa-solid fa-xmark no"></i> Bring your own</td>
+                  <td><i class="fa-solid fa-minus meh"></i> Material only</td>
+                </tr>
+                <tr>
+                  <td class="feat">Framework-agnostic</td>
+                  <td class="ak"><i class="fa-solid fa-check yes"></i> Any / none</td>
+                  <td><i class="fa-solid fa-xmark no"></i> React only</td>
+                  <td><i class="fa-solid fa-xmark no"></i> Vue only</td>
+                  <td><i class="fa-solid fa-xmark no"></i> Angular only</td>
+                </tr>
+                <tr>
+                  <td class="feat">Style isolation by default</td>
+                  <td class="ak"><i class="fa-solid fa-check yes"></i> Shadow DOM</td>
+                  <td><i class="fa-solid fa-minus meh"></i> CSS-in-JS</td>
+                  <td><i class="fa-solid fa-check yes"></i> Scoped</td>
+                  <td><i class="fa-solid fa-check yes"></i> ViewEncaps.</td>
+                </tr>
+                <tr>
+                  <td class="feat">Built-in themes &amp; tokens</td>
+                  <td class="ak"><i class="fa-solid fa-check yes"></i> 7 + custom</td>
+                  <td><i class="fa-solid fa-xmark no"></i> Library</td>
+                  <td><i class="fa-solid fa-xmark no"></i> Library</td>
+                  <td><i class="fa-solid fa-minus meh"></i> Material</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== COMPONENT SHOWCASE ======================== -->
+    <section class="section">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="line"></span> Component library <span class="line"></span></span>
+          <h2>281 components. <span class="grad-text">All live.</span></h2>
+          <p>Every preview below is a real <code>&lt;aktion-app&gt;</code> — not a screenshot. Compose data, not DOM.</p>
+        </div>
+
+        <div class="demo-grid">
+          <div class="demo-card reveal">
+            <div class="head"><i class="fa-solid fa-chart-simple"></i> Charts &amp; stats</div>
+            <div class="body">
+<pre data-demo style="display:none">$app(Column([kpi, chart], { gap: "md" }))
+kpi = StatCard("Active users", { value: "8,420", trend: "up", delta: "+12%", icon: "users" })
+chart = BarChart(labels, [Series("Users", values)], { title: "Daily Activity" })
+labels = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+values = [32, 51, 44, 68, 59]</pre>
+            </div>
+          </div>
+
+          <div class="demo-card reveal">
+            <div class="head"><i class="fa-solid fa-list-check"></i> Forms &amp; inputs</div>
+            <div class="body">
+<pre data-demo style="display:none">$app(settingsCard)
+
+$plan = "pro"
+$notify = true
+$volume = 60
+
+function save() {
+  $toast.success("Settings saved")
+}
+
+settingsCard = Card([
+  CardHeader("Settings"),
+  Column([
+    FormControl("Plan", Select("plan-select", {
+      items: planOptions,
+      value: $plan
+    })),
+    FormControl("Notifications", Switch("notify-switch", {
+      label: "Email notifications",
+      value: $notify
+    })),
+    FormControl("Volume", Slider("volume-slider", {
+      value: $volume,
+      min: 0,
+      max: 100,
+      showValue: true
+    })),
+    Button("Save changes", {
+      onClick: save,
+      variant: "primary",
+      icon: "check",
+      fullWidth: true
+    })
+  ], { gap: "md" })
+])
+
+planOptions = [
+  SelectItem("free", "Free"),
+  SelectItem("pro", "Pro"),
+  SelectItem("team", "Team")
+]</pre>
+            </div>
+          </div>
+
+          <div class="demo-card reveal">
+            <div class="head"><i class="fa-solid fa-table-list"></i> Data &amp; feedback</div>
+            <div class="body">
+<pre data-demo style="display:none">$app(Column([callout, userTable, statusBadges], { gap: "md" }))
+callout = Callout("Heads up", { tone: "info", description: "Your trial ends in 3 days." })
+userTable = Table([
+  Col("Name", ["Ada Lovelace", "Alan Turing", "Grace Hopper"]),
+  Col("Role", ["Owner", "Admin", "Member"]),
+  Col("Status", [
+    Badge("Active", { tone: "success" }),
+    Badge("Active", { tone: "success" }),
+    Badge("Invited", { tone: "warning" })
+  ])
+])
+statusBadges = Row([
+  Badge("Live", { tone: "success" }),
+  Badge("Beta", { tone: "warning" })
+], { gap: "sm" })</pre>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align:center;margin-top:42px;" class="reveal">
+          <a class="btn btn-primary" href="components.html"><i class="fa-solid fa-grip"></i> Browse all components</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== THEMES ======================== -->
+    <section class="section" style="background: var(--bg-2);">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="line"></span> Theming <span class="line"></span></span>
+          <h2>Six themes. <span class="grad-text">Infinite brands.</span></h2>
+          <p>Switch palettes with the <code>theme</code> attribute, or override 80+ design tokens in-script with <code>$theme({…})</code>.</p>
+        </div>
+        <div class="themes-row reveal">
+          <div class="swatch sw-light"><div class="dots"><i style="background:#6366f1"></i><i style="background:#10b981"></i><i style="background:#f59e0b"></i></div><div class="name">Light</div></div>
+          <div class="swatch sw-dark"><div class="dots"><i style="background:#8b5cf6"></i><i style="background:#22d3ee"></i><i style="background:#ec4899"></i></div><div class="name">Dark</div></div>
+          <div class="swatch sw-corporate"><div class="dots"><i style="background:#0f766e"></i><i style="background:#0369a1"></i><i style="background:#f59e0b"></i></div><div class="name">Corporate</div></div>
+          <div class="swatch sw-soft"><div class="dots"><i style="background:#c4b5fd"></i><i style="background:#fbcfe8"></i><i style="background:#a7f3d0"></i></div><div class="name">Soft</div></div>
+          <div class="swatch sw-glass"><div class="dots"><i style="background:#f2826a"></i><i style="background:#b58ee6"></i><i style="background:#8ec5e8"></i></div><div class="name">Glass</div></div>
+          <div class="swatch sw-modern"><div class="dots"><i style="background:#111827"></i><i style="background:#7c5cfc"></i><i style="background:#ff7849"></i></div><div class="name">Modern</div></div>
+          <div class="swatch sw-custom"><div class="dots"><i style="background:#fff"></i><i style="background:#fde68a"></i><i style="background:#fbcfe8"></i></div><div class="name">Your brand →</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== DEVELOPER / LLM ======================== -->
+    <section class="section">
+      <div class="wrap">
+        <div class="dev-split">
+          <div class="reveal">
+            <span class="eyebrow"><span class="line"></span> For developers</span>
+            <h2 style="font-size:clamp(26px,3.6vw,40px);font-weight:900;margin-bottom:16px;">Three steps to <span class="grad-text">your first UI</span>.</h2>
+            <p style="color:var(--text-soft);font-size:16px;margin-bottom:18px;">Load the bundle, mount the tag, and write Aktion — a JavaScript subset you already know. No CLI, no config, no JSX. It runs the same inside React, Vue, Angular or a plain HTML file.</p>
+            <ul class="feature-list">
+              <li><span class="tick" style="background:var(--grad-brand)"><i class="fa-solid fa-1"></i></span><div><b>Load</b><span>One ESM script tag from the CDN — or <code>npm i aktion-runtime</code>.</span></div></li>
+              <li><span class="tick" style="background:var(--grad-cyan)"><i class="fa-solid fa-2"></i></span><div><b>Mount</b><span>Add <code>&lt;aktion-app theme="dark"&gt;</code> wherever HTML runs.</span></div></li>
+              <li><span class="tick" style="background:var(--grad-emerald)"><i class="fa-solid fa-3"></i></span><div><b>Build</b><span>Write state, functions and components, then call <code>$app(…)</code>. That's the whole app.</span></div></li>
+            </ul>
+            <div style="margin-top:26px;display:flex;gap:12px;flex-wrap:wrap;">
+              <a class="btn btn-primary" href="get-started.html"><i class="fa-solid fa-book"></i> Read the docs</a>
+              <a class="btn btn-ghost" href="frameworks.html"><i class="fa-solid fa-layer-group"></i> Framework guides</a>
+            </div>
+          </div>
+
+          <div class="terminal reveal">
+            <div class="window-bar">
+              <span class="dots"><i></i><i></i><i></i></span>
+              <span class="file">index.html — the whole app</span>
+            </div>
+            <div class="terminal-body"><span class="cm">// 1 · one tag, any framework</span><br>
+&lt;<span class="pr">script</span> <span class="ok">type</span>=<span style="color:#fca5a5">"module"</span> <span class="ok">src</span>=<span style="color:#fca5a5">"https://asfand-dev.github.io/aktion/dist/aktion.js"</span>&gt;<br>
+&lt;<span class="pr">aktion-app</span> <span class="ok">theme</span>=<span style="color:#fca5a5">"dark"</span>&gt;<br>
+<br>
+<span class="cm">// 2 · write Aktion — a JS subset</span><br>
+&nbsp;&nbsp;$greeting = <span style="color:#fca5a5">"Hello"</span><br>
+&nbsp;&nbsp;<span class="ok">$app</span>(<span class="ok">Card</span>([<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="ok">CardHeader</span>($greeting),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="ok">Button</span>(<span style="color:#fca5a5">"Wave"</span>, { onClick: () =&gt; { $greeting = <span style="color:#fca5a5">"Hi!"</span> } })<br>
+&nbsp;&nbsp;]))<br>
+<br>
+&lt;/<span class="pr">aktion-app</span>&gt;<br>
+<span class="ok">✓</span> <span class="cm">no build · no JSX · runs anywhere</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== ORCHESTRATION ======================== -->
+    <section class="section" style="background: var(--bg-2);">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="line"></span> Orchestration <span class="line"></span></span>
+          <h2>One language. <span class="grad-text">Any design system.</span></h2>
+          <p>Aktion acts as an orchestration layer. Write your UI logic once, and let Aktion map it to Material UI, Bootstrap, ShadCN, or your own in-house framework.</p>
+        </div>
+
+        <div class="terminal reveal" style="max-width: 860px; margin: 40px auto 0;">
+          <div class="window-bar">
+            <span class="dots"><i></i><i></i><i></i></span>
+            <span class="file">card.aktion — one quine, three outputs</span>
+          </div>
+          <div class="terminal-body"><span class="cm">// Aktion quine (single source)</span><br>
+            <span class="ok">$app</span>(<span class="ok">Card</span>([<br>
+            &nbsp;&nbsp;<span class="ok">CardHeader</span>(<span style="color:#fca5a5">"Revenue dashboard"</span>),<br>
+            &nbsp;&nbsp;<span class="ok">Text</span>(<span style="color:#fca5a5">"Mapped through a UI provider."</span>),<br>
+            &nbsp;&nbsp;<span class="ok">Row</span>([<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span class="ok">Button</span>(<span style="color:#fca5a5">"Primary"</span>, { variant: <span style="color:#fca5a5">"primary"</span> }),<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span class="ok">Button</span>(<span style="color:#fca5a5">"Secondary"</span>, { variant: <span style="color:#fca5a5">"ghost"</span> })<br>
+            &nbsp;&nbsp;], { gap: <span style="color:#fca5a5">"sm"</span> })<br>
+            ]))<br>
+            <br><span class="cm">// Provider bundles are loaded via CDN, not npm install.</span>
+          </div>
+        </div>
+
+        <div class="reveal" style="display:flex;flex-direction:column;align-items:center;margin-top:18px;margin-bottom:18px;">
+          <div style="width:2px;height:26px;background:var(--fork-line);"></div>
+          <div style="width:min(72%,680px);height:2px;background:var(--fork-line);display:flex;justify-content:space-between;">
+            <div style="width:2px;height:22px;background:var(--fork-line);"></div>
+            <div style="width:2px;height:22px;background:var(--fork-line);"></div>
+            <div style="width:2px;height:22px;background:var(--fork-line);"></div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; width: 100%; max-width: 980px; margin: 12px auto 0; gap: 20px; flex-wrap: wrap;" class="reveal">
+          <div class="demo-card" style="flex: 1; min-width: 260px;">
+            <div class="head" style="justify-content: center;"><i class="fa-brands fa-react" style="color: #61dafb"></i> Material UI</div>
+            <div class="body" style="padding: 14px; font-size: 13px; color: var(--text-soft);">
+              <div style="margin-bottom:8px;"><code>@aktion/material-ui-provider</code></div>
+              <iframe title="Material UI card preview" data-home-preview="mui" sandbox="allow-scripts" style="width:100%;height:165px;border:0;border-radius:10px;background:transparent;overflow:hidden;margin-bottom:10px;"></iframe>
+<pre style="margin:0;background:var(--code-bg);color:var(--code-text);padding:10px;border-radius:10px;overflow:auto;font-size:11px;line-height:1.45;">&lt;Card&gt;
+  &lt;CardHeader title="Revenue dashboard" /&gt;
+  &lt;CardContent&gt;&lt;Typography&gt;Mapped through a UI provider.&lt;/Typography&gt;&lt;/CardContent&gt;
+  &lt;CardActions&gt;&lt;Button variant="contained"&gt;Primary&lt;/Button&gt;&lt;/CardActions&gt;
+&lt;/Card&gt;</pre>
+            </div>
+          </div>
+          <div class="demo-card" style="flex: 1; min-width: 260px;">
+            <div class="head" style="justify-content: center;"><i class="fa-brands fa-bootstrap" style="color: #7952b3"></i> Bootstrap</div>
+            <div class="body" style="padding: 14px; font-size: 13px; color: var(--text-soft);">
+              <div style="margin-bottom:8px;"><code>@aktion/bootstrap-provider</code></div>
+              <iframe title="Bootstrap card preview" data-home-preview="bootstrap" sandbox="allow-scripts" style="width:100%;height:165px;border:0;border-radius:10px;background:transparent;overflow:hidden;margin-bottom:10px;"></iframe>
+<pre style="margin:0;background:var(--code-bg);color:var(--code-text);padding:10px;border-radius:10px;overflow:auto;font-size:11px;line-height:1.45;">&lt;div class="card"&gt;
+  &lt;div class="card-header"&gt;Revenue dashboard&lt;/div&gt;
+  &lt;div class="card-body"&gt;&lt;button class="btn btn-primary btn-sm"&gt;Primary&lt;/button&gt;&lt;/div&gt;
+&lt;/div&gt;</pre>
+            </div>
+          </div>
+          <div class="demo-card" style="flex: 1; min-width: 260px;">
+            <div class="head" style="justify-content: center;"><i class="fa-solid fa-code" style="color: var(--text)"></i> ShadCN</div>
+            <div class="body" style="padding: 14px; font-size: 13px; color: var(--text-soft);">
+              <div style="margin-bottom:8px;"><code>@aktion/shadcn-provider</code></div>
+              <iframe title="ShadCN card preview" data-home-preview="shadcn" sandbox="allow-scripts" style="width:100%;height:165px;border:0;border-radius:10px;background:transparent;overflow:hidden;margin-bottom:10px;"></iframe>
+<pre style="margin:0;background:var(--code-bg);color:var(--code-text);padding:10px;border-radius:10px;overflow:auto;font-size:11px;line-height:1.45;">&lt;Card&gt;
+  &lt;CardHeader&gt;&lt;CardTitle&gt;Revenue dashboard&lt;/CardTitle&gt;&lt;/CardHeader&gt;
+  &lt;CardFooter&gt;&lt;Button&gt;Primary&lt;/Button&gt;&lt;/CardFooter&gt;
+&lt;/Card&gt;</pre>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align:center;margin-top:42px;" class="reveal">
+          <a class="btn btn-ghost" href="ui-providers.html"><i class="fa-solid fa-plug"></i> Learn how to build UI Providers</a>
+        </div>
+      </div>
+    </section>
+
+<!-- ======================== FINAL CTA ======================== -->
+    <section class="section">
+      <div class="wrap">
+        <div class="cta reveal">
+          <h2>A faster way to build UIs.</h2>
+          <p>Learn it in an afternoon. Ship complex, themeable, reactive interfaces in any framework — with a fraction of the code. Open source under MIT.</p>
+          <div class="hero-cta">
+            <a class="btn btn-white" href="get-started.html"><i class="fa-solid fa-rocket"></i> Get started free</a>
+            <a class="btn btn-ghost" href="tutorial.html"><i class="fa-solid fa-gamepad"></i> Play the interactive tutorial</a>
+            <a class="btn btn-ghost" href="https://github.com/asfand-dev/aktion" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i> Star on GitHub</a>
+          </div>
+          <div class="cta-snippet">
+            <span><span style="color:#a5b4fc">&lt;script</span> src=<span style="color:#fca5a5">"https://asfand-dev.github.io/aktion/dist/aktion.js"</span><span style="color:#a5b4fc">&gt;</span> + <span style="color:#a5b4fc">&lt;aktion-app&gt;</span></span>
+            <button id="copyCta" aria-label="Copy"><i class="fa-solid fa-copy"></i></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== FOOTER ======================== -->
+    <footer>
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-brand">
+            <a class="brand" href="index.html">
+              <img src="assets/logo.png" alt="Aktion logo" />
+              <span>Aktion</span>
+            </a>
+            <p>A reactive UI language and component runtime — a strict subset of JavaScript — for building rich interfaces in any framework, with far less code.</p>
+          </div>
+          <div class="foot-col">
+            <h5>Product</h5>
+            <a href="get-started.html">Get started</a>
+            <a href="components.html">Components</a>
+            <a href="themes.html">Themes</a>
+            <a href="playground.html">Playground</a>
+          </div>
+          <div class="foot-col">
+            <h5>Learn</h5>
+            <a href="tutorial.html">Interactive tutorial</a>
+            <a href="language.html">Language</a>
+            <a href="reactivity.html">Reactivity</a>
+            <a href="llm-integration.html">LLM integration</a>
+          </div>
+          <div class="foot-col">
+            <h5>Resources</h5>
+            <a href="live-demos.html">Live demos</a>
+            <a href="frameworks.html">Frameworks</a>
+            <a href="deployment.html">Deployment</a>
+            <a href="https://github.com/asfand-dev/aktion" target="_blank" rel="noopener">GitHub</a>
+          </div>
+        </div>
+        <div class="foot-bottom">
+          <span>© 2026 Aktion · Released under the MIT License.</span>
+          <div class="foot-social">
+            <a class="icon-btn" href="https://github.com/asfand-dev/aktion" target="_blank" rel="noopener" aria-label="GitHub"><i class="fa-brands fa-github"></i></a>
+            <a class="icon-btn" href="get-started.html" aria-label="Docs"><i class="fa-solid fa-book"></i></a>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ======================== SCRIPTS ======================== -->
+  <script type="module">
+    import "./dist/aktion.js"; // registers <aktion-app>
+
+    const docTheme = () => document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+
+    function buildHomeProviderPreviews(theme) {
+      const isDark = theme === "dark";
+      const muiBg = "transparent";
+      const bootstrapBodyBg = "transparent";
+      const bootstrapCardClass = isDark ? "card shadow-sm border border-secondary bg-dark text-light" : "card shadow-sm border-0";
+      const bootstrapCardTextClass = isDark ? "text-light-emphasis" : "text-body-secondary";
+      const shadcnVars = isDark
+        ? `--background: 222.2 84% 4.9%;
+      --foreground: 210 40% 98%;
+      --card: 222.2 84% 4.9%;
+      --card-foreground: 210 40% 98%;
+      --border: 217.2 32.6% 17.5%;
+      --primary: 210 40% 98%;
+      --primary-foreground: 222.2 47.4% 11.2%;
+      --secondary: 217.2 32.6% 17.5%;
+      --secondary-foreground: 210 40% 98%;
+      --muted-foreground: 215 20.2% 65.1%;`
+        : `--background: 0 0% 100%;
+      --foreground: 222.2 84% 4.9%;
+      --card: 0 0% 100%;
+      --card-foreground: 222.2 84% 4.9%;
+      --border: 214.3 31.8% 91.4%;
+      --primary: 222.2 47.4% 11.2%;
+      --primary-foreground: 210 40% 98%;
+      --secondary: 210 40% 96.1%;
+      --secondary-foreground: 222.2 47.4% 11.2%;
+      --muted-foreground: 215.4 16.3% 46.9%;`;
+      const shadcnBodyBg = "transparent";
+
+      return {
+        mui: `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    html,body{margin:0;padding:0;background:${muiBg};font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+    body{overflow:hidden}
+    #root{margin:0;padding:0}
+  </style>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
+  <script src="https://unpkg.com/@mui/material@5/umd/material-ui.production.min.js"><\/script>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+    const { createElement: h } = React;
+    const { ThemeProvider, createTheme, CssBaseline, Card, CardContent, CardActions, Typography, Button, CardHeader } = MaterialUI;
+    const theme = createTheme({
+      palette: { mode: "${theme}", primary: { main: "#6366f1" } },
+      components: {
+        MuiCssBaseline: {
+          styleOverrides: {
+            html: { backgroundColor: "transparent" },
+            body: { backgroundColor: "transparent" },
+          },
+        },
+      },
+    });
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(
+      h(ThemeProvider, { theme },
+        h(CssBaseline),
+        h(Card, { sx: { maxWidth: 420, borderRadius: 3 } },
+          h(CardHeader, { title: "Revenue dashboard" }),
+          h(CardContent, null, h(Typography, { variant: "body2", color: "text.secondary" }, "Mapped through a UI provider.")),
+          h(CardActions, null, h(Button, { variant: "contained", size: "small" }, "Primary"))
+        )
+      )
+    );
+  <\/script>
+</body>
+</html>`,
+        bootstrap: `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+  <style>
+    html,body{margin:0;padding:0;background:${bootstrapBodyBg};}
+    body{overflow:hidden;padding:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+  </style>
+</head>
+<body>
+  <div class="${bootstrapCardClass}" style="max-width:420px;border-radius:14px;">
+    <div class="card-header">Revenue dashboard</div>
+    <div class="card-body">
+      <p class="card-text ${bootstrapCardTextClass} mb-3">Mapped through a UI provider.</p>
+      <button class="btn btn-primary btn-sm">Primary</button>
+    </div>
+  </div>
+</body>
+</html>`,
+        shadcn: `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"><\/script>
+  <style>
+    :root {
+      ${shadcnVars}
+      --radius: 0.65rem;
+    }
+    body{margin:0;padding:0;background:${shadcnBodyBg};font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;overflow:hidden}
+  </style>
+</head>
+<body>
+  <div class="rounded-[var(--radius)] border bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))] shadow-sm max-w-[420px] w-full box-border">
+    <div class="flex flex-col space-y-1.5 p-6 pb-2">
+      <h3 class="text-lg font-semibold leading-none tracking-tight">Revenue dashboard</h3>
+      <p class="text-sm text-[hsl(var(--muted-foreground))]">Mapped through a UI provider.</p>
+    </div>
+    <div class="p-6 pt-2 flex gap-2">
+      <button class="inline-flex h-9 items-center justify-center whitespace-nowrap rounded-md bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-[hsl(var(--primary-foreground))] shadow transition-colors cursor-pointer hover:opacity-90">Primary</button>
+    </div>
+  </div>
+</body>
+</html>`,
+      };
+    }
+
+    function renderHomeProviderPreviews() {
+      const previews = buildHomeProviderPreviews(docTheme());
+      for (const frame of document.querySelectorAll("iframe[data-home-preview]")) {
+        const key = frame.getAttribute("data-home-preview");
+        if (key && previews[key]) frame.srcdoc = previews[key];
+      }
+    }
+
+    /* ---- mount every [data-demo] code block as a live aktion-app ---- */
+    function mountDemos(root = document) {
+      for (const pre of root.querySelectorAll("pre[data-demo]")) {
+        if (pre.dataset.mounted) continue;
+        let host = pre.closest(".preview-pane, .body");
+        if (!host) {
+          const split = pre.closest(".split, .window");
+          host = split && split.querySelector(".preview-pane");
+        }
+        if (!host) continue;
+        pre.dataset.mounted = "1";
+        const src = pre.textContent || "";
+        const app = document.createElement("aktion-app");
+        app.setAttribute("theme", docTheme());
+        host.appendChild(app);
+        try {
+          if (typeof app.setResponse === "function") app.setResponse(src);
+          else app.setAttribute("response", src);
+        } catch (err) { console.error("[demo] render failed", err); }
+      }
+    }
+    mountDemos();
+
+    // keep all previews in sync with the doc theme
+    const syncTheme = () => document.querySelectorAll("aktion-app").forEach(a => a.setAttribute("theme", docTheme()));
+    renderHomeProviderPreviews();
+    new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+    new MutationObserver(renderHomeProviderPreviews).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+
+    /* ---- streaming token animation ---- */
+    const STREAM_SRC = `$app(Column([header, card, btn], { gap: "md" }))
+header = PageHeader("Live order", { subtitle: "Streaming in…" })
+card = Card([
+  CardHeader("Espresso · x2"),
+  Text("Oat milk, extra hot"),
+  Badge("Preparing", { tone: "warning" })
+])
+btn = Button("Track order", { variant: "primary", icon: "location-dot" })`;
+
+    function runStream() {
+      const codeEl = document.getElementById("streamCode");
+      const out = document.querySelector(".stream-out .preview-pane");
+      if (!codeEl || !out) return;
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", docTheme());
+      app.setAttribute("streaming", "true");
+      out.innerHTML = "";
+      out.appendChild(app);
+      try { app.clear && app.clear(); } catch (_) {}
+
+      codeEl.innerHTML = "";
+      const cursor = document.createElement("span");
+      cursor.className = "cursor";
+      codeEl.appendChild(cursor);
+
+      const tokens = STREAM_SRC.match(/\s+|[^\s]+/g) || [STREAM_SRC];
+      let i = 0, acc = "";
+      const tick = () => {
+        if (i >= tokens.length) {
+          try { app.removeAttribute("streaming"); } catch (_) {}
+          cursor.remove();
+          return;
+        }
+        const tok = tokens[i++];
+        acc += tok;
+        const text = document.createTextNode(tok);
+        codeEl.insertBefore(text, cursor);
+        try {
+          if (typeof app.appendChunk === "function") app.appendChunk(tok);
+          else app.setAttribute("response", acc);
+        } catch (_) {}
+        codeEl.scrollTop = codeEl.scrollHeight;
+        setTimeout(tick, 1 + Math.random() * 90);
+      };
+      tick();
+    }
+
+    // run the stream demo when it scrolls into view (once)
+    const streamSection = document.querySelector(".stream-demo");
+    if (streamSection) {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) { runStream(); io.disconnect(); }
+        });
+      }, { threshold: 0.15, rootMargin: "0px 0px -10% 0px" });
+      io.observe(streamSection);
+    }
+
+    /* ---- live chat streaming carousel ---- */
+    const CHAT_EXAMPLES = [
+      {
+        title: "Sprint Dashboard",
+        prompt: "Give me a quick read on this sprint.",
+        intro: "Here's where the sprint stands right now:",
+        src: `$app(Column([header, stats, card], { gap: "lg" }))
+header = PageHeader("Atlas · Sprint 24", { subtitle: "6 days left", badge: Badge("On track", { tone: "success" }), breadcrumbs: [] })
+stats = Stats([
+  StatCard("Velocity", { value: "48 pts", trend: "up", delta: "+6", icon: "gauge-high" }),
+  StatCard("Done", { value: "31 / 48", trend: "up", delta: "65%", icon: "circle-check" }),
+  StatCard("Blocked", { value: "3", trend: "down", delta: "-1", icon: "ban", tone: "warning" })
+], { layout: "grid" })
+card = Card([
+  CardHeader("Burndown · points / day"),
+  BarChart(["Mon", "Tue", "Wed", "Thu", "Fri"], [Series("Remaining", [48, 41, 36, 24, 17])], { title: "Trending to zero" })
+])`
+      },
+      {
+        title: "Orders List",
+        prompt: "Show me the list of orders for today",
+        intro: "Here's the list of orders for today:",
+        src: `$app(content)
+
+content = Column([header, toolbar, banner, dataGrid], { gap: "lg", padding: "lg" })
+
+header = PageHeader("Today's Orders List", {
+  subtitle: "Here is the list of orders happened today",
+  breadcrumbs: []
+})
+
+toolbar = Toolbar({
+  left: [
+    SearchBar("search-orders", {
+      placeholder: "Search ID or customer...",
+      value: $search,
+      sx: { minW: "300px" }
+    })
+  ],
+  right: [
+    SegmentedControl(["All", "Pending", "Processing", "Shipped"], {
+      value: $statusFilter,
+      onChange: v => { $statusFilter = v }
+    })
+  ]
+})
+
+banner = Show($selectedIds.length > 0, {
+  children: Banner(\`\${$selectedIds.length} orders selected\`, {
+    tone: "primary",
+    action: Button("Mark as Shipped", {
+      size: "sm",
+      onClick: () => updateStatus("Shipped")
+    })
+  })
+})
+
+dataGrid = Card([
+  DataGrid(columns, {
+    emptyLabel: "Orders list is loading...",
+    selectedIds: $selectedIds,
+    selectable: true,
+    stickyHeader: true,
+    onRowClick: row => $toast.info(\`Opening \${row.id}\`),
+  })
+])
+
+columns = [
+  Col("Order ID", filtered.map(o => Text(o.id, { variant: "body-heavy" })), { sortable: true }),
+  Col("Customer", filtered.map(o => Row([
+    Avatar(o.customer, { size: "xs" }),
+    Text(o.customer)
+  ], { gap: "sm" })), { sortable: true }),
+  Col("Status", filtered.map(o => Badge(o.status, {
+    tone: o.status === "Shipped" ? "success" :
+          o.status === "Processing" ? "primary" :
+          o.status === "Cancelled" ? "danger" : "warning"
+  }))),
+  Col("Priority", filtered.map(o => Row([
+    StatusDot(o.priority, {
+      tone: o.priority === "High" ? "danger" : o.priority === "Medium" ? "warning" : "neutral",
+      pulse: o.priority === "High"
+    })
+  ]))),
+  Col("Total", filtered.map(o => o.total), { format: "currency", align: "right" }),
+  Col("Placed", filtered.map(o => o.time), { align: "right" }),
+  Col("", filtered.map(o => IconButton("ellipsis-vertical", {
+    label: "Actions",
+    variant: "ghost",
+    onClick: () => $toast.show("Action menu opened")
+  })), { align: "center" })
+]
+
+$search = ""
+$statusFilter = "All"
+$selectedIds = []
+
+filtered = $orders.filter(o => {
+  const matchesSearch = o.customer.toLowerCase().includes($search.toLowerCase()) || o.id.includes($search)
+  const matchesStatus = $statusFilter === "All" || o.status === $statusFilter
+  return matchesSearch && matchesStatus
+})
+
+function updateStatus(newStatus) {
+  if ($selectedIds.length === 0) return $toast.info("Select orders first")
+  $toast.success(\`Updated \${$selectedIds.length} orders to \${newStatus}\`)
+  $selectedIds = []
+}
+
+$orders = [
+  { id: "ORD-7281", customer: "Alex Rivera", items: 3, total: 124.50, status: "Processing", time: "2m ago", priority: "High" },
+  { id: "ORD-7282", customer: "Sarah Chen", items: 1, total: 45.00, status: "Shipped", time: "5m ago", priority: "Medium" },
+  { id: "ORD-7283", customer: "Jordan Smyth", items: 5, total: 892.10, status: "Pending", time: "12m ago", priority: "High" },
+  { id: "ORD-7284", customer: "Maria Garcia", items: 2, total: 67.25, status: "Delivered", time: "1h ago", priority: "Low" },
+  { id: "ORD-7285", customer: "Sam Wilson", items: 1, total: 12.99, status: "Cancelled", time: "2h ago", priority: "Low" },
+  { id: "ORD-7286", customer: "Emma Vogt", items: 4, total: 210.00, status: "Processing", time: "3h ago", priority: "Medium" },
+  { id: "ORD-7287", customer: "Liam Neeson", items: 2, total: 55.40, status: "Shipped", time: "4h ago", priority: "High" }
+]`
+      },
+      {
+        title: "Scene Controller",
+        prompt: "Set up a movie-night scene for the living room.",
+        intro: "Here's a scene you can fine-tune live:",
+        src: `$bright = 25
+$temp = 21
+$tv = true
+$ac = false
+$app(Card([
+  CardHeader("Movie Night", { subtitle: "Living room · 4 devices" }),
+  FormControl("Brightness", Slider("bright", { value: $bright, min: 0, max: 100, showValue: true })),
+  FormControl("Temperature °C", Slider("temp", { value: $temp, min: 16, max: 28, showValue: true })),
+  Row([
+    Switch("tv", { label: "TV", value: $tv }),
+    Switch("ac", { label: "AC", value: $ac })
+  ], { gap: "xl" }),
+  Button("Activate scene", { variant: "primary", icon: "play", fullWidth: true })
+], { sx: { gap: "md" } }))`
+      },
+      {
+        title: "Kyoto Itinerary",
+        prompt: "Plan a one-day itinerary for Kyoto, in a short summary.",
+        intro: "A relaxed one-day loop — temples to ramen:",
+        src: `$app(Card([
+  CardHeader("Kyoto · 1 day", { subtitle: "Walkable, ~14k steps" }),
+  Timeline([
+    TimelineItem("Fushimi Inari", { time: "7:00", description: "Sunrise hike through the torii gates", icon: "mountain-sun", tone: "primary" }),
+    TimelineItem("Nishiki Market", { time: "10:30", description: "Street-food brunch crawl", icon: "utensils", tone: "warning" }),
+    TimelineItem("Arashiyama", { time: "14:00", description: "Bamboo grove & river walk", icon: "tree", tone: "success" }),
+    TimelineItem("Gion", { time: "18:30", description: "Evening stroll, kaiseki dinner", icon: "moon", tone: "info" })
+  ])
+], { sx: { gap: "md" } }))`
+      },
+      {
+        title: "Plan Comparison",
+        prompt: "Compare your plans for a small team.",
+        intro: "Here's how the tiers stack up for ~5 seats:",
+        src: `$app(PricingTable([
+  PricingCard("Starter", "$0", { period: "/mo", description: "Kick the tyres", features: ["3 projects", "Community support", "1 GB storage"], action: Button("Choose", { variant: "secondary", fullWidth: true }) }),
+  PricingCard("Team", "$29", { period: "/seat", description: "For small squads", features: ["Unlimited projects", "Priority support", "Roles & SSO"], featured: true, badge: "Popular", action: Button("Start trial", { variant: "primary", fullWidth: true }) }),
+  PricingCard("Scale", "$79", { period: "/seat", description: "Growing orgs", features: ["Audit log", "SAML & SCIM", "99.9% SLA"], action: Button("Talk to us", { variant: "secondary", fullWidth: true }) })
+], { columns: 3 }))`
+      },
+      {
+        title: "Workout Tracker",
+        prompt: "Build me a push-day workout I can check off.",
+        intro: "Here's today's push day — tap as you go:",
+        src: `$done = { warmup: true, bench: false, ohp: false, dips: false }
+function pct() { return Math.round(Object.values($done).filter(v => v).length / 4 * 100) }
+$app(Card([
+  CardHeader("Push day", { subtitle: "Chest · shoulders · triceps" }),
+  Progress(pct(), { label: "Completed", showValue: true, tone: "success" }),
+  CheckBoxGroup("ex", { items: [
+    CheckBoxItem("Warm-up · band pull-aparts", "warmup"),
+    CheckBoxItem("Bench press · 4 × 8", "bench"),
+    CheckBoxItem("Overhead press · 3 × 10", "ohp"),
+    CheckBoxItem("Triceps dips · 3 × 12", "dips")
+  ], value: $done })
+], { sx: { gap: "md" } }))`
+      },
+      {
+        title: "Team Poll",
+        prompt: "Run a quick poll: where should we do the offsite?",
+        intro: "Live results — cast your vote:",
+        src: `$votes = { lisbon: 8, austin: 5, tokyo: 11 }
+function total() { return $votes.lisbon + $votes.austin + $votes.tokyo }
+function option(label, key) {
+  return Column([
+    Row([Text(label, { variant: "body-heavy" }), Text($votes[key] + " votes", { variant: "small", tone: "muted" })], { justify: "between", align: "center" }),
+    Progress(Math.round($votes[key] / total() * 100), { tone: "primary" }),
+    Button("Vote", { variant: "ghost", size: "sm", icon: "thumbs-up", onClick: () => { $votes[key] = $votes[key] + 1 } })
+  ], { gap: "xs" })
+}
+$app(Card([
+  CardHeader("Team offsite", { subtitle: total() + " votes so far" }),
+  option("Lisbon", "lisbon"),
+  option("Austin", "austin"),
+  option("Tokyo", "tokyo")
+], { sx: { gap: "lg" } }))`
+      }
+    ];
+
+    (function initChatCarousel() {
+      const stage = document.getElementById("chatStage");
+      if (!stage) return;
+      const titleEl = stage.querySelector("[data-chat-title]");
+      const promptEl = stage.querySelector("[data-chat-prompt]");
+      const introEl = stage.querySelector("[data-chat-intro]");
+      const renderEl = stage.querySelector("[data-chat-render]");
+      const statusEl = stage.querySelector("[data-chat-status]");
+      const loaderEl = stage.querySelector("[data-chat-loader]");
+      const replyEl = stage.querySelector("[data-chat-reply]");
+      const dotsWrap = stage.querySelector("[data-chat-dots]");
+      const prevBtn = stage.querySelector("[data-chat-prev]");
+      const nextBtn = stage.querySelector("[data-chat-next]");
+
+      const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      // Timings — the whole sequence is deliberately snappy.
+      const USER_SPEED = 10;   // ms per token while typing the user message
+      const REPLY_SPEED = 20;  // ms per token while typing the assistant reply
+      const THINK_MS = 1500;   // loader dwell between user message and reply
+      let idx = 0, auto = !reduce, started = false, streamTimer = null, stepTimer = null, autoTimer = null;
+
+      const CHAT_EACH_EXAMPLE_DELAY = 5000;
+
+      CHAT_EXAMPLES.forEach((_, i) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("aria-label", "Show example " + (i + 1));
+        b.addEventListener("click", () => { auto = false; show(i); });
+        dotsWrap.appendChild(b);
+      });
+      const dots = () => Array.from(dotsWrap.children);
+
+      function clearTimers() {
+        if (streamTimer) { clearTimeout(streamTimer); streamTimer = null; }
+        if (stepTimer) { clearTimeout(stepTimer); stepTimer = null; }
+        if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+      }
+
+      const setStatus = (label) => { statusEl.innerHTML = '<span class="dot"></span> ' + label; };
+
+      function typeText(el, text, perToken, done) {
+        const tokens = text.match(/\s+|[^\s]+/g) || [text];
+        let i = 0;
+        el.textContent = "";
+        const tick = () => {
+          if (i >= tokens.length) { done && done(); return; }
+          el.textContent += tokens[i++];
+          streamTimer = setTimeout(tick, perToken);
+        };
+        tick();
+      }
+
+      function streamSrc(app, src, done) {
+        const tokens = src.match(/\s+|[^\s]+/g) || [src];
+        let i = 0, acc = "";
+        const tick = () => {
+          if (i >= tokens.length) {
+            try { app.removeAttribute("streaming"); } catch (_) {}
+            done && done();
+            return;
+          }
+          const tok = tokens[i++];
+          acc += tok;
+          try {
+            if (typeof app.appendChunk === "function") app.appendChunk(tok);
+            else app.setAttribute("response", acc);
+          } catch (_) {}
+          streamTimer = setTimeout(tick, 2 + Math.random() * 10);
+        };
+        tick();
+      }
+
+      function renderUI(src, done) {
+        renderEl.innerHTML = "";
+        const app = document.createElement("aktion-app");
+        app.setAttribute("theme", docTheme());
+        renderEl.appendChild(app);
+        if (reduce) {
+          try {
+            if (typeof app.setResponse === "function") app.setResponse(src);
+            else app.setAttribute("response", src);
+          } catch (_) {}
+          done && done();
+          return;
+        }
+        app.setAttribute("streaming", "true");
+        try { app.clear && app.clear(); } catch (_) {}
+        streamSrc(app, src, done);
+      }
+
+      function show(i) {
+        clearTimers();
+        idx = (i + CHAT_EXAMPLES.length) % CHAT_EXAMPLES.length;
+        const ex = CHAT_EXAMPLES[idx];
+        titleEl.textContent = ex.title;
+        dots().forEach((d, j) => d.classList.toggle("active", j === idx));
+
+        // Reset the conversation to an empty slate.
+        promptEl.style.display = "none";
+        promptEl.textContent = "";
+        loaderEl.style.display = "none";
+        replyEl.style.display = "none";
+        introEl.textContent = "";
+        renderEl.innerHTML = "";
+
+        const finish = () => {
+          setStatus("Live");
+          if (auto) autoTimer = setTimeout(() => show(idx + 1), CHAT_EACH_EXAMPLE_DELAY);
+        };
+
+        if (reduce) {
+          promptEl.style.display = "flex";
+          promptEl.textContent = ex.prompt;
+          replyEl.style.display = "flex";
+          introEl.textContent = ex.intro;
+          renderUI(ex.src, finish);
+          return;
+        }
+
+        // 1 · user message types in
+        setStatus("Streaming…");
+        promptEl.style.display = "flex";
+        typeText(promptEl, ex.prompt, USER_SPEED, () => {
+          // 2 · assistant "thinking" loader
+          setStatus("Thinking…");
+          loaderEl.style.display = "flex";
+          stepTimer = setTimeout(() => {
+            loaderEl.style.display = "none";
+            // 3 · assistant reply types in
+            setStatus("Streaming…");
+            replyEl.style.display = "flex";
+            typeText(introEl, ex.intro, REPLY_SPEED, () => {
+              // 4 · the live Aktion UI streams in
+              setStatus("Generating UI…");
+              renderUI(ex.src, finish);
+            });
+          }, THINK_MS);
+        });
+      }
+
+      prevBtn.addEventListener("click", () => { auto = false; show(idx - 1); });
+      nextBtn.addEventListener("click", () => { auto = false; show(idx + 1); });
+
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting && !started) { started = true; show(0); }
+        });
+      }, { threshold: 0.2 });
+      io.observe(stage);
+    })();
+  </script>
+
+  <script>
+    /* ---- theme toggle (shared localStorage with docs) ---- */
+    (function () {
+      const root = document.documentElement;
+      const btn = document.getElementById("themeToggle");
+      const icon = () => btn && btn.querySelector("i");
+      function paint() {
+        const dark = root.getAttribute("data-doc-theme") === "dark";
+        const i = icon();
+        if (i) i.className = dark ? "fa-solid fa-sun" : "fa-solid fa-moon";
+      }
+      paint();
+      btn && btn.addEventListener("click", () => {
+        const next = root.getAttribute("data-doc-theme") === "dark" ? "light" : "dark";
+        root.setAttribute("data-doc-theme", next);
+        try { localStorage.setItem("doc-theme", next); } catch (_) {}
+        paint();
+      });
+    })();
+
+    /* ---- nav shadow on scroll ---- */
+    (function () {
+      const nav = document.getElementById("nav");
+      const onScroll = () => nav.classList.toggle("scrolled", window.scrollY > 12);
+      onScroll();
+      window.addEventListener("scroll", onScroll, { passive: true });
+    })();
+
+    /* ---- mobile burger: toggle dropdown menu ---- */
+    (function () {
+      const burger = document.getElementById("burger");
+      const menu = document.getElementById("mobileMenu");
+      const backdrop = document.getElementById("mobileMenuBackdrop");
+      if (!burger || !menu) return;
+      const icon = burger.querySelector("i");
+
+      function setOpen(open) {
+        menu.classList.toggle("is-open", open);
+        if (backdrop) backdrop.classList.toggle("is-open", open);
+        burger.setAttribute("aria-expanded", String(open));
+        burger.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+        if (icon) icon.className = open ? "fa-solid fa-xmark" : "fa-solid fa-bars";
+      }
+
+      burger.addEventListener("click", () => setOpen(!menu.classList.contains("is-open")));
+      backdrop && backdrop.addEventListener("click", () => setOpen(false));
+      menu.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => setOpen(false)));
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") setOpen(false); });
+      // Reset when leaving the burger breakpoint so the panel never lingers on desktop.
+      window.matchMedia("(min-width: 1081px)").addEventListener("change", (e) => { if (e.matches) setOpen(false); });
+    })();
+
+    /* ---- scroll reveal ---- */
+    (function () {
+      const els = document.querySelectorAll(".reveal");
+      if (!("IntersectionObserver" in window)) { els.forEach(e => e.classList.add("in")); return; }
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+      }, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
+      els.forEach(e => io.observe(e));
+    })();
+
+    /* ---- count-up stats ---- */
+    (function () {
+      const nums = document.querySelectorAll("[data-count]");
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (!e.isIntersecting) return;
+          const el = e.target;
+          const target = parseInt(el.dataset.count, 10);
+          const suffix = el.dataset.suffix || "";
+          let cur = 0;
+          const steps = 36;
+          const inc = Math.max(1, Math.ceil(target / steps));
+          const t = setInterval(() => {
+            cur += inc;
+            if (cur >= target) { cur = target; clearInterval(t); }
+            el.textContent = cur + suffix;
+          }, 24);
+          io.unobserve(el);
+        });
+      }, { threshold: 0.6 });
+      nums.forEach(n => io.observe(n));
+    })();
+
+    /* ---- copy CTA snippet ---- */
+    (function () {
+      const btn = document.getElementById("copyCta");
+      btn && btn.addEventListener("click", async () => {
+        const code = '<script type="module" src="https://asfand-dev.github.io/aktion/dist/aktion.js"></scr' + 'ipt>\n<aktion-app theme="dark"></aktion-app>';
+        try { await navigator.clipboard.writeText(code); } catch (_) {}
+        btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+        setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-copy"></i>'; }, 1600);
+      });
+    })();
+
+    /* ---- shared reduced-motion flag for JS-driven effects ---- */
+    const REDUCE_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    /* ---- scroll progress bar ---- */
+    (function () {
+      const bar = document.getElementById("scrollProgress");
+      if (!bar) return;
+      const update = () => {
+        const h = document.documentElement;
+        const max = h.scrollHeight - h.clientHeight;
+        const pct = max > 0 ? (h.scrollTop || window.scrollY) / max : 0;
+        bar.style.width = Math.min(100, Math.max(0, pct * 100)) + "%";
+      };
+      update();
+      window.addEventListener("scroll", update, { passive: true });
+      window.addEventListener("resize", update, { passive: true });
+    })();
+
+    /* ---- rotating headline word ---- */
+    (function () {
+      const host = document.getElementById("rotator");
+      if (!host) return;
+      const WORDS = ["dashboards", "chat UIs", "forms", "charts", "anything"];
+      if (REDUCE_MOTION) { host.querySelector(".word").textContent = WORDS[0]; return; }
+      let i = 0;
+      const word = host.querySelector(".word");
+      // Sequential transition on a single element: fully animate the current word OUT,
+      // then swap the text and animate the new one IN — the two are never visible together.
+      const swap = () => {
+        word.classList.remove("in");
+        word.classList.add("out");
+        setTimeout(() => {
+          i = (i + 1) % WORDS.length;
+          word.textContent = WORDS[i];
+          host.setAttribute("aria-label", WORDS[i]);
+          word.classList.remove("out");
+          void word.offsetWidth; // restart the animation
+          word.classList.add("in");
+        }, 300);
+      };
+      setInterval(swap, 2600);
+    })();
+
+    /* ---- cursor spotlight on cards ---- */
+    (function () {
+      if (REDUCE_MOTION) return;
+      const cards = document.querySelectorAll(".card, .demo-card, .stat");
+      cards.forEach((card) => {
+        card.addEventListener("pointermove", (e) => {
+          const r = card.getBoundingClientRect();
+          card.style.setProperty("--mx", (e.clientX - r.left) + "px");
+          card.style.setProperty("--my", (e.clientY - r.top) + "px");
+        });
+      });
+    })();
+
+    /* ---- 3D tilt on the hero device ---- */
+    (function () {
+      if (REDUCE_MOTION) return;
+      const el = document.querySelector("[data-tilt]");
+      if (!el) return;
+      const MAX = 7; // degrees
+      let raf = null;
+      const onMove = (e) => {
+        const r = el.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width - 0.5;
+        const py = (e.clientY - r.top) / r.height - 0.5;
+        if (raf) cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+          el.style.transform = `rotateY(${px * MAX}deg) rotateX(${-py * MAX}deg) translateZ(0)`;
+        });
+      };
+      const reset = () => { if (raf) cancelAnimationFrame(raf); el.style.transform = ""; };
+      el.addEventListener("pointermove", onMove);
+      el.addEventListener("pointerleave", reset);
+    })();
+
+    /* ---- magnetic primary buttons ---- */
+    (function () {
+      if (REDUCE_MOTION) return;
+      if (!window.matchMedia || !window.matchMedia("(pointer: fine)").matches) return;
+      document.querySelectorAll(".btn-primary").forEach((btn) => {
+        btn.addEventListener("pointermove", (e) => {
+          const r = btn.getBoundingClientRect();
+          const x = (e.clientX - r.left - r.width / 2) * 0.3;
+          const y = (e.clientY - r.top - r.height / 2) * 0.4;
+          btn.style.transform = `translate(${x}px, ${y}px)`;
+        });
+        btn.addEventListener("pointerleave", () => { btn.style.transform = ""; });
+      });
+    })();
+
+    /* ---- particle background ---- */
+    (function () {
+      const canvas = document.getElementById("particles");
+      if (!canvas) return;
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const ctx = canvas.getContext("2d");
+      let w, h, dpr, particles = [];
+      const COLORS = ["#6366f1", "#8b5cf6", "#ec4899", "#22d3ee"];
+
+      function resize() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        w = canvas.width = innerWidth * dpr;
+        h = canvas.height = innerHeight * dpr;
+        canvas.style.width = innerWidth + "px";
+        canvas.style.height = innerHeight + "px";
+        const count = Math.min(70, Math.floor(innerWidth / 22));
+        particles = Array.from({ length: count }, () => ({
+          x: Math.random() * w, y: Math.random() * h,
+          vx: (Math.random() - 0.5) * 0.25 * dpr,
+          vy: (Math.random() - 0.5) * 0.25 * dpr,
+          r: (Math.random() * 1.6 + 0.6) * dpr,
+          c: COLORS[(Math.random() * COLORS.length) | 0],
+        }));
+      }
+      resize();
+      addEventListener("resize", resize);
+
+      const LINK = 400;
+      function frame() {
+        ctx.clearRect(0, 0, w, h);
+        for (const p of particles) {
+          p.x += p.vx; p.y += p.vy;
+          if (p.x < 0 || p.x > w) p.vx *= -1;
+          if (p.y < 0 || p.y > h) p.vy *= -1;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fillStyle = p.c;
+          ctx.globalAlpha = 0.7;
+          ctx.fill();
+        }
+        const link = LINK * dpr;
+        for (let i = 0; i < particles.length; i++) {
+          for (let j = i + 1; j < particles.length; j++) {
+            const a = particles[i], b = particles[j];
+            const dx = a.x - b.x, dy = a.y - b.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < link) {
+              ctx.beginPath();
+              ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+              ctx.strokeStyle = a.c;
+              ctx.globalAlpha = (1 - dist / link) * 0.18;
+              ctx.lineWidth = dpr * 0.6;
+              ctx.stroke();
+            }
+          }
+        }
+        ctx.globalAlpha = 1;
+        requestAnimationFrame(frame);
+      }
+      frame();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,320 @@
+// Order tracking & returns portal — a post-purchase account page: a live shipment tracker,
+// package contents with computed totals, support cases and a full returns / exchange flow.
+// Starting point for: order status pages, delivery tracking, RMA and self-service refund portals.
+// Uses: $store (orders + cases), Steps + Timeline tracker, Cart + OrderSummary, Modal case filing,
+//       Checkbox/Select returns picker, SuccessState + QRCode label, ProductCard recommendations.
+$app(Column([header, kpis, tracker, logistics, contents, details, support, returns, history, alsoLike, reportModal], { gap: "lg", padding: "md" }))
+
+img = (seed, w, h) => `https://picsum.photos/seed/${seed}/${w}/${h}`
+money = n => $util.currency(n, "USD")
+stages = ["Ordered", "Packed", "Shipped", "Out for delivery", "Delivered"]
+stageIcons = ["receipt", "box-open", "truck-fast", "truck-ramp-box", "house-circle-check"]
+account = { name: "Robin Álvarez", street: "1184 Marlowe Street, Apt 3B", city: "Oakland, CA 94607", country: "United States", phone: "+1 (510) 555-0142" }
+
+seedOrders = [
+  {
+    id: "HR-48219", placed: "3 Aug 2026", stage: 2, promoPct: 10, taxPct: 8.25, express: false, promo: "AUTUMN10", card: "Visa •••• 4242",
+    courier: "Meridian Freight", service: "Ground · 3–5 business days", tracking: "MRF-8842-19073", eta: "Friday 8 August",
+    returnsBy: "2026-09-02", instructions: "Leave with the building concierge",
+    stamps: ["Mon 3 Aug, 09:12", "Mon 3 Aug, 17:40", "Tue 4 Aug, 06:55", "Fri 8 Aug, 07:30", "Fri 8 Aug, 15:10"],
+    scans: ["Payment authorised · Portland, OR", "Packed at Fulfilment Centre 4 · Gresham, OR", "Departed sort facility · Sacramento, CA", "On the van for delivery · Oakland, CA", "Handed to the concierge · Oakland, CA"],
+    items: [{ sku: "FJL-BL-0348", name: "Fjell Merino Base Layer — Slate", price: 89, qty: 1, seed: "halden-merino-base" }, { sku: "KTR-DV-1172", name: "Kettle Ridge Down Vest — Moss", price: 168, qty: 1, seed: "halden-down-vest" }, { sku: "ANV-SK-0091", name: "Anvil Trail Socks, 3-pack", price: 26, qty: 2, seed: "halden-trail-socks" }]
+  },
+  {
+    id: "HR-47960", placed: "21 Jul 2026", stage: 4, promoPct: 0, taxPct: 8.25, express: true, promo: "", card: "Visa •••• 4242",
+    courier: "Beacon Same-Day", service: "Express · next business day", tracking: "BSD-2210-44815", eta: "Delivered 23 July",
+    returnsBy: "2026-08-20", instructions: "Signature taken on delivery",
+    stamps: ["Tue 21 Jul, 11:02", "Tue 21 Jul, 15:20", "Wed 22 Jul, 05:44", "Thu 23 Jul, 08:10", "Thu 23 Jul, 13:47"],
+    scans: ["Payment authorised · Portland, OR", "Packed at Fulfilment Centre 2 · Portland, OR", "Departed sort facility · Sacramento, CA", "On the van for delivery · Oakland, CA", "Signed for by R. Álvarez · Oakland, CA"],
+    items: [{ sku: "HRW-LT-0210", name: "Harbour Lantern — Brass", price: 74, qty: 1, seed: "halden-harbour-lantern" }, { sku: "CDR-CB-0455", name: "Cedar End-Grain Board", price: 58, qty: 1, seed: "halden-cedar-board" }]
+  },
+  {
+    id: "HR-47418", placed: "2 Jul 2026", stage: 4, promoPct: 0, taxPct: 8.25, express: false, promo: "", card: "Amex •••• 1007",
+    courier: "Meridian Freight", service: "Ground · 3–5 business days", tracking: "MRF-7741-08822", eta: "Delivered 6 July",
+    returnsBy: "2026-07-30", instructions: "Left at the front desk",
+    stamps: ["Thu 2 Jul, 08:31", "Thu 2 Jul, 14:05", "Fri 3 Jul, 06:12", "Mon 6 Jul, 09:40", "Mon 6 Jul, 16:22"],
+    scans: ["Payment authorised · Portland, OR", "Packed at Fulfilment Centre 4 · Gresham, OR", "Departed sort facility · Sacramento, CA", "On the van for delivery · Oakland, CA", "Left at the front desk · Oakland, CA"],
+    items: [{ sku: "TDE-MG-0733", name: "Tidewater Enamel Mug", price: 22, qty: 2, seed: "halden-enamel-mug" }]
+  }
+]
+
+shop = $store({
+  activeId: "HR-48219",
+  orders: seedOrders,
+  cases: [{ id: "CASE-1381", orderId: "HR-47418", title: "Something arrived damaged", notes: "One mug had a chipped rim.", opened: "12 Jul 2026", status: "Resolved" }],
+  select: (s, id) => { s.activeId = id },
+  advance: (s) => { s.orders = s.orders.map(o => o.id == s.activeId ? { ...o, stage: Math.min(4, o.stage + 1) } : o) },
+  addCase: (s, entry) => { s.cases = [entry, ...s.cases] },
+  resolveCase: (s, id) => { s.cases = s.cases.map(c => c.id == id ? { ...c, status: "Resolved" } : c) }
+})
+
+$live = false
+$reportOpen = false
+$caseReason = "late"
+$caseNotes = ""
+$returnIds = []
+$returnReasons = {}
+$resolution = "refund"
+$returnDone = false
+
+returnReasons = [{ value: "too-large", label: "Too large" }, { value: "too-small", label: "Too small" }, { value: "not-as-described", label: "Not as described" }, { value: "damaged", label: "Arrived damaged" }, { value: "changed-mind", label: "Changed my mind" }]
+caseReasons = [{ value: "missing-item", label: "An item is missing" }, { value: "damaged", label: "Something arrived damaged" }, { value: "late", label: "Delivery is running late" }, { value: "wrong-item", label: "The wrong item shipped" }, { value: "other", label: "Something else" }]
+
+function lineSum(o) { return $util.sum(o.items.map(it => it.price * it.qty)) }
+function discountOf(o) { return Math.round(lineSum(o) * o.promoPct) / 100 }
+function shippingOf(o) { return o.express ? 14.5 : (lineSum(o) - discountOf(o) >= 75 ? 0 : 7.95) }
+function taxableOf(o) { return lineSum(o) - discountOf(o) + shippingOf(o) }
+function taxOf(o) { return Math.round(taxableOf(o) * o.taxPct) / 100 }
+function totalOf(o) { return taxableOf(o) + taxOf(o) }
+function reasonOf(sku) { return $returnReasons[sku] || "too-large" }
+
+order = shop.orders.find(o => o.id == shop.activeId)
+subtotal = lineSum(order)
+discount = discountOf(order)
+shipping = shippingOf(order)
+tax = taxOf(order)
+total = totalOf(order)
+delivered = order.stage >= 4
+daysLeft = $util.diffDays($util.today(), order.returnsBy)
+returnsOpen = daysLeft > 0
+orderCases = shop.cases.filter(c => c.orderId == order.id)
+openCases = shop.cases.filter(c => c.status == "Open")
+
+function feeFor(it) {
+  if ($resolution != "refund") return 0
+  if (reasonOf(it.sku) != "changed-mind") return 0
+  return Math.round(it.price * it.qty * 6) / 100
+}
+
+returnLines = order.items.filter(it => $returnIds.indexOf(it.sku) >= 0)
+returnSubtotal = $util.sum(returnLines.map(it => it.price * it.qty))
+restockFee = $util.sum(returnLines.map(it => feeFor(it)))
+fullReturn = returnLines.length == order.items.length && returnLines.length > 0
+returnShipping = $resolution == "refund" && fullReturn ? shipping : 0
+refundTotal = Math.max(0, returnSubtotal - restockFee + returnShipping)
+rma = `RMA-${order.id}-${$resolution == "refund" ? "R" : "X"}${returnLines.length}`
+
+function openOrder(id) {
+  shop.select(id)
+  $returnIds = []
+  $returnDone = false
+  $toast.info(`Now viewing order ${id}`)
+}
+
+function toggleReturn(sku) {
+  if ($returnIds.indexOf(sku) >= 0) $returnIds = $returnIds.filter(s => s != sku)
+  else $returnIds = [...$returnIds, sku]
+}
+
+function setReason(sku, value) { $returnReasons = { ...$returnReasons, [sku]: value } }
+
+function shippingRefundLabel() {
+  if (returnShipping > 0) return money(returnShipping)
+  if (shipping == 0) return "Delivery was free"
+  return "Only on a full return"
+}
+
+function submitReturn() {
+  if (returnLines.length == 0) return
+  $returnDone = true
+  $toast.success(`Label ${rma} issued for ${$util.plural(returnLines.length, "item")}`)
+}
+
+function resetReturn() {
+  $returnDone = false
+  $returnIds = []
+}
+
+function fileCase() {
+  const picked = caseReasons.find(r => r.value == $caseReason)
+  shop.addCase({ id: `CASE-${1400 + shop.cases.length}`, orderId: order.id, title: picked.label, notes: $caseNotes.length > 0 ? $caseNotes : "No extra details supplied.", opened: "Today", status: "Open" })
+  $caseNotes = ""
+  $reportOpen = false
+  $toast.success("Case filed — support replies within one business day")
+}
+
+$effect(() => {
+  if ($live && order.stage < 4) shop.advance()
+}, ["every(6000)"])
+
+header = PageHeader(`Order ${order.id}`, {
+  subtitle: `Placed ${order.placed} · ${$util.plural(order.items.length, "item")} · ${money(total)}`,
+  breadcrumbs: ["Account", "Orders", order.id],
+  status: Badge(stages[order.stage], { tone: delivered ? "success" : "info", icon: stageIcons[order.stage] }),
+  actions: [Button("Invoice", { variant: "ghost", size: "sm", icon: "file-invoice", onClick: () => $toast.info(`Invoice for ${order.id} queued as a PDF`) }), Button("Report a problem", { variant: "secondary", size: "sm", icon: "life-ring", onClick: () => { $reportOpen = true } })]
+})
+
+kpis = Stats([
+  { label: "Order total", value: money(total), hint: `incl. ${money(tax)} tax` }, { label: "Status", value: stages[order.stage], hint: order.courier, tone: delivered ? "success" : "info" },
+  { label: "Arrives", value: order.eta, hint: order.service }, { label: "Open cases", value: String(openCases.length), tone: openCases.length > 0 ? "warning" : "default" },
+  { label: "Return window", value: returnsOpen ? `${daysLeft} days left` : "Closed", tone: returnsOpen ? "default" : "warning" }
+], { layout: "strip" })
+
+stepItems = stages.map((label, i) => ({ title: label, details: i <= order.stage ? order.stamps[i] : `Expected ${order.stamps[i]}`, status: i < order.stage ? "complete" : (i == order.stage ? "active" : "pending") }))
+
+trackerActions = [Switch("live-tracking", { label: "Auto-advance", value: $live }), Button("Advance shipment", { variant: "secondary", size: "sm", icon: "forward", disabled: delivered, onClick: () => shop.advance() })]
+trackerHeader = SectionHeader("Delivery progress", { eyebrow: "SHIPMENT", subtitle: `${order.courier} · ${order.tracking}`, status: StatusDot(delivered ? "Delivered" : "In transit", { tone: delivered ? "success" : "info", pulse: !delivered }), actions: trackerActions })
+deliveredNote = Callout("success", { title: "Delivered", description: `${order.instructions}. Everything in this parcel can be sent back until ${order.returnsBy}.`, icon: "box-open", compact: true })
+transitNote = Callout("info", { title: `Arriving ${order.eta}`, description: `${order.service}. We text ${account.phone} when the driver is one stop away.`, icon: "clock", compact: true })
+
+tracker = Card([
+  trackerHeader,
+  Progress(order.stage * 25, { max: 100, label: `Step ${order.stage + 1} of 5 — ${stages[order.stage]}`, tone: delivered ? "success" : "primary", showValue: true }),
+  Steps(stepItems, { orientation: "horizontal" }),
+  Show(delivered, { children: deliveredNote, fallback: transitNote })
+])
+
+scanFeed = $util.reverse(stages.slice(0, order.stage + 1).map((label, i) => TimelineItem(label, { time: order.stamps[i], description: order.scans[i], icon: stageIcons[i], tone: i == order.stage ? "primary" : "success" })))
+
+etaCard = Card([
+  SectionHeader("Estimated arrival", { eyebrow: "ETA" }),
+  Row([Icon(delivered ? "house-circle-check" : "truck-fast", { size: "lg" }), Column([Text(order.eta, { variant: "title" }), Text(`${order.courier} · ${order.service}`, { variant: "small", tone: "muted" })], { gap: "3xs" })], { gap: "md", align: "center" }),
+  DescriptionList([
+    DescriptionItem("Tracking number", { icon: "barcode", value: Row([Text(order.tracking, { variant: "body-heavy" }), CopyButton(order.tracking, { label: "Copy", copiedLabel: "Copied" })], { gap: "sm", align: "center", wrap: true }) }),
+    DescriptionItem("Delivery note", { value: order.instructions, icon: "note-sticky" }),
+    DescriptionItem("Returns until", { value: order.returnsBy, icon: "rotate-left" })
+  ], { columns: 1 })
+])
+
+logistics = Grid([
+  Card([SectionHeader("Courier scans", { eyebrow: "TRACKING", subtitle: `${$util.plural(order.stage + 1, "scan")} recorded` }), Timeline(scanFeed)]),
+  etaCard
+], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+contents = Grid([
+  Card([
+    SectionHeader("Package contents", { eyebrow: "PARCEL", subtitle: `${$util.plural(order.items.length, "line")} · shipped in one box` }),
+    Cart(order.items.map(it => ({ id: it.sku, name: it.name, price: it.price, qty: it.qty, image: img(it.seed, 96, 96) })), { currency: "USD" })
+  ]),
+  OrderSummary(order.items.map(it => ({ label: it.name, amount: money(it.price * it.qty), qty: it.qty })), {
+    subtotal: money(subtotal), discount: discount > 0 ? `− ${money(discount)}` : money(0), shipping: shipping == 0 ? "Free" : money(shipping),
+    tax: money(tax), total: money(total), note: `Charged to ${order.card} on ${order.placed}${order.promo.length > 0 ? ` · promo ${order.promo}` : ""}`
+  })
+], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+details = Grid([
+  Card([
+    SectionHeader("Delivery address", { eyebrow: "SHIP TO", actions: [IconButton("pen", { label: "Edit delivery address", variant: "ghost", size: "sm", onClick: () => $toast.info("The address locks once a parcel ships") })] }),
+    DescriptionList([
+      DescriptionItem("Recipient", { value: account.name, icon: "user" }),
+      DescriptionItem("Street", { value: account.street, icon: "location-dot" }),
+      DescriptionItem("City", { value: `${account.city} · ${account.country}`, icon: "city" }),
+      DescriptionItem("Phone", { value: account.phone, icon: "phone" })
+    ], { columns: 1 })
+  ]),
+  Card([
+    SectionHeader("Payment method", { eyebrow: "BILLING", status: Pill("Captured", { tone: "success" }) }),
+    DescriptionList([
+      DescriptionItem("Card", { value: order.card, icon: "credit-card" }),
+      DescriptionItem("Authorised", { value: order.placed, icon: "circle-check" }),
+      DescriptionItem("Promotion", { value: order.promo.length > 0 ? `${order.promo} (− ${money(discount)})` : "None applied", icon: "ticket" }),
+      DescriptionItem("Charged", { value: money(total), icon: "receipt" })
+    ], { columns: 1 })
+  ])
+], { columns: { base: 1, md: 2 }, gap: "lg", alignItems: "start" })
+
+function CaseRow(c) {
+  const open = c.status == "Open"
+  return ListItem(c.title, {
+    description: `${c.id} · ${c.notes} · opened ${c.opened}`,
+    icon: open ? "ticket" : "circle-check",
+    tone: open ? "warning" : "success",
+    trailing: open ? [Badge("Open", { tone: "warning" }), Button("Mark resolved", { variant: "ghost", size: "sm", onClick: () => shop.resolveCase(c.id) })] : [Badge("Resolved", { tone: "success" })]
+  })
+}
+
+supportStatus = openCases.length > 0 ? Pill(`${openCases.length} open`, { tone: "warning" }) : Pill("All clear", { tone: "success" })
+
+support = Card([
+  SectionHeader("Support cases", { eyebrow: "HELP", subtitle: "Anything filed against this order shows up here", status: supportStatus, actions: [Button("Report a problem", { variant: "secondary", size: "sm", icon: "life-ring", onClick: () => { $reportOpen = true } })] }),
+  Show(orderCases.length > 0, { children: List(orderCases.map(c => CaseRow(c)), { divided: true }), fallback: EmptyState("No cases on this order", { description: "Missing, damaged or late? File a case and support picks it up within one business day.", icon: "circle-check" }) })
+])
+
+reportModal = Modal("Report a problem", $reportOpen, [
+  Column([
+    Text(`Order ${order.id} · ${order.courier} · ${order.tracking}`, { variant: "small", tone: "muted" }),
+    FormControl("What went wrong?", { field: Select("case-reason", { items: caseReasons, value: $caseReason, labelHidden: true }) }),
+    FormControl("Tell us more", { field: TextArea("case-notes", { value: $caseNotes, rows: 4, maxLength: 400, placeholder: "The vest is in the box but the base layer is missing…" }), hint: "Photos can be attached once the case is open." }),
+    Callout("info", { title: "Most cases close in a day", description: "Damaged or missing items are refunded or reshipped without sending anything back.", icon: "circle-info", compact: true })
+  ], { gap: "md" })
+], { size: "md", footer: [Button("Cancel", { variant: "ghost", onClick: () => { $reportOpen = false } }), Button("File case", { variant: "primary", icon: "paper-plane", onClick: fileCase })] })
+
+function ReturnRow(it) {
+  const picked = $returnIds.indexOf(it.sku) >= 0
+  const box = Checkbox(`ret-${it.sku}`, { label: it.name, description: `${it.sku} · qty ${it.qty} · ${money(it.price * it.qty)}`, value: picked, onChange: () => toggleReturn(it.sku) })
+  const why = Select(`why-${it.sku}`, { items: returnReasons, value: reasonOf(it.sku), label: `Reason for returning ${it.name}`, labelHidden: true, onChange: v => setReason(it.sku, v) })
+  return Box([Row([
+    StackItem(box, { grow: 1, minWidth: "220px" }),
+    Show(picked, { children: why, fallback: Text("Keeping", { variant: "small", tone: "muted" }) })
+  ], { gap: "md", align: "center", wrap: true })], { padding: "sm", border: "subtle", radius: "md" })
+}
+
+refundLines = DescriptionList([
+  DescriptionItem("Items selected", { value: `${returnLines.length} of ${order.items.length}`, icon: "list-check" }),
+  DescriptionItem("Item value", { value: money(returnSubtotal), icon: "tags" }),
+  DescriptionItem("Restocking fee", { value: restockFee > 0 ? `− ${money(restockFee)}` : "Waived", icon: "percent" }),
+  DescriptionItem("Shipping refunded", { value: shippingRefundLabel(), icon: "truck" }),
+  DescriptionItem($resolution == "refund" ? "Estimated refund" : "Exchange credit", { value: money(refundTotal), icon: "money-bill-transfer" })
+], { columns: 1 })
+
+resolutionPicker = SegmentedControl([{ value: "refund", label: "Refund to card" }, { value: "exchange", label: "Exchange" }], { value: $resolution, label: "Resolution", onChange: v => { $resolution = v } })
+resolutionNote = $resolution == "refund" ? `Refunds land on ${order.card} 3–5 days after the parcel is scanned back in. Change-of-mind returns carry a 6% restocking fee.` : "Exchanges ship the moment the courier scans your parcel — and the restocking fee is waived."
+
+returnPicker = Column([
+  Column(order.items.map(it => ReturnRow(it)), { gap: "sm" }),
+  Separator("horizontal"),
+  Grid([
+    Column([FormControl("How should we settle it?", { field: resolutionPicker }), Text(resolutionNote, { variant: "small", tone: "muted" })], { gap: "sm" }),
+    Column([refundLines, Buttons([
+      Button($resolution == "refund" ? "Request refund" : "Request exchange", { variant: "primary", icon: "rotate-left", disabled: returnLines.length == 0, onClick: submitReturn }),
+      Button("Clear selection", { variant: "ghost", disabled: returnLines.length == 0, onClick: () => { $returnIds = [] } })
+    ])], { gap: "sm" })
+  ], { columns: { base: 1, md: 2 }, gap: "lg", alignItems: "start" })
+], { gap: "md" })
+
+labelBlurb = `${rma} covers ${$util.plural(returnLines.length, "item")} worth ${money(refundTotal)}. Drop the parcel at any Meridian point within 14 days.`
+
+returnLabel = Grid([
+  SuccessState("Return label ready", { description: labelBlurb, icon: "tag", actions: [Button("Print label", { variant: "primary", icon: "print", onClick: () => $toast.success("Label sent to your printer queue") }), Button("Start another return", { variant: "ghost", icon: "arrow-rotate-left", onClick: resetReturn })] }),
+  Card([Column([
+    QRCode(`https://returns.haldenrowe.example/${rma}`, { size: 132, label: `Return QR code for ${rma}` }),
+    Text("Show this code at the drop-off counter", { variant: "small", tone: "muted", align: "center" }),
+    Row([Text(rma, { variant: "body-heavy" }), CopyButton(rma, { label: "Copy RMA" })], { gap: "sm", align: "center", wrap: true })
+  ], { gap: "sm", align: "center" })])
+], { columns: { base: 1, md: 2 }, gap: "lg", alignItems: "center" })
+
+returnsClosed = EmptyState("Return window closed", { description: "Faulty goods are still covered by the two-year warranty — file a support case and we take it from there.", icon: "calendar-xmark", action: Button("Open a warranty case", { variant: "secondary", icon: "shield-halved", onClick: () => { $reportOpen = true } }) })
+
+returnsSubtitle = returnsOpen ? `Pick what goes back — ${daysLeft} days of the 30-day window left` : `The 30-day window closed on ${order.returnsBy}`
+
+returns = Card([
+  SectionHeader("Return or exchange", { eyebrow: "AFTER-SALES", subtitle: returnsSubtitle, status: Badge(returnsOpen ? "Window open" : "Window closed", { tone: returnsOpen ? "success" : "warning" }) }),
+  Show(returnsOpen, { children: Show($returnDone, { children: returnLabel, fallback: returnPicker }), fallback: returnsClosed })
+])
+
+history = Card([
+  SectionHeader("Order history", { eyebrow: "ACCOUNT", subtitle: "Select an order to load it into this page" }),
+  List(shop.orders.map(o => ListItem(`${o.id} — ${o.placed}`, {
+    description: `${$util.plural(o.items.length, "item")} · ${money(totalOf(o))} · ${o.courier}`,
+    icon: stageIcons[o.stage],
+    active: o.id == shop.activeId,
+    onClick: () => openOrder(o.id),
+    trailing: [Badge(stages[o.stage], { tone: o.stage >= 4 ? "success" : "info" })]
+  })), { divided: true })
+])
+
+recommendations = [
+  { title: "Fjell Merino Beanie", price: 42, compareAt: 52, rating: 4.7, reviews: 218, seed: "halden-merino-beanie", badge: "Pairs well" },
+  { title: "Kettle Ridge Glove Liner", price: 38, compareAt: 0, rating: 4.5, reviews: 96, seed: "halden-glove-liner", badge: "" },
+  { title: "Anvil Waxed Duffel 40L", price: 189, compareAt: 219, rating: 4.8, reviews: 341, seed: "halden-waxed-duffel", badge: "Sale" },
+  { title: "Tidewater Vacuum Flask", price: 46, compareAt: 0, rating: 4.6, reviews: 154, seed: "halden-vacuum-flask", badge: "" }
+]
+
+alsoLike = Card([
+  SectionHeader("You might also like", { eyebrow: "FOR YOU", subtitle: `Chosen from what shipped in ${order.id}` }),
+  Grid(recommendations.map(p => ProductCard(p.title, {
+    image: img(p.seed, 480, 360), price: p.price, compareAt: p.compareAt > 0 ? p.compareAt : null,
+    rating: p.rating, reviewCount: p.reviews, badge: p.badge.length > 0 ? p.badge : null,
+    onAdd: () => $toast.success(`${p.title} added to your bag`)
+  })), { columns: { base: 1, sm: 2, lg: 4 }, gap: "lg" })
+])
