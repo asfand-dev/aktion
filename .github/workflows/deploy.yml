@@ -22,7 +22,7 @@ jobs:
     name: Deploy the latest main version to GitHub Pages.
     environment:
       name: github-pages
-      url: https://primajin.github.io/aktion/
+      url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Get console logs
     env:
-      PREVIEW_URL: https://primajin.github.io/aktion/pr-preview/pr-${{ github.event.number }}/
+      PREVIEW_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-preview/pr-${{ github.event.number }}/
     steps:
       - name: Wait for build to succeed
         uses: fountainhead/action-wait-for-check@v1.2.0
