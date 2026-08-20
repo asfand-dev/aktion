@@ -327,6 +327,23 @@ export interface ComponentLibrary {
   componentGroups?: ReadonlyArray<ComponentGroup>;
 }
 
+/**
+ * Interoperability layer for third-party UI libraries (MUI, Bootstrap, ShadCN, etc.).
+ *
+ * Implement this interface in external adapter packages to replace Aktion's default
+ * component set with mapped components from another design system.
+ */
+export interface UIProvider {
+  /** Name of the provider (e.g. "mui", "bootstrap") */
+  name: string;
+  /** The component library mapping Aktion elements to the provider's implementation */
+  library: ComponentLibrary;
+  /** Optional setup hook to inject global styles, fonts, or provider contexts */
+  setup?: (root: ShadowRoot | Document | HTMLElement) => void;
+  /** Optional teardown hook when the provider is swapped out */
+  teardown?: () => void;
+}
+
 /** Resolve positional args from Aktion into named props. */
 export function mapPositionalArgs(
   spec: ComponentSpec,

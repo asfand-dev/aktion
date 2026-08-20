@@ -1,0 +1,141 @@
+name: "Deploy"
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  actions: write
+  contents: write
+
+# Use a single shared concurrency group so all runs that write to gh-pages are
+# serialised. A per-ref group still allows concurrent writes from different
+# triggers and causes rebase conflicts on the gh-pages branch.
+# cancel-in-progress: false ensures queued runs still execute.
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy the latest main version to GitHub Pages.
+    environment:
+      name: github-pages
+      url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Cache dependencies
+        uses: actions/cache@v6
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-
+      - name: Install dependencies
+        run: npm ci
+      - name: Run build
+        run: npm run build:preview
+        env:
+          VITE_BASE_PATH: "/aktion/"
+      - name: Deploy 🚀
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: site
+          clean-exclude: pr-preview
+          retry_on_conflict: true
+      - name: Capture deployed Pages SHA
+        run: echo "EXPECTED_PAGES_SHA=$(git ls-remote origin refs/heads/gh-pages | cut -f1)" >> "$GITHUB_ENV"
+      - name: Wait for Pages deployment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import time
+          import urllib.request
+
+          expected_sha = os.environ['EXPECTED_PAGES_SHA'].strip()
+          repository = os.environ['GITHUB_REPOSITORY']
+          token = os.environ['GITHUB_TOKEN']
+          deadline = time.time() + 15 * 60
+          retries_done = 0
+          max_reruns = 2
+          last_retried_attempt = 0
+
+          if not expected_sha:
+              raise SystemExit('EXPECTED_PAGES_SHA is empty')
+
+          def request(method, url, *, expect_json=True):
+              req = urllib.request.Request(
+                  url,
+                  method=method,
+                  headers={
+                      'Authorization': 'Bearer ' + token,
+                      'Accept': 'application/vnd.github+json',
+                      'X-GitHub-Api-Version': '2022-11-28',
+                  },
+              )
+              with urllib.request.urlopen(req, timeout=15) as response:
+                  if not expect_json:
+                      return None
+                  body = response.read()
+                  return json.loads(body or '{}')
+
+          while time.time() < deadline:
+              data = request(
+                  'GET',
+                  f'https://api.github.com/repos/{repository}/actions/runs?branch=gh-pages&event=dynamic&per_page=50',
+              )
+              runs = [
+                  run for run in data.get('workflow_runs', [])
+                  if run.get('path') == 'dynamic/pages/pages-build-deployment'
+                  and run.get('head_sha') == expected_sha
+              ]
+              runs.sort(key=lambda run: (run.get('run_attempt', 0), run.get('created_at', '')), reverse=True)
+
+              if not runs:
+                  print(f'Waiting for Pages workflow for {expected_sha}...')
+                  time.sleep(10)
+                  continue
+
+              run = runs[0]
+              status = run.get('status')
+              conclusion = run.get('conclusion')
+              attempt = run.get('run_attempt', 1)
+              run_id = run['id']
+              print(f"Pages run {run_id} attempt {attempt}: status={status} conclusion={conclusion}")
+
+              if status != 'completed':
+                  time.sleep(10)
+                  continue
+
+              if conclusion == 'success':
+                  sys.exit(0)
+
+              if retries_done < max_reruns and attempt > last_retried_attempt:
+                  print(f'Re-running failed Pages workflow run {run_id}...')
+                  request(
+                      'POST',
+                      f'https://api.github.com/repos/{repository}/actions/runs/{run_id}/rerun',
+                      expect_json=False,
+                  )
+                  retries_done += 1
+                  last_retried_attempt = attempt
+                  time.sleep(10)
+                  continue
+
+              raise SystemExit(
+                  f"Pages deployment failed for {expected_sha}: "
+                  f"{run.get('html_url')}"
+              )
+
+          raise SystemExit(f'Timed out waiting for Pages deployment for {expected_sha}')
+          PY
