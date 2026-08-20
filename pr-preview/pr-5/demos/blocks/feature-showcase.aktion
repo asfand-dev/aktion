@@ -1,0 +1,41 @@
+// Feature Showcase — a marketing feature section: section header, a responsive
+// feature grid, an alternating media row and a closing call-to-action banner.
+$app(Container([Column([head, grid, spotlight, cta], { gap: "lg" })], { size: "lg" }))
+
+features = [
+  { title: "Streaming-first", icon: "bolt", tone: "primary", desc: "UI renders progressively as the response streams in — no blank screens." },
+  { title: "One reactive atom", icon: "atom", tone: "info", desc: "A single $state primitive for every use case. No tiers, no boilerplate." },
+  { title: "90+ components", icon: "shapes", tone: "success", desc: "Dashboards, forms, charts, overlays — composable out of the box." },
+  { title: "Six themes", icon: "palette", tone: "warning", desc: "Light, dark, corporate, soft, glass, modern — switch at runtime." },
+  { title: "Framework agnostic", icon: "puzzle-piece", tone: "primary", desc: "Drop the web component into React, Vue, Svelte or plain HTML." },
+  { title: "Type-safe tooling", icon: "shield-halved", tone: "info", desc: "First-class editor support: hover, completion, diagnostics, rename." }
+]
+
+head = Center([Column([
+  Badge("Why Aktion", { tone: "primary", icon: "star" }),
+  Text("Everything you need to ship", { variant: "title" }),
+  Text("A batteries-included toolkit for generative, reactive interfaces.", { variant: "small", tone: "muted" })
+], { gap: "xs", align: "center" })])
+
+grid = FeatureGrid(features.map(f => FeatureItem(f.title, { description: f.desc, icon: f.icon, tone: f.tone })), { columns: { base: 1, sm: 2, lg: 3 } })
+
+spotlight = Card([Grid([
+  Column([
+    Badge("Deep dive", { tone: "info", icon: "magnifying-glass" }),
+    Text("Author once, render anywhere", { variant: "heading" }),
+    Text("Each .aktion file is pure source — no HTML, no script tags. The runtime parses it on every chunk and commits each line as it arrives, so partial responses still render top-down.", { tone: "muted" }),
+    Column([
+      Row([Icon("circle-check", { color: "var(--rui-color-success)", size: "sm" }), Text("Hot-swappable themes via a single attribute", { variant: "small" })], { gap: "sm", align: "center" }),
+      Row([Icon("circle-check", { color: "var(--rui-color-success)", size: "sm" }), Text("Reactive HTTP with caching + mutations", { variant: "small" })], { gap: "sm", align: "center" }),
+      Row([Icon("circle-check", { color: "var(--rui-color-success)", size: "sm" }), Text("Router, i18n and storage built in", { variant: "small" })], { gap: "sm", align: "center" })
+    ], { gap: "xs" }),
+    Button("Read the docs", { variant: "secondary", icon: "book" })
+  ], { gap: "md" }),
+  Image("https://picsum.photos/seed/aktion-feature/720/520", { alt: "Product screenshot", ratio: "4:3", fit: "cover" })
+], { columns: { base: 1, md: 2 }, gap: "lg", alignItems: "center" })])
+
+cta = Banner("Ready to build something great?", {
+  message: "Spin up your first reactive surface in under three minutes.",
+  tone: "primary", icon: "rocket",
+  action: Button("Get started free", { variant: "primary", icon: "arrow-right" })
+})

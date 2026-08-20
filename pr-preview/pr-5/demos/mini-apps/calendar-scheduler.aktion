@@ -1,0 +1,97 @@
+// Calendar Scheduler — a month calendar with event chips, a panel for the
+// selected day, an add-event form and an upcoming agenda. Events persist across
+// reloads. Starting point for: any booking, planner or scheduling feature.
+// Uses: Calendar (keyboard nav + chips), $store({ persist }), $form, Timeline agenda, CountdownTimer.
+$app(Column([header, body, agenda], { gap: "lg", padding: "md" }))
+
+today = $util.today()
+
+sched = $store({
+  persist: "scheduler.events",
+  events: [
+    { id: "e1", date: today, label: "Team standup", color: "#6366f1", kind: "Meeting" },
+    { id: "e2", date: $util.formatDate($util.addDays(today, 2), "iso").slice(0, 10), label: "Design review", color: "#10b981", kind: "Review" },
+    { id: "e3", date: $util.formatDate($util.addDays(today, 5), "iso").slice(0, 10), label: "Release v0.6", color: "#ef4444", kind: "Milestone" }
+  ],
+  add: (s, e) => { s.events = [...s.events, { ...e, id: $util.uuid() }] },
+  remove: (s, id) => { s.events = s.events.filter(e => e.id != id) }
+})
+
+$selected = today
+
+colors = [
+  { value: "#6366f1", label: "Indigo" },
+  { value: "#10b981", label: "Green" },
+  { value: "#f59e0b", label: "Amber" },
+  { value: "#ef4444", label: "Red" }
+]
+
+addForm = $form({
+  values: { label: "", kind: "Meeting", color: "#6366f1" },
+  rules: { label: [$util.rules.required("Give the event a name")] },
+  onSubmit: (v) => { sched.add({ date: $selected, label: v.label, kind: v.kind, color: v.color }); addForm.reset() }
+})
+
+onSelected = sched.events.filter(e => e.date == $selected)
+sorted = $util.sort(sched.events, "date", "asc")
+upcoming = sorted.filter(e => e.date >= today)
+nextEvent = upcoming.length > 0 ? upcoming[0] : null
+
+header = PageHeader("Scheduler", {
+  subtitle: `${sched.events.length} ${$util.plural(sched.events.length, "event")} scheduled`,
+  badge: Badge(`${upcoming.length} upcoming`, { tone: "primary", icon: "calendar-days" })
+})
+
+calendarCard = Card([
+  SectionHeader("Calendar", { eyebrow: "MONTH VIEW", subtitle: "Click a day — arrow keys, Home and End work too" }),
+  Calendar({
+    selected: $selected,
+    events: sched.events.map(e => ({ date: e.date, label: e.label, color: e.color })),
+    onSelect: (d) => { $selected = d },
+    firstDay: 1
+  })
+])
+
+dayPanel = Card([
+  SectionHeader($util.formatDate($selected, "MMM D, YYYY"), { eyebrow: "SELECTED DAY", subtitle: onSelected.length == 0 ? "Nothing planned — add something" : `${onSelected.length} ${$util.plural(onSelected.length, "event")}` }),
+  Show(onSelected.length > 0, {
+    children: Column(onSelected.map(e => Row([
+      Badge("●", { tone: "neutral", size: "sm", style: `color: ${e.color};` }),
+      StackItem(Column([Text(e.label, { variant: "body-heavy" }), Text(e.kind, { variant: "small", tone: "muted" })], { gap: "none" }), { grow: 1 }),
+      IconButton("trash", { label: "Remove", variant: "ghost", size: "sm", onClick: () => sched.remove(e.id) })
+    ], { gap: "sm", align: "center" })), { gap: "sm" })
+  }),
+  Separator("horizontal", { label: "add event" }),
+  FormControl("Event name", { field: Input("evLabel", { placeholder: "e.g. 1:1 with Grace", value: addForm.values.label, error: addForm.errors.label, onBlur: () => addForm.touch("label") }) }),
+  Grid([
+    FormControl("Type", { field: Select("evKind", { items: ["Meeting", "Review", "Milestone", "Personal"].map(k => SelectItem(k, { label: k })), value: addForm.values.kind }) }),
+    FormControl("Colour", { field: Select("evColor", { items: colors.map(c => SelectItem(c.value, { label: c.label })), value: addForm.values.color }) })
+  ], { columns: 2, gap: "sm" }),
+  Button("Add to this day", { variant: "primary", icon: "calendar-plus", fullWidth: true, onClick: () => addForm.submit(), disabled: !addForm.values.label })
+])
+
+countdown = Show(nextEvent != null, {
+  children: Card([
+    SectionHeader("Next up", { eyebrow: "COUNTDOWN" }),
+    Center([Column([
+      Text(nextEvent ? nextEvent.label : "", { variant: "large-heavy" }),
+      CountdownTimer(nextEvent ? `${nextEvent.date}T09:00:00` : "", { endLabel: "Happening now!" }),
+      Text(nextEvent ? $util.formatDate(nextEvent.date, "MMM D, YYYY") : "", { variant: "small", tone: "muted" })
+    ], { gap: "sm", align: "center" })], { minHeight: "120px" })
+  ])
+})
+
+body = Grid([calendarCard, Column([countdown, dayPanel], { gap: "lg" })], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+agenda = Card([
+  SectionHeader("Upcoming agenda", { eyebrow: "NEXT 7 DAYS" }),
+  Show(upcoming.length > 0, {
+    fallback: EmptyState("Nothing ahead", { icon: "calendar-plus", description: "Pick a day and add your first event." }),
+    children: Timeline(upcoming.slice(0, 8).map(e => TimelineItem(e.label, {
+      time: $util.formatDate(e.date, "MMM D"),
+      description: e.kind,
+      icon: e.kind == "Milestone" ? "flag-checkered" : e.kind == "Review" ? "magnifying-glass" : "calendar-day",
+      tone: e.date == today ? "primary" : "default"
+    })))
+  })
+])

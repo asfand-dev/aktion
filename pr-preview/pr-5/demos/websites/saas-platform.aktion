@@ -1,0 +1,306 @@
+// Resolvr — B2B support-automation marketing site built around a live ROI calculator.
+// Starting point for: B2B SaaS product sites, value-selling pages, seat-based pricing pages.
+// Uses: $theme branding, NavBar + stacked Sections, BrowserFrame preview, controlled Tabs product
+//        tour (BarChart / LineChart / CodeWindow), Slider + NumberInput driving live Metric / Stats
+//        math, seat-aware PricingTable, ComparisonTable, Tile grid, FAQ Accordion, Reveal, Footer.
+$theme({
+  colors: { primary: "#0d7d6b", primaryHover: "#0a6357", accent: "#f0723a" },
+  radius: { md: "12px", lg: "18px", button: "10px", input: "10px" },
+  fonts: { import: ["Inter:400,600,800"] }
+})
+
+$app([nav, hero, logos, tour, proof, calculator, pricing, compare, integrations, faq, cta, siteFooter])
+
+$tourTab = "resolve"
+$preview = "queue"
+$preset = "SaaS"
+$agents = 24
+$tickets = 18000
+$aht = 9
+$rate = 38
+$deflect = 46
+$seats = 25
+$cycle = "annual"
+$stack = "All"
+
+// ---- The model: every figure on the page derives from those five inputs ------
+seatFee = 39
+resolutionFee = 0.9
+bound = (n, lo, hi) => Math.min(hi, Math.max(lo, n || lo))
+agents = () => bound($agents, 3, 250)
+tickets = () => bound($tickets, 500, 80000)
+aht = () => bound($aht, 2, 30)
+rate = () => bound($rate, 12, 120)
+deflected = () => Math.round(tickets() * $deflect / 100)
+hoursNow = () => Math.round(tickets() * aht() / 60)
+hoursAfter = () => Math.round((tickets() - deflected()) * aht() / 60)
+hoursSaved = () => (hoursNow() - hoursAfter()) * 12
+moneySaved = () => hoursSaved() * rate()
+licence = () => Math.round(agents() * seatFee * 12 + deflected() * 12 * resolutionFee)
+netGain = () => moneySaved() - licence()
+roiPct = () => Math.round(netGain() / Math.max(1, licence()) * 100)
+fte = () => Math.round(hoursSaved() / 172) / 10
+payback = () => Math.max(1, Math.round(licence() / Math.max(1, moneySaved() / 52)))
+// The sign has to sit OUTSIDE the currency symbol, or a below-break-even model
+// prints "$-102K"; above a million a whole-number compact reading drops six
+// figures ("$1M" for $1,035,504), so that band keeps one decimal.
+money = n => `${n < 0 ? "-" : ""}$${$util.format(Math.abs(Math.round(n)), "compact", { decimals: Math.abs(n) >= 1000000 ? 1 : 0 })}`
+num = n => $util.format(Math.round(n), "number")
+presets = {
+  "SaaS": { agents: 24, tickets: 18000, aht: 9, rate: 38, deflect: 46, sample: 340 },
+  "Retail": { agents: 68, tickets: 54000, aht: 6, rate: 27, deflect: 58, sample: 210 },
+  "Fintech": { agents: 15, tickets: 7200, aht: 14, rate: 52, deflect: 34, sample: 96 }
+}
+
+function applyPreset(name) {
+  const p = presets[name]
+  if (p) {
+    $preset = name
+    $agents = p.agents
+    $tickets = p.tickets
+    $aht = p.aht
+    $rate = p.rate
+    $deflect = p.deflect
+    $toast.info(`Loaded the ${name} benchmark — the median of ${p.sample} live deployments.`)
+  }
+}
+// Dragging any input away from a benchmark has to clear the benchmark chip,
+// or the strip keeps claiming "SaaS" over numbers that are no longer its median.
+function unpreset() { $preset = "" }
+function checkRow(label) {
+  return Row([Icon("circle-check", { color: "var(--rui-color-success)" }), Text(label, { variant: "small" })], { gap: "sm", align: "start" })
+}
+function tourPane(eyebrow, title, body, points, visual) {
+  const copy = Column([Eyebrow(eyebrow), Heading(title, { level: 3, size: "lg" }), Text(body, { variant: "body", tone: "muted" }), Column(points.map(p => checkRow(p)), { gap: "sm" })], { gap: "md" })
+  return Split(copy, visual, { ratio: "1/1", gap: "xl", stackAt: "md", align: "center" })
+}
+
+// ---- Navigation and hero ----------------------------------------------------
+nav = NavBar({
+  brand: Brand("Resolvr", { version: "v4.2" }),
+  links: [Link("Product", { href: "#product" }), Link("ROI calculator", { href: "#roi" }), Link("Pricing", { href: "#pricing" }), Link("FAQ", { href: "#faq" })],
+  actions: [ThemeToggle(), Button("Book a demo", { variant: "primary", size: "sm", icon: "calendar-check", onClick: () => $toast.success("A solutions engineer will reach out within one business day.") })],
+  sticky: true,
+  blur: true
+})
+
+queuePane = Card([
+  SectionHeader("Tier-1 queue · EMEA", { subtitle: "Thursday, 14 May · 09:41 CET", status: Pill("Auto-triage on", { tone: "success" }) }),
+  Stats([{ label: "Waiting", value: "38", hint: "was 214 in March" }, { label: "Auto-resolved today", value: "612", tone: "success" }, { label: "Median first reply", value: "42s", tone: "primary" }], { layout: "strip" }),
+  List([
+    ListItem("Refund not received — order 88214", { description: "Matched refund-status policy · closed in 11s", icon: "wand-magic-sparkles", tone: "success", trailing: [Badge("Auto", { tone: "success", size: "sm" })] }),
+    ListItem("Cannot add a second workspace owner", { description: "Draft ready for Priya N. · 2 sources cited", icon: "pen-nib", tone: "info", trailing: [Badge("Assisted", { tone: "info", size: "sm" })] }),
+    ListItem("Invoice VAT number is wrong", { description: "Escalated to Billing — customer is enterprise", icon: "arrow-up-right-from-square", tone: "warning", trailing: [Badge("Escalated", { tone: "warning", size: "sm" })] })
+  ], { divided: true })
+])
+reportPane = Card([
+  SectionHeader("Deflection report", { subtitle: "Rolling 26 weeks · all channels", status: Pill("+18 pts", { tone: "promoting" }) }),
+  LineChart({ labels: ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May"], series: [Series("Auto-resolved %", [21, 26, 31, 37, 41, 44, 46]), Series("Escalated %", [39, 34, 29, 25, 22, 19, 17])], filled: true, height: 190, yAxisLabel: "share of queue" }),
+  Stats([{ label: "Containment", value: "46%" }, { label: "CSAT on auto-replies", value: "4.6 / 5", tone: "success" }, { label: "Wrong-answer rate", value: "0.7%", tone: "warning" }], { layout: "strip" })
+])
+
+hero = Section([
+  Column([
+    Eyebrow("SUPPORT AUTOMATION FOR HIGH-VOLUME TEAMS"),
+    Display(["Close half the queue ", GradientText("before an agent opens it", { gradient: "brand" })], { size: "hero", align: "center", balance: true }),
+    Text("Resolvr reads your help centre, macros and five years of resolved tickets, then answers the repetitive half of your queue end-to-end — and hands the rest to an agent with the reply already drafted and sourced.", { variant: "large", tone: "muted", align: "center" }),
+    Row([
+      Button("Model your savings", { variant: "primary", size: "lg", icon: "calculator", onClick: () => $toast.info("The ROI calculator is live further down — every number recomputes as you drag.") }),
+      Button("Take the product tour", { variant: "secondary", size: "lg", icon: "play", onClick: () => { $tourTab = "resolve"; $toast.info("Product tour opened on Auto-resolve.") } })
+    ], { gap: "md", justify: "center", wrap: true }),
+    Text("SOC 2 Type II · EU and US data residency · Keeps the helpdesk you already pay for", { variant: "small", tone: "muted", align: "center" }),
+    Row([ToggleGroup("preview", { items: [["queue", "Live queue"], ["insight", "Deflection report"]], value: $preview, size: "sm", label: "Product preview" })], { justify: "center" }),
+    BrowserFrame($preview == "queue" ? queuePane : reportPane, { url: "app.resolvr.io/inbox/tier-1", height: "380px" })
+  ], { gap: "lg" })
+], { background: "base", width: "xl", padding: "lg" })
+logos = Section([
+  LogoCloud([
+    LogoChip("Northwind Freight", { icon: "truck-fast" }), LogoChip("Latitude Bank", { icon: "building-columns" }), LogoChip("Cadence Health", { icon: "heart-pulse" }), LogoChip("Orbital Games", { icon: "gamepad" }), LogoChip("Feldspar Retail", { icon: "bag-shopping" }), LogoChip("Vantage Cloud", { icon: "cloud" })
+  ], { label: "Handling 41 million tickets a year for" })
+], { background: "soft", padding: "sm" })
+
+// ---- Product tour -----------------------------------------------------------
+copilotCode = `{
+  "intent": "refund_status",
+  "customer": "Marta Deveraux · Growth plan · 3rd contact",
+  "policy": "EU 14-day cooling-off (refunds.md#eu)",
+  "draft": "Hi Marta — your refund for order 88214 was approved on
+    4 June and left us the same day. Banks settle in 3-5 working
+    days, so it should land by 11 June. Reference: RF-88214-EU.",
+  "citations": ["refunds.md#eu", "order/88214/timeline"],
+  "next_best_action": "offer_expedited_trace"
+}`
+
+policyCode = `policy: refund-status
+match:
+  intent: [refund_status, where_is_my_money]
+  confidence: ">= 0.82"
+guardrails:
+  - never_quote_amounts_from: [chat_history]
+  - require_citation: [refunds.md, terms.md]
+resolve:
+  reply: templates/refund_status.md
+escalate_when:
+  - order.age_days > 30
+  - customer.tier == "enterprise"`
+resolveViz = BarChart(["Email", "Chat", "In-app", "Voice"], [Series("Auto-resolved", [58, 71, 64, 22]), Series("Assisted", [24, 19, 22, 31]), Series("Escalated", [18, 10, 14, 47])], { stacked: true, height: 250, title: "Resolution mix by channel (%)" })
+copilotViz = CodeWindow(copilotCode, { file: "copilot-draft.json", language: "json", status: Badge("confidence 0.94", { tone: "success" }), maxHeight: "300px" })
+insightViz = LineChart({ labels: ["W1", "W5", "W9", "W13", "W17", "W21", "W26"], series: [Series("Median first response (min)", [400, 288, 191, 122, 78, 51, 42]), Series("Backlog older than 24h", [318, 262, 197, 141, 96, 63, 41])], height: 250, yAxisLabel: "minutes / tickets", title: "Queue health after go-live" })
+policyViz = CodeWindow(policyCode, { file: "policies/refund-status.yaml", language: "yaml", status: Badge("shadow mode", { tone: "warning" }), maxHeight: "300px" })
+
+tour = Section([
+  Tabs([
+    TabItem("resolve", { label: "Auto-resolve", icon: "wand-magic-sparkles", children: [tourPane("END-TO-END RESOLUTION", "The repetitive half, answered in seconds", "Resolvr only replies when it can cite a source and clear the confidence floor you set. Everything else is routed, summarised and handed over — never guessed at.", ["Grounded in your documents, never invented", "Confidence floor configured per policy", "Full transcript and citation trail on every reply"], resolveViz)] }),
+    TabItem("copilot", { label: "Agent copilot", icon: "user-astronaut", children: [tourPane("AGENT COPILOT", "Agents start from a draft, not a blank box", "Every escalated ticket arrives with a proposed reply, the customer's history condensed to four lines, and the exact policy paragraph the answer leans on.", ["Median 71 seconds saved per handled ticket", "Tone matched to your brand voice guide", "One click to accept, edit or reject the draft"], copilotViz)] }),
+    TabItem("insight", { label: "Voice of customer", icon: "chart-line", children: [tourPane("INSIGHT ENGINE", "The queue is your best product research", "Resolvr clusters every contact into themes and prices them in agent hours, so the roadmap argument arrives with a number already attached.", ["Themes clustered weekly, no tagging by hand", "Each theme costed in hours and in dollars", "Exports straight into Jira and Linear"], insightViz)] }),
+    TabItem("build", { label: "Policy builder", icon: "diagram-project", children: [tourPane("POLICY BUILDER", "Support leads ship policies, not tickets to engineering", "Policies are plain files under version control. Write one in the UI, review it in a pull request, roll it back the moment a metric moves the wrong way.", ["Version-controlled, reviewable, revertable", "Shadow mode scores a policy before it goes live", "Guardrails are declarative, not prompt-engineering"], policyViz)] })
+  ], { value: $tourTab, fitted: true })
+], { eyebrow: "PRODUCT TOUR", title: ["Four surfaces. ", GradientText("One resolution engine.")], subtitle: "Pick a capability — every pane below is the real component, not a screenshot.", align: "center", width: "xl", id: "product" })
+proof = Section([
+  Reveal(MetricStrip([
+    Metric("46%", { label: "Median tickets fully auto-resolved" }), Metric("41M", { label: "Tickets handled a year" }), Metric("42s", { label: "Median first response" }), Metric("4.6", { label: "CSAT on automated replies" })
+  ], { columns: 4 }), { animation: "zoom" })
+], { background: "brand", padding: "md", align: "center" })
+
+// ---- ROI calculator: the centrepiece ----------------------------------------
+inputs = Card([
+  SectionHeader("Your support economics", { eyebrow: "STEP 1", subtitle: "Start from a benchmark, then drag until it looks like your team.", actions: [ToggleGroup("preset", { items: ["SaaS", "Retail", "Fintech"], value: $preset, size: "sm", label: "Industry benchmark", onChange: applyPreset })] }),
+  Grid([
+    Column([
+      Slider("agents", { label: "Support agents", min: 3, max: 250, step: 1, value: $agents, showValue: true, suffix: " agents", marks: [3, 60, 130, 250] }),
+      Slider("tickets", { label: "Tickets per month", min: 500, max: 80000, step: 500, value: $tickets, showValue: true, hint: "Every inbound contact across email, chat, in-app and voice." }),
+      Slider("aht", { label: "Average handle time", min: 2, max: 30, step: 1, value: $aht, showValue: true, suffix: " min" })
+    ], { gap: "lg" }),
+    Column([
+      NumberInput("rate", { label: "Fully loaded hourly cost", value: $rate, min: 12, max: 120, step: 1, prefix: "$", suffix: "/h", hint: "Salary, benefits, tooling and management overhead per agent hour." }),
+      Slider("deflect", { label: "Share Resolvr answers end-to-end", min: 20, max: 75, step: 1, value: $deflect, showValue: true, suffix: "%", hint: "The median across 340 live deployments is 46%." }),
+      Row([
+        Button("Reset model", { variant: "ghost", icon: "rotate-left", onClick: () => applyPreset("SaaS") }),
+        Button("Email me this model", { variant: "secondary", icon: "envelope", onClick: () => $toast.success(`Sending a PDF of your ${money(netGain())} net-gain model.`) })
+      ], { gap: "sm", wrap: true })
+    ], { gap: "lg" })
+  ], { columns: { base: 1, md: 2 }, gap: "xl" })
+])
+results = Column([
+  MetricStrip([
+    Metric(money(moneySaved()), { label: "Agent cost avoided per year", gradient: true }), Metric(`${num(hoursSaved())} h`, { label: "Agent hours returned per year" }), Metric(`${fte()} FTE`, { label: "Headcount freed for tier-2 work" }), Metric(`${roiPct()}%`, { label: "First-year ROI", trend: netGain() > 0 ? `payback in ${payback()} weeks` : "below break-even" })
+  ], { columns: { base: 2, lg: 4 } }),
+  Card([
+    SectionHeader("Where the hours go", { eyebrow: "STEP 2", subtitle: `${num(tickets())} tickets a month at ${aht()} minutes each, ${$deflect}% of them resolved without an agent.` }),
+    BarChart(["Agent hours today", "Agent hours with Resolvr"], [Series("Hours per month", [hoursNow(), hoursAfter()])], { horizontal: true, showLegend: false, height: 190 }),
+    Stats([
+      { label: "Tickets deflected / month", value: num(deflected()) }, { label: "Resolvr, all-in / year", value: money(licence()) }, { label: "Net gain / year", value: money(netGain()), tone: netGain() > 0 ? "success" : "warning" }, { label: "Payback", value: netGain() > 0 ? `${payback()} weeks` : "n/a" }
+    ], { layout: "strip" }),
+    Callout("success", {
+      title: netGain() > 0 ? `You would clear ${money(netGain())} in year one` : "Below break-even at this volume",
+      description: netGain() > 0 ? `That is ${money(agents() * seatFee * 12)} of seats plus $0.90 per auto-resolved ticket — no minimums and no professional-services fee.` : "Under roughly 4,000 tickets a month the seat fee outruns the saving. Ask us about the usage-only plan instead.",
+      icon: "chart-simple", compact: true
+    })
+  ])
+], { gap: "lg" })
+
+calculator = Section([
+  Reveal(inputs, { animation: "fade-up" }),
+  Spacer("lg"),
+  Reveal(results, { animation: "fade-up", delay: 80 })
+], { background: "soft", width: "xl", id: "roi", align: "center", eyebrow: "ROI CALCULATOR", title: ["What does your queue ", GradientText("actually cost")], subtitle: "Nothing here is a lookup table — every figure recomputes on each drag." })
+
+// ---- Pricing: the cycle toggle and the seat slider both reprice the tiers ----
+tierPrice = base => $cycle == "annual" ? Math.round(base * 0.8) : base
+seatCount = () => bound($seats, 5, 250)
+tierTotal = base => tierPrice(base) * seatCount()
+billed = () => $cycle == "annual" ? "billed annually" : "billed monthly"
+
+pricing = Section([
+  Row([ToggleGroup("cycle", { items: [["monthly", "Monthly"], ["annual", "Annual · save 20%"]], value: $cycle, size: "sm", label: "Billing cycle" })], { justify: "center" }),
+  Card([Slider("seats", { label: "Agent seats", min: 5, max: 250, step: 5, value: $seats, showValue: true, suffix: " seats", marks: [5, 50, 100, 250], hint: "Auto-resolved tickets are billed separately at $0.90 each." })]),
+  Reveal(PricingTable([
+    PricingCard("Starter", {
+      price: `$${tierPrice(29)}`, period: "/seat/mo", description: `${seatCount()} seats · ${money(tierTotal(29))} per month, ${billed()}`,
+      features: ["Auto-resolve on email and chat", "10 policies", "Help-centre grounding", { label: "Voice channel", included: false }],
+      action: Button("Start 21-day trial", { variant: "secondary", fullWidth: true, onClick: () => $toast.info("Trials run on a sandbox — production data is never touched.") })
+    }),
+    PricingCard("Growth", {
+      price: `$${tierPrice(49)}`, period: "/seat/mo", description: `${seatCount()} seats · ${money(tierTotal(49))} per month, ${billed()}`,
+      features: ["Every channel including voice", "Unlimited policies plus shadow mode", "Agent copilot and insight engine", "SSO and audit log"],
+      featured: true, ribbon: "Most teams land here",
+      action: Button("Start 21-day trial", { variant: "primary", fullWidth: true, onClick: () => $toast.success(`Growth reserved for ${seatCount()} seats — we will confirm by email.`) })
+    }),
+    PricingCard("Scale", {
+      price: `$${tierPrice(79)}`, period: "/seat/mo", description: `${seatCount()} seats · ${money(tierTotal(79))} per month, ${billed()}`,
+      features: ["EU or US data residency", "Private model deployment", "99.95% uptime SLA", "Named CX architect"],
+      action: Button("Talk to sales", { variant: "secondary", fullWidth: true, onClick: () => $toast.info("Enterprise pricing is negotiated against resolution volume.") })
+    })
+  ]), { animation: "fade-up" })
+], { eyebrow: "PRICING", title: "Pay for seats, then for results", subtitle: "Drag the seat count — every tier reprices live. No onboarding fee and no lock-in on the monthly plan.", align: "center", width: "lg", id: "pricing", background: "base" })
+
+compare = Section([
+  ComparisonTable({
+    columns: ["Manual triage", "Macros and rules", "Resolvr"],
+    featureLabel: "How tier-1 gets handled",
+    highlightColumn: 2,
+    stickyFirstColumn: true,
+    rows: [
+      { label: "Median first response", values: ["6h 40m", "2h 05m", "42 seconds"], group: "Speed" },
+      { label: "Works outside business hours", values: [false, true, true], group: "Speed" },
+      { label: "Answers cite a source document", values: [false, false, true], group: "Quality" },
+      { label: "Adapts when the policy changes", values: ["Retraining", "Rule rewrite", "File edit and review"], group: "Quality" },
+      { label: "Effort to add a new topic", values: ["Hire and train", "Two weeks of rules", "One afternoon"], group: "Operations" },
+      { label: "Cost per resolved ticket", values: ["$5.70", "$3.40", "$0.90"], group: "Operations" }
+    ]
+  }),
+  Grid([
+    Testimonial("We went live in nine days on our own policies. The first week deflected 31% and nobody on the team had to learn a prompt syntax.", { author: "Nadia Okafor", role: "VP Support, Feldspar Retail", avatarSrc: "https://picsum.photos/seed/resolvr-nadia/96/96", rating: 5 }),
+    Testimonial("The insight engine costed our top ticket theme at 1,900 agent hours a year. That one slide got the fix prioritised in a single meeting.", { author: "Tomas Brandt", role: "Head of CX Ops, Vantage Cloud", avatarSrc: "https://picsum.photos/seed/resolvr-tomas/96/96", rating: 5 })
+  ], { columns: { base: 1, md: 2 }, gap: "lg" })
+], { eyebrow: "THE ALTERNATIVE", title: "Against the status quo", subtitle: "Blended medians across 340 deployments during their first two quarters.", align: "center", width: "xl", background: "soft" })
+
+// ---- Integrations, FAQ, closing CTA, footer ---------------------------------
+tools = [
+  { name: "Zendesk", icon: "headset", group: "Helpdesk", note: "Bi-directional sync, 4 min setup" },
+  { name: "Intercom", icon: "comments", group: "Helpdesk", note: "Inbox and Fin hand-off" },
+  { name: "Freshdesk", icon: "life-ring", group: "Helpdesk", note: "Tickets, contacts, macros" },
+  { name: "Salesforce", icon: "cloud", group: "Helpdesk", note: "Service Cloud cases" },
+  { name: "Snowflake", icon: "snowflake", group: "Data", note: "Nightly theme exports" },
+  { name: "Segment", icon: "shuffle", group: "Data", note: "Customer traits at reply time" },
+  { name: "Notion", icon: "book-open", group: "Data", note: "Help-centre grounding" },
+  { name: "Slack", icon: "hashtag", group: "Comms", note: "Escalation channels" },
+  { name: "Microsoft Teams", icon: "users-rectangle", group: "Comms", note: "Approvals and alerts" },
+  { name: "Jira", icon: "bug", group: "Comms", note: "One-click bug escalation" }
+]
+stacks = ["All", "Helpdesk", "Data", "Comms"]
+countIn = g => g == "All" ? tools.length : tools.filter(t => t.group == g).length
+visibleTools = () => $stack == "All" ? tools : tools.filter(t => t.group == $stack)
+
+integrations = Section([
+  Row(stacks.map(s => FilterPill(s, { active: $stack == s, count: countIn(s), onToggle: () => { $stack = s } })), { gap: "sm", justify: "center", wrap: true }),
+  Grid(visibleTools().map(t => Tile(t.name, { icon: t.icon, description: t.note, tone: t.group == "Helpdesk" ? "primary" : "default", onClick: () => $toast.info(`${t.name} connects over OAuth in about four minutes — no engineering ticket.`) })), { columns: { base: 2, md: 3, lg: 4 }, gap: "md" }),
+  Text(`Showing ${visibleTools().length} of ${tools.length} connectors · anything else over the webhook API.`, { variant: "small", tone: "muted", align: "center" })
+], { eyebrow: "INTEGRATIONS", title: "Keeps the stack you already bought", subtitle: "Resolvr sits in front of your helpdesk, not instead of it. Filter by the part of the stack you care about.", align: "center", width: "xl" })
+
+faqs = [
+  { q: "Do we have to replace our helpdesk?", a: "No. Resolvr connects through your helpdesk's own API and writes back into the same tickets your agents already work in. Most teams keep Zendesk or Intercom permanently." },
+  { q: "What stops it inventing an answer?", a: "Every reply must cite a paragraph from a document you approved and clear the confidence floor you set per policy. Anything below that floor is routed to a human with the draft attached rather than sent." },
+  { q: "How long does go-live take?", a: "The median is nine days: two to connect the helpdesk and index your content, five running in shadow mode where Resolvr scores itself against your agents, and two to switch the first policies on." },
+  { q: "What if deflection is lower than the model predicts?", a: "Your first invoice is capped at the figure you modelled. If measured deflection lands below it after 90 days we credit the difference — that guarantee sits in the standard order form." }
+]
+faq = Section([
+  Accordion(faqs.map(f => AccordionItem(f.q, { children: [Text(f.a, { tone: "muted" })] })), { showArrow: true, type: "single" })
+], { eyebrow: "FAQ", title: "The questions that come up on every call", align: "center", width: "md", id: "faq", background: "soft" })
+cta = Section([
+  Reveal(Banner("See it on your own ticket history", {
+    message: "Send us 30 days of resolved tickets and we return a measured deflection rate, costed in agent hours, within 48 hours. No integration and no commitment.", tone: "primary", icon: "gauge-high",
+    action: Button("Request a deflection audit", { variant: "primary", icon: "paper-plane", onClick: () => $toast.success("Audit requested — a secure upload link is on its way to your inbox.") })
+  }), { animation: "zoom" })
+], { width: "lg", padding: "md" })
+
+siteFooter = Footer({
+  brand: Brand("Resolvr"),
+  tagline: "Support automation that answers, cites its sources, and knows when to step aside.",
+  columns: [
+    FooterColumn("Product", [Link("Product tour", { href: "#product" }), Link("ROI calculator", { href: "#roi" }), Link("Pricing", { href: "#pricing" }), Link("Integrations", { href: "#" })]),
+    FooterColumn("Company", [Link("About", { href: "#" }), Link("Careers", { href: "#" }), Link("Customer stories", { href: "#" })]),
+    FooterColumn("Trust", [Link("Security", { href: "#" }), Link("Data residency", { href: "#" }), Link("Status", { href: "#" })])
+  ],
+  legal: "© 2026 Resolvr Systems Ltd — demonstration marketing site, no real product behind it."
+})

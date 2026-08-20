@@ -1,0 +1,318 @@
+// Customer support helpdesk console — an agent workspace for Larkspur, an invented
+// payments platform: a filterable queue beside a live conversation pane whose status,
+// priority and assignee writes flow straight back into the queue, KPIs and charts.
+// Starting point for: any helpdesk, ITSM, moderation or shared-inbox console.
+// Uses: AppShell + Sidebar, SplitView, $store tickets, SearchBar/FilterPill/Select
+//       filters, ChatBubble thread + macro composer, Table + Progress, BarChart, Gauge.
+$app(AppShell(sidebar, [page], { topbar: topbar, collapsible: true }))
+
+me = "Priya Raman"
+desk = $store({
+  selectedId: "LK-4821",
+  tickets: [
+    { id: "LK-4821", subject: "Webhook retries stopped after the 3 Aug deploy", requester: "Ana Ferreira", email: "ana@brightharbor.example", company: "Bright Harbor Bakery", channel: "email", priority: "urgent", status: "open", assignee: "Priya Raman", created: "2026-08-07T08:12:00", slaMinutes: 18, firstResponseMin: 12, csat: 0, tags: ["webhooks", "api"], messages: [{ from: "customer", author: "Ana Ferreira", body: "Since Monday none of our payment.succeeded webhooks are retrying. 47 events are stuck pending and orders are never marked paid.", time: "08:12" }, { from: "agent", author: "Priya Raman", body: "Thanks Ana — I can see the stuck events on your account. Retries were paused by a config change on 3 August; I am escalating to the platform team now.", time: "08:24" }, { from: "customer", author: "Ana Ferreira", body: "Understood. Can they be replayed once it is fixed? We cannot ship without the paid flag.", time: "08:31" }] },
+    { id: "LK-4818", subject: "Payout schedule shows the wrong timezone", requester: "Marek Nowak", email: "marek@vellum.example", company: "Vellum Studio", channel: "chat", priority: "high", status: "open", assignee: "Priya Raman", created: "2026-08-07T07:41:00", slaMinutes: 46, firstResponseMin: 9, csat: 0, tags: ["payouts"], messages: [{ from: "customer", author: "Marek Nowak", body: "The dashboard says our payout lands at 09:00 but the bank shows 11:00. Which one is right?", time: "07:41" }, { from: "agent", author: "Priya Raman", body: "The dashboard renders in UTC while your bank reports in CEST. I have raised it with product — the label should follow your account timezone.", time: "07:50" }] },
+    { id: "LK-4815", subject: "3-D Secure step fails on Safari 18", requester: "Ines Duarte", email: "ines@northgate.example", company: "Northgate Clinics", channel: "email", priority: "urgent", status: "pending", assignee: "Tom Okafor", created: "2026-08-06T16:05:00", slaMinutes: -12, firstResponseMin: 21, csat: 0, tags: ["3ds"], messages: [{ from: "customer", author: "Ines Duarte", body: "Around 30% of our card payments fail at the 3-D Secure challenge. Every report is Safari 18 on iOS.", time: "16:05" }, { from: "agent", author: "Tom Okafor", body: "Reproduced on Safari 18.0 — the challenge iframe is blocked by the new partitioned-cookie behaviour. A fix is in review.", time: "16:26" }, { from: "note", author: "Tom Okafor", body: "Waiting on checkout SDK 4.2.1 before we commit to a date with the customer.", time: "16:40" }] },
+    { id: "LK-4809", subject: "Add a second admin to our account", requester: "Yusuf Demir", email: "yusuf@kiteanchor.example", company: "Kite & Anchor", channel: "email", priority: "low", status: "open", assignee: "", created: "2026-08-06T11:20:00", slaMinutes: 240, firstResponseMin: 0, csat: 0, tags: ["accounts"], messages: [{ from: "customer", author: "Yusuf Demir", body: "Could you add my colleague Sena as a second admin? She needs refunds and payouts.", time: "11:20" }] },
+    { id: "LK-4802", subject: "Refund created twice for order 90-3311", requester: "Hana Sato", email: "hana@meridianbooks.example", company: "Meridian Books", channel: "phone", priority: "high", status: "pending", assignee: "Mira Lindqvist", created: "2026-08-05T14:02:00", slaMinutes: 95, firstResponseMin: 15, csat: 0, tags: ["refunds"], messages: [{ from: "customer", author: "Hana Sato", body: "We refunded order 90-3311 once, but the customer received two credits totalling 138.00 EUR.", time: "14:02" }, { from: "agent", author: "Mira Lindqvist", body: "I can see two refund objects created 40 seconds apart from one idempotency key. Finance is reversing the duplicate today.", time: "14:17" }] },
+    { id: "LK-4796", subject: "Invoice PDF is missing our VAT number", requester: "Elena Rossi", email: "elena@fabbricarossi.example", company: "Fabbrica Rossi", channel: "email", priority: "normal", status: "open", assignee: "", created: "2026-08-05T09:35:00", slaMinutes: 310, firstResponseMin: 0, csat: 0, tags: ["invoices"], messages: [{ from: "customer", author: "Elena Rossi", body: "Our accountant rejected the July invoice because the VAT number is not printed on the PDF.", time: "09:35" }] },
+    { id: "LK-4790", subject: "Sandbox API keys rotate every hour", requester: "Ola Berg", email: "ola@tundralogistics.example", company: "Tundra Logistics", channel: "chat", priority: "normal", status: "pending", assignee: "Priya Raman", created: "2026-08-04T13:48:00", slaMinutes: 55, firstResponseMin: 7, csat: 0, tags: ["api"], messages: [{ from: "customer", author: "Ola Berg", body: "Our integration tests break hourly because the sandbox key is regenerated. Is that expected?", time: "13:48" }, { from: "agent", author: "Priya Raman", body: "Sandbox keys expire after 60 minutes on Scale. I can pin a long-lived test key for your workspace — shall I?", time: "13:55" }] },
+    { id: "LK-4781", subject: "Dispute evidence upload times out", requester: "Ravi Menon", email: "ravi@saffrontable.example", company: "Saffron Table", channel: "email", priority: "high", status: "solved", assignee: "Tom Okafor", created: "2026-08-03T10:11:00", slaMinutes: 0, firstResponseMin: 11, csat: 5, tags: ["disputes"], messages: [{ from: "customer", author: "Ravi Menon", body: "Uploading a 9 MB evidence PDF fails at 90% every time.", time: "10:11" }, { from: "agent", author: "Tom Okafor", body: "The limit was 8 MB. We raised it to 25 MB this morning and your evidence is attached to the dispute.", time: "10:22" }] },
+    { id: "LK-4776", subject: "Change the billing email on our account", requester: "Clara Mendes", email: "clara@brightharbor.example", company: "Bright Harbor Bakery", channel: "email", priority: "low", status: "solved", assignee: "Priya Raman", created: "2026-08-02T15:26:00", slaMinutes: 0, firstResponseMin: 6, csat: 4, tags: ["accounts", "invoices"], messages: [{ from: "customer", author: "Clara Mendes", body: "Please send invoices to finance@brightharbor.example from now on.", time: "15:26" }, { from: "agent", author: "Priya Raman", body: "Updated — the August invoice goes to the new address.", time: "15:32" }] },
+    { id: "LK-4770", subject: "Rate limited during the Friday sale", requester: "Marek Nowak", email: "marek@vellum.example", company: "Vellum Studio", channel: "api", priority: "normal", status: "solved", assignee: "Mira Lindqvist", created: "2026-08-01T18:04:00", slaMinutes: 0, firstResponseMin: 14, csat: 5, tags: ["api"], messages: [{ from: "customer", author: "Marek Nowak", body: "We hit 429s for eleven minutes during the sale. Can the limit be raised?", time: "18:04" }, { from: "agent", author: "Mira Lindqvist", body: "Raised your burst limit to 300 requests per second and added a sale-window exemption.", time: "18:18" }] }
+  ],
+  select: (s, id) => { s.selectedId = id },
+  setStatus: (s, id, next) => { s.tickets = s.tickets.map(t => t.id == id ? { ...t, status: next, slaMinutes: next == "solved" ? 0 : t.slaMinutes } : t) },
+  setPriority: (s, id, next) => { s.tickets = s.tickets.map(t => t.id == id ? { ...t, priority: next } : t) },
+  assign: (s, id, next) => { s.tickets = s.tickets.map(t => t.id == id ? { ...t, assignee: next } : t) },
+  reply: (s, id, msg) => { s.tickets = s.tickets.map(t => t.id == id ? { ...t, status: "pending", slaMinutes: 240, firstResponseMin: t.firstResponseMin > 0 ? t.firstResponseMin : 4, messages: [...t.messages, msg] } : t) },
+  note: (s, id, msg) => { s.tickets = s.tickets.map(t => t.id == id ? { ...t, messages: [...t.messages, msg] } : t) },
+  add: (s, ticket) => { s.tickets = [ticket, ...s.tickets] }
+})
+
+accounts = [
+  { company: "Bright Harbor Bakery", plan: "Scale", mrr: 890, since: "2024-03-18", region: "EU · Lisbon", csm: "Dan Whitfield" },
+  { company: "Vellum Studio", plan: "Growth", mrr: 320, since: "2025-01-09", region: "EU · Kraków", csm: "Mira Lindqvist" },
+  { company: "Northgate Clinics", plan: "Scale", mrr: 1140, since: "2023-11-02", region: "UK · Leeds", csm: "Dan Whitfield" },
+  { company: "Kite & Anchor", plan: "Starter", mrr: 79, since: "2026-04-27", region: "UK · Bristol", csm: "Mira Lindqvist" },
+  { company: "Meridian Books", plan: "Growth", mrr: 410, since: "2024-08-14", region: "EU · Utrecht", csm: "Dan Whitfield" },
+  { company: "Fabbrica Rossi", plan: "Growth", mrr: 365, since: "2025-06-30", region: "EU · Bologna", csm: "Mira Lindqvist" },
+  { company: "Tundra Logistics", plan: "Scale", mrr: 960, since: "2023-05-21", region: "EU · Oulu", csm: "Dan Whitfield" },
+  { company: "Saffron Table", plan: "Growth", mrr: 285, since: "2025-09-12", region: "EU · Ghent", csm: "Mira Lindqvist" }
+]
+articles = [
+  { title: "Replaying failed webhook deliveries", tag: "webhooks", views: "2.4k" },
+  { title: "Payout timing and bank cut-off windows", tag: "payouts", views: "1.8k" },
+  { title: "Troubleshooting 3-D Secure challenges", tag: "3ds", views: "3.1k" },
+  { title: "Managing team members and admin roles", tag: "accounts", views: "980" },
+  { title: "How refunds settle back to a card", tag: "refunds", views: "1.2k" },
+  { title: "Adding tax details to invoices", tag: "invoices", views: "640" },
+  { title: "Sandbox API key lifecycle", tag: "api", views: "1.5k" },
+  { title: "Uploading dispute evidence", tag: "disputes", views: "2.0k" }
+]
+macros = [
+  { value: "ack", label: "Acknowledge with an ETA", body: "Thanks for flagging this. I have reproduced it on our side and escalated to the platform team — I will come back to you with an update within four hours." },
+  { value: "logs", label: "Request request ids", body: "Could you send two or three request ids from the failing calls (they start with req_) plus the approximate timestamps? That lets us pull the exact traces." },
+  { value: "workaround", label: "Offer a workaround", body: "While the fix ships you can switch to the v2 endpoint — it takes the same payload and is not affected by this issue." },
+  { value: "resolve", label: "Confirm the resolution", body: "The fix went live this morning and I have verified it against your account. I am marking this solved, but replying here reopens the thread at any time." }
+]
+team = [
+  { name: "Priya Raman", role: "Tier 2 · Payments", sla: 96, csat: 4.8 },
+  { name: "Tom Okafor", role: "Tier 2 · Disputes", sla: 91, csat: 4.6 },
+  { name: "Mira Lindqvist", role: "Tier 1 · Billing", sla: 88, csat: 4.4 },
+  { name: "Dan Whitfield", role: "Tier 1 · Onboarding", sla: 94, csat: 4.7 }
+]
+ranges = {
+  "7d": { label: "last 7 days", labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], created: [42, 48, 39, 55, 61, 22, 18], solved: [40, 45, 41, 50, 58, 25, 20], sla: [96, 94, 97, 92, 89, 98, 99] },
+  "30d": { label: "last 30 days", labels: ["Week 1", "Week 2", "Week 3", "Week 4"], created: [268, 291, 247, 305], solved: [259, 288, 251, 297], sla: [95, 93, 96, 91] }
+}
+
+$view = "mine"
+$search = ""
+$statusFilter = "all"
+$priorityFilter = "all"
+$assigneeFilter = "all"
+$range = "7d"
+$reply = ""
+$macro = ""
+$internal = false
+$newOpen = false
+$ntName = ""
+$ntCompany = "Bright Harbor Bakery"
+$ntSubject = ""
+$ntBody = ""
+$ntPriority = "normal"
+$ntChannel = "email"
+
+statusOptions = [{ value: "open", label: "Open" }, { value: "pending", label: "Pending" }, { value: "solved", label: "Solved" }]
+priorityOptions = [{ value: "urgent", label: "Urgent" }, { value: "high", label: "High" }, { value: "normal", label: "Normal" }, { value: "low", label: "Low" }]
+channelOptions = [{ value: "email", label: "Email" }, { value: "chat", label: "Live chat" }, { value: "phone", label: "Phone" }, { value: "api", label: "API" }]
+assigneeOptions = [{ value: "", label: "Unassigned" }, ...team.map(a => ({ value: a.name, label: a.name }))]
+macroOptions = macros.map(m => ({ value: m.value, label: m.label }))
+
+channelIcon = c => c == "email" ? "envelope" : c == "chat" ? "comments" : c == "phone" ? "phone" : "code"
+channelLabel = c => c == "email" ? "Email" : c == "chat" ? "Live chat" : c == "phone" ? "Phone" : "API"
+statusLabel = s => s == "open" ? "Open" : s == "pending" ? "Pending" : "Solved"
+statusTone = s => s == "open" ? "activating" : s == "pending" ? "warning" : "success"
+priorityTone = p => p == "urgent" ? "danger" : p == "high" ? "warning" : p == "normal" ? "info" : "neutral"
+openFor = name => desk.tickets.filter(t => t.assignee == name && t.status != "solved").length
+macroText = v => macros.filter(m => m.value == v).map(m => m.body).join("")
+slaPill = t => t.status == "solved" ? Pill("SLA met", { tone: "success", icon: "circle-check" }) : t.slaMinutes <= 0 ? Pill(`${Math.abs(t.slaMinutes)}m over`, { tone: "critical", icon: "triangle-exclamation" }) : t.slaMinutes < 30 ? Pill(`${t.slaMinutes}m left`, { tone: "warning", icon: "clock" }) : Pill(`${t.slaMinutes >= 60 ? Math.round(t.slaMinutes / 60) + "h" : t.slaMinutes + "m"} left`, { tone: "neutral", icon: "clock" })
+scoped = v => desk.tickets.filter(t => v == "mine" ? (t.assignee == me && t.status != "solved") : v == "unassigned" ? (t.assignee == "" && t.status != "solved") : v == "risk" ? (t.status != "solved" && t.slaMinutes < 30) : v == "solved" ? t.status == "solved" : true)
+matches = t => ($statusFilter == "all" || t.status == $statusFilter) && ($priorityFilter == "all" || t.priority == $priorityFilter) && ($assigneeFilter == "all" || t.assignee == $assigneeFilter) && ($search == "" || `${t.id} ${t.subject} ${t.requester} ${t.company}`.toLowerCase().includes($search.toLowerCase()))
+inScope = scoped($view)
+queue = inScope.filter(t => matches(t))
+selected = desk.tickets.find(t => t.id == desk.selectedId)
+active = desk.tickets.filter(t => t.status != "solved")
+breached = active.filter(t => t.slaMinutes <= 0)
+atRisk = active.filter(t => t.slaMinutes < 30)
+responded = desk.tickets.filter(t => t.firstResponseMin > 0)
+avgResponse = $util.round($util.sum(responded.map(t => t.firstResponseMin)) / responded.length, 1)
+rated = desk.tickets.filter(t => t.csat > 0)
+csatScore = $util.round($util.sum(rated.map(t => t.csat)) / rated.length, 1)
+period = ranges[$range]
+slaAvg = Math.round($util.sum(period.sla) / period.sla.length)
+channelCounts = channelOptions.map(o => desk.tickets.filter(t => t.channel == o.value).length)
+nameError = $ntName.length > 0 && $ntName.trim().split(" ").length < 2 ? "Enter a first and last name" : ""
+subjectError = $ntSubject.length > 0 && $ntSubject.trim().length < 10 ? "Give the subject a little more detail" : ""
+newValid = nameError == "" && subjectError == "" && $ntName.trim().length > 2 && $ntSubject.trim().length > 9
+appliedChips = [$statusFilter == "all" ? null : { label: `Status: ${statusLabel($statusFilter)}`, value: "status" }, $priorityFilter == "all" ? null : { label: `Priority: ${$priorityFilter}`, value: "priority" }, $assigneeFilter == "all" ? null : { label: `Assignee: ${$assigneeFilter == "" ? "Unassigned" : $assigneeFilter}`, value: "assignee" }, $search == "" ? null : { label: `Search: ${$search}`, value: "search" }].filter(c => c != null)
+
+// ---- Actions ---------------------------------------------------------------
+function applyMacro(v) {
+  $macro = v
+  $reply = macroText(v)
+}
+function send() {
+  const t = selected
+  const text = $reply.trim()
+  const ok = t && text.length > 0
+  if (ok && $internal) { desk.note(t.id, { from: "note", author: me, body: text, time: "now" }) }
+  if (ok && !$internal) { desk.reply(t.id, { from: "agent", author: me, body: text, time: "now" }) }
+  if (ok) { $toast.success($internal ? "Internal note added — the customer cannot see it" : `Reply sent to ${t.requester} · ${t.id} is now pending`) }
+  if (ok) { applyMacro("") }
+}
+function clearChip(v) {
+  if (v == "status" || v == "all") { $statusFilter = "all" }
+  if (v == "priority" || v == "all") { $priorityFilter = "all" }
+  if (v == "assignee" || v == "all") { $assigneeFilter = "all" }
+  if (v == "search" || v == "all") { $search = "" }
+}
+clearAll = () => clearChip("all")
+function createTicket() {
+  const id = `LK-${4900 + desk.tickets.length}`
+  const first = $ntName.trim().split(" ")[0].toLowerCase()
+  desk.add({ id: id, subject: $ntSubject.trim(), requester: $ntName.trim(), email: `${first}@${$util.slugify($ntCompany)}.example`, company: $ntCompany, channel: $ntChannel, priority: $ntPriority, status: "open", assignee: me, created: "2026-08-07T11:40:00", slaMinutes: 30, firstResponseMin: 0, csat: 0, tags: ["accounts"], messages: [{ from: "customer", author: $ntName.trim(), body: $ntBody.trim() == "" ? "No description supplied by the requester." : $ntBody.trim(), time: "11:40" }] })
+  desk.select(id)
+  $newOpen = false
+  $ntName = ""
+  $ntSubject = ""
+  $ntBody = ""
+  $toast.success(`${id} created and assigned to you`)
+}
+
+// ---- Shell -----------------------------------------------------------------
+sidebar = Sidebar([
+  SidebarSection("Queues", [
+    SidebarItem("My tickets", { icon: "inbox", badge: String(scoped("mine").length), active: $view == "mine", onClick: () => { $view = "mine" } }),
+    SidebarItem("Unassigned", { icon: "user-slash", badge: String(scoped("unassigned").length), active: $view == "unassigned", onClick: () => { $view = "unassigned" } }),
+    SidebarItem("Near SLA", { icon: "triangle-exclamation", badge: String(scoped("risk").length), active: $view == "risk", onClick: () => { $view = "risk" } }),
+    SidebarItem("Solved", { icon: "circle-check", badge: String(scoped("solved").length), active: $view == "solved", onClick: () => { $view = "solved" } }),
+    SidebarItem("All tickets", { icon: "layer-group", badge: String(desk.tickets.length), active: $view == "all", onClick: () => { $view = "all" } })
+  ]),
+  SidebarSection("Team", team.map(a => SidebarItem(a.name, { icon: "user", badge: String(openFor(a.name)), active: $assigneeFilter == a.name, onClick: () => { $assigneeFilter = $assigneeFilter == a.name ? "all" : a.name } }))),
+  SidebarSection("Workspace", [SidebarItem("Macros", { icon: "wand-magic-sparkles", onClick: () => $toast.info("Macro library — 24 saved replies") }), SidebarItem("Knowledge base", { icon: "book", onClick: () => $toast.info("Knowledge base — 86 published articles") })])
+], { brand: "Larkspur", tagline: "Support console", footer: [PersonChip(me, { role: "Tier 2 · Payments", status: "online" })] })
+
+topbar = Row([
+  StatusDot("Queue live", { tone: "success", pulse: true }),
+  Text(`Shift 08:00–16:00 CET · ${queue.length} in view`, { variant: "small", tone: "muted" }),
+  Spacer(),
+  Pill(`${scoped("unassigned").length} unassigned`, { tone: scoped("unassigned").length > 0 ? "warning" : "neutral", icon: "user-slash" }),
+  IconButton("rotate-right", { label: "Refresh queue", variant: "ghost", size: "sm", onClick: () => $toast.info("Queue refreshed") }),
+  Avatar(me, { size: "sm", status: "online", fallback: "initials" })
+], { gap: "sm", align: "center" })
+headerPill = breached.length > 0 ? Pill(`${breached.length} SLA breach${breached.length == 1 ? "" : "es"}`, { tone: "critical", icon: "triangle-exclamation" }) : atRisk.length > 0 ? Pill(`${atRisk.length} near SLA`, { tone: "warning", icon: "clock" }) : Pill("All within SLA", { tone: "success", icon: "shield-halved" })
+
+kpis = Stats([
+  StatCard("Open tickets", { value: String(active.length), icon: "inbox", tone: "primary", hint: `${desk.tickets.filter(t => t.status == "pending").length} awaiting the customer`, spark: [9, 11, 8, 12, 10, 7, active.length] }),
+  StatCard("Breaching SLA", { value: String(atRisk.length), icon: "triangle-exclamation", tone: atRisk.length > 0 ? "danger" : "success", hint: `${breached.length} already past target` }),
+  StatCard("First response", { value: `${avgResponse}m`, icon: "stopwatch", tone: "info", trend: "down", delta: "-2.4m", hint: "15 minute target" }),
+  StatCard("CSAT", { value: `${csatScore} / 5`, icon: "face-smile", tone: "success", trend: "up", delta: "+0.2", hint: `${rated.length} rated conversations` })
+], { layout: "grid" })
+
+queueToolbar = Toolbar({
+  left: [Text(`${queue.length} of ${desk.tickets.length} tickets`, { variant: "small-heavy", tone: "muted" }), FilterChips(appliedChips, { onRemove: clearChip, onClear: clearAll, clearLabel: "Reset filters" })],
+  right: [Button("Assign to me", { variant: "secondary", size: "sm", icon: "user-plus", disabled: !selected, onClick: () => desk.assign(desk.selectedId, me) }), Button("Escalate", { variant: "secondary", size: "sm", icon: "arrow-up", disabled: !selected, onClick: () => desk.setPriority(desk.selectedId, "urgent") }), Button("Mark solved", { variant: "primary", size: "sm", icon: "circle-check", disabled: !selected, onClick: () => desk.setStatus(desk.selectedId, "solved") })]
+})
+
+// ---- Queue pane ------------------------------------------------------------
+function QueueRow(t) {
+  return Card([Row([
+    Avatar(t.requester, { size: "sm", fallback: "initials" }),
+    StackItem(Column([
+      Row([StackItem(Text(t.subject, { variant: "small-heavy", lines: 2 }), { grow: 1 }), Icon(channelIcon(t.channel), { size: "sm", label: `${channelLabel(t.channel)} ticket` })], { gap: "xs", align: "start" }),
+      Text(`${t.id} · ${t.requester} · ${t.company}`, { variant: "small", tone: "muted", truncate: true }),
+      Row([Badge(t.priority, { tone: priorityTone(t.priority), size: "xs" }), slaPill(t), Spacer(), Text(t.assignee == "" ? "Unassigned" : $util.initials(t.assignee), { variant: "small", tone: "muted" })], { gap: "2xs", wrap: true })
+    ], { gap: "2xs" }), { grow: 1 })
+  ], { gap: "sm", align: "start" })], { key: t.id, padding: "sm", variant: t.id == desk.selectedId ? "elevated" : "outlined", onClick: () => desk.select(t.id) })
+}
+
+queuePane = Column([
+  Card([
+    SearchBar("queue-search", { placeholder: "Search subject, requester, company…", value: $search, shortcut: "/", ariaLabel: "Search the ticket queue" }),
+    Row(statusOptions.map(o => FilterPill(o.label, { active: $statusFilter == o.value, count: inScope.filter(t => t.status == o.value).length, onToggle: () => { $statusFilter = $statusFilter == o.value ? "all" : o.value } })), { gap: "2xs", wrap: true }),
+    Row(priorityOptions.map(o => FilterPill(o.label, { active: $priorityFilter == o.value, count: inScope.filter(t => t.priority == o.value).length, onToggle: () => { $priorityFilter = $priorityFilter == o.value ? "all" : o.value } })), { gap: "2xs", wrap: true }),
+    Select("queue-assignee", [{ value: "all", label: "Anyone" }, ...assigneeOptions], { value: $assigneeFilter, label: "Assignee", onChange: (v) => { $assigneeFilter = v } })
+  ], { padding: "md" }),
+  Show(queue.length > 0, { fallback: EmptyState("No tickets match", { icon: "filter-circle-xmark", description: "Widen the queue or reset the filters to see more.", action: Button("Reset filters", { variant: "secondary", icon: "rotate-left", onClick: clearAll }) }), children: ScrollArea([Column(queue.map(t => QueueRow(t)), { gap: "xs" })], { maxHeight: "620px" }) })
+], { gap: "sm" })
+
+// ---- Detail pane -----------------------------------------------------------
+function TicketCard(t) {
+  return Card([
+    SectionHeader(t.subject, { eyebrow: `${t.id} · ${channelLabel(t.channel)}`, status: slaPill(t), actions: [IconButton("link", { label: "Copy a link to this ticket", variant: "ghost", size: "sm", onClick: () => $toast.info(`Link to ${t.id} copied`) })] }),
+    Row([Avatar(t.requester, { size: "md", fallback: "initials" }), StackItem(Column([Text(t.requester, { variant: "body-heavy" }), Text(`${t.email} · ${t.company}`, { variant: "small", tone: "muted" })], { gap: "none" }), { grow: 1 }), Pill(statusLabel(t.status), { tone: statusTone(t.status) })], { gap: "sm", align: "center" }),
+    Grid([Select("t-status", statusOptions, { value: t.status, label: "Status", onChange: (v) => desk.setStatus(t.id, v) }), Select("t-priority", priorityOptions, { value: t.priority, label: "Priority", onChange: (v) => desk.setPriority(t.id, v) }), Select("t-assignee", assigneeOptions, { value: t.assignee, label: "Assignee", onChange: (v) => desk.assign(t.id, v) })], { columns: { base: 1, md: 3 }, gap: "sm" }),
+    DescriptionList([DescriptionItem("Opened", $util.formatDate(t.created, "datetime"), { icon: "calendar" }), DescriptionItem("First response", t.firstResponseMin > 0 ? `${t.firstResponseMin} minutes` : "Awaiting first reply", { icon: "stopwatch" }), DescriptionItem("Channel", channelLabel(t.channel), { icon: channelIcon(t.channel) }), DescriptionItem("Tags", BadgeList(t.tags, { tone: "neutral", size: "xs" }), { icon: "tag" })], { columns: 2 })
+  ])
+}
+
+function ThreadCard(t) {
+  return Card([
+    SectionHeader("Conversation", { eyebrow: "THREAD", subtitle: `${t.messages.length} messages · ${t.requester}` }),
+    ScrollArea([Column(t.messages.map((m, i) => ChatBubble(m.author, { body: m.body, time: m.time, from: m.from == "agent" ? "me" : m.from == "note" ? "system" : "agent", key: `${t.id}-${i}` })), { gap: "sm" })], { maxHeight: "340px", stickToBottom: true })
+  ])
+}
+
+function ComposerCard(t) {
+  return Card([
+    SectionHeader($internal ? "Internal note" : "Reply", { eyebrow: "COMPOSE", subtitle: $internal ? "Only visible to the support team" : `Sending as ${me}`, actions: [Switch("internal", { label: "Internal note", value: $internal })] }),
+    Select("macro", macroOptions, { value: $macro, label: "Insert a macro", placeholder: "Insert a macro…", onChange: applyMacro }),
+    TextArea("reply", { value: $reply, rows: 5, label: "Message", labelHidden: true, placeholder: `Write to ${t.requester}…` }),
+    Row([Button($internal ? "Add note" : "Send reply", { variant: "primary", icon: $internal ? "note-sticky" : "paper-plane", disabled: $reply.trim() == "", onClick: send }), Button("Clear", { variant: "ghost", disabled: $reply == "", onClick: () => applyMacro("") }), Spacer(), Text(`${$reply.length} characters`, { variant: "small", tone: "muted" })], { gap: "sm", wrap: true })
+  ])
+}
+
+function ContextCard(t) {
+  const a = accounts.find(x => x.company == t.company)
+  const past = desk.tickets.filter(x => x.company == t.company && x.id != t.id)
+  return Card([
+    SectionHeader("Customer", { eyebrow: "CONTEXT", status: Badge(a ? a.plan : "Unknown plan", { tone: "info", size: "sm" }) }),
+    DescriptionList([DescriptionItem("Account", t.company, { icon: "building" }), DescriptionItem("Plan", a ? `${a.plan} · ${$util.currency(a.mrr, "EUR")}/mo` : "Not on file", { icon: "gem" }), DescriptionItem("Customer since", a ? $util.formatDate(a.since, "date") : "Not on file", { icon: "calendar-check" }), DescriptionItem("Region", a ? a.region : "Not on file", { icon: "location-dot" }), DescriptionItem("Success manager", a ? a.csm : "Unassigned", { icon: "user-tie" })], { columns: 1 }),
+    Separator("horizontal", { label: `Past tickets (${past.length})` }),
+    Show(past.length > 0, {
+      fallback: Text("This is the first ticket from the account.", { variant: "small", tone: "muted" }),
+      children: List(past.map(p => ListItem(p.subject, { description: `${p.id} · ${statusLabel(p.status)}`, icon: channelIcon(p.channel), tone: p.status == "solved" ? "success" : "warning", onClick: () => desk.select(p.id) })), { divided: true })
+    })
+  ])
+}
+
+function ArticlesCard(t) {
+  const hits = articles.filter(a => t.tags.includes(a.tag))
+  const list = hits.length > 0 ? hits : articles.slice(0, 3)
+  return Card([
+    SectionHeader("Suggested articles", { eyebrow: "KNOWLEDGE BASE", subtitle: `Matched on ${t.tags.join(", ")}` }),
+    List(list.map(a => ListItem(a.title, { description: `${a.views} views · ${a.tag}`, icon: "file-lines", trailing: [Button("Insert", { variant: "ghost", size: "xs", icon: "arrow-turn-down", onClick: () => { $reply = `${$reply}${$reply == "" ? "" : " "}This help-centre guide walks through it: ${a.title}.` } })] })), { divided: true })
+  ])
+}
+
+function DetailPane() {
+  const t = selected
+  return t ? Grid([GridItem(Column([TicketCard(t), ThreadCard(t), ComposerCard(t)], { gap: "md" }), { span: "2/3" }), GridItem(Column([ContextCard(t), ArticlesCard(t)], { gap: "md" }), { span: "1/3" })], { columns: { base: 1, xl: 3 }, gap: "lg", alignItems: "start" }) : Center([EmptyState("Pick a ticket", { icon: "envelope-open-text", description: "Select a conversation from the queue to read it and reply." })], { minHeight: "40vh" })
+}
+
+// ---- Reporting -------------------------------------------------------------
+volumeCard = Card([
+  SectionHeader("Ticket volume", { eyebrow: "TRENDS", subtitle: `${$util.sum(period.created)} created · ${$util.sum(period.solved)} solved · ${period.label}`, actions: [SegmentedControl(["7d", "30d"], { value: $range, size: "sm", label: "Reporting range", onChange: (v) => { $range = v } })] }),
+  BarChart(period.labels, { series: [Series("Created", { values: period.created }), Series("Solved", { values: period.solved })], height: 230, ariaLabel: `Tickets created versus solved over the ${period.label}` })
+])
+
+serviceCard = Card([
+  SectionHeader("Service level", { eyebrow: "SLA", subtitle: `First response within 30 minutes · ${period.label}`, status: Pill(`${slaAvg}%`, { tone: slaAvg > 94 ? "success" : slaAvg > 89 ? "warning" : "critical" }) }),
+  Gauge(slaAvg, { min: 80, max: 100, unit: "%", size: "md", caption: "Target 95%", thresholds: [{ value: 90, tone: "warning" }, { value: 95, tone: "success" }], showRange: true, ariaLabel: `SLA attainment ${slaAvg} percent` }),
+  Separator("horizontal", { label: "Channel mix" }),
+  PieChart(channelOptions.map(o => o.label), { values: channelCounts, donut: true, valueFormat: "percent", size: 190, ariaLabel: "Share of tickets by channel" })
+])
+
+teamCard = Card([
+  SectionHeader("Team performance", { eyebrow: "THIS WEEK", subtitle: `${active.length} tickets open across ${team.length} agents` }),
+  Table([
+    Col("Agent", team.map(a => PersonChip(a.name, { role: a.role, size: "sm" }))),
+    Col("Open", team.map(a => String(openFor(a.name))), { align: "right" }),
+    Col("SLA attainment", team.map(a => Progress(a.sla, { max: 100, showValue: true, label: `${a.name} SLA attainment`, tone: a.sla > 94 ? "success" : a.sla > 89 ? "warning" : "danger" }))),
+    Col("CSAT", team.map(a => Badge(`${a.csat} / 5`, { tone: a.csat > 4.6 ? "success" : "info", size: "sm" })), { align: "right" })
+  ], { striped: true, ariaLabel: "Agent performance for the current week" })
+])
+
+attentionCard = Card([
+  SectionHeader("Needs attention", { eyebrow: "FOLLOW-UPS", subtitle: "Open tickets within 30 minutes of their response target, or already past it", status: Pill(`${atRisk.length} flagged`, { tone: atRisk.length > 0 ? "warning" : "success" }) }),
+  Show(atRisk.length > 0, { fallback: EmptyState("Nothing is at risk", { icon: "circle-check", description: "Every open ticket has more than 30 minutes of headroom." }), children: List(atRisk.map(t => ListItem(t.subject, { description: `${t.id} · ${t.company} · ${t.assignee == "" ? "Unassigned" : t.assignee}`, icon: channelIcon(t.channel), tone: t.slaMinutes <= 0 ? "danger" : "warning", trailing: [slaPill(t)], onClick: () => desk.select(t.id) })), { divided: true }) }),
+  Callout("info", { title: "Handover to the APAC queue at 16:00 CET", description: "Leave an internal note on anything still open so the next shift can pick it up cleanly.", icon: "clock", compact: true })
+])
+
+newTicketModal = Modal("New ticket", {
+  open: $newOpen,
+  size: "md",
+  closeOnBackdrop: true,
+  onClose: () => { $newOpen = false },
+  children: [
+    FormSection("Requester", [FormControl("Full name", Input("nt-name", { value: $ntName, placeholder: "Jamie Cole" }), { required: true, error: nameError }), FormControl("Account", Select("nt-company", accounts.map(a => a.company), { value: $ntCompany, label: "Account", labelHidden: true }))], { helper: "The ticket is threaded onto the account you pick here." }),
+    FormSection("Request", [
+      FormControl("Subject", Input("nt-subject", { value: $ntSubject, placeholder: "Payout for 5 August is missing" }), { required: true, error: subjectError }),
+      FormControl("First message", TextArea("nt-body", { value: $ntBody, rows: 3, placeholder: "What did the customer report?" })),
+      Grid([FormControl("Priority", Select("nt-priority", priorityOptions, { value: $ntPriority, label: "Priority", labelHidden: true })), FormControl("Channel", Select("nt-channel", channelOptions, { value: $ntChannel, label: "Channel", labelHidden: true }))], { columns: { base: 1, md: 2 }, gap: "sm" })
+    ])
+  ],
+  footer: [Button("Cancel", { variant: "ghost", onClick: () => { $newOpen = false } }), Button("Create ticket", { variant: "primary", icon: "plus", disabled: !newValid, onClick: createTicket })]
+})
+
+page = Column([
+  PageHeader("Support console", { subtitle: `${active.length} open · ${desk.tickets.length} tickets this shift · average first response ${avgResponse} minutes`, breadcrumbs: ["Larkspur", "Support", "Queue"], status: headerPill, actions: [Button("New ticket", { variant: "primary", size: "sm", icon: "plus", onClick: () => { $newOpen = true } })] }),
+  kpis,
+  queueToolbar,
+  SplitView([queuePane], [DetailPane()], { primaryWidth: "340px" }),
+  Grid([volumeCard, serviceCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" }),
+  Grid([teamCard, attentionCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" }),
+  newTicketModal
+], { gap: "lg" })

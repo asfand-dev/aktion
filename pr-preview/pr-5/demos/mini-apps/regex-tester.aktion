@@ -1,0 +1,95 @@
+// Regex Tester — type a pattern and flags, paste sample text, and see the
+// match count, every capture and a quick cheatsheet. Invalid patterns surface
+// a friendly error instead of crashing. Starting point for: any live
+// "input → parsed result" developer utility.
+// Uses: try/catch in a helper, CheckBoxGroup flags, TextArea, Table, Callout.
+$app(Column([header, Grid([patternCard, textCard], { columns: { base: 1, md: 2 }, gap: "lg", alignItems: "start" }), resultCard, cheatCard], { gap: "lg", padding: "md" }))
+
+$pattern = "\\b(\\w+)@(\\w+)\\.(\\w+)\\b"
+$flags = { g: true, i: true, m: false }
+$text = "Contact us at hello@aktion.dev or sales@example.com — replies within 24h."
+
+function flagString() {
+  let f = ""
+  if ($flags.g) f += "g"
+  if ($flags.i) f += "i"
+  if ($flags.m) f += "m"
+  return f
+}
+
+// Compile + run the regex defensively; never throw into the render tree.
+function analyze() {
+  if (!$pattern) return { ok: true, error: null, matches: [] }
+  try {
+    const f = flagString().includes("g") ? flagString() : flagString() + "g"
+    const re = new RegExp($pattern, f)
+    const out = []
+    let m = re.exec($text)
+    let guard = 0
+    while (m != null && guard < 500) {
+      out.push({ index: m.index, match: m[0], groups: m.slice(1) })
+      if (m[0] == "") re.lastIndex = re.lastIndex + 1
+      m = re.exec($text)
+      guard = guard + 1
+    }
+    return { ok: true, error: null, matches: out }
+  } catch (e) {
+    return { ok: false, error: String(e.message ?? e), matches: [] }
+  }
+}
+result = analyze()
+
+header = PageHeader("Regex Tester", {
+  subtitle: "Test a regular expression against sample text",
+  badge: result.ok ? Badge(`${result.matches.length} ${$util.plural(result.matches.length, "match", "matches")}`, { tone: result.matches.length > 0 ? "success" : "neutral" }) : Badge("invalid", { tone: "danger" })
+})
+
+patternCard = Card([
+  SectionHeader("Pattern", { eyebrow: "REGEX" }),
+  Row([
+    Text("/", { variant: "large", tone: "muted" }),
+    StackItem(Input("pattern", { value: $pattern, placeholder: "e.g. \\d{3}-\\d{4}" }), { grow: 1 }),
+    Text("/" + flagString(), { variant: "large", tone: "muted" })
+  ], { gap: "xs", align: "center" }),
+  FormControl("Flags", { field: CheckBoxGroup("flags", { items: [
+    CheckBoxItem("g", { label: "global (g)" }),
+    CheckBoxItem("i", { label: "ignore case (i)" }),
+    CheckBoxItem("m", { label: "multiline (m)" })
+  ], value: $flags }) })
+], { animate: "fade-up" })
+
+textCard = Card([
+  SectionHeader("Test string"),
+  TextArea("text", { value: $text, rows: 7, placeholder: "Paste text to search…" })
+], { animate: { preset: "fade-up", delay: 80 } })
+
+resultCard = Card([
+  SectionHeader("Matches", { eyebrow: "RESULT" }),
+  result.ok
+    ? Show(result.matches.length > 0, {
+        fallback: EmptyState("No matches", { icon: "magnifying-glass", description: "Adjust the pattern or test string." }),
+        children: Table([
+          Col("#", result.matches.map((m, i) => String(i + 1)), { align: "right" }),
+          Col("Index", result.matches.map(m => String(m.index)), { align: "right" }),
+          Col("Match", result.matches.map(m => Badge(m.match || "∅", { tone: "primary", size: "sm" }))),
+          Col("Groups", result.matches.map(m => m.groups.length > 0 ? m.groups.map((g, gi) => Badge(`$${gi + 1}: ${g ?? "—"}`, { tone: "neutral", size: "xs" })) : Text("—", { tone: "muted" })))
+        ], { striped: true })
+      })
+    : Callout("danger", { title: "Invalid pattern", description: result.error, icon: "triangle-exclamation" })
+])
+
+cheats = [
+  { token: "\\d", meaning: "Any digit (0–9)" },
+  { token: "\\w", meaning: "Word char (a–z, 0–9, _)" },
+  { token: "\\s", meaning: "Whitespace" },
+  { token: ".", meaning: "Any character" },
+  { token: "^ $", meaning: "Start / end anchors" },
+  { token: "*  +  ?", meaning: "0+, 1+, 0 or 1" },
+  { token: "{n,m}", meaning: "Between n and m times" },
+  { token: "( )", meaning: "Capture group" }
+]
+
+cheatCard = Card([
+  SectionHeader("Cheatsheet"),
+  Grid(cheats.map(c => Row([Kbd(c.token), StackItem(Text(c.meaning, { variant: "small", tone: "muted" }), { grow: 1 })], { gap: "sm", align: "center" })), { columns: { base: 1, sm: 2, md: 4 }, gap: "sm" })
+])

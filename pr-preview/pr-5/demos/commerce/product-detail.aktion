@@ -1,0 +1,317 @@
+// Cascade 3L Rain Shell — a full product detail page: a gallery that really switches, a buy
+// box where every colour/size combination carries its own price and stock, tabbed detail, a
+// review histogram computed from the review data, Q&A, a bundle builder and related products.
+// Starting point for: any e-commerce PDP — apparel, hardware, furniture, marketplace listings.
+// Uses: NavBar + Sections + Footer, Gallery-driven Image, VariantSelector + QuantityStepper
+//        stock rules, Tabs, Accordion, FilterPill review filter, Progress histogram,
+//        OrderSummary bag with a working promo code, ProductCard grid, $util.currency totals.
+$app(Column([nav, buySection, benefits, detailSection, reviewSection, qnaSection, bundleSection, relatedSection, pageFooter], { gap: "none" }))
+
+$theme({
+  colors: { primary: "#1f6f5c", accent: "#c2622d" },
+  radius: { md: "12px", lg: "18px", button: "10px", input: "10px" }
+})
+
+$colour = "Slate"
+$size = "M"
+$qty = 1
+$shot = 0
+$tab = "description"
+$wish = false
+$stars = 0
+$helpful = []
+$lines = []
+$extras = ["cap"]
+$promo = ""
+$promoOk = false
+
+img = (seed, w, h) => `https://picsum.photos/seed/${seed}/${w}/${h}`
+money = n => $util.currency(n, "USD")
+months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+dayLabel = iso => `${Number(String(iso).slice(8, 10))} ${months[Number(String(iso).slice(5, 7)) - 1]}`
+product = { brand: "Alder & Pike", name: "Cascade 3L Rain Shell", family: "AP-CS3L", weight: "412 g (men's M)" }
+shots = [
+  { seed: "alder-cascade-front", alt: "Cascade 3L Rain Shell photographed from the front against a plain studio backdrop", caption: "Front — storm flap closed, pit zips open" },
+  { seed: "alder-cascade-back", alt: "Back view of the Cascade 3L Rain Shell showing the dropped hem", caption: "Back — dropped hem and taped centre seam" },
+  { seed: "alder-cascade-hood", alt: "Close-up of the helmet-compatible hood and laminated brim", caption: "Hood — helmet compatible, laminated brim" },
+  { seed: "alder-cascade-cuff", alt: "Close-up of the welded cuff tab and sealed seam", caption: "Cuff — welded tab, no bulk under a glove" },
+  { seed: "alder-cascade-worn", alt: "The Cascade 3L Rain Shell worn on a wet ridge trail", caption: "Worn — Cascade Pass, eleven hours of rain" }
+]
+colours = [{ label: "Slate", value: "Slate", color: "#4a5568" }, { label: "Ember", value: "Ember", color: "#c2410c" }, { label: "Moss", value: "Moss", color: "#4d7c0f" }]
+sizes = ["S", "M", "L", "XL"]
+variants = [
+  { colour: "Slate", size: "S", price: 289, compareAt: 349, stock: 12, sku: "AP-CS3L-SLA-S" },
+  { colour: "Slate", size: "M", price: 289, compareAt: 349, stock: 24, sku: "AP-CS3L-SLA-M" },
+  { colour: "Slate", size: "L", price: 289, compareAt: 349, stock: 18, sku: "AP-CS3L-SLA-L" },
+  { colour: "Slate", size: "XL", price: 299, compareAt: 359, stock: 0, sku: "AP-CS3L-SLA-XL" },
+  { colour: "Ember", size: "S", price: 299, compareAt: 349, stock: 4, sku: "AP-CS3L-EMB-S" },
+  { colour: "Ember", size: "M", price: 299, compareAt: 349, stock: 9, sku: "AP-CS3L-EMB-M" },
+  { colour: "Ember", size: "L", price: 299, compareAt: 349, stock: 0, sku: "AP-CS3L-EMB-L" },
+  { colour: "Ember", size: "XL", price: 309, compareAt: 359, stock: 6, sku: "AP-CS3L-EMB-XL" },
+  { colour: "Moss", size: "S", price: 279, compareAt: 329, stock: 0, sku: "AP-CS3L-MOS-S" },
+  { colour: "Moss", size: "M", price: 279, compareAt: 329, stock: 7, sku: "AP-CS3L-MOS-M" },
+  { colour: "Moss", size: "L", price: 279, compareAt: 329, stock: 11, sku: "AP-CS3L-MOS-L" },
+  { colour: "Moss", size: "XL", price: 289, compareAt: 339, stock: 3, sku: "AP-CS3L-MOS-XL" }
+]
+reviews = [
+  { id: "r1", author: "Marta Okonkwo", seed: "alder-rev-marta", rating: 5, date: "18 Jul 2026", verified: true, bought: "Slate / M", title: "Eleven hours of rain and still dry", body: "Wore it end to end on the Cascade Pass traverse in steady rain. Not a drop through the shoulders where a pack strap sits, which is where every other shell I own has given up.", helpful: 34 },
+  { id: "r2", author: "Tomas Ferreira", seed: "alder-rev-tomas", rating: 5, date: "02 Jul 2026", verified: true, bought: "Ember / L", title: "The hood is the whole product", body: "Cinches down over a bare head without the brim collapsing, and still clears a helmet. I stopped carrying a cap because of it.", helpful: 21 },
+  { id: "r3", author: "Priya Raghunathan", seed: "alder-rev-priya", rating: 4, date: "24 Jun 2026", verified: true, bought: "Moss / M", title: "Excellent, but size up for layering", body: "Fits close over a base layer. With a mid-weight fleece the M pulled across the back, so I swapped to L and it is perfect. The exchange took four days.", helpful: 47 },
+  { id: "r4", author: "Jonas Behrens", seed: "alder-rev-jonas", rating: 5, date: "11 Jun 2026", verified: true, bought: "Slate / L", title: "Packs smaller than the spec suggests", body: "Rolls into its own chest pocket and disappears into a 20 L daypack. Weighs less than the softshell it replaced and does far more.", helpful: 18 },
+  { id: "r5", author: "Ines Delacroix", seed: "alder-rev-ines", rating: 4, date: "29 May 2026", verified: false, bought: "Ember / S", title: "Great shell, loud fabric", body: "Waterproofing is faultless after six weeks of commuting. The 3L face fabric does crackle for the first few wears, though it quiets down after a wash.", helpful: 12 },
+  { id: "r6", author: "Kwame Asante", seed: "alder-rev-kwame", rating: 5, date: "15 May 2026", verified: true, bought: "Moss / L", title: "Pit zips you can reach mid-stride", body: "Long two-way zips placed far enough forward that I can vent without stopping. A small thing, but it is why this one lives in my bag.", helpful: 29 },
+  { id: "r7", author: "Sofia Lindqvist", seed: "alder-rev-sofia", rating: 3, date: "03 May 2026", verified: true, bought: "Slate / S", title: "Sleeves run long", body: "Waterproofing and build are five-star. On a 168 cm frame the S sleeves cover half my hand even with the cuff tab pulled tight. Wonderful jacket, awkward proportions.", helpful: 55 },
+  { id: "r8", author: "Haruto Nakamura", seed: "alder-rev-haruto", rating: 5, date: "21 Apr 2026", verified: true, bought: "Slate / XL", title: "Third season, second jacket", body: "Reproofed once a year and it beads like new. Bought a second in Ember so one is always dry in the hallway.", helpful: 40 },
+  { id: "r9", author: "Amara Osei", seed: "alder-rev-amara", rating: 2, date: "08 Apr 2026", verified: false, bought: "Ember / XL", title: "Zip garage frayed early", body: "Six weeks in, the fabric behind the chin guard started to fray. Support replaced it without argument, but I expected more at this price.", helpful: 9 }
+]
+specs = [
+  { label: "Fabric", value: "3-layer 40D recycled nylon, PFC-free DWR", icon: "layer-group" }, { label: "Waterproofing", value: "20,000 mm hydrostatic head", icon: "umbrella" },
+  { label: "Breathability", value: "25,000 g/m²/24h (RET 6)", icon: "wind" }, { label: "Seams", value: "Fully taped, 13 mm laminated tape", icon: "ruler-horizontal" },
+  { label: "Weight", value: product.weight, icon: "feather" }, { label: "Packed size", value: "24 × 14 cm — into the chest pocket", icon: "box-open" },
+  { label: "Hood", value: "Helmet compatible, three-point adjustment", icon: "hard-hat" }, { label: "Certification", value: "Bluesign approved · Fair Trade sewn", icon: "certificate" }
+]
+perks = [
+  { label: "Free 2-day shipping over $150", note: "Carbon-neutral, tracked, no signature needed", icon: "truck-fast", cta: "Details" },
+  { label: "60-day returns, worn or unworn", note: "Prepaid label in every box — refund in four days", icon: "rotate-left", cta: "Policy" },
+  { label: "Repaired for life in Portland", note: "Zips, cuffs and delamination fixed at cost", icon: "screwdriver-wrench", cta: "How it works" }
+]
+highlights = [
+  { title: "20k / 25k membrane", note: "Waterproof to 20,000 mm, breathable to 25,000 g", icon: "umbrella", tone: "info" }, { title: "Helmet-ready hood", note: "Three-point adjustment, laminated brim", icon: "hard-hat", tone: "primary" },
+  { title: "Packs to 24 × 14 cm", note: "Stows into its own chest pocket", icon: "box-open", tone: "success" }, { title: "PFC-free finish", note: "Bluesign approved, Fair Trade sewn", icon: "leaf", tone: "success" }
+]
+questions = [
+  { q: "Does it fit over a mid-layer fleece?", a: "Yes — the cut allows a 200-weight fleece without pulling. If you routinely layer a puffy underneath, take the next size up; roughly one in five customers does." },
+  { q: "How do I reproof the DWR finish?", a: "Wash warm on a gentle cycle with a technical detergent, then tumble low for twenty minutes to reactivate the finish. Our Revive DWR Wash restores it in one cycle when heat alone stops working." },
+  { q: "Is the fabric recycled?", a: "The face and backer are 100% recycled nylon and the membrane is PFC-free. The jacket carries a Bluesign approval and is Fair Trade sewn." },
+  { q: "What does the warranty cover?", a: "Every Alder & Pike shell is guaranteed against manufacturing defects for the life of the product. Wear from use is repaired at cost through our Portland repair shop." }
+]
+shippingFaq = [
+  { q: "Delivery options and cost", a: "Standard (3–5 working days) is $9.50, and free on bags over $150 after discounts. Express (2 working days) is $19. Orders placed before 14:00 PT ship the same day." },
+  { q: "Returns and exchanges", a: "Sixty days from delivery, worn or unworn, with a prepaid label in every box. Exchanges ship the moment the carrier scans your parcel, so you are not waiting on us twice." },
+  { q: "Repairs and the lifetime guarantee", a: "Manufacturing defects are covered for the life of the jacket. Everything else — a snagged zip, a delaminated cuff, a tear from a branch — is repaired at cost in Portland." },
+  { q: "International shipping", a: "We ship to 34 countries. Duties and import taxes are calculated at checkout and paid up front, so nothing is owed on delivery. International returns carry a $12 label fee." }
+]
+addons = [
+  { id: "cap", name: "Cascade Packable Cap", price: 39, seed: "alder-cap", note: "Matching 3L brim — folds into the jacket's chest pocket" },
+  { id: "wash", name: "Revive DWR Wash · 300 ml", price: 18, seed: "alder-wash", note: "Restores the water-repellent finish in a single machine cycle" }
+]
+related = [
+  { id: "rp1", name: "Ridgeline Merino Hoodie", price: 149, compareAt: 0, rating: 4.7, count: 186, seed: "alder-ridgeline", badge: "" },
+  { id: "rp2", name: "Basin Insulated Vest", price: 189, compareAt: 229, rating: 4.5, count: 94, seed: "alder-basin", badge: "Sale" },
+  { id: "rp3", name: "Timberline Softshell Pant", price: 165, compareAt: 0, rating: 4.8, count: 231, seed: "alder-timberline", badge: "" },
+  { id: "rp4", name: "Foxglove 22 L Daypack", price: 129, compareAt: 159, rating: 4.4, count: 72, seed: "alder-foxglove", badge: "Sale" }
+]
+
+// ---------- derived ----------------------------------------------------------
+current = variants.find(v => v.colour == $colour && v.size == $size) || variants[0]
+inStock = current.stock > 0
+maxQty = Math.max(1, Math.min(current.stock, 8))
+qty = $util.clamp($qty, 1, maxQty)
+activeShot = shots[$shot] || shots[0]
+sizeOptions = sizes.map(s => ({ label: s, value: s, disabled: (variants.find(v => v.colour == $colour && v.size == s) || current).stock == 0 }))
+stockPip = !inStock ? StatusDot(`Out of stock — ${$colour} / ${$size}`, { tone: "danger" }) : current.stock <= 5 ? StatusDot(`Only ${current.stock} left in ${$colour} / ${$size}`, { tone: "warning", pulse: true }) : StatusDot(`In stock — ${current.stock} ready to ship from Portland`, { tone: "success" })
+shipDate = $util.addDays($util.today(), 1)
+arriveFrom = $util.addDays($util.today(), 3)
+arriveTo = $util.addDays($util.today(), 5)
+
+avgRating = $util.round($util.avg(reviews.map(r => r.rating)), 1)
+buckets = [5, 4, 3, 2, 1].map(n => ({ stars: n, count: reviews.filter(r => r.rating == n).length }))
+pctFor = c => reviews.length == 0 ? 0 : Math.round(c / reviews.length * 100)
+shownReviews = $stars == 0 ? reviews : reviews.filter(r => r.rating == $stars)
+helpfulFor = r => r.helpful + ($helpful.includes(r.id) ? 1 : 0)
+
+cartCount = $util.sum($lines.map(l => l.qty))
+cartSubtotal = $util.sum($lines.map(l => l.price * l.qty))
+cartDiscount = $promoOk ? $util.round(cartSubtotal * 0.15, 2) : 0
+netSubtotal = cartSubtotal - cartDiscount
+cartShipping = cartSubtotal == 0 || netSubtotal >= 150 ? 0 : 9.5
+cartTax = $util.round(netSubtotal * 0.0825, 2)
+cartTotal = netSubtotal + cartShipping + cartTax
+shipNote = cartSubtotal == 0 ? "Taxes estimated at 8.25% — recalculated at checkout." : cartShipping == 0 ? "Free 2-day shipping applied." : `Add ${money(150 - netSubtotal)} more for free 2-day shipping.`
+
+pickedAddons = addons.filter(a => $extras.includes(a.id))
+bundleBase = current.price + $util.sum(pickedAddons.map(a => a.price))
+bundleSaving = pickedAddons.length > 0 ? $util.round(bundleBase * 0.1, 2) : 0
+bundleTotal = bundleBase - bundleSaving
+
+// ---------- actions ----------------------------------------------------------
+function addLine(id, name, price, count) {
+  const found = $lines.find(l => l.id == id)
+  if (found) $lines = $lines.map(l => l.id == id ? { ...l, qty: l.qty + count } : l)
+  else $lines = [...$lines, { id: id, name: name, price: price, qty: count }]
+}
+function addToBag() {
+  if (!inStock) return
+  addLine(`${current.colour}/${current.size}`, `${product.name} — ${current.colour} / ${current.size}`, current.price, qty)
+  $toast.success(`${qty} × ${current.colour} / ${current.size} added — ${money(current.price * qty)}`)
+}
+function buyNow() {
+  if (!inStock) return
+  addToBag()
+  $toast.info("Express checkout opening with your saved address")
+}
+function addBundle() {
+  if (!inStock) return
+  addToBag()
+  pickedAddons.forEach(a => addLine(a.id, a.name, a.price, 1))
+  if (bundleSaving > 0) $toast.success(`Bundle added — you saved ${money(bundleSaving)}`)
+}
+function addRelated(p) {
+  addLine(p.id, p.name, p.price, 1)
+  $toast.success(`${p.name} added — ${money(p.price)}`)
+}
+function toggleWish() {
+  $wish = !$wish
+  $toast.show($wish ? `${product.name} saved to your wishlist` : "Removed from your wishlist", { tone: $wish ? "success" : "info" })
+}
+function applyPromo() {
+  const code = $util.uppercase($util.trim($promo))
+  $promoOk = code == "SHELL15"
+  if ($promoOk) $toast.success("SHELL15 applied — 15% off your bag")
+  else $toast.error(`${code || "That code"} is not a valid promo code`)
+}
+pickColour = next => { $colour = next }
+pickSize = next => { $size = next }
+markHelpful = id => { $helpful = $helpful.includes(id) ? $helpful.filter(x => x != id) : [...$helpful, id] }
+toggleAddon = id => { $extras = $extras.includes(id) ? $extras.filter(x => x != id) : [...$extras, id] }
+nav = NavBar({
+  brand: Brand("Alder & Pike"), sticky: true, blur: true,
+  links: [Link("Shells", { href: "#" }), Link("Insulation", { href: "#" }), Link("Packs", { href: "#" }), Link("Repairs", { href: "#" })],
+  actions: [Button(`Bag · ${cartCount}`, { variant: "secondary", size: "sm", icon: "bag-shopping", onClick: () => $toast.info(cartCount > 0 ? `${cartCount} items · ${money(cartTotal)}` : "Your bag is empty") }), ThemeToggle()]
+})
+galleryPane = Column([
+  Image(img(activeShot.seed, 900, 900), { alt: activeShot.alt, ratio: "1:1", fit: "cover", placeholder: "blur", caption: activeShot.caption }),
+  Gallery(shots.map(s => ({ src: img(s.seed, 220, 220), alt: s.alt })), { columns: 5, ratio: "1:1", label: "Product photography", onSelect: i => { $shot = i } })
+], { gap: "sm" })
+bagCard = Card([
+  SectionHeader("Your bag", { eyebrow: "RUNNING TOTAL", status: Pill($util.plural(cartCount, "item"), { tone: cartCount > 0 ? "success" : "neutral" }) }),
+  OrderSummary($lines.map(l => ({ label: l.name, amount: money(l.price * l.qty), qty: l.qty })), { subtotal: money(cartSubtotal), discount: cartDiscount > 0 ? `− ${money(cartDiscount)}` : null, shipping: cartShipping == 0 ? "Free" : money(cartShipping), tax: money(cartTax), total: money(cartTotal), note: shipNote, empty: "Nothing here yet — pick a colour and size above." }),
+  InputGroup(Input("promo", { value: $promo, placeholder: "Promo code — try SHELL15", label: "Promo code", labelHidden: true }), { icon: "tag", action: Button("Apply", { variant: "secondary", size: "sm", onClick: applyPromo }) })
+])
+buyPane = Column([
+  Breadcrumb([{ label: "Home", to: "/" }, { label: "Men's", to: "/mens" }, { label: "Shells & jackets", to: "/mens/shells" }, { label: product.name }], { maxItems: 4 }),
+  Row([Badge("New for AW26", { tone: "primary", icon: "seedling", size: "sm" }), Badge("Bluesign approved", { tone: "info", icon: "leaf", size: "sm" })], { gap: "xs", wrap: true }),
+  Text(product.brand, { variant: "small-heavy", tone: "muted" }), Heading(product.name, { level: 1, size: "lg" }),
+  Row([Rating(avgRating, { count: reviews.length, label: `${avgRating} out of 5`, size: "sm", readonly: true }), Separator("vertical"), Text(`SKU ${current.sku}`, { variant: "small", tone: "muted" })], { gap: "sm", align: "center", wrap: true }),
+  Row([PriceTag(current.price, { compareAt: current.compareAt, size: "lg" }), Spacer(), Text(`or 4 × ${money($util.round(current.price / 4, 2))} interest-free`, { variant: "small", tone: "muted" })], { gap: "sm", align: "center", wrap: true }),
+  stockPip,
+  VariantSelector(colours, { kind: "swatch", label: `Colour — ${$colour}`, value: $colour, onChange: pickColour }),
+  VariantSelector(sizeOptions, { kind: "pill", label: `Size — ${$size} · sold-out sizes are dimmed`, value: $size, onChange: pickSize }),
+  Row([
+    QuantityStepper(qty, { min: 1, max: maxQty, disabled: !inStock, label: `Quantity of ${product.name}`, onChange: n => { $qty = n } }),
+    StackItem(Button(inStock ? `Add to bag · ${money(current.price * qty)}` : "Out of stock in this size", { variant: "primary", size: "lg", icon: inStock ? "cart-plus" : "ban", fullWidth: true, disabled: !inStock, onClick: addToBag }), { grow: 1 }),
+    IconButton($wish ? "heart" : "regular:heart", { label: $wish ? "Remove from wishlist" : "Save to wishlist", variant: $wish ? "secondary" : "ghost", size: "lg", active: $wish, onClick: toggleWish })
+  ], { gap: "sm", align: "center", wrap: true }),
+  Button("Buy it now", { variant: "outline", size: "lg", icon: "bolt", fullWidth: true, disabled: !inStock, onClick: buyNow }),
+  DescriptionList([DescriptionItem("Dispatch", { value: `Ships ${dayLabel(shipDate)} from Portland, OR`, icon: "warehouse" }), DescriptionItem("Arrives", { value: `${dayLabel(arriveFrom)} – ${dayLabel(arriveTo)} with standard delivery`, icon: "truck-fast" }),
+    DescriptionItem("Returns", { value: "60 days, free label, worn or unworn", icon: "rotate-left" }), DescriptionItem("Warranty", { value: "Lifetime against manufacturing defects", icon: "shield-halved" })], { columns: 1 }),
+  bagCard
+], { gap: "md" })
+
+buySection = Section([Grid([galleryPane, buyPane], { columns: { base: 1, lg: 2 }, gap: "xl", alignItems: "start" })], { width: "xl", padding: "lg" })
+benefits = Section([Grid(perks.map(p => ActionStripe(p.label, { description: p.note, icon: p.icon, value: p.cta, onClick: () => { $tab = "shipping" } })), { columns: { base: 1, md: 3 }, gap: "md" })], { width: "xl", padding: "sm", background: "soft" })
+descriptionPane = Grid([
+  Prose([Text("Built for the eleventh hour of rain, not the first.", { variant: "large-heavy", as: "p" }),
+    Text("The Cascade is our three-layer workhorse: a 40D recycled nylon face over a PFC-free membrane, with a tricot backer that stops the clamminess most hard shells trade breathability for. Every seam is taped at 13 mm, the hood takes a climbing helmet without swallowing your head when it is bare, and the two-way pit zips sit far enough forward that you can vent without breaking stride.", { variant: "body", as: "p" }),
+    Text("We cut it long at the back so a pack hem does not ride up, and welded the cuff tabs flat so they disappear under a glove. Three seasons of field testing on the Olympic Peninsula went into the hood brim alone.", { variant: "body", as: "p" })
+  ]),
+  Column([
+    FeatureGrid(highlights.map(h => FeatureItem(h.title, { description: h.note, icon: h.icon, tone: h.tone })), { columns: 2 }),
+    Callout("info", { title: "Sizing note", description: "Cut close over a base layer. If you layer a mid-weight fleece underneath, take the next size up — 21% of customers do.", icon: "ruler", compact: true })
+  ], { gap: "md" })
+], { columns: { base: 1, md: 2 }, gap: "lg", alignItems: "start" })
+specPane = Column([
+  DescriptionList(specs.map(s => DescriptionItem(s.label, { value: s.value, icon: s.icon })), { columns: 2 }), Separator("horizontal"),
+  Text(`Model family ${product.family} · currently viewing ${current.sku} · ${current.colour} / ${current.size}`, { variant: "small", tone: "muted" })
+], { gap: "md" })
+detailSection = Section([
+  Tabs([
+    TabItem("description", { label: "Description", icon: "align-left", children: [descriptionPane] }),
+    TabItem("specs", { label: "Specifications", icon: "list-check", children: [specPane] }),
+    TabItem("shipping", { label: "Shipping & returns", icon: "truck", children: [Accordion(shippingFaq.map(f => AccordionItem(f.q, { children: [Text(f.a, { tone: "muted" })] })), { showArrow: true, type: "single" })] })
+  ], { value: $tab, onChange: v => { $tab = v }, fitted: true })
+], { width: "xl", padding: "lg", eyebrow: "THE DETAIL", title: "Everything about this shell" })
+
+// ---------- reviews ----------------------------------------------------------
+function ReviewCard(r) {
+  return Card([Column([
+    Row([
+      Avatar(r.author, { src: img(r.seed, 96, 96), size: "sm" }),
+      StackItem(Column([
+        Row([Text(r.author, { variant: "body-heavy" }), Show(r.verified, { children: Badge("Verified buyer", { tone: "success", icon: "circle-check", size: "xs" }) })], { gap: "xs", align: "center", wrap: true }),
+        Text(`${r.bought} · ${r.date}`, { variant: "small", tone: "muted" })
+      ], { gap: "3xs" }), { grow: 1 }),
+      Rating(r.rating, { size: "sm", readonly: true })
+    ], { gap: "sm", align: "center" }),
+    Text(r.title, { variant: "body-heavy" }), Text(r.body, { variant: "body", tone: "muted" }),
+    Row([
+      Button(`Helpful · ${helpfulFor(r)}`, { variant: $helpful.includes(r.id) ? "secondary" : "ghost", size: "sm", icon: "thumbs-up", onClick: () => markHelpful(r.id) }), Spacer(),
+      Text($helpful.includes(r.id) ? "Thanks for the vote" : "Was this useful?", { variant: "small", tone: "muted" })
+    ], { gap: "sm", align: "center" })
+  ], { gap: "sm" })], { key: r.id })
+}
+histogram = Column(buckets.map(b => Row([
+  StackItem(Text(`${b.stars} star`, { variant: "small" }), { basis: "56px" }),
+  StackItem(Progress(pctFor(b.count), { max: 100, tone: b.stars >= 4 ? "success" : b.stars == 3 ? "warning" : "danger" }), { grow: 1 }),
+  StackItem(Text(`${b.count} · ${pctFor(b.count)}%`, { variant: "small", tone: "muted", align: "right" }), { basis: "72px" })
+], { gap: "sm", align: "center" })), { gap: "xs" })
+ratingCard = Card([
+  SectionHeader("Customer rating", { eyebrow: "VERIFIED" }),
+  Row([Text(String(avgRating), { variant: "title" }), Column([Rating(avgRating, { readonly: true, size: "sm" }), Text($util.plural(reviews.length, "review"), { variant: "small", tone: "muted" })], { gap: "3xs" })], { gap: "sm", align: "center" }),
+  Separator("horizontal"), histogram, Separator("horizontal"),
+  Text(`${reviews.filter(r => r.verified).length} of ${reviews.length} reviews are from verified buyers.`, { variant: "small", tone: "muted" }),
+  Button("Write a review", { variant: "secondary", icon: "pen", fullWidth: true, onClick: () => $toast.info("Review form opens for verified buyers") })
+])
+filterRow = Row([FilterPill("All ratings", { active: $stars == 0, count: reviews.length, icon: "star", onToggle: () => { $stars = 0 } })].concat(buckets.map(b => FilterPill(`${b.stars} star`, { active: $stars == b.stars, count: b.count, disabled: b.count == 0, onToggle: () => { $stars = $stars == b.stars ? 0 : b.stars } }))), { gap: "xs", wrap: true })
+reviewList = Column([
+  Toolbar({ left: [filterRow], right: [Badge($util.plural(shownReviews.length, "review"), { tone: "primary", icon: "filter" })] }),
+  Show(shownReviews.length > 0, {
+    fallback: EmptyState("No reviews at that rating", { description: "Clear the filter to see everything customers have written.", icon: "star", action: Button("Show all reviews", { variant: "primary", onClick: () => { $stars = 0 } }) }),
+    children: Column(shownReviews.map(r => ReviewCard(r)), { gap: "md" })
+  })
+], { gap: "md" })
+reviewSection = Section([
+  Grid([GridItem(ratingCard, { spanAt: { base: 12, lg: 4 } }), GridItem(reviewList, { spanAt: { base: 12, lg: 8 } })], { gap: "lg", alignItems: "start" })
+], { width: "xl", padding: "lg", eyebrow: "REVIEWS", title: `What ${reviews.length} owners say`, subtitle: "Every review below is tied to a real order. Filter by rating to read the hard ones first." })
+qnaSection = Section([
+  Accordion(questions.map(q => AccordionItem(q.q, { children: [Text(q.a, { tone: "muted" })] })), { showArrow: true }),
+  Callout("info", { title: "Still unsure?", description: "Our Portland team answers product questions within one working day.", icon: "comments", compact: true, actions: [Button("Ask a question", { variant: "secondary", size: "sm", onClick: () => $toast.info("Question sent to the Portland team") })] })
+], { width: "lg", padding: "lg", eyebrow: "Q&A", title: "Questions from customers" })
+bundleRows = [Card([Row([
+  Image(img(shots[0].seed, 160, 160), { alt: shots[0].alt, ratio: "1:1", fit: "cover" }),
+  StackItem(Column([Text(`${product.name} — ${current.colour} / ${current.size}`, { variant: "body-heavy" }), Text(money(current.price), { variant: "small", tone: "muted" })], { gap: "3xs" }), { grow: 1 }),
+  Badge("This item", { tone: "primary", size: "sm" })
+], { gap: "sm", align: "center" })])].concat(addons.map(a => Card([Row([
+  Image(img(a.seed, 160, 160), { alt: `${a.name} product photograph`, ratio: "1:1", fit: "cover" }),
+  StackItem(Column([Text(a.name, { variant: "body-heavy" }), Text(a.note, { variant: "small", tone: "muted" }), Text(money(a.price), { variant: "small-heavy" })], { gap: "3xs" }), { grow: 1 }),
+  Checkbox(`addon-${a.id}`, `Add ${a.name}`, { value: $extras.includes(a.id), labelHidden: true, onChange: () => toggleAddon(a.id) })
+], { gap: "sm", align: "center" })], { key: a.id })))
+bundleSection = Section([
+  Grid([
+    Column(bundleRows, { gap: "md" }),
+    Card([
+      SectionHeader("Bundle total", { eyebrow: "SAVE 10%", status: Pill(pickedAddons.length > 0 ? "Discount active" : "Add an extra", { tone: pickedAddons.length > 0 ? "success" : "neutral" }) }),
+      DescriptionList([
+        DescriptionItem("Items", { value: `${1 + pickedAddons.length} in this bundle`, icon: "boxes-stacked" }), DescriptionItem("Bought separately", { value: money(bundleBase), icon: "receipt" }),
+        DescriptionItem("Bundle saving", { value: bundleSaving > 0 ? `− ${money(bundleSaving)}` : "Add an extra to unlock", icon: "tag" })
+      ], { columns: 1 }),
+      Separator("horizontal"),
+      Row([StackItem(Text("Bundle price", { variant: "large-heavy" }), { grow: 1 }), Text(money(bundleTotal), { variant: "title", tone: "primary" })], { align: "center" }),
+      Button(inStock ? `Add all ${1 + pickedAddons.length} to bag` : "Shell unavailable in this size", { variant: "primary", icon: "layer-group", fullWidth: true, disabled: !inStock, onClick: addBundle })
+    ])
+  ], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+], { width: "xl", padding: "lg", eyebrow: "FREQUENTLY BOUGHT TOGETHER", title: "Complete the kit" })
+relatedSection = Section([
+  Grid(related.map(p => ProductCard(p.name, {
+    image: img(p.seed, 600, 600), price: p.price, compareAt: p.compareAt > 0 ? p.compareAt : null, rating: p.rating,
+    reviewCount: p.count, badge: p.badge || null, onAdd: () => addRelated(p), key: p.id
+  })), { columns: { base: 1, sm: 2, lg: 4 }, gap: "lg" })
+], { width: "xl", padding: "lg", background: "soft", eyebrow: "PAIRS WITH", title: "Customers also bought" })
+pageFooter = Footer({
+  brand: Brand("Alder & Pike"),
+  tagline: "Weatherproof kit made to be repaired, not replaced. Portland, Oregon since 2009.",
+  columns: [FooterColumn("Shop", { links: [Link("Shells", { href: "#" }), Link("Insulation", { href: "#" }), Link("Packs", { href: "#" })] }),
+    FooterColumn("Support", { links: [Link("Shipping", { href: "#" }), Link("Returns", { href: "#" }), Link("Repairs", { href: "#" })] }),
+    FooterColumn("Company", { links: [Link("Our materials", { href: "#" }), Link("Fair Trade", { href: "#" }), Link("Stores", { href: "#" })] })],
+  legal: "© 2026 Alder & Pike Outfitters — demo storefront, no real orders are placed."
+})

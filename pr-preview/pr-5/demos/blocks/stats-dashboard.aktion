@@ -1,0 +1,62 @@
+// Stats Dashboard — an analytics overview block: KPI cards with trends, a
+// range switcher that reshapes the chart, a revenue line chart and a top-pages
+// table. A self-contained dashboard section you can drop into any page.
+$app(Column([header, kpis, body, pages], { gap: "lg", padding: "md" }))
+
+$range = "30d"
+
+ranges = {
+  "7d":  { label: "7 days",  months: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], rev: [4, 6, 5, 8, 7, 9, 11], visitors: [120, 160, 140, 210, 190, 240, 280] },
+  "30d": { label: "30 days", months: ["W1", "W2", "W3", "W4"], rev: [22, 28, 26, 34], visitors: [640, 780, 720, 910] },
+  "12m": { label: "12 months", months: ["Q1", "Q2", "Q3", "Q4"], rev: [78, 96, 88, 124], visitors: [2100, 2600, 2400, 3200] }
+}
+data = ranges[$range]
+
+money = n => $util.format(n * 1000, "currency", "USD")
+totalRev = $util.sum(data.rev)
+totalVisitors = $util.sum(data.visitors)
+conversion = $util.round((totalRev * 1000) / (totalVisitors * 50), 1)
+
+header = PageHeader("Analytics", {
+  subtitle: `Performance over the last ${ranges[$range].label}`,
+  actions: [
+    ToggleGroup("range", { items: [{ value: "7d", label: "7D" }, { value: "30d", label: "30D" }, { value: "12m", label: "12M" }], value: $range, size: "sm" }),
+    Button("Export", { variant: "secondary", icon: "download", size: "sm" })
+  ]
+})
+
+kpis = Stats([
+  StatCard("Revenue", { value: money(totalRev), icon: "sack-dollar", tone: "success", trend: "up", delta: "+12.4%" }),
+  StatCard("Visitors", { value: $util.format(totalVisitors, "compact"), icon: "users", tone: "primary", trend: "up", delta: "+8.1%" }),
+  StatCard("Conversion", { value: `${conversion}%`, icon: "bullseye", tone: "info", trend: conversion >= 3 ? "up" : "down", delta: "+0.6%" }),
+  StatCard("Churn", { value: "1.8%", icon: "user-minus", tone: "warning", trend: "down", delta: "-0.3%" })
+])
+
+revChart = Card([
+  SectionHeader("Revenue trend", { eyebrow: "CHART", subtitle: ranges[$range].label }),
+  LineChart(data.months, { series: [Series("Revenue (k)", { values: data.rev }), Series("Visitors (h)", { values: data.visitors.map(v => Math.round(v / 100)) })], filled: true })
+])
+
+split = Card([
+  SectionHeader("Traffic sources", { eyebrow: "BREAKDOWN" }),
+  PieChart(["Organic", "Direct", "Referral", "Social"], { values: [48, 24, 18, 10], valueFormat: "percent" })
+])
+
+body = Grid([revChart, split], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+topPages = [
+  { path: "/", views: 18420, change: "+6%", up: true },
+  { path: "/pricing", views: 9210, change: "+14%", up: true },
+  { path: "/docs", views: 7640, change: "-2%", up: false },
+  { path: "/blog/streaming-ui", views: 5120, change: "+22%", up: true },
+  { path: "/changelog", views: 3080, change: "+1%", up: true }
+]
+
+pages = Card([
+  SectionHeader("Top pages", { eyebrow: "PAGES", subtitle: "By views this period" }),
+  Table([
+    Col("Page", { values: topPages.map(p => Text(p.path, { variant: "body-heavy" })) }),
+    Col("Views", { align: "right", values: topPages.map(p => $util.format(p.views, "compact")) }),
+    Col("Change", { align: "right", values: topPages.map(p => Badge(p.change, { tone: p.up ? "success" : "danger", size: "sm", icon: p.up ? "arrow-trend-up" : "arrow-trend-down" })) })
+  ], { striped: true })
+])

@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Language · Aktion</title>
+  <meta name="description" content="The Aktion language reference — a strict subset of JavaScript with reactive semantics. Program structure, $state, expressions, control flow, the `$util` runtime helper namespace, and the full JavaScript global surface." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
+    /* Live layout demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+      background-blend-mode: normal;
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Visual filler so structural demos read clearly without real content. */
+    .demo-cheats code { white-space: nowrap; }
+  </style>
+</head>
+<body data-page="language">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Reference</span>
+        <h1>Language.</h1>
+        <p class="lead">
+          Aktion is a <strong>strict subset of JavaScript</strong> with reactive
+          semantics layered on top. Every program is valid JS &mdash; functions,
+          arrows, template literals, spread, optional chaining &mdash; and the
+          runtime adds two things: it makes <code>$state</code> reactive and it
+          renders the component tree you pass to <code>$app(&hellip;)</code>. If you
+          know JavaScript, you already know almost all of this page.
+        </p>
+      </header>
+
+      <h2 id="program-structure">Program structure</h2>
+      <p>
+        A program is a flat list of <code>name = expression</code> statements,
+        one per line. The entry point is a call to <code>$app(&hellip;)</code>
+        &mdash; whatever you pass to <code>$app(&hellip;)</code> becomes the rendered
+        UI, normally a <code>Column([&hellip;])</code> for a page or an
+        <code>AppShell(&hellip;)</code> for an app. Every other binding is
+        referenced from the <code>$app(&hellip;)</code> root directly or through other bindings.
+      </p>
+      <p>
+        Newlines terminate statements; semicolons are optional. Forward
+        references resolve from the whole scope, so you can call
+        <code>$app(&hellip;)</code> first and let the pieces it depends on stream in
+        below it &mdash; the renderer re-parses each chunk and fills in names as
+        they arrive.
+      </p>
+      <p>
+        A program does not have to live in one file. Once an app grows, split it
+        into multiple <code>.aktion</code> files that <code>import</code> and
+        <code>export</code> components, helpers, and reactive state &mdash; see
+        <a href="modules.html">Modules</a>.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$app(Column([header, body]))
+
+header = PageHeader("Project Atlas", { subtitle: "Forward references resolve fine" })
+
+body = Card([
+  CardHeader("Overview"),
+  Text("$app(...) is called first; header and body are defined below it.")
+])</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="name-conventions">Three name conventions</h2>
+      <p>
+        The first character of a name carries meaning. There are exactly three
+        conventions:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Form</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>$name = value</code></td><td><strong>Reactive atom.</strong> A tracked cell &mdash; reading subscribes the surrounding component / effect, writing notifies subscribers and re-renders.</td></tr>
+          <tr><td><code>name = value</code></td><td><strong>Plain binding.</strong> A non-reactive alias captured once; reading it never subscribes.</td></tr>
+          <tr><td><code>function name()</code></td><td><strong>Component or action.</strong> A function declaration creates both: invoked in a render position its return value is rendered (a function with no <code>return</code> simply renders nothing); referenced from an event handler its body runs for side effects. First-letter case (<code>Card</code> vs <code>card</code>) is not significant. Reusing a <em>built-in</em> component's name is flagged by the validator &mdash; unless the body calls that same name (the wrapper pattern: inside its own body the name refers to the built-in, so <code>function Badge(l) { return Badge(l, { tone: "success" }) }</code> extends the library Badge instead of recursing).</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The UI root is set by calling <code>$app(&hellip;)</code> (required, first
+        line). Two top-level names are also <strong>reserved</strong>:
+        <code>theme</code> (an optional <code>$theme({&hellip;})</code> brand
+        override), and <code>route</code> (the router-owned reactive handle &mdash;
+        never declare it yourself).
+      </p>
+
+      <h2 id="state">Reactive state</h2>
+      <p>
+        There is one reactive primitive: the <code>$</code>-prefixed atom. The
+        sigil <em>is</em> the contract. Reading a <code>$atom</code> subscribes
+        whoever is reading; writing it wakes every subscriber and re-renders.
+        Plain (sigil-less) bindings are never tracked.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$count = 0
+function inc() { $count = $count + 1 }
+$app(Column([
+  Text(`Count: ${$count}`, { variant: "large-heavy" }),
+  Button("Increment", { variant: "primary", onClick: inc })
+]))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Assignment is only legal inside <code>function</code>,
+        <code>effect</code>, and lambda bodies &mdash; never in render position
+        (top-level bindings, component output, prop values). All the JS
+        assignment operators work against an atom:
+        <code>= += -= *= /= ??= ++ --</code>. Member-target writes are
+        first-class too &mdash; <code>$user.name = "Alex"</code> or
+        <code>$cart.items[0].qty += 1</code> &mdash; the runtime rebuilds the
+        root reference immutably so subscribers always wake up. A
+        <code>$name</code> declared inside a component body is per-instance: two
+        siblings each get their own atom.
+      </p>
+      <p>
+        Subscriptions are <strong>fine-grained</strong>: dependencies track the
+        exact <em>path</em> you read, not the whole atom. Reading
+        <code>$user.name</code> subscribes to <code>user.name</code> alone, so a
+        write to a sibling field (<code>$user.role = &hellip;</code>) won&rsquo;t
+        re-render, recompute, or re-fire it &mdash; while replacing the whole
+        atom (<code>$user = &hellip;</code>, an ancestor) or writing a descendant
+        still does. Object fields track field-by-field; reading into an array
+        (<code>$rows[i]</code>, the <code>$rows.field</code> pluck) or through a
+        dynamic key subscribes at the array/container. The same rule drives
+        computed values and effect dependencies
+        (<code>$effect(&hellip;, [$user.name])</code>). No selectors, no special
+        syntax &mdash; just read the path.
+      </p>
+      <p>
+        It also drives <strong>per-component re-rendering</strong>: a component
+        re-executes only when its own inputs change &mdash; its args (props) or a
+        <code>$state</code> path its body read &mdash; the granularity of
+        <code>React.memo</code> / Solid, but automatic. Split a screen into focused
+        components (<code>ShowName($user.name)</code>, <code>ShowAge($user.age)</code>)
+        and changing <code>$user.age</code> re-runs only <code>ShowAge</code>. Args
+        are compared shallowly, so (as in React) a fresh inline-lambda prop each
+        render makes the child re-render &mdash; hoist the handler to a stable
+        binding to skip it. First-letter case does not matter: <code>App</code> and
+        <code>app</code> seed state once and re-render identically.
+      </p>
+
+      <h2 id="hooks">Hooks</h2>
+      <p>
+        A function whose name starts with <code>$</code> is a <strong>hook</strong>
+        &mdash; the same <code>use*</code> convention you know from React. Hooks are
+        the composable way to manage per-instance state. Five are built in:
+        <code>$state</code> (<code>useState</code>), <code>$memo</code>
+        (<code>useMemo</code>), <code>$ref</code> (<code>useRef</code>),
+        <code>$reducer</code> (<code>useReducer</code>), and <code>$id</code>
+        (<code>useId</code>). See the <a href="hooks.html">Hooks guide</a> for the
+        full reference and live examples.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>function Counter() {
+  const [count, setCount] = $state(0)
+  const label = $memo(() =&gt; `Count: ${count}`, [count])
+  return Column([
+    Text(label, { variant: "large-heavy" }),
+    Button("Increment", { variant: "primary", onClick: () =&gt; setCount(c =&gt; c + 1) })
+  ])
+}
+$app(Counter())</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <ul>
+        <li>
+          <strong><code>$state(initial)</code></strong> returns a
+          <code>[value, setValue]</code> pair. <code>setValue(next)</code> replaces
+          the value; <code>setValue(prev =&gt; next)</code> derives it from the
+          previous value. The initializer runs once, on first render.
+        </li>
+        <li>
+          <strong><code>$memo(() =&gt; value, [deps])</code></strong> caches a value
+          and recomputes it only when a dependency changes (shallow
+          <code>Object.is</code>). Omit the deps array to recompute every render.
+        </li>
+        <li>
+          <strong><code>$ref(initial)</code></strong> returns a stable
+          <code>{ current }</code> box; writing <code>.current</code> never
+          re-renders (<code>useRef</code>).
+        </li>
+        <li>
+          <strong><code>$reducer((state, action) =&gt; next, initial)</code></strong>
+          returns a <code>[state, dispatch]</code> pair for centralised state
+          transitions (<code>useReducer</code>).
+        </li>
+        <li>
+          <strong><code>$id(prefix?)</code></strong> returns a stable, unique id per
+          instance &mdash; ideal for label/control wiring (<code>useId</code>).
+        </li>
+      </ul>
+      <p>
+        Declare your own hooks with <code>function $name(...)</code>. The body
+        runs <em>inline in the calling component&rsquo;s hook scope</em>, so its
+        <code>$state</code> / <code>$memo</code> calls attach to that component
+        &mdash; exactly how a React custom hook shares its caller&rsquo;s slots:
+      </p>
+<pre><code>function $useToggle(initial) {
+  const [on, setOn] = $state(initial)
+  return { on: on, toggle: () =&gt; setOn(v =&gt; !v) }
+}
+
+function Panel() {
+  const t = $useToggle(false)
+  return Column([
+    Button(t.on ? "Hide" : "Show", { onClick: t.toggle }),
+    t.on ? Card([Text("Revealed")]) : null
+  ])
+}</code></pre>
+      <p>
+        Two rules carry over from React: call hooks
+        <strong>unconditionally and in a stable order</strong> at the top level of a
+        component / hook body (slots are matched by call order across renders), and
+        note that hook state <strong>resets when the instance leaves the tree</strong>
+        &mdash; a remounted component starts again from its initial value.
+        <code>$state</code>, <code>$memo</code>, <code>$ref</code>,
+        <code>$reducer</code>, and <code>$id</code> are reserved names. Reach for the
+        hook form when a component owns local state with explicit setters; the bare
+        <code>$name = value</code> per-instance form above is the lighter option when
+        an atom is written directly by the component&rsquo;s actions.
+      </p>
+
+      <h2 id="expressions">Expressions</h2>
+      <p>The right-hand side of any binding is a value-producing JS expression:</p>
+      <ul>
+        <li><strong>Strings &amp; template literals</strong> &mdash; <code>"hi"</code>, <code>'hi'</code>, and backticks with <code>${expr}</code> interpolation. Prefer template literals over <code>+</code> concatenation: <code>`Hi ${$user.name}, you have ${$util.count($todos)} todos`</code>.</li>
+        <li><strong>Numbers, booleans, null</strong> &mdash; <code>42</code>, <code>3.14</code>, <code>1_000_000</code>, <code>true</code> / <code>false</code>, <code>null</code>.</li>
+        <li><strong>Arrays &amp; objects</strong> &mdash; <code>[1, 2, 3]</code>, <code>{ name: "Ada", role: "Engineer" }</code>; both may span multiple lines.</li>
+        <li><strong>Operators</strong> &mdash; arithmetic (<code>+ - * / % **</code>), comparison (<code>== != === !== &lt; &lt;= &gt; &gt;=</code>), logical (<code>&amp;&amp; || !</code>).</li>
+        <li><strong>Ternary</strong> &mdash; <code>cond ? a : b</code>; this is how you branch on a value (there is no <code>if</code> expression).</li>
+        <li><strong>Spread</strong> &mdash; <code>[...$a, ...$b]</code>, <code>{ ...$cur, status: "done" }</code>.</li>
+        <li><strong>Member &amp; optional chaining</strong> &mdash; <code>$user.email</code>, <code>$orders.data[0].id</code>, <code>$user?.profile?.name</code>.</li>
+        <li><strong>Nullish coalescing</strong> &mdash; <code>$user.name ?? "stranger"</code>.</li>
+      </ul>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$value = 42
+tone = $value &gt; 0 ? "success" : ($value &lt; 0 ? "danger" : "neutral")
+$app(Column([
+  Badge(`value is ${$value}`, { tone: tone }),
+  Button("Flip sign", { onClick: () =&gt; { $value = -$value } })
+]))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="data-to-ui">Building UI from data</h2>
+      <p>
+        To turn an array of data into an array of nodes, use the native
+        <code>.map</code> / <code>.filter</code> &mdash; they always produce a
+        new array you can hand to a container. Aktion also adds a few array
+        conveniences: <code>rows.length</code>, <code>rows.first</code>,
+        <code>rows.last</code>, and <strong>array pluck</strong> &mdash;
+        <code>rows.title</code> returns the <code>title</code> of every row.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$people = [
+  { name: "Ada Lovelace", role: "Engineer" },
+  { name: "Alan Turing", role: "Researcher" },
+  { name: "Grace Hopper", role: "Admiral" }
+]
+cards = $people.map(p =&gt; Card([
+  Text(p.name, { variant: "large-heavy" }),
+  Text(p.role, { tone: "muted" })
+]))
+$app(Column([
+  Text(`${$people.length} people`, { tone: "muted" }),
+  Column(cards, { gap: "sm" })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="control-flow">Control flow</h2>
+      <p>
+        <code>if</code> / <code>else</code>, <code>switch</code>,
+        <code>for...of</code>, <code>while</code>, and
+        <code>try</code> / <code>catch</code> are JavaScript
+        <strong>statements</strong> &mdash; they do not produce a value, so they
+        cannot appear on the right-hand side of a binding. Use them inside
+        <code>function</code>, <code>effect</code>, and lambda bodies. To branch
+        in render position, use a ternary; to project an array, use
+        <code>.map</code> / <code>.filter</code>; to compute a value from a
+        <code>switch</code>, wrap it in a function and call it.
+      </p>
+<pre><code>// ✅ Statements inside an action body
+function submit(payload) {
+  if (!payload.email) return
+  for (let tag of payload.tags) $tags = [...$tags, tag]
+  switch (payload.kind) {
+    case "draft": $drafts = [...$drafts, payload]; break
+    default:      $records = [...$records, payload]
+  }
+}
+
+// ✅ Wrap a switch in a function to use it as a value
+function panelFor(tab) {
+  switch (tab) {
+    case "billing": return billingPanel
+    default:        return overviewPanel
+  }
+}
+panel = panelFor($tab)
+
+// ❌ Statements are not expressions
+banner = if ($error) { Banner($error) }     // use a ternary instead
+rows   = for (let r of data) { Row(r) }      // use data.map(r => Row(r))</code></pre>
+
+      <h2 id="builtins"><code>$util</code> &mdash; runtime helper namespace</h2>
+      <p>
+        Aktion exposes a single global <code>$util</code> object with
+        <strong>pure</strong>, side-effect-free helpers for aggregation,
+        reshaping, formatting, dates, math, and strings. Every method is
+        callable from any expression position &mdash; render bodies, actions,
+        effects, lambdas &mdash; and from ordinary host JavaScript that imports
+        the bundle. New helpers can be added to <code>$util</code> over time
+        without changing the language.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Group</th><th>Methods</th></tr></thead>
+        <tbody>
+          <tr><td>Aggregation</td><td><code>$util.count</code>, <code>$util.sum</code>, <code>$util.avg</code>, <code>$util.min</code>, <code>$util.max</code>, <code>$util.first</code>, <code>$util.last</code></td></tr>
+          <tr><td>Reshaping</td><td><code>$util.filter</code>, <code>$util.find</code>, <code>$util.sort</code>, <code>$util.groupBy</code>, <code>$util.slice</code>, <code>$util.unique</code>, <code>$util.reverse</code>, <code>$util.range</code>, <code>$util.repeat</code>, <code>$util.pick</code></td></tr>
+          <tr><td>Formatting</td><td><code>$util.format</code>, <code>$util.formatDate</code>, <code>$util.plural</code>, <code>$util.capitalize</code>, <code>$util.titlecase</code>, <code>$util.case</code></td></tr>
+          <tr><td>Date / time</td><td><code>$util.now</code>, <code>$util.today</code>, <code>$util.addDays</code>, <code>$util.addHours</code>, <code>$util.diffDays</code>, <code>$util.startOfWeek</code>, <code>$util.endOfMonth</code></td></tr>
+          <tr><td>Math</td><td><code>$util.round</code>, <code>$util.floor</code>, <code>$util.ceil</code>, <code>$util.abs</code>, <code>$util.clamp</code>, <code>$util.pow</code>, <code>$util.sqrt</code>, <code>$util.random</code>, <code>$util.log</code></td></tr>
+          <tr><td>String</td><td><code>$util.join</code>, <code>$util.split</code>, <code>$util.trim</code>, <code>$util.replace</code>, <code>$util.substring</code>, <code>$util.startsWith</code>, <code>$util.endsWith</code>, <code>$util.contains</code>, <code>$util.match</code>, <code>$util.lowercase</code>, <code>$util.uppercase</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Many <code>$util</code> helpers overlap with native JavaScript methods
+        (<code>arr.length</code>, <code>arr.filter(…)</code>, <code>arr.map(…)</code>,
+        <code>Math.round(…)</code>). Prefer the native form when it reads
+        cleanly; reach for <code>$util</code> when you want field-based
+        comparators (<code>$util.filter(arr, "status", "==", "open")</code>),
+        locale-aware formatting (<code>$util.format</code>,
+        <code>$util.formatDate</code>, <code>$util.plural</code>), or a quick
+        range / repeat for skeleton UIs.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$prices = [12, 8, 30, 5]
+total = $util.sum($prices)
+count = $util.count($prices)
+$app(Column([
+  Text(`${count} ${$util.plural(count, "item", "items")}, total ${total}`, { variant: "large-heavy" }),
+  Row($util.range(1, count).map(n =&gt; Badge(`#${n}`, { tone: "primary" })), { gap: "sm" })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="globals">Full JavaScript globals</h2>
+      <p>
+        Because Aktion is a subset of JavaScript, the entire JS global surface
+        resolves by name inside <code>function</code> / <code>effect</code> /
+        lambda bodies &mdash; no import, no escape hatch. That includes the
+        standard library (<code>Math</code>, <code>JSON</code>,
+        <code>Object</code>, <code>Date</code>, <code>Map</code>, &hellip;),
+        browser dialogs (<code>alert</code>, <code>confirm</code>,
+        <code>prompt</code>), and Web APIs (<code>fetch</code>, <code>URL</code>,
+        <code>URLSearchParams</code>, <code>crypto</code>, <code>navigator</code>,
+        <code>Intl</code>, <code>BigInt</code>, <code>atob</code>/<code>btoa</code>,
+        &hellip;), plus <code>window</code> and <code>document</code>. Timers
+        are available too: <code>setTimeout</code>, <code>setInterval</code>,
+        <code>clearTimeout</code>, <code>clearInterval</code> &mdash; create
+        them inside an <code>effect</code> and clear them in its
+        <code>cleanup</code>.
+      </p>
+<pre><code>function copyLink() {
+  navigator.clipboard.writeText(window.location.href)
+  $toast = "Link copied"
+}
+
+function remove(id) {
+  if (confirm("Delete this item?")) $items = $items.filter(x =&gt; x.id != id)
+}
+
+id = crypto.randomUUID()</code></pre>
+      <p>
+        Your own declarations and built-in components always win over a
+        same-named global &mdash; the passthrough only fills names you have not
+        defined. Prefer the reactive <code>$http({&hellip;})</code> over raw
+        <code>fetch</code> for data that drives the UI. See the
+        <a href="javascript-interactions.html">JavaScript interactions guide</a>
+        for the full bridge surface.
+      </p>
+
+      <h2 id="component-calls">Component calls &mdash; three argument forms</h2>
+      <p>
+        Pick <strong>one form per call</strong>. The canonical form is
+        <code>Type(positional, { prop: value })</code> &mdash; the prop tagged
+        <em>(positional)</em> bare, everything else in a trailing
+        <code>{ }</code> object. Calls may also be <strong>all-positional</strong>
+        (arguments bind to the signature&rsquo;s props in listed order) or
+        <strong>all-named</strong> (a single <code>{ }</code> object naming every
+        prop). A lone object for a component whose positional prop is itself
+        object-typed is that prop&rsquo;s payload, and one object is never split
+        between the two roles.
+      </p>
+<pre><code>// ✅ Canonical: one positional + a trailing options object
+Button("Save", { variant: "primary" })
+Grid([Card1(), Card2(), Card3()], { columns: 3 })
+StatCard("Revenue", { value: "$48k", trend: "up", delta: "+12%" })
+
+// ✅ All-positional — binds in signature order
+StatCard("Revenue", "$48k", "up")
+
+// ✅ All-named — a single object naming the props
+Button({ label: "Save", variant: "primary" })
+
+// ⚠️ Signature order matters for all-positional calls:
+// Button(label, onClick?, variant?, …) — so this binds "primary" to
+// onClick, NOT variant. Prefer the trailing object for non-adjacent props.
+Button("Save", "primary")</code></pre>
+      <div class="callout warn">
+        <h4>Slot order past the first argument is not a stable API</h4>
+        <p>
+          Only the prop tagged <em>(positional)</em> has a guaranteed slot. Every
+          later positional argument binds to <strong>the next unfilled prop in
+          declaration order</strong>, so adding a prop in the middle of a
+          component's signature silently rebinds every argument after it. That is
+          not hypothetical: the 0.5 component pass added roughly a thousand props,
+          and 24 components changed which prop a given slot lands on &mdash;
+          <code>Input</code>, <code>TextArea</code>, <code>Combobox</code>,
+          <code>TagInput</code>, <code>PasswordInput</code>, <code>Gauge</code>,
+          <code>Histogram</code>, <code>Draggable</code>, <code>Reveal</code> and
+          <code>Show</code> among them.
+        </p>
+        <p>
+          These rebinds produce <strong>no validation error</strong> &mdash; the call
+          is still well-formed, it just means something else. Both lines below
+          validate clean, and neither does what it looks like:
+        </p>
+<pre><code>// slots 2 and 3 are now `type` and `disabled` — the callbacks land on the
+// wrong props, and nothing complains.
+Draggable(Card([Text("drag me")]), "id-1", () =&gt; {}, () =&gt; {})
+
+// slot 3 is now `duration`, so `true` becomes a duration, not `once`.
+Reveal(Card([Text("hi")]), "fade", 100, true)</code></pre>
+        <p>
+          So: use <strong>one positional argument at most</strong>, and put
+          everything else in the trailing object. The named form is stable across
+          versions, self-documenting at the call site, and the form every example in
+          these docs uses.
+        </p>
+      </div>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$app(Grid([
+  Card([Text("One")]),
+  Card([Text("Two")]),
+  Card([Text("Three")])
+], { columns: 3, gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="comments">Comments</h2>
+      <p>
+        Both JavaScript comment forms work and are ignored by the parser:
+        line comments with <code>//</code> (including trailing comments like
+        <code>$count = 0 // counter</code>) and block comments with
+        <code>/* &hellip; */</code>, which may span multiple lines. Indentation
+        is decorative &mdash; brackets and braces drive parsing &mdash; and
+        blank lines are ignored.
+      </p>
+<pre><code>// A line comment
+$count = 0 // trailing comment on a statement
+
+/* A block comment
+   spanning several lines. */
+$app(Text(`Count: ${$count}`))</code></pre>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="layout.html">
+          <span class="demo-tag">Core concepts</span>
+          <h3>Layout</h3>
+          <p>Column, Row, and Grid &mdash; the three primitives behind every screen.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="actions.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Actions</h3>
+          <p>The full action body grammar: state writes, HTTP, navigation, and emit.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="side-effects.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Side effects</h3>
+          <p>Effects, dependencies, polling, timers, and cleanup.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Library</span>
+          <h3>Component reference</h3>
+          <p>Every built-in component, prop, and enum, with a live preview.</p>
+          <span class="demo-arrow">Browse library &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+  <script type="module">
+    // Render each .lay-demo code block as a live <aktion-app> beside it.
+    import "./dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      // setResponse once connected; guard so a single bad demo can't break the page.
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[layout demo] render failed", err);
+      }
+    }
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>

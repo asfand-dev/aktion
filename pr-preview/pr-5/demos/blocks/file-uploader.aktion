@@ -1,0 +1,82 @@
+// File Uploader — a drag-and-drop dropzone (also click-to-browse) that accepts
+// files, shows a per-file progress bar that animates to done, supports remove
+// and clear-completed, and summarises total size. Simulated upload progress.
+$app(Container([Column([header, dropzone, list, footer], { gap: "lg" })], { size: "md" }))
+
+$files = []
+sample = [
+  { name: "design-spec.pdf", size: 2400000, type: "pdf" },
+  { name: "hero-banner.png", size: 880000, type: "image" },
+  { name: "data-export.csv", size: 145000, type: "csv" }
+]
+$nextSample = 0
+
+iconFor = t => t == "pdf" ? "file-pdf" : t == "image" ? "file-image" : t == "csv" ? "file-csv" : "file"
+fmtSize = b => b >= 1000000 ? `${$util.round(b / 1000000, 1)} MB` : `${Math.round(b / 1000)} KB`
+
+function tick(id) {
+  setTimeout(() => {
+    let active = false
+    $files = $files.map(f => {
+      if (f.id != id || f.progress >= 100) return f
+      active = true
+      const p = Math.min(100, f.progress + 20)
+      return { ...f, progress: p, status: p >= 100 ? "done" : "uploading" }
+    })
+    const me = $files.find(f => f.id == id)
+    if (me && me.progress < 100) tick(id)
+  }, 250)
+}
+
+function addFile() {
+  const s = sample[$nextSample % sample.length]
+  $nextSample = $nextSample + 1
+  const id = crypto.randomUUID()
+  $files = [...$files, { id, name: s.name, size: s.size, type: s.type, progress: 0, status: "uploading" }]
+  tick(id)
+}
+
+function removeFile(id) { $files = $files.filter(f => f.id != id) }
+function clearDone() { $files = $files.filter(f => f.status != "done") }
+
+uploading = $files.filter(f => f.status == "uploading").length
+totalSize = $util.sum($files.map(f => f.size))
+
+header = PageHeader("Upload files", { subtitle: uploading > 0 ? `${uploading} uploading…` : `${$files.length} ${$util.plural($files.length, "file")}`, breadcrumbs: false })
+
+dropzone = OnMouse(Box([Center([Column([
+  Icon("cloud-arrow-up", { size: "lg", color: "var(--rui-color-primary)" }),
+  Text("Drag & drop files here", { variant: "body-heavy" }),
+  Text("or click to browse · PDF, PNG, CSV up to 10 MB", { variant: "small", tone: "muted" }),
+  Button("Choose file", { variant: "secondary", icon: "folder-open", onClick: addFile })
+], { gap: "sm", align: "center" })], { minHeight: "160px" })], { padding: "lg", border: "subtle", background: "surface" }), {
+  dragOver: (e) => e.preventDefault(),
+  drop: (e) => { e.preventDefault(); addFile() },
+  click: () => addFile()
+})
+
+function fileRow(f) {
+  return Card([Row([
+    Icon(iconFor(f.type), { size: "lg", color: f.status == "done" ? "var(--rui-color-success)" : "var(--rui-color-primary)" }),
+    StackItem(Column([
+      Row([Text(f.name, { variant: "body-heavy" }), Spacer(), Text(fmtSize(f.size), { variant: "small", tone: "muted" })], { align: "center" }),
+      f.status == "done"
+        ? Row([Icon("circle-check", { size: "sm", color: "var(--rui-color-success)" }), Text("Uploaded", { variant: "small", tone: "success" })], { gap: "xs", align: "center" })
+        : Progress(f.progress, { max: 100, tone: "primary", showValue: true })
+    ], { gap: "xs" }), { grow: 1 }),
+    IconButton("trash", { label: "Remove", variant: "ghost", size: "sm", onClick: () => removeFile(f.id) })
+  ], { gap: "md", align: "center" })])
+}
+
+list = Show($files.length > 0, {
+  fallback: EmptyState("No files yet", { description: "Add a file to see upload progress.", icon: "inbox" }),
+  children: Column($files.map(f => fileRow(f)), { gap: "sm" })
+})
+
+footer = Show($files.length > 0, {
+  children: Row([
+    Text(`Total: ${fmtSize(totalSize)}`, { variant: "small", tone: "muted" }),
+    Spacer(),
+    Button("Clear completed", { variant: "ghost", size: "sm", icon: "broom", onClick: clearDone })
+  ], { align: "center" })
+})

@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Migration to Aktion · Aktion</title>
+  <meta name="description" content="A concept-by-concept migration guide from React, Vue, Angular, Svelte, Solid, and plain HTML to Aktion. Components, state, props, events, lists, conditionals, side effects, HTTP, routing, styling, and slots — side-by-side code." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Framework tab bar */
+    .mig-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 6px;
+      margin: 18px 0 0;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      background: var(--doc-surface-elev);
+      position: sticky;
+      top: 64px;
+      z-index: 5;
+      backdrop-filter: blur(8px);
+    }
+    .mig-tab {
+      appearance: none;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--doc-text-muted);
+      font: inherit;
+      font-weight: 500;
+      font-size: 13px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background var(--doc-transition), color var(--doc-transition), border-color var(--doc-transition);
+    }
+    .mig-tab:hover { color: var(--doc-text); background: var(--doc-bg-soft); }
+    .mig-tab[aria-selected="true"] {
+      background: var(--doc-surface);
+      color: var(--doc-text);
+      border-color: var(--doc-border);
+      box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+    }
+    .mig-tab i { font-size: 14px; opacity: 0.9; }
+
+    /* Side-by-side code blocks */
+    .mig-compare {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      margin: 14px 0 24px;
+    }
+    @media (max-width: 880px) { .mig-compare { grid-template-columns: 1fr; } }
+    .mig-pane {
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+      display: flex;
+      flex-direction: column;
+    }
+    .mig-pane-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--doc-text-muted);
+      border-bottom: 1px solid var(--doc-border);
+      background: var(--doc-bg-soft);
+    }
+    .mig-pane-head i { font-size: 12px; }
+    .mig-pane-head.is-aktion { color: var(--doc-accent, var(--doc-text)); }
+    .mig-pane pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); flex: 1; }
+
+    /* Live preview row */
+    .mig-live {
+      margin: 14px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    .mig-live-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--doc-text-muted);
+      border-bottom: 1px solid var(--doc-border);
+      background: var(--doc-bg-soft);
+    }
+    .mig-live-body {
+      padding: 18px;
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+    }
+    .mig-live-body aktion-app { display: block; }
+
+    /* Hidden tab panels */
+    [data-fw-panel] { display: none; }
+    [data-fw-panel].is-active { display: block; }
+
+    /* Concept jump bar */
+    .mig-jump {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 12px;
+      margin: 18px 0 8px;
+      border: 1px dashed var(--doc-border);
+      border-radius: 12px;
+      background: var(--doc-bg-soft);
+    }
+    .mig-jump a {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      color: var(--doc-text-muted);
+      text-decoration: none;
+    }
+    .mig-jump a:hover { color: var(--doc-text); border-color: var(--doc-text-muted); }
+
+    .callout {
+      border-left: 3px solid var(--doc-accent, #6366f1);
+      background: var(--doc-bg-soft);
+      padding: 12px 14px;
+      border-radius: 6px;
+      margin: 14px 0;
+      font-size: 14px;
+      padding-left: 50px;
+    }
+    .callout strong { display: block; margin-bottom: 4px; }
+  </style>
+</head>
+<body data-page="migration-guide">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Getting started</span>
+        <h1>Migration to Aktion.</h1>
+        <p class="lead">
+          Already shipping with React, Vue, Angular, Svelte, Solid, or plain HTML?
+          You can keep almost all of your mental model. Aktion is JavaScript with
+          three additions: reactive <code>$</code>variables, <code>$app(…)</code>
+          as the render entry point, and components called with named arguments.
+          Pick your framework below for a concept&#8209;by&#8209;concept walkthrough.
+        </p>
+      </header>
+
+      <div class="mig-jump" aria-label="Jump to concept">
+        <strong style="font-size: 12px; color: var(--doc-text); align-self: center; margin-right: 4px;">Concepts:</strong>
+        <a href="#mental-model">Mental model</a>
+        <a href="#components">Components</a>
+        <a href="#props">Props</a>
+        <a href="#state">State</a>
+        <a href="#events">Events</a>
+        <a href="#conditionals">Conditionals</a>
+        <a href="#lists">Lists</a>
+        <a href="#two-way">Two-way binding</a>
+        <a href="#effects">Side effects</a>
+        <a href="#http">HTTP</a>
+        <a href="#routing">Routing</a>
+        <a href="#styling">Styling &amp; theme</a>
+        <a href="#storage">Storage</a>
+        <a href="#events-out">Outbound events</a>
+        <a href="#slots">Children &amp; slots</a>
+        <a href="#cheatsheet">Cheat sheet</a>
+      </div>
+
+      <div class="mig-tabs" role="tablist" aria-label="Source framework">
+        <button class="mig-tab" role="tab" data-fw="react"   aria-selected="true"><i class="fa-brands fa-react"></i>React</button>
+        <button class="mig-tab" role="tab" data-fw="vue"     aria-selected="false"><i class="fa-brands fa-vuejs"></i>Vue 3</button>
+        <button class="mig-tab" role="tab" data-fw="angular" aria-selected="false"><i class="fa-brands fa-angular"></i>Angular</button>
+        <button class="mig-tab" role="tab" data-fw="svelte"  aria-selected="false"><i class="fa-solid fa-bolt"></i>Svelte</button>
+        <button class="mig-tab" role="tab" data-fw="solid"   aria-selected="false"><i class="fa-solid fa-atom"></i>Solid</button>
+        <button class="mig-tab" role="tab" data-fw="html"    aria-selected="false"><i class="fa-brands fa-html5"></i>Vanilla JS</button>
+      </div>
+
+      <h2 id="mental-model">The mental model</h2>
+      <p>
+        Aktion is a thin DSL on top of JavaScript. A program produces a tree of
+        UI by calling <code>$app(…)</code>. Reactive
+        state is any identifier prefixed with <code>$</code>; whenever it changes
+        the runtime re&#8209;renders the smallest part of the tree that depended
+        on it. Components are plain JavaScript functions that <code>return</code> a
+        node. Side effects live in <code>$effect(() =&gt; { … }, [...deps])</code>,
+        and the network is a single primitive: <code>$http({ url, method, … })</code>.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>You used to&hellip;</th><th>In Aktion&hellip;</th></tr></thead>
+        <tbody>
+          <tr><td>Mount a root with <code>createRoot(...).render(&lt;App /&gt;)</code></td><td>Write <code>$app(App())</code></td></tr>
+          <tr><td>Declare a reactive value (<code>useState</code> / <code>ref</code> / <code>signal</code>)</td><td>Just write <code>$count = 0</code></td></tr>
+          <tr><td>Wire an event with <code>onClick={...}</code> / <code>@click</code></td><td>Pass a named arg: <code>{ onClick: () =&gt; … }</code></td></tr>
+          <tr><td>Render a list with <code>.map(…)</code></td><td>Same: <code>$items.map(x =&gt; …)</code></td></tr>
+          <tr><td>Conditionally render with <code>{cond &amp;&amp; …}</code></td><td><code>if (cond) { … } else { … }</code> &mdash; expressions can be assigned</td></tr>
+          <tr><td>Reach for a CSS framework / utility classes</td><td>Use the built&#8209;in component library and theme tokens; drop down to <code>Css(child, { class, style })</code> only when needed</td></tr>
+          <tr><td>Pick a router package</td><td>Use the built&#8209;in <code>$router({ … })</code></td></tr>
+          <tr><td>Pick a fetch library / TanStack Query</td><td>Use the built&#8209;in <code>$http({ … })</code> resource</td></tr>
+        </tbody>
+      </table>
+
+      <!-- ===================== COMPONENTS ===================== -->
+      <h2 id="components">Components</h2>
+      <p>
+        Components in Aktion are functions that <code>return</code> a
+        node. The first-letter case of the function name is not significant
+        &mdash; <code>UserCard</code> and <code>userCard</code> are both valid.
+        Components are called with positional arguments followed by an optional
+        named&#8209;arguments object &mdash; the same convention used everywhere
+        in the standard library.
+      </p>
+
+      <div data-fw-panel="react" class="is-active">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-react"></i>React (JSX)</div>
+<pre><code>function Hello({ name }) {
+  return &lt;h1&gt;Hello, {name}!&lt;/h1&gt;;
+}
+export default function App() {
+  return &lt;Hello name="Ada" /&gt;;
+}</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>function Hello(name) {
+  return Text(`Hello, ${name}!`, { variant: "large-heavy" })
+}
+$app(Hello("Ada"))</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div data-fw-panel="vue">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-vuejs"></i>Vue 3 (SFC)</div>
+<pre><code>&lt;script setup&gt;
+defineProps({ name: String })
+&lt;/script&gt;
+&lt;template&gt;&lt;h1&gt;Hello, {{ name }}!&lt;/h1&gt;&lt;/template&gt;
+
+&lt;!-- App.vue --&gt;
+&lt;Hello name="Ada" /&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>function Hello(name) {
+  return Text(`Hello, ${name}!`, { variant: "large-heavy" })
+}
+$app(Hello("Ada"))</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div data-fw-panel="angular">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-angular"></i>Angular</div>
+<pre><code>@Component({
+  selector: 'hello',
+  template: `&lt;h1&gt;Hello, {{ name }}!&lt;/h1&gt;`
+})
+export class Hello {
+  @Input() name!: string;
+}</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>function Hello(name) {
+  return Text(`Hello, ${name}!`, { variant: "large-heavy" })
+}
+$app(Hello("Ada"))</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div data-fw-panel="svelte">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-bolt"></i>Svelte</div>
+<pre><code>&lt;!-- Hello.svelte --&gt;
+&lt;script&gt;export let name;&lt;/script&gt;
+&lt;h1&gt;Hello, {name}!&lt;/h1&gt;
+
+&lt;!-- App.svelte --&gt;
+&lt;Hello name="Ada" /&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>function Hello(name) {
+  return Text(`Hello, ${name}!`, { variant: "large-heavy" })
+}
+$app(Hello("Ada"))</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div data-fw-panel="solid">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-atom"></i>Solid</div>
+<pre><code>function Hello(props) {
+  return &lt;h1&gt;Hello, {props.name}!&lt;/h1&gt;;
+}
+render(() =&gt; &lt;Hello name="Ada" /&gt;, root);</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>function Hello(name) {
+  return Text(`Hello, ${name}!`, { variant: "large-heavy" })
+}
+$app(Hello("Ada"))</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div data-fw-panel="html">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-html5"></i>Vanilla JS</div>
+<pre><code>function hello(name) {
+  const h = document.createElement('h1');
+  h.textContent = `Hello, ${name}!`;
+  return h;
+}
+document.body.append(hello('Ada'));</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>function Hello(name) {
+  return Text(`Hello, ${name}!`, { variant: "large-heavy" })
+}
+$app(Hello("Ada"))</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="mig-live">
+        <div class="mig-live-head">Live</div>
+        <div class="mig-live-body">
+<script type="application/x-aktion">function Hello(name) {
+  return Text(`Hello, ${name}!`, { variant: "large-heavy" })
+}
+$app(Hello("Ada"))</script>
+        </div>
+      </div>
+
+      <!-- ===================== PROPS ===================== -->
+      <h2 id="props">Props &amp; named arguments</h2>
+      <p>
+        Aktion components canonically take one positional argument (when it has
+        an obvious identity like a label or items list) followed by a single
+        <code>{ options }</code> object &mdash; the same pattern as
+        <code>Array.prototype.sort(compareFn)</code> or
+        <code>fetch(url, options)</code>. All-positional calls (arguments in
+        signature order) and a single all-named <code>{ }</code> object are
+        also accepted. There is no JSX, no template DSL, and no
+        attribute&#8209;vs&#8209;prop dichotomy.
+      </p>
+      <div data-fw-panel="react" class="is-active">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-react"></i>React</div>
+<pre><code>&lt;Button variant="primary" disabled={loading}&gt;Save&lt;/Button&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>Button("Save", { variant: "primary", disabled: $loading })</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="vue">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-vuejs"></i>Vue</div>
+<pre><code>&lt;Button variant="primary" :disabled="loading"&gt;Save&lt;/Button&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>Button("Save", { variant: "primary", disabled: $loading })</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="angular">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-angular"></i>Angular</div>
+<pre><code>&lt;button [variant]="'primary'" [disabled]="loading"&gt;Save&lt;/button&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>Button("Save", { variant: "primary", disabled: $loading })</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="svelte">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-bolt"></i>Svelte</div>
+<pre><code>&lt;Button variant="primary" disabled={loading}&gt;Save&lt;/Button&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>Button("Save", { variant: "primary", disabled: $loading })</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="solid">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-atom"></i>Solid</div>
+<pre><code>&lt;Button variant="primary" disabled={loading()}&gt;Save&lt;/Button&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>Button("Save", { variant: "primary", disabled: $loading })</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="html">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-html5"></i>Vanilla JS</div>
+<pre><code>const btn = document.createElement('button');
+btn.className = 'btn-primary';
+btn.disabled = loading;
+btn.textContent = 'Save';</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>Button("Save", { variant: "primary", disabled: $loading })</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== STATE ===================== -->
+      <h2 id="state">State</h2>
+      <p>
+        Any identifier that starts with <code>$</code> is reactive. Write to it
+        with a plain assignment; the runtime tracks every read inside the render
+        tree and re&#8209;evaluates exactly the dependent expressions. There is
+        no <code>setState</code>, no <code>ref().value</code>, no Zone.js.
+      </p>
+      <div data-fw-panel="react" class="is-active">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-react"></i>React</div>
+<pre><code>const [count, setCount] = useState(0);
+return &lt;button onClick={() =&gt; setCount(c =&gt; c + 1)}&gt;{count}&lt;/button&gt;;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$count = 0
+$app(Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 }))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="vue">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-vuejs"></i>Vue</div>
+<pre><code>const count = ref(0)
+&lt;button @click="count++"&gt;{{ count }}&lt;/button&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$count = 0
+$app(Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 }))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="angular">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-angular"></i>Angular (signals)</div>
+<pre><code>count = signal(0);
+// template
+&lt;button (click)="count.set(count() + 1)"&gt;{{ count() }}&lt;/button&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$count = 0
+$app(Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 }))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="svelte">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-bolt"></i>Svelte 5</div>
+<pre><code>let count = $state(0);
+&lt;button onclick={() =&gt; count++}&gt;{count}&lt;/button&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$count = 0
+$app(Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 }))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="solid">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-atom"></i>Solid</div>
+<pre><code>const [count, setCount] = createSignal(0);
+&lt;button onClick={() =&gt; setCount(count() + 1)}&gt;{count()}&lt;/button&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$count = 0
+$app(Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 }))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="html">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-html5"></i>Vanilla JS</div>
+<pre><code>let count = 0;
+const btn = document.createElement('button');
+btn.textContent = count;
+btn.addEventListener('click', () =&gt; { count++; btn.textContent = count; });</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$count = 0
+$app(Button(`${$count}`, { onClick: () =&gt; $count = $count + 1 }))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div class="mig-live">
+        <div class="mig-live-head">Live</div>
+        <div class="mig-live-body">
+<script type="application/x-aktion">$count = 0
+$app(Button(`Count: ${$count}`, { onClick: () => $count = $count + 1, variant: "primary" }))</script>
+        </div>
+      </div>
+
+      <p>
+        Derived values are just expressions &mdash; assign them to a non&#8209;reactive
+        local. They re&#8209;evaluate whenever any <code>$</code>variable they
+        read changes, no <code>useMemo</code> or <code>computed()</code> required.
+      </p>
+      <pre><code>$first = "Ada"
+$last  = "Lovelace"
+fullName = `${$first} ${$last}`     // recomputes when either changes
+$app(Text(fullName))</code></pre>
+
+      <!-- ===================== EVENTS ===================== -->
+      <h2 id="events">Event handlers</h2>
+      <p>
+        Every interactive component takes a callback as a named argument
+        (<code>onClick</code>, <code>onChange</code>, <code>onSubmit</code>, &hellip;).
+        Inline arrow functions are the idiomatic choice. The
+        <code>OnClick</code> / <code>OnMouse</code> / <code>OnKeyboard</code>
+        wrappers attach handlers to <em>any</em> component that doesn&rsquo;t
+        already expose one.
+      </p>
+      <div data-fw-panel="react" class="is-active">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-react"></i>React</div>
+<pre><code>&lt;input value={text} onChange={e =&gt; setText(e.target.value)} /&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>Input("name", { value: $text, onChange: v =&gt; $text = v })</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="vue">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-vuejs"></i>Vue</div>
+<pre><code>&lt;input :value="text" @input="text = $event.target.value" /&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>Input("name", { value: $text, onChange: v =&gt; $text = v })</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="angular">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-angular"></i>Angular</div>
+<pre><code>&lt;input [value]="text" (input)="text = $event.target.value" /&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>Input("name", { value: $text, onChange: v =&gt; $text = v })</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="svelte">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-bolt"></i>Svelte</div>
+<pre><code>&lt;input bind:value={text} /&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>Input("name", { value: $text })   &lt;!-- $-vars two-way bind automatically --&gt;</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="solid">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-atom"></i>Solid</div>
+<pre><code>&lt;input value={text()} onInput={e =&gt; setText(e.currentTarget.value)} /&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>Input("name", { value: $text, onChange: v =&gt; $text = v })</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="html">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-html5"></i>Vanilla JS</div>
+<pre><code>input.addEventListener('input', e =&gt; { text = e.target.value });</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>Input("name", { value: $text, onChange: v =&gt; $text = v })</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== CONDITIONALS ===================== -->
+      <h2 id="conditionals">Conditional rendering</h2>
+      <p>
+        Aktion is plain JavaScript. Use the ternary operator <code>cond ? a : b</code>
+        to pick between branches inline, and chain ternaries for three&#8209;way
+        switches. Statement <code>if&hellip;else</code> still works in function
+        bodies for guard clauses and side effects &mdash; it just isn&rsquo;t an
+        expression you can assign.
+      </p>
+      <div data-fw-panel="react" class="is-active">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-react"></i>React</div>
+<pre><code>{loading ? &lt;Spinner /&gt; : items.length === 0
+  ? &lt;EmptyState /&gt;
+  : &lt;List items={items} /&gt;}</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app($loading
+  ? Spinner()
+  : $items.length === 0
+    ? EmptyState("Nothing yet")
+    : List($items))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="vue">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-vuejs"></i>Vue</div>
+<pre><code>&lt;Spinner v-if="loading" /&gt;
+&lt;EmptyState v-else-if="items.length === 0" /&gt;
+&lt;List v-else :items="items" /&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app($loading
+  ? Spinner()
+  : $items.length === 0
+    ? EmptyState("Nothing yet")
+    : List($items))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="angular">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-angular"></i>Angular</div>
+<pre><code>@if (loading) { &lt;spinner/&gt; }
+@else if (items.length === 0) { &lt;empty-state/&gt; }
+@else { &lt;list [items]="items"/&gt; }</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app($loading
+  ? Spinner()
+  : $items.length === 0
+    ? EmptyState("Nothing yet")
+    : List($items))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="svelte">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-bolt"></i>Svelte</div>
+<pre><code>{#if loading}&lt;Spinner /&gt;
+{:else if items.length === 0}&lt;EmptyState /&gt;
+{:else}&lt;List {items} /&gt;{/if}</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app($loading
+  ? Spinner()
+  : $items.length === 0
+    ? EmptyState("Nothing yet")
+    : List($items))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="solid">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-atom"></i>Solid</div>
+<pre><code>&lt;Show when={!loading()} fallback={&lt;Spinner /&gt;}&gt;
+  &lt;List items={items()} /&gt;
+&lt;/Show&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app($loading ? Spinner() : List($items))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="html">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-html5"></i>Vanilla JS</div>
+<pre><code>root.replaceChildren(loading ? spinner() : list(items));</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app($loading ? Spinner() : List($items))</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== LISTS ===================== -->
+      <h2 id="lists">Lists</h2>
+      <p>
+        Aktion uses plain JavaScript: render a collection with
+        <code>arr.map(fn)</code>. Statement <code>for</code> / <code>while</code>
+        loops work too &mdash; for accumulating side effects &mdash; but they
+        are <em>not</em> expressions, so you can&rsquo;t write
+        <code>x = for (&hellip;) { &hellip; }</code>. Stick with
+        <code>.map</code> when you want the result.
+      </p>
+      <div data-fw-panel="react" class="is-active">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-react"></i>React</div>
+<pre><code>{todos.map(t =&gt; (
+  &lt;li key={t.id}&gt;{t.title}&lt;/li&gt;
+))}</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app(Column($todos.map(t =&gt; Text(t.title))))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="vue">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-vuejs"></i>Vue</div>
+<pre><code>&lt;li v-for="t in todos" :key="t.id"&gt;{{ t.title }}&lt;/li&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app(Column($todos.map(t =&gt; Text(t.title))))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="angular">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-angular"></i>Angular</div>
+<pre><code>@for (t of todos; track t.id) {
+  &lt;li&gt;{{ t.title }}&lt;/li&gt;
+}</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app(Column($todos.map(t =&gt; Text(t.title))))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="svelte">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-bolt"></i>Svelte</div>
+<pre><code>{#each todos as t (t.id)}
+  &lt;li&gt;{t.title}&lt;/li&gt;
+{/each}</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app(Column($todos.map(t =&gt; Text(t.title))))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="solid">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-atom"></i>Solid</div>
+<pre><code>&lt;For each={todos()}&gt;{t =&gt; &lt;li&gt;{t.title}&lt;/li&gt;}&lt;/For&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app(Column($todos.map(t =&gt; Text(t.title))))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="html">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-html5"></i>Vanilla JS</div>
+<pre><code>ul.replaceChildren(...todos.map(t =&gt; {
+  const li = document.createElement('li');
+  li.textContent = t.title;
+  return li;
+}));</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app(Column($todos.map(t =&gt; Text(t.title))))</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="mig-live">
+        <div class="mig-live-head">Live</div>
+        <div class="mig-live-body">
+<script type="application/x-aktion">$todos = [
+  { id: 1, title: "Write the migration guide" },
+  { id: 2, title: "Ship it" },
+  { id: 3, title: "Celebrate" }
+]
+$app(Column($todos.map(t => Card([Text(t.title)])), { gap: "sm" }))</script>
+        </div>
+      </div>
+
+      <!-- ===================== TWO-WAY ===================== -->
+      <h2 id="two-way">Two-way binding</h2>
+      <p>
+        Pass a <code>$</code>variable as the <code>value</code> of any form
+        component &mdash; the runtime treats it as a two&#8209;way bind. No
+        directive, no <code>v-model</code>, no <code>[(ngModel)]</code>, no
+        explicit <code>bind:</code> prefix.
+      </p>
+      <div class="mig-compare">
+        <div class="mig-pane">
+          <div class="mig-pane-head"><i class="fa-solid fa-shuffle"></i>Everyone else</div>
+<pre><code>&lt;!-- Vue --&gt;     &lt;input v-model="name" /&gt;
+&lt;!-- Angular --&gt; &lt;input [(ngModel)]="name" /&gt;
+&lt;!-- Svelte --&gt;  &lt;input bind:value={name} /&gt;
+// React        &lt;input value={name} onChange={e =&gt; setName(e.target.value)} /&gt;</code></pre>
+        </div>
+        <div class="mig-pane">
+          <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$name = ""
+$app(Input("name", { value: $name, placeholder: "Your name" }))</code></pre>
+        </div>
+      </div>
+      <p>
+        For a whole form with validation &mdash; the job of Formik / React Hook Form /
+        VeeValidate &mdash; reach for <code>$form</code>: managed values, per&#8209;field
+        <code>$util.rules</code> validators, touched&#8209;tracking, and a
+        <code>handleSubmit()</code> that only fires when valid. See
+        <a href="stores.html#forms">Global state &rarr; Forms</a>.
+      </p>
+<pre><code>signup = $form({
+  values: { email: "" },
+  rules:  { email: [$util.rules.required(), $util.rules.email()] },
+  onSubmit: (v) =&gt; $save.mutate({ body: v })
+})</code></pre>
+
+      <!-- ===================== EFFECTS ===================== -->
+      <h2 id="effects">Side effects</h2>
+      <p>
+        <code>$effect(() =&gt; { … }, [...deps])</code> runs after render whenever
+        any dependency changes. Dependencies are <code>$</code>variables or
+        lifecycle / scheduling strings: <code>"mount"</code>, <code>"unmount"</code>,
+        <code>"every(N)"</code>, <code>"debounce(N)"</code>, <code>"throttle(N)"</code>.
+        Effects also work inside a component &mdash; in which case they are scoped
+        to that component&rsquo;s lifetime.
+      </p>
+      <div data-fw-panel="react" class="is-active">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-react"></i>React</div>
+<pre><code>useEffect(() =&gt; {
+  const id = setInterval(() =&gt; setNow(Date.now()), 1000);
+  return () =&gt; clearInterval(id);
+}, []);</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$now = Date.now()
+$effect(() =&gt; { $now = Date.now() }, ["every(1000)"])</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="vue">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-vuejs"></i>Vue</div>
+<pre><code>watch(query, async (q) =&gt; {
+  results.value = await fetch(`/api/search?q=${q}`).then(r =&gt; r.json())
+}, { debounce: 300 })</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$effect(() =&gt; {
+  $results = $http({ url: "/api/search", query: { q: $query } })
+}, [$query, "debounce(300)"])</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="angular">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-angular"></i>Angular</div>
+<pre><code>effect(() =&gt; { console.log('query:', this.query()); });</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$effect(() =&gt; { console.log("query:", $query) }, [$query])</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="svelte">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-bolt"></i>Svelte</div>
+<pre><code>$effect(() =&gt; { console.log('query:', query); });</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$effect(() =&gt; { console.log("query:", $query) }, [$query])</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="solid">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-atom"></i>Solid</div>
+<pre><code>createEffect(() =&gt; console.log('query:', query()));</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$effect(() =&gt; { console.log("query:", $query) }, [$query])</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="html">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-html5"></i>Vanilla JS</div>
+<pre><code>const id = setInterval(tick, 1000);
+window.addEventListener('beforeunload', () =&gt; clearInterval(id));</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$effect(() =&gt; { tick() }, ["every(1000)"])</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== HTTP ===================== -->
+      <h2 id="http">HTTP &amp; data fetching</h2>
+      <p>
+        <code>$http({ url, method, query, body, headers, ... })</code> returns a
+        <em>reactive resource</em> with <code>.data</code>, <code>.error</code>,
+        <code>.loading</code>, <code>.status</code>, <code>.headers</code>,
+        <code>.lastUpdated</code>, <code>.refetch()</code>, <code>.cancel()</code>,
+        and an assignable <code>.onDone</code> callback. Pair it with
+        <code>Async(resource, { loading, error, empty, data })</code> for clean
+        rendering.
+      </p>
+      <div data-fw-panel="react" class="is-active">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-react"></i>React + TanStack Query</div>
+<pre><code>const { data, isLoading, error } = useQuery({
+  queryKey: ['todos'],
+  queryFn: () =&gt; fetch('/api/todos').then(r =&gt; r.json())
+});
+return isLoading ? &lt;Spinner /&gt; : &lt;List items={data} /&gt;;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$todos = $http({ url: "/api/todos" })
+$app(Async($todos, {
+  loading: Spinner(),
+  error:   ErrorState("Couldn't load"),
+  empty:   EmptyState("No todos yet"),
+  data:    List($todos.data)
+}))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="vue">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-vuejs"></i>Vue + VueUse</div>
+<pre><code>const { data, isFetching, error } = useFetch('/api/todos').json()</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$todos = $http({ url: "/api/todos" })</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="angular">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-angular"></i>Angular</div>
+<pre><code>todos$ = this.http.get&lt;Todo[]&gt;('/api/todos');
+// template
+&lt;ng-container *ngIf="todos$ | async as todos"&gt;…&lt;/ng-container&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$todos = $http({ url: "/api/todos" })
+$app(Async($todos, { data: List($todos.data) }))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="svelte">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-bolt"></i>Svelte</div>
+<pre><code>{#await fetch('/api/todos').then(r =&gt; r.json())}
+  &lt;Spinner /&gt;
+{:then todos}
+  &lt;List items={todos} /&gt;
+{/await}</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$todos = $http({ url: "/api/todos" })
+$app(Async($todos, { data: List($todos.data) }))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="solid">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-atom"></i>Solid</div>
+<pre><code>const [todos] = createResource(() =&gt; fetch('/api/todos').then(r =&gt; r.json()));</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$todos = $http({ url: "/api/todos" })</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="html">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-html5"></i>Vanilla JS</div>
+<pre><code>fetch('/api/todos').then(r =&gt; r.json()).then(render);</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$todos = $http({ url: "/api/todos" })</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <p style="margin-top: 12px;">
+        Mutations use the same primitive &mdash; just pass <code>method</code> and
+        <code>body</code>. Re&#8209;fetching the list after success is a single
+        line:
+      </p>
+<pre><code>function toggle(todo) {
+  $patch = $http({
+    url:    `/api/todos/${todo.id}`,
+    method: "PATCH",
+    body:   { done: !todo.done }
+  })
+  $patch.onDone = () =&gt; $todos.refetch()
+}</code></pre>
+
+      <!-- ===================== ROUTING ===================== -->
+      <h2 id="routing">Routing</h2>
+      <p>
+        <code>$router({ … })</code> returns the matched view for the current URL
+        (hash router by default). Inside any route, <code>params</code> is the
+        bound parameter object. <code>NavLink(label, { to })</code> is a
+        router&#8209;aware anchor; <code>route.navigate(path)</code> changes the
+        URL programmatically.
+      </p>
+      <div data-fw-panel="react" class="is-active">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-react"></i>React Router</div>
+<pre><code>&lt;Routes&gt;
+  &lt;Route path="/" element={&lt;Home/&gt;} /&gt;
+  &lt;Route path="/users/:id" element={&lt;User/&gt;} /&gt;
+  &lt;Route path="*" element={&lt;NotFound/&gt;} /&gt;
+&lt;/Routes&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app($router({
+  "/":          Home(),
+  "/users/:id": User({ id: params.id }),
+  default:      NotFound()
+}))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="vue">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-vuejs"></i>Vue Router</div>
+<pre><code>const routes = [
+  { path: '/', component: Home },
+  { path: '/users/:id', component: User }
+]</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app($router({
+  "/":          Home(),
+  "/users/:id": User({ id: params.id }),
+  default:      NotFound()
+}))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="angular">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-angular"></i>Angular Router</div>
+<pre><code>const routes: Routes = [
+  { path: '', component: Home },
+  { path: 'users/:id', component: User }
+];</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app($router({
+  "/":          Home(),
+  "/users/:id": User({ id: params.id }),
+  default:      NotFound()
+}))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="svelte">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-bolt"></i>SvelteKit</div>
+<pre><code>// File-based: src/routes/users/[id]/+page.svelte</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app($router({
+  "/":          Home(),
+  "/users/:id": User({ id: params.id }),
+  default:      NotFound()
+}))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="solid">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-solid fa-atom"></i>Solid Router</div>
+<pre><code>&lt;Routes&gt;
+  &lt;Route path="/" component={Home} /&gt;
+  &lt;Route path="/users/:id" component={User} /&gt;
+&lt;/Routes&gt;</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app($router({
+  "/":          Home(),
+  "/users/:id": User({ id: params.id }),
+  default:      NotFound()
+}))</code></pre>
+          </div>
+        </div>
+      </div>
+      <div data-fw-panel="html">
+        <div class="mig-compare">
+          <div class="mig-pane">
+            <div class="mig-pane-head"><i class="fa-brands fa-html5"></i>Vanilla JS</div>
+<pre><code>window.addEventListener('hashchange', render);</code></pre>
+          </div>
+          <div class="mig-pane">
+            <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$app($router({
+  "/":          Home(),
+  default:      NotFound()
+}))</code></pre>
+          </div>
+        </div>
+      </div>
+      <p>
+        The router scales up to the patterns you reach for libraries to provide:
+        <strong>nested layouts</strong> (<code>"/app": { layout, routes }</code> &mdash;
+        a shared shell with an <code>outlet</code>), <strong>guards</strong>
+        (<code>$util.onNavigate(({ to, from }) =&gt; &hellip;)</code> to block/redirect),
+        <strong>query&#8209;param state</strong> (<code>$util.url.setQuery(&hellip;)</code>),
+        <strong>lazy routes</strong> (<code>Lazy(() =&gt; import(&hellip;))</code>), and
+        <strong>scroll restoration</strong> (the
+        <code>scroll-restoration</code> attribute). See the
+        <a href="routing.html#nested">Routing guide</a>.
+      </p>
+
+      <!-- ===================== STYLING ===================== -->
+      <h2 id="styling">Styling &amp; theme</h2>
+      <p>
+        Skip CSS frameworks entirely &mdash; every component already speaks the
+        active theme&rsquo;s tokens. Switch themes with
+        <code>$theme({ … })</code>, override single tokens, or
+        attach raw class / style to any component with
+        <code>Css(child, { class, style })</code>.
+      </p>
+      <div class="mig-compare">
+        <div class="mig-pane">
+          <div class="mig-pane-head"><i class="fa-solid fa-paint-brush"></i>Typical stack</div>
+<pre><code>&lt;!-- Tailwind + CSS-in-JS + theme provider --&gt;
+&lt;ThemeProvider theme={dark}&gt;
+  &lt;Button className="bg-blue-600 px-4 py-2 rounded"&gt;
+    Save
+  &lt;/Button&gt;
+&lt;/ThemeProvider&gt;</code></pre>
+        </div>
+        <div class="mig-pane">
+          <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$theme({ colors: { primary: "#2563eb" } })
+$app(Button("Save", { variant: "primary" }))
+
+// Escape hatch when you really need raw CSS:
+Css(Button("Save"), { class: "my-button", style: "padding: 12px;" })</code></pre>
+        </div>
+      </div>
+
+      <!-- ===================== STORAGE ===================== -->
+      <h2 id="storage">Persistence &amp; storage</h2>
+      <p>
+        Reach for the built&#8209;in <code>$storage</code> namespace instead of
+        touching <code>localStorage</code>&nbsp;/&nbsp;<code>sessionStorage</code>&nbsp;/&nbsp;cookies
+        by hand. One <code>set</code>&nbsp;/&nbsp;<code>get</code>&nbsp;/&nbsp;<code>remove</code>&nbsp;/&nbsp;<code>clear</code>
+        API spans all three backends, non&#8209;string values round&#8209;trip through
+        JSON automatically, and every call is safe in private&#8209;mode / SSR
+        (missing storage returns <code>null</code> rather than throwing).
+      </p>
+      <div class="mig-compare">
+        <div class="mig-pane">
+          <div class="mig-pane-head"><i class="fa-solid fa-database"></i>Everyone else</div>
+<pre><code>// React
+useEffect(() =&gt; { localStorage.setItem('theme', theme) }, [theme]);
+const initial = localStorage.getItem('theme') ?? 'light';</code></pre>
+        </div>
+        <div class="mig-pane">
+          <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>$storage.set("theme", $pref)              // localStorage by default
+$pref = $storage.get("theme") ?? "light"
+$storage.session.set("draft", $draft)     // sessionStorage
+$storage.cookies.set("uid", id, { expires: 7 })</code></pre>
+        </div>
+      </div>
+      <p>
+        For whole&#8209;store persistence, skip the manual round&#8209;trip entirely:
+        add <code>persist</code> to a <code>$store({&hellip;})</code> and its data
+        hydrates on mount and writes back on every change (the equivalent of a
+        Redux&#8209;persist setup, built in). It also offers undo/redo via
+        <code>history: true</code> &mdash; see <a href="stores.html#persist">Global
+        state &rarr; Persistence</a>.
+      </p>
+<pre><code>prefs = $store({ theme: "system", persist: "prefs", history: true })
+// survives reload · prefs.undo() / prefs.redo()</code></pre>
+
+      <!-- ===================== EVENTS OUT ===================== -->
+      <h2 id="events-out">Outbound events (host integration)</h2>
+      <p>
+        Need to tell the surrounding page something? <code>$emit("name", { … })</code>
+        dispatches a <code>CustomEvent</code> on the <code>&lt;aktion-app&gt;</code>
+        host element &mdash; the same way you would <code>$emit</code> in Vue or
+        call a Svelte <code>createEventDispatcher()</code>.
+      </p>
+      <pre><code>// in any action / effect
+$emit("checkout", { items: $cart, total: $total })
+
+&lt;!-- in the host page --&gt;
+&lt;script&gt;
+  document.querySelector('aktion-app')
+    .addEventListener('checkout', (e) =&gt; console.log(e.detail));
+&lt;/script&gt;</code></pre>
+
+      <!-- ===================== SLOTS ===================== -->
+      <h2 id="slots">Children &amp; composition</h2>
+      <p>
+        There are no slots, no <code>children</code> prop, and no transclusion.
+        A container component just takes its children as an <em>array</em>
+        positional argument &mdash; the same way <code>Stack</code>,
+        <code>Card</code>, and <code>Grid</code> work everywhere else.
+      </p>
+      <div class="mig-compare">
+        <div class="mig-pane">
+          <div class="mig-pane-head"><i class="fa-solid fa-layer-group"></i>Slots / children prop</div>
+<pre><code>// React
+function Card({ children }) { return &lt;div className="card"&gt;{children}&lt;/div&gt; }
+&lt;Card&gt;&lt;h1&gt;Hi&lt;/h1&gt;&lt;/Card&gt;
+
+&lt;!-- Vue --&gt;
+&lt;template&gt;&lt;div class="card"&gt;&lt;slot/&gt;&lt;/div&gt;&lt;/template&gt;</code></pre>
+        </div>
+        <div class="mig-pane">
+          <div class="mig-pane-head is-aktion"><i class="fa-solid fa-bolt"></i>Aktion</div>
+<pre><code>function MyCard(children) {
+  return Box(children, { padding: "md", background: "surface", border: "default" })
+}
+$app(MyCard([
+  CardHeader("Hi"),
+  Text("Body content")
+]))</code></pre>
+        </div>
+      </div>
+
+      <!-- ===================== CHEATSHEET ===================== -->
+      <h2 id="cheatsheet">One&#8209;page cheat sheet</h2>
+      <table class="signature-table">
+        <thead><tr><th>Concept</th><th>React / Vue / Angular / Svelte / Solid</th><th>Aktion</th></tr></thead>
+        <tbody>
+          <tr><td>Render root</td><td><code>createRoot().render(&lt;App/&gt;)</code></td><td><code>$app(App())</code></td></tr>
+          <tr><td>Component</td><td>function / class / SFC</td><td><code>function Name(args) { return … }</code></td></tr>
+          <tr><td>Local state</td><td><code>useState</code> / <code>ref</code> / <code>signal</code></td><td><code>$count = 0</code></td></tr>
+          <tr><td>Derived</td><td><code>useMemo</code> / <code>computed</code></td><td>Plain expression: <code>full = `${$f} ${$l}`</code></td></tr>
+          <tr><td>Two-way bind</td><td><code>v-model</code> / <code>[(ngModel)]</code> / <code>bind:value</code></td><td>Pass a <code>$var</code> as <code>value</code></td></tr>
+          <tr><td>Event</td><td><code>onClick</code> / <code>@click</code> / <code>(click)</code></td><td><code>{ onClick: fn }</code> (named arg)</td></tr>
+          <tr><td>If</td><td><code>?:</code> / <code>v-if</code> / <code>@if</code> / <code>{#if}</code> / <code>&lt;Show&gt;</code></td><td>Ternary: <code>cond ? a : b</code> (statement <code>if</code> works in function bodies)</td></tr>
+          <tr><td>List</td><td><code>.map</code> / <code>v-for</code> / <code>@for</code> / <code>{#each}</code> / <code>&lt;For&gt;</code></td><td><code>$items.map(x =&gt; …)</code></td></tr>
+          <tr><td>Side effect</td><td><code>useEffect</code> / <code>watch</code> / <code>effect</code></td><td><code>$effect(() =&gt; { … }, [...deps])</code></td></tr>
+          <tr><td>HTTP</td><td>TanStack Query / VueUse / HttpClient</td><td><code>$http({ url, method, query, body })</code></td></tr>
+          <tr><td>Routing</td><td>React Router / Vue Router / Angular Router</td><td><code>$router({ "/": Home(), default: NotFound() })</code></td></tr>
+          <tr><td>Persistence</td><td><code>localStorage</code> / cookies-js</td><td><code>$storage.set / .get / .session / .cookies</code></td></tr>
+          <tr><td>Theme</td><td>ThemeProvider + Tailwind / styled-components</td><td><code>$theme({ … })</code></td></tr>
+          <tr><td>Outbound event</td><td><code>$emit</code> / <code>EventEmitter</code> / dispatcher</td><td><code>$emit("name", { detail })</code></td></tr>
+          <tr><td>Children</td><td>JSX children / slots</td><td>Pass an array of nodes as the first positional argument</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>Common pitfalls when porting</strong>
+        Forgetting the <code>$</code> on state names &mdash; without it the value
+        is a plain constant and won&rsquo;t trigger re&#8209;render. Calling a
+        component without parentheses (<code>$app(App)</code>) &mdash; Aktion
+        won&rsquo;t call it for you, write <code>$app(App())</code>. Using
+        positional arguments past the first one &mdash; everything after the
+        leading positional goes into a single <code>{ options }</code> object.
+      </div>
+
+      <h2 id="next">Next steps</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="get-started.html">
+          <span class="demo-tag">Setup</span>
+          <h3>Installation</h3>
+          <p>Add Aktion to any existing project via CDN or <code>npm i aktion-runtime</code>.</p>
+          <span class="demo-arrow">Install &rarr;</span>
+        </a>
+        <a class="demo-card" href="language.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Language</h3>
+          <p>The full surface: expressions, control flow, effects, and component calls.</p>
+          <span class="demo-arrow">Read the spec &rarr;</span>
+        </a>
+        <a class="demo-card" href="playground.html">
+          <span class="demo-tag">Try it</span>
+          <h3>Playground</h3>
+          <p>Paste any snippet above and tweak it live with autocomplete and inspect mode.</p>
+          <span class="demo-arrow">Open the playground &rarr;</span>
+        </a>
+        <a class="demo-card" href="ui-providers.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>UI Providers</h3>
+          <p>Keep Aktion's DSL and swap output to Material UI, Bootstrap, or ShadCN through provider adapters.</p>
+          <span class="demo-arrow">Explore provider adapters &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+  <script type="module">
+    /* Framework tab switcher — shows the panel matching the selected tab. */
+    const tabs = Array.from(document.querySelectorAll(".mig-tab"));
+    const panels = Array.from(document.querySelectorAll("[data-fw-panel]"));
+    function selectFramework(fw) {
+      for (const t of tabs) t.setAttribute("aria-selected", t.dataset.fw === fw ? "true" : "false");
+      for (const p of panels) p.classList.toggle("is-active", p.dataset.fwPanel === fw);
+      try { localStorage.setItem("mig-fw", fw); } catch (_) {}
+    }
+    for (const t of tabs) t.addEventListener("click", () => selectFramework(t.dataset.fw));
+    let saved = null;
+    try { saved = localStorage.getItem("mig-fw"); } catch (_) {}
+    if (saved && tabs.some((t) => t.dataset.fw === saved)) selectFramework(saved);
+
+    /* Render <script type="application/x-aktion"> blocks as live <aktion-app>. */
+    import "./dist/aktion.js";
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const node of document.querySelectorAll('script[type="application/x-aktion"]')) {
+      const src = node.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      node.replaceWith(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[migration-guide live] render failed", err);
+      }
+    }
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll("aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>
