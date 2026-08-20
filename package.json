@@ -48,23 +48,25 @@
     "access": "public"
   },
   "scripts": {
-    "dev": "npm run build && vite",
-    "build": "tsc -p tsconfig.build.json && vite build && vite build --config vite.testing.config.ts && vite build --config vite.coverage.config.ts && vite build --config vite.devtools.config.ts && vite build --config vite.language.config.ts && vite build --config vite.plugin.config.ts && node scripts/emit-prompt.mjs && node scripts/emit-skill.mjs && node scripts/emit-entry.mjs",
-    "build:lib": "vite build",
-    "build:test": "vite build --config vite.testing.config.ts",
+    "build": "npm run sync:docs-version && tsc -p tsconfig.build.json && vite build && vite build --config vite.testing.config.ts && vite build --config vite.coverage.config.ts && vite build --config vite.devtools.config.ts && vite build --config vite.language.config.ts && vite build --config vite.plugin.config.ts && node scripts/emit-prompt.mjs && node scripts/emit-skill.mjs && node scripts/emit-entry.mjs",
     "build:coverage": "vite build --config vite.coverage.config.ts",
     "build:devtools": "vite build --config vite.devtools.config.ts",
-    "build:language": "vite build --config vite.language.config.ts",
-    "build:plugin": "vite build --config vite.plugin.config.ts",
-    "build:prompt": "node scripts/emit-prompt.mjs",
+    "build:docs": "npm run sync:docs-version && node scripts/build-docs.mjs",
     "build:entry": "node scripts/emit-entry.mjs",
-    "build:skill": "node scripts/emit-skill.mjs",
+    "build:language": "vite build --config vite.language.config.ts",
+    "build:lib": "vite build",
     "build:lsp": "node editors/lsp/esbuild.mjs",
-    "build:docs": "node scripts/build-docs.mjs",
+    "build:plugin": "vite build --config vite.plugin.config.ts",
+    "build:preview": "npm run build && npm run build:docs",
+    "build:prompt": "node scripts/emit-prompt.mjs",
+    "build:skill": "node scripts/emit-skill.mjs",
+    "build:test": "vite build --config vite.testing.config.ts",
+    "dev": "npm run build && vite",
+    "prepublishOnly": "npm run build",
     "preview": "vite preview",
+    "sync:docs-version": "node scripts/sync-docs-version.mjs",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "prepublishOnly": "npm run build"
+    "test:watch": "vitest"
   },
   "peerDependencies": {
     "vite": "^5.0.0 || ^6.0.0"

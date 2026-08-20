@@ -727,7 +727,7 @@ before = "function total(items) {\\n  let sum = 0\\n  for (const i of items) {\\
 after  = "function total(items) {\\n  return items.reduce((sum, i) => sum + i.price, 0)\\n}"
 
 config = {
-  runtime: { version: "0.5.15", strict: true },
+  runtime: { version: "0.6.3", strict: true },
   features: { router: "hash", i18n: ["en", "de", "fr"] },
   limits: { requests: 60, budgetMs: 2000 }
 }
