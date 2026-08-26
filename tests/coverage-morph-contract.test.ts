@@ -27,7 +27,7 @@
  * the library assigns) and `tests/regression-reported-bugs.test.ts` (#2/#6/#7)
  * cover slices of this; this file extends rather than repeats them.
  *
- * Three suites at the bottom are marked `it.fails` — they encode contracts the
+ * Two cases at the bottom are marked `it.fails` — they encode contracts the
  * reconciler documents but does not yet honour (uncontrolled `<textarea>` and
  * `<select>` state). They pass while the defect exists and go red the moment it
  * is fixed, which is the signal to flip them to `it`.
@@ -976,6 +976,57 @@ describe("morph: form state", () => {
     morphChildren(container, fresh(buildSelect(["a", "b", "c"], "b")));
     expect([...select.options].map((o) => o.value)).toEqual(["a", "b", "c"]);
   });
+
+  it("keeps the selected value when the fresh option list is LONGER than the live one", () => {
+    // The defect this pins: `reconcileChildren` MOVES surplus <option> nodes out
+    // of the fresh <select> into the live one, so a fresh select whose list is
+    // longer loses the tail of its own options — and its selectedness with them
+    // whenever the selected option sat in that tail. A single-line <select> with
+    // nothing selected reports its FIRST option, so reading `newEl.value` AFTER
+    // the children were reconciled yielded a value the render never asked for.
+    //
+    // Real-world shape: a location picker offering four regions with the fourth
+    // chosen, re-rendered with nine (a wider set for a different cluster type).
+    // The render asked for the fourth; the live control showed the first, while
+    // the program's own state still held the fourth — a control saying one thing
+    // over a form that submits another.
+    const buildSelect = (values: string[], value: string): HTMLSelectElement => {
+      const select = h("select", {}) as HTMLSelectElement;
+      for (const v of values) select.appendChild(h("option", { value: v }, [v.toUpperCase()]));
+      select.value = value;
+      return select;
+    };
+    const live = buildSelect(["de/fra", "us/ewr", "us/las", "us/mci"], "us/mci");
+    const container = stage(live);
+    expect(live.value).toBe("us/mci");
+
+    const wider = ["de/txl", "de/fra", "fr/par", "es/vit", "gb/lhr", "gb/bhx", "us/las", "us/mci", "us/ewr"];
+    morphChildren(container, fresh(buildSelect(wider, "us/mci")));
+
+    expect([...live.options].map((o) => o.value)).toEqual(wider);
+    // Index 7 of the new list — past the live list's length, which is what made
+    // the fresh select drop it.
+    expect(live.value).toBe("us/mci");
+    expect(live.selectedIndex).toBe(7);
+  });
+
+  it("still follows the fresh render when the list grows AND the value changes", () => {
+    // The guard must not pin the OLD value either: a render that both widens the
+    // list and moves the selection has to be applied as asked.
+    const buildSelect = (values: string[], value: string): HTMLSelectElement => {
+      const select = h("select", {}) as HTMLSelectElement;
+      for (const v of values) select.appendChild(h("option", { value: v }, [v.toUpperCase()]));
+      select.value = value;
+      return select;
+    };
+    const live = buildSelect(["a", "b"], "b");
+    const container = stage(live);
+
+    morphChildren(container, fresh(buildSelect(["a", "b", "c", "d"], "d")));
+
+    expect(live.value).toBe("d");
+    expect(live.selectedIndex).toBe(3);
+  });
 });
 
 /* -------------------------------------------------------------------------- */
@@ -1182,10 +1233,12 @@ describe("morph: a real app across a state-change re-render", () => {
  * which is always a string, so "the render asserts nothing" is indistinguishable
  * from "the render asserts empty / the first option".
  *
- * These three are `it.fails`: they document the defect executably and go red the
- * moment it is fixed — at which point they should become plain `it`.
+ * The two remaining ones are `it.fails`: they document the defect executably and
+ * go red the moment it is fixed — at which point they should become plain `it`.
+ * The third — a value resolved against options only the fresh tree had — is fixed
+ * and kept here as a plain `it`, next to the defect it grew out of.
  */
-describe("morph: OPEN DEFECTS — uncontrolled textarea/select state", () => {
+describe("morph: uncontrolled textarea/select state — two OPEN DEFECTS", () => {
   it.fails("should keep text typed into an uncontrolled <textarea>", () => {
     const area = h("textarea") as HTMLTextAreaElement;
     const container = stage(area);
@@ -1215,10 +1268,12 @@ describe("morph: OPEN DEFECTS — uncontrolled textarea/select state", () => {
     expect(select.value).toBe("beta");
   });
 
-  it.fails("should resolve a <select> value against options only the fresh tree has", () => {
-    // morph.ts reconciles children before form state precisely so this works,
-    // but the new options are MOVED out of the fresh <select>, which resets its
-    // `value` before the comparison reads it.
+  it("resolves a <select> value against options only the fresh tree has", () => {
+    // FIXED. morph.ts reconciles children before form state precisely so this
+    // works, but the new options are MOVED out of the fresh <select>, which reset
+    // its `value` before the comparison read it. `patchElement` now captures the
+    // fresh select's value BEFORE reconciling its children, and `syncFormState`
+    // applies that instead of re-reading the emptied node.
     const build = (values: string[], value: string): HTMLSelectElement => {
       const select = h("select") as HTMLSelectElement;
       for (const v of values) select.appendChild(h("option", { value: v }, [v]));

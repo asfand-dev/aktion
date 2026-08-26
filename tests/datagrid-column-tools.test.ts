@@ -698,3 +698,503 @@ describe("DataGrid column reordering", () => {
     }
   });
 });
+
+/**
+ * PINNING, GROUPING AND THE DIVIDER.
+ *
+ * Pinning used to be invisible in the list: `effectiveCols` promised "pinned
+ * first" in its doc comment and simply filtered `order`, so a pinned column stuck
+ * to the viewport edge without moving, and could sit visually to the right of an
+ * unpinned one. `order` is now kept partitioned (see `normalizeOrder`), which
+ * makes pin/unpin a MOVE — in the panel and in the header row alike — and makes
+ * the divider between the two groups a real boundary that neither a drag nor an
+ * arrow key may cross.
+ */
+describe("DataGrid column pinning groups the list", () => {
+  const COLS = [
+    '  Col("Name", rows.map(r => r.name), "text", "left", true),',
+    '  Col("Age", rows.map(r => r.age), "number"),',
+    '  Col("City", rows.map(r => r.name), "text"),',
+    '  Col("Zip", rows.map(r => r.age), "number")',
+  ].join("\n");
+
+  const headers = (screen: ReturnType<typeof render>): string[] =>
+    [...screen.shadowRoot.querySelectorAll<HTMLElement>(
+      ".rui-data-grid-table thead th:not([role=\"presentation\"])",
+    )].map((th) => (th.textContent ?? "").trim());
+
+  const panelKeys = (screen: ReturnType<typeof render>): string[] =>
+    [...screen.shadowRoot.querySelectorAll(".rui-data-grid-col-panel-row")]
+      .map((r) => r.getAttribute("data-col-key") ?? "");
+
+  /** Panel children in order, with the divider marked — the visual grouping. */
+  const panelLayout = (screen: ReturnType<typeof render>): string[] =>
+    [...screen.shadowRoot.querySelectorAll(
+      ".rui-data-grid-col-panel-row, .rui-data-grid-col-panel-divider",
+    )].map((n) => n.classList.contains("rui-data-grid-col-panel-divider")
+      ? "—divider—"
+      : (n.getAttribute("data-col-key") ?? ""));
+
+  async function open(screen: ReturnType<typeof render>): Promise<void> {
+    await screen.click(screen.getByRole("button", { name: "Column settings" }));
+    await settle();
+  }
+
+  it("moves a pinned column to the top of the list AND of the table", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+
+    await screen.click(screen.getByRole("button", { name: "Pin City" }));
+    await settle();
+
+    expect(panelKeys(screen)).toStrictEqual(["City", "Name", "Age", "Zip"]);
+    // The header follows: this is the half that silently did nothing before.
+    expect(headers(screen)).toStrictEqual(["City", "Name", "Age", "Zip"]);
+  });
+
+  it("stacks a second pin below the first, in the order they were pinned", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+
+    await screen.click(screen.getByRole("button", { name: "Pin City" }));
+    await settle();
+    await screen.click(screen.getByRole("button", { name: "Pin Zip" }));
+    await settle();
+
+    expect(panelKeys(screen)).toStrictEqual(["City", "Zip", "Name", "Age"]);
+    expect(headers(screen)).toStrictEqual(["City", "Zip", "Name", "Age"]);
+  });
+
+  it("returns an unpinned column to the top of the unpinned group", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+    await screen.click(screen.getByRole("button", { name: "Pin City" }));
+    await settle();
+
+    await screen.click(screen.getByRole("button", { name: "Unpin City" }));
+    await settle();
+
+    expect(panelKeys(screen)).toStrictEqual(["City", "Name", "Age", "Zip"]);
+    expect(screen.shadowRoot.querySelector(".rui-data-grid-col-panel-divider")).toBeNull();
+  });
+
+  it("draws the divider only between the two groups, and only when both exist", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+    // Nothing pinned — a rule above the first row would read as panel chrome.
+    expect(panelLayout(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+
+    await screen.click(screen.getByRole("button", { name: "Pin City" }));
+    await settle();
+    expect(panelLayout(screen)).toStrictEqual(["City", "—divider—", "Name", "Age", "Zip"]);
+    expect(screen.shadowRoot.querySelectorAll(".rui-data-grid-col-panel-divider")).toHaveLength(1);
+  });
+
+  it("marks each row with the group it is in", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await open(screen);
+    await screen.click(screen.getByRole("button", { name: "Pin City" }));
+    await settle();
+
+    const pinned = [...screen.shadowRoot.querySelectorAll(".rui-data-grid-col-panel-row")]
+      .map((r) => `${r.getAttribute("data-col-key")}:${r.getAttribute("data-pinned")}`);
+    expect(pinned).toStrictEqual(["City:true", "Name:false", "Age:false", "Zip:false"]);
+  });
+});
+
+/** The divider is a boundary, not decoration — nothing but the pin crosses it. */
+describe("DataGrid reordering stops at the pinned divider", () => {
+  const COLS = [
+    '  Col("Name", rows.map(r => r.name), "text", "left", true),',
+    '  Col("Age", rows.map(r => r.age), "number"),',
+    '  Col("City", rows.map(r => r.name), "text"),',
+    '  Col("Zip", rows.map(r => r.age), "number")',
+  ].join("\n");
+  const ROW_H = 32;
+
+  const panelKeys = (screen: ReturnType<typeof render>): string[] =>
+    [...screen.shadowRoot.querySelectorAll(".rui-data-grid-col-panel-row")]
+      .map((r) => r.getAttribute("data-col-key") ?? "");
+
+  const rowFor = (screen: ReturnType<typeof render>, key: string): HTMLElement =>
+    [...screen.shadowRoot.querySelectorAll<HTMLElement>(".rui-data-grid-col-panel-row")]
+      .find((r) => r.getAttribute("data-col-key") === key)!;
+
+  function stubGeometry(screen: ReturnType<typeof render>): void {
+    const rows = [...screen.shadowRoot.querySelectorAll<HTMLElement>(".rui-data-grid-col-panel-row")];
+    rows.forEach((row, i) => {
+      row.getBoundingClientRect = () => ({
+        top: i * ROW_H, bottom: (i + 1) * ROW_H, height: ROW_H,
+        left: 0, right: 200, width: 200, x: 0, y: i * ROW_H, toJSON: () => ({}),
+      } as DOMRect);
+    });
+    const panel = screen.shadowRoot.querySelector<HTMLElement>(".rui-data-grid-col-panel")!;
+    panel.getBoundingClientRect = () => ({
+      top: 0, bottom: rows.length * ROW_H, height: rows.length * ROW_H,
+      left: 0, right: 200, width: 200, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect);
+  }
+
+  const pointer = (node: HTMLElement, type: string, clientY: number, pointerId = 1): void => {
+    node.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, composed: true,
+      pointerId, pointerType: "mouse", isPrimary: true,
+      button: 0, buttons: type === "pointerup" ? 0 : 1, clientX: 20, clientY,
+    }));
+  };
+
+  async function drag(
+    screen: ReturnType<typeof render>, key: string, deltaRows: number,
+  ): Promise<void> {
+    stubGeometry(screen);
+    const row = rowFor(screen, key);
+    const startY = row.getBoundingClientRect().top + (ROW_H / 2);
+    pointer(row, "pointerdown", startY);
+    pointer(row, "pointermove", startY + (Math.sign(deltaRows) * 8));
+    pointer(row, "pointermove", startY + (deltaRows * ROW_H));
+    pointer(row, "pointerup", startY + (deltaRows * ROW_H));
+    await settle();
+  }
+
+  /** Two pinned (`Name`, `Age`) above two unpinned (`City`, `Zip`). */
+  async function twoAndTwo(): Promise<ReturnType<typeof render>> {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await screen.click(screen.getByRole("button", { name: "Column settings" }));
+    await settle();
+    await screen.click(screen.getByRole("button", { name: "Pin Name" }));
+    await settle();
+    await screen.click(screen.getByRole("button", { name: "Pin Age" }));
+    await settle();
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+    return screen;
+  }
+
+  it("clamps a pinned row to the bottom of the pinned group", async () => {
+    const screen = await twoAndTwo();
+
+    // Aimed three rows down, which is deep inside the unpinned group.
+    await drag(screen, "Name", 3);
+
+    // It travelled exactly one row — to the end of its own group — and stayed pinned.
+    expect(panelKeys(screen)).toStrictEqual(["Age", "Name", "City", "Zip"]);
+    expect(rowFor(screen, "Name").getAttribute("data-pinned")).toBe("true");
+  });
+
+  it("clamps an unpinned row to the top of the unpinned group", async () => {
+    const screen = await twoAndTwo();
+
+    await drag(screen, "Zip", -3);
+
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "Zip", "City"]);
+    expect(rowFor(screen, "Zip").getAttribute("data-pinned")).toBe("false");
+  });
+
+  it("stops the arrow keys at the boundary too", async () => {
+    const screen = await twoAndTwo();
+    const press = async (name: string, key: string) => {
+      screen.getByRole("button", { name }).dispatchEvent(new KeyboardEvent("keydown", {
+        key, bubbles: true, cancelable: true, composed: true,
+      }));
+      await settle();
+    };
+
+    // `Age` is the last pinned row: down must not walk it into the unpinned group.
+    await press("Reorder Age", "ArrowDown");
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+
+    // `City` is the first unpinned row: up must not walk it into the pinned group.
+    await press("Reorder City", "ArrowUp");
+    expect(panelKeys(screen)).toStrictEqual(["Name", "Age", "City", "Zip"]);
+
+    // …but a move WITHIN a group still works, so the clamp is not just "inert".
+    await press("Reorder Name", "ArrowDown");
+    expect(panelKeys(screen)).toStrictEqual(["Age", "Name", "City", "Zip"]);
+  });
+});
+
+/** A grid with every column hidden cannot be recovered from its own UI. */
+describe("DataGrid keeps at least one column visible", () => {
+  const COLS = [
+    '  Col("Name", rows.map(r => r.name), "text", "left", true),',
+    '  Col("Age", rows.map(r => r.age), "number")',
+  ].join("\n");
+
+  const headers = (screen: ReturnType<typeof render>): string[] =>
+    [...screen.shadowRoot.querySelectorAll<HTMLElement>(
+      ".rui-data-grid-table thead th:not([role=\"presentation\"])",
+    )].map((th) => (th.textContent ?? "").trim());
+
+  const cbFor = (screen: ReturnType<typeof render>, name: string): HTMLInputElement =>
+    screen.getByRole("checkbox", { name: `Show ${name}` }) as HTMLInputElement;
+
+  it("disables the checkbox of the only remaining column", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await screen.click(screen.getByRole("button", { name: "Column settings" }));
+    await settle();
+    expect(cbFor(screen, "Name").disabled).toBe(false);
+
+    await screen.click(cbFor(screen, "Age"));
+    await settle();
+
+    expect(headers(screen)).toStrictEqual(["Name"]);
+    // Greyed rather than silently inert: a checkbox that ignores clicks reads as
+    // broken, and the title says why it will not move.
+    expect(cbFor(screen, "Name").disabled).toBe(true);
+    expect(cbFor(screen, "Name").title).toBe("At least one column must stay visible");
+  });
+
+  it("refuses a hide that would empty the grid, even from a script", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await screen.click(screen.getByRole("button", { name: "Column settings" }));
+    await settle();
+    await screen.click(cbFor(screen, "Age"));
+    await settle();
+
+    // `disabled` is the first line of defence and a disabled input never even
+    // dispatches the click. Drop it to reach the handler itself, which is what has
+    // to hold when the attribute is bypassed — a script toggling the property, or
+    // a future refactor that renders the box enabled.
+    const last = cbFor(screen, "Name");
+    last.disabled = false;
+    last.checked = false;
+    last.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    await settle();
+
+    expect(headers(screen)).toStrictEqual(["Name"]);
+    expect(cbFor(screen, "Name").checked).toBe(true);
+  });
+
+  it("re-enables the checkbox as soon as a second column comes back", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await screen.click(screen.getByRole("button", { name: "Column settings" }));
+    await settle();
+    await screen.click(cbFor(screen, "Age"));
+    await settle();
+    expect(cbFor(screen, "Name").disabled).toBe(true);
+
+    await screen.click(cbFor(screen, "Age"));
+    await settle();
+
+    expect(headers(screen)).toStrictEqual(["Name", "Age"]);
+    expect(cbFor(screen, "Name").disabled).toBe(false);
+  });
+});
+
+/**
+ * EXTERNAL CONTROL of the settings panel.
+ *
+ * The panel could only ever be opened by its own header icon, which is no use to
+ * a page that wants one "Table settings" button in its own toolbar. `open` is now
+ * a normal two-way binding, the trigger can be hidden without losing the panel,
+ * and the panel can hang off any element by selector.
+ */
+describe("DataGrid column menu can be driven from outside", () => {
+  const COLS = [
+    '  Col("Name", rows.map(r => r.name), "text", "left", true),',
+    '  Col("Age", rows.map(r => r.age), "number")',
+  ].join("\n");
+
+  const panel = (screen: ReturnType<typeof render>): HTMLElement =>
+    screen.shadowRoot.querySelector<HTMLElement>(".rui-data-grid-col-panel")!;
+
+  it("hides the built-in trigger without taking the panel with it", async () => {
+    // The panel is a CHILD of the menu wrapper on the popover path, so hiding the
+    // wrapper hid the panel too — the menu opened into nothing. Only the button goes.
+    const screen = render(grid("{columnMenu: true, columnMenuButton: false}", COLS));
+    await settle();
+
+    const wrap = screen.shadowRoot.querySelector(".rui-data-grid-col-menu")!;
+    expect(wrap.getAttribute("data-hidden")).toBe("true");
+    expect(wrap.querySelector(".rui-data-grid-col-panel")).not.toBeNull();
+    // Still configured: the rows exist, ready for an external opener.
+    expect(screen.shadowRoot.querySelectorAll(".rui-data-grid-col-panel-row")).toHaveLength(2);
+  });
+
+  it("keeps the built-in trigger by default", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    expect(screen.shadowRoot.querySelector(".rui-data-grid-col-menu")!.hasAttribute("data-hidden"))
+      .toBe(false);
+    expect(screen.getByRole("button", { name: "Column settings" })).toBeDefined();
+  });
+
+  it("opens from a bound variable and reports every close back to it", async () => {
+    const screen = render([
+      ROWS,
+      "$menuOpen = false",
+      "$app(Stack([",
+      '  Button("Settings", {id: "ext-trigger", onClick: () => { $menuOpen = true }}),',
+      "  DataGrid([",
+      COLS,
+      "  ], {columnMenu: true, columnMenuButton: false, columnMenuOpen: $menuOpen,",
+      '   columnMenuAnchor: "#ext-trigger", onColumnMenuOpenChange: next => { $menuOpen = next }})',
+      "]))",
+    ].join("\n"));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("false");
+
+    await screen.click(screen.getByRole("button", { name: "Settings" }));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("true");
+    expect(screen.state.get("menuOpen")).toBe(true);
+
+    // The × writes the binding back, so the app's own state cannot drift out of
+    // step with what is on screen.
+    await screen.click(screen.getByRole("button", { name: "Close column settings" }));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("false");
+    expect(screen.state.get("menuOpen")).toBe(false);
+  });
+
+  it("closes when the bound variable is set false elsewhere", async () => {
+    const screen = render([
+      ROWS,
+      "$menuOpen = true",
+      "$app(Stack([",
+      '  Button("Hide", {onClick: () => { $menuOpen = false }}),',
+      "  DataGrid([",
+      COLS,
+      "  ], {columnMenu: true, columnMenuOpen: $menuOpen})",
+      "]))",
+    ].join("\n"));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("true");
+
+    await screen.click(screen.getByRole("button", { name: "Hide" }));
+    await settle();
+
+    // Promotion into the top layer lives outside the rendered tree, so the panel
+    // has to be torn down explicitly — the reconciler cannot do it.
+    expect(panel(screen).getAttribute("data-open")).toBe("false");
+  });
+
+  it("leaves the state alone when nothing is bound", async () => {
+    // The uncontrolled path is the old behaviour and must stay exactly that:
+    // the trigger owns the state and nothing is written anywhere.
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await screen.click(screen.getByRole("button", { name: "Column settings" }));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("true");
+    expect(screen.getByRole("button", { name: "Column settings" }).getAttribute("aria-expanded"))
+      .toBe("true");
+  });
+});
+
+describe("DataGrid column panel chrome", () => {
+  const COLS = [
+    '  Col("Name", rows.map(r => r.name), "text", "left", true),',
+    '  Col("Age", rows.map(r => r.age), "number")',
+  ].join("\n");
+
+  it("leads with a title and a sub-heading, and puts reset in a footer", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await screen.click(screen.getByRole("button", { name: "Column settings" }));
+    await settle();
+
+    const root = screen.shadowRoot;
+    expect(root.querySelector(".rui-data-grid-col-panel-title")?.textContent).toBe("Table settings");
+    expect(root.querySelector(".rui-data-grid-col-panel-subtitle")?.textContent)
+      .toBe("Manage column visibility and order");
+    // Reset sat beside the close button, where a mis-click threw away a layout
+    // instead of dismissing a popup.
+    const reset = root.querySelector(".rui-data-grid-col-panel-reset")!;
+    expect(reset.textContent).toContain("Reset to default");
+    expect(reset.closest(".rui-data-grid-col-panel-footer")).not.toBeNull();
+  });
+
+  it("takes translated labels, and drops the sub-heading when it is emptied", async () => {
+    const screen = render(grid(
+      '{columnMenu: true, columnMenuTitle: "Spalten", columnMenuDescription: "", columnMenuResetLabel: "Zurücksetzen"}',
+      COLS,
+    ));
+    await settle();
+    await screen.click(screen.getByRole("button", { name: "Column settings" }));
+    await settle();
+
+    const root = screen.shadowRoot;
+    expect(root.querySelector(".rui-data-grid-col-panel-title")?.textContent).toBe("Spalten");
+    expect(root.querySelector(".rui-data-grid-col-panel-subtitle")).toBeNull();
+    expect(root.querySelector(".rui-data-grid-col-panel-reset")?.textContent).toContain("Zurücksetzen");
+  });
+});
+
+/**
+ * Focus survives the panel rebuilds the user's own actions trigger.
+ *
+ * Hiding a column has to rebuild the whole list — the "at least one column"
+ * guard is cross-row, so hiding the second-to-last column must disable a
+ * DIFFERENT row's checkbox. `replaceChildren` then throws away the element the
+ * user was standing on, focus falls to the body, and from there Escape never
+ * reaches the panel's own handler: the panel became impossible to dismiss with
+ * the keyboard after touching any checkbox.
+ */
+describe("DataGrid column panel keeps focus across a rebuild", () => {
+  const COLS = [
+    '  Col("Name", rows.map(r => r.name), "text", "left", true),',
+    '  Col("Age", rows.map(r => r.age), "number"),',
+    '  Col("City", rows.map(r => r.name), "text")',
+  ].join("\n");
+
+  async function openPanel(screen: ReturnType<typeof render>): Promise<void> {
+    await screen.click(screen.getByRole("button", { name: "Column settings" }));
+    await settle();
+  }
+
+  const activeKey = (screen: ReturnType<typeof render>): string | null =>
+    (screen.shadowRoot.activeElement?.closest(".rui-data-grid-col-panel-row") ?? null)
+      ?.getAttribute("data-col-key") ?? null;
+
+  it("returns focus to the checkbox that was just toggled", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await openPanel(screen);
+
+    await screen.click(screen.getByRole("checkbox", { name: "Show Age" }));
+    await settle();
+
+    expect(activeKey(screen)).toBe("Age");
+    expect(screen.shadowRoot.activeElement?.classList.contains("rui-data-grid-col-panel-cb")).toBe(true);
+  });
+
+  it("returns focus to the pin that was just pressed", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await openPanel(screen);
+
+    await screen.click(screen.getByRole("button", { name: "Pin City" }));
+    await settle();
+
+    expect(activeKey(screen)).toBe("City");
+    expect(screen.shadowRoot.activeElement?.classList.contains("rui-data-grid-col-panel-pin")).toBe(true);
+  });
+
+  it("leaves Escape able to close the panel after a column is hidden", async () => {
+    const screen = render(grid("{columnMenu: true}", COLS));
+    await settle();
+    await openPanel(screen);
+    await screen.click(screen.getByRole("checkbox", { name: "Show Age" }));
+    await settle();
+
+    // Dispatched from wherever focus actually landed — the point of the test is
+    // that it is still somewhere inside the panel.
+    screen.shadowRoot.activeElement!.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Escape", bubbles: true, cancelable: true, composed: true,
+    }));
+    await settle();
+
+    expect(screen.shadowRoot.querySelector(".rui-data-grid-col-panel")!.getAttribute("data-open"))
+      .toBe("false");
+  });
+});

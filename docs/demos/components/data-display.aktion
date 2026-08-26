@@ -65,6 +65,6 @@ demos = [
   Demo("CompareSpecs", "Plan comparison table", CompareSpecs({ columns: ["Free", "Pro", "Team"], rows: [{ label: "Projects", values: ["3", "Unlimited", "Unlimited"] }, { label: "SSO", values: [false, false, true] }, { label: "Support", values: ["Community", "Priority", "Dedicated"] }] })),
   Demo("StatStrip", "KPI strip", StatStrip({ items: [{ label: "Teams", value: "1,240" }, { label: "Uptime", value: "99.9%" }, { label: "Regions", value: "12" }] })),
   Demo("IconList", "Titled list with icons", IconList({ items: [{ title: "Streaming UI v2.4", description: "3 open issues", icon: "rocket" }, { title: "Auth SDK rewrite", description: "1 open issue", icon: "shield-halved" }] })),
-  Demo("JsonViewer", "Expandable JSON tree", JsonViewer({ data: { name: "aktion", version: "0.6.3", features: ["reactive", "themes"], meta: { stars: 1240, license: "MIT" } } })),
+  Demo("JsonViewer", "Expandable JSON tree", JsonViewer({ data: { name: "aktion", version: "0.6.4", features: ["reactive", "themes"], meta: { stars: 1240, license: "MIT" } } })),
   Demo("CodePreview", "Read-only code block", CodePreview({ code: "function add(a, b) {\n  return a + b\n}\n\nadd(2, 3)", language: "javascript" }))
 ]

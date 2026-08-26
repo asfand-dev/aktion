@@ -253,6 +253,7 @@ function initColumnConfig(
     widths: {},
   };
   for (const c of cols) { if (c.width) config.widths[c.key] = c.width; }
+  config.order = normalizeOrder(config.order, config.pinned);
   if (!persisted) return config;
   if (persisted.order) {
     const colKeys = new Set(defaultOrder);
@@ -268,7 +269,32 @@ function initColumnConfig(
       if (sanitised && cols.some((c) => c.key === k)) config.widths[k] = sanitised;
     }
   }
+  config.order = normalizeOrder(config.order, config.pinned);
   return config;
+}
+
+/**
+ * Hoist every pinned key above every unpinned one, preserving the relative order
+ * within each group.
+ *
+ * `order` is the single source of truth for BOTH the table's column sequence and
+ * the settings panel's row sequence, so "pinned columns come first" has to be a
+ * property of the list itself rather than something each reader re-derives. That
+ * makes pin/unpin a MOVE: a stable partition drops a newly pinned key at the
+ * bottom of the pinned group (it was already below all of them) and a newly
+ * unpinned key at the top of the unpinned group, which is exactly where the user
+ * watches the row travel to.
+ *
+ * `effectiveCols` used to promise "pinned first" in its doc comment and simply
+ * not do it — it filtered `order` and nothing more — so pinning a column stuck it
+ * to the viewport edge without moving it, and a pinned column could sit visually
+ * to the right of an unpinned one.
+ */
+function normalizeOrder(order: string[], pinned: Set<string>): string[] {
+  const head: string[] = [];
+  const tail: string[] = [];
+  for (const key of order) (pinned.has(key) ? head : tail).push(key);
+  return [...head, ...tail];
 }
 
 /**
@@ -292,15 +318,21 @@ function reconcileColumnConfig(cols: ColDef[], config: ColumnConfig): ColumnConf
   const widths: Record<string, string> = {};
   for (const [k, v] of Object.entries(config.widths)) { if (known.has(k)) widths[k] = v; }
   for (const c of cols) { if (!(c.key in widths) && c.width) widths[c.key] = c.width; }
+  const nextPinned = prune(config.pinned);
   return {
-    order: [...kept, ...added],
+    order: normalizeOrder([...kept, ...added], nextPinned),
     hidden: prune(config.hidden),
-    pinned: prune(config.pinned),
+    pinned: nextPinned,
     widths,
   };
 }
 
-/** Produce the display-order list of visible columns, pinned first. */
+/**
+ * The display-order list of visible columns.
+ *
+ * Pinned columns lead because `order` itself is kept partitioned — see
+ * `normalizeOrder`. Nothing here re-sorts.
+ */
 function effectiveCols(cols: ColDef[], config: ColumnConfig): ColDef[] {
   const byKey = new Map(cols.map((c) => [c.key, c]));
   return config.order
@@ -382,7 +414,15 @@ export const DataGrid: ComponentSpec = {
     "Use `loading` / `error` for query states. " +
     "Set `columnMenu=true` to let the user hide, reorder, and pin columns — the " +
     "button is pinned to the top-right of the header and stays put while the " +
-    "grid scrolls sideways, without taking a column of its own. " +
+    "grid scrolls sideways, without taking a column of its own. Pinning MOVES a " +
+    "column to the front of the table and above a divider in the panel; drag and " +
+    "arrow-key reordering both stay inside their own group, so the only way " +
+    "across that divider is the pin. The last visible column cannot be hidden. " +
+    "To drive the panel from your own toolbar, bind `columnMenuOpen` (with " +
+    "`onColumnMenuOpenChange`), point `columnMenuAnchor` at your button and set " +
+    "`columnMenuButton: false` — the panel keeps working, it just loses the " +
+    "in-header icon. `columnMenuTitle` / `columnMenuDescription` / " +
+    "`columnMenuResetLabel` take translated strings. " +
     "Set `resizable=true` to let the user drag column borders to resize; the " +
     "first drag pins the columns at the widths they are already rendered at and " +
     "switches to a fixed layout, so a narrowed column truncates instead of " +
@@ -433,6 +473,13 @@ export const DataGrid: ComponentSpec = {
     { name: "rowNumbers", type: "boolean", optional: true, description: "Show a leading row-number column." },
     { name: "highlightOnHover", type: "boolean", optional: true, description: "Highlight rows on mouse hover (default true)." },
     { name: "scrollArrows", type: "boolean", optional: true, description: "Show small chevron buttons in the header band while there are columns hidden to the left / right (default true). They sit in the header, never over a data cell." },
+    { name: "columnMenuOpen", type: "boolean", optional: true, description: "Open state of the column-settings panel — bind a `$variable` for two-way control, so an external button can open it. Leave unset to let the built-in trigger own the state." },
+    { name: "onColumnMenuOpenChange", type: "callable", optional: true, aliases: ["oncolumnmenuopenchange"], description: "Called with the new boolean whenever the column-settings panel opens or closes — including via Escape, the × button, or an outside click." },
+    { name: "columnMenuButton", type: "boolean", optional: true, description: "Render the built-in column-settings trigger in the header (default true). Set `false` when an external control opens the panel, which keeps the panel and its configuration without the in-header icon." },
+    { name: "columnMenuAnchor", type: "string", optional: true, description: "CSS selector for the element the panel should hang off, e.g. `\"#table-settings\"`. Defaults to the built-in trigger; required when `columnMenuButton` is `false`, or the panel has nothing to anchor to." },
+    { name: "columnMenuTitle", type: "string", optional: true, description: "Heading of the column-settings panel (default \"Table settings\"). Pass a translated string in a localised app." },
+    { name: "columnMenuDescription", type: "string", optional: true, description: "Sub-heading under the panel title (default \"Manage column visibility and order\"). Pass `\"\"` to drop the line." },
+    { name: "columnMenuResetLabel", type: "string", optional: true, description: "Label of the panel's reset action (default \"Reset to default\")." },
   ],
   render: (node, props, helpers) => {
     const allCols = readDataGridCols(props.columns);
@@ -517,6 +564,11 @@ export const DataGrid: ComponentSpec = {
     const updateColConfig = (patch: Partial<ColumnConfig>): void => {
       const current = getColConfig();
       const next = { ...current, ...patch };
+      // Re-partitioned centrally rather than at each call site: pin, unpin and
+      // reorder all funnel through here, and every one of them can break the
+      // "pinned keys lead" invariant that `order` carries for both the table and
+      // the settings panel.
+      next.order = normalizeOrder(next.order, next.pinned);
       colConfigSlot.set(next);
       if (persistKey) persistConfig(persistKey, configToStorage(next));
     };
@@ -1573,6 +1625,56 @@ export const DataGrid: ComponentSpec = {
       // Per-instance: two grids with column menus on one page must not emit the
       // same DOM id, or their handles' `aria-describedby` both resolve to the first.
       const reorderHintId = `${autoId(helpers, "rui-data-grid-col")}-reorder-hint`;
+      // Overridable because these are the only user-facing strings the grid
+      // invents for itself, and a localised app has no other way to translate
+      // them. `columnMenuDescription: ""` removes the line rather than defaulting.
+      const columnMenuTitle = asString(props.columnMenuTitle) || "Table settings";
+      const columnMenuSubtitle = props.columnMenuDescription === undefined
+        ? "Manage column visibility and order"
+        : asString(props.columnMenuDescription);
+      const columnMenuResetLabel = asString(props.columnMenuResetLabel) || "Reset to default";
+
+      /**
+       * External control of the panel.
+       *
+       * `columnMenuOpen` is a normal two-way binding: the slot below is the source
+       * of truth, the bound `$variable` is mirrored into it on every render, and
+       * every open/close writes back to both the variable and `onColumnMenuOpenChange`.
+       * Leaving the prop off keeps the old behaviour exactly — the built-in trigger
+       * owns the state and nothing is written anywhere.
+       *
+       * `argMeta` is indexed by the prop's position in THIS spec's `props` array, so
+       * the slot is looked up by name rather than written as a literal: a literal
+       * would silently re-point the moment a prop is added above it, and this list
+       * is explicitly append-only for exactly that reason.
+       */
+      const openSlotIndex = DataGrid.props.findIndex((pr) => pr.name === "columnMenuOpen");
+      const openStateName = openSlotIndex >= 0
+        ? node.argMeta?.[openSlotIndex]?.stateRef
+        : undefined;
+      const openControlled = props.columnMenuOpen !== undefined;
+      // The panel is anchored to the built-in trigger unless the author names
+      // another element; with the trigger hidden there is nothing else to hang off.
+      const columnMenuAnchor = asString(props.columnMenuAnchor);
+      const showMenuButton = props.columnMenuButton === undefined
+        ? true
+        : asBoolean(props.columnMenuButton);
+      if (openControlled) colConfigPanelOpen.set(asBoolean(props.columnMenuOpen));
+
+      /**
+       * Single exit for every state change, so the write-back cannot be forgotten.
+       *
+       * Idempotent on purpose: `restoreColMenu` re-opens the panel after EVERY
+       * paint (promotion into the top layer does not survive reconciliation), and
+       * without this guard each of those would fire `onColumnMenuOpenChange` again
+       * and write the bound variable — a render loop in any app that repaints on it.
+       */
+      const reportOpen = (next: boolean): void => {
+        if (colConfigPanelOpen.get() === next) return;
+        colConfigPanelOpen.set(next);
+        if (openStateName) helpers.setState(openStateName, next);
+        helpers.invoke(props.onColumnMenuOpenChange, next);
+      };
       const menuWrap = el("div", { class: "rui-data-grid-col-menu" });
       const menuBtn = el("button", {
         type: "button",
@@ -1583,6 +1685,10 @@ export const DataGrid: ComponentSpec = {
       });
       const gearIcon = renderIcon("sliders", { className: "rui-data-grid-col-menu-icon" });
       if (gearIcon) menuBtn.append(gearIcon); else menuBtn.textContent = "☰";
+      // Hidden, not absent. The button is still the fallback anchor and still owns
+      // `aria-expanded`, so the panel keeps working when the author supplies no
+      // `columnMenuAnchor` — it just stops taking space in the header band.
+      if (!showMenuButton) menuWrap.setAttribute("data-hidden", "true");
 
       // Visibility is an ATTRIBUTE, not an inline `display`: the floating layer
       // promotes this panel with the popover API, and `[popover]` is
@@ -1614,6 +1720,7 @@ export const DataGrid: ComponentSpec = {
       };
 
       const closePanel = (origin?: Element | null): void => {
+        reportOpen(false);
         colConfigPanelOpen.set(false);
         const live = findLive(origin ?? null);
         if (live.panel) {
@@ -1627,12 +1734,19 @@ export const DataGrid: ComponentSpec = {
         panelEl.replaceChildren();
         const cfg0 = getColConfig();
         const panelHead = el("div", { class: "rui-data-grid-col-panel-head" });
-        panelHead.append(el("span", { class: "rui-data-grid-col-panel-title" }, ["Columns"]));
-        const actions = el("span", { style: "display:flex;align-items:center;gap:4px" });
+        const heading = el("span", { class: "rui-data-grid-col-panel-heading" });
+        heading.append(el("span", { class: "rui-data-grid-col-panel-title" }, [columnMenuTitle]));
+        if (columnMenuSubtitle) {
+          heading.append(el("span", { class: "rui-data-grid-col-panel-subtitle" }, [columnMenuSubtitle]));
+        }
+        panelHead.append(heading);
         const resetBtn = el("button", {
           type: "button",
           class: "rui-data-grid-col-panel-reset",
-        }, ["Reset"]);
+        });
+        const resetIcon = renderIcon("rotate-left", { className: "rui-data-grid-col-panel-reset-icon" });
+        if (resetIcon) resetBtn.append(resetIcon);
+        resetBtn.append(el("span", {}, [columnMenuResetLabel]));
         resetBtn.onclick = (ev) => {
           ev.stopPropagation();
           colConfigSlot.set(initColumnConfig(allCols, null));
@@ -1652,8 +1766,7 @@ export const DataGrid: ComponentSpec = {
           "aria-label": "Close column settings",
         }, ["\u00D7"]);
         closeBtn.onclick = (ev) => { ev.stopPropagation(); closePanel(ev.currentTarget as Element); };
-        actions.append(resetBtn, closeBtn);
-        panelHead.append(actions);
+        panelHead.append(closeBtn);
         panelEl.append(panelHead);
 
         const list = el("div", { class: "rui-data-grid-col-panel-list" });
@@ -1699,16 +1812,22 @@ export const DataGrid: ComponentSpec = {
           node: HTMLElement;
           active: boolean;
           lastY: number;
+          /** Inclusive row-index bounds of the group the drag started in. */
+          groupStart: number;
+          groupEnd: number;
         }
         let colDrag: ColDragState | null = null;
         // Below this the gesture is still a click, so the checkbox and pin button
         // keep working and a twitchy mouse does not reorder anything.
         const DRAG_THRESHOLD = 4;
 
-        /** Where the dragged row currently sits, in whole row-heights travelled. */
+        /**
+         * Where the dragged row currently sits, in whole row-heights travelled,
+         * clamped to its own group so a drag can never cross the pinned divider.
+         */
         const dragTargetIndex = (d: ColDragState, dy: number): number => {
           const raw = d.fromIndex + Math.round(dy / d.rowH);
-          return Math.max(0, Math.min(d.rows.length - 1, raw));
+          return Math.max(d.groupStart, Math.min(d.groupEnd, raw));
         };
 
         /** Lay the list out for "the dragged row is at `toIndex`". */
@@ -1798,36 +1917,87 @@ export const DataGrid: ComponentSpec = {
           repaint(origin);
         };
 
-        /** Move one column by `delta` places and keep focus on its handle. */
+        /**
+         * The half-open row range of the group `index` belongs to.
+         *
+         * Pinned and unpinned columns are two separate lists that happen to share
+         * one scroll box, and the divider between them is a real boundary: dragging
+         * across it would mean "pin this column", which is the pin button's job and
+         * not something a stray 40px of travel should decide. Both the pointer drag
+         * and the arrow keys clamp to this range, so the only way across is the pin.
+         */
+        const groupBounds = (index: number): { start: number; end: number } => {
+          const pinnedCount = cfg0.order.filter((k) => cfg0.pinned.has(k)).length;
+          return index < pinnedCount
+            ? { start: 0, end: pinnedCount - 1 }
+            : { start: pinnedCount, end: cfg0.order.length - 1 };
+        };
+
+        /**
+         * Put focus back on one control of `key`'s row after a rebuild.
+         *
+         * `rebuildColPanel` calls `replaceChildren`, which throws away the element
+         * the user was standing on — focus lands on the body, and from there Escape
+         * never reaches the panel's own handler, so the panel could not be
+         * dismissed after hiding a column.
+         *
+         * Matched by attribute value rather than interpolated into a selector: a
+         * column header is arbitrary user text and would need CSS escaping.
+         */
+        const refocusRow = (key: string, childSelector: string): void => {
+          for (const r of panelEl.querySelectorAll<HTMLElement>(".rui-data-grid-col-panel-row")) {
+            if (r.getAttribute("data-col-key") !== key) continue;
+            r.querySelector<HTMLElement>(childSelector)?.focus();
+            return;
+          }
+        };
+
+        /** Move one column by `delta` places within its group, keeping focus on its handle. */
         const nudgeColumn = (key: string, delta: number, origin: Element | null): void => {
           const cfg = getColConfig();
           const order = [...cfg.order];
           const from = order.indexOf(key);
           const to = from + delta;
-          if (from < 0 || to < 0 || to >= order.length) return;
+          if (from < 0) return;
+          const bounds = groupBounds(from);
+          if (to < bounds.start || to > bounds.end) return;
           order.splice(from, 1);
           order.splice(to, 0, key);
           updateColConfig({ order });
           rebuildColPanel(panelEl);
           repaint(origin);
-          // Matched by attribute value rather than interpolated into a selector:
-          // a column header is arbitrary user text and would need CSS escaping.
-          for (const r of panelEl.querySelectorAll<HTMLElement>(".rui-data-grid-col-panel-row")) {
-            if (r.getAttribute("data-col-key") !== key) continue;
-            r.querySelector<HTMLElement>(".rui-data-grid-col-panel-handle")?.focus();
-            break;
-          }
+          refocusRow(key, ".rui-data-grid-col-panel-handle");
         };
+
+        // Hiding is refused rather than merely discouraged once one column is left:
+        // a grid with every column hidden renders a header of nothing over rows of
+        // nothing, and the only way back is the panel the user just emptied.
+        const visibleCount = cfg0.order.filter((k) => !cfg0.hidden.has(k)).length;
+        let dividerDrawn = false;
 
         for (const key of cfg0.order) {
           const colDef = allCols.find((cd) => cd.key === key);
           if (!colDef) continue;
           const isHidden = cfg0.hidden.has(key);
           const isPinnedCol = cfg0.pinned.has(key);
+          const isLastVisible = !isHidden && visibleCount <= 1;
+
+          // The divider is drawn ONCE, before the first unpinned row, and only when
+          // both groups exist — a rule above the first row or below the last would
+          // read as a panel border rather than as a boundary.
+          if (!isPinnedCol && !dividerDrawn && cfg0.pinned.size > 0) {
+            dividerDrawn = true;
+            list.append(el("div", {
+              class: "rui-data-grid-col-panel-divider",
+              role: "separator",
+              "aria-label": "Pinned columns above",
+            }));
+          }
 
           const row = el("div", {
             class: "rui-data-grid-col-panel-row",
             "data-col-key": key,
+            "data-pinned": isPinnedCol ? "true" : "false",
           });
 
           // The handle is a real button, not an aria-hidden glyph: reordering was
@@ -1848,23 +2018,6 @@ export const DataGrid: ComponentSpec = {
           };
           row.append(handle);
 
-          const cb = el("input", {
-            type: "checkbox",
-            class: "rui-data-grid-col-panel-cb",
-            checked: isHidden ? null : "",
-            "aria-label": `Show ${colDef.header}`,
-          });
-          cb.onclick = (ev) => {
-            ev.stopPropagation();
-            const target2 = ev.currentTarget as HTMLInputElement;
-            const cfg = getColConfig();
-            const nextHidden = new Set(cfg.hidden);
-            if (target2.checked) nextHidden.delete(key); else nextHidden.add(key);
-            updateColConfig({ hidden: nextHidden });
-            repaint(target2);
-          };
-          row.append(cb);
-
           row.append(el("span", {
             class: "rui-data-grid-col-panel-label",
           }, [colDef.header]));
@@ -1882,11 +2035,49 @@ export const DataGrid: ComponentSpec = {
             const cfg = getColConfig();
             const nextPinned = new Set(cfg.pinned);
             if (isPinnedCol) nextPinned.delete(key); else nextPinned.add(key);
+            // `updateColConfig` re-partitions `order`, so the row MOVES across the
+            // divider on its own — both here and in the table behind the panel.
             updateColConfig({ pinned: nextPinned });
             rebuildColPanel(panelEl);
             repaint(ev.currentTarget as Element);
+            refocusRow(key, ".rui-data-grid-col-panel-pin");
           };
           row.append(pinBtn);
+
+          const cb = el("input", {
+            type: "checkbox",
+            class: "rui-data-grid-col-panel-cb",
+            checked: isHidden ? null : "",
+            // Disabled rather than silently ignored: a checkbox that does nothing
+            // when clicked reads as broken, whereas a greyed one says why it cannot
+            // move. The title carries the reason for a pointer user.
+            disabled: isLastVisible ? "" : null,
+            title: isLastVisible ? "At least one column must stay visible" : null,
+            "aria-label": `Show ${colDef.header}`,
+          });
+          cb.onclick = (ev) => {
+            ev.stopPropagation();
+            const target2 = ev.currentTarget as HTMLInputElement;
+            const cfg = getColConfig();
+            const nextHidden = new Set(cfg.hidden);
+            if (target2.checked) {
+              nextHidden.delete(key);
+            } else if (cfg.order.filter((k) => !cfg.hidden.has(k)).length <= 1) {
+              // Belt and braces for the `disabled` above: a click can still arrive
+              // from a script, and an empty grid is unrecoverable from its own UI.
+              target2.checked = true;
+              return;
+            } else {
+              nextHidden.add(key);
+            }
+            updateColConfig({ hidden: nextHidden });
+            // Rebuilt because the guard is cross-row: hiding the second-to-last
+            // column has to disable the checkbox of a DIFFERENT row.
+            rebuildColPanel(panelEl);
+            repaint(target2);
+            refocusRow(key, ".rui-data-grid-col-panel-cb");
+          };
+          row.append(cb);
 
           row.onpointerdown = (ev) => {
             if (ev.button !== 0) return;
@@ -1912,6 +2103,8 @@ export const DataGrid: ComponentSpec = {
               node,
               active: false,
               lastY: ev.clientY,
+              groupStart: groupBounds(fromIndex).start,
+              groupEnd: groupBounds(fromIndex).end,
             };
             try { node.setPointerCapture(ev.pointerId); } catch { /* capture unsupported */ }
           };
@@ -1961,15 +2154,47 @@ export const DataGrid: ComponentSpec = {
           list.append(row);
         }
         panelEl.append(list);
+        const footer = el("div", { class: "rui-data-grid-col-panel-footer" });
+        footer.append(resetBtn);
+        panelEl.append(footer);
         panelEl.append(el("span", {
           id: reorderHintId,
           class: "rui-data-grid-col-panel-hint",
-        }, ["Press the up and down arrow keys to move this column."]));
+        }, ["Press the up and down arrow keys to move this column within its group."]));
+      };
+
+      /**
+       * The element the panel hangs off.
+       *
+       * Searched from the grid's own root and then from the document, because an
+       * external trigger is by definition NOT inside the grid: in a shadow-DOM app
+       * both live in the same shadow root (which `document.querySelector` cannot
+       * see), while a light-DOM host puts it in the document. Falls back to the
+       * built-in button whenever the selector matches nothing, so a typo degrades
+       * to the old placement instead of dropping the panel in the corner.
+       */
+      const resolveMenuAnchor = (fallback: HTMLElement): HTMLElement => {
+        // A hidden trigger measures 0x0, which would drop the panel in the page's
+        // top-left corner. The grid's own viewport is the honest fallback: the
+        // panel still lands on the table it configures.
+        const base = showMenuButton ? fallback : ((viewport as HTMLElement) ?? fallback);
+        if (!columnMenuAnchor) return base;
+        const scope = liveScope(fallback);
+        const root = scope.getRootNode?.() as ParentNode | null;
+        for (const where of [root, scope, typeof document === "undefined" ? null : document]) {
+          if (!where) continue;
+          try {
+            const found = where.querySelector?.(columnMenuAnchor);
+            if (found instanceof HTMLElement) return found;
+          } catch { /* an invalid selector is the author's typo, not a crash */ }
+        }
+        return base;
       };
 
       const openPanel = (origin: Element | null): void => {
         const live = findLive(origin);
         if (!live.panel || !live.btn) return;
+        reportOpen(true);
         colConfigPanelOpen.set(true);
         // `data-open` first: a hidden panel measures 0×0, which would defeat both
         // the flip decision and the height cap in the floating layer.
@@ -1980,7 +2205,7 @@ export const DataGrid: ComponentSpec = {
         // band of a scroll box inside (usually) an `overflow: hidden` card, so in
         // place it was amputated on two counts.
         openFloating(live.panel, {
-          anchor: live.btn,
+          anchor: resolveMenuAnchor(live.btn),
           side: "bottom",
           align: "end",
           offset: 4,
@@ -1993,8 +2218,18 @@ export const DataGrid: ComponentSpec = {
       // tree, so an open panel has to be put back into the top layer once the
       // reconciler has finished with it.
       restoreColMenu = () => {
-        if (!colConfigPanelOpen.get()) return;
         const live = findLive(null);
+        if (!colConfigPanelOpen.get()) {
+          // A bound `columnMenuOpen` that flipped to false has to close a panel the
+          // user never touched. Promotion lives outside the rendered tree, so the
+          // reconciler cannot take it down on its own.
+          if (live.panel && isFloating(live.panel)) {
+            closeFloating(live.panel);
+            live.panel.setAttribute("data-open", "false");
+            live.btn?.setAttribute("aria-expanded", "false");
+          }
+          return;
+        }
         if (!live.panel || !live.btn) return;
         if (isFloating(live.panel)) updateFloating(live.panel);
         else openPanel(live.btn);

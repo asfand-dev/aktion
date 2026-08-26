@@ -167,11 +167,29 @@ function patchElement(oldEl: Element, newEl: Element): void {
   }
   syncAttributes(oldEl, newEl);
   syncEventHandlers(oldEl, newEl);
+  // A <select>'s intended value has to be read BEFORE its children are
+  // reconciled, and cannot be read from `newEl` afterwards.
+  //
+  // `reconcileChildren` MOVES surplus nodes out of the fresh tree into the live
+  // one (`parent.appendChild(newChild)`), so a freshly-rendered <select> whose
+  // option list is LONGER than the live one loses the tail of its own options —
+  // and with them its selectedness, whenever the selected option was in that
+  // tail. A single-line <select> with nothing selected reports its FIRST option,
+  // so `newEl.value` then reads as a value the render never asked for, and
+  // `syncFormState` faithfully applies it to the live control.
+  //
+  // Concretely: a picker showing four locations, the fourth selected, re-rendered
+  // with nine — the render asks for the fourth, the live control ends up showing
+  // the first, and the program's state still holds the fourth. A control showing
+  // one thing over a form that submits another.
+  const desiredSelectValue = oldEl instanceof HTMLSelectElement && newEl instanceof HTMLSelectElement
+    ? newEl.value
+    : null;
   // Reconcile children FIRST so that <select>.value can resolve against
   // its freshly-patched <option>s, and so descendant inputs are stable
   // before we apply any parent-level form-state updates.
   reconcileChildren(oldEl, Array.from(newEl.childNodes));
-  syncFormState(oldEl, newEl);
+  syncFormState(oldEl, newEl, desiredSelectValue);
 }
 
 /**
@@ -260,7 +278,12 @@ function syncEventHandlers(oldEl: Element, newEl: Element): void {
   }
 }
 
-function syncFormState(oldEl: Element, newEl: Element): void {
+/**
+ * @param desiredSelectValue - The `<select>` value the fresh render asked for,
+ * captured before `reconcileChildren` could steal the options that carried it.
+ * `null` for anything that is not a select-to-select patch.
+ */
+function syncFormState(oldEl: Element, newEl: Element, desiredSelectValue: string | null): void {
   if (oldEl instanceof HTMLInputElement && newEl instanceof HTMLInputElement) {
     syncInput(oldEl, newEl);
     return;
@@ -273,8 +296,9 @@ function syncFormState(oldEl: Element, newEl: Element): void {
     // Same rule as inputs: the value-difference check keeps user selection
     // intact (state mirrors the DOM after a `change`), so this only fires for
     // a programmatic value change, which must apply even when focused.
-    if (oldEl.value !== newEl.value) {
-      oldEl.value = newEl.value;
+    const desired = desiredSelectValue ?? newEl.value;
+    if (oldEl.value !== desired) {
+      oldEl.value = desired;
     }
     return;
   }

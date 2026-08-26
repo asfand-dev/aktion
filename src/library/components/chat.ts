@@ -231,7 +231,7 @@ export const ActionLink: ComponentSpec = {
     // button chrome needs resetting.
     const button = el("button", {
       type: "button",
-      class: "rui-action-link",
+      class: "rui-action-link" + (props.icon ? " has-icon" : ""),
       disabled,
       style: "background:none;border:0;padding:0;font:inherit;text-align:inherit",
     });

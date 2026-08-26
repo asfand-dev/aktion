@@ -5,6 +5,68 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-08-26
+
+### A Select No Longer Loses Its Value When Its Option List Grows
+
+- Re-rendering a `<select>` with **more** options than it currently shows used to
+  drop the selected value and fall back to the first option, whenever the value
+  the render asked for sat past the end of the old list.
+- The cause was in the reconciler: it moves the fresh element's surplus
+  `<option>` nodes into the live element, which empties the fresh `<select>` of
+  the very options that carried its selectedness — and then read `value` off that
+  emptied node. A single-line select with nothing selected reports its *first*
+  option, so the live control was faithfully set to a value nothing asked for.
+- The reconciler now captures the fresh select's value **before** touching its
+  children, so the value the render asked for is the value that lands. A render
+  that widens the list *and* moves the selection still applies as asked.
+- Visible symptom this fixes: a picker whose options depend on another control —
+  a location list that widens when a "private" option is chosen, say — showed the
+  first entry while the program's state still held the operator's real choice. A
+  control saying one thing over a form that submits another.
+- The executable defect note for this (`tests/coverage-morph-contract.test.ts`,
+  "should resolve a `<select>` value against options only the fresh tree has") is
+  now a passing contract rather than an `it.fails`.
+
+---
+
+## 2026-08-20
+
+### Redesigned DataGrid Column Settings
+
+- The column-settings panel is now a titled "Table settings" sheet with a
+  sub-heading, a drag handle, pin and checkbox on every row, and its reset action
+  moved out of the header into a footer that says "Reset to default" — it used to
+  sit one mis-click away from the close button while discarding a whole layout.
+- **Pinning a column now moves it.** Pinned columns are hoisted to the front of
+  the table and above a divider in the panel, in the order they were pinned.
+  Previously a pinned column stuck to the edge of the viewport but never changed
+  places, so it could sit visually to the right of an unpinned one.
+- That divider is a real boundary: dragging and arrow-key reordering both stop at
+  it, so columns rearrange freely within the pinned group or within the unpinned
+  group, and the only way to move one between them is the pin itself.
+- The panel's checkbox is now the same control the rest of the library uses, so
+  it picks up each theme's own checkbox styling instead of the browser default.
+- **The last visible column can no longer be hidden.** Its checkbox is disabled
+  and explains why. A grid with every column hidden renders nothing over nothing,
+  and the only way back was the panel the user had just emptied.
+- Hiding or pinning a column no longer drops keyboard focus. The panel rebuilds
+  itself on those actions, which used to throw away the control the user was
+  standing on — after which Escape no longer closed the panel.
+
+### Opening the DataGrid Column Panel From Your Own Button
+
+- New `columnMenuOpen` (a two-way binding) and `onColumnMenuOpenChange` let a
+  page open and close the column-settings panel from anywhere — a button in your
+  own toolbar, a keyboard shortcut, a menu item.
+- `columnMenuAnchor` takes a CSS selector for the element the panel should hang
+  off, and `columnMenuButton: false` drops the in-header icon while keeping the
+  panel and everything it configures. The built-in trigger stays the default, so
+  grids that do not ask for any of this are unchanged.
+- `columnMenuTitle`, `columnMenuDescription` and `columnMenuResetLabel` accept
+  translated strings — the panel's three labels were the one grid surface with no
+  way to localise it. Passing an empty `columnMenuDescription` drops that line.
+
 ## 2026-08-19
 
 ### Reading a File the User Picked

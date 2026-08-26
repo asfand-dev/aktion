@@ -1602,6 +1602,7 @@ a.rui-card {
  * consistent across themes and platforms. */
 .rui-checkbox input[type="checkbox"],
 .rui-checkbox-item input[type="checkbox"],
+.rui-data-grid-col-panel-cb,
 .rui-radio input[type="radio"] {
   appearance: none;
   -webkit-appearance: none;
@@ -1618,7 +1619,8 @@ a.rui-card {
   transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 .rui-checkbox input[type="checkbox"],
-.rui-checkbox-item input[type="checkbox"] {
+.rui-checkbox-item input[type="checkbox"],
+.rui-data-grid-col-panel-cb {
   border-radius: 5px;
 }
 .rui-radio input[type="radio"] {
@@ -1626,11 +1628,13 @@ a.rui-card {
 }
 .rui-checkbox input[type="checkbox"]:hover,
 .rui-checkbox-item input[type="checkbox"]:hover,
+.rui-data-grid-col-panel-cb:hover:not(:disabled),
 .rui-radio input[type="radio"]:hover {
   border-color: var(--rui-color-primary);
 }
 .rui-checkbox input[type="checkbox"]:focus-visible,
 .rui-checkbox-item input[type="checkbox"]:focus-visible,
+.rui-data-grid-col-panel-cb:focus-visible,
 .rui-radio input[type="radio"]:focus-visible {
   outline: none;
   border-color: var(--rui-color-focus-ring);
@@ -1638,12 +1642,14 @@ a.rui-card {
 }
 .rui-checkbox input[type="checkbox"]:checked,
 .rui-checkbox-item input[type="checkbox"]:checked,
+.rui-data-grid-col-panel-cb:checked,
 .rui-radio input[type="radio"]:checked {
   background: var(--rui-color-primary);
   border-color: var(--rui-color-primary);
 }
 .rui-checkbox input[type="checkbox"]:checked::after,
-.rui-checkbox-item input[type="checkbox"]:checked::after {
+.rui-checkbox-item input[type="checkbox"]:checked::after,
+.rui-data-grid-col-panel-cb:checked::after {
   content: "";
   position: absolute;
   left: 5px;
@@ -5667,7 +5673,7 @@ ${below("xs")} {
   text-decoration: none;
   line-height: 20px;
 }
-:host([data-rui-theme="vision"]) .rui-action-link::before {
+:host([data-rui-theme="vision"]) .rui-action-link:not(.has-icon)::before {
   content: "";
   display: inline-block;
   width: 0.36em;
@@ -5754,6 +5760,7 @@ ${below("xs")} {
   border-color: var(--rui-color-focus-ring); outline: 1px solid var(--rui-color-focus-ring); box-shadow: none;
 }
 :host([data-rui-theme="vision"]) .rui-search-bar-submit { border-radius: 999px; } /* embeds a real .rui-button-like pill */
+:host([data-rui-theme="vision"]) .rui-number-input-button { background: transparent; }
 :host([data-rui-theme="vision"]) .rui-number-input-button,
 :host([data-rui-theme="vision"]) .rui-password-input-toggle { color: var(--rui-color-link); }
 :host([data-rui-theme="vision"]) .rui-number-input-button:hover:not(:disabled),
@@ -5788,6 +5795,7 @@ ${below("xs")} {
    read differently. Cancel the scale, use the real 17px, and open the gap. */
 :host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"],
 :host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel-cb,
 :host([data-rui-theme="vision"]) .rui-radio input[type="radio"] {
   /* content-box: 17px of box + 2px border each side = a 21px marker, and the
      label sits 32px from its left edge -> an 11px gap. */
@@ -5829,7 +5837,8 @@ ${below("xs")} {
 :host([data-rui-theme="vision"]) .rui-radio-label { font-weight: 400; line-height: 21px; }
 /* the CSS-drawn tick has to be re-centred for the larger, unscaled box */
 :host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:checked::after,
-:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked::after {
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked::after,
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel-cb:checked::after {
   left: 6px; top: 2px; width: 4px; height: 8px; border-width: 0 2px 2px 0;
 }
 /* UI block's radio has no separate centre-dot element at all -- the whole "filled" look
@@ -5841,7 +5850,8 @@ ${below("xs")} {
   content: none;
 }
 :host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"],
-:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"] { border-radius: 4px; }
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel-cb { border-radius: 4px; }
 /* UI block keeps the box TRANSPARENT when checked and draws the fill as two stacked
    inset rings, so a 2px page-coloured gap separates the border from the blue centre:
      .input-checkbox:checked+label::before {
@@ -5852,7 +5862,8 @@ ${below("xs")} {
    single most visible checkbox difference. The tick is the PAGE background colour
    #f4f7fa, not pure white. */
 :host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:checked,
-:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked {
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked,
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel-cb:checked {
   background: transparent; border-color: #095bb1;
   box-shadow: 0 0 0 2px inset #f4f7fa, 0 0 0 10px inset #095bb1;
 }
@@ -5869,7 +5880,8 @@ ${below("xs")} {
   box-shadow: 0 0 0 2px inset #fff, 0 0 0 10px inset #095bb1;
 }
 :host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:checked::after,
-:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked::after {
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked::after,
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel-cb:checked::after {
   border-color: #f4f7fa;                       /* tick = --default-background-color */
 }
 /* Checked + disabled swaps both rings to inactive neutral -- UI block never just fades it:
@@ -6062,6 +6074,9 @@ ${below("xs")} {
 }
 :host([data-rui-theme="vision"]) .rui-data-grid-table tbody td {
   border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle); color: var(--rui-color-text);
+}
+:host([data-rui-theme="vision"]) .rui-data-grid-table tbody tr:last-child td {
+  border-bottom: none;
 }
 :host([data-rui-theme="vision"]) .rui-data-grid[data-highlight-hover="true"] tbody tr:hover td,
 :host([data-rui-theme="vision"]) .rui-data-grid[data-highlight-hover="true"] tbody tr:hover td[data-pinned="true"] {
@@ -9491,48 +9506,80 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   box-shadow: var(--rui-shadow-lg, 0 4px 16px rgba(0,0,0,0.12));
 }
 .rui-data-grid-col-panel[data-open="true"] { display: flex; flex-direction: column; }
+/* The head is a title + sub-heading block with the close control pinned to the
+   top-right corner, so align-items:flex-start -- centring would drop the x to
+   the middle of a two-line heading. */
 .rui-data-grid-col-panel-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+  gap: 12px;
+  padding: 14px 16px 10px;
 }
+.rui-data-grid-col-panel-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rui-data-grid-col-panel-title {
-  font-weight: 600;
-  font-size: var(--rui-font-size-13);
+  font-weight: 700;
+  font-size: var(--rui-font-size-base);
+  line-height: 1.35;
+}
+.rui-data-grid-col-panel-subtitle {
+  font-weight: 400;
+  font-size: var(--rui-font-size-base);
+  line-height: 1.35;
+  color: var(--rui-color-text);
+}
+/* Reset moved out of the header and under the list: it is the least-used control
+   in the panel and sat next to the close button, where a mis-click threw away a
+   layout instead of dismissing a popup. */
+.rui-data-grid-col-panel-footer {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px 14px;
 }
 .rui-data-grid-col-panel-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: none;
   background: none;
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  color: var(--rui-color-primary);
-  padding: 2px 6px;
+  font-size: var(--rui-font-size-base);
+  color: var(--rui-color-link, var(--rui-color-primary));
+  padding: 4px 6px;
+  margin-left: -6px;
   border-radius: var(--rui-radius-sm, 4px);
 }
 .rui-data-grid-col-panel-reset:hover { background: color-mix(in srgb, var(--rui-color-primary) 8%, transparent); }
+.rui-data-grid-col-panel-reset-icon { font-size: var(--rui-font-size-18); }
 .rui-data-grid-col-panel-close {
   border: none;
   background: none;
   cursor: pointer;
-  font-size: 16px;
+  font-size: var(--rui-font-size-24);
   line-height: 1;
-  color: var(--rui-color-text-muted, #888);
-  padding: 2px 4px;
+  color: var(--rui-color-text);
+  padding: 0 2px;
   border-radius: var(--rui-radius-sm, 4px);
   margin-left: 4px;
+  flex-shrink: 0;
 }
 .rui-data-grid-col-panel-close:hover { color: var(--rui-color-text); background: color-mix(in srgb, var(--rui-color-text) 6%, transparent); }
 .rui-data-grid-col-panel-list {
-  padding: 4px 0;
+  padding: 2px 0;
+}
+/* The boundary between pinned and unpinned columns, and a real one: neither a
+   drag nor an arrow key crosses it — only the pin button does. */
+.rui-data-grid-col-panel-divider {
+  height: var(--rui-border-width);
+  background: var(--rui-color-border);
+  margin: 6px 0;
 }
 .rui-data-grid-col-panel-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 12px;
+  padding: 7px 16px;
   cursor: grab;
   transition: background 0.15s;
   user-select: none;
@@ -9566,7 +9613,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-data-grid-col-panel-handle {
   color: var(--rui-color-text-muted);
-  font-size: 14px;
+  font-size: 20px;
   cursor: grab;
   flex: 0 0 auto;
   line-height: 1;
@@ -9606,7 +9653,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-data-grid-col-panel-label {
   flex: 1;
-  font-size: var(--rui-font-size-13);
+  font-size: var(--rui-font-size-base);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -9625,11 +9672,34 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   align-items: center;
   opacity: 0.7;
 }
-.rui-data-grid-col-panel-pin:hover { color: var(--rui-color-primary); opacity: 0.9; }
+.rui-data-grid-col-panel-pin:hover { color: var(--rui-color-primary); opacity: 1; }
+/* Font Awesome Free ships thumbtack in Solid only — there is no outline cut to
+   pair it with — so the pinned/unpinned distinction is carried by weight of
+   colour rather than by two glyphs: a full-strength primary pin against a muted
+   one. Same silhouette, unmistakably different state. */
 .rui-data-grid-col-panel-pin[data-active="true"] {
   color: var(--rui-color-primary);
   opacity: 1;
 }
+.rui-data-grid-col-panel-pin-icon { font-size: var(--rui-font-size-18); }
+/* The last visible column cannot be hidden, and the control says so rather than
+   swallowing the click. */
+.rui-data-grid-col-panel-cb:disabled {
+  cursor: not-allowed;
+  border-color: var(--rui-color-border);
+  opacity: 0.85;
+}
+.rui-data-grid-col-panel-cb:disabled:checked {
+  border-color: var(--rui-color-border);
+  box-shadow: none;
+  background: var(--rui-color-surface-muted);
+}
+.rui-data-grid-col-panel-cb:disabled:checked::after { border-color: var(--rui-color-text-muted); }
+/* columnMenuButton:false hides the TRIGGER, never the wrapper: on the popover
+   path the panel is still a child of that wrapper, so display:none on it took the
+   panel down too -- the menu opened into nothing. The wrapper is absolutely
+   positioned and now empty, so it costs no space either way. */
+.rui-data-grid-col-menu[data-hidden="true"] .rui-data-grid-col-menu-btn { display: none; }
 
 /* DataGrid — column resize handle.
    The visible bar is 3px via ::after, but the click target is 12px wide so the
