@@ -7,6 +7,66 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-08-26
 
+### shadcn/ui, Material UI and HeroUI, Light and Dark
+
+The three designed-in-house themes have been replaced by faithful re-creations
+of the design systems they were reaching for, each in a light and a dark
+variant. A program written against tones and variants — the way the library has
+always asked you to write it — now renders as a real shadcn/ui, Material UI or
+HeroUI app with one attribute.
+
+- **Added `shadcn`, `shadcn-light` and `shadcn-dark`** — shadcn/ui's default
+  `neutral` theme, token for token from its own `globals.css`. White page, ink
+  `#171717` primary with a near-white label, one flat `#f5f5f5` wash doing
+  secondary / muted / accent duty, `rounded-md` (8px) controls inside
+  `rounded-xl` (14px) cards, `shadow-xs` everywhere, the 3px 50%-alpha focus
+  ring, a segmented tab strip, a square-cornered badge and a tooltip painted in
+  the primary colour — set in Geist at 14px. Dark mode inverts the primary to
+  `#e5e5e5` ink on `#0a0a0a`.
+- **Added `mui`, `mui-light` and `mui-dark`** — Material UI's default theme.
+  `#1976d2` primary, `#9c27b0` secondary, 4px radii everywhere, UPPERCASE
+  500-weight buttons on `0.02857em` tracking with a 64px minimum width,
+  borderless Paper separated by MUI's real three-layer elevation shadows, 56px
+  outlined text fields whose outline thickens on focus, 12px helper text
+  indented to clear the corner, uppercase tab labels over a 2px indicator,
+  full-bleed menu rows, the charcoal 11px tooltip, and the 34×14 switch whose
+  20px thumb overhangs the track — in Roboto. Dark mode is `#90caf9` on
+  `#121212` with Paper at its elevation overlay.
+- **Added `heroui`, `heroui-light` and `heroui-dark`** — HeroUI. `#006fee`
+  primary, 12px controls inside 14px borderless cards on `shadow-medium`, filled
+  `#f4f4f5` fields, hover that *dims* to `opacity: .8` instead of recolouring,
+  press that scales to `.97`, a hard 2px focus outline offset 2px clear of the
+  control, a rounded table header band with no row separators, and a light
+  tooltip — in Inter at 16px. Dark mode is pure black behind `#18181b` surfaces
+  with HeroUI's inset rim-light shadows.
+- Each family's **bare name means its light variant**, so `theme="shadcn"` and
+  `theme="shadcn-light"` are the same theme, and both pick up the family's CSS.
+- Selecting any of them **by name loads its typeface** — Geist, Roboto or Inter —
+  the way `corporate` used to load Inter + Space Grotesk. That request needs
+  `fonts.googleapis.com` / `fonts.gstatic.com` in your CSP.
+- **Breaking:** `modern`, `glass` and `corporate` are retired. They still
+  resolve — the resolver rewrites them to `shadcn-light`, `mui-light` and
+  `heroui-light`, so an existing page renders the new design rather than
+  silently falling back to `light` — but they are gone from the theme picker,
+  editor autocomplete, generated docs and `builtInThemes`, and they will be
+  removed in a future release. Note the host now reports the *replacement's*
+  name in `data-rui-theme`.
+- **Breaking:** the exported `modernTheme`, `glassTheme` and `corporateTheme`
+  token objects are gone. Use `shadcnLightTheme` / `shadcnDarkTheme`,
+  `muiLightTheme` / `muiDarkTheme`, `herouiLightTheme` / `herouiDarkTheme`.
+  Two new exports go with them: `deprecatedThemeAliases` (retired name →
+  replacement) and `canonicalThemeName()`.
+- Every new theme keeps the library's accessibility floor, which in three places
+  means departing from the framework it copies: control boundaries are darkened
+  from the source's hairline to clear the 3:1 WCAG 1.4.11 bar, `heroui-dark`
+  paints link text in `#66aaf9` because HeroUI blue is only 3.8:1 on its own
+  dark card (the button *fill* is untouched), and a status glyph sitting on a
+  mid-tone fill takes a hue-matched dark ink instead of white.
+- The theme-contrast suite was tightened while this landed: the brand hue is now
+  checked in both directions — as text (via `colorLink`, the token that exists
+  for exactly this) and as a fill under its own label — instead of only the
+  first.
+
 ### DevTools Grew From Three Tabs to Fourteen
 
 The in-page debugger (`aktion-runtime/devtools`) used to answer three questions:

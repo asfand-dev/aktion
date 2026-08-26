@@ -325,17 +325,39 @@ async function writeThemes(surface) {
   const names = Object.keys(builtInThemes);
   const tokenNames = Object.keys(builtInThemes[names[0]]);
 
+  /*
+   * A family shorthand and its `-light` sibling are the SAME object
+   * (`builtInThemes.shadcn === builtInThemes["shadcn-light"]`), so a column per
+   * name would repeat 86 identical cells three times over and make the table
+   * unreadable. Group by identity instead and label the column with every name
+   * that resolves to it.
+   */
+  const columns = [];
+  for (const name of names) {
+    const existing = columns.find((c) => builtInThemes[c.names[0]] === builtInThemes[name]);
+    if (existing) existing.names.push(name);
+    else columns.push({ names: [name] });
+  }
+  const label = (col) => col.names.map((n) => `\`${n}\``).join("<br>");
+
   const lines = [
     GENERATED_BANNER("`builtInThemes` + `builtInThemeFonts`"),
     "# Themes & design tokens",
     "",
-    `${names.length} built-in themes, ${tokenNames.length} tokens each. Select one with the`,
-    "`theme` attribute on `<aktion-app>`, or override individual tokens from inside a program",
-    "with `$theme({ … })`.",
+    `${columns.length} built-in themes under ${names.length} names, ${tokenNames.length} tokens each.`,
+    "Select one with the `theme` attribute on `<aktion-app>`, or override individual tokens",
+    "from inside a program with `$theme({ … })`.",
     "",
     "```html",
-    `<aktion-app theme="corporate"></aktion-app>`,
+    `<aktion-app theme="shadcn"></aktion-app>`,
     "```",
+    "",
+    "Three of them re-create a design system you already know, each in a light and a dark",
+    "variant, with the bare name meaning the light one:",
+    "",
+    "- `shadcn` / `shadcn-light` / `shadcn-dark` — shadcn/ui's default neutral theme.",
+    "- `mui` / `mui-light` / `mui-dark` — Material UI's default theme.",
+    "- `heroui` / `heroui-light` / `heroui-dark` — HeroUI.",
     "",
     "**Never hard-code a colour.** Components already read these tokens, so a program that",
     "picks its own hex values looks wrong the moment the theme changes. If you need a variant,",
@@ -343,20 +365,23 @@ async function writeThemes(surface) {
     "",
     "| theme | web fonts loaded |",
     "| --- | --- |",
-    ...names.map(
-      (n) =>
-        `| \`${n}\` | ${builtInThemeFonts[n]?.import?.length ? builtInThemeFonts[n].import.map((f) => `\`${f}\``).join(", ") : "— (system stack)"} |`,
-    ),
+    ...columns.map((col) => {
+      const decl = builtInThemeFonts[col.names[0]];
+      const fonts = decl?.import?.length
+        ? decl.import.map((f) => `\`${f}\``).join(", ")
+        : "— (system stack)";
+      return `| ${label(col)} | ${fonts} |`;
+    }),
     "",
     "A theme selected **by name** pulls in its own web fonts automatically.",
     "",
     "## Token values per theme",
     "",
-    `| token | ${names.join(" | ")} |`,
-    `| --- | ${names.map(() => "---").join(" | ")} |`,
+    `| token | ${columns.map(label).join(" | ")} |`,
+    `| --- | ${columns.map(() => "---").join(" | ")} |`,
     ...tokenNames.map(
       (token) =>
-        `| \`${token}\` | ${names.map((n) => `\`${cell(builtInThemes[n][token])}\``).join(" | ")} |`,
+        `| \`${token}\` | ${columns.map((c) => `\`${cell(builtInThemes[c.names[0]][token])}\``).join(" | ")} |`,
     ),
     "",
   ];

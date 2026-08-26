@@ -8,11 +8,18 @@ import { describe, expect, it } from "vitest";
 import {
   builtInThemes,
   privateThemes,
+  deprecatedThemeAliases,
   findThemeByName,
   resolveTheme,
   applyTheme,
   lightTheme,
   visionTheme,
+  shadcnLightTheme,
+  shadcnDarkTheme,
+  muiLightTheme,
+  muiDarkTheme,
+  herouiLightTheme,
+  herouiDarkTheme,
 } from "../src/theme/index.js";
 import { componentStyles } from "../src/theme/styles.js";
 
@@ -57,14 +64,63 @@ describe("resolveTheme", () => {
     expect(resolved.name).toBe("light");
   });
 
-  it("ships soft and modern as built-ins", () => {
+  it("ships soft and the three framework families as built-ins", () => {
     expect(builtInThemes.soft).toBeDefined();
-    expect(builtInThemes.modern).toBeDefined();
     // Each one must be visually distinct from light/dark to be useful.
     expect(builtInThemes.soft.colorPrimary).not.toBe(lightTheme.colorPrimary);
-    expect(builtInThemes.modern.colorPrimary).not.toBe(lightTheme.colorPrimary);
     expect(builtInThemes.soft.fontFamily).not.toBe(lightTheme.fontFamily);
-    expect(builtInThemes.modern.fontFamily).not.toBe(lightTheme.fontFamily);
+    for (const name of ["shadcn", "mui", "heroui"] as const) {
+      expect(builtInThemes[name], name).toBeDefined();
+      expect(builtInThemes[name].fontFamily, name).not.toBe(lightTheme.fontFamily);
+    }
+  });
+
+  it("makes each family's bare name an alias of its light variant", () => {
+    // The user-facing promise: theme="shadcn" is theme="shadcn-light".
+    expect(builtInThemes.shadcn).toBe(shadcnLightTheme);
+    expect(builtInThemes["shadcn-light"]).toBe(shadcnLightTheme);
+    expect(builtInThemes.mui).toBe(muiLightTheme);
+    expect(builtInThemes["mui-light"]).toBe(muiLightTheme);
+    expect(builtInThemes.heroui).toBe(herouiLightTheme);
+    expect(builtInThemes["heroui-light"]).toBe(herouiLightTheme);
+    // …and the shorthand keeps its own spelling on the host, so the CSS block
+    // (which prefix-matches the family) has to cover all three names.
+    expect(resolveTheme("shadcn").name).toBe("shadcn");
+    expect(resolveTheme("mui").name).toBe("mui");
+    expect(resolveTheme("heroui").name).toBe("heroui");
+  });
+
+  it("pairs every family with a genuinely darker dark variant", () => {
+    const pairs = [
+      ["shadcn", shadcnLightTheme, shadcnDarkTheme],
+      ["mui", muiLightTheme, muiDarkTheme],
+      ["heroui", herouiLightTheme, herouiDarkTheme],
+    ] as const;
+    for (const [family, light, dark] of pairs) {
+      expect(builtInThemes[family + "-dark"], family).toBe(dark);
+      // A dark variant that forgot to invert is the failure worth catching.
+      expect(dark.colorBg, family).not.toBe(light.colorBg);
+      expect(dark.colorText, family).not.toBe(light.colorText);
+      expect(dark.colorSurface, family).not.toBe(light.colorSurface);
+      // …while staying the same DESIGN: type and shape are shared.
+      expect(dark.fontFamily, family).toBe(light.fontFamily);
+      expect(dark.radiusButton, family).toBe(light.radiusButton);
+      expect(dark.buttonTextTransform, family).toBe(light.buttonTextTransform);
+    }
+  });
+
+  it("keeps the three families visually distinct from each other", () => {
+    // The whole point of the rename is that each one reads as its framework.
+    // Sharing a primary, a button radius or a type stack would undo that.
+    const primaries = [shadcnLightTheme, muiLightTheme, herouiLightTheme]
+      .map((t) => t.colorPrimary);
+    expect(new Set(primaries).size).toBe(3);
+    const radii = [shadcnLightTheme, muiLightTheme, herouiLightTheme]
+      .map((t) => t.radiusButton);
+    expect(new Set(radii).size).toBe(3);
+    const fonts = [shadcnLightTheme, muiLightTheme, herouiLightTheme]
+      .map((t) => t.fontFamily);
+    expect(new Set(fonts).size).toBe(3);
   });
 
   it("drops the retired neon and brutalist themes", () => {
@@ -75,14 +131,26 @@ describe("resolveTheme", () => {
     expect(resolveTheme("brutalist").name).toBe("light");
   });
 
-  it("ships glass as a light glassmorphism built-in", () => {
-    expect(builtInThemes.glass).toBeDefined();
-    // Glass uses translucent white surfaces over a light backdrop.
-    expect(builtInThemes.glass.colorSurface.startsWith("rgba")).toBe(true);
-    expect(builtInThemes.glass.colorBg).not.toBe(lightTheme.colorBg);
-    // Text stays dark for contrast on the frosted surfaces.
-    expect(builtInThemes.glass.colorText).not.toBe(lightTheme.colorBg);
-    expect(builtInThemes.glass.fontFamily).not.toBe(lightTheme.fontFamily);
+  it("keeps the retired modern / glass / corporate names resolving", () => {
+    // They are gone from every ENUMERATING surface…
+    expect(builtInThemes.modern).toBeUndefined();
+    expect(builtInThemes.glass).toBeUndefined();
+    expect(builtInThemes.corporate).toBeUndefined();
+    expect(privateThemes.modern).toBeUndefined();
+    // …but a page that still names one gets the theme that replaced it, not a
+    // silent fall back to light, which is what an unknown name does.
+    expect(deprecatedThemeAliases).toEqual({
+      modern: "shadcn-light",
+      glass: "mui-light",
+      corporate: "heroui-light",
+    });
+    expect(findThemeByName("modern")).toBe(shadcnLightTheme);
+    expect(findThemeByName("glass")).toBe(muiLightTheme);
+    expect(findThemeByName("corporate")).toBe(herouiLightTheme);
+    // The resolver reports the CANONICAL name, so the host's data-rui-theme
+    // matches the marker the replacement's CSS block is keyed on.
+    expect(resolveTheme("modern").name).toBe("shadcn-light");
+    expect(resolveTheme("  CORPORATE ").name).toBe("heroui-light");
   });
 
   it("keeps the UI block re-creation alive as the PRIVATE vision theme", () => {
@@ -120,41 +188,94 @@ describe("resolveTheme", () => {
     // everywhere at once.
     expect(builtInThemes.vision).toBeUndefined();
     expect(Object.keys(builtInThemes)).toEqual([
-      "light", "dark", "corporate", "soft", "glass", "modern",
+      "light", "dark",
+      "shadcn", "shadcn-light", "shadcn-dark",
+      "mui", "mui-light", "mui-dark",
+      "heroui", "heroui-light", "heroui-dark",
+      "soft",
     ]);
     expect(privateThemes.vision).toBe(visionTheme);
     // …while a lookup still finds it.
     expect(findThemeByName("vision")).toBe(visionTheme);
-    expect(findThemeByName("corporate")).toBe(builtInThemes.corporate);
+    expect(findThemeByName("shadcn")).toBe(builtInThemes.shadcn);
     expect(findThemeByName("nope")).toBeNull();
   });
 
-  it("ships corporate as a teal-on-graphite enterprise workspace", () => {
-    const corporate = builtInThemes.corporate;
-    expect(corporate).toBeDefined();
-    // Its signature: one deep-teal brand hue on square-shouldered 8px controls.
-    expect(corporate.colorPrimary).toBe("#0f766e");
-    expect(corporate.radiusButton).toBe("8px");
-    expect(corporate.radiusInput).toBe("8px");
-    // Primary DARKENS on hover — the opposite of vision's brighten.
-    expect(corporate.colorPrimaryHover).toBe("#0b5f58");
-    // Distinct from light/dark, and from the theme that used to own the name.
-    expect(corporate.colorBg).not.toBe(lightTheme.colorBg);
-    expect(corporate.colorPrimary).not.toBe(visionTheme.colorPrimary);
-    expect(corporate.fontFamily).not.toBe(visionTheme.fontFamily);
-    expect(corporate.radiusButton).not.toBe(visionTheme.radiusButton);
-    // Still public, still resolvable under the name it always had.
-    expect(resolveTheme("corporate").name).toBe("corporate");
+  /*
+   * The three blocks below pin the values that make each theme a RE-CREATION
+   * rather than "something in the same mood". Each one is a load-bearing token
+   * copied out of the framework's own source; if one drifts, the theme stops
+   * being the thing it claims to be and nothing else in the suite would notice.
+   */
+  it("re-creates shadcn/ui's default neutral theme", () => {
+    // globals.css: --primary oklch(0.205 0 0), --primary-foreground
+    // oklch(0.985 0 0), --muted oklch(0.97 0 0), --border #e5e5e5…
+    expect(shadcnLightTheme.colorPrimary).toBe("#171717");
+    expect(shadcnLightTheme.colorPrimaryText).toBe("#fafafa");
+    expect(shadcnLightTheme.colorSurfaceMuted).toBe("#f5f5f5");
+    expect(shadcnLightTheme.colorBorder).toBe("#e5e5e5");
+    // --radius 0.625rem, with rounded-md (8px) controls and rounded-xl cards.
+    expect(shadcnLightTheme.radiusButton).toBe("8px");
+    expect(shadcnLightTheme.radiusLg).toBe("14px");
+    // text-sm components and font-medium buttons.
+    expect(shadcnLightTheme.fontSizeBase).toBe("14px");
+    expect(shadcnLightTheme.buttonFontWeight).toBe("500");
+    expect(shadcnLightTheme.buttonTextTransform).toBe("none");
+    expect(shadcnLightTheme.fontFamily).toContain("Geist");
+    // The .dark block inverts the primary to near-white ink.
+    expect(shadcnDarkTheme.colorBg).toBe("#0a0a0a");
+    expect(shadcnDarkTheme.colorSurface).toBe("#171717");
+    expect(shadcnDarkTheme.colorPrimary).toBe("#e5e5e5");
+    expect(shadcnDarkTheme.colorPrimaryText).toBe("#171717");
   });
 
-  it("ships modern with an ink primary and pill buttons", () => {
-    const modern = builtInThemes.modern;
-    expect(modern).toBeDefined();
-    // Ink (near-black) primary rendered as pill buttons is the signature look.
-    expect(modern.colorPrimary).toBe("#111827");
-    expect(modern.radiusButton).toBe("999px");
-    expect(modern.colorBg).not.toBe(lightTheme.colorBg);
-    expect(resolveTheme("modern").name).toBe("modern");
+  it("re-creates Material UI's default theme", () => {
+    expect(muiLightTheme.colorPrimary).toBe("#1976d2");
+    expect(muiLightTheme.colorPrimaryHover).toBe("#1565c0");
+    expect(muiLightTheme.colorAccent).toBe("#9c27b0");
+    expect(muiLightTheme.colorDanger).toBe("#d32f2f");
+    expect(muiLightTheme.colorText).toBe("rgba(0, 0, 0, 0.87)");
+    expect(muiLightTheme.colorBorder).toBe("rgba(0, 0, 0, 0.12)");
+    // shape.borderRadius: 4 really is the whole scale.
+    expect(muiLightTheme.radiusButton).toBe("4px");
+    expect(muiLightTheme.radiusMd).toBe("4px");
+    // The single loudest Material tell.
+    expect(muiLightTheme.buttonTextTransform).toBe("uppercase");
+    expect(muiLightTheme.buttonLetterSpacing).toBe("0.02857em");
+    expect(muiLightTheme.fontFamily).toContain("Roboto");
+    // Elevation 1, verbatim — three stacked layers, not one soft drop.
+    expect(muiLightTheme.shadowSm).toContain("0px 2px 1px -1px rgba(0, 0, 0, 0.2)");
+    expect(muiLightTheme.shadowSm.split(",").length).toBeGreaterThan(6);
+    // Dark mode: the lighter primary, and Paper at its elevation-1 overlay.
+    expect(muiDarkTheme.colorPrimary).toBe("#90caf9");
+    expect(muiDarkTheme.colorBg).toBe("#121212");
+    expect(muiDarkTheme.colorSurface).toBe("#1e1e1e");
+  });
+
+  it("re-creates HeroUI's default theme", () => {
+    expect(herouiLightTheme.colorPrimary).toBe("#006fee");
+    expect(herouiLightTheme.colorAccent).toBe("#7828c8");
+    expect(herouiLightTheme.colorSuccess).toBe("#17c964");
+    expect(herouiLightTheme.colorWarning).toBe("#f5a524");
+    expect(herouiLightTheme.colorDanger).toBe("#f31260");
+    expect(herouiLightTheme.colorText).toBe("#11181c");
+    // --heroui-radius-small / -medium / -large.
+    expect(herouiLightTheme.radiusSm).toBe("8px");
+    expect(herouiLightTheme.radiusButton).toBe("12px");
+    expect(herouiLightTheme.radiusLg).toBe("14px");
+    expect(herouiLightTheme.fontFamily).toContain("Inter");
+    // shadow-medium, verbatim — including the 1px hairline layer that does the
+    // work a border does in the other two themes.
+    expect(herouiLightTheme.shadowMd).toContain("0px 0px 1px 0px rgba(0, 0, 0, 0.3)");
+    // Dark mode is pure black behind #18181b content1 surfaces, with the
+    // inset white rim-light HeroUI uses instead of a darker drop shadow.
+    expect(herouiDarkTheme.colorBg).toBe("#000000");
+    expect(herouiDarkTheme.colorSurface).toBe("#18181b");
+    expect(herouiDarkTheme.shadowMd).toContain("inset");
+    // Its primary stays HeroUI blue as a FILL; the text-side value steps up so
+    // links clear 4.5:1 on content1 (see theme-focus-contrast.test.ts).
+    expect(herouiDarkTheme.colorPrimary).toBe("#006fee");
+    expect(herouiDarkTheme.colorLink).toBe("#66aaf9");
   });
 });
 

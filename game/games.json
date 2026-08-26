@@ -2476,7 +2476,7 @@
             "Every section is one call. If a line is getting long, it is probably the options object, not the structure.",
             "Emphasis is `tone: \"warning\"` or `variant: \"primary\"`. If a hex value appears, the theme has lost."
           ],
-          "explain": "Five sections, one root, and nothing in it that would break if the host switched to the `corporate` or `glass` theme tomorrow. Notice what you did not have to write: no breadcrumb markup, no icon choices, no grid maths for the KPI strip, no media queries, and no colours. That is the whole trade — the composites own the visual decisions so your program only has to say what the page is about.",
+          "explain": "Five sections, one root, and nothing in it that would break if the host switched to the `mui` or `heroui-dark` theme tomorrow. Notice what you did not have to write: no breadcrumb markup, no icon choices, no grid maths for the KPI strip, no media queries, and no colours. That is the whole trade — the composites own the visual decisions so your program only has to say what the page is about.",
           "codex": {
             "term": "Tone-first authoring",
             "def": "Emphasis is expressed with the semantic palette (`default`, `primary`, `success`, `warning`, `danger`, `info`) through `tone` or `variant`, never as a colour, spacing or font value — so one program renders correctly on all six built-in themes."
@@ -6567,8 +6567,8 @@
       },
       "intro": {
         "headline": "The theme decides. Your program only names meaning.",
-        "body": "Six themes ship in the box — `light`, `dark`, `corporate`, `soft`, `glass`, `modern` — and the host picks one. Your program does not get a vote, and that is the feature.\n\nSo you never write a colour. You write `tone: \"success\"` and `variant: \"primary\"` and `gap: \"lg\"`, and the active theme resolves each of those into a real value. The same file that looks like a bank on `corporate` looks like a frosted pastel app on `glass`, with nothing edited.\n\nWhen you *do* want to brand something, there is exactly one place for it: a `$theme({ ... })` statement. That is the only line in an Aktion program where a hex literal belongs.",
-        "code": "$theme({ name: \"corporate\" })\n\n$app(Card([\n  Badge(\"Active\", { tone: \"success\" }),\n  Button(\"Renew\", { variant: \"primary\", icon: \"circle-check\" })\n]))",
+        "body": "Nine themes ship in the box — `light`, `dark`, `soft`, and a light and a dark variant each of `shadcn`, `mui` and `heroui` — and the host picks one. Your program does not get a vote, and that is the feature.\n\nSo you never write a colour. You write `tone: \"success\"` and `variant: \"primary\"` and `gap: \"lg\"`, and the active theme resolves each of those into a real value. The same file that looks like a shadcn/ui dashboard on `shadcn` looks like a Material console on `mui` and a rounded consumer app on `heroui-dark`, with nothing edited.\n\nWhen you *do* want to brand something, there is exactly one place for it: a `$theme({ ... })` statement. That is the only line in an Aktion program where a hex literal belongs.",
+        "code": "$theme({ name: \"heroui\" })\n\n$app(Card([\n  Badge(\"Active\", { tone: \"success\" }),\n  Button(\"Renew\", { variant: \"primary\", icon: \"circle-check\" })\n]))",
         "codeCaption": "no colour in the tree — correct on all six themes",
         "infographic": {
           "type": "orbit",
@@ -6618,9 +6618,9 @@
           "goal": "Rebrand a whole program with one $theme({ ... }) statement.",
           "xp": 100,
           "teach": {
-            "text": "`$theme({ ... })` is a **builtin statement**, like `$app`. It is not a component, there is no provider to wrap your tree in, and it never appears inside one.\n\n`name` selects one of the six built-in palettes as the base — `light`, `dark`, `corporate`, `soft`, `glass`, `modern`. Everything else you pass layers on top of it. Selecting a theme by name also loads whatever web fonts that theme needs to look like itself.\n\nOnly the **structured** shape is accepted. Every top-level key must be a token group — `colors`, `radius`, `font`, `spacing`, `shadows`, `gradients`, `zIndex`, `motion`, `fonts`, `icons` — or the metadata keys `name` and `direction`.",
+            "text": "`$theme({ ... })` is a **builtin statement**, like `$app`. It is not a component, there is no provider to wrap your tree in, and it never appears inside one.\n\n`name` selects one of the built-in palettes as the base — `light`, `dark`, `soft`, `shadcn`/`shadcn-dark`, `mui`/`mui-dark`, `heroui`/`heroui-dark` (a bare framework name means its light variant). Everything else you pass layers on top of it. Selecting a theme by name also loads whatever web fonts that theme needs to look like itself.\n\nOnly the **structured** shape is accepted. Every top-level key must be a token group — `colors`, `radius`, `font`, `spacing`, `shadows`, `gradients`, `zIndex`, `motion`, `fonts`, `icons` — or the metadata keys `name` and `direction`.",
             "code": {
-              "src": "$theme({\n  name: \"corporate\",\n  colors: { primary: \"#635bff\", primaryHover: \"#4f46e5\" },\n  radius: { button: \"999px\" },\n  font: { weightHeading: \"600\" }\n})",
+              "src": "$theme({\n  name: \"heroui\",\n  colors: { primary: \"#635bff\", primaryHover: \"#4f46e5\" },\n  radius: { button: \"999px\" },\n  font: { weightHeading: \"600\" }\n})",
               "caption": "the one place a literal value belongs"
             },
             "infographic": {
@@ -6640,7 +6640,7 @@
                   "note": "your in-program override, if any"
                 },
                 {
-                  "label": "name: \"corporate\"",
+                  "label": "name: \"heroui\"",
                   "note": "the base palette underneath"
                 }
               ]
@@ -6708,7 +6708,7 @@
           ],
           "explain": "`$theme` is a statement, not a node, because theming is not something a subtree opts into — it is a property of the whole document. That is also why the structured form is enforced: the group names are the contract the runtime maps onto `--rui-*` variables. The flat form was removed precisely because `colorPrimary` and `primaryColor` and `colourPrimary` all looked equally plausible to a generator, and the wrong one failed in silence. Now the *shape* fails loudly, and only a typo inside a group can fail quietly.",
           "afterCode": {
-            "src": "$theme({ name: \"corporate\" })",
+            "src": "$theme({ name: \"heroui\" })",
             "caption": "the smallest useful rebrand there is"
           },
           "codex": {
@@ -6716,8 +6716,8 @@
             "def": "A builtin statement — never a component — that merges structured token groups (colors, radius, font, spacing, …) on top of the active base theme. Write it at the top level, before $app."
           },
           "preview": {
-            "program": "$theme({ name: \"corporate\" })\n\n$app(Column([\n  PageHeader(\"Invoices\", { subtitle: \"One program. The theme decides how it looks.\" }),\n  Card([\n    Row([\n      Badge(\"Paid\", { tone: \"success\" }),\n      Badge(\"Overdue\", { tone: \"danger\" })\n    ], { gap: \"sm\" }),\n    Text(\"Nothing in this program names a colour.\", { variant: \"body\", tone: \"muted\" })\n  ])\n]))",
-            "caption": "the corporate palette, chosen by one line"
+            "program": "$theme({ name: \"heroui\" })\n\n$app(Column([\n  PageHeader(\"Invoices\", { subtitle: \"One program. The theme decides how it looks.\" }),\n  Card([\n    Row([\n      Badge(\"Paid\", { tone: \"success\" }),\n      Badge(\"Overdue\", { tone: \"danger\" })\n    ], { gap: \"sm\" }),\n    Text(\"Nothing in this program names a colour.\", { variant: \"body\", tone: \"muted\" })\n  ])\n]))",
+            "caption": "the HeroUI palette, chosen by one line"
           }
         },
         {
@@ -6728,7 +6728,7 @@
           "goal": "Pass meaning — tone, variant, gap — and let the theme resolve it.",
           "xp": 110,
           "teach": {
-            "text": "Every visual choice in the library is an **enum of meanings**, not a value. You say what a thing *is* and the theme says what it looks like.\n\nThe ones you will reach for daily:\n\n- `Badge` tone: neutral · primary · success · warning · danger · info\n- `Pill` tone: neutral · activating · success · warning · critical · promoting · corporate\n- `Text` variant: small · small-heavy · body · body-heavy · large · large-heavy · heading · title\n- `Button` variant: primary · secondary · outline · ghost · link · danger\n- `gap` and `padding`: none · 3xs · 2xs · xs · sm · md · lg · xl · 2xl · 3xl\n\nA wrong enum value is a schema error you will see immediately. A hard-coded value is worse: `sx: { bg: \"#10b981\" }` validates perfectly and then looks wrong on five of the six themes.",
+            "text": "Every visual choice in the library is an **enum of meanings**, not a value. You say what a thing *is* and the theme says what it looks like.\n\nThe ones you will reach for daily:\n\n- `Badge` tone: neutral · primary · success · warning · danger · info\n- `Pill` tone: neutral · activating · success · warning · critical · promoting · corporate\n- `Text` variant: small · small-heavy · body · body-heavy · large · large-heavy · heading · title\n- `Button` variant: primary · secondary · outline · ghost · link · danger\n- `gap` and `padding`: none · 3xs · 2xs · xs · sm · md · lg · xl · 2xl · 3xl\n\nA wrong enum value is a schema error you will see immediately. A hard-coded value is worse: `sx: { bg: \"#10b981\" }` validates perfectly and then looks wrong on eight of the nine themes — and unreadable on the dark ones.",
             "code": {
               "src": "Badge(\"Active\", { tone: \"success\" })\nPill(\"SSL activating\", { tone: \"activating\" })\nButton(\"Renew\", { variant: \"primary\" })\nRow([left, right], { gap: \"sm\" })",
               "caption": "four decisions, zero values"
@@ -6741,7 +6741,7 @@
                   "kind": "bad",
                   "title": "Validates, still wrong",
                   "code": "Badge(\"Active\", {\n  sx: { bg: \"#10b981\" }\n})",
-                  "note": "Tuned on light. Muddy on corporate, invisible on glass — and no error anywhere."
+                  "note": "Tuned on light. Muddy on mui, invisible on shadcn-dark — and no error anywhere."
                 },
                 {
                   "kind": "good",
@@ -6929,7 +6929,7 @@
               "The two chips in a pair are equivalent right now. That is the trap — they stop being equivalent the moment the theme moves.",
               {
                 "kind": "warn",
-                "text": "`#10b981` really is the success colour on `light` and `dark`. On `corporate` success is `#16a34a`, and on `soft` it is `#5eead4`. Nothing warns you."
+                "text": "`#10b981` really is the success colour on `light` and `dark`. On `mui` success is `#2e7d32`, on `heroui` it is `#17c964`, and on `soft` `#5eead4`. Nothing warns you."
               }
             ]
           },
@@ -6967,7 +6967,7 @@
             "code": "const P = ctx.params;\nconst themes = [[0x0b1220, 0xf8fafc, 0x818cf8], [0xf5f7f8, 0x0d1f22, 0x0f766e], [0xfdf6ff, 0x3b1f56, 0x7c4ddb], [0xeceef2, 0x33303a, 0xaf4027]];\nlet ti = 0, score = 0, flips = 0, t = 40, pair = 0;\nconst card = new PIXI.Graphics();\ncard.x = 16; card.y = 14;\nctx.stage.addChild(card);\nconst cap = ctx.text('live preview', { size: 10, color: ctx.colors.dim });\ncap.x = 16; cap.y = 84;\nctx.stage.addChild(cap);\nfunction paint(broken) {\n  const th = themes[ti];\n  card.clear();\n  card.roundRect(0, 0, 132, 64, 10).fill({ color: th[0] }).stroke({ width: 2, color: broken ? ctx.colors.bad : th[2], alpha: 0.9 });\n  card.roundRect(12, 12, 76, 7, 3).fill({ color: th[1], alpha: 0.75 });\n  card.roundRect(12, 25, 50, 6, 3).fill({ color: th[1], alpha: 0.3 });\n  card.roundRect(12, 40, 58, 14, 7).fill({ color: broken ? 0xf43f5e : th[2] });\n}\npaint(false);\nconst pad = ctx.chip('semantic only', { color: ctx.colors.g1, minWidth: 156, size: 12 });\npad.y = ctx.height - 26;\npad.x = ctx.width / 2;\nctx.stage.addChild(pad);\nconst onMove = (e) => { pad.x = Math.max(84, Math.min(ctx.width - 84, e.global.x)); };\nctx.app.stage.on('pointermove', onMove);\nctx.onDestroy(() => ctx.app.stage.off('pointermove', onMove));\nctx.api.setGoal('0 / ' + P.target);\nconst live = [];\nctx.onTick((dt) => {\n  t += dt;\n  if (t > 58) {\n    t = 0;\n    const i = pair % P.tokens.length;\n    pair++;\n    const left = Math.random() < 0.5;\n    const lanes = [ctx.width * 0.3, ctx.width * 0.7];\n    const add = (label, good, x) => {\n      const c = ctx.chip(label, { color: 0x1b2030, textColor: 0xe4ebff, stroke: ctx.colors.g3, size: 12 });\n      c.x = x; c.y = -18; c.good = good;\n      ctx.stage.addChild(c); live.push(c);\n    };\n    add(P.tokens[i], true, lanes[left ? 0 : 1]);\n    add(P.hexes[i], false, lanes[left ? 1 : 0]);\n  }\n  for (let k = live.length - 1; k >= 0; k--) {\n    const c = live[k];\n    c.y += 2.2 * dt;\n    const hit = c.y > pad.y - 20 && c.y < pad.y + 20 && Math.abs(c.x - pad.x) < 88;\n    if (!hit) {\n      if (c.y > ctx.height + 24) { live.splice(k, 1); c.destroy(); }\n      continue;\n    }\n    live.splice(k, 1);\n    c.destroy();\n    if (c.good) {\n      score++;\n      ctx.api.setScore(score);\n      ctx.api.setGoal(score + ' / ' + P.target);\n      gsap.to(pad.scale, { x: 1.16, y: 1.16, duration: 0.1, onComplete: () => gsap.to(pad.scale, { x: 1, y: 1, duration: 0.22, ease: 'back.out' }) });\n      if (score >= P.target) { ctx.api.win('Every value stayed semantic. That page survives all six themes.'); return; }\n    } else {\n      flips++;\n      ti = (ti + 1) % themes.length;\n      paint(true);\n      gsap.delayedCall(0.55, () => paint(false));\n      ctx.api.setGoal(score + ' / ' + P.target + '  -  ' + (3 - flips) + ' flips left');\n      if (flips >= 3) { ctx.api.fail('Three hard-coded values, three themes they were wrong on.'); return; }\n    }\n  }\n});",
             "fallback": {
               "type": "quiz",
-              "prompt": "All three of these paint the badge green on the `light` theme. Which one is still right on `corporate` and `glass`?",
+              "prompt": "All three of these paint the badge green on the `light` theme. Which one is still right on `mui` and `heroui-dark`?",
               "options": [
                 {
                   "id": "a",
@@ -6992,7 +6992,7 @@
             "Both chips in a pair look identical, so you have to read them. A token names a meaning — it has a prop name and a colon (`tone:`, `variant:`, `gap:`). A value is the thing that meaning happens to resolve to today.",
             "Let a pair fall if you cannot reach the right half in time. A miss costs nothing; a wrong catch costs a flip."
           ],
-          "explain": "A hard-coded value is not wrong when you write it — that is the entire problem. It is wrong later, on somebody else's theme, in a screenshot you never see. `#10b981` genuinely is `colorSuccess` on `light` and `dark`; it is `#16a34a` on `corporate` and `#5eead4` on `soft`, and a badge that insists on the first one reads as a slightly-off green on four themes out of six. The semantic token is not extra ceremony over the hex — it is the only version of the decision that stays true.",
+          "explain": "A hard-coded value is not wrong when you write it — that is the entire problem. It is wrong later, on somebody else's theme, in a screenshot you never see. `#10b981` genuinely is `colorSuccess` on `light` and `dark`; it is `#2e7d32` on `mui` and `#17c964` on `heroui`, and a badge that insists on the first one reads as a slightly-off green on seven themes out of nine. The semantic token is not extra ceremony over the hex — it is the only version of the decision that stays true.",
           "codex": {
             "term": "Design token",
             "def": "A named slot in the theme (colorSuccess, radiusButton, spacingL) that every component reads through a `--rui-*` CSS variable. Name the token; never copy the value it currently holds."
@@ -7089,11 +7089,11 @@
             "filename": "branded.aktion",
             "starter": "",
             "placeholder": "$theme({ name: \"…\" })\n\n$app(…)",
-            "solution": "$theme({\n  name: \"corporate\",\n  radius: { button: \"999px\" }\n})\n\n$app(Column([\n  PageHeader(\"Domains\", { subtitle: \"Nothing here names a colour\" }),\n  Card([\n    Row([\n      Badge(\"Active\", { tone: \"success\" }),\n      Pill(\"SSL activating\", { tone: \"activating\" })\n    ], { gap: \"sm\" }),\n    Text(\"Renews 12 May\", { variant: \"small\", tone: \"muted\" }),\n    Buttons([Button(\"Renew\", { variant: \"primary\", icon: \"circle-check\" })])\n  ])\n]))",
+            "solution": "$theme({\n  name: \"heroui\",\n  radius: { button: \"999px\" }\n})\n\n$app(Column([\n  PageHeader(\"Domains\", { subtitle: \"Nothing here names a colour\" }),\n  Card([\n    Row([\n      Badge(\"Active\", { tone: \"success\" }),\n      Pill(\"SSL activating\", { tone: \"activating\" })\n    ], { gap: \"sm\" }),\n    Text(\"Renews 12 May\", { variant: \"small\", tone: \"muted\" }),\n    Buttons([Button(\"Renew\", { variant: \"primary\", icon: \"circle-check\" })])\n  ])\n]))",
             "validate": {
               "must": [
                 "\\$theme\\s*\\(",
-                "name\\s*:\\s*[\"'](light|dark|corporate|soft|glass|modern)[\"']",
+                "name\\s*:\\s*[\"'](light|dark|soft|shadcn|shadcn-light|shadcn-dark|mui|mui-light|mui-dark|heroui|heroui-light|heroui-dark)[\"']",
                 "\\$app\\s*\\(",
                 "Card\\s*\\(\\s*\\[",
                 "tone\\s*:\\s*[\"'][a-z-]+[\"']",
@@ -7102,7 +7102,7 @@
               ],
               "mustWhy": [
                 "Start with the brand: a $theme({ ... }) statement.",
-                "Select one of the six built-ins by name: light, dark, corporate, soft, glass or modern.",
+                "Select one of the built-ins by name: light, dark, soft, shadcn, mui or heroui (each framework name also takes a -light or -dark suffix).",
                 "Nothing renders without $app(...).",
                 "Put the content in a Card([ ... ]).",
                 "Give the Badge a semantic tone — success, warning, danger, info, primary or neutral.",
@@ -7120,17 +7120,17 @@
             }
           },
           "hints": [
-            "Two statements: `$theme({ name: \"corporate\" })` on top, then `$app(...)`.",
+            "Two statements: `$theme({ name: \"heroui\" })` on top, then `$app(...)`.",
             "`Badge(\"Active\", { tone: \"success\" })` and `Button(\"Renew\", { variant: \"primary\", icon: \"circle-check\" })` are both complete calls — you only have to nest them.",
             "If the validator complains about something that should not be there, look for a `#`. A colour literal is only legal inside the `$theme` groups, and you do not need one here."
           ],
-          "explain": "That program has no opinion about colour, spacing, radius or type — and that is exactly why it looks deliberate. Change `corporate` to `glass` and every surface, shadow, radius and font swaps together, because each one came from the same token map instead of six independent guesses. This is the payoff for the whole world: a program you can hand to any host, on any theme, in any reading direction, and it stays right without you being there.",
+          "explain": "That program has no opinion about colour, spacing, radius or type — and that is exactly why it looks deliberate. Change `heroui` to `mui` and every surface, shadow, radius and font swaps together, because each one came from the same token map instead of six independent guesses. This is the payoff for the whole world: a program you can hand to any host, on any theme, in any reading direction, and it stays right without you being there.",
           "codex": {
             "term": "Theme-neutral program",
             "def": "A program whose tree contains no colour, spacing or type literal — only semantic props — so it renders correctly under any of the six base themes and either reading direction."
           },
           "preview": {
-            "program": "$theme({\n  name: \"corporate\",\n  radius: { button: \"999px\" }\n})\n\n$app(Column([\n  PageHeader(\"Domains\", { subtitle: \"Nothing here names a colour\" }),\n  Card([\n    Row([\n      Badge(\"Active\", { tone: \"success\" }),\n      Pill(\"SSL activating\", { tone: \"activating\" })\n    ], { gap: \"sm\" }),\n    Text(\"Renews 12 May\", { variant: \"small\", tone: \"muted\" }),\n    Buttons([Button(\"Renew\", { variant: \"primary\", icon: \"circle-check\" })])\n  ])\n]))",
+            "program": "$theme({\n  name: \"heroui\",\n  radius: { button: \"999px\" }\n})\n\n$app(Column([\n  PageHeader(\"Domains\", { subtitle: \"Nothing here names a colour\" }),\n  Card([\n    Row([\n      Badge(\"Active\", { tone: \"success\" }),\n      Pill(\"SSL activating\", { tone: \"activating\" })\n    ], { gap: \"sm\" }),\n    Text(\"Renews 12 May\", { variant: \"small\", tone: \"muted\" }),\n    Buttons([Button(\"Renew\", { variant: \"primary\", icon: \"circle-check\" })])\n  ])\n]))",
             "caption": "live — one name away from looking like a completely different product"
           }
         }

@@ -724,7 +724,7 @@
         "Every section is one call. If a line is getting long, it is probably the options object, not the structure.",
         "Emphasis is `tone: \"warning\"` or `variant: \"primary\"`. If a hex value appears, the theme has lost."
       ],
-      "explain": "Five sections, one root, and nothing in it that would break if the host switched to the `corporate` or `glass` theme tomorrow. Notice what you did not have to write: no breadcrumb markup, no icon choices, no grid maths for the KPI strip, no media queries, and no colours. That is the whole trade — the composites own the visual decisions so your program only has to say what the page is about.",
+      "explain": "Five sections, one root, and nothing in it that would break if the host switched to the `mui` or `heroui-dark` theme tomorrow. Notice what you did not have to write: no breadcrumb markup, no icon choices, no grid maths for the KPI strip, no media queries, and no colours. That is the whole trade — the composites own the visual decisions so your program only has to say what the page is about.",
       "codex": {
         "term": "Tone-first authoring",
         "def": "Emphasis is expressed with the semantic palette (`default`, `primary`, `success`, `warning`, `danger`, `info`) through `tone` or `variant`, never as a colour, spacing or font value — so one program renders correctly on all six built-in themes."

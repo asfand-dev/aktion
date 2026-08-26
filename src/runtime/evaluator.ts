@@ -3377,12 +3377,12 @@ function evaluateInvoke(
           if (obj.font) loadFonts(obj.font);
         }
         // A `name` property selects a built-in theme (e.g.
-        // `$theme({ name: "modern" })`) — seed the full token set from that
+        // `$theme({ name: "mui-dark" })`) — seed the full token set from that
         // theme so the whole palette applies, then let any structured
         // overrides (`colors`, `radius`, ...) layer on top.
         const tokens = collectThemeTokens(themeInput);
         const themeName = resolveBuiltInThemeName(themeInput);
-        // `$theme({ name: "corporate" })` must load that theme's web fonts too,
+        // `$theme({ name: "shadcn" })` must load that theme's web fonts too,
         // exactly as the `theme="..."` attribute path does.
         if (themeName) loadBuiltInThemeFonts(themeName);
         const baseTokens = themeName ? findThemeByName(themeName) : null;
@@ -5684,8 +5684,9 @@ const THEME_GROUP_PREFIX: Record<string, string> = {
 
 /**
  * Read the `name` metadata key off a `$theme({...})` config and return the
- * matching registered theme key (`dark`, `corporate`, `soft`, `glass`,
- * `modern`, ...) when it names a real theme.
+ * matching registered theme key (`dark`, `shadcn`, `mui-dark`, `heroui`,
+ * `soft`, ...) when it names a real theme. A retired alias resolves to the
+ * theme that replaced it.
  * Returns `null` for an absent / unknown name so the runtime falls back to
  * the active base theme rather than wiping it.
  *

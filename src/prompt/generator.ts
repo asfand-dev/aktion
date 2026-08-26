@@ -169,7 +169,7 @@ Set by the HOST PAGE, never from Aktion code. Listed so you know what is configu
 
 | Attribute | Values | Effect |
 | --- | --- | --- |
-| \`theme\` | \`light\` \`dark\` \`corporate\` \`soft\` \`glass\` \`modern\` | Base palette. \`$theme({...})\` layers on top of it. A theme selected by name also loads its web fonts. |
+| \`theme\` | \`light\` \`dark\` \`shadcn\` \`shadcn-dark\` \`mui\` \`mui-dark\` \`heroui\` \`heroui-dark\` \`soft\` | Base palette. \`shadcn\`, \`mui\` and \`heroui\` re-create shadcn/ui, Material UI and HeroUI; each also answers to an explicit \`-light\` spelling. \`$theme({...})\` layers on top. A theme selected by name also loads its web fonts. |
 | \`dir\` | \`ltr\` \`rtl\` \`auto\` | Flips the whole tree. Programs need no change. |
 | \`margin\` | \`0\` \`12\` \`1rem\` | Outer gutter (default 20px). |
 | \`scroll-restoration\` | \`auto\` \`top\` | Scroll behaviour on navigation. |
@@ -800,7 +800,7 @@ A bare \`$theme({...})\` statement (before \`$app\`) brands the response. Omit i
 Note that \`zIndex\` values are numbers and \`gradients\` accepts an array — do not quote them.
 
 Core group keys (all optional):
-- \`name?: string\` — selects a built-in theme as the base palette (\`"dark"\`, \`"light"\`, \`"modern"\`, \`"corporate"\`, \`"soft"\`, \`"glass"\`; unknown names are ignored).
+- \`name?: string\` — selects a built-in theme as the base palette (\`"light"\`, \`"dark"\`, \`"shadcn"\`/\`"shadcn-light"\`/\`"shadcn-dark"\`, \`"mui"\`/\`"mui-light"\`/\`"mui-dark"\`, \`"heroui"\`/\`"heroui-light"\`/\`"heroui-dark"\`, \`"soft"\`; unknown names are ignored).
 - \`direction?: "ltr" | "rtl"\` — reading direction (metadata; not applied as a token).
 - \`colors?: { ... }\` — CSS color strings. Keys: \`bg\`, \`bgSubtle\`, \`surface\`, \`surfaceMuted\`, \`border\`, \`borderSubtle\`, \`text\`, \`textMuted\`, \`primary\`, \`primaryHover\`, \`primaryText\`, \`accent\`, \`accentHover\`, \`accentText\`, \`focusRing\`, \`success\`, \`warning\`, \`danger\`, \`info\`.
 - \`radius?: { ... }\` — CSS length strings. Keys: \`xs\`, \`sm\`, \`md\`, \`lg\`, \`pill\`, \`button\`, \`input\`.
@@ -814,7 +814,7 @@ $theme({
 })
 \`\`\`
 
-The host picks one of six base themes (\`light\`, \`dark\`, \`corporate\`, \`soft\`, \`glass\`, \`modern\`) — author theme-neutral UI (use \`tone:\` / \`variant:\`, not hard-coded colours).
+The host picks one of twelve base theme names (\`light\`, \`dark\`, \`soft\`, and a light + dark variant each of \`shadcn\`, \`mui\` and \`heroui\`) — author theme-neutral UI (use \`tone:\` / \`variant:\`, not hard-coded colours), and never assume a light background.
 
 ### i18n
 \`\`\`

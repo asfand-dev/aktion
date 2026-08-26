@@ -17,7 +17,7 @@
  * smuggle a different origin or CSS payload into the page.
  */
 
-import { builtInThemeFonts } from "./index.js";
+import { builtInThemeFonts, canonicalThemeName } from "./index.js";
 
 const FAMILY_RE = /^[A-Za-z0-9 ]{1,48}$/;
 const injectedUrls = new Set<string>();
@@ -107,13 +107,14 @@ export function loadFonts(record: unknown): string {
 /**
  * Load the web fonts a built-in theme needs, if it declares any.
  *
- * Called when a theme is selected by name, so `theme="corporate"` renders in
- * this Brand UI typefaces rather than falling back to `system-ui`. Idempotent —
- * `loadFonts` de-duplicates by URL.
+ * Called when a theme is selected by name, so `theme="shadcn"` renders in
+ * that framework's typefaces rather than falling back to `system-ui`. Retired
+ * aliases are canonicalised first, so `theme="modern"` loads what
+ * `shadcn-light` needs. Idempotent — `loadFonts` de-duplicates by URL.
  */
 export function loadBuiltInThemeFonts(name: unknown): void {
   const key = typeof name === "string" ? name.trim().toLowerCase() : "";
   if (!key) return;
-  const decl = builtInThemeFonts[key];
+  const decl = builtInThemeFonts[canonicalThemeName(key)];
   if (decl) loadFonts(decl);
 }
