@@ -2,22 +2,24 @@
  * `<aktion-devtools>` — the in-page DevTools panel.
  *
  * A self-contained, framework-agnostic debugger that attaches to the global
- * hook (see `hook.ts`) and renders three tabs over the live runtime:
+ * hook (see `hook.ts`) and renders fourteen tabs over the live runtime:
+ * Overview, Inspect, State, Profiler, Effects, Network, Console, Routes, Data,
+ * Theme, Source, Test, Timeline, and Settings.
  *
- *   - **State** — a live tree of every reactive `$state` atom, with inline
- *     editing (writes flow back through the real reactive pipeline) and a
- *     flash on every change.
- *   - **Profiler** — a per-commit strip + flamegraph of which components
- *     (re)rendered, why, and how long their bodies took, plus a ranked
- *     "most expensive components" table.
- *   - **Effects** — a chronological timeline of every effect's
- *     mount/run/cleanup/unmount, attributed to the trigger that fired it,
- *     with per-effect lanes.
+ * This file is the *shell*: chrome, docking, event ingestion, and the shared
+ * services (highlight overlay, interaction recorder, console tap). Each tab is
+ * a pure `(context) → Node[]` function in `tabs/`, so adding a tool never means
+ * touching the shell.
  *
- * The panel lives in its own shadow root with its own styles, so it is fully
- * isolated from the page and from the `<aktion-app>` it inspects. It is built
- * with plain DOM (no dependency on Aktion's own renderer) so it can debug a
- * broken program without sharing its fate.
+ * Three properties are load-bearing:
+ *
+ *   - **Its own shadow root, its own styles.** The inspector can never be
+ *     restyled by the app it inspects, or vice versa.
+ *   - **Plain DOM, no Aktion renderer.** It can debug a program whose renderer
+ *     is broken without sharing its fate.
+ *   - **A full re-read on every render.** There is no local state inside a tab,
+ *     so what you see is always the current model — a panel that caches is a
+ *     panel that lies.
  */
 
 import {
@@ -27,151 +29,57 @@ import {
   type DevtoolsAppRecord,
   type DevtoolsEvent,
 } from "./hook.js";
-import type {
-  CommitRecord,
-  ComponentRenderRecord,
-  EffectEvent,
-  EffectPhase,
-  StateEvent,
-} from "./protocol.js";
 import { devtoolsStyles } from "./styles.js";
+import { h, spacer } from "./ui.js";
+import {
+  defaultUiState, loadPersisted, savePersisted,
+  type DockMode, type PersistedUiState, type TabContext, type TabDefinition, type TabId, type UiState,
+} from "./context.js";
+import {
+  clearModel, emptyModel, ingest, ingestLog, type AppModel,
+} from "./model.js";
+import { InspectOverlay } from "./overlay.js";
+import { InteractionRecorder, type RecordedStep } from "./recorder.js";
+import { ConsoleCapture } from "./console-capture.js";
+import { componentNameFromKey } from "./tree.js";
 
-const DEVTOOLS_UI_VERSION = "0.5";
+import { overviewTab } from "./tabs/overview.js";
+import { inspectTab } from "./tabs/inspect.js";
+import { stateTab } from "./tabs/state.js";
+import { profilerTab } from "./tabs/profiler.js";
+import { effectsTab } from "./tabs/effects.js";
+import { networkTab } from "./tabs/network.js";
+import { consoleTab } from "./tabs/console.js";
+import { routesTab } from "./tabs/routes.js";
+import { dataTab } from "./tabs/data.js";
+import { themeTab } from "./tabs/theme.js";
+import { sourceTab } from "./tabs/source.js";
+import { testTab } from "./tabs/test.js";
+import { timelineTab } from "./tabs/timeline.js";
+import { settingsTab } from "./tabs/settings.js";
 
-/** Atom names the runtime owns — shown but never editable. */
-const RESERVED_ATOMS = new Set(["route"]);
+const DEVTOOLS_UI_VERSION = "0.6";
 
-/** Caps so a long-running session can't grow the panel's model unbounded. */
-const MAX_COMMITS = 200;
-const MAX_EFFECT_EVENTS = 400;
-const MAX_LOG_ROWS = 250;
-/** A state row keeps its "just changed" flash for this long. */
-const FLASH_MS = 1100;
+/** Every tab, in strip order. */
+const TABS: ReadonlyArray<TabDefinition> = [
+  overviewTab,
+  inspectTab,
+  stateTab,
+  profilerTab,
+  effectsTab,
+  networkTab,
+  consoleTab,
+  routesTab,
+  dataTab,
+  themeTab,
+  sourceTab,
+  testTab,
+  timelineTab,
+  settingsTab,
+];
 
-type TabId = "state" | "profiler" | "effects";
-
-/** Per-app derived model the panel maintains from the event stream. */
-interface AppModel {
-  commits: CommitRecord[];
-  effects: EffectEvent[];
-  state: Record<string, unknown>;
-  /** Atom (root) → timestamp of last change, for flash highlighting. */
-  changed: Map<string, number>;
-  /** Atom (root) → number of flushes that changed it (reactivity heat). */
-  changeCounts: Map<string, number>;
-  /** Timestamp of the first observed event (timeline zero). */
-  firstTime: number | null;
-}
-
-function emptyModel(): AppModel {
-  return { commits: [], effects: [], state: {}, changed: new Map(), changeCounts: new Map(), firstTime: null };
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Tiny DOM builder                                                           */
-/* -------------------------------------------------------------------------- */
-
-type Attrs = Record<string, unknown>;
-type Child = Node | string | null | undefined | false;
-
-function h(tag: string, attrs: Attrs = {}, ...children: Child[]): HTMLElement {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v == null || v === false) continue;
-    if (k === "class") node.className = String(v);
-    else if (k === "style") node.setAttribute("style", String(v));
-    else if (k.startsWith("on") && typeof v === "function") {
-      node.addEventListener(k.slice(2).toLowerCase(), v as EventListener);
-    } else if (v === true) node.setAttribute(k, "");
-    else node.setAttribute(k, String(v));
-  }
-  for (const child of children) {
-    if (child == null || child === false) continue;
-    node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
-  }
-  return node;
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Formatting helpers                                                         */
-/* -------------------------------------------------------------------------- */
-
-function valueType(v: unknown): string {
-  if (v === null) return "null";
-  if (Array.isArray(v)) return "array";
-  return typeof v;
-}
-
-function isExpandable(v: unknown): boolean {
-  const t = valueType(v);
-  return (t === "object" || t === "array") && childEntries(v).length > 0;
-}
-
-function childEntries(v: unknown): Array<[string, unknown]> {
-  if (Array.isArray(v)) return v.map((item, i) => [String(i), item] as [string, unknown]);
-  if (v && typeof v === "object") return Object.entries(v as Record<string, unknown>);
-  return [];
-}
-
-function previewValue(v: unknown): string {
-  switch (valueType(v)) {
-    case "string": return JSON.stringify(v);
-    case "number":
-    case "boolean": return String(v);
-    case "null": return "null";
-    case "undefined": return "undefined";
-    case "function": return "ƒ ()";
-    case "array": return `Array(${(v as unknown[]).length})`;
-    case "object": {
-      const keys = Object.keys(v as object);
-      const head = keys.slice(0, 3).join(", ");
-      return `{ ${head}${keys.length > 3 ? ", …" : ""} }`;
-    }
-    default: return String(v);
-  }
-}
-
-/** Parse an inline edit: JSON first (`42`, `true`, `"x"`, `null`), else a bare string. */
-function parseEdit(raw: string): unknown {
-  try { return JSON.parse(raw); } catch { return raw; }
-}
-
-function fmtMs(n: number): string {
-  if (!isFinite(n)) return "—";
-  if (n >= 100) return `${n.toFixed(0)} ms`;
-  if (n >= 10) return `${n.toFixed(1)} ms`;
-  return `${n.toFixed(2)} ms`;
-}
-
-function fmtRel(ms: number): string {
-  if (ms >= 10000) return `${(ms / 1000).toFixed(1)} s`;
-  return `${ms.toFixed(0)} ms`;
-}
-
-/** Compact integer with a `k` suffix past 9999 (`12.3k`). */
-function fmtCount(n: number): string {
-  if (n >= 10000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
-}
-
-/** Percentage with no decimals (`73%`). */
-function fmtPct(num: number, den: number): string {
-  if (den <= 0) return "—";
-  return `${Math.round((num / den) * 100)}%`;
-}
-
-/** Sortable columns of the ranked-components table. */
-type RankKey = "name" | "renders" | "memo" | "total" | "avg" | "max";
-
-const PHASE_CHIP: Record<string, string> = {
-  mount: "green",
-  update: "blue",
-  memo: "grey",
-  run: "blue",
-  cleanup: "purple",
-  unmount: "grey",
-  error: "red",
-};
+/** How long a toast stays up. */
+const TOAST_MS = 2600;
 
 /* -------------------------------------------------------------------------- */
 /*  The element                                                                */
@@ -186,59 +94,69 @@ export class AktionDevtoolsElement extends HTMLElement {
 
   private readonly models = new Map<string, AppModel>();
   private selectedAppId: string | null = null;
-  private tab: TabId = "state";
-  private paused = false;
+  private ui: UiState = defaultUiState();
 
-  // State tab
-  private stateFilter = "";
-  private expanded = new Set<string>();
-  private editingPath: string | null = null;
-  /** Sort atoms by change frequency (reactivity heat) instead of name. */
-  private stateSortByActivity = false;
+  private readonly overlay = new InspectOverlay();
+  private readonly recorder = new InteractionRecorder();
+  private readonly consoleCapture = new ConsoleCapture();
 
-  // Profiler tab
-  private selectedCommitId: number | null = null;
-  private flashOnCommit = false;
-  /** Sort key + direction for the ranked-components table. */
-  private rankedSort: { key: RankKey; dir: 1 | -1 } = { key: "total", dir: -1 };
-
-  // Effects tab
-  private phaseFilter: Set<EffectPhase> = new Set(["mount", "run", "cleanup", "unmount", "error"]);
-  /** Group the effect timeline into per-effect lanes vs. a flat log. */
-  private effectView: "timeline" | "log" = "timeline";
-
-  // chrome
-  private collapsed = false;
   private renderScheduled = false;
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Floating-mode geometry, persisted so the panel reopens where you left it. */
+  private geometry: { left: number; top: number; width: number; height: number };
 
   // skeleton refs
   private root!: ShadowRoot;
   private panelEl!: HTMLElement;
+  private headerEl!: HTMLElement;
   private controlsEl!: HTMLElement;
   private tabsEl!: HTMLElement;
   private bodyEl!: HTMLElement;
+  private toastEl!: HTMLElement;
+
+  constructor() {
+    super();
+    const persisted = loadPersisted();
+    const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+    const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+    const width = persisted.width ?? 560;
+    const height = persisted.height ?? 620;
+    this.geometry = {
+      width,
+      height,
+      left: persisted.left ?? Math.max(8, vw - width - 16),
+      top: persisted.top ?? Math.max(8, vh - height - 16),
+    };
+    if (persisted.tab && TABS.some((tab) => tab.id === persisted.tab)) this.ui.tab = persisted.tab;
+    if (persisted.dock) this.ui.dock = persisted.dock;
+    if (persisted.light !== undefined) this.ui.light = persisted.light;
+    if (persisted.compact !== undefined) this.ui.compact = persisted.compact;
+    if (persisted.captureConsole !== undefined) this.ui.captureConsole = persisted.captureConsole;
+  }
 
   connectedCallback(): void {
     if (!this.root) this.buildSkeleton();
     this.hook = installDevtoolsHook(DEVTOOLS_UI_VERSION);
 
     // Adopt any apps that registered before the panel opened, seed their state
-    // immediately, and backfill the model from the hook's event buffer so the
-    // timeline isn't empty on open.
+    // immediately, and backfill from the hook's event buffer so the timeline
+    // isn't empty on open.
     for (const app of this.hook.apps.values()) this.adopt(app);
     if (!this.selectedAppId && this.hook.apps.size > 0) {
       this.selectedAppId = [...this.hook.apps.keys()][0]!;
     }
-    for (const event of this.hook.buffer) this.ingest(event, /* fromBuffer */ true);
+    for (const event of this.hook.buffer) this.ingestEvent(event, true);
 
     this.unsubEvents = this.hook.subscribe((event) => this.onEvent(event));
     this.unsubApps = this.hook.subscribeApps((action, app) => this.onApp(action, app));
 
-    // Late attach: ask every `<aktion-app>` already on the page to register
-    // with the (now-installed) hook. Apps that mounted before DevTools opened
-    // would otherwise never appear.
+    // Late attach: ask every `<aktion-app>` already on the page to register with
+    // the (now-installed) hook. Apps that mounted before DevTools opened would
+    // otherwise never appear.
     this.discoverApps();
+    this.syncConsoleCapture();
+    this.applyDock();
     this.scheduleRender();
   }
 
@@ -247,17 +165,33 @@ export class AktionDevtoolsElement extends HTMLElement {
     this.unsubApps?.();
     this.unsubEvents = null;
     this.unsubApps = null;
+    this.consoleCapture.stop();
+    this.recorder.stop();
+    this.overlay.destroy();
     if (this.flashTimer) clearTimeout(this.flashTimer);
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.persist();
   }
 
   /* ---- public controller surface ---- */
 
-  open(): void { this.hidden = false; }
-  close(): void { this.hidden = true; }
-  toggle(): void { this.hidden = !this.hidden; }
+  open(): void { this.hidden = false; this.scheduleRender(); }
+  close(): void { this.hidden = true; this.overlay.clear(); this.overlay.stopPicking(); }
+  toggle(): void { if (this.hidden) this.open(); else this.close(); }
+
   selectApp(id: string): void {
     this.selectedAppId = id;
-    this.selectedCommitId = null;
+    this.ui.selectedCommitId = null;
+    this.ui.selectedInstance = null;
+    this.ui.selectedRequest = null;
+    this.ui.timeTravel = null;
+    this.scheduleRender();
+  }
+
+  /** Switch tabs programmatically (used by the controller and by tab links). */
+  selectTab(tab: TabId): void {
+    this.ui.tab = tab;
+    this.persist();
     this.scheduleRender();
   }
 
@@ -267,27 +201,49 @@ export class AktionDevtoolsElement extends HTMLElement {
     return id ? this.models.get(id) ?? null : null;
   }
 
+  /** Test/inspection hook: the panel's current view state. */
+  getUiState(): UiState {
+    return this.ui;
+  }
+
   /* ---- event ingestion ---- */
 
   private ensureModel(appId: string): AppModel {
-    let m = this.models.get(appId);
-    if (!m) { m = emptyModel(); this.models.set(appId, m); }
-    return m;
+    let model = this.models.get(appId);
+    if (!model) {
+      model = emptyModel();
+      this.models.set(appId, model);
+    }
+    return model;
   }
 
   /** Adopt an app: ensure a model and seed its current state snapshot. */
   private adopt(app: DevtoolsAppRecord): AppModel {
-    const m = this.ensureModel(app.id);
-    try { m.state = app.getState(); } catch { /* app mid-teardown */ }
-    return m;
+    const model = this.ensureModel(app.id);
+    try {
+      model.state = app.getState();
+    } catch {
+      /* app mid-teardown */
+    }
+    if (typeof app.getNetworkRules === "function") {
+      try {
+        this.ui.rules = app.getNetworkRules();
+      } catch {
+        /* older record */
+      }
+    }
+    return model;
   }
 
   /** Ask every `<aktion-app>` on the page to register with the hook. */
   private discoverApps(): void {
     if (typeof document === "undefined") return;
     document.querySelectorAll("aktion-app").forEach((el) => {
-      try { (el as unknown as { connectDevtools?: () => void }).connectDevtools?.(); }
-      catch { /* not an Aktion element, or pre-DevTools build */ }
+      try {
+        (el as unknown as { connectDevtools?: () => void }).connectDevtools?.();
+      } catch {
+        /* not an Aktion element, or a pre-DevTools build */
+      }
     });
   }
 
@@ -296,50 +252,42 @@ export class AktionDevtoolsElement extends HTMLElement {
       this.adopt(app);
       if (!this.selectedAppId) this.selectedAppId = app.id;
     } else if (this.selectedAppId === app.id) {
-      // Keep the model around (history is still useful) but re-point selection.
-      const next = [...this.hook!.apps.keys()].find((id) => id !== app.id) ?? null;
+      // Keep the model (history is still useful) but re-point the selection.
+      const next = [...(this.hook?.apps.keys() ?? [])].find((id) => id !== app.id) ?? null;
       this.selectedAppId = next;
     }
     this.scheduleRender();
   }
 
   private onEvent(event: DevtoolsEvent): void {
-    if (this.paused) return;
-    this.ingest(event, false);
-    // "Flash on commit" — briefly outline the inspected element so you can see
-    // which app on the page just re-rendered.
-    if (event.kind === "commit" && this.flashOnCommit && event.appId === this.selectedAppId) {
+    if (this.ui.paused) return;
+    this.ingestEvent(event, false);
+    if (event.kind === "commit" && this.ui.flashOnCommit && event.appId === this.selectedAppId) {
       this.flashApp(event.appId);
+    }
+    // A navigation that happens while recording belongs in the generated test:
+    // the DOM cannot report it, so the shell forwards it.
+    if (event.kind === "route" && this.recorder.isRecording && event.appId === this.selectedAppId) {
+      this.recorder.addStep({ type: "navigate", value: event.to, label: `navigate to ${event.to}` });
     }
     this.scheduleRender();
   }
 
-  private ingest(event: DevtoolsEvent, fromBuffer: boolean): void {
-    const model = this.ensureModel(event.appId);
-    const t = eventTime(event);
-    if (model.firstTime === null || t < model.firstTime) model.firstTime = t;
-    switch (event.kind) {
-      case "commit": {
-        model.commits.push(event);
-        if (model.commits.length > MAX_COMMITS) model.commits.shift();
-        // Auto-follow the latest commit unless the user pinned one.
-        if (!fromBuffer || this.selectedCommitId === null) this.selectedCommitId = event.commitId;
-        break;
-      }
-      case "state": {
-        model.state = event.snapshot;
-        for (const p of event.changedPaths) {
-          const root = rootOf(p);
-          model.changed.set(root, event.time);
-          model.changeCounts.set(root, (model.changeCounts.get(root) ?? 0) + 1);
-        }
-        break;
-      }
-      case "effect": {
-        model.effects.push(event);
-        if (model.effects.length > MAX_EFFECT_EVENTS) model.effects.shift();
-        break;
-      }
+  private ingestEvent(event: DevtoolsEvent, fromBuffer: boolean): void {
+    ingest(this.ensureModel(event.appId), event, fromBuffer);
+  }
+
+  /** Route a captured console line into the selected app's model. */
+  private syncConsoleCapture(): void {
+    if (this.ui.captureConsole && !this.consoleCapture.active) {
+      this.consoleCapture.start((entry) => {
+        const id = this.selectedAppId;
+        if (!id) return;
+        ingestLog(this.ensureModel(id), { ...entry, text: entry.args.join(" "), count: 1 });
+        this.scheduleRender();
+      });
+    } else if (!this.ui.captureConsole && this.consoleCapture.active) {
+      this.consoleCapture.stop();
     }
   }
 
@@ -348,11 +296,26 @@ export class AktionDevtoolsElement extends HTMLElement {
   private scheduleRender(): void {
     if (this.renderScheduled) return;
     this.renderScheduled = true;
-    queueMicrotask(() => {
+    const run = (): void => {
       this.renderScheduled = false;
-      try { this.render(); }
-      catch (err) { /* eslint-disable-next-line no-console */ console.error("[aktion-devtools] render failed", err); }
-    });
+      try {
+        this.render();
+      } catch (err) {
+        // A tab that throws must not take the panel with it — the whole point of
+        // the panel is to still be there when something is broken.
+        // eslint-disable-next-line no-console
+        console.error("[aktion-devtools] render failed", err);
+        this.bodyEl?.replaceChildren(h("div", { class: "empty" },
+          h("p", {}, "The panel hit an error while rendering this tab."),
+          h("p", { class: "faint" }, String(err))));
+      }
+    };
+    // A microtask, matching the runtime's own render scheduling: every event a
+    // single task produces (a state flush, its commit, the effects it triggers)
+    // collapses into ONE panel render, and the panel is up to date by the time
+    // the task's promise chain settles — which is what makes it observable from
+    // a test without waiting on frames.
+    queueMicrotask(run);
   }
 
   private currentApp(): DevtoolsAppRecord | null {
@@ -361,53 +324,149 @@ export class AktionDevtoolsElement extends HTMLElement {
   }
 
   private render(): void {
-    if (this.hidden) return;
-    // Don't tear down the tree out from under an open inline editor.
-    if (this.tab === "state" && this.editingPath) {
-      this.renderControls();
-      this.renderTabs();
-      return;
-    }
+    if (this.hidden || !this.root) return;
+    this.syncConsoleCapture();
+    this.applyChrome();
     this.renderControls();
     this.renderTabs();
+    const focus = this.captureFocus();
+    const scroll = this.bodyEl.scrollTop;
     this.renderBody();
+    this.bodyEl.scrollTop = scroll;
+    this.restoreFocus(focus);
+    this.renderToast();
   }
 
-  /* ---- skeleton ---- */
+  /* ---- focus preservation ---- */
+
+  /**
+   * Remember where the caret is before a re-render.
+   *
+   * The panel re-renders on every event, and a filter box that loses focus (or
+   * its caret) after one keystroke is unusable. Rather than making each tab
+   * patch its own DOM in place, the shell records the focused field's position
+   * in the tree and puts the caret back afterwards — which works for every tab
+   * without any of them knowing about it.
+   */
+  private captureFocus(): { path: number[]; start: number | null; end: number | null; className: string } | null {
+    // Reading `activeElement` on a shadow root can throw in some DOM
+    // implementations while focus lives in another shadow root (the inspected
+    // app has one too). A lost caret restore is cosmetic; a throw here would
+    // take the whole panel render with it.
+    let active: Element | null = null;
+    try {
+      active = this.root.activeElement;
+    } catch {
+      return null;
+    }
+    if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) return null;
+    if (!this.bodyEl.contains(active)) return null;
+    const path: number[] = [];
+    let node: Element | null = active;
+    while (node && node !== this.bodyEl) {
+      const parent: Element | null = node.parentElement;
+      if (!parent) break;
+      path.unshift([...parent.children].indexOf(node));
+      node = parent;
+    }
+    let start: number | null = null;
+    let end: number | null = null;
+    try {
+      start = active.selectionStart;
+      end = active.selectionEnd;
+    } catch {
+      /* an input type that forbids selection reads */
+    }
+    return { path, start, end, className: active.className };
+  }
+
+  private restoreFocus(
+    focus: { path: number[]; start: number | null; end: number | null; className: string } | null,
+  ): void {
+    if (!focus) return;
+    let node: Element | null = this.bodyEl;
+    for (const index of focus.path) {
+      node = node?.children[index] ?? null;
+      if (!node) return;
+    }
+    if (!(node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)) return;
+    // The path is only meaningful if the tree came back the same shape. When it
+    // did not (a banner appeared, a section collapsed) the same position can be
+    // a different field, and stealing focus into it would be worse than losing
+    // the caret — so require the class to match too.
+    if (node.className !== focus.className) return;
+    node.focus();
+    if (focus.start !== null && focus.end !== null) {
+      try {
+        node.setSelectionRange(focus.start, focus.end);
+      } catch {
+        /* not supported for this input type */
+      }
+    }
+  }
+
+  /* ---- chrome ---- */
 
   private buildSkeleton(): void {
     this.root = this.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = devtoolsStyles;
 
-    this.controlsEl = h("div", { class: "controls", style: "display:flex;gap:6px;align-items:center;" });
-    const header = h(
+    this.controlsEl = h("div", { class: "controls" });
+    this.toastEl = h("div", { class: "toast", hidden: true });
+    this.headerEl = h(
       "div",
       { class: "header" },
       h("div", { class: "brand" },
         h("span", { class: "bolt" }, "⚡"),
         h("span", {}, "Aktion DevTools"),
-        h("span", { class: "ver" }, `v${DEVTOOLS_UI_VERSION}`),
-      ),
-      h("div", { class: "spacer" }),
+        h("span", { class: "ver" }, `v${DEVTOOLS_UI_VERSION}`)),
+      this.toastEl,
+      spacer(),
       this.controlsEl,
     );
-    this.makeDraggable(header);
+    this.makeDraggable(this.headerEl);
 
     this.tabsEl = h("div", { class: "tabs" });
     this.bodyEl = h("div", { class: "panel-body" });
     const grip = h("div", { class: "resize", title: "Drag to resize" });
     this.makeResizable(grip);
 
-    this.panelEl = h("div", { class: "panel" }, header, this.tabsEl, this.bodyEl, grip);
+    this.panelEl = h("div", { class: "panel" }, this.headerEl, this.tabsEl, this.bodyEl, grip);
     this.root.append(style, this.panelEl);
+    this.applyChrome();
+  }
 
-    // Default placement: lower-right, computed once so drag/resize can take over.
-    const w = 480, hgt = 560;
-    const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
-    const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-    this.style.left = `${Math.max(8, vw - w - 16)}px`;
-    this.style.top = `${Math.max(8, vh - hgt - 16)}px`;
+  /** Reflect dock mode, theme, and density onto the host + panel. */
+  private applyChrome(): void {
+    this.classList.toggle("is-light", this.ui.light);
+    this.classList.toggle("is-compact", this.ui.compact);
+    this.panelEl.classList.toggle("is-collapsed", this.ui.collapsed);
+    this.applyDock();
+  }
+
+  private applyDock(): void {
+    const dock = this.ui.dock;
+    for (const mode of ["float", "right", "bottom", "left"] as DockMode[]) {
+      this.classList.toggle(`dock-${mode}`, dock === mode);
+    }
+    if (dock === "float") {
+      this.style.left = `${this.geometry.left}px`;
+      this.style.top = `${this.geometry.top}px`;
+      this.style.right = "";
+      this.style.bottom = "";
+      this.panelEl.style.width = `${this.geometry.width}px`;
+      this.panelEl.style.height = `${this.geometry.height}px`;
+      return;
+    }
+    // Docked: the host spans an edge and the panel fills it, so the geometry
+    // above is irrelevant until you float again (where it is restored).
+    this.style.left = "";
+    this.style.top = "";
+    this.style.right = "";
+    this.style.bottom = "";
+    this.panelEl.style.width = "";
+    this.panelEl.style.height = "";
   }
 
   private renderControls(): void {
@@ -415,861 +474,247 @@ export class AktionDevtoolsElement extends HTMLElement {
     const select = h("select", {
       class: "app-select",
       title: "Inspected app",
-      onchange: (e: Event) => this.selectApp((e.target as HTMLSelectElement).value),
+      onchange: (event: Event) => this.selectApp((event.target as HTMLSelectElement).value),
     }) as HTMLSelectElement;
     if (apps.length === 0) {
       select.appendChild(h("option", {}, "no app detected"));
       select.disabled = true;
     } else {
       for (const app of apps) {
-        const opt = h("option", { value: app.id }, app.label) as HTMLOptionElement;
-        if (app.id === this.selectedAppId) opt.selected = true;
-        select.appendChild(opt);
+        const option = h("option", { value: app.id }, app.label) as HTMLOptionElement;
+        if (app.id === this.selectedAppId) option.selected = true;
+        select.appendChild(option);
       }
     }
 
-    const rec = h(
-      "button",
-      {
-        class: `icon-btn ${this.paused ? "" : "is-on"}`,
-        title: this.paused ? "Paused — click to resume recording" : "Recording — click to pause",
-        onclick: () => { this.paused = !this.paused; this.scheduleRender(); },
+    const record = h("button", {
+      class: `icon-btn ${this.ui.paused ? "" : "is-on"}`,
+      title: this.ui.paused ? "Paused — click to resume recording" : "Recording — click to pause",
+      onclick: () => {
+        this.ui.paused = !this.ui.paused;
+        this.scheduleRender();
       },
-      h("span", { class: `rec-dot ${this.paused ? "is-paused" : ""}` }),
-      this.paused ? "Paused" : "Rec",
-    );
+    }, h("span", { class: `rec-dot ${this.ui.paused ? "is-paused" : ""}` }), this.ui.paused ? "Paused" : "Rec");
+
+    const dockButton = h("button", {
+      class: "icon-btn",
+      title: `Dock: ${this.ui.dock} — click to cycle`,
+      onclick: () => {
+        const order: DockMode[] = ["float", "right", "bottom", "left"];
+        const next = order[(order.indexOf(this.ui.dock) + 1) % order.length]!;
+        this.ui.dock = next;
+        this.persist();
+        this.scheduleRender();
+      },
+    }, dockGlyph(this.ui.dock));
 
     const collapse = h("button", {
       class: "icon-btn",
-      title: this.collapsed ? "Expand" : "Collapse",
-      onclick: () => { this.collapsed = !this.collapsed; this.panelEl.classList.toggle("is-collapsed", this.collapsed); },
-    }, this.collapsed ? "▢" : "—");
+      title: this.ui.collapsed ? "Expand" : "Collapse",
+      onclick: () => {
+        this.ui.collapsed = !this.ui.collapsed;
+        this.scheduleRender();
+      },
+    }, this.ui.collapsed ? "▢" : "—");
 
     const close = h("button", { class: "icon-btn", title: "Close", onclick: () => this.close() }, "✕");
 
-    this.controlsEl.replaceChildren(select, rec, collapse, close);
+    this.controlsEl.replaceChildren(select, record, dockButton, collapse, close);
   }
 
   private renderTabs(): void {
-    const model = this.getModel();
-    const defs: Array<[TabId, string, number]> = [
-      ["state", "State", model ? Object.keys(model.state).length : 0],
-      ["profiler", "Profiler", model ? model.commits.length : 0],
-      ["effects", "Effects", model ? model.effects.length : 0],
-    ];
-    this.tabsEl.replaceChildren(
-      ...defs.map(([id, label, count]) =>
-        h(
-          "button",
-          {
-            class: `tab ${this.tab === id ? "is-active" : ""}`,
-            onclick: () => { this.tab = id; this.scheduleRender(); },
-          },
-          label,
-          h("span", { class: "count" }, String(count)),
-        ),
-      ),
-    );
+    const ctx = this.context();
+    this.tabsEl.replaceChildren(...TABS.map((tab) => {
+      const badge = tab.badge?.(ctx) ?? null;
+      return h("button", {
+        class: `tab ${this.ui.tab === tab.id ? "is-active" : ""}`,
+        title: tab.hint,
+        onclick: () => this.selectTab(tab.id),
+      },
+        h("span", { class: "tab-icon" }, tab.icon),
+        h("span", { class: "tab-label" }, tab.label),
+        badge !== null ? h("span", { class: "count" }, badge > 999 ? "999+" : String(badge)) : null);
+    }));
   }
 
   private renderBody(): void {
+    const ctx = this.context();
+    const definition = TABS.find((tab) => tab.id === this.ui.tab) ?? TABS[0]!;
+    this.bodyEl.replaceChildren(...definition.render(ctx));
+  }
+
+  private renderToast(): void {
+    const toast = this.ui.toast;
+    if (!toast) {
+      this.toastEl.hidden = true;
+      this.toastEl.replaceChildren();
+      return;
+    }
+    this.toastEl.hidden = false;
+    this.toastEl.className = `toast t-${toast.tone}`;
+    this.toastEl.textContent = toast.message;
+  }
+
+  /* ---- tab context ---- */
+
+  private context(): TabContext {
     const app = this.currentApp();
-    const model = this.getModel();
-    if (!app || !model) {
-      this.bodyEl.replaceChildren(
-        h("div", { class: "empty" },
-          h("p", {}, "No Aktion app detected on this page."),
-          h("p", { class: "faint" }, "Mount an ", h("code", {}, "<aktion-app>"), " and it will appear here."),
-        ),
-      );
+    const model = this.getModel() ?? emptyModel();
+    const hook = this.hook ?? installDevtoolsHook(DEVTOOLS_UI_VERSION);
+    return {
+      app,
+      model,
+      hook,
+      ui: this.ui,
+      overlay: this.overlay,
+      recorder: this.recorder,
+      refresh: () => this.scheduleRender(),
+      selectTab: (tab) => this.selectTab(tab),
+      selectInstance: (instanceKey, options) => {
+        this.ui.selectedInstance = instanceKey;
+        this.ui.selectedElement = null;
+        if (instanceKey) {
+          this.highlightInstance(instanceKey, true);
+          if (options?.reveal !== false) this.ui.tab = "inspect";
+        }
+        this.scheduleRender();
+      },
+      toast: (message, tone = "info") => {
+        this.ui.toast = { message, tone, at: Date.now() };
+        if (this.toastTimer) clearTimeout(this.toastTimer);
+        this.toastTimer = setTimeout(() => {
+          this.ui.toast = null;
+          this.scheduleRender();
+        }, TOAST_MS);
+        this.renderToast();
+      },
+      highlightInstance: (instanceKey, pin) => this.highlightInstance(instanceKey, pin ?? false),
+      recordedSteps: (): ReadonlyArray<RecordedStep> => this.recorder.list(),
+    };
+  }
+
+  /** Highlight the DOM node an instance rendered, labelled with its name. */
+  private highlightInstance(instanceKey: string | null, pin: boolean): void {
+    if (!instanceKey) {
+      this.overlay.hideHover();
       return;
     }
-    if (this.tab === "state") this.renderStateTab(app, model);
-    else if (this.tab === "profiler") this.renderProfilerTab(model);
-    else this.renderEffectsTab(model);
-  }
-
-  /* ---------------------------------------------------------------------- */
-  /*  State inspector                                                        */
-  /* ---------------------------------------------------------------------- */
-
-  private renderStateTab(app: DevtoolsAppRecord, model: AppModel): void {
-    const totalChanges = [...model.changeCounts.values()].reduce((a, b) => a + b, 0);
-    const toolbar = h(
-      "div",
-      { class: "toolbar" },
-      h("input", {
-        class: "search",
-        placeholder: "Filter atoms…",
-        value: this.stateFilter,
-        oninput: (e: Event) => {
-          this.stateFilter = (e.target as HTMLInputElement).value;
-          this.renderTreeOnly(app, model);
-        },
-      }),
-      h("button", {
-        class: `filter-chip ${this.stateSortByActivity ? "is-on" : ""}`,
-        title: "Sort atoms by how often they change (reactivity heat)",
-        onclick: () => { this.stateSortByActivity = !this.stateSortByActivity; this.renderTreeOnly(app, model); },
-      }, "Sort by activity"),
-      h("span", { class: "muted" }, `${Object.keys(model.state).length} atoms · ${fmtCount(totalChanges)} changes`),
-    );
-
-    const tree = h("div", { class: "tree" });
-    this.fillTree(tree, app, model);
-    this.bodyEl.replaceChildren(toolbar, tree);
-  }
-
-  /** Re-render only the tree (used by the filter box to keep its focus). */
-  private renderTreeOnly(app: DevtoolsAppRecord, model: AppModel): void {
-    const tree = this.bodyEl.querySelector(".tree");
-    if (!tree) return;
-    tree.replaceChildren();
-    this.fillTree(tree as HTMLElement, app, model);
-  }
-
-  private fillTree(tree: HTMLElement, app: DevtoolsAppRecord, model: AppModel): void {
-    const filter = this.stateFilter.trim().toLowerCase();
-    const maxChanges = Math.max(1, ...model.changeCounts.values());
-    const names = Object.keys(model.state).sort((a, b) => {
-      if (this.stateSortByActivity) {
-        const ca = model.changeCounts.get(a) ?? 0;
-        const cb = model.changeCounts.get(b) ?? 0;
-        if (cb !== ca) return cb - ca;
-      }
-      return a.localeCompare(b);
-    });
-    const now = (typeof performance !== "undefined" ? performance.now() : Date.now());
-    let shown = 0;
-    for (const name of names) {
-      if (filter && !name.toLowerCase().includes(filter)) continue;
-      shown += 1;
-      this.appendRow(tree, app, model, name, name, model.state[name], 0, now, maxChanges);
-    }
-    if (shown === 0) {
-      tree.appendChild(h("div", { class: "empty" }, filter ? "No atoms match the filter." : "No reactive state yet."));
-    }
-  }
-
-  private appendRow(
-    container: HTMLElement,
-    app: DevtoolsAppRecord,
-    model: AppModel,
-    path: string,
-    key: string,
-    value: unknown,
-    depth: number,
-    now: number,
-    maxChanges: number,
-  ): void {
-    const type = valueType(value);
-    const expandable = isExpandable(value);
-    const isOpen = this.expanded.has(path);
-    const reserved = depth === 0 && RESERVED_ATOMS.has(key);
-    const root = rootOf(path);
-    const changedAt = model.changed.get(root);
-    const justChanged = changedAt != null && now - changedAt < FLASH_MS;
-    const changeCount = depth === 0 ? (model.changeCounts.get(root) ?? 0) : 0;
-
-    const twist = h("span", {
-      class: `twist ${expandable ? "" : "is-leaf"}`,
-      onclick: expandable
-        ? () => {
-            if (this.expanded.has(path)) this.expanded.delete(path);
-            else this.expanded.add(path);
-            this.renderTreeOnly(app, model);
-          }
-        : undefined,
-    }, expandable ? (isOpen ? "▾" : "▸") : "•");
-
-    const valueSpan = h("span", { class: `v t-${type}` }, expandable ? previewValue(value) : previewValue(value));
-    const editable = !reserved && !expandable && type !== "function";
-    if (editable) {
-      valueSpan.title = "Click to edit";
-      valueSpan.addEventListener("click", () => this.beginEdit(app, path, value, valueSpan));
-    }
-
-    // Reactivity-heat badge: a small bar + count showing how often this atom
-    // changed across the session, so the hottest atoms stand out at a glance.
-    const heat = changeCount > 0
-      ? h("span", {
-          class: "heat",
-          title: `${changeCount} change${changeCount === 1 ? "" : "s"} this session`,
-        },
-        h("span", { class: "heat-bar" },
-          h("span", { class: "heat-fill", style: `width:${Math.max(8, Math.round((changeCount / maxChanges) * 100))}%` })),
-        h("span", { class: "heat-num" }, fmtCount(changeCount)),
-      )
-      : null;
-
-    const row = h(
-      "div",
-      { class: `row ${justChanged ? "is-changed" : ""}`, style: `padding-left:${8 + depth * 14}px` },
-      twist,
-      h("span", { class: "k" }, key),
-      h("span", { class: "sep" }, ": "),
-      valueSpan,
-      reserved ? h("span", { class: "tag" }, "reserved") : null,
-      h("span", { class: "grow" }),
-      heat,
-    );
-    container.appendChild(row);
-
-    if (expandable && isOpen) {
-      for (const [childKey, childValue] of childEntries(value)) {
-        this.appendRow(container, app, model, `${path}.${childKey}`, childKey, childValue, depth + 1, now, maxChanges);
-      }
-    }
-  }
-
-  private beginEdit(
-    app: DevtoolsAppRecord,
-    path: string,
-    value: unknown,
-    valueSpan: HTMLElement,
-  ): void {
-    if (this.editingPath) return;
-    this.editingPath = path;
-    const initial = valueType(value) === "string" ? String(value) : previewValue(value);
-    const input = h("input", { class: "edit-input", value: initial }) as HTMLInputElement;
-
-    const commit = (apply: boolean) => {
-      if (this.editingPath !== path) return;
-      this.editingPath = null;
-      if (apply) {
-        try { app.setState(path, parseEdit(input.value)); }
-        catch (err) { /* eslint-disable-next-line no-console */ console.error("[aktion-devtools] edit failed", err); }
-      }
-      // Re-render the whole tab now that editing is done.
-      this.scheduleRender();
-    };
-
-    input.addEventListener("keydown", (e: KeyboardEvent) => {
-      if (e.key === "Enter") { e.preventDefault(); commit(true); }
-      else if (e.key === "Escape") { e.preventDefault(); commit(false); }
-    });
-    input.addEventListener("blur", () => commit(true));
-
-    valueSpan.replaceWith(input);
-    input.focus();
-    input.select();
-  }
-
-  /* ---------------------------------------------------------------------- */
-  /*  Render profiler                                                        */
-  /* ---------------------------------------------------------------------- */
-
-  private renderProfilerTab(model: AppModel): void {
     const app = this.currentApp();
-    const last = model.commits[model.commits.length - 1];
-    const toolbar = h(
-      "div",
-      { class: "toolbar" },
-      h("span", { class: "muted" },
-        `${model.commits.length} commit${model.commits.length === 1 ? "" : "s"}`,
-        last ? ` · last ${fmtMs(last.duration)}` : "",
-      ),
-      h("div", { class: "grow" }),
-      h("button", {
-        class: `filter-chip ${this.flashOnCommit ? "is-on" : ""}`,
-        title: "Outline the app element on every commit",
-        onclick: () => { this.flashOnCommit = !this.flashOnCommit; this.scheduleRender(); },
-      }, "Flash on commit"),
-      h("button", {
-        class: "icon-btn",
-        title: "Clear commits",
-        onclick: () => { model.commits.length = 0; this.selectedCommitId = null; this.scheduleRender(); },
-      }, "Clear"),
-    );
-
-    if (model.commits.length === 0) {
-      this.bodyEl.replaceChildren(toolbar, h("div", { class: "empty" },
-        h("p", {}, "No commits recorded yet."),
-        h("p", { class: "faint" }, "Interact with the app to capture renders."),
-      ));
+    const node = typeof app?.nodeForInstance === "function" ? app.nodeForInstance(instanceKey) : null;
+    if (!node) {
+      this.overlay.hideHover();
       return;
     }
-
-    // Commit strip
-    const maxDur = Math.max(...model.commits.map((c) => c.duration), 0.001);
-    const strip = h("div", { class: "commit-strip" });
-    for (const c of model.commits) {
-      const height = Math.max(3, Math.round((c.duration / maxDur) * 52));
-      strip.appendChild(h("div", {
-        class: `commit-bar ${c.initial ? "is-initial" : c.fullRender ? "is-full" : ""} ${c.commitId === this.selectedCommitId ? "is-selected" : ""}`,
-        style: `height:${height}px`,
-        title: `#${c.commitId} · ${fmtMs(c.duration)} · ${c.rendered} rendered / ${c.memoized} memoized`,
-        onclick: () => { this.selectedCommitId = c.commitId; this.scheduleRender(); },
-      }));
-    }
-
-    const selected = model.commits.find((c) => c.commitId === this.selectedCommitId) ?? last!;
-    const summary = this.renderPerfSummary(model);
-    const insights = this.renderProfilerInsights(model);
-    const hotAtoms = this.renderHotAtoms(model);
-    const detail = this.renderCommitDetail(selected);
-    const ranked = this.renderRankedComponents(model);
-
-    const sections = [toolbar, summary, strip, insights, detail, hotAtoms, ranked]
-      .filter((n): n is HTMLElement => n != null);
-    this.bodyEl.replaceChildren(...sections);
-    void app;
+    this.overlay.highlight(node, { component: componentNameFromKey(instanceKey) }, pin);
   }
 
-  /** A compact grid of headline performance numbers for the session. */
-  private renderPerfSummary(model: AppModel): HTMLElement {
-    const commits = model.commits;
-    const totalTime = commits.reduce((a, c) => a + c.duration, 0);
-    const avg = commits.length ? totalTime / commits.length : 0;
-    const slowest = commits.reduce<CommitRecord | null>((m, c) => (!m || c.duration > m.duration ? c : m), null);
-    let rendered = 0, memoized = 0, fullRenders = 0;
-    for (const c of commits) {
-      rendered += c.rendered;
-      memoized += c.memoized;
-      if (c.fullRender) fullRenders += 1;
-    }
-    const first = commits[0];
-    const lastCommit = commits[commits.length - 1];
-    const span = first && lastCommit ? (lastCommit.startTime - first.startTime) : 0;
-    const rate = span > 0 ? (commits.length / (span / 1000)) : 0;
-
-    const stat = (label: string, value: string, opts: { tone?: string; title?: string; onclick?: () => void } = {}) =>
-      h("div", { class: `stat ${opts.onclick ? "is-link" : ""}`, title: opts.title, onclick: opts.onclick },
-        h("span", { class: `stat-val ${opts.tone ? `t-${opts.tone}` : ""}` }, value),
-        h("span", { class: "stat-label" }, label),
-      );
-
-    return h("div", { class: "section" },
-      h("p", { class: "section-title" }, "Performance summary"),
-      h("div", { class: "stat-grid" },
-        stat("commits", fmtCount(commits.length)),
-        stat("total render", fmtMs(totalTime)),
-        stat("avg / commit", fmtMs(avg), { tone: avg >= 8 ? "warn" : undefined }),
-        slowest
-          ? stat("slowest", fmtMs(slowest.duration), {
-              tone: slowest.duration >= 16 ? "warn" : undefined,
-              title: `Commit #${slowest.commitId} — click to inspect`,
-              onclick: () => { this.selectedCommitId = slowest.commitId; this.scheduleRender(); },
-            })
-          : stat("slowest", "—"),
-        stat("memoized", fmtPct(memoized, rendered + memoized), {
-          tone: (rendered + memoized) > 0 && memoized / (rendered + memoized) < 0.2 ? "warn" : "good",
-          title: `${fmtCount(memoized)} skipped / ${fmtCount(rendered + memoized)} component evaluations`,
-        }),
-        stat("full renders", fmtCount(fullRenders), {
-          tone: fullRenders > Math.max(1, commits.length * 0.5) ? "warn" : undefined,
-          title: "Commits that bypassed memoization and re-evaluated the whole tree",
-        }),
-        rate > 0 ? stat("commit rate", `${rate.toFixed(1)}/s`, { tone: rate >= 30 ? "warn" : undefined }) : null,
-      ),
-    );
-  }
-
-  /**
-   * Reactivity insight: which `$state` paths triggered the most commits.
-   * Surfaces the "hot" atoms driving re-renders so an author can see what
-   * their UI actually reacts to.
-   */
-  private renderHotAtoms(model: AppModel): HTMLElement {
-    const counts = new Map<string, number>();
-    for (const c of model.commits) {
-      for (const p of c.changedPaths) counts.set(p, (counts.get(p) ?? 0) + 1);
-    }
-    const rows = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
-    const max = Math.max(1, ...rows.map(([, n]) => n));
-
-    const body = rows.length
-      ? h("div", {}, ...rows.map(([path, n]) =>
-          h("div", { class: "bar-row" },
-            h("span", { class: "bar-row-label" }, path),
-            h("span", { class: "bar-row-track" },
-              h("span", { class: "bar-row-fill", style: `width:${Math.round((n / max) * 100)}%` })),
-            h("span", { class: "bar-row-num" }, `${fmtCount(n)} commit${n === 1 ? "" : "s"}`),
-          )))
-      : h("div", { class: "faint", style: "font-size:11px" }, "No state-driven commits yet (forced / initial only).");
-
-    return h("div", { class: "section" },
-      h("p", { class: "section-title" }, "Reactivity — state paths that triggered commits"),
-      body,
-    );
-  }
-
-  /**
-   * Heuristic insights: surface likely performance problems derived from the
-   * captured commits (frequent re-renders, heavy bodies, low memoization).
-   */
-  private renderProfilerInsights(model: AppModel): HTMLElement | null {
-    interface Agg { name: string; kind: string; renders: number; memo: number; total: number; max: number; }
-    const aggs = new Map<string, Agg>();
-    for (const commit of model.commits) {
-      for (const c of commit.components) {
-        let a = aggs.get(c.name);
-        if (!a) { a = { name: c.name, kind: c.kind, renders: 0, memo: 0, total: 0, max: 0 }; aggs.set(c.name, a); }
-        if (c.phase === "memo") a.memo += 1;
-        else { a.renders += 1; a.total += c.selfTime; a.max = Math.max(a.max, c.selfTime); }
-      }
-    }
-
-    const insights: Array<{ tone: string; icon: string; text: string }> = [];
-    const commitCount = model.commits.length;
-    for (const a of aggs.values()) {
-      if (a.renders === 0) continue;
-      const avg = a.total / a.renders;
-      if (avg >= 8) {
-        insights.push({ tone: "warn", icon: "▲", text: `${a.name} averages ${fmtMs(avg)} per render — consider splitting or memoizing its work.` });
-      }
-      if (a.kind === "user" && a.renders >= 12 && a.memo === 0 && commitCount >= 4) {
-        insights.push({ tone: "warn", icon: "↻", text: `${a.name} re-rendered ${fmtCount(a.renders)}× and was never memoized — check its $state reads.` });
-      }
-    }
-    const fullAfterInitial = model.commits.filter((c) => c.fullRender && !c.initial).length;
-    if (fullAfterInitial >= 3) {
-      insights.push({ tone: "warn", icon: "⛶", text: `${fmtCount(fullAfterInitial)} commits forced a full re-render (memoization disabled) — often async/timer/effect notifies.` });
-    }
-    if (insights.length === 0 && commitCount > 0) {
-      insights.push({ tone: "good", icon: "✓", text: "No render hot-spots detected. Component bodies are cheap and memoization is doing its job." });
-    }
-    if (insights.length === 0) return null;
-
-    return h("div", { class: "section" },
-      h("p", { class: "section-title" }, "Insights"),
-      h("div", { class: "insights" }, ...insights.slice(0, 6).map((i) =>
-        h("div", { class: `insight t-${i.tone}` },
-          h("span", { class: "insight-ic" }, i.icon),
-          h("span", {}, i.text),
-        ))),
-    );
-  }
-
-  private renderCommitDetail(commit: CommitRecord): HTMLElement {
-    const trigger = commit.initial
-      ? "initial mount"
-      : commit.changedPaths.length > 0
-        ? commit.changedPaths.join(", ")
-        : "forced (async / effect / timer)";
-
-    const meta = h(
-      "div",
-      { class: "kv" },
-      h("span", {}, "commit ", h("b", {}, `#${commit.commitId}`)),
-      h("span", {}, "duration ", h("b", { class: "mono" }, fmtMs(commit.duration))),
-      h("span", {}, "rendered ", h("b", {}, String(commit.rendered))),
-      h("span", {}, "memoized ", h("b", {}, String(commit.memoized))),
-      h("span", {}, commit.fullRender
-        ? h("span", { class: "chip amber" }, "full render")
-        : h("span", { class: "chip blue" }, "incremental")),
-    );
-    const triggerLine = h("div", { class: "kv" },
-      h("span", {}, "trigger ", h("b", { class: "mono" }, trigger)));
-
-    const flame = h("div", {});
-    if (commit.components.length === 0) {
-      flame.appendChild(h("div", { class: "faint", style: "font-size:11px" }, "No component instances in this commit (primitive root)."));
-    } else {
-      const maxSelf = Math.max(...commit.components.map((c) => c.selfTime), 0.001);
-      const minDepth = Math.min(...commit.components.map((c) => c.depth));
-      for (const c of commit.components) {
-        flame.appendChild(this.renderFlameRow(c, maxSelf, minDepth));
-      }
-    }
-
-    return h(
-      "div",
-      { class: "section" },
-      h("p", { class: "section-title" }, "Commit detail"),
-      meta,
-      triggerLine,
-      flame,
-    );
-  }
-
-  private renderFlameRow(c: ComponentRenderRecord, maxSelf: number, minDepth: number): HTMLElement {
-    const indent = (c.depth - minDepth) * 12;
-    const widthPct = c.phase === "memo" ? 22 : Math.max(6, Math.round((c.selfTime / maxSelf) * 100));
-    const label = `${c.kind === "user" ? "" : "▪ "}${c.name}`;
-    const bar = h("div", {
-      class: `flame-bar p-${c.phase}`,
-      style: `width:${widthPct}%`,
-      title: `${c.name} — ${c.phase} — ${fmtMs(c.selfTime)}\n${c.reason}${c.deps && c.deps.length ? `\ndeps: ${c.deps.join(", ")}` : ""}`,
-    }, label);
-    return h(
-      "div",
-      { class: "flame-row", style: `padding-left:${indent}px` },
-      h("div", { class: "flame-bar-wrap" }, bar),
-      h("span", { class: "flame-time" }, c.phase === "memo" ? "memo" : fmtMs(c.selfTime)),
-    );
-  }
-
-  private renderRankedComponents(model: AppModel): HTMLElement {
-    interface Agg { name: string; kind: string; renders: number; memo: number; total: number; max: number; }
-    const aggs = new Map<string, Agg>();
-    for (const commit of model.commits) {
-      for (const c of commit.components) {
-        let a = aggs.get(c.name);
-        if (!a) { a = { name: c.name, kind: c.kind, renders: 0, memo: 0, total: 0, max: 0 }; aggs.set(c.name, a); }
-        if (c.phase === "memo") a.memo += 1;
-        else { a.renders += 1; a.total += c.selfTime; a.max = Math.max(a.max, c.selfTime); }
-      }
-    }
-    const sortKey = this.rankedSort.key;
-    const dir = this.rankedSort.dir;
-    const valueOf = (r: Agg): number | string => {
-      switch (sortKey) {
-        case "name": return r.name;
-        case "renders": return r.renders;
-        case "memo": return r.memo;
-        case "avg": return r.renders ? r.total / r.renders : 0;
-        case "max": return r.max;
-        default: return r.total;
-      }
-    };
-    const rows = [...aggs.values()].sort((a, b) => {
-      const va = valueOf(a), vb = valueOf(b);
-      if (typeof va === "string" || typeof vb === "string") {
-        return dir * String(va).localeCompare(String(vb));
-      }
-      return dir * (vb - va) * -1; // dir=-1 → descending for numbers
-    });
-    const maxTotal = Math.max(...rows.map((r) => r.total), 0.001);
-
-    const sortFor = (key: RankKey) => () => {
-      if (this.rankedSort.key === key) this.rankedSort.dir = (this.rankedSort.dir === 1 ? -1 : 1) as 1 | -1;
-      else this.rankedSort = { key, dir: key === "name" ? 1 : -1 };
-      this.scheduleRender();
-    };
-    const arrow = (key: RankKey) => sortKey === key ? (dir === 1 ? " ▲" : " ▼") : "";
-    const th = (key: RankKey, label: string, right = false) =>
-      h("th", { class: "sortable", style: right ? "text-align:right" : "", onclick: sortFor(key) }, label + arrow(key));
-
-    const table = h("table", { class: "dt-table" },
-      h("thead", {}, h("tr", {},
-        th("name", "Component"),
-        h("th", {}, "Type"),
-        th("renders", "Renders", true),
-        th("memo", "Memo", true),
-        th("total", "Total", true),
-        th("avg", "Avg", true),
-        th("max", "Max", true),
-      )),
-      h("tbody", {}, ...rows.map((r) =>
-        h("tr", {},
-          h("td", { class: "name" }, r.name),
-          h("td", {}, h("span", { class: `chip ${r.kind === "user" ? "purple" : "grey"}` }, r.kind)),
-          h("td", { class: "num" }, String(r.renders)),
-          h("td", { class: "num" }, String(r.memo)),
-          h("td", { class: "num bar-cell" },
-            h("span", { class: "barfill", style: `width:${Math.round((r.total / maxTotal) * 100)}%` }),
-            h("span", {}, fmtMs(r.total)),
-          ),
-          h("td", { class: "num" }, r.renders ? fmtMs(r.total / r.renders) : "—"),
-          h("td", { class: "num" }, r.renders ? fmtMs(r.max) : "—"),
-        ),
-      )),
-    );
-
-    return h("div", { class: "section" },
-      h("p", { class: "section-title" }, "Components — ranked by self time"),
-      rows.length ? table : h("div", { class: "faint", style: "font-size:11px" }, "No component renders captured."),
-    );
-  }
-
-  /* ---------------------------------------------------------------------- */
-  /*  Effect timeline                                                        */
-  /* ---------------------------------------------------------------------- */
-
-  private renderEffectsTab(model: AppModel): void {
-    const phases: EffectPhase[] = ["mount", "run", "cleanup", "unmount", "error"];
-    const toolbar = h(
-      "div",
-      { class: "toolbar" },
-      h("div", { class: "filters" }, ...phases.map((p) =>
-        h("button", {
-          class: `filter-chip ${this.phaseFilter.has(p) ? "is-on" : ""}`,
-          onclick: () => {
-            if (this.phaseFilter.has(p)) this.phaseFilter.delete(p);
-            else this.phaseFilter.add(p);
-            this.scheduleRender();
-          },
-        }, p),
-      )),
-      h("div", { class: "grow" }),
-      h("button", {
-        class: `filter-chip ${this.effectView === "timeline" ? "is-on" : ""}`,
-        title: "Toggle the visual timeline",
-        onclick: () => { this.effectView = this.effectView === "timeline" ? "log" : "timeline"; this.scheduleRender(); },
-      }, this.effectView === "timeline" ? "Timeline" : "Log"),
-      h("button", {
-        class: "icon-btn",
-        title: "Clear effect events",
-        onclick: () => { model.effects.length = 0; this.scheduleRender(); },
-      }, "Clear"),
-    );
-
-    if (model.effects.length === 0) {
-      this.bodyEl.replaceChildren(toolbar, h("div", { class: "empty" },
-        h("p", {}, "No effects observed yet."),
-        h("p", { class: "faint" }, "Effects appear as they mount, run, and clean up."),
-      ));
-      return;
-    }
-
-    const summary = this.renderEffectSummary(model);
-    const insights = this.renderEffectInsights(model);
-    const viz = this.effectView === "timeline"
-      ? this.renderEffectTimeline(model)
-      : this.renderEffectLog(model);
-    const sections = [toolbar, summary, insights, this.renderEffectLanes(model), viz]
-      .filter((n): n is HTMLElement => n != null);
-    this.bodyEl.replaceChildren(...sections);
-  }
-
-  /** Headline counters for the effect session. */
-  private renderEffectSummary(model: AppModel): HTMLElement {
-    const keys = new Set<string>();
-    let runs = 0, total = 0, cleanups = 0, errors = 0;
-    for (const e of model.effects) {
-      keys.add(e.effectKey);
-      if (e.phase === "run") { runs += 1; total += e.duration ?? 0; }
-      else if (e.phase === "cleanup") cleanups += 1;
-      else if (e.phase === "error") errors += 1;
-    }
-    const stat = (label: string, value: string, tone?: string) =>
-      h("div", { class: "stat" },
-        h("span", { class: `stat-val ${tone ? `t-${tone}` : ""}` }, value),
-        h("span", { class: "stat-label" }, label),
-      );
-    return h("div", { class: "section" },
-      h("p", { class: "section-title" }, "Effect summary"),
-      h("div", { class: "stat-grid" },
-        stat("effects", fmtCount(keys.size)),
-        stat("runs", fmtCount(runs)),
-        stat("total run", fmtMs(total)),
-        stat("avg run", fmtMs(runs ? total / runs : 0)),
-        stat("cleanups", fmtCount(cleanups)),
-        stat("errors", fmtCount(errors), errors > 0 ? "bad" : "good"),
-      ),
-    );
-  }
-
-  /** Re-run thrash + error detection for effects. */
-  private renderEffectInsights(model: AppModel): HTMLElement | null {
-    interface Agg { label: string; runs: number; errors: number; total: number; }
-    const aggs = new Map<string, Agg>();
-    for (const e of model.effects) {
-      let a = aggs.get(e.effectKey);
-      if (!a) { a = { label: e.label, runs: 0, errors: 0, total: 0 }; aggs.set(e.effectKey, a); }
-      if (e.phase === "run") { a.runs += 1; a.total += e.duration ?? 0; }
-      else if (e.phase === "error") a.errors += 1;
-    }
-    const insights: Array<{ tone: string; icon: string; text: string }> = [];
-    for (const a of aggs.values()) {
-      if (a.errors > 0) {
-        insights.push({ tone: "bad", icon: "✖", text: `${a.label} threw ${fmtCount(a.errors)}× — check the effect body.` });
-      }
-      if (a.runs >= 20) {
-        insights.push({ tone: "warn", icon: "↻", text: `${a.label} ran ${fmtCount(a.runs)}× — a hot trigger; confirm its dependency list is intentional.` });
-      } else if (a.runs >= 1 && a.total / Math.max(1, a.runs) >= 6) {
-        insights.push({ tone: "warn", icon: "▲", text: `${a.label} averages ${fmtMs(a.total / a.runs)} per run — heavy work in an effect body.` });
-      }
-    }
-    if (insights.length === 0) return null;
-    return h("div", { class: "section" },
-      h("p", { class: "section-title" }, "Insights"),
-      h("div", { class: "insights" }, ...insights.slice(0, 6).map((i) =>
-        h("div", { class: `insight t-${i.tone}` },
-          h("span", { class: "insight-ic" }, i.icon),
-          h("span", {}, i.text),
-        ))),
-    );
-  }
-
-  /**
-   * A visual, time-positioned timeline: one lane per effect, with a marker
-   * for every event placed along a shared time axis and coloured by phase.
-   * Makes overlapping runs, cleanup→run pairing, and bursts obvious at a
-   * glance in a way the chronological log can't.
-   */
-  private renderEffectTimeline(model: AppModel): HTMLElement {
-    const base = model.firstTime ?? 0;
-    const last = model.effects.reduce((m, e) => Math.max(m, e.time), base);
-    const span = Math.max(1, last - base);
-
-    // Group events by effect, preserving first-seen order for stable lanes.
-    const order: string[] = [];
-    const byKey = new Map<string, { label: string; instance: boolean; events: EffectEvent[] }>();
-    for (const e of model.effects) {
-      let lane = byKey.get(e.effectKey);
-      if (!lane) { lane = { label: e.label, instance: e.instanceKey != null, events: [] }; byKey.set(e.effectKey, lane); order.push(e.effectKey); }
-      lane.events.push(e);
-    }
-
-    const wrap = h("div", { class: "section", style: "padding:0" });
-    wrap.appendChild(h("div", { class: "tl-head" },
-      h("span", { class: "section-title", style: "margin:0" }, `Timeline · ${fmtRel(span)} span`),
-      h("span", { class: "tl-axis" }, "0", h("span", { class: "tl-axis-end" }, fmtRel(span))),
-    ));
-
-    for (const key of order) {
-      const lane = byKey.get(key)!;
-      const track = h("div", { class: "tl-track" });
-      for (const e of lane.events) {
-        if (!this.phaseFilter.has(e.phase)) continue;
-        const leftPct = ((e.time - base) / span) * 100;
-        track.appendChild(h("span", {
-          class: `tl-dot ${PHASE_CHIP[e.phase] ?? "grey"}`,
-          style: `left:${Math.min(99, Math.max(0, leftPct))}%`,
-          title: `${e.phase} · ${e.reason}${e.duration != null ? ` · ${fmtMs(e.duration)}` : ""} · ${fmtRel(e.time - base)}`,
-        }));
-      }
-      wrap.appendChild(h("div", { class: "tl-row" },
-        h("span", { class: "tl-name" },
-          lane.label,
-          lane.instance ? h("span", { class: "chip purple", style: "margin-left:5px" }, "inst") : null,
-        ),
-        track,
-      ));
-    }
-    return wrap;
-  }
-
-  private renderEffectLanes(model: AppModel): HTMLElement {
-    interface Lane { key: string; label: string; triggers: string; runs: number; total: number; lastReason: string; instance: boolean; }
-    const lanes = new Map<string, Lane>();
-    for (const e of model.effects) {
-      let lane = lanes.get(e.effectKey);
-      if (!lane) {
-        lane = { key: e.effectKey, label: e.label, triggers: e.triggers, runs: 0, total: 0, lastReason: e.reason, instance: e.instanceKey != null };
-        lanes.set(e.effectKey, lane);
-      }
-      if (e.phase === "run") { lane.runs += 1; lane.total += e.duration ?? 0; lane.lastReason = e.reason; }
-    }
-    const list = [...lanes.values()].sort((a, b) => b.runs - a.runs);
-    const wrap = h("div", { class: "section", style: "padding:0" });
-    wrap.appendChild(h("p", { class: "section-title", style: "padding:8px 10px 0" }, `Effects (${list.length})`));
-    for (const lane of list) {
-      wrap.appendChild(h("div", { class: "lane" },
-        h("span", { class: "lane-name" }, lane.label),
-        lane.instance ? h("span", { class: "chip purple", style: "flex:0 0 auto" }, "instance") : null,
-        h("span", { class: "lane-trig" }, lane.triggers),
-        h("span", { class: "lane-stat" }, `${lane.runs} run${lane.runs === 1 ? "" : "s"} · ${fmtMs(lane.total)}`),
-      ));
-    }
-    return wrap;
-  }
-
-  private renderEffectLog(model: AppModel): HTMLElement {
-    const base = model.firstTime ?? 0;
-    const filtered = model.effects.filter((e) => this.phaseFilter.has(e.phase));
-    const rows = filtered.slice(-MAX_LOG_ROWS).reverse();
-    const wrap = h("div", { class: "section", style: "padding:0;border-bottom:none" });
-    wrap.appendChild(h("p", { class: "section-title", style: "padding:8px 10px 0" }, "Timeline"));
-    if (rows.length === 0) {
-      wrap.appendChild(h("div", { class: "faint", style: "font-size:11px;padding:0 10px 10px" }, "No events match the active filters."));
-      return wrap;
-    }
-    for (const e of rows) {
-      wrap.appendChild(h("div", { class: "log-row" },
-        h("span", { class: "t" }, fmtRel(e.time - base)),
-        h("span", { class: "ph" }, h("span", { class: `chip ${PHASE_CHIP[e.phase] ?? "grey"}` }, e.phase)),
-        h("span", { class: "lbl" }, e.label),
-        h("span", { class: "rsn" },
-          e.reason,
-          e.phase === "run" && e.duration != null ? ` · ${fmtMs(e.duration)}` : "",
-          e.phase === "cleanup" && e.cleanups != null ? ` · ${e.cleanups}×` : "",
-          e.error ? ` · ${e.error}` : "",
-        ),
-      ));
-    }
-    return wrap;
-  }
-
-  /* ---------------------------------------------------------------------- */
-  /*  Highlight + drag/resize                                                */
-  /* ---------------------------------------------------------------------- */
+  /* ---- highlight + drag/resize ---- */
 
   private flashApp(appId: string): void {
     const app = this.hook?.apps.get(appId);
     if (!app) return;
-    const el = app.element as HTMLElement;
-    const prev = el.style.outline;
-    el.style.outline = "2px solid rgba(124,156,255,0.9)";
-    el.style.outlineOffset = "1px";
+    const element = app.element;
+    const previous = element.style.outline;
+    element.style.outline = "2px solid rgba(124,156,255,0.9)";
+    element.style.outlineOffset = "1px";
     if (this.flashTimer) clearTimeout(this.flashTimer);
     this.flashTimer = setTimeout(() => {
-      el.style.outline = prev;
-      el.style.outlineOffset = "";
+      element.style.outline = previous;
+      element.style.outlineOffset = "";
     }, 140);
   }
 
   private makeDraggable(handle: HTMLElement): void {
     let startX = 0, startY = 0, originLeft = 0, originTop = 0, dragging = false;
-    const onDown = (e: MouseEvent) => {
-      // Ignore drags that start on an interactive control in the header.
-      if ((e.target as HTMLElement).closest("button, select, input")) return;
-      dragging = true;
-      handle.classList.add("is-dragging");
-      startX = e.clientX; startY = e.clientY;
-      const rect = this.getBoundingClientRect();
-      originLeft = rect.left; originTop = rect.top;
-      e.preventDefault();
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-    };
-    const onMove = (e: MouseEvent) => {
+    const onMove = (event: MouseEvent): void => {
       if (!dragging) return;
-      this.style.left = `${Math.max(0, originLeft + (e.clientX - startX))}px`;
-      this.style.top = `${Math.max(0, originTop + (e.clientY - startY))}px`;
+      this.geometry.left = Math.max(0, originLeft + (event.clientX - startX));
+      this.geometry.top = Math.max(0, originTop + (event.clientY - startY));
+      this.style.left = `${this.geometry.left}px`;
+      this.style.top = `${this.geometry.top}px`;
     };
-    const onUp = () => {
+    const onUp = (): void => {
       dragging = false;
       handle.classList.remove("is-dragging");
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      this.persist();
     };
-    handle.addEventListener("mousedown", onDown);
+    handle.addEventListener("mousedown", (event: MouseEvent) => {
+      // Dragging only applies while floating, and never from a control.
+      if (this.ui.dock !== "float") return;
+      if ((event.target as HTMLElement).closest("button, select, input")) return;
+      dragging = true;
+      handle.classList.add("is-dragging");
+      startX = event.clientX;
+      startY = event.clientY;
+      const rect = this.getBoundingClientRect();
+      originLeft = rect.left;
+      originTop = rect.top;
+      event.preventDefault();
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    });
   }
 
   private makeResizable(grip: HTMLElement): void {
     let startX = 0, startY = 0, startW = 0, startH = 0, resizing = false;
-    const onDown = (e: MouseEvent) => {
-      resizing = true;
-      startX = e.clientX; startY = e.clientY;
-      const rect = this.panelEl.getBoundingClientRect();
-      startW = rect.width; startH = rect.height;
-      e.preventDefault();
-      e.stopPropagation();
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-    };
-    const onMove = (e: MouseEvent) => {
+    const onMove = (event: MouseEvent): void => {
       if (!resizing) return;
-      this.panelEl.style.width = `${Math.max(320, startW + (e.clientX - startX))}px`;
-      this.panelEl.style.height = `${Math.max(240, startH + (e.clientY - startY))}px`;
+      this.geometry.width = Math.max(360, startW + (event.clientX - startX));
+      this.geometry.height = Math.max(260, startH + (event.clientY - startY));
+      this.panelEl.style.width = `${this.geometry.width}px`;
+      this.panelEl.style.height = `${this.geometry.height}px`;
     };
-    const onUp = () => {
+    const onUp = (): void => {
       resizing = false;
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      this.persist();
     };
-    grip.addEventListener("mousedown", onDown);
+    grip.addEventListener("mousedown", (event: MouseEvent) => {
+      if (this.ui.dock !== "float") return;
+      resizing = true;
+      startX = event.clientX;
+      startY = event.clientY;
+      const rect = this.panelEl.getBoundingClientRect();
+      startW = rect.width;
+      startH = rect.height;
+      event.preventDefault();
+      event.stopPropagation();
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    });
+  }
+
+  private persist(): void {
+    const payload: PersistedUiState = {
+      tab: this.ui.tab,
+      dock: this.ui.dock,
+      light: this.ui.light,
+      compact: this.ui.compact,
+      captureConsole: this.ui.captureConsole,
+      width: this.geometry.width,
+      height: this.geometry.height,
+      left: this.geometry.left,
+      top: this.geometry.top,
+    };
+    savePersisted(payload);
+  }
+}
+
+function dockGlyph(dock: DockMode): string {
+  switch (dock) {
+    case "right": return "▐";
+    case "left": return "▌";
+    case "bottom": return "▄";
+    default: return "❐";
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Helpers + public API                                                       */
+/*  Public API                                                                 */
 /* -------------------------------------------------------------------------- */
-
-function eventTime(event: DevtoolsEvent): number {
-  if (event.kind === "commit") return (event as CommitRecord).startTime;
-  if (event.kind === "state") return (event as StateEvent).time;
-  return (event as EffectEvent).time;
-}
-
-/** Root atom name of a dotted path (`user.name` → `user`). */
-function rootOf(path: string): string {
-  const dot = path.indexOf(".");
-  return dot < 0 ? path : path.slice(0, dot);
-}
 
 /** Register the custom element (idempotent). */
 export function defineDevtoolsElement(): void {
@@ -1286,6 +731,10 @@ export interface MountDevtoolsOptions {
   appId?: string;
   /** Start open (default `true`). */
   open?: boolean;
+  /** Open on a specific tab. */
+  tab?: TabId;
+  /** Dock position (default: whatever was last used, else floating). */
+  dock?: DockMode;
 }
 
 export interface DevtoolsController {
@@ -1297,16 +746,18 @@ export interface DevtoolsController {
   close(): void;
   toggle(): void;
   selectApp(id: string): void;
+  /** Switch to a tab by id. */
+  selectTab(tab: TabId): void;
   /** Remove the panel from the DOM (the hook + event stream stay installed). */
   destroy(): void;
 }
 
 /**
- * Install the DevTools hook and mount an in-page panel. Idempotent at the
- * hook level — multiple panels share one event stream — but each call mounts
- * a fresh panel element.
+ * Install the DevTools hook and mount an in-page panel. Idempotent at the hook
+ * level — multiple panels share one event stream — but each call mounts a fresh
+ * panel element.
  *
- *   import { mountDevtools } from "aktion/devtools";
+ *   import { mountDevtools } from "aktion-runtime/devtools";
  *   mountDevtools();
  */
 export function mountDevtools(options: MountDevtoolsOptions = {}): DevtoolsController {
@@ -1315,6 +766,11 @@ export function mountDevtools(options: MountDevtoolsOptions = {}): DevtoolsContr
   const element = document.createElement(AktionDevtoolsElement.tagName) as AktionDevtoolsElement;
   (options.container ?? document.body).appendChild(element);
   if (options.appId) element.selectApp(options.appId);
+  if (options.tab) element.selectTab(options.tab);
+  if (options.dock) {
+    element.getUiState().dock = options.dock;
+    element.selectTab(element.getUiState().tab);
+  }
   if (options.open === false) element.close();
   return {
     element,
@@ -1323,6 +779,7 @@ export function mountDevtools(options: MountDevtoolsOptions = {}): DevtoolsContr
     close: () => element.close(),
     toggle: () => element.toggle(),
     selectApp: (id) => element.selectApp(id),
+    selectTab: (tab) => element.selectTab(tab),
     destroy: () => element.remove(),
   };
 }
@@ -1331,3 +788,6 @@ export function mountDevtools(options: MountDevtoolsOptions = {}): DevtoolsContr
 export function isDevtoolsInstalled(): boolean {
   return getDevtoolsHook() !== undefined;
 }
+
+/** Re-exported so a host can clear a panel's captured data programmatically. */
+export { clearModel };

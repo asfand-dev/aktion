@@ -59,9 +59,9 @@ import {
   RuntimeBudgetError,
   type RouteChangeDetail,
 } from "./runtime/index.js";
-import { HttpRuntime } from "./runtime/http.js";
+import { HttpRuntime, invalidateQueries, type HttpDevtoolsTap } from "./runtime/http.js";
 import { EffectRunner } from "./runtime/effects.js";
-import type { EvaluationContext } from "./runtime/evaluator.js";
+import { evaluate, isPureLiteralExpression, type EvaluationContext } from "./runtime/evaluator.js";
 import type { ComponentLibrary, ComponentSpec, UIProvider } from "./library/types.js";
 import { defaultLibrary, validateProgramSchema } from "./library/index.js";
 import { mergeLibraries } from "./library/registry.js";
@@ -74,9 +74,11 @@ import {
 import {
   applyTheme,
   applyPartialTheme,
+  builtInThemes,
   clearTokenOverrides,
   resolveTheme,
   sanitiseThemeTokens,
+  themeTokenCssVar,
   type ThemeInput,
   type ThemeTokens,
 } from "./theme/index.js";
@@ -85,6 +87,7 @@ import { componentStyles } from "./theme/styles.js";
 import { getResponsiveSheet } from "./library/responsive-style.js";
 import { ensureFontAwesomeLoaded, registerIcons } from "./icons/index.js";
 import {
+  devtoolsOption,
   emitDevtoolsEvent,
   getDevtoolsHook,
   isDevtoolsActive,
@@ -92,7 +95,37 @@ import {
   unregisterDevtoolsApp,
   type DevtoolsAppRecord,
 } from "./devtools/hook.js";
-import type { EffectEventPayload } from "./devtools/protocol.js";
+import type {
+  AppStats,
+  ComponentRenderRecord,
+  Diagnostic,
+  EffectEventPayload,
+  EffectInfo,
+  EvalResult,
+  InstanceDetail,
+  InstanceNode,
+  NetworkRule,
+  ProgramAnalysis,
+  QueryInfo,
+  RouteInfo,
+  StateAtomMeta,
+  StoreInfo,
+  ThemeInfo,
+} from "./devtools/protocol.js";
+import { bodyPreview, bodySize, toDevtoolsValue, truncate } from "./devtools/serialize.js";
+import { findMatchingRule, verdictFor } from "./devtools/rules.js";
+import { ancestorsOf, buildInstanceTree, parentKeyOf } from "./devtools/tree.js";
+import {
+  collectRoutePatterns,
+  describeDiagnostics,
+  describeHookCells,
+  describeQueries,
+  describeStateMeta,
+  describeStores,
+  describeUiState,
+  outlineProgram,
+} from "./devtools/introspect.js";
+import { INSTANCE_ATTR, OWNER_ATTR } from "./renderer/renderer.js";
 
 const ATTRIBUTE_THEME = "theme";
 const ATTRIBUTE_STREAMING = "streaming";
@@ -430,6 +463,32 @@ export class AktionElement extends HTMLElement {
   private devtoolsCommitId = 0;
   /** True once this element has been registered with the DevTools hook. */
   private devtoolsRegistered = false;
+  /**
+   * Component records from the most recent commit. The inspector needs the
+   * *current* tree (props, sources, per-instance keys), which is a different
+   * question from the profiler's history — and answering it from the last
+   * commit means no extra bookkeeping during render.
+   */
+  private devtoolsComponents: ComponentRenderRecord[] = [];
+  /** Structured diagnostics from the last plan, for the Source tab. */
+  private devtoolsDiagnostics: Diagnostic[] = [];
+  /** Last planned program, kept only for static introspection (routes, outline). */
+  private devtoolsProgram: Program | null = null;
+  /** DevTools-installed network rules (delay / mock / fail / offline). */
+  private devtoolsNetworkRules: NetworkRule[] = [];
+  /** Correlation counter for network events. */
+  private devtoolsRequestSeq = 0;
+  /** In-flight requests, so a terminal event can carry the request details. */
+  private readonly devtoolsRequests = new Map<string, { method: string; url: string }>();
+  /** True while an HTTP tap is installed on the shared runtime. */
+  private devtoolsTapInstalled = false;
+  /** Theme tokens DevTools is currently overriding, so they can be cleared. */
+  private devtoolsThemeKeys: ReadonlyArray<keyof ThemeTokens> = [];
+  /**
+   * A navigation waiting for the render that resolves which route arm matched.
+   * See {@link handleRouteChange}.
+   */
+  private devtoolsPendingRoute: { from: string; to: string; source?: string; time: number } | null = null;
 
   constructor() {
     super();
@@ -735,6 +794,13 @@ export class AktionElement extends HTMLElement {
     if (this.devtoolsRegistered) {
       unregisterDevtoolsApp(this.devtoolsId);
       this.devtoolsRegistered = false;
+    }
+    // Drop the network tap and any DevTools-installed request rules: a torn-down
+    // element must not keep mocking (or observing) requests the next mount makes.
+    if (this.devtoolsTapInstalled) {
+      this.http.setDevtoolsTap(null);
+      this.devtoolsTapInstalled = false;
+      this.devtoolsRequests.clear();
     }
   }
 
@@ -1178,6 +1244,18 @@ export class AktionElement extends HTMLElement {
 
   /** Dispatch a custom event from `emit()` calls in effect/action bodies. */
   private emitCustomEvent(eventName: string, detail: unknown): void {
+    // Mirror it to DevTools first: a host that stops propagation, or a page
+    // with no listener at all, would otherwise make an `emit(...)` that really
+    // did fire look like one that never ran.
+    if (isDevtoolsActive()) {
+      emitDevtoolsEvent({
+        kind: "emit",
+        appId: this.devtoolsId,
+        name: eventName,
+        detail: toDevtoolsValue(detail),
+        time: nowMs(),
+      });
+    }
     this.dispatchEvent(new CustomEvent(eventName, {
       detail,
       bubbles: true,
@@ -1202,7 +1280,22 @@ export class AktionElement extends HTMLElement {
     // late-attach path: the page opened DevTools *after* the app mounted.
     const hook = getDevtoolsHook();
     if (!hook) return;
-    const record: DevtoolsAppRecord = {
+    hook.registerApp(this.buildDevtoolsRecord());
+    this.devtoolsRegistered = true;
+    this.installDevtoolsHttpTap();
+  }
+
+  /**
+   * Assemble the capability record a frontend drives the app through.
+   *
+   * Every entry is a narrow, purpose-built operation — read this, write that,
+   * navigate there. No raw `context`, `renderer`, or `state` reference escapes,
+   * so a buggy (or hostile) frontend cannot reach past what a debugger
+   * legitimately needs, and every write it *can* make goes through the same
+   * reactive pipeline a real event handler would use.
+   */
+  private buildDevtoolsRecord(): DevtoolsAppRecord {
+    return {
       id: this.devtoolsId,
       label: this.getAttribute("data-devtools-label") || this.id || this.devtoolsId,
       element: this,
@@ -1210,9 +1303,559 @@ export class AktionElement extends HTMLElement {
       setState: (path, value) => this.applyDevtoolsStateEdit(path, value),
       getProgram: () => this.currentResponse,
       forceRender: () => this.requestFullRender(),
+
+      /* ---- program & diagnostics ---- */
+      setProgram: (text) => this.setResponse(text),
+      getSources: () => this.devtoolsSources(),
+      getDiagnostics: () => [...this.devtoolsDiagnostics],
+      analyzeProgram: (text) => this.devtoolsAnalyze(text),
+      reload: () => {
+        this.programDirty = true;
+        this.requestFullRender();
+      },
+
+      /* ---- inspector ---- */
+      getRenderRoot: () => this.rootEl,
+      getComponentTree: () => this.devtoolsTree(),
+      getInstance: (key) => this.devtoolsInstance(key),
+      instanceForNode: (node) => this.devtoolsInstanceForNode(node),
+      nodeForInstance: (key) => this.devtoolsNodeForInstance(key),
+      setInstanceHook: (key, slot, value) => this.devtoolsSetInstanceHook(key, slot, value),
+      setInstanceUiState: (key, slot, value) => {
+        const applied = this.renderer.setInstanceUiState(key, slot, value);
+        if (applied) this.requestFullRender();
+        return applied;
+      },
+      setPropOverride: (key, prop, value) => {
+        this.renderer.setPropOverride(key, prop, value);
+        this.requestFullRender();
+      },
+      clearPropOverride: (key, prop) => {
+        this.renderer.clearPropOverride(key, prop);
+        this.requestFullRender();
+      },
+      listPropOverrides: () => this.renderer.listPropOverrides().map((entry) => ({
+        instanceKey: entry.instanceKey,
+        prop: entry.prop,
+        preview: toDevtoolsValue(entry.value).preview,
+      })),
+      remountInstance: (key) => {
+        this.renderer.dropInstance(key);
+        clearInstanceHooks(this.context, key);
+        this.effectRunner.unmountInstance(key);
+        this.requestFullRender();
+      },
+
+      /* ---- reactive state ---- */
+      getStateMeta: () => this.devtoolsStateMeta(),
+      resetState: (names) => {
+        if (names && names.length > 0) this.state.reset(...names);
+        else this.state.resetAll();
+        this.requestFullRender();
+      },
+      hydrateState: (snapshot) => this.hydrateState(snapshot),
+      evaluateExpression: (source) => this.devtoolsEvaluate(source),
+
+      /* ---- effects ---- */
+      getEffects: () => this.effectRunner.listMounted() as EffectInfo[],
+      runEffect: (key) => this.effectRunner.runNow(key),
+
+      /* ---- data layer ---- */
+      getQueries: () => this.devtoolsQueries(),
+      refetchQuery: (key) => {
+        void this.context.queryCache.get(key)?.refetch();
+      },
+      cancelQuery: (key) => {
+        this.context.queryCache.get(key)?.cancel();
+      },
+      invalidateQueries: (pattern) => invalidateQueries(this.context, [pattern]),
+      getStores: () => this.devtoolsStores(),
+      callStoreMethod: (atom, method, args) => this.devtoolsCallStoreMethod(atom, method, args ?? []),
+
+      /* ---- router ---- */
+      getRoute: () => this.devtoolsRoute(),
+      navigate: (path) => this.router.navigate(path),
+
+      /* ---- theme ---- */
+      getTheme: () => this.devtoolsTheme(),
+      setThemeTokens: (tokens) => this.devtoolsSetThemeTokens(tokens),
+      clearThemeTokens: () => {
+        clearTokenOverrides(this, this.devtoolsThemeKeys);
+        this.devtoolsThemeKeys = [];
+        // Repaint the base theme so cleared tokens fall back correctly, then
+        // let the next render re-apply any in-script `$theme({...})`.
+        this.applyThemeFromAttribute();
+        this.requestFullRender();
+      },
+      setThemeName: (name) => this.setTheme(name),
+
+      /* ---- network rules ---- */
+      setNetworkRules: (rules) => {
+        this.devtoolsNetworkRules = rules.map((rule) => ({ ...rule }));
+        this.installDevtoolsHttpTap();
+      },
+      getNetworkRules: () => this.devtoolsNetworkRules.map((rule) => ({ ...rule })),
+
+      /* ---- stats ---- */
+      getStats: () => this.devtoolsStats(),
     };
-    hook.registerApp(record);
-    this.devtoolsRegistered = true;
+  }
+
+  /* ---- DevTools: program ------------------------------------------------ */
+
+  /**
+   * Per-module sources of a linked program, or the single inline source.
+   *
+   * A multi-file program is planned from a pre-linked AST, so the element only
+   * holds the module *paths*; the text of a module it never fetched is not
+   * recoverable here. Reporting the paths with empty text would look like empty
+   * files, so only the entry text is claimed — the panel labels the rest.
+   */
+  private devtoolsSources(): Array<{ path: string; text: string }> {
+    const paths = this.devtoolsProgram?.sources;
+    const entry = this.compiledSourceId ?? "<inline>";
+    if (!paths || paths.length === 0) {
+      return [{ path: entry, text: this.currentResponse }];
+    }
+    return paths.map((path, index) => ({
+      path,
+      text: index === 0 ? this.currentResponse : "",
+    }));
+  }
+
+  /**
+   * Parse + validate a candidate program and outline its declarations, without
+   * mounting it.
+   *
+   * This is what makes the Source tab's editor safe to use: you see the parse
+   * errors and the schema violations of the draft *before* replacing a running
+   * program. It runs the same parser and the same validator the mount path uses,
+   * against the same component library, so its verdict cannot differ.
+   */
+  private devtoolsAnalyze(text?: string): ProgramAnalysis {
+    const source = text ?? this.currentResponse;
+    try {
+      const program = parse(source);
+      const schemaErrors = validateProgramSchema(program, this.library);
+      const diagnostics = describeDiagnostics({
+        parse: [...program.errors, ...schemaErrors],
+        warnings: program.warnings,
+      });
+      return {
+        diagnostics,
+        outline: outlineProgram(program.statements),
+        ok: diagnostics.every((diagnostic) => diagnostic.severity !== "error"),
+      };
+    } catch (err) {
+      return {
+        diagnostics: [{ line: 0, column: 0, message: errorMessage(err), kind: "parse", severity: "error" }],
+        outline: [],
+        ok: false,
+      };
+    }
+  }
+
+  /* ---- DevTools: inspector --------------------------------------------- */
+
+  /** Component tree of the last commit, with liveness resolved against the DOM. */
+  private devtoolsTree(): InstanceNode[] {
+    const nodes = buildInstanceTree(this.devtoolsComponents);
+    for (const node of nodes) {
+      node.mounted = this.devtoolsNodeForInstance(node.instanceKey) !== null;
+    }
+    return nodes;
+  }
+
+  /**
+   * Everything the inspector knows about one instance: the props it received,
+   * its per-instance hook cells, its library UI-state slots, what it reads, the
+   * effects it owns, and the DOM it produced.
+   *
+   * This is the "see and change one component" surface — the props and hooks
+   * here are exactly what `setPropOverride` / `setInstanceHook` write back to.
+   */
+  private devtoolsInstance(instanceKey: string): InstanceDetail | null {
+    const record = this.devtoolsComponents.find((c) => c.instanceKey === instanceKey);
+    const keys = new Set(this.devtoolsComponents.map((c) => c.instanceKey));
+    const node = this.devtoolsNodeForInstance(instanceKey);
+    if (!record && !node) return null;
+
+    const overrides = this.renderer.propOverridesFor(instanceKey);
+    const effects = this.effectRunner
+      .listMounted()
+      .filter((effect) => effect.instanceKey === instanceKey)
+      .map((effect) => effect.effectKey);
+
+    const detail: InstanceDetail = {
+      instanceKey,
+      name: record?.name ?? instanceKey.slice(instanceKey.lastIndexOf("#") + 1),
+      kind: record?.kind ?? "library",
+      parentKey: parentKeyOf(instanceKey, keys),
+      depth: record?.depth ?? 0,
+      source: record?.source,
+      explicitKey: record?.explicitKey,
+      props: record?.props ? [...record.props] : [],
+      hooks: describeHookCells(this.context.hookStore.get(instanceKey)),
+      uiState: describeUiState(this.renderer.listInstanceUiState(instanceKey)),
+      deps: record?.deps ? [...record.deps] : [],
+      effects,
+      ancestors: ancestorsOf(instanceKey, keys),
+      mounted: node !== null,
+    };
+    if (node) {
+      detail.html = truncate(node.outerHTML ?? "", 4000);
+      detail.domNodes = countDomNodes(node);
+    }
+    if (overrides && overrides.size > 0) {
+      detail.overrides = [...overrides].map(([prop, value]) => ({ prop, value: toDevtoolsValue(value) }));
+    }
+    return detail;
+  }
+
+  /**
+   * Resolve a DOM node to the instance that rendered it — the element picker's
+   * whole job. Walks up to the nearest tagged ancestor, preferring the library
+   * instance (which owns the node) and falling back to the enclosing user
+   * component when the node came from a component that renders a fragment.
+   */
+  private devtoolsInstanceForNode(node: Node): string | null {
+    let current: Node | null = node;
+    while (current) {
+      if (current instanceof Element) {
+        const tagged = current.getAttribute(INSTANCE_ATTR) ?? current.getAttribute(OWNER_ATTR);
+        if (tagged) return tagged;
+      }
+      // Cross a shadow boundary rather than stopping at it: the app's own tree
+      // lives in a shadow root, and a picker that gave up here would only ever
+      // resolve the host element.
+      const parent: Node | null = current.parentNode;
+      current = parent ?? (current as { host?: Node }).host ?? null;
+    }
+    return null;
+  }
+
+  /** The element an instance rendered, or `null` when it is not in the DOM. */
+  private devtoolsNodeForInstance(instanceKey: string): Element | null {
+    const escaped = escapeAttrValue(instanceKey);
+    const selector = `[${INSTANCE_ATTR}="${escaped}"], [${OWNER_ATTR}="${escaped}"]`;
+    try {
+      return this.rootEl.querySelector(selector);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Write one per-instance hook cell.
+   *
+   * Hooks are matched by call order, so the slot index is the address. A write
+   * lands directly in the cell the next render will read, then forces a render —
+   * the same two steps the hook's own setter performs.
+   */
+  private devtoolsSetInstanceHook(instanceKey: string, slot: number, value: unknown): boolean {
+    const cells = this.context.hookStore.get(instanceKey);
+    const cell = cells?.[slot];
+    if (!cell) return false;
+    switch (cell.kind) {
+      case "state":
+      case "reducer":
+        cell.value = value;
+        break;
+      case "ref":
+        cell.box.current = value;
+        break;
+      default:
+        // `memo` recomputes from its deps and `id` is runtime-owned: writing
+        // either would be undone (or would break `aria-*` wiring) — refusing is
+        // more useful than a change that silently does not stick.
+        return false;
+    }
+    this.requestFullRender();
+    return true;
+  }
+
+  /* ---- DevTools: state ------------------------------------------------- */
+
+  /** Declaration metadata for every atom (reserved / computed / module). */
+  private devtoolsStateMeta(): StateAtomMeta[] {
+    const names = Object.keys(this.state.snapshot());
+    // A `$x = expr` atom with a non-literal initialiser is DERIVED: the runtime
+    // re-evaluates it whenever its dependencies change, so a manual edit lasts
+    // only until the next flush. Flagging that prevents a confusing "my edit
+    // reverted on its own" — the same predicate the runtime itself uses.
+    const computed = new Set<string>();
+    const sources = new Map<string, { line: number; column: number }>();
+    for (const statement of this.devtoolsProgram?.statements ?? []) {
+      if (statement.kind !== "Assignment" || !statement.isState) continue;
+      if (statement.loc) {
+        sources.set(statement.identifier, { line: statement.loc.line, column: statement.loc.column });
+      }
+      if (!isPureLiteralExpression(statement.expression)) computed.add(statement.identifier);
+    }
+    const meta = describeStateMeta(names, computed, this.devtoolsProgram?.sources);
+    for (const entry of meta) {
+      const loc = sources.get(entry.name) ?? (entry.authored ? sources.get(entry.authored) : undefined);
+      if (loc) entry.source = loc;
+    }
+    return meta;
+  }
+
+  /**
+   * Evaluate an Aktion expression (or a single `$atom = …` assignment) against
+   * the live program scope — the REPL behind the Console tab.
+   *
+   * Reads see exactly what the program sees: the same bindings, the same
+   * per-atom values, the same helpers. Writes go through the normal reactive
+   * path, so `$count = 5` from the console is indistinguishable from a button
+   * doing it. Evaluation is deliberately NOT tracked as a render dependency:
+   * the tracker is swapped out first, so poking at state in the console cannot
+   * widen the render gate and change what the app re-renders on.
+   */
+  private devtoolsEvaluate(source: string): EvalResult {
+    const text = source.trim();
+    if (text === "") return { ok: false, error: "empty expression" };
+    const ctx = this.context;
+    const previousTracker = ctx.trackedState;
+    ctx.trackedState = new Set<string>();
+    try {
+      let program = parse(text);
+      let statement = program.statements[0];
+      // A bare expression (`$count + 1`) is not a top-level statement form, so
+      // fall back to wrapping it in an assignment and evaluating the right side.
+      if (program.errors.length > 0 || !statement) {
+        program = parse(`__aktion_devtools_eval = ${text}`);
+        statement = program.statements[0];
+        if (program.errors.length > 0 || !statement) {
+          return { ok: false, error: program.errors[0]?.message ?? "could not parse expression" };
+        }
+      }
+      if (statement.kind === "Assignment") {
+        const value = evaluate(statement.expression, ctx);
+        // Only a `$`-prefixed target writes state; `x = 1` on a plain binding
+        // would not survive the next render, so it evaluates and reports instead.
+        if (statement.isState && statement.identifier !== "__aktion_devtools_eval") {
+          this.applyDevtoolsStateEdit(statement.identifier, value);
+        }
+        return this.devtoolsEvalResult(value);
+      }
+      if (statement.kind === "ExpressionStatement") {
+        return this.devtoolsEvalResult(evaluate(statement.expression, ctx));
+      }
+      return { ok: false, error: `unsupported statement: ${statement.kind}` };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    } finally {
+      ctx.trackedState = previousTracker;
+    }
+  }
+
+  private devtoolsEvalResult(value: unknown): EvalResult {
+    const described = toDevtoolsValue(value);
+    const result: EvalResult = { ok: true, value: described };
+    if (described.json !== undefined) result.text = described.json;
+    return result;
+  }
+
+  /* ---- DevTools: data layer -------------------------------------------- */
+
+  private devtoolsQueries(): QueryInfo[] {
+    return describeQueries(this.context.queryCache);
+  }
+
+  private devtoolsStores(): StoreInfo[] {
+    return describeStores(this.context.stores, (atom) => this.state.get(atom));
+  }
+
+  /** Invoke a method on a live `Store` / `$form` handle from the Data tab. */
+  private devtoolsCallStoreMethod(atom: string, method: string, args: unknown[]): EvalResult {
+    for (const handle of this.context.stores.values()) {
+      if (handle.__atom !== atom) continue;
+      const fn = handle.__methods?.[method];
+      if (typeof fn !== "function") return { ok: false, error: `no method "${method}" on ${atom}` };
+      try {
+        const value = fn(...args);
+        this.requestFullRender();
+        return this.devtoolsEvalResult(value);
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+    return { ok: false, error: `no store for atom "${atom}"` };
+  }
+
+  /* ---- DevTools: router ------------------------------------------------ */
+
+  private devtoolsRoute(): RouteInfo {
+    return {
+      path: this.router.getPath(),
+      pattern: this.router.getActivePattern(),
+      params: { ...this.router.getParams() },
+      mode: this.router.getMode(),
+      basePath: this.getAttribute("router-base") ?? undefined,
+      guarded: this.router.hasGuard(),
+      declared: this.devtoolsProgram ? collectRoutePatterns(this.devtoolsProgram) : [],
+    };
+  }
+
+  /* ---- DevTools: theme ------------------------------------------------- */
+
+  private devtoolsTheme(): ThemeInfo {
+    const resolved = resolveTheme(this.getAttribute(ATTRIBUTE_THEME));
+    const tokens: Record<string, string> = {};
+    for (const [key, value] of Object.entries(resolved.tokens)) {
+      if (typeof value === "string") tokens[key] = value;
+    }
+    // Report what is actually painted, not just what the base theme declares:
+    // an in-script `$theme({...})` or a DevTools edit writes inline custom
+    // properties, and those are what the user sees.
+    for (const key of [...this.scriptThemeKeys, ...this.devtoolsThemeKeys]) {
+      const cssVar = themeTokenCssVar(String(key));
+      const cssValue = cssVar ? this.style.getPropertyValue(cssVar) : "";
+      if (cssValue) tokens[key as string] = cssValue.trim();
+    }
+    return {
+      name: resolved.name,
+      tokens,
+      scriptOverrides: this.scriptThemeKeys.map(String),
+      devtoolsOverrides: this.devtoolsThemeKeys.map(String),
+      available: Object.keys(builtInThemes).sort(),
+    };
+  }
+
+  private devtoolsSetThemeTokens(tokens: Record<string, string>): void {
+    const applied = applyPartialTheme(this, sanitiseThemeTokens(tokens));
+    const merged = new Set<keyof ThemeTokens>([...this.devtoolsThemeKeys, ...applied]);
+    this.devtoolsThemeKeys = [...merged];
+    this.requestFullRender();
+  }
+
+  /* ---- DevTools: stats ------------------------------------------------- */
+
+  private devtoolsStats(): AppStats {
+    const stats: AppStats = {
+      domNodes: countDomNodes(this.rootEl),
+      elements: this.rootEl.querySelectorAll("*").length,
+      instances: new Set(this.devtoolsComponents.map((c) => c.instanceKey)).size,
+      atoms: Object.keys(this.state.snapshot()).length,
+      effects: this.effectRunner.listMounted().length,
+      queries: this.context.queryCache.size,
+      stores: this.context.stores.size,
+      programBytes: this.currentResponse.length,
+      commits: this.devtoolsCommitId,
+    };
+    const heap = (performance as unknown as { memory?: { usedJSHeapSize?: number } } | undefined)?.memory;
+    if (heap?.usedJSHeapSize != null) stats.heapBytes = heap.usedJSHeapSize;
+    return stats;
+  }
+
+  /* ---- DevTools: network tap ------------------------------------------ */
+
+  /**
+   * Install (or refresh) the HTTP tap that feeds the Network tab and applies
+   * DevTools request rules. Removed again in `disconnectedCallback` so a torn
+   * down element never keeps emitting.
+   */
+  private installDevtoolsHttpTap(): void {
+    if (this.devtoolsTapInstalled) return;
+    const tap: HttpDevtoolsTap = {
+      start: (request) => {
+        const id = `${this.devtoolsId}-req-${(this.devtoolsRequestSeq += 1)}`;
+        if (!devtoolsOption("captureNetwork")) return id;
+        this.devtoolsRequests.set(id, { method: request.method, url: request.url });
+        emitDevtoolsEvent({
+          kind: "network",
+          appId: this.devtoolsId,
+          requestId: id,
+          phase: "start",
+          method: request.method,
+          url: request.url,
+          time: nowMs(),
+          requestHeaders: { ...request.headers },
+          requestBody: request.body === undefined ? undefined : bodyPreview(request.body, 2000),
+        });
+        return id;
+      },
+      finish: (id, outcome) => {
+        const pending = this.devtoolsRequests.get(id);
+        this.devtoolsRequests.delete(id);
+        if (!devtoolsOption("captureNetwork")) return;
+        const method = pending?.method ?? outcome.request.method;
+        const url = pending?.url ?? outcome.request.url;
+        if (outcome.error !== undefined) {
+          emitDevtoolsEvent({
+            kind: "network",
+            appId: this.devtoolsId,
+            requestId: id,
+            phase: outcome.rule ? "blocked" : "error",
+            method,
+            url,
+            time: nowMs(),
+            duration: outcome.duration,
+            error: outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
+            rule: outcome.rule,
+            injectedDelay: outcome.injectedDelay,
+          });
+          return;
+        }
+        const response = outcome.response;
+        emitDevtoolsEvent({
+          kind: "network",
+          appId: this.devtoolsId,
+          requestId: id,
+          phase: outcome.mocked ? "mock" : "success",
+          method,
+          url,
+          time: nowMs(),
+          duration: outcome.duration,
+          status: response?.status,
+          responseHeaders: response ? { ...response.headers } : undefined,
+          responseBody: bodyPreview(response?.body),
+          responseSize: bodySize(response?.body),
+          rule: outcome.rule,
+          injectedDelay: outcome.injectedDelay,
+        });
+      },
+      gate: (request) => {
+        if (this.devtoolsNetworkRules.length === 0) return undefined;
+        const rule = findMatchingRule(this.devtoolsNetworkRules, request.method, request.url);
+        return rule ? verdictFor(rule) : undefined;
+      },
+    };
+    this.http.setDevtoolsTap(tap);
+    this.devtoolsTapInstalled = true;
+  }
+
+  /**
+   * Emit the held navigation now that the render has resolved which arm matched.
+   * A no-op when nothing is pending.
+   */
+  private flushDevtoolsRoute(): void {
+    const pending = this.devtoolsPendingRoute;
+    if (!pending) return;
+    this.devtoolsPendingRoute = null;
+    emitDevtoolsEvent({
+      kind: "route",
+      appId: this.devtoolsId,
+      from: pending.from,
+      to: pending.to,
+      pattern: this.router.getActivePattern(),
+      params: { ...this.router.getParams() },
+      source: pending.source,
+      time: pending.time,
+    });
+  }
+
+  /** Report a survivable runtime failure to the DevTools error log. */
+  private reportDevtoolsError(phase: string, message: string, subject?: string): void {
+    if (!isDevtoolsActive()) return;
+    emitDevtoolsEvent({
+      kind: "error",
+      appId: this.devtoolsId,
+      phase,
+      message,
+      subject,
+      time: nowMs(),
+    });
   }
 
   /**
@@ -1223,9 +1866,16 @@ export class AktionElement extends HTMLElement {
    */
   connectDevtools(): void {
     this.registerWithDevtools();
-    // Push a fresh state snapshot + commit so the just-opened panel has data
-    // immediately, even for an idle app that won't re-render on its own.
-    if (this.devtoolsRegistered) this.requestFullRender();
+    // Already registered from an earlier panel? Re-register so the record picks
+    // up a label the host may have set since, and so a panel that reloaded gets
+    // a live handle rather than one closing over a stale render pass.
+    if (this.devtoolsRegistered) {
+      getDevtoolsHook()?.registerApp(this.buildDevtoolsRecord());
+      this.installDevtoolsHttpTap();
+      // Push a fresh state snapshot + commit so the just-opened panel has data
+      // immediately, even for an idle app that won't re-render on its own.
+      this.requestFullRender();
+    }
   }
 
   /**
@@ -1307,6 +1957,19 @@ export class AktionElement extends HTMLElement {
    */
   private handleRouteChange(detail: RouteChangeDetail): void {
     this.writeRouteState();
+    // Hold the navigation until the render that resolves it. Which route arm
+    // matched is decided DURING evaluation, so emitting here would report the
+    // previous render's pattern — the one piece of information the tab exists
+    // to show. The timestamp is taken now, so the timeline still orders it at
+    // the moment the URL changed.
+    if (isDevtoolsActive()) {
+      this.devtoolsPendingRoute = {
+        from: detail.previousPath ?? "",
+        to: detail.path,
+        source: detail.source,
+        time: nowMs(),
+      };
+    }
     this.dispatchEvent(new CustomEvent("route-change", {
       detail,
       bubbles: true,
@@ -1476,8 +2139,12 @@ export class AktionElement extends HTMLElement {
     // frontend is actually attached. Decide once per commit so the flag stays
     // consistent across this whole pass, and arm the renderer accordingly.
     const devtoolsActive = isDevtoolsActive();
-    this.renderer.setProfiling(devtoolsActive);
+    this.renderer.setProfiling(devtoolsActive, {
+      captureProps: devtoolsOption("captureProps"),
+      tagDom: devtoolsOption("tagDom"),
+    });
     const commitStart = devtoolsActive ? nowMs() : 0;
+    let morphTime = 0;
 
     // Scope a fresh dependency tracker to this render so we learn exactly
     // which state paths the UI read — that read-set becomes the gate that
@@ -1519,6 +2186,7 @@ export class AktionElement extends HTMLElement {
             this.handleRuntimeBudgetError(err);
             return;
           }
+          this.reportDevtoolsError("render", errorMessage(err), "$app entry point");
           // eslint-disable-next-line no-console
           console.error("[aktion] entry point evaluation error", err);
         }
@@ -1560,7 +2228,12 @@ export class AktionElement extends HTMLElement {
       // handler-only write has no source of truth the render can reproduce).
       const guarded = this.ensureMorphGuard();
       const imperativeWrites = guarded ? this.snapshotImperativeWrites() : [];
+      // Time the reconciler separately from evaluation: "the commit took 30ms"
+      // is not actionable until you know whether the program or the DOM diff
+      // spent it.
+      const morphStart = devtoolsActive ? nowMs() : 0;
       morphChildren(this.rootEl, rendered);
+      if (devtoolsActive) morphTime = nowMs() - morphStart;
       if (guarded) this.checkImperativeWrites(imperativeWrites);
       this.renderer.endRender();
       this.restoreFocus(focusSnapshot);
@@ -1578,6 +2251,10 @@ export class AktionElement extends HTMLElement {
           if (c.phase === "memo") memoizedCount += 1;
           else renderedCount += 1;
         }
+        // The inspector reads the CURRENT tree from here rather than replaying
+        // the profiler's history, so a selected component keeps resolving to
+        // live props even after the panel has trimmed old commits.
+        this.devtoolsComponents = components;
         emitDevtoolsEvent({
           kind: "commit",
           appId: this.devtoolsId,
@@ -1590,8 +2267,19 @@ export class AktionElement extends HTMLElement {
           components,
           rendered: renderedCount,
           memoized: memoizedCount,
+          morphTime,
+          domNodes: devtoolsOption("measureDom") ? countDomNodes(this.rootEl) : undefined,
+          // Time travel needs a value per commit, not per state flush: a commit
+          // is the granularity a user actually recognises ("put it back to how
+          // it looked two clicks ago").
+          snapshot: devtoolsOption("captureSnapshots") ? this.state.snapshot() : undefined,
         });
         this.devtoolsCommitId += 1;
+        this.flushDevtoolsRoute();
+      } else {
+        // Nobody is listening; drop any held navigation rather than reporting a
+        // stale one the next time a frontend attaches.
+        this.devtoolsPendingRoute = null;
       }
     } finally {
       this.context.trackedState = prevTracker;
@@ -1637,6 +2325,7 @@ export class AktionElement extends HTMLElement {
       this.parseErrors = [...this.parseErrors, message];
     }
     this.updateErrorBanner();
+    this.reportDevtoolsError("budget", err.message, err.kind);
     if (!this.streaming) {
       this.dispatchEvent(new CustomEvent("error", {
         detail: { errors: [{ line: 0, column: 0, message: err.message }] },
@@ -1647,7 +2336,18 @@ export class AktionElement extends HTMLElement {
   }
 
   private captureFocus(): FocusSnapshot | null {
-    const active = this.root.activeElement as HTMLElement | null;
+    // `activeElement` on a shadow root is a getter, and in some DOM
+    // implementations it throws when focus currently lives in a DIFFERENT
+    // shadow root on the page — which happens routinely once anything else
+    // opens one (the DevTools panel's inline editors do it on every edit).
+    // Losing a caret restore is a cosmetic regression; letting the throw
+    // escape would abort the whole commit, so this must never propagate.
+    let active: HTMLElement | null = null;
+    try {
+      active = this.root.activeElement as HTMLElement | null;
+    } catch {
+      return null;
+    }
     if (!active || !this.rootEl.contains(active)) return null;
     const id = active.id || null;
     if (!id) return null;
@@ -1689,6 +2389,11 @@ export class AktionElement extends HTMLElement {
 
   private replan(): void {
     this.effectRunner.reset();
+    // DevTools prop overrides are keyed by instance path, and a new program can
+    // produce the same path for a different component — so they do not survive
+    // a replan. The panel reports this: an override you installed is gone once
+    // the program changes.
+    this.renderer.clearAllPropOverrides();
     // A new program has a brand-new dependency surface — drop the render-gate
     // baseline so the first render of the new program always runs and
     // re-establishes it. Re-arm the render-write warning for the new program.
@@ -1767,6 +2472,20 @@ export class AktionElement extends HTMLElement {
     ];
     this.updateErrorBanner();
 
+    // DevTools keeps the STRUCTURED diagnostics (line, column, kind) the banner
+    // flattens into strings, plus the planned program itself, so the Source tab
+    // can place a marker on the right line and list the declared routes.
+    this.devtoolsProgram = program;
+    this.devtoolsDiagnostics = describeDiagnostics({
+      parse: program.errors,
+      warnings: program.warnings,
+      effects: this.effectRunner.getErrors(),
+      src: this.srcDiagnostics,
+    });
+    for (const error of program.errors) {
+      this.reportDevtoolsError("plan", error.message, `line ${error.line}`);
+    }
+
     // While streaming, the in-flight chunk is almost always mid-token, so
     // errors are expected and transient. Defer dispatch until streaming ends.
     if (program.errors.length > 0 && !this.streaming) {
@@ -1818,6 +2537,36 @@ interface FocusSnapshot {
  * in all modern browsers and happy-dom; we fall back to a tiny shim for older
  * environments so the renderer never blows up while restoring focus.
  */
+/**
+ * Escape a string for use inside a quoted attribute selector
+ * (`[data-x="…"]`). `CSS.escape` is the wrong tool here — it escapes for an
+ * IDENTIFIER, so it would mangle an instance key's `/`, `#`, and `@` into a
+ * selector that matches nothing. Only the quote and the backslash actually
+ * need escaping inside a quoted value.
+ */
+function escapeAttrValue(value: string): string {
+  return value.replace(/(["\\])/g, "\\$1");
+}
+
+/**
+ * Count the nodes in a subtree, including text nodes.
+ *
+ * Element count alone hides the most common bloat in a generated UI (a table
+ * that renders one text node per cell), so the DevTools stats report both.
+ * Capped so a pathological tree cannot turn a stats read into a freeze.
+ */
+function countDomNodes(root: Node, limit = 200_000): number {
+  let count = 0;
+  const stack: Node[] = [root];
+  while (stack.length > 0 && count < limit) {
+    const node = stack.pop()!;
+    count += 1;
+    const children = node.childNodes;
+    for (let i = 0; i < children.length; i += 1) stack.push(children[i]!);
+  }
+  return count;
+}
+
 function cssEscapeId(id: string): string {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
     return CSS.escape(id);

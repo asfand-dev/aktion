@@ -169,7 +169,7 @@ Everything you need at runtime ships in a single bundle:
 - **SSR / SSG.** `renderToString(program, { path, initialState })` → `{ html, state }` for server-side rendering. `renderToStaticMarkup` for static pages.
 - **DX tooling.** `tailwindToSx(classString)` maps Tailwind classes to `sx`; `cssToSx(cssText)` and `styledToSx(template)` do the same for plain CSS and styled-components templates; `htmlToAktion(html)` imports common HTML/JSX; `componentSchema(library)` emits a stable JSON schema for editor autocomplete; `buildGallery(library)` generates a self-contained component explorer; `suggestComponent("Buttn", library)` returns typo candidates.
 - **Testing utilities.** `render(program)` / `renderComponent(expression)` return a `Screen` with Testing-Library-style queries and a `screen.user` interaction driver; plus `waitFor` / `act` / `flush` for async assertions, `json(data, status?)` for mocked fetches, `within(node)` for scoped queries, and `axe(node)` for a dependency-free a11y audit — all from the `aktion-runtime/test` entry.
-- **DevTools.** `aktion-runtime/devtools` ships an in-page panel: a live state inspector you can write through, the current program text, and a forced-render button. Import it once on the page and call `el.connectDevtools()` (or label an instance with `data-devtools-label`) — see [`docs/devtools.html`](./docs/devtools.html).
+- **DevTools.** `aktion-runtime/devtools` ships a fourteen-tab in-page debugger: a component-instance tree with an element picker that reaches inside the shadow root, live editing of any component's props / hooks / internal UI state, a writable `$state` tree with snapshot time travel, a render profiler with flamegraph and memoization analysis, an effect timeline plus a run-now button, a network inspector with request mocking and latency injection, a console that captures the runtime's own diagnostics plus a REPL for Aktion expressions, route / query / store / storage explorers, a live theme-token editor with contrast checks, the program source with diagnostics on their lines and edit-and-remount, and a Test tab that records interactions into a runnable test, audits accessibility, measures DSL coverage, and fuzzes the UI. Import it once on the page and call `el.connectDevtools()` (or label an instance with `data-devtools-label`) — see [`docs/devtools.html`](./docs/devtools.html).
 - **A React-like DOM reconciler.** Diffs each re-render against the live
   DOM. Text-input value, selection, IME state, scroll positions,
   `<details>.open`, and stateful primitives like `Tabs` are all preserved
@@ -446,7 +446,7 @@ surfaces from the *generated prompt*, build it via
 | `hydrateState(snapshot)`                                        | Apply a snapshot to the live store and schedule a re-render. Atoms not in the snapshot are untouched.                        |
 | `loadSnapshot({ programText, state })`                          | Atomic program + state load. The next render plans the program with the hydrated state already in place.                     |
 | `applyDelta(ops)`                                               | Apply a structured delta (`patch` / `replace` / `append` / `new` / `delete`). User `$state` is preserved across the diff.    |
-| `connectDevtools()`                                             | Attach this instance to the Aktion DevTools panel (`aktion-runtime/devtools`). Idempotent; label the instance with `data-devtools-label`. |
+| `connectDevtools()`                                             | Attach this instance to the Aktion DevTools panel (`aktion-runtime/devtools`). Idempotent; label the instance with `data-devtools-label`. Re-registering refreshes the capability record, so a reopened panel gets a live handle. |
 
 ### Module exports
 
@@ -1773,7 +1773,7 @@ The migration / DX / test helpers, and where each one lives:
 | `suggestComponent(name, library)` | "Did you mean?" typo candidates by edit distance. |
 | `renderToString(program, opts)` / `renderToStaticMarkup` | SSR/SSG — render a program to `{ html, state }` under any DOM (browser or Node + happy-dom/jsdom); pair with `StateStore.hydrate`. From the main entry. |
 | `within(node)` / `axe(node)` | Testing helpers from `aktion-runtime/test` — scoped queries and a dependency-free a11y audit (`img-alt`, `svg-name`, `button-name`, `link-name`, `label` — with `aria-labelledby` resolution —, `duplicate-id`, `tabindex`). |
-| `el.connectDevtools()` | Attach a live instance to the DevTools panel from `aktion-runtime/devtools` — state inspector (writable), current program text, forced render. See [`docs/devtools.html`](./docs/devtools.html). |
+| `el.connectDevtools()` | Attach a live instance to the DevTools panel from `aktion-runtime/devtools` — component inspector, writable `$state`, profiler, effects, network, console + REPL, routes, data, theme, source, and test tools. See [`docs/devtools.html`](./docs/devtools.html). |
 
 ### Validating `.aktion` files from the CLI
 
@@ -2050,7 +2050,7 @@ consumes from the CDN.
 | `performance.html`                  | Performance & optimization — re-render avoidance, memoization rules, the safety budget, bundle size, and `setResponse` vs `appendChunk`. |
 | `troubleshooting.html`              | Troubleshooting / FAQ — focus loss, effects not firing, memoized-away components, the `Map` component vs JS `Map`, dropped styles, missing i18n keys. |
 | `errors.html`                       | Error handling & debugging — reading parse/runtime errors, the render-loop and budget guards, the `error` event, and strict mode. |
-| `devtools.html`                     | The `aktion-runtime/devtools` panel — mount it with one line, inspect and edit live `$state`, profile every render commit, and watch effects fire. |
+| `devtools.html`                     | The `aktion-runtime/devtools` panel — mount it with one line, then inspect the component tree, edit props / state / theme tokens live, profile commits, mock requests, and record interactions into a test. |
 | `testing.html`                      | The Aktion Testing Library (`aktion-runtime/test`) — render a program, query the shadow DOM the way a user sees it, drive real interactions, assert on output, `$state`, emitted events, and mocked `$http`. |
 | `typescript.html`                   | TypeScript guide — public types, subpath entry points, typing custom components/helpers/interceptors, host event payloads, a typed host-wrapper recipe. |
 | `accessibility.html`                | Accessibility guide — conformance target, keyboard map, screen-reader/streaming behaviour, built-in ARIA, and theme contrast. |
@@ -2135,7 +2135,8 @@ The full catalog with zoomed-out live preview cards lives at
 │   ├── compiler/              #   .aktion linker (linkProgram / linkProject / resolveSpecifier)
 │   ├── plugin/                #   The Vite plugin (aktion-runtime/vite)
 │   ├── testing/               #   The testing library (aktion-runtime/test)
-│   ├── devtools/              #   DevTools panel, hook, and protocol (aktion-runtime/devtools)
+│   ├── devtools/              #   DevTools: hook + protocol, the 14-tab panel (tabs/), overlay,
+│   │                          #   a11y audit, interaction recorder (aktion-runtime/devtools)
 │   ├── theme/                 #   Token system + injected stylesheet
 │   ├── prompt/                #   System prompt generator
 │   ├── tooling/               #   Host-side helpers (formatter, inspector, language service)
@@ -2265,7 +2266,9 @@ undo/redo), the `$query` / `$mutation` data layer, `$socket` / `$sse`
 realtime, `$toast`, hooks, fine-grained reactivity + memoization, strict
 mode, the morph value/event contracts, `sx` conversion, third-party
 interop, the sanitiser + DoS security suite, registry-wide spec
-invariants over all 282 components, the testing library, DevTools, the
+invariants over all 282 components, the testing library, DevTools (the
+event protocol, the inspector's capability surface, prop overrides,
+request rules, the accessibility audit, and the interaction recorder), the
 standalone LSP server, and the editor-tooling surfaces (navigation,
 semantic tokens, signature help, namespace members).
 

@@ -1192,6 +1192,24 @@ export function resolveTheme(input: ThemeInput | null | undefined): ResolvedThem
 }
 
 /**
+ * CSS custom property backing one theme token (`colorBg` → `--rui-color-bg`),
+ * or `null` for a name that is not a token.
+ *
+ * Exported for DevTools: a live token editor has to read back what is
+ * *actually* painted on the host — an in-script `$theme({...})` or a DevTools
+ * edit writes inline custom properties, not theme objects — and duplicating the
+ * mapping is how such an editor silently stops covering newly-added tokens.
+ */
+export function themeTokenCssVar(token: string): string | null {
+  return TOKEN_TO_CSS[token as keyof ThemeTokens] ?? null;
+}
+
+/** Every theme token name, in declaration order. */
+export function themeTokenNames(): Array<keyof ThemeTokens> {
+  return Object.keys(TOKEN_TO_CSS) as Array<keyof ThemeTokens>;
+}
+
+/**
  * Apply theme tokens to the host element. Also sets `data-rui-theme` so the
  * shadow-DOM stylesheet can hook into theme-specific overrides (fonts,
  * gradients, animations, etc.) that go beyond raw token values.

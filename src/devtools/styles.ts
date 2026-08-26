@@ -3,8 +3,15 @@
  * own shadow root so it is fully isolated from both the host page and the
  * inspected `<aktion-app>` — the inspector can never be restyled by the app
  * it is inspecting, and vice versa.
+ *
+ * This file holds the chrome and the original three tabs; `styles-extra.ts`
+ * holds the tabs added in 0.6. They are concatenated below into the single
+ * stylesheet the panel adopts.
  */
-export const devtoolsStyles = `
+
+import { devtoolsExtraStyles } from "./styles-extra.js";
+
+const baseStyles = `
 :host {
   --dt-bg: #16181d;
   --dt-bg-raised: #1d2026;
@@ -22,6 +29,8 @@ export const devtoolsStyles = `
   --dt-grey: #5b626f;
   --dt-red: #f87171;
   --dt-purple: #c08cf0;
+  --dt-cyan: #5fd0d8;
+  --dt-row: 22px;
   --dt-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --dt-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   all: initial;
@@ -32,6 +41,56 @@ export const devtoolsStyles = `
   contain: layout style;
 }
 :host([hidden]) { display: none; }
+
+/* ---- Light chrome, for a light host page ---- */
+:host(.is-light) {
+  --dt-bg: #ffffff;
+  --dt-bg-raised: #f4f5f7;
+  --dt-bg-inset: #fafbfc;
+  --dt-border: #e2e5ea;
+  --dt-border-strong: #cbd0d8;
+  --dt-text: #1c2029;
+  --dt-text-dim: #57606f;
+  --dt-text-faint: #8c95a4;
+  --dt-accent: #3b62d9;
+  --dt-accent-soft: #dfe6ff;
+  --dt-green: #17864f;
+  --dt-blue: #2563c9;
+  --dt-amber: #9a6100;
+  --dt-grey: #8c95a4;
+  --dt-red: #c62d2d;
+  --dt-purple: #7c3fbf;
+  --dt-cyan: #0f7c86;
+}
+
+/* ---- Compact density, for a narrow dock ---- */
+:host(.is-compact) { --dt-row: 18px; }
+:host(.is-compact) .section { padding: 6px 8px; }
+:host(.is-compact) .row, :host(.is-compact) .log-row { padding-top: 0; padding-bottom: 0; }
+
+/*
+ * Docking. A docked panel spans a full edge of the viewport, so it needs the
+ * host itself to stretch — the panel's own width/height (used while floating)
+ * is cleared by the shell. Radius and shadow are dropped on the docked edges so
+ * the panel reads as part of the window rather than a card sitting on it.
+ */
+:host(.dock-right), :host(.dock-left) { top: 0; bottom: 0; width: min(560px, 60vw); }
+:host(.dock-right) { right: 0; }
+:host(.dock-left) { left: 0; }
+:host(.dock-bottom) { left: 0; right: 0; bottom: 0; height: min(460px, 60vh); }
+:host(.dock-right) .panel, :host(.dock-left) .panel, :host(.dock-bottom) .panel {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+:host(.dock-right) .panel { border-right: none; }
+:host(.dock-left) .panel { border-left: none; }
+:host(.dock-bottom) .panel { border-bottom: none; }
+:host(.dock-right) .resize, :host(.dock-left) .resize, :host(.dock-bottom) .resize { display: none; }
+:host(.dock-right) .header, :host(.dock-left) .header, :host(.dock-bottom) .header { cursor: default; }
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -121,33 +180,75 @@ export const devtoolsStyles = `
 .rec-dot.is-paused { background: var(--dt-text-faint); }
 
 /* ---- Tabs ---- */
+/*
+ * The tab strip scrolls horizontally rather than wrapping: fourteen tabs on a
+ * 400px-wide panel would otherwise take three rows of vertical space away from
+ * the thing you are actually looking at.
+ */
 .tabs {
   display: flex;
-  gap: 2px;
-  padding: 6px 8px 0;
+  gap: 1px;
+  padding: 5px 6px 0;
   background: var(--dt-bg-raised);
   border-bottom: 1px solid var(--dt-border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  flex: 0 0 auto;
 }
+.tabs::-webkit-scrollbar { height: 4px; }
+.tabs::-webkit-scrollbar-thumb { background: var(--dt-border-strong); border-radius: 4px; }
 .tab {
   appearance: none;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--dt-text-dim);
-  padding: 6px 12px 8px;
-  font-size: 12px;
+  padding: 5px 9px 7px;
+  font-size: 11.5px;
   font-family: var(--dt-sans);
   cursor: pointer;
   border-radius: 6px 6px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
-.tab:hover { color: var(--dt-text); background: rgba(255,255,255,0.03); }
+.tab:hover { color: var(--dt-text); background: rgba(255,255,255,0.05); }
 .tab.is-active { color: var(--dt-text); border-bottom-color: var(--dt-accent); font-weight: 600; }
+.tab-icon { font-size: 11px; opacity: 0.85; }
+.tab.is-active .tab-icon { opacity: 1; color: var(--dt-accent); }
 .tab .count {
-  margin-left: 5px;
-  font-size: 10px;
+  font-size: 9.5px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--dt-bg-inset);
+  border: 1px solid var(--dt-border);
   color: var(--dt-text-faint);
   font-variant-numeric: tabular-nums;
 }
+.tab.is-active .count { color: var(--dt-text); border-color: var(--dt-border-strong); }
+
+/* ---- Toast (transient confirmation in the header) ---- */
+.toast {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  background: var(--dt-accent-soft);
+  color: var(--dt-text);
+  border: 1px solid var(--dt-border-strong);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.toast[hidden] { display: none; }
+.toast.t-good { border-color: var(--dt-green); color: var(--dt-green); background: rgba(90,209,155,0.12); }
+.toast.t-bad { border-color: var(--dt-red); color: var(--dt-red); background: rgba(248,113,113,0.12); }
+.toast.t-warn { border-color: var(--dt-amber); color: var(--dt-amber); background: rgba(240,179,94,0.12); }
 
 /* ---- Body ---- */
 .panel-body {
@@ -586,3 +687,6 @@ table.dt-table th.sortable:hover { color: var(--dt-text-dim); }
   border-bottom-right-radius: 12px;
 }
 `;
+
+/** The panel's complete stylesheet: chrome + original tabs + the 0.6 tabs. */
+export const devtoolsStyles = baseStyles + devtoolsExtraStyles;

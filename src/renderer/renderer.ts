@@ -64,7 +64,26 @@ import {
   type RenderHelpers,
 } from "../library/types.js";
 import { nowMs } from "../devtools/hook.js";
-import type { ComponentRenderRecord, RenderPhase } from "../devtools/protocol.js";
+import type {
+  ComponentPropRecord,
+  ComponentRenderRecord,
+  RenderPhase,
+} from "../devtools/protocol.js";
+import { toDevtoolsValue } from "../devtools/serialize.js";
+
+/**
+ * DOM attribute carrying the instance key of the library component that
+ * produced an element. This is the whole basis of the DevTools element picker:
+ * a click anywhere in the app resolves to the nearest tagged ancestor, which
+ * resolves to a row in the component tree. Written only while a DevTools
+ * frontend has `tagDom` enabled, so production renders never see it.
+ */
+export const INSTANCE_ATTR = "data-aktion-instance";
+/** Same idea, but naming the nearest enclosing user `function Foo()` instance. */
+export const OWNER_ATTR = "data-aktion-owner";
+
+/** Most props we record per instance — a 200-column DataGrid is not a payload. */
+const MAX_PROP_RECORDS = 40;
 
 export interface RenderOptions {
   library: ComponentLibrary;
@@ -200,6 +219,62 @@ function hostUniversal(out: Node, universal: Record<string, unknown>): Node {
   return host;
 }
 
+/**
+ * Rebuild a library-component node with DevTools overrides applied.
+ *
+ * A copy, never a mutation: the original node may be sitting in a memo entry
+ * (it is the cached return value of the enclosing user component), so writing
+ * through it would make the override outlive the moment it is cleared — the
+ * exact "why is my UI still wrong?" bug an inspector must not create.
+ *
+ * A name matching a declared prop position rewrites that positional argument;
+ * anything else lands on the universal channel (`sx`, `class`, `aria`, …),
+ * which is where those props come from in the first place.
+ */
+function applyLibraryOverrides(
+  node: ComponentNode,
+  spec: { props: ReadonlyArray<{ name: string }> },
+  overrides: ReadonlyMap<string, unknown>,
+): ComponentNode {
+  const args = [...node.args];
+  let universal: Record<string, unknown> | undefined = node.universal;
+  let touchedUniversal = false;
+  for (const [name, value] of overrides) {
+    const index = spec.props.findIndex((p) => p.name === name);
+    if (index >= 0) {
+      // Pad so an override on an un-passed trailing prop still lands.
+      while (args.length <= index) args.push(undefined);
+      args[index] = value;
+    } else {
+      if (!touchedUniversal) {
+        universal = { ...(node.universal ?? {}) };
+        touchedUniversal = true;
+      }
+      (universal as Record<string, unknown>)[name] = value;
+    }
+  }
+  return { ...node, args, universal };
+}
+
+/** The same, for a user-declared `function Foo(a, b)` invocation. */
+function applyUserOverrides(
+  node: UserComponentNode,
+  overrides: ReadonlyMap<string, unknown>,
+): UserComponentNode {
+  const positional = [...node.positional];
+  const named = { ...node.named };
+  for (const [name, value] of overrides) {
+    const index = node.decl.params.findIndex((p) => p.name === name);
+    if (index >= 0) {
+      while (positional.length <= index) positional.push(undefined);
+      positional[index] = value;
+    } else {
+      named[name] = value;
+    }
+  }
+  return { ...node, positional, named };
+}
+
 export class Renderer {
   /**
    * Persistent state cells, keyed by `instancePath::userKey`. Lives as long
@@ -274,6 +349,15 @@ export class Renderer {
    * costs nothing. See `setProfiling`.
    */
   private profiling = false;
+  /**
+   * Record each instance's props/arguments alongside its timing. Separate from
+   * {@link profiling} because serialising a prop bag per instance per commit is
+   * the expensive half — a profiler session on a heavy app wants the timings
+   * without it, an inspector session needs it.
+   */
+  private captureProps = false;
+  /** Stamp {@link INSTANCE_ATTR} / {@link OWNER_ATTR} on rendered elements. */
+  private tagDom = false;
   /** Per-commit profiler records, drained by the host after each render. */
   private profilerRecords: ComponentRenderRecord[] = [];
   /**
@@ -282,6 +366,17 @@ export class Renderer {
    * tracks exactly the live tree. Only maintained while profiling.
    */
   private profiledInstances = new Set<string>();
+  /**
+   * DevTools prop overrides: instance key → prop name → forced value.
+   *
+   * An override is applied where the value enters the component — before
+   * memoization compares args, so changing one re-renders the instance, and
+   * before `render` sees the prop bag, so a component that reads `node.args`
+   * directly observes the same value the props record shows. The program is
+   * never edited: clearing the override restores the authored value on the
+   * next commit.
+   */
+  private readonly propOverrides = new Map<string, Map<string, unknown>>();
 
   constructor(private options: RenderOptions) {}
 
@@ -289,13 +384,127 @@ export class Renderer {
    * Enable/disable the render profiler. The host element flips this on when a
    * DevTools frontend subscribes and off when it disconnects, so the common
    * (no-DevTools) path never allocates a record or reads the clock.
+   *
+   * `detail` carries the frontend's instrumentation switches (see
+   * `DevtoolsHookOptions`); omitted keys default to off so a caller that only
+   * wants timings gets only timings.
    */
-  setProfiling(enabled: boolean): void {
+  setProfiling(enabled: boolean, detail?: { captureProps?: boolean; tagDom?: boolean }): void {
     this.profiling = enabled;
+    this.captureProps = enabled && detail?.captureProps === true;
+    this.tagDom = enabled && detail?.tagDom === true;
     if (!enabled) {
       this.profilerRecords = [];
       this.profiledInstances.clear();
     }
+  }
+
+  /* ---- DevTools inspector surface --------------------------------------- */
+
+  /**
+   * Force `prop` to `value` for one instance until the override is cleared.
+   * Returns `true` when the instance is one the renderer has actually seen, so
+   * the caller can report a stale key instead of silently doing nothing.
+   */
+  setPropOverride(instanceKey: string, prop: string, value: unknown): boolean {
+    let bucket = this.propOverrides.get(instanceKey);
+    if (!bucket) {
+      bucket = new Map();
+      this.propOverrides.set(instanceKey, bucket);
+    }
+    bucket.set(prop, value);
+    // Drop the memo so the next commit re-evaluates with the new value.
+    this.memoCache.delete(instanceKey);
+    return this.profiledInstances.has(instanceKey) || this.aliveInstances.has(instanceKey);
+  }
+
+  /** Drop one override, or every override on the instance when `prop` is omitted. */
+  clearPropOverride(instanceKey: string, prop?: string): void {
+    if (prop === undefined) {
+      this.propOverrides.delete(instanceKey);
+    } else {
+      const bucket = this.propOverrides.get(instanceKey);
+      bucket?.delete(prop);
+      if (bucket && bucket.size === 0) this.propOverrides.delete(instanceKey);
+    }
+    this.memoCache.delete(instanceKey);
+  }
+
+  /**
+   * Drop every override.
+   *
+   * The host calls this on replan and on `clear()`: an instance key encodes a
+   * render path, and a NEW program can produce the same path for a different
+   * component — so a surviving override would silently apply to something the
+   * user never touched.
+   */
+  clearAllPropOverrides(): void {
+    this.propOverrides.clear();
+  }
+
+  /** Every active override, flattened for the inspector's override banner. */
+  listPropOverrides(): Array<{ instanceKey: string; prop: string; value: unknown }> {
+    const out: Array<{ instanceKey: string; prop: string; value: unknown }> = [];
+    for (const [instanceKey, bucket] of this.propOverrides) {
+      for (const [prop, value] of bucket) out.push({ instanceKey, prop, value });
+    }
+    return out;
+  }
+
+  /** Overrides in force for one instance (used to flag props in the tree). */
+  propOverridesFor(instanceKey: string): ReadonlyMap<string, unknown> | undefined {
+    return this.propOverrides.get(instanceKey);
+  }
+
+  /**
+   * `useInstanceState` slots held by one instance — a library component's own
+   * UI state (a Tabs' active pane, a Popover's open flag, a DataGrid's sort).
+   * These never appear in `$state`, which is exactly why an inspector that
+   * cannot show them leaves the most common "why is it showing that?" question
+   * unanswerable.
+   */
+  listInstanceUiState(instanceKey: string): Array<{ key: string; value: unknown }> {
+    const prefix = `${instanceKey}::`;
+    const out: Array<{ key: string; value: unknown }> = [];
+    for (const [storageKey, value] of this.instanceStates) {
+      if (storageKey.startsWith(prefix)) {
+        out.push({ key: storageKey.slice(prefix.length), value });
+      }
+    }
+    return out.sort((a, b) => a.key.localeCompare(b.key));
+  }
+
+  /** Write one `useInstanceState` slot. Returns `false` for an unknown slot. */
+  setInstanceUiState(instanceKey: string, key: string, value: unknown): boolean {
+    const storageKey = `${instanceKey}::${key}`;
+    if (!this.instanceStates.has(storageKey)) return false;
+    this.instanceStates.set(storageKey, value);
+    return true;
+  }
+
+  /**
+   * Drop everything the renderer holds for one instance so the next commit
+   * treats it as a fresh mount: memo, UI-state slots, and disposers. The
+   * host pairs this with `clearInstanceHooks` to remount a component without
+   * reloading the program.
+   */
+  dropInstance(instanceKey: string): void {
+    this.memoCache.delete(instanceKey);
+    this.profiledInstances.delete(instanceKey);
+    const prefix = `${instanceKey}::`;
+    for (const key of [...this.instanceStates.keys()]) {
+      if (key === instanceKey || key.startsWith(prefix)) this.instanceStates.delete(key);
+    }
+    const disposers = this.instanceDisposers.get(instanceKey);
+    if (disposers) {
+      for (const dispose of disposers.values()) this.safeDispose(dispose);
+      this.instanceDisposers.delete(instanceKey);
+    }
+  }
+
+  /** Instance keys currently in the rendered tree. */
+  liveInstanceKeys(): string[] {
+    return [...this.aliveInstances];
   }
 
   /** Hand the current commit's component records to the host, then clear. */
@@ -339,6 +548,7 @@ export class Renderer {
     this.instanceDisposers.clear();
     this.instanceStates.clear();
     this.memoCache.clear();
+    this.propOverrides.clear();
     // Tear down any per-instance effects so they don't outlive the
     // program. The host's `EffectRunner.reset()` clears top-level effects
     // separately, but instance effects need an explicit per-key unmount.
@@ -469,6 +679,11 @@ export class Renderer {
     selfTime: number,
     reason: string,
     deps?: ReadonlySet<string>,
+    extra?: {
+      source?: { line: number; column: number };
+      explicitKey?: unknown;
+      props?: ComponentPropRecord[];
+    },
   ): void {
     this.profilerRecords.push({
       instanceKey,
@@ -479,8 +694,75 @@ export class Renderer {
       depth: this.depthOf(instanceKey),
       reason,
       deps: deps ? [...deps] : undefined,
+      source: extra?.source,
+      explicitKey: extra?.explicitKey != null ? String(extra.explicitKey) : undefined,
+      props: extra?.props,
     });
     this.profiledInstances.add(instanceKey);
+  }
+
+  /**
+   * Turn one component instance's arguments into inspector-ready prop records.
+   *
+   * `names` supplies the declared order (a library spec's `props`, or a user
+   * declaration's `params`); anything past the declared arity is reported under
+   * its index so an over-supplied call is visible rather than hidden. `stateRefs`
+   * carries the `$`-binding per position, which is what tells the inspector to
+   * edit the ATOM rather than install an override — editing `value: $name` has
+   * to write `$name`, or the next commit would overwrite the edit.
+   */
+  private buildPropRecords(
+    names: ReadonlyArray<string>,
+    values: ReadonlyArray<unknown>,
+    stateRefs: ReadonlyArray<string | undefined>,
+    named: Record<string, unknown> | undefined,
+    universal: Record<string, unknown> | undefined,
+    overrides: ReadonlyMap<string, unknown> | undefined,
+  ): ComponentPropRecord[] {
+    const out: ComponentPropRecord[] = [];
+    const push = (name: string, value: unknown, stateRef?: string): void => {
+      if (out.length >= MAX_PROP_RECORDS) return;
+      const record: ComponentPropRecord = { name, value: toDevtoolsValue(value) };
+      if (stateRef) record.stateRef = stateRef;
+      if (overrides?.has(name)) record.overridden = true;
+      out.push(record);
+    };
+    for (let i = 0; i < values.length; i += 1) {
+      // `undefined` in a positional slot is "not passed" — listing it would
+      // bury the props that were.
+      if (values[i] === undefined) continue;
+      push(names[i] ?? `#${i}`, values[i], stateRefs[i]);
+    }
+    if (named) {
+      for (const [key, value] of Object.entries(named)) {
+        if (value === undefined) continue;
+        push(key, value);
+      }
+    }
+    if (universal) {
+      for (const [key, value] of Object.entries(universal)) {
+        if (value == null) continue;
+        push(key, value);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Stamp the instance key onto a rendered element so a DOM node can be traced
+   * back to the component that produced it. `owner` writes the enclosing user
+   * component instead, and only when nothing closer already claimed the node —
+   * so the nearest owner wins and `Page > Card > Button` attributes the button
+   * to `Card`, not `Page`.
+   */
+  private tagInstance(node: Node, instanceKey: string, attr: string): void {
+    if (!(node instanceof Element)) return;
+    try {
+      if (attr === OWNER_ATTR && node.hasAttribute(OWNER_ATTR)) return;
+      node.setAttribute(attr, instanceKey);
+    } catch {
+      /* exotic element (SVG in an old DOM impl) — tagging is best-effort */
+    }
   }
 
   private safeDispose(dispose: () => void): void {
@@ -612,6 +894,14 @@ export class Renderer {
     const instancePath = `${path}#${node.decl.name}${keyPart}`;
     this.markAlive(instancePath);
 
+    // DevTools prop override: substitute the forced values BEFORE the memo
+    // comparison below, so flipping an override is observed as an arg change
+    // and re-renders the instance (rather than being masked by a memo hit).
+    const overrides = this.propOverrides.get(instancePath);
+    if (overrides && overrides.size > 0) {
+      node = applyUserOverrides(node, overrides);
+    }
+
     // Per-component memoization: when the change set is fully known and this
     // instance's args are unchanged AND none of the `$state` paths it read
     // last render changed, skip re-executing its body and reuse the cached
@@ -630,7 +920,11 @@ export class Renderer {
       const tracker = ctx.trackedState;
       for (const dep of memo.deps) tracker.add(dep);
       if (this.profiling) {
-        this.profile(instancePath, node.decl.name, "user", "memo", 0, "memoized (args + deps unchanged)", memo.deps);
+        this.profile(
+          instancePath, node.decl.name, "user", "memo", 0,
+          "memoized (args + deps unchanged)", memo.deps,
+          { source: node.source, explicitKey: node.explicitKey, props: this.userProps(node, overrides) },
+        );
       }
       enterUserComponent(ctx, node.decl.name);
       try {
@@ -679,7 +973,11 @@ export class Renderer {
       // Profiler: the body just ran — record its self time (children render
       // lazily below, so this measures only this component's own work).
       if (this.profiling) {
-        this.profile(instancePath, node.decl.name, "user", profilePhase, nowMs() - profileStart, profileReason, instanceDeps);
+        this.profile(
+          instancePath, node.decl.name, "user", profilePhase, nowMs() - profileStart,
+          profileReason, instanceDeps,
+          { source: node.source, explicitKey: node.explicitKey, props: this.userProps(node, overrides) },
+        );
       }
       // Hand any `effect(() => { … }, [deps])` declarations discovered
       // inside this component's body to the host's effect runner under
@@ -708,10 +1006,24 @@ export class Renderer {
       if (node.explicitKey != null && rendered instanceof Element && !(rendered as Element).hasAttribute("data-rui-key")) {
         (rendered as Element).setAttribute("data-rui-key", String(node.explicitKey));
       }
+      // Attribute the painted node to the nearest user component so the
+      // element picker can answer "which of MY components rendered this?"
+      // (the `data-aktion-instance` tag names the library primitive).
+      if (this.tagDom) this.tagInstance(rendered, instancePath, OWNER_ATTR);
       return rendered;
     } finally {
       leaveUserComponent(ctx);
     }
+  }
+
+  /** Prop records for a user component instance, or `undefined` when off. */
+  private userProps(
+    node: UserComponentNode,
+    overrides: ReadonlyMap<string, unknown> | undefined,
+  ): ComponentPropRecord[] | undefined {
+    if (!this.captureProps) return undefined;
+    const names = node.decl.params.map((p, i) => p.name || (p.pattern ? `{pattern ${i}}` : `#${i}`));
+    return this.buildPropRecords(names, node.positional, [], node.named, undefined, overrides);
   }
 
   private renderComponent(node: ComponentNode, path: string): Node {
@@ -722,7 +1034,6 @@ export class Renderer {
       placeholder.textContent = `[unknown component: ${node.name}]`;
       return placeholder;
     }
-    const props = mapPositionalArgs(spec, node.args);
     // §13 — when the author passes `key:`, use it as the instance suffix
     // so reordering siblings keeps per-instance state attached to the
     // right node. Otherwise fall back to the source location which is
@@ -732,6 +1043,15 @@ export class Renderer {
       : `@${node.source?.line ?? 0}:${node.source?.column ?? 0}`;
     const instancePath = `${path}#${node.name}${keySuffix}`;
     this.markAlive(instancePath);
+
+    // DevTools prop override: rebuild the node's args (and universal channel)
+    // with the forced values so BOTH the mapped prop bag and any component that
+    // reads `node.args` directly observe the same value the inspector shows.
+    const overrides = this.propOverrides.get(instancePath);
+    if (overrides && overrides.size > 0) {
+      node = applyLibraryOverrides(node, spec, overrides);
+    }
+    const props = mapPositionalArgs(spec, node.args);
 
     // Track an auto-increment counter so `helpers.renderNode(child)` calls
     // get a stable sibling index even when a component renders several
@@ -858,13 +1178,22 @@ export class Renderer {
       if (node.explicitKey != null && out instanceof Element && !(out as Element).hasAttribute("data-rui-key")) {
         (out as Element).setAttribute("data-rui-key", String(node.explicitKey));
       }
+      // The element picker's anchor: this node now traces back to this instance.
+      if (this.tagDom) this.tagInstance(out, instancePath, INSTANCE_ATTR);
       if (this.profiling) {
-        this.profile(instancePath, node.name, "library", libPhase, nowMs() - libStart, libPhase === "mount" ? "mounted" : "re-rendered");
+        this.profile(
+          instancePath, node.name, "library", libPhase, nowMs() - libStart,
+          libPhase === "mount" ? "mounted" : "re-rendered", undefined,
+          { source: node.source, explicitKey: node.explicitKey, props: this.libraryProps(spec, node, overrides) },
+        );
       }
       return out;
     } catch (err) {
       if (this.profiling) {
-        this.profile(instancePath, node.name, "library", libPhase, nowMs() - libStart, "render threw");
+        this.profile(
+          instancePath, node.name, "library", libPhase, nowMs() - libStart, "render threw", undefined,
+          { source: node.source, explicitKey: node.explicitKey, props: this.libraryProps(spec, node, overrides) },
+        );
       }
       // eslint-disable-next-line no-console
       console.error(`[aktion] failed to render ${spec.name}`, err);
@@ -873,6 +1202,18 @@ export class Renderer {
       fallback.textContent = `[render error in ${spec.name}]`;
       return fallback;
     }
+  }
+
+  /** Prop records for a library component instance, or `undefined` when off. */
+  private libraryProps(
+    spec: { props: ReadonlyArray<{ name: string }> },
+    node: ComponentNode,
+    overrides: ReadonlyMap<string, unknown> | undefined,
+  ): ComponentPropRecord[] | undefined {
+    if (!this.captureProps) return undefined;
+    const names = spec.props.map((p) => p.name);
+    const stateRefs = node.args.map((_, i) => node.argMeta[i]?.stateRef);
+    return this.buildPropRecords(names, node.args, stateRefs, undefined, node.universal, overrides);
   }
 
   private eventFor(element: HTMLElement): string {

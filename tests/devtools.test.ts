@@ -39,17 +39,26 @@ function listen(): DevtoolsEvent[] {
 const commits = (e: DevtoolsEvent[]) => e.filter((x): x is CommitRecord => x.kind === "commit");
 const states = (e: DevtoolsEvent[]) => e.filter((x): x is StateEvent => x.kind === "state");
 const effects = (e: DevtoolsEvent[]) => e.filter((x): x is EffectEvent => x.kind === "effect");
-
 afterEach(() => {
   for (const u of unsubscribers) u();
   unsubscribers = [];
   cleanup();
   // Remove any panels we mounted and reset the shared hub between tests.
   document.querySelectorAll("aktion-devtools").forEach((el) => el.remove());
+  document.querySelectorAll("aktion-devtools-overlay").forEach((el) => el.remove());
   const hook = getDevtoolsHook();
   if (hook) {
     hook.apps.clear();
     hook.buffer.length = 0;
+    // Instrumentation switches are global and sticky, so a test that turns one
+    // off would silently change every test after it.
+    hook.setOptions({
+      captureProps: true,
+      tagDom: true,
+      captureSnapshots: true,
+      captureNetwork: true,
+      measureDom: true,
+    });
   }
 });
 
@@ -265,10 +274,14 @@ describe("panel", () => {
     expect(model!.state.count).toBe(7);
     expect(model!.commits.length).toBeGreaterThan(0);
 
-    // The rendered panel shows the State tab with the atom name.
-    const text = controller.element.shadowRoot!.textContent ?? "";
-    expect(text).toContain("Aktion DevTools");
-    expect(text).toContain("count");
+    // The panel opens on Overview; the State tab shows the atom by name.
+    const chrome = controller.element.shadowRoot!.textContent ?? "";
+    expect(chrome).toContain("Aktion DevTools");
+    expect(chrome).toContain("Overview");
+
+    clickTab(controller.element, "State");
+    await flush();
+    expect(controller.element.shadowRoot!.textContent ?? "").toContain("count");
 
     // A pushed edit flows through and updates the model on the next flush.
     const app = [...controller.hook.apps.values()].pop()!;
@@ -283,13 +296,25 @@ describe("panel", () => {
 
 /* -------------------------------------------------------------------------- */
 
-/** Click a panel tab button by its leading label text. */
+/**
+ * Click a panel tab by its label. Each tab renders an icon glyph before its
+ * label, so the match is on containment rather than a prefix.
+ */
 function clickTab(el: AktionDevtoolsElement, label: string): void {
   const tabs = [...el.shadowRoot!.querySelectorAll(".tab")] as HTMLElement[];
-  const btn = tabs.find((t) => (t.textContent ?? "").startsWith(label));
+  const btn = tabs.find((t) => (t.textContent ?? "").includes(label));
   if (!btn) throw new Error(`devtools tab not found: ${label}`);
   btn.click();
 }
+
+/** Click a filter chip / sub-view toggle by its exact label. */
+function clickChip(el: AktionDevtoolsElement, label: string): void {
+  const chips = [...el.shadowRoot!.querySelectorAll(".filter-chip")] as HTMLElement[];
+  const btn = chips.find((c) => (c.textContent ?? "").trim() === label);
+  if (!btn) throw new Error(`devtools chip not found: ${label}`);
+  btn.click();
+}
+
 
 describe("panel — insights & visualizations", () => {
   it("tracks per-atom reactivity heat (change counts) in the model", async () => {
@@ -323,10 +348,12 @@ describe("panel — insights & visualizations", () => {
     await flush();
     await screen.click("inc");
     await flush();
+    clickTab(controller.element, "State");
+    await flush();
 
     const text = controller.element.shadowRoot!.textContent ?? "";
     expect(text).toContain("changes");
-    expect(text).toContain("Sort by activity");
+    expect(text).toContain("Activity");
     controller.destroy();
   });
 
@@ -347,12 +374,20 @@ describe("panel — insights & visualizations", () => {
     clickTab(controller.element, "Profiler");
     await flush();
 
-    const text = controller.element.shadowRoot!.textContent ?? "";
-    expect(text).toContain("Performance summary");
-    expect(text).toContain("Reactivity");
-    expect(text).toContain("Components");
+    // The default Commit view: summary, the commit strip, and the flamegraph.
+    const commitView = controller.element.shadowRoot!.textContent ?? "";
+    expect(commitView).toContain("Performance summary");
+    expect(commitView).toContain("Commit #");
+    expect(commitView).toContain("Row");
+
+    // The Ranked view adds the per-component table and the hot-atom breakdown.
+    clickChip(controller.element, "Ranked");
+    await flush();
+    const rankedView = controller.element.shadowRoot!.textContent ?? "";
+    expect(rankedView).toContain("Components");
+    expect(rankedView).toContain("Reactivity");
     // The hot-atoms panel attributes a commit to the `count` path.
-    expect(text).toContain("count");
+    expect(rankedView).toContain("count");
     controller.destroy();
   });
 

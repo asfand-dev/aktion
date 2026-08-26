@@ -7,6 +7,90 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-08-26
 
+### DevTools Grew From Three Tabs to Fourteen
+
+The in-page debugger (`aktion-runtime/devtools`) used to answer three questions:
+what is in `$state`, what re-rendered, and what did the effects do. It now covers
+the whole runtime, and — more importantly — lets you change things instead of only
+watching them.
+
+- **Inspect** is the new headline tab. It shows the live component-instance tree
+  the renderer actually built, with an element picker that reaches *inside* the
+  app's shadow root: click anything on the page and land on its row in the tree.
+  Selecting an instance shows its props, its per-instance `$state` / `$memo`
+  cells, the internal UI state a library component keeps for itself (a Tabs'
+  active pane, a DataGrid's sort), what reactive paths it reads, the effects it
+  owns, its box model, its computed styles, the `--rui-*` theme variables actually
+  in effect on it, and the accessibility properties a screen reader would
+  announce. Hovering any row draws the real box model over the element.
+- **Every one of those values is editable.** Editing a `$`-bound prop writes the
+  atom; editing any other prop installs a DevTools override that lasts until you
+  clear it, so you can try `variant: "danger"` or `sx: { padding: 24 }` on one live
+  component without touching the program. Per-instance hook cells and UI-state
+  slots are writable too, and "Remount" drops an instance's memo, hooks, and UI
+  state so it mounts fresh.
+- **Time travel.** The runtime attaches a `$state` snapshot to every commit, so
+  the State tab has a scrubber: drag back through recent commits to see what the
+  store held, then restore one into the live app.
+- **Network.** Every request the Aktion HTTP layer makes, with headers, bodies, a
+  waterfall, and a "copy as curl" button — plus **request rules** that delay,
+  mock, fail, or blackhole matching requests. Reproducing a 500, a three-second
+  endpoint, or an offline device no longer needs a server or a code change, and
+  leaves no `if (dev)` branch behind in the program.
+- **Console.** The panel now mirrors the page console, which is where the
+  runtime's own diagnostics land ("a reactive `$state` write happened during
+  render…", "failed to render Button") — usually the most direct explanation of a
+  reactivity bug, and easy to miss in a busy page console. Alongside it, a REPL
+  that evaluates **Aktion** expressions against the live program scope: `$user.name`,
+  `Util.range(0, 3)`, and `$count = 5` all mean what they mean in the source, and a
+  write goes through the normal reactive path.
+- **Routes** lists the patterns the program declares — read statically from the
+  `$router({ … })` arms, so every route is clickable from the start rather than
+  only the ones you have already visited — plus the current match, its params, and
+  the navigation history.
+- **Data** covers the three places state hides from the State tab: the `$query` /
+  `Http({...})` cache (with refetch, cancel, and invalidate-by-key), `Store` /
+  `$form` handles (with their methods callable), and browser storage.
+- **Theme** is a live token editor: every resolved `--rui-*` token with a colour
+  picker, contrast checks for the pairs the library actually paints, a theme
+  switcher, and "copy as `$theme({…})`".
+- **Source** shows the running program with diagnostics placed on their lines, an
+  outline of its declarations, and an editor that validates a draft *before* you
+  mount it (state is preserved across the diff, exactly as for a streamed update).
+- **Test** is five tools: record your interactions and get a runnable
+  `aktion-runtime/test` file with the program inlined and the final state
+  asserted; audit the rendered tree for accessibility problems that each name
+  their fix; measure real DSL coverage (V8 sees one line per `.aktion` file, so
+  coverage has to come from the interpreter); try Testing Library queries against
+  the live app and see what matches; and fuzz the UI with a few hundred random
+  clicks to find the handler that throws.
+- **Timeline** interleaves every commit, effect, request, navigation, log, and
+  error into one ordered stream with idle gaps marked — the view you need when a
+  single click produced four things across four tabs — and exports the whole
+  session as JSON to attach to a bug report.
+- **Overview** is the new front door: what is broken right now, what is expensive,
+  and what the app is made of, with every number linking to the tab that explains
+  it. **Settings** exposes the instrumentation switches (prop capture, DOM
+  tagging, per-commit snapshots, network capture, DOM measuring) because a
+  debugger that silently changes the timings it reports is a bad debugger.
+- The panel can now dock to any edge or float, has a light theme and a compact
+  density, remembers where you left it, and keeps your caret in a filter box while
+  events stream in behind it.
+- Profiler additions: each commit now reports how much of its time went to the DOM
+  reconciler rather than to your program, and how many DOM nodes it left behind.
+- Effect additions: a "Mounted" view listing every live effect with its
+  subscriptions, intervals, and cleanup count — the view you need when the bug is
+  that *nothing* happened, and there is therefore no event to look at — plus a
+  "run now" button that fires an effect's body as if its trigger had.
+- **Fixed:** a reactive `$state` write during render could abort the whole commit
+  in one specific case — when focus was sitting inside another shadow root on the
+  page (which is exactly what an inspector's inline editor does). Focus capture is
+  now defensive: a lost caret restore never costs you the render.
+- The DevTools protocol is at version 2. Everything added is optional or additive,
+  so a v1 frontend still works against a v2 runtime — it just sees less. All of it
+  stays dormant until a frontend subscribes: closing the panel returns the app to
+  its uninstrumented speed.
+
 ### Guidance Above a Field, and an "(optional)" Marker
 
 - Every field now takes a `description` — a line of guidance that renders

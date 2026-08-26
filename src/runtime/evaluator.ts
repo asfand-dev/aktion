@@ -1509,8 +1509,13 @@ function installComputedStateDerivations(
  * literals, arrays of pure values, objects of pure values, and template
  * strings without interpolation. These don't need a re-evaluation pass
  * because the literal-default seed already produced their final value.
+ *
+ * Exported because it is also the definition of a DERIVED atom: `$x = expr`
+ * with a non-literal RHS is re-evaluated whenever its dependencies change, so a
+ * DevTools edit to it lasts only until the next flush. An inspector that could
+ * not tell the two apart would show an edit silently reverting.
  */
-function isPureLiteralExpression(expr: Expression): boolean {
+export function isPureLiteralExpression(expr: Expression): boolean {
   switch (expr.kind) {
     case "Literal":
       return true;
