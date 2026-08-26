@@ -155,6 +155,8 @@ export declare class Router {
      * before every in-app `navigate(...)` and every URL-driven change once the
      * router is started. Set via `$util.onNavigate(fn)`.
      */
+    /** True when the program installed a navigation guard (`$router.guard = …`). */
+    hasGuard(): boolean;
     setGuard(guard: NavigationGuard | null): void;
     /** Run the guard for a pending navigation, failing open on error. */
     private runGuard;

@@ -8118,11 +8118,11 @@ const TEXT_PROPS = [
   { name: "truncate", type: "boolean", optional: true, description: "Clip to a single line with a trailing ellipsis" },
   { name: "lines", type: "number", optional: true, aliases: ["clamp"], description: "Clamp to N lines with a trailing ellipsis (implies `truncate`)" }
 ];
-function textClampStyle(truncate, lines) {
+function textClampStyle(truncate2, lines) {
   if (lines > 1) {
     return `display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:${lines};overflow:hidden`;
   }
-  if (truncate || lines === 1) {
+  if (truncate2 || lines === 1) {
     return "display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
   }
   return "";
@@ -9784,13 +9784,21 @@ const InputGroup = {
   render: (_node, props, helpers) => {
     const disabled = asBoolean$1(props.disabled);
     const error = asString$1(props.error);
+    const invalid = asBoolean$1(props.invalid) || Boolean(error);
+    const warning = asString$1(props.warning);
     const root = el("div", {
       class: "rui-input-group",
-      // The group owns the border and the focus ring, so the invalid + disabled
-      // states have to be readable on the shell itself — the nested field's own
-      // chrome is stripped by the theme and can never show them.
+      // The group owns the border and the focus ring, so the invalid, warning and
+      // disabled states have to be readable on the shell itself — the nested
+      // field's own chrome is stripped by the theme and can never show them.
+      //
+      // All three, not just `error`: the shell's own state selectors reach
+      // `.rui-input` / `.rui-select` / `.rui-textarea`, none of which is what
+      // carries the border here — so a group that did not mirror them onto itself
+      // signalled a bad value by message text alone.
       "data-disabled": disabled ? "true" : null,
-      "data-invalid": error ? "true" : null
+      "data-invalid": invalid ? "true" : null,
+      "data-warning": !invalid && warning ? "true" : null
     });
     const iconNode = renderIcon(props.icon, { className: "rui-input-group-icon" });
     if (iconNode) root.append(iconNode);
@@ -10373,7 +10381,10 @@ const FormControl = {
     const describedByIds = [];
     if (description || descriptionNode) {
       const descriptionId = controlId ? `${controlId}-description` : "";
-      const wrap = el("p", { class: "rui-field-description", id: descriptionId || null });
+      const wrap = el(descriptionNode ? "div" : "p", {
+        class: "rui-field-description",
+        id: descriptionId || null
+      });
       if (descriptionNode) wrap.append(descriptionNode);
       else wrap.append(document.createTextNode(description));
       root.append(wrap);
@@ -28259,6 +28270,10 @@ class Router {
    * before every in-app `navigate(...)` and every URL-driven change once the
    * router is started. Set via `$util.onNavigate(fn)`.
    */
+  /** True when the program installed a navigation guard (`$router.guard = …`). */
+  hasGuard() {
+    return this.guard !== null;
+  }
   setGuard(guard) {
     this.guard = guard;
   }
@@ -36916,6 +36931,15 @@ class HttpRuntime {
      * interceptors run program→host (inner-to-outer, the usual convention).
      */
     __publicField(this, "programInterceptors", {});
+    /**
+     * DevTools tap, or `null` in the normal case. See {@link HttpDevtoolsTap} —
+     * one null check per request when no debugger is attached.
+     */
+    __publicField(this, "tap", null);
+  }
+  /** Install (or with `null`, remove) the DevTools network tap. */
+  setDevtoolsTap(tap) {
+    this.tap = tap;
   }
   /** Merge new interceptors on top of any previously-registered ones. */
   registerInterceptors(interceptors) {
@@ -36991,6 +37015,38 @@ class HttpRuntime {
       }
       return { status: response.status, headers, body };
     };
+    const tap = this.tap;
+    const verdict = tap?.gate?.(req);
+    const traceId = tap ? tap.start(req) : "";
+    const startedAt = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+    const elapsed = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) - startedAt;
+    if (verdict?.delayMs && verdict.delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, verdict.delayMs));
+    }
+    if (tap && verdict?.error !== void 0) {
+      const failure = new Error(verdict.error);
+      tap.finish(traceId, {
+        request: req,
+        error: failure,
+        duration: elapsed(),
+        rule: verdict.rule,
+        injectedDelay: verdict.delayMs
+      });
+      this.fireError(failure, req);
+      throw failure;
+    }
+    if (tap && verdict?.response !== void 0) {
+      const mocked = verdict.response;
+      tap.finish(traceId, {
+        request: req,
+        response: mocked,
+        duration: elapsed(),
+        rule: verdict.rule,
+        mocked: true,
+        injectedDelay: verdict.delayMs
+      });
+      return mocked;
+    }
     try {
       let response = await exec();
       const responseChain = [this.programInterceptors.onResponse, this.interceptors.onResponse];
@@ -37004,8 +37060,22 @@ class HttpRuntime {
         };
         response = await onResponse(response, retry);
       }
+      tap?.finish(traceId, {
+        request: req,
+        response,
+        duration: elapsed(),
+        rule: verdict?.rule,
+        injectedDelay: verdict?.delayMs
+      });
       return response;
     } catch (err) {
+      tap?.finish(traceId, {
+        request: req,
+        error: err,
+        duration: elapsed(),
+        rule: verdict?.rule,
+        injectedDelay: verdict?.delayMs
+      });
       this.fireError(err, req);
       throw err;
     }
@@ -39650,88 +39720,6 @@ const softTheme = {
   chart5: "#93c5fd",
   chart6: "#f9a8d4"
 };
-const glassTheme = {
-  ...lightTheme,
-  colorBg: "#eceef2",
-  colorBgSubtle: "#e6e8ee",
-  colorSurface: "rgba(255, 255, 255, 0.55)",
-  colorSurfaceMuted: "rgba(255, 255, 255, 0.35)",
-  colorBorder: "rgba(255, 255, 255, 0.70)",
-  colorBorderControl: "rgba(71, 85, 105, 0.85)",
-  colorBorderSubtle: "rgba(255, 255, 255, 0.45)",
-  colorText: "#33303a",
-  // Was #7c7585: 4.43:1 on #ffffff, 3.81:1 on the #eceef2 page and 3.62:1 on
-  // #e6e8ee — muted captions (StatCard, hints, table meta) were the single
-  // largest body of failing text in this theme. #5d5768 keeps the warm-grey
-  // hue at 6.93 / 5.97 / 5.66:1.
-  colorTextMuted: "#5d5768",
-  // Deepened from #f2826a (2.57:1 on white), which failed as text and for the
-  // #ffffff label on primary buttons. #af4027 is the same terracotta-coral hue
-  // at 5.86:1 on #ffffff and 4.78:1 on the darkest page tint. The frosted
-  // translucency that defines this theme is unaffected.
-  colorPrimary: "#af4027",
-  colorPrimaryHover: "#9c3722",
-  colorPrimaryText: "#ffffff",
-  colorAccent: "#b58ee6",
-  colorAccentHover: "#a376e0",
-  colorAccentText: "#ffffff",
-  // The lavender accent is 2.63:1 on #ffffff and 2.15:1 on the #e6e8ee page, so
-  // it fails as link text; it stays put because it is also a fill (and the
-  // gradientAccent stop). The same lavender at text depth takes over: 7.38:1 on
-  // #ffffff, 6.03:1 on #e6e8ee. Hover deepens, matching the primary's direction.
-  colorLink: "#6b3fa0",
-  colorLinkHover: "#552f80",
-  // Now the primary itself — it clears the 4.5:1 text bar, so it also clears the
-  // 3:1 the focus border needs (the 22% glow beside it is only ~1.2:1).
-  colorFocusRing: "#af4027",
-  // 5.86:1 on #ffffff
-  colorSuccess: "#5bbf9b",
-  colorWarning: "#f0b259",
-  colorDanger: "#ef7b86",
-  colorInfo: "#7fb0e8",
-  // Same hues at text depth: 6.46 / 6.75 / 6.07 / 6.29:1 on #ffffff and
-  // >= 4.68:1 on #e6e8ee (the fills are 1.9-2.7:1).
-  colorSuccessText: "#146b50",
-  colorWarningText: "#7f5200",
-  colorDangerText: "#b82c39",
-  colorInfoText: "#28629f",
-  // Ink on this theme's softer fills: 6.99 / 8.00 / 5.84 / 6.49:1.
-  colorOnSuccess: "#04291e",
-  colorOnWarning: "#451a03",
-  colorOnDanger: "#4c0519",
-  colorOnInfo: "#172554",
-  fontFamily: "'Poppins', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyHeading: "'Poppins', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyMono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  letterSpacingHeading: "-0.01em",
-  radiusXs: "8px",
-  radiusSm: "14px",
-  radiusMd: "20px",
-  radiusLg: "28px",
-  radiusButton: "16px",
-  radiusInput: "16px",
-  shadowSm: "0 2px 8px rgba(120, 110, 140, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.55)",
-  shadowMd: "0 14px 40px rgba(120, 110, 140, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.55)",
-  shadowLg: "0 26px 70px rgba(120, 110, 140, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.60)",
-  spacingXs: "6px",
-  spacingS: "12px",
-  spacingM: "18px",
-  spacingL: "26px",
-  spacingXl: "42px",
-  // See softTheme: light's 48px/80px would otherwise cap this theme's scale.
-  spacing2xl: "63px",
-  spacing3xl: "105px",
-  gradientBrand: "linear-gradient(120deg, #f7a072 0%, #f2826a 45%, #c98bd6 100%)",
-  gradientAccent: "linear-gradient(120deg, #b58ee6 0%, #8ec5e8 100%)",
-  gradientWarm: "linear-gradient(120deg, #f9b079 0%, #f48aa6 100%)",
-  gradientCool: "linear-gradient(120deg, #8ec5e8 0%, #9fd8c6 100%)",
-  chart1: "#f2826a",
-  chart2: "#b58ee6",
-  chart3: "#8ec5e8",
-  chart4: "#5bbf9b",
-  chart5: "#f0b259",
-  chart6: "#f48aa6"
-};
 const visionTheme = {
   ...lightTheme,
   /* Surface & semantic — palette */
@@ -39885,152 +39873,66 @@ const visionTheme = {
   chart6: "#0b2a63"
   // corporate-7 (navy)
 };
-const modernTheme = {
-  ...lightTheme,
-  colorBg: "#f4f5f7",
-  colorBgSubtle: "#eef0f3",
-  colorSurface: "#ffffff",
-  colorSurfaceMuted: "#f6f7f9",
-  colorBorder: "#ebedf1",
-  colorBorderControl: "#787d88",
-  colorBorderSubtle: "rgba(17, 24, 39, 0.06)",
-  colorText: "#111827",
-  // Was #6b7280: 4.83:1 on the white surface but 4.43:1 on the #f4f5f7 page and
-  // 4.23:1 on #eef0f3, and muted captions sit on the page as often as on a card.
-  // #585f6b is the same cool grey at 6.43 / 5.90 / 5.64:1.
-  colorTextMuted: "#585f6b",
-  colorPrimary: "#111827",
-  colorPrimaryHover: "#000000",
-  colorPrimaryText: "#ffffff",
-  colorAccent: "#7c5cfc",
-  colorAccentHover: "#6a47f5",
-  colorAccentText: "#ffffff",
-  // The violet accent is 4.38:1 on #ffffff and 3.84:1 on the #eef0f3 page — just
-  // under the text bar in both, and it is also the badge fill and the
-  // gradientAccent stop, so it stays. The link takes one step down the same
-  // ramp (the value this theme already uses for accentHover): 5.48:1 on #ffffff,
-  // 4.80:1 on #eef0f3; hover goes to 6.67 / 5.84:1.
-  colorLink: "#6a47f5",
-  colorLinkHover: "#5b34ec",
-  colorFocusRing: "#7c5cfc",
-  colorSuccess: "#22c55e",
-  colorWarning: "#f59e0b",
-  colorDanger: "#f43f5e",
-  colorInfo: "#2563eb",
-  // 2.0-3.7:1 as text on this theme's surfaces; same hues at text depth give
-  // 6.20 / 5.77 / 6.29 / 6.70:1 on #ffffff and >= 5.05:1 on #eef0f3.
-  colorSuccessText: "#12702f",
-  colorWarningText: "#9a5400",
-  colorDangerText: "#be123c",
-  colorInfoText: "#1d4ed8",
-  // Ink ON the fills: 6.87 / 6.97 / 4.84:1. This theme's info is blue-600, dark
-  // enough that white is the better ink there (5.17:1 against 2.86:1 for a dark
-  // one). onDanger is rose-tinted to match #f43f5e rather than reusing light's
-  // red-tinted ink.
-  colorOnSuccess: "#04291e",
-  colorOnWarning: "#451a03",
-  colorOnDanger: "#33061a",
-  colorOnInfo: "#ffffff",
-  fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyHeading: "'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyMono: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  fontWeightHeading: "700",
-  letterSpacingHeading: "-0.02em",
-  radiusXs: "8px",
-  radiusSm: "12px",
-  radiusMd: "18px",
-  radiusLg: "24px",
-  radiusButton: "999px",
-  radiusInput: "12px",
-  shadowSm: "0 1px 3px rgba(17, 24, 39, 0.05)",
-  shadowMd: "0 8px 30px rgba(17, 24, 39, 0.07)",
-  shadowLg: "0 24px 60px rgba(17, 24, 39, 0.10)",
-  spacingXs: "5px",
-  spacingS: "10px",
-  spacingM: "16px",
-  spacingL: "24px",
-  spacingXl: "40px",
-  // See softTheme: light's 48px/80px would otherwise cap this theme's scale.
-  spacing2xl: "60px",
-  spacing3xl: "100px",
-  buttonFontWeight: "600",
-  buttonPaddingY: "10px",
-  buttonPaddingX: "18px",
-  gradientBrand: "linear-gradient(120deg, #111827 0%, #4b3f72 50%, #7c5cfc 100%)",
-  gradientAccent: "linear-gradient(120deg, #7c5cfc 0%, #2563eb 100%)",
-  gradientWarm: "linear-gradient(120deg, #ff7849 0%, #f43f5e 100%)",
-  gradientCool: "linear-gradient(120deg, #2563eb 0%, #22d3ee 100%)",
-  chart1: "#7c5cfc",
-  chart2: "#ff7849",
-  chart3: "#2563eb",
-  chart4: "#22c55e",
-  chart5: "#f43f5e",
-  chart6: "#fbbf24"
-};
-const corporateTheme = {
+const shadcnLightTheme = {
   ...lightTheme,
   /* ----- Surface & semantic ----- */
-  // Graphite with a whisper of green so the canvas agrees with the teal brand
-  // hue instead of fighting it (light's #f8fafc is blue-cast).
-  colorBg: "#f5f7f8",
-  colorBgSubtle: "#eaeef0",
+  colorBg: "#ffffff",
+  colorBgSubtle: "#fafafa",
   colorSurface: "#ffffff",
-  colorSurfaceMuted: "#f2f5f6",
-  colorBorder: "#dfe5e8",
-  colorBorderSubtle: "rgba(13, 31, 34, 0.07)",
-  // 3.45:1 on the darkest of the three surfaces — the accessible boundary for
-  // inputs/checkboxes, kept separate from the decorative `colorBorder` hairline.
-  colorBorderControl: "#71818a",
-  colorText: "#0d1f22",
-  colorTextMuted: "#4d616a",
-  colorPrimary: "#0f766e",
-  // Primary DARKENS on hover (the private vision theme brightens — that is its
-  // signature, not a house rule).
-  colorPrimaryHover: "#0b5f58",
-  colorPrimaryText: "#ffffff",
-  // One step brighter than primary so tinted accents read as a second voice in
-  // the same family; still 5.01:1 under white ink as a fill.
-  colorAccent: "#0b7d72",
-  colorAccentHover: "#0a6a61",
-  colorAccentText: "#ffffff",
-  colorLink: "#0f766e",
-  colorLinkHover: "#115e59",
-  colorFocusRing: "#0f766e",
+  colorSurfaceMuted: "#f5f5f5",
+  colorBorder: "#e5e5e5",
+  colorBorderSubtle: "rgba(10, 10, 10, 0.06)",
+  colorBorderControl: "#8f8f8f",
+  colorText: "#0a0a0a",
+  colorTextMuted: "#737373",
+  colorPrimary: "#171717",
+  // shadcn hovers a solid button by dropping the fill to `bg-primary/90`,
+  // which over a white page LIGHTENS it. This is that composite.
+  colorPrimaryHover: "#2e2e2e",
+  colorPrimaryText: "#fafafa",
+  // shadcn has no second brand hue — `--accent` is the same neutral wash as
+  // `--muted`, and anything that wants attention uses the ink primary.
+  colorAccent: "#171717",
+  colorAccentHover: "#2e2e2e",
+  colorAccentText: "#fafafa",
+  colorLink: "#171717",
+  colorLinkHover: "#404040",
+  colorFocusRing: "#737373",
+  // shadcn ships one semantic colour (`--destructive`); the other three are
+  // the Tailwind v4 hues its own examples and charts reach for.
   colorSuccess: "#16a34a",
   colorWarning: "#f59e0b",
-  colorDanger: "#e11d48",
-  // Sky rather than cyan: a cyan info would collide with the teal brand hue and
-  // stop reading as a status at all.
-  colorInfo: "#0369a1",
-  colorSuccessText: "#0a7038",
-  colorWarningText: "#8a4b00",
-  colorDangerText: "#be123c",
-  colorInfoText: "#075985",
-  // Ink ON the fills. Success and warning are bright enough to need dark ink
-  // (4.75 / 6.97:1); the rose danger and the sky info are dark enough that white
-  // is the correct answer (4.70 / 5.93:1).
+  colorDanger: "#e7000b",
+  colorInfo: "#2563eb",
+  colorSuccessText: "#15803d",
+  colorWarningText: "#a35a00",
+  colorDangerText: "#c10007",
+  colorInfoText: "#1d4ed8",
+  // shadcn paints white on `--destructive`, and white clears 4.5:1 on that
+  // fill (4.77:1) — so unlike most themes here, three of the four inks are
+  // simply white. Success and warning are too light for it.
   colorOnSuccess: "#04291e",
   colorOnWarning: "#451a03",
-  colorOnDanger: "#33061a",
+  colorOnDanger: "#ffffff",
   colorOnInfo: "#ffffff",
-  colorSurfaceHover: "rgba(15, 118, 110, 0.06)",
-  /* ----- Typography — Inter body, Space Grotesk display, 15px/1.55 ----- */
-  fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-  fontFamilyHeading: "'Space Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyMono: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  fontSizeBase: "15px",
-  fontSizeSm: "13px",
-  fontSizeLg: "17px",
-  fontSizeHeading: "17px",
+  colorSurfaceHover: "rgba(10, 10, 10, 0.05)",
+  /* ----- Typography — Geist, 14px (`text-sm`) ----- */
+  fontFamily: "'Geist', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyHeading: "'Geist', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyMono: "'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontSizeBase: "14px",
+  fontSizeSm: "12px",
+  fontSizeLg: "16px",
+  fontSizeHeading: "16px",
   fontSizeTitle: "24px",
   fontWeightBody: "400",
   fontWeightHeading: "600",
-  lineHeightBody: "1.55",
+  lineHeightBody: "1.5",
   lineHeightHeading: "1.25",
   letterSpacingHeading: "-0.015em",
   headingTextTransform: "none",
-  /* ----- Shape — square-shouldered, 8px controls ----- */
-  radiusXs: "3px",
+  /* ----- Shape — `--radius: 0.625rem` and its four derived rungs ----- */
+  radiusXs: "4px",
   radiusSm: "6px",
   radiusMd: "10px",
   radiusLg: "14px",
@@ -40038,58 +39940,465 @@ const corporateTheme = {
   radiusButton: "8px",
   radiusInput: "8px",
   borderWidth: "1px",
-  /* ----- Shadows — short throw, graphite-tinted, always paired with a hairline ----- */
-  shadowSm: "0 1px 2px rgba(13, 31, 34, 0.06), 0 1px 1px rgba(13, 31, 34, 0.04)",
-  shadowMd: "0 4px 16px rgba(13, 31, 34, 0.08), 0 1px 2px rgba(13, 31, 34, 0.05)",
-  shadowLg: "0 16px 48px rgba(13, 31, 34, 0.14), 0 2px 6px rgba(13, 31, 34, 0.06)",
-  /* ----- Spacing — 4 / 8 / 14 / 22 / 36 ----- */
+  /* ----- Shadows — Tailwind's `shadow-xs` / `shadow-md` / `shadow-lg` ----- */
+  shadowSm: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+  shadowMd: "0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.10)",
+  shadowLg: "0 10px 15px -3px rgba(0, 0, 0, 0.10), 0 4px 6px -4px rgba(0, 0, 0, 0.10)",
+  /* ----- Spacing — Tailwind's 4px grid, `p-6` cards ----- */
   spacingXs: "4px",
   spacingS: "8px",
-  spacingM: "14px",
-  spacingL: "22px",
+  spacingM: "12px",
+  spacingL: "24px",
   spacingXl: "36px",
-  // See softTheme: light's 48px/80px would otherwise cap this theme's scale.
   spacing2xl: "56px",
   spacing3xl: "88px",
-  /* ----- Gradients ----- */
-  gradientBrand: "linear-gradient(120deg, #0d1f22 0%, #0f766e 55%, #14b8a6 100%)",
-  gradientAccent: "linear-gradient(120deg, #0f766e 0%, #0369a1 100%)",
-  gradientWarm: "linear-gradient(120deg, #f59e0b 0%, #e11d48 100%)",
-  gradientCool: "linear-gradient(120deg, #0369a1 0%, #14b8a6 100%)",
-  gradientSuccess: "linear-gradient(120deg, #16a34a 0%, #14b8a6 100%)",
-  gradientDanger: "linear-gradient(120deg, #e11d48 0%, #9f1239 100%)",
-  /* ----- Buttons — compact, semibold, a hair of tracking ----- */
-  buttonFontWeight: "600",
+  /* ----- Gradients — neutral-first, the way shadcn's own marketing reads ----- */
+  gradientBrand: "linear-gradient(120deg, #0a0a0a 0%, #404040 55%, #737373 100%)",
+  gradientAccent: "linear-gradient(120deg, #171717 0%, #525252 100%)",
+  gradientWarm: "linear-gradient(120deg, #f59e0b 0%, #e7000b 100%)",
+  gradientCool: "linear-gradient(120deg, #2563eb 0%, #06b6d4 100%)",
+  gradientSuccess: "linear-gradient(120deg, #16a34a 0%, #22c55e 100%)",
+  gradientDanger: "linear-gradient(120deg, #e7000b 0%, #9f0712 100%)",
+  /* ----- Buttons — `h-9 px-4 text-sm font-medium` ----- */
+  buttonFontWeight: "500",
   buttonTextTransform: "none",
-  buttonLetterSpacing: "0.01em",
-  buttonPaddingY: "9px",
+  buttonLetterSpacing: "0",
+  buttonPaddingY: "8px",
   buttonPaddingX: "16px",
-  /* ----- Motion — decisive, with a fast-out easing curve ----- */
+  /* ----- Motion — Tailwind's 150ms / `ease-in-out` default ----- */
   transitionDuration: "150ms",
-  motionFast: "110ms",
-  motionBase: "170ms",
+  motionFast: "100ms",
+  motionBase: "150ms",
   motionSlow: "300ms",
-  motionEase: "cubic-bezier(0.2, 0, 0, 1)",
-  /* ----- Charts — brand teal first, then a wide-spread supporting set ----- */
-  chart1: "#0f766e",
-  chart2: "#0369a1",
-  chart3: "#f59e0b",
-  chart4: "#7c3aed",
-  chart5: "#e11d48",
-  chart6: "#65a30d"
+  motionEase: "cubic-bezier(0.4, 0, 0.2, 1)",
+  /* ----- Charts — the five `--chart-*` values from shadcn's light block ----- */
+  chart1: "#e76e50",
+  chart2: "#2a9d90",
+  chart3: "#274754",
+  chart4: "#e8c468",
+  chart5: "#f4a462",
+  chart6: "#9c6644"
 };
+const shadcnDarkTheme = {
+  ...shadcnLightTheme,
+  colorBg: "#0a0a0a",
+  colorBgSubtle: "#0f0f0f",
+  colorSurface: "#171717",
+  colorSurfaceMuted: "#262626",
+  colorBorder: "#262626",
+  colorBorderSubtle: "rgba(255, 255, 255, 0.08)",
+  colorBorderControl: "#737373",
+  colorText: "#fafafa",
+  colorTextMuted: "#a1a1a1",
+  colorPrimary: "#e5e5e5",
+  colorPrimaryHover: "#cfcfcf",
+  colorPrimaryText: "#171717",
+  colorAccent: "#e5e5e5",
+  colorAccentHover: "#cfcfcf",
+  colorAccentText: "#171717",
+  colorLink: "#fafafa",
+  colorLinkHover: "#d4d4d4",
+  colorFocusRing: "#737373",
+  colorSuccess: "#22c55e",
+  colorWarning: "#f59e0b",
+  colorDanger: "#ff6467",
+  colorInfo: "#3b82f6",
+  // On #171717 all four fills already clear the 4.5:1 text bar (7.9 / 10.4 /
+  // 6.4 / 4.9:1), so the text partners are the hues themselves — light's
+  // darkened values would be unreadable here.
+  colorSuccessText: "#22c55e",
+  colorWarningText: "#f59e0b",
+  colorDangerText: "#ff6467",
+  colorInfoText: "#3b82f6",
+  // The dark fills are bright, so the ink flips the other way: white on
+  // #ff6467 is 2.4:1 and on #3b82f6 3.7:1.
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#2c0606",
+  colorOnInfo: "#08131f",
+  colorSurfaceHover: "rgba(255, 255, 255, 0.06)",
+  shadowSm: "0 1px 2px 0 rgba(0, 0, 0, 0.35)",
+  shadowMd: "0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.45)",
+  shadowLg: "0 10px 15px -3px rgba(0, 0, 0, 0.55), 0 4px 6px -4px rgba(0, 0, 0, 0.50)",
+  gradientBrand: "linear-gradient(120deg, #fafafa 0%, #a1a1a1 55%, #525252 100%)",
+  gradientAccent: "linear-gradient(120deg, #e5e5e5 0%, #a1a1a1 100%)",
+  // One Dark — CodeBlock's surface is `--rui-color-surface-muted`, #262626 here.
+  hlKeyword: "#c678dd",
+  hlString: "#98c379",
+  hlNumber: "#d19a66",
+  hlComment: "#9ca3af",
+  hlFn: "#61afef",
+  hlTag: "#e06c75",
+  hlAttr: "#d19a66",
+  hlPunct: "#abb2bf",
+  /* The `--chart-*` values from shadcn's `.dark` block. */
+  chart1: "#2662d9",
+  chart2: "#2eb88a",
+  chart3: "#e88c30",
+  chart4: "#af57db",
+  chart5: "#e23670",
+  chart6: "#3ec9d6"
+};
+const muiLightTheme = {
+  ...lightTheme,
+  /* ----- Surface & semantic ----- */
+  colorBg: "#ffffff",
+  colorBgSubtle: "#f5f5f5",
+  colorSurface: "#ffffff",
+  colorSurfaceMuted: "#f5f5f5",
+  colorBorder: "rgba(0, 0, 0, 0.12)",
+  colorBorderSubtle: "rgba(0, 0, 0, 0.07)",
+  colorBorderControl: "#8c8c8c",
+  colorText: "rgba(0, 0, 0, 0.87)",
+  colorTextMuted: "rgba(0, 0, 0, 0.6)",
+  colorPrimary: "#1976d2",
+  colorPrimaryHover: "#1565c0",
+  colorPrimaryText: "#ffffff",
+  colorAccent: "#9c27b0",
+  colorAccentHover: "#7b1fa2",
+  colorAccentText: "#ffffff",
+  // MUI's Link is `primary.main`, which is 4.22:1 on the grey-100 band this
+  // theme paints table headers and muted panels with — under the 4.5:1 text
+  // bar. One step down the same ramp (`primary.dark`) gives 5.27:1 there and
+  // 5.75:1 on white; hover continues to blue-900.
+  colorLink: "#1565c0",
+  colorLinkHover: "#0d47a1",
+  colorFocusRing: "#1976d2",
+  colorSuccess: "#2e7d32",
+  colorWarning: "#ed6c02",
+  colorDanger: "#d32f2f",
+  colorInfo: "#0288d1",
+  colorSuccessText: "#1e4620",
+  colorWarningText: "#663c00",
+  colorDangerText: "#5f2120",
+  colorInfoText: "#014361",
+  // Success and error are dark enough for MUI's own white label (5.13 / 4.98:1).
+  // Warning and info are not (3.11 / 3.86:1), so those two take a hue-matched
+  // dark ink instead — the one place this theme knowingly departs from MUI,
+  // and only on the ~45 rules that paint a glyph ON the fill.
+  colorOnSuccess: "#ffffff",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#ffffff",
+  colorOnInfo: "#001724",
+  colorSurfaceHover: "rgba(0, 0, 0, 0.04)",
+  /* ----- Typography — Roboto, 16px body, MUI's h5/h6 for title/heading ----- */
+  fontFamily: "'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+  fontFamilyHeading: "'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+  fontFamilyMono: "'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontSizeBase: "16px",
+  fontSizeSm: "14px",
+  fontSizeLg: "18px",
+  fontSizeHeading: "20px",
+  fontSizeTitle: "24px",
+  fontWeightBody: "400",
+  fontWeightHeading: "500",
+  lineHeightBody: "1.5",
+  lineHeightHeading: "1.334",
+  letterSpacingHeading: "0.0075em",
+  headingTextTransform: "none",
+  /* ----- Shape — `shape.borderRadius: 4` really is the whole scale ----- */
+  radiusXs: "2px",
+  radiusSm: "4px",
+  radiusMd: "4px",
+  radiusLg: "4px",
+  radiusPill: "999px",
+  radiusButton: "4px",
+  radiusInput: "4px",
+  borderWidth: "1px",
+  /* ----- Shadows — MUI elevation 1 / 4 / 24, verbatim ----- */
+  shadowSm: "0px 2px 1px -1px rgba(0, 0, 0, 0.2), 0px 1px 1px 0px rgba(0, 0, 0, 0.14), 0px 1px 3px 0px rgba(0, 0, 0, 0.12)",
+  shadowMd: "0px 2px 4px -1px rgba(0, 0, 0, 0.2), 0px 4px 5px 0px rgba(0, 0, 0, 0.14), 0px 1px 10px 0px rgba(0, 0, 0, 0.12)",
+  shadowLg: "0px 11px 15px -7px rgba(0, 0, 0, 0.2), 0px 24px 38px 3px rgba(0, 0, 0, 0.14), 0px 9px 46px 8px rgba(0, 0, 0, 0.12)",
+  /* ----- Spacing — `theme.spacing(n)` = n * 8 ----- */
+  spacingXs: "4px",
+  spacingS: "8px",
+  spacingM: "16px",
+  spacingL: "24px",
+  spacingXl: "32px",
+  spacing2xl: "48px",
+  spacing3xl: "80px",
+  /* ----- Gradients — primary → secondary, the only two brand hues MUI has -- */
+  gradientBrand: "linear-gradient(120deg, #1976d2 0%, #9c27b0 100%)",
+  gradientAccent: "linear-gradient(120deg, #9c27b0 0%, #1976d2 100%)",
+  gradientWarm: "linear-gradient(120deg, #ed6c02 0%, #d32f2f 100%)",
+  gradientCool: "linear-gradient(120deg, #0288d1 0%, #1976d2 100%)",
+  gradientSuccess: "linear-gradient(120deg, #2e7d32 0%, #0288d1 100%)",
+  gradientDanger: "linear-gradient(120deg, #d32f2f 0%, #9c27b0 100%)",
+  /* ----- Buttons — MUI's `MuiButton` typography, exactly ----- */
+  buttonFontWeight: "500",
+  buttonTextTransform: "uppercase",
+  buttonLetterSpacing: "0.02857em",
+  buttonPaddingY: "6px",
+  buttonPaddingX: "16px",
+  /* ----- Motion — `transitions.duration` shortest / standard / complex ----- */
+  transitionDuration: "150ms",
+  motionFast: "150ms",
+  motionBase: "250ms",
+  motionSlow: "300ms",
+  motionEase: "cubic-bezier(0.4, 0, 0.2, 1)",
+  /* ----- Charts — MUI X's default `blueberryTwilightPalette` (light) ----- */
+  chart1: "#02b2af",
+  chart2: "#2e96ff",
+  chart3: "#b800d8",
+  chart4: "#60009b",
+  chart5: "#2731c8",
+  chart6: "#03008d"
+};
+const muiDarkTheme = {
+  ...muiLightTheme,
+  colorBg: "#121212",
+  colorBgSubtle: "#181818",
+  colorSurface: "#1e1e1e",
+  colorSurfaceMuted: "#272727",
+  colorBorder: "rgba(255, 255, 255, 0.12)",
+  colorBorderSubtle: "rgba(255, 255, 255, 0.08)",
+  colorBorderControl: "#7a7a7a",
+  colorText: "#ffffff",
+  colorTextMuted: "rgba(255, 255, 255, 0.7)",
+  colorPrimary: "#90caf9",
+  colorPrimaryHover: "#42a5f5",
+  colorPrimaryText: "rgba(0, 0, 0, 0.87)",
+  colorAccent: "#ce93d8",
+  colorAccentHover: "#ba68c8",
+  colorAccentText: "rgba(0, 0, 0, 0.87)",
+  colorLink: "#90caf9",
+  colorLinkHover: "#bbdefb",
+  colorFocusRing: "#90caf9",
+  colorSuccess: "#66bb6a",
+  colorWarning: "#ffa726",
+  colorDanger: "#f44336",
+  colorInfo: "#29b6f6",
+  // 7.0 / 10.5 / 4.5 / 8.4:1 on #1e1e1e — the dark palette's fills are already
+  // text-safe, so light's very dark Alert inks are replaced by the hues.
+  colorSuccessText: "#66bb6a",
+  colorWarningText: "#ffa726",
+  colorDangerText: "#f44336",
+  colorInfoText: "#29b6f6",
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#2c0606",
+  colorOnInfo: "#08131f",
+  colorSurfaceHover: "rgba(255, 255, 255, 0.08)",
+  gradientBrand: "linear-gradient(120deg, #90caf9 0%, #ce93d8 100%)",
+  gradientAccent: "linear-gradient(120deg, #ce93d8 0%, #90caf9 100%)",
+  gradientWarm: "linear-gradient(120deg, #ffa726 0%, #f44336 100%)",
+  gradientCool: "linear-gradient(120deg, #29b6f6 0%, #90caf9 100%)",
+  gradientSuccess: "linear-gradient(120deg, #66bb6a 0%, #29b6f6 100%)",
+  gradientDanger: "linear-gradient(120deg, #f44336 0%, #ce93d8 100%)",
+  hlKeyword: "#c678dd",
+  hlString: "#98c379",
+  hlNumber: "#d19a66",
+  hlComment: "#9ca3af",
+  hlFn: "#61afef",
+  hlTag: "#e06c75",
+  hlAttr: "#d19a66",
+  hlPunct: "#abb2bf",
+  /* MUI X's `blueberryTwilightPalette` (dark). */
+  chart1: "#02b2af",
+  chart2: "#72ccff",
+  chart3: "#da00ff",
+  chart4: "#9001cb",
+  chart5: "#2e96ff",
+  chart6: "#b800d8"
+};
+const herouiLightTheme = {
+  ...lightTheme,
+  /* ----- Surface & semantic ----- */
+  colorBg: "#ffffff",
+  colorBgSubtle: "#fafafa",
+  colorSurface: "#ffffff",
+  colorSurfaceMuted: "#f4f4f5",
+  colorBorder: "#e4e4e7",
+  colorBorderSubtle: "rgba(17, 17, 17, 0.08)",
+  colorBorderControl: "#8b8b93",
+  colorText: "#11181c",
+  // HeroUI's `default-500` #71717a measures 4.40:1 on the `default-100` fill
+  // that backs chips, pills and flat inputs — just under the body-text bar.
+  // #63636b is the same zinc a rung darker: 5.42:1 there, 5.95:1 on white.
+  colorTextMuted: "#63636b",
+  colorPrimary: "#006fee",
+  colorPrimaryHover: "#005bc4",
+  colorPrimaryText: "#ffffff",
+  colorAccent: "#7828c8",
+  colorAccentHover: "#6020a0",
+  colorAccentText: "#ffffff",
+  // HeroUI paints links in `primary` itself, which is 4.46:1 on this theme's
+  // `default-50` page tint — a hair under the body-text bar. The link takes
+  // the 600 rung instead (6.38:1 on white, 6.10:1 on the tint); the FILL
+  // above is untouched, so buttons and chips stay HeroUI blue.
+  colorLink: "#005bc4",
+  colorLinkHover: "#004493",
+  colorFocusRing: "#006fee",
+  colorSuccess: "#17c964",
+  colorWarning: "#f5a524",
+  colorDanger: "#f31260",
+  // HeroUI's semantic set has no `info`; the primary blue is what its own
+  // informational chips and alerts use.
+  colorInfo: "#006fee",
+  // The 700 rung of each HeroUI colour scale — the shade its flat chips and
+  // alerts already paint their label in.
+  colorSuccessText: "#0e793c",
+  colorWarningText: "#936316",
+  colorDangerText: "#920b3a",
+  colorInfoText: "#005bc4",
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#2a0413",
+  colorOnInfo: "#ffffff",
+  colorSurfaceHover: "rgba(17, 24, 28, 0.05)",
+  /* ----- Typography — Inter at 16px (`text-medium`) ----- */
+  fontFamily: "'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyHeading: "'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyMono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontSizeBase: "16px",
+  fontSizeSm: "14px",
+  fontSizeLg: "18px",
+  fontSizeHeading: "18px",
+  fontSizeTitle: "30px",
+  fontWeightBody: "400",
+  fontWeightHeading: "600",
+  lineHeightBody: "1.5",
+  lineHeightHeading: "1.25",
+  letterSpacingHeading: "-0.02em",
+  headingTextTransform: "none",
+  /* ----- Shape — `--heroui-radius-small / -medium / -large` ----- */
+  radiusXs: "6px",
+  radiusSm: "8px",
+  radiusMd: "12px",
+  radiusLg: "14px",
+  radiusPill: "999px",
+  radiusButton: "12px",
+  radiusInput: "12px",
+  borderWidth: "1px",
+  /* ----- Shadows — HeroUI's `shadow-small / -medium / -large`, verbatim ----- */
+  shadowSm: "0px 0px 5px 0px rgba(0, 0, 0, 0.02), 0px 2px 10px 0px rgba(0, 0, 0, 0.06), 0px 0px 1px 0px rgba(0, 0, 0, 0.3)",
+  shadowMd: "0px 0px 15px 0px rgba(0, 0, 0, 0.03), 0px 2px 30px 0px rgba(0, 0, 0, 0.08), 0px 0px 1px 0px rgba(0, 0, 0, 0.3)",
+  shadowLg: "0px 0px 30px 0px rgba(0, 0, 0, 0.04), 0px 30px 60px 0px rgba(0, 0, 0, 0.12), 0px 0px 1px 0px rgba(0, 0, 0, 0.3)",
+  /* ----- Spacing ----- */
+  spacingXs: "4px",
+  spacingS: "8px",
+  spacingM: "12px",
+  spacingL: "16px",
+  spacingXl: "28px",
+  spacing2xl: "48px",
+  spacing3xl: "80px",
+  /* ----- Gradients — the pairs HeroUI's own docs put on their hero copy ----- */
+  gradientBrand: "linear-gradient(120deg, #5ea2ef 0%, #0072f5 100%)",
+  gradientAccent: "linear-gradient(120deg, #ff1cf7 0%, #b249f8 100%)",
+  gradientWarm: "linear-gradient(120deg, #ff705b 0%, #ffb457 100%)",
+  gradientCool: "linear-gradient(120deg, #5ea2ef 0%, #17c964 100%)",
+  gradientSuccess: "linear-gradient(120deg, #6fee8d 0%, #17c964 100%)",
+  gradientDanger: "linear-gradient(120deg, #f54180 0%, #f31260 100%)",
+  /* ----- Buttons — `h-10 px-4 text-small font-medium`, `rounded-medium` ----- */
+  buttonFontWeight: "500",
+  buttonTextTransform: "none",
+  buttonLetterSpacing: "0",
+  buttonPaddingY: "10px",
+  buttonPaddingX: "16px",
+  /* ----- Motion — HeroUI's 250ms `transition-transform-colors-opacity` ----- */
+  transitionDuration: "250ms",
+  motionFast: "150ms",
+  motionBase: "250ms",
+  motionSlow: "300ms",
+  motionEase: "cubic-bezier(0, 0, 0.2, 1)",
+  /* ----- Charts — the semantic palette, primary first ----- */
+  chart1: "#006fee",
+  chart2: "#7828c8",
+  chart3: "#17c964",
+  chart4: "#f5a524",
+  chart5: "#f31260",
+  chart6: "#ff705b"
+};
+const herouiDarkTheme = {
+  ...herouiLightTheme,
+  colorBg: "#000000",
+  colorBgSubtle: "#09090b",
+  colorSurface: "#18181b",
+  colorSurfaceMuted: "#27272a",
+  colorBorder: "#27272a",
+  colorBorderSubtle: "rgba(255, 255, 255, 0.10)",
+  colorBorderControl: "#8b8b93",
+  colorText: "#ecedee",
+  colorTextMuted: "#a1a1aa",
+  colorPrimary: "#006fee",
+  // Dark-mode primaries BRIGHTEN on hover — #338ef7 is the dark scale's 500.
+  colorPrimaryHover: "#338ef7",
+  colorPrimaryText: "#ffffff",
+  colorAccent: "#9353d3",
+  colorAccentHover: "#ae7ede",
+  colorAccentText: "#ffffff",
+  colorLink: "#66aaf9",
+  colorLinkHover: "#99c7fb",
+  colorFocusRing: "#006fee",
+  colorSuccess: "#17c964",
+  colorWarning: "#f5a524",
+  colorDanger: "#f31260",
+  colorInfo: "#006fee",
+  colorSuccessText: "#17c964",
+  colorWarningText: "#f5a524",
+  // #f31260 is 4.27:1 on content1; #f54180 is the same ramp one step up, 5.02:1.
+  colorDangerText: "#f54180",
+  colorInfoText: "#66aaf9",
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#2a0413",
+  colorOnInfo: "#ffffff",
+  colorSurfaceHover: "rgba(255, 255, 255, 0.07)",
+  shadowSm: "0px 0px 5px 0px rgba(0, 0, 0, 0.05), 0px 2px 10px 0px rgba(0, 0, 0, 0.2), inset 0px 0px 1px 0px rgba(255, 255, 255, 0.15)",
+  shadowMd: "0px 0px 15px 0px rgba(0, 0, 0, 0.06), 0px 2px 30px 0px rgba(0, 0, 0, 0.22), inset 0px 0px 1px 0px rgba(255, 255, 255, 0.15)",
+  shadowLg: "0px 0px 30px 0px rgba(0, 0, 0, 0.07), 0px 30px 60px 0px rgba(0, 0, 0, 0.26), inset 0px 0px 1px 0px rgba(255, 255, 255, 0.15)",
+  hlKeyword: "#c678dd",
+  hlString: "#98c379",
+  hlNumber: "#d19a66",
+  hlComment: "#9ca3af",
+  hlFn: "#61afef",
+  hlTag: "#e06c75",
+  hlAttr: "#d19a66",
+  hlPunct: "#abb2bf",
+  chart1: "#338ef7",
+  chart2: "#9353d3",
+  chart3: "#45d483",
+  chart4: "#f7b750",
+  chart5: "#f54180",
+  chart6: "#ff8f7c"
+};
+const SHADCN_FONTS = ["Geist:400,500,600,700", "Geist Mono:400,500"];
+const MUI_FONTS = ["Roboto:300,400,500,700", "Roboto Mono:400,500"];
+const HEROUI_FONTS = ["Inter:400,500,600,700"];
 const builtInThemeFonts = {
-  corporate: { import: ["Inter:400,500,600,700", "Space Grotesk:500,600,700"] },
+  shadcn: { import: SHADCN_FONTS },
+  "shadcn-light": { import: SHADCN_FONTS },
+  "shadcn-dark": { import: SHADCN_FONTS },
+  mui: { import: MUI_FONTS },
+  "mui-light": { import: MUI_FONTS },
+  "mui-dark": { import: MUI_FONTS },
+  heroui: { import: HEROUI_FONTS },
+  "heroui-light": { import: HEROUI_FONTS },
+  "heroui-dark": { import: HEROUI_FONTS },
   vision: { import: ["Open Sans:400,600", "Overpass:400,600"] }
 };
 const builtInThemes = {
   light: lightTheme,
   dark: darkTheme,
-  corporate: corporateTheme,
-  soft: softTheme,
-  glass: glassTheme,
-  modern: modernTheme
+  shadcn: shadcnLightTheme,
+  "shadcn-light": shadcnLightTheme,
+  "shadcn-dark": shadcnDarkTheme,
+  mui: muiLightTheme,
+  "mui-light": muiLightTheme,
+  "mui-dark": muiDarkTheme,
+  heroui: herouiLightTheme,
+  "heroui-light": herouiLightTheme,
+  "heroui-dark": herouiDarkTheme,
+  soft: softTheme
 };
+const deprecatedThemeAliases = {
+  modern: "shadcn-light",
+  glass: "mui-light",
+  corporate: "heroui-light"
+};
+function canonicalThemeName(key2) {
+  return deprecatedThemeAliases[key2] ?? key2;
+}
 const privateThemes = {
   vision: visionTheme
 };
@@ -40097,7 +40406,8 @@ function findThemeByName(name) {
   if (typeof name !== "string") return null;
   const key2 = name.trim().toLowerCase();
   if (!key2) return null;
-  return builtInThemes[key2] ?? privateThemes[key2] ?? null;
+  const canonical = canonicalThemeName(key2);
+  return builtInThemes[canonical] ?? privateThemes[canonical] ?? null;
 }
 const TOKEN_TO_CSS = {
   colorBg: "--rui-color-bg",
@@ -40225,11 +40535,15 @@ function resolveTheme(input) {
         return { name: "light", tokens: lightTheme };
       }
     }
-    const tokens = findThemeByName(key2);
-    if (tokens) return { name: key2, tokens };
+    const canonical = canonicalThemeName(key2);
+    const tokens = findThemeByName(canonical);
+    if (tokens) return { name: canonical, tokens };
     return { name: "light", tokens: lightTheme };
   }
   return { name: "custom", tokens: mergeTheme(input) };
+}
+function themeTokenCssVar(token) {
+  return TOKEN_TO_CSS[token] ?? null;
 }
 function applyTheme(host, theme) {
   const resolved = "tokens" in theme ? theme : { name: "custom", tokens: theme };
@@ -40339,7 +40653,7 @@ function loadFonts(record) {
 function loadBuiltInThemeFonts(name) {
   const key2 = typeof name === "string" ? name.trim().toLowerCase() : "";
   if (!key2) return;
-  const decl = builtInThemeFonts[key2];
+  const decl = builtInThemeFonts[canonicalThemeName(key2)];
   if (decl) loadFonts(decl);
 }
 const safeRun = (fn, fallback) => {
@@ -44150,6 +44464,11 @@ function isDevtoolsActive() {
   const hook = getDevtoolsHook();
   return hook !== void 0 && hook.active;
 }
+function devtoolsOption(key2) {
+  const hook = getDevtoolsHook();
+  if (hook === void 0 || !hook.active) return false;
+  return hook.options[key2];
+}
 function emitDevtoolsEvent(event) {
   getDevtoolsHook()?.emit(event);
 }
@@ -44162,6 +44481,255 @@ function nowMs() {
   }
   return Date.now();
 }
+const PREVIEW_LIMIT = 120;
+const JSON_LIMIT = 2e4;
+const DEPTH_LIMIT = 6;
+const BREADTH_LIMIT = 200;
+function valueKind(value) {
+  if (value === null) return "null";
+  if (value === void 0) return "undefined";
+  if (Array.isArray(value)) return "array";
+  const t = typeof value;
+  if (t !== "object") return t;
+  const rec = value;
+  if (rec.__kind === "Store") return "store";
+  if (typeof rec.refetch === "function" && "state" in rec && "loading" in rec) return "resource";
+  if (typeof rec.send === "function" && "connected" in rec) return "socket";
+  if (typeof Node !== "undefined" && value instanceof Node) return "node";
+  if (value instanceof Date) return "date";
+  if (value instanceof Map) return "map";
+  if (value instanceof Set) return "set";
+  if (value instanceof RegExp) return "regexp";
+  if (value instanceof Error) return "error";
+  return "object";
+}
+function truncate(text, limit = PREVIEW_LIMIT) {
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}…`;
+}
+function previewOf(value) {
+  const kind = valueKind(value);
+  try {
+    switch (kind) {
+      case "string":
+        return truncate(JSON.stringify(value) ?? '""');
+      case "number":
+      case "boolean":
+        return String(value);
+      case "null":
+        return "null";
+      case "undefined":
+        return "undefined";
+      case "function": {
+        const name = value.name;
+        return name ? `ƒ ${name}()` : "ƒ ()";
+      }
+      case "symbol":
+        return String(value);
+      case "bigint":
+        return `${String(value)}n`;
+      case "date":
+        return value.toISOString();
+      case "regexp":
+        return String(value);
+      case "error":
+        return `${value.name}: ${value.message}`;
+      case "node": {
+        const el2 = value;
+        return `<${(el2.tagName ?? "node").toLowerCase()}>`;
+      }
+      case "map":
+        return `Map(${value.size})`;
+      case "set":
+        return `Set(${value.size})`;
+      case "array": {
+        const arr = value;
+        if (arr.length === 0) return "[]";
+        const head = arr.slice(0, 3).map((v) => shortPreview(v)).join(", ");
+        return truncate(`[${head}${arr.length > 3 ? `, …${arr.length - 3} more` : ""}]`);
+      }
+      case "store": {
+        const methods = Object.keys(value.__methods ?? {});
+        return `Store { ${methods.slice(0, 3).join(", ")}${methods.length > 3 ? ", …" : ""} }`;
+      }
+      case "resource": {
+        const res = value;
+        return `Resource(${String(res.state ?? "?")}${res.status != null ? ` ${String(res.status)}` : ""})`;
+      }
+      case "socket": {
+        const sock = value;
+        return `Socket(${String(sock.status ?? "?")})`;
+      }
+      default: {
+        const keys = safeKeys(value);
+        if (keys.length === 0) return "{}";
+        const head = keys.slice(0, 4).join(", ");
+        return truncate(`{ ${head}${keys.length > 4 ? ", …" : ""} }`);
+      }
+    }
+  } catch {
+    return "<unreadable>";
+  }
+}
+function shortPreview(value) {
+  const kind = valueKind(value);
+  switch (kind) {
+    case "string":
+      return truncate(JSON.stringify(value) ?? '""', 24);
+    case "array":
+      return `Array(${value.length})`;
+    case "object":
+      return "{…}";
+    case "function":
+      return "ƒ";
+    default:
+      return truncate(String(value), 24);
+  }
+}
+function safeKeys(value) {
+  try {
+    return Object.keys(value);
+  } catch {
+    return [];
+  }
+}
+function toPlain(value, depth, seen) {
+  const kind = valueKind(value);
+  switch (kind) {
+    case "string":
+    case "number":
+    case "boolean":
+    case "null":
+      return value;
+    case "undefined":
+      return "[undefined]";
+    case "function": {
+      const name = value.name;
+      return name ? `[Function ${name}]` : "[Function]";
+    }
+    case "symbol":
+      return String(value);
+    case "bigint":
+      return `${String(value)}n`;
+    case "date":
+      return value.toISOString();
+    case "regexp":
+      return String(value);
+    case "error":
+      return `[${value.name}: ${value.message}]`;
+    case "node":
+      return `[Node <${(value.tagName ?? "node").toLowerCase()}>]`;
+    case "store":
+      return `[Store]`;
+    case "resource":
+      return `[Resource]`;
+    case "socket":
+      return `[Socket]`;
+    case "map": {
+      const out = {};
+      let i = 0;
+      for (const [k, v] of value) {
+        if (i++ >= BREADTH_LIMIT) {
+          out["…"] = `${value.size - BREADTH_LIMIT} more`;
+          break;
+        }
+        out[String(k)] = depth >= DEPTH_LIMIT ? previewOf(v) : toPlain(v, depth + 1, seen);
+      }
+      return out;
+    }
+    case "set": {
+      const arr = [];
+      let i = 0;
+      for (const v of value) {
+        if (i++ >= BREADTH_LIMIT) {
+          arr.push(`…${value.size - BREADTH_LIMIT} more`);
+          break;
+        }
+        arr.push(depth >= DEPTH_LIMIT ? previewOf(v) : toPlain(v, depth + 1, seen));
+      }
+      return arr;
+    }
+    case "array": {
+      const arr = value;
+      if (seen.has(arr)) return "[Circular]";
+      if (depth >= DEPTH_LIMIT) return `[Array(${arr.length})]`;
+      seen.add(arr);
+      try {
+        const out = arr.slice(0, BREADTH_LIMIT).map((v) => toPlain(v, depth + 1, seen));
+        if (arr.length > BREADTH_LIMIT) out.push(`…${arr.length - BREADTH_LIMIT} more`);
+        return out;
+      } finally {
+        seen.delete(arr);
+      }
+    }
+    default: {
+      const obj = value;
+      if (seen.has(obj)) return "[Circular]";
+      if (depth >= DEPTH_LIMIT) return previewOf(obj);
+      seen.add(obj);
+      try {
+        const out = {};
+        const keys = safeKeys(obj);
+        for (const key2 of keys.slice(0, BREADTH_LIMIT)) {
+          let entry;
+          try {
+            entry = obj[key2];
+          } catch {
+            entry = "[getter threw]";
+          }
+          out[key2] = toPlain(entry, depth + 1, seen);
+        }
+        if (keys.length > BREADTH_LIMIT) out["…"] = `${keys.length - BREADTH_LIMIT} more`;
+        return out;
+      } finally {
+        seen.delete(obj);
+      }
+    }
+  }
+}
+function toJsonText(value, indent = 2) {
+  const kind = valueKind(value);
+  if (kind === "function" || kind === "node" || kind === "resource" || kind === "socket" || kind === "symbol") {
+    return null;
+  }
+  try {
+    const plain = toPlain(value, 0, /* @__PURE__ */ new WeakSet());
+    const text = JSON.stringify(plain, null, indent);
+    if (text === void 0) return null;
+    if (text.length > JSON_LIMIT) return null;
+    return text;
+  } catch {
+    return null;
+  }
+}
+function toDevtoolsValue(value) {
+  const type = valueKind(value);
+  const out = { type, preview: previewOf(value) };
+  const json2 = toJsonText(value, 0);
+  if (json2 !== null) out.json = json2;
+  if (type === "array") out.size = value.length;
+  else if (type === "object") out.size = safeKeys(value).length;
+  else if (type === "string") out.size = value.length;
+  return out;
+}
+function bodySize(body) {
+  if (body == null) return 0;
+  if (typeof body === "string") return body.length;
+  try {
+    return JSON.stringify(body)?.length ?? 0;
+  } catch {
+    return 0;
+  }
+}
+function bodyPreview(body, limit = 4e3) {
+  if (body == null) return "";
+  if (typeof body === "string") return truncate(body, limit);
+  const json2 = toJsonText(body);
+  return json2 === null ? previewOf(body) : truncate(json2, limit);
+}
+const INSTANCE_ATTR = "data-aktion-instance";
+const OWNER_ATTR = "data-aktion-owner";
+const MAX_PROP_RECORDS = 40;
 const ROOT_PATH = "$";
 function positionalEqual(a, b) {
   if (a.length !== b.length) return false;
@@ -44199,6 +44767,39 @@ function hostUniversal(out, universal) {
   host.append(out);
   applyUniversal(host, universal);
   return host;
+}
+function applyLibraryOverrides(node, spec, overrides) {
+  const args = [...node.args];
+  let universal = node.universal;
+  let touchedUniversal = false;
+  for (const [name, value] of overrides) {
+    const index = spec.props.findIndex((p) => p.name === name);
+    if (index >= 0) {
+      while (args.length <= index) args.push(void 0);
+      args[index] = value;
+    } else {
+      if (!touchedUniversal) {
+        universal = { ...node.universal ?? {} };
+        touchedUniversal = true;
+      }
+      universal[name] = value;
+    }
+  }
+  return { ...node, args, universal };
+}
+function applyUserOverrides(node, overrides) {
+  const positional = [...node.positional];
+  const named = { ...node.named };
+  for (const [name, value] of overrides) {
+    const index = node.decl.params.findIndex((p) => p.name === name);
+    if (index >= 0) {
+      while (positional.length <= index) positional.push(void 0);
+      positional[index] = value;
+    } else {
+      named[name] = value;
+    }
+  }
+  return { ...node, positional, named };
 }
 class Renderer {
   constructor(options) {
@@ -44273,6 +44874,15 @@ class Renderer {
      * costs nothing. See `setProfiling`.
      */
     __publicField(this, "profiling", false);
+    /**
+     * Record each instance's props/arguments alongside its timing. Separate from
+     * {@link profiling} because serialising a prop bag per instance per commit is
+     * the expensive half — a profiler session on a heavy app wants the timings
+     * without it, an inspector session needs it.
+     */
+    __publicField(this, "captureProps", false);
+    /** Stamp {@link INSTANCE_ATTR} / {@link OWNER_ATTR} on rendered elements. */
+    __publicField(this, "tagDom", false);
     /** Per-commit profiler records, drained by the host after each render. */
     __publicField(this, "profilerRecords", []);
     /**
@@ -44281,19 +44891,133 @@ class Renderer {
      * tracks exactly the live tree. Only maintained while profiling.
      */
     __publicField(this, "profiledInstances", /* @__PURE__ */ new Set());
+    /**
+     * DevTools prop overrides: instance key → prop name → forced value.
+     *
+     * An override is applied where the value enters the component — before
+     * memoization compares args, so changing one re-renders the instance, and
+     * before `render` sees the prop bag, so a component that reads `node.args`
+     * directly observes the same value the props record shows. The program is
+     * never edited: clearing the override restores the authored value on the
+     * next commit.
+     */
+    __publicField(this, "propOverrides", /* @__PURE__ */ new Map());
     this.options = options;
   }
   /**
    * Enable/disable the render profiler. The host element flips this on when a
    * DevTools frontend subscribes and off when it disconnects, so the common
    * (no-DevTools) path never allocates a record or reads the clock.
+   *
+   * `detail` carries the frontend's instrumentation switches (see
+   * `DevtoolsHookOptions`); omitted keys default to off so a caller that only
+   * wants timings gets only timings.
    */
-  setProfiling(enabled) {
+  setProfiling(enabled, detail) {
     this.profiling = enabled;
+    this.captureProps = enabled && detail?.captureProps === true;
+    this.tagDom = enabled && detail?.tagDom === true;
     if (!enabled) {
       this.profilerRecords = [];
       this.profiledInstances.clear();
     }
+  }
+  /* ---- DevTools inspector surface --------------------------------------- */
+  /**
+   * Force `prop` to `value` for one instance until the override is cleared.
+   * Returns `true` when the instance is one the renderer has actually seen, so
+   * the caller can report a stale key instead of silently doing nothing.
+   */
+  setPropOverride(instanceKey, prop2, value) {
+    let bucket = this.propOverrides.get(instanceKey);
+    if (!bucket) {
+      bucket = /* @__PURE__ */ new Map();
+      this.propOverrides.set(instanceKey, bucket);
+    }
+    bucket.set(prop2, value);
+    this.memoCache.delete(instanceKey);
+    return this.profiledInstances.has(instanceKey) || this.aliveInstances.has(instanceKey);
+  }
+  /** Drop one override, or every override on the instance when `prop` is omitted. */
+  clearPropOverride(instanceKey, prop2) {
+    if (prop2 === void 0) {
+      this.propOverrides.delete(instanceKey);
+    } else {
+      const bucket = this.propOverrides.get(instanceKey);
+      bucket?.delete(prop2);
+      if (bucket && bucket.size === 0) this.propOverrides.delete(instanceKey);
+    }
+    this.memoCache.delete(instanceKey);
+  }
+  /**
+   * Drop every override.
+   *
+   * The host calls this on replan and on `clear()`: an instance key encodes a
+   * render path, and a NEW program can produce the same path for a different
+   * component — so a surviving override would silently apply to something the
+   * user never touched.
+   */
+  clearAllPropOverrides() {
+    this.propOverrides.clear();
+  }
+  /** Every active override, flattened for the inspector's override banner. */
+  listPropOverrides() {
+    const out = [];
+    for (const [instanceKey, bucket] of this.propOverrides) {
+      for (const [prop2, value] of bucket) out.push({ instanceKey, prop: prop2, value });
+    }
+    return out;
+  }
+  /** Overrides in force for one instance (used to flag props in the tree). */
+  propOverridesFor(instanceKey) {
+    return this.propOverrides.get(instanceKey);
+  }
+  /**
+   * `useInstanceState` slots held by one instance — a library component's own
+   * UI state (a Tabs' active pane, a Popover's open flag, a DataGrid's sort).
+   * These never appear in `$state`, which is exactly why an inspector that
+   * cannot show them leaves the most common "why is it showing that?" question
+   * unanswerable.
+   */
+  listInstanceUiState(instanceKey) {
+    const prefix = `${instanceKey}::`;
+    const out = [];
+    for (const [storageKey, value] of this.instanceStates) {
+      if (storageKey.startsWith(prefix)) {
+        out.push({ key: storageKey.slice(prefix.length), value });
+      }
+    }
+    return out.sort((a, b) => a.key.localeCompare(b.key));
+  }
+  /** Write one `useInstanceState` slot. Returns `false` for an unknown slot. */
+  setInstanceUiState(instanceKey, key2, value) {
+    const storageKey = `${instanceKey}::${key2}`;
+    if (!this.instanceStates.has(storageKey)) return false;
+    this.instanceStates.set(storageKey, value);
+    return true;
+  }
+  /**
+   * Drop everything the renderer holds for one instance so the next commit
+   * treats it as a fresh mount: memo, UI-state slots, and disposers. The
+   * host pairs this with `clearInstanceHooks` to remount a component without
+   * reloading the program.
+   */
+  dropInstance(instanceKey) {
+    this.memoCache.delete(instanceKey);
+    this.profiledInstances.delete(instanceKey);
+    const prefix = `${instanceKey}::`;
+    for (const key2 of [...this.instanceStates.keys()]) {
+      if (key2 === instanceKey || key2.startsWith(prefix)) this.instanceStates.delete(key2);
+    }
+    const disposers = this.instanceDisposers.get(instanceKey);
+    if (disposers) {
+      for (const dispose of disposers.values()) this.safeDispose(dispose);
+      this.instanceDisposers.delete(instanceKey);
+    }
+  }
+  /** Instance keys currently in the rendered tree. */
+  liveInstanceKeys() {
+    return [...this.aliveInstances];
   }
   /** Hand the current commit's component records to the host, then clear. */
   drainProfilerRecords() {
@@ -44331,6 +45055,7 @@ class Renderer {
     this.instanceDisposers.clear();
     this.instanceStates.clear();
     this.memoCache.clear();
+    this.propOverrides.clear();
     if (this.options.unmountInstanceEffects) {
       for (const instanceKey of this.instancesWithEffects) {
         try {
@@ -44424,7 +45149,7 @@ class Renderer {
     }
   }
   /** Record one component instance's contribution to the current commit. */
-  profile(instanceKey, name, kind, phase, selfTime, reason, deps) {
+  profile(instanceKey, name, kind, phase, selfTime, reason, deps, extra) {
     this.profilerRecords.push({
       instanceKey,
       name,
@@ -44433,9 +45158,64 @@ class Renderer {
       selfTime,
       depth: this.depthOf(instanceKey),
       reason,
-      deps: deps ? [...deps] : void 0
+      deps: deps ? [...deps] : void 0,
+      source: extra?.source,
+      explicitKey: extra?.explicitKey != null ? String(extra.explicitKey) : void 0,
+      props: extra?.props
     });
     this.profiledInstances.add(instanceKey);
+  }
+  /**
+   * Turn one component instance's arguments into inspector-ready prop records.
+   *
+   * `names` supplies the declared order (a library spec's `props`, or a user
+   * declaration's `params`); anything past the declared arity is reported under
+   * its index so an over-supplied call is visible rather than hidden. `stateRefs`
+   * carries the `$`-binding per position, which is what tells the inspector to
+   * edit the ATOM rather than install an override — editing `value: $name` has
+   * to write `$name`, or the next commit would overwrite the edit.
+   */
+  buildPropRecords(names, values, stateRefs, named, universal, overrides) {
+    const out = [];
+    const push = (name, value, stateRef) => {
+      if (out.length >= MAX_PROP_RECORDS) return;
+      const record = { name, value: toDevtoolsValue(value) };
+      if (stateRef) record.stateRef = stateRef;
+      if (overrides?.has(name)) record.overridden = true;
+      out.push(record);
+    };
+    for (let i = 0; i < values.length; i += 1) {
+      if (values[i] === void 0) continue;
+      push(names[i] ?? `#${i}`, values[i], stateRefs[i]);
+    }
+    if (named) {
+      for (const [key2, value] of Object.entries(named)) {
+        if (value === void 0) continue;
+        push(key2, value);
+      }
+    }
+    if (universal) {
+      for (const [key2, value] of Object.entries(universal)) {
+        if (value == null) continue;
+        push(key2, value);
+      }
+    }
+    return out;
+  }
+  /**
+   * Stamp the instance key onto a rendered element so a DOM node can be traced
+   * back to the component that produced it. `owner` writes the enclosing user
+   * component instead, and only when nothing closer already claimed the node —
+   * so the nearest owner wins and `Page > Card > Button` attributes the button
+   * to `Card`, not `Page`.
+   */
+  tagInstance(node, instanceKey, attr) {
+    if (!(node instanceof Element)) return;
+    try {
+      if (attr === OWNER_ATTR && node.hasAttribute(OWNER_ATTR)) return;
+      node.setAttribute(attr, instanceKey);
+    } catch {
+    }
   }
   safeDispose(dispose) {
     try {
@@ -44552,12 +45332,25 @@ class Renderer {
     const keyPart = node.explicitKey != null ? `=${String(node.explicitKey)}` : `@${node.source?.line ?? 0}:${node.source?.column ?? 0}`;
     const instancePath = `${path}#${node.decl.name}${keyPart}`;
     this.markAlive(instancePath);
+    const overrides = this.propOverrides.get(instancePath);
+    if (overrides && overrides.size > 0) {
+      node = applyUserOverrides(node, overrides);
+    }
     const memo = this.memoCache.get(instancePath);
     if (this.memoEnabled && memo && positionalEqual(node.positional, memo.positional) && namedEqual(node.named, memo.named) && !pathsOverlap(this.changedPaths, memo.deps)) {
       const tracker = ctx.trackedState;
       for (const dep of memo.deps) tracker.add(dep);
       if (this.profiling) {
-        this.profile(instancePath, node.decl.name, "user", "memo", 0, "memoized (args + deps unchanged)", memo.deps);
+        this.profile(
+          instancePath,
+          node.decl.name,
+          "user",
+          "memo",
+          0,
+          "memoized (args + deps unchanged)",
+          memo.deps,
+          { source: node.source, explicitKey: node.explicitKey, props: this.userProps(node, overrides) }
+        );
       }
       enterUserComponent(ctx, node.decl.name);
       try {
@@ -44583,7 +45376,16 @@ class Renderer {
       }
       const { value, effects, hooks } = evaluated;
       if (this.profiling) {
-        this.profile(instancePath, node.decl.name, "user", profilePhase, nowMs() - profileStart, profileReason, instanceDeps);
+        this.profile(
+          instancePath,
+          node.decl.name,
+          "user",
+          profilePhase,
+          nowMs() - profileStart,
+          profileReason,
+          instanceDeps,
+          { source: node.source, explicitKey: node.explicitKey, props: this.userProps(node, overrides) }
+        );
       }
       if (this.options.mountInstanceEffects) {
         this.options.mountInstanceEffects(instancePath, effects, ctxRef);
@@ -44600,10 +45402,17 @@ class Renderer {
       if (node.explicitKey != null && rendered instanceof Element && !rendered.hasAttribute("data-rui-key")) {
         rendered.setAttribute("data-rui-key", String(node.explicitKey));
       }
+      if (this.tagDom) this.tagInstance(rendered, instancePath, OWNER_ATTR);
       return rendered;
     } finally {
       leaveUserComponent(ctx);
     }
+  }
+  /** Prop records for a user component instance, or `undefined` when off. */
+  userProps(node, overrides) {
+    if (!this.captureProps) return void 0;
+    const names = node.decl.params.map((p, i) => p.name || (p.pattern ? `{pattern ${i}}` : `#${i}`));
+    return this.buildPropRecords(names, node.positional, [], node.named, void 0, overrides);
   }
   renderComponent(node, path) {
     const spec = findComponent(this.options.library, node.name);
@@ -44613,10 +45422,14 @@ class Renderer {
       placeholder.textContent = `[unknown component: ${node.name}]`;
       return placeholder;
     }
-    const props = mapPositionalArgs(spec, node.args);
     const keySuffix = node.explicitKey != null ? `=${String(node.explicitKey)}` : `@${node.source?.line ?? 0}:${node.source?.column ?? 0}`;
     const instancePath = `${path}#${node.name}${keySuffix}`;
     this.markAlive(instancePath);
+    const overrides = this.propOverrides.get(instancePath);
+    if (overrides && overrides.size > 0) {
+      node = applyLibraryOverrides(node, spec, overrides);
+    }
+    const props = mapPositionalArgs(spec, node.args);
     let childCounter = 0;
     let outOfBand = false;
     let anonSlot = 0;
@@ -44704,13 +45517,32 @@ class Renderer {
       if (node.explicitKey != null && out instanceof Element && !out.hasAttribute("data-rui-key")) {
         out.setAttribute("data-rui-key", String(node.explicitKey));
       }
+      if (this.tagDom) this.tagInstance(out, instancePath, INSTANCE_ATTR);
       if (this.profiling) {
-        this.profile(instancePath, node.name, "library", libPhase, nowMs() - libStart, libPhase === "mount" ? "mounted" : "re-rendered");
+        this.profile(
+          instancePath,
+          node.name,
+          "library",
+          libPhase,
+          nowMs() - libStart,
+          libPhase === "mount" ? "mounted" : "re-rendered",
+          void 0,
+          { source: node.source, explicitKey: node.explicitKey, props: this.libraryProps(spec, node, overrides) }
+        );
       }
       return out;
     } catch (err) {
       if (this.profiling) {
-        this.profile(instancePath, node.name, "library", libPhase, nowMs() - libStart, "render threw");
+        this.profile(
+          instancePath,
+          node.name,
+          "library",
+          libPhase,
+          nowMs() - libStart,
+          "render threw",
+          void 0,
+          { source: node.source, explicitKey: node.explicitKey, props: this.libraryProps(spec, node, overrides) }
+        );
       }
       console.error(`[aktion] failed to render ${spec.name}`, err);
       const fallback = document.createElement("div");
@@ -44718,6 +45550,13 @@ class Renderer {
       fallback.textContent = `[render error in ${spec.name}]`;
       return fallback;
     }
+  }
+  /** Prop records for a library component instance, or `undefined` when off. */
+  libraryProps(spec, node, overrides) {
+    if (!this.captureProps) return void 0;
+    const names = spec.props.map((p) => p.name);
+    const stateRefs = node.args.map((_, i) => node.argMeta[i]?.stateRef);
+    return this.buildPropRecords(names, node.args, stateRefs, void 0, node.universal, overrides);
   }
   eventFor(element) {
     if (element instanceof HTMLSelectElement) return "change";
@@ -44832,6 +45671,49 @@ class EffectRunner {
     }
     this.errors = [];
   }
+  /* ---- DevTools introspection ------------------------------------------ */
+  /**
+   * Describe every currently-mounted effect: what it subscribes to, what
+   * intervals it holds, how many `cleanup(fn)` handlers are live.
+   *
+   * The event timeline shows what effects *did*; this shows what they *are* —
+   * which is the half you need when the question is "why did nothing happen?"
+   * (a dependency list that never matches never produces an event to look at).
+   */
+  listMounted() {
+    const out = [];
+    for (const [mountKey, mounted2] of this.mounted) {
+      const sep = mountKey.lastIndexOf(INSTANCE_KEY_SEPARATOR);
+      const stateDeps = [];
+      const intervals = [];
+      for (const trigger of mounted2.decl.triggers) {
+        if (trigger.kind === "state") stateDeps.push(trigger.name);
+        else if (trigger.kind === "every") intervals.push(trigger.intervalMs);
+      }
+      out.push({
+        effectKey: mountKey,
+        label: effectLabel(mounted2.decl.name),
+        instanceKey: sep >= 0 ? mountKey.slice(0, sep) : null,
+        triggers: summariseTriggers(mounted2.decl),
+        stateDeps,
+        intervals,
+        cleanups: mounted2.cleanups.length,
+        source: mounted2.decl.loc ? { line: mounted2.decl.loc.line, column: mounted2.decl.loc.column } : void 0
+      });
+    }
+    return out;
+  }
+  /**
+   * Run one mounted effect's body now, as if its trigger had fired. Prior
+   * cleanups fire first, exactly like a real re-run, so "run now" can't leave
+   * an effect with two live subscriptions. Returns `false` for an unknown key.
+   */
+  runNow(mountKey, reason = "devtools") {
+    const mounted2 = this.mounted.get(mountKey);
+    if (!mounted2?.run) return false;
+    mounted2.run(reason);
+    return true;
+  }
   mount(mountKey, decl, getCtx, capturedAliases, capturedLoopVars) {
     const mounted2 = {
       decl,
@@ -44871,6 +45753,7 @@ class EffectRunner {
       }
     };
     const runBody = wrapRateLimit(rawRunBody, decl.rateLimit, mounted2);
+    mounted2.run = runBody;
     let hasMountTrigger = false;
     let hasUnmountTrigger = false;
     let hasEveryTrigger = false;
@@ -45200,7 +46083,7 @@ Set by the HOST PAGE, never from Aktion code. Listed so you know what is configu
 
 | Attribute | Values | Effect |
 | --- | --- | --- |
-| \`theme\` | \`light\` \`dark\` \`corporate\` \`soft\` \`glass\` \`modern\` | Base palette. \`$theme({...})\` layers on top of it. A theme selected by name also loads its web fonts. |
+| \`theme\` | \`light\` \`dark\` \`shadcn\` \`shadcn-dark\` \`mui\` \`mui-dark\` \`heroui\` \`heroui-dark\` \`soft\` | Base palette. \`shadcn\`, \`mui\` and \`heroui\` re-create shadcn/ui, Material UI and HeroUI; each also answers to an explicit \`-light\` spelling. \`$theme({...})\` layers on top. A theme selected by name also loads its web fonts. |
 | \`dir\` | \`ltr\` \`rtl\` \`auto\` | Flips the whole tree. Programs need no change. |
 | \`margin\` | \`0\` \`12\` \`1rem\` | Outer gutter (default 20px). |
 | \`scroll-restoration\` | \`auto\` \`top\` | Scroll behaviour on navigation. |
@@ -45794,7 +46677,7 @@ A bare \`$theme({...})\` statement (before \`$app\`) brands the response. Omit i
 Note that \`zIndex\` values are numbers and \`gradients\` accepts an array — do not quote them.
 
 Core group keys (all optional):
-- \`name?: string\` — selects a built-in theme as the base palette (\`"dark"\`, \`"light"\`, \`"modern"\`, \`"corporate"\`, \`"soft"\`, \`"glass"\`; unknown names are ignored).
+- \`name?: string\` — selects a built-in theme as the base palette (\`"light"\`, \`"dark"\`, \`"shadcn"\`/\`"shadcn-light"\`/\`"shadcn-dark"\`, \`"mui"\`/\`"mui-light"\`/\`"mui-dark"\`, \`"heroui"\`/\`"heroui-light"\`/\`"heroui-dark"\`, \`"soft"\`; unknown names are ignored).
 - \`direction?: "ltr" | "rtl"\` — reading direction (metadata; not applied as a token).
 - \`colors?: { ... }\` — CSS color strings. Keys: \`bg\`, \`bgSubtle\`, \`surface\`, \`surfaceMuted\`, \`border\`, \`borderSubtle\`, \`text\`, \`textMuted\`, \`primary\`, \`primaryHover\`, \`primaryText\`, \`accent\`, \`accentHover\`, \`accentText\`, \`focusRing\`, \`success\`, \`warning\`, \`danger\`, \`info\`.
 - \`radius?: { ... }\` — CSS length strings. Keys: \`xs\`, \`sm\`, \`md\`, \`lg\`, \`pill\`, \`button\`, \`input\`.
@@ -45808,7 +46691,7 @@ $theme({
 })
 \`\`\`
 
-The host picks one of six base themes (\`light\`, \`dark\`, \`corporate\`, \`soft\`, \`glass\`, \`modern\`) — author theme-neutral UI (use \`tone:\` / \`variant:\`, not hard-coded colours).
+The host picks one of twelve base theme names (\`light\`, \`dark\`, \`soft\`, and a light + dark variant each of \`shadcn\`, \`mui\` and \`heroui\`) — author theme-neutral UI (use \`tone:\` / \`variant:\`, not hard-coded colours), and never assume a light background.
 
 ### i18n
 \`\`\`
@@ -46796,6 +47679,10 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 .rui-field[data-warning="true"] .rui-textarea,
 .rui-field[data-warning="true"] .rui-select,
 .rui-field[data-warning="true"] .rui-number-input { border-color: var(--rui-color-warning); }
+/* An InputGroup owns its own border — the nested control's is stripped — so the
+   state has to be readable on the group. It mirrors the shell's states onto itself
+   for exactly this. */
+.rui-input-group[data-warning="true"] { border-color: var(--rui-color-warning); }
 
 /* Requirement list — one row per rule, met / unmet / not yet checked.
    The tri-state is carried by data-met, and the glyph plus a visually-hidden
@@ -47480,6 +48367,19 @@ a.rui-card {
    reads as a note about missing content, not as body copy. */
 .rui-markdown-image-fallback { color: var(--rui-color-text-muted); font-style: italic; }
 .rui-markdown p { margin: 0; }
+/* A link inside a BLOCK OF TEXT has to be distinguishable by something other than
+   its colour (WCAG 1.4.1, and what axe reports as link-in-text-block): surrounded
+   by prose, a hue change alone is invisible to anyone who cannot separate the two
+   hues, and the two are nowhere near a 3:1 ratio in any of the themes. A standalone
+   link — a nav item, a card action, a button-shaped link — is not in this situation
+   and keeps the undecorated treatment.
+
+   These two containers are the framework's own prose: Markdown is a paragraph by
+   definition, and a field description is a sentence under a label. Scoped by the
+   CONTAINER rather than by the link, so an app never has to know which of its links
+   happen to sit in running text. */
+.rui-markdown a,
+.rui-field-description a { text-decoration: underline; text-underline-offset: 2px; }
 .rui-markdown ul { margin: 0; padding-left: var(--rui-spacing-l); }
 .rui-markdown code {
   background: var(--rui-color-surface-muted);
@@ -51302,157 +52202,6 @@ ${below("xs")} {
   transform: translateY(-1px);
 }
 
-/* Glass — light glassmorphism. Frosted *white* surfaces float over a soft,
-   airy pastel wash (cool grey at the top melting into peach → pink → lavender
-   → mint toward the bottom). Surfaces use real backdrop-filter blur so they
-   pick up the colourful gradient behind them, edged with a bright 1px white
-   rim-light and a feather-soft tinted shadow. Text stays dark for contrast. */
-:host([data-rui-theme="glass"]) {
-  background:
-    radial-gradient(60vw 55vw at 8% 88%, rgba(245, 160, 120, 0.55), transparent 60%),
-    radial-gradient(55vw 50vw at 55% 108%, rgba(244, 138, 166, 0.50), transparent 58%),
-    radial-gradient(60vw 55vw at 100% 95%, rgba(181, 142, 230, 0.50), transparent 60%),
-    radial-gradient(50vw 45vw at 100% 35%, rgba(142, 197, 232, 0.35), transparent 60%),
-    radial-gradient(45vw 45vw at 0% 25%, rgba(159, 216, 198, 0.30), transparent 60%),
-    linear-gradient(160deg, #eef0f3 0%, #e9e6ef 45%, #efe4ec 100%);
-  background-attachment: local;
-}
-:host([data-rui-theme="glass"][transparent]),
-:host([data-rui-theme="glass"][transparent="true"]) {
-  background: transparent;
-}
-:host([data-rui-theme="glass"]) .rui-card,
-:host([data-rui-theme="glass"]) .rui-stat-card,
-:host([data-rui-theme="glass"]) .rui-callout,
-:host([data-rui-theme="glass"]) .rui-chart,
-:host([data-rui-theme="glass"]) .rui-table-wrapper,
-:host([data-rui-theme="glass"]) .rui-accordion-item,
-:host([data-rui-theme="glass"]) .rui-list-item,
-:host([data-rui-theme="glass"]) .rui-modal,
-:host([data-rui-theme="glass"]) .rui-dropdown-menu-content,
-:host([data-rui-theme="glass"]) .rui-popover-content,
-:host([data-rui-theme="glass"]) .rui-hover-card-content,
-:host([data-rui-theme="glass"]) .rui-combobox-panel,
-:host([data-rui-theme="glass"]) .rui-multiselect-panel,
-:host([data-rui-theme="glass"]) .rui-context-menu-pop,
-:host([data-rui-theme="glass"]) .rui-mention-input-suggestions,
-:host([data-rui-theme="glass"]) .rui-notification-bell-panel,
-:host([data-rui-theme="glass"]) .rui-command-palette-panel,
-:host([data-rui-theme="glass"]) .rui-sheet,
-:host([data-rui-theme="glass"]) .rui-sheet-panel,
-:host([data-rui-theme="glass"]) .rui-toast,
-:host([data-rui-theme="glass"]) .rui-toast-standalone,
-:host([data-rui-theme="glass"]) .rui-tour-card,
-:host([data-rui-theme="glass"]) .rui-spotlight-card,
-:host([data-rui-theme="glass"]) .rui-confirm-card,
-:host([data-rui-theme="glass"]) .rui-drawer,
-:host([data-rui-theme="glass"]) .rui-notification,
-:host([data-rui-theme="glass"]) .rui-tile,
-:host([data-rui-theme="glass"]) .rui-media-card,
-:host([data-rui-theme="glass"]) .rui-pricing-card,
-:host([data-rui-theme="glass"]) .rui-profile-card,
-:host([data-rui-theme="glass"]) .rui-product-card,
-:host([data-rui-theme="glass"]) .rui-kanban-card,
-:host([data-rui-theme="glass"]) .rui-code-block {
-  background: linear-gradient(150deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.40));
-  backdrop-filter: blur(26px) saturate(150%);
-  -webkit-backdrop-filter: blur(26px) saturate(150%);
-  border: var(--rui-border-width) solid rgba(255, 255, 255, 0.75);
-  box-shadow:
-    0 14px 40px rgba(120, 110, 140, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
-}
-:host([data-rui-theme="glass"]) .rui-card,
-:host([data-rui-theme="glass"]) .rui-stat-card {
-  transition: transform 240ms ease, box-shadow 240ms ease;
-}
-:host([data-rui-theme="glass"]) .rui-card:hover,
-:host([data-rui-theme="glass"]) .rui-stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 22px 56px rgba(120, 110, 140, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-:host([data-rui-theme="glass"]) .rui-input,
-:host([data-rui-theme="glass"]) .rui-select,
-:host([data-rui-theme="glass"]) .rui-textarea {
-  background: rgba(255, 255, 255, 0.55);
-  border-color: rgba(255, 255, 255, 0.75);
-  color: var(--rui-color-text);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-:host([data-rui-theme="glass"]) .rui-input::placeholder,
-:host([data-rui-theme="glass"]) .rui-textarea::placeholder { color: rgba(60, 50, 70, 0.45); }
-:host([data-rui-theme="glass"]) .rui-input:focus,
-:host([data-rui-theme="glass"]) .rui-select:focus,
-:host([data-rui-theme="glass"]) .rui-textarea:focus {
-  border-color: rgba(242, 130, 106, 0.75);
-  box-shadow: 0 0 0 4px rgba(242, 130, 106, 0.18);
-  background: rgba(255, 255, 255, 0.75);
-}
-:host([data-rui-theme="glass"]) .rui-button {
-  background: linear-gradient(135deg, #f7a072, #f2826a);
-  color: #ffffff;
-  border: var(--rui-border-width) solid rgba(255, 255, 255, 0.45);
-  box-shadow: 0 10px 24px rgba(242, 130, 106, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.45);
-}
-:host([data-rui-theme="glass"]) .rui-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 30px rgba(242, 130, 106, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.55);
-}
-:host([data-rui-theme="glass"]) .rui-button[data-variant="secondary"] {
-  background: rgba(255, 255, 255, 0.62);
-  color: var(--rui-color-text);
-  border-color: rgba(255, 255, 255, 0.8);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-:host([data-rui-theme="glass"]) .rui-button[data-variant="ghost"] {
-  background: transparent;
-  color: var(--rui-color-text);
-  border-color: rgba(255, 255, 255, 0.6);
-  box-shadow: none;
-}
-:host([data-rui-theme="glass"]) .rui-card-title,
-:host([data-rui-theme="glass"]) .rui-section-title,
-:host([data-rui-theme="glass"]) .rui-page-header-title,
-:host([data-rui-theme="glass"]) .rui-text[data-variant="title"],
-:host([data-rui-theme="glass"]) .rui-text[data-variant="heading"] {
-  color: var(--rui-color-text);
-  letter-spacing: -0.01em;
-}
-:host([data-rui-theme="glass"]) .rui-tab-list { border-bottom-color: rgba(255, 255, 255, 0.6); }
-:host([data-rui-theme="glass"]) .rui-tab-trigger { color: var(--rui-color-text-muted); }
-:host([data-rui-theme="glass"]) .rui-tab-trigger:hover { color: var(--rui-color-text); }
-:host([data-rui-theme="glass"]) .rui-tab-trigger[aria-selected="true"] {
-  color: var(--rui-color-primary);
-  border-bottom-color: var(--rui-color-primary);
-}
-:host([data-rui-theme="glass"]) .rui-table th {
-  background: rgba(255, 255, 255, 0.45);
-  border-bottom-color: rgba(255, 255, 255, 0.6);
-}
-:host([data-rui-theme="glass"]) .rui-table td { border-bottom-color: rgba(255, 255, 255, 0.5); }
-:host([data-rui-theme="glass"]) .rui-follow-up-button {
-  background: rgba(255, 255, 255, 0.55);
-  border-color: rgba(255, 255, 255, 0.75);
-  color: var(--rui-color-text);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-:host([data-rui-theme="glass"]) .rui-follow-up-button:hover {
-  background: rgba(255, 255, 255, 0.75);
-  border-color: rgba(242, 130, 106, 0.5);
-  box-shadow: 0 6px 18px rgba(242, 130, 106, 0.18);
-}
-:host([data-rui-theme="glass"]) .rui-skeleton-line {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.7) 50%, rgba(255, 255, 255, 0.3) 100%);
-  background-size: 200% 100%;
-}
-:host([data-rui-theme="glass"]) .rui-separator { background: rgba(255, 255, 255, 0.6); }
-
 /* ============================================================================
    Vision — a faithful re-creation of the UI block design framework.
    (Private theme: resolvable by name, deliberately absent from the public
@@ -52010,6 +52759,10 @@ ${below("xs")} {
    defaults to the accent — so corporate-4 #1474c4 is unchanged — but keeps the
    text side separate from the accent's fill/border duties. */
 :host([data-rui-theme="vision"]) .rui-link { color: var(--rui-color-link); font-weight: 400; text-decoration: none; }
+/* …except in running text, where colour alone is not a distinction. Restated per
+   theme because each theme's own .rui-link rule out-specifies the base pair. */
+:host([data-rui-theme="vision"]) .rui-markdown a,
+:host([data-rui-theme="vision"]) .rui-field-description a { text-decoration: underline; text-underline-offset: 2px; }
 /* UI block ".link--action" is an un-underlined interactive-blue link with a
    leading chevron glyph (link.scss) — not a navy underlined link. */
 :host([data-rui-theme="vision"]) .rui-action-link {
@@ -52086,6 +52839,23 @@ ${below("xs")} {
 :host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-textarea,
 :host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-number-input {
   border-color: #ff6159; /* critical-shape-color */
+}
+/* The warning state needs the same host-scoped mirror as the invalid one above and
+   for the same reason: the vision at-rest .rui-input border is a specificity TIE
+   with the base state rule, and this block comes later, so without a mirror here a
+   warned field renders as an ordinary one. */
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-input,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-select,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-textarea,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-number-input {
+  border-color: #ffaa00; /* warning-shape-color */
+}
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-input:hover,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-input:focus,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-select:hover,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-select:focus,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-textarea:focus {
+  border-color: #ffaa00; outline: 1px solid #ffaa00; box-shadow: none;
 }
 :host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-input:hover,
 :host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-input:focus,
@@ -52677,6 +53447,13 @@ ${below("xs")} {
 :host([data-rui-theme="vision"]) .rui-input-group[data-invalid="true"]:focus-within {
   border-color: var(--rui-color-danger);
   outline-color: var(--rui-color-danger);
+}
+/* Same mirror for the warning state, for the same reason. */
+:host([data-rui-theme="vision"]) .rui-input-group[data-warning="true"],
+:host([data-rui-theme="vision"]) .rui-input-group[data-warning="true"]:hover,
+:host([data-rui-theme="vision"]) .rui-input-group[data-warning="true"]:focus-within {
+  border-color: var(--rui-color-warning);
+  outline-color: var(--rui-color-warning);
 }
 :host([data-rui-theme="vision"]) .rui-input-group[data-disabled="true"]:hover,
 :host([data-rui-theme="vision"]) .rui-input-group[data-disabled="true"]:focus-within {
@@ -53330,481 +54107,1912 @@ ${below("xs")} {
 }
 
 /* ============================================================================
-   Corporate — contemporary enterprise workspace.
+   shadcn/ui — shadcn (= shadcn-light), shadcn-light, shadcn-dark.
 
-   Signatures, each one chosen to be somebody's opposite in this stylesheet:
-     - square-shouldered 8px controls, where modern is a 999px pill;
-     - flat cards that own a hairline and NO resting shadow, gaining a tinted
-       border plus a short-throw shadow on hover, where modern lifts on hover;
-     - a 2px teal rail marking the selected tab, active nav item and open
-       accordion, where modern fills a segmented pill;
-     - a single brand hue (teal) doing primary, link, focus and chart-1, so the
-       only other colour on screen is a status;
-     - Space Grotesk display type with negative tracking over a 15px Inter body.
+   The family is matched with a PREFIX selector, [data-rui-theme^="shadcn"],
+   so one block serves all three spellings; the handful of rules that differ
+   between modes key off the exact "shadcn-dark" marker at the end. (The
+   older single-theme blocks above use = because they answer to one name.)
 
-   Every rule below is a deliberate departure from the base sheet. Anything the
-   theme is happy with (spacing rhythm, icon sizing, layout) is left alone and
-   inherits from the tokens.
+   What makes a screen read as shadcn rather than as a generic light UI:
+     - a NEUTRAL system — one flat #f5f5f5 wash doing secondary / muted /
+       accent duty, and an ink #171717 primary. There is no brand hue at all;
+     - rounded-md (8px) controls inside rounded-xl (14px) cards, i.e. the
+       card is rounder than the button, which is the reverse of most kits;
+     - shadow-xs — a 1px 5%-black hint — on buttons, inputs and cards, and
+       cards that do NOT lift, tilt or glow on hover;
+     - the focus treatment: border-ring plus a 3px 50%-alpha ring, never an
+       outline;
+     - a segmented bg-muted tab strip with a white active pill, never an
+       underline rail;
+     - table headers in muted 14px MEDIUM sentence case on no fill at all;
+     - a rounded-md badge (shadcn is one of the few kits whose badge is not
+       a pill), and a tooltip painted in the PRIMARY colour.
    ============================================================================ */
-:host([data-rui-theme="corporate"]) {
-  /* A quiet brand wash anchoring the top of the page — no radial blobs, which
-     is the modern theme's move. */
-  background:
-    linear-gradient(180deg, rgba(15, 118, 110, 0.05) 0%, rgba(15, 118, 110, 0) 240px),
-    var(--rui-color-bg);
+:host([data-rui-theme^="shadcn"]) {
+  background: var(--rui-color-bg);
 }
-:host([data-rui-theme="corporate"][transparent]),
-:host([data-rui-theme="corporate"][transparent="true"]) {
+:host([data-rui-theme^="shadcn"][transparent]),
+:host([data-rui-theme^="shadcn"][transparent="true"]) {
   background: transparent;
 }
 
-/* ---- Surfaces — hairline first, shadow only on interaction ---------------- */
-:host([data-rui-theme="corporate"]) .rui-card,
-:host([data-rui-theme="corporate"]) .rui-stat-card,
-:host([data-rui-theme="corporate"]) .rui-chart,
-:host([data-rui-theme="corporate"]) .rui-table-wrapper,
-:host([data-rui-theme="corporate"]) .rui-accordion-item,
-:host([data-rui-theme="corporate"]) .rui-code-block {
+/* ---- Surfaces — rounded-xl border bg-card shadow-xs, and they stay put --- */
+:host([data-rui-theme^="shadcn"]) .rui-card,
+:host([data-rui-theme^="shadcn"]) .rui-stat-card,
+:host([data-rui-theme^="shadcn"]) .rui-chart,
+:host([data-rui-theme^="shadcn"]) .rui-table-wrapper,
+:host([data-rui-theme^="shadcn"]) .rui-media-card,
+:host([data-rui-theme^="shadcn"]) .rui-tile,
+:host([data-rui-theme^="shadcn"]) .rui-empty-state {
   border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-lg);
   background: var(--rui-color-surface);
-  box-shadow: none;
-}
-:host([data-rui-theme="corporate"]) .rui-card,
-:host([data-rui-theme="corporate"]) .rui-stat-card {
-  transition:
-    border-color var(--rui-motion-base, 170ms) var(--rui-motion-ease, ease),
-    box-shadow var(--rui-motion-base, 170ms) var(--rui-motion-ease, ease);
-}
-:host([data-rui-theme="corporate"]) .rui-card:hover,
-:host([data-rui-theme="corporate"]) .rui-stat-card:hover {
-  /* No translate: a console is a dense grid, and lifting one tile out of it
-     reads as breakage rather than as feedback. */
-  border-color: color-mix(in srgb, var(--rui-color-primary) 34%, var(--rui-color-border));
   box-shadow: var(--rui-shadow-sm);
 }
-:host([data-rui-theme="corporate"]) .rui-modal {
+/* No translate, no scale, no glow: a shadcn card that can be clicked tints,
+   and one that cannot does nothing at all. */
+:host([data-rui-theme^="shadcn"]) .rui-card,
+:host([data-rui-theme^="shadcn"]) .rui-stat-card {
+  transition: background var(--rui-motion-fast, 100ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="shadcn"]) .rui-card[data-clickable="true"]:hover,
+:host([data-rui-theme^="shadcn"]) .rui-tile:hover {
+  background: color-mix(in srgb, var(--rui-color-surface-muted) 55%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="shadcn"]) .rui-modal,
+:host([data-rui-theme^="shadcn"]) .rui-sheet-panel {
   border: var(--rui-border-width) solid var(--rui-color-border);
-  border-radius: var(--rui-radius-lg);
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface);
   box-shadow: var(--rui-shadow-lg);
 }
-
-/* ---- Type — display face, negative tracking, teal eyebrows --------------- */
-:host([data-rui-theme="corporate"]) .rui-card-title,
-:host([data-rui-theme="corporate"]) .rui-section-title,
-:host([data-rui-theme="corporate"]) .rui-page-header-title,
-:host([data-rui-theme="corporate"]) .rui-text[data-variant="title"],
-:host([data-rui-theme="corporate"]) .rui-text[data-variant="heading"],
-:host([data-rui-theme="corporate"]) .rui-text[data-variant="large-heavy"] {
-  font-family: var(--rui-font-family-heading);
+:host([data-rui-theme^="shadcn"]) .rui-modal-title {
+  font-size: var(--rui-font-size-18);
   font-weight: 600;
-  letter-spacing: -0.015em;
-  color: var(--rui-color-text);
+  letter-spacing: -0.01em;
 }
-:host([data-rui-theme="corporate"]) .rui-section-header-eyebrow {
-  color: var(--rui-color-primary);
-  letter-spacing: 0.1em;
+:host([data-rui-theme^="shadcn"]) .rui-code-block {
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface-muted);
 }
-:host([data-rui-theme="corporate"]) .rui-page-header {
-  border-bottom-width: 2px;
-  border-bottom-color: var(--rui-color-border);
+:host([data-rui-theme^="shadcn"]) .rui-list-item {
+  border-radius: var(--rui-radius-button);
 }
 
-/* ---- Buttons — 8px, flat, with a darker bottom edge that compresses on press
-   (the "keycap"). No lift, no glow: this is a control, not a call to action. */
-:host([data-rui-theme="corporate"]) .rui-button {
+/* ---- Type — semibold, tight tracking, leading-none card titles ---------- */
+:host([data-rui-theme^="shadcn"]) .rui-card-title,
+:host([data-rui-theme^="shadcn"]) .rui-section-title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+:host([data-rui-theme^="shadcn"]) .rui-page-header-title,
+:host([data-rui-theme^="shadcn"]) .rui-text[data-variant="title"],
+:host([data-rui-theme^="shadcn"]) .rui-text[data-variant="heading"],
+:host([data-rui-theme^="shadcn"]) .rui-text[data-variant="large-heavy"] {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+:host([data-rui-theme^="shadcn"]) .rui-card-subtitle,
+:host([data-rui-theme^="shadcn"]) .rui-callout-description {
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-base);
+}
+:host([data-rui-theme^="shadcn"]) .rui-card-eyebrow,
+:host([data-rui-theme^="shadcn"]) .rui-section-header-eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--rui-font-size-sm);
+  font-weight: 500;
+}
+
+/* ---- Buttons — h-9 rounded-md px-4 text-sm font-medium shadow-xs --------
+   The hover LIGHTENS: shadcn's hover:bg-primary/90 drops the fill to 90%
+   alpha, which over a light page reads as a step towards the background
+   rather than away from it. color-mix reproduces that on any surface. */
+:host([data-rui-theme^="shadcn"]) .rui-button {
   border-radius: var(--rui-radius-button);
-  font-weight: var(--rui-button-font-weight);
-  letter-spacing: var(--rui-button-letter-spacing);
+  font-weight: 500;
+  border: var(--rui-border-width) solid transparent;
   background: var(--rui-color-primary);
   color: var(--rui-color-primary-text);
-  border: var(--rui-border-width) solid transparent;
-  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   transition:
-    background var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease),
-    border-color var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease),
-    box-shadow var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease);
+    background var(--rui-motion-fast, 100ms) var(--rui-motion-ease, ease),
+    border-color var(--rui-motion-fast, 100ms) var(--rui-motion-ease, ease),
+    box-shadow var(--rui-motion-fast, 100ms) var(--rui-motion-ease, ease);
 }
-:host([data-rui-theme="corporate"]) .rui-button:hover:not(:disabled) {
-  background: var(--rui-color-primary-hover);
+:host([data-rui-theme^="shadcn"]) .rui-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-primary) 90%, transparent);
 }
-:host([data-rui-theme="corporate"]) .rui-button:active:not(:disabled) {
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="secondary"] {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text);
+  border-color: transparent;
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="secondary"] {
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="secondary"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-surface-muted) 80%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="outline"] {
   background: var(--rui-color-surface);
   color: var(--rui-color-text);
-  border-color: var(--rui-color-border-control);
-  box-shadow: none;
+  border-color: var(--rui-color-border);
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="secondary"]:hover:not(:disabled) {
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="outline"]:hover:not(:disabled) {
   background: var(--rui-color-surface-muted);
-  border-color: var(--rui-color-primary);
-  color: var(--rui-color-primary);
+  color: var(--rui-color-text);
+  border-color: var(--rui-color-border);
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"],
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="link"] {
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="ghost"] {
   background: transparent;
+  color: var(--rui-color-text);
   border-color: transparent;
   box-shadow: none;
-  color: var(--rui-color-link);
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--rui-color-primary) 9%, transparent);
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
+  background: var(--rui-color-surface-muted);
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="danger"] {
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="link"] {
+  background: transparent;
+  color: var(--rui-color-text);
+  border-color: transparent;
+  box-shadow: none;
+  text-underline-offset: 4px;
+}
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="danger"] {
   background: var(--rui-color-danger);
-  color: var(--rui-color-on-danger);
+  color: #ffffff;
+  border-color: transparent;
 }
-:host([data-rui-theme="corporate"]) .rui-button:disabled {
-  /* Opacity only — recolouring a disabled button loses which variant it was. */
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="danger"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-danger) 90%, transparent);
+}
+:host([data-rui-theme^="shadcn"]) .rui-button:disabled {
   opacity: 0.5;
   box-shadow: none;
 }
+/* The focus treatment, everywhere: recolour the border to the ring token and
+   lay a 3px 50%-alpha halo outside it. No outline, ever. */
+:host([data-rui-theme^="shadcn"]) .rui-button:focus-visible,
+:host([data-rui-theme^="shadcn"]) .rui-icon-button:focus-visible,
+:host([data-rui-theme^="shadcn"]) .rui-follow-up-button:focus-visible,
+:host([data-rui-theme^="shadcn"]) .rui-tab-trigger:focus-visible,
+:host([data-rui-theme^="shadcn"]) .rui-menu-item:focus-visible {
+  outline: none;
+  border-color: var(--rui-color-focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 50%, transparent);
+}
+:host([data-rui-theme^="shadcn"]) .rui-icon-button {
+  border-radius: var(--rui-radius-button);
+}
+:host([data-rui-theme^="shadcn"]) .rui-button-group > .rui-button-group-item[data-pos="start"] {
+  border-top-left-radius: var(--rui-radius-button);
+  border-bottom-left-radius: var(--rui-radius-button);
+}
+:host([data-rui-theme^="shadcn"]) .rui-button-group > .rui-button-group-item[data-pos="end"] {
+  border-top-right-radius: var(--rui-radius-button);
+  border-bottom-right-radius: var(--rui-radius-button);
+}
 
-/* ---- Fields — white box, accessible boundary, 3px halo on focus ---------- */
-:host([data-rui-theme="corporate"]) .rui-input,
-:host([data-rui-theme="corporate"]) .rui-select,
-:host([data-rui-theme="corporate"]) .rui-textarea {
-  background: var(--rui-color-surface);
+/* ---- Fields — transparent box, hairline, shadow-xs, 3px ring on focus --- */
+:host([data-rui-theme^="shadcn"]) .rui-input,
+:host([data-rui-theme^="shadcn"]) .rui-select,
+:host([data-rui-theme^="shadcn"]) .rui-textarea,
+:host([data-rui-theme^="shadcn"]) .rui-number-input,
+:host([data-rui-theme^="shadcn"]) .rui-combobox-trigger,
+:host([data-rui-theme^="shadcn"]) .rui-input-group {
+  background: transparent;
   border-color: var(--rui-color-border-control);
   border-radius: var(--rui-radius-input);
-  transition:
-    border-color var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease),
-    box-shadow var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
-:host([data-rui-theme="corporate"]) .rui-input:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-select:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-textarea:hover:not(:disabled) {
-  border-color: var(--rui-color-primary);
+:host([data-rui-theme^="shadcn"]) .rui-input::placeholder,
+:host([data-rui-theme^="shadcn"]) .rui-textarea::placeholder {
+  color: var(--rui-color-text-muted);
 }
-:host([data-rui-theme="corporate"]) .rui-input:focus,
-:host([data-rui-theme="corporate"]) .rui-select:focus,
-:host([data-rui-theme="corporate"]) .rui-textarea:focus {
-  border-color: var(--rui-color-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-primary) 20%, transparent);
+:host([data-rui-theme^="shadcn"]) .rui-input:focus,
+:host([data-rui-theme^="shadcn"]) .rui-select:focus,
+:host([data-rui-theme^="shadcn"]) .rui-textarea:focus,
+:host([data-rui-theme^="shadcn"]) .rui-input-group:focus-within {
+  border-color: var(--rui-color-focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 50%, transparent);
 }
-
-/* ---- Tabs — a 2px rail under the selected trigger, not a segmented pill --- */
-:host([data-rui-theme="corporate"]) .rui-tab-list {
-  gap: var(--rui-spacing-l);
-  padding: 0;
-  background: transparent;
-  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
-  border-radius: 0;
-}
-:host([data-rui-theme="corporate"]) .rui-tab-trigger {
+/* The base sheet strips the nested control's chrome so the GROUP owns the
+   border, radius and fill. The field rules above out-specify that reset, so
+   it is restated here at the same weight — otherwise an InputGroup renders a
+   box inside a box. */
+:host([data-rui-theme^="shadcn"]) .rui-input-group-field .rui-input,
+:host([data-rui-theme^="shadcn"]) .rui-input-group-field .rui-select,
+:host([data-rui-theme^="shadcn"]) .rui-input-group-field .rui-textarea,
+:host([data-rui-theme^="shadcn"]) .rui-input-group-field .rui-number-input,
+:host([data-rui-theme^="shadcn"]) .rui-input-group-field .rui-combobox-trigger {
   border: none;
   border-radius: 0;
-  padding: 8px 0;
-  margin-bottom: -1px;
-  font-weight: 500;
-  color: var(--rui-color-text-muted);
-  border-bottom: 2px solid transparent;
   background: transparent;
-}
-:host([data-rui-theme="corporate"]) .rui-tab-trigger:hover {
-  color: var(--rui-color-text);
-  border-bottom-color: var(--rui-color-border-control);
-}
-:host([data-rui-theme="corporate"]) .rui-tab-trigger[aria-selected="true"] {
-  color: var(--rui-color-primary);
-  font-weight: 600;
-  background: transparent;
-  border-bottom-color: var(--rui-color-primary);
   box-shadow: none;
 }
-
-/* ---- Navigation — the same 2px rail, turned on its side ------------------ */
-:host([data-rui-theme="corporate"]) .rui-nav-link {
-  border-radius: var(--rui-radius-sm);
+:host([data-rui-theme^="shadcn"]) .rui-field-label,
+:host([data-rui-theme^="shadcn"]) .rui-form-label,
+:host([data-rui-theme^="shadcn"]) .rui-switch-label {
+  font-size: var(--rui-font-size-base);
   font-weight: 500;
+  line-height: 1;
 }
-:host([data-rui-theme="corporate"]) .rui-nav-link[data-active="true"] {
-  background: color-mix(in srgb, var(--rui-color-primary) 10%, transparent);
-  color: var(--rui-color-primary);
-  border-color: transparent;
-  box-shadow: inset 2px 0 0 var(--rui-color-primary);
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  font-weight: 600;
-}
-:host([data-rui-theme="corporate"]) .rui-breadcrumb-link:hover {
-  color: var(--rui-color-link-hover);
-}
-
-/* ---- Chips — square shoulders, so a Badge never reads as a Button -------- */
-:host([data-rui-theme="corporate"]) .rui-tag,
-:host([data-rui-theme="corporate"]) .rui-badge,
-:host([data-rui-theme="corporate"]) .rui-pill {
-  border-radius: var(--rui-radius-sm);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-:host([data-rui-theme="corporate"]) .rui-badge[data-variant="primary"] {
-  background: color-mix(in srgb, var(--rui-color-primary) 12%, transparent);
-  color: var(--rui-color-link);
-}
-
-/* ---- Data — sentence-case headers on a muted band, teal row wash ---------
-   Uppercase table headers are already the private vision theme's and modern's
-   signature; going sentence-case with a 2px rule is how this theme's tables
-   read as its own. */
-:host([data-rui-theme="corporate"]) .rui-table th {
-  background: var(--rui-color-surface-muted);
+:host([data-rui-theme^="shadcn"]) .rui-field-hint,
+:host([data-rui-theme^="shadcn"]) .rui-field-description,
+:host([data-rui-theme^="shadcn"]) .rui-form-hint {
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
-  font-weight: 600;
-  font-size: var(--rui-font-size-13);
-  text-transform: none;
-  letter-spacing: 0;
-  border-bottom: 2px solid var(--rui-color-border);
 }
-:host([data-rui-theme="corporate"]) .rui-table td {
-  border-bottom-color: var(--rui-color-border-subtle);
+:host([data-rui-theme^="shadcn"]) .rui-field-error {
+  font-size: var(--rui-font-size-sm);
+  color: var(--rui-color-danger-text);
 }
-:host([data-rui-theme="corporate"]) .rui-table tbody tr:hover td {
-  background: color-mix(in srgb, var(--rui-color-primary) 6%, transparent);
+/* size-4 rounded-[4px] border shadow-xs; the radio keeps its circle. */
+:host([data-rui-theme^="shadcn"]) .rui-checkbox input[type="checkbox"],
+:host([data-rui-theme^="shadcn"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme^="shadcn"]) .rui-data-grid-col-panel-cb {
+  border-radius: 4px;
+  border-width: 1px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
-:host([data-rui-theme="corporate"]) .rui-stat-value {
-  font-family: var(--rui-font-family-heading);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  color: var(--rui-color-text);
+:host([data-rui-theme^="shadcn"]) .rui-radio input[type="radio"] {
+  border-width: 1px;
 }
-:host([data-rui-theme="corporate"]) .rui-stat-label {
-  color: var(--rui-color-text-muted);
-  text-transform: uppercase;
-  font-size: var(--rui-font-size-11);
-  letter-spacing: 0.08em;
-  font-weight: 600;
-}
-
-/* ---- Messaging — a 3px status rail on a flat tint, no icon disc chrome --- */
-:host([data-rui-theme="corporate"]) .rui-callout {
-  border-radius: var(--rui-radius-md);
-  border-left-width: 3px;
-  border-left-color: var(--rui-color-primary);
+/* h-[1.15rem] w-8 — the smallest switch of the three frameworks here. */
+:host([data-rui-theme^="shadcn"]) .rui-switch-track {
+  width: 32px;
+  height: 18px;
   background: var(--rui-color-surface-muted);
+  border: var(--rui-border-width) solid var(--rui-color-border-control);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
-:host([data-rui-theme="corporate"]) .rui-callout[data-tone="success"] { border-left-color: var(--rui-color-success); }
-:host([data-rui-theme="corporate"]) .rui-callout[data-tone="warning"] { border-left-color: var(--rui-color-warning); }
-:host([data-rui-theme="corporate"]) .rui-callout[data-tone="danger"]  { border-left-color: var(--rui-color-danger); }
-:host([data-rui-theme="corporate"]) .rui-callout[data-tone="info"]    { border-left-color: var(--rui-color-info); }
-:host([data-rui-theme="corporate"]) .rui-banner {
-  border-radius: 0;
-  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
-}
-
-/* ---- Progress, steps, separators ---------------------------------------- */
-:host([data-rui-theme="corporate"]) .rui-progress-bar {
-  background: var(--rui-gradient-accent);
-}
-:host([data-rui-theme="corporate"]) .rui-steps-item::before {
-  border-radius: var(--rui-radius-xs);
-  font-weight: 600;
-  font-family: var(--rui-font-family-heading);
-}
-:host([data-rui-theme="corporate"]) .rui-separator {
-  background: var(--rui-color-border);
-}
-:host([data-rui-theme="corporate"]) .rui-link {
-  color: var(--rui-color-link);
-  font-weight: 500;
-  text-underline-offset: 2px;
-}
-:host([data-rui-theme="corporate"]) .rui-follow-up-button {
-  border-radius: var(--rui-radius-button);
+:host([data-rui-theme^="shadcn"]) .rui-switch-thumb {
+  width: 14px;
+  height: 14px;
   background: var(--rui-color-surface);
-  border-color: var(--rui-color-border-control);
-  color: var(--rui-color-text);
-  font-weight: 500;
-  box-shadow: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
-:host([data-rui-theme="corporate"]) .rui-follow-up-button:hover {
+:host([data-rui-theme^="shadcn"]) .rui-switch-input:checked + .rui-switch-track {
+  background: var(--rui-color-primary);
   border-color: var(--rui-color-primary);
-  color: var(--rui-color-primary);
-  background: color-mix(in srgb, var(--rui-color-primary) 7%, transparent);
+}
+:host([data-rui-theme^="shadcn"]) .rui-switch-input:checked + .rui-switch-track .rui-switch-thumb {
+  transform: translateX(15px);
+}
+:host([data-rui-theme^="shadcn"]) .rui-switch-input:focus-visible + .rui-switch-track {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 50%, transparent);
 }
 
-/* Modern — clean SaaS dashboard. Light off-white canvas with a whisper-faint
-   ambient wash, crisp white cards with generous rounding and feather-soft
-   diffuse shadows that lift on hover, an ink (near-black) primary rendered as
-   pill buttons, a violet accent, and segmented pill-style tabs. */
-:host([data-rui-theme="modern"]) {
-  background:
-    radial-gradient(60vw 50vw at 100% -5%, rgba(37, 99, 235, 0.06), transparent 60%),
-    radial-gradient(55vw 50vw at 0% 105%, rgba(124, 92, 252, 0.06), transparent 60%),
-    var(--rui-color-bg);
+/* ---- Tabs — bg-muted strip, 3px inset, white active pill ---------------- */
+:host([data-rui-theme^="shadcn"]) .rui-tab-list {
+  display: inline-flex;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  gap: 0;
+  padding: 3px;
+  background: var(--rui-color-surface-muted);
+  border: none;
+  border-bottom: none;
+  border-radius: var(--rui-radius-md);
 }
-:host([data-rui-theme="modern"][transparent]),
-:host([data-rui-theme="modern"][transparent="true"]) {
+:host([data-rui-theme^="shadcn"]) .rui-tab-trigger {
+  border: var(--rui-border-width) solid transparent;
+  border-radius: calc(var(--rui-radius-md) - 3px);
+  margin-bottom: 0;
+  padding: 4px 12px;
+  font-size: var(--rui-font-size-base);
+  font-weight: 500;
+  color: var(--rui-color-text-muted);
   background: transparent;
 }
-:host([data-rui-theme="modern"]) .rui-card,
-:host([data-rui-theme="modern"]) .rui-stat-card,
-:host([data-rui-theme="modern"]) .rui-callout,
-:host([data-rui-theme="modern"]) .rui-chart,
-:host([data-rui-theme="modern"]) .rui-table-wrapper,
-:host([data-rui-theme="modern"]) .rui-accordion-item,
-:host([data-rui-theme="modern"]) .rui-list-item,
-:host([data-rui-theme="modern"]) .rui-modal,
-:host([data-rui-theme="modern"]) .rui-code-block {
-  border: var(--rui-border-width) solid var(--rui-color-border);
+:host([data-rui-theme^="shadcn"]) .rui-tab-trigger:hover {
+  color: var(--rui-color-text);
+}
+:host([data-rui-theme^="shadcn"]) .rui-tab-trigger[aria-selected="true"] {
   background: var(--rui-color-surface);
+  color: var(--rui-color-text);
+  border-color: var(--rui-color-border);
   box-shadow: var(--rui-shadow-sm);
 }
-:host([data-rui-theme="modern"]) .rui-card,
-:host([data-rui-theme="modern"]) .rui-stat-card {
-  transition: transform 240ms ease, box-shadow 240ms ease;
+:host([data-rui-theme^="shadcn"]) .rui-segmented-control {
+  background: var(--rui-color-surface-muted);
+  border: none;
+  border-radius: var(--rui-radius-md);
+  padding: 3px;
 }
-:host([data-rui-theme="modern"]) .rui-card:hover,
-:host([data-rui-theme="modern"]) .rui-stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--rui-shadow-md);
+:host([data-rui-theme^="shadcn"]) .rui-segmented-control-option {
+  border-radius: calc(var(--rui-radius-md) - 3px);
+  font-weight: 500;
 }
-:host([data-rui-theme="modern"]) .rui-card-title,
-:host([data-rui-theme="modern"]) .rui-section-title,
-:host([data-rui-theme="modern"]) .rui-page-header-title,
-:host([data-rui-theme="modern"]) .rui-text[data-variant="title"],
-:host([data-rui-theme="modern"]) .rui-text[data-variant="heading"],
-:host([data-rui-theme="modern"]) .rui-text[data-variant="large-heavy"] {
+
+/* ---- Navigation — rounded-md, bg-accent when active ------------------- */
+:host([data-rui-theme^="shadcn"]) .rui-nav-link,
+:host([data-rui-theme^="shadcn"]) .rui-sidebar-item {
+  border-radius: var(--rui-radius-button);
+  font-weight: 500;
+}
+:host([data-rui-theme^="shadcn"]) .rui-nav-link[data-active="true"],
+:host([data-rui-theme^="shadcn"]) .rui-sidebar-item[data-active="true"] {
+  background: var(--rui-color-surface-muted);
   color: var(--rui-color-text);
-  letter-spacing: -0.02em;
-  font-weight: 700;
+  border-color: transparent;
 }
-:host([data-rui-theme="modern"]) .rui-button {
+:host([data-rui-theme^="shadcn"]) .rui-sidebar-item:hover {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text);
+}
+:host([data-rui-theme^="shadcn"]) .rui-sidebar {
+  background: var(--rui-color-bg-subtle);
+  border-radius: var(--rui-radius-lg);
+}
+:host([data-rui-theme^="shadcn"]) .rui-link {
+  font-weight: 500;
+  text-underline-offset: 4px;
+}
+
+/* ---- Chips — rounded-md, not a pill. Badge is shadcn's one hard tell. --- */
+:host([data-rui-theme^="shadcn"]) .rui-badge,
+:host([data-rui-theme^="shadcn"]) .rui-tag,
+:host([data-rui-theme^="shadcn"]) .rui-pill,
+:host([data-rui-theme^="shadcn"]) .rui-filter-pill {
+  border-radius: var(--rui-radius-button);
+  font-size: var(--rui-font-size-sm);
+  font-weight: 500;
+  padding: 2px 8px;
+  letter-spacing: 0;
+}
+:host([data-rui-theme^="shadcn"]) .rui-badge {
+  border: var(--rui-border-width) solid transparent;
+}
+:host([data-rui-theme^="shadcn"]) .rui-badge[data-variant="primary"] {
   background: var(--rui-color-primary);
   color: var(--rui-color-primary-text);
-  border: var(--rui-border-width) solid transparent;
-  border-radius: var(--rui-radius-pill);
+}
+:host([data-rui-theme^="shadcn"]) .rui-kbd {
+  border-radius: var(--rui-radius-xs);
+  font-family: var(--rui-font-family-mono);
+}
+
+/* ---- Data — muted MEDIUM sentence-case headers on NO fill ----------------- */
+:host([data-rui-theme^="shadcn"]) .rui-table,
+:host([data-rui-theme^="shadcn"]) .rui-data-grid-table {
+  font-size: var(--rui-font-size-base);
+}
+:host([data-rui-theme^="shadcn"]) .rui-table th,
+:host([data-rui-theme^="shadcn"]) .rui-data-grid-table th {
+  background: transparent;
+  color: var(--rui-color-text-muted);
+  font-weight: 500;
+  font-size: var(--rui-font-size-base);
+  text-transform: none;
+  letter-spacing: 0;
+  height: 40px;
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+}
+:host([data-rui-theme^="shadcn"]) .rui-table td,
+:host([data-rui-theme^="shadcn"]) .rui-data-grid-table td {
+  border-bottom-color: var(--rui-color-border);
+}
+:host([data-rui-theme^="shadcn"]) .rui-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--rui-color-surface-muted) 50%, transparent);
+}
+:host([data-rui-theme^="shadcn"]) .rui-stat-value {
   font-weight: 600;
-  box-shadow: 0 4px 14px rgba(17, 24, 39, 0.12);
-  transition: transform 120ms ease, box-shadow 160ms ease, background 140ms ease;
+  letter-spacing: -0.025em;
 }
-:host([data-rui-theme="modern"]) .rui-button:hover:not(:disabled) {
-  background: var(--rui-color-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(17, 24, 39, 0.18);
+:host([data-rui-theme^="shadcn"]) .rui-stat-label {
+  color: var(--rui-color-text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--rui-font-size-base);
+  font-weight: 500;
 }
-:host([data-rui-theme="modern"]) .rui-button:active:not(:disabled) {
-  transform: translateY(0);
+:host([data-rui-theme^="shadcn"]) .rui-pagination-button {
+  border-radius: var(--rui-radius-button);
+  font-weight: 500;
 }
-:host([data-rui-theme="modern"]) .rui-button[data-variant="secondary"] {
+
+/* ---- Messaging — a bordered card, an inline glyph, no coloured disc ------- */
+:host([data-rui-theme^="shadcn"]) .rui-callout {
+  border-radius: var(--rui-radius-md);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   background: var(--rui-color-surface);
-  color: var(--rui-color-text);
-  border-color: var(--rui-color-border);
-  box-shadow: var(--rui-shadow-sm);
 }
-:host([data-rui-theme="modern"]) .rui-button[data-variant="secondary"]:hover:not(:disabled) {
+:host([data-rui-theme^="shadcn"]) .rui-callout-section {
+  padding: 12px 16px;
+  gap: 12px;
+  align-items: flex-start;
+}
+:host([data-rui-theme^="shadcn"]) .rui-callout-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--rui-font-size-lg);
+  font-weight: 400;
+  color: var(--rui-color-text);
+  margin-top: 2px;
+}
+:host([data-rui-theme^="shadcn"]) .rui-callout-title {
+  font-weight: 500;
+  line-height: 1.2;
+}
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="success"] .rui-callout-icon { color: var(--rui-color-success-text); }
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="warning"] .rui-callout-icon { color: var(--rui-color-warning-text); }
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="info"] .rui-callout-icon    { color: var(--rui-color-info-text); }
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="danger"] .rui-callout-icon,
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="error"] .rui-callout-icon   { color: var(--rui-color-danger-text); }
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="neutral"] .rui-callout-icon { color: var(--rui-color-text-muted); }
+/* Destructive is the only variant shadcn tints, and it tints the TEXT. */
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="danger"],
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="error"] {
+  background: var(--rui-color-surface);
+  border-color: color-mix(in srgb, var(--rui-color-danger) 40%, transparent);
+}
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="danger"] .rui-callout-title,
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="error"] .rui-callout-title {
+  color: var(--rui-color-danger-text);
+}
+:host([data-rui-theme^="shadcn"]) .rui-toast,
+:host([data-rui-theme^="shadcn"]) .rui-notification {
+  border-radius: var(--rui-radius-md);
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  box-shadow: var(--rui-shadow-lg);
+}
+:host([data-rui-theme^="shadcn"]) .rui-banner {
+  border-radius: var(--rui-radius-md);
+}
+
+/* ---- Overlays — rounded-md border bg-popover p-1 shadow-md -------------- */
+:host([data-rui-theme^="shadcn"]) .rui-dropdown-menu-content,
+:host([data-rui-theme^="shadcn"]) .rui-popover-content,
+:host([data-rui-theme^="shadcn"]) .rui-hover-card-content,
+:host([data-rui-theme^="shadcn"]) .rui-context-menu-pop {
+  border-radius: var(--rui-radius-button);
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-md);
+  padding: 4px;
+}
+:host([data-rui-theme^="shadcn"]) .rui-menu-item {
+  border-radius: var(--rui-radius-sm);
+  padding: 6px 8px;
+  font-size: var(--rui-font-size-base);
+}
+/* The tooltip is painted in the PRIMARY colour, which is unusual enough to be
+   a tell on its own — most kits reach for a neutral charcoal. */
+:host([data-rui-theme^="shadcn"]) .rui-tooltip-content {
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+  border-radius: var(--rui-radius-button);
+  padding: 6px 12px;
+  font-size: var(--rui-font-size-sm);
+  font-weight: 400;
+  box-shadow: none;
+}
+
+/* ---- Accordion — a rule, not a box --------------------------------------- */
+:host([data-rui-theme^="shadcn"]) .rui-accordion-item {
+  border: none;
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: 0;
+  background: transparent;
+}
+:host([data-rui-theme^="shadcn"]) .rui-accordion-trigger {
+  padding: 16px 0;
+  font-weight: 500;
+}
+:host([data-rui-theme^="shadcn"]) .rui-accordion-trigger:hover {
+  text-decoration: underline;
+}
+
+/* ---- Progress, steps, skeletons, separators ------------------------------ */
+:host([data-rui-theme^="shadcn"]) .rui-progress-track {
+  height: 8px;
+  background: color-mix(in srgb, var(--rui-color-primary) 20%, transparent);
+}
+:host([data-rui-theme^="shadcn"]) .rui-progress-bar {
+  background: var(--rui-color-primary);
+}
+:host([data-rui-theme^="shadcn"]) .rui-steps-item::before {
+  font-weight: 500;
+  font-size: var(--rui-font-size-sm);
+}
+:host([data-rui-theme^="shadcn"]) .rui-skeleton-line {
+  background: var(--rui-color-surface-muted);
+  border-radius: var(--rui-radius-button);
+}
+:host([data-rui-theme^="shadcn"]) .rui-separator {
+  background: var(--rui-color-border);
+}
+:host([data-rui-theme^="shadcn"]) .rui-avatar-fallback {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="shadcn"]) .rui-follow-up-button {
+  border-radius: var(--rui-radius-button);
+  background: var(--rui-color-surface);
+  border-color: var(--rui-color-border);
+  color: var(--rui-color-text);
+  font-weight: 500;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+:host([data-rui-theme^="shadcn"]) .rui-follow-up-button:hover {
   background: var(--rui-color-surface-muted);
 }
-:host([data-rui-theme="modern"]) .rui-button[data-variant="ghost"] {
+
+/* ---- Dark mode deltas ----------------------------------------------------
+   Everything above is mode-agnostic because it reads tokens. These four are
+   the places shadcn's .dark block changes the RECIPE rather than the value:
+   fields get a translucent fill, the active tab pill is bg-input/30 instead
+   of white, and the shadows lose their 5%-black hint (it is invisible on
+   #0a0a0a and only fogs the edge). */
+:host([data-rui-theme="shadcn-dark"]) .rui-input,
+:host([data-rui-theme="shadcn-dark"]) .rui-select,
+:host([data-rui-theme="shadcn-dark"]) .rui-textarea,
+:host([data-rui-theme="shadcn-dark"]) .rui-number-input,
+:host([data-rui-theme="shadcn-dark"]) .rui-combobox-trigger,
+:host([data-rui-theme="shadcn-dark"]) .rui-input-group {
+  background: color-mix(in srgb, var(--rui-color-surface-muted) 40%, transparent);
+  box-shadow: none;
+}
+:host([data-rui-theme="shadcn-dark"]) .rui-tab-trigger[aria-selected="true"] {
+  background: var(--rui-color-surface-muted);
+  border-color: var(--rui-color-border);
+  box-shadow: none;
+}
+:host([data-rui-theme="shadcn-dark"]) .rui-button,
+:host([data-rui-theme="shadcn-dark"]) .rui-follow-up-button,
+:host([data-rui-theme="shadcn-dark"]) .rui-checkbox input[type="checkbox"],
+:host([data-rui-theme="shadcn-dark"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme="shadcn-dark"]) .rui-switch-track {
+  box-shadow: none;
+}
+:host([data-rui-theme="shadcn-dark"]) .rui-button[data-variant="danger"] {
+  color: #ffffff;
+}
+
+/* ============================================================================
+   Material UI — mui (= mui-light), mui-light, mui-dark.
+
+   Same prefix-selector arrangement as the shadcn block above:
+   [data-rui-theme^="mui"] covers all three names, ="mui-dark" carries the
+   deltas.
+
+   The Material tells, in rough order of how quickly the eye catches them:
+     - UPPERCASE button labels at 500 with 0.02857em tracking, 64px minimum
+       width, and a contained button that carries elevation 2 and lifts to
+       elevation 4 under the pointer;
+     - Paper: no border at ALL. Every surface is separated from the page by a
+       three-layer elevation shadow, which is why 4px corners still read as
+       deliberate rather than unfinished;
+     - the outlined text field — a tall 56px box whose 1px outline thickens to
+       2px in primary on focus, with a 12px label above it and 12px helper
+       text indented 14px to sit under the outline's radius;
+     - tab labels in the same uppercase as the buttons over a 2px primary
+       indicator rail on a 48px strip;
+     - full-bleed menu items with square corners in an elevation-8 popover;
+     - the charcoal rgba(97,97,97,0.92) tooltip at 11px;
+     - the 34x14 pill switch whose 20px thumb overhangs the track on both
+       sides, and turns primary (not white) when on;
+     - hover as an OVERLAY: rgba(primary, 0.04) washed over the control,
+       never a different fill.
+   ============================================================================ */
+:host([data-rui-theme^="mui"]) {
+  background: var(--rui-color-bg);
+}
+:host([data-rui-theme^="mui"][transparent]),
+:host([data-rui-theme^="mui"][transparent="true"]) {
+  background: transparent;
+}
+
+/* ---- Paper — elevation instead of a hairline ----------------------------- */
+:host([data-rui-theme^="mui"]) .rui-card,
+:host([data-rui-theme^="mui"]) .rui-stat-card,
+:host([data-rui-theme^="mui"]) .rui-chart,
+:host([data-rui-theme^="mui"]) .rui-table-wrapper,
+:host([data-rui-theme^="mui"]) .rui-media-card,
+:host([data-rui-theme^="mui"]) .rui-tile,
+:host([data-rui-theme^="mui"]) .rui-empty-state {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-sm);
+}
+:host([data-rui-theme^="mui"]) .rui-card {
+  --rui-card-pad: var(--rui-spacing-m);
+}
+:host([data-rui-theme^="mui"]) .rui-card,
+:host([data-rui-theme^="mui"]) .rui-tile {
+  transition: box-shadow var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="mui"]) .rui-card[data-clickable="true"]:hover,
+:host([data-rui-theme^="mui"]) .rui-tile:hover {
+  /* elevation 1 -> elevation 4, the standard Material raise. */
+  box-shadow: var(--rui-shadow-md);
+}
+:host([data-rui-theme^="mui"]) .rui-card[data-variant="outlined"] {
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  box-shadow: none;
+}
+:host([data-rui-theme^="mui"]) .rui-modal,
+:host([data-rui-theme^="mui"]) .rui-sheet-panel {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-lg);
+  padding: var(--rui-spacing-l);
+}
+:host([data-rui-theme^="mui"]) .rui-modal-title {
+  font-size: var(--rui-font-size-20);
+  font-weight: 500;
+  letter-spacing: 0.0075em;
+}
+:host([data-rui-theme^="mui"]) .rui-code-block {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  box-shadow: var(--rui-shadow-sm);
+}
+
+/* ---- Type — Roboto's own ladder; h6 for card titles, h5 for page titles --- */
+:host([data-rui-theme^="mui"]) .rui-card-title,
+:host([data-rui-theme^="mui"]) .rui-section-title {
+  font-weight: 500;
+  letter-spacing: 0.0075em;
+  line-height: 1.6;
+}
+:host([data-rui-theme^="mui"]) .rui-page-header-title,
+:host([data-rui-theme^="mui"]) .rui-text[data-variant="title"] {
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.334;
+}
+:host([data-rui-theme^="mui"]) .rui-text[data-variant="heading"],
+:host([data-rui-theme^="mui"]) .rui-text[data-variant="large-heavy"] {
+  font-weight: 500;
+  letter-spacing: 0.0075em;
+}
+:host([data-rui-theme^="mui"]) .rui-card-subtitle {
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-sm);
+  letter-spacing: 0.01071em;
+}
+:host([data-rui-theme^="mui"]) .rui-card-eyebrow,
+:host([data-rui-theme^="mui"]) .rui-section-header-eyebrow {
+  /* Material's overline: 12px, uppercase, 500, 0.08333em. */
+  font-size: var(--rui-font-size-sm);
+  font-weight: 500;
+  letter-spacing: 0.08333em;
+  text-transform: uppercase;
+}
+/* Material's Link is underlined by default, with the rule drawn at 40% of the
+   text colour until the pointer arrives. */
+:host([data-rui-theme^="mui"]) .rui-link {
+  font-weight: 400;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--rui-color-link) 40%, transparent);
+  text-underline-offset: 2px;
+}
+:host([data-rui-theme^="mui"]) .rui-link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* ---- Buttons — uppercase, 64px min, elevation 2 -> 4 --------------------- */
+:host([data-rui-theme^="mui"]) .rui-button {
+  min-width: 64px;
+  border-radius: var(--rui-radius-button);
+  border: var(--rui-border-width) solid transparent;
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+  font-size: 14px;
+  font-weight: var(--rui-button-font-weight);
+  line-height: 1.75;
+  letter-spacing: var(--rui-button-letter-spacing);
+  text-transform: var(--rui-button-text-transform);
+  box-shadow:
+    0px 3px 1px -2px rgba(0, 0, 0, 0.2),
+    0px 2px 2px 0px rgba(0, 0, 0, 0.14),
+    0px 1px 5px 0px rgba(0, 0, 0, 0.12);
+  transition:
+    background-color var(--rui-motion-fast, 150ms) var(--rui-motion-ease, ease),
+    box-shadow var(--rui-motion-fast, 150ms) var(--rui-motion-ease, ease),
+    border-color var(--rui-motion-fast, 150ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="mui"]) .rui-button:hover:not(:disabled) {
+  background: var(--rui-color-primary-hover);
+  box-shadow:
+    0px 2px 4px -1px rgba(0, 0, 0, 0.2),
+    0px 4px 5px 0px rgba(0, 0, 0, 0.14),
+    0px 1px 10px 0px rgba(0, 0, 0, 0.12);
+}
+:host([data-rui-theme^="mui"]) .rui-button:active:not(:disabled) {
+  box-shadow:
+    0px 5px 5px -3px rgba(0, 0, 0, 0.2),
+    0px 8px 10px 1px rgba(0, 0, 0, 0.14),
+    0px 3px 14px 2px rgba(0, 0, 0, 0.12);
+}
+:host([data-rui-theme^="mui"]) .rui-button[data-size="xs"] { font-size: 13px; }
+:host([data-rui-theme^="mui"]) .rui-button[data-size="sm"] { font-size: 13px; }
+:host([data-rui-theme^="mui"]) .rui-button[data-size="lg"] { font-size: 15px; }
+:host([data-rui-theme^="mui"]) .rui-button[data-size="xl"] { font-size: 16px; }
+/* variant="outlined": a 1px 50%-alpha primary edge, and a 4% primary wash on
+   hover — Material never swaps the fill of a low-emphasis button. */
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="outline"],
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="secondary"] {
+  background: transparent;
+  color: var(--rui-color-primary);
+  border-color: color-mix(in srgb, var(--rui-color-primary) 50%, transparent);
+  box-shadow: none;
+}
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="outline"]:hover:not(:disabled),
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="secondary"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-primary) 4%, transparent);
+  border-color: var(--rui-color-primary);
+  box-shadow: none;
+}
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="ghost"],
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="link"] {
+  background: transparent;
+  color: var(--rui-color-primary);
+  border-color: transparent;
+  box-shadow: none;
+}
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="ghost"]:hover:not(:disabled),
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="link"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-primary) 4%, transparent);
+  text-decoration: none;
+}
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="danger"] {
+  background: var(--rui-color-danger);
+  color: var(--rui-color-on-danger);
+}
+:host([data-rui-theme^="mui"]) .rui-button:disabled {
+  /* Material greys a disabled button out rather than fading it, and drops the
+     elevation entirely. */
+  opacity: 1;
+  color: color-mix(in srgb, var(--rui-color-text) 26%, transparent);
+  background: color-mix(in srgb, var(--rui-color-text) 12%, transparent);
+  border-color: transparent;
+  box-shadow: none;
+}
+/* Only the contained button gets the grey fill; Material leaves a disabled
+   text button transparent and a disabled outlined one edged in 12% ink. */
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="ghost"]:disabled,
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="link"]:disabled {
+  background: transparent;
+}
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="outline"]:disabled,
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="secondary"]:disabled {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--rui-color-text) 12%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-button:focus-visible,
+:host([data-rui-theme^="mui"]) .rui-icon-button:focus-visible,
+:host([data-rui-theme^="mui"]) .rui-tab-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 30%, transparent);
+}
+/* IconButton is a 40px circle in Material, and its hover is the same 4% wash. */
+:host([data-rui-theme^="mui"]) .rui-icon-button {
+  border-radius: var(--rui-radius-pill);
+  padding: 8px;
+}
+:host([data-rui-theme^="mui"]) .rui-icon-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-text) 4%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-fab {
+  box-shadow:
+    0px 3px 5px -1px rgba(0, 0, 0, 0.2),
+    0px 6px 10px 0px rgba(0, 0, 0, 0.14),
+    0px 1px 18px 0px rgba(0, 0, 0, 0.12);
+}
+
+/* ---- Outlined text fields — 56px tall, 2px primary outline on focus ------
+   The focus state uses an inset ring rather than a real 2px border so the box
+   does not resize by a pixel the moment it is focused, which is what Material's
+   own fieldset legend trick avoids. */
+:host([data-rui-theme^="mui"]) .rui-input,
+:host([data-rui-theme^="mui"]) .rui-select,
+:host([data-rui-theme^="mui"]) .rui-textarea,
+:host([data-rui-theme^="mui"]) .rui-number-input,
+:host([data-rui-theme^="mui"]) .rui-combobox-trigger {
+  background: transparent;
+  border-color: var(--rui-color-border-control);
+  border-radius: var(--rui-radius-input);
+  padding: 16.5px 14px;
+  font-size: var(--rui-font-size-base);
+  box-shadow: none;
+}
+:host([data-rui-theme^="mui"]) .rui-textarea {
+  padding: 16.5px 14px;
+}
+:host([data-rui-theme^="mui"]) .rui-input:hover:not(:disabled),
+:host([data-rui-theme^="mui"]) .rui-select:hover:not(:disabled),
+:host([data-rui-theme^="mui"]) .rui-textarea:hover:not(:disabled) {
+  border-color: var(--rui-color-text);
+}
+:host([data-rui-theme^="mui"]) .rui-input:focus,
+:host([data-rui-theme^="mui"]) .rui-select:focus,
+:host([data-rui-theme^="mui"]) .rui-textarea:focus,
+:host([data-rui-theme^="mui"]) .rui-input-group:focus-within {
+  border-color: var(--rui-color-primary);
+  box-shadow: inset 0 0 0 1px var(--rui-color-primary);
+}
+:host([data-rui-theme^="mui"]) .rui-input-group {
+  border-radius: var(--rui-radius-input);
+  border-color: var(--rui-color-border-control);
+}
+/* The base sheet strips the nested control's chrome so the GROUP owns the
+   border, radius and fill. The field rules above out-specify that reset, so
+   it is restated here at the same weight — otherwise an InputGroup renders a
+   box inside a box. */
+:host([data-rui-theme^="mui"]) .rui-input-group-field .rui-input,
+:host([data-rui-theme^="mui"]) .rui-input-group-field .rui-select,
+:host([data-rui-theme^="mui"]) .rui-input-group-field .rui-textarea,
+:host([data-rui-theme^="mui"]) .rui-input-group-field .rui-number-input,
+:host([data-rui-theme^="mui"]) .rui-input-group-field .rui-combobox-trigger {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+/* The floating label cannot be reproduced without moving the DOM, but its
+   RESTING typography can: 12px, text.secondary, regular weight. */
+:host([data-rui-theme^="mui"]) .rui-field-label,
+:host([data-rui-theme^="mui"]) .rui-form-label {
+  font-size: var(--rui-font-size-sm);
+  font-weight: 400;
+  letter-spacing: 0.00938em;
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="mui"]) .rui-field-hint,
+:host([data-rui-theme^="mui"]) .rui-field-description,
+:host([data-rui-theme^="mui"]) .rui-field-error,
+:host([data-rui-theme^="mui"]) .rui-field-warning,
+:host([data-rui-theme^="mui"]) .rui-form-hint {
+  font-size: var(--rui-font-size-sm);
+  letter-spacing: 0.03333em;
+  /* Material indents helper text to clear the outline's corner radius. */
+  margin-left: 14px;
+}
+/* Material's checkbox is a 2px-stroked square with a 2px radius; the radio is
+   a ring. Both sit on a 4% hover wash rather than recolouring their border. */
+:host([data-rui-theme^="mui"]) .rui-checkbox input[type="checkbox"],
+:host([data-rui-theme^="mui"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme^="mui"]) .rui-data-grid-col-panel-cb {
+  border-radius: 2px;
+  border-width: 2px;
+}
+:host([data-rui-theme^="mui"]) .rui-radio input[type="radio"] {
+  border-width: 2px;
+}
+/* The Material switch: a 34x14 track the 20px thumb overhangs, an unchecked
+   track at 38% ink, and a checked track that is the PRIMARY at 50% with a
+   primary thumb. */
+:host([data-rui-theme^="mui"]) .rui-switch-track {
+  width: 34px;
+  height: 14px;
+  border: none;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--rui-color-text) 38%, transparent);
+  overflow: visible;
+}
+:host([data-rui-theme^="mui"]) .rui-switch-thumb {
+  width: 20px;
+  height: 20px;
+  /* Centred on the track's rounded ends, which is why it overhangs by 3px at
+     both extremes — the Material switch's most-copied detail. */
+  top: -3px;
+  left: -3px;
+  background: var(--rui-color-surface);
+  box-shadow:
+    0px 2px 1px -1px rgba(0, 0, 0, 0.2),
+    0px 1px 1px 0px rgba(0, 0, 0, 0.14),
+    0px 1px 3px 0px rgba(0, 0, 0, 0.12);
+}
+:host([data-rui-theme^="mui"]) .rui-switch-input:checked + .rui-switch-track {
+  background: color-mix(in srgb, var(--rui-color-primary) 50%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-switch-input:checked + .rui-switch-track .rui-switch-thumb {
+  transform: translateX(20px);
+  background: var(--rui-color-primary);
+}
+:host([data-rui-theme^="mui"]) .rui-switch-input:focus-visible + .rui-switch-track {
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--rui-color-primary) 12%, transparent);
+}
+
+/* ---- Tabs — uppercase labels on a 48px strip over a 2px indicator -------- */
+:host([data-rui-theme^="mui"]) .rui-tab-list {
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+  min-height: 48px;
+}
+:host([data-rui-theme^="mui"]) .rui-tab-trigger {
+  border: none;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  min-width: 90px;
+  padding: 12px 16px;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02857em;
+  text-transform: uppercase;
+  color: var(--rui-color-text-muted);
+  background: transparent;
+}
+:host([data-rui-theme^="mui"]) .rui-tab-trigger:hover {
+  color: var(--rui-color-primary);
+  background: color-mix(in srgb, var(--rui-color-primary) 4%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-tab-trigger[aria-selected="true"] {
+  color: var(--rui-color-primary);
+  border-bottom-color: var(--rui-color-primary);
+  background: transparent;
+}
+:host([data-rui-theme^="mui"]) .rui-segmented-control {
+  border-radius: var(--rui-radius-md);
+  border-color: var(--rui-color-border-control);
+  background: transparent;
+  padding: 0;
+  gap: 0;
+}
+:host([data-rui-theme^="mui"]) .rui-segmented-control-option {
+  border-radius: 0;
+  padding: 6px 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02857em;
+  font-size: 13px;
+}
+:host([data-rui-theme^="mui"]) .rui-segmented-control-option[data-active="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 12%, transparent);
+  color: var(--rui-color-primary);
+  box-shadow: none;
+}
+
+/* ---- Navigation — pill-free rows with the 4% / 8% overlay ladder --------- */
+:host([data-rui-theme^="mui"]) .rui-nav-link,
+:host([data-rui-theme^="mui"]) .rui-sidebar-item {
+  border-radius: var(--rui-radius-sm);
+  font-weight: 400;
+}
+:host([data-rui-theme^="mui"]) .rui-nav-link:hover,
+:host([data-rui-theme^="mui"]) .rui-sidebar-item:hover {
+  background: color-mix(in srgb, var(--rui-color-text) 4%, transparent);
+  color: var(--rui-color-text);
+}
+:host([data-rui-theme^="mui"]) .rui-nav-link[data-active="true"],
+:host([data-rui-theme^="mui"]) .rui-sidebar-item[data-active="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 8%, transparent);
+  color: var(--rui-color-primary);
+  border-color: transparent;
+}
+:host([data-rui-theme^="mui"]) .rui-sidebar {
+  border: none;
+  border-right: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: 0;
+  background: var(--rui-color-surface);
+}
+
+/* ---- Chips — the 32px fully-rounded Material chip ------------------------ */
+:host([data-rui-theme^="mui"]) .rui-badge,
+:host([data-rui-theme^="mui"]) .rui-tag,
+:host([data-rui-theme^="mui"]) .rui-pill,
+:host([data-rui-theme^="mui"]) .rui-filter-pill {
+  border-radius: var(--rui-radius-pill);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.01071em;
+  padding: 4px 12px;
+  border-color: transparent;
+}
+:host([data-rui-theme^="mui"]) .rui-badge {
+  font-weight: 500;
+}
+:host([data-rui-theme^="mui"]) .rui-tag,
+:host([data-rui-theme^="mui"]) .rui-pill {
+  background: color-mix(in srgb, var(--rui-color-text) 8%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-kbd {
+  border-radius: var(--rui-radius-xs);
+}
+
+/* ---- Data — 16px cells, a 500-weight header on NO fill ------------------- */
+:host([data-rui-theme^="mui"]) .rui-table,
+:host([data-rui-theme^="mui"]) .rui-data-grid-table {
+  font-size: 14px;
+}
+:host([data-rui-theme^="mui"]) .rui-table th,
+:host([data-rui-theme^="mui"]) .rui-table td,
+:host([data-rui-theme^="mui"]) .rui-data-grid-table th,
+:host([data-rui-theme^="mui"]) .rui-data-grid-table td {
+  padding: var(--rui-spacing-m);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+}
+:host([data-rui-theme^="mui"]) .rui-table th,
+:host([data-rui-theme^="mui"]) .rui-data-grid-table th {
+  background: transparent;
+  color: var(--rui-color-text);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.5rem;
+  text-transform: none;
+  letter-spacing: 0.01071em;
+}
+:host([data-rui-theme^="mui"]) .rui-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--rui-color-text) 4%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-stat-value {
+  font-weight: 400;
+  letter-spacing: 0;
+}
+:host([data-rui-theme^="mui"]) .rui-stat-label {
+  color: var(--rui-color-text-muted);
+  text-transform: none;
+  letter-spacing: 0.01071em;
+  font-size: var(--rui-font-size-sm);
+}
+/* Material's Pagination items are 32px circles with an 8%-ink selected wash. */
+:host([data-rui-theme^="mui"]) .rui-pagination-button {
+  border-radius: var(--rui-radius-pill);
+  min-width: 32px;
+  border-color: transparent;
+}
+:host([data-rui-theme^="mui"]) .rui-pagination-button[aria-current="page"],
+:host([data-rui-theme^="mui"]) .rui-pagination-button[data-active="true"] {
+  background: color-mix(in srgb, var(--rui-color-text) 8%, transparent);
+  color: var(--rui-color-text);
+  border-color: transparent;
+}
+
+/* ---- Alerts — a tinted band with a bare tinted glyph, no disc ------------ */
+:host([data-rui-theme^="mui"]) .rui-callout {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  background: color-mix(in srgb, var(--rui-color-info) 12%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="mui"]) .rui-callout-section {
+  padding: 6px 16px;
+  gap: 12px;
+  align-items: center;
+}
+:host([data-rui-theme^="mui"]) .rui-callout-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 0;
+  background: transparent;
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--rui-color-info);
+  opacity: 0.9;
+}
+:host([data-rui-theme^="mui"]) .rui-callout-title,
+:host([data-rui-theme^="mui"]) .rui-callout-description {
+  color: var(--rui-color-info-text);
+  font-size: 14px;
+}
+:host([data-rui-theme^="mui"]) .rui-callout-title {
+  font-weight: 500;
+}
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="success"] {
+  background: color-mix(in srgb, var(--rui-color-success) 12%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="success"] .rui-callout-icon { background: transparent; color: var(--rui-color-success); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="success"] .rui-callout-title,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="success"] .rui-callout-description { color: var(--rui-color-success-text); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="warning"] {
+  background: color-mix(in srgb, var(--rui-color-warning) 12%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="warning"] .rui-callout-icon { background: transparent; color: var(--rui-color-warning); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="warning"] .rui-callout-title,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="warning"] .rui-callout-description { color: var(--rui-color-warning-text); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="danger"],
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="error"] {
+  background: color-mix(in srgb, var(--rui-color-danger) 12%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="danger"] .rui-callout-icon,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="error"] .rui-callout-icon { background: transparent; color: var(--rui-color-danger); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="danger"] .rui-callout-title,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="danger"] .rui-callout-description,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="error"] .rui-callout-title,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="error"] .rui-callout-description { color: var(--rui-color-danger-text); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="neutral"] {
+  background: color-mix(in srgb, var(--rui-color-text) 8%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="neutral"] .rui-callout-icon { background: transparent; color: var(--rui-color-text-muted); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="neutral"] .rui-callout-title,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="neutral"] .rui-callout-description { color: var(--rui-color-text); }
+:host([data-rui-theme^="mui"]) .rui-toast,
+:host([data-rui-theme^="mui"]) .rui-notification {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  box-shadow:
+    0px 3px 5px -1px rgba(0, 0, 0, 0.2),
+    0px 6px 10px 0px rgba(0, 0, 0, 0.14),
+    0px 1px 18px 0px rgba(0, 0, 0, 0.12);
+}
+:host([data-rui-theme^="mui"]) .rui-banner {
+  border-radius: 0;
+  border: none;
+  box-shadow: var(--rui-shadow-sm);
+}
+
+/* ---- Menus — elevation 8, square full-bleed rows ------------------------- */
+:host([data-rui-theme^="mui"]) .rui-dropdown-menu-content,
+:host([data-rui-theme^="mui"]) .rui-popover-content,
+:host([data-rui-theme^="mui"]) .rui-hover-card-content,
+:host([data-rui-theme^="mui"]) .rui-context-menu-pop {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface);
+  padding: 8px 0;
+  box-shadow:
+    0px 5px 5px -3px rgba(0, 0, 0, 0.2),
+    0px 8px 10px 1px rgba(0, 0, 0, 0.14),
+    0px 3px 14px 2px rgba(0, 0, 0, 0.12);
+}
+:host([data-rui-theme^="mui"]) .rui-menu-item {
+  border-radius: 0;
+  padding: 6px 16px;
+  font-size: var(--rui-font-size-base);
+  min-height: 36px;
+}
+:host([data-rui-theme^="mui"]) .rui-menu-item:hover:not(:disabled),
+:host([data-rui-theme^="mui"]) .rui-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--rui-color-text) 4%, transparent);
+}
+/* Material's tooltip is a fixed charcoal, not the theme's ink — it stays the
+   same colour in dark mode, which is why it is a literal here. */
+:host([data-rui-theme^="mui"]) .rui-tooltip-content {
+  background: rgba(97, 97, 97, 0.92);
+  color: #ffffff;
+  border-radius: var(--rui-radius-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+/* ---- Accordion — stacked Paper with no gap and no radius ----------------- */
+:host([data-rui-theme^="mui"]) .rui-accordion {
+  gap: 0;
+}
+:host([data-rui-theme^="mui"]) .rui-accordion-item {
+  border: none;
+  border-radius: 0;
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-sm);
+}
+:host([data-rui-theme^="mui"]) .rui-accordion-item + .rui-accordion-item {
+  border-top: var(--rui-border-width) solid var(--rui-color-border);
+}
+:host([data-rui-theme^="mui"]) .rui-accordion-trigger {
+  min-height: 48px;
+  padding: 0 16px;
+  font-weight: 400;
+}
+:host([data-rui-theme^="mui"]) .rui-accordion-trigger:hover {
+  background: color-mix(in srgb, var(--rui-color-text) 4%, transparent);
+}
+
+/* ---- Progress, steps, separators, avatars -------------------------------- */
+:host([data-rui-theme^="mui"]) .rui-progress-track {
+  height: 4px;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--rui-color-primary) 30%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="mui"]) .rui-progress-bar {
+  border-radius: 0;
+  background: var(--rui-color-primary);
+}
+:host([data-rui-theme^="mui"]) .rui-steps-item::before {
+  width: 24px;
+  height: 24px;
+  font-size: var(--rui-font-size-sm);
+  font-weight: 400;
+}
+/* Material's inactive step is a flat 38%-ink disc, not an outlined one. */
+:host([data-rui-theme^="mui"]) .rui-steps-item[data-status="pending"]::before {
+  background: color-mix(in srgb, var(--rui-color-text) 38%, transparent);
+  color: var(--rui-color-primary-text);
+  border: none;
+}
+:host([data-rui-theme^="mui"]) .rui-separator {
+  background: var(--rui-color-border);
+}
+:host([data-rui-theme^="mui"]) .rui-avatar-fallback {
+  background: #bdbdbd;
+  color: var(--rui-color-surface);
+}
+:host([data-rui-theme^="mui"]) .rui-skeleton-line {
+  border-radius: var(--rui-radius-sm);
+  background: color-mix(in srgb, var(--rui-color-text) 11%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-follow-up-button {
+  border-radius: var(--rui-radius-button);
+  background: transparent;
+  color: var(--rui-color-primary);
+  border-color: color-mix(in srgb, var(--rui-color-primary) 50%, transparent);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02857em;
+  font-size: 13px;
+  box-shadow: none;
+}
+:host([data-rui-theme^="mui"]) .rui-follow-up-button:hover {
+  background: color-mix(in srgb, var(--rui-color-primary) 4%, transparent);
+  border-color: var(--rui-color-primary);
+}
+
+/* ---- Dark mode deltas ----------------------------------------------------
+   Material's dark palette is mostly a token swap, which the theme object
+   already carries. What it does NOT swap is Paper: in dark mode a raised
+   surface is lightened by a white overlay proportional to its elevation
+   instead of being separated by a darker shadow, so a hovered card has to grow
+   a lighter fill rather than a deeper shadow to read as raised at all. */
+:host([data-rui-theme="mui-dark"]) .rui-card[data-clickable="true"]:hover,
+:host([data-rui-theme="mui-dark"]) .rui-tile:hover {
+  background: var(--rui-color-surface-muted);
+}
+:host([data-rui-theme="mui-dark"]) .rui-avatar-fallback {
+  background: #616161;
+  color: #ffffff;
+}
+:host([data-rui-theme="mui-dark"]) .rui-callout {
+  /* Dark Alerts invert: the tint becomes a dark wash of the hue and the label
+     is painted in the hue itself. */
+  background: color-mix(in srgb, var(--rui-color-info) 16%, #000000);
+}
+:host([data-rui-theme="mui-dark"]) .rui-callout[data-variant="success"] { background: color-mix(in srgb, var(--rui-color-success) 16%, #000000); }
+:host([data-rui-theme="mui-dark"]) .rui-callout[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 16%, #000000); }
+:host([data-rui-theme="mui-dark"]) .rui-callout[data-variant="danger"],
+:host([data-rui-theme="mui-dark"]) .rui-callout[data-variant="error"]   { background: color-mix(in srgb, var(--rui-color-danger) 16%, #000000); }
+:host([data-rui-theme="mui-dark"]) .rui-callout[data-variant="neutral"] { background: color-mix(in srgb, var(--rui-color-text) 12%, #000000); }
+:host([data-rui-theme="mui-dark"]) .rui-progress-track {
+  background: color-mix(in srgb, var(--rui-color-primary) 30%, #000000);
+}
+
+/* ============================================================================
+   HeroUI — heroui (= heroui-light), heroui-light, heroui-dark.
+
+   Prefix-matched like the two blocks above; ="heroui-dark" carries the
+   deltas.
+
+   HeroUI's tells are mostly BEHAVIOURAL, which is what separates it from the
+   other two rounded-and-friendly kits:
+     - hover DIMS. A solid button keeps its exact fill and drops to
+       opacity: .8; nothing recolours. Press scales the control to .97;
+     - focus is a 2px outline offset by 2px — a hard ring standing clear of
+       the control, not a soft halo bleeding out of its border;
+     - surfaces have NO border. A card is content1 on shadow-medium, and
+       the hairline you think you see is the third layer of that shadow;
+     - 12px controls inside 14px cards, so nothing on screen is square;
+     - flat default-100 fields rather than outlined ones;
+     - a default-100 tab strip with a white content1 pill on
+       shadow-small, and a LIGHT tooltip (content1 + shadow-small) where
+       every other kit paints a dark one;
+     - table headers on a default-100 band whose first and last cells round
+       off, over rows with no separators at all.
+   ============================================================================ */
+:host([data-rui-theme^="heroui"]) {
+  background: var(--rui-color-bg);
+}
+:host([data-rui-theme^="heroui"][transparent]),
+:host([data-rui-theme^="heroui"][transparent="true"]) {
+  background: transparent;
+}
+
+/* ---- Surfaces — content1 on shadow-medium, no border ----------------- */
+:host([data-rui-theme^="heroui"]) .rui-card,
+:host([data-rui-theme^="heroui"]) .rui-stat-card,
+:host([data-rui-theme^="heroui"]) .rui-chart,
+:host([data-rui-theme^="heroui"]) .rui-table-wrapper,
+:host([data-rui-theme^="heroui"]) .rui-media-card,
+:host([data-rui-theme^="heroui"]) .rui-tile,
+:host([data-rui-theme^="heroui"]) .rui-empty-state {
+  border: none;
+  border-radius: var(--rui-radius-lg);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-card,
+:host([data-rui-theme^="heroui"]) .rui-tile {
+  transition:
+    transform var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease),
+    box-shadow var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease);
+}
+/* isPressable cards scale rather than lift — the same gesture as the button. */
+:host([data-rui-theme^="heroui"]) .rui-card[data-clickable="true"]:active,
+:host([data-rui-theme^="heroui"]) .rui-tile:active {
+  transform: scale(0.98);
+}
+:host([data-rui-theme^="heroui"]) .rui-modal,
+:host([data-rui-theme^="heroui"]) .rui-sheet-panel {
+  border: none;
+  border-radius: var(--rui-radius-lg);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-sm);
+}
+/* HeroUI blurs behind its modal scrim instead of just darkening it. */
+:host([data-rui-theme^="heroui"]) .rui-modal-overlay,
+:host([data-rui-theme^="heroui"]) .rui-sheet-overlay {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+:host([data-rui-theme^="heroui"]) .rui-modal-title {
+  font-size: var(--rui-font-size-20);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+:host([data-rui-theme^="heroui"]) .rui-code-block {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface-muted);
+}
+:host([data-rui-theme^="heroui"]) .rui-list-item {
+  border-radius: var(--rui-radius-md);
+}
+
+/* ---- Type — semibold headings on tight tracking -------------------------- */
+:host([data-rui-theme^="heroui"]) .rui-card-title,
+:host([data-rui-theme^="heroui"]) .rui-section-title,
+:host([data-rui-theme^="heroui"]) .rui-text[data-variant="heading"],
+:host([data-rui-theme^="heroui"]) .rui-text[data-variant="large-heavy"] {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+:host([data-rui-theme^="heroui"]) .rui-page-header-title,
+:host([data-rui-theme^="heroui"]) .rui-text[data-variant="title"] {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+:host([data-rui-theme^="heroui"]) .rui-card-subtitle,
+:host([data-rui-theme^="heroui"]) .rui-callout-description {
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-sm);
+}
+:host([data-rui-theme^="heroui"]) .rui-card-eyebrow,
+:host([data-rui-theme^="heroui"]) .rui-section-header-eyebrow {
+  color: var(--rui-color-primary);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--rui-font-size-sm);
+  font-weight: 600;
+}
+/* Links dim like everything else here; they are not underlined. */
+:host([data-rui-theme^="heroui"]) .rui-link {
+  font-weight: 500;
+  transition: opacity var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="heroui"]) .rui-link:hover {
+  color: var(--rui-color-link);
+  opacity: 0.8;
+  text-decoration: none;
+}
+
+/* ---- Buttons — dim on hover, scale on press, never recolour -------------- */
+:host([data-rui-theme^="heroui"]) .rui-button {
+  border-radius: var(--rui-radius-button);
+  border: var(--rui-border-width) solid transparent;
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+  font-size: 14px;
+  font-weight: 500;
+  min-width: 80px;
+  box-shadow: none;
+  transition:
+    opacity var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease),
+    transform var(--rui-motion-fast, 150ms) var(--rui-motion-ease, ease),
+    background var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="heroui"]) .rui-button:hover:not(:disabled) {
+  background: var(--rui-color-primary);
+  opacity: 0.8;
+}
+:host([data-rui-theme^="heroui"]) .rui-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-size="xs"],
+:host([data-rui-theme^="heroui"]) .rui-button[data-size="sm"] { font-size: 12px; min-width: 64px; }
+:host([data-rui-theme^="heroui"]) .rui-button[data-size="lg"],
+:host([data-rui-theme^="heroui"]) .rui-button[data-size="xl"] { font-size: 16px; min-width: 96px; }
+/* variant="flat" — a 20% wash of the colour with the colour as the label.
+   This is HeroUI's real secondary button, and it is used far more than the
+   bordered one. */
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="secondary"] {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text);
+  border-color: transparent;
+  box-shadow: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="secondary"]:hover:not(:disabled) {
+  background: var(--rui-color-surface-muted);
+  opacity: 0.8;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="outline"] {
+  background: transparent;
+  color: var(--rui-color-link);
+  border: 2px solid var(--rui-color-primary);
+  box-shadow: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="outline"]:hover:not(:disabled) {
+  background: transparent;
+  opacity: 0.8;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="ghost"] {
   background: transparent;
   color: var(--rui-color-text);
   border-color: transparent;
   box-shadow: none;
 }
-:host([data-rui-theme="modern"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
   background: var(--rui-color-surface-muted);
+  opacity: 1;
 }
-:host([data-rui-theme="modern"]) .rui-input,
-:host([data-rui-theme="modern"]) .rui-select,
-:host([data-rui-theme="modern"]) .rui-textarea {
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="link"] {
+  background: transparent;
+  color: var(--rui-color-link);
+  border-color: transparent;
+  box-shadow: none;
+  min-width: 0;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="link"]:hover:not(:disabled) {
+  background: transparent;
+  opacity: 0.8;
+  text-decoration: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="danger"] {
+  background: var(--rui-color-danger);
+  color: #ffffff;
+  border-color: transparent;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="danger"]:hover:not(:disabled) {
+  background: var(--rui-color-danger);
+  opacity: 0.8;
+}
+:host([data-rui-theme^="heroui"]) .rui-button:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+}
+/* The focus ring: a hard 2px outline standing 2px clear of the control. */
+:host([data-rui-theme^="heroui"]) .rui-button:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-icon-button:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-follow-up-button:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-tab-trigger:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-menu-item:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-nav-link:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-sidebar-item:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-icon-button {
+  border-radius: var(--rui-radius-md);
+  transition:
+    opacity var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease),
+    transform var(--rui-motion-fast, 150ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="heroui"]) .rui-icon-button:active:not(:disabled) {
+  transform: scale(0.93);
+}
+
+/* ---- Fields — flat default-100 fill, 12px corners ---------------------- */
+:host([data-rui-theme^="heroui"]) .rui-input,
+:host([data-rui-theme^="heroui"]) .rui-select,
+:host([data-rui-theme^="heroui"]) .rui-textarea,
+:host([data-rui-theme^="heroui"]) .rui-number-input,
+:host([data-rui-theme^="heroui"]) .rui-combobox-trigger {
   background: var(--rui-color-surface-muted);
-  border-color: var(--rui-color-border);
+  border-color: var(--rui-color-border-control);
   border-radius: var(--rui-radius-input);
-  transition: border-color 140ms ease, box-shadow 160ms ease, background 140ms ease;
+  padding: 10px 12px;
+  box-shadow: none;
 }
-:host([data-rui-theme="modern"]) .rui-input:focus,
-:host([data-rui-theme="modern"]) .rui-select:focus,
-:host([data-rui-theme="modern"]) .rui-textarea:focus {
-  background: var(--rui-color-surface);
-  border-color: var(--rui-color-accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--rui-color-accent) 18%, transparent);
+/* The InputGroup shell takes the same fill and edge but no padding of its own —
+   the control it wraps is already padded, and doubling it would make the shell
+   two rows tall. */
+:host([data-rui-theme^="heroui"]) .rui-input-group {
+  background: var(--rui-color-surface-muted);
+  border-color: var(--rui-color-border-control);
+  border-radius: var(--rui-radius-input);
+  box-shadow: none;
 }
-:host([data-rui-theme="modern"]) .rui-tab-list {
-  border-bottom: none;
+/* The base sheet strips the nested control's chrome so the GROUP owns the
+   border, radius and fill. The field rules above out-specify that reset, so
+   it is restated here at the same weight — otherwise an InputGroup renders a
+   box inside a box. */
+:host([data-rui-theme^="heroui"]) .rui-input-group-field .rui-input,
+:host([data-rui-theme^="heroui"]) .rui-input-group-field .rui-select,
+:host([data-rui-theme^="heroui"]) .rui-input-group-field .rui-textarea,
+:host([data-rui-theme^="heroui"]) .rui-input-group-field .rui-number-input,
+:host([data-rui-theme^="heroui"]) .rui-input-group-field .rui-combobox-trigger {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-input:hover:not(:disabled),
+:host([data-rui-theme^="heroui"]) .rui-select:hover:not(:disabled),
+:host([data-rui-theme^="heroui"]) .rui-textarea:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-text) 8%, var(--rui-color-surface-muted));
+}
+:host([data-rui-theme^="heroui"]) .rui-input:focus,
+:host([data-rui-theme^="heroui"]) .rui-select:focus,
+:host([data-rui-theme^="heroui"]) .rui-textarea:focus,
+:host([data-rui-theme^="heroui"]) .rui-input-group:focus-within {
+  background: var(--rui-color-surface-muted);
+  border-color: var(--rui-color-primary);
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-input::placeholder,
+:host([data-rui-theme^="heroui"]) .rui-textarea::placeholder {
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="heroui"]) .rui-field-label,
+:host([data-rui-theme^="heroui"]) .rui-form-label {
+  font-size: var(--rui-font-size-sm);
+  font-weight: 500;
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="heroui"]) .rui-field-hint,
+:host([data-rui-theme^="heroui"]) .rui-field-description,
+:host([data-rui-theme^="heroui"]) .rui-field-error,
+:host([data-rui-theme^="heroui"]) .rui-form-hint {
+  font-size: var(--rui-font-size-sm);
+}
+/* HeroUI's checkbox is a filled rounded square (no ring when unchecked in the
+   real kit — a 2px boundary is kept here so the control clears WCAG 1.4.11). */
+:host([data-rui-theme^="heroui"]) .rui-checkbox input[type="checkbox"],
+:host([data-rui-theme^="heroui"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme^="heroui"]) .rui-data-grid-col-panel-cb {
+  border-radius: 7px;
+  border-width: 2px;
+}
+:host([data-rui-theme^="heroui"]) .rui-radio input[type="radio"] {
+  border-width: 2px;
+}
+:host([data-rui-theme^="heroui"]) .rui-checkbox input[type="checkbox"]:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-radio input[type="radio"]:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+/* A 48x28 track with a 22px thumb — the largest switch of the three. */
+:host([data-rui-theme^="heroui"]) .rui-switch-track {
+  width: 48px;
+  height: 28px;
+  border: none;
+  background: var(--rui-color-border-control);
+}
+:host([data-rui-theme^="heroui"]) .rui-switch-thumb {
+  width: 22px;
+  height: 22px;
+  top: 3px;
+  left: 3px;
+  background: #ffffff;
+  box-shadow: var(--rui-shadow-sm);
+}
+:host([data-rui-theme^="heroui"]) .rui-switch-input:checked + .rui-switch-track {
+  background: var(--rui-color-primary);
+}
+:host([data-rui-theme^="heroui"]) .rui-switch-input:checked + .rui-switch-track .rui-switch-thumb {
+  transform: translateX(20px);
+}
+:host([data-rui-theme^="heroui"]) .rui-switch-input:focus-visible + .rui-switch-track {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* ---- Tabs — a default-100 trough with a content1 cursor -------------- */
+:host([data-rui-theme^="heroui"]) .rui-tab-list {
+  display: inline-flex;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
   gap: 4px;
   padding: 4px;
   background: var(--rui-color-surface-muted);
-  border-radius: var(--rui-radius-pill);
-  display: inline-flex;
-}
-:host([data-rui-theme="modern"]) .rui-tab-trigger {
   border: none;
-  border-radius: var(--rui-radius-pill);
-  padding: 6px 16px;
-  font-weight: 600;
-  color: var(--rui-color-text-muted);
-  transition: background 140ms ease, color 140ms ease;
+  border-bottom: none;
+  border-radius: var(--rui-radius-md);
 }
-:host([data-rui-theme="modern"]) .rui-tab-trigger:hover {
+:host([data-rui-theme^="heroui"]) .rui-tab-trigger {
+  border: none;
+  border-radius: var(--rui-radius-sm);
+  margin-bottom: 0;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--rui-color-text-muted);
+  background: transparent;
+}
+:host([data-rui-theme^="heroui"]) .rui-tab-trigger[aria-selected="true"] {
+  background: var(--rui-color-surface);
+  color: var(--rui-color-text);
+  box-shadow: var(--rui-shadow-sm);
+}
+:host([data-rui-theme^="heroui"]) .rui-segmented-control {
+  background: var(--rui-color-surface-muted);
+  border: none;
+  border-radius: var(--rui-radius-md);
+  padding: 4px;
+}
+:host([data-rui-theme^="heroui"]) .rui-segmented-control-option {
+  border-radius: var(--rui-radius-sm);
+  font-weight: 500;
+}
+:host([data-rui-theme^="heroui"]) .rui-segmented-control-option[data-active="true"] {
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-sm);
+}
+
+/* ---- Navigation — a translucent, blurred bar and rounded rows ------------ */
+:host([data-rui-theme^="heroui"]) .rui-nav-link,
+:host([data-rui-theme^="heroui"]) .rui-sidebar-item {
+  border-radius: var(--rui-radius-sm);
+  font-weight: 500;
+}
+:host([data-rui-theme^="heroui"]) .rui-nav-link[data-active="true"],
+:host([data-rui-theme^="heroui"]) .rui-sidebar-item[data-active="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 15%, transparent);
+  color: var(--rui-color-link);
+  border-color: transparent;
+}
+:host([data-rui-theme^="heroui"]) .rui-sidebar-item:hover {
+  background: var(--rui-color-surface-muted);
   color: var(--rui-color-text);
 }
-:host([data-rui-theme="modern"]) .rui-tab-trigger[aria-selected="true"] {
+:host([data-rui-theme^="heroui"]) .rui-sidebar {
+  border: none;
+  border-radius: var(--rui-radius-lg);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-toolbar {
+  border-radius: var(--rui-radius-md);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+}
+
+/* ---- Chips — fully rounded, solid by default ----------------------------- */
+:host([data-rui-theme^="heroui"]) .rui-badge,
+:host([data-rui-theme^="heroui"]) .rui-tag,
+:host([data-rui-theme^="heroui"]) .rui-pill,
+:host([data-rui-theme^="heroui"]) .rui-filter-pill {
+  border-radius: var(--rui-radius-pill);
+  font-size: var(--rui-font-size-sm);
+  font-weight: 400;
+  padding: 3px 10px;
+  border-color: transparent;
+}
+:host([data-rui-theme^="heroui"]) .rui-badge[data-variant="primary"] {
   background: var(--rui-color-primary);
   color: var(--rui-color-primary-text);
-  box-shadow: 0 2px 8px rgba(17, 24, 39, 0.14);
+  font-weight: 500;
 }
-:host([data-rui-theme="modern"]) .rui-tag,
-:host([data-rui-theme="modern"]) .rui-badge {
-  border-radius: var(--rui-radius-pill);
+:host([data-rui-theme^="heroui"]) .rui-kbd {
+  border-radius: var(--rui-radius-xs);
+}
+
+/* ---- Data — a rounded header band and separator-free rows ---------------- */
+:host([data-rui-theme^="heroui"]) .rui-table,
+:host([data-rui-theme^="heroui"]) .rui-data-grid-table {
+  font-size: var(--rui-font-size-sm);
+  border-collapse: separate;
+  border-spacing: 0;
+}
+:host([data-rui-theme^="heroui"]) .rui-table th,
+:host([data-rui-theme^="heroui"]) .rui-data-grid-table th {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text-muted);
   font-weight: 600;
+  font-size: var(--rui-font-size-sm);
+  text-transform: none;
+  letter-spacing: 0;
+  border-bottom: none;
 }
-:host([data-rui-theme="modern"]) .rui-badge[data-variant="primary"] {
-  background: color-mix(in srgb, var(--rui-color-accent) 14%, transparent);
-  /* The 14% wash stays keyed to the accent; the label on it does not — this
-     theme's accent is 3.66:1 against its own wash, the link token 4.58:1. */
-  color: var(--rui-color-link);
+:host([data-rui-theme^="heroui"]) .rui-table th:first-child {
+  border-top-left-radius: var(--rui-radius-md);
+  border-bottom-left-radius: var(--rui-radius-md);
 }
-:host([data-rui-theme="modern"]) .rui-stat-value {
-  color: var(--rui-color-text);
-  font-weight: 700;
+:host([data-rui-theme^="heroui"]) .rui-table th:last-child {
+  border-top-right-radius: var(--rui-radius-md);
+  border-bottom-right-radius: var(--rui-radius-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-table td {
+  border-bottom: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-table tbody tr:hover td {
+  background: var(--rui-color-surface-muted);
+}
+:host([data-rui-theme^="heroui"]) .rui-table tbody tr:hover td:first-child {
+  border-top-left-radius: var(--rui-radius-md);
+  border-bottom-left-radius: var(--rui-radius-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-table tbody tr:hover td:last-child {
+  border-top-right-radius: var(--rui-radius-md);
+  border-bottom-right-radius: var(--rui-radius-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-stat-value {
+  font-weight: 600;
   letter-spacing: -0.03em;
 }
-:host([data-rui-theme="modern"]) .rui-stat-label {
+:host([data-rui-theme^="heroui"]) .rui-stat-label {
   color: var(--rui-color-text-muted);
-  letter-spacing: 0.01em;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--rui-font-size-sm);
+  font-weight: 500;
 }
-:host([data-rui-theme="modern"]) .rui-link {
-  color: var(--rui-color-link);
-  font-weight: 600;
+:host([data-rui-theme^="heroui"]) .rui-pagination-button {
+  border-radius: var(--rui-radius-md);
+  border-color: transparent;
+  font-weight: 500;
 }
-:host([data-rui-theme="modern"]) .rui-table th {
-  background: var(--rui-color-surface-muted);
-  color: var(--rui-color-text-muted);
-  font-weight: 600;
-  font-size: var(--rui-font-size-11);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  border-bottom-color: var(--rui-color-border);
+
+/* ---- Messaging — a flat 15% wash of the hue, a rounded icon plate -------- */
+:host([data-rui-theme^="heroui"]) .rui-callout {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  background: color-mix(in srgb, var(--rui-color-info) 15%, var(--rui-color-surface));
 }
-:host([data-rui-theme="modern"]) .rui-table td { border-bottom-color: var(--rui-color-border-subtle); }
-:host([data-rui-theme="modern"]) .rui-table tbody tr:hover td {
-  background: var(--rui-color-surface-muted);
+:host([data-rui-theme^="heroui"]) .rui-callout-section {
+  padding: 12px 16px;
+  gap: 12px;
+  align-items: center;
 }
-:host([data-rui-theme="modern"]) .rui-follow-up-button {
-  background: var(--rui-color-surface);
-  border-color: var(--rui-color-border);
-  color: var(--rui-color-text);
+:host([data-rui-theme^="heroui"]) .rui-callout-icon {
+  width: 32px;
+  height: 32px;
   border-radius: var(--rui-radius-pill);
+  background: color-mix(in srgb, var(--rui-color-info) 25%, var(--rui-color-surface));
+  color: var(--rui-color-info-text);
+  font-size: var(--rui-font-size-base);
+}
+:host([data-rui-theme^="heroui"]) .rui-callout-title {
   font-weight: 600;
+  color: var(--rui-color-info-text);
+}
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="success"] { background: color-mix(in srgb, var(--rui-color-success) 15%, var(--rui-color-surface)); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="success"] .rui-callout-icon { background: color-mix(in srgb, var(--rui-color-success) 25%, var(--rui-color-surface)); color: var(--rui-color-success-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="success"] .rui-callout-title { color: var(--rui-color-success-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 15%, var(--rui-color-surface)); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="warning"] .rui-callout-icon { background: color-mix(in srgb, var(--rui-color-warning) 25%, var(--rui-color-surface)); color: var(--rui-color-warning-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="warning"] .rui-callout-title { color: var(--rui-color-warning-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="danger"],
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="error"] { background: color-mix(in srgb, var(--rui-color-danger) 15%, var(--rui-color-surface)); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="danger"] .rui-callout-icon,
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="error"] .rui-callout-icon { background: color-mix(in srgb, var(--rui-color-danger) 25%, var(--rui-color-surface)); color: var(--rui-color-danger-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="danger"] .rui-callout-title,
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="error"] .rui-callout-title { color: var(--rui-color-danger-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="neutral"] { background: var(--rui-color-surface-muted); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="neutral"] .rui-callout-icon { background: color-mix(in srgb, var(--rui-color-text) 12%, transparent); color: var(--rui-color-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="neutral"] .rui-callout-title { color: var(--rui-color-text); }
+:host([data-rui-theme^="heroui"]) .rui-toast,
+:host([data-rui-theme^="heroui"]) .rui-notification {
+  border: none;
+  border-radius: var(--rui-radius-lg);
+  box-shadow: var(--rui-shadow-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-banner {
+  border: none;
+  border-radius: 0;
+}
+
+/* ---- Overlays — rounded-large, shadow-medium, and a LIGHT tooltip ---- */
+:host([data-rui-theme^="heroui"]) .rui-dropdown-menu-content,
+:host([data-rui-theme^="heroui"]) .rui-popover-content,
+:host([data-rui-theme^="heroui"]) .rui-hover-card-content,
+:host([data-rui-theme^="heroui"]) .rui-context-menu-pop {
+  border: none;
+  border-radius: var(--rui-radius-lg);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-md);
+  padding: 4px;
+}
+:host([data-rui-theme^="heroui"]) .rui-menu-item {
+  border-radius: var(--rui-radius-sm);
+  padding: 8px 10px;
+  font-size: var(--rui-font-size-sm);
+}
+/* Light tooltip on content1, which is the one HeroUI choice most likely to
+   read as "wrong" to somebody expecting a dark chip — and is exactly right. */
+:host([data-rui-theme^="heroui"]) .rui-tooltip-content {
+  background: var(--rui-color-surface);
+  color: var(--rui-color-text);
+  border-radius: var(--rui-radius-sm);
+  padding: 6px 10px;
+  font-size: var(--rui-font-size-sm);
+  font-weight: 400;
   box-shadow: var(--rui-shadow-sm);
-  transition: background 140ms ease, border-color 140ms ease, transform 120ms ease;
 }
-:host([data-rui-theme="modern"]) .rui-follow-up-button:hover {
-  background: var(--rui-color-surface-muted);
-  border-color: color-mix(in srgb, var(--rui-color-accent) 40%, var(--rui-color-border));
-  transform: translateY(-1px);
+:host([data-rui-theme^="heroui"]) .rui-tooltip-arrow {
+  background: var(--rui-color-surface);
 }
-:host([data-rui-theme="modern"]) .rui-steps-item::before {
+
+/* ---- Accordion — divided rows, no boxes ---------------------------------- */
+:host([data-rui-theme^="heroui"]) .rui-accordion {
+  gap: 0;
+}
+:host([data-rui-theme^="heroui"]) .rui-accordion-item {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+:host([data-rui-theme^="heroui"]) .rui-accordion-item + .rui-accordion-item {
+  border-top: var(--rui-border-width) solid var(--rui-color-border);
+}
+:host([data-rui-theme^="heroui"]) .rui-accordion-trigger {
+  padding: 16px 0;
+  font-weight: 500;
+}
+
+/* ---- Progress, steps, skeletons, separators, avatars --------------------- */
+:host([data-rui-theme^="heroui"]) .rui-progress-track {
+  height: 12px;
+  background: color-mix(in srgb, var(--rui-color-text) 15%, transparent);
+}
+:host([data-rui-theme^="heroui"]) .rui-progress-bar {
   background: var(--rui-color-primary);
-  color: var(--rui-color-primary-text);
-  font-weight: 700;
 }
-:host([data-rui-theme="modern"]) .rui-separator {
+:host([data-rui-theme^="heroui"]) .rui-steps-item::before {
+  font-weight: 500;
+  font-size: var(--rui-font-size-sm);
+}
+:host([data-rui-theme^="heroui"]) .rui-skeleton-line {
+  background: var(--rui-color-surface-muted);
+  border-radius: var(--rui-radius-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-separator {
   background: var(--rui-color-border);
 }
+:host([data-rui-theme^="heroui"]) .rui-avatar-fallback {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="heroui"]) .rui-follow-up-button {
+  border-radius: var(--rui-radius-button);
+  background: var(--rui-color-surface-muted);
+  border-color: transparent;
+  color: var(--rui-color-text);
+  font-weight: 500;
+  box-shadow: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-follow-up-button:hover {
+  background: var(--rui-color-surface-muted);
+  opacity: 0.8;
+}
+
+/* ---- Dark mode deltas ----------------------------------------------------
+   The palette swap is carried by the tokens. What the tokens cannot express is
+   that HeroUI's dark surfaces get their edge from an INSET white rim-light
+   inside the shadow rather than from a darker drop, and that the page behind
+   them is pure black — so a hovered row has to lighten rather than darken. */
+:host([data-rui-theme="heroui-dark"]) .rui-input:hover:not(:disabled),
+:host([data-rui-theme="heroui-dark"]) .rui-select:hover:not(:disabled),
+:host([data-rui-theme="heroui-dark"]) .rui-textarea:hover:not(:disabled) {
+  background: color-mix(in srgb, #ffffff 8%, var(--rui-color-surface-muted));
+}
+:host([data-rui-theme="heroui-dark"]) .rui-switch-thumb {
+  background: var(--rui-color-text);
+}
+:host([data-rui-theme="heroui-dark"]) .rui-callout {
+  background: color-mix(in srgb, var(--rui-color-info) 18%, var(--rui-color-surface));
+}
+:host([data-rui-theme="heroui-dark"]) .rui-callout[data-variant="success"] { background: color-mix(in srgb, var(--rui-color-success) 18%, var(--rui-color-surface)); }
+:host([data-rui-theme="heroui-dark"]) .rui-callout[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 18%, var(--rui-color-surface)); }
+:host([data-rui-theme="heroui-dark"]) .rui-callout[data-variant="danger"],
+:host([data-rui-theme="heroui-dark"]) .rui-callout[data-variant="error"]   { background: color-mix(in srgb, var(--rui-color-danger) 18%, var(--rui-color-surface)); }
 
 /* ----------------------------------------------------------------------- */
 /* DropdownMenu / MenuItem / MenuSeparator / MenuLabel                     */
@@ -54037,8 +56245,10 @@ ${below("xs")} {
 /* Present in the position enum and on the standalone Toast since day one, but
    the STACK had no rule — so Toasts with position "bottom-center" pinned to
    nothing and rendered wherever position: fixed left it (top-left of the
-   viewport, over the page's own chrome). column-reverse like the other two
-   bottom corners, so the newest toast is the one nearest the viewport edge. */
+   viewport, over the page's own chrome). column-reverse like the other two bottom
+   corners: DOM order is append order, so reversing it lays the OLDEST toast against
+   the viewport edge and grows the stack upwards, away from it — which is what keeps
+   a burst from walking off the bottom of the screen. */
 .rui-toasts[data-position="bottom-center"] { bottom: 16px; left: 50%; transform: translateX(-50%); align-items: center; flex-direction: column-reverse; }
 /* The max cap summarises the toasts it hid; without this the +N row is bare
    text floating in the stack. align-self overrides the per-position align-items. */
@@ -59706,6 +61916,299 @@ ${below("sm")} {
   .rui-parallax { transform: none !important; }
 }
 `;
+function globToRegExp(pattern) {
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  return new RegExp(`^${escaped}$`);
+}
+function ruleMatches(rule, method2, url) {
+  if (!rule.enabled) return false;
+  if (rule.method && rule.method.toUpperCase() !== method2.toUpperCase()) return false;
+  const pattern = rule.pattern.trim();
+  if (pattern === "" || pattern === "*") return true;
+  if (pattern.includes("*")) {
+    try {
+      return globToRegExp(pattern).test(url);
+    } catch {
+      return false;
+    }
+  }
+  return url.includes(pattern);
+}
+function findMatchingRule(rules, method2, url) {
+  for (const rule of rules) {
+    if (ruleMatches(rule, method2, url)) return rule;
+  }
+  return null;
+}
+function verdictFor(rule) {
+  const label = rule.label || rule.pattern || rule.action;
+  switch (rule.action) {
+    case "delay":
+      return { delayMs: Math.max(0, rule.delayMs ?? 0), rule: label };
+    case "fail":
+      return { error: rule.message || `blocked by DevTools rule "${label}"`, rule: label, delayMs: rule.delayMs };
+    case "offline":
+      return { error: rule.message || "Failed to fetch (DevTools offline mode)", rule: label, delayMs: rule.delayMs };
+    case "mock": {
+      let body = rule.body ?? "";
+      if (typeof rule.body === "string" && rule.body.trim() !== "") {
+        try {
+          body = JSON.parse(rule.body);
+        } catch {
+          body = rule.body;
+        }
+      }
+      const headers = { "content-type": "application/json", ...rule.headers ?? {} };
+      return {
+        response: { status: rule.status ?? 200, headers, body },
+        rule: label,
+        delayMs: rule.delayMs
+      };
+    }
+    default:
+      return { rule: label };
+  }
+}
+const SEGMENT_STARTS = /* @__PURE__ */ new Set(["/", ">", "#"]);
+function parentKeyOf(key2, keys) {
+  for (let i = key2.length - 1; i > 0; i -= 1) {
+    if (!SEGMENT_STARTS.has(key2[i])) continue;
+    const candidate = key2.slice(0, i);
+    if (candidate !== key2 && keys.has(candidate)) return candidate;
+  }
+  return null;
+}
+function ancestorsOf(key2, keys) {
+  const out = [];
+  let current = parentKeyOf(key2, keys);
+  let guard = 0;
+  while (current !== null && guard++ < 200) {
+    out.push(current);
+    current = parentKeyOf(current, keys);
+  }
+  return out.reverse();
+}
+function buildInstanceTree(records) {
+  const byKey = /* @__PURE__ */ new Map();
+  const counts = /* @__PURE__ */ new Map();
+  for (const record of records) {
+    byKey.set(record.instanceKey, record);
+    counts.set(record.instanceKey, (counts.get(record.instanceKey) ?? 0) + 1);
+  }
+  const keys = new Set(byKey.keys());
+  const depthCache = /* @__PURE__ */ new Map();
+  const depthOf = (key2) => {
+    const cached = depthCache.get(key2);
+    if (cached !== void 0) return cached;
+    const parent = parentKeyOf(key2, keys);
+    const depth = parent === null ? 0 : depthOf(parent) + 1;
+    depthCache.set(key2, depth);
+    return depth;
+  };
+  const nodes = [];
+  for (const [key2, record] of byKey) {
+    nodes.push({
+      instanceKey: key2,
+      name: record.name,
+      kind: record.kind,
+      parentKey: parentKeyOf(key2, keys),
+      depth: depthOf(key2),
+      phase: record.phase,
+      selfTime: record.selfTime,
+      source: record.source,
+      explicitKey: record.explicitKey,
+      propCount: record.props?.length ?? 0,
+      renders: counts.get(key2) ?? 1
+    });
+  }
+  return sortTree(nodes);
+}
+function sortTree(nodes) {
+  const children = /* @__PURE__ */ new Map();
+  for (const node of nodes) {
+    const bucket = children.get(node.parentKey);
+    if (bucket) bucket.push(node);
+    else children.set(node.parentKey, [node]);
+  }
+  const out = [];
+  const visit = (parent) => {
+    for (const node of children.get(parent) ?? []) {
+      out.push(node);
+      visit(node.instanceKey);
+    }
+  };
+  visit(null);
+  if (out.length < nodes.length) {
+    const seen = new Set(out.map((n) => n.instanceKey));
+    for (const node of nodes) {
+      if (!seen.has(node.instanceKey)) out.push(node);
+    }
+  }
+  return out;
+}
+function describeHookCells(cells) {
+  if (!cells) return [];
+  return cells.map((cell, slot) => {
+    const raw = cell.kind === "ref" ? cell.box.current : cell.value;
+    const value = toDevtoolsValue(raw);
+    return {
+      slot,
+      kind: cell.kind,
+      value,
+      // `id` cells are runtime-generated identifiers; overwriting one would
+      // desynchronise the `aria-*` wiring that depends on it. `memo` cells are
+      // recomputed from their deps, so an edit would be silently reverted on
+      // the next render — showing it read-only is the honest answer.
+      editable: (cell.kind === "state" || cell.kind === "ref" || cell.kind === "reducer") && value.json !== void 0
+    };
+  });
+}
+function describeUiState(slots) {
+  return slots.map(({ key: key2, value }) => {
+    const described = toDevtoolsValue(value);
+    return { key: key2, value: described, editable: described.json !== void 0 };
+  });
+}
+const RUNTIME_ATOM_PREFIXES = ["__store_", "__form_", "__query_", "__effect_"];
+function isReservedAtom(name) {
+  if (name === "route") return true;
+  return RUNTIME_ATOM_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+function decodeModuleAtom(name) {
+  const match = /^__a(\d+)_(.+)$/.exec(name);
+  if (!match) return null;
+  return { authored: match[2], moduleIndex: Number(match[1]) };
+}
+function describeStateMeta(names, computedNames, sources) {
+  return names.map((name) => {
+    const decoded = decodeModuleAtom(name);
+    const meta = {
+      name,
+      reserved: isReservedAtom(name),
+      computed: computedNames.has(name)
+    };
+    if (decoded) {
+      meta.authored = decoded.authored;
+      const path = sources?.[decoded.moduleIndex];
+      if (path) meta.module = path;
+    }
+    return meta;
+  }).sort((a, b) => a.name.localeCompare(b.name));
+}
+function describeQueries(cache) {
+  const out = [];
+  for (const [key2, resource] of cache) {
+    const info = {
+      key: key2,
+      state: String(resource.state),
+      loading: Boolean(resource.loading),
+      data: toDevtoolsValue(resource.data)
+    };
+    if (resource.status !== void 0) info.status = resource.status;
+    if (resource.error != null) info.error = toDevtoolsValue(resource.error);
+    if (resource.lastUpdated !== void 0) info.lastUpdated = resource.lastUpdated;
+    if (resource.loadMore !== void 0) {
+      info.infinite = true;
+      info.page = resource.page;
+      info.hasMore = resource.hasMore;
+    }
+    out.push(info);
+  }
+  return out;
+}
+function describeStores(stores, readAtom) {
+  const out = [];
+  for (const [key2, handle] of stores) {
+    const atom = handle.__atom;
+    const flavour = atom.startsWith("__form_") ? "form" : "store";
+    const loc = /^(\d+):(\d+)$/.exec(key2);
+    out.push({
+      atom,
+      flavour,
+      source: loc ? { line: Number(loc[1]), column: Number(loc[2]) } : void 0,
+      methods: Object.keys(handle.__methods ?? {}).sort(),
+      value: toDevtoolsValue(readAtom(atom))
+    });
+  }
+  return out.sort((a, b) => a.atom.localeCompare(b.atom));
+}
+function collectRoutePatterns(program) {
+  const patterns = /* @__PURE__ */ new Set();
+  const collectFromObject = (node, prefix) => {
+    const obj = node;
+    if (obj?.kind !== "Object" || !Array.isArray(obj.properties)) return;
+    for (const prop2 of obj.properties) {
+      if (prop2.spread) continue;
+      if (prop2.key === "default" || prop2.key === "*") continue;
+      const full = `${prefix}${prop2.key}`;
+      const value = prop2.value;
+      const nested = value?.kind === "Object" ? value.properties?.find((p) => p.key === "routes" && p.value?.kind === "Object") : void 0;
+      patterns.add(full);
+      if (nested) collectFromObject(nested.value, full);
+    }
+  };
+  walk(program, ({ node }) => {
+    if (node.kind !== "Invoke") return;
+    const callee = node.callee;
+    const isRouterCall = callee.kind === "StateRef" && callee.name === "router" || callee.kind === "Identifier" && callee.name === "Router";
+    if (!isRouterCall) return;
+    const first = node.arguments[0];
+    if (first) collectFromObject(first, "");
+  });
+  return [...patterns].sort();
+}
+function describeDiagnostics(input) {
+  const out = [];
+  for (const error of input.parse) {
+    const kind = /unknown prop|expects|arity|enum|not a component|unknown component/i.test(error.message) ? "schema" : "parse";
+    out.push({ line: error.line, column: error.column, message: error.message, kind, severity: "error" });
+  }
+  for (const warning of input.warnings ?? []) {
+    out.push({ line: warning.line, column: warning.column, message: warning.message, kind: "schema", severity: "warning" });
+  }
+  for (const message of input.effects ?? []) {
+    out.push({ line: 0, column: 0, message, kind: "effect", severity: "error" });
+  }
+  for (const message of input.src ?? []) {
+    out.push({ line: 0, column: 0, message, kind: "src", severity: "error" });
+  }
+  return out;
+}
+function outlineProgram(statements) {
+  const out = [];
+  for (const stmt of statements) {
+    const loc = stmt.loc;
+    const line = loc?.line ?? 0;
+    const column = loc?.column ?? 0;
+    switch (stmt.kind) {
+      case "ComponentDeclaration":
+        out.push({ kind: "component", name: stmt.name, line, column, exported: stmt.exported });
+        break;
+      case "EffectDeclaration":
+        out.push({ kind: "effect", name: stmt.name, line, column });
+        break;
+      case "ActionDeclaration":
+        out.push({ kind: "action", name: stmt.name, line, column });
+        break;
+      case "HookDeclaration":
+        out.push({ kind: "hook", name: stmt.name, line, column });
+        break;
+      case "Import":
+        out.push({ kind: "import", name: stmt.source, line, column });
+        break;
+      case "Assignment":
+        out.push({
+          kind: stmt.isState ? "state" : "binding",
+          name: stmt.identifier,
+          line,
+          column,
+          exported: stmt.exported
+        });
+        break;
+    }
+  }
+  return out;
+}
 const ATTRIBUTE_THEME = "theme";
 const ATTRIBUTE_STREAMING = "streaming";
 const ATTRIBUTE_RESPONSE = "response";
@@ -59929,6 +62432,32 @@ class AktionElement extends HTMLElement {
     __publicField(this, "devtoolsCommitId", 0);
     /** True once this element has been registered with the DevTools hook. */
     __publicField(this, "devtoolsRegistered", false);
+    /**
+     * Component records from the most recent commit. The inspector needs the
+     * *current* tree (props, sources, per-instance keys), which is a different
+     * question from the profiler's history — and answering it from the last
+     * commit means no extra bookkeeping during render.
+     */
+    __publicField(this, "devtoolsComponents", []);
+    /** Structured diagnostics from the last plan, for the Source tab. */
+    __publicField(this, "devtoolsDiagnostics", []);
+    /** Last planned program, kept only for static introspection (routes, outline). */
+    __publicField(this, "devtoolsProgram", null);
+    /** DevTools-installed network rules (delay / mock / fail / offline). */
+    __publicField(this, "devtoolsNetworkRules", []);
+    /** Correlation counter for network events. */
+    __publicField(this, "devtoolsRequestSeq", 0);
+    /** In-flight requests, so a terminal event can carry the request details. */
+    __publicField(this, "devtoolsRequests", /* @__PURE__ */ new Map());
+    /** True while an HTTP tap is installed on the shared runtime. */
+    __publicField(this, "devtoolsTapInstalled", false);
+    /** Theme tokens DevTools is currently overriding, so they can be cleared. */
+    __publicField(this, "devtoolsThemeKeys", []);
+    /**
+     * A navigation waiting for the render that resolves which route arm matched.
+     * See {@link handleRouteChange}.
+     */
+    __publicField(this, "devtoolsPendingRoute", null);
     /** Whether the "state write during render" warning has already fired. */
     __publicField(this, "warnedStateWriteDuringRender", false);
     this.root = this.attachShadow({ mode: "open" });
@@ -60187,6 +62716,11 @@ class AktionElement extends HTMLElement {
     if (this.devtoolsRegistered) {
       unregisterDevtoolsApp(this.devtoolsId);
       this.devtoolsRegistered = false;
+    }
+    if (this.devtoolsTapInstalled) {
+      this.http.setDevtoolsTap(null);
+      this.devtoolsTapInstalled = false;
+      this.devtoolsRequests.clear();
     }
   }
   attributeChangedCallback(name, _old, value) {
@@ -60536,6 +63070,15 @@ class AktionElement extends HTMLElement {
   // ----- Internal -----
   /** Dispatch a custom event from `emit()` calls in effect/action bodies. */
   emitCustomEvent(eventName, detail) {
+    if (isDevtoolsActive()) {
+      emitDevtoolsEvent({
+        kind: "emit",
+        appId: this.devtoolsId,
+        name: eventName,
+        detail: toDevtoolsValue(detail),
+        time: nowMs()
+      });
+    }
     this.dispatchEvent(new CustomEvent(eventName, {
       detail,
       bubbles: true,
@@ -60555,17 +63098,520 @@ class AktionElement extends HTMLElement {
     if (this.devtoolsRegistered) return;
     const hook = getDevtoolsHook();
     if (!hook) return;
-    const record = {
+    hook.registerApp(this.buildDevtoolsRecord());
+    this.devtoolsRegistered = true;
+    this.installDevtoolsHttpTap();
+  }
+  /**
+   * Assemble the capability record a frontend drives the app through.
+   *
+   * Every entry is a narrow, purpose-built operation — read this, write that,
+   * navigate there. No raw `context`, `renderer`, or `state` reference escapes,
+   * so a buggy (or hostile) frontend cannot reach past what a debugger
+   * legitimately needs, and every write it *can* make goes through the same
+   * reactive pipeline a real event handler would use.
+   */
+  buildDevtoolsRecord() {
+    return {
       id: this.devtoolsId,
       label: this.getAttribute("data-devtools-label") || this.id || this.devtoolsId,
       element: this,
       getState: () => this.state.snapshot(),
       setState: (path, value) => this.applyDevtoolsStateEdit(path, value),
       getProgram: () => this.currentResponse,
-      forceRender: () => this.requestFullRender()
+      forceRender: () => this.requestFullRender(),
+      /* ---- program & diagnostics ---- */
+      setProgram: (text) => this.setResponse(text),
+      getSources: () => this.devtoolsSources(),
+      getDiagnostics: () => [...this.devtoolsDiagnostics],
+      analyzeProgram: (text) => this.devtoolsAnalyze(text),
+      reload: () => {
+        this.programDirty = true;
+        this.requestFullRender();
+      },
+      /* ---- inspector ---- */
+      getRenderRoot: () => this.rootEl,
+      getComponentTree: () => this.devtoolsTree(),
+      getInstance: (key2) => this.devtoolsInstance(key2),
+      instanceForNode: (node) => this.devtoolsInstanceForNode(node),
+      nodeForInstance: (key2) => this.devtoolsNodeForInstance(key2),
+      setInstanceHook: (key2, slot, value) => this.devtoolsSetInstanceHook(key2, slot, value),
+      setInstanceUiState: (key2, slot, value) => {
+        const applied = this.renderer.setInstanceUiState(key2, slot, value);
+        if (applied) this.requestFullRender();
+        return applied;
+      },
+      setPropOverride: (key2, prop2, value) => {
+        this.renderer.setPropOverride(key2, prop2, value);
+        this.requestFullRender();
+      },
+      clearPropOverride: (key2, prop2) => {
+        this.renderer.clearPropOverride(key2, prop2);
+        this.requestFullRender();
+      },
+      listPropOverrides: () => this.renderer.listPropOverrides().map((entry) => ({
+        instanceKey: entry.instanceKey,
+        prop: entry.prop,
+        preview: toDevtoolsValue(entry.value).preview
+      })),
+      remountInstance: (key2) => {
+        this.renderer.dropInstance(key2);
+        clearInstanceHooks(this.context, key2);
+        this.effectRunner.unmountInstance(key2);
+        this.requestFullRender();
+      },
+      /* ---- reactive state ---- */
+      getStateMeta: () => this.devtoolsStateMeta(),
+      resetState: (names) => {
+        if (names && names.length > 0) this.state.reset(...names);
+        else this.state.resetAll();
+        this.requestFullRender();
+      },
+      hydrateState: (snapshot) => this.hydrateState(snapshot),
+      evaluateExpression: (source) => this.devtoolsEvaluate(source),
+      /* ---- effects ---- */
+      getEffects: () => this.effectRunner.listMounted(),
+      runEffect: (key2) => this.effectRunner.runNow(key2),
+      /* ---- data layer ---- */
+      getQueries: () => this.devtoolsQueries(),
+      refetchQuery: (key2) => {
+        void this.context.queryCache.get(key2)?.refetch();
+      },
+      cancelQuery: (key2) => {
+        this.context.queryCache.get(key2)?.cancel();
+      },
+      invalidateQueries: (pattern) => invalidateQueries(this.context, [pattern]),
+      getStores: () => this.devtoolsStores(),
+      callStoreMethod: (atom, method2, args) => this.devtoolsCallStoreMethod(atom, method2, args ?? []),
+      /* ---- router ---- */
+      getRoute: () => this.devtoolsRoute(),
+      navigate: (path) => this.router.navigate(path),
+      /* ---- theme ---- */
+      getTheme: () => this.devtoolsTheme(),
+      setThemeTokens: (tokens) => this.devtoolsSetThemeTokens(tokens),
+      clearThemeTokens: () => {
+        clearTokenOverrides(this, this.devtoolsThemeKeys);
+        this.devtoolsThemeKeys = [];
+        this.applyThemeFromAttribute();
+        this.requestFullRender();
+      },
+      setThemeName: (name) => this.setTheme(name),
+      /* ---- network rules ---- */
+      setNetworkRules: (rules) => {
+        this.devtoolsNetworkRules = rules.map((rule) => ({ ...rule }));
+        this.installDevtoolsHttpTap();
+      },
+      getNetworkRules: () => this.devtoolsNetworkRules.map((rule) => ({ ...rule })),
+      /* ---- stats ---- */
+      getStats: () => this.devtoolsStats()
     };
-    hook.registerApp(record);
-    this.devtoolsRegistered = true;
+  }
+  /* ---- DevTools: program ------------------------------------------------ */
+  /**
+   * Per-module sources of a linked program, or the single inline source.
+   *
+   * A multi-file program is planned from a pre-linked AST, so the element only
+   * holds the module *paths*; the text of a module it never fetched is not
+   * recoverable here. Reporting the paths with empty text would look like empty
+   * files, so only the entry text is claimed — the panel labels the rest.
+   */
+  devtoolsSources() {
+    const paths = this.devtoolsProgram?.sources;
+    const entry = this.compiledSourceId ?? "<inline>";
+    if (!paths || paths.length === 0) {
+      return [{ path: entry, text: this.currentResponse }];
+    }
+    return paths.map((path, index) => ({
+      path,
+      text: index === 0 ? this.currentResponse : ""
+    }));
+  }
+  /**
+   * Parse + validate a candidate program and outline its declarations, without
+   * mounting it.
+   *
+   * This is what makes the Source tab's editor safe to use: you see the parse
+   * errors and the schema violations of the draft *before* replacing a running
+   * program. It runs the same parser and the same validator the mount path uses,
+   * against the same component library, so its verdict cannot differ.
+   */
+  devtoolsAnalyze(text) {
+    const source = text ?? this.currentResponse;
+    try {
+      const program = parse(source);
+      const schemaErrors = validateProgramSchema(program, this.library);
+      const diagnostics = describeDiagnostics({
+        parse: [...program.errors, ...schemaErrors],
+        warnings: program.warnings
+      });
+      return {
+        diagnostics,
+        outline: outlineProgram(program.statements),
+        ok: diagnostics.every((diagnostic) => diagnostic.severity !== "error")
+      };
+    } catch (err) {
+      return {
+        diagnostics: [{ line: 0, column: 0, message: errorMessage(err), kind: "parse", severity: "error" }],
+        outline: [],
+        ok: false
+      };
+    }
+  }
+  /* ---- DevTools: inspector --------------------------------------------- */
+  /** Component tree of the last commit, with liveness resolved against the DOM. */
+  devtoolsTree() {
+    const nodes = buildInstanceTree(this.devtoolsComponents);
+    for (const node of nodes) {
+      node.mounted = this.devtoolsNodeForInstance(node.instanceKey) !== null;
+    }
+    return nodes;
+  }
+  /**
+   * Everything the inspector knows about one instance: the props it received,
+   * its per-instance hook cells, its library UI-state slots, what it reads, the
+   * effects it owns, and the DOM it produced.
+   *
+   * This is the "see and change one component" surface — the props and hooks
+   * here are exactly what `setPropOverride` / `setInstanceHook` write back to.
+   */
+  devtoolsInstance(instanceKey) {
+    const record = this.devtoolsComponents.find((c) => c.instanceKey === instanceKey);
+    const keys = new Set(this.devtoolsComponents.map((c) => c.instanceKey));
+    const node = this.devtoolsNodeForInstance(instanceKey);
+    if (!record && !node) return null;
+    const overrides = this.renderer.propOverridesFor(instanceKey);
+    const effects = this.effectRunner.listMounted().filter((effect) => effect.instanceKey === instanceKey).map((effect) => effect.effectKey);
+    const detail = {
+      instanceKey,
+      name: record?.name ?? instanceKey.slice(instanceKey.lastIndexOf("#") + 1),
+      kind: record?.kind ?? "library",
+      parentKey: parentKeyOf(instanceKey, keys),
+      depth: record?.depth ?? 0,
+      source: record?.source,
+      explicitKey: record?.explicitKey,
+      props: record?.props ? [...record.props] : [],
+      hooks: describeHookCells(this.context.hookStore.get(instanceKey)),
+      uiState: describeUiState(this.renderer.listInstanceUiState(instanceKey)),
+      deps: record?.deps ? [...record.deps] : [],
+      effects,
+      ancestors: ancestorsOf(instanceKey, keys),
+      mounted: node !== null
+    };
+    if (node) {
+      detail.html = truncate(node.outerHTML ?? "", 4e3);
+      detail.domNodes = countDomNodes(node);
+    }
+    if (overrides && overrides.size > 0) {
+      detail.overrides = [...overrides].map(([prop2, value]) => ({ prop: prop2, value: toDevtoolsValue(value) }));
+    }
+    return detail;
+  }
+  /**
+   * Resolve a DOM node to the instance that rendered it — the element picker's
+   * whole job. Walks up to the nearest tagged ancestor, preferring the library
+   * instance (which owns the node) and falling back to the enclosing user
+   * component when the node came from a component that renders a fragment.
+   */
+  devtoolsInstanceForNode(node) {
+    let current = node;
+    while (current) {
+      if (current instanceof Element) {
+        const tagged = current.getAttribute(INSTANCE_ATTR) ?? current.getAttribute(OWNER_ATTR);
+        if (tagged) return tagged;
+      }
+      const parent = current.parentNode;
+      current = parent ?? current.host ?? null;
+    }
+    return null;
+  }
+  /** The element an instance rendered, or `null` when it is not in the DOM. */
+  devtoolsNodeForInstance(instanceKey) {
+    const escaped = escapeAttrValue(instanceKey);
+    const selector = `[${INSTANCE_ATTR}="${escaped}"], [${OWNER_ATTR}="${escaped}"]`;
+    try {
+      return this.rootEl.querySelector(selector);
+    } catch {
+      return null;
+    }
+  }
+  /**
+   * Write one per-instance hook cell.
+   *
+   * Hooks are matched by call order, so the slot index is the address. A write
+   * lands directly in the cell the next render will read, then forces a render —
+   * the same two steps the hook's own setter performs.
+   */
+  devtoolsSetInstanceHook(instanceKey, slot, value) {
+    const cells = this.context.hookStore.get(instanceKey);
+    const cell = cells?.[slot];
+    if (!cell) return false;
+    switch (cell.kind) {
+      case "state":
+      case "reducer":
+        cell.value = value;
+        break;
+      case "ref":
+        cell.box.current = value;
+        break;
+      default:
+        return false;
+    }
+    this.requestFullRender();
+    return true;
+  }
+  /* ---- DevTools: state ------------------------------------------------- */
+  /** Declaration metadata for every atom (reserved / computed / module). */
+  devtoolsStateMeta() {
+    const names = Object.keys(this.state.snapshot());
+    const computed = /* @__PURE__ */ new Set();
+    const sources = /* @__PURE__ */ new Map();
+    for (const statement of this.devtoolsProgram?.statements ?? []) {
+      if (statement.kind !== "Assignment" || !statement.isState) continue;
+      if (statement.loc) {
+        sources.set(statement.identifier, { line: statement.loc.line, column: statement.loc.column });
+      }
+      if (!isPureLiteralExpression(statement.expression)) computed.add(statement.identifier);
+    }
+    const meta = describeStateMeta(names, computed, this.devtoolsProgram?.sources);
+    for (const entry of meta) {
+      const loc = sources.get(entry.name) ?? (entry.authored ? sources.get(entry.authored) : void 0);
+      if (loc) entry.source = loc;
+    }
+    return meta;
+  }
+  /**
+   * Evaluate an Aktion expression (or a single `$atom = …` assignment) against
+   * the live program scope — the REPL behind the Console tab.
+   *
+   * Reads see exactly what the program sees: the same bindings, the same
+   * per-atom values, the same helpers. Writes go through the normal reactive
+   * path, so `$count = 5` from the console is indistinguishable from a button
+   * doing it. Evaluation is deliberately NOT tracked as a render dependency:
+   * the tracker is swapped out first, so poking at state in the console cannot
+   * widen the render gate and change what the app re-renders on.
+   */
+  devtoolsEvaluate(source) {
+    const text = source.trim();
+    if (text === "") return { ok: false, error: "empty expression" };
+    const ctx = this.context;
+    const previousTracker = ctx.trackedState;
+    ctx.trackedState = /* @__PURE__ */ new Set();
+    try {
+      let program = parse(text);
+      let statement = program.statements[0];
+      if (program.errors.length > 0 || !statement) {
+        program = parse(`__aktion_devtools_eval = ${text}`);
+        statement = program.statements[0];
+        if (program.errors.length > 0 || !statement) {
+          return { ok: false, error: program.errors[0]?.message ?? "could not parse expression" };
+        }
+      }
+      if (statement.kind === "Assignment") {
+        const value = evaluate(statement.expression, ctx);
+        if (statement.isState && statement.identifier !== "__aktion_devtools_eval") {
+          this.applyDevtoolsStateEdit(statement.identifier, value);
+        }
+        return this.devtoolsEvalResult(value);
+      }
+      if (statement.kind === "ExpressionStatement") {
+        return this.devtoolsEvalResult(evaluate(statement.expression, ctx));
+      }
+      return { ok: false, error: `unsupported statement: ${statement.kind}` };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    } finally {
+      ctx.trackedState = previousTracker;
+    }
+  }
+  devtoolsEvalResult(value) {
+    const described = toDevtoolsValue(value);
+    const result = { ok: true, value: described };
+    if (described.json !== void 0) result.text = described.json;
+    return result;
+  }
+  /* ---- DevTools: data layer -------------------------------------------- */
+  devtoolsQueries() {
+    return describeQueries(this.context.queryCache);
+  }
+  devtoolsStores() {
+    return describeStores(this.context.stores, (atom) => this.state.get(atom));
+  }
+  /** Invoke a method on a live `Store` / `$form` handle from the Data tab. */
+  devtoolsCallStoreMethod(atom, method2, args) {
+    for (const handle of this.context.stores.values()) {
+      if (handle.__atom !== atom) continue;
+      const fn = handle.__methods?.[method2];
+      if (typeof fn !== "function") return { ok: false, error: `no method "${method2}" on ${atom}` };
+      try {
+        const value = fn(...args);
+        this.requestFullRender();
+        return this.devtoolsEvalResult(value);
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+    return { ok: false, error: `no store for atom "${atom}"` };
+  }
+  /* ---- DevTools: router ------------------------------------------------ */
+  devtoolsRoute() {
+    return {
+      path: this.router.getPath(),
+      pattern: this.router.getActivePattern(),
+      params: { ...this.router.getParams() },
+      mode: this.router.getMode(),
+      basePath: this.getAttribute("router-base") ?? void 0,
+      guarded: this.router.hasGuard(),
+      declared: this.devtoolsProgram ? collectRoutePatterns(this.devtoolsProgram) : []
+    };
+  }
+  /* ---- DevTools: theme ------------------------------------------------- */
+  devtoolsTheme() {
+    const resolved = resolveTheme(this.getAttribute(ATTRIBUTE_THEME));
+    const tokens = {};
+    for (const [key2, value] of Object.entries(resolved.tokens)) {
+      if (typeof value === "string") tokens[key2] = value;
+    }
+    for (const key2 of [...this.scriptThemeKeys, ...this.devtoolsThemeKeys]) {
+      const cssVar = themeTokenCssVar(String(key2));
+      const cssValue = cssVar ? this.style.getPropertyValue(cssVar) : "";
+      if (cssValue) tokens[key2] = cssValue.trim();
+    }
+    return {
+      name: resolved.name,
+      tokens,
+      scriptOverrides: this.scriptThemeKeys.map(String),
+      devtoolsOverrides: this.devtoolsThemeKeys.map(String),
+      available: Object.keys(builtInThemes).sort()
+    };
+  }
+  devtoolsSetThemeTokens(tokens) {
+    const applied = applyPartialTheme(this, sanitiseThemeTokens(tokens));
+    const merged = /* @__PURE__ */ new Set([...this.devtoolsThemeKeys, ...applied]);
+    this.devtoolsThemeKeys = [...merged];
+    this.requestFullRender();
+  }
+  /* ---- DevTools: stats ------------------------------------------------- */
+  devtoolsStats() {
+    const stats = {
+      domNodes: countDomNodes(this.rootEl),
+      elements: this.rootEl.querySelectorAll("*").length,
+      instances: new Set(this.devtoolsComponents.map((c) => c.instanceKey)).size,
+      atoms: Object.keys(this.state.snapshot()).length,
+      effects: this.effectRunner.listMounted().length,
+      queries: this.context.queryCache.size,
+      stores: this.context.stores.size,
+      programBytes: this.currentResponse.length,
+      commits: this.devtoolsCommitId
+    };
+    const heap = performance?.memory;
+    if (heap?.usedJSHeapSize != null) stats.heapBytes = heap.usedJSHeapSize;
+    return stats;
+  }
+  /* ---- DevTools: network tap ------------------------------------------ */
+  /**
+   * Install (or refresh) the HTTP tap that feeds the Network tab and applies
+   * DevTools request rules. Removed again in `disconnectedCallback` so a torn
+   * down element never keeps emitting.
+   */
+  installDevtoolsHttpTap() {
+    if (this.devtoolsTapInstalled) return;
+    const tap = {
+      start: (request) => {
+        const id = `${this.devtoolsId}-req-${this.devtoolsRequestSeq += 1}`;
+        if (!devtoolsOption("captureNetwork")) return id;
+        this.devtoolsRequests.set(id, { method: request.method, url: request.url });
+        emitDevtoolsEvent({
+          kind: "network",
+          appId: this.devtoolsId,
+          requestId: id,
+          phase: "start",
+          method: request.method,
+          url: request.url,
+          time: nowMs(),
+          requestHeaders: { ...request.headers },
+          requestBody: request.body === void 0 ? void 0 : bodyPreview(request.body, 2e3)
+        });
+        return id;
+      },
+      finish: (id, outcome) => {
+        const pending = this.devtoolsRequests.get(id);
+        this.devtoolsRequests.delete(id);
+        if (!devtoolsOption("captureNetwork")) return;
+        const method2 = pending?.method ?? outcome.request.method;
+        const url = pending?.url ?? outcome.request.url;
+        if (outcome.error !== void 0) {
+          emitDevtoolsEvent({
+            kind: "network",
+            appId: this.devtoolsId,
+            requestId: id,
+            phase: outcome.rule ? "blocked" : "error",
+            method: method2,
+            url,
+            time: nowMs(),
+            duration: outcome.duration,
+            error: outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
+            rule: outcome.rule,
+            injectedDelay: outcome.injectedDelay
+          });
+          return;
+        }
+        const response = outcome.response;
+        emitDevtoolsEvent({
+          kind: "network",
+          appId: this.devtoolsId,
+          requestId: id,
+          phase: outcome.mocked ? "mock" : "success",
+          method: method2,
+          url,
+          time: nowMs(),
+          duration: outcome.duration,
+          status: response?.status,
+          responseHeaders: response ? { ...response.headers } : void 0,
+          responseBody: bodyPreview(response?.body),
+          responseSize: bodySize(response?.body),
+          rule: outcome.rule,
+          injectedDelay: outcome.injectedDelay
+        });
+      },
+      gate: (request) => {
+        if (this.devtoolsNetworkRules.length === 0) return void 0;
+        const rule = findMatchingRule(this.devtoolsNetworkRules, request.method, request.url);
+        return rule ? verdictFor(rule) : void 0;
+      }
+    };
+    this.http.setDevtoolsTap(tap);
+    this.devtoolsTapInstalled = true;
+  }
+  /**
+   * Emit the held navigation now that the render has resolved which arm matched.
+   * A no-op when nothing is pending.
+   */
+  flushDevtoolsRoute() {
+    const pending = this.devtoolsPendingRoute;
+    if (!pending) return;
+    this.devtoolsPendingRoute = null;
+    emitDevtoolsEvent({
+      kind: "route",
+      appId: this.devtoolsId,
+      from: pending.from,
+      to: pending.to,
+      pattern: this.router.getActivePattern(),
+      params: { ...this.router.getParams() },
+      source: pending.source,
+      time: pending.time
+    });
+  }
+  /** Report a survivable runtime failure to the DevTools error log. */
+  reportDevtoolsError(phase, message, subject) {
+    if (!isDevtoolsActive()) return;
+    emitDevtoolsEvent({
+      kind: "error",
+      appId: this.devtoolsId,
+      phase,
+      message,
+      subject,
+      time: nowMs()
+    });
   }
   /**
    * Public DevTools entry point: attach to a hook that was installed *after*
@@ -60575,7 +63621,11 @@ class AktionElement extends HTMLElement {
    */
   connectDevtools() {
     this.registerWithDevtools();
-    if (this.devtoolsRegistered) this.requestFullRender();
+    if (this.devtoolsRegistered) {
+      getDevtoolsHook()?.registerApp(this.buildDevtoolsRecord());
+      this.installDevtoolsHttpTap();
+      this.requestFullRender();
+    }
   }
   /**
    * Apply a DevTools-originated edit to a reactive atom. Dotted paths
@@ -60646,6 +63696,14 @@ class AktionElement extends HTMLElement {
    */
   handleRouteChange(detail) {
     this.writeRouteState();
+    if (isDevtoolsActive()) {
+      this.devtoolsPendingRoute = {
+        from: detail.previousPath ?? "",
+        to: detail.path,
+        source: detail.source,
+        time: nowMs()
+      };
+    }
     this.dispatchEvent(new CustomEvent("route-change", {
       detail,
       bubbles: true,
@@ -60780,8 +63838,12 @@ class AktionElement extends HTMLElement {
     if (this.context.budget) resetRuntimeBudget(this.context.budget);
     if (!this.devtoolsRegistered) this.registerWithDevtools();
     const devtoolsActive = isDevtoolsActive();
-    this.renderer.setProfiling(devtoolsActive);
+    this.renderer.setProfiling(devtoolsActive, {
+      captureProps: devtoolsOption("captureProps"),
+      tagDom: devtoolsOption("tagDom")
+    });
     const commitStart = devtoolsActive ? nowMs() : 0;
+    let morphTime = 0;
     const renderTracker = /* @__PURE__ */ new Set();
     const prevTracker = this.context.trackedState;
     this.context.trackedState = renderTracker;
@@ -60800,6 +63862,7 @@ class AktionElement extends HTMLElement {
             this.handleRuntimeBudgetError(err);
             return;
           }
+          this.reportDevtoolsError("render", errorMessage(err), "$app entry point");
           console.error("[aktion] entry point evaluation error", err);
         }
       }
@@ -60822,7 +63885,9 @@ class AktionElement extends HTMLElement {
       }
       const guarded = this.ensureMorphGuard();
       const imperativeWrites = guarded ? this.snapshotImperativeWrites() : [];
+      const morphStart = devtoolsActive ? nowMs() : 0;
       morphChildren(this.rootEl, rendered);
+      if (devtoolsActive) morphTime = nowMs() - morphStart;
       if (guarded) this.checkImperativeWrites(imperativeWrites);
       this.renderer.endRender();
       this.restoreFocus(focusSnapshot);
@@ -60836,6 +63901,7 @@ class AktionElement extends HTMLElement {
           if (c.phase === "memo") memoizedCount += 1;
           else renderedCount += 1;
         }
+        this.devtoolsComponents = components2;
         emitDevtoolsEvent({
           kind: "commit",
           appId: this.devtoolsId,
@@ -60847,9 +63913,18 @@ class AktionElement extends HTMLElement {
           initial: this.devtoolsCommitId === 0,
           components: components2,
           rendered: renderedCount,
-          memoized: memoizedCount
+          memoized: memoizedCount,
+          morphTime,
+          domNodes: devtoolsOption("measureDom") ? countDomNodes(this.rootEl) : void 0,
+          // Time travel needs a value per commit, not per state flush: a commit
+          // is the granularity a user actually recognises ("put it back to how
+          // it looked two clicks ago").
+          snapshot: devtoolsOption("captureSnapshots") ? this.state.snapshot() : void 0
         });
         this.devtoolsCommitId += 1;
+        this.flushDevtoolsRoute();
+      } else {
+        this.devtoolsPendingRoute = null;
       }
     } finally {
       this.context.trackedState = prevTracker;
@@ -60878,6 +63953,7 @@ class AktionElement extends HTMLElement {
       this.parseErrors = [...this.parseErrors, message];
     }
     this.updateErrorBanner();
+    this.reportDevtoolsError("budget", err.message, err.kind);
     if (!this.streaming) {
       this.dispatchEvent(new CustomEvent("error", {
         detail: { errors: [{ line: 0, column: 0, message: err.message }] },
@@ -60887,7 +63963,12 @@ class AktionElement extends HTMLElement {
     }
   }
   captureFocus() {
-    const active = this.root.activeElement;
+    let active = null;
+    try {
+      active = this.root.activeElement;
+    } catch {
+      return null;
+    }
     if (!active || !this.rootEl.contains(active)) return null;
     const id = active.id || null;
     if (!id) return null;
@@ -60917,6 +63998,7 @@ class AktionElement extends HTMLElement {
   }
   replan() {
     this.effectRunner.reset();
+    this.renderer.clearAllPropOverrides();
     this.lastRenderDeps = null;
     this.warnedStateWriteDuringRender = false;
     if (this.context) disposeContext(this.context);
@@ -60961,6 +64043,16 @@ class AktionElement extends HTMLElement {
       ...this.effectRunner.getErrors()
     ];
     this.updateErrorBanner();
+    this.devtoolsProgram = program;
+    this.devtoolsDiagnostics = describeDiagnostics({
+      parse: program.errors,
+      warnings: program.warnings,
+      effects: this.effectRunner.getErrors(),
+      src: this.srcDiagnostics
+    });
+    for (const error of program.errors) {
+      this.reportDevtoolsError("plan", error.message, `line ${error.line}`);
+    }
     if (program.errors.length > 0 && !this.streaming) {
       this.dispatchEvent(new CustomEvent("error", {
         detail: { errors: program.errors },
@@ -60989,6 +64081,20 @@ class AktionElement extends HTMLElement {
   }
 }
 __publicField(AktionElement, "tagName", "aktion-app");
+function escapeAttrValue(value) {
+  return value.replace(/(["\\])/g, "\\$1");
+}
+function countDomNodes(root, limit = 2e5) {
+  let count = 0;
+  const stack = [root];
+  while (stack.length > 0 && count < limit) {
+    const node = stack.pop();
+    count += 1;
+    const children = node.childNodes;
+    for (let i = 0; i < children.length; i += 1) stack.push(children[i]);
+  }
+  return count;
+}
 function cssEscapeId(id) {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
     return CSS.escape(id);

@@ -3,6 +3,16 @@ import { StateStore } from '../runtime/state.js';
 import { Router } from '../runtime/router.js';
 import { ComponentLibrary } from '../library/types.js';
 import { ComponentRenderRecord } from '../devtools/protocol.js';
+/**
+ * DOM attribute carrying the instance key of the library component that
+ * produced an element. This is the whole basis of the DevTools element picker:
+ * a click anywhere in the app resolves to the nearest tagged ancestor, which
+ * resolves to a row in the component tree. Written only while a DevTools
+ * frontend has `tagDom` enabled, so production renders never see it.
+ */
+export declare const INSTANCE_ATTR = "data-aktion-instance";
+/** Same idea, but naming the nearest enclosing user `function Foo()` instance. */
+export declare const OWNER_ATTR = "data-aktion-owner";
 export interface RenderOptions {
     library: ComponentLibrary;
     state: StateStore;
@@ -119,6 +129,15 @@ export declare class Renderer {
      * costs nothing. See `setProfiling`.
      */
     private profiling;
+    /**
+     * Record each instance's props/arguments alongside its timing. Separate from
+     * {@link profiling} because serialising a prop bag per instance per commit is
+     * the expensive half — a profiler session on a heavy app wants the timings
+     * without it, an inspector session needs it.
+     */
+    private captureProps;
+    /** Stamp {@link INSTANCE_ATTR} / {@link OWNER_ATTR} on rendered elements. */
+    private tagDom;
     /** Per-commit profiler records, drained by the host after each render. */
     private profilerRecords;
     /**
@@ -127,13 +146,78 @@ export declare class Renderer {
      * tracks exactly the live tree. Only maintained while profiling.
      */
     private profiledInstances;
+    /**
+     * DevTools prop overrides: instance key → prop name → forced value.
+     *
+     * An override is applied where the value enters the component — before
+     * memoization compares args, so changing one re-renders the instance, and
+     * before `render` sees the prop bag, so a component that reads `node.args`
+     * directly observes the same value the props record shows. The program is
+     * never edited: clearing the override restores the authored value on the
+     * next commit.
+     */
+    private readonly propOverrides;
     constructor(options: RenderOptions);
     /**
      * Enable/disable the render profiler. The host element flips this on when a
      * DevTools frontend subscribes and off when it disconnects, so the common
      * (no-DevTools) path never allocates a record or reads the clock.
+     *
+     * `detail` carries the frontend's instrumentation switches (see
+     * `DevtoolsHookOptions`); omitted keys default to off so a caller that only
+     * wants timings gets only timings.
      */
-    setProfiling(enabled: boolean): void;
+    setProfiling(enabled: boolean, detail?: {
+        captureProps?: boolean;
+        tagDom?: boolean;
+    }): void;
+    /**
+     * Force `prop` to `value` for one instance until the override is cleared.
+     * Returns `true` when the instance is one the renderer has actually seen, so
+     * the caller can report a stale key instead of silently doing nothing.
+     */
+    setPropOverride(instanceKey: string, prop: string, value: unknown): boolean;
+    /** Drop one override, or every override on the instance when `prop` is omitted. */
+    clearPropOverride(instanceKey: string, prop?: string): void;
+    /**
+     * Drop every override.
+     *
+     * The host calls this on replan and on `clear()`: an instance key encodes a
+     * render path, and a NEW program can produce the same path for a different
+     * component — so a surviving override would silently apply to something the
+     * user never touched.
+     */
+    clearAllPropOverrides(): void;
+    /** Every active override, flattened for the inspector's override banner. */
+    listPropOverrides(): Array<{
+        instanceKey: string;
+        prop: string;
+        value: unknown;
+    }>;
+    /** Overrides in force for one instance (used to flag props in the tree). */
+    propOverridesFor(instanceKey: string): ReadonlyMap<string, unknown> | undefined;
+    /**
+     * `useInstanceState` slots held by one instance — a library component's own
+     * UI state (a Tabs' active pane, a Popover's open flag, a DataGrid's sort).
+     * These never appear in `$state`, which is exactly why an inspector that
+     * cannot show them leaves the most common "why is it showing that?" question
+     * unanswerable.
+     */
+    listInstanceUiState(instanceKey: string): Array<{
+        key: string;
+        value: unknown;
+    }>;
+    /** Write one `useInstanceState` slot. Returns `false` for an unknown slot. */
+    setInstanceUiState(instanceKey: string, key: string, value: unknown): boolean;
+    /**
+     * Drop everything the renderer holds for one instance so the next commit
+     * treats it as a fresh mount: memo, UI-state slots, and disposers. The
+     * host pairs this with `clearInstanceHooks` to remount a component without
+     * reloading the program.
+     */
+    dropInstance(instanceKey: string): void;
+    /** Instance keys currently in the rendered tree. */
+    liveInstanceKeys(): string[];
     /** Hand the current commit's component records to the host, then clear. */
     drainProfilerRecords(): ComponentRenderRecord[];
     /** Tree depth for flamegraph indentation — one level per `#instance` segment. */
@@ -169,6 +253,25 @@ export declare class Renderer {
     endRender(): void;
     /** Record one component instance's contribution to the current commit. */
     private profile;
+    /**
+     * Turn one component instance's arguments into inspector-ready prop records.
+     *
+     * `names` supplies the declared order (a library spec's `props`, or a user
+     * declaration's `params`); anything past the declared arity is reported under
+     * its index so an over-supplied call is visible rather than hidden. `stateRefs`
+     * carries the `$`-binding per position, which is what tells the inspector to
+     * edit the ATOM rather than install an override — editing `value: $name` has
+     * to write `$name`, or the next commit would overwrite the edit.
+     */
+    private buildPropRecords;
+    /**
+     * Stamp the instance key onto a rendered element so a DOM node can be traced
+     * back to the component that produced it. `owner` writes the enclosing user
+     * component instead, and only when nothing closer already claimed the node —
+     * so the nearest owner wins and `Page > Card > Button` attributes the button
+     * to `Card`, not `Page`.
+     */
+    private tagInstance;
     private safeDispose;
     /**
      * Apply a state write addressed by either a plain atom name
@@ -222,7 +325,11 @@ export declare class Renderer {
      * two `Counter()` instances hold independent atoms (§7).
      */
     private renderUserComponent;
+    /** Prop records for a user component instance, or `undefined` when off. */
+    private userProps;
     private renderComponent;
+    /** Prop records for a library component instance, or `undefined` when off. */
+    private libraryProps;
     private eventFor;
     private defaultValueGetter;
 }

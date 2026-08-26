@@ -2,20 +2,30 @@
  * Theme tokens applied as CSS custom properties on the host element.
  *
  * Built-in themes:
- *   - "light"      (default)
+ *   - "light"         (default)
  *   - "dark"
- *   - "corporate"  (contemporary enterprise workspace: graphite neutrals, a
- *                   deep teal brand hue, square-shouldered controls, crisp
- *                   hairlines and tight shadows)
- *   - "soft"       (soft, friendly, light & rounded; lavender + mint)
- *   - "glass"      (light glassmorphism: frosted white surfaces over a soft
- *                   pastel gradient, airy and translucent)
- *   - "modern"     (clean modern SaaS: light, generous rounding, ink primary,
- *                   pill buttons, soft diffuse shadows, vibrant charts)
+ *   - "shadcn"        (= "shadcn-light") · "shadcn-light" · "shadcn-dark"
+ *                     shadcn/ui's default `neutral` theme: white page, ink
+ *                     primary, one flat grey wash, hairline borders, 8px
+ *                     controls on 14px Geist
+ *   - "mui"           (= "mui-light") · "mui-light" · "mui-dark"
+ *                     Material UI's default theme: #1976d2 primary, 4px
+ *                     radii everywhere, uppercase buttons, Roboto, and the
+ *                     real three-layer elevation shadows
+ *   - "heroui"        (= "heroui-light") · "heroui-light" · "heroui-dark"
+ *                     HeroUI: #006fee primary, 12–14px corners, borderless
+ *                     cards on soft shadows, opacity-dimming hovers and a
+ *                     2px offset focus outline, on 16px Inter
+ *   - "soft"          (soft, friendly, light & rounded; lavender + mint)
+ *
+ * Each framework family is ONE design in two modes; the bare name is the
+ * light one. All three names of a family share a CSS block in `styles.ts`.
  *
  * Private themes (see `privateThemes`) resolve by name exactly like the ones
  * above but are deliberately absent from `builtInThemes`, so they never reach
  * `langSpec.themeNames`, the docs' theme pickers or the published reference.
+ * The retired `modern` / `glass` / `corporate` names live there too, pointing
+ * at the themes that replaced them (see `deprecatedThemeAliases`).
  *
  * Consumers can also pass a JSON object via the `theme` attribute, call
  * `element.setTheme({...})`, or write a bare `$theme({...})` statement
@@ -71,10 +81,10 @@ export interface ThemeTokens {
      * `#0f3a35` ink) *and* it was painted as link text. Darkening the accent to
      * clear the 4.5:1 text minimum would have broken the fill pairing, so the
      * text-side value moved here instead. soft's mint measured 1.48:1 on its own
-     * white surface and glass's `#b58ee6` 2.63:1 — links were effectively invisible.
+     * white surface, and `heroui-dark`'s `#006fee` 3.80:1 on its `content1` card.
      *
      * A theme whose accent already clears 4.5:1 as text (light 6.29:1, dark
-     * 5.95:1, corporate 4.86:1) can omit both and inherit the derivation.
+     * 5.95:1, `heroui-light` 4.66:1) can omit both and inherit the derivation.
      */
     colorLink?: string;
     colorLinkHover?: string;
@@ -115,10 +125,10 @@ export interface ThemeTokens {
      * by the other direction; `colorPrimaryText`/`colorAccentText` are the naming
      * precedent for "ink on this fill".)
      *
-     * Values are per theme because the fills are: corporate's danger `#c80a00` is
-     * dark enough that white is the correct ink (6.00:1), while soft's pastel
+     * Values are per theme because the fills are: shadcn's destructive `#e7000b`
+     * is dark enough that white is the correct ink (4.77:1), while soft's pastel
      * `#fda4af` needs a deep rose. No status fill had to be darkened — a
-     * hue-matched dark ink clears 4.5:1 on all four hues in all six themes.
+     * hue-matched dark ink clears 4.5:1 on all four hues in every theme.
      */
     colorOnSuccess?: string;
     colorOnWarning?: string;
@@ -253,15 +263,6 @@ export declare const darkTheme: ThemeTokens;
  */
 export declare const softTheme: ThemeTokens;
 /**
- * Glass — light glassmorphism. Frosted *white* translucent surfaces floating
- * over a soft, airy pastel gradient (peach → pink → lavender → mint). Real
- * backdrop-filter blur is applied via the stylesheet, so surfaces pick up the
- * colourful wash behind them. Dark warm-slate text, a warm coral primary, a
- * lavender accent, generous rounding, and feather-soft tinted shadows. The
- * look mirrors calm, modern wellness / consumer dashboards.
- */
-export declare const glassTheme: ThemeTokens;
-/**
  * Vision — enterprise cloud-console aesthetic. Deep navy primary, calm
  * cyan accents, very pale blue page background, white surfaces with crisp
  * 1px borders, small radii, and Open Sans / Overpass type. The look should
@@ -271,58 +272,127 @@ export declare const glassTheme: ThemeTokens;
  * `theme="vision"` and `$theme({ name: "vision" })` resolve normally while the
  * name stays out of `langSpec.themeNames` — the single source the playground
  * theme picker, the editor autocomplete and the generated docs all read from.
- * (Formerly "skyline", then "corporate"; the `corporate` key now names the
- * unrelated theme below.)
+ * (Formerly "skyline", then "corporate"; the `corporate` key is now a
+ * deprecated alias of `heroui-light` — see `deprecatedThemeAliases`.)
  */
 export declare const visionTheme: ThemeTokens;
 /**
- * Modern — clean, friendly SaaS dashboard. Light off-white page, crisp white
- * surfaces, generous rounding, feather-soft diffuse shadows, an ink (near
- * black) primary rendered as pill buttons, a violet accent, and a vibrant
- * multi-hue chart palette. The aesthetic is the contemporary product-dashboard
- * look: airy, rounded, low-contrast chrome with confident black call-to-actions.
+ * shadcn/ui (light) — a faithful re-creation of the default `neutral` shadcn
+ * theme, the one `npx shadcn@latest init` produces.
+ *
+ * Every colour below is the sRGB value of the corresponding `oklch(...)` custom
+ * property in shadcn's own `globals.css`:
+ *
+ *   --background #ffffff · --foreground #0a0a0a · --card #ffffff
+ *   --primary #171717 · --primary-foreground #fafafa
+ *   --secondary / --muted / --accent #f5f5f5 · --muted-foreground #737373
+ *   --border / --input #e5e5e5 · --destructive #e7000b
+ *   --radius 0.625rem (10px), with `rounded-md` (8px) on buttons and inputs
+ *   and `rounded-xl` (14px) on cards
+ *
+ * The look: pure white page, near-black primary buttons with a white label,
+ * one flat neutral grey doing secondary / muted / accent duty, hairline
+ * borders, a 3px translucent focus ring, `shadow-xs` on almost everything, and
+ * Geist at 14px (`text-sm`, which is shadcn's component default).
+ *
+ * Two values are NOT shadcn's, and both are accessibility corrections the
+ * repo applies to every theme:
+ *   - `colorBorderControl` #8f8f8f (3.24:1) rather than `--input` #e5e5e5
+ *     (1.20:1) — WCAG 1.4.11 wants 3:1 on the boundary of a control the user
+ *     has to find. Decorative hairlines keep `colorBorder` #e5e5e5.
+ *   - `colorFocusRing` #737373 (4.74:1) rather than `--ring` #a1a1a1
+ *     (2.58:1). It is still shadcn's neutral-grey ring, one step down the
+ *     same ramp, and it is the value shadcn itself shipped before v4.
  */
-export declare const modernTheme: ThemeTokens;
+export declare const shadcnLightTheme: ThemeTokens;
 /**
- * Corporate — contemporary enterprise workspace.
+ * shadcn/ui (dark) — the `.dark` block of the same file.
  *
- * A single-hue system: graphite neutrals with a faint green cast, pure white
- * surfaces, and one confident deep-teal brand colour that carries primary
- * buttons, links, the focus ring and the first chart series. Controls are
- * square-shouldered (8px, not pills), hairlines are crisp, shadows are tight
- * and short-throw, and the type is Inter over a Space Grotesk display face at a
- * 15px base — roomy enough to read all day, dense enough for a data console.
+ *   --background #0a0a0a · --card / --popover #171717 · --foreground #fafafa
+ *   --primary #e5e5e5 · --primary-foreground #171717
+ *   --secondary / --muted / --accent #262626 · --muted-foreground #a1a1a1
+ *   --border oklch(1 0 0 / 10%) · --ring #737373 · --destructive #ff6467
  *
- * Deliberately unlike its siblings: `modern` is ink + violet on pill buttons
- * with 24px radii, `light` is indigo, `soft` pastel, `glass` translucent, and
- * the private `vision` theme is navy + cyan pills. Teal on graphite with 8px
- * corners is nobody else's territory.
- *
- * Contrast notes (WCAG AA, measured against `colorSurface` #ffffff, the page
- * `colorBg` #f5f7f8 and the `colorBgSubtle` #eaeef0 tint, worst case listed):
- *   primary #0f766e as text 4.69:1 · white on primary 5.47:1
- *   textMuted 5.56:1 · borderControl 3.45:1 (>= the 3:1 shape bar)
- *   status *Text tokens 5.08-5.83:1 · ink on every status fill >= 4.70:1
+ * Note the inversion: in dark mode shadcn's primary button is a near-WHITE
+ * pill of ink with dark text, which is the single most recognisable thing
+ * about the theme.
  */
-export declare const corporateTheme: ThemeTokens;
+export declare const shadcnDarkTheme: ThemeTokens;
 /**
- * Web fonts a built-in theme needs in order to look like itself.
+ * Material UI (light) — MUI's default theme, token for token.
  *
- * Selecting a theme by name (`theme="corporate"` or `$theme({ name: ... })`)
- * previously loaded no fonts at all — only a program that spelled out
- * `$theme({ fonts: { import: [...] } })` triggered `loadFonts`. For the
- * vision theme that meant every page rendered in `system-ui` instead of the
- * UI block typefaces, so the whole UI block type ladder (and every font-weight
- * correction in the theme) was invisible outside the parity harnesses, which
- * load the fonts themselves.
+ *   palette.primary.main #1976d2 / .dark #1565c0
+ *   palette.secondary.main #9c27b0 / .dark #7b1fa2
+ *   error #d32f2f · warning #ed6c02 · info #0288d1 · success #2e7d32
+ *   text.primary rgba(0,0,0,0.87) · text.secondary rgba(0,0,0,0.6)
+ *   divider rgba(0,0,0,0.12) · background.paper #fff
+ *   shape.borderRadius 4 · spacing(1) = 8px
+ *   typography Roboto, htmlFontSize 16, button 0.875rem/500/uppercase with
+ *   0.02857em tracking
  *
- * UI block self-hosts OpenSansRegular / OpenSansSemibold / OverpassRegular /
- * OverpassSemibold and always asks for weight 400, taking its boldness from the
- * font FILE. The closest equivalent here is the same two families at 400 and 600.
+ * `shadowSm` / `shadowMd` / `shadowLg` are MUI's elevation 1 / 4 / 24 strings
+ * verbatim, which is what makes a Paper read as Material rather than as a
+ * generic card: three stacked umbra / penumbra / ambient layers instead of one
+ * soft drop shadow. The status *Text* tokens are MUI's own Alert text colours
+ * (`rgb(30,70,32)`, `#663c00`, `#5f2120`, `#014361`).
  *
- * Keyed by theme name, private themes included — `loadBuiltInThemeFonts` looks
- * a name up here directly, so a private theme still gets its typefaces.
+ * `colorBorderControl` #8c8c8c replaces MUI's `rgba(0,0,0,0.23)` outline for
+ * the same WCAG 1.4.11 reason as every other theme here; the decorative
+ * divider keeps the authentic `rgba(0,0,0,0.12)`.
  */
+export declare const muiLightTheme: ThemeTokens;
+/**
+ * Material UI (dark) — `createTheme({ palette: { mode: "dark" } })`.
+ *
+ *   primary.main #90caf9 · secondary.main #ce93d8
+ *   error #f44336 · warning #ffa726 · info #29b6f6 · success #66bb6a
+ *   text.primary #fff · text.secondary rgba(255,255,255,0.7)
+ *   divider rgba(255,255,255,0.12) · background.default / .paper #121212
+ *
+ * `colorSurface` is #1e1e1e rather than the raw #121212 because MUI's dark
+ * Paper composites an elevation overlay on top of the palette value — a
+ * resting Card renders at `rgba(255,255,255,0.05)` over #121212, which is
+ * exactly #1e1e1e. Using the raw value would make every card invisible
+ * against the page.
+ */
+export declare const muiDarkTheme: ThemeTokens;
+/**
+ * HeroUI (light) — the default `light` layout + colour theme from
+ * `@heroui/theme`.
+ *
+ *   background #ffffff · foreground #11181c · content1 #ffffff
+ *   default-100 #f4f4f5 · default-200 #e4e4e7 · default-500 #71717a
+ *   primary #006fee (600 #005bc4) · secondary #7828c8
+ *   success #17c964 · warning #f5a524 · danger #f31260
+ *   radius small 8px / medium 12px / large 14px
+ *   shadow small / medium / large — the three-layer, hairline-topped strings
+ *
+ * The signatures that make it unmistakable and that the stylesheet block
+ * builds on: buttons that dim to `opacity: .8` on hover and scale to .97 on
+ * press instead of changing colour, a 2px `outline-offset: 2px` focus ring
+ * rather than a glow, borderless cards carrying `shadow-medium`, filled
+ * `default-100` inputs, and 12–14px corners everywhere.
+ *
+ * As in the other two themes, `colorBorderControl` (#8b8b93, 3.38:1) is an
+ * accessibility upgrade over HeroUI's `default-200` field boundary.
+ */
+export declare const herouiLightTheme: ThemeTokens;
+/**
+ * HeroUI (dark) — the `dark` theme from `@heroui/theme`.
+ *
+ *   background #000000 · foreground #ecedee
+ *   content1 #18181b · content2 #27272a · default-500 #a1a1aa
+ *   primary #006fee (brightening to #338ef7 on hover) · secondary #9353d3
+ *   divider rgba(255,255,255,0.15)
+ *   the dark `shadow-*` trio, each with an inset white rim-light
+ *
+ * The page really is pure black — that, plus #18181b cards with no border at
+ * all, is what dark HeroUI looks like. `colorLink` steps up to the dark
+ * scale's #66aaf9 because #006fee measures 3.80:1 on `content1`: fine for the
+ * button fill it mostly is, short of the 4.5:1 bar for the places the sheet
+ * paints the brand hue as running text.
+ */
+export declare const herouiDarkTheme: ThemeTokens;
 export declare const builtInThemeFonts: Record<string, {
     import: string[];
 }>;
@@ -333,8 +403,41 @@ export declare const builtInThemeFonts: Record<string, {
  * themes: `langSpec.themeNames` (playground picker + editor autocomplete), the
  * generated VS Code metadata, the agent-skill reference and the docs. Adding a
  * key here publishes the theme; see `privateThemes` for the other case.
+ *
+ * Three of the entries are family SHORTHANDS: `shadcn`, `mui` and `heroui`
+ * each hold the very same object as their `-light` sibling, so
+ * `theme="shadcn"` and `theme="shadcn-light"` are interchangeable and
+ * `data-rui-theme` echoes back whichever spelling the author used (both are
+ * matched by the family's CSS block). They are listed rather than hidden
+ * because editor autocomplete should offer every name that works.
  */
 export declare const builtInThemes: Record<string, ThemeTokens>;
+/**
+ * Retired theme names → the theme that replaced them.
+ *
+ * `modern`, `glass` and `corporate` were the previous generation of this
+ * library's designed-in-house themes. They have been replaced by faithful
+ * re-creations of the design systems each was reaching for, under the names of
+ * those systems. The old spellings still resolve so a page that says
+ * `theme="modern"` renders the new design rather than silently falling back to
+ * `light` — which is what an unknown name does.
+ *
+ * Unlike the family shorthands in `builtInThemes` (`shadcn` and `shadcn-light`
+ * are two spellings of a LIVE name), these map to a DIFFERENT name: the
+ * resolver rewrites them, so the host ends up with `data-rui-theme="shadcn-light"`
+ * and picks up the family's CSS block, which is keyed on the new names only.
+ *
+ * They are deliberately absent from `builtInThemes` and `privateThemes`: every
+ * surface that ENUMERATES themes reads those records, so listing a retired
+ * name there would re-publish it.
+ */
+export declare const deprecatedThemeAliases: Record<string, string>;
+/**
+ * Rewrite a retired theme name onto its replacement; pass anything else
+ * through unchanged. Callers hand this a name they have already trimmed and
+ * lower-cased.
+ */
+export declare function canonicalThemeName(key: string): string;
 /**
  * Themes that RESOLVE by name but are not advertised anywhere.
  *
@@ -360,6 +463,18 @@ export interface ResolvedTheme {
     tokens: ThemeTokens;
 }
 export declare function resolveTheme(input: ThemeInput | null | undefined): ResolvedTheme;
+/**
+ * CSS custom property backing one theme token (`colorBg` → `--rui-color-bg`),
+ * or `null` for a name that is not a token.
+ *
+ * Exported for DevTools: a live token editor has to read back what is
+ * *actually* painted on the host — an in-script `$theme({...})` or a DevTools
+ * edit writes inline custom properties, not theme objects — and duplicating the
+ * mapping is how such an editor silently stops covering newly-added tokens.
+ */
+export declare function themeTokenCssVar(token: string): string | null;
+/** Every theme token name, in declaration order. */
+export declare function themeTokenNames(): Array<keyof ThemeTokens>;
 /**
  * Apply theme tokens to the host element. Also sets `data-rui-theme` so the
  * shadow-DOM stylesheet can hook into theme-specific overrides (fonts,

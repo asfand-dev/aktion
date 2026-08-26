@@ -137,8 +137,8 @@ const PAGE_KEYWORDS = {
   "head.html": "head document head $head title meta description canonical open graph og twitter card jsonld json-ld structured data schema.org seo social preview link rel htmlattrs lang dir robots noindex titletemplate ssr crawlable rendertostring sitemap marketing pdp",
   "routing.html": "routes navlink navigate hash router",
   "testing.html": "testing test render screen getbytext getbyrole fireevent userevent click type vitest jest assertion mock fetch http snapshot serializestate findby waitfor unit integration tdd react testing library rtl spy state events emit testid data-testid getbytestid within",
-  "devtools.html": "devtools dev tools inspector debugger state inspector render profiler effect timeline flamegraph commit memoization mount update memoized hook __aktion_devtools_hook__ react devtools vue devtools profiling performance edit state live debug panel",
-  "themes.html": "built-in themes light dark corporate soft glass modern tokens custom studio in-script Theme",
+  "devtools.html": "devtools dev tools inspector debugger state inspector render profiler effect timeline flamegraph commit memoization mount update memoized hook __aktion_devtools_hook__ react devtools vue devtools profiling performance edit state live debug panel component tree element picker inspect element box model computed styles prop override edit props hooks time travel snapshot network mock request rules offline latency console repl expression evaluate routes query cache store storage theme tokens contrast source diagnostics outline hot reload test recorder generate test accessibility audit a11y coverage lcov chaos fuzz timeline session export dock",
+  "themes.html": "built-in themes light dark shadcn shadcn-ui mui material-ui heroui nextui soft tokens custom studio in-script Theme dark mode",
   "theme-generator.html": "theme generator builder studio create custom theme colors palette radius typography fonts spacing shadows gradient brand $theme tokens live preview copy generate design system",
   "brand-themes.html": "brand themes token maps partial theme tokens settheme setresponse css variables rui prefix palette gallery side-by-side comparison brand palette",
   "live-demos.html": "demos catalog showcase mini-apps blocks components",
@@ -587,10 +587,16 @@ function setupCopyButtons() {
 const THEME_BG = {
   light: "#ffffff",
   dark: "#0b1220",
-  corporate: "linear-gradient(180deg, #f0f5f4 0%, #eaeef0 100%)",
+  shadcn: "#ffffff",
+  "shadcn-light": "#ffffff",
+  "shadcn-dark": "#0a0a0a",
+  mui: "#ffffff",
+  "mui-light": "#ffffff",
+  "mui-dark": "#121212",
+  heroui: "#ffffff",
+  "heroui-light": "#ffffff",
+  "heroui-dark": "#000000",
   soft: "#fdf6ff",
-  glass: "linear-gradient(160deg, #eef0f3 0%, #e9e6ef 45%, #efe4ec 100%)",
-  modern: "#f4f5f7",
 };
 
 function paintExampleOutputs(themeName) {

@@ -347,10 +347,13 @@
                 <select id="tg-base" class="tg-select" aria-label="Base theme">
                   <option value="light">Light</option>
                   <option value="dark">Dark</option>
-                  <option value="corporate">Corporate</option>
+                  <option value="shadcn">shadcn</option>
+                  <option value="shadcn-dark">shadcn dark</option>
+                  <option value="mui">Material UI</option>
+                  <option value="mui-dark">Material UI dark</option>
+                  <option value="heroui">HeroUI</option>
+                  <option value="heroui-dark">HeroUI dark</option>
                   <option value="soft">Soft</option>
-                  <option value="glass">Glass</option>
-                  <option value="modern">Modern</option>
                 </select>
               </div>
               <button class="tg-btn" id="tg-reset" type="button" title="Reset overrides">
@@ -512,12 +515,12 @@ app.setTheme({ colorPrimary: "#7c3aed",        // flat token overrides
         <div class="callout" data-variant="warning">
           <h4>A <code>name:</code> base does not carry the theme's CSS personality</h4>
           <p>
-            When you start from <code>corporate</code>, <code>soft</code>,
-            <code>glass</code> or <code>modern</code>, the generated statement begins
+            When you start from <code>shadcn</code>, <code>mui</code>,
+            <code>heroui</code> or <code>soft</code>, the generated statement begins
             <code>$theme({ name: "&hellip;" })</code>. That copies the theme's
             <strong>token values</strong>, but not its extra stylesheet block &mdash;
-            glass's backdrop blur, corporate's tab rail and flat hairline cards, the
-            hover lift on soft and modern cards. Those are gated on the <code>data-rui-theme</code>
+            MUI's uppercase tabs and borderless Paper, HeroUI's dimming hover and
+            offset focus ring, shadcn's 3px focus halo. Those are gated on the <code>data-rui-theme</code>
             marker, which only the host <code>theme</code> attribute and
             <code>setTheme()</code> write. For the full look, set the theme on the host
             <em>and</em> paste the generated overrides on top. Details:

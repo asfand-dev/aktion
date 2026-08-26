@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Aktion — A new language for building UIs. Less code, any framework.</title>
-  <meta name="description" content="Aktion is a reactive UI language — a strict subset of JavaScript — that replaces your framework, component kit, router and i18n with one tag. 282 built-in components, 6 themes, fine-grained reactivity, full JS interop, and a fraction of the code. Can also be effectively used as a Micro-Frontend in React, Vue, Angular, Svelte, Next.js or any other Framework. LLM-friendly by design." />
+  <meta name="description" content="Aktion is a reactive UI language — a strict subset of JavaScript — that replaces your framework, component kit, router and i18n with one tag. 282 built-in components, 9 themes (incl. shadcn/ui, Material UI and HeroUI re-creations), fine-grained reactivity, full JS interop, and a fraction of the code. Can also be effectively used as a Micro-Frontend in React, Vue, Angular, Svelte, Next.js or any other Framework. LLM-friendly by design." />
 
   <link rel="icon" type="image/png" href="assets/logo.png" />
   <link rel="apple-touch-icon" href="assets/logo.png" />
@@ -539,10 +539,13 @@
     .swatch .dots i { width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
     .sw-light { background:#ffffff; color:#14102b; } .sw-light .name{color:#14102b;}
     .sw-dark { background:#0e0b1c; color:#fff; }
-    .sw-corporate { background:linear-gradient(160deg,#0d1f22,#0f766e); color:#a7f3ea; }
+    .sw-shadcn { background:#ffffff; color:#0a0a0a; border:1px solid #e5e5e5; }
+    .sw-shadcn-dark { background:#171717; color:#fafafa; }
+    .sw-mui { background:#ffffff; color:#1976d2; border:1px solid rgba(0,0,0,.12); }
+    .sw-mui-dark { background:#1e1e1e; color:#90caf9; }
+    .sw-heroui { background:#ffffff; color:#006fee; border:1px solid #e4e4e7; }
+    .sw-heroui-dark { background:#18181b; color:#66aaf9; }
     .sw-soft { background:#fff5fb; color:#7c3aed; }
-    .sw-glass { background:linear-gradient(160deg,#eef0f3,#efe4ec); color:#33303a; }
-    .sw-modern { background:#f4f5f7; color:#111827; border:1px solid #ebedf1; }
     .sw-custom { background: var(--grad-brand); color:#fff; }
 
     /* ===================================================================
@@ -688,7 +691,7 @@
         <p class="lead">
           Aktion is a reactive UI language — a <strong>strict subset of JavaScript</strong> you
           already know. It replaces your framework, component kit, router and i18n with
-          <strong>one tag</strong>: 282 built-in components, fine-grained reactivity, 6 themes,
+          <strong>one tag</strong>: 282 built-in components, fine-grained reactivity, 9 themes,
           and full JS interop — no JSX, no bundler, no boilerplate. Can also be effectively used
           as a Micro-Frontend in React, Vue, Angular, Svelte, Next.js or any other Framework.
         </p>
@@ -847,7 +850,7 @@ $count = 0
           <article class="card span-2 reveal">
             <span class="glow g-warm"></span>
             <div class="ic g-warm"><i class="fa-solid fa-palette"></i></div>
-            <h3>6 themes + design tokens</h3>
+            <h3>9 themes + design tokens</h3>
             <p>Switch palettes with one attribute, or brand the whole UI in-script with <code>$theme({…})</code> over 113 tokens.</p>
           </article>
 
@@ -1204,16 +1207,19 @@ statusBadges = Row([
       <div class="wrap">
         <div class="section-head reveal">
           <span class="eyebrow"><span class="line"></span> Theming <span class="line"></span></span>
-          <h2>Six themes. <span class="grad-text">Infinite brands.</span></h2>
-          <p>Switch palettes with the <code>theme</code> attribute, or override 80+ design tokens in-script with <code>$theme({…})</code>.</p>
+          <h2>Nine themes. <span class="grad-text">Infinite brands.</span></h2>
+          <p>Three of them re-create shadcn/ui, Material&nbsp;UI and HeroUI, light and dark. Switch palettes with the <code>theme</code> attribute, or override 80+ design tokens in-script with <code>$theme({…})</code>.</p>
         </div>
         <div class="themes-row reveal">
           <div class="swatch sw-light"><div class="dots"><i style="background:#6366f1"></i><i style="background:#10b981"></i><i style="background:#f59e0b"></i></div><div class="name">Light</div></div>
           <div class="swatch sw-dark"><div class="dots"><i style="background:#8b5cf6"></i><i style="background:#22d3ee"></i><i style="background:#ec4899"></i></div><div class="name">Dark</div></div>
-          <div class="swatch sw-corporate"><div class="dots"><i style="background:#0f766e"></i><i style="background:#0369a1"></i><i style="background:#f59e0b"></i></div><div class="name">Corporate</div></div>
+          <div class="swatch sw-shadcn"><div class="dots"><i style="background:#171717"></i><i style="background:#e76e50"></i><i style="background:#2a9d90"></i></div><div class="name">shadcn</div></div>
+          <div class="swatch sw-shadcn-dark"><div class="dots"><i style="background:#e5e5e5"></i><i style="background:#2662d9"></i><i style="background:#2eb88a"></i></div><div class="name">shadcn&#8209;dark</div></div>
+          <div class="swatch sw-mui"><div class="dots"><i style="background:#1976d2"></i><i style="background:#9c27b0"></i><i style="background:#02b2af"></i></div><div class="name">MUI</div></div>
+          <div class="swatch sw-mui-dark"><div class="dots"><i style="background:#90caf9"></i><i style="background:#ce93d8"></i><i style="background:#72ccff"></i></div><div class="name">MUI&nbsp;dark</div></div>
+          <div class="swatch sw-heroui"><div class="dots"><i style="background:#006fee"></i><i style="background:#7828c8"></i><i style="background:#17c964"></i></div><div class="name">HeroUI</div></div>
+          <div class="swatch sw-heroui-dark"><div class="dots"><i style="background:#338ef7"></i><i style="background:#9353d3"></i><i style="background:#45d483"></i></div><div class="name">HeroUI&nbsp;dark</div></div>
           <div class="swatch sw-soft"><div class="dots"><i style="background:#c4b5fd"></i><i style="background:#fbcfe8"></i><i style="background:#a7f3d0"></i></div><div class="name">Soft</div></div>
-          <div class="swatch sw-glass"><div class="dots"><i style="background:#f2826a"></i><i style="background:#b58ee6"></i><i style="background:#8ec5e8"></i></div><div class="name">Glass</div></div>
-          <div class="swatch sw-modern"><div class="dots"><i style="background:#111827"></i><i style="background:#7c5cfc"></i><i style="background:#ff7849"></i></div><div class="name">Modern</div></div>
           <div class="swatch sw-custom"><div class="dots"><i style="background:#fff"></i><i style="background:#fde68a"></i><i style="background:#fbcfe8"></i></div><div class="name">Your brand →</div></div>
         </div>
       </div>

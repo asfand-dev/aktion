@@ -19,6 +19,54 @@ export interface HttpInterceptors {
     onResponse?: (response: HttpResponse, retry: () => Promise<HttpResponse>) => HttpResponse | Promise<HttpResponse>;
     onError?: (error: unknown, request: HttpRequest) => void;
 }
+/**
+ * How a DevTools frontend interfered with one request. Reported back on
+ * {@link HttpDevtoolsTap.finish} so the network inspector can label the row
+ * instead of showing a mocked 500 as if the server had really sent one.
+ */
+export interface HttpGateVerdict {
+    /** Respond with this instead of hitting the network. */
+    response?: HttpResponse;
+    /** Fail the request with this message instead of hitting the network. */
+    error?: string;
+    /** Label of the rule that matched, for the inspector. */
+    rule?: string;
+    /** Latency to inject before the request proceeds (or before the mock resolves). */
+    delayMs?: number;
+}
+/**
+ * DevTools instrumentation for the HTTP layer.
+ *
+ * The runtime owns *transport*; a debugger owns *observation and simulation*.
+ * This is the seam between them: the host element installs a tap while a
+ * DevTools frontend is attached, and removes it when the panel closes. With no
+ * tap installed the request path is byte-for-byte what it was before — one
+ * `null` check per request.
+ *
+ * `gate` is what makes the network half a genuine testing tool: it can delay a
+ * request, answer it with a canned response, or fail it outright, so an author
+ * can reproduce a 500, a 3-second endpoint, or an offline device without
+ * editing the program or standing up a server.
+ */
+export interface HttpDevtoolsTap {
+    /** A request is leaving the interceptor chain; returns a correlation id. */
+    start(request: HttpRequest): string;
+    /** The request settled (or was mocked / failed by a rule). */
+    finish(id: string, outcome: {
+        request: HttpRequest;
+        response?: HttpResponse;
+        error?: unknown;
+        duration: number;
+        /** Label of the DevTools rule that produced this outcome, if any. */
+        rule?: string;
+        /** True when `response` came from a rule rather than the network. */
+        mocked?: boolean;
+        /** Latency injected by a rule, in ms. */
+        injectedDelay?: number;
+    }): void;
+    /** Optional pre-flight: delay, mock, or fail the request. */
+    gate?(request: HttpRequest): HttpGateVerdict | undefined;
+}
 /** Reactive lifecycle of an `Http({...})` resource. */
 export type ResourceState = "idle" | "loading" | "data" | "error" | "stale";
 /**
@@ -76,6 +124,13 @@ export declare class HttpRuntime {
      * interceptors run program→host (inner-to-outer, the usual convention).
      */
     private programInterceptors;
+    /**
+     * DevTools tap, or `null` in the normal case. See {@link HttpDevtoolsTap} —
+     * one null check per request when no debugger is attached.
+     */
+    private tap;
+    /** Install (or with `null`, remove) the DevTools network tap. */
+    setDevtoolsTap(tap: HttpDevtoolsTap | null): void;
     /** Merge new interceptors on top of any previously-registered ones. */
     registerInterceptors(interceptors: HttpInterceptors): void;
     /** Merge in-program interceptors on top of any already registered. */

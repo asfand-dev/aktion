@@ -7,7 +7,7 @@ $app(Column([header, toolbar, Grid([editorCard, treeCard], { columns: { base: 1,
 sample = `{
   "name": "Aktion",
   "version": "0.6.4",
-  "themes": ["light", "dark", "modern"],
+  "themes": ["light", "dark", "shadcn", "mui", "heroui"],
   "components": 272,
   "meta": { "open_source": true, "license": "MIT" }
 }`

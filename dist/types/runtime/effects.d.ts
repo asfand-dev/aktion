@@ -1,7 +1,7 @@
 import { EffectDeclaration } from '../parser/types.js';
 import { EvaluationContext, ScopedEffectDecl } from './evaluator.js';
 import { StateStore } from './state.js';
-import { EffectEventPayload } from '../devtools/protocol.js';
+import { EffectEventPayload, EffectInfo } from '../devtools/protocol.js';
 export interface EffectRunnerOptions {
     state: StateStore;
     /** Called whenever an effect mutates state or completes — schedules render. */
@@ -50,6 +50,21 @@ export declare class EffectRunner {
      */
     unmountInstance(instanceKey: string): void;
     reset(): void;
+    /**
+     * Describe every currently-mounted effect: what it subscribes to, what
+     * intervals it holds, how many `cleanup(fn)` handlers are live.
+     *
+     * The event timeline shows what effects *did*; this shows what they *are* —
+     * which is the half you need when the question is "why did nothing happen?"
+     * (a dependency list that never matches never produces an event to look at).
+     */
+    listMounted(): EffectInfo[];
+    /**
+     * Run one mounted effect's body now, as if its trigger had fired. Prior
+     * cleanups fire first, exactly like a real re-run, so "run now" can't leave
+     * an effect with two live subscriptions. Returns `false` for an unknown key.
+     */
+    runNow(mountKey: string, reason?: string): boolean;
     private mount;
     /**
      * Build and dispatch one DevTools effect event. Returns immediately when no

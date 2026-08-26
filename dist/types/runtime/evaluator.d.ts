@@ -631,6 +631,18 @@ export declare function extractStatePath(expr: Expression, ctx: EvaluationContex
  * build lazy bindings for every assignment so forward references resolve.
  */
 export declare function planProgram(program: Program, ctx: EvaluationContext): void;
+/**
+ * `true` when `expr` evaluates to the same value regardless of context —
+ * literals, arrays of pure values, objects of pure values, and template
+ * strings without interpolation. These don't need a re-evaluation pass
+ * because the literal-default seed already produced their final value.
+ *
+ * Exported because it is also the definition of a DERIVED atom: `$x = expr`
+ * with a non-literal RHS is re-evaluated whenever its dependencies change, so a
+ * DevTools edit to it lasts only until the next flush. An inspector that could
+ * not tell the two apart would show an edit silently reverting.
+ */
+export declare function isPureLiteralExpression(expr: Expression): boolean;
 export declare function evaluate(expr: Expression, ctx: EvaluationContext): unknown;
 /**
  * Control-flow signals threaded through `runStatement` / `evaluateBlock`

@@ -116,6 +116,32 @@ export declare class AktionElement extends HTMLElement {
     private devtoolsCommitId;
     /** True once this element has been registered with the DevTools hook. */
     private devtoolsRegistered;
+    /**
+     * Component records from the most recent commit. The inspector needs the
+     * *current* tree (props, sources, per-instance keys), which is a different
+     * question from the profiler's history — and answering it from the last
+     * commit means no extra bookkeeping during render.
+     */
+    private devtoolsComponents;
+    /** Structured diagnostics from the last plan, for the Source tab. */
+    private devtoolsDiagnostics;
+    /** Last planned program, kept only for static introspection (routes, outline). */
+    private devtoolsProgram;
+    /** DevTools-installed network rules (delay / mock / fail / offline). */
+    private devtoolsNetworkRules;
+    /** Correlation counter for network events. */
+    private devtoolsRequestSeq;
+    /** In-flight requests, so a terminal event can carry the request details. */
+    private readonly devtoolsRequests;
+    /** True while an HTTP tap is installed on the shared runtime. */
+    private devtoolsTapInstalled;
+    /** Theme tokens DevTools is currently overriding, so they can be cleared. */
+    private devtoolsThemeKeys;
+    /**
+     * A navigation waiting for the render that resolves which route arm matched.
+     * See {@link handleRouteChange}.
+     */
+    private devtoolsPendingRoute;
     constructor();
     connectedCallback(): void;
     /**
@@ -320,6 +346,99 @@ export declare class AktionElement extends HTMLElement {
      * never the raw runtime internals. A no-op when no hook is installed.
      */
     private registerWithDevtools;
+    /**
+     * Assemble the capability record a frontend drives the app through.
+     *
+     * Every entry is a narrow, purpose-built operation — read this, write that,
+     * navigate there. No raw `context`, `renderer`, or `state` reference escapes,
+     * so a buggy (or hostile) frontend cannot reach past what a debugger
+     * legitimately needs, and every write it *can* make goes through the same
+     * reactive pipeline a real event handler would use.
+     */
+    private buildDevtoolsRecord;
+    /**
+     * Per-module sources of a linked program, or the single inline source.
+     *
+     * A multi-file program is planned from a pre-linked AST, so the element only
+     * holds the module *paths*; the text of a module it never fetched is not
+     * recoverable here. Reporting the paths with empty text would look like empty
+     * files, so only the entry text is claimed — the panel labels the rest.
+     */
+    private devtoolsSources;
+    /**
+     * Parse + validate a candidate program and outline its declarations, without
+     * mounting it.
+     *
+     * This is what makes the Source tab's editor safe to use: you see the parse
+     * errors and the schema violations of the draft *before* replacing a running
+     * program. It runs the same parser and the same validator the mount path uses,
+     * against the same component library, so its verdict cannot differ.
+     */
+    private devtoolsAnalyze;
+    /** Component tree of the last commit, with liveness resolved against the DOM. */
+    private devtoolsTree;
+    /**
+     * Everything the inspector knows about one instance: the props it received,
+     * its per-instance hook cells, its library UI-state slots, what it reads, the
+     * effects it owns, and the DOM it produced.
+     *
+     * This is the "see and change one component" surface — the props and hooks
+     * here are exactly what `setPropOverride` / `setInstanceHook` write back to.
+     */
+    private devtoolsInstance;
+    /**
+     * Resolve a DOM node to the instance that rendered it — the element picker's
+     * whole job. Walks up to the nearest tagged ancestor, preferring the library
+     * instance (which owns the node) and falling back to the enclosing user
+     * component when the node came from a component that renders a fragment.
+     */
+    private devtoolsInstanceForNode;
+    /** The element an instance rendered, or `null` when it is not in the DOM. */
+    private devtoolsNodeForInstance;
+    /**
+     * Write one per-instance hook cell.
+     *
+     * Hooks are matched by call order, so the slot index is the address. A write
+     * lands directly in the cell the next render will read, then forces a render —
+     * the same two steps the hook's own setter performs.
+     */
+    private devtoolsSetInstanceHook;
+    /** Declaration metadata for every atom (reserved / computed / module). */
+    private devtoolsStateMeta;
+    /**
+     * Evaluate an Aktion expression (or a single `$atom = …` assignment) against
+     * the live program scope — the REPL behind the Console tab.
+     *
+     * Reads see exactly what the program sees: the same bindings, the same
+     * per-atom values, the same helpers. Writes go through the normal reactive
+     * path, so `$count = 5` from the console is indistinguishable from a button
+     * doing it. Evaluation is deliberately NOT tracked as a render dependency:
+     * the tracker is swapped out first, so poking at state in the console cannot
+     * widen the render gate and change what the app re-renders on.
+     */
+    private devtoolsEvaluate;
+    private devtoolsEvalResult;
+    private devtoolsQueries;
+    private devtoolsStores;
+    /** Invoke a method on a live `Store` / `$form` handle from the Data tab. */
+    private devtoolsCallStoreMethod;
+    private devtoolsRoute;
+    private devtoolsTheme;
+    private devtoolsSetThemeTokens;
+    private devtoolsStats;
+    /**
+     * Install (or refresh) the HTTP tap that feeds the Network tab and applies
+     * DevTools request rules. Removed again in `disconnectedCallback` so a torn
+     * down element never keeps emitting.
+     */
+    private installDevtoolsHttpTap;
+    /**
+     * Emit the held navigation now that the render has resolved which arm matched.
+     * A no-op when nothing is pending.
+     */
+    private flushDevtoolsRoute;
+    /** Report a survivable runtime failure to the DevTools error log. */
+    private reportDevtoolsError;
     /**
      * Public DevTools entry point: attach to a hook that was installed *after*
      * this element mounted. The in-page panel calls this on every

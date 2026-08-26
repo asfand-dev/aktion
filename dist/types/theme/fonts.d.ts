@@ -31,8 +31,9 @@ export declare function loadFonts(record: unknown): string;
 /**
  * Load the web fonts a built-in theme needs, if it declares any.
  *
- * Called when a theme is selected by name, so `theme="corporate"` renders in
- * this Brand UI typefaces rather than falling back to `system-ui`. Idempotent —
- * `loadFonts` de-duplicates by URL.
+ * Called when a theme is selected by name, so `theme="shadcn"` renders in
+ * that framework's typefaces rather than falling back to `system-ui`. Retired
+ * aliases are canonicalised first, so `theme="modern"` loads what
+ * `shadcn-light` needs. Idempotent — `loadFonts` de-duplicates by URL.
  */
 export declare function loadBuiltInThemeFonts(name: unknown): void;

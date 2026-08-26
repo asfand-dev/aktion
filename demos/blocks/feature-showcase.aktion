@@ -6,7 +6,7 @@ features = [
   { title: "Streaming-first", icon: "bolt", tone: "primary", desc: "UI renders progressively as the response streams in — no blank screens." },
   { title: "One reactive atom", icon: "atom", tone: "info", desc: "A single $state primitive for every use case. No tiers, no boilerplate." },
   { title: "90+ components", icon: "shapes", tone: "success", desc: "Dashboards, forms, charts, overlays — composable out of the box." },
-  { title: "Six themes", icon: "palette", tone: "warning", desc: "Light, dark, corporate, soft, glass, modern — switch at runtime." },
+  { title: "Nine themes", icon: "palette", tone: "warning", desc: "Light, dark, soft, plus shadcn/ui, Material UI and HeroUI in light and dark — switch at runtime." },
   { title: "Framework agnostic", icon: "puzzle-piece", tone: "primary", desc: "Drop the web component into React, Vue, Svelte or plain HTML." },
   { title: "Type-safe tooling", icon: "shield-halved", tone: "info", desc: "First-class editor support: hover, completion, diagnostics, rename." }
 ]
