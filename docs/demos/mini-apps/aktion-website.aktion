@@ -150,7 +150,7 @@ hero = Section([
   Column([
     Row([Badge("v0.6.4", { tone: "primary" }), Text("A new language for building user interfaces", { variant: "small", tone: "muted" })], { gap: "sm", align: "center" }),
     Display(["Build complex UIs in ", GradientText("a fraction of the code"), "."], { size: "hero", balance: true }),
-    Text("Aktion is a reactive UI language — a strict subset of JavaScript you already know. It replaces your framework, component kit, router and i18n with one tag: 270+ built-in components, fine-grained reactivity, 6 themes, and full JS interop — no JSX, no bundler, no boilerplate. Can also be effectively used as a Micro-Frontend in React, Vue, Angular, Svelte, Next.js or any other Framework.", { variant: "large", tone: "muted" }),
+    Text("Aktion is a reactive UI language — a strict subset of JavaScript you already know. It replaces your framework, component kit, router and i18n with one tag: 270+ built-in components, fine-grained reactivity, 9 themes, and full JS interop — no JSX, no bundler, no boilerplate. Can also be effectively used as a Micro-Frontend in React, Vue, Angular, Svelte, Next.js or any other Framework.", { variant: "large", tone: "muted" }),
     Row([
       Link(Button("Start building", { variant: "primary", icon: "rocket", size: "lg" }), { href: "get-started.html" }),
       Link(Button("Open the playground", { variant: "secondary", icon: "play", size: "lg" }), { href: "playground.html" })
@@ -221,7 +221,7 @@ features = Section([
     BentoCell(feature("feather", "Looks like JavaScript — because it is", "Aktion is a strict subset of JS you already know: function, for…of, template literals, arrow functions, destructuring, optional chaining. Nothing new to memorize, no JSX.", ["subset of JS", "no JSX", "no build"]), { span: "3x1" }),
     BentoCell(feature("bolt", "One reactive sigil — $state", "Declare state with $name = value, read it in your tree, write it in a function. The runtime tracks dependencies automatically at path granularity — no hooks rules, no useMemo dance.", ["$count = 0", "auto-tracked", "fine-grained"]), { span: "3x1" }),
     BentoCell(feature("cubes", "270+ components", "Layout, forms, charts, tables, calendars, gestures, drawing canvases, marketing sections — included, not installed.", null), { span: "2x1" }),
-    BentoCell(feature("palette", "6 themes + design tokens", "Switch palettes with one attribute, or brand the whole UI in-script with $theme({…}) over 80+ tokens.", null), { span: "2x1" }),
+    BentoCell(feature("palette", "9 themes + design tokens", "Switch palettes with one attribute, or brand the whole UI in-script with $theme({…}) over 80+ tokens.", null), { span: "2x1" }),
     BentoCell(feature("language", "Built-in i18n", "$i18n({ translations }) gives you t(), language switching and {name} interpolation — no extra library.", null), { span: "2x1" }),
     BentoCell(feature("route", "Router + global stores", "$router, NavLink and params ship in the box, alongside $store for shared global state.", null), { span: "2x1" }),
     BentoCell(feature("puzzle-piece", "Use any JS library", "The full JavaScript surface is in scope — fetch, Intl, crypto, JSON, Date, Math — plus a $util helper namespace.", null), { span: "2x1" }),
@@ -352,7 +352,7 @@ themesStrip = Section([
   ], { columns: 4, gap: "md", minChildWidth: "180px" })
 ], {
   eyebrow: "Theming",
-  title: ["Six themes. ", GradientText("Infinite brands.")],
+  title: ["Nine themes. ", GradientText("Infinite brands.")],
   subtitle: "Switch palettes with the theme attribute, or override 80+ design tokens in-script with $theme({…}) — exactly what this page does for its Inter headings.",
   align: "center",
   width: "xl"

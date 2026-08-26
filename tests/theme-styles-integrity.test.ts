@@ -23,8 +23,11 @@ import { defaultLibrary } from "../src/library/index.js";
 
 /** Source order of the per-theme blocks, which the slices below rely on. */
 const VISION = ':host([data-rui-theme="vision"])';
-const CORPORATE = ':host([data-rui-theme="corporate"])';
-const MODERN = ':host([data-rui-theme="modern"])';
+const SHADCN = ':host([data-rui-theme^="shadcn"])';
+const MUI = ':host([data-rui-theme^="mui"])';
+const HEROUI = ':host([data-rui-theme^="heroui"])';
+/** Marks the end of the last theme block — the first rule after it. */
+const AFTER_LAST = ".rui-dropdown-menu {";
 
 const blockBetween = (from: string, to: string): string =>
   componentStyles.slice(componentStyles.indexOf(from), componentStyles.indexOf(to));
@@ -41,25 +44,62 @@ describe("componentStyles integrity", () => {
     // `:host([data-rui-theme=...])` block; the rest reshape components.
     // `vision` is private — absent from `builtInThemes`, but its CSS block is
     // what makes the name work at all, so it is asserted here like the others.
-    for (const theme of ["soft", "glass", "vision", "corporate", "modern"]) {
+    for (const theme of ["soft", "vision"]) {
       expect(componentStyles).toContain(`:host([data-rui-theme="${theme}"])`);
+    }
+    // The three framework families are PREFIX-matched, so one block covers
+    // `shadcn`, `shadcn-light` and `shadcn-dark` at once; the dark variant then
+    // adds an exact-match delta on top.
+    for (const family of ["shadcn", "mui", "heroui"]) {
+      expect(componentStyles).toContain(`:host([data-rui-theme^="${family}"])`);
+      expect(componentStyles).toContain(`:host([data-rui-theme="${family}-dark"])`);
+    }
+  });
+
+  it("prefix-matches each family so all three of its names are styled", () => {
+    // The whole reason `^=` is used instead of `=`: `theme="shadcn"` and
+    // `theme="shadcn-light"` are two live spellings of the same theme and the
+    // host echoes back whichever one the author wrote. An `=` selector would
+    // style one of them and silently leave the other on the base sheet.
+    const families = { shadcn: SHADCN, mui: MUI, heroui: HEROUI } as const;
+    for (const [family, prefixSel] of Object.entries(families)) {
+      for (const name of [family, `${family}-light`, `${family}-dark`]) {
+        expect(
+          name.startsWith(family),
+          `${name} must be matched by ${prefixSel}`,
+        ).toBe(true);
+      }
+      // …and no exact-match rule for the bare or -light spelling sneaked back
+      // in, which would be the sign someone had started dividing the family.
+      expect(componentStyles).not.toContain(`:host([data-rui-theme="${family}"])`);
+      expect(componentStyles).not.toContain(`:host([data-rui-theme="${family}-light"])`);
+    }
+  });
+
+  it("drops the blocks of the three themes these replaced", () => {
+    for (const retired of ["modern", "glass", "corporate"]) {
+      expect(componentStyles).not.toContain(`[data-rui-theme="${retired}"]`);
     }
   });
 
   it("reaches the end of the sheet — the last theme block is intact", () => {
-    // `modern` is authored last; if the literal closed early it would be absent.
+    // The families are authored vision -> shadcn -> mui -> heroui; if the
+    // literal closed early the later ones would be absent.
     const vision = componentStyles.indexOf(VISION);
-    const corporate = componentStyles.indexOf(CORPORATE);
-    const modern = componentStyles.indexOf(MODERN);
+    const shadcn = componentStyles.indexOf(SHADCN);
+    const mui = componentStyles.indexOf(MUI);
+    const heroui = componentStyles.indexOf(HEROUI);
     expect(vision).toBeGreaterThan(-1);
-    expect(corporate).toBeGreaterThan(vision);
-    expect(modern).toBeGreaterThan(corporate);
+    expect(shadcn).toBeGreaterThan(vision);
+    expect(mui).toBeGreaterThan(shadcn);
+    expect(heroui).toBeGreaterThan(mui);
+    expect(componentStyles.indexOf(AFTER_LAST)).toBeGreaterThan(heroui);
   });
 
   it("keeps the vision block's UI block-anchored anchor values", () => {
     // A few load-bearing values from the UI block. If any of these
     // vanish the vision theme has silently drifted off the framework.
-    const visionBlock = blockBetween(VISION, CORPORATE);
+    const visionBlock = blockBetween(VISION, SHADCN);
     expect(visionBlock).toContain("line-height: 24px");   // 36px button box
     expect(visionBlock).toContain("#dbedf8");             // corporate-1 hover wash
     expect(visionBlock).toContain("#718095");             // neutral-5 input border
@@ -67,18 +107,57 @@ describe("componentStyles integrity", () => {
     expect(visionBlock).toContain("text-transform: uppercase"); // table header
   });
 
-  it("keeps the corporate block's own signatures", () => {
-    // The corporate theme is a fresh design, not a re-creation of an external
-    // framework, so what is pinned here is what makes it recognisably itself.
-    const corporateBlock = blockBetween(CORPORATE, MODERN);
-    // Square-shouldered controls (the radius token, not a pill).
-    expect(corporateBlock).toContain("border-radius: var(--rui-radius-button)");
-    // The 2px teal rail that marks the selected tab.
-    expect(corporateBlock).toContain("border-bottom-color: var(--rui-color-primary)");
-    // Flat cards: no resting shadow, hairline first.
-    expect(corporateBlock).toContain("box-shadow: none");
-    // Sentence-case table headers — deliberately NOT vision's/modern's uppercase.
-    expect(corporateBlock).toContain("text-transform: none");
+  /*
+   * Each framework block is pinned by the handful of rules that make it that
+   * framework rather than a generic light theme. These are the details a
+   * well-meaning cleanup would flatten first — and flattening any one of them
+   * is what would make somebody able to tell the difference.
+   */
+  it("keeps the shadcn block's signatures", () => {
+    const block = blockBetween(SHADCN, MUI);
+    // The 3px 50%-alpha focus ring plus a recoloured border, never an outline.
+    expect(block).toContain("box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 50%, transparent)");
+    // A segmented tab strip on the muted wash, not an underline rail.
+    expect(block).toContain("background: var(--rui-color-surface-muted)");
+    // hover:bg-primary/90 — shadcn LIGHTENS a solid button rather than
+    // swapping in a darker fill.
+    expect(block).toContain("color-mix(in srgb, var(--rui-color-primary) 90%, transparent)");
+    // The tooltip is painted in the primary colour.
+    expect(block).toContain("background: var(--rui-color-primary);");
+    // Table headers: muted, 500, sentence case, no fill.
+    expect(block).toContain("text-transform: none");
+  });
+
+  it("keeps the Material UI block's signatures", () => {
+    const block = blockBetween(MUI, HEROUI);
+    // Paper has no border — elevation does the separating.
+    expect(block).toContain("border: none");
+    // Uppercase tab labels on Material's own tracking.
+    expect(block).toContain("letter-spacing: 0.02857em");
+    expect(block).toContain("text-transform: uppercase");
+    // Elevation 2 on a resting contained button.
+    expect(block).toContain("0px 3px 1px -2px rgba(0, 0, 0, 0.2)");
+    // The 4% overlay that Material uses instead of a hover fill.
+    expect(block).toContain("color-mix(in srgb, var(--rui-color-primary) 4%, transparent)");
+    // The charcoal tooltip, which stays charcoal in dark mode.
+    expect(block).toContain("background: rgba(97, 97, 97, 0.92)");
+    // The 34x14 switch track the 20px thumb overhangs.
+    expect(block).toContain("width: 34px");
+  });
+
+  it("keeps the HeroUI block's signatures", () => {
+    const block = blockBetween(HEROUI, AFTER_LAST);
+    // Hover DIMS; it does not recolour.
+    expect(block).toContain("opacity: 0.8");
+    // Press scales.
+    expect(block).toContain("transform: scale(0.97)");
+    // A hard 2px ring standing 2px clear of the control.
+    expect(block).toContain("outline: 2px solid var(--rui-color-focus-ring)");
+    expect(block).toContain("outline-offset: 2px");
+    // Borderless surfaces carrying shadow-medium.
+    expect(block).toContain("box-shadow: var(--rui-shadow-md)");
+    // The blurred modal scrim.
+    expect(block).toContain("backdrop-filter: blur(8px)");
   });
 });
 
@@ -96,7 +175,7 @@ describe("vision theme web fonts", () => {
   });
 
   it("keeps vision on UI block's weight ladder — no 700/800 title roles", () => {
-    const block = blockBetween(VISION, CORPORATE);
+    const block = blockBetween(VISION, SHADCN);
     // UI block has no component text above SemiBold; a 700 or 800 here means a title
     // role slipped back onto the UA bold rung.
     expect(block).not.toMatch(/font-weight:\s*(700|800)\b/);
@@ -105,17 +184,48 @@ describe("vision theme web fonts", () => {
   });
 });
 
-describe("corporate theme web fonts", () => {
-  it("declares its own typefaces rather than inheriting vision's", async () => {
+describe("framework theme web fonts", () => {
+  /*
+   * Geist, Roboto and Inter are half of what makes each of these read as its
+   * framework. Without a declaration here the theme falls back to `system-ui`
+   * and the whole type ladder — every weight, size and tracking value the
+   * theme sets — lands on the wrong face.
+   */
+  it("declares the typeface each framework is actually set in", async () => {
     const { builtInThemeFonts } = await import("../src/theme/index.js");
-    const decl = builtInThemeFonts.corporate;
-    expect(decl).toBeTruthy();
-    expect(decl.import).toEqual(
-      expect.arrayContaining(["Inter:400,500,600,700", "Space Grotesk:500,600,700"]),
-    );
-    // The two themes must not share a font declaration — that was the symptom
-    // to avoid when the `corporate` key was handed to a different design.
-    expect(decl.import).not.toEqual(builtInThemeFonts.vision.import);
+    const expected: Record<string, string> = {
+      shadcn: "Geist",
+      mui: "Roboto",
+      heroui: "Inter",
+    };
+    for (const [family, face] of Object.entries(expected)) {
+      // Every spelling of the family, so `theme="mui-dark"` is not left bare.
+      for (const name of [family, `${family}-light`, `${family}-dark`]) {
+        const decl = builtInThemeFonts[name];
+        expect(decl, name).toBeTruthy();
+        expect(decl.import.join(" "), name).toContain(face);
+      }
+    }
+  });
+
+  it("gives no two families the same declaration", async () => {
+    const { builtInThemeFonts } = await import("../src/theme/index.js");
+    const decls = [
+      builtInThemeFonts.shadcn.import.join(),
+      builtInThemeFonts.mui.import.join(),
+      builtInThemeFonts.heroui.import.join(),
+      builtInThemeFonts.vision.import.join(),
+    ];
+    expect(new Set(decls).size).toBe(decls.length);
+  });
+
+  it("loads a retired alias's replacement typefaces", async () => {
+    const { canonicalThemeName, builtInThemeFonts } = await import("../src/theme/index.js");
+    // `loadBuiltInThemeFonts` canonicalises before the lookup, so `modern`
+    // must not silently render in system-ui.
+    expect(builtInThemeFonts[canonicalThemeName("modern")]).toBe(builtInThemeFonts["shadcn-light"]);
+    expect(builtInThemeFonts[canonicalThemeName("glass")]).toBe(builtInThemeFonts["mui-light"]);
+    expect(builtInThemeFonts[canonicalThemeName("corporate")]).toBe(builtInThemeFonts["heroui-light"]);
   });
 });
 

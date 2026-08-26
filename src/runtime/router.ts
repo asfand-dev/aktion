@@ -331,6 +331,11 @@ export class Router {
    * before every in-app `navigate(...)` and every URL-driven change once the
    * router is started. Set via `$util.onNavigate(fn)`.
    */
+  /** True when the program installed a navigation guard (`$router.guard = …`). */
+  hasGuard(): boolean {
+    return this.guard !== null;
+  }
+
   setGuard(guard: NavigationGuard | null): void {
     this.guard = guard;
   }

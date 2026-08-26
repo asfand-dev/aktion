@@ -56,6 +56,59 @@ export interface HttpInterceptors {
   onError?: (error: unknown, request: HttpRequest) => void;
 }
 
+/**
+ * How a DevTools frontend interfered with one request. Reported back on
+ * {@link HttpDevtoolsTap.finish} so the network inspector can label the row
+ * instead of showing a mocked 500 as if the server had really sent one.
+ */
+export interface HttpGateVerdict {
+  /** Respond with this instead of hitting the network. */
+  response?: HttpResponse;
+  /** Fail the request with this message instead of hitting the network. */
+  error?: string;
+  /** Label of the rule that matched, for the inspector. */
+  rule?: string;
+  /** Latency to inject before the request proceeds (or before the mock resolves). */
+  delayMs?: number;
+}
+
+/**
+ * DevTools instrumentation for the HTTP layer.
+ *
+ * The runtime owns *transport*; a debugger owns *observation and simulation*.
+ * This is the seam between them: the host element installs a tap while a
+ * DevTools frontend is attached, and removes it when the panel closes. With no
+ * tap installed the request path is byte-for-byte what it was before — one
+ * `null` check per request.
+ *
+ * `gate` is what makes the network half a genuine testing tool: it can delay a
+ * request, answer it with a canned response, or fail it outright, so an author
+ * can reproduce a 500, a 3-second endpoint, or an offline device without
+ * editing the program or standing up a server.
+ */
+export interface HttpDevtoolsTap {
+  /** A request is leaving the interceptor chain; returns a correlation id. */
+  start(request: HttpRequest): string;
+  /** The request settled (or was mocked / failed by a rule). */
+  finish(
+    id: string,
+    outcome: {
+      request: HttpRequest;
+      response?: HttpResponse;
+      error?: unknown;
+      duration: number;
+      /** Label of the DevTools rule that produced this outcome, if any. */
+      rule?: string;
+      /** True when `response` came from a rule rather than the network. */
+      mocked?: boolean;
+      /** Latency injected by a rule, in ms. */
+      injectedDelay?: number;
+    },
+  ): void;
+  /** Optional pre-flight: delay, mock, or fail the request. */
+  gate?(request: HttpRequest): HttpGateVerdict | undefined;
+}
+
 /** Reactive lifecycle of an `Http({...})` resource. */
 export type ResourceState = "idle" | "loading" | "data" | "error" | "stale";
 
@@ -134,6 +187,17 @@ export class HttpRuntime {
    * interceptors run program→host (inner-to-outer, the usual convention).
    */
   private programInterceptors: HttpInterceptors = {};
+
+  /**
+   * DevTools tap, or `null` in the normal case. See {@link HttpDevtoolsTap} —
+   * one null check per request when no debugger is attached.
+   */
+  private tap: HttpDevtoolsTap | null = null;
+
+  /** Install (or with `null`, remove) the DevTools network tap. */
+  setDevtoolsTap(tap: HttpDevtoolsTap | null): void {
+    this.tap = tap;
+  }
 
   /** Merge new interceptors on top of any previously-registered ones. */
   registerInterceptors(interceptors: HttpInterceptors): void {
@@ -216,6 +280,43 @@ export class HttpRuntime {
       return { status: response.status, headers, body };
     };
 
+    // DevTools: observe (and possibly simulate) this request. The tap is only
+    // installed while a frontend is attached; `verdict` is undefined unless a
+    // rule matched, so the normal path is a null check and a clock read.
+    const tap = this.tap;
+    const verdict = tap?.gate?.(req);
+    const traceId = tap ? tap.start(req) : "";
+    const startedAt = typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
+    const elapsed = (): number => (
+      (typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : Date.now()) - startedAt
+    );
+    if (verdict?.delayMs && verdict.delayMs > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, verdict.delayMs));
+    }
+    if (tap && verdict?.error !== undefined) {
+      // A rule asked for a failure — surface it exactly like a transport error
+      // so the program's `error` / `onDone` paths behave identically.
+      const failure = new Error(verdict.error);
+      tap.finish(traceId, {
+        request: req, error: failure, duration: elapsed(),
+        rule: verdict.rule, injectedDelay: verdict.delayMs,
+      });
+      this.fireError(failure, req);
+      throw failure;
+    }
+    if (tap && verdict?.response !== undefined) {
+      const mocked = verdict.response;
+      tap.finish(traceId, {
+        request: req, response: mocked, duration: elapsed(),
+        rule: verdict.rule, mocked: true, injectedDelay: verdict.delayMs,
+      });
+      return mocked;
+    }
+
     try {
       let response = await exec();
       const responseChain = [this.programInterceptors.onResponse, this.interceptors.onResponse];
@@ -229,8 +330,16 @@ export class HttpRuntime {
         };
         response = await onResponse(response, retry);
       }
+      tap?.finish(traceId, {
+        request: req, response, duration: elapsed(),
+        rule: verdict?.rule, injectedDelay: verdict?.delayMs,
+      });
       return response;
     } catch (err) {
+      tap?.finish(traceId, {
+        request: req, error: err, duration: elapsed(),
+        rule: verdict?.rule, injectedDelay: verdict?.delayMs,
+      });
       this.fireError(err, req);
       throw err;
     }

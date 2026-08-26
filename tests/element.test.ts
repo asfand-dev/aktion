@@ -258,9 +258,21 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
 
   it("reflects the resolved theme name as data-rui-theme on the host", async () => {
     const el = create();
-    el.setAttribute("theme", "modern");
+    el.setAttribute("theme", "shadcn-dark");
     await flush();
-    expect(el.getAttribute("data-rui-theme")).toBe("modern");
+    expect(el.getAttribute("data-rui-theme")).toBe("shadcn-dark");
+
+    // A family shorthand keeps its own spelling on the host — the CSS block is
+    // prefix-matched, so all three names of a family hit the same rules.
+    el.setAttribute("theme", "mui");
+    await flush();
+    expect(el.getAttribute("data-rui-theme")).toBe("mui");
+
+    // A RETIRED name is rewritten to its replacement, because the CSS block it
+    // needs is keyed on the new name only.
+    el.setAttribute("theme", "corporate");
+    await flush();
+    expect(el.getAttribute("data-rui-theme")).toBe("heroui-light");
 
     el.setAttribute("theme", "soft");
     await flush();
@@ -282,14 +294,14 @@ follow = FollowUpBlock(["Show at-risk projects", "Compare to Q2"])`);
     // pinning it made a legitimate accessibility fix (soft's primary was 2.72:1
     // as text) look like a regression.
     const el = create();
-    for (const name of ["modern", "soft"] as const) {
+    for (const name of ["shadcn", "heroui-dark", "soft"] as const) {
       el.setAttribute("theme", name);
       expect(el.style.getPropertyValue("--rui-color-primary"))
         .toBe(builtInThemes[name].colorPrimary);
     }
     // …and the two themes must genuinely differ, or the assertion above could
     // pass while nothing was being applied at all.
-    expect(builtInThemes.modern.colorPrimary).not.toBe(builtInThemes.soft.colorPrimary);
+    expect(builtInThemes.shadcn.colorPrimary).not.toBe(builtInThemes.soft.colorPrimary);
   });
 
   it("preserves DOM identity for non-text input types (email/number)", async () => {

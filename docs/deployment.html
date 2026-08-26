@@ -243,8 +243,9 @@ app.loadSnapshot(await loadSession());</code></pre>
         <code>script-src</code> is not the interesting directive here, though. The
         runtime renders inline styles and can pull two external stylesheets, so a
         policy that tightens only <code>script-src</code> yields an app with no
-        icons, no spacing, and a <code>corporate</code> theme stuck on
-        <code>system-ui</code>. Here is a policy that actually works:
+        icons, no spacing, and a <code>shadcn</code> / <code>mui</code> /
+        <code>heroui</code> theme stuck on <code>system-ui</code>. Here is a policy that
+        actually works:
       </p>
 <pre><code>Content-Security-Policy:
   default-src 'self';
@@ -266,7 +267,7 @@ app.loadSnapshot(await loadSession());</code></pre>
           </tr>
           <tr>
             <td><code>fonts.googleapis.com</code> / <code>fonts.gstatic.com</code></td>
-            <td>Web fonts requested by <code>$theme({ fonts: { import: [&hellip;] } })</code>, and by the <code>corporate</code> built-in theme, which declares Open&nbsp;Sans and Overpass (see <a href="themes.html#built-in">built-in themes</a>). Omit both hosts if you use no web fonts.</td>
+            <td>Web fonts requested by <code>$theme({ fonts: { import: [&hellip;] } })</code>, and by the <code>shadcn</code> / <code>mui</code> / <code>heroui</code> built-in themes, which declare Geist, Roboto and Inter respectively (see <a href="themes.html#built-in">built-in themes</a>). Omit both hosts if you use no web fonts.</td>
           </tr>
           <tr>
             <td><code>img-src data: blob:</code></td>

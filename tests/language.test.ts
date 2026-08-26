@@ -52,7 +52,15 @@ describe("getLanguageSpec", () => {
   it("exposes built-in theme names", () => {
     expect(spec.themeNames).toContain("light");
     expect(spec.themeNames).toContain("dark");
-    expect(spec.themeNames).toContain("modern");
+    expect(spec.themeNames).toContain("shadcn");
+    // Both halves of a framework family, and the bare shorthand for each.
+    expect(spec.themeNames).toContain("shadcn-dark");
+    expect(spec.themeNames).toContain("mui-light");
+    expect(spec.themeNames).toContain("heroui-dark");
+    // Retired names resolve but must not be advertised.
+    expect(spec.themeNames).not.toContain("modern");
+    expect(spec.themeNames).not.toContain("glass");
+    expect(spec.themeNames).not.toContain("corporate");
   });
 
   it("maps grammar token kinds to highlight tag names", () => {

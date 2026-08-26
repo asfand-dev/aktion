@@ -5043,157 +5043,6 @@ ${below("xs")} {
   transform: translateY(-1px);
 }
 
-/* Glass — light glassmorphism. Frosted *white* surfaces float over a soft,
-   airy pastel wash (cool grey at the top melting into peach → pink → lavender
-   → mint toward the bottom). Surfaces use real backdrop-filter blur so they
-   pick up the colourful gradient behind them, edged with a bright 1px white
-   rim-light and a feather-soft tinted shadow. Text stays dark for contrast. */
-:host([data-rui-theme="glass"]) {
-  background:
-    radial-gradient(60vw 55vw at 8% 88%, rgba(245, 160, 120, 0.55), transparent 60%),
-    radial-gradient(55vw 50vw at 55% 108%, rgba(244, 138, 166, 0.50), transparent 58%),
-    radial-gradient(60vw 55vw at 100% 95%, rgba(181, 142, 230, 0.50), transparent 60%),
-    radial-gradient(50vw 45vw at 100% 35%, rgba(142, 197, 232, 0.35), transparent 60%),
-    radial-gradient(45vw 45vw at 0% 25%, rgba(159, 216, 198, 0.30), transparent 60%),
-    linear-gradient(160deg, #eef0f3 0%, #e9e6ef 45%, #efe4ec 100%);
-  background-attachment: local;
-}
-:host([data-rui-theme="glass"][transparent]),
-:host([data-rui-theme="glass"][transparent="true"]) {
-  background: transparent;
-}
-:host([data-rui-theme="glass"]) .rui-card,
-:host([data-rui-theme="glass"]) .rui-stat-card,
-:host([data-rui-theme="glass"]) .rui-callout,
-:host([data-rui-theme="glass"]) .rui-chart,
-:host([data-rui-theme="glass"]) .rui-table-wrapper,
-:host([data-rui-theme="glass"]) .rui-accordion-item,
-:host([data-rui-theme="glass"]) .rui-list-item,
-:host([data-rui-theme="glass"]) .rui-modal,
-:host([data-rui-theme="glass"]) .rui-dropdown-menu-content,
-:host([data-rui-theme="glass"]) .rui-popover-content,
-:host([data-rui-theme="glass"]) .rui-hover-card-content,
-:host([data-rui-theme="glass"]) .rui-combobox-panel,
-:host([data-rui-theme="glass"]) .rui-multiselect-panel,
-:host([data-rui-theme="glass"]) .rui-context-menu-pop,
-:host([data-rui-theme="glass"]) .rui-mention-input-suggestions,
-:host([data-rui-theme="glass"]) .rui-notification-bell-panel,
-:host([data-rui-theme="glass"]) .rui-command-palette-panel,
-:host([data-rui-theme="glass"]) .rui-sheet,
-:host([data-rui-theme="glass"]) .rui-sheet-panel,
-:host([data-rui-theme="glass"]) .rui-toast,
-:host([data-rui-theme="glass"]) .rui-toast-standalone,
-:host([data-rui-theme="glass"]) .rui-tour-card,
-:host([data-rui-theme="glass"]) .rui-spotlight-card,
-:host([data-rui-theme="glass"]) .rui-confirm-card,
-:host([data-rui-theme="glass"]) .rui-drawer,
-:host([data-rui-theme="glass"]) .rui-notification,
-:host([data-rui-theme="glass"]) .rui-tile,
-:host([data-rui-theme="glass"]) .rui-media-card,
-:host([data-rui-theme="glass"]) .rui-pricing-card,
-:host([data-rui-theme="glass"]) .rui-profile-card,
-:host([data-rui-theme="glass"]) .rui-product-card,
-:host([data-rui-theme="glass"]) .rui-kanban-card,
-:host([data-rui-theme="glass"]) .rui-code-block {
-  background: linear-gradient(150deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.40));
-  backdrop-filter: blur(26px) saturate(150%);
-  -webkit-backdrop-filter: blur(26px) saturate(150%);
-  border: var(--rui-border-width) solid rgba(255, 255, 255, 0.75);
-  box-shadow:
-    0 14px 40px rgba(120, 110, 140, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
-}
-:host([data-rui-theme="glass"]) .rui-card,
-:host([data-rui-theme="glass"]) .rui-stat-card {
-  transition: transform 240ms ease, box-shadow 240ms ease;
-}
-:host([data-rui-theme="glass"]) .rui-card:hover,
-:host([data-rui-theme="glass"]) .rui-stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 22px 56px rgba(120, 110, 140, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-:host([data-rui-theme="glass"]) .rui-input,
-:host([data-rui-theme="glass"]) .rui-select,
-:host([data-rui-theme="glass"]) .rui-textarea {
-  background: rgba(255, 255, 255, 0.55);
-  border-color: rgba(255, 255, 255, 0.75);
-  color: var(--rui-color-text);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-:host([data-rui-theme="glass"]) .rui-input::placeholder,
-:host([data-rui-theme="glass"]) .rui-textarea::placeholder { color: rgba(60, 50, 70, 0.45); }
-:host([data-rui-theme="glass"]) .rui-input:focus,
-:host([data-rui-theme="glass"]) .rui-select:focus,
-:host([data-rui-theme="glass"]) .rui-textarea:focus {
-  border-color: rgba(242, 130, 106, 0.75);
-  box-shadow: 0 0 0 4px rgba(242, 130, 106, 0.18);
-  background: rgba(255, 255, 255, 0.75);
-}
-:host([data-rui-theme="glass"]) .rui-button {
-  background: linear-gradient(135deg, #f7a072, #f2826a);
-  color: #ffffff;
-  border: var(--rui-border-width) solid rgba(255, 255, 255, 0.45);
-  box-shadow: 0 10px 24px rgba(242, 130, 106, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.45);
-}
-:host([data-rui-theme="glass"]) .rui-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 30px rgba(242, 130, 106, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.55);
-}
-:host([data-rui-theme="glass"]) .rui-button[data-variant="secondary"] {
-  background: rgba(255, 255, 255, 0.62);
-  color: var(--rui-color-text);
-  border-color: rgba(255, 255, 255, 0.8);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-:host([data-rui-theme="glass"]) .rui-button[data-variant="ghost"] {
-  background: transparent;
-  color: var(--rui-color-text);
-  border-color: rgba(255, 255, 255, 0.6);
-  box-shadow: none;
-}
-:host([data-rui-theme="glass"]) .rui-card-title,
-:host([data-rui-theme="glass"]) .rui-section-title,
-:host([data-rui-theme="glass"]) .rui-page-header-title,
-:host([data-rui-theme="glass"]) .rui-text[data-variant="title"],
-:host([data-rui-theme="glass"]) .rui-text[data-variant="heading"] {
-  color: var(--rui-color-text);
-  letter-spacing: -0.01em;
-}
-:host([data-rui-theme="glass"]) .rui-tab-list { border-bottom-color: rgba(255, 255, 255, 0.6); }
-:host([data-rui-theme="glass"]) .rui-tab-trigger { color: var(--rui-color-text-muted); }
-:host([data-rui-theme="glass"]) .rui-tab-trigger:hover { color: var(--rui-color-text); }
-:host([data-rui-theme="glass"]) .rui-tab-trigger[aria-selected="true"] {
-  color: var(--rui-color-primary);
-  border-bottom-color: var(--rui-color-primary);
-}
-:host([data-rui-theme="glass"]) .rui-table th {
-  background: rgba(255, 255, 255, 0.45);
-  border-bottom-color: rgba(255, 255, 255, 0.6);
-}
-:host([data-rui-theme="glass"]) .rui-table td { border-bottom-color: rgba(255, 255, 255, 0.5); }
-:host([data-rui-theme="glass"]) .rui-follow-up-button {
-  background: rgba(255, 255, 255, 0.55);
-  border-color: rgba(255, 255, 255, 0.75);
-  color: var(--rui-color-text);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-:host([data-rui-theme="glass"]) .rui-follow-up-button:hover {
-  background: rgba(255, 255, 255, 0.75);
-  border-color: rgba(242, 130, 106, 0.5);
-  box-shadow: 0 6px 18px rgba(242, 130, 106, 0.18);
-}
-:host([data-rui-theme="glass"]) .rui-skeleton-line {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.7) 50%, rgba(255, 255, 255, 0.3) 100%);
-  background-size: 200% 100%;
-}
-:host([data-rui-theme="glass"]) .rui-separator { background: rgba(255, 255, 255, 0.6); }
-
 /* ============================================================================
    Vision — a faithful re-creation of the UI block design framework.
    (Private theme: resolvable by name, deliberately absent from the public
@@ -7099,481 +6948,1912 @@ ${below("xs")} {
 }
 
 /* ============================================================================
-   Corporate — contemporary enterprise workspace.
+   shadcn/ui — shadcn (= shadcn-light), shadcn-light, shadcn-dark.
 
-   Signatures, each one chosen to be somebody's opposite in this stylesheet:
-     - square-shouldered 8px controls, where modern is a 999px pill;
-     - flat cards that own a hairline and NO resting shadow, gaining a tinted
-       border plus a short-throw shadow on hover, where modern lifts on hover;
-     - a 2px teal rail marking the selected tab, active nav item and open
-       accordion, where modern fills a segmented pill;
-     - a single brand hue (teal) doing primary, link, focus and chart-1, so the
-       only other colour on screen is a status;
-     - Space Grotesk display type with negative tracking over a 15px Inter body.
+   The family is matched with a PREFIX selector, [data-rui-theme^="shadcn"],
+   so one block serves all three spellings; the handful of rules that differ
+   between modes key off the exact "shadcn-dark" marker at the end. (The
+   older single-theme blocks above use = because they answer to one name.)
 
-   Every rule below is a deliberate departure from the base sheet. Anything the
-   theme is happy with (spacing rhythm, icon sizing, layout) is left alone and
-   inherits from the tokens.
+   What makes a screen read as shadcn rather than as a generic light UI:
+     - a NEUTRAL system — one flat #f5f5f5 wash doing secondary / muted /
+       accent duty, and an ink #171717 primary. There is no brand hue at all;
+     - rounded-md (8px) controls inside rounded-xl (14px) cards, i.e. the
+       card is rounder than the button, which is the reverse of most kits;
+     - shadow-xs — a 1px 5%-black hint — on buttons, inputs and cards, and
+       cards that do NOT lift, tilt or glow on hover;
+     - the focus treatment: border-ring plus a 3px 50%-alpha ring, never an
+       outline;
+     - a segmented bg-muted tab strip with a white active pill, never an
+       underline rail;
+     - table headers in muted 14px MEDIUM sentence case on no fill at all;
+     - a rounded-md badge (shadcn is one of the few kits whose badge is not
+       a pill), and a tooltip painted in the PRIMARY colour.
    ============================================================================ */
-:host([data-rui-theme="corporate"]) {
-  /* A quiet brand wash anchoring the top of the page — no radial blobs, which
-     is the modern theme's move. */
-  background:
-    linear-gradient(180deg, rgba(15, 118, 110, 0.05) 0%, rgba(15, 118, 110, 0) 240px),
-    var(--rui-color-bg);
+:host([data-rui-theme^="shadcn"]) {
+  background: var(--rui-color-bg);
 }
-:host([data-rui-theme="corporate"][transparent]),
-:host([data-rui-theme="corporate"][transparent="true"]) {
+:host([data-rui-theme^="shadcn"][transparent]),
+:host([data-rui-theme^="shadcn"][transparent="true"]) {
   background: transparent;
 }
 
-/* ---- Surfaces — hairline first, shadow only on interaction ---------------- */
-:host([data-rui-theme="corporate"]) .rui-card,
-:host([data-rui-theme="corporate"]) .rui-stat-card,
-:host([data-rui-theme="corporate"]) .rui-chart,
-:host([data-rui-theme="corporate"]) .rui-table-wrapper,
-:host([data-rui-theme="corporate"]) .rui-accordion-item,
-:host([data-rui-theme="corporate"]) .rui-code-block {
+/* ---- Surfaces — rounded-xl border bg-card shadow-xs, and they stay put --- */
+:host([data-rui-theme^="shadcn"]) .rui-card,
+:host([data-rui-theme^="shadcn"]) .rui-stat-card,
+:host([data-rui-theme^="shadcn"]) .rui-chart,
+:host([data-rui-theme^="shadcn"]) .rui-table-wrapper,
+:host([data-rui-theme^="shadcn"]) .rui-media-card,
+:host([data-rui-theme^="shadcn"]) .rui-tile,
+:host([data-rui-theme^="shadcn"]) .rui-empty-state {
   border: var(--rui-border-width) solid var(--rui-color-border);
   border-radius: var(--rui-radius-lg);
   background: var(--rui-color-surface);
-  box-shadow: none;
-}
-:host([data-rui-theme="corporate"]) .rui-card,
-:host([data-rui-theme="corporate"]) .rui-stat-card {
-  transition:
-    border-color var(--rui-motion-base, 170ms) var(--rui-motion-ease, ease),
-    box-shadow var(--rui-motion-base, 170ms) var(--rui-motion-ease, ease);
-}
-:host([data-rui-theme="corporate"]) .rui-card:hover,
-:host([data-rui-theme="corporate"]) .rui-stat-card:hover {
-  /* No translate: a console is a dense grid, and lifting one tile out of it
-     reads as breakage rather than as feedback. */
-  border-color: color-mix(in srgb, var(--rui-color-primary) 34%, var(--rui-color-border));
   box-shadow: var(--rui-shadow-sm);
 }
-:host([data-rui-theme="corporate"]) .rui-modal {
+/* No translate, no scale, no glow: a shadcn card that can be clicked tints,
+   and one that cannot does nothing at all. */
+:host([data-rui-theme^="shadcn"]) .rui-card,
+:host([data-rui-theme^="shadcn"]) .rui-stat-card {
+  transition: background var(--rui-motion-fast, 100ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="shadcn"]) .rui-card[data-clickable="true"]:hover,
+:host([data-rui-theme^="shadcn"]) .rui-tile:hover {
+  background: color-mix(in srgb, var(--rui-color-surface-muted) 55%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="shadcn"]) .rui-modal,
+:host([data-rui-theme^="shadcn"]) .rui-sheet-panel {
   border: var(--rui-border-width) solid var(--rui-color-border);
-  border-radius: var(--rui-radius-lg);
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface);
   box-shadow: var(--rui-shadow-lg);
 }
-
-/* ---- Type — display face, negative tracking, teal eyebrows --------------- */
-:host([data-rui-theme="corporate"]) .rui-card-title,
-:host([data-rui-theme="corporate"]) .rui-section-title,
-:host([data-rui-theme="corporate"]) .rui-page-header-title,
-:host([data-rui-theme="corporate"]) .rui-text[data-variant="title"],
-:host([data-rui-theme="corporate"]) .rui-text[data-variant="heading"],
-:host([data-rui-theme="corporate"]) .rui-text[data-variant="large-heavy"] {
-  font-family: var(--rui-font-family-heading);
+:host([data-rui-theme^="shadcn"]) .rui-modal-title {
+  font-size: var(--rui-font-size-18);
   font-weight: 600;
-  letter-spacing: -0.015em;
-  color: var(--rui-color-text);
+  letter-spacing: -0.01em;
 }
-:host([data-rui-theme="corporate"]) .rui-section-header-eyebrow {
-  color: var(--rui-color-primary);
-  letter-spacing: 0.1em;
+:host([data-rui-theme^="shadcn"]) .rui-code-block {
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface-muted);
 }
-:host([data-rui-theme="corporate"]) .rui-page-header {
-  border-bottom-width: 2px;
-  border-bottom-color: var(--rui-color-border);
+:host([data-rui-theme^="shadcn"]) .rui-list-item {
+  border-radius: var(--rui-radius-button);
 }
 
-/* ---- Buttons — 8px, flat, with a darker bottom edge that compresses on press
-   (the "keycap"). No lift, no glow: this is a control, not a call to action. */
-:host([data-rui-theme="corporate"]) .rui-button {
+/* ---- Type — semibold, tight tracking, leading-none card titles ---------- */
+:host([data-rui-theme^="shadcn"]) .rui-card-title,
+:host([data-rui-theme^="shadcn"]) .rui-section-title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+:host([data-rui-theme^="shadcn"]) .rui-page-header-title,
+:host([data-rui-theme^="shadcn"]) .rui-text[data-variant="title"],
+:host([data-rui-theme^="shadcn"]) .rui-text[data-variant="heading"],
+:host([data-rui-theme^="shadcn"]) .rui-text[data-variant="large-heavy"] {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+:host([data-rui-theme^="shadcn"]) .rui-card-subtitle,
+:host([data-rui-theme^="shadcn"]) .rui-callout-description {
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-base);
+}
+:host([data-rui-theme^="shadcn"]) .rui-card-eyebrow,
+:host([data-rui-theme^="shadcn"]) .rui-section-header-eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--rui-font-size-sm);
+  font-weight: 500;
+}
+
+/* ---- Buttons — h-9 rounded-md px-4 text-sm font-medium shadow-xs --------
+   The hover LIGHTENS: shadcn's hover:bg-primary/90 drops the fill to 90%
+   alpha, which over a light page reads as a step towards the background
+   rather than away from it. color-mix reproduces that on any surface. */
+:host([data-rui-theme^="shadcn"]) .rui-button {
   border-radius: var(--rui-radius-button);
-  font-weight: var(--rui-button-font-weight);
-  letter-spacing: var(--rui-button-letter-spacing);
+  font-weight: 500;
+  border: var(--rui-border-width) solid transparent;
   background: var(--rui-color-primary);
   color: var(--rui-color-primary-text);
-  border: var(--rui-border-width) solid transparent;
-  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   transition:
-    background var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease),
-    border-color var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease),
-    box-shadow var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease);
+    background var(--rui-motion-fast, 100ms) var(--rui-motion-ease, ease),
+    border-color var(--rui-motion-fast, 100ms) var(--rui-motion-ease, ease),
+    box-shadow var(--rui-motion-fast, 100ms) var(--rui-motion-ease, ease);
 }
-:host([data-rui-theme="corporate"]) .rui-button:hover:not(:disabled) {
-  background: var(--rui-color-primary-hover);
+:host([data-rui-theme^="shadcn"]) .rui-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-primary) 90%, transparent);
 }
-:host([data-rui-theme="corporate"]) .rui-button:active:not(:disabled) {
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="secondary"] {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text);
+  border-color: transparent;
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="secondary"] {
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="secondary"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-surface-muted) 80%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="outline"] {
   background: var(--rui-color-surface);
   color: var(--rui-color-text);
-  border-color: var(--rui-color-border-control);
-  box-shadow: none;
+  border-color: var(--rui-color-border);
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="secondary"]:hover:not(:disabled) {
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="outline"]:hover:not(:disabled) {
   background: var(--rui-color-surface-muted);
-  border-color: var(--rui-color-primary);
-  color: var(--rui-color-primary);
+  color: var(--rui-color-text);
+  border-color: var(--rui-color-border);
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"],
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="link"] {
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="ghost"] {
   background: transparent;
+  color: var(--rui-color-text);
   border-color: transparent;
   box-shadow: none;
-  color: var(--rui-color-link);
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--rui-color-primary) 9%, transparent);
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
+  background: var(--rui-color-surface-muted);
 }
-:host([data-rui-theme="corporate"]) .rui-button[data-variant="danger"] {
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="link"] {
+  background: transparent;
+  color: var(--rui-color-text);
+  border-color: transparent;
+  box-shadow: none;
+  text-underline-offset: 4px;
+}
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="danger"] {
   background: var(--rui-color-danger);
-  color: var(--rui-color-on-danger);
+  color: #ffffff;
+  border-color: transparent;
 }
-:host([data-rui-theme="corporate"]) .rui-button:disabled {
-  /* Opacity only — recolouring a disabled button loses which variant it was. */
+:host([data-rui-theme^="shadcn"]) .rui-button[data-variant="danger"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-danger) 90%, transparent);
+}
+:host([data-rui-theme^="shadcn"]) .rui-button:disabled {
   opacity: 0.5;
   box-shadow: none;
 }
+/* The focus treatment, everywhere: recolour the border to the ring token and
+   lay a 3px 50%-alpha halo outside it. No outline, ever. */
+:host([data-rui-theme^="shadcn"]) .rui-button:focus-visible,
+:host([data-rui-theme^="shadcn"]) .rui-icon-button:focus-visible,
+:host([data-rui-theme^="shadcn"]) .rui-follow-up-button:focus-visible,
+:host([data-rui-theme^="shadcn"]) .rui-tab-trigger:focus-visible,
+:host([data-rui-theme^="shadcn"]) .rui-menu-item:focus-visible {
+  outline: none;
+  border-color: var(--rui-color-focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 50%, transparent);
+}
+:host([data-rui-theme^="shadcn"]) .rui-icon-button {
+  border-radius: var(--rui-radius-button);
+}
+:host([data-rui-theme^="shadcn"]) .rui-button-group > .rui-button-group-item[data-pos="start"] {
+  border-top-left-radius: var(--rui-radius-button);
+  border-bottom-left-radius: var(--rui-radius-button);
+}
+:host([data-rui-theme^="shadcn"]) .rui-button-group > .rui-button-group-item[data-pos="end"] {
+  border-top-right-radius: var(--rui-radius-button);
+  border-bottom-right-radius: var(--rui-radius-button);
+}
 
-/* ---- Fields — white box, accessible boundary, 3px halo on focus ---------- */
-:host([data-rui-theme="corporate"]) .rui-input,
-:host([data-rui-theme="corporate"]) .rui-select,
-:host([data-rui-theme="corporate"]) .rui-textarea {
-  background: var(--rui-color-surface);
+/* ---- Fields — transparent box, hairline, shadow-xs, 3px ring on focus --- */
+:host([data-rui-theme^="shadcn"]) .rui-input,
+:host([data-rui-theme^="shadcn"]) .rui-select,
+:host([data-rui-theme^="shadcn"]) .rui-textarea,
+:host([data-rui-theme^="shadcn"]) .rui-number-input,
+:host([data-rui-theme^="shadcn"]) .rui-combobox-trigger,
+:host([data-rui-theme^="shadcn"]) .rui-input-group {
+  background: transparent;
   border-color: var(--rui-color-border-control);
   border-radius: var(--rui-radius-input);
-  transition:
-    border-color var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease),
-    box-shadow var(--rui-motion-fast, 110ms) var(--rui-motion-ease, ease);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
-:host([data-rui-theme="corporate"]) .rui-input:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-select:hover:not(:disabled),
-:host([data-rui-theme="corporate"]) .rui-textarea:hover:not(:disabled) {
-  border-color: var(--rui-color-primary);
+:host([data-rui-theme^="shadcn"]) .rui-input::placeholder,
+:host([data-rui-theme^="shadcn"]) .rui-textarea::placeholder {
+  color: var(--rui-color-text-muted);
 }
-:host([data-rui-theme="corporate"]) .rui-input:focus,
-:host([data-rui-theme="corporate"]) .rui-select:focus,
-:host([data-rui-theme="corporate"]) .rui-textarea:focus {
-  border-color: var(--rui-color-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-primary) 20%, transparent);
+:host([data-rui-theme^="shadcn"]) .rui-input:focus,
+:host([data-rui-theme^="shadcn"]) .rui-select:focus,
+:host([data-rui-theme^="shadcn"]) .rui-textarea:focus,
+:host([data-rui-theme^="shadcn"]) .rui-input-group:focus-within {
+  border-color: var(--rui-color-focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 50%, transparent);
 }
-
-/* ---- Tabs — a 2px rail under the selected trigger, not a segmented pill --- */
-:host([data-rui-theme="corporate"]) .rui-tab-list {
-  gap: var(--rui-spacing-l);
-  padding: 0;
-  background: transparent;
-  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
-  border-radius: 0;
-}
-:host([data-rui-theme="corporate"]) .rui-tab-trigger {
+/* The base sheet strips the nested control's chrome so the GROUP owns the
+   border, radius and fill. The field rules above out-specify that reset, so
+   it is restated here at the same weight — otherwise an InputGroup renders a
+   box inside a box. */
+:host([data-rui-theme^="shadcn"]) .rui-input-group-field .rui-input,
+:host([data-rui-theme^="shadcn"]) .rui-input-group-field .rui-select,
+:host([data-rui-theme^="shadcn"]) .rui-input-group-field .rui-textarea,
+:host([data-rui-theme^="shadcn"]) .rui-input-group-field .rui-number-input,
+:host([data-rui-theme^="shadcn"]) .rui-input-group-field .rui-combobox-trigger {
   border: none;
   border-radius: 0;
-  padding: 8px 0;
-  margin-bottom: -1px;
-  font-weight: 500;
-  color: var(--rui-color-text-muted);
-  border-bottom: 2px solid transparent;
   background: transparent;
-}
-:host([data-rui-theme="corporate"]) .rui-tab-trigger:hover {
-  color: var(--rui-color-text);
-  border-bottom-color: var(--rui-color-border-control);
-}
-:host([data-rui-theme="corporate"]) .rui-tab-trigger[aria-selected="true"] {
-  color: var(--rui-color-primary);
-  font-weight: 600;
-  background: transparent;
-  border-bottom-color: var(--rui-color-primary);
   box-shadow: none;
 }
-
-/* ---- Navigation — the same 2px rail, turned on its side ------------------ */
-:host([data-rui-theme="corporate"]) .rui-nav-link {
-  border-radius: var(--rui-radius-sm);
+:host([data-rui-theme^="shadcn"]) .rui-field-label,
+:host([data-rui-theme^="shadcn"]) .rui-form-label,
+:host([data-rui-theme^="shadcn"]) .rui-switch-label {
+  font-size: var(--rui-font-size-base);
   font-weight: 500;
+  line-height: 1;
 }
-:host([data-rui-theme="corporate"]) .rui-nav-link[data-active="true"] {
-  background: color-mix(in srgb, var(--rui-color-primary) 10%, transparent);
-  color: var(--rui-color-primary);
-  border-color: transparent;
-  box-shadow: inset 2px 0 0 var(--rui-color-primary);
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  font-weight: 600;
-}
-:host([data-rui-theme="corporate"]) .rui-breadcrumb-link:hover {
-  color: var(--rui-color-link-hover);
-}
-
-/* ---- Chips — square shoulders, so a Badge never reads as a Button -------- */
-:host([data-rui-theme="corporate"]) .rui-tag,
-:host([data-rui-theme="corporate"]) .rui-badge,
-:host([data-rui-theme="corporate"]) .rui-pill {
-  border-radius: var(--rui-radius-sm);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-:host([data-rui-theme="corporate"]) .rui-badge[data-variant="primary"] {
-  background: color-mix(in srgb, var(--rui-color-primary) 12%, transparent);
-  color: var(--rui-color-link);
-}
-
-/* ---- Data — sentence-case headers on a muted band, teal row wash ---------
-   Uppercase table headers are already the private vision theme's and modern's
-   signature; going sentence-case with a 2px rule is how this theme's tables
-   read as its own. */
-:host([data-rui-theme="corporate"]) .rui-table th {
-  background: var(--rui-color-surface-muted);
+:host([data-rui-theme^="shadcn"]) .rui-field-hint,
+:host([data-rui-theme^="shadcn"]) .rui-field-description,
+:host([data-rui-theme^="shadcn"]) .rui-form-hint {
+  font-size: var(--rui-font-size-sm);
   color: var(--rui-color-text-muted);
-  font-weight: 600;
-  font-size: var(--rui-font-size-13);
-  text-transform: none;
-  letter-spacing: 0;
-  border-bottom: 2px solid var(--rui-color-border);
 }
-:host([data-rui-theme="corporate"]) .rui-table td {
-  border-bottom-color: var(--rui-color-border-subtle);
+:host([data-rui-theme^="shadcn"]) .rui-field-error {
+  font-size: var(--rui-font-size-sm);
+  color: var(--rui-color-danger-text);
 }
-:host([data-rui-theme="corporate"]) .rui-table tbody tr:hover td {
-  background: color-mix(in srgb, var(--rui-color-primary) 6%, transparent);
+/* size-4 rounded-[4px] border shadow-xs; the radio keeps its circle. */
+:host([data-rui-theme^="shadcn"]) .rui-checkbox input[type="checkbox"],
+:host([data-rui-theme^="shadcn"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme^="shadcn"]) .rui-data-grid-col-panel-cb {
+  border-radius: 4px;
+  border-width: 1px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
-:host([data-rui-theme="corporate"]) .rui-stat-value {
-  font-family: var(--rui-font-family-heading);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  color: var(--rui-color-text);
+:host([data-rui-theme^="shadcn"]) .rui-radio input[type="radio"] {
+  border-width: 1px;
 }
-:host([data-rui-theme="corporate"]) .rui-stat-label {
-  color: var(--rui-color-text-muted);
-  text-transform: uppercase;
-  font-size: var(--rui-font-size-11);
-  letter-spacing: 0.08em;
-  font-weight: 600;
-}
-
-/* ---- Messaging — a 3px status rail on a flat tint, no icon disc chrome --- */
-:host([data-rui-theme="corporate"]) .rui-callout {
-  border-radius: var(--rui-radius-md);
-  border-left-width: 3px;
-  border-left-color: var(--rui-color-primary);
+/* h-[1.15rem] w-8 — the smallest switch of the three frameworks here. */
+:host([data-rui-theme^="shadcn"]) .rui-switch-track {
+  width: 32px;
+  height: 18px;
   background: var(--rui-color-surface-muted);
+  border: var(--rui-border-width) solid var(--rui-color-border-control);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
-:host([data-rui-theme="corporate"]) .rui-callout[data-tone="success"] { border-left-color: var(--rui-color-success); }
-:host([data-rui-theme="corporate"]) .rui-callout[data-tone="warning"] { border-left-color: var(--rui-color-warning); }
-:host([data-rui-theme="corporate"]) .rui-callout[data-tone="danger"]  { border-left-color: var(--rui-color-danger); }
-:host([data-rui-theme="corporate"]) .rui-callout[data-tone="info"]    { border-left-color: var(--rui-color-info); }
-:host([data-rui-theme="corporate"]) .rui-banner {
-  border-radius: 0;
-  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
-}
-
-/* ---- Progress, steps, separators ---------------------------------------- */
-:host([data-rui-theme="corporate"]) .rui-progress-bar {
-  background: var(--rui-gradient-accent);
-}
-:host([data-rui-theme="corporate"]) .rui-steps-item::before {
-  border-radius: var(--rui-radius-xs);
-  font-weight: 600;
-  font-family: var(--rui-font-family-heading);
-}
-:host([data-rui-theme="corporate"]) .rui-separator {
-  background: var(--rui-color-border);
-}
-:host([data-rui-theme="corporate"]) .rui-link {
-  color: var(--rui-color-link);
-  font-weight: 500;
-  text-underline-offset: 2px;
-}
-:host([data-rui-theme="corporate"]) .rui-follow-up-button {
-  border-radius: var(--rui-radius-button);
+:host([data-rui-theme^="shadcn"]) .rui-switch-thumb {
+  width: 14px;
+  height: 14px;
   background: var(--rui-color-surface);
-  border-color: var(--rui-color-border-control);
-  color: var(--rui-color-text);
-  font-weight: 500;
-  box-shadow: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
-:host([data-rui-theme="corporate"]) .rui-follow-up-button:hover {
+:host([data-rui-theme^="shadcn"]) .rui-switch-input:checked + .rui-switch-track {
+  background: var(--rui-color-primary);
   border-color: var(--rui-color-primary);
-  color: var(--rui-color-primary);
-  background: color-mix(in srgb, var(--rui-color-primary) 7%, transparent);
+}
+:host([data-rui-theme^="shadcn"]) .rui-switch-input:checked + .rui-switch-track .rui-switch-thumb {
+  transform: translateX(15px);
+}
+:host([data-rui-theme^="shadcn"]) .rui-switch-input:focus-visible + .rui-switch-track {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 50%, transparent);
 }
 
-/* Modern — clean SaaS dashboard. Light off-white canvas with a whisper-faint
-   ambient wash, crisp white cards with generous rounding and feather-soft
-   diffuse shadows that lift on hover, an ink (near-black) primary rendered as
-   pill buttons, a violet accent, and segmented pill-style tabs. */
-:host([data-rui-theme="modern"]) {
-  background:
-    radial-gradient(60vw 50vw at 100% -5%, rgba(37, 99, 235, 0.06), transparent 60%),
-    radial-gradient(55vw 50vw at 0% 105%, rgba(124, 92, 252, 0.06), transparent 60%),
-    var(--rui-color-bg);
+/* ---- Tabs — bg-muted strip, 3px inset, white active pill ---------------- */
+:host([data-rui-theme^="shadcn"]) .rui-tab-list {
+  display: inline-flex;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  gap: 0;
+  padding: 3px;
+  background: var(--rui-color-surface-muted);
+  border: none;
+  border-bottom: none;
+  border-radius: var(--rui-radius-md);
 }
-:host([data-rui-theme="modern"][transparent]),
-:host([data-rui-theme="modern"][transparent="true"]) {
+:host([data-rui-theme^="shadcn"]) .rui-tab-trigger {
+  border: var(--rui-border-width) solid transparent;
+  border-radius: calc(var(--rui-radius-md) - 3px);
+  margin-bottom: 0;
+  padding: 4px 12px;
+  font-size: var(--rui-font-size-base);
+  font-weight: 500;
+  color: var(--rui-color-text-muted);
   background: transparent;
 }
-:host([data-rui-theme="modern"]) .rui-card,
-:host([data-rui-theme="modern"]) .rui-stat-card,
-:host([data-rui-theme="modern"]) .rui-callout,
-:host([data-rui-theme="modern"]) .rui-chart,
-:host([data-rui-theme="modern"]) .rui-table-wrapper,
-:host([data-rui-theme="modern"]) .rui-accordion-item,
-:host([data-rui-theme="modern"]) .rui-list-item,
-:host([data-rui-theme="modern"]) .rui-modal,
-:host([data-rui-theme="modern"]) .rui-code-block {
-  border: var(--rui-border-width) solid var(--rui-color-border);
+:host([data-rui-theme^="shadcn"]) .rui-tab-trigger:hover {
+  color: var(--rui-color-text);
+}
+:host([data-rui-theme^="shadcn"]) .rui-tab-trigger[aria-selected="true"] {
   background: var(--rui-color-surface);
+  color: var(--rui-color-text);
+  border-color: var(--rui-color-border);
   box-shadow: var(--rui-shadow-sm);
 }
-:host([data-rui-theme="modern"]) .rui-card,
-:host([data-rui-theme="modern"]) .rui-stat-card {
-  transition: transform 240ms ease, box-shadow 240ms ease;
+:host([data-rui-theme^="shadcn"]) .rui-segmented-control {
+  background: var(--rui-color-surface-muted);
+  border: none;
+  border-radius: var(--rui-radius-md);
+  padding: 3px;
 }
-:host([data-rui-theme="modern"]) .rui-card:hover,
-:host([data-rui-theme="modern"]) .rui-stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--rui-shadow-md);
+:host([data-rui-theme^="shadcn"]) .rui-segmented-control-option {
+  border-radius: calc(var(--rui-radius-md) - 3px);
+  font-weight: 500;
 }
-:host([data-rui-theme="modern"]) .rui-card-title,
-:host([data-rui-theme="modern"]) .rui-section-title,
-:host([data-rui-theme="modern"]) .rui-page-header-title,
-:host([data-rui-theme="modern"]) .rui-text[data-variant="title"],
-:host([data-rui-theme="modern"]) .rui-text[data-variant="heading"],
-:host([data-rui-theme="modern"]) .rui-text[data-variant="large-heavy"] {
+
+/* ---- Navigation — rounded-md, bg-accent when active ------------------- */
+:host([data-rui-theme^="shadcn"]) .rui-nav-link,
+:host([data-rui-theme^="shadcn"]) .rui-sidebar-item {
+  border-radius: var(--rui-radius-button);
+  font-weight: 500;
+}
+:host([data-rui-theme^="shadcn"]) .rui-nav-link[data-active="true"],
+:host([data-rui-theme^="shadcn"]) .rui-sidebar-item[data-active="true"] {
+  background: var(--rui-color-surface-muted);
   color: var(--rui-color-text);
-  letter-spacing: -0.02em;
-  font-weight: 700;
+  border-color: transparent;
 }
-:host([data-rui-theme="modern"]) .rui-button {
+:host([data-rui-theme^="shadcn"]) .rui-sidebar-item:hover {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text);
+}
+:host([data-rui-theme^="shadcn"]) .rui-sidebar {
+  background: var(--rui-color-bg-subtle);
+  border-radius: var(--rui-radius-lg);
+}
+:host([data-rui-theme^="shadcn"]) .rui-link {
+  font-weight: 500;
+  text-underline-offset: 4px;
+}
+
+/* ---- Chips — rounded-md, not a pill. Badge is shadcn's one hard tell. --- */
+:host([data-rui-theme^="shadcn"]) .rui-badge,
+:host([data-rui-theme^="shadcn"]) .rui-tag,
+:host([data-rui-theme^="shadcn"]) .rui-pill,
+:host([data-rui-theme^="shadcn"]) .rui-filter-pill {
+  border-radius: var(--rui-radius-button);
+  font-size: var(--rui-font-size-sm);
+  font-weight: 500;
+  padding: 2px 8px;
+  letter-spacing: 0;
+}
+:host([data-rui-theme^="shadcn"]) .rui-badge {
+  border: var(--rui-border-width) solid transparent;
+}
+:host([data-rui-theme^="shadcn"]) .rui-badge[data-variant="primary"] {
   background: var(--rui-color-primary);
   color: var(--rui-color-primary-text);
-  border: var(--rui-border-width) solid transparent;
-  border-radius: var(--rui-radius-pill);
+}
+:host([data-rui-theme^="shadcn"]) .rui-kbd {
+  border-radius: var(--rui-radius-xs);
+  font-family: var(--rui-font-family-mono);
+}
+
+/* ---- Data — muted MEDIUM sentence-case headers on NO fill ----------------- */
+:host([data-rui-theme^="shadcn"]) .rui-table,
+:host([data-rui-theme^="shadcn"]) .rui-data-grid-table {
+  font-size: var(--rui-font-size-base);
+}
+:host([data-rui-theme^="shadcn"]) .rui-table th,
+:host([data-rui-theme^="shadcn"]) .rui-data-grid-table th {
+  background: transparent;
+  color: var(--rui-color-text-muted);
+  font-weight: 500;
+  font-size: var(--rui-font-size-base);
+  text-transform: none;
+  letter-spacing: 0;
+  height: 40px;
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+}
+:host([data-rui-theme^="shadcn"]) .rui-table td,
+:host([data-rui-theme^="shadcn"]) .rui-data-grid-table td {
+  border-bottom-color: var(--rui-color-border);
+}
+:host([data-rui-theme^="shadcn"]) .rui-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--rui-color-surface-muted) 50%, transparent);
+}
+:host([data-rui-theme^="shadcn"]) .rui-stat-value {
   font-weight: 600;
-  box-shadow: 0 4px 14px rgba(17, 24, 39, 0.12);
-  transition: transform 120ms ease, box-shadow 160ms ease, background 140ms ease;
+  letter-spacing: -0.025em;
 }
-:host([data-rui-theme="modern"]) .rui-button:hover:not(:disabled) {
-  background: var(--rui-color-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(17, 24, 39, 0.18);
+:host([data-rui-theme^="shadcn"]) .rui-stat-label {
+  color: var(--rui-color-text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--rui-font-size-base);
+  font-weight: 500;
 }
-:host([data-rui-theme="modern"]) .rui-button:active:not(:disabled) {
-  transform: translateY(0);
+:host([data-rui-theme^="shadcn"]) .rui-pagination-button {
+  border-radius: var(--rui-radius-button);
+  font-weight: 500;
 }
-:host([data-rui-theme="modern"]) .rui-button[data-variant="secondary"] {
+
+/* ---- Messaging — a bordered card, an inline glyph, no coloured disc ------- */
+:host([data-rui-theme^="shadcn"]) .rui-callout {
+  border-radius: var(--rui-radius-md);
+  border: var(--rui-border-width) solid var(--rui-color-border);
   background: var(--rui-color-surface);
-  color: var(--rui-color-text);
-  border-color: var(--rui-color-border);
-  box-shadow: var(--rui-shadow-sm);
 }
-:host([data-rui-theme="modern"]) .rui-button[data-variant="secondary"]:hover:not(:disabled) {
+:host([data-rui-theme^="shadcn"]) .rui-callout-section {
+  padding: 12px 16px;
+  gap: 12px;
+  align-items: flex-start;
+}
+:host([data-rui-theme^="shadcn"]) .rui-callout-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--rui-font-size-lg);
+  font-weight: 400;
+  color: var(--rui-color-text);
+  margin-top: 2px;
+}
+:host([data-rui-theme^="shadcn"]) .rui-callout-title {
+  font-weight: 500;
+  line-height: 1.2;
+}
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="success"] .rui-callout-icon { color: var(--rui-color-success-text); }
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="warning"] .rui-callout-icon { color: var(--rui-color-warning-text); }
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="info"] .rui-callout-icon    { color: var(--rui-color-info-text); }
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="danger"] .rui-callout-icon,
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="error"] .rui-callout-icon   { color: var(--rui-color-danger-text); }
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="neutral"] .rui-callout-icon { color: var(--rui-color-text-muted); }
+/* Destructive is the only variant shadcn tints, and it tints the TEXT. */
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="danger"],
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="error"] {
+  background: var(--rui-color-surface);
+  border-color: color-mix(in srgb, var(--rui-color-danger) 40%, transparent);
+}
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="danger"] .rui-callout-title,
+:host([data-rui-theme^="shadcn"]) .rui-callout[data-variant="error"] .rui-callout-title {
+  color: var(--rui-color-danger-text);
+}
+:host([data-rui-theme^="shadcn"]) .rui-toast,
+:host([data-rui-theme^="shadcn"]) .rui-notification {
+  border-radius: var(--rui-radius-md);
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  box-shadow: var(--rui-shadow-lg);
+}
+:host([data-rui-theme^="shadcn"]) .rui-banner {
+  border-radius: var(--rui-radius-md);
+}
+
+/* ---- Overlays — rounded-md border bg-popover p-1 shadow-md -------------- */
+:host([data-rui-theme^="shadcn"]) .rui-dropdown-menu-content,
+:host([data-rui-theme^="shadcn"]) .rui-popover-content,
+:host([data-rui-theme^="shadcn"]) .rui-hover-card-content,
+:host([data-rui-theme^="shadcn"]) .rui-context-menu-pop {
+  border-radius: var(--rui-radius-button);
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-md);
+  padding: 4px;
+}
+:host([data-rui-theme^="shadcn"]) .rui-menu-item {
+  border-radius: var(--rui-radius-sm);
+  padding: 6px 8px;
+  font-size: var(--rui-font-size-base);
+}
+/* The tooltip is painted in the PRIMARY colour, which is unusual enough to be
+   a tell on its own — most kits reach for a neutral charcoal. */
+:host([data-rui-theme^="shadcn"]) .rui-tooltip-content {
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+  border-radius: var(--rui-radius-button);
+  padding: 6px 12px;
+  font-size: var(--rui-font-size-sm);
+  font-weight: 400;
+  box-shadow: none;
+}
+
+/* ---- Accordion — a rule, not a box --------------------------------------- */
+:host([data-rui-theme^="shadcn"]) .rui-accordion-item {
+  border: none;
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: 0;
+  background: transparent;
+}
+:host([data-rui-theme^="shadcn"]) .rui-accordion-trigger {
+  padding: 16px 0;
+  font-weight: 500;
+}
+:host([data-rui-theme^="shadcn"]) .rui-accordion-trigger:hover {
+  text-decoration: underline;
+}
+
+/* ---- Progress, steps, skeletons, separators ------------------------------ */
+:host([data-rui-theme^="shadcn"]) .rui-progress-track {
+  height: 8px;
+  background: color-mix(in srgb, var(--rui-color-primary) 20%, transparent);
+}
+:host([data-rui-theme^="shadcn"]) .rui-progress-bar {
+  background: var(--rui-color-primary);
+}
+:host([data-rui-theme^="shadcn"]) .rui-steps-item::before {
+  font-weight: 500;
+  font-size: var(--rui-font-size-sm);
+}
+:host([data-rui-theme^="shadcn"]) .rui-skeleton-line {
+  background: var(--rui-color-surface-muted);
+  border-radius: var(--rui-radius-button);
+}
+:host([data-rui-theme^="shadcn"]) .rui-separator {
+  background: var(--rui-color-border);
+}
+:host([data-rui-theme^="shadcn"]) .rui-avatar-fallback {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="shadcn"]) .rui-follow-up-button {
+  border-radius: var(--rui-radius-button);
+  background: var(--rui-color-surface);
+  border-color: var(--rui-color-border);
+  color: var(--rui-color-text);
+  font-weight: 500;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+:host([data-rui-theme^="shadcn"]) .rui-follow-up-button:hover {
   background: var(--rui-color-surface-muted);
 }
-:host([data-rui-theme="modern"]) .rui-button[data-variant="ghost"] {
+
+/* ---- Dark mode deltas ----------------------------------------------------
+   Everything above is mode-agnostic because it reads tokens. These four are
+   the places shadcn's .dark block changes the RECIPE rather than the value:
+   fields get a translucent fill, the active tab pill is bg-input/30 instead
+   of white, and the shadows lose their 5%-black hint (it is invisible on
+   #0a0a0a and only fogs the edge). */
+:host([data-rui-theme="shadcn-dark"]) .rui-input,
+:host([data-rui-theme="shadcn-dark"]) .rui-select,
+:host([data-rui-theme="shadcn-dark"]) .rui-textarea,
+:host([data-rui-theme="shadcn-dark"]) .rui-number-input,
+:host([data-rui-theme="shadcn-dark"]) .rui-combobox-trigger,
+:host([data-rui-theme="shadcn-dark"]) .rui-input-group {
+  background: color-mix(in srgb, var(--rui-color-surface-muted) 40%, transparent);
+  box-shadow: none;
+}
+:host([data-rui-theme="shadcn-dark"]) .rui-tab-trigger[aria-selected="true"] {
+  background: var(--rui-color-surface-muted);
+  border-color: var(--rui-color-border);
+  box-shadow: none;
+}
+:host([data-rui-theme="shadcn-dark"]) .rui-button,
+:host([data-rui-theme="shadcn-dark"]) .rui-follow-up-button,
+:host([data-rui-theme="shadcn-dark"]) .rui-checkbox input[type="checkbox"],
+:host([data-rui-theme="shadcn-dark"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme="shadcn-dark"]) .rui-switch-track {
+  box-shadow: none;
+}
+:host([data-rui-theme="shadcn-dark"]) .rui-button[data-variant="danger"] {
+  color: #ffffff;
+}
+
+/* ============================================================================
+   Material UI — mui (= mui-light), mui-light, mui-dark.
+
+   Same prefix-selector arrangement as the shadcn block above:
+   [data-rui-theme^="mui"] covers all three names, ="mui-dark" carries the
+   deltas.
+
+   The Material tells, in rough order of how quickly the eye catches them:
+     - UPPERCASE button labels at 500 with 0.02857em tracking, 64px minimum
+       width, and a contained button that carries elevation 2 and lifts to
+       elevation 4 under the pointer;
+     - Paper: no border at ALL. Every surface is separated from the page by a
+       three-layer elevation shadow, which is why 4px corners still read as
+       deliberate rather than unfinished;
+     - the outlined text field — a tall 56px box whose 1px outline thickens to
+       2px in primary on focus, with a 12px label above it and 12px helper
+       text indented 14px to sit under the outline's radius;
+     - tab labels in the same uppercase as the buttons over a 2px primary
+       indicator rail on a 48px strip;
+     - full-bleed menu items with square corners in an elevation-8 popover;
+     - the charcoal rgba(97,97,97,0.92) tooltip at 11px;
+     - the 34x14 pill switch whose 20px thumb overhangs the track on both
+       sides, and turns primary (not white) when on;
+     - hover as an OVERLAY: rgba(primary, 0.04) washed over the control,
+       never a different fill.
+   ============================================================================ */
+:host([data-rui-theme^="mui"]) {
+  background: var(--rui-color-bg);
+}
+:host([data-rui-theme^="mui"][transparent]),
+:host([data-rui-theme^="mui"][transparent="true"]) {
+  background: transparent;
+}
+
+/* ---- Paper — elevation instead of a hairline ----------------------------- */
+:host([data-rui-theme^="mui"]) .rui-card,
+:host([data-rui-theme^="mui"]) .rui-stat-card,
+:host([data-rui-theme^="mui"]) .rui-chart,
+:host([data-rui-theme^="mui"]) .rui-table-wrapper,
+:host([data-rui-theme^="mui"]) .rui-media-card,
+:host([data-rui-theme^="mui"]) .rui-tile,
+:host([data-rui-theme^="mui"]) .rui-empty-state {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-sm);
+}
+:host([data-rui-theme^="mui"]) .rui-card {
+  --rui-card-pad: var(--rui-spacing-m);
+}
+:host([data-rui-theme^="mui"]) .rui-card,
+:host([data-rui-theme^="mui"]) .rui-tile {
+  transition: box-shadow var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="mui"]) .rui-card[data-clickable="true"]:hover,
+:host([data-rui-theme^="mui"]) .rui-tile:hover {
+  /* elevation 1 -> elevation 4, the standard Material raise. */
+  box-shadow: var(--rui-shadow-md);
+}
+:host([data-rui-theme^="mui"]) .rui-card[data-variant="outlined"] {
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  box-shadow: none;
+}
+:host([data-rui-theme^="mui"]) .rui-modal,
+:host([data-rui-theme^="mui"]) .rui-sheet-panel {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-lg);
+  padding: var(--rui-spacing-l);
+}
+:host([data-rui-theme^="mui"]) .rui-modal-title {
+  font-size: var(--rui-font-size-20);
+  font-weight: 500;
+  letter-spacing: 0.0075em;
+}
+:host([data-rui-theme^="mui"]) .rui-code-block {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  box-shadow: var(--rui-shadow-sm);
+}
+
+/* ---- Type — Roboto's own ladder; h6 for card titles, h5 for page titles --- */
+:host([data-rui-theme^="mui"]) .rui-card-title,
+:host([data-rui-theme^="mui"]) .rui-section-title {
+  font-weight: 500;
+  letter-spacing: 0.0075em;
+  line-height: 1.6;
+}
+:host([data-rui-theme^="mui"]) .rui-page-header-title,
+:host([data-rui-theme^="mui"]) .rui-text[data-variant="title"] {
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.334;
+}
+:host([data-rui-theme^="mui"]) .rui-text[data-variant="heading"],
+:host([data-rui-theme^="mui"]) .rui-text[data-variant="large-heavy"] {
+  font-weight: 500;
+  letter-spacing: 0.0075em;
+}
+:host([data-rui-theme^="mui"]) .rui-card-subtitle {
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-sm);
+  letter-spacing: 0.01071em;
+}
+:host([data-rui-theme^="mui"]) .rui-card-eyebrow,
+:host([data-rui-theme^="mui"]) .rui-section-header-eyebrow {
+  /* Material's overline: 12px, uppercase, 500, 0.08333em. */
+  font-size: var(--rui-font-size-sm);
+  font-weight: 500;
+  letter-spacing: 0.08333em;
+  text-transform: uppercase;
+}
+/* Material's Link is underlined by default, with the rule drawn at 40% of the
+   text colour until the pointer arrives. */
+:host([data-rui-theme^="mui"]) .rui-link {
+  font-weight: 400;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--rui-color-link) 40%, transparent);
+  text-underline-offset: 2px;
+}
+:host([data-rui-theme^="mui"]) .rui-link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* ---- Buttons — uppercase, 64px min, elevation 2 -> 4 --------------------- */
+:host([data-rui-theme^="mui"]) .rui-button {
+  min-width: 64px;
+  border-radius: var(--rui-radius-button);
+  border: var(--rui-border-width) solid transparent;
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+  font-size: 14px;
+  font-weight: var(--rui-button-font-weight);
+  line-height: 1.75;
+  letter-spacing: var(--rui-button-letter-spacing);
+  text-transform: var(--rui-button-text-transform);
+  box-shadow:
+    0px 3px 1px -2px rgba(0, 0, 0, 0.2),
+    0px 2px 2px 0px rgba(0, 0, 0, 0.14),
+    0px 1px 5px 0px rgba(0, 0, 0, 0.12);
+  transition:
+    background-color var(--rui-motion-fast, 150ms) var(--rui-motion-ease, ease),
+    box-shadow var(--rui-motion-fast, 150ms) var(--rui-motion-ease, ease),
+    border-color var(--rui-motion-fast, 150ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="mui"]) .rui-button:hover:not(:disabled) {
+  background: var(--rui-color-primary-hover);
+  box-shadow:
+    0px 2px 4px -1px rgba(0, 0, 0, 0.2),
+    0px 4px 5px 0px rgba(0, 0, 0, 0.14),
+    0px 1px 10px 0px rgba(0, 0, 0, 0.12);
+}
+:host([data-rui-theme^="mui"]) .rui-button:active:not(:disabled) {
+  box-shadow:
+    0px 5px 5px -3px rgba(0, 0, 0, 0.2),
+    0px 8px 10px 1px rgba(0, 0, 0, 0.14),
+    0px 3px 14px 2px rgba(0, 0, 0, 0.12);
+}
+:host([data-rui-theme^="mui"]) .rui-button[data-size="xs"] { font-size: 13px; }
+:host([data-rui-theme^="mui"]) .rui-button[data-size="sm"] { font-size: 13px; }
+:host([data-rui-theme^="mui"]) .rui-button[data-size="lg"] { font-size: 15px; }
+:host([data-rui-theme^="mui"]) .rui-button[data-size="xl"] { font-size: 16px; }
+/* variant="outlined": a 1px 50%-alpha primary edge, and a 4% primary wash on
+   hover — Material never swaps the fill of a low-emphasis button. */
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="outline"],
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="secondary"] {
+  background: transparent;
+  color: var(--rui-color-primary);
+  border-color: color-mix(in srgb, var(--rui-color-primary) 50%, transparent);
+  box-shadow: none;
+}
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="outline"]:hover:not(:disabled),
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="secondary"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-primary) 4%, transparent);
+  border-color: var(--rui-color-primary);
+  box-shadow: none;
+}
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="ghost"],
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="link"] {
+  background: transparent;
+  color: var(--rui-color-primary);
+  border-color: transparent;
+  box-shadow: none;
+}
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="ghost"]:hover:not(:disabled),
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="link"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-primary) 4%, transparent);
+  text-decoration: none;
+}
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="danger"] {
+  background: var(--rui-color-danger);
+  color: var(--rui-color-on-danger);
+}
+:host([data-rui-theme^="mui"]) .rui-button:disabled {
+  /* Material greys a disabled button out rather than fading it, and drops the
+     elevation entirely. */
+  opacity: 1;
+  color: color-mix(in srgb, var(--rui-color-text) 26%, transparent);
+  background: color-mix(in srgb, var(--rui-color-text) 12%, transparent);
+  border-color: transparent;
+  box-shadow: none;
+}
+/* Only the contained button gets the grey fill; Material leaves a disabled
+   text button transparent and a disabled outlined one edged in 12% ink. */
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="ghost"]:disabled,
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="link"]:disabled {
+  background: transparent;
+}
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="outline"]:disabled,
+:host([data-rui-theme^="mui"]) .rui-button[data-variant="secondary"]:disabled {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--rui-color-text) 12%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-button:focus-visible,
+:host([data-rui-theme^="mui"]) .rui-icon-button:focus-visible,
+:host([data-rui-theme^="mui"]) .rui-tab-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 30%, transparent);
+}
+/* IconButton is a 40px circle in Material, and its hover is the same 4% wash. */
+:host([data-rui-theme^="mui"]) .rui-icon-button {
+  border-radius: var(--rui-radius-pill);
+  padding: 8px;
+}
+:host([data-rui-theme^="mui"]) .rui-icon-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-text) 4%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-fab {
+  box-shadow:
+    0px 3px 5px -1px rgba(0, 0, 0, 0.2),
+    0px 6px 10px 0px rgba(0, 0, 0, 0.14),
+    0px 1px 18px 0px rgba(0, 0, 0, 0.12);
+}
+
+/* ---- Outlined text fields — 56px tall, 2px primary outline on focus ------
+   The focus state uses an inset ring rather than a real 2px border so the box
+   does not resize by a pixel the moment it is focused, which is what Material's
+   own fieldset legend trick avoids. */
+:host([data-rui-theme^="mui"]) .rui-input,
+:host([data-rui-theme^="mui"]) .rui-select,
+:host([data-rui-theme^="mui"]) .rui-textarea,
+:host([data-rui-theme^="mui"]) .rui-number-input,
+:host([data-rui-theme^="mui"]) .rui-combobox-trigger {
+  background: transparent;
+  border-color: var(--rui-color-border-control);
+  border-radius: var(--rui-radius-input);
+  padding: 16.5px 14px;
+  font-size: var(--rui-font-size-base);
+  box-shadow: none;
+}
+:host([data-rui-theme^="mui"]) .rui-textarea {
+  padding: 16.5px 14px;
+}
+:host([data-rui-theme^="mui"]) .rui-input:hover:not(:disabled),
+:host([data-rui-theme^="mui"]) .rui-select:hover:not(:disabled),
+:host([data-rui-theme^="mui"]) .rui-textarea:hover:not(:disabled) {
+  border-color: var(--rui-color-text);
+}
+:host([data-rui-theme^="mui"]) .rui-input:focus,
+:host([data-rui-theme^="mui"]) .rui-select:focus,
+:host([data-rui-theme^="mui"]) .rui-textarea:focus,
+:host([data-rui-theme^="mui"]) .rui-input-group:focus-within {
+  border-color: var(--rui-color-primary);
+  box-shadow: inset 0 0 0 1px var(--rui-color-primary);
+}
+:host([data-rui-theme^="mui"]) .rui-input-group {
+  border-radius: var(--rui-radius-input);
+  border-color: var(--rui-color-border-control);
+}
+/* The base sheet strips the nested control's chrome so the GROUP owns the
+   border, radius and fill. The field rules above out-specify that reset, so
+   it is restated here at the same weight — otherwise an InputGroup renders a
+   box inside a box. */
+:host([data-rui-theme^="mui"]) .rui-input-group-field .rui-input,
+:host([data-rui-theme^="mui"]) .rui-input-group-field .rui-select,
+:host([data-rui-theme^="mui"]) .rui-input-group-field .rui-textarea,
+:host([data-rui-theme^="mui"]) .rui-input-group-field .rui-number-input,
+:host([data-rui-theme^="mui"]) .rui-input-group-field .rui-combobox-trigger {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+/* The floating label cannot be reproduced without moving the DOM, but its
+   RESTING typography can: 12px, text.secondary, regular weight. */
+:host([data-rui-theme^="mui"]) .rui-field-label,
+:host([data-rui-theme^="mui"]) .rui-form-label {
+  font-size: var(--rui-font-size-sm);
+  font-weight: 400;
+  letter-spacing: 0.00938em;
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="mui"]) .rui-field-hint,
+:host([data-rui-theme^="mui"]) .rui-field-description,
+:host([data-rui-theme^="mui"]) .rui-field-error,
+:host([data-rui-theme^="mui"]) .rui-field-warning,
+:host([data-rui-theme^="mui"]) .rui-form-hint {
+  font-size: var(--rui-font-size-sm);
+  letter-spacing: 0.03333em;
+  /* Material indents helper text to clear the outline's corner radius. */
+  margin-left: 14px;
+}
+/* Material's checkbox is a 2px-stroked square with a 2px radius; the radio is
+   a ring. Both sit on a 4% hover wash rather than recolouring their border. */
+:host([data-rui-theme^="mui"]) .rui-checkbox input[type="checkbox"],
+:host([data-rui-theme^="mui"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme^="mui"]) .rui-data-grid-col-panel-cb {
+  border-radius: 2px;
+  border-width: 2px;
+}
+:host([data-rui-theme^="mui"]) .rui-radio input[type="radio"] {
+  border-width: 2px;
+}
+/* The Material switch: a 34x14 track the 20px thumb overhangs, an unchecked
+   track at 38% ink, and a checked track that is the PRIMARY at 50% with a
+   primary thumb. */
+:host([data-rui-theme^="mui"]) .rui-switch-track {
+  width: 34px;
+  height: 14px;
+  border: none;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--rui-color-text) 38%, transparent);
+  overflow: visible;
+}
+:host([data-rui-theme^="mui"]) .rui-switch-thumb {
+  width: 20px;
+  height: 20px;
+  /* Centred on the track's rounded ends, which is why it overhangs by 3px at
+     both extremes — the Material switch's most-copied detail. */
+  top: -3px;
+  left: -3px;
+  background: var(--rui-color-surface);
+  box-shadow:
+    0px 2px 1px -1px rgba(0, 0, 0, 0.2),
+    0px 1px 1px 0px rgba(0, 0, 0, 0.14),
+    0px 1px 3px 0px rgba(0, 0, 0, 0.12);
+}
+:host([data-rui-theme^="mui"]) .rui-switch-input:checked + .rui-switch-track {
+  background: color-mix(in srgb, var(--rui-color-primary) 50%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-switch-input:checked + .rui-switch-track .rui-switch-thumb {
+  transform: translateX(20px);
+  background: var(--rui-color-primary);
+}
+:host([data-rui-theme^="mui"]) .rui-switch-input:focus-visible + .rui-switch-track {
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--rui-color-primary) 12%, transparent);
+}
+
+/* ---- Tabs — uppercase labels on a 48px strip over a 2px indicator -------- */
+:host([data-rui-theme^="mui"]) .rui-tab-list {
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+  min-height: 48px;
+}
+:host([data-rui-theme^="mui"]) .rui-tab-trigger {
+  border: none;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  min-width: 90px;
+  padding: 12px 16px;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02857em;
+  text-transform: uppercase;
+  color: var(--rui-color-text-muted);
+  background: transparent;
+}
+:host([data-rui-theme^="mui"]) .rui-tab-trigger:hover {
+  color: var(--rui-color-primary);
+  background: color-mix(in srgb, var(--rui-color-primary) 4%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-tab-trigger[aria-selected="true"] {
+  color: var(--rui-color-primary);
+  border-bottom-color: var(--rui-color-primary);
+  background: transparent;
+}
+:host([data-rui-theme^="mui"]) .rui-segmented-control {
+  border-radius: var(--rui-radius-md);
+  border-color: var(--rui-color-border-control);
+  background: transparent;
+  padding: 0;
+  gap: 0;
+}
+:host([data-rui-theme^="mui"]) .rui-segmented-control-option {
+  border-radius: 0;
+  padding: 6px 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02857em;
+  font-size: 13px;
+}
+:host([data-rui-theme^="mui"]) .rui-segmented-control-option[data-active="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 12%, transparent);
+  color: var(--rui-color-primary);
+  box-shadow: none;
+}
+
+/* ---- Navigation — pill-free rows with the 4% / 8% overlay ladder --------- */
+:host([data-rui-theme^="mui"]) .rui-nav-link,
+:host([data-rui-theme^="mui"]) .rui-sidebar-item {
+  border-radius: var(--rui-radius-sm);
+  font-weight: 400;
+}
+:host([data-rui-theme^="mui"]) .rui-nav-link:hover,
+:host([data-rui-theme^="mui"]) .rui-sidebar-item:hover {
+  background: color-mix(in srgb, var(--rui-color-text) 4%, transparent);
+  color: var(--rui-color-text);
+}
+:host([data-rui-theme^="mui"]) .rui-nav-link[data-active="true"],
+:host([data-rui-theme^="mui"]) .rui-sidebar-item[data-active="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 8%, transparent);
+  color: var(--rui-color-primary);
+  border-color: transparent;
+}
+:host([data-rui-theme^="mui"]) .rui-sidebar {
+  border: none;
+  border-right: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: 0;
+  background: var(--rui-color-surface);
+}
+
+/* ---- Chips — the 32px fully-rounded Material chip ------------------------ */
+:host([data-rui-theme^="mui"]) .rui-badge,
+:host([data-rui-theme^="mui"]) .rui-tag,
+:host([data-rui-theme^="mui"]) .rui-pill,
+:host([data-rui-theme^="mui"]) .rui-filter-pill {
+  border-radius: var(--rui-radius-pill);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.01071em;
+  padding: 4px 12px;
+  border-color: transparent;
+}
+:host([data-rui-theme^="mui"]) .rui-badge {
+  font-weight: 500;
+}
+:host([data-rui-theme^="mui"]) .rui-tag,
+:host([data-rui-theme^="mui"]) .rui-pill {
+  background: color-mix(in srgb, var(--rui-color-text) 8%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-kbd {
+  border-radius: var(--rui-radius-xs);
+}
+
+/* ---- Data — 16px cells, a 500-weight header on NO fill ------------------- */
+:host([data-rui-theme^="mui"]) .rui-table,
+:host([data-rui-theme^="mui"]) .rui-data-grid-table {
+  font-size: 14px;
+}
+:host([data-rui-theme^="mui"]) .rui-table th,
+:host([data-rui-theme^="mui"]) .rui-table td,
+:host([data-rui-theme^="mui"]) .rui-data-grid-table th,
+:host([data-rui-theme^="mui"]) .rui-data-grid-table td {
+  padding: var(--rui-spacing-m);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+}
+:host([data-rui-theme^="mui"]) .rui-table th,
+:host([data-rui-theme^="mui"]) .rui-data-grid-table th {
+  background: transparent;
+  color: var(--rui-color-text);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.5rem;
+  text-transform: none;
+  letter-spacing: 0.01071em;
+}
+:host([data-rui-theme^="mui"]) .rui-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--rui-color-text) 4%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-stat-value {
+  font-weight: 400;
+  letter-spacing: 0;
+}
+:host([data-rui-theme^="mui"]) .rui-stat-label {
+  color: var(--rui-color-text-muted);
+  text-transform: none;
+  letter-spacing: 0.01071em;
+  font-size: var(--rui-font-size-sm);
+}
+/* Material's Pagination items are 32px circles with an 8%-ink selected wash. */
+:host([data-rui-theme^="mui"]) .rui-pagination-button {
+  border-radius: var(--rui-radius-pill);
+  min-width: 32px;
+  border-color: transparent;
+}
+:host([data-rui-theme^="mui"]) .rui-pagination-button[aria-current="page"],
+:host([data-rui-theme^="mui"]) .rui-pagination-button[data-active="true"] {
+  background: color-mix(in srgb, var(--rui-color-text) 8%, transparent);
+  color: var(--rui-color-text);
+  border-color: transparent;
+}
+
+/* ---- Alerts — a tinted band with a bare tinted glyph, no disc ------------ */
+:host([data-rui-theme^="mui"]) .rui-callout {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  background: color-mix(in srgb, var(--rui-color-info) 12%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="mui"]) .rui-callout-section {
+  padding: 6px 16px;
+  gap: 12px;
+  align-items: center;
+}
+:host([data-rui-theme^="mui"]) .rui-callout-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 0;
+  background: transparent;
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--rui-color-info);
+  opacity: 0.9;
+}
+:host([data-rui-theme^="mui"]) .rui-callout-title,
+:host([data-rui-theme^="mui"]) .rui-callout-description {
+  color: var(--rui-color-info-text);
+  font-size: 14px;
+}
+:host([data-rui-theme^="mui"]) .rui-callout-title {
+  font-weight: 500;
+}
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="success"] {
+  background: color-mix(in srgb, var(--rui-color-success) 12%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="success"] .rui-callout-icon { background: transparent; color: var(--rui-color-success); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="success"] .rui-callout-title,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="success"] .rui-callout-description { color: var(--rui-color-success-text); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="warning"] {
+  background: color-mix(in srgb, var(--rui-color-warning) 12%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="warning"] .rui-callout-icon { background: transparent; color: var(--rui-color-warning); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="warning"] .rui-callout-title,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="warning"] .rui-callout-description { color: var(--rui-color-warning-text); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="danger"],
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="error"] {
+  background: color-mix(in srgb, var(--rui-color-danger) 12%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="danger"] .rui-callout-icon,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="error"] .rui-callout-icon { background: transparent; color: var(--rui-color-danger); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="danger"] .rui-callout-title,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="danger"] .rui-callout-description,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="error"] .rui-callout-title,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="error"] .rui-callout-description { color: var(--rui-color-danger-text); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="neutral"] {
+  background: color-mix(in srgb, var(--rui-color-text) 8%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="neutral"] .rui-callout-icon { background: transparent; color: var(--rui-color-text-muted); }
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="neutral"] .rui-callout-title,
+:host([data-rui-theme^="mui"]) .rui-callout[data-variant="neutral"] .rui-callout-description { color: var(--rui-color-text); }
+:host([data-rui-theme^="mui"]) .rui-toast,
+:host([data-rui-theme^="mui"]) .rui-notification {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  box-shadow:
+    0px 3px 5px -1px rgba(0, 0, 0, 0.2),
+    0px 6px 10px 0px rgba(0, 0, 0, 0.14),
+    0px 1px 18px 0px rgba(0, 0, 0, 0.12);
+}
+:host([data-rui-theme^="mui"]) .rui-banner {
+  border-radius: 0;
+  border: none;
+  box-shadow: var(--rui-shadow-sm);
+}
+
+/* ---- Menus — elevation 8, square full-bleed rows ------------------------- */
+:host([data-rui-theme^="mui"]) .rui-dropdown-menu-content,
+:host([data-rui-theme^="mui"]) .rui-popover-content,
+:host([data-rui-theme^="mui"]) .rui-hover-card-content,
+:host([data-rui-theme^="mui"]) .rui-context-menu-pop {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface);
+  padding: 8px 0;
+  box-shadow:
+    0px 5px 5px -3px rgba(0, 0, 0, 0.2),
+    0px 8px 10px 1px rgba(0, 0, 0, 0.14),
+    0px 3px 14px 2px rgba(0, 0, 0, 0.12);
+}
+:host([data-rui-theme^="mui"]) .rui-menu-item {
+  border-radius: 0;
+  padding: 6px 16px;
+  font-size: var(--rui-font-size-base);
+  min-height: 36px;
+}
+:host([data-rui-theme^="mui"]) .rui-menu-item:hover:not(:disabled),
+:host([data-rui-theme^="mui"]) .rui-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--rui-color-text) 4%, transparent);
+}
+/* Material's tooltip is a fixed charcoal, not the theme's ink — it stays the
+   same colour in dark mode, which is why it is a literal here. */
+:host([data-rui-theme^="mui"]) .rui-tooltip-content {
+  background: rgba(97, 97, 97, 0.92);
+  color: #ffffff;
+  border-radius: var(--rui-radius-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+/* ---- Accordion — stacked Paper with no gap and no radius ----------------- */
+:host([data-rui-theme^="mui"]) .rui-accordion {
+  gap: 0;
+}
+:host([data-rui-theme^="mui"]) .rui-accordion-item {
+  border: none;
+  border-radius: 0;
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-sm);
+}
+:host([data-rui-theme^="mui"]) .rui-accordion-item + .rui-accordion-item {
+  border-top: var(--rui-border-width) solid var(--rui-color-border);
+}
+:host([data-rui-theme^="mui"]) .rui-accordion-trigger {
+  min-height: 48px;
+  padding: 0 16px;
+  font-weight: 400;
+}
+:host([data-rui-theme^="mui"]) .rui-accordion-trigger:hover {
+  background: color-mix(in srgb, var(--rui-color-text) 4%, transparent);
+}
+
+/* ---- Progress, steps, separators, avatars -------------------------------- */
+:host([data-rui-theme^="mui"]) .rui-progress-track {
+  height: 4px;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--rui-color-primary) 30%, var(--rui-color-surface));
+}
+:host([data-rui-theme^="mui"]) .rui-progress-bar {
+  border-radius: 0;
+  background: var(--rui-color-primary);
+}
+:host([data-rui-theme^="mui"]) .rui-steps-item::before {
+  width: 24px;
+  height: 24px;
+  font-size: var(--rui-font-size-sm);
+  font-weight: 400;
+}
+/* Material's inactive step is a flat 38%-ink disc, not an outlined one. */
+:host([data-rui-theme^="mui"]) .rui-steps-item[data-status="pending"]::before {
+  background: color-mix(in srgb, var(--rui-color-text) 38%, transparent);
+  color: var(--rui-color-primary-text);
+  border: none;
+}
+:host([data-rui-theme^="mui"]) .rui-separator {
+  background: var(--rui-color-border);
+}
+:host([data-rui-theme^="mui"]) .rui-avatar-fallback {
+  background: #bdbdbd;
+  color: var(--rui-color-surface);
+}
+:host([data-rui-theme^="mui"]) .rui-skeleton-line {
+  border-radius: var(--rui-radius-sm);
+  background: color-mix(in srgb, var(--rui-color-text) 11%, transparent);
+}
+:host([data-rui-theme^="mui"]) .rui-follow-up-button {
+  border-radius: var(--rui-radius-button);
+  background: transparent;
+  color: var(--rui-color-primary);
+  border-color: color-mix(in srgb, var(--rui-color-primary) 50%, transparent);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02857em;
+  font-size: 13px;
+  box-shadow: none;
+}
+:host([data-rui-theme^="mui"]) .rui-follow-up-button:hover {
+  background: color-mix(in srgb, var(--rui-color-primary) 4%, transparent);
+  border-color: var(--rui-color-primary);
+}
+
+/* ---- Dark mode deltas ----------------------------------------------------
+   Material's dark palette is mostly a token swap, which the theme object
+   already carries. What it does NOT swap is Paper: in dark mode a raised
+   surface is lightened by a white overlay proportional to its elevation
+   instead of being separated by a darker shadow, so a hovered card has to grow
+   a lighter fill rather than a deeper shadow to read as raised at all. */
+:host([data-rui-theme="mui-dark"]) .rui-card[data-clickable="true"]:hover,
+:host([data-rui-theme="mui-dark"]) .rui-tile:hover {
+  background: var(--rui-color-surface-muted);
+}
+:host([data-rui-theme="mui-dark"]) .rui-avatar-fallback {
+  background: #616161;
+  color: #ffffff;
+}
+:host([data-rui-theme="mui-dark"]) .rui-callout {
+  /* Dark Alerts invert: the tint becomes a dark wash of the hue and the label
+     is painted in the hue itself. */
+  background: color-mix(in srgb, var(--rui-color-info) 16%, #000000);
+}
+:host([data-rui-theme="mui-dark"]) .rui-callout[data-variant="success"] { background: color-mix(in srgb, var(--rui-color-success) 16%, #000000); }
+:host([data-rui-theme="mui-dark"]) .rui-callout[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 16%, #000000); }
+:host([data-rui-theme="mui-dark"]) .rui-callout[data-variant="danger"],
+:host([data-rui-theme="mui-dark"]) .rui-callout[data-variant="error"]   { background: color-mix(in srgb, var(--rui-color-danger) 16%, #000000); }
+:host([data-rui-theme="mui-dark"]) .rui-callout[data-variant="neutral"] { background: color-mix(in srgb, var(--rui-color-text) 12%, #000000); }
+:host([data-rui-theme="mui-dark"]) .rui-progress-track {
+  background: color-mix(in srgb, var(--rui-color-primary) 30%, #000000);
+}
+
+/* ============================================================================
+   HeroUI — heroui (= heroui-light), heroui-light, heroui-dark.
+
+   Prefix-matched like the two blocks above; ="heroui-dark" carries the
+   deltas.
+
+   HeroUI's tells are mostly BEHAVIOURAL, which is what separates it from the
+   other two rounded-and-friendly kits:
+     - hover DIMS. A solid button keeps its exact fill and drops to
+       opacity: .8; nothing recolours. Press scales the control to .97;
+     - focus is a 2px outline offset by 2px — a hard ring standing clear of
+       the control, not a soft halo bleeding out of its border;
+     - surfaces have NO border. A card is content1 on shadow-medium, and
+       the hairline you think you see is the third layer of that shadow;
+     - 12px controls inside 14px cards, so nothing on screen is square;
+     - flat default-100 fields rather than outlined ones;
+     - a default-100 tab strip with a white content1 pill on
+       shadow-small, and a LIGHT tooltip (content1 + shadow-small) where
+       every other kit paints a dark one;
+     - table headers on a default-100 band whose first and last cells round
+       off, over rows with no separators at all.
+   ============================================================================ */
+:host([data-rui-theme^="heroui"]) {
+  background: var(--rui-color-bg);
+}
+:host([data-rui-theme^="heroui"][transparent]),
+:host([data-rui-theme^="heroui"][transparent="true"]) {
+  background: transparent;
+}
+
+/* ---- Surfaces — content1 on shadow-medium, no border ----------------- */
+:host([data-rui-theme^="heroui"]) .rui-card,
+:host([data-rui-theme^="heroui"]) .rui-stat-card,
+:host([data-rui-theme^="heroui"]) .rui-chart,
+:host([data-rui-theme^="heroui"]) .rui-table-wrapper,
+:host([data-rui-theme^="heroui"]) .rui-media-card,
+:host([data-rui-theme^="heroui"]) .rui-tile,
+:host([data-rui-theme^="heroui"]) .rui-empty-state {
+  border: none;
+  border-radius: var(--rui-radius-lg);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-card,
+:host([data-rui-theme^="heroui"]) .rui-tile {
+  transition:
+    transform var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease),
+    box-shadow var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease);
+}
+/* isPressable cards scale rather than lift — the same gesture as the button. */
+:host([data-rui-theme^="heroui"]) .rui-card[data-clickable="true"]:active,
+:host([data-rui-theme^="heroui"]) .rui-tile:active {
+  transform: scale(0.98);
+}
+:host([data-rui-theme^="heroui"]) .rui-modal,
+:host([data-rui-theme^="heroui"]) .rui-sheet-panel {
+  border: none;
+  border-radius: var(--rui-radius-lg);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-sm);
+}
+/* HeroUI blurs behind its modal scrim instead of just darkening it. */
+:host([data-rui-theme^="heroui"]) .rui-modal-overlay,
+:host([data-rui-theme^="heroui"]) .rui-sheet-overlay {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+:host([data-rui-theme^="heroui"]) .rui-modal-title {
+  font-size: var(--rui-font-size-20);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+:host([data-rui-theme^="heroui"]) .rui-code-block {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface-muted);
+}
+:host([data-rui-theme^="heroui"]) .rui-list-item {
+  border-radius: var(--rui-radius-md);
+}
+
+/* ---- Type — semibold headings on tight tracking -------------------------- */
+:host([data-rui-theme^="heroui"]) .rui-card-title,
+:host([data-rui-theme^="heroui"]) .rui-section-title,
+:host([data-rui-theme^="heroui"]) .rui-text[data-variant="heading"],
+:host([data-rui-theme^="heroui"]) .rui-text[data-variant="large-heavy"] {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+:host([data-rui-theme^="heroui"]) .rui-page-header-title,
+:host([data-rui-theme^="heroui"]) .rui-text[data-variant="title"] {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+:host([data-rui-theme^="heroui"]) .rui-card-subtitle,
+:host([data-rui-theme^="heroui"]) .rui-callout-description {
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-sm);
+}
+:host([data-rui-theme^="heroui"]) .rui-card-eyebrow,
+:host([data-rui-theme^="heroui"]) .rui-section-header-eyebrow {
+  color: var(--rui-color-primary);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--rui-font-size-sm);
+  font-weight: 600;
+}
+/* Links dim like everything else here; they are not underlined. */
+:host([data-rui-theme^="heroui"]) .rui-link {
+  font-weight: 500;
+  transition: opacity var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="heroui"]) .rui-link:hover {
+  color: var(--rui-color-link);
+  opacity: 0.8;
+  text-decoration: none;
+}
+
+/* ---- Buttons — dim on hover, scale on press, never recolour -------------- */
+:host([data-rui-theme^="heroui"]) .rui-button {
+  border-radius: var(--rui-radius-button);
+  border: var(--rui-border-width) solid transparent;
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+  font-size: 14px;
+  font-weight: 500;
+  min-width: 80px;
+  box-shadow: none;
+  transition:
+    opacity var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease),
+    transform var(--rui-motion-fast, 150ms) var(--rui-motion-ease, ease),
+    background var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="heroui"]) .rui-button:hover:not(:disabled) {
+  background: var(--rui-color-primary);
+  opacity: 0.8;
+}
+:host([data-rui-theme^="heroui"]) .rui-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-size="xs"],
+:host([data-rui-theme^="heroui"]) .rui-button[data-size="sm"] { font-size: 12px; min-width: 64px; }
+:host([data-rui-theme^="heroui"]) .rui-button[data-size="lg"],
+:host([data-rui-theme^="heroui"]) .rui-button[data-size="xl"] { font-size: 16px; min-width: 96px; }
+/* variant="flat" — a 20% wash of the colour with the colour as the label.
+   This is HeroUI's real secondary button, and it is used far more than the
+   bordered one. */
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="secondary"] {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text);
+  border-color: transparent;
+  box-shadow: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="secondary"]:hover:not(:disabled) {
+  background: var(--rui-color-surface-muted);
+  opacity: 0.8;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="outline"] {
+  background: transparent;
+  color: var(--rui-color-link);
+  border: 2px solid var(--rui-color-primary);
+  box-shadow: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="outline"]:hover:not(:disabled) {
+  background: transparent;
+  opacity: 0.8;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="ghost"] {
   background: transparent;
   color: var(--rui-color-text);
   border-color: transparent;
   box-shadow: none;
 }
-:host([data-rui-theme="modern"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
   background: var(--rui-color-surface-muted);
+  opacity: 1;
 }
-:host([data-rui-theme="modern"]) .rui-input,
-:host([data-rui-theme="modern"]) .rui-select,
-:host([data-rui-theme="modern"]) .rui-textarea {
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="link"] {
+  background: transparent;
+  color: var(--rui-color-link);
+  border-color: transparent;
+  box-shadow: none;
+  min-width: 0;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="link"]:hover:not(:disabled) {
+  background: transparent;
+  opacity: 0.8;
+  text-decoration: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="danger"] {
+  background: var(--rui-color-danger);
+  color: #ffffff;
+  border-color: transparent;
+}
+:host([data-rui-theme^="heroui"]) .rui-button[data-variant="danger"]:hover:not(:disabled) {
+  background: var(--rui-color-danger);
+  opacity: 0.8;
+}
+:host([data-rui-theme^="heroui"]) .rui-button:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+}
+/* The focus ring: a hard 2px outline standing 2px clear of the control. */
+:host([data-rui-theme^="heroui"]) .rui-button:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-icon-button:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-follow-up-button:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-tab-trigger:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-menu-item:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-nav-link:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-sidebar-item:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-icon-button {
+  border-radius: var(--rui-radius-md);
+  transition:
+    opacity var(--rui-motion-base, 250ms) var(--rui-motion-ease, ease),
+    transform var(--rui-motion-fast, 150ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="heroui"]) .rui-icon-button:active:not(:disabled) {
+  transform: scale(0.93);
+}
+
+/* ---- Fields — flat default-100 fill, 12px corners ---------------------- */
+:host([data-rui-theme^="heroui"]) .rui-input,
+:host([data-rui-theme^="heroui"]) .rui-select,
+:host([data-rui-theme^="heroui"]) .rui-textarea,
+:host([data-rui-theme^="heroui"]) .rui-number-input,
+:host([data-rui-theme^="heroui"]) .rui-combobox-trigger {
   background: var(--rui-color-surface-muted);
-  border-color: var(--rui-color-border);
+  border-color: var(--rui-color-border-control);
   border-radius: var(--rui-radius-input);
-  transition: border-color 140ms ease, box-shadow 160ms ease, background 140ms ease;
+  padding: 10px 12px;
+  box-shadow: none;
 }
-:host([data-rui-theme="modern"]) .rui-input:focus,
-:host([data-rui-theme="modern"]) .rui-select:focus,
-:host([data-rui-theme="modern"]) .rui-textarea:focus {
-  background: var(--rui-color-surface);
-  border-color: var(--rui-color-accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--rui-color-accent) 18%, transparent);
+/* The InputGroup shell takes the same fill and edge but no padding of its own —
+   the control it wraps is already padded, and doubling it would make the shell
+   two rows tall. */
+:host([data-rui-theme^="heroui"]) .rui-input-group {
+  background: var(--rui-color-surface-muted);
+  border-color: var(--rui-color-border-control);
+  border-radius: var(--rui-radius-input);
+  box-shadow: none;
 }
-:host([data-rui-theme="modern"]) .rui-tab-list {
-  border-bottom: none;
+/* The base sheet strips the nested control's chrome so the GROUP owns the
+   border, radius and fill. The field rules above out-specify that reset, so
+   it is restated here at the same weight — otherwise an InputGroup renders a
+   box inside a box. */
+:host([data-rui-theme^="heroui"]) .rui-input-group-field .rui-input,
+:host([data-rui-theme^="heroui"]) .rui-input-group-field .rui-select,
+:host([data-rui-theme^="heroui"]) .rui-input-group-field .rui-textarea,
+:host([data-rui-theme^="heroui"]) .rui-input-group-field .rui-number-input,
+:host([data-rui-theme^="heroui"]) .rui-input-group-field .rui-combobox-trigger {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-input:hover:not(:disabled),
+:host([data-rui-theme^="heroui"]) .rui-select:hover:not(:disabled),
+:host([data-rui-theme^="heroui"]) .rui-textarea:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rui-color-text) 8%, var(--rui-color-surface-muted));
+}
+:host([data-rui-theme^="heroui"]) .rui-input:focus,
+:host([data-rui-theme^="heroui"]) .rui-select:focus,
+:host([data-rui-theme^="heroui"]) .rui-textarea:focus,
+:host([data-rui-theme^="heroui"]) .rui-input-group:focus-within {
+  background: var(--rui-color-surface-muted);
+  border-color: var(--rui-color-primary);
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-input::placeholder,
+:host([data-rui-theme^="heroui"]) .rui-textarea::placeholder {
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="heroui"]) .rui-field-label,
+:host([data-rui-theme^="heroui"]) .rui-form-label {
+  font-size: var(--rui-font-size-sm);
+  font-weight: 500;
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="heroui"]) .rui-field-hint,
+:host([data-rui-theme^="heroui"]) .rui-field-description,
+:host([data-rui-theme^="heroui"]) .rui-field-error,
+:host([data-rui-theme^="heroui"]) .rui-form-hint {
+  font-size: var(--rui-font-size-sm);
+}
+/* HeroUI's checkbox is a filled rounded square (no ring when unchecked in the
+   real kit — a 2px boundary is kept here so the control clears WCAG 1.4.11). */
+:host([data-rui-theme^="heroui"]) .rui-checkbox input[type="checkbox"],
+:host([data-rui-theme^="heroui"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme^="heroui"]) .rui-data-grid-col-panel-cb {
+  border-radius: 7px;
+  border-width: 2px;
+}
+:host([data-rui-theme^="heroui"]) .rui-radio input[type="radio"] {
+  border-width: 2px;
+}
+:host([data-rui-theme^="heroui"]) .rui-checkbox input[type="checkbox"]:focus-visible,
+:host([data-rui-theme^="heroui"]) .rui-radio input[type="radio"]:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+/* A 48x28 track with a 22px thumb — the largest switch of the three. */
+:host([data-rui-theme^="heroui"]) .rui-switch-track {
+  width: 48px;
+  height: 28px;
+  border: none;
+  background: var(--rui-color-border-control);
+}
+:host([data-rui-theme^="heroui"]) .rui-switch-thumb {
+  width: 22px;
+  height: 22px;
+  top: 3px;
+  left: 3px;
+  background: #ffffff;
+  box-shadow: var(--rui-shadow-sm);
+}
+:host([data-rui-theme^="heroui"]) .rui-switch-input:checked + .rui-switch-track {
+  background: var(--rui-color-primary);
+}
+:host([data-rui-theme^="heroui"]) .rui-switch-input:checked + .rui-switch-track .rui-switch-thumb {
+  transform: translateX(20px);
+}
+:host([data-rui-theme^="heroui"]) .rui-switch-input:focus-visible + .rui-switch-track {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* ---- Tabs — a default-100 trough with a content1 cursor -------------- */
+:host([data-rui-theme^="heroui"]) .rui-tab-list {
+  display: inline-flex;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
   gap: 4px;
   padding: 4px;
   background: var(--rui-color-surface-muted);
-  border-radius: var(--rui-radius-pill);
-  display: inline-flex;
-}
-:host([data-rui-theme="modern"]) .rui-tab-trigger {
   border: none;
-  border-radius: var(--rui-radius-pill);
-  padding: 6px 16px;
-  font-weight: 600;
-  color: var(--rui-color-text-muted);
-  transition: background 140ms ease, color 140ms ease;
+  border-bottom: none;
+  border-radius: var(--rui-radius-md);
 }
-:host([data-rui-theme="modern"]) .rui-tab-trigger:hover {
+:host([data-rui-theme^="heroui"]) .rui-tab-trigger {
+  border: none;
+  border-radius: var(--rui-radius-sm);
+  margin-bottom: 0;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--rui-color-text-muted);
+  background: transparent;
+}
+:host([data-rui-theme^="heroui"]) .rui-tab-trigger[aria-selected="true"] {
+  background: var(--rui-color-surface);
+  color: var(--rui-color-text);
+  box-shadow: var(--rui-shadow-sm);
+}
+:host([data-rui-theme^="heroui"]) .rui-segmented-control {
+  background: var(--rui-color-surface-muted);
+  border: none;
+  border-radius: var(--rui-radius-md);
+  padding: 4px;
+}
+:host([data-rui-theme^="heroui"]) .rui-segmented-control-option {
+  border-radius: var(--rui-radius-sm);
+  font-weight: 500;
+}
+:host([data-rui-theme^="heroui"]) .rui-segmented-control-option[data-active="true"] {
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-sm);
+}
+
+/* ---- Navigation — a translucent, blurred bar and rounded rows ------------ */
+:host([data-rui-theme^="heroui"]) .rui-nav-link,
+:host([data-rui-theme^="heroui"]) .rui-sidebar-item {
+  border-radius: var(--rui-radius-sm);
+  font-weight: 500;
+}
+:host([data-rui-theme^="heroui"]) .rui-nav-link[data-active="true"],
+:host([data-rui-theme^="heroui"]) .rui-sidebar-item[data-active="true"] {
+  background: color-mix(in srgb, var(--rui-color-primary) 15%, transparent);
+  color: var(--rui-color-link);
+  border-color: transparent;
+}
+:host([data-rui-theme^="heroui"]) .rui-sidebar-item:hover {
+  background: var(--rui-color-surface-muted);
   color: var(--rui-color-text);
 }
-:host([data-rui-theme="modern"]) .rui-tab-trigger[aria-selected="true"] {
+:host([data-rui-theme^="heroui"]) .rui-sidebar {
+  border: none;
+  border-radius: var(--rui-radius-lg);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-toolbar {
+  border-radius: var(--rui-radius-md);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+}
+
+/* ---- Chips — fully rounded, solid by default ----------------------------- */
+:host([data-rui-theme^="heroui"]) .rui-badge,
+:host([data-rui-theme^="heroui"]) .rui-tag,
+:host([data-rui-theme^="heroui"]) .rui-pill,
+:host([data-rui-theme^="heroui"]) .rui-filter-pill {
+  border-radius: var(--rui-radius-pill);
+  font-size: var(--rui-font-size-sm);
+  font-weight: 400;
+  padding: 3px 10px;
+  border-color: transparent;
+}
+:host([data-rui-theme^="heroui"]) .rui-badge[data-variant="primary"] {
   background: var(--rui-color-primary);
   color: var(--rui-color-primary-text);
-  box-shadow: 0 2px 8px rgba(17, 24, 39, 0.14);
+  font-weight: 500;
 }
-:host([data-rui-theme="modern"]) .rui-tag,
-:host([data-rui-theme="modern"]) .rui-badge {
-  border-radius: var(--rui-radius-pill);
+:host([data-rui-theme^="heroui"]) .rui-kbd {
+  border-radius: var(--rui-radius-xs);
+}
+
+/* ---- Data — a rounded header band and separator-free rows ---------------- */
+:host([data-rui-theme^="heroui"]) .rui-table,
+:host([data-rui-theme^="heroui"]) .rui-data-grid-table {
+  font-size: var(--rui-font-size-sm);
+  border-collapse: separate;
+  border-spacing: 0;
+}
+:host([data-rui-theme^="heroui"]) .rui-table th,
+:host([data-rui-theme^="heroui"]) .rui-data-grid-table th {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text-muted);
   font-weight: 600;
+  font-size: var(--rui-font-size-sm);
+  text-transform: none;
+  letter-spacing: 0;
+  border-bottom: none;
 }
-:host([data-rui-theme="modern"]) .rui-badge[data-variant="primary"] {
-  background: color-mix(in srgb, var(--rui-color-accent) 14%, transparent);
-  /* The 14% wash stays keyed to the accent; the label on it does not — this
-     theme's accent is 3.66:1 against its own wash, the link token 4.58:1. */
-  color: var(--rui-color-link);
+:host([data-rui-theme^="heroui"]) .rui-table th:first-child {
+  border-top-left-radius: var(--rui-radius-md);
+  border-bottom-left-radius: var(--rui-radius-md);
 }
-:host([data-rui-theme="modern"]) .rui-stat-value {
-  color: var(--rui-color-text);
-  font-weight: 700;
+:host([data-rui-theme^="heroui"]) .rui-table th:last-child {
+  border-top-right-radius: var(--rui-radius-md);
+  border-bottom-right-radius: var(--rui-radius-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-table td {
+  border-bottom: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-table tbody tr:hover td {
+  background: var(--rui-color-surface-muted);
+}
+:host([data-rui-theme^="heroui"]) .rui-table tbody tr:hover td:first-child {
+  border-top-left-radius: var(--rui-radius-md);
+  border-bottom-left-radius: var(--rui-radius-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-table tbody tr:hover td:last-child {
+  border-top-right-radius: var(--rui-radius-md);
+  border-bottom-right-radius: var(--rui-radius-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-stat-value {
+  font-weight: 600;
   letter-spacing: -0.03em;
 }
-:host([data-rui-theme="modern"]) .rui-stat-label {
+:host([data-rui-theme^="heroui"]) .rui-stat-label {
   color: var(--rui-color-text-muted);
-  letter-spacing: 0.01em;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--rui-font-size-sm);
+  font-weight: 500;
 }
-:host([data-rui-theme="modern"]) .rui-link {
-  color: var(--rui-color-link);
-  font-weight: 600;
+:host([data-rui-theme^="heroui"]) .rui-pagination-button {
+  border-radius: var(--rui-radius-md);
+  border-color: transparent;
+  font-weight: 500;
 }
-:host([data-rui-theme="modern"]) .rui-table th {
-  background: var(--rui-color-surface-muted);
-  color: var(--rui-color-text-muted);
-  font-weight: 600;
-  font-size: var(--rui-font-size-11);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  border-bottom-color: var(--rui-color-border);
+
+/* ---- Messaging — a flat 15% wash of the hue, a rounded icon plate -------- */
+:host([data-rui-theme^="heroui"]) .rui-callout {
+  border: none;
+  border-radius: var(--rui-radius-md);
+  background: color-mix(in srgb, var(--rui-color-info) 15%, var(--rui-color-surface));
 }
-:host([data-rui-theme="modern"]) .rui-table td { border-bottom-color: var(--rui-color-border-subtle); }
-:host([data-rui-theme="modern"]) .rui-table tbody tr:hover td {
-  background: var(--rui-color-surface-muted);
+:host([data-rui-theme^="heroui"]) .rui-callout-section {
+  padding: 12px 16px;
+  gap: 12px;
+  align-items: center;
 }
-:host([data-rui-theme="modern"]) .rui-follow-up-button {
-  background: var(--rui-color-surface);
-  border-color: var(--rui-color-border);
-  color: var(--rui-color-text);
+:host([data-rui-theme^="heroui"]) .rui-callout-icon {
+  width: 32px;
+  height: 32px;
   border-radius: var(--rui-radius-pill);
+  background: color-mix(in srgb, var(--rui-color-info) 25%, var(--rui-color-surface));
+  color: var(--rui-color-info-text);
+  font-size: var(--rui-font-size-base);
+}
+:host([data-rui-theme^="heroui"]) .rui-callout-title {
   font-weight: 600;
+  color: var(--rui-color-info-text);
+}
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="success"] { background: color-mix(in srgb, var(--rui-color-success) 15%, var(--rui-color-surface)); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="success"] .rui-callout-icon { background: color-mix(in srgb, var(--rui-color-success) 25%, var(--rui-color-surface)); color: var(--rui-color-success-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="success"] .rui-callout-title { color: var(--rui-color-success-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 15%, var(--rui-color-surface)); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="warning"] .rui-callout-icon { background: color-mix(in srgb, var(--rui-color-warning) 25%, var(--rui-color-surface)); color: var(--rui-color-warning-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="warning"] .rui-callout-title { color: var(--rui-color-warning-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="danger"],
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="error"] { background: color-mix(in srgb, var(--rui-color-danger) 15%, var(--rui-color-surface)); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="danger"] .rui-callout-icon,
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="error"] .rui-callout-icon { background: color-mix(in srgb, var(--rui-color-danger) 25%, var(--rui-color-surface)); color: var(--rui-color-danger-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="danger"] .rui-callout-title,
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="error"] .rui-callout-title { color: var(--rui-color-danger-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="neutral"] { background: var(--rui-color-surface-muted); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="neutral"] .rui-callout-icon { background: color-mix(in srgb, var(--rui-color-text) 12%, transparent); color: var(--rui-color-text); }
+:host([data-rui-theme^="heroui"]) .rui-callout[data-variant="neutral"] .rui-callout-title { color: var(--rui-color-text); }
+:host([data-rui-theme^="heroui"]) .rui-toast,
+:host([data-rui-theme^="heroui"]) .rui-notification {
+  border: none;
+  border-radius: var(--rui-radius-lg);
+  box-shadow: var(--rui-shadow-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-banner {
+  border: none;
+  border-radius: 0;
+}
+
+/* ---- Overlays — rounded-large, shadow-medium, and a LIGHT tooltip ---- */
+:host([data-rui-theme^="heroui"]) .rui-dropdown-menu-content,
+:host([data-rui-theme^="heroui"]) .rui-popover-content,
+:host([data-rui-theme^="heroui"]) .rui-hover-card-content,
+:host([data-rui-theme^="heroui"]) .rui-context-menu-pop {
+  border: none;
+  border-radius: var(--rui-radius-lg);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-md);
+  padding: 4px;
+}
+:host([data-rui-theme^="heroui"]) .rui-menu-item {
+  border-radius: var(--rui-radius-sm);
+  padding: 8px 10px;
+  font-size: var(--rui-font-size-sm);
+}
+/* Light tooltip on content1, which is the one HeroUI choice most likely to
+   read as "wrong" to somebody expecting a dark chip — and is exactly right. */
+:host([data-rui-theme^="heroui"]) .rui-tooltip-content {
+  background: var(--rui-color-surface);
+  color: var(--rui-color-text);
+  border-radius: var(--rui-radius-sm);
+  padding: 6px 10px;
+  font-size: var(--rui-font-size-sm);
+  font-weight: 400;
   box-shadow: var(--rui-shadow-sm);
-  transition: background 140ms ease, border-color 140ms ease, transform 120ms ease;
 }
-:host([data-rui-theme="modern"]) .rui-follow-up-button:hover {
-  background: var(--rui-color-surface-muted);
-  border-color: color-mix(in srgb, var(--rui-color-accent) 40%, var(--rui-color-border));
-  transform: translateY(-1px);
+:host([data-rui-theme^="heroui"]) .rui-tooltip-arrow {
+  background: var(--rui-color-surface);
 }
-:host([data-rui-theme="modern"]) .rui-steps-item::before {
+
+/* ---- Accordion — divided rows, no boxes ---------------------------------- */
+:host([data-rui-theme^="heroui"]) .rui-accordion {
+  gap: 0;
+}
+:host([data-rui-theme^="heroui"]) .rui-accordion-item {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+:host([data-rui-theme^="heroui"]) .rui-accordion-item + .rui-accordion-item {
+  border-top: var(--rui-border-width) solid var(--rui-color-border);
+}
+:host([data-rui-theme^="heroui"]) .rui-accordion-trigger {
+  padding: 16px 0;
+  font-weight: 500;
+}
+
+/* ---- Progress, steps, skeletons, separators, avatars --------------------- */
+:host([data-rui-theme^="heroui"]) .rui-progress-track {
+  height: 12px;
+  background: color-mix(in srgb, var(--rui-color-text) 15%, transparent);
+}
+:host([data-rui-theme^="heroui"]) .rui-progress-bar {
   background: var(--rui-color-primary);
-  color: var(--rui-color-primary-text);
-  font-weight: 700;
 }
-:host([data-rui-theme="modern"]) .rui-separator {
+:host([data-rui-theme^="heroui"]) .rui-steps-item::before {
+  font-weight: 500;
+  font-size: var(--rui-font-size-sm);
+}
+:host([data-rui-theme^="heroui"]) .rui-skeleton-line {
+  background: var(--rui-color-surface-muted);
+  border-radius: var(--rui-radius-md);
+}
+:host([data-rui-theme^="heroui"]) .rui-separator {
   background: var(--rui-color-border);
 }
+:host([data-rui-theme^="heroui"]) .rui-avatar-fallback {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="heroui"]) .rui-follow-up-button {
+  border-radius: var(--rui-radius-button);
+  background: var(--rui-color-surface-muted);
+  border-color: transparent;
+  color: var(--rui-color-text);
+  font-weight: 500;
+  box-shadow: none;
+}
+:host([data-rui-theme^="heroui"]) .rui-follow-up-button:hover {
+  background: var(--rui-color-surface-muted);
+  opacity: 0.8;
+}
+
+/* ---- Dark mode deltas ----------------------------------------------------
+   The palette swap is carried by the tokens. What the tokens cannot express is
+   that HeroUI's dark surfaces get their edge from an INSET white rim-light
+   inside the shadow rather than from a darker drop, and that the page behind
+   them is pure black — so a hovered row has to lighten rather than darken. */
+:host([data-rui-theme="heroui-dark"]) .rui-input:hover:not(:disabled),
+:host([data-rui-theme="heroui-dark"]) .rui-select:hover:not(:disabled),
+:host([data-rui-theme="heroui-dark"]) .rui-textarea:hover:not(:disabled) {
+  background: color-mix(in srgb, #ffffff 8%, var(--rui-color-surface-muted));
+}
+:host([data-rui-theme="heroui-dark"]) .rui-switch-thumb {
+  background: var(--rui-color-text);
+}
+:host([data-rui-theme="heroui-dark"]) .rui-callout {
+  background: color-mix(in srgb, var(--rui-color-info) 18%, var(--rui-color-surface));
+}
+:host([data-rui-theme="heroui-dark"]) .rui-callout[data-variant="success"] { background: color-mix(in srgb, var(--rui-color-success) 18%, var(--rui-color-surface)); }
+:host([data-rui-theme="heroui-dark"]) .rui-callout[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 18%, var(--rui-color-surface)); }
+:host([data-rui-theme="heroui-dark"]) .rui-callout[data-variant="danger"],
+:host([data-rui-theme="heroui-dark"]) .rui-callout[data-variant="error"]   { background: color-mix(in srgb, var(--rui-color-danger) 18%, var(--rui-color-surface)); }
 
 /* ----------------------------------------------------------------------- */
 /* DropdownMenu / MenuItem / MenuSeparator / MenuLabel                     */

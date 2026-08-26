@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Themes · Aktion</title>
-  <meta name="description" content="Ship Aktion apps with six polished built-in themes — light, dark, corporate, soft, glass, modern — switch with one attribute, and override any of the 113 design tokens in-program with $theme({...}): colours, radius, typography, spacing, shadows, gradients, layers, motion." />
+  <meta name="description" content="Ship Aktion apps with nine built-in themes under twelve names — light, dark, soft, plus faithful re-creations of shadcn/ui, Material UI and HeroUI in light and dark — switch with one attribute, and override any of the 113 design tokens in-program with $theme({...}): colours, radius, typography, spacing, shadows, gradients, layers, motion." />
   <script>
     (function () {
       try {
@@ -126,9 +126,16 @@
 
       <h2 id="built-in">Built-in themes</h2>
       <p>
-        Six themes come in the box. Select one with the <code>theme</code>
-        attribute on the host element &mdash; <code>light</code> is the default if
-        you omit it. Switching is instant: only the host's CSS variables change.
+        Nine themes come in the box, under twelve names. Select one with the
+        <code>theme</code> attribute on the host element &mdash; <code>light</code> is the
+        default if you omit it. Switching is instant: only the host's CSS variables change.
+      </p>
+      <p>
+        Three of them are faithful re-creations of design systems you already know
+        &mdash; <strong>shadcn/ui</strong>, <strong>Material&nbsp;UI</strong> and
+        <strong>HeroUI</strong> &mdash; each in a light and a dark variant. The bare name
+        means the light one, so <code>theme="shadcn"</code> and
+        <code>theme="shadcn-light"</code> are the same theme.
       </p>
       <pre><code>&lt;aktion-app theme="dark"&gt;&lt;/aktion-app&gt;</code></pre>
       <p>
@@ -152,10 +159,22 @@
             <td>None</td>
           </tr>
           <tr>
-            <td><code>corporate</code></td>
-            <td>Contemporary enterprise workspace. Deep teal <code>#0f766e</code> primary that <em>darkens</em> to <code>#0b5f58</code> on hover, graphite <code>#f5f7f8</code> canvas, square&#8209;shouldered 8px buttons and inputs, flat hairline cards that tint on hover, a 2px teal rail under the selected tab, 15px Inter body under Space&nbsp;Grotesk headings.</td>
-            <td>Admin panels, consoles, dense scannable data UIs, internal tools.</td>
-            <td><strong>Yes</strong> &mdash; Inter + Space&nbsp;Grotesk</td>
+            <td><code>shadcn</code><br /><code>shadcn-light</code><br /><code>shadcn-dark</code></td>
+            <td><strong>shadcn/ui</strong>, default <code>neutral</code> theme. White page, ink <code>#171717</code> primary with a near&#8209;white label, one flat <code>#f5f5f5</code> wash doing secondary / muted / accent duty, <code>rounded-md</code> (8px) controls inside <code>rounded-xl</code> (14px) cards, a 3px 50%&#8209;alpha focus ring, a segmented tab strip, a <code>rounded-md</code> badge and a tooltip painted in the primary colour &mdash; on 14px Geist. Dark inverts the primary to <code>#e5e5e5</code> ink on <code>#0a0a0a</code>.</td>
+            <td>Anything that should look like it was built with shadcn/ui &mdash; app dashboards, admin panels, developer tools.</td>
+            <td><strong>Yes</strong> &mdash; Geist + Geist&nbsp;Mono</td>
+          </tr>
+          <tr>
+            <td><code>mui</code><br /><code>mui-light</code><br /><code>mui-dark</code></td>
+            <td><strong>Material&nbsp;UI</strong>, default theme. <code>#1976d2</code> primary, <code>#9c27b0</code> secondary, 4px radii everywhere, UPPERCASE 500&#8209;weight buttons on <code>0.02857em</code> tracking, borderless Paper separated by the real three&#8209;layer elevation shadows, 56px outlined text fields, a 2px tab indicator and the charcoal 11px tooltip. Dark is <code>#90caf9</code> on <code>#121212</code> with elevation&#8209;overlay surfaces.</td>
+            <td>Enterprise apps, internal tools and anywhere the house style is Material.</td>
+            <td><strong>Yes</strong> &mdash; Roboto + Roboto&nbsp;Mono</td>
+          </tr>
+          <tr>
+            <td><code>heroui</code><br /><code>heroui-light</code><br /><code>heroui-dark</code></td>
+            <td><strong>HeroUI</strong>. <code>#006fee</code> primary, 12px controls in 14px borderless cards on <code>shadow-medium</code>, filled <code>#f4f4f5</code> fields, hover that <em>dims</em> to <code>opacity: .8</code> instead of recolouring, press that scales to <code>.97</code>, a hard 2px offset focus outline and a light tooltip &mdash; on 16px Inter. Dark is pure black behind <code>#18181b</code> surfaces.</td>
+            <td>Consumer products, marketing apps, anything that should feel rounded and modern.</td>
+            <td><strong>Yes</strong> &mdash; Inter</td>
           </tr>
           <tr>
             <td><code>soft</code></td>
@@ -163,88 +182,92 @@
             <td>Consumer, wellness and education UIs &mdash; anything that should read as gentle.</td>
             <td>Declares Quicksand/Nunito, does <em>not</em> load them</td>
           </tr>
-          <tr>
-            <td><code>glass</code></td>
-            <td>Light glassmorphism. Translucent <code>rgba(255,255,255,0.55)</code> surfaces with real <code>backdrop-filter</code> blur over a pastel wash, white rim&#8209;light borders, terracotta primary.</td>
-            <td>Marketing, hero and showcase screens where the backdrop is part of the design.</td>
-            <td>Declares Poppins/Inter, does <em>not</em> load them</td>
-          </tr>
-          <tr>
-            <td><code>modern</code></td>
-            <td>Clean SaaS dashboard. Off&#8209;white <code>#f4f5f7</code> canvas, crisp white cards, ink <code>#111827</code> primary, violet accent, fully pill buttons (<code>radiusButton: 999px</code>), tightened heading tracking, vibrant charts.</td>
-            <td>Product dashboards, analytics, modern B2B SaaS.</td>
-            <td>Declares Plus&nbsp;Jakarta&nbsp;Sans/Inter, does <em>not</em> load them</td>
-          </tr>
         </tbody>
       </table>
       <p>
-        Retired names are gone for good: <code>neon</code> and <code>brutalist</code> were
-        removed, <code>skyline</code> became <code>corporate</code>, and
+        <strong>Renamed in 0.7.</strong> <code>modern</code>, <code>glass</code> and
+        <code>corporate</code> were replaced by <code>shadcn</code>, <code>mui</code> and
+        <code>heroui</code>. The old spellings still resolve &mdash; the resolver rewrites
+        them, so <code>theme="modern"</code> renders shadcn/ui and the host reports
+        <code>data-rui-theme="shadcn-light"</code> &mdash; but they are no longer listed
+        anywhere and will be removed in a future release.
+      </p>
+      <p>
+        Names retired earlier are gone for good: <code>neon</code>,
+        <code>brutalist</code> and <code>skyline</code> were removed and
         <code>pastel</code> became <code>soft</code>. Each of those now resolves to
         <code>light</code>.
       </p>
 
       <h3 id="theme-signatures">What each theme actually changes</h3>
       <p>
-        All six themes share the same token names, so a component never has to know
-        which one is active. These are the values that give each theme its character:
+        Every theme shares the same token names, so a component never has to know
+        which one is active. These are the values that give each theme its character
+        (the <code>-dark</code> variants share their sibling's shape and type and differ
+        only in colour):
       </p>
       <table class="signature-table">
-        <thead><tr><th>Token</th><th><code>light</code></th><th><code>dark</code></th><th><code>corporate</code></th><th><code>soft</code></th><th><code>glass</code></th><th><code>modern</code></th></tr></thead>
+        <thead><tr><th>Token</th><th><code>light</code></th><th><code>dark</code></th><th><code>shadcn</code></th><th><code>shadcn-dark</code></th><th><code>mui</code></th><th><code>mui-dark</code></th><th><code>heroui</code></th><th><code>heroui-dark</code></th><th><code>soft</code></th></tr></thead>
         <tbody>
-          <tr><td><code>colorBg</code></td><td><code>#ffffff</code></td><td><code>#0b1220</code></td><td><code>#f5f7f8</code></td><td><code>#fdf6ff</code></td><td><code>#eceef2</code></td><td><code>#f4f5f7</code></td></tr>
-          <tr><td><code>colorSurface</code></td><td><code>#ffffff</code></td><td><code>#111827</code></td><td><code>#ffffff</code></td><td><code>#ffffff</code></td><td><code>rgba(255,255,255,.55)</code></td><td><code>#ffffff</code></td></tr>
-          <tr><td><code>colorText</code></td><td><code>#0f172a</code></td><td><code>#f8fafc</code></td><td><code>#0d1f22</code></td><td><code>#3b1f56</code></td><td><code>#33303a</code></td><td><code>#111827</code></td></tr>
-          <tr><td><code>colorPrimary</code></td><td><code>#4f46e5</code></td><td><code>#818cf8</code></td><td><code>#0f766e</code></td><td><code>#7c4ddb</code></td><td><code>#af4027</code></td><td><code>#111827</code></td></tr>
-          <tr><td><code>colorAccent</code></td><td><code>#4f46e5</code></td><td><code>#818cf8</code></td><td><code>#0b7d72</code></td><td><code>#5eead4</code></td><td><code>#b58ee6</code></td><td><code>#7c5cfc</code></td></tr>
-          <tr><td><code>radiusSm/Md/Lg</code></td><td>6/10/16</td><td>6/10/16</td><td>6/10/14</td><td>12/20/28</td><td>14/20/28</td><td>12/18/24</td></tr>
-          <tr><td><code>radiusButton</code></td><td><code>6px</code></td><td><code>6px</code></td><td><code>8px</code></td><td><code>16px</code></td><td><code>16px</code></td><td><code>999px</code></td></tr>
-          <tr><td><code>spacing</code> xs&hellip;3xl</td><td>4/8/12/20/32/48/80</td><td>same</td><td>4/8/14/22/36/56/88</td><td>6/12/18/28/44/66/110</td><td>6/12/18/26/42/63/105</td><td>5/10/16/24/40/60/100</td></tr>
-          <tr><td><code>buttonPaddingY/X</code></td><td>8/14</td><td>8/14</td><td><strong>9/16</strong></td><td>8/14</td><td>8/14</td><td>10/18</td></tr>
-          <tr><td><code>transitionDuration</code></td><td><code>120ms</code></td><td><code>120ms</code></td><td><code>150ms</code></td><td><code>120ms</code></td><td><code>120ms</code></td><td><code>120ms</code></td></tr>
+          <tr><td><code>colorBg</code></td><td><code>#ffffff</code></td><td><code>#0b1220</code></td><td><code>#ffffff</code></td><td><code>#0a0a0a</code></td><td><code>#ffffff</code></td><td><code>#121212</code></td><td><code>#ffffff</code></td><td><code>#000000</code></td><td><code>#fdf6ff</code></td></tr>
+          <tr><td><code>colorSurface</code></td><td><code>#ffffff</code></td><td><code>#111827</code></td><td><code>#ffffff</code></td><td><code>#171717</code></td><td><code>#ffffff</code></td><td><code>#1e1e1e</code></td><td><code>#ffffff</code></td><td><code>#18181b</code></td><td><code>#ffffff</code></td></tr>
+          <tr><td><code>colorText</code></td><td><code>#0f172a</code></td><td><code>#f8fafc</code></td><td><code>#0a0a0a</code></td><td><code>#fafafa</code></td><td><code>rgba(0,0,0,.87)</code></td><td><code>#ffffff</code></td><td><code>#11181c</code></td><td><code>#ecedee</code></td><td><code>#3b1f56</code></td></tr>
+          <tr><td><code>colorPrimary</code></td><td><code>#4f46e5</code></td><td><code>#818cf8</code></td><td><code>#171717</code></td><td><code>#e5e5e5</code></td><td><code>#1976d2</code></td><td><code>#90caf9</code></td><td><code>#006fee</code></td><td><code>#006fee</code></td><td><code>#7c4ddb</code></td></tr>
+          <tr><td><code>colorAccent</code></td><td><code>#4f46e5</code></td><td><code>#818cf8</code></td><td><code>#171717</code></td><td><code>#e5e5e5</code></td><td><code>#9c27b0</code></td><td><code>#ce93d8</code></td><td><code>#7828c8</code></td><td><code>#9353d3</code></td><td><code>#5eead4</code></td></tr>
+          <tr><td><code>radiusSm/Md/Lg</code></td><td>6/10/16</td><td>6/10/16</td><td>6/10/14</td><td>6/10/14</td><td>4/4/4</td><td>4/4/4</td><td>8/12/14</td><td>8/12/14</td><td>12/20/28</td></tr>
+          <tr><td><code>radiusButton</code></td><td><code>6px</code></td><td><code>6px</code></td><td><code>8px</code></td><td><code>8px</code></td><td><code>4px</code></td><td><code>4px</code></td><td><code>12px</code></td><td><code>12px</code></td><td><code>16px</code></td></tr>
+          <tr><td><code>fontSizeBase</code></td><td>14</td><td>14</td><td>14</td><td>14</td><td><strong>16</strong></td><td><strong>16</strong></td><td><strong>16</strong></td><td><strong>16</strong></td><td>14</td></tr>
+          <tr><td><code>buttonTextTransform</code></td><td>none</td><td>none</td><td>none</td><td>none</td><td><strong>uppercase</strong></td><td><strong>uppercase</strong></td><td>none</td><td>none</td><td>none</td></tr>
+          <tr><td><code>spacing</code> xs&hellip;3xl</td><td>4/8/12/20/32/48/80</td><td>same</td><td>4/8/12/24/36/56/88</td><td>same</td><td>4/8/16/24/32/48/80</td><td>same</td><td>4/8/12/16/28/48/80</td><td>same</td><td>6/12/18/28/44/66/110</td></tr>
+          <tr><td><code>buttonPaddingY/X</code></td><td>8/14</td><td>8/14</td><td>8/16</td><td>8/16</td><td><strong>6/16</strong></td><td><strong>6/16</strong></td><td>10/16</td><td>10/16</td><td>8/14</td></tr>
+          <tr><td><code>transitionDuration</code></td><td><code>120ms</code></td><td><code>120ms</code></td><td><code>150ms</code></td><td><code>150ms</code></td><td><code>150ms</code></td><td><code>150ms</code></td><td><code>250ms</code></td><td><code>250ms</code></td><td><code>120ms</code></td></tr>
         </tbody>
       </table>
       <p>
-        Only <code>corporate</code>, <code>soft</code>, <code>glass</code> and
-        <code>modern</code> also ship a block of theme&#8209;specific CSS on top of their
-        tokens &mdash; the glass blur, corporate's tab rail and flat hairline cards, the
-        hover lift on soft and modern cards. <code>light</code> and <code>dark</code> are purely
+        Tokens alone cannot say "hover dims instead of recolouring" or "Paper has no
+        border", so <code>shadcn</code>, <code>mui</code>, <code>heroui</code> and
+        <code>soft</code> each also ship a block of theme&#8209;specific CSS on top of
+        their tokens &mdash; that is where MUI's uppercase tabs and elevation shadows,
+        HeroUI's opacity hover and offset focus outline, and shadcn's segmented tab strip
+        and 3px focus ring live. <code>light</code> and <code>dark</code> are purely
         token&#8209;driven. That distinction matters for
         <a href="#precedence">how you select a theme</a>.
       </p>
 
       <h3 id="theme-fonts">Fonts a theme brings with it</h3>
       <p>
-        Selecting a theme <em>by name</em> also loads the web fonts it declares. Exactly
-        one built&#8209;in theme declares any:
+        Selecting a theme <em>by name</em> also loads the web fonts it declares. The
+        three framework themes each declare their own, because the typeface is half of
+        what makes them recognisable:
       </p>
       <pre><code>builtInThemeFonts = {
-  corporate: { import: ["Inter:400,500,600,700", "Space Grotesk:500,600,700"] }
+  shadcn: { import: ["Geist:400,500,600,700", "Geist Mono:400,500"] },
+  mui:    { import: ["Roboto:300,400,500,700", "Roboto Mono:400,500"] },
+  heroui: { import: ["Inter:400,500,600,700"] },
+  // …the -light and -dark spellings of each declare the same families
 }</code></pre>
       <p>
-        So <code>&lt;aktion-app theme="corporate"&gt;</code> and
-        <code>$theme({ name: "corporate" })</code> both inject one de&#8209;duplicated
+        So <code>&lt;aktion-app theme="mui"&gt;</code> and
+        <code>$theme({ name: "mui" })</code> both inject one de&#8209;duplicated
         Google&nbsp;Fonts <code>&lt;link&gt;</code> into <code>document.head</code> before
-        painting the tokens. That is new: until this behaviour landed,
-        <code>theme="corporate"</code> rendered in <code>system-ui</code> and the theme's
-        whole type ladder was invisible.
+        painting the tokens. Without it the theme would render in <code>system-ui</code>
+        and its whole type ladder would be invisible.
       </p>
       <div class="callout">
         <h4>Three caveats worth planning for</h4>
         <p>
-          <strong>1. <code>setTheme("corporate")</code> does not load the fonts.</strong>
+          <strong>1. <code>setTheme("mui")</code> does not load the fonts.</strong>
           Only the <code>theme</code> attribute and <code>$theme({ name })</code> take that
           path. If you switch themes imperatively and want the families too, set the
-          attribute (<code>app.setAttribute("theme", "corporate")</code>) or add a
+          attribute (<code>app.setAttribute("theme", "mui")</code>) or add a
           <code>fonts</code> group of your own.
         </p>
         <p>
-          <strong>2. <code>soft</code>, <code>glass</code> and <code>modern</code> name
-          families they do not load.</strong> Their <code>fontFamily</code> starts with
-          Quicksand, Poppins and Plus&nbsp;Jakarta&nbsp;Sans respectively, but none is in
-          <code>builtInThemeFonts</code>, so they silently fall through to
-          <code>system-ui</code> unless the host page loads the family or the program adds
-          <code>$theme({ fonts: { import: ["Poppins:400,600"] } })</code>.
+          <strong>2. <code>soft</code> names families it does not load.</strong> Its
+          <code>fontFamily</code> starts with Quicksand, but that family is not in
+          <code>builtInThemeFonts</code>, so it silently falls through to
+          <code>system-ui</code> unless the host page loads it or the program adds
+          <code>$theme({ fonts: { import: ["Quicksand:400,600"] } })</code>.
         </p>
         <p>
           <strong>3. It is an outbound request.</strong> Allow
@@ -349,9 +372,9 @@ $app(Column([
         <code>name</code> metadata key. It seeds the full token set from that theme, then
         your groups layer on top:
       </p>
-<pre><code>$theme({ name: "corporate", colors: { primary: "#0f766e" } })
+<pre><code>$theme({ name: "heroui", colors: { primary: "#0f766e" } })
 $app(Column([
-  Card([CardHeader("Console", { subtitle: "corporate base, one override" })])
+  Card([CardHeader("Console", { subtitle: "heroui base, one override" })])
 ], { gap: "md" }))</code></pre>
       <p>
         An unknown <code>name</code> is ignored and seeds nothing, so the active base
@@ -367,11 +390,12 @@ $app(Column([
           marker.
         </p>
         <p>
-          So <code>$theme({ name: "glass" })</code> gives you glass's colours, radii and
-          shadows, but <em>not</em> the backdrop blur and rim lights &mdash; those live in
-          the <code>[data-rui-theme="glass"]</code> block. Same for corporate's ~70
-          selectors of console styling, soft's hover lift, and modern's card polish. A flat
-          token map resolves to the name <code>"custom"</code> and gets no block either.
+          So <code>$theme({ name: "mui" })</code> gives you Material's colours, radii and
+          elevation shadows, but <em>not</em> the uppercase tab strip, the 56px outlined
+          fields or the borderless Paper &mdash; those live in the
+          <code>[data-rui-theme^="mui"]</code> block. Same for shadcn's focus ring and
+          segmented tabs, HeroUI's dimming hover, and soft's hover lift. A flat token map
+          resolves to the name <code>"custom"</code> and gets no block either.
           <code>light</code> and <code>dark</code> are unaffected: they have no override
           block at all. <strong>Want the full personality? Select the theme on the host,
           then layer <code>$theme({&hellip;})</code> on top.</strong>
@@ -427,7 +451,8 @@ $app(Column([
 })
 $app(Text("Corporate-like type", { variant: "title" }))</code></pre>
         <p>
-          That pair is exactly what <code>theme="corporate"</code> does for you.
+          That pair is exactly what <code>theme="shadcn"</code> or
+          <code>theme="mui"</code> does for you.
         </p>
       </div>
 
@@ -478,9 +503,11 @@ $app(Text("Corporate-like type", { variant: "title" }))</code></pre>
         three optional keys <code>light</code> leaves out: the stylesheet derives them
         from <code>accent</code>, <code>accentHover</code> and <code>surface</code>. Set
         them when the derivation is wrong for your palette &mdash; <code>soft</code>,
-        <code>glass</code> and <code>modern</code> all ship an explicit
-        <code>link</code>, and <code>dark</code> overrides only
-        <code>linkHover</code> because hover has to <em>brighten</em> on a dark surface.
+        <code>mui</code> and <code>heroui</code> all ship an explicit
+        <code>link</code> (HeroUI's <code>#006fee</code> is only 3.8:1 as text on its dark
+        card, so the dark variant's link steps up to <code>#66aaf9</code>), and
+        <code>dark</code> overrides only <code>linkHover</code> because hover has to
+        <em>brighten</em> on a dark surface.
       </p>
 
       <h3 id="status-colors">Status colours come in threes</h3>
@@ -813,10 +840,11 @@ $app(Row([
       </p>
       <p>
         <code>motion</code> tokens brand durations and easing. They are
-        <strong>optional and unset in every theme except <code>corporate</code></strong>
-        (<code>110ms</code> / <code>170ms</code> / <code>300ms</code> /
-        <code>cubic-bezier(0.2, 0, 0, 1)</code>); when a token is absent, components fall
-        back to their built&#8209;in timings.
+        <strong>optional, and set only by the three framework themes</strong> &mdash;
+        shadcn <code>100/150/300ms</code> on <code>cubic-bezier(0.4, 0, 0.2, 1)</code>,
+        MUI <code>150/250/300ms</code> on the same curve, HeroUI
+        <code>150/250/300ms</code> on <code>cubic-bezier(0, 0, 0.2, 1)</code>; when a
+        token is absent, components fall back to their built&#8209;in timings.
       </p>
 <pre><code>$theme({
   zIndex: { modal: 2000, toast: 2100 },
@@ -852,7 +880,7 @@ $app(Row([
         <tbody>
           <tr>
             <td>An app&#8209;wide look, including a theme's own CSS personality</td>
-            <td><code>theme="corporate"</code> or <code>setTheme("corporate")</code></td>
+            <td><code>theme="mui"</code> or <code>setTheme("mui")</code></td>
             <td>Writes <code>data-rui-theme</code>, so the per&#8209;theme CSS block engages. The attribute also loads the theme's fonts.</td>
           </tr>
           <tr>
@@ -917,7 +945,7 @@ $app(Row([
 <pre><code>import type { ThemeTokens } from "aktion-runtime";
 
 const app = document.querySelector("aktion-app")!;
-app.setTheme("corporate");                                     // built-in name
+app.setTheme("mui-dark");                                      // built-in name
 app.setTheme({ colorPrimary: "#7c3aed", chart1: "#7c3aed" });  // flat keys reach chart*/button*/hl*
 </code></pre>
       <p>
@@ -955,7 +983,7 @@ app.setTheme({ colorPrimary: "#7c3aed", chart1: "#7c3aed" });  // flat keys reac
           <tr>
             <td><code>builtInThemes</code> · <code>builtInThemeFonts</code></td>
             <td><code>Record&lt;string, ThemeTokens&gt;</code> · <code>Record&lt;string, { import: string[] }&gt;</code></td>
-            <td>Enumerate the six themes and their font declarations &mdash; how a theme picker builds its own list. Individual objects (<code>lightTheme</code>, <code>corporateTheme</code>, &hellip;) are exported too.</td>
+            <td>Enumerate the built&#8209;in themes and their font declarations &mdash; how a theme picker builds its own list. Individual objects (<code>lightTheme</code>, <code>shadcnLightTheme</code>, <code>muiDarkTheme</code>, &hellip;) are exported too, along with <code>deprecatedThemeAliases</code> and <code>canonicalThemeName()</code> for the retired names.</td>
           </tr>
         </tbody>
       </table>

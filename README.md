@@ -169,7 +169,7 @@ Everything you need at runtime ships in a single bundle:
 - **SSR / SSG.** `renderToString(program, { path, initialState })` → `{ html, state }` for server-side rendering. `renderToStaticMarkup` for static pages.
 - **DX tooling.** `tailwindToSx(classString)` maps Tailwind classes to `sx`; `cssToSx(cssText)` and `styledToSx(template)` do the same for plain CSS and styled-components templates; `htmlToAktion(html)` imports common HTML/JSX; `componentSchema(library)` emits a stable JSON schema for editor autocomplete; `buildGallery(library)` generates a self-contained component explorer; `suggestComponent("Buttn", library)` returns typo candidates.
 - **Testing utilities.** `render(program)` / `renderComponent(expression)` return a `Screen` with Testing-Library-style queries and a `screen.user` interaction driver; plus `waitFor` / `act` / `flush` for async assertions, `json(data, status?)` for mocked fetches, `within(node)` for scoped queries, and `axe(node)` for a dependency-free a11y audit — all from the `aktion-runtime/test` entry.
-- **DevTools.** `aktion-runtime/devtools` ships an in-page panel: a live state inspector you can write through, the current program text, and a forced-render button. Import it once on the page and call `el.connectDevtools()` (or label an instance with `data-devtools-label`) — see [`docs/devtools.html`](./docs/devtools.html).
+- **DevTools.** `aktion-runtime/devtools` ships a fourteen-tab in-page debugger: a component-instance tree with an element picker that reaches inside the shadow root, live editing of any component's props / hooks / internal UI state, a writable `$state` tree with snapshot time travel, a render profiler with flamegraph and memoization analysis, an effect timeline plus a run-now button, a network inspector with request mocking and latency injection, a console that captures the runtime's own diagnostics plus a REPL for Aktion expressions, route / query / store / storage explorers, a live theme-token editor with contrast checks, the program source with diagnostics on their lines and edit-and-remount, and a Test tab that records interactions into a runnable test, audits accessibility, measures DSL coverage, and fuzzes the UI. Import it once on the page and call `el.connectDevtools()` (or label an instance with `data-devtools-label`) — see [`docs/devtools.html`](./docs/devtools.html).
 - **A React-like DOM reconciler.** Diffs each re-render against the live
   DOM. Text-input value, selection, IME state, scroll positions,
   `<details>.open`, and stateful primitives like `Tabs` are all preserved
@@ -201,8 +201,10 @@ Everything you need at runtime ships in a single bundle:
   exposes `route.path`, `route.params`, `route.query`, `route.pattern`,
   and `route.navigate("/path")`. Hash-based, framework-agnostic, always
   wired up.
-- **Six built-in themes** (`light`, `dark`, `corporate`, `soft`, `glass`,
-  `modern`) plus full custom-token support via CSS custom
+- **Nine built-in themes under twelve names** — `light`, `dark`, `soft`, plus
+  faithful re-creations of `shadcn`/`shadcn-light`/`shadcn-dark`,
+  `mui`/`mui-light`/`mui-dark` and `heroui`/`heroui-light`/`heroui-dark` —
+  plus full custom-token support via CSS custom
   properties. **86 design tokens** are set by every built-in theme (every
   theme spreads `light`), out of 113 declared on `ThemeTokens` — the extras
   are optional, and individual themes set a handful more. They are
@@ -446,7 +448,7 @@ surfaces from the *generated prompt*, build it via
 | `hydrateState(snapshot)`                                        | Apply a snapshot to the live store and schedule a re-render. Atoms not in the snapshot are untouched.                        |
 | `loadSnapshot({ programText, state })`                          | Atomic program + state load. The next render plans the program with the hydrated state already in place.                     |
 | `applyDelta(ops)`                                               | Apply a structured delta (`patch` / `replace` / `append` / `new` / `delete`). User `$state` is preserved across the diff.    |
-| `connectDevtools()`                                             | Attach this instance to the Aktion DevTools panel (`aktion-runtime/devtools`). Idempotent; label the instance with `data-devtools-label`. |
+| `connectDevtools()`                                             | Attach this instance to the Aktion DevTools panel (`aktion-runtime/devtools`). Idempotent; label the instance with `data-devtools-label`. Re-registering refreshes the capability record, so a reopened panel gets a live handle. |
 
 ### Module exports
 
@@ -1314,25 +1316,36 @@ The next call to `getSystemPrompt()` automatically includes the new component.
 
 ## Themes
 
-Six themes are built in. Pick one with `theme="..."` or pass a custom token map.
+Nine themes are built in, under twelve names. Pick one with `theme="..."` or pass
+a custom token map.
+
+Three of them are faithful re-creations of design systems you already know, each
+in a light and a dark variant. The **bare name is the light one**, so
+`theme="shadcn"` and `theme="shadcn-light"` are the same theme.
 
 | Theme        | Vibe                                                                                              |
 | ------------ | ------------------------------------------------------------------------------------------------- |
 | `light`      | Crisp default, indigo accent (`#4f46e5`).                                                         |
 | `dark`       | Standard dark surface, indigo accent.                                                             |
-| `corporate`  | Contemporary enterprise workspace — graphite `#f5f7f8` canvas, one deep teal `#0f766e` primary that *darkens* to `#0b5f58` on hover, square-shouldered 8px buttons and inputs, flat hairline cards that tint their border on hover, a 2px teal rail under the selected tab, sentence-case table headers, 15px Inter body under Space Grotesk headings. |
+| `shadcn` · `shadcn-light` · `shadcn-dark` | **shadcn/ui**, default `neutral` theme. White page, ink `#171717` primary with a near-white label, one flat `#f5f5f5` wash doing secondary / muted / accent duty, `rounded-md` (8px) controls inside `rounded-xl` (14px) cards, a 3px 50%-alpha focus ring, a segmented tab strip and a `rounded-md` badge — on 14px Geist. Dark mode inverts the primary to `#e5e5e5` ink on `#0a0a0a`. |
+| `mui` · `mui-light` · `mui-dark` | **Material UI**, default theme. `#1976d2` primary, `#9c27b0` secondary, 4px radii everywhere, UPPERCASE 500-weight buttons on `0.02857em` tracking, borderless Paper separated by the real three-layer elevation shadows, 56px outlined text fields, a 2px tab indicator and the charcoal 11px tooltip — on Roboto. Dark mode is `#90caf9` on `#121212` with elevation-overlay surfaces. |
+| `heroui` · `heroui-light` · `heroui-dark` | **HeroUI**. `#006fee` primary, 12px controls in 14px borderless cards on `shadow-medium`, filled `#f4f4f5` fields, hover that DIMS to `opacity: .8` instead of recolouring, press that scales to `.97`, a hard 2px offset focus outline and a light tooltip — on 16px Inter. Dark mode is pure black behind `#18181b` surfaces. |
 | `soft`       | Soft, friendly, light & rounded. Violet primary + mint accent fill, generous radii, gentle shadows. |
-| `glass`      | Light glassmorphism — frosted translucent surfaces over an airy pastel gradient, warm terracotta primary. |
-| `modern`     | Clean modern SaaS dashboard — light, generous rounding, ink primary with fully pill-shaped buttons, soft shadows, vibrant charts. |
 
 **Theme fonts.** Selecting a built-in theme *by name* loads the web fonts that
-theme needs to look like itself. `corporate` pulls `Inter:400,500,600,700` and
-`Space Grotesk:500,600,700` from Google Fonts — declared in the exported
-`builtInThemeFonts` map and fetched by both `theme="corporate"` and
-`$theme({ name: "corporate" })`, with no `$theme({ fonts: … })` in the program.
-Every other built-in theme uses system fonts and issues no request. If your CSP
+theme needs to look like itself: `shadcn` pulls Geist, `mui` pulls Roboto and
+`heroui` pulls Inter from Google Fonts. They are declared in the exported
+`builtInThemeFonts` map and fetched by both `theme="mui"` and
+`$theme({ name: "mui" })`, with no `$theme({ fonts: … })` in the program.
+`light`, `dark` and `soft` use system fonts and issue no request. If your CSP
 forbids `fonts.googleapis.com` / `fonts.gstatic.com`, self-host the families and
 override `fontFamily` / `fontFamilyHeading` via `el.setTheme(...)`.
+
+**Renamed in 0.7.** `modern`, `glass` and `corporate` were replaced by
+`shadcn`, `mui` and `heroui` respectively. The old names still resolve — they
+are rewritten to their replacement, so `theme="modern"` renders shadcn/ui rather
+than falling back to `light` — but they are no longer listed anywhere and will
+be removed in a future release.
 
 ### Token groups
 
@@ -1401,7 +1414,7 @@ numbers are coerced):
 
 | Key         | Type                | Notes                                                                                                                                                                                              |
 | ----------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`      | `string`            | Selects a built-in theme as the base palette (`"light"`, `"dark"`, `"corporate"`, `"soft"`, `"glass"`, `"modern"`); structured overrides layer on top. Unknown names are ignored. A named theme also loads its own web fonts — see *Theme fonts* above. |
+| `name`      | `string`            | Selects a built-in theme as the base palette (`"light"`, `"dark"`, `"shadcn"` / `"shadcn-light"` / `"shadcn-dark"`, `"mui"` / `"mui-light"` / `"mui-dark"`, `"heroui"` / `"heroui-light"` / `"heroui-dark"`, `"soft"`); structured overrides layer on top. Unknown names are ignored. A named theme also loads its own web fonts — see *Theme fonts* above. |
 | `direction` | `"ltr"` \| `"rtl"`  | Reading direction. Metadata only — not applied as a token.                                                                                                                                        |
 | `colors`    | `{ [key]: string }` | CSS color strings. Keys: `bg`, `bgSubtle`, `surface`, `surfaceMuted`, `surfaceHover`, `border`, `borderSubtle`, `borderControl`, `text`, `textMuted`, `primary`, `primaryHover`, `primaryText`, `accent`, `accentHover`, `accentText`, `focusRing`, `link`, `linkHover`, `success`, `warning`, `danger`, `info`, plus the `successText` / `warningText` / `dangerText` / `infoText` text partners and the `onSuccess` / `onWarning` / `onDanger` / `onInfo` inks. |
 | `radius`    | `{ [key]: string }` | CSS length strings. Keys: `xs`, `sm`, `md`, `lg`, `pill`, `button`, `input`.                                                                                                                       |
@@ -1773,7 +1786,7 @@ The migration / DX / test helpers, and where each one lives:
 | `suggestComponent(name, library)` | "Did you mean?" typo candidates by edit distance. |
 | `renderToString(program, opts)` / `renderToStaticMarkup` | SSR/SSG — render a program to `{ html, state }` under any DOM (browser or Node + happy-dom/jsdom); pair with `StateStore.hydrate`. From the main entry. |
 | `within(node)` / `axe(node)` | Testing helpers from `aktion-runtime/test` — scoped queries and a dependency-free a11y audit (`img-alt`, `svg-name`, `button-name`, `link-name`, `label` — with `aria-labelledby` resolution —, `duplicate-id`, `tabindex`). |
-| `el.connectDevtools()` | Attach a live instance to the DevTools panel from `aktion-runtime/devtools` — state inspector (writable), current program text, forced render. See [`docs/devtools.html`](./docs/devtools.html). |
+| `el.connectDevtools()` | Attach a live instance to the DevTools panel from `aktion-runtime/devtools` — component inspector, writable `$state`, profiler, effects, network, console + REPL, routes, data, theme, source, and test tools. See [`docs/devtools.html`](./docs/devtools.html). |
 
 ### Validating `.aktion` files from the CLI
 
@@ -2050,7 +2063,7 @@ consumes from the CDN.
 | `performance.html`                  | Performance & optimization — re-render avoidance, memoization rules, the safety budget, bundle size, and `setResponse` vs `appendChunk`. |
 | `troubleshooting.html`              | Troubleshooting / FAQ — focus loss, effects not firing, memoized-away components, the `Map` component vs JS `Map`, dropped styles, missing i18n keys. |
 | `errors.html`                       | Error handling & debugging — reading parse/runtime errors, the render-loop and budget guards, the `error` event, and strict mode. |
-| `devtools.html`                     | The `aktion-runtime/devtools` panel — mount it with one line, inspect and edit live `$state`, profile every render commit, and watch effects fire. |
+| `devtools.html`                     | The `aktion-runtime/devtools` panel — mount it with one line, then inspect the component tree, edit props / state / theme tokens live, profile commits, mock requests, and record interactions into a test. |
 | `testing.html`                      | The Aktion Testing Library (`aktion-runtime/test`) — render a program, query the shadow DOM the way a user sees it, drive real interactions, assert on output, `$state`, emitted events, and mocked `$http`. |
 | `typescript.html`                   | TypeScript guide — public types, subpath entry points, typing custom components/helpers/interceptors, host event payloads, a typed host-wrapper recipe. |
 | `accessibility.html`                | Accessibility guide — conformance target, keyboard map, screen-reader/streaming behaviour, built-in ARIA, and theme contrast. |
@@ -2135,7 +2148,8 @@ The full catalog with zoomed-out live preview cards lives at
 │   ├── compiler/              #   .aktion linker (linkProgram / linkProject / resolveSpecifier)
 │   ├── plugin/                #   The Vite plugin (aktion-runtime/vite)
 │   ├── testing/               #   The testing library (aktion-runtime/test)
-│   ├── devtools/              #   DevTools panel, hook, and protocol (aktion-runtime/devtools)
+│   ├── devtools/              #   DevTools: hook + protocol, the 14-tab panel (tabs/), overlay,
+│   │                          #   a11y audit, interaction recorder (aktion-runtime/devtools)
 │   ├── theme/                 #   Token system + injected stylesheet
 │   ├── prompt/                #   System prompt generator
 │   ├── tooling/               #   Host-side helpers (formatter, inspector, language service)
@@ -2265,7 +2279,9 @@ undo/redo), the `$query` / `$mutation` data layer, `$socket` / `$sse`
 realtime, `$toast`, hooks, fine-grained reactivity + memoization, strict
 mode, the morph value/event contracts, `sx` conversion, third-party
 interop, the sanitiser + DoS security suite, registry-wide spec
-invariants over all 282 components, the testing library, DevTools, the
+invariants over all 282 components, the testing library, DevTools (the
+event protocol, the inspector's capability surface, prop overrides,
+request rules, the accessibility audit, and the interaction recorder), the
 standalone LSP server, and the editor-tooling surfaces (navigation,
 semantic tokens, signature help, namespace members).
 
@@ -2347,7 +2363,7 @@ makes a `script-src` without `'unsafe-eval'` meaningful when program text
 is not fully trusted. Two outbound requests are worth allow-listing or
 blocking deliberately: the Font Awesome stylesheet (`cdnjs.cloudflare.com`,
 skippable by self-hosting and never calling `ensureFontAwesomeLoaded`) and, for
-`theme="corporate"` only, its Google Fonts stylesheet — that one needs
+the `shadcn` / `mui` / `heroui` themes, their Google Fonts stylesheet — that one needs
 `style-src`/`font-src https://fonts.googleapis.com https://fonts.gstatic.com`,
 or self-hosted families and a `fontFamily` override. See
 [SECURITY.md](SECURITY.md#content-security-policy)

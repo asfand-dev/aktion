@@ -349,7 +349,7 @@ In-script theme override merged on top of the active base theme. Structured grou
 
 | key | type | notes |
 | --- | --- | --- |
-| `name` | `string` | Selects a built-in base theme ("dark", "light", "corporate", "soft", "glass", "modern"). |
+| `name` | `string` | Selects a built-in base theme ("light", "dark", "shadcn"/"-light"/"-dark", "mui"/"-light"/"-dark", "heroui"/"-light"/"-dark", "soft"). |
 | `direction` | `enum: "ltr" \| "rtl"` | Reading direction (metadata). |
 | `colors` | `object` | CSS color tokens: bg, surface, border, text, primary, accent, success, warning, danger, info, …. |
 | `radius` | `object` | Border-radius tokens: xs, sm, md, lg, pill, button, input. |

@@ -7,6 +7,150 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-08-26
 
+### shadcn/ui, Material UI and HeroUI, Light and Dark
+
+The three designed-in-house themes have been replaced by faithful re-creations
+of the design systems they were reaching for, each in a light and a dark
+variant. A program written against tones and variants — the way the library has
+always asked you to write it — now renders as a real shadcn/ui, Material UI or
+HeroUI app with one attribute.
+
+- **Added `shadcn`, `shadcn-light` and `shadcn-dark`** — shadcn/ui's default
+  `neutral` theme, token for token from its own `globals.css`. White page, ink
+  `#171717` primary with a near-white label, one flat `#f5f5f5` wash doing
+  secondary / muted / accent duty, `rounded-md` (8px) controls inside
+  `rounded-xl` (14px) cards, `shadow-xs` everywhere, the 3px 50%-alpha focus
+  ring, a segmented tab strip, a square-cornered badge and a tooltip painted in
+  the primary colour — set in Geist at 14px. Dark mode inverts the primary to
+  `#e5e5e5` ink on `#0a0a0a`.
+- **Added `mui`, `mui-light` and `mui-dark`** — Material UI's default theme.
+  `#1976d2` primary, `#9c27b0` secondary, 4px radii everywhere, UPPERCASE
+  500-weight buttons on `0.02857em` tracking with a 64px minimum width,
+  borderless Paper separated by MUI's real three-layer elevation shadows, 56px
+  outlined text fields whose outline thickens on focus, 12px helper text
+  indented to clear the corner, uppercase tab labels over a 2px indicator,
+  full-bleed menu rows, the charcoal 11px tooltip, and the 34×14 switch whose
+  20px thumb overhangs the track — in Roboto. Dark mode is `#90caf9` on
+  `#121212` with Paper at its elevation overlay.
+- **Added `heroui`, `heroui-light` and `heroui-dark`** — HeroUI. `#006fee`
+  primary, 12px controls inside 14px borderless cards on `shadow-medium`, filled
+  `#f4f4f5` fields, hover that *dims* to `opacity: .8` instead of recolouring,
+  press that scales to `.97`, a hard 2px focus outline offset 2px clear of the
+  control, a rounded table header band with no row separators, and a light
+  tooltip — in Inter at 16px. Dark mode is pure black behind `#18181b` surfaces
+  with HeroUI's inset rim-light shadows.
+- Each family's **bare name means its light variant**, so `theme="shadcn"` and
+  `theme="shadcn-light"` are the same theme, and both pick up the family's CSS.
+- Selecting any of them **by name loads its typeface** — Geist, Roboto or Inter —
+  the way `corporate` used to load Inter + Space Grotesk. That request needs
+  `fonts.googleapis.com` / `fonts.gstatic.com` in your CSP.
+- **Breaking:** `modern`, `glass` and `corporate` are retired. They still
+  resolve — the resolver rewrites them to `shadcn-light`, `mui-light` and
+  `heroui-light`, so an existing page renders the new design rather than
+  silently falling back to `light` — but they are gone from the theme picker,
+  editor autocomplete, generated docs and `builtInThemes`, and they will be
+  removed in a future release. Note the host now reports the *replacement's*
+  name in `data-rui-theme`.
+- **Breaking:** the exported `modernTheme`, `glassTheme` and `corporateTheme`
+  token objects are gone. Use `shadcnLightTheme` / `shadcnDarkTheme`,
+  `muiLightTheme` / `muiDarkTheme`, `herouiLightTheme` / `herouiDarkTheme`.
+  Two new exports go with them: `deprecatedThemeAliases` (retired name →
+  replacement) and `canonicalThemeName()`.
+- Every new theme keeps the library's accessibility floor, which in three places
+  means departing from the framework it copies: control boundaries are darkened
+  from the source's hairline to clear the 3:1 WCAG 1.4.11 bar, `heroui-dark`
+  paints link text in `#66aaf9` because HeroUI blue is only 3.8:1 on its own
+  dark card (the button *fill* is untouched), and a status glyph sitting on a
+  mid-tone fill takes a hue-matched dark ink instead of white.
+- The theme-contrast suite was tightened while this landed: the brand hue is now
+  checked in both directions — as text (via `colorLink`, the token that exists
+  for exactly this) and as a fill under its own label — instead of only the
+  first.
+
+### DevTools Grew From Three Tabs to Fourteen
+
+The in-page debugger (`aktion-runtime/devtools`) used to answer three questions:
+what is in `$state`, what re-rendered, and what did the effects do. It now covers
+the whole runtime, and — more importantly — lets you change things instead of only
+watching them.
+
+- **Inspect** is the new headline tab. It shows the live component-instance tree
+  the renderer actually built, with an element picker that reaches *inside* the
+  app's shadow root: click anything on the page and land on its row in the tree.
+  Selecting an instance shows its props, its per-instance `$state` / `$memo`
+  cells, the internal UI state a library component keeps for itself (a Tabs'
+  active pane, a DataGrid's sort), what reactive paths it reads, the effects it
+  owns, its box model, its computed styles, the `--rui-*` theme variables actually
+  in effect on it, and the accessibility properties a screen reader would
+  announce. Hovering any row draws the real box model over the element.
+- **Every one of those values is editable.** Editing a `$`-bound prop writes the
+  atom; editing any other prop installs a DevTools override that lasts until you
+  clear it, so you can try `variant: "danger"` or `sx: { padding: 24 }` on one live
+  component without touching the program. Per-instance hook cells and UI-state
+  slots are writable too, and "Remount" drops an instance's memo, hooks, and UI
+  state so it mounts fresh.
+- **Time travel.** The runtime attaches a `$state` snapshot to every commit, so
+  the State tab has a scrubber: drag back through recent commits to see what the
+  store held, then restore one into the live app.
+- **Network.** Every request the Aktion HTTP layer makes, with headers, bodies, a
+  waterfall, and a "copy as curl" button — plus **request rules** that delay,
+  mock, fail, or blackhole matching requests. Reproducing a 500, a three-second
+  endpoint, or an offline device no longer needs a server or a code change, and
+  leaves no `if (dev)` branch behind in the program.
+- **Console.** The panel now mirrors the page console, which is where the
+  runtime's own diagnostics land ("a reactive `$state` write happened during
+  render…", "failed to render Button") — usually the most direct explanation of a
+  reactivity bug, and easy to miss in a busy page console. Alongside it, a REPL
+  that evaluates **Aktion** expressions against the live program scope: `$user.name`,
+  `Util.range(0, 3)`, and `$count = 5` all mean what they mean in the source, and a
+  write goes through the normal reactive path.
+- **Routes** lists the patterns the program declares — read statically from the
+  `$router({ … })` arms, so every route is clickable from the start rather than
+  only the ones you have already visited — plus the current match, its params, and
+  the navigation history.
+- **Data** covers the three places state hides from the State tab: the `$query` /
+  `Http({...})` cache (with refetch, cancel, and invalidate-by-key), `Store` /
+  `$form` handles (with their methods callable), and browser storage.
+- **Theme** is a live token editor: every resolved `--rui-*` token with a colour
+  picker, contrast checks for the pairs the library actually paints, a theme
+  switcher, and "copy as `$theme({…})`".
+- **Source** shows the running program with diagnostics placed on their lines, an
+  outline of its declarations, and an editor that validates a draft *before* you
+  mount it (state is preserved across the diff, exactly as for a streamed update).
+- **Test** is five tools: record your interactions and get a runnable
+  `aktion-runtime/test` file with the program inlined and the final state
+  asserted; audit the rendered tree for accessibility problems that each name
+  their fix; measure real DSL coverage (V8 sees one line per `.aktion` file, so
+  coverage has to come from the interpreter); try Testing Library queries against
+  the live app and see what matches; and fuzz the UI with a few hundred random
+  clicks to find the handler that throws.
+- **Timeline** interleaves every commit, effect, request, navigation, log, and
+  error into one ordered stream with idle gaps marked — the view you need when a
+  single click produced four things across four tabs — and exports the whole
+  session as JSON to attach to a bug report.
+- **Overview** is the new front door: what is broken right now, what is expensive,
+  and what the app is made of, with every number linking to the tab that explains
+  it. **Settings** exposes the instrumentation switches (prop capture, DOM
+  tagging, per-commit snapshots, network capture, DOM measuring) because a
+  debugger that silently changes the timings it reports is a bad debugger.
+- The panel can now dock to any edge or float, has a light theme and a compact
+  density, remembers where you left it, and keeps your caret in a filter box while
+  events stream in behind it.
+- Profiler additions: each commit now reports how much of its time went to the DOM
+  reconciler rather than to your program, and how many DOM nodes it left behind.
+- Effect additions: a "Mounted" view listing every live effect with its
+  subscriptions, intervals, and cleanup count — the view you need when the bug is
+  that *nothing* happened, and there is therefore no event to look at — plus a
+  "run now" button that fires an effect's body as if its trigger had.
+- **Fixed:** a reactive `$state` write during render could abort the whole commit
+  in one specific case — when focus was sitting inside another shadow root on the
+  page (which is exactly what an inspector's inline editor does). Focus capture is
+  now defensive: a lost caret restore never costs you the render.
+- The DevTools protocol is at version 2. Everything added is optional or additive,
+  so a v1 frontend still works against a v2 runtime — it just sees less. All of it
+  stays dormant until a frontend subscribes: closing the panel returns the app to
+  its uninstrumented speed.
+
 ### Guidance Above a Field, and an "(optional)" Marker
 
 - Every field now takes a `description` — a line of guidance that renders

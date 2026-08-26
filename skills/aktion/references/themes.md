@@ -6,13 +6,20 @@
 
 # Themes & design tokens
 
-6 built-in themes, 86 tokens each. Select one with the
-`theme` attribute on `<aktion-app>`, or override individual tokens from inside a program
-with `$theme({ … })`.
+9 built-in themes under 12 names, 86 tokens each.
+Select one with the `theme` attribute on `<aktion-app>`, or override individual tokens
+from inside a program with `$theme({ … })`.
 
 ```html
-<aktion-app theme="corporate"></aktion-app>
+<aktion-app theme="shadcn"></aktion-app>
 ```
+
+Three of them re-create a design system you already know, each in a light and a dark
+variant, with the bare name meaning the light one:
+
+- `shadcn` / `shadcn-light` / `shadcn-dark` — shadcn/ui's default neutral theme.
+- `mui` / `mui-light` / `mui-dark` — Material UI's default theme.
+- `heroui` / `heroui-light` / `heroui-dark` — HeroUI.
 
 **Never hard-code a colour.** Components already read these tokens, so a program that
 picks its own hex values looks wrong the moment the theme changes. If you need a variant,
@@ -22,101 +29,104 @@ override the token.
 | --- | --- |
 | `light` | — (system stack) |
 | `dark` | — (system stack) |
-| `corporate` | `Inter:400,500,600,700`, `Space Grotesk:500,600,700` |
+| `shadcn`<br>`shadcn-light` | `Geist:400,500,600,700`, `Geist Mono:400,500` |
+| `shadcn-dark` | `Geist:400,500,600,700`, `Geist Mono:400,500` |
+| `mui`<br>`mui-light` | `Roboto:300,400,500,700`, `Roboto Mono:400,500` |
+| `mui-dark` | `Roboto:300,400,500,700`, `Roboto Mono:400,500` |
+| `heroui`<br>`heroui-light` | `Inter:400,500,600,700` |
+| `heroui-dark` | `Inter:400,500,600,700` |
 | `soft` | — (system stack) |
-| `glass` | — (system stack) |
-| `modern` | — (system stack) |
 
 A theme selected **by name** pulls in its own web fonts automatically.
 
 ## Token values per theme
 
-| token | light | dark | corporate | soft | glass | modern |
-| --- | --- | --- | --- | --- | --- | --- |
-| `colorBg` | `#ffffff` | `#0b1220` | `#f5f7f8` | `#fdf6ff` | `#eceef2` | `#f4f5f7` |
-| `colorBgSubtle` | `#f8fafc` | `#0f172a` | `#eaeef0` | `#fbf2ff` | `#e6e8ee` | `#eef0f3` |
-| `colorSurface` | `#ffffff` | `#111827` | `#ffffff` | `#ffffff` | `rgba(255, 255, 255, 0.55)` | `#ffffff` |
-| `colorSurfaceMuted` | `#f1f5f9` | `#1e293b` | `#f2f5f6` | `#f4ecff` | `rgba(255, 255, 255, 0.35)` | `#f6f7f9` |
-| `colorBorder` | `#e2e8f0` | `#1f2937` | `#dfe5e8` | `#ead8ff` | `rgba(255, 255, 255, 0.70)` | `#ebedf1` |
-| `colorBorderControl` | `#767f8c` | `#5b6674` | `#71818a` | `#8d78a8` | `rgba(71, 85, 105, 0.85)` | `#787d88` |
-| `colorBorderSubtle` | `rgba(15, 23, 42, 0.08)` | `rgba(248, 250, 252, 0.08)` | `rgba(13, 31, 34, 0.07)` | `rgba(168, 132, 232, 0.18)` | `rgba(255, 255, 255, 0.45)` | `rgba(17, 24, 39, 0.06)` |
-| `colorText` | `#0f172a` | `#f8fafc` | `#0d1f22` | `#3b1f56` | `#33303a` | `#111827` |
-| `colorTextMuted` | `#475569` | `#94a3b8` | `#4d616a` | `#7d6193` | `#5d5768` | `#585f6b` |
-| `colorPrimary` | `#4f46e5` | `#818cf8` | `#0f766e` | `#7c4ddb` | `#af4027` | `#111827` |
-| `colorPrimaryHover` | `#4338ca` | `#6366f1` | `#0b5f58` | `#6d3fc4` | `#9c3722` | `#000000` |
-| `colorPrimaryText` | `#ffffff` | `#0b1220` | `#ffffff` | `#ffffff` | `#ffffff` | `#ffffff` |
-| `colorAccent` | `#4f46e5` | `#818cf8` | `#0b7d72` | `#5eead4` | `#b58ee6` | `#7c5cfc` |
-| `colorAccentHover` | `#4338ca` | `#6366f1` | `#0a6a61` | `#2dd4bf` | `#a376e0` | `#6a47f5` |
-| `colorAccentText` | `#ffffff` | `#0b1220` | `#ffffff` | `#0f3a35` | `#ffffff` | `#ffffff` |
-| `colorFocusRing` | `#4f46e5` | `#818cf8` | `#0f766e` | `#8b66f8` | `#af4027` | `#7c5cfc` |
-| `colorSuccess` | `#10b981` | `#10b981` | `#16a34a` | `#5eead4` | `#5bbf9b` | `#22c55e` |
-| `colorWarning` | `#f59e0b` | `#f59e0b` | `#f59e0b` | `#fcd34d` | `#f0b259` | `#f59e0b` |
-| `colorDanger` | `#ef4444` | `#ef4444` | `#e11d48` | `#fda4af` | `#ef7b86` | `#f43f5e` |
-| `colorInfo` | `#06b6d4` | `#06b6d4` | `#0369a1` | `#93c5fd` | `#7fb0e8` | `#2563eb` |
-| `colorSuccessText` | `#047857` | `#10b981` | `#0a7038` | `#0f766e` | `#146b50` | `#12702f` |
-| `colorWarningText` | `#a35a00` | `#f59e0b` | `#8a4b00` | `#856400` | `#7f5200` | `#9a5400` |
-| `colorDangerText` | `#d92d20` | `#ef4444` | `#be123c` | `#be123c` | `#b82c39` | `#be123c` |
-| `colorInfoText` | `#0e7490` | `#06b6d4` | `#075985` | `#1d4ed8` | `#28629f` | `#1d4ed8` |
-| `colorOnSuccess` | `#04291e` | `#04291e` | `#04291e` | `#0f3a35` | `#04291e` | `#04291e` |
-| `colorOnWarning` | `#451a03` | `#451a03` | `#451a03` | `#3d2600` | `#451a03` | `#451a03` |
-| `colorOnDanger` | `#2c0606` | `#2c0606` | `#33061a` | `#4c0519` | `#4c0519` | `#33061a` |
-| `colorOnInfo` | `#0c2b3a` | `#0c2b3a` | `#ffffff` | `#172554` | `#172554` | `#ffffff` |
-| `hlKeyword` | `#cf222e` | `#c678dd` | `#cf222e` | `#cf222e` | `#cf222e` | `#cf222e` |
-| `hlString` | `#0a3069` | `#98c379` | `#0a3069` | `#0a3069` | `#0a3069` | `#0a3069` |
-| `hlNumber` | `#0550ae` | `#d19a66` | `#0550ae` | `#0550ae` | `#0550ae` | `#0550ae` |
-| `hlComment` | `#57606a` | `#9ca3af` | `#57606a` | `#57606a` | `#57606a` | `#57606a` |
-| `hlFn` | `#6f42c1` | `#61afef` | `#6f42c1` | `#6f42c1` | `#6f42c1` | `#6f42c1` |
-| `hlTag` | `#116329` | `#e06c75` | `#116329` | `#116329` | `#116329` | `#116329` |
-| `hlAttr` | `#953800` | `#d19a66` | `#953800` | `#953800` | `#953800` | `#953800` |
-| `hlPunct` | `#475569` | `#abb2bf` | `#475569` | `#475569` | `#475569` | `#475569` |
-| `shadowSm` | `0 1px 2px rgba(15, 23, 42, 0.06)` | `0 1px 2px rgba(0, 0, 0, 0.4)` | `0 1px 2px rgba(13, 31, 34, 0.06), 0 1px 1px rgba(13, 31, 34, 0.04)` | `0 4px 14px rgba(168, 132, 232, 0.12)` | `0 2px 8px rgba(120, 110, 140, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.55)` | `0 1px 3px rgba(17, 24, 39, 0.05)` |
-| `shadowMd` | `0 6px 24px rgba(15, 23, 42, 0.08)` | `0 8px 24px rgba(0, 0, 0, 0.4)` | `0 4px 16px rgba(13, 31, 34, 0.08), 0 1px 2px rgba(13, 31, 34, 0.05)` | `0 18px 40px rgba(168, 132, 232, 0.18)` | `0 14px 40px rgba(120, 110, 140, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.55)` | `0 8px 30px rgba(17, 24, 39, 0.07)` |
-| `shadowLg` | `0 18px 60px rgba(15, 23, 42, 0.12)` | `0 22px 60px rgba(0, 0, 0, 0.55)` | `0 16px 48px rgba(13, 31, 34, 0.14), 0 2px 6px rgba(13, 31, 34, 0.06)` | `0 28px 70px rgba(168, 132, 232, 0.22)` | `0 26px 70px rgba(120, 110, 140, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.60)` | `0 24px 60px rgba(17, 24, 39, 0.10)` |
-| `borderWidth` | `1px` | `1px` | `1px` | `1px` | `1px` | `1px` |
-| `chart1` | `#6366f1` | `#6366f1` | `#0f766e` | `#a78bfa` | `#f2826a` | `#7c5cfc` |
-| `chart2` | `#10b981` | `#10b981` | `#0369a1` | `#5eead4` | `#b58ee6` | `#ff7849` |
-| `chart3` | `#f59e0b` | `#f59e0b` | `#f59e0b` | `#fcd34d` | `#8ec5e8` | `#2563eb` |
-| `chart4` | `#ef4444` | `#ef4444` | `#7c3aed` | `#fda4af` | `#5bbf9b` | `#22c55e` |
-| `chart5` | `#06b6d4` | `#06b6d4` | `#e11d48` | `#93c5fd` | `#f0b259` | `#f43f5e` |
-| `chart6` | `#8b5cf6` | `#8b5cf6` | `#65a30d` | `#f9a8d4` | `#f48aa6` | `#fbbf24` |
-| `fontFamily` | `system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif` | `system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif` | `'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif` | `'Quicksand', 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Poppins', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` |
-| `fontFamilyHeading` | `system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif` | `system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif` | `'Space Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Quicksand', 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Poppins', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` |
-| `fontFamilyMono` | `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` |
-| `fontSizeBase` | `14px` | `14px` | `15px` | `14px` | `14px` | `14px` |
-| `fontSizeSm` | `12px` | `12px` | `13px` | `12px` | `12px` | `12px` |
-| `fontSizeLg` | `16px` | `16px` | `17px` | `16px` | `16px` | `16px` |
-| `fontSizeHeading` | `16px` | `16px` | `17px` | `16px` | `16px` | `16px` |
-| `fontSizeTitle` | `22px` | `22px` | `24px` | `22px` | `22px` | `22px` |
-| `fontWeightBody` | `400` | `400` | `400` | `400` | `400` | `400` |
-| `fontWeightHeading` | `700` | `700` | `600` | `700` | `700` | `700` |
-| `lineHeightBody` | `1.5` | `1.5` | `1.55` | `1.5` | `1.5` | `1.5` |
-| `lineHeightHeading` | `1.2` | `1.2` | `1.25` | `1.2` | `1.2` | `1.2` |
-| `letterSpacingHeading` | `0` | `0` | `-0.015em` | `0` | `-0.01em` | `-0.02em` |
-| `headingTextTransform` | `none` | `none` | `none` | `none` | `none` | `none` |
-| `spacingXs` | `4px` | `4px` | `4px` | `6px` | `6px` | `5px` |
-| `spacingS` | `8px` | `8px` | `8px` | `12px` | `12px` | `10px` |
-| `spacingM` | `12px` | `12px` | `14px` | `18px` | `18px` | `16px` |
-| `spacingL` | `20px` | `20px` | `22px` | `28px` | `26px` | `24px` |
-| `spacingXl` | `32px` | `32px` | `36px` | `44px` | `42px` | `40px` |
-| `spacing2xl` | `48px` | `48px` | `56px` | `66px` | `63px` | `60px` |
-| `spacing3xl` | `80px` | `80px` | `88px` | `110px` | `105px` | `100px` |
-| `gradientBrand` | `linear-gradient(120deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)` | `linear-gradient(120deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)` | `linear-gradient(120deg, #0d1f22 0%, #0f766e 55%, #14b8a6 100%)` | `linear-gradient(135deg, #7c3aed 0%, #be185d 100%)` | `linear-gradient(120deg, #f7a072 0%, #f2826a 45%, #c98bd6 100%)` | `linear-gradient(120deg, #111827 0%, #4b3f72 50%, #7c5cfc 100%)` |
-| `gradientAccent` | `linear-gradient(120deg, #22d3ee 0%, #6366f1 100%)` | `linear-gradient(120deg, #22d3ee 0%, #6366f1 100%)` | `linear-gradient(120deg, #0f766e 0%, #0369a1 100%)` | `linear-gradient(120deg, #22d3ee 0%, #6366f1 100%)` | `linear-gradient(120deg, #b58ee6 0%, #8ec5e8 100%)` | `linear-gradient(120deg, #7c5cfc 0%, #2563eb 100%)` |
-| `gradientWarm` | `linear-gradient(120deg, #f59e0b 0%, #ec4899 100%)` | `linear-gradient(120deg, #f59e0b 0%, #ec4899 100%)` | `linear-gradient(120deg, #f59e0b 0%, #e11d48 100%)` | `linear-gradient(120deg, #f59e0b 0%, #ec4899 100%)` | `linear-gradient(120deg, #f9b079 0%, #f48aa6 100%)` | `linear-gradient(120deg, #ff7849 0%, #f43f5e 100%)` |
-| `gradientCool` | `linear-gradient(120deg, #3b82f6 0%, #06b6d4 100%)` | `linear-gradient(120deg, #3b82f6 0%, #06b6d4 100%)` | `linear-gradient(120deg, #0369a1 0%, #14b8a6 100%)` | `linear-gradient(120deg, #3b82f6 0%, #06b6d4 100%)` | `linear-gradient(120deg, #8ec5e8 0%, #9fd8c6 100%)` | `linear-gradient(120deg, #2563eb 0%, #22d3ee 100%)` |
-| `gradientSuccess` | `linear-gradient(120deg, #10b981 0%, #22d3ee 100%)` | `linear-gradient(120deg, #10b981 0%, #22d3ee 100%)` | `linear-gradient(120deg, #16a34a 0%, #14b8a6 100%)` | `linear-gradient(120deg, #10b981 0%, #22d3ee 100%)` | `linear-gradient(120deg, #10b981 0%, #22d3ee 100%)` | `linear-gradient(120deg, #10b981 0%, #22d3ee 100%)` |
-| `gradientDanger` | `linear-gradient(120deg, #f43f5e 0%, #ec4899 100%)` | `linear-gradient(120deg, #f43f5e 0%, #ec4899 100%)` | `linear-gradient(120deg, #e11d48 0%, #9f1239 100%)` | `linear-gradient(120deg, #f43f5e 0%, #ec4899 100%)` | `linear-gradient(120deg, #f43f5e 0%, #ec4899 100%)` | `linear-gradient(120deg, #f43f5e 0%, #ec4899 100%)` |
-| `radiusXs` | `4px` | `4px` | `3px` | `8px` | `8px` | `8px` |
-| `radiusSm` | `6px` | `6px` | `6px` | `12px` | `14px` | `12px` |
-| `radiusMd` | `10px` | `10px` | `10px` | `20px` | `20px` | `18px` |
-| `radiusLg` | `16px` | `16px` | `14px` | `28px` | `28px` | `24px` |
-| `radiusPill` | `999px` | `999px` | `999px` | `999px` | `999px` | `999px` |
-| `radiusButton` | `6px` | `6px` | `8px` | `16px` | `16px` | `999px` |
-| `radiusInput` | `6px` | `6px` | `8px` | `16px` | `16px` | `12px` |
-| `buttonFontWeight` | `600` | `600` | `600` | `600` | `600` | `600` |
-| `buttonTextTransform` | `none` | `none` | `none` | `none` | `none` | `none` |
-| `buttonLetterSpacing` | `0` | `0` | `0.01em` | `0` | `0` | `0` |
-| `buttonPaddingY` | `8px` | `8px` | `9px` | `8px` | `8px` | `10px` |
-| `buttonPaddingX` | `14px` | `14px` | `16px` | `14px` | `14px` | `18px` |
-| `transitionDuration` | `120ms` | `120ms` | `150ms` | `120ms` | `120ms` | `120ms` |
+| token | `light` | `dark` | `shadcn`<br>`shadcn-light` | `shadcn-dark` | `mui`<br>`mui-light` | `mui-dark` | `heroui`<br>`heroui-light` | `heroui-dark` | `soft` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `colorBg` | `#ffffff` | `#0b1220` | `#ffffff` | `#0a0a0a` | `#ffffff` | `#121212` | `#ffffff` | `#000000` | `#fdf6ff` |
+| `colorBgSubtle` | `#f8fafc` | `#0f172a` | `#fafafa` | `#0f0f0f` | `#f5f5f5` | `#181818` | `#fafafa` | `#09090b` | `#fbf2ff` |
+| `colorSurface` | `#ffffff` | `#111827` | `#ffffff` | `#171717` | `#ffffff` | `#1e1e1e` | `#ffffff` | `#18181b` | `#ffffff` |
+| `colorSurfaceMuted` | `#f1f5f9` | `#1e293b` | `#f5f5f5` | `#262626` | `#f5f5f5` | `#272727` | `#f4f4f5` | `#27272a` | `#f4ecff` |
+| `colorBorder` | `#e2e8f0` | `#1f2937` | `#e5e5e5` | `#262626` | `rgba(0, 0, 0, 0.12)` | `rgba(255, 255, 255, 0.12)` | `#e4e4e7` | `#27272a` | `#ead8ff` |
+| `colorBorderControl` | `#767f8c` | `#5b6674` | `#8f8f8f` | `#737373` | `#8c8c8c` | `#7a7a7a` | `#8b8b93` | `#8b8b93` | `#8d78a8` |
+| `colorBorderSubtle` | `rgba(15, 23, 42, 0.08)` | `rgba(248, 250, 252, 0.08)` | `rgba(10, 10, 10, 0.06)` | `rgba(255, 255, 255, 0.08)` | `rgba(0, 0, 0, 0.07)` | `rgba(255, 255, 255, 0.08)` | `rgba(17, 17, 17, 0.08)` | `rgba(255, 255, 255, 0.10)` | `rgba(168, 132, 232, 0.18)` |
+| `colorText` | `#0f172a` | `#f8fafc` | `#0a0a0a` | `#fafafa` | `rgba(0, 0, 0, 0.87)` | `#ffffff` | `#11181c` | `#ecedee` | `#3b1f56` |
+| `colorTextMuted` | `#475569` | `#94a3b8` | `#737373` | `#a1a1a1` | `rgba(0, 0, 0, 0.6)` | `rgba(255, 255, 255, 0.7)` | `#63636b` | `#a1a1aa` | `#7d6193` |
+| `colorPrimary` | `#4f46e5` | `#818cf8` | `#171717` | `#e5e5e5` | `#1976d2` | `#90caf9` | `#006fee` | `#006fee` | `#7c4ddb` |
+| `colorPrimaryHover` | `#4338ca` | `#6366f1` | `#2e2e2e` | `#cfcfcf` | `#1565c0` | `#42a5f5` | `#005bc4` | `#338ef7` | `#6d3fc4` |
+| `colorPrimaryText` | `#ffffff` | `#0b1220` | `#fafafa` | `#171717` | `#ffffff` | `rgba(0, 0, 0, 0.87)` | `#ffffff` | `#ffffff` | `#ffffff` |
+| `colorAccent` | `#4f46e5` | `#818cf8` | `#171717` | `#e5e5e5` | `#9c27b0` | `#ce93d8` | `#7828c8` | `#9353d3` | `#5eead4` |
+| `colorAccentHover` | `#4338ca` | `#6366f1` | `#2e2e2e` | `#cfcfcf` | `#7b1fa2` | `#ba68c8` | `#6020a0` | `#ae7ede` | `#2dd4bf` |
+| `colorAccentText` | `#ffffff` | `#0b1220` | `#fafafa` | `#171717` | `#ffffff` | `rgba(0, 0, 0, 0.87)` | `#ffffff` | `#ffffff` | `#0f3a35` |
+| `colorFocusRing` | `#4f46e5` | `#818cf8` | `#737373` | `#737373` | `#1976d2` | `#90caf9` | `#006fee` | `#006fee` | `#8b66f8` |
+| `colorSuccess` | `#10b981` | `#10b981` | `#16a34a` | `#22c55e` | `#2e7d32` | `#66bb6a` | `#17c964` | `#17c964` | `#5eead4` |
+| `colorWarning` | `#f59e0b` | `#f59e0b` | `#f59e0b` | `#f59e0b` | `#ed6c02` | `#ffa726` | `#f5a524` | `#f5a524` | `#fcd34d` |
+| `colorDanger` | `#ef4444` | `#ef4444` | `#e7000b` | `#ff6467` | `#d32f2f` | `#f44336` | `#f31260` | `#f31260` | `#fda4af` |
+| `colorInfo` | `#06b6d4` | `#06b6d4` | `#2563eb` | `#3b82f6` | `#0288d1` | `#29b6f6` | `#006fee` | `#006fee` | `#93c5fd` |
+| `colorSuccessText` | `#047857` | `#10b981` | `#15803d` | `#22c55e` | `#1e4620` | `#66bb6a` | `#0e793c` | `#17c964` | `#0f766e` |
+| `colorWarningText` | `#a35a00` | `#f59e0b` | `#a35a00` | `#f59e0b` | `#663c00` | `#ffa726` | `#936316` | `#f5a524` | `#856400` |
+| `colorDangerText` | `#d92d20` | `#ef4444` | `#c10007` | `#ff6467` | `#5f2120` | `#f44336` | `#920b3a` | `#f54180` | `#be123c` |
+| `colorInfoText` | `#0e7490` | `#06b6d4` | `#1d4ed8` | `#3b82f6` | `#014361` | `#29b6f6` | `#005bc4` | `#66aaf9` | `#1d4ed8` |
+| `colorOnSuccess` | `#04291e` | `#04291e` | `#04291e` | `#04291e` | `#ffffff` | `#04291e` | `#04291e` | `#04291e` | `#0f3a35` |
+| `colorOnWarning` | `#451a03` | `#451a03` | `#451a03` | `#451a03` | `#451a03` | `#451a03` | `#451a03` | `#451a03` | `#3d2600` |
+| `colorOnDanger` | `#2c0606` | `#2c0606` | `#ffffff` | `#2c0606` | `#ffffff` | `#2c0606` | `#2a0413` | `#2a0413` | `#4c0519` |
+| `colorOnInfo` | `#0c2b3a` | `#0c2b3a` | `#ffffff` | `#08131f` | `#001724` | `#08131f` | `#ffffff` | `#ffffff` | `#172554` |
+| `hlKeyword` | `#cf222e` | `#c678dd` | `#cf222e` | `#c678dd` | `#cf222e` | `#c678dd` | `#cf222e` | `#c678dd` | `#cf222e` |
+| `hlString` | `#0a3069` | `#98c379` | `#0a3069` | `#98c379` | `#0a3069` | `#98c379` | `#0a3069` | `#98c379` | `#0a3069` |
+| `hlNumber` | `#0550ae` | `#d19a66` | `#0550ae` | `#d19a66` | `#0550ae` | `#d19a66` | `#0550ae` | `#d19a66` | `#0550ae` |
+| `hlComment` | `#57606a` | `#9ca3af` | `#57606a` | `#9ca3af` | `#57606a` | `#9ca3af` | `#57606a` | `#9ca3af` | `#57606a` |
+| `hlFn` | `#6f42c1` | `#61afef` | `#6f42c1` | `#61afef` | `#6f42c1` | `#61afef` | `#6f42c1` | `#61afef` | `#6f42c1` |
+| `hlTag` | `#116329` | `#e06c75` | `#116329` | `#e06c75` | `#116329` | `#e06c75` | `#116329` | `#e06c75` | `#116329` |
+| `hlAttr` | `#953800` | `#d19a66` | `#953800` | `#d19a66` | `#953800` | `#d19a66` | `#953800` | `#d19a66` | `#953800` |
+| `hlPunct` | `#475569` | `#abb2bf` | `#475569` | `#abb2bf` | `#475569` | `#abb2bf` | `#475569` | `#abb2bf` | `#475569` |
+| `shadowSm` | `0 1px 2px rgba(15, 23, 42, 0.06)` | `0 1px 2px rgba(0, 0, 0, 0.4)` | `0 1px 2px 0 rgba(0, 0, 0, 0.05)` | `0 1px 2px 0 rgba(0, 0, 0, 0.35)` | `0px 2px 1px -1px rgba(0, 0, 0, 0.2), 0px 1px 1px 0px rgba(0, 0, 0, 0.14), 0px 1px 3px 0px rgba(0, 0, 0, 0.12)` | `0px 2px 1px -1px rgba(0, 0, 0, 0.2), 0px 1px 1px 0px rgba(0, 0, 0, 0.14), 0px 1px 3px 0px rgba(0, 0, 0, 0.12)` | `0px 0px 5px 0px rgba(0, 0, 0, 0.02), 0px 2px 10px 0px rgba(0, 0, 0, 0.06), 0px 0px 1px 0px rgba(0, 0, 0, 0.3)` | `0px 0px 5px 0px rgba(0, 0, 0, 0.05), 0px 2px 10px 0px rgba(0, 0, 0, 0.2), inset 0px 0px 1px 0px rgba(255, 255, 255, 0.15)` | `0 4px 14px rgba(168, 132, 232, 0.12)` |
+| `shadowMd` | `0 6px 24px rgba(15, 23, 42, 0.08)` | `0 8px 24px rgba(0, 0, 0, 0.4)` | `0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.10)` | `0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.45)` | `0px 2px 4px -1px rgba(0, 0, 0, 0.2), 0px 4px 5px 0px rgba(0, 0, 0, 0.14), 0px 1px 10px 0px rgba(0, 0, 0, 0.12)` | `0px 2px 4px -1px rgba(0, 0, 0, 0.2), 0px 4px 5px 0px rgba(0, 0, 0, 0.14), 0px 1px 10px 0px rgba(0, 0, 0, 0.12)` | `0px 0px 15px 0px rgba(0, 0, 0, 0.03), 0px 2px 30px 0px rgba(0, 0, 0, 0.08), 0px 0px 1px 0px rgba(0, 0, 0, 0.3)` | `0px 0px 15px 0px rgba(0, 0, 0, 0.06), 0px 2px 30px 0px rgba(0, 0, 0, 0.22), inset 0px 0px 1px 0px rgba(255, 255, 255, 0.15)` | `0 18px 40px rgba(168, 132, 232, 0.18)` |
+| `shadowLg` | `0 18px 60px rgba(15, 23, 42, 0.12)` | `0 22px 60px rgba(0, 0, 0, 0.55)` | `0 10px 15px -3px rgba(0, 0, 0, 0.10), 0 4px 6px -4px rgba(0, 0, 0, 0.10)` | `0 10px 15px -3px rgba(0, 0, 0, 0.55), 0 4px 6px -4px rgba(0, 0, 0, 0.50)` | `0px 11px 15px -7px rgba(0, 0, 0, 0.2), 0px 24px 38px 3px rgba(0, 0, 0, 0.14), 0px 9px 46px 8px rgba(0, 0, 0, 0.12)` | `0px 11px 15px -7px rgba(0, 0, 0, 0.2), 0px 24px 38px 3px rgba(0, 0, 0, 0.14), 0px 9px 46px 8px rgba(0, 0, 0, 0.12)` | `0px 0px 30px 0px rgba(0, 0, 0, 0.04), 0px 30px 60px 0px rgba(0, 0, 0, 0.12), 0px 0px 1px 0px rgba(0, 0, 0, 0.3)` | `0px 0px 30px 0px rgba(0, 0, 0, 0.07), 0px 30px 60px 0px rgba(0, 0, 0, 0.26), inset 0px 0px 1px 0px rgba(255, 255, 255, 0.15)` | `0 28px 70px rgba(168, 132, 232, 0.22)` |
+| `borderWidth` | `1px` | `1px` | `1px` | `1px` | `1px` | `1px` | `1px` | `1px` | `1px` |
+| `chart1` | `#6366f1` | `#6366f1` | `#e76e50` | `#2662d9` | `#02b2af` | `#02b2af` | `#006fee` | `#338ef7` | `#a78bfa` |
+| `chart2` | `#10b981` | `#10b981` | `#2a9d90` | `#2eb88a` | `#2e96ff` | `#72ccff` | `#7828c8` | `#9353d3` | `#5eead4` |
+| `chart3` | `#f59e0b` | `#f59e0b` | `#274754` | `#e88c30` | `#b800d8` | `#da00ff` | `#17c964` | `#45d483` | `#fcd34d` |
+| `chart4` | `#ef4444` | `#ef4444` | `#e8c468` | `#af57db` | `#60009b` | `#9001cb` | `#f5a524` | `#f7b750` | `#fda4af` |
+| `chart5` | `#06b6d4` | `#06b6d4` | `#f4a462` | `#e23670` | `#2731c8` | `#2e96ff` | `#f31260` | `#f54180` | `#93c5fd` |
+| `chart6` | `#8b5cf6` | `#8b5cf6` | `#9c6644` | `#3ec9d6` | `#03008d` | `#b800d8` | `#ff705b` | `#ff8f7c` | `#f9a8d4` |
+| `fontFamily` | `system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif` | `system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif` | `'Geist', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Geist', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif` | `'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif` | `'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Quicksand', 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` |
+| `fontFamilyHeading` | `system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif` | `system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif` | `'Geist', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Geist', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif` | `'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif` | `'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` | `'Quicksand', 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` |
+| `fontFamilyMono` | `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` |
+| `fontSizeBase` | `14px` | `14px` | `14px` | `14px` | `16px` | `16px` | `16px` | `16px` | `14px` |
+| `fontSizeSm` | `12px` | `12px` | `12px` | `12px` | `14px` | `14px` | `14px` | `14px` | `12px` |
+| `fontSizeLg` | `16px` | `16px` | `16px` | `16px` | `18px` | `18px` | `18px` | `18px` | `16px` |
+| `fontSizeHeading` | `16px` | `16px` | `16px` | `16px` | `20px` | `20px` | `18px` | `18px` | `16px` |
+| `fontSizeTitle` | `22px` | `22px` | `24px` | `24px` | `24px` | `24px` | `30px` | `30px` | `22px` |
+| `fontWeightBody` | `400` | `400` | `400` | `400` | `400` | `400` | `400` | `400` | `400` |
+| `fontWeightHeading` | `700` | `700` | `600` | `600` | `500` | `500` | `600` | `600` | `700` |
+| `lineHeightBody` | `1.5` | `1.5` | `1.5` | `1.5` | `1.5` | `1.5` | `1.5` | `1.5` | `1.5` |
+| `lineHeightHeading` | `1.2` | `1.2` | `1.25` | `1.25` | `1.334` | `1.334` | `1.25` | `1.25` | `1.2` |
+| `letterSpacingHeading` | `0` | `0` | `-0.015em` | `-0.015em` | `0.0075em` | `0.0075em` | `-0.02em` | `-0.02em` | `0` |
+| `headingTextTransform` | `none` | `none` | `none` | `none` | `none` | `none` | `none` | `none` | `none` |
+| `spacingXs` | `4px` | `4px` | `4px` | `4px` | `4px` | `4px` | `4px` | `4px` | `6px` |
+| `spacingS` | `8px` | `8px` | `8px` | `8px` | `8px` | `8px` | `8px` | `8px` | `12px` |
+| `spacingM` | `12px` | `12px` | `12px` | `12px` | `16px` | `16px` | `12px` | `12px` | `18px` |
+| `spacingL` | `20px` | `20px` | `24px` | `24px` | `24px` | `24px` | `16px` | `16px` | `28px` |
+| `spacingXl` | `32px` | `32px` | `36px` | `36px` | `32px` | `32px` | `28px` | `28px` | `44px` |
+| `spacing2xl` | `48px` | `48px` | `56px` | `56px` | `48px` | `48px` | `48px` | `48px` | `66px` |
+| `spacing3xl` | `80px` | `80px` | `88px` | `88px` | `80px` | `80px` | `80px` | `80px` | `110px` |
+| `gradientBrand` | `linear-gradient(120deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)` | `linear-gradient(120deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)` | `linear-gradient(120deg, #0a0a0a 0%, #404040 55%, #737373 100%)` | `linear-gradient(120deg, #fafafa 0%, #a1a1a1 55%, #525252 100%)` | `linear-gradient(120deg, #1976d2 0%, #9c27b0 100%)` | `linear-gradient(120deg, #90caf9 0%, #ce93d8 100%)` | `linear-gradient(120deg, #5ea2ef 0%, #0072f5 100%)` | `linear-gradient(120deg, #5ea2ef 0%, #0072f5 100%)` | `linear-gradient(135deg, #7c3aed 0%, #be185d 100%)` |
+| `gradientAccent` | `linear-gradient(120deg, #22d3ee 0%, #6366f1 100%)` | `linear-gradient(120deg, #22d3ee 0%, #6366f1 100%)` | `linear-gradient(120deg, #171717 0%, #525252 100%)` | `linear-gradient(120deg, #e5e5e5 0%, #a1a1a1 100%)` | `linear-gradient(120deg, #9c27b0 0%, #1976d2 100%)` | `linear-gradient(120deg, #ce93d8 0%, #90caf9 100%)` | `linear-gradient(120deg, #ff1cf7 0%, #b249f8 100%)` | `linear-gradient(120deg, #ff1cf7 0%, #b249f8 100%)` | `linear-gradient(120deg, #22d3ee 0%, #6366f1 100%)` |
+| `gradientWarm` | `linear-gradient(120deg, #f59e0b 0%, #ec4899 100%)` | `linear-gradient(120deg, #f59e0b 0%, #ec4899 100%)` | `linear-gradient(120deg, #f59e0b 0%, #e7000b 100%)` | `linear-gradient(120deg, #f59e0b 0%, #e7000b 100%)` | `linear-gradient(120deg, #ed6c02 0%, #d32f2f 100%)` | `linear-gradient(120deg, #ffa726 0%, #f44336 100%)` | `linear-gradient(120deg, #ff705b 0%, #ffb457 100%)` | `linear-gradient(120deg, #ff705b 0%, #ffb457 100%)` | `linear-gradient(120deg, #f59e0b 0%, #ec4899 100%)` |
+| `gradientCool` | `linear-gradient(120deg, #3b82f6 0%, #06b6d4 100%)` | `linear-gradient(120deg, #3b82f6 0%, #06b6d4 100%)` | `linear-gradient(120deg, #2563eb 0%, #06b6d4 100%)` | `linear-gradient(120deg, #2563eb 0%, #06b6d4 100%)` | `linear-gradient(120deg, #0288d1 0%, #1976d2 100%)` | `linear-gradient(120deg, #29b6f6 0%, #90caf9 100%)` | `linear-gradient(120deg, #5ea2ef 0%, #17c964 100%)` | `linear-gradient(120deg, #5ea2ef 0%, #17c964 100%)` | `linear-gradient(120deg, #3b82f6 0%, #06b6d4 100%)` |
+| `gradientSuccess` | `linear-gradient(120deg, #10b981 0%, #22d3ee 100%)` | `linear-gradient(120deg, #10b981 0%, #22d3ee 100%)` | `linear-gradient(120deg, #16a34a 0%, #22c55e 100%)` | `linear-gradient(120deg, #16a34a 0%, #22c55e 100%)` | `linear-gradient(120deg, #2e7d32 0%, #0288d1 100%)` | `linear-gradient(120deg, #66bb6a 0%, #29b6f6 100%)` | `linear-gradient(120deg, #6fee8d 0%, #17c964 100%)` | `linear-gradient(120deg, #6fee8d 0%, #17c964 100%)` | `linear-gradient(120deg, #10b981 0%, #22d3ee 100%)` |
+| `gradientDanger` | `linear-gradient(120deg, #f43f5e 0%, #ec4899 100%)` | `linear-gradient(120deg, #f43f5e 0%, #ec4899 100%)` | `linear-gradient(120deg, #e7000b 0%, #9f0712 100%)` | `linear-gradient(120deg, #e7000b 0%, #9f0712 100%)` | `linear-gradient(120deg, #d32f2f 0%, #9c27b0 100%)` | `linear-gradient(120deg, #f44336 0%, #ce93d8 100%)` | `linear-gradient(120deg, #f54180 0%, #f31260 100%)` | `linear-gradient(120deg, #f54180 0%, #f31260 100%)` | `linear-gradient(120deg, #f43f5e 0%, #ec4899 100%)` |
+| `radiusXs` | `4px` | `4px` | `4px` | `4px` | `2px` | `2px` | `6px` | `6px` | `8px` |
+| `radiusSm` | `6px` | `6px` | `6px` | `6px` | `4px` | `4px` | `8px` | `8px` | `12px` |
+| `radiusMd` | `10px` | `10px` | `10px` | `10px` | `4px` | `4px` | `12px` | `12px` | `20px` |
+| `radiusLg` | `16px` | `16px` | `14px` | `14px` | `4px` | `4px` | `14px` | `14px` | `28px` |
+| `radiusPill` | `999px` | `999px` | `999px` | `999px` | `999px` | `999px` | `999px` | `999px` | `999px` |
+| `radiusButton` | `6px` | `6px` | `8px` | `8px` | `4px` | `4px` | `12px` | `12px` | `16px` |
+| `radiusInput` | `6px` | `6px` | `8px` | `8px` | `4px` | `4px` | `12px` | `12px` | `16px` |
+| `buttonFontWeight` | `600` | `600` | `500` | `500` | `500` | `500` | `500` | `500` | `600` |
+| `buttonTextTransform` | `none` | `none` | `none` | `none` | `uppercase` | `uppercase` | `none` | `none` | `none` |
+| `buttonLetterSpacing` | `0` | `0` | `0` | `0` | `0.02857em` | `0.02857em` | `0` | `0` | `0` |
+| `buttonPaddingY` | `8px` | `8px` | `8px` | `8px` | `6px` | `6px` | `10px` | `10px` | `8px` |
+| `buttonPaddingX` | `14px` | `14px` | `16px` | `16px` | `16px` | `16px` | `16px` | `16px` | `14px` |
+| `transitionDuration` | `120ms` | `120ms` | `150ms` | `150ms` | `150ms` | `150ms` | `250ms` | `250ms` | `120ms` |
 

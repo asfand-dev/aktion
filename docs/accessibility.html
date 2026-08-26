@@ -71,7 +71,7 @@
       <table class="signature-table">
         <thead><tr><th>Guarantee</th><th>How it is enforced</th></tr></thead>
         <tbody>
-          <tr><td>Every theme&rsquo;s focus ring, control boundary, and primary colour clear their contrast bar</td><td><strong>Machine-checked</strong> for all six built-in themes in <code>tests/theme-focus-contrast.test.ts</code> &mdash; see <a href="#contrast">Theme contrast</a>.</td></tr>
+          <tr><td>Every theme&rsquo;s focus ring, control boundary, and primary colour clear their contrast bar</td><td><strong>Machine-checked</strong> for every built-in theme in <code>tests/theme-focus-contrast.test.ts</code> &mdash; see <a href="#contrast">Theme contrast</a>.</td></tr>
           <tr><td>Nothing focusable is left without a visible indicator</td><td>A zero-specificity global rule paints a 2px <code>outline</code> in the focus token on every <code>button</code>, <code>a[href]</code>, <code>summary</code>, positive <code>tabindex</code>, and widget <code>role</code> at <code>:focus-visible</code>.</td></tr>
           <tr><td>Components render real interactive elements with accessible names</td><td>Buttons are <code>&lt;button&gt;</code>, links are <code>&lt;a href&gt;</code>, fields are <code>&lt;input&gt;</code>/<code>&lt;select&gt;</code>/<code>&lt;textarea&gt;</code>, so <kbd>Enter</kbd>&hairsp;/&hairsp;<kbd>Space</kbd> activation and name computation are the browser&rsquo;s, not a handler&rsquo;s.</td></tr>
           <tr><td>Dialogs are labelled, trap focus, and restore it</td><td><code>Modal</code> renders <code>role="dialog"</code> + <code>aria-modal="true"</code> + <code>aria-labelledby</code>, moves focus in, locks background scroll (ref-counted for nesting), and restores focus on close.</td></tr>
@@ -188,7 +188,7 @@
 
       <h2 id="contrast">Theme contrast</h2>
       <p>
-        The six built-in themes are not eyeballed. Three contrast invariants are
+        The built-in themes are not eyeballed. Three contrast invariants are
         asserted for every one of them in
         <code>tests/theme-focus-contrast.test.ts</code>, so a retint that breaks one
         fails the build rather than shipping:
@@ -214,7 +214,7 @@
         <p><strong>Do not collapse them into one value.</strong>
           <code>colorBorder</code> is deliberately faint
           (<span class="swatch" style="background:#e2e8f0"></span><code>#e2e8f0</code>
-          on <code>light</code>, 1.17&ndash;1.70:1 across the six themes) because the
+          on <code>light</code>, and comparably faint in every other theme) because the
           same token draws dividers and table row separators, where a 3:1 hairline
           reads as heavy ruling. <code>colorBorderControl</code>
           (<span class="swatch" style="background:#767f8c"></span><code>#767f8c</code>)
@@ -226,8 +226,11 @@
         One more split worth knowing: <code>colorAccent</code> has two jobs &mdash;
         a fill paired with <code>colorAccentText</code>, and link text. Themes whose
         accent already clears 4.5:1 as text inherit a derived
-        <code>colorLink</code>; <code>soft</code>, <code>glass</code>, and
-        <code>modern</code> ship an explicit one because their accents do not.
+        <code>colorLink</code>; <code>soft</code>, <code>mui</code> and
+        <code>heroui</code> ship an explicit one because theirs do not &mdash;
+        HeroUI's <code>#006fee</code> is 3.8:1 as text on its own dark card, so
+        <code>heroui-dark</code> paints links in <code>#66aaf9</code> instead while the
+        button FILL stays HeroUI blue.
       </p>
 
       <h3 id="status-colours">The three-way status colour split</h3>
@@ -265,9 +268,9 @@
           on-fill ink still come from the default palette, so they stop matching
           the brand and may stop clearing their bar. Two themes already break the
           &ldquo;white ink is fine&rdquo; assumption in the other direction:
-          <code>corporate</code> sets <code>colorOnDanger: "#ffffff"</code> and
-          <code>modern</code> sets <code>colorOnInfo: "#ffffff"</code>, because
-          those two fills are dark enough for it.</p>
+          <code>shadcn</code> sets <code>colorOnDanger: "#ffffff"</code> and
+          <code>mui</code> sets <code>colorOnSuccess: "#ffffff"</code>, because
+          those fills are dark enough for it.</p>
       </div>
       <p>
         The rest of the rule set is short: body text at 4.5:1, large text and UI
@@ -275,9 +278,10 @@
         <code>tone</code> with an icon or a label, as the components already do.
       </p>
       <p>
-        One caveat on the invariants: they compare opaque hex values, so
-        <code>glass</code>&rsquo;s translucent <code>rgba(&hellip;)</code> surfaces
-        are skipped by the test and reviewed by hand.
+        One caveat on the invariants: they compare opaque hex values, so a theme
+        whose surface or ink is an <code>rgba(&hellip;)</code> &mdash; Material's
+        <code>rgba(0,0,0,0.87)</code> body text, for one &mdash; is skipped by the test
+        and reviewed by hand.
         <a href="themes.html#colors">Themes</a> has the full token reference.
       </p>
 

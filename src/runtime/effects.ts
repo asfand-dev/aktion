@@ -36,7 +36,7 @@ import {
 import type { StateStore, StateValue } from "./state.js";
 import { anyPathAffects } from "./state.js";
 import { isDevtoolsActive, nowMs } from "../devtools/hook.js";
-import type { EffectEventPayload, EffectPhase } from "../devtools/protocol.js";
+import type { EffectEventPayload, EffectInfo, EffectPhase } from "../devtools/protocol.js";
 
 /**
  * `true` for a `$emit("name", detail)` call — an Invoke on the reserved
@@ -94,6 +94,12 @@ interface MountedEffect {
    * `syncInstanceEffects` so the effect always sees the latest values.
    */
   capturedLoopVars: ReadonlyMap<string, unknown>;
+  /**
+   * The rate-limit-wrapped body runner, kept so DevTools can fire an effect
+   * on demand ("run now") without waiting for its trigger. Assigned at the end
+   * of `mount`; absent only in the window before the wrapper exists.
+   */
+  run?: (reason: string) => void;
 }
 
 /**
@@ -215,6 +221,54 @@ export class EffectRunner {
     this.errors = [];
   }
 
+  /* ---- DevTools introspection ------------------------------------------ */
+
+  /**
+   * Describe every currently-mounted effect: what it subscribes to, what
+   * intervals it holds, how many `cleanup(fn)` handlers are live.
+   *
+   * The event timeline shows what effects *did*; this shows what they *are* —
+   * which is the half you need when the question is "why did nothing happen?"
+   * (a dependency list that never matches never produces an event to look at).
+   */
+  listMounted(): EffectInfo[] {
+    const out: EffectInfo[] = [];
+    for (const [mountKey, mounted] of this.mounted) {
+      const sep = mountKey.lastIndexOf(INSTANCE_KEY_SEPARATOR);
+      const stateDeps: string[] = [];
+      const intervals: number[] = [];
+      for (const trigger of mounted.decl.triggers) {
+        if (trigger.kind === "state") stateDeps.push(trigger.name);
+        else if (trigger.kind === "every") intervals.push(trigger.intervalMs);
+      }
+      out.push({
+        effectKey: mountKey,
+        label: effectLabel(mounted.decl.name),
+        instanceKey: sep >= 0 ? mountKey.slice(0, sep) : null,
+        triggers: summariseTriggers(mounted.decl),
+        stateDeps,
+        intervals,
+        cleanups: mounted.cleanups.length,
+        source: mounted.decl.loc
+          ? { line: mounted.decl.loc.line, column: mounted.decl.loc.column }
+          : undefined,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * Run one mounted effect's body now, as if its trigger had fired. Prior
+   * cleanups fire first, exactly like a real re-run, so "run now" can't leave
+   * an effect with two live subscriptions. Returns `false` for an unknown key.
+   */
+  runNow(mountKey: string, reason = "devtools"): boolean {
+    const mounted = this.mounted.get(mountKey);
+    if (!mounted?.run) return false;
+    mounted.run(reason);
+    return true;
+  }
+
   private mount(
     mountKey: string,
     decl: EffectDeclaration,
@@ -268,6 +322,8 @@ export class EffectRunner {
     // effect body. The wrapper is installed once at mount-time so
     // subsequent re-runs go through the same timer state.
     const runBody = wrapRateLimit(rawRunBody, decl.rateLimit, mounted);
+    // Keep a handle so DevTools can run this effect on demand (see `runNow`).
+    mounted.run = runBody;
 
     // Wire triggers.
     let hasMountTrigger = false;

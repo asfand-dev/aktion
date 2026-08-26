@@ -2,20 +2,30 @@
  * Theme tokens applied as CSS custom properties on the host element.
  *
  * Built-in themes:
- *   - "light"      (default)
+ *   - "light"         (default)
  *   - "dark"
- *   - "corporate"  (contemporary enterprise workspace: graphite neutrals, a
- *                   deep teal brand hue, square-shouldered controls, crisp
- *                   hairlines and tight shadows)
- *   - "soft"       (soft, friendly, light & rounded; lavender + mint)
- *   - "glass"      (light glassmorphism: frosted white surfaces over a soft
- *                   pastel gradient, airy and translucent)
- *   - "modern"     (clean modern SaaS: light, generous rounding, ink primary,
- *                   pill buttons, soft diffuse shadows, vibrant charts)
+ *   - "shadcn"        (= "shadcn-light") · "shadcn-light" · "shadcn-dark"
+ *                     shadcn/ui's default `neutral` theme: white page, ink
+ *                     primary, one flat grey wash, hairline borders, 8px
+ *                     controls on 14px Geist
+ *   - "mui"           (= "mui-light") · "mui-light" · "mui-dark"
+ *                     Material UI's default theme: #1976d2 primary, 4px
+ *                     radii everywhere, uppercase buttons, Roboto, and the
+ *                     real three-layer elevation shadows
+ *   - "heroui"        (= "heroui-light") · "heroui-light" · "heroui-dark"
+ *                     HeroUI: #006fee primary, 12–14px corners, borderless
+ *                     cards on soft shadows, opacity-dimming hovers and a
+ *                     2px offset focus outline, on 16px Inter
+ *   - "soft"          (soft, friendly, light & rounded; lavender + mint)
+ *
+ * Each framework family is ONE design in two modes; the bare name is the
+ * light one. All three names of a family share a CSS block in `styles.ts`.
  *
  * Private themes (see `privateThemes`) resolve by name exactly like the ones
  * above but are deliberately absent from `builtInThemes`, so they never reach
  * `langSpec.themeNames`, the docs' theme pickers or the published reference.
+ * The retired `modern` / `glass` / `corporate` names live there too, pointing
+ * at the themes that replaced them (see `deprecatedThemeAliases`).
  *
  * Consumers can also pass a JSON object via the `theme` attribute, call
  * `element.setTheme({...})`, or write a bare `$theme({...})` statement
@@ -73,10 +83,10 @@ export interface ThemeTokens {
    * `#0f3a35` ink) *and* it was painted as link text. Darkening the accent to
    * clear the 4.5:1 text minimum would have broken the fill pairing, so the
    * text-side value moved here instead. soft's mint measured 1.48:1 on its own
-   * white surface and glass's `#b58ee6` 2.63:1 — links were effectively invisible.
+   * white surface, and `heroui-dark`'s `#006fee` 3.80:1 on its `content1` card.
    *
    * A theme whose accent already clears 4.5:1 as text (light 6.29:1, dark
-   * 5.95:1, corporate 4.86:1) can omit both and inherit the derivation.
+   * 5.95:1, `heroui-light` 4.66:1) can omit both and inherit the derivation.
    */
   colorLink?: string;
   colorLinkHover?: string;
@@ -117,10 +127,10 @@ export interface ThemeTokens {
    * by the other direction; `colorPrimaryText`/`colorAccentText` are the naming
    * precedent for "ink on this fill".)
    *
-   * Values are per theme because the fills are: corporate's danger `#c80a00` is
-   * dark enough that white is the correct ink (6.00:1), while soft's pastel
+   * Values are per theme because the fills are: shadcn's destructive `#e7000b`
+   * is dark enough that white is the correct ink (4.77:1), while soft's pastel
    * `#fda4af` needs a deep rose. No status fill had to be darkened — a
-   * hue-matched dark ink clears 4.5:1 on all four hues in all six themes.
+   * hue-matched dark ink clears 4.5:1 on all four hues in every theme.
    */
   colorOnSuccess?: string;
   colorOnWarning?: string;
@@ -541,96 +551,6 @@ export const softTheme: ThemeTokens = {
 };
 
 /**
- * Glass — light glassmorphism. Frosted *white* translucent surfaces floating
- * over a soft, airy pastel gradient (peach → pink → lavender → mint). Real
- * backdrop-filter blur is applied via the stylesheet, so surfaces pick up the
- * colourful wash behind them. Dark warm-slate text, a warm coral primary, a
- * lavender accent, generous rounding, and feather-soft tinted shadows. The
- * look mirrors calm, modern wellness / consumer dashboards.
- */
-export const glassTheme: ThemeTokens = {
-  ...lightTheme,
-  colorBg: "#eceef2",
-  colorBgSubtle: "#e6e8ee",
-  colorSurface: "rgba(255, 255, 255, 0.55)",
-  colorSurfaceMuted: "rgba(255, 255, 255, 0.35)",
-  colorBorder: "rgba(255, 255, 255, 0.70)",
-  colorBorderControl: "rgba(71, 85, 105, 0.85)",
-  colorBorderSubtle: "rgba(255, 255, 255, 0.45)",
-  colorText: "#33303a",
-  // Was #7c7585: 4.43:1 on #ffffff, 3.81:1 on the #eceef2 page and 3.62:1 on
-  // #e6e8ee — muted captions (StatCard, hints, table meta) were the single
-  // largest body of failing text in this theme. #5d5768 keeps the warm-grey
-  // hue at 6.93 / 5.97 / 5.66:1.
-  colorTextMuted: "#5d5768",
-  // Deepened from #f2826a (2.57:1 on white), which failed as text and for the
-  // #ffffff label on primary buttons. #af4027 is the same terracotta-coral hue
-  // at 5.86:1 on #ffffff and 4.78:1 on the darkest page tint. The frosted
-  // translucency that defines this theme is unaffected.
-  colorPrimary: "#af4027",
-  colorPrimaryHover: "#9c3722",
-  colorPrimaryText: "#ffffff",
-  colorAccent: "#b58ee6",
-  colorAccentHover: "#a376e0",
-  colorAccentText: "#ffffff",
-  // The lavender accent is 2.63:1 on #ffffff and 2.15:1 on the #e6e8ee page, so
-  // it fails as link text; it stays put because it is also a fill (and the
-  // gradientAccent stop). The same lavender at text depth takes over: 7.38:1 on
-  // #ffffff, 6.03:1 on #e6e8ee. Hover deepens, matching the primary's direction.
-  colorLink: "#6b3fa0",
-  colorLinkHover: "#552f80",
-  // Now the primary itself — it clears the 4.5:1 text bar, so it also clears the
-  // 3:1 the focus border needs (the 22% glow beside it is only ~1.2:1).
-  colorFocusRing: "#af4027",   // 5.86:1 on #ffffff
-  colorSuccess: "#5bbf9b",
-  colorWarning: "#f0b259",
-  colorDanger: "#ef7b86",
-  colorInfo: "#7fb0e8",
-  // Same hues at text depth: 6.46 / 6.75 / 6.07 / 6.29:1 on #ffffff and
-  // >= 4.68:1 on #e6e8ee (the fills are 1.9-2.7:1).
-  colorSuccessText: "#146b50",
-  colorWarningText: "#7f5200",
-  colorDangerText: "#b82c39",
-  colorInfoText: "#28629f",
-  // Ink on this theme's softer fills: 6.99 / 8.00 / 5.84 / 6.49:1.
-  colorOnSuccess: "#04291e",
-  colorOnWarning: "#451a03",
-  colorOnDanger: "#4c0519",
-  colorOnInfo: "#172554",
-  fontFamily: "'Poppins', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyHeading: "'Poppins', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyMono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  letterSpacingHeading: "-0.01em",
-  radiusXs: "8px",
-  radiusSm: "14px",
-  radiusMd: "20px",
-  radiusLg: "28px",
-  radiusButton: "16px",
-  radiusInput: "16px",
-  shadowSm: "0 2px 8px rgba(120, 110, 140, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.55)",
-  shadowMd: "0 14px 40px rgba(120, 110, 140, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.55)",
-  shadowLg: "0 26px 70px rgba(120, 110, 140, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.60)",
-  spacingXs: "6px",
-  spacingS: "12px",
-  spacingM: "18px",
-  spacingL: "26px",
-  spacingXl: "42px",
-  // See softTheme: light's 48px/80px would otherwise cap this theme's scale.
-  spacing2xl: "63px",
-  spacing3xl: "105px",
-  gradientBrand: "linear-gradient(120deg, #f7a072 0%, #f2826a 45%, #c98bd6 100%)",
-  gradientAccent: "linear-gradient(120deg, #b58ee6 0%, #8ec5e8 100%)",
-  gradientWarm: "linear-gradient(120deg, #f9b079 0%, #f48aa6 100%)",
-  gradientCool: "linear-gradient(120deg, #8ec5e8 0%, #9fd8c6 100%)",
-  chart1: "#f2826a",
-  chart2: "#b58ee6",
-  chart3: "#8ec5e8",
-  chart4: "#5bbf9b",
-  chart5: "#f0b259",
-  chart6: "#f48aa6",
-};
-
-/**
  * Vision — enterprise cloud-console aesthetic. Deep navy primary, calm
  * cyan accents, very pale blue page background, white surfaces with crisp
  * 1px borders, small radii, and Open Sans / Overpass type. The look should
@@ -640,8 +560,8 @@ export const glassTheme: ThemeTokens = {
  * `theme="vision"` and `$theme({ name: "vision" })` resolve normally while the
  * name stays out of `langSpec.themeNames` — the single source the playground
  * theme picker, the editor autocomplete and the generated docs all read from.
- * (Formerly "skyline", then "corporate"; the `corporate` key now names the
- * unrelated theme below.)
+ * (Formerly "skyline", then "corporate"; the `corporate` key is now a
+ * deprecated alias of `heroui-light` — see `deprecatedThemeAliases`.)
  */
 export const visionTheme: ThemeTokens = {
   ...lightTheme,
@@ -758,182 +678,100 @@ export const visionTheme: ThemeTokens = {
   chart6: "#0b2a63", // corporate-7 (navy)
 };
 
-/**
- * Modern — clean, friendly SaaS dashboard. Light off-white page, crisp white
- * surfaces, generous rounding, feather-soft diffuse shadows, an ink (near
- * black) primary rendered as pill buttons, a violet accent, and a vibrant
- * multi-hue chart palette. The aesthetic is the contemporary product-dashboard
- * look: airy, rounded, low-contrast chrome with confident black call-to-actions.
- */
-export const modernTheme: ThemeTokens = {
-  ...lightTheme,
-  colorBg: "#f4f5f7",
-  colorBgSubtle: "#eef0f3",
-  colorSurface: "#ffffff",
-  colorSurfaceMuted: "#f6f7f9",
-  colorBorder: "#ebedf1",
-  colorBorderControl: "#787d88",
-  colorBorderSubtle: "rgba(17, 24, 39, 0.06)",
-  colorText: "#111827",
-  // Was #6b7280: 4.83:1 on the white surface but 4.43:1 on the #f4f5f7 page and
-  // 4.23:1 on #eef0f3, and muted captions sit on the page as often as on a card.
-  // #585f6b is the same cool grey at 6.43 / 5.90 / 5.64:1.
-  colorTextMuted: "#585f6b",
-  colorPrimary: "#111827",
-  colorPrimaryHover: "#000000",
-  colorPrimaryText: "#ffffff",
-  colorAccent: "#7c5cfc",
-  colorAccentHover: "#6a47f5",
-  colorAccentText: "#ffffff",
-  // The violet accent is 4.38:1 on #ffffff and 3.84:1 on the #eef0f3 page — just
-  // under the text bar in both, and it is also the badge fill and the
-  // gradientAccent stop, so it stays. The link takes one step down the same
-  // ramp (the value this theme already uses for accentHover): 5.48:1 on #ffffff,
-  // 4.80:1 on #eef0f3; hover goes to 6.67 / 5.84:1.
-  colorLink: "#6a47f5",
-  colorLinkHover: "#5b34ec",
-  colorFocusRing: "#7c5cfc",
-  colorSuccess: "#22c55e",
-  colorWarning: "#f59e0b",
-  colorDanger: "#f43f5e",
-  colorInfo: "#2563eb",
-  // 2.0-3.7:1 as text on this theme's surfaces; same hues at text depth give
-  // 6.20 / 5.77 / 6.29 / 6.70:1 on #ffffff and >= 5.05:1 on #eef0f3.
-  colorSuccessText: "#12702f",
-  colorWarningText: "#9a5400",
-  colorDangerText: "#be123c",
-  colorInfoText: "#1d4ed8",
-  // Ink ON the fills: 6.87 / 6.97 / 4.84:1. This theme's info is blue-600, dark
-  // enough that white is the better ink there (5.17:1 against 2.86:1 for a dark
-  // one). onDanger is rose-tinted to match #f43f5e rather than reusing light's
-  // red-tinted ink.
-  colorOnSuccess: "#04291e",
-  colorOnWarning: "#451a03",
-  colorOnDanger: "#33061a",
-  colorOnInfo: "#ffffff",
-  fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyHeading: "'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyMono: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  fontWeightHeading: "700",
-  letterSpacingHeading: "-0.02em",
-  radiusXs: "8px",
-  radiusSm: "12px",
-  radiusMd: "18px",
-  radiusLg: "24px",
-  radiusButton: "999px",
-  radiusInput: "12px",
-  shadowSm: "0 1px 3px rgba(17, 24, 39, 0.05)",
-  shadowMd: "0 8px 30px rgba(17, 24, 39, 0.07)",
-  shadowLg: "0 24px 60px rgba(17, 24, 39, 0.10)",
-  spacingXs: "5px",
-  spacingS: "10px",
-  spacingM: "16px",
-  spacingL: "24px",
-  spacingXl: "40px",
-  // See softTheme: light's 48px/80px would otherwise cap this theme's scale.
-  spacing2xl: "60px",
-  spacing3xl: "100px",
-  buttonFontWeight: "600",
-  buttonPaddingY: "10px",
-  buttonPaddingX: "18px",
-  gradientBrand: "linear-gradient(120deg, #111827 0%, #4b3f72 50%, #7c5cfc 100%)",
-  gradientAccent: "linear-gradient(120deg, #7c5cfc 0%, #2563eb 100%)",
-  gradientWarm: "linear-gradient(120deg, #ff7849 0%, #f43f5e 100%)",
-  gradientCool: "linear-gradient(120deg, #2563eb 0%, #22d3ee 100%)",
-  chart1: "#7c5cfc",
-  chart2: "#ff7849",
-  chart3: "#2563eb",
-  chart4: "#22c55e",
-  chart5: "#f43f5e",
-  chart6: "#fbbf24",
-};
+/* ==========================================================================
+   shadcn/ui  —  `shadcn` · `shadcn-light` · `shadcn-dark`
+   ========================================================================== */
 
 /**
- * Corporate — contemporary enterprise workspace.
+ * shadcn/ui (light) — a faithful re-creation of the default `neutral` shadcn
+ * theme, the one `npx shadcn@latest init` produces.
  *
- * A single-hue system: graphite neutrals with a faint green cast, pure white
- * surfaces, and one confident deep-teal brand colour that carries primary
- * buttons, links, the focus ring and the first chart series. Controls are
- * square-shouldered (8px, not pills), hairlines are crisp, shadows are tight
- * and short-throw, and the type is Inter over a Space Grotesk display face at a
- * 15px base — roomy enough to read all day, dense enough for a data console.
+ * Every colour below is the sRGB value of the corresponding `oklch(...)` custom
+ * property in shadcn's own `globals.css`:
  *
- * Deliberately unlike its siblings: `modern` is ink + violet on pill buttons
- * with 24px radii, `light` is indigo, `soft` pastel, `glass` translucent, and
- * the private `vision` theme is navy + cyan pills. Teal on graphite with 8px
- * corners is nobody else's territory.
+ *   --background #ffffff · --foreground #0a0a0a · --card #ffffff
+ *   --primary #171717 · --primary-foreground #fafafa
+ *   --secondary / --muted / --accent #f5f5f5 · --muted-foreground #737373
+ *   --border / --input #e5e5e5 · --destructive #e7000b
+ *   --radius 0.625rem (10px), with `rounded-md` (8px) on buttons and inputs
+ *   and `rounded-xl` (14px) on cards
  *
- * Contrast notes (WCAG AA, measured against `colorSurface` #ffffff, the page
- * `colorBg` #f5f7f8 and the `colorBgSubtle` #eaeef0 tint, worst case listed):
- *   primary #0f766e as text 4.69:1 · white on primary 5.47:1
- *   textMuted 5.56:1 · borderControl 3.45:1 (>= the 3:1 shape bar)
- *   status *Text tokens 5.08-5.83:1 · ink on every status fill >= 4.70:1
+ * The look: pure white page, near-black primary buttons with a white label,
+ * one flat neutral grey doing secondary / muted / accent duty, hairline
+ * borders, a 3px translucent focus ring, `shadow-xs` on almost everything, and
+ * Geist at 14px (`text-sm`, which is shadcn's component default).
+ *
+ * Two values are NOT shadcn's, and both are accessibility corrections the
+ * repo applies to every theme:
+ *   - `colorBorderControl` #8f8f8f (3.24:1) rather than `--input` #e5e5e5
+ *     (1.20:1) — WCAG 1.4.11 wants 3:1 on the boundary of a control the user
+ *     has to find. Decorative hairlines keep `colorBorder` #e5e5e5.
+ *   - `colorFocusRing` #737373 (4.74:1) rather than `--ring` #a1a1a1
+ *     (2.58:1). It is still shadcn's neutral-grey ring, one step down the
+ *     same ramp, and it is the value shadcn itself shipped before v4.
  */
-export const corporateTheme: ThemeTokens = {
+export const shadcnLightTheme: ThemeTokens = {
   ...lightTheme,
   /* ----- Surface & semantic ----- */
-  // Graphite with a whisper of green so the canvas agrees with the teal brand
-  // hue instead of fighting it (light's #f8fafc is blue-cast).
-  colorBg: "#f5f7f8",
-  colorBgSubtle: "#eaeef0",
+  colorBg: "#ffffff",
+  colorBgSubtle: "#fafafa",
   colorSurface: "#ffffff",
-  colorSurfaceMuted: "#f2f5f6",
-  colorBorder: "#dfe5e8",
-  colorBorderSubtle: "rgba(13, 31, 34, 0.07)",
-  // 3.45:1 on the darkest of the three surfaces — the accessible boundary for
-  // inputs/checkboxes, kept separate from the decorative `colorBorder` hairline.
-  colorBorderControl: "#71818a",
-  colorText: "#0d1f22",
-  colorTextMuted: "#4d616a",
-  colorPrimary: "#0f766e",
-  // Primary DARKENS on hover (the private vision theme brightens — that is its
-  // signature, not a house rule).
-  colorPrimaryHover: "#0b5f58",
-  colorPrimaryText: "#ffffff",
-  // One step brighter than primary so tinted accents read as a second voice in
-  // the same family; still 5.01:1 under white ink as a fill.
-  colorAccent: "#0b7d72",
-  colorAccentHover: "#0a6a61",
-  colorAccentText: "#ffffff",
-  colorLink: "#0f766e",
-  colorLinkHover: "#115e59",
-  colorFocusRing: "#0f766e",
+  colorSurfaceMuted: "#f5f5f5",
+  colorBorder: "#e5e5e5",
+  colorBorderSubtle: "rgba(10, 10, 10, 0.06)",
+  colorBorderControl: "#8f8f8f",
+  colorText: "#0a0a0a",
+  colorTextMuted: "#737373",
+  colorPrimary: "#171717",
+  // shadcn hovers a solid button by dropping the fill to `bg-primary/90`,
+  // which over a white page LIGHTENS it. This is that composite.
+  colorPrimaryHover: "#2e2e2e",
+  colorPrimaryText: "#fafafa",
+  // shadcn has no second brand hue — `--accent` is the same neutral wash as
+  // `--muted`, and anything that wants attention uses the ink primary.
+  colorAccent: "#171717",
+  colorAccentHover: "#2e2e2e",
+  colorAccentText: "#fafafa",
+  colorLink: "#171717",
+  colorLinkHover: "#404040",
+  colorFocusRing: "#737373",
+  // shadcn ships one semantic colour (`--destructive`); the other three are
+  // the Tailwind v4 hues its own examples and charts reach for.
   colorSuccess: "#16a34a",
   colorWarning: "#f59e0b",
-  colorDanger: "#e11d48",
-  // Sky rather than cyan: a cyan info would collide with the teal brand hue and
-  // stop reading as a status at all.
-  colorInfo: "#0369a1",
-  colorSuccessText: "#0a7038",
-  colorWarningText: "#8a4b00",
-  colorDangerText: "#be123c",
-  colorInfoText: "#075985",
-  // Ink ON the fills. Success and warning are bright enough to need dark ink
-  // (4.75 / 6.97:1); the rose danger and the sky info are dark enough that white
-  // is the correct answer (4.70 / 5.93:1).
+  colorDanger: "#e7000b",
+  colorInfo: "#2563eb",
+  colorSuccessText: "#15803d",
+  colorWarningText: "#a35a00",
+  colorDangerText: "#c10007",
+  colorInfoText: "#1d4ed8",
+  // shadcn paints white on `--destructive`, and white clears 4.5:1 on that
+  // fill (4.77:1) — so unlike most themes here, three of the four inks are
+  // simply white. Success and warning are too light for it.
   colorOnSuccess: "#04291e",
   colorOnWarning: "#451a03",
-  colorOnDanger: "#33061a",
+  colorOnDanger: "#ffffff",
   colorOnInfo: "#ffffff",
-  colorSurfaceHover: "rgba(15, 118, 110, 0.06)",
-  /* ----- Typography — Inter body, Space Grotesk display, 15px/1.55 ----- */
-  fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+  colorSurfaceHover: "rgba(10, 10, 10, 0.05)",
+  /* ----- Typography — Geist, 14px (`text-sm`) ----- */
+  fontFamily:
+    "'Geist', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
   fontFamilyHeading:
-    "'Space Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  fontFamilyMono: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  fontSizeBase: "15px",
-  fontSizeSm: "13px",
-  fontSizeLg: "17px",
-  fontSizeHeading: "17px",
+    "'Geist', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyMono: "'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontSizeBase: "14px",
+  fontSizeSm: "12px",
+  fontSizeLg: "16px",
+  fontSizeHeading: "16px",
   fontSizeTitle: "24px",
   fontWeightBody: "400",
   fontWeightHeading: "600",
-  lineHeightBody: "1.55",
+  lineHeightBody: "1.5",
   lineHeightHeading: "1.25",
   letterSpacingHeading: "-0.015em",
   headingTextTransform: "none",
-  /* ----- Shape — square-shouldered, 8px controls ----- */
-  radiusXs: "3px",
+  /* ----- Shape — `--radius: 0.625rem` and its four derived rungs ----- */
+  radiusXs: "4px",
   radiusSm: "6px",
   radiusMd: "10px",
   radiusLg: "14px",
@@ -941,51 +779,539 @@ export const corporateTheme: ThemeTokens = {
   radiusButton: "8px",
   radiusInput: "8px",
   borderWidth: "1px",
-  /* ----- Shadows — short throw, graphite-tinted, always paired with a hairline ----- */
-  shadowSm: "0 1px 2px rgba(13, 31, 34, 0.06), 0 1px 1px rgba(13, 31, 34, 0.04)",
-  shadowMd: "0 4px 16px rgba(13, 31, 34, 0.08), 0 1px 2px rgba(13, 31, 34, 0.05)",
-  shadowLg: "0 16px 48px rgba(13, 31, 34, 0.14), 0 2px 6px rgba(13, 31, 34, 0.06)",
-  /* ----- Spacing — 4 / 8 / 14 / 22 / 36 ----- */
+  /* ----- Shadows — Tailwind's `shadow-xs` / `shadow-md` / `shadow-lg` ----- */
+  shadowSm: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+  shadowMd: "0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.10)",
+  shadowLg: "0 10px 15px -3px rgba(0, 0, 0, 0.10), 0 4px 6px -4px rgba(0, 0, 0, 0.10)",
+  /* ----- Spacing — Tailwind's 4px grid, `p-6` cards ----- */
   spacingXs: "4px",
   spacingS: "8px",
-  spacingM: "14px",
-  spacingL: "22px",
+  spacingM: "12px",
+  spacingL: "24px",
   spacingXl: "36px",
-  // See softTheme: light's 48px/80px would otherwise cap this theme's scale.
   spacing2xl: "56px",
   spacing3xl: "88px",
-  /* ----- Gradients ----- */
-  gradientBrand: "linear-gradient(120deg, #0d1f22 0%, #0f766e 55%, #14b8a6 100%)",
-  gradientAccent: "linear-gradient(120deg, #0f766e 0%, #0369a1 100%)",
-  gradientWarm: "linear-gradient(120deg, #f59e0b 0%, #e11d48 100%)",
-  gradientCool: "linear-gradient(120deg, #0369a1 0%, #14b8a6 100%)",
-  gradientSuccess: "linear-gradient(120deg, #16a34a 0%, #14b8a6 100%)",
-  gradientDanger: "linear-gradient(120deg, #e11d48 0%, #9f1239 100%)",
-  /* ----- Buttons — compact, semibold, a hair of tracking ----- */
-  buttonFontWeight: "600",
+  /* ----- Gradients — neutral-first, the way shadcn's own marketing reads ----- */
+  gradientBrand: "linear-gradient(120deg, #0a0a0a 0%, #404040 55%, #737373 100%)",
+  gradientAccent: "linear-gradient(120deg, #171717 0%, #525252 100%)",
+  gradientWarm: "linear-gradient(120deg, #f59e0b 0%, #e7000b 100%)",
+  gradientCool: "linear-gradient(120deg, #2563eb 0%, #06b6d4 100%)",
+  gradientSuccess: "linear-gradient(120deg, #16a34a 0%, #22c55e 100%)",
+  gradientDanger: "linear-gradient(120deg, #e7000b 0%, #9f0712 100%)",
+  /* ----- Buttons — `h-9 px-4 text-sm font-medium` ----- */
+  buttonFontWeight: "500",
   buttonTextTransform: "none",
-  buttonLetterSpacing: "0.01em",
-  buttonPaddingY: "9px",
+  buttonLetterSpacing: "0",
+  buttonPaddingY: "8px",
   buttonPaddingX: "16px",
-  /* ----- Motion — decisive, with a fast-out easing curve ----- */
+  /* ----- Motion — Tailwind's 150ms / `ease-in-out` default ----- */
   transitionDuration: "150ms",
-  motionFast: "110ms",
-  motionBase: "170ms",
+  motionFast: "100ms",
+  motionBase: "150ms",
   motionSlow: "300ms",
-  motionEase: "cubic-bezier(0.2, 0, 0, 1)",
-  /* ----- Charts — brand teal first, then a wide-spread supporting set ----- */
-  chart1: "#0f766e",
-  chart2: "#0369a1",
-  chart3: "#f59e0b",
-  chart4: "#7c3aed",
-  chart5: "#e11d48",
-  chart6: "#65a30d",
+  motionEase: "cubic-bezier(0.4, 0, 0.2, 1)",
+  /* ----- Charts — the five `--chart-*` values from shadcn's light block ----- */
+  chart1: "#e76e50",
+  chart2: "#2a9d90",
+  chart3: "#274754",
+  chart4: "#e8c468",
+  chart5: "#f4a462",
+  chart6: "#9c6644",
+};
+
+/**
+ * shadcn/ui (dark) — the `.dark` block of the same file.
+ *
+ *   --background #0a0a0a · --card / --popover #171717 · --foreground #fafafa
+ *   --primary #e5e5e5 · --primary-foreground #171717
+ *   --secondary / --muted / --accent #262626 · --muted-foreground #a1a1a1
+ *   --border oklch(1 0 0 / 10%) · --ring #737373 · --destructive #ff6467
+ *
+ * Note the inversion: in dark mode shadcn's primary button is a near-WHITE
+ * pill of ink with dark text, which is the single most recognisable thing
+ * about the theme.
+ */
+export const shadcnDarkTheme: ThemeTokens = {
+  ...shadcnLightTheme,
+  colorBg: "#0a0a0a",
+  colorBgSubtle: "#0f0f0f",
+  colorSurface: "#171717",
+  colorSurfaceMuted: "#262626",
+  colorBorder: "#262626",
+  colorBorderSubtle: "rgba(255, 255, 255, 0.08)",
+  colorBorderControl: "#737373",
+  colorText: "#fafafa",
+  colorTextMuted: "#a1a1a1",
+  colorPrimary: "#e5e5e5",
+  colorPrimaryHover: "#cfcfcf",
+  colorPrimaryText: "#171717",
+  colorAccent: "#e5e5e5",
+  colorAccentHover: "#cfcfcf",
+  colorAccentText: "#171717",
+  colorLink: "#fafafa",
+  colorLinkHover: "#d4d4d4",
+  colorFocusRing: "#737373",
+  colorSuccess: "#22c55e",
+  colorWarning: "#f59e0b",
+  colorDanger: "#ff6467",
+  colorInfo: "#3b82f6",
+  // On #171717 all four fills already clear the 4.5:1 text bar (7.9 / 10.4 /
+  // 6.4 / 4.9:1), so the text partners are the hues themselves — light's
+  // darkened values would be unreadable here.
+  colorSuccessText: "#22c55e",
+  colorWarningText: "#f59e0b",
+  colorDangerText: "#ff6467",
+  colorInfoText: "#3b82f6",
+  // The dark fills are bright, so the ink flips the other way: white on
+  // #ff6467 is 2.4:1 and on #3b82f6 3.7:1.
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#2c0606",
+  colorOnInfo: "#08131f",
+  colorSurfaceHover: "rgba(255, 255, 255, 0.06)",
+  shadowSm: "0 1px 2px 0 rgba(0, 0, 0, 0.35)",
+  shadowMd: "0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.45)",
+  shadowLg: "0 10px 15px -3px rgba(0, 0, 0, 0.55), 0 4px 6px -4px rgba(0, 0, 0, 0.50)",
+  gradientBrand: "linear-gradient(120deg, #fafafa 0%, #a1a1a1 55%, #525252 100%)",
+  gradientAccent: "linear-gradient(120deg, #e5e5e5 0%, #a1a1a1 100%)",
+  // One Dark — CodeBlock's surface is `--rui-color-surface-muted`, #262626 here.
+  hlKeyword: "#c678dd",
+  hlString: "#98c379",
+  hlNumber: "#d19a66",
+  hlComment: "#9ca3af",
+  hlFn: "#61afef",
+  hlTag: "#e06c75",
+  hlAttr: "#d19a66",
+  hlPunct: "#abb2bf",
+  /* The `--chart-*` values from shadcn's `.dark` block. */
+  chart1: "#2662d9",
+  chart2: "#2eb88a",
+  chart3: "#e88c30",
+  chart4: "#af57db",
+  chart5: "#e23670",
+  chart6: "#3ec9d6",
+};
+
+/* ==========================================================================
+   Material UI  —  `mui` · `mui-light` · `mui-dark`
+   ========================================================================== */
+
+/**
+ * Material UI (light) — MUI's default theme, token for token.
+ *
+ *   palette.primary.main #1976d2 / .dark #1565c0
+ *   palette.secondary.main #9c27b0 / .dark #7b1fa2
+ *   error #d32f2f · warning #ed6c02 · info #0288d1 · success #2e7d32
+ *   text.primary rgba(0,0,0,0.87) · text.secondary rgba(0,0,0,0.6)
+ *   divider rgba(0,0,0,0.12) · background.paper #fff
+ *   shape.borderRadius 4 · spacing(1) = 8px
+ *   typography Roboto, htmlFontSize 16, button 0.875rem/500/uppercase with
+ *   0.02857em tracking
+ *
+ * `shadowSm` / `shadowMd` / `shadowLg` are MUI's elevation 1 / 4 / 24 strings
+ * verbatim, which is what makes a Paper read as Material rather than as a
+ * generic card: three stacked umbra / penumbra / ambient layers instead of one
+ * soft drop shadow. The status *Text* tokens are MUI's own Alert text colours
+ * (`rgb(30,70,32)`, `#663c00`, `#5f2120`, `#014361`).
+ *
+ * `colorBorderControl` #8c8c8c replaces MUI's `rgba(0,0,0,0.23)` outline for
+ * the same WCAG 1.4.11 reason as every other theme here; the decorative
+ * divider keeps the authentic `rgba(0,0,0,0.12)`.
+ */
+export const muiLightTheme: ThemeTokens = {
+  ...lightTheme,
+  /* ----- Surface & semantic ----- */
+  colorBg: "#ffffff",
+  colorBgSubtle: "#f5f5f5",
+  colorSurface: "#ffffff",
+  colorSurfaceMuted: "#f5f5f5",
+  colorBorder: "rgba(0, 0, 0, 0.12)",
+  colorBorderSubtle: "rgba(0, 0, 0, 0.07)",
+  colorBorderControl: "#8c8c8c",
+  colorText: "rgba(0, 0, 0, 0.87)",
+  colorTextMuted: "rgba(0, 0, 0, 0.6)",
+  colorPrimary: "#1976d2",
+  colorPrimaryHover: "#1565c0",
+  colorPrimaryText: "#ffffff",
+  colorAccent: "#9c27b0",
+  colorAccentHover: "#7b1fa2",
+  colorAccentText: "#ffffff",
+  // MUI's Link is `primary.main`, which is 4.22:1 on the grey-100 band this
+  // theme paints table headers and muted panels with — under the 4.5:1 text
+  // bar. One step down the same ramp (`primary.dark`) gives 5.27:1 there and
+  // 5.75:1 on white; hover continues to blue-900.
+  colorLink: "#1565c0",
+  colorLinkHover: "#0d47a1",
+  colorFocusRing: "#1976d2",
+  colorSuccess: "#2e7d32",
+  colorWarning: "#ed6c02",
+  colorDanger: "#d32f2f",
+  colorInfo: "#0288d1",
+  colorSuccessText: "#1e4620",
+  colorWarningText: "#663c00",
+  colorDangerText: "#5f2120",
+  colorInfoText: "#014361",
+  // Success and error are dark enough for MUI's own white label (5.13 / 4.98:1).
+  // Warning and info are not (3.11 / 3.86:1), so those two take a hue-matched
+  // dark ink instead — the one place this theme knowingly departs from MUI,
+  // and only on the ~45 rules that paint a glyph ON the fill.
+  colorOnSuccess: "#ffffff",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#ffffff",
+  colorOnInfo: "#001724",
+  colorSurfaceHover: "rgba(0, 0, 0, 0.04)",
+  /* ----- Typography — Roboto, 16px body, MUI's h5/h6 for title/heading ----- */
+  fontFamily: "'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+  fontFamilyHeading: "'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+  fontFamilyMono: "'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontSizeBase: "16px",
+  fontSizeSm: "14px",
+  fontSizeLg: "18px",
+  fontSizeHeading: "20px",
+  fontSizeTitle: "24px",
+  fontWeightBody: "400",
+  fontWeightHeading: "500",
+  lineHeightBody: "1.5",
+  lineHeightHeading: "1.334",
+  letterSpacingHeading: "0.0075em",
+  headingTextTransform: "none",
+  /* ----- Shape — `shape.borderRadius: 4` really is the whole scale ----- */
+  radiusXs: "2px",
+  radiusSm: "4px",
+  radiusMd: "4px",
+  radiusLg: "4px",
+  radiusPill: "999px",
+  radiusButton: "4px",
+  radiusInput: "4px",
+  borderWidth: "1px",
+  /* ----- Shadows — MUI elevation 1 / 4 / 24, verbatim ----- */
+  shadowSm:
+    "0px 2px 1px -1px rgba(0, 0, 0, 0.2), 0px 1px 1px 0px rgba(0, 0, 0, 0.14), 0px 1px 3px 0px rgba(0, 0, 0, 0.12)",
+  shadowMd:
+    "0px 2px 4px -1px rgba(0, 0, 0, 0.2), 0px 4px 5px 0px rgba(0, 0, 0, 0.14), 0px 1px 10px 0px rgba(0, 0, 0, 0.12)",
+  shadowLg:
+    "0px 11px 15px -7px rgba(0, 0, 0, 0.2), 0px 24px 38px 3px rgba(0, 0, 0, 0.14), 0px 9px 46px 8px rgba(0, 0, 0, 0.12)",
+  /* ----- Spacing — `theme.spacing(n)` = n * 8 ----- */
+  spacingXs: "4px",
+  spacingS: "8px",
+  spacingM: "16px",
+  spacingL: "24px",
+  spacingXl: "32px",
+  spacing2xl: "48px",
+  spacing3xl: "80px",
+  /* ----- Gradients — primary → secondary, the only two brand hues MUI has -- */
+  gradientBrand: "linear-gradient(120deg, #1976d2 0%, #9c27b0 100%)",
+  gradientAccent: "linear-gradient(120deg, #9c27b0 0%, #1976d2 100%)",
+  gradientWarm: "linear-gradient(120deg, #ed6c02 0%, #d32f2f 100%)",
+  gradientCool: "linear-gradient(120deg, #0288d1 0%, #1976d2 100%)",
+  gradientSuccess: "linear-gradient(120deg, #2e7d32 0%, #0288d1 100%)",
+  gradientDanger: "linear-gradient(120deg, #d32f2f 0%, #9c27b0 100%)",
+  /* ----- Buttons — MUI's `MuiButton` typography, exactly ----- */
+  buttonFontWeight: "500",
+  buttonTextTransform: "uppercase",
+  buttonLetterSpacing: "0.02857em",
+  buttonPaddingY: "6px",
+  buttonPaddingX: "16px",
+  /* ----- Motion — `transitions.duration` shortest / standard / complex ----- */
+  transitionDuration: "150ms",
+  motionFast: "150ms",
+  motionBase: "250ms",
+  motionSlow: "300ms",
+  motionEase: "cubic-bezier(0.4, 0, 0.2, 1)",
+  /* ----- Charts — MUI X's default `blueberryTwilightPalette` (light) ----- */
+  chart1: "#02b2af",
+  chart2: "#2e96ff",
+  chart3: "#b800d8",
+  chart4: "#60009b",
+  chart5: "#2731c8",
+  chart6: "#03008d",
+};
+
+/**
+ * Material UI (dark) — `createTheme({ palette: { mode: "dark" } })`.
+ *
+ *   primary.main #90caf9 · secondary.main #ce93d8
+ *   error #f44336 · warning #ffa726 · info #29b6f6 · success #66bb6a
+ *   text.primary #fff · text.secondary rgba(255,255,255,0.7)
+ *   divider rgba(255,255,255,0.12) · background.default / .paper #121212
+ *
+ * `colorSurface` is #1e1e1e rather than the raw #121212 because MUI's dark
+ * Paper composites an elevation overlay on top of the palette value — a
+ * resting Card renders at `rgba(255,255,255,0.05)` over #121212, which is
+ * exactly #1e1e1e. Using the raw value would make every card invisible
+ * against the page.
+ */
+export const muiDarkTheme: ThemeTokens = {
+  ...muiLightTheme,
+  colorBg: "#121212",
+  colorBgSubtle: "#181818",
+  colorSurface: "#1e1e1e",
+  colorSurfaceMuted: "#272727",
+  colorBorder: "rgba(255, 255, 255, 0.12)",
+  colorBorderSubtle: "rgba(255, 255, 255, 0.08)",
+  colorBorderControl: "#7a7a7a",
+  colorText: "#ffffff",
+  colorTextMuted: "rgba(255, 255, 255, 0.7)",
+  colorPrimary: "#90caf9",
+  colorPrimaryHover: "#42a5f5",
+  colorPrimaryText: "rgba(0, 0, 0, 0.87)",
+  colorAccent: "#ce93d8",
+  colorAccentHover: "#ba68c8",
+  colorAccentText: "rgba(0, 0, 0, 0.87)",
+  colorLink: "#90caf9",
+  colorLinkHover: "#bbdefb",
+  colorFocusRing: "#90caf9",
+  colorSuccess: "#66bb6a",
+  colorWarning: "#ffa726",
+  colorDanger: "#f44336",
+  colorInfo: "#29b6f6",
+  // 7.0 / 10.5 / 4.5 / 8.4:1 on #1e1e1e — the dark palette's fills are already
+  // text-safe, so light's very dark Alert inks are replaced by the hues.
+  colorSuccessText: "#66bb6a",
+  colorWarningText: "#ffa726",
+  colorDangerText: "#f44336",
+  colorInfoText: "#29b6f6",
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#2c0606",
+  colorOnInfo: "#08131f",
+  colorSurfaceHover: "rgba(255, 255, 255, 0.08)",
+  gradientBrand: "linear-gradient(120deg, #90caf9 0%, #ce93d8 100%)",
+  gradientAccent: "linear-gradient(120deg, #ce93d8 0%, #90caf9 100%)",
+  gradientWarm: "linear-gradient(120deg, #ffa726 0%, #f44336 100%)",
+  gradientCool: "linear-gradient(120deg, #29b6f6 0%, #90caf9 100%)",
+  gradientSuccess: "linear-gradient(120deg, #66bb6a 0%, #29b6f6 100%)",
+  gradientDanger: "linear-gradient(120deg, #f44336 0%, #ce93d8 100%)",
+  hlKeyword: "#c678dd",
+  hlString: "#98c379",
+  hlNumber: "#d19a66",
+  hlComment: "#9ca3af",
+  hlFn: "#61afef",
+  hlTag: "#e06c75",
+  hlAttr: "#d19a66",
+  hlPunct: "#abb2bf",
+  /* MUI X's `blueberryTwilightPalette` (dark). */
+  chart1: "#02b2af",
+  chart2: "#72ccff",
+  chart3: "#da00ff",
+  chart4: "#9001cb",
+  chart5: "#2e96ff",
+  chart6: "#b800d8",
+};
+
+/* ==========================================================================
+   HeroUI  —  `heroui` · `heroui-light` · `heroui-dark`
+   ========================================================================== */
+
+/**
+ * HeroUI (light) — the default `light` layout + colour theme from
+ * `@heroui/theme`.
+ *
+ *   background #ffffff · foreground #11181c · content1 #ffffff
+ *   default-100 #f4f4f5 · default-200 #e4e4e7 · default-500 #71717a
+ *   primary #006fee (600 #005bc4) · secondary #7828c8
+ *   success #17c964 · warning #f5a524 · danger #f31260
+ *   radius small 8px / medium 12px / large 14px
+ *   shadow small / medium / large — the three-layer, hairline-topped strings
+ *
+ * The signatures that make it unmistakable and that the stylesheet block
+ * builds on: buttons that dim to `opacity: .8` on hover and scale to .97 on
+ * press instead of changing colour, a 2px `outline-offset: 2px` focus ring
+ * rather than a glow, borderless cards carrying `shadow-medium`, filled
+ * `default-100` inputs, and 12–14px corners everywhere.
+ *
+ * As in the other two themes, `colorBorderControl` (#8b8b93, 3.38:1) is an
+ * accessibility upgrade over HeroUI's `default-200` field boundary.
+ */
+export const herouiLightTheme: ThemeTokens = {
+  ...lightTheme,
+  /* ----- Surface & semantic ----- */
+  colorBg: "#ffffff",
+  colorBgSubtle: "#fafafa",
+  colorSurface: "#ffffff",
+  colorSurfaceMuted: "#f4f4f5",
+  colorBorder: "#e4e4e7",
+  colorBorderSubtle: "rgba(17, 17, 17, 0.08)",
+  colorBorderControl: "#8b8b93",
+  colorText: "#11181c",
+  // HeroUI's `default-500` #71717a measures 4.40:1 on the `default-100` fill
+  // that backs chips, pills and flat inputs — just under the body-text bar.
+  // #63636b is the same zinc a rung darker: 5.42:1 there, 5.95:1 on white.
+  colorTextMuted: "#63636b",
+  colorPrimary: "#006fee",
+  colorPrimaryHover: "#005bc4",
+  colorPrimaryText: "#ffffff",
+  colorAccent: "#7828c8",
+  colorAccentHover: "#6020a0",
+  colorAccentText: "#ffffff",
+  // HeroUI paints links in `primary` itself, which is 4.46:1 on this theme's
+  // `default-50` page tint — a hair under the body-text bar. The link takes
+  // the 600 rung instead (6.38:1 on white, 6.10:1 on the tint); the FILL
+  // above is untouched, so buttons and chips stay HeroUI blue.
+  colorLink: "#005bc4",
+  colorLinkHover: "#004493",
+  colorFocusRing: "#006fee",
+  colorSuccess: "#17c964",
+  colorWarning: "#f5a524",
+  colorDanger: "#f31260",
+  // HeroUI's semantic set has no `info`; the primary blue is what its own
+  // informational chips and alerts use.
+  colorInfo: "#006fee",
+  // The 700 rung of each HeroUI colour scale — the shade its flat chips and
+  // alerts already paint their label in.
+  colorSuccessText: "#0e793c",
+  colorWarningText: "#936316",
+  colorDangerText: "#920b3a",
+  colorInfoText: "#005bc4",
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#2a0413",
+  colorOnInfo: "#ffffff",
+  colorSurfaceHover: "rgba(17, 24, 28, 0.05)",
+  /* ----- Typography — Inter at 16px (`text-medium`) ----- */
+  fontFamily: "'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyHeading:
+    "'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyMono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontSizeBase: "16px",
+  fontSizeSm: "14px",
+  fontSizeLg: "18px",
+  fontSizeHeading: "18px",
+  fontSizeTitle: "30px",
+  fontWeightBody: "400",
+  fontWeightHeading: "600",
+  lineHeightBody: "1.5",
+  lineHeightHeading: "1.25",
+  letterSpacingHeading: "-0.02em",
+  headingTextTransform: "none",
+  /* ----- Shape — `--heroui-radius-small / -medium / -large` ----- */
+  radiusXs: "6px",
+  radiusSm: "8px",
+  radiusMd: "12px",
+  radiusLg: "14px",
+  radiusPill: "999px",
+  radiusButton: "12px",
+  radiusInput: "12px",
+  borderWidth: "1px",
+  /* ----- Shadows — HeroUI's `shadow-small / -medium / -large`, verbatim ----- */
+  shadowSm:
+    "0px 0px 5px 0px rgba(0, 0, 0, 0.02), 0px 2px 10px 0px rgba(0, 0, 0, 0.06), 0px 0px 1px 0px rgba(0, 0, 0, 0.3)",
+  shadowMd:
+    "0px 0px 15px 0px rgba(0, 0, 0, 0.03), 0px 2px 30px 0px rgba(0, 0, 0, 0.08), 0px 0px 1px 0px rgba(0, 0, 0, 0.3)",
+  shadowLg:
+    "0px 0px 30px 0px rgba(0, 0, 0, 0.04), 0px 30px 60px 0px rgba(0, 0, 0, 0.12), 0px 0px 1px 0px rgba(0, 0, 0, 0.3)",
+  /* ----- Spacing ----- */
+  spacingXs: "4px",
+  spacingS: "8px",
+  spacingM: "12px",
+  spacingL: "16px",
+  spacingXl: "28px",
+  spacing2xl: "48px",
+  spacing3xl: "80px",
+  /* ----- Gradients — the pairs HeroUI's own docs put on their hero copy ----- */
+  gradientBrand: "linear-gradient(120deg, #5ea2ef 0%, #0072f5 100%)",
+  gradientAccent: "linear-gradient(120deg, #ff1cf7 0%, #b249f8 100%)",
+  gradientWarm: "linear-gradient(120deg, #ff705b 0%, #ffb457 100%)",
+  gradientCool: "linear-gradient(120deg, #5ea2ef 0%, #17c964 100%)",
+  gradientSuccess: "linear-gradient(120deg, #6fee8d 0%, #17c964 100%)",
+  gradientDanger: "linear-gradient(120deg, #f54180 0%, #f31260 100%)",
+  /* ----- Buttons — `h-10 px-4 text-small font-medium`, `rounded-medium` ----- */
+  buttonFontWeight: "500",
+  buttonTextTransform: "none",
+  buttonLetterSpacing: "0",
+  buttonPaddingY: "10px",
+  buttonPaddingX: "16px",
+  /* ----- Motion — HeroUI's 250ms `transition-transform-colors-opacity` ----- */
+  transitionDuration: "250ms",
+  motionFast: "150ms",
+  motionBase: "250ms",
+  motionSlow: "300ms",
+  motionEase: "cubic-bezier(0, 0, 0.2, 1)",
+  /* ----- Charts — the semantic palette, primary first ----- */
+  chart1: "#006fee",
+  chart2: "#7828c8",
+  chart3: "#17c964",
+  chart4: "#f5a524",
+  chart5: "#f31260",
+  chart6: "#ff705b",
+};
+
+/**
+ * HeroUI (dark) — the `dark` theme from `@heroui/theme`.
+ *
+ *   background #000000 · foreground #ecedee
+ *   content1 #18181b · content2 #27272a · default-500 #a1a1aa
+ *   primary #006fee (brightening to #338ef7 on hover) · secondary #9353d3
+ *   divider rgba(255,255,255,0.15)
+ *   the dark `shadow-*` trio, each with an inset white rim-light
+ *
+ * The page really is pure black — that, plus #18181b cards with no border at
+ * all, is what dark HeroUI looks like. `colorLink` steps up to the dark
+ * scale's #66aaf9 because #006fee measures 3.80:1 on `content1`: fine for the
+ * button fill it mostly is, short of the 4.5:1 bar for the places the sheet
+ * paints the brand hue as running text.
+ */
+export const herouiDarkTheme: ThemeTokens = {
+  ...herouiLightTheme,
+  colorBg: "#000000",
+  colorBgSubtle: "#09090b",
+  colorSurface: "#18181b",
+  colorSurfaceMuted: "#27272a",
+  colorBorder: "#27272a",
+  colorBorderSubtle: "rgba(255, 255, 255, 0.10)",
+  colorBorderControl: "#8b8b93",
+  colorText: "#ecedee",
+  colorTextMuted: "#a1a1aa",
+  colorPrimary: "#006fee",
+  // Dark-mode primaries BRIGHTEN on hover — #338ef7 is the dark scale's 500.
+  colorPrimaryHover: "#338ef7",
+  colorPrimaryText: "#ffffff",
+  colorAccent: "#9353d3",
+  colorAccentHover: "#ae7ede",
+  colorAccentText: "#ffffff",
+  colorLink: "#66aaf9",
+  colorLinkHover: "#99c7fb",
+  colorFocusRing: "#006fee",
+  colorSuccess: "#17c964",
+  colorWarning: "#f5a524",
+  colorDanger: "#f31260",
+  colorInfo: "#006fee",
+  colorSuccessText: "#17c964",
+  colorWarningText: "#f5a524",
+  // #f31260 is 4.27:1 on content1; #f54180 is the same ramp one step up, 5.02:1.
+  colorDangerText: "#f54180",
+  colorInfoText: "#66aaf9",
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#2a0413",
+  colorOnInfo: "#ffffff",
+  colorSurfaceHover: "rgba(255, 255, 255, 0.07)",
+  shadowSm:
+    "0px 0px 5px 0px rgba(0, 0, 0, 0.05), 0px 2px 10px 0px rgba(0, 0, 0, 0.2), inset 0px 0px 1px 0px rgba(255, 255, 255, 0.15)",
+  shadowMd:
+    "0px 0px 15px 0px rgba(0, 0, 0, 0.06), 0px 2px 30px 0px rgba(0, 0, 0, 0.22), inset 0px 0px 1px 0px rgba(255, 255, 255, 0.15)",
+  shadowLg:
+    "0px 0px 30px 0px rgba(0, 0, 0, 0.07), 0px 30px 60px 0px rgba(0, 0, 0, 0.26), inset 0px 0px 1px 0px rgba(255, 255, 255, 0.15)",
+  hlKeyword: "#c678dd",
+  hlString: "#98c379",
+  hlNumber: "#d19a66",
+  hlComment: "#9ca3af",
+  hlFn: "#61afef",
+  hlTag: "#e06c75",
+  hlAttr: "#d19a66",
+  hlPunct: "#abb2bf",
+  chart1: "#338ef7",
+  chart2: "#9353d3",
+  chart3: "#45d483",
+  chart4: "#f7b750",
+  chart5: "#f54180",
+  chart6: "#ff8f7c",
 };
 
 /**
  * Web fonts a built-in theme needs in order to look like itself.
  *
- * Selecting a theme by name (`theme="corporate"` or `$theme({ name: ... })`)
+ * Selecting a theme by name (`theme="shadcn"` or `$theme({ name: ... })`)
  * previously loaded no fonts at all — only a program that spelled out
  * `$theme({ fonts: { import: [...] } })` triggered `loadFonts`. For the
  * vision theme that meant every page rendered in `system-ui` instead of the
@@ -993,15 +1319,33 @@ export const corporateTheme: ThemeTokens = {
  * correction in the theme) was invisible outside the parity harnesses, which
  * load the fonts themselves.
  *
+ * The three framework themes are in the same position: Geist, Roboto and Inter
+ * ARE half of what makes shadcn/ui, Material UI and HeroUI recognisable, so
+ * every alias of each family declares its typefaces here.
+ *
  * UI block self-hosts OpenSansRegular / OpenSansSemibold / OverpassRegular /
  * OverpassSemibold and always asks for weight 400, taking its boldness from the
  * font FILE. The closest equivalent here is the same two families at 400 and 600.
  *
- * Keyed by theme name, private themes included — `loadBuiltInThemeFonts` looks
- * a name up here directly, so a private theme still gets its typefaces.
+ * Keyed by CANONICAL theme name, private themes included: callers pass the
+ * name through `canonicalThemeName` first, so a retired alias picks up the
+ * typefaces of the theme that replaced it, and a theme that is not publicly
+ * enumerated still gets its own.
  */
+const SHADCN_FONTS = ["Geist:400,500,600,700", "Geist Mono:400,500"];
+const MUI_FONTS = ["Roboto:300,400,500,700", "Roboto Mono:400,500"];
+const HEROUI_FONTS = ["Inter:400,500,600,700"];
+
 export const builtInThemeFonts: Record<string, { import: string[] }> = {
-  corporate: { import: ["Inter:400,500,600,700", "Space Grotesk:500,600,700"] },
+  shadcn: { import: SHADCN_FONTS },
+  "shadcn-light": { import: SHADCN_FONTS },
+  "shadcn-dark": { import: SHADCN_FONTS },
+  mui: { import: MUI_FONTS },
+  "mui-light": { import: MUI_FONTS },
+  "mui-dark": { import: MUI_FONTS },
+  heroui: { import: HEROUI_FONTS },
+  "heroui-light": { import: HEROUI_FONTS },
+  "heroui-dark": { import: HEROUI_FONTS },
   vision: { import: ["Open Sans:400,600", "Overpass:400,600"] },
 };
 
@@ -1012,15 +1356,62 @@ export const builtInThemeFonts: Record<string, { import: string[] }> = {
  * themes: `langSpec.themeNames` (playground picker + editor autocomplete), the
  * generated VS Code metadata, the agent-skill reference and the docs. Adding a
  * key here publishes the theme; see `privateThemes` for the other case.
+ *
+ * Three of the entries are family SHORTHANDS: `shadcn`, `mui` and `heroui`
+ * each hold the very same object as their `-light` sibling, so
+ * `theme="shadcn"` and `theme="shadcn-light"` are interchangeable and
+ * `data-rui-theme` echoes back whichever spelling the author used (both are
+ * matched by the family's CSS block). They are listed rather than hidden
+ * because editor autocomplete should offer every name that works.
  */
 export const builtInThemes: Record<string, ThemeTokens> = {
   light: lightTheme,
   dark: darkTheme,
-  corporate: corporateTheme,
+  shadcn: shadcnLightTheme,
+  "shadcn-light": shadcnLightTheme,
+  "shadcn-dark": shadcnDarkTheme,
+  mui: muiLightTheme,
+  "mui-light": muiLightTheme,
+  "mui-dark": muiDarkTheme,
+  heroui: herouiLightTheme,
+  "heroui-light": herouiLightTheme,
+  "heroui-dark": herouiDarkTheme,
   soft: softTheme,
-  glass: glassTheme,
-  modern: modernTheme,
 };
+
+/**
+ * Retired theme names → the theme that replaced them.
+ *
+ * `modern`, `glass` and `corporate` were the previous generation of this
+ * library's designed-in-house themes. They have been replaced by faithful
+ * re-creations of the design systems each was reaching for, under the names of
+ * those systems. The old spellings still resolve so a page that says
+ * `theme="modern"` renders the new design rather than silently falling back to
+ * `light` — which is what an unknown name does.
+ *
+ * Unlike the family shorthands in `builtInThemes` (`shadcn` and `shadcn-light`
+ * are two spellings of a LIVE name), these map to a DIFFERENT name: the
+ * resolver rewrites them, so the host ends up with `data-rui-theme="shadcn-light"`
+ * and picks up the family's CSS block, which is keyed on the new names only.
+ *
+ * They are deliberately absent from `builtInThemes` and `privateThemes`: every
+ * surface that ENUMERATES themes reads those records, so listing a retired
+ * name there would re-publish it.
+ */
+export const deprecatedThemeAliases: Record<string, string> = {
+  modern: "shadcn-light",
+  glass: "mui-light",
+  corporate: "heroui-light",
+};
+
+/**
+ * Rewrite a retired theme name onto its replacement; pass anything else
+ * through unchanged. Callers hand this a name they have already trimmed and
+ * lower-cased.
+ */
+export function canonicalThemeName(key: string): string {
+  return deprecatedThemeAliases[key] ?? key;
+}
 
 /**
  * Themes that RESOLVE by name but are not advertised anywhere.
@@ -1046,7 +1437,8 @@ export function findThemeByName(name: unknown): ThemeTokens | null {
   if (typeof name !== "string") return null;
   const key = name.trim().toLowerCase();
   if (!key) return null;
-  return builtInThemes[key] ?? privateThemes[key] ?? null;
+  const canonical = canonicalThemeName(key);
+  return builtInThemes[canonical] ?? privateThemes[canonical] ?? null;
 }
 
 const TOKEN_TO_CSS: Record<keyof ThemeTokens, string> = {
@@ -1184,11 +1576,32 @@ export function resolveTheme(input: ThemeInput | null | undefined): ResolvedThem
         return { name: "light", tokens: lightTheme };
       }
     }
-    const tokens = findThemeByName(key);
-    if (tokens) return { name: key, tokens };
+    const canonical = canonicalThemeName(key);
+    const tokens = findThemeByName(canonical);
+    // The CANONICAL name, so a retired alias (`modern`) lands on the marker
+    // its replacement's CSS block is keyed on (`shadcn-light`).
+    if (tokens) return { name: canonical, tokens };
     return { name: "light", tokens: lightTheme };
   }
   return { name: "custom", tokens: mergeTheme(input) };
+}
+
+/**
+ * CSS custom property backing one theme token (`colorBg` → `--rui-color-bg`),
+ * or `null` for a name that is not a token.
+ *
+ * Exported for DevTools: a live token editor has to read back what is
+ * *actually* painted on the host — an in-script `$theme({...})` or a DevTools
+ * edit writes inline custom properties, not theme objects — and duplicating the
+ * mapping is how such an editor silently stops covering newly-added tokens.
+ */
+export function themeTokenCssVar(token: string): string | null {
+  return TOKEN_TO_CSS[token as keyof ThemeTokens] ?? null;
+}
+
+/** Every theme token name, in declaration order. */
+export function themeTokenNames(): Array<keyof ThemeTokens> {
+  return Object.keys(TOKEN_TO_CSS) as Array<keyof ThemeTokens>;
 }
 
 /**

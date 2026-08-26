@@ -106,18 +106,21 @@ stacking two or three components reads as a wireframe, not a product.
 
 ## Theme awareness — write tone-first, never colour-first
 
-The host page picks one of six built-in themes (`light`, `dark`, `corporate`,
-`soft`, `glass`, `modern`) or supplies a partial token map. **A program must work
-on every one of them.**
+The host page picks one of nine built-in themes, under twelve names, or supplies a
+partial token map. **A program must work on every one of them** — including the
+dark ones, which is the failure mode a hard-coded colour hits first.
+
+Three of them re-create a design system you already know, each in a light and a
+dark variant; the bare name means the light one, so `shadcn` is `shadcn-light`.
 
 | Theme | Vibe | Use for |
 | --- | --- | --- |
 | `light` | Crisp default, indigo accent, soft shadows. | Most business apps, dashboards, settings. |
 | `dark` | Standard dark surface, indigo accent. | Night mode, code-heavy workflows, ops dashboards. |
-| `corporate` | Contemporary enterprise workspace — deep teal primary on a graphite canvas, square-shouldered 8px controls, flat hairline cards. Loads Inter + Space Grotesk. | Admin consoles, B2B portals, infra dashboards. |
+| `shadcn` · `shadcn-light` · `shadcn-dark` | shadcn/ui's default neutral theme — white page, ink primary, one flat grey wash, 8px controls in 14px cards, hairline borders, Geist. | Anything that should look shadcn-built: app dashboards, admin panels, developer tools. |
+| `mui` · `mui-light` · `mui-dark` | Material UI's default theme — `#1976d2` primary, 4px radii, UPPERCASE buttons, borderless Paper on elevation shadows, tall outlined fields, Roboto. | Enterprise apps, internal tools, anywhere the house style is Material. |
+| `heroui` · `heroui-light` · `heroui-dark` | HeroUI — `#006fee` primary, 12–14px corners, borderless cards on soft shadows, filled fields, hover that dims rather than recolours, Inter at 16px. | Consumer products, marketing apps, anything rounded and modern. |
 | `soft` | Friendly, light, rounded. Lavender + mint, generous radii. | Onboarding, wellness, education, consumer apps. |
-| `glass` | Light glassmorphism — frosted surfaces over an airy pastel gradient, warm coral accent. | Wellness, lifestyle, consumer dashboards, calm hero pages. |
-| `modern` | Clean modern SaaS — generous rounding, ink primary with pill buttons, vibrant charts. | Product dashboards, project/finance tools, contemporary B2B. |
 
 Rules:
 
