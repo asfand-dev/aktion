@@ -5511,8 +5511,11 @@ ${below("xs")} {
   /* Flat surfaces above strip every tile's border, but on a choice card the
      border IS the affordance — it is what says "this is one of a set you pick
      from" and what the selected state changes colour. */
-  border: 2px solid var(--rui-color-border);
+  border: 1px solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
+}
+:host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"][data-selected="true"] {
+  border-width: 2px;
 }
 :host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"] .rui-tile-body {
   align-items: flex-start; text-align: left; flex: 1 1 auto; gap: 2px;
