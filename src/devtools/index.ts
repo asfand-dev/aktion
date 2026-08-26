@@ -37,6 +37,10 @@
  *   - **Timeline** — every event in one ordered stream, and a session export.
  *   - **Settings** — instrumentation switches, docking, and density.
  *
+ * Everything is reachable two ways: the tab strip, and a command palette
+ * (Ctrl/Cmd + K) that fuzzy-matches every tab and every action — press ? for
+ * the full shortcut list.
+ *
  * Architecture mirrors the browser-DevTools split: the runtime ("backend")
  * always emits to a global hook (`__AKTION_DEVTOOLS_HOOK__`) but the calls are
  * cheap no-ops until a frontend subscribes. This module is the in-page
@@ -146,6 +150,8 @@ export {
   type TimelineEntry,
   type ComponentAggregate,
   type EffectAggregate,
+  type ProgramVersion,
+  type LongTask,
 } from "./model.js";
 
 // Accessibility audit (usable on its own, e.g. from a test).
@@ -191,6 +197,28 @@ export {
 
 // Console tap.
 export { ConsoleCapture, type CapturedLog } from "./console-capture.js";
+
+// Command palette — the fuzzy matcher, the command list, and the controller.
+export {
+  PaletteController,
+  buildPalette,
+  fuzzyScore,
+  rankCommands,
+  SHORTCUTS,
+  type Command,
+  type PaletteActions,
+  type PaletteHandlers,
+  type PaletteState,
+} from "./palette.js";
+
+// Session export — everything the panel knows, as one JSON document.
+export { exportSessionJson } from "./session.js";
+
+// Derivations the tabs expose because they are useful on their own: the
+// leaf-level diff between two state snapshots, and the visible-tree
+// projection that keeps the hierarchy when library components are hidden.
+export { diffSnapshots, type Change } from "./tabs/state.js";
+export { visibleNodes } from "./tabs/inspect.js";
 
 // The in-page panel + its programmatic mount API.
 export {

@@ -13,16 +13,22 @@
  *
  * The element picker closes the loop in the other direction: click anything on
  * the page and land on its row in the tree.
+ *
+ * Layout adapts to the panel: wide enough and the tree sits beside the detail so
+ * selecting a component does not scroll the tree out of view; narrow, they
+ * stack. That is not decoration — the stacked layout is genuinely worse to use,
+ * and it was the first thing that made this tab feel clumsy.
  */
 
 import {
-  button, chip, chipGroup, code, copyButton, defList, editableValue, emptyState,
-  faint, fmtMs, h, muted, searchInput, section, spacer, stat, statGrid, table,
-  toggle, toolbar, truncateMiddle, valueSpan,
+  SCROLL_KEY_ATTR, button, chip, chipGroup, code, copyButton, defList,
+  editableValue, emptyState, faint, fmtMs, h, muted, searchInput, section,
+  spacer, stat, statGrid, table, textField, toggle, toolbar, truncateMiddle,
+  valueSpan,
 } from "../ui.js";
 import { can, type TabContext, type TabDefinition } from "../context.js";
 import { instanceAggregates } from "../model.js";
-import { descendantsOf, shortInstanceLabel } from "../tree.js";
+import { shortInstanceLabel } from "../tree.js";
 import {
   COMPUTED_GROUPS, a11ySummary, computedGroup, cssPath, cssVariables,
   describeElement, measureBox,
@@ -30,6 +36,9 @@ import {
 import { auditAccessibility } from "../a11y.js";
 import type { ComponentPropRecord, InstanceDetail, InstanceNode } from "../protocol.js";
 import { parseEditedValue } from "../serialize.js";
+
+/** Below this panel width the tree and the detail stack instead of splitting. */
+const SPLIT_MIN_WIDTH = 700;
 
 /* -------------------------------------------------------------------------- */
 
@@ -54,36 +63,44 @@ function render(ctx: TabContext): Node[] {
     )];
   }
 
-  const nodes = app.getComponentTree();
-  const aggregates = instanceAggregates(ctx.model.commits);
+  // One tree + one aggregate pass per render, however many places want them.
+  const nodes = ctx.cache("tree", () => app.getComponentTree());
+  const aggregates = ctx.cache("instanceAggregates", () => instanceAggregates(ctx.model.commits));
   const overrides = can(app, "listPropOverrides") ? app.listPropOverrides() : [];
+  const visible = visibleNodes(ctx, nodes);
 
   const bar = toolbar(
     button(
-      ctx.overlay.isPicking ? "◎ Picking…" : "◎ Pick",
-      () => togglePicker(ctx),
+      ctx.overlay.isPicking ? "◎ Picking… (Esc)" : "◎ Pick",
+      () => ctx.togglePicker(),
       {
-        title: "Select an element on the page to inspect it (Esc to cancel)",
+        title: "Select an element on the page to inspect it — Ctrl+Shift+P, Esc to cancel",
         active: ctx.overlay.isPicking,
       },
     ),
     searchInput(ui.inspectFilter, (value) => {
       ui.inspectFilter = value;
       ctx.refresh();
-    }, "Filter components…"),
+    }, "Filter components…", { focusKey: "inspect-filter" }),
     toggle("Library", ui.inspectShowLibrary, () => {
       ui.inspectShowLibrary = !ui.inspectShowLibrary;
       ctx.refresh();
     }, "Show built-in library components as well as your own"),
+    toggle("Highlight", ui.highlightUpdates, () => {
+      ui.highlightUpdates = !ui.highlightUpdates;
+      if (!ui.highlightUpdates) ctx.overlay.clearUpdateFlashes();
+      ctx.toast(ui.highlightUpdates ? "Outlining components as they re-render" : "Highlighting off");
+      ctx.refresh();
+    }, "Outline components on the page as they re-render"),
     spacer(),
-    muted(`${nodes.length} instance${nodes.length === 1 ? "" : "s"}`),
-    button("Collapse all", () => {
+    muted(`${visible.length}${visible.length === nodes.length ? "" : ` / ${nodes.length}`} instance${nodes.length === 1 ? "" : "s"}`),
+    button("⊟", () => {
       for (const node of nodes) {
-        if (nodes.some((n) => n.parentKey === node.instanceKey)) ui.inspectCollapsed.add(node.instanceKey);
+        if (nodes.some((other) => other.parentKey === node.instanceKey)) ui.inspectCollapsed.add(node.instanceKey);
       }
       ctx.refresh();
     }, { title: "Collapse every subtree" }),
-    button("Expand all", () => {
+    button("⊞", () => {
       ui.inspectCollapsed.clear();
       ctx.refresh();
     }, { title: "Expand every subtree" }),
@@ -104,102 +121,137 @@ function render(ctx: TabContext): Node[] {
     ), { flush: true }));
   }
 
-  out.push(renderTree(ctx, nodes, aggregates));
+  const tree = renderTree(ctx, visible, aggregates);
+  const detail = renderDetailPane(ctx, nodes, aggregates);
 
-  if (ui.selectedInstance) {
-    const detail = can(app, "getInstance") ? app.getInstance(ui.selectedInstance) : null;
-    if (detail) out.push(...renderDetail(ctx, detail, nodes, aggregates));
-    else {
-      out.push(section("Selection", faint(
-        "That instance is no longer in the tree — it unmounted, or the program was replanned.",
-      )));
-    }
-  } else if (ui.selectedElement) {
-    out.push(...renderElementOnly(ctx, ui.selectedElement));
+  // Side by side when there is room; stacked otherwise.
+  if (ctx.width() >= SPLIT_MIN_WIDTH) {
+    out.push(h("div", { class: "split" },
+      h("div", { class: "split-left", [SCROLL_KEY_ATTR]: "inspect-tree" }, tree),
+      h("div", { class: "split-right", [SCROLL_KEY_ATTR]: "inspect-detail" }, ...detail)));
   } else {
-    out.push(section(null, faint("Select a component above, or use ◎ Pick to click one on the page."), { flush: true }));
+    out.push(h("div", { class: "tree-wrap", [SCROLL_KEY_ATTR]: "inspect-tree" }, tree));
+    out.push(...detail);
   }
   return out;
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Picker                                                                     */
-/* -------------------------------------------------------------------------- */
-
-function togglePicker(ctx: TabContext): void {
-  if (ctx.overlay.isPicking) {
-    ctx.overlay.stopPicking();
-    ctx.refresh();
-    return;
-  }
-  const app = ctx.app;
-  ctx.overlay.startPicking({
-    onPick: (element) => {
-      ctx.ui.selectedElement = element;
-      const key = can(app, "instanceForNode") ? app.instanceForNode(element) : null;
-      ctx.ui.selectedInstance = key;
-      if (key) ctx.highlightInstance(key, true);
-      else ctx.overlay.highlight(element, {}, true);
-      ctx.ui.inspectPane = key ? "props" : "dom";
-      ctx.selectTab("inspect");
-    },
-    onCancel: () => ctx.refresh(),
-  });
-  ctx.refresh();
 }
 
 /* -------------------------------------------------------------------------- */
 /*  Tree                                                                       */
 /* -------------------------------------------------------------------------- */
 
-function renderTree(
-  ctx: TabContext,
-  nodes: ReadonlyArray<InstanceNode>,
-  aggregates: ReturnType<typeof instanceAggregates>,
-): HTMLElement {
+/**
+ * The rows to show, with depth re-derived from the *visible* ancestors.
+ *
+ * Hiding library components must not flatten the hierarchy: a user component
+ * nested three library components deep is still nested, and indenting it at zero
+ * makes siblings and children indistinguishable. Each visible node is therefore
+ * re-parented to its nearest visible ancestor, and its depth recomputed from
+ * that chain.
+ */
+export function visibleNodes(ctx: TabContext, nodes: ReadonlyArray<InstanceNode>): InstanceNode[] {
   const { ui } = ctx;
   const filter = ui.inspectFilter.trim().toLowerCase();
-  const wrap = h("div", { class: "tree comp-tree" });
 
   // A filter turns the tree into a flat result list: keeping the hierarchy would
   // mean showing unmatched ancestors, which reads as "these matched too".
-  const visible = filter !== ""
-    ? nodes.filter((node) =>
+  if (filter !== "") {
+    return nodes
+      .filter((node) =>
         node.name.toLowerCase().includes(filter) ||
         node.instanceKey.toLowerCase().includes(filter))
-    : nodes.filter((node) => ui.inspectShowLibrary || node.kind === "user");
+      .map((node) => ({ ...node, depth: 0, parentKey: null }));
+  }
+  if (ui.inspectShowLibrary) return [...nodes];
 
-  const hasChildren = new Set(nodes.map((n) => n.parentKey).filter((k): k is string => k !== null));
-  const hidden = new Set<string>();
-  if (filter === "") {
-    for (const node of visible) {
-      if (!ui.inspectCollapsed.has(node.instanceKey)) continue;
-      for (const key of descendantsOf(node.instanceKey, nodes)) hidden.add(key);
+  const byKey = new Map(nodes.map((node) => [node.instanceKey, node]));
+  const keep = (node: InstanceNode): boolean => node.kind === "user";
+  const nearestKeptAncestor = (node: InstanceNode): InstanceNode | null => {
+    let current = node.parentKey ? byKey.get(node.parentKey) ?? null : null;
+    let guard = 0;
+    while (current && guard++ < 200) {
+      if (keep(current)) return current;
+      current = current.parentKey ? byKey.get(current.parentKey) ?? null : null;
     }
+    return null;
+  };
+
+  const depths = new Map<string, number>();
+  const out: InstanceNode[] = [];
+  for (const node of nodes) {
+    if (!keep(node)) continue;
+    const parent = nearestKeptAncestor(node);
+    const depth = parent ? (depths.get(parent.instanceKey) ?? 0) + 1 : 0;
+    depths.set(node.instanceKey, depth);
+    out.push({ ...node, depth, parentKey: parent?.instanceKey ?? null });
+  }
+  return out;
+}
+
+function renderTree(
+  ctx: TabContext,
+  visible: ReadonlyArray<InstanceNode>,
+  aggregates: ReturnType<typeof instanceAggregates>,
+): HTMLElement {
+  const { ui } = ctx;
+  const wrap = h("div", { class: "tree comp-tree", tabindex: "0" });
+
+  const hasChildren = new Set(visible.map((node) => node.parentKey).filter((key): key is string => key !== null));
+  // Hide the descendants of a collapsed node, using the VISIBLE parent chain so
+  // collapsing works the same with library components hidden.
+  const hidden = new Set<string>();
+  const byParent = new Map<string, InstanceNode[]>();
+  for (const node of visible) {
+    if (node.parentKey === null) continue;
+    const bucket = byParent.get(node.parentKey);
+    if (bucket) bucket.push(node);
+    else byParent.set(node.parentKey, [node]);
+  }
+  const hideSubtree = (key: string): void => {
+    for (const child of byParent.get(key) ?? []) {
+      if (hidden.has(child.instanceKey)) continue;
+      hidden.add(child.instanceKey);
+      hideSubtree(child.instanceKey);
+    }
+  };
+  for (const node of visible) {
+    if (ui.inspectCollapsed.has(node.instanceKey)) hideSubtree(node.instanceKey);
   }
 
-  let shown = 0;
-  const minDepth = visible.reduce((min, n) => Math.min(min, n.depth), Number.MAX_SAFE_INTEGER);
-  for (const node of visible) {
-    if (hidden.has(node.instanceKey)) continue;
-    shown += 1;
+  const rows = visible.filter((node) => !hidden.has(node.instanceKey));
+  // Keyboard navigation over exactly the rows on screen: ↑/↓ move, ←/→
+  // collapse/expand, Enter focuses the detail. A tree you can only click is
+  // slower than the list it replaced.
+  wrap.addEventListener("keydown", (event: KeyboardEvent) => {
+    const index = rows.findIndex((node) => node.instanceKey === ui.selectedInstance);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const next = rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))];
+      if (next) selectRow(ctx, next.instanceKey);
+    } else if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      const node = rows[index];
+      if (!node) return;
+      event.preventDefault();
+      if (event.key === "ArrowRight") ui.inspectCollapsed.delete(node.instanceKey);
+      else ui.inspectCollapsed.add(node.instanceKey);
+      ctx.refresh();
+    }
+  });
+
+  let revealRow: HTMLElement | null = null;
+  for (const node of rows) {
     const agg = aggregates.get(node.instanceKey);
     const collapsed = ui.inspectCollapsed.has(node.instanceKey);
-    const expandable = hasChildren.has(node.instanceKey) && filter === "";
+    const expandable = hasChildren.has(node.instanceKey);
     const selected = ui.selectedInstance === node.instanceKey;
-    const depth = filter === "" ? Math.max(0, node.depth - (minDepth === Number.MAX_SAFE_INTEGER ? 0 : minDepth)) : 0;
 
     const row = h(
       "div",
       {
         class: `row ct-row ${selected ? "is-selected" : ""} ${node.mounted === false ? "is-unmounted" : ""}`,
-        style: `padding-left:${6 + depth * 13}px`,
-        onclick: () => {
-          ui.selectedInstance = node.instanceKey;
-          ui.selectedElement = null;
-          ctx.highlightInstance(node.instanceKey, true);
-          ctx.refresh();
-        },
+        style: `padding-left:${6 + node.depth * 13}px`,
+        title: node.instanceKey,
+        onclick: () => selectRow(ctx, node.instanceKey),
         onmouseenter: () => ctx.highlightInstance(node.instanceKey, false),
         onmouseleave: () => ctx.overlay.hideHover(),
       },
@@ -217,27 +269,83 @@ function renderTree(
       h("span", { class: `ct-name ${node.kind === "user" ? "is-user" : ""}` }, node.name),
       node.explicitKey ? h("span", { class: "ct-key" }, `key=${truncateMiddle(node.explicitKey, 16)}`) : null,
       node.phase === "memo" ? chip("memo", "grey", "Skipped by memoization in the last commit") : null,
-      node.mounted === false ? chip("no dom", "amber", "No DOM node carries this instance's tag") : null,
+      node.mounted === false ? chip("no dom", "amber", "Renders a fragment with no host element, so there is nothing to highlight") : null,
       h("span", { class: "grow" }),
-      node.propCount ? h("span", { class: "ct-meta" }, `${node.propCount}p`) : null,
+      node.propCount ? h("span", { class: "ct-meta", title: `${node.propCount} props` }, `${node.propCount}p`) : null,
       agg && agg.renders > 0
         ? h("span", { class: "ct-meta", title: `${agg.renders} render(s), ${agg.memo} memoized` }, `×${agg.renders}`)
         : null,
       h("span", { class: "ct-time" }, node.selfTime > 0 ? fmtMs(node.selfTime) : "—"),
     );
+    if (ui.inspectReveal === node.instanceKey) revealRow = row;
     wrap.appendChild(row);
   }
 
-  if (shown === 0) {
-    wrap.appendChild(h("div", { class: "empty" },
-      filter ? "No component matches the filter." : "No component instances in the last commit."));
+  // A selection made in another tab may be far down a long tree. Scroll to it
+  // once, after the rows are in the document, then forget the request.
+  if (revealRow) {
+    const target = revealRow;
+    ui.inspectReveal = null;
+    queueMicrotask(() => {
+      if (target.isConnected) target.scrollIntoView({ block: "nearest" });
+    });
+  } else if (ui.inspectReveal !== null && rows.length > 0) {
+    // The instance is not in the tree at all (it unmounted, or the commit it
+    // came from is gone). Drop the request rather than retrying every render.
+    ui.inspectReveal = null;
   }
-  return section(null, wrap, { flush: true });
+
+  if (rows.length === 0) {
+    wrap.appendChild(h("div", { class: "empty" },
+      h("p", {}, ui.inspectFilter ? "No component matches the filter." : "No component instances yet."),
+      ui.inspectFilter
+        ? h("p", { class: "faint" }, "Clear the filter, or search by instance key.")
+        : !ui.inspectShowLibrary
+          ? h("p", { class: "faint" }, "This program declares no `function` components — turn on “Library” to see the built-ins it uses.")
+          : h("p", { class: "faint" }, "Interact with the app, or press Force render on the Overview tab.")));
+  }
+  return wrap;
+}
+
+function selectRow(ctx: TabContext, instanceKey: string): void {
+  ctx.ui.selectedInstance = instanceKey;
+  ctx.ui.selectedElement = null;
+  ctx.highlightInstance(instanceKey, true);
+  ctx.refresh();
 }
 
 /* -------------------------------------------------------------------------- */
 /*  Detail                                                                     */
 /* -------------------------------------------------------------------------- */
+
+function renderDetailPane(
+  ctx: TabContext,
+  nodes: ReadonlyArray<InstanceNode>,
+  aggregates: ReturnType<typeof instanceAggregates>,
+): Node[] {
+  const { app, ui } = ctx;
+  if (ui.selectedInstance) {
+    const detail = can(app, "getInstance") ? app.getInstance(ui.selectedInstance) : null;
+    if (detail) return renderDetail(ctx, detail, nodes, aggregates);
+    return [section("Selection", [
+      faint("That instance is no longer in the tree — it unmounted, or the program was replanned."),
+      h("div", { class: "detail-head" }, button("Clear selection", () => {
+        ui.selectedInstance = null;
+        ctx.overlay.clear();
+        ctx.refresh();
+      })),
+    ])];
+  }
+  if (ui.selectedElement) return renderElementOnly(ctx, ui.selectedElement);
+  return [section(null, [
+    faint("Select a component on the left, or use ◎ Pick to click one on the page."),
+    h("div", { class: "detail-head" },
+      button("◎ Pick an element", () => ctx.togglePicker(), { tone: "good" }),
+      nodes.length > 0
+        ? button(`Select ${nodes[0]!.name}`, () => selectRow(ctx, nodes[0]!.instanceKey), { title: "Select the root component" })
+        : null),
+  ], { flush: true })];
+}
 
 function renderDetail(
   ctx: TabContext,
@@ -254,11 +362,7 @@ function renderDetail(
     crumbs.appendChild(h("button", {
       class: "crumb",
       title: ancestor,
-      onclick: () => {
-        ui.selectedInstance = ancestor;
-        ctx.highlightInstance(ancestor, true);
-        ctx.refresh();
-      },
+      onclick: () => selectRow(ctx, ancestor),
       onmouseenter: () => ctx.highlightInstance(ancestor, false),
       onmouseleave: () => ctx.overlay.hideHover(),
     }, shortInstanceLabel(ancestor).replace(/[@=].*$/, "")));
@@ -277,7 +381,7 @@ function renderDetail(
         ? button("Scroll to", () => {
             element.scrollIntoView({ block: "center", behavior: "smooth" });
             ctx.highlightInstance(detail.instanceKey, true);
-          }, { title: "Scroll the element into view" })
+          }, { title: "Scroll the element into view and highlight it" })
         : null,
       can(app, "remountInstance")
         ? button("Remount", () => {
@@ -289,18 +393,22 @@ function renderDetail(
       copyButton(() => detail.instanceKey, "Copy key"),
     ),
     statGrid(
-      stat("renders", String(agg?.renders ?? 0)),
-      stat("memoized", String(agg?.memo ?? 0)),
-      stat("self time", fmtMs(agg?.total)),
+      stat("renders", String(agg?.renders ?? 0), { title: "Times this instance's body actually ran" }),
+      stat("memoized", String(agg?.memo ?? 0), { title: "Times it was skipped because nothing it reads changed" }),
+      stat("self time", fmtMs(agg?.total), { title: "Total body time across those renders" }),
       stat("slowest", fmtMs(agg?.max)),
       stat("dom nodes", detail.domNodes !== undefined ? String(detail.domNodes) : "—"),
       stat("effects", String(detail.effects.length)),
     ),
   ], { flush: true });
 
+  const paneCounts = {
+    props: detail.props.length,
+    hooks: detail.hooks.length + detail.uiState.length,
+  };
   const panes: Array<{ value: typeof ui.inspectPane; label: string; title: string }> = [
-    { value: "props", label: `Props${detail.props.length ? ` (${detail.props.length})` : ""}`, title: "Arguments this instance received" },
-    { value: "hooks", label: `State${detail.hooks.length + detail.uiState.length ? ` (${detail.hooks.length + detail.uiState.length})` : ""}`, title: "Per-instance $state / $memo cells and library UI state" },
+    { value: "props", label: `Props${paneCounts.props ? ` ${paneCounts.props}` : ""}`, title: "Arguments this instance received" },
+    { value: "hooks", label: `State${paneCounts.hooks ? ` ${paneCounts.hooks}` : ""}`, title: "Per-instance $state / $memo cells and library UI state" },
     { value: "dom", label: "DOM", title: "Box model, attributes, and markup" },
     { value: "styles", label: "Styles", title: "Computed styles and theme variables in effect" },
     { value: "a11y", label: "A11y", title: "Role, accessible name, and ARIA wiring" },
@@ -322,33 +430,32 @@ function renderDetail(
   }
 
   const deps = detail.deps.length > 0
-    ? section("Reads", h("div", { class: "chip-row" }, ...detail.deps.map((dep) =>
-        h("button", {
-          class: "chip blue is-link",
-          title: `Show $${dep} in the State tab`,
-          onclick: () => {
-            ui.stateFilter = dep.split(".")[0] ?? dep;
-            ctx.selectTab("state");
-          },
-        }, `$${dep}`))))
+    ? section("Reads", [
+        h("div", { class: "chip-row" }, ...detail.deps.map((dep) =>
+          h("button", {
+            class: "chip blue is-link",
+            title: `Show $${dep} in the State tab`,
+            onclick: () => {
+              ui.stateFilter = dep.split(".")[0] ?? dep;
+              ctx.selectTab("state");
+            },
+          }, `$${dep}`))),
+        faint("These are the reactive paths this body read last render — its memo dependencies. A change to any of them re-renders it."),
+      ])
     : null;
 
-  const kids = nodes.filter((n) => n.parentKey === detail.instanceKey);
+  const kids = nodes.filter((node) => node.parentKey === detail.instanceKey);
   const children = kids.length > 0
     ? section(`Children (${kids.length})`, h("div", { class: "chip-row" }, ...kids.slice(0, 24).map((kid) =>
         h("button", {
           class: "chip grey is-link",
-          onclick: () => {
-            ui.selectedInstance = kid.instanceKey;
-            ctx.highlightInstance(kid.instanceKey, true);
-            ctx.refresh();
-          },
+          onclick: () => selectRow(ctx, kid.instanceKey),
           onmouseenter: () => ctx.highlightInstance(kid.instanceKey, false),
           onmouseleave: () => ctx.overlay.hideHover(),
         }, kid.name))))
     : null;
 
-  return [header, tabs, ...body, deps, children].filter((n): n is HTMLElement => n != null);
+  return [header, tabs, ...body, deps, children].filter((node): node is HTMLElement => node != null);
 }
 
 /* ---- props ------------------------------------------------------------- */
@@ -357,20 +464,20 @@ function renderProps(ctx: TabContext, detail: InstanceDetail): Node[] {
   const { app } = ctx;
   const editable = can(app, "setPropOverride");
   if (detail.props.length === 0 && (detail.overrides?.length ?? 0) === 0) {
-    return [section("Props", faint("This instance received no arguments."))];
+    return [section("Props", [
+      faint("This instance received no arguments."),
+      editable ? renderAddOverride(ctx, detail) : null,
+    ].filter((node): node is HTMLElement => node != null))];
   }
-
-  const rows = detail.props.map((prop) => renderPropRow(ctx, detail, prop, editable));
-  const addRow = editable ? renderAddOverride(ctx, detail) : null;
 
   return [
     section("Props", [
-      h("div", { class: "prop-list" }, ...rows),
-      addRow,
+      h("div", { class: "prop-list" }, ...detail.props.map((prop) => renderPropRow(ctx, detail, prop, editable))),
+      editable ? renderAddOverride(ctx, detail) : null,
       editable
-        ? faint("Editing a $-bound prop writes the atom. Editing any other prop installs a DevTools override that lasts until you clear it.")
+        ? faint("A $-bound prop writes the atom. Any other prop takes a DevTools override that lasts until you clear it.")
         : faint("This runtime does not support prop overrides."),
-    ]),
+    ].filter((node): node is HTMLElement => node != null)),
   ];
 }
 
@@ -381,15 +488,14 @@ function renderPropRow(
   editable: boolean,
 ): HTMLElement {
   const { app } = ctx;
-  const canWriteAtom = can(app, "setState");
   const readOnly = prop.value.json === undefined;
 
   const commit = (next: unknown): void => {
-    if (prop.stateRef && canWriteAtom) {
+    if (prop.stateRef && app) {
       // The atom is the source of truth for a `$`-bound prop; overriding the
       // prop instead would be silently reverted by the next commit.
-      app!.setState(prop.stateRef, next);
-      ctx.toast(`$${prop.stateRef} = ${JSON.stringify(next)}`);
+      app.setState(prop.stateRef, next);
+      ctx.toast(`$${prop.stateRef} updated`);
     } else if (can(app, "setPropOverride")) {
       app.setPropOverride(detail.instanceKey, prop.name, next);
       ctx.toast(`${detail.name}.${prop.name} overridden`);
@@ -401,12 +507,17 @@ function renderPropRow(
     "div",
     { class: `prop-row ${prop.overridden ? "is-overridden" : ""}` },
     h("span", { class: "prop-name" }, prop.name),
-    prop.stateRef ? chip(`$${prop.stateRef}`, "blue", "Two-way bound to this reactive path") : null,
+    prop.stateRef ? chip(`$${prop.stateRef}`, "blue", "Two-way bound: editing this writes the atom") : null,
     prop.overridden ? chip("override", "amber", "Value forced by DevTools") : null,
     h("span", { class: "grow" }),
     readOnly || !editable
-      ? valueSpan(prop.value, { title: readOnly ? "This value cannot be edited (function, resource, or DOM node)" : undefined })
-      : editableValue(prop.value, commit),
+      ? valueSpan(prop.value, {
+          title: readOnly
+            ? "This value cannot be edited — it is a function, a live resource, or a DOM node"
+            : undefined,
+        })
+      : editableValue(prop.value, commit, { focusKey: `${detail.instanceKey}:${prop.name}` }),
+    prop.value.json !== undefined ? copyButton(() => prop.value.json ?? "", "⧉") : null,
     prop.overridden && can(app, "clearPropOverride")
       ? button("↺", () => {
           app.clearPropOverride(detail.instanceKey, prop.name);
@@ -425,22 +536,29 @@ function renderPropRow(
  * passed, and the interesting experiment is usually something that was not.
  */
 function renderAddOverride(ctx: TabContext, detail: InstanceDetail): HTMLElement {
-  const nameInput = h("input", { class: "search", placeholder: "prop name", style: "max-width:120px" }) as HTMLInputElement;
-  const valueInput = h("input", { class: "search", placeholder: 'value (JSON, e.g. "danger" or 12)' }) as HTMLInputElement;
+  let name = "";
+  let value = "";
   const apply = (): void => {
-    const name = nameInput.value.trim();
-    if (name === "" || !can(ctx.app, "setPropOverride")) return;
-    ctx.app.setPropOverride(detail.instanceKey, name, parseEditedValue(valueInput.value));
-    ctx.toast(`${detail.name}.${name} overridden`);
+    const prop = name.trim();
+    if (prop === "" || !can(ctx.app, "setPropOverride")) return;
+    ctx.app.setPropOverride(detail.instanceKey, prop, parseEditedValue(value));
+    ctx.toast(`${detail.name}.${prop} overridden`);
     ctx.refresh();
   };
-  valueInput.addEventListener("keydown", (event: KeyboardEvent) => {
-    if (event.key === "Enter") apply();
-  });
   return h("div", { class: "prop-row is-add" },
     h("span", { class: "prop-name faint" }, "＋"),
-    nameInput,
-    valueInput,
+    textField({
+      focusKey: `${detail.instanceKey}:new-prop-name`,
+      placeholder: "prop name",
+      width: "120px",
+      onInput: (next) => { name = next; },
+    }),
+    textField({
+      focusKey: `${detail.instanceKey}:new-prop-value`,
+      placeholder: 'value — "danger", 12, true, { "gap": 8 }',
+      onInput: (next) => { value = next; },
+      onEnter: apply,
+    }),
     button("Override", apply, { title: "Force this prop on the selected instance" }),
   );
 }
@@ -452,9 +570,9 @@ function renderComponentState(ctx: TabContext, detail: InstanceDetail): Node[] {
   const out: Node[] = [];
 
   if (detail.hooks.length > 0) {
-    out.push(section("Hooks — $state / $memo cells", h("div", { class: "prop-list" },
-      ...detail.hooks.map((hook) => h("div", { class: "prop-row" },
-        h("span", { class: "prop-name mono" }, `[${hook.slot}]`),
+    out.push(section("Hooks — $state / $memo cells", [
+      h("div", { class: "prop-list" }, ...detail.hooks.map((hook) => h("div", { class: "prop-row" },
+        h("span", { class: "prop-name mono", title: "Hooks are matched by call order, so the slot index is the address" }, `[${hook.slot}]`),
         chip(hook.kind, hook.kind === "state" ? "green" : "grey"),
         h("span", { class: "grow" }),
         hook.editable && can(app, "setInstanceHook")
@@ -462,10 +580,15 @@ function renderComponentState(ctx: TabContext, detail: InstanceDetail): Node[] {
               const ok = app.setInstanceHook(detail.instanceKey, hook.slot, next);
               ctx.toast(ok ? `slot ${hook.slot} updated` : `slot ${hook.slot} is read-only`, ok ? "good" : "warn");
               ctx.refresh();
-            })
-          : valueSpan(hook.value, { title: hook.kind === "memo" ? "A $memo is recomputed from its deps — edit the deps instead" : "read-only" }),
-      )),
-    )));
+            }, { focusKey: `${detail.instanceKey}:hook:${hook.slot}` })
+          : valueSpan(hook.value, {
+              title: hook.kind === "memo"
+                ? "A $memo is recomputed from its deps — edit what it reads instead"
+                : "read-only",
+            }),
+      ))),
+      faint("These are this instance's own cells. Two instances of the same component hold different ones."),
+    ]));
   }
 
   if (detail.uiState.length > 0) {
@@ -478,10 +601,10 @@ function renderComponentState(ctx: TabContext, detail: InstanceDetail): Node[] {
               const ok = app.setInstanceUiState(detail.instanceKey, slot.key, next);
               ctx.toast(ok ? `${slot.key} updated` : `${slot.key} no longer exists`, ok ? "good" : "warn");
               ctx.refresh();
-            })
+            }, { focusKey: `${detail.instanceKey}:ui:${slot.key}` })
           : valueSpan(slot.value),
       ))),
-      faint("These are the slots a library component keeps for itself — a Tabs' active pane, a Popover's open flag, a DataGrid's sort. They never appear in $state."),
+      faint("The slots a library component keeps for itself — a Tabs' active pane, a Popover's open flag, a DataGrid's sort. They never appear in $state."),
     ]));
   }
 
@@ -490,6 +613,7 @@ function renderComponentState(ctx: TabContext, detail: InstanceDetail): Node[] {
       h("div", { class: "chip-row" }, ...detail.effects.map((key) =>
         h("button", {
           class: "chip purple is-link",
+          title: "Open in the Effects tab",
           onclick: () => {
             ctx.ui.selectedEffect = key;
             ctx.selectTab("effects");
@@ -565,7 +689,7 @@ function attributeTable(element: Element): HTMLElement {
   return table(
     [
       { key: "name", label: "Attribute", render: (row) => code(row.name) },
-      { key: "value", label: "Value", render: (row) => h("span", { class: "mono wrap" }, row.value === "" ? " " : row.value) },
+      { key: "value", label: "Value", render: (row) => h("span", { class: "mono wrap" }, row.value === "" ? " " : row.value) },
     ],
     attrs,
   );
@@ -581,7 +705,7 @@ function renderStyles(ctx: TabContext, element: Element | null): Node[] {
       searchInput(ctx.ui.computedFilter, (value) => {
         ctx.ui.computedFilter = value;
         ctx.refresh();
-      }, "Filter properties…"),
+      }, "Filter properties…", { focusKey: "computed-filter" }),
     ), { flush: true }),
   ];
 
@@ -602,7 +726,10 @@ function renderStyles(ctx: TabContext, element: Element | null): Node[] {
           isColor(value) ? h("span", { class: "swatch", style: `background:${value}` }) : null,
           value),
       ])),
-      faint("These are the resolved --rui-* custom properties. Change them live in the Theme tab."),
+      h("div", { class: "detail-head" },
+        faint("These are the resolved --rui-* custom properties."),
+        spacer(),
+        button("Edit tokens", () => ctx.selectTab("theme"), { title: "Open the Theme tab" })),
     ]));
   }
 
@@ -629,18 +756,27 @@ function renderA11y(ctx: TabContext, element: Element | null): Node[] {
     section("Accessibility properties", summary.length > 0
       ? defList(summary.map(([key, value]) => [key, h("span", { class: "mono" }, value)]))
       : faint("No ARIA attributes, role, or accessible name.")),
-    section(`Findings in this subtree (${own.length})`, own.length === 0
-      ? h("div", { class: "insight t-good" }, h("span", { class: "insight-ic" }, "✓"), h("span", {}, "No accessibility problems found here."))
-      : h("div", {}, ...own.slice(0, 12).map((finding) =>
-          h("div", { class: `insight t-${finding.impact === "critical" || finding.impact === "serious" ? "bad" : "warn"}` },
-            h("span", { class: "insight-ic" }, finding.impact === "critical" ? "✖" : "▲"),
-            h("span", {},
-              h("b", {}, `${finding.rule}: `),
-              finding.message,
-              " ",
-              faint(finding.help)),
-            spacer(),
-            button("Show", () => ctx.overlay.highlight(finding.element, {}, true), { title: "Highlight the element" }))))),
+    section(`Findings in this subtree (${own.length})`, [
+      own.length === 0
+        ? h("div", { class: "insight t-good" }, h("span", { class: "insight-ic" }, "✓"), h("span", {}, "No accessibility problems found here."))
+        : h("div", {}, ...own.slice(0, 12).map((finding) =>
+            h("div", { class: `insight t-${finding.impact === "critical" || finding.impact === "serious" ? "bad" : "warn"}` },
+              h("span", { class: "insight-ic" }, finding.impact === "critical" ? "✖" : "▲"),
+              h("span", {},
+                h("b", {}, `${finding.rule}: `),
+                finding.message,
+                " ",
+                faint(finding.help)),
+              spacer(),
+              button("Show", () => ctx.overlay.highlight(finding.element, {}, true), { title: "Highlight the element" })))),
+      h("div", { class: "detail-head" },
+        spacer(),
+        button("Audit the whole app", () => {
+          ctx.ui.testPane = "a11y";
+          ctx.ui.a11yRequested = true;
+          ctx.selectTab("test");
+        }, { title: "Run the full audit in the Test tab" })),
+    ]),
   ];
 }
 
@@ -701,4 +837,3 @@ function renderElementOnly(ctx: TabContext, element: Element): Node[] {
     ...renderStyles(ctx, element),
   ];
 }
-

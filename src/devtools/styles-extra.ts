@@ -537,3 +537,241 @@ code.mono { background: var(--dt-bg-inset); padding: 0 3px; border-radius: 3px; 
 .bar-row-fill.t-bad { background: var(--dt-red); }
 .bar-row-fill.t-warn { background: var(--dt-amber); }
 `;
+
+/**
+ * Styles for the chrome added in the reliability/UX pass: the command palette,
+ * the shortcut sheet, the first-run tips, the Inspect split layout, watch rows,
+ * and the state diff.
+ *
+ * Kept in a second string only so neither block becomes unreadable; both are
+ * concatenated into the one stylesheet the panel adopts.
+ */
+export const devtoolsPaletteStyles = `
+/* ---- Command palette + shortcut sheet ---- */
+.pal-host { position: absolute; inset: 0; z-index: 5; }
+.pal-host[hidden] { display: none; }
+.pal-scrim {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 48px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(1px);
+}
+.pal-box {
+  width: min(460px, 92%);
+  max-height: 70%;
+  display: flex;
+  flex-direction: column;
+  background: var(--dt-bg-raised);
+  border: 1px solid var(--dt-border-strong);
+  border-radius: 10px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.pal-box.is-help { padding: 12px 14px; gap: 8px; }
+.pal-title { font-weight: 700; font-size: 12.5px; }
+.pal-input {
+  border: none;
+  border-bottom: 1px solid var(--dt-border);
+  background: var(--dt-bg-inset);
+  color: var(--dt-text);
+  font: 500 13px var(--dt-sans);
+  padding: 9px 11px;
+}
+.pal-input:focus { outline: none; border-bottom-color: var(--dt-accent); }
+.pal-list { overflow: auto; padding: 4px; }
+.pal-row {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--dt-text);
+  font: 500 11.5px var(--dt-sans);
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.pal-row.is-active { background: var(--dt-accent-soft); }
+.pal-group {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--dt-text-faint);
+  min-width: 54px;
+}
+.pal-label { flex: 1; }
+.pal-hint { font-family: var(--dt-mono); font-size: 10px; color: var(--dt-text-faint); }
+.pal-empty { padding: 12px; font-size: 11px; color: var(--dt-text-faint); }
+.pal-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--dt-border);
+  font-size: 10px;
+  color: var(--dt-text-faint);
+}
+
+/* ---- First-run tips ---- */
+.tips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px;
+  border: 1px solid var(--dt-accent);
+  border-radius: 8px;
+  background: var(--dt-accent-soft);
+}
+.tips-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 11.5px; }
+.tips-list { display: flex; flex-direction: column; gap: 4px; }
+.tip-row {
+  appearance: none;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  background: none;
+  border: none;
+  text-align: left;
+  color: var(--dt-text);
+  font: 500 11px var(--dt-sans);
+  padding: 2px 0;
+  cursor: pointer;
+}
+.tip-row:hover .tip-action { color: var(--dt-accent); text-decoration: underline; }
+.tip-num {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--dt-bg-inset);
+  border: 1px solid var(--dt-border-strong);
+  font-size: 9px;
+  font-weight: 700;
+}
+.tip-action { font-weight: 700; }
+.tip-why { color: var(--dt-text-dim); }
+
+/* ---- Inspect split layout (wide panel) ---- */
+.split { display: grid; grid-template-columns: minmax(220px, 40%) minmax(0, 1fr); min-height: 0; }
+.split > .split-left { border-right: 1px solid var(--dt-border); min-width: 0; overflow: auto; max-height: 520px; }
+.split > .split-right { min-width: 0; overflow: auto; max-height: 520px; }
+.split .comp-tree { max-height: none; }
+
+/* ---- Watch expressions ---- */
+.watch-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 11px;
+}
+.watch-expr { flex: 0 0 40%; font-family: var(--dt-mono); color: var(--dt-purple); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watch-val { flex: 1; font-family: var(--dt-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watch-val.is-error { color: var(--dt-red); }
+
+/* ---- State diff ---- */
+.diff-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 11px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.diff-mark { flex: 0 0 14px; text-align: center; font-family: var(--dt-mono); font-weight: 700; }
+.diff-row.is-added .diff-mark { color: var(--dt-green); }
+.diff-row.is-removed .diff-mark { color: var(--dt-red); }
+.diff-row.is-changed .diff-mark { color: var(--dt-amber); }
+.diff-path { flex: 0 0 34%; font-family: var(--dt-mono); color: var(--dt-text); overflow: hidden; text-overflow: ellipsis; }
+.diff-old { color: var(--dt-red); font-family: var(--dt-mono); text-decoration: line-through; opacity: .8; }
+.diff-arrow { color: var(--dt-text-faint); }
+.diff-new { color: var(--dt-green); font-family: var(--dt-mono); }
+.diff-empty { padding: 8px 0; color: var(--dt-text-faint); font-size: 11px; }
+
+/* ---- Break-on-change marker ---- */
+.brk {
+  appearance: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--dt-text-faint);
+  padding: 0 2px;
+}
+.brk.is-on { color: var(--dt-red); }
+.brk:hover { color: var(--dt-red); }
+
+/* ---- Program history ---- */
+.ver-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 11px;
+}
+.ver-when { flex: 0 0 96px; font-family: var(--dt-mono); font-size: 10px; color: var(--dt-text-faint); }
+.ver-meta { flex: 1; color: var(--dt-text-dim); }
+
+/* ---- Keyboard hint chips in a toolbar ---- */
+kbd {
+  font-family: var(--dt-mono);
+  font-size: 9.5px;
+  padding: 1px 4px;
+  border: 1px solid var(--dt-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--dt-bg-inset);
+  color: var(--dt-text-dim);
+}
+`;
+
+/**
+ * Styles for the scroll containers introduced by the reliability pass. Kept
+ * separate from the palette block only to keep each string readable; all three
+ * are concatenated into one stylesheet.
+ */
+export const devtoolsScrollStyles = `
+/* A keyed scroll region: bounded height so the surrounding page keeps its
+   shape, and a preserved offset across re-renders (see SCROLL_KEY_ATTR). */
+.tree-wrap { max-height: 340px; overflow: auto; }
+:host(.dock-bottom) .tree-wrap { max-height: 240px; }
+[data-dt-scroll] { scrollbar-width: thin; }
+[data-dt-scroll]::-webkit-scrollbar { width: 9px; height: 9px; }
+[data-dt-scroll]::-webkit-scrollbar-thumb {
+  background: var(--dt-border-strong);
+  border-radius: 6px;
+  border: 2px solid var(--dt-bg);
+}
+`;
+
+/** Styles for search hits and the code window's paging affordances. */
+export const devtoolsCodeStyles = `
+.code-line.is-hit { background: rgba(240, 179, 94, 0.10); }
+.code-text mark {
+  background: var(--dt-amber);
+  color: #10121a;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+`;
+
+/** Bounded list regions, so a long table cannot push a detail pane off-screen. */
+export const devtoolsListStyles = `
+.list-wrap { max-height: 300px; overflow: auto; }
+:host(.dock-bottom) .list-wrap { max-height: 200px; }
+.log-list, .tlist { max-height: 420px; overflow: auto; }
+:host(.dock-bottom) .log-list, :host(.dock-bottom) .tlist { max-height: 240px; }
+`;

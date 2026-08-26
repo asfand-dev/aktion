@@ -10,8 +10,8 @@
  */
 
 import {
-  button, chip, code, defList, emptyState, faint, fmtClock, h, muted, section,
-  spacer, stat, statGrid, table, toolbar,
+  button, chip, code, defList, emptyState, faint, fmtRel, h, muted, section,
+  spacer, stat, statGrid, table, textField, toolbar,
 } from "../ui.js";
 import { can, type TabContext, type TabDefinition } from "../context.js";
 
@@ -32,25 +32,22 @@ function render(ctx: TabContext): Node[] {
   const route = app.getRoute();
   const canNavigate = can(app, "navigate");
 
-  const input = h("input", {
-    class: "search",
-    placeholder: "/orders/42",
-    value: ui.routeDraft,
-    style: "max-width:220px",
-  }) as HTMLInputElement;
   const go = (): void => {
-    const path = input.value.trim();
+    const path = ui.routeDraft.trim();
     if (path === "" || !can(app, "navigate")) return;
     app.navigate(path);
     ui.routeDraft = "";
     ctx.toast(`Navigated to ${path}`);
     ctx.refresh();
   };
-  input.addEventListener("input", () => {
-    ui.routeDraft = input.value;
-  });
-  input.addEventListener("keydown", (event: KeyboardEvent) => {
-    if (event.key === "Enter") go();
+  const input = textField({
+    focusKey: "route-navigate",
+    value: ui.routeDraft,
+    placeholder: "/orders/42",
+    width: "220px",
+    title: "Type a path and press Enter",
+    onInput: (value) => { ui.routeDraft = value; },
+    onEnter: go,
   });
 
   const bar = toolbar(
@@ -97,7 +94,14 @@ function render(ctx: TabContext): Node[] {
   const history = section(`Navigation history (${model.routes.length})`, model.routes.length > 0
     ? table(
         [
-          { key: "time", label: "When", render: (row) => faint(fmtClock(Date.now() - (model.lastTime - row.time))) },
+          {
+            key: "time",
+            label: "When",
+            // Route timestamps come from the monotonic clock, so they can only be
+            // reported RELATIVE to the newest event. Mixing them with
+            // `Date.now()` produced a wall-clock time that was simply wrong.
+            render: (row) => faint(`${fmtRel(Math.max(0, model.lastTime - row.time))} ago`),
+          },
           { key: "from", label: "From", render: (row) => code(row.from || "—") },
           { key: "to", label: "To", render: (row) => code(row.to) },
           { key: "pattern", label: "Matched", render: (row) => (row.pattern ? code(row.pattern) : chip("no match", "amber")) },

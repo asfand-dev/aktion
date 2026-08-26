@@ -18,8 +18,8 @@
  */
 
 import {
-  button, chip, code, downloadText, faint, fmtClock, fmtCount, h, searchInput,
-  section, spacer, toggle, toolbar,
+  FOCUS_KEY_ATTR, SCROLL_KEY_ATTR, button, chip, code, downloadText, faint,
+  fmtClock, fmtCount, h, searchInput, section, spacer, textField, toggle, toolbar,
 } from "../ui.js";
 import { can, type TabContext, type TabDefinition } from "../context.js";
 import type { LogEntry } from "../model.js";
@@ -54,7 +54,7 @@ function render(ctx: TabContext): Node[] {
     searchInput(ui.logFilter, (value) => {
       ui.logFilter = value;
       ctx.refresh();
-    }, "Filter output…"),
+    }, "Filter output…", { focusKey: "console-filter" }),
     h("div", { class: "filters" }, ...LEVELS.map((level) => {
       const count = model.logs.filter((entry) => entry.level === level).length;
       return toggle(
@@ -86,6 +86,7 @@ function render(ctx: TabContext): Node[] {
   const out: Node[] = [bar];
 
   if (model.errors.length > 0) out.push(renderRuntimeErrors(ctx));
+  out.push(renderWatches(ctx));
   out.push(renderRepl(ctx));
   out.push(renderLogs(ctx));
   return out;
@@ -161,6 +162,9 @@ function renderRepl(ctx: TabContext): HTMLElement {
     placeholder: "$count + 1 · $user.name · Util.range(0, 3) · $count = 5",
     value: ui.replDraft,
     spellcheck: "false",
+    // A stable key, so running an expression (which grows the history ABOVE the
+    // input and changes the tree shape) keeps the caret in the input.
+    [FOCUS_KEY_ATTR]: "repl",
   }) as HTMLInputElement;
 
   const run = (): void => {
@@ -207,10 +211,31 @@ function renderRepl(ctx: TabContext): HTMLElement {
     }
   });
 
-  const history = h("div", { class: "repl-log" });
+  const history = h("div", { class: "repl-log", [SCROLL_KEY_ATTR]: "repl-log" });
   for (const entry of ui.repl.slice(-12)) {
     history.appendChild(h("div", { class: "repl-entry" },
-      h("div", { class: "repl-in" }, h("span", { class: "repl-caret" }, "›"), code(entry.input)),
+      h("div", { class: "repl-in" },
+        h("span", { class: "repl-caret" }, "›"),
+        code(entry.input),
+        spacer(),
+        // Re-running is the most common next action after reading a result.
+        button("↻", () => {
+          ui.replDraft = entry.input;
+          const result = app.evaluateExpression(entry.input);
+          ui.repl = [...ui.repl.slice(-40), {
+            input: entry.input,
+            ok: result.ok,
+            output: result.ok ? (result.text ?? result.value?.preview ?? "undefined") : (result.error ?? "evaluation failed"),
+            time: Date.now(),
+          }];
+          ctx.refresh();
+        }, { title: "Run this expression again" }),
+        button("👁", () => {
+          if (!ui.watches.includes(entry.input)) ui.watches = [...ui.watches, entry.input].slice(-20);
+          ctx.persist();
+          ctx.toast(`Watching ${entry.input}`);
+          ctx.refresh();
+        }, { title: "Watch this expression — it is re-evaluated on every render" })),
       h("div", { class: `repl-out ${entry.ok ? "" : "is-error"}` },
         h("span", { class: "repl-caret" }, entry.ok ? "‹" : "✖"),
         h("pre", {}, entry.output)),
@@ -229,7 +254,53 @@ function renderRepl(ctx: TabContext): HTMLElement {
             ctx.refresh();
           })
         : null),
-    faint("Aktion expressions, not JavaScript — the same scope the program sees. `$atom = value` writes through the reactive pipeline."),
+    faint("Aktion expressions, not JavaScript — the same scope the program sees. `$atom = value` writes through the reactive pipeline. ↑ / ↓ walk history."),
+  ]);
+}
+
+/**
+ * Watch expressions: pinned expressions re-evaluated on every render.
+ *
+ * The REPL answers "what is it right now?". A watch answers "what is it doing?",
+ * which is the question you actually have while clicking through a bug — and it
+ * answers it without you touching the panel again.
+ */
+function renderWatches(ctx: TabContext): HTMLElement {
+  const { app, ui } = ctx;
+  const add = textField({
+    focusKey: "watch-add",
+    placeholder: "Watch an expression — $todos.length, $user.role …",
+    onEnter: (value) => {
+      const expr = value.trim();
+      if (expr === "") return;
+      if (!ui.watches.includes(expr)) ui.watches = [...ui.watches, expr].slice(-20);
+      ctx.persist();
+      ctx.refresh();
+    },
+  });
+
+  const rows = ui.watches.map((expr) => {
+    const result = can(app, "evaluateExpression") ? app.evaluateExpression(expr) : null;
+    const text = result === null
+      ? "no evaluator"
+      : result.ok
+        ? (result.value?.preview ?? "undefined")
+        : (result.error ?? "failed");
+    return h("div", { class: "watch-row" },
+      h("span", { class: "watch-expr", title: expr }, expr),
+      h("span", { class: `watch-val ${result?.ok === false ? "is-error" : ""}`, title: result?.text ?? text }, text),
+      button("✕", () => {
+        ui.watches = ui.watches.filter((entry) => entry !== expr);
+        ctx.persist();
+        ctx.refresh();
+      }, { title: "Stop watching" }));
+  });
+
+  return section(`Watch (${ui.watches.length})`, [
+    h("div", { class: "detail-head" }, add),
+    ui.watches.length > 0
+      ? h("div", {}, ...rows)
+      : faint("Pin an expression here and it is re-evaluated on every render — the value updates as you use the app. Watches survive a page reload."),
   ]);
 }
 

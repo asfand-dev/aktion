@@ -356,6 +356,19 @@ const OVERLAY_CSS = `
   box-shadow: 0 8px 20px rgba(0,0,0,0.4);
   pointer-events: none;
 }
+/* "Highlight updates": one cheap outline per re-rendered element, per commit. */
+.update-flash {
+  position: fixed;
+  pointer-events: none;
+  border: 1px solid rgba(90, 209, 155, 0.9);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(90, 209, 155, 0.25) inset;
+  animation: dt-update-fade 320ms ease-out forwards;
+}
+@keyframes dt-update-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
 `;
 
 /** Tag names that belong to DevTools itself and must never be inspected. */
@@ -416,6 +429,9 @@ export class InspectOverlay {
   private pinnedElement: Element | null = null;
   private pinnedLabel: HighlightLabel = {};
   private reflowBound: (() => void) | null = null;
+  /** Transient "this re-rendered" outlines — see {@link flashUpdated}. */
+  private updateFlashes: HTMLElement[] = [];
+  private updateFlashTimer: ReturnType<typeof setTimeout> | null = null;
 
   /* ---- picking ---- */
   private picking = false;
@@ -493,6 +509,50 @@ export class InspectOverlay {
       return;
     }
     this.clear();
+  }
+
+  /**
+   * Briefly outline every element that just re-rendered ("highlight updates").
+   *
+   * Drawn as its own cheap layer rather than through the box-model highlight:
+   * this fires on every commit, so it has to cost one absolutely-positioned div
+   * per element and nothing else. Overlapping flashes replace each other, which
+   * is what makes a repeated re-render read as a pulse.
+   */
+  flashUpdated(elements: ReadonlyArray<Element>): void {
+    const root = this.ensureHost();
+    if (!root) return;
+    for (const stale of this.updateFlashes) stale.remove();
+    this.updateFlashes = [];
+    if (this.updateFlashTimer !== null) clearTimeout(this.updateFlashTimer);
+
+    for (const element of elements) {
+      if (!element.isConnected) continue;
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      const box = document.createElement("div");
+      box.className = "update-flash";
+      box.style.top = `${rect.top}px`;
+      box.style.left = `${rect.left}px`;
+      box.style.width = `${rect.width}px`;
+      box.style.height = `${rect.height}px`;
+      root.appendChild(box);
+      this.updateFlashes.push(box);
+    }
+    if (this.updateFlashes.length === 0) return;
+    this.updateFlashTimer = setTimeout(() => {
+      for (const box of this.updateFlashes) box.remove();
+      this.updateFlashes = [];
+      this.updateFlashTimer = null;
+    }, 320);
+  }
+
+  /** Remove any update flashes without touching the highlight. */
+  clearUpdateFlashes(): void {
+    if (this.updateFlashTimer !== null) clearTimeout(this.updateFlashTimer);
+    this.updateFlashTimer = null;
+    for (const box of this.updateFlashes) box.remove();
+    this.updateFlashes = [];
   }
 
   /** Remove every highlight and stop tracking. */
@@ -721,6 +781,7 @@ export class InspectOverlay {
   /** Remove the overlay host from the page. */
   destroy(): void {
     this.stopPicking();
+    this.clearUpdateFlashes();
     this.clear();
     this.host?.remove();
     this.host = null;

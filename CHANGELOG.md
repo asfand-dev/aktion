@@ -67,6 +67,83 @@ HeroUI app with one attribute.
   for exactly this) and as a fill under its own label — instead of only the
   first.
 
+### DevTools: Faster, Calmer, and Reachable From the Keyboard
+
+Fourteen tabs is a lot of surface, and a panel that re-renders on every runtime
+event is a hostile place to type. This pass is about the difference between
+"the feature exists" and "the feature is usable": everything is now reachable
+without hunting for it, the panel costs microseconds instead of milliseconds per
+event, and it stops fighting you while you work.
+
+- **Command palette.** Press <kbd>Ctrl/Cmd + K</kbd> for a fuzzy search over
+  every tab and every action — pick an element, arm a break, clear the theme,
+  export the session — so nothing is buried behind three clicks in a tab you
+  have not opened yet. Typing a word that names a tab takes you there.
+- **Keyboard shortcuts.** <kbd>?</kbd> lists them all. <kbd>Alt</kbd> + a digit
+  jumps to a tab, <kbd>Alt</kbd> + <kbd>[</kbd> / <kbd>]</kbd> cycles,
+  <kbd>/</kbd> focuses the current tab's filter box, <kbd>Ctrl + F</kbd> finds
+  in the source, and <kbd>Escape</kbd> backs out of whatever is open. The
+  palette, the element picker, and the tab shortcuts fire from anywhere on the
+  page — you are usually clicking the app, not the panel, when you want to
+  change what the panel shows — but never while you are typing in one of the
+  app's own fields.
+- **Watch expressions.** Pin an Aktion expression — `$todos.length`,
+  `$user.role` — and it is re-evaluated on every render, so you can watch a
+  value move while you use the app instead of re-running the REPL by hand.
+  Watches survive a page reload.
+- **Diff two state snapshots.** The State tab can compare any two commits and
+  list only what actually changed between them, down to the leaf, which is a
+  much shorter read than two trees side by side.
+- **Break on change.** Arm an atom and the browser pauses in the debugger the
+  moment something writes to it, with the write already on the stack — the
+  fastest way to answer "what is setting this?".
+- **Highlight re-renders.** Optionally flash a box over every component that
+  actually re-rendered in the last commit, the classic "why is this whole page
+  repainting" view, and mark commits with `performance.measure` so they line up
+  with the browser's own profiler.
+- **Long tasks.** The panel now reports main-thread blocking it observed, so a
+  janky interaction points at the frame that caused it.
+- **Program history.** Every version of the running program is kept as you edit
+  it in the Source tab, with a one-click revert — a bad edit is no longer a
+  reload-and-lose-your-state event.
+- **Find in source**, and large programs no longer cost anything to display: the
+  Source tab renders a window around what you are looking at instead of rebuilding
+  a thousand rows on every event.
+- **Inspect is now a split view** at usable widths, with the tree and the selected
+  instance's detail visible at once, arrow-key navigation, collapse/expand all,
+  and a copy button on every value.
+- **Editing browser storage.** The Data tab can write new `localStorage` /
+  `sessionStorage` keys and edit existing ones in place, not just read them.
+- **Seeding a request rule from a real request.** "Mock this", "delay", and
+  "fail" on a `$query` or a logged request pre-fill the rule for you.
+- **Onboarding.** The Overview tab opens with three dismissible tips, and every
+  tab and control has a hint explaining what it is for.
+- **Fixed: the panel stole your caret.** A field you were typing in lost focus —
+  and its caret — whenever a runtime event arrived, which for the REPL meant the
+  <kbd>Enter</kbd> that ran your expression also emptied the box. Focus is now
+  restored by a declared key rather than by tree position, so it survives the
+  panel's shape changing underneath it. Scroll offsets survive too, so a scrolled
+  component tree no longer jumps to the top once a second.
+- **Fixed: the panel was doing the same expensive work several times per event.**
+  The program analysis and the component tree are computed once per render pass
+  and shared by every caller and every tab badge, and the tree now reads the DOM
+  with one query instead of one per instance.
+- **Fixed: hiding library components flattened the tree.** Your components were
+  all reported at depth zero rather than nested under their real parents.
+- **Fixed: clicking a component in the Profiler could look like it did nothing.**
+  Jumping to Inspect landed on a row that was hidden — collapsed, filtered out, or
+  a library component with the Library toggle off. It now clears whatever was
+  hiding the row, says what it cleared, and scrolls to it.
+- **Fixed: the Routes tab reported nonsense times** ("14332s ago") by mixing the
+  page's monotonic clock with wall time.
+- **Fixed: "Paused" looked like "broken".** Pausing drops events by design, but
+  the panel gave no sign it was ignoring them; the record button now counts what
+  pausing has cost you.
+- **Fixed: preferences did not stick.** The dock position, light theme, density,
+  console capture, dismissed tips, and your watches are all remembered now.
+- **Fixed: dragging a colour in the Theme tab** wrote a token per mouse event and
+  re-rendered the whole panel each time; it now writes at most once per frame.
+
 ### DevTools Grew From Three Tabs to Fourteen
 
 The in-page debugger (`aktion-runtime/devtools`) used to answer three questions:

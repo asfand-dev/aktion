@@ -49,10 +49,16 @@ function render(ctx: TabContext): Node[] {
       },
     ),
     spacer(),
+    toggle("Highlight", ui.highlightUpdates, () => {
+      ui.highlightUpdates = !ui.highlightUpdates;
+      if (!ui.highlightUpdates) ctx.overlay.clearUpdateFlashes();
+      ctx.toast(ui.highlightUpdates ? "Outlining components as they re-render" : "Highlighting off");
+      ctx.refresh();
+    }, "Outline each component on the page as it re-renders — the fastest way to see unnecessary work"),
     toggle("Flash", ui.flashOnCommit, () => {
       ui.flashOnCommit = !ui.flashOnCommit;
       ctx.refresh();
-    }, "Outline the app element on every commit"),
+    }, "Outline the whole app element on every commit"),
     button("Clear", () => {
       model.commits.length = 0;
       ui.selectedCommitId = null;
@@ -232,7 +238,7 @@ function renderFlameRow(
 
 function renderRanked(ctx: TabContext): HTMLElement {
   const { model, ui } = ctx;
-  const rows = componentAggregates(model.commits);
+  const rows = ctx.cache("componentAggregates", () => componentAggregates(model.commits));
   const maxTotal = Math.max(...rows.map((r) => r.total), 0.001);
 
   return section("Components — ranked by self time", table(
@@ -298,7 +304,7 @@ function renderHotAtoms(ctx: TabContext): HTMLElement {
  */
 function renderInsights(ctx: TabContext): HTMLElement {
   const { model } = ctx;
-  const aggs = componentAggregates(model.commits);
+  const aggs = ctx.cache("componentAggregates", () => componentAggregates(model.commits));
   const items: Array<{ tone: string; icon: string; text: string }> = [];
   const commitCount = model.commits.length;
 

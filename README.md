@@ -169,7 +169,7 @@ Everything you need at runtime ships in a single bundle:
 - **SSR / SSG.** `renderToString(program, { path, initialState })` → `{ html, state }` for server-side rendering. `renderToStaticMarkup` for static pages.
 - **DX tooling.** `tailwindToSx(classString)` maps Tailwind classes to `sx`; `cssToSx(cssText)` and `styledToSx(template)` do the same for plain CSS and styled-components templates; `htmlToAktion(html)` imports common HTML/JSX; `componentSchema(library)` emits a stable JSON schema for editor autocomplete; `buildGallery(library)` generates a self-contained component explorer; `suggestComponent("Buttn", library)` returns typo candidates.
 - **Testing utilities.** `render(program)` / `renderComponent(expression)` return a `Screen` with Testing-Library-style queries and a `screen.user` interaction driver; plus `waitFor` / `act` / `flush` for async assertions, `json(data, status?)` for mocked fetches, `within(node)` for scoped queries, and `axe(node)` for a dependency-free a11y audit — all from the `aktion-runtime/test` entry.
-- **DevTools.** `aktion-runtime/devtools` ships a fourteen-tab in-page debugger: a component-instance tree with an element picker that reaches inside the shadow root, live editing of any component's props / hooks / internal UI state, a writable `$state` tree with snapshot time travel, a render profiler with flamegraph and memoization analysis, an effect timeline plus a run-now button, a network inspector with request mocking and latency injection, a console that captures the runtime's own diagnostics plus a REPL for Aktion expressions, route / query / store / storage explorers, a live theme-token editor with contrast checks, the program source with diagnostics on their lines and edit-and-remount, and a Test tab that records interactions into a runnable test, audits accessibility, measures DSL coverage, and fuzzes the UI. Import it once on the page and call `el.connectDevtools()` (or label an instance with `data-devtools-label`) — see [`docs/devtools.html`](./docs/devtools.html).
+- **DevTools.** `aktion-runtime/devtools` ships a fourteen-tab in-page debugger: a component-instance tree with an element picker that reaches inside the shadow root, live editing of any component's props / hooks / internal UI state, a writable `$state` tree with snapshot time travel, a render profiler with flamegraph and memoization analysis, an effect timeline plus a run-now button, a network inspector with request mocking and latency injection, a console that captures the runtime's own diagnostics plus a REPL for Aktion expressions, route / query / store / storage explorers, a live theme-token editor with contrast checks, the program source with diagnostics on their lines and edit-and-remount, and a Test tab that records interactions into a runnable test, audits accessibility, measures DSL coverage, and fuzzes the UI. Everything is reachable from a command palette (`Ctrl`/`Cmd`+`K`) or the keyboard, and four aids run continuously while you use the app: watch expressions, a flash over every component that re-rendered, `debugger` on write to a chosen atom, and `performance.measure` marks so Aktion commits line up in the browser's own profiler. Import it once on the page and call `el.connectDevtools()` (or label an instance with `data-devtools-label`) — see [`docs/devtools.html`](./docs/devtools.html).
 - **A React-like DOM reconciler.** Diffs each re-render against the live
   DOM. Text-input value, selection, IME state, scroll positions,
   `<details>.open`, and stateful primitives like `Tabs` are all preserved
@@ -2149,7 +2149,8 @@ The full catalog with zoomed-out live preview cards lives at
 │   ├── plugin/                #   The Vite plugin (aktion-runtime/vite)
 │   ├── testing/               #   The testing library (aktion-runtime/test)
 │   ├── devtools/              #   DevTools: hook + protocol, the 14-tab panel (tabs/), overlay,
-│   │                          #   a11y audit, interaction recorder (aktion-runtime/devtools)
+│   │                          #   command palette, a11y audit, interaction recorder,
+│   │                          #   session export (aktion-runtime/devtools)
 │   ├── theme/                 #   Token system + injected stylesheet
 │   ├── prompt/                #   System prompt generator
 │   ├── tooling/               #   Host-side helpers (formatter, inspector, language service)
@@ -2281,7 +2282,10 @@ mode, the morph value/event contracts, `sx` conversion, third-party
 interop, the sanitiser + DoS security suite, registry-wide spec
 invariants over all 282 components, the testing library, DevTools (the
 event protocol, the inspector's capability surface, prop overrides,
-request rules, the accessibility audit, and the interaction recorder), the
+request rules, the accessibility audit, the interaction recorder, and the
+panel's own reliability — focus and caret survival, per-render caching,
+tree hierarchy under a filter, the command palette, state diffing, and
+cross-tab reveal), the
 standalone LSP server, and the editor-tooling surfaces (navigation,
 semantic tokens, signature help, namespace members).
 

@@ -15,7 +15,7 @@
 
 import {
   button, chip, code, copyButton, emptyState, faint, h, muted, searchInput,
-  section, spacer, stat, statGrid, toolbar,
+  section, spacer, stat, statGrid, textField, toolbar,
 } from "../ui.js";
 import { can, type TabContext, type TabDefinition } from "../context.js";
 import { contrastRatio, parseColor } from "../a11y.js";
@@ -134,32 +134,50 @@ function renderToken(ctx: TabContext, theme: ThemeInfo, token: string, value: st
   const fromScript = theme.scriptOverrides.includes(token);
   const colour = isColor(value);
 
-  const input = h("input", {
-    class: "token-input",
+  const input = textField({
+    focusKey: `token:${token}`,
+    className: "token-input",
     value,
-    spellcheck: "false",
-  }) as HTMLInputElement;
-  const commit = (): void => {
-    if (!can(app, "setThemeTokens") || input.value === value) return;
-    app.setThemeTokens({ [token]: input.value });
-    ctx.toast(`${token} = ${input.value}`);
-    ctx.refresh();
-  };
-  input.addEventListener("change", commit);
-  input.addEventListener("keydown", (event: KeyboardEvent) => {
-    if (event.key === "Enter") commit();
+    onCommit: (next) => {
+      if (!can(app, "setThemeTokens")) return;
+      app.setThemeTokens({ [token]: next });
+      ctx.toast(`${token} = ${next}`);
+      ctx.refresh();
+    },
   });
 
   // A native colour picker for colour-valued tokens: typing hex is fine, but
   // finding a colour by typing hex is not.
+  //
+  // Dragging the picker fires `input` continuously, and each write forces a full
+  // re-render of the app. Coalescing to one write per frame keeps the drag smooth
+  // — without it, dragging across a gradient queues hundreds of renders.
   const picker = colour && can(app, "setThemeTokens")
     ? (() => {
-        const el = h("input", { class: "token-picker", type: "color", value: toHex(value) ?? "#000000" }) as HTMLInputElement;
+        const el = h("input", {
+          class: "token-picker",
+          type: "color",
+          value: toHex(value) ?? "#000000",
+          title: `Pick a colour for ${token}`,
+        }) as HTMLInputElement;
+        let queued = false;
         el.addEventListener("input", () => {
-          app.setThemeTokens({ [token]: el.value });
           input.value = el.value;
+          if (queued) return;
+          queued = true;
+          const flush = (): void => {
+            queued = false;
+            app.setThemeTokens({ [token]: el.value });
+          };
+          if (typeof requestAnimationFrame === "function") requestAnimationFrame(flush);
+          else setTimeout(flush, 16);
         });
-        el.addEventListener("change", () => ctx.refresh());
+        // The panel only re-renders when the drag ends, so the token list does
+        // not rebuild under the cursor.
+        el.addEventListener("change", () => {
+          app.setThemeTokens({ [token]: el.value });
+          ctx.refresh();
+        });
         return el;
       })()
     : null;

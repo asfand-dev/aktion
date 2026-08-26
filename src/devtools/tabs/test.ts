@@ -193,6 +193,17 @@ function renderA11y(ctx: TabContext): Node[] {
     ctx.refresh();
   };
 
+  // Opened from the palette or from an element's A11y pane: run it immediately
+  // rather than showing an empty pane with a button the user already pressed.
+  if (ui.a11yRequested) {
+    ui.a11yRequested = false;
+    if (root) {
+      const result = auditAccessibility(root);
+      ui.a11yRun = { ...result, at: Date.now() };
+      ui.a11ySelected = null;
+    }
+  }
+
   const controls = section(null, h("div", { class: "detail-head" },
     button("Run audit", runAudit, { tone: "good", disabled: root === null }),
     ui.a11yRun
@@ -435,7 +446,9 @@ function renderQueries(ctx: TabContext): Node[] {
     searchInput(ui.queryProbe, (value) => {
       ui.queryProbe = value;
       ctx.refresh();
-    }, ui.queryProbeKind === "role" ? "button" : ui.queryProbeKind === "css" ? ".rui-card > button" : "Save"),
+    },
+    ui.queryProbeKind === "role" ? "button" : ui.queryProbeKind === "css" ? ".rui-card > button" : "Save",
+    { focusKey: "query-probe" }),
   );
 
   if (!root) return [bar, faint("No render root to query.")];

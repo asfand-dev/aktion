@@ -13,10 +13,10 @@
  */
 
 import {
-  barRow, button, chip, chipGroup, code, copyButton, defList, emptyState, faint,
-  fmtBytes, fmtCount, fmtMs, h, muted, searchInput, section, spacer, stat,
-  statGrid, table, toggle, toolbar, truncateMiddle, urlHost, urlPath,
-  waterfallBar,
+  SCROLL_KEY_ATTR, barRow, button, chip, chipGroup, code, copyButton, defList,
+  emptyState, faint, fmtBytes, fmtCount, fmtMs, h, muted, searchInput, section,
+  spacer, stat, statGrid, table, textField, toggle, toolbar, truncateMiddle,
+  urlHost, urlPath, waterfallBar,
 } from "../ui.js";
 import { can, type TabContext, type TabDefinition } from "../context.js";
 import { networkStats, type NetworkRequest } from "../model.js";
@@ -45,7 +45,7 @@ function render(ctx: TabContext): Node[] {
     searchInput(ui.networkFilter, (value) => {
       ui.networkFilter = value;
       ctx.refresh();
-    }, "Filter by URL or method…"),
+    }, "Filter by URL or method…", { focusKey: "network-filter" }),
     toggle("Problems", ui.networkOnlyProblems, () => {
       ui.networkOnlyProblems = !ui.networkOnlyProblems;
       ctx.refresh();
@@ -142,7 +142,10 @@ function renderList(ctx: TabContext): HTMLElement {
   const last = rows.reduce((max, r) => Math.max(max, r.endTime ?? r.startTime), 0);
   const span = Math.max(1, last - first);
 
-  return section(null, table(
+  // The list gets its own scroll region so a hundred requests do not push the
+  // detail pane off the bottom of the panel, and its offset survives the
+  // re-render that each new request triggers.
+  return section(null, h("div", { class: "list-wrap", [SCROLL_KEY_ATTR]: "network-list" }, table(
     [
       {
         key: "status",
@@ -196,7 +199,7 @@ function renderList(ctx: TabContext): HTMLElement {
       },
       empty: filter === "" ? "No requests match the current filters." : `Nothing matches "${filter}".`,
     },
-  ), { flush: true });
+  )), { flush: true });
 }
 
 function statusChip(request: NetworkRequest): HTMLElement {
@@ -357,19 +360,21 @@ function renderRule(ctx: TabContext, rule: NetworkRule): HTMLElement {
     pushRules(ctx);
     ctx.refresh();
   };
+  // Keyed per rule + per field, so a rule list that re-renders while you are
+  // typing a URL pattern keeps your caret where it was.
   const field = (
+    name: string,
     placeholder: string,
     value: string,
     onCommit: (value: string) => void,
     width = "150px",
-  ): HTMLInputElement => {
-    const input = h("input", { class: "search", placeholder, value, style: `max-width:${width}` }) as HTMLInputElement;
-    input.addEventListener("change", () => onCommit(input.value));
-    input.addEventListener("keydown", (event: KeyboardEvent) => {
-      if (event.key === "Enter") onCommit(input.value);
-    });
-    return input;
-  };
+  ): HTMLInputElement => textField({
+    focusKey: `rule:${rule.id}:${name}`,
+    placeholder,
+    value,
+    width,
+    onCommit,
+  });
 
   // How many recorded requests this rule would claim: a rule that matches
   // nothing looks identical to a rule that is not working.
@@ -380,8 +385,8 @@ function renderRule(ctx: TabContext, rule: NetworkRule): HTMLElement {
     h("div", { class: "rule-head" },
       toggle(rule.enabled ? "on" : "off", rule.enabled, () => update({ enabled: !rule.enabled })),
       chip(rule.action, rule.action === "mock" ? "purple" : rule.action === "delay" ? "blue" : "red"),
-      field("URL pattern (empty = all)", rule.pattern, (value) => update({ pattern: value }), "220px"),
-      field("method", rule.method ?? "", (value) => update({ method: value.trim() === "" ? undefined : value.trim().toUpperCase() }), "80px"),
+      field("pattern", "URL pattern (empty = all)", rule.pattern, (value) => update({ pattern: value }), "220px"),
+      field("method", "method", rule.method ?? "", (value) => update({ method: value.trim() === "" ? undefined : value.trim().toUpperCase() }), "80px"),
       spacer(),
       muted(`${matches} match${matches === 1 ? "" : "es"}`),
       button("✕", () => {
@@ -391,10 +396,10 @@ function renderRule(ctx: TabContext, rule: NetworkRule): HTMLElement {
       }, { title: "Remove this rule" })),
     h("div", { class: "rule-body" },
       rule.action !== "offline"
-        ? field("delay ms", String(rule.delayMs ?? 0), (value) => update({ delayMs: Number(value) || 0 }), "90px")
+        ? field("delay", "delay ms", String(rule.delayMs ?? 0), (value) => update({ delayMs: Number(value) || 0 }), "90px")
         : null,
       rule.action === "mock"
-        ? field("status", String(rule.status ?? 200), (value) => update({ status: Number(value) || 200 }), "80px")
+        ? field("status", "status", String(rule.status ?? 200), (value) => update({ status: Number(value) || 200 }), "80px")
         : null,
       rule.action === "mock"
         ? (() => {
@@ -408,7 +413,7 @@ function renderRule(ctx: TabContext, rule: NetworkRule): HTMLElement {
           })()
         : null,
       rule.action === "fail" || rule.action === "offline"
-        ? field("error message", rule.message ?? "", (value) => update({ message: value }), "260px")
+        ? field("message", "error message", rule.message ?? "", (value) => update({ message: value }), "260px")
         : null,
     ),
   );

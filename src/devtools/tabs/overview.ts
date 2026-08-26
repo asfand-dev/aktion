@@ -47,19 +47,25 @@ function render(ctx: TabContext): Node[] {
     muted(app.label),
     chip(`protocol v${ctx.hook.protocolVersion}`, "grey"),
     spacer(),
+    button("⌘K Commands", () => ctx.openPalette(), {
+      title: "Every action in the panel, searchable (Ctrl/⌘ K)",
+    }),
     can(app, "reload")
       ? button("Reload program", () => {
           app.reload();
           ctx.toast("Program re-planned");
+          ctx.refresh();
         }, { title: "Re-plan and re-render from the current source" })
       : null,
     button("Force render", () => {
       app.forceRender();
       ctx.toast("Full re-render requested");
+      ctx.refresh();
     }, { title: "Re-render the whole tree, bypassing memoization" }),
   );
 
   const out: Node[] = [bar];
+  if (!ctx.ui.tipsDismissed) out.push(renderTips(ctx));
 
   /* ---- health ---- */
   const problems: Array<{ tone: string; icon: string; text: Node }> = [];
@@ -175,6 +181,38 @@ function render(ctx: TabContext): Node[] {
         : null)));
   }
 
+  /* ---- watches ---- */
+  if (ctx.ui.watches.length > 0) {
+    out.push(section("Watching", [
+      h("div", {}, ...ctx.ui.watches.map((expr) => {
+        const result = can(app, "evaluateExpression") ? app.evaluateExpression(expr) : null;
+        const text = result === null
+          ? "no evaluator"
+          : result.ok ? (result.value?.preview ?? "undefined") : (result.error ?? "failed");
+        return h("div", { class: "watch-row" },
+          h("span", { class: "watch-expr", title: expr }, expr),
+          h("span", { class: `watch-val ${result?.ok === false ? "is-error" : ""}` }, text));
+      })),
+      h("div", { class: "detail-head" },
+        spacer(),
+        button("Manage watches", () => ctx.selectTab("console"), { title: "Add or remove watches in the Console tab" })),
+    ]));
+  }
+
+  /* ---- long tasks ---- */
+  if (model.longTasks.length > 0) {
+    const worst = model.longTasks.reduce((max, task) => Math.max(max, task.duration), 0);
+    const total = model.longTasks.reduce((sum, task) => sum + task.duration, 0);
+    out.push(section("Main-thread blocking", [
+      statGrid(
+        stat("long tasks", fmtCount(model.longTasks.length), { tone: "warn" }),
+        stat("worst", fmtMs(worst), { tone: worst > 200 ? "bad" : "warn" }),
+        stat("total blocked", fmtMs(total)),
+      ),
+      faint("A long task is >50ms of uninterrupted main-thread work. Compare it with the commit durations in the Profiler: if the commits are short and the tasks are long, the jank is not coming from your program."),
+    ]));
+  }
+
   /* ---- hot atoms ---- */
   const hot = hotAtoms(model.commits, 5);
   if (hot.length > 0) {
@@ -203,6 +241,58 @@ function render(ctx: TabContext): Node[] {
     ), { flush: true }));
   }
   return out;
+}
+
+/**
+ * First-run tips.
+ *
+ * Fourteen tabs of icons is not self-explanatory, and a tooltip only helps
+ * someone who already hovers the right thing. Three concrete actions, each one
+ * click, each explaining what it will show — dismissed for good once clicked
+ * away. This is the difference between "there is a lot in here" and "I know what
+ * to do first".
+ */
+function renderTips(ctx: TabContext): HTMLElement {
+  const tips: Array<{ action: string; why: string; run: () => void }> = [
+    {
+      action: "Pick an element",
+      why: "click anything on the page to find the component that rendered it, then edit its props",
+      run: () => ctx.togglePicker(),
+    },
+    {
+      action: "Watch it re-render",
+      why: "outlines every component as it repaints — the fastest way to see work you did not expect",
+      run: () => {
+        ctx.ui.highlightUpdates = true;
+        ctx.toast("Outlining components as they re-render");
+        ctx.refresh();
+      },
+    },
+    {
+      action: "Open the command palette",
+      why: "every action in the panel, searchable — Ctrl/⌘ K from anywhere",
+      run: () => ctx.openPalette(),
+    },
+  ];
+  return section(null, h("div", { class: "tips" },
+    h("div", { class: "tips-head" },
+      h("span", {}, "New here? Try these three."),
+      spacer(),
+      button("Dismiss", () => {
+        ctx.ui.tipsDismissed = true;
+        // Written now: "for good" has to survive a reload, and a teardown hook
+        // is not guaranteed to run before the page unloads.
+        ctx.persist();
+        ctx.refresh();
+      }, { title: "Hide these tips for good" })),
+    h("div", { class: "tips-list" }, ...tips.map((tip, index) =>
+      h("button", { class: "tip-row", onclick: tip.run },
+        h("span", { class: "tip-num" }, String(index + 1)),
+        h("span", {},
+          h("span", { class: "tip-action" }, tip.action),
+          h("span", { class: "tip-why" }, ` — ${tip.why}`))))),
+    faint("Press ? at any time for the keyboard shortcuts."),
+  ), { flush: true });
 }
 
 function commitRate(ctx: TabContext): number {

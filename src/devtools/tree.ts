@@ -37,6 +37,22 @@ export function parentKeyOf(key: string, keys: ReadonlySet<string>): string | nu
   return null;
 }
 
+/**
+ * Every prefix of `key` that ends at a segment boundary — the ancestor keys it
+ * COULD have, without needing the set of keys that currently exist.
+ *
+ * Useful when acting on ancestors is idempotent (expanding a collapsed branch,
+ * say): a prefix that is not a real instance simply has no effect, which is
+ * cheaper than reconstructing the tree to find out.
+ */
+export function ancestorKeyCandidates(key: string): string[] {
+  const out: string[] = [];
+  for (let i = 1; i < key.length; i += 1) {
+    if (SEGMENT_STARTS.has(key[i]!)) out.push(key.slice(0, i));
+  }
+  return out;
+}
+
 /** Ancestor keys of `key`, root first. */
 export function ancestorsOf(key: string, keys: ReadonlySet<string>): string[] {
   const out: string[] = [];

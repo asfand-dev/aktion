@@ -17,6 +17,7 @@ import {
 } from "../ui.js";
 import type { TabContext, TabDefinition } from "../context.js";
 import { buildTimeline, type TimelineEntry } from "../model.js";
+import { exportSessionJson } from "../session.js";
 
 const KINDS: ReadonlyArray<{ id: string; label: string; title: string }> = [
   { id: "commit", label: "commits", title: "Render commits" },
@@ -47,7 +48,7 @@ function render(ctx: TabContext): Node[] {
         ctx.refresh();
       }, kind.title))),
     spacer(),
-    button("Export session", () => downloadText("aktion-session.json", exportSession(ctx)), {
+    button("Export session", () => downloadText("aktion-session.json", exportSessionJson(ctx)), {
       title: "Download every captured event as JSON",
     }),
   );
@@ -127,38 +128,3 @@ function jump(ctx: TabContext, entry: TimelineEntry): void {
       break;
   }
 }
-
-/**
- * The whole session as JSON: events, state, and the derived model's totals.
- *
- * This is what you attach to a bug report. It is also what a future replay tool
- * would consume, which is why it carries the raw hook buffer rather than the
- * panel's formatted rows.
- */
-function exportSession(ctx: TabContext): string {
-  const payload = {
-    exportedAt: new Date().toISOString(),
-    protocolVersion: ctx.hook.protocolVersion,
-    libraryVersion: ctx.hook.libraryVersion,
-    app: ctx.app ? { id: ctx.app.id, label: ctx.app.label } : null,
-    program: ctx.app?.getProgram() ?? null,
-    state: ctx.model.state,
-    totals: ctx.model.totals,
-    commits: ctx.model.commits,
-    effects: ctx.model.effects,
-    network: ctx.model.network,
-    routes: ctx.model.routes,
-    emits: ctx.model.emits,
-    errors: ctx.model.errors,
-    logs: ctx.model.logs,
-  };
-  try {
-    return JSON.stringify(payload, null, 2);
-  } catch {
-    // A snapshot holding something unserialisable should still produce a usable
-    // export of everything else.
-    return JSON.stringify({ ...payload, state: "<unserialisable>" }, null, 2);
-  }
-}
-
-

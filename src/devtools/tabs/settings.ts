@@ -88,33 +88,78 @@ function render(ctx: TabContext): Node[] {
     faint("These gate work inside the runtime, not inside the panel — switching one off makes the app faster, not just the panel."),
   ]);
 
+  const visual = section("While you work", [
+    h("div", { class: "switch-list" },
+      h("div", { class: "switch-row" },
+        toggle("Highlight re-renders", ui.highlightUpdates, () => {
+          ui.highlightUpdates = !ui.highlightUpdates;
+          if (!ui.highlightUpdates) ctx.overlay.clearUpdateFlashes();
+          ctx.refresh();
+        }),
+        h("span", { class: "switch-hint" },
+          "Outline every component on the page as it re-renders. The quickest way to see work you did not expect — type one character and watch how much of the screen lights up.")),
+      h("div", { class: "switch-row" },
+        toggle("Flash on commit", ui.flashOnCommit, () => {
+          ui.flashOnCommit = !ui.flashOnCommit;
+          ctx.refresh();
+        }),
+        h("span", { class: "switch-hint" }, "Outline the whole app element on every commit — useful with several apps on one page.")),
+      h("div", { class: "switch-row" },
+        toggle("Browser performance marks", ui.perfMarks, () => {
+          ui.perfMarks = !ui.perfMarks;
+          ctx.toast(ui.perfMarks ? "Commits will appear in the browser's performance timeline" : "Performance marks off");
+          ctx.refresh();
+        }),
+        h("span", { class: "switch-hint" },
+          "Mirror each commit into `performance.measure`, so Aktion commits show up in the browser's own timeline next to layout, paint, and long tasks.")),
+      h("div", { class: "switch-row" },
+        toggle("Capture console", ui.captureConsole, () => {
+          ui.captureConsole = !ui.captureConsole;
+          ctx.persist();
+          ctx.refresh();
+        }),
+        h("span", { class: "switch-hint" }, "Mirror the page console into the Console tab, including the runtime's own [aktion] diagnostics.")),
+    ),
+  ]);
+
   const layout = section("Panel", [
     h("div", { class: "switch-row" },
       h("div", { class: "filters" }, ...DOCKS.map((dock) =>
         toggle(dock.label, ui.dock === dock.value, () => {
           ui.dock = dock.value;
+          ctx.persist();
           ctx.refresh();
         }))),
       h("span", { class: "switch-hint" }, "Float freely, or dock to an edge.")),
     h("div", { class: "switch-row" },
       toggle("Light theme", ui.light, () => {
         ui.light = !ui.light;
+        ctx.persist();
         ctx.refresh();
       }),
       h("span", { class: "switch-hint" }, "For a light host page.")),
     h("div", { class: "switch-row" },
       toggle("Compact rows", ui.compact, () => {
         ui.compact = !ui.compact;
+        ctx.persist();
         ctx.refresh();
       }),
       h("span", { class: "switch-hint" }, "Denser lists, for a small dock.")),
     h("div", { class: "switch-row" },
-      toggle("Capture console", ui.captureConsole, () => {
-        ui.captureConsole = !ui.captureConsole;
+      button("Show keyboard shortcuts", () => {
+        ui.shortcutsOpen = true;
         ctx.refresh();
-      }),
-      h("span", { class: "switch-hint" }, "Mirror the page console into the Console tab, including the runtime's own [aktion] diagnostics.")),
-  ]);
+      }, { title: "Also available with ?" }),
+      h("span", { class: "switch-hint" }, "Ctrl/⌘ K opens the command palette from anywhere — every action in the panel, searchable.")),
+    !ui.tipsDismissed
+      ? null
+      : h("div", { class: "switch-row" },
+          button("Show the getting-started tips again", () => {
+            ui.tipsDismissed = false;
+            ctx.selectTab("overview");
+          }),
+          h("span", { class: "switch-hint" }, "The three-step introduction on the Overview tab.")),
+  ].filter((node): node is HTMLElement => node != null));
 
   const retention = section("Session", [
     statGrid(
@@ -159,5 +204,5 @@ function render(ctx: TabContext): Node[] {
     faint("Instrumentation stays dormant until a frontend subscribes: closing this panel returns the app to its uninstrumented speed."),
   ]);
 
-  return [bar, instrumentation, layout, retention, shortcuts, about];
+  return [bar, visual, instrumentation, layout, retention, shortcuts, about];
 }

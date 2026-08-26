@@ -233,13 +233,86 @@ export function searchInput(
   value: string,
   onInput: (value: string) => void,
   placeholder = "Filter…",
+  options: { focusKey?: string } = {},
 ): HTMLInputElement {
   return h("input", {
     class: "search",
     placeholder,
     value,
+    // A stable focus key survives a re-render even when the surrounding tree
+    // changes shape — see `FOCUS_KEY_ATTR`.
+    [FOCUS_KEY_ATTR]: options.focusKey ?? `search:${placeholder}`,
     oninput: (e: Event) => onInput((e.target as HTMLInputElement).value),
   }) as HTMLInputElement;
+}
+
+/**
+ * Attribute carrying a field's stable identity across re-renders.
+ *
+ * The panel re-renders on every runtime event, so a field the user is typing in
+ * is destroyed and rebuilt several times a second. Restoring focus by POSITION
+ * fails exactly when it matters — running a REPL expression grows the history
+ * above the input, so the input is no longer the same child index and focus is
+ * lost on the keystroke that mattered most. A declared key is positional-shape
+ * independent.
+ */
+export const FOCUS_KEY_ATTR = "data-dt-focus";
+
+/**
+ * Attribute marking a scroll container whose position should survive a
+ * re-render. Without it, a scrolled component tree jumps back to the top every
+ * time an event arrives.
+ */
+export const SCROLL_KEY_ATTR = "data-dt-scroll";
+
+/** A scrollable region whose scroll offset is preserved across re-renders. */
+export function scrollArea(key: string, attrs: Attrs, ...children: Child[]): HTMLElement {
+  return h("div", { ...attrs, [SCROLL_KEY_ATTR]: key }, ...children);
+}
+
+/** A single-line text field with a stable focus key and Enter/blur commit. */
+export function textField(options: {
+  focusKey: string;
+  value?: string;
+  placeholder?: string;
+  className?: string;
+  width?: string;
+  title?: string;
+  /** Fires on every keystroke. */
+  onInput?: (value: string) => void;
+  /** Fires on Enter and on blur when the value changed. */
+  onCommit?: (value: string) => void;
+  /** Fires on Enter only. */
+  onEnter?: (value: string) => void;
+}): HTMLInputElement {
+  const input = h("input", {
+    class: options.className ?? "search",
+    placeholder: options.placeholder,
+    title: options.title,
+    value: options.value ?? "",
+    spellcheck: "false",
+    style: options.width ? `max-width:${options.width}` : undefined,
+    [FOCUS_KEY_ATTR]: options.focusKey,
+  }) as HTMLInputElement;
+  const initial = options.value ?? "";
+  if (options.onInput) {
+    input.addEventListener("input", () => options.onInput!(input.value));
+  }
+  const commit = (): void => {
+    if (options.onCommit && input.value !== initial) options.onCommit(input.value);
+  };
+  input.addEventListener("change", commit);
+  input.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commit();
+      options.onEnter?.(input.value);
+    } else if (event.key === "Escape") {
+      input.value = initial;
+      input.blur();
+    }
+  });
+  return input;
 }
 
 /** Muted inline note. */
@@ -444,9 +517,11 @@ export function valueSpan(value: DevtoolsValue, options: { title?: string } = {}
 export function editableValue(
   value: DevtoolsValue,
   onCommit: (next: unknown) => void,
-  options: { title?: string; disabled?: boolean; onCancel?: () => void } = {},
+  options: { title?: string; disabled?: boolean; onCancel?: () => void; focusKey?: string } = {},
 ): HTMLElement {
-  const span = valueSpan(value, { title: options.title ?? (options.disabled ? "read-only" : "Click to edit") });
+  const span = valueSpan(value, {
+    title: options.title ?? (options.disabled ? "read-only" : "Click to edit · Enter commits · Esc cancels"),
+  });
   if (options.disabled) {
     span.classList.add("is-readonly");
     return span;
@@ -457,7 +532,13 @@ export function editableValue(
     const initial = value.type === "string"
       ? (safeParse(value.json) as string ?? value.preview)
       : value.json ?? value.preview;
-    const input = h("input", { class: "edit-input", value: String(initial ?? "") }) as HTMLInputElement;
+    const input = h("input", {
+      class: "edit-input",
+      value: String(initial ?? ""),
+      // Keyed so a re-render mid-edit (an event arrives while you are typing)
+      // re-focuses the same field instead of dropping you out of the editor.
+      [FOCUS_KEY_ATTR]: options.focusKey ? `edit:${options.focusKey}` : undefined,
+    }) as HTMLInputElement;
     let settled = false;
     const settle = (apply: boolean): void => {
       if (settled) return;
@@ -466,13 +547,18 @@ export function editableValue(
       else options.onCancel?.();
       // The owning tab re-renders on commit; on cancel put the span back so a
       // dismissed edit does not leave a stranded input behind.
-      if (!apply) input.replaceWith(span);
+      if (!apply && input.isConnected) input.replaceWith(span);
     };
     input.addEventListener("keydown", (e: KeyboardEvent) => {
       if (e.key === "Enter") { e.preventDefault(); settle(true); }
       else if (e.key === "Escape") { e.preventDefault(); settle(false); }
     });
-    input.addEventListener("blur", () => settle(true));
+    // Commit on blur, EXCEPT when the blur is the panel re-rendering underneath
+    // us (the node is being detached). Committing then would write a value the
+    // user had not finished typing.
+    input.addEventListener("blur", () => {
+      if (input.isConnected) settle(true);
+    });
     span.replaceWith(input);
     input.focus();
     input.select();
@@ -645,18 +731,28 @@ export function jsonPreview(value: unknown): string {
 export interface CodeBlockOptions {
   /** Show 1-based line numbers. */
   lineNumbers?: boolean;
-  /** Lines to mark, keyed by 1-based line number → tone. */
+  /** Lines to mark, keyed by 1-based line number (within the slice) → tone. */
   markers?: Map<number, { tone: string; title: string }>;
-  /** Line to scroll into view + highlight. */
+  /** Line to scroll into view + highlight, 1-based within the slice. */
   focusLine?: number | null;
-  /** Called when a line's gutter is clicked. */
+  /** Called when a line is clicked, with the 1-based line within the slice. */
   onLineClick?(line: number): void;
   /** Cap the rendered lines (a 5k-line program does not need to be in the DOM). */
   maxLines?: number;
+  /**
+   * Line number the slice starts at, when the caller is rendering a window of a
+   * larger file. Gutter numbers are absolute; every other index stays relative.
+   */
+  firstLine?: number;
+  /** Case-insensitive substring to mark inside each line. */
+  highlight?: string;
+  /** Preserve the scroll offset across re-renders under this key. */
+  scrollKey?: string;
 }
 
 /**
- * Render source text with optional line numbers and gutter markers.
+ * Render source text with optional line numbers, gutter markers, and search
+ * highlighting.
  *
  * Diagnostics land on the line that produced them, which is the difference
  * between "line 42: unknown prop" as a sentence and as a place you can look at.
@@ -665,18 +761,30 @@ export function codeBlock(text: string, options: CodeBlockOptions = {}): HTMLEle
   const lines = text.split("\n");
   const cap = options.maxLines ?? 4000;
   const shown = lines.slice(0, cap);
-  const wrap = h("div", { class: "code-block" });
+  const offset = (options.firstLine ?? 1) - 1;
+  const needle = (options.highlight ?? "").toLowerCase();
+  const wrap = h("div", {
+    class: "code-block",
+    ...(options.scrollKey ? { [SCROLL_KEY_ATTR]: options.scrollKey } : {}),
+  });
   shown.forEach((line, index) => {
-    const lineNo = index + 1;
-    const marker = options.markers?.get(lineNo);
+    const relative = index + 1;
+    const marker = options.markers?.get(relative);
     const row = h(
       "div",
       {
-        class: `code-line ${marker ? `has-marker t-${marker.tone}` : ""} ${options.focusLine === lineNo ? "is-focus" : ""}`,
-        onclick: options.onLineClick ? () => options.onLineClick!(lineNo) : undefined,
+        class: [
+          "code-line",
+          marker ? `has-marker t-${marker.tone}` : "",
+          options.focusLine === relative ? "is-focus" : "",
+          needle !== "" && line.toLowerCase().includes(needle) ? "is-hit" : "",
+        ].filter(Boolean).join(" "),
+        onclick: options.onLineClick ? () => options.onLineClick!(relative) : undefined,
       },
-      options.lineNumbers === false ? null : h("span", { class: "code-gutter", title: marker?.title }, String(lineNo)),
-      h("span", { class: "code-text" }, line === "" ? " " : line),
+      options.lineNumbers === false
+        ? null
+        : h("span", { class: "code-gutter", title: marker?.title }, String(relative + offset)),
+      renderCodeText(line, needle),
     );
     wrap.appendChild(row);
   });
@@ -686,6 +794,28 @@ export function codeBlock(text: string, options: CodeBlockOptions = {}): HTMLEle
       h("span", { class: "code-text faint" }, `${lines.length - cap} more lines not shown`)));
   }
   return wrap;
+}
+
+/** One code line, with every occurrence of `needle` wrapped in a `<mark>`. */
+function renderCodeText(line: string, needle: string): HTMLElement {
+  const span = h("span", { class: "code-text" });
+  if (needle === "" || !line.toLowerCase().includes(needle)) {
+    span.appendChild(document.createTextNode(line === "" ? " " : line));
+    return span;
+  }
+  const lower = line.toLowerCase();
+  let cursor = 0;
+  while (cursor < line.length) {
+    const found = lower.indexOf(needle, cursor);
+    if (found < 0) {
+      span.appendChild(document.createTextNode(line.slice(cursor)));
+      break;
+    }
+    if (found > cursor) span.appendChild(document.createTextNode(line.slice(cursor, found)));
+    span.appendChild(h("mark", {}, line.slice(found, found + needle.length)));
+    cursor = found + needle.length;
+  }
+  return span;
 }
 
 /**

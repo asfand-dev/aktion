@@ -11,11 +11,12 @@
  */
 
 import {
-  button, chip, chipGroup, code, copyButton, emptyState, faint, fmtBytes,
-  h, muted, section, spacer, stat, statGrid, table, toolbar,
-  truncateMiddle, valueSpan,
+  button, chip, chipGroup, code, copyButton, editableValue, emptyState, faint,
+  fmtBytes, h, muted, section, spacer, stat, statGrid, table, textField,
+  toolbar, truncateMiddle, urlPath, valueSpan,
 } from "../ui.js";
 import { can, type TabContext, type TabDefinition } from "../context.js";
+import { newRule } from "../rules.js";
 import type { QueryInfo, StoreInfo } from "../protocol.js";
 
 export const dataTab: TabDefinition = {
@@ -77,11 +78,21 @@ function renderQueries(ctx: TabContext): Node[] {
   const failed = queries.filter((query) => query.error !== undefined).length;
   const stale = queries.filter((query) => query.state === "stale").length;
 
-  const invalidateInput = h("input", {
-    class: "search",
+  let invalidatePattern = "";
+  const invalidate = (): void => {
+    const pattern = invalidatePattern.trim();
+    if (pattern === "" || !can(app, "invalidateQueries")) return;
+    app.invalidateQueries(pattern);
+    ctx.toast(`Invalidated queries matching "${pattern}"`);
+    ctx.refresh();
+  };
+  const invalidateInput = textField({
+    focusKey: "invalidate",
     placeholder: "/api/todos",
-    style: "max-width:200px",
-  }) as HTMLInputElement;
+    width: "200px",
+    onInput: (value) => { invalidatePattern = value; },
+    onEnter: invalidate,
+  });
 
   const rows = queries.map((query) => renderQueryRow(ctx, query));
 
@@ -94,13 +105,9 @@ function renderQueries(ctx: TabContext): Node[] {
     )),
     section("Invalidate by key", h("div", { class: "detail-head" },
       invalidateInput,
-      button("Invalidate", () => {
-        const pattern = invalidateInput.value.trim();
-        if (pattern === "" || !can(app, "invalidateQueries")) return;
-        app.invalidateQueries(pattern);
-        ctx.toast(`Invalidated queries matching "${pattern}"`);
-        ctx.refresh();
-      }, { title: "Refetch every cached query whose key contains this substring" }),
+      button("Invalidate", invalidate, {
+        title: "Refetch every cached query whose key contains this substring",
+      }),
       spacer(),
       faint("Matching is substring-based, so /api/posts refreshes every page and filtered variant."),
     )),
@@ -136,7 +143,7 @@ function renderQueryRow(ctx: TabContext, query: QueryInfo): HTMLElement {
             app.refetchQuery(query.key);
             ctx.toast("Refetching…");
             ctx.refresh();
-          })
+          }, { title: "Re-run this request now" })
         : null,
       query.loading && can(app, "cancelQuery")
         ? button("Cancel", () => {
@@ -144,6 +151,24 @@ function renderQueryRow(ctx: TabContext, query: QueryInfo): HTMLElement {
             ctx.toast("Cancelled");
             ctx.refresh();
           }, { tone: "warn" })
+        : null,
+      // The two experiments you want on a cached query are "what if it were slow"
+      // and "what if it failed". Both live in the Network tab's rules, so offer
+      // them from here rather than making you copy the URL across.
+      can(app, "setNetworkRules")
+        ? button("Mock", () => seedRule(ctx, query, "mock"), {
+            title: "Answer this request with a canned response (opens the Network tab)",
+          })
+        : null,
+      can(app, "setNetworkRules")
+        ? button("Slow", () => seedRule(ctx, query, "delay"), {
+            title: "Add 2s of latency to this request, to see your own loading state",
+          })
+        : null,
+      can(app, "setNetworkRules")
+        ? button("Fail", () => seedRule(ctx, query, "fail"), {
+            title: "Make this request fail, to exercise the error path",
+          })
         : null),
     expanded
       ? h("div", { class: "data-body" },
@@ -159,6 +184,39 @@ function renderQueryRow(ctx: TabContext, query: QueryInfo): HTMLElement {
             : valueSpan(query.data))
       : null,
   );
+}
+
+/**
+ * Seed a network rule for a cached query and hand the user to the Network tab.
+ *
+ * A query's cache key starts with its method and URL, which is exactly what a
+ * rule matches on — so the bridge is a substring extraction, and the user never
+ * has to copy a URL between tabs.
+ */
+function seedRule(ctx: TabContext, query: QueryInfo, action: "mock" | "delay" | "fail"): void {
+  if (!can(ctx.app, "setNetworkRules")) return;
+  const url = query.key.replace(/^[A-Z]+\s+/, "").split(/\s+/)[0] ?? query.key;
+  const pattern = urlPath(url) || url;
+  const rule = newRule(
+    action === "mock"
+      ? {
+          action,
+          pattern,
+          status: query.status ?? 200,
+          // Seed the mock with the response the app already has: editing a real
+          // payload is far easier than writing one from nothing.
+          body: query.data.json ?? "",
+          label: `mock ${pattern}`,
+        }
+      : action === "delay"
+        ? { action, pattern, delayMs: 2000, label: `slow ${pattern}` }
+        : { action, pattern, message: "Request failed (DevTools rule)", label: `fail ${pattern}` },
+  );
+  ctx.ui.rules = [...ctx.ui.rules, rule];
+  ctx.app.setNetworkRules(ctx.ui.rules);
+  ctx.ui.showRules = true;
+  ctx.toast(`Rule added for ${pattern} — refetch to see it`);
+  ctx.selectTab("network");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -259,8 +317,18 @@ function renderStorage(ctx: TabContext): Node[] {
     muted(`${entries.length} key${entries.length === 1 ? "" : "s"} · ${fmtBytes(bytes)}`),
   );
 
+  const label = ui.storageKind === "cookies" ? "cookies" : `${ui.storageKind}Storage`;
+  const adder = renderStorageAdder(ctx);
+
   if (entries.length === 0) {
-    return [bar, emptyState(`Nothing in ${ui.storageKind === "cookies" ? "cookies" : `${ui.storageKind}Storage`}.`)];
+    return [
+      bar,
+      emptyState(
+        `Nothing in ${label}.`,
+        "Anything the program writes through the `storage` namespace shows up here — and you can add a key yourself to test how the app reads it.",
+      ),
+      adder,
+    ];
   }
 
   return [
@@ -271,7 +339,17 @@ function renderStorage(ctx: TabContext): Node[] {
         {
           key: "value",
           label: "Value",
-          render: (row) => h("span", { class: "mono wrap", title: row.value }, truncateMiddle(row.value, 80)),
+          // Editable in place: the common use is not reading a stored value but
+          // changing it to see how the app behaves on the next read.
+          render: (row) => editableValue(
+            { type: "string", preview: truncateMiddle(row.value, 80), json: JSON.stringify(row.value) },
+            (next) => {
+              const written = writeStorage(ui.storageKind, row.key, typeof next === "string" ? next : JSON.stringify(next));
+              ctx.toast(written ? `${row.key} updated` : `could not write ${row.key}`, written ? "good" : "bad");
+              ctx.refresh();
+            },
+            { focusKey: `storage:${ui.storageKind}:${row.key}`, title: row.value },
+          ),
         },
         { key: "size", label: "Size", numeric: true, sort: (row) => row.value.length, render: (row) => fmtBytes(row.value.length) },
         {
@@ -288,10 +366,41 @@ function renderStorage(ctx: TabContext): Node[] {
       ],
       entries,
     ), { flush: true }),
+    adder,
     section(null, faint(
-      "Aktion's `storage` namespace round-trips non-string values through JSON, so a value that looks like JSON here is what the program reads back as an object.",
+      "Aktion's `storage` namespace round-trips non-string values through JSON, so a value that looks like JSON here is what the program reads back as an object. Nothing in the app re-reads storage on its own — force a render after an edit.",
     ), { flush: true }),
   ];
+}
+
+/** Add (or overwrite) a storage key, for testing what the app reads back. */
+function renderStorageAdder(ctx: TabContext): HTMLElement {
+  const { ui } = ctx;
+  let key = "";
+  let value = "";
+  const write = (): void => {
+    const name = key.trim();
+    if (name === "") return;
+    const ok = writeStorage(ui.storageKind, name, value);
+    ctx.toast(ok ? `${name} written` : `could not write ${name}`, ok ? "good" : "bad");
+    ctx.refresh();
+  };
+  return section(null, h("div", { class: "detail-head" },
+    muted("Add a key"),
+    textField({
+      focusKey: `storage-new-key:${ui.storageKind}`,
+      placeholder: "key",
+      width: "150px",
+      onInput: (next) => { key = next; },
+    }),
+    textField({
+      focusKey: `storage-new-value:${ui.storageKind}`,
+      placeholder: 'value — plain text, or JSON like {"seen":true}',
+      onInput: (next) => { value = next; },
+      onEnter: write,
+    }),
+    button("Write", write, { title: "Set this key in the selected store" }),
+  ), { flush: true });
 }
 
 interface StorageEntry {
@@ -323,6 +432,25 @@ function readStorage(kind: "local" | "session" | "cookies"): StorageEntry[] {
   } catch {
     // Private mode, a blocked origin, or a disabled storage API.
     return [];
+  }
+}
+
+/**
+ * Write one storage key. Returns `false` when the browser refused (quota,
+ * private mode, a disabled API) rather than throwing into the render.
+ */
+function writeStorage(kind: "local" | "session" | "cookies", key: string, value: string): boolean {
+  try {
+    if (kind === "cookies") {
+      document.cookie = `${encodeURIComponent(key)}=${encodeURIComponent(value)}; path=/`;
+      return true;
+    }
+    const store = kind === "local" ? globalThis.localStorage : globalThis.sessionStorage;
+    if (!store) return false;
+    store.setItem(key, value);
+    return true;
+  } catch {
+    return false;
   }
 }
 

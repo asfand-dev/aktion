@@ -9,7 +9,13 @@
  * stylesheet the panel adopts.
  */
 
-import { devtoolsExtraStyles } from "./styles-extra.js";
+import {
+  devtoolsCodeStyles,
+  devtoolsExtraStyles,
+  devtoolsPaletteStyles,
+  devtoolsListStyles,
+  devtoolsScrollStyles,
+} from "./styles-extra.js";
 
 const baseStyles = `
 :host {
@@ -689,4 +695,10 @@ table.dt-table th.sortable:hover { color: var(--dt-text-dim); }
 `;
 
 /** The panel's complete stylesheet: chrome + original tabs + the 0.6 tabs. */
-export const devtoolsStyles = baseStyles + devtoolsExtraStyles;
+export const devtoolsStyles =
+  baseStyles
+  + devtoolsExtraStyles
+  + devtoolsPaletteStyles
+  + devtoolsScrollStyles
+  + devtoolsCodeStyles
+  + devtoolsListStyles;

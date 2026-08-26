@@ -1457,11 +1457,29 @@ export class AktionElement extends HTMLElement {
 
   /* ---- DevTools: inspector --------------------------------------------- */
 
-  /** Component tree of the last commit, with liveness resolved against the DOM. */
+  /**
+   * Component tree of the last commit, with liveness resolved against the DOM.
+   *
+   * Liveness comes from ONE `querySelectorAll` over the tagged attributes, not a
+   * `querySelector` per node: an inspector open on a 300-instance tree is asked
+   * for this on every event, and 300 selector queries per event is how a
+   * debugger becomes the thing it is measuring.
+   */
   private devtoolsTree(): InstanceNode[] {
     const nodes = buildInstanceTree(this.devtoolsComponents);
+    const mounted = new Set<string>();
+    try {
+      for (const el of this.rootEl.querySelectorAll(`[${INSTANCE_ATTR}], [${OWNER_ATTR}]`)) {
+        const instance = el.getAttribute(INSTANCE_ATTR);
+        if (instance) mounted.add(instance);
+        const owner = el.getAttribute(OWNER_ATTR);
+        if (owner) mounted.add(owner);
+      }
+    } catch {
+      /* an exotic DOM without attribute selectors — report nothing as mounted */
+    }
     for (const node of nodes) {
-      node.mounted = this.devtoolsNodeForInstance(node.instanceKey) !== null;
+      node.mounted = mounted.has(node.instanceKey);
     }
     return nodes;
   }
