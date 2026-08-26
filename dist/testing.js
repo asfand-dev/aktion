@@ -15622,7 +15622,7 @@ const ActionLink = {
     const disabled = asBoolean$1(props.disabled);
     const button = el("button", {
       type: "button",
-      class: "rui-action-link",
+      class: "rui-action-link" + (props.icon ? " has-icon" : ""),
       disabled,
       style: "background:none;border:0;padding:0;font:inherit;text-align:inherit"
     });
@@ -18234,6 +18234,7 @@ function initColumnConfig(cols, persisted) {
   for (const c of cols) {
     if (c.width) config.widths[c.key] = c.width;
   }
+  config.order = normalizeOrder(config.order, config.pinned);
   if (!persisted) return config;
   if (persisted.order) {
     const colKeys = new Set(defaultOrder);
@@ -18249,7 +18250,14 @@ function initColumnConfig(cols, persisted) {
       if (sanitised && cols.some((c) => c.key === k)) config.widths[k] = sanitised;
     }
   }
+  config.order = normalizeOrder(config.order, config.pinned);
   return config;
+}
+function normalizeOrder(order, pinned) {
+  const head = [];
+  const tail = [];
+  for (const key2 of order) (pinned.has(key2) ? head : tail).push(key2);
+  return [...head, ...tail];
 }
 function reconcileColumnConfig(cols, config) {
   const keys = cols.map((c) => c.key);
@@ -18265,10 +18273,11 @@ function reconcileColumnConfig(cols, config) {
   for (const c of cols) {
     if (!(c.key in widths) && c.width) widths[c.key] = c.width;
   }
+  const nextPinned = prune(config.pinned);
   return {
-    order: [...kept, ...added],
+    order: normalizeOrder([...kept, ...added], nextPinned),
     hidden: prune(config.hidden),
-    pinned: prune(config.pinned),
+    pinned: nextPinned,
     widths
   };
 }
@@ -18297,7 +18306,7 @@ function attrSelectorValue(raw) {
 const INITIAL_HINT = { overflows: false, atStart: true, atEnd: true, headHeight: 0 };
 const DataGrid = {
   name: "DataGrid",
-  description: "Advanced data table with sortable headers, per-column filter chips, row selection (checkboxes), sticky header / first column, optional pagination, an optional bulk-action toolbar slot, and click-to-act rows. Columns are Col(header, values, format?, align?, sortable?, filterable?) entries. Sorting, selection and pagination work on their own; bind `$sort` (`{key, direction}` object), `$selectedIds` (string[]) and `$page` (number) when the host needs to read or drive them, or use `onSort` / `onSelectionChange` for server-side work. Use `loading` / `error` for query states. Set `columnMenu=true` to let the user hide, reorder, and pin columns — the button is pinned to the top-right of the header and stays put while the grid scrolls sideways, without taking a column of its own. Set `resizable=true` to let the user drag column borders to resize; the first drag pins the columns at the widths they are already rendered at and switches to a fixed layout, so a narrowed column truncates instead of pushing its neighbours around. `scrollArrows=false` turns off the small chevrons that appear in the header band when there are columns to scroll to. Pass `persistKey` to save the user's column layout to localStorage — give each grid its own key, and prefix it per app when several apps share an origin; the key is mirrored onto the grid as `data-persist-key`. Set `wrapCells=false` for single-line cells with ellipsis + hover tooltip. Use INSTEAD of `Table` when you need any of those interactions.",
+  description: "Advanced data table with sortable headers, per-column filter chips, row selection (checkboxes), sticky header / first column, optional pagination, an optional bulk-action toolbar slot, and click-to-act rows. Columns are Col(header, values, format?, align?, sortable?, filterable?) entries. Sorting, selection and pagination work on their own; bind `$sort` (`{key, direction}` object), `$selectedIds` (string[]) and `$page` (number) when the host needs to read or drive them, or use `onSort` / `onSelectionChange` for server-side work. Use `loading` / `error` for query states. Set `columnMenu=true` to let the user hide, reorder, and pin columns — the button is pinned to the top-right of the header and stays put while the grid scrolls sideways, without taking a column of its own. Pinning MOVES a column to the front of the table and above a divider in the panel; drag and arrow-key reordering both stay inside their own group, so the only way across that divider is the pin. The last visible column cannot be hidden. To drive the panel from your own toolbar, bind `columnMenuOpen` (with `onColumnMenuOpenChange`), point `columnMenuAnchor` at your button and set `columnMenuButton: false` — the panel keeps working, it just loses the in-header icon. `columnMenuTitle` / `columnMenuDescription` / `columnMenuResetLabel` take translated strings. Set `resizable=true` to let the user drag column borders to resize; the first drag pins the columns at the widths they are already rendered at and switches to a fixed layout, so a narrowed column truncates instead of pushing its neighbours around. `scrollArrows=false` turns off the small chevrons that appear in the header band when there are columns to scroll to. Pass `persistKey` to save the user's column layout to localStorage — give each grid its own key, and prefix it per app when several apps share an origin; the key is mirrored onto the grid as `data-persist-key`. Set `wrapCells=false` for single-line cells with ellipsis + hover tooltip. Use INSTEAD of `Table` when you need any of those interactions.",
   props: [
     { name: "columns", type: "Col[]", description: "Columns; pass sortable=true / filterable=true on each Col." },
     { name: "rowIds", type: "any[]", optional: true, description: "Stable id per row (used by `selectedIds` and as the row's morph key); defaults to row index." },
@@ -18336,7 +18345,14 @@ const DataGrid = {
     { name: "wrapCells", type: "boolean", optional: true, description: "Default cell content wrapping. `false` = single line with ellipsis and hover tooltip; `true` = allow wrapping. Per-column `Col(wrap:)` overrides." },
     { name: "rowNumbers", type: "boolean", optional: true, description: "Show a leading row-number column." },
     { name: "highlightOnHover", type: "boolean", optional: true, description: "Highlight rows on mouse hover (default true)." },
-    { name: "scrollArrows", type: "boolean", optional: true, description: "Show small chevron buttons in the header band while there are columns hidden to the left / right (default true). They sit in the header, never over a data cell." }
+    { name: "scrollArrows", type: "boolean", optional: true, description: "Show small chevron buttons in the header band while there are columns hidden to the left / right (default true). They sit in the header, never over a data cell." },
+    { name: "columnMenuOpen", type: "boolean", optional: true, description: "Open state of the column-settings panel — bind a `$variable` for two-way control, so an external button can open it. Leave unset to let the built-in trigger own the state." },
+    { name: "onColumnMenuOpenChange", type: "callable", optional: true, aliases: ["oncolumnmenuopenchange"], description: "Called with the new boolean whenever the column-settings panel opens or closes — including via Escape, the × button, or an outside click." },
+    { name: "columnMenuButton", type: "boolean", optional: true, description: "Render the built-in column-settings trigger in the header (default true). Set `false` when an external control opens the panel, which keeps the panel and its configuration without the in-header icon." },
+    { name: "columnMenuAnchor", type: "string", optional: true, description: 'CSS selector for the element the panel should hang off, e.g. `"#table-settings"`. Defaults to the built-in trigger; required when `columnMenuButton` is `false`, or the panel has nothing to anchor to.' },
+    { name: "columnMenuTitle", type: "string", optional: true, description: 'Heading of the column-settings panel (default "Table settings"). Pass a translated string in a localised app.' },
+    { name: "columnMenuDescription", type: "string", optional: true, description: 'Sub-heading under the panel title (default "Manage column visibility and order"). Pass `""` to drop the line.' },
+    { name: "columnMenuResetLabel", type: "string", optional: true, description: `Label of the panel's reset action (default "Reset to default").` }
   ],
   render: (node, props, helpers) => {
     const allCols = readDataGridCols(props.columns);
@@ -18394,6 +18410,7 @@ const DataGrid = {
     const updateColConfig = (patch) => {
       const current = getColConfig();
       const next = { ...current, ...patch };
+      next.order = normalizeOrder(next.order, next.pinned);
       colConfigSlot.set(next);
       if (persistKey) persistConfig(persistKey, configToStorage(next));
     };
@@ -19194,6 +19211,21 @@ const DataGrid = {
     if (fixedLayout) headRow.append(fillerCell("th"));
     if (columnMenuEnabled) {
       const reorderHintId = `${autoId(helpers, "rui-data-grid-col")}-reorder-hint`;
+      const columnMenuTitle = asString$1(props.columnMenuTitle) || "Table settings";
+      const columnMenuSubtitle = props.columnMenuDescription === void 0 ? "Manage column visibility and order" : asString$1(props.columnMenuDescription);
+      const columnMenuResetLabel = asString$1(props.columnMenuResetLabel) || "Reset to default";
+      const openSlotIndex = DataGrid.props.findIndex((pr) => pr.name === "columnMenuOpen");
+      const openStateName = openSlotIndex >= 0 ? node.argMeta?.[openSlotIndex]?.stateRef : void 0;
+      const openControlled = props.columnMenuOpen !== void 0;
+      const columnMenuAnchor = asString$1(props.columnMenuAnchor);
+      const showMenuButton = props.columnMenuButton === void 0 ? true : asBoolean$1(props.columnMenuButton);
+      if (openControlled) colConfigPanelOpen.set(asBoolean$1(props.columnMenuOpen));
+      const reportOpen = (next) => {
+        if (colConfigPanelOpen.get() === next) return;
+        colConfigPanelOpen.set(next);
+        if (openStateName) helpers.setState(openStateName, next);
+        helpers.invoke(props.onColumnMenuOpenChange, next);
+      };
       const menuWrap = el("div", { class: "rui-data-grid-col-menu" });
       const menuBtn = el("button", {
         type: "button",
@@ -19205,6 +19237,7 @@ const DataGrid = {
       const gearIcon = renderIcon("sliders", { className: "rui-data-grid-col-menu-icon" });
       if (gearIcon) menuBtn.append(gearIcon);
       else menuBtn.textContent = "☰";
+      if (!showMenuButton) menuWrap.setAttribute("data-hidden", "true");
       const panel = el("div", {
         class: "rui-data-grid-col-panel",
         role: "dialog",
@@ -19223,6 +19256,7 @@ const DataGrid = {
         };
       };
       const closePanel = (origin) => {
+        reportOpen(false);
         colConfigPanelOpen.set(false);
         const live = findLive(origin ?? null);
         if (live.panel) {
@@ -19235,12 +19269,19 @@ const DataGrid = {
         panelEl.replaceChildren();
         const cfg0 = getColConfig();
         const panelHead = el("div", { class: "rui-data-grid-col-panel-head" });
-        panelHead.append(el("span", { class: "rui-data-grid-col-panel-title" }, ["Columns"]));
-        const actions = el("span", { style: "display:flex;align-items:center;gap:4px" });
+        const heading = el("span", { class: "rui-data-grid-col-panel-heading" });
+        heading.append(el("span", { class: "rui-data-grid-col-panel-title" }, [columnMenuTitle]));
+        if (columnMenuSubtitle) {
+          heading.append(el("span", { class: "rui-data-grid-col-panel-subtitle" }, [columnMenuSubtitle]));
+        }
+        panelHead.append(heading);
         const resetBtn = el("button", {
           type: "button",
           class: "rui-data-grid-col-panel-reset"
-        }, ["Reset"]);
+        });
+        const resetIcon = renderIcon("rotate-left", { className: "rui-data-grid-col-panel-reset-icon" });
+        if (resetIcon) resetBtn.append(resetIcon);
+        resetBtn.append(el("span", {}, [columnMenuResetLabel]));
         resetBtn.onclick = (ev) => {
           ev.stopPropagation();
           colConfigSlot.set(initColumnConfig(allCols, null));
@@ -19263,15 +19304,14 @@ const DataGrid = {
           ev.stopPropagation();
           closePanel(ev.currentTarget);
         };
-        actions.append(resetBtn, closeBtn);
-        panelHead.append(actions);
+        panelHead.append(closeBtn);
         panelEl.append(panelHead);
         const list = el("div", { class: "rui-data-grid-col-panel-list" });
         let colDrag = null;
         const DRAG_THRESHOLD = 4;
         const dragTargetIndex = (d, dy) => {
           const raw = d.fromIndex + Math.round(dy / d.rowH);
-          return Math.max(0, Math.min(d.rows.length - 1, raw));
+          return Math.max(d.groupStart, Math.min(d.groupEnd, raw));
         };
         const applyDragOffsets = (d, dy) => {
           d.node.style.transform = `translateY(${dy}px)`;
@@ -19345,31 +19385,52 @@ const DataGrid = {
           rebuildColPanel(panelEl);
           repaint(origin);
         };
+        const groupBounds = (index) => {
+          const pinnedCount = cfg0.order.filter((k) => cfg0.pinned.has(k)).length;
+          return index < pinnedCount ? { start: 0, end: pinnedCount - 1 } : { start: pinnedCount, end: cfg0.order.length - 1 };
+        };
+        const refocusRow = (key2, childSelector) => {
+          for (const r of panelEl.querySelectorAll(".rui-data-grid-col-panel-row")) {
+            if (r.getAttribute("data-col-key") !== key2) continue;
+            r.querySelector(childSelector)?.focus();
+            return;
+          }
+        };
         const nudgeColumn = (key2, delta, origin) => {
           const cfg2 = getColConfig();
           const order = [...cfg2.order];
           const from = order.indexOf(key2);
           const to = from + delta;
-          if (from < 0 || to < 0 || to >= order.length) return;
+          if (from < 0) return;
+          const bounds = groupBounds(from);
+          if (to < bounds.start || to > bounds.end) return;
           order.splice(from, 1);
           order.splice(to, 0, key2);
           updateColConfig({ order });
           rebuildColPanel(panelEl);
           repaint(origin);
-          for (const r of panelEl.querySelectorAll(".rui-data-grid-col-panel-row")) {
-            if (r.getAttribute("data-col-key") !== key2) continue;
-            r.querySelector(".rui-data-grid-col-panel-handle")?.focus();
-            break;
-          }
+          refocusRow(key2, ".rui-data-grid-col-panel-handle");
         };
+        const visibleCount = cfg0.order.filter((k) => !cfg0.hidden.has(k)).length;
+        let dividerDrawn = false;
         for (const key2 of cfg0.order) {
           const colDef = allCols.find((cd) => cd.key === key2);
           if (!colDef) continue;
           const isHidden = cfg0.hidden.has(key2);
           const isPinnedCol = cfg0.pinned.has(key2);
+          const isLastVisible = !isHidden && visibleCount <= 1;
+          if (!isPinnedCol && !dividerDrawn && cfg0.pinned.size > 0) {
+            dividerDrawn = true;
+            list.append(el("div", {
+              class: "rui-data-grid-col-panel-divider",
+              role: "separator",
+              "aria-label": "Pinned columns above"
+            }));
+          }
           const row = el("div", {
             class: "rui-data-grid-col-panel-row",
-            "data-col-key": key2
+            "data-col-key": key2,
+            "data-pinned": isPinnedCol ? "true" : "false"
           });
           const handle = el("button", {
             type: "button",
@@ -19385,23 +19446,6 @@ const DataGrid = {
             nudgeColumn(key2, delta, ev.currentTarget);
           };
           row.append(handle);
-          const cb = el("input", {
-            type: "checkbox",
-            class: "rui-data-grid-col-panel-cb",
-            checked: isHidden ? null : "",
-            "aria-label": `Show ${colDef.header}`
-          });
-          cb.onclick = (ev) => {
-            ev.stopPropagation();
-            const target2 = ev.currentTarget;
-            const cfg2 = getColConfig();
-            const nextHidden = new Set(cfg2.hidden);
-            if (target2.checked) nextHidden.delete(key2);
-            else nextHidden.add(key2);
-            updateColConfig({ hidden: nextHidden });
-            repaint(target2);
-          };
-          row.append(cb);
           row.append(el("span", {
             class: "rui-data-grid-col-panel-label"
           }, [colDef.header]));
@@ -19422,8 +19466,39 @@ const DataGrid = {
             updateColConfig({ pinned: nextPinned });
             rebuildColPanel(panelEl);
             repaint(ev.currentTarget);
+            refocusRow(key2, ".rui-data-grid-col-panel-pin");
           };
           row.append(pinBtn);
+          const cb = el("input", {
+            type: "checkbox",
+            class: "rui-data-grid-col-panel-cb",
+            checked: isHidden ? null : "",
+            // Disabled rather than silently ignored: a checkbox that does nothing
+            // when clicked reads as broken, whereas a greyed one says why it cannot
+            // move. The title carries the reason for a pointer user.
+            disabled: isLastVisible ? "" : null,
+            title: isLastVisible ? "At least one column must stay visible" : null,
+            "aria-label": `Show ${colDef.header}`
+          });
+          cb.onclick = (ev) => {
+            ev.stopPropagation();
+            const target2 = ev.currentTarget;
+            const cfg2 = getColConfig();
+            const nextHidden = new Set(cfg2.hidden);
+            if (target2.checked) {
+              nextHidden.delete(key2);
+            } else if (cfg2.order.filter((k) => !cfg2.hidden.has(k)).length <= 1) {
+              target2.checked = true;
+              return;
+            } else {
+              nextHidden.add(key2);
+            }
+            updateColConfig({ hidden: nextHidden });
+            rebuildColPanel(panelEl);
+            repaint(target2);
+            refocusRow(key2, ".rui-data-grid-col-panel-cb");
+          };
+          row.append(cb);
           row.onpointerdown = (ev) => {
             if (ev.button !== 0) return;
             const from = ev.target;
@@ -19444,7 +19519,9 @@ const DataGrid = {
               pointerId: ev.pointerId,
               node: node2,
               active: false,
-              lastY: ev.clientY
+              lastY: ev.clientY,
+              groupStart: groupBounds(fromIndex).start,
+              groupEnd: groupBounds(fromIndex).end
             };
             try {
               node2.setPointerCapture(ev.pointerId);
@@ -19488,20 +19565,39 @@ const DataGrid = {
           list.append(row);
         }
         panelEl.append(list);
+        const footer = el("div", { class: "rui-data-grid-col-panel-footer" });
+        footer.append(resetBtn);
+        panelEl.append(footer);
         panelEl.append(el("span", {
           id: reorderHintId,
           class: "rui-data-grid-col-panel-hint"
-        }, ["Press the up and down arrow keys to move this column."]));
+        }, ["Press the up and down arrow keys to move this column within its group."]));
+      };
+      const resolveMenuAnchor = (fallback) => {
+        const base = showMenuButton ? fallback : viewport ?? fallback;
+        if (!columnMenuAnchor) return base;
+        const scope = liveScope(fallback);
+        const root = scope.getRootNode?.();
+        for (const where of [root, scope, typeof document === "undefined" ? null : document]) {
+          if (!where) continue;
+          try {
+            const found = where.querySelector?.(columnMenuAnchor);
+            if (found instanceof HTMLElement) return found;
+          } catch {
+          }
+        }
+        return base;
       };
       const openPanel = (origin) => {
         const live = findLive(origin);
         if (!live.panel || !live.btn) return;
+        reportOpen(true);
         colConfigPanelOpen.set(true);
         live.panel.setAttribute("data-open", "true");
         live.btn.setAttribute("aria-expanded", "true");
         rebuildColPanel(live.panel);
         openFloating(live.panel, {
-          anchor: live.btn,
+          anchor: resolveMenuAnchor(live.btn),
           side: "bottom",
           align: "end",
           offset: 4,
@@ -19510,8 +19606,15 @@ const DataGrid = {
         });
       };
       restoreColMenu = () => {
-        if (!colConfigPanelOpen.get()) return;
         const live = findLive(null);
+        if (!colConfigPanelOpen.get()) {
+          if (live.panel && isFloating(live.panel)) {
+            closeFloating(live.panel);
+            live.panel.setAttribute("data-open", "false");
+            live.btn?.setAttribute("aria-expanded", "false");
+          }
+          return;
+        }
         if (!live.panel || !live.btn) return;
         if (isFloating(live.panel)) updateFloating(live.panel);
         else openPanel(live.btn);
@@ -28207,8 +28310,9 @@ function patchElement(oldEl, newEl) {
   }
   syncAttributes(oldEl, newEl);
   syncEventHandlers(oldEl, newEl);
+  const desiredSelectValue = oldEl instanceof HTMLSelectElement && newEl instanceof HTMLSelectElement ? newEl.value : null;
   reconcileChildren(oldEl, Array.from(newEl.childNodes));
-  syncFormState(oldEl, newEl);
+  syncFormState(oldEl, newEl, desiredSelectValue);
 }
 const FLOATING_OWNED_ATTRS = /* @__PURE__ */ new Set(["popover", "style", "data-floating-side"]);
 const isFloatingPromoted = (el2) => el2.hasAttribute("data-floating-side");
@@ -28251,7 +28355,7 @@ function syncEventHandlers(oldEl, newEl) {
     oldEl[key2] = fresh ?? null;
   }
 }
-function syncFormState(oldEl, newEl) {
+function syncFormState(oldEl, newEl, desiredSelectValue) {
   if (oldEl instanceof HTMLInputElement && newEl instanceof HTMLInputElement) {
     syncInput(oldEl, newEl);
     return;
@@ -28261,8 +28365,9 @@ function syncFormState(oldEl, newEl) {
     return;
   }
   if (oldEl instanceof HTMLSelectElement && newEl instanceof HTMLSelectElement) {
-    if (oldEl.value !== newEl.value) {
-      oldEl.value = newEl.value;
+    const desired = desiredSelectValue ?? newEl.value;
+    if (oldEl.value !== desired) {
+      oldEl.value = desired;
     }
     return;
   }
@@ -35707,7 +35812,7 @@ const componentGroups = [
       '- Build columns using array pluck: `Col("Title", data.rows.title, format?, align?)`.',
       "- For per-row controls inside a Col, use `for (let row of data.rows) { ... }` and reference `row.field` inline.",
       '- `Table(cols, caption?, density?, striped?, sticky?, emptyLabel?)` — pass `density="compact"` for dense data, `sticky=true` to pin the header in a scrolling parent, and `emptyLabel` for the zero-state cell.',
-      '- `DataGrid(cols, rowIds?, caption?, sort, selectedIds, selectable?, page, perPage?, …)` is the advanced Table — adds sortable headers (`sortable=true` on Col), per-column filter chips (`filterable=true`), checkbox row selection bound to `$selectedIds`, sticky header / first column, pagination, and an optional bulk-action toolbar. Set `columnMenu=true` to let users hide / reorder / pin columns (the button overlays the top-right of the header — it takes no column of its own and stays put while the grid scrolls sideways); `resizable=true` for draggable column widths (the first drag pins the columns at their current widths and switches to a fixed layout, so a narrowed column truncates instead of shoving its neighbours);`persistKey="myTable"` to save the layout in localStorage. A small chevron appears in the header band whenever there are columns off-screen left / right — `scrollArrows=false` turns it off. `wrapCells=false` renders single-line cells with ellipsis + hover tooltip. `globalSearch` adds a cross-column search bar. `rowNumbers=true` shows a leading number column. Reach for this whenever a user needs to sort, filter, or page through a list.',
+      '- `DataGrid(cols, rowIds?, caption?, sort, selectedIds, selectable?, page, perPage?, …)` is the advanced Table — adds sortable headers (`sortable=true` on Col), per-column filter chips (`filterable=true`), checkbox row selection bound to `$selectedIds`, sticky header / first column, pagination, and an optional bulk-action toolbar. Set `columnMenu=true` to let users hide / reorder / pin columns (the button overlays the top-right of the header — it takes no column of its own and stays put while the grid scrolls sideways; pinning moves the column to the front of the table and above a divider in the panel, reordering never crosses that divider, and the last visible column cannot be hidden). Bind `columnMenuOpen` + `onColumnMenuOpenChange` and point `columnMenuAnchor` at your own button to open the panel from outside the grid, with `columnMenuButton: false` to drop the in-header icon; `resizable=true` for draggable column widths (the first drag pins the columns at their current widths and switches to a fixed layout, so a narrowed column truncates instead of shoving its neighbours);`persistKey="myTable"` to save the layout in localStorage. A small chevron appears in the header band whenever there are columns off-screen left / right — `scrollArrows=false` turns it off. `wrapCells=false` renders single-line cells with ellipsis + hover tooltip. `globalSearch` adds a cross-column search bar. `rowNumbers=true` shows a leading number column. Reach for this whenever a user needs to sort, filter, or page through a list.',
       "- `CalendarView(value?, month?, events?, view?, firstDay?, onSelect?)` renders a full-month (or week) calendar grid for scheduling apps — distinct from the `DatePicker` input. Bind `value` to a `$variable` for the selected ISO date.",
       "- `ComparisonTable(columns, rows, highlightColumn?)` is the generic counterpart of `PricingTable` — pass rows of `{label, values, hint?, group?}`. Use for feature comparisons, spec sheets, plan grids.",
       "- `InfiniteList(items, onLoadMore?, loading?, hasMore?)` is a scroll-to-load list; the action fires when the sentinel scrolls into view.",
@@ -47611,6 +47716,7 @@ a.rui-card {
  * consistent across themes and platforms. */
 .rui-checkbox input[type="checkbox"],
 .rui-checkbox-item input[type="checkbox"],
+.rui-data-grid-col-panel-cb,
 .rui-radio input[type="radio"] {
   appearance: none;
   -webkit-appearance: none;
@@ -47627,7 +47733,8 @@ a.rui-card {
   transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 .rui-checkbox input[type="checkbox"],
-.rui-checkbox-item input[type="checkbox"] {
+.rui-checkbox-item input[type="checkbox"],
+.rui-data-grid-col-panel-cb {
   border-radius: 5px;
 }
 .rui-radio input[type="radio"] {
@@ -47635,11 +47742,13 @@ a.rui-card {
 }
 .rui-checkbox input[type="checkbox"]:hover,
 .rui-checkbox-item input[type="checkbox"]:hover,
+.rui-data-grid-col-panel-cb:hover:not(:disabled),
 .rui-radio input[type="radio"]:hover {
   border-color: var(--rui-color-primary);
 }
 .rui-checkbox input[type="checkbox"]:focus-visible,
 .rui-checkbox-item input[type="checkbox"]:focus-visible,
+.rui-data-grid-col-panel-cb:focus-visible,
 .rui-radio input[type="radio"]:focus-visible {
   outline: none;
   border-color: var(--rui-color-focus-ring);
@@ -47647,12 +47756,14 @@ a.rui-card {
 }
 .rui-checkbox input[type="checkbox"]:checked,
 .rui-checkbox-item input[type="checkbox"]:checked,
+.rui-data-grid-col-panel-cb:checked,
 .rui-radio input[type="radio"]:checked {
   background: var(--rui-color-primary);
   border-color: var(--rui-color-primary);
 }
 .rui-checkbox input[type="checkbox"]:checked::after,
-.rui-checkbox-item input[type="checkbox"]:checked::after {
+.rui-checkbox-item input[type="checkbox"]:checked::after,
+.rui-data-grid-col-panel-cb:checked::after {
   content: "";
   position: absolute;
   left: 5px;
@@ -51514,8 +51625,11 @@ ${below("xs")} {
   /* Flat surfaces above strip every tile's border, but on a choice card the
      border IS the affordance — it is what says "this is one of a set you pick
      from" and what the selected state changes colour. */
-  border: 2px solid var(--rui-color-border);
+  border: 1px solid var(--rui-color-border);
   border-radius: var(--rui-radius-md);
+}
+:host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"][data-selected="true"] {
+  border-width: 2px;
 }
 :host([data-rui-theme="vision"]) .rui-tile[data-icon-position="end"] .rui-tile-body {
   align-items: flex-start; text-align: left; flex: 1 1 auto; gap: 2px;
@@ -51676,7 +51790,7 @@ ${below("xs")} {
   text-decoration: none;
   line-height: 20px;
 }
-:host([data-rui-theme="vision"]) .rui-action-link::before {
+:host([data-rui-theme="vision"]) .rui-action-link:not(.has-icon)::before {
   content: "";
   display: inline-block;
   width: 0.36em;
@@ -51763,6 +51877,7 @@ ${below("xs")} {
   border-color: var(--rui-color-focus-ring); outline: 1px solid var(--rui-color-focus-ring); box-shadow: none;
 }
 :host([data-rui-theme="vision"]) .rui-search-bar-submit { border-radius: 999px; } /* embeds a real .rui-button-like pill */
+:host([data-rui-theme="vision"]) .rui-number-input-button { background: transparent; }
 :host([data-rui-theme="vision"]) .rui-number-input-button,
 :host([data-rui-theme="vision"]) .rui-password-input-toggle { color: var(--rui-color-link); }
 :host([data-rui-theme="vision"]) .rui-number-input-button:hover:not(:disabled),
@@ -51797,6 +51912,7 @@ ${below("xs")} {
    read differently. Cancel the scale, use the real 17px, and open the gap. */
 :host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"],
 :host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel-cb,
 :host([data-rui-theme="vision"]) .rui-radio input[type="radio"] {
   /* content-box: 17px of box + 2px border each side = a 21px marker, and the
      label sits 32px from its left edge -> an 11px gap. */
@@ -51838,7 +51954,8 @@ ${below("xs")} {
 :host([data-rui-theme="vision"]) .rui-radio-label { font-weight: 400; line-height: 21px; }
 /* the CSS-drawn tick has to be re-centred for the larger, unscaled box */
 :host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:checked::after,
-:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked::after {
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked::after,
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel-cb:checked::after {
   left: 6px; top: 2px; width: 4px; height: 8px; border-width: 0 2px 2px 0;
 }
 /* UI block's radio has no separate centre-dot element at all -- the whole "filled" look
@@ -51850,7 +51967,8 @@ ${below("xs")} {
   content: none;
 }
 :host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"],
-:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"] { border-radius: 4px; }
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel-cb { border-radius: 4px; }
 /* UI block keeps the box TRANSPARENT when checked and draws the fill as two stacked
    inset rings, so a 2px page-coloured gap separates the border from the blue centre:
      .input-checkbox:checked+label::before {
@@ -51861,7 +51979,8 @@ ${below("xs")} {
    single most visible checkbox difference. The tick is the PAGE background colour
    #f4f7fa, not pure white. */
 :host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:checked,
-:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked {
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked,
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel-cb:checked {
   background: transparent; border-color: #095bb1;
   box-shadow: 0 0 0 2px inset #f4f7fa, 0 0 0 10px inset #095bb1;
 }
@@ -51878,7 +51997,8 @@ ${below("xs")} {
   box-shadow: 0 0 0 2px inset #fff, 0 0 0 10px inset #095bb1;
 }
 :host([data-rui-theme="vision"]) .rui-checkbox input[type="checkbox"]:checked::after,
-:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked::after {
+:host([data-rui-theme="vision"]) .rui-checkbox-item input[type="checkbox"]:checked::after,
+:host([data-rui-theme="vision"]) .rui-data-grid-col-panel-cb:checked::after {
   border-color: #f4f7fa;                       /* tick = --default-background-color */
 }
 /* Checked + disabled swaps both rings to inactive neutral -- UI block never just fades it:
@@ -52071,6 +52191,9 @@ ${below("xs")} {
 }
 :host([data-rui-theme="vision"]) .rui-data-grid-table tbody td {
   border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle); color: var(--rui-color-text);
+}
+:host([data-rui-theme="vision"]) .rui-data-grid-table tbody tr:last-child td {
+  border-bottom: none;
 }
 :host([data-rui-theme="vision"]) .rui-data-grid[data-highlight-hover="true"] tbody tr:hover td,
 :host([data-rui-theme="vision"]) .rui-data-grid[data-highlight-hover="true"] tbody tr:hover td[data-pinned="true"] {
@@ -55500,48 +55623,80 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   box-shadow: var(--rui-shadow-lg, 0 4px 16px rgba(0,0,0,0.12));
 }
 .rui-data-grid-col-panel[data-open="true"] { display: flex; flex-direction: column; }
+/* The head is a title + sub-heading block with the close control pinned to the
+   top-right corner, so align-items:flex-start -- centring would drop the x to
+   the middle of a two-line heading. */
 .rui-data-grid-col-panel-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+  gap: 12px;
+  padding: 14px 16px 10px;
 }
+.rui-data-grid-col-panel-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rui-data-grid-col-panel-title {
-  font-weight: 600;
-  font-size: var(--rui-font-size-13);
+  font-weight: 700;
+  font-size: var(--rui-font-size-base);
+  line-height: 1.35;
+}
+.rui-data-grid-col-panel-subtitle {
+  font-weight: 400;
+  font-size: var(--rui-font-size-base);
+  line-height: 1.35;
+  color: var(--rui-color-text);
+}
+/* Reset moved out of the header and under the list: it is the least-used control
+   in the panel and sat next to the close button, where a mis-click threw away a
+   layout instead of dismissing a popup. */
+.rui-data-grid-col-panel-footer {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px 14px;
 }
 .rui-data-grid-col-panel-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: none;
   background: none;
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
-  color: var(--rui-color-primary);
-  padding: 2px 6px;
+  font-size: var(--rui-font-size-base);
+  color: var(--rui-color-link, var(--rui-color-primary));
+  padding: 4px 6px;
+  margin-left: -6px;
   border-radius: var(--rui-radius-sm, 4px);
 }
 .rui-data-grid-col-panel-reset:hover { background: color-mix(in srgb, var(--rui-color-primary) 8%, transparent); }
+.rui-data-grid-col-panel-reset-icon { font-size: var(--rui-font-size-18); }
 .rui-data-grid-col-panel-close {
   border: none;
   background: none;
   cursor: pointer;
-  font-size: 16px;
+  font-size: var(--rui-font-size-24);
   line-height: 1;
-  color: var(--rui-color-text-muted, #888);
-  padding: 2px 4px;
+  color: var(--rui-color-text);
+  padding: 0 2px;
   border-radius: var(--rui-radius-sm, 4px);
   margin-left: 4px;
+  flex-shrink: 0;
 }
 .rui-data-grid-col-panel-close:hover { color: var(--rui-color-text); background: color-mix(in srgb, var(--rui-color-text) 6%, transparent); }
 .rui-data-grid-col-panel-list {
-  padding: 4px 0;
+  padding: 2px 0;
+}
+/* The boundary between pinned and unpinned columns, and a real one: neither a
+   drag nor an arrow key crosses it — only the pin button does. */
+.rui-data-grid-col-panel-divider {
+  height: var(--rui-border-width);
+  background: var(--rui-color-border);
+  margin: 6px 0;
 }
 .rui-data-grid-col-panel-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 12px;
+  padding: 7px 16px;
   cursor: grab;
   transition: background 0.15s;
   user-select: none;
@@ -55575,7 +55730,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-data-grid-col-panel-handle {
   color: var(--rui-color-text-muted);
-  font-size: 14px;
+  font-size: 20px;
   cursor: grab;
   flex: 0 0 auto;
   line-height: 1;
@@ -55615,7 +55770,7 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-data-grid-col-panel-label {
   flex: 1;
-  font-size: var(--rui-font-size-13);
+  font-size: var(--rui-font-size-base);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -55634,11 +55789,34 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
   align-items: center;
   opacity: 0.7;
 }
-.rui-data-grid-col-panel-pin:hover { color: var(--rui-color-primary); opacity: 0.9; }
+.rui-data-grid-col-panel-pin:hover { color: var(--rui-color-primary); opacity: 1; }
+/* Font Awesome Free ships thumbtack in Solid only — there is no outline cut to
+   pair it with — so the pinned/unpinned distinction is carried by weight of
+   colour rather than by two glyphs: a full-strength primary pin against a muted
+   one. Same silhouette, unmistakably different state. */
 .rui-data-grid-col-panel-pin[data-active="true"] {
   color: var(--rui-color-primary);
   opacity: 1;
 }
+.rui-data-grid-col-panel-pin-icon { font-size: var(--rui-font-size-18); }
+/* The last visible column cannot be hidden, and the control says so rather than
+   swallowing the click. */
+.rui-data-grid-col-panel-cb:disabled {
+  cursor: not-allowed;
+  border-color: var(--rui-color-border);
+  opacity: 0.85;
+}
+.rui-data-grid-col-panel-cb:disabled:checked {
+  border-color: var(--rui-color-border);
+  box-shadow: none;
+  background: var(--rui-color-surface-muted);
+}
+.rui-data-grid-col-panel-cb:disabled:checked::after { border-color: var(--rui-color-text-muted); }
+/* columnMenuButton:false hides the TRIGGER, never the wrapper: on the popover
+   path the panel is still a child of that wrapper, so display:none on it took the
+   panel down too -- the menu opened into nothing. The wrapper is absolutely
+   positioned and now empty, so it costs no space either way. */
+.rui-data-grid-col-menu[data-hidden="true"] .rui-data-grid-col-menu-btn { display: none; }
 
 /* DataGrid — column resize handle.
    The visible bar is 3px via ::after, but the click target is 12px wide so the
