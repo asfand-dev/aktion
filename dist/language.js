@@ -5234,6 +5234,7 @@ const toastMembers = [
   method("warning", "warning(message, options?)", '`show` with tone "warning".'),
   method("dismiss", "dismiss(id)", "Remove a single toast by id."),
   method("clear", "clear()", "Remove every toast."),
+  method("configure", "configure(options)", 'Settings for the auto-rendered stack, e.g. { position: "bottom-center" }. Call once at the top level of the program.'),
   prop("items", "Reactive list of live toasts (newest last). Treat as read-only.")
 ];
 const domMembers = [
@@ -8801,35 +8802,49 @@ function withFieldShell(control, props, options = {}) {
   const label = asString(props.label);
   const hint = asString(props.hint);
   const error = asString(props.error);
+  const warning = asString(props.warning);
+  const description = asString(props.description);
   const required = asBoolean(props.required);
-  if (!label && !hint && !error && !required) return control;
+  const optionalText = required ? "" : props.optional === true ? "(optional)" : asString(props.optional);
+  const invalid = asBoolean(props.invalid) || Boolean(error);
+  if (invalid) control.setAttribute("aria-invalid", "true");
+  const authorDescribedBy = asString(props.describedBy).split(/\s+/).filter(Boolean);
+  if (authorDescribedBy.length > 0) mergeDescribedBy(control, authorDescribedBy);
+  if (!label && !hint && !error && !required && !description && !warning && !optionalText) return control;
   const id = asString(props[options.idKey ?? "id"]) || asString(control.getAttribute("id"));
   if (required) control.setAttribute("required", "");
   if (error) control.setAttribute("aria-invalid", "true");
-  const root = el("div", { class: "rui-field", "data-invalid": error ? "true" : null });
+  const root = el("div", {
+    class: "rui-field",
+    "data-invalid": invalid ? "true" : null,
+    "data-warning": !invalid && warning ? "true" : null
+  });
   const requiredMark = () => el("span", { class: "rui-field-required", "aria-hidden": "true" }, ["*"]);
+  const optionalMark = () => el("span", { class: "rui-field-optional" }, [optionalText]);
   const labelHidden = asBoolean(props.labelHidden);
   const labelClass = labelHidden ? "rui-field-label rui-visually-hidden" : "rui-field-label";
   const implicitLabel = !!label && !id;
   if (label && !implicitLabel) {
     const lab = el("label", { class: labelClass, for: id }, [label]);
     if (required) lab.append(requiredMark());
+    else if (optionalText) lab.append(optionalMark());
     root.append(lab);
   }
   const describedBy = [];
-  const message = error ? el("div", { class: "rui-field-error", id: id ? `${id}-error` : null, role: "alert" }, [error]) : hint ? el("div", { class: "rui-field-hint", id: id ? `${id}-hint` : null }, [hint]) : null;
+  const descriptionNode = description ? el("p", { class: "rui-field-description", id: id ? `${id}-description` : null }, [description]) : null;
+  if (descriptionNode && id) describedBy.push(descriptionNode.getAttribute("id"));
+  const message = error ? el("div", { class: "rui-field-error", id: id ? `${id}-error` : null, role: "alert" }, [error]) : warning ? el("div", { class: "rui-field-warning", id: id ? `${id}-warning` : null, role: "status", "aria-live": "polite" }, [warning]) : hint ? el("div", { class: "rui-field-hint", id: id ? `${id}-hint` : null }, [hint]) : null;
   if (message && id) describedBy.push(message.getAttribute("id"));
-  if (describedBy.length) {
-    const existing = (control.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
-    const merged = [.../* @__PURE__ */ new Set([...existing, ...describedBy])];
-    control.setAttribute("aria-describedby", merged.join(" "));
-  }
+  if (describedBy.length) mergeDescribedBy(control, describedBy);
   if (implicitLabel) {
     const lab = el("label", { class: `${labelClass}`.trim(), "data-implicit": "true" }, [label]);
     if (required) lab.append(requiredMark());
+    else if (optionalText) lab.append(optionalMark());
+    if (descriptionNode) lab.append(descriptionNode);
     lab.append(control);
     root.append(lab);
   } else {
+    if (descriptionNode) root.append(descriptionNode);
     root.append(control);
   }
   if (message) {
@@ -8838,17 +8853,39 @@ function withFieldShell(control, props, options = {}) {
   }
   return root;
 }
+function mergeDescribedBy(control, ids) {
+  const existing = (control.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
+  const merged = [.../* @__PURE__ */ new Set([...existing, ...ids])];
+  control.setAttribute("aria-describedby", merged.join(" "));
+}
 const FIELD_SHELL_PROPS = [
   { name: "disabled", type: "boolean", optional: true, description: "Disable the control (non-editable, skipped by tab order)" },
   { name: "label", type: "string", optional: true, description: "Field label rendered above the control" },
   { name: "hint", type: "string", optional: true, description: "Helper text rendered below the control" },
-  { name: "error", type: "string", optional: true, description: "Validation error rendered below the control (marks it invalid)" },
+  { name: "error", type: "string", optional: true, description: "Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint`" },
+  { name: "warning", type: "string", optional: true, description: "Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint`" },
+  { name: "description", type: "string", optional: true, description: "Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it" },
   { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*` and the `required` attribute)" },
+  { name: "optional", type: "boolean | string", optional: true, description: 'Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set' },
+  { name: "invalid", type: "boolean", optional: true, aliases: ["ariaInvalid"], description: "Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary" },
+  { name: "describedBy", type: "string", optional: true, aliases: ["ariaDescribedBy"], description: "Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message" },
   { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves the control (validate-on-blur, `form.touch`)" },
   { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
   { name: "name", type: "string", optional: true, description: "Form field name submitted to the server (defaults to `id`)" },
   { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context" }
 ];
+const SHELL_LATER_PROP_NAMES = [
+  "description",
+  "warning",
+  "optional",
+  "invalid",
+  "describedBy"
+];
+function fieldShellExtraProps(exclude = []) {
+  return FIELD_SHELL_PROPS.filter(
+    (prop2) => SHELL_LATER_PROP_NAMES.includes(prop2.name) && !exclude.includes(prop2.name)
+  );
+}
 function attachFocusHandlers(control, props, helpers, getValue = (node) => node.value) {
   const chain = (key, handler) => {
     const existing = control[key];
@@ -9386,7 +9423,8 @@ const Select = {
     // Appended, not inserted: `value` is read from positional slot 4 by
     // `bindToStateAtArg`, so anything placed ahead of it silently breaks
     // two-way binding at every existing call site.
-    { name: "emptyLabel", type: "string", optional: true, description: 'Shown in place of the options when there are none — the difference between "this list is genuinely empty" and "something failed to load". Defaults to "No options"' }
+    { name: "emptyLabel", type: "string", optional: true, description: 'Shown in place of the options when there are none — the difference between "this list is genuinely empty" and "something failed to load". Defaults to "No options"' },
+    ...fieldShellExtraProps()
   ],
   render: (node, props, helpers) => {
     if (asBoolean(props.searchable) || props.onSearch != null) {
@@ -9469,7 +9507,8 @@ const Checkbox = {
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the control (marks it invalid)" },
     { name: "hint", type: "string", optional: true, description: "Helper text rendered below the control" },
     { name: "indeterminate", type: "boolean", optional: true, description: 'Tri-state "partially checked" dash (a parent of a partly-selected list)' },
-    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a checkbox in a table cell whose column header already carries the name" }
+    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a checkbox in a table cell whose column header already carries the name" },
+    ...fieldShellExtraProps(["description"])
   ],
   render: (node, props, helpers) => {
     const disabled = asBoolean(props.disabled);
@@ -9516,7 +9555,7 @@ const Checkbox = {
     } else {
       wrapper.append(input, labelSpan);
     }
-    const shell = withFieldShell(wrapper, { ...props, label: null });
+    const shell = withFieldShell(wrapper, { ...props, label: null, description: null });
     relocateControlAria(wrapper, input);
     return shell;
   }
@@ -9571,7 +9610,8 @@ const CheckBoxGroup = {
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the group (marks it invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark the group required (adds a `*` to the heading)" },
     { name: "disabled", type: "boolean", optional: true, description: "Lock every item in the group" },
-    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" }
+    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
+    ...fieldShellExtraProps()
   ],
   render: (node, props, helpers) => {
     const groupName = asString(props.name);
@@ -9674,7 +9714,8 @@ const Radio = {
     { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
     // Declared last: the controlled `value` channel reads its state ref from
     // argMeta slot 2, so nothing may be inserted ahead of it.
-    { name: "slots", type: "Node[]", optional: true, description: "Per-option trailing content, aligned by index with `items` — rendered beside the option, outside its `<label>`, so a control in the slot stays independently clickable. Use `null` for an option that has none." }
+    { name: "slots", type: "Node[]", optional: true, description: "Per-option trailing content, aligned by index with `items` — rendered beside the option, outside its `<label>`, so a control in the slot stays independently clickable. Use `null` for an option that has none." },
+    ...fieldShellExtraProps()
   ],
   render: (node, props, helpers) => {
     const groupName = asString(props.id);
@@ -9762,35 +9803,58 @@ const FormControl = {
     { name: "hint", type: "string", optional: true },
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the field (marks the control invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*` and the `required` attribute)" },
-    { name: "for", type: "string", optional: true, aliases: ["htmlFor"], description: "Id of the control the label points at — only needed when the nested field has no `id` of its own" }
+    { name: "for", type: "string", optional: true, aliases: ["htmlFor"], description: "Id of the control the label points at — only needed when the nested field has no `id` of its own" },
+    // The same five the field shell grew, implemented here rather than spread:
+    // this component wires its own label/message and does not call
+    // `withFieldShell`, so a spread would declare props nothing reads.
+    ...fieldShellExtraProps()
   ],
   render: (_node, props, helpers) => {
     const labelText = asString(props.label);
     const hint = asString(props.hint);
     const error = asString(props.error);
+    const warning = asString(props.warning);
+    const descriptionNode = isComponentNodeLike(props.description) ? helpers.renderNode(props.description) : null;
+    const description = descriptionNode ? "" : asString(props.description);
     const required = asBoolean(props.required);
+    const invalid = asBoolean(props.invalid) || Boolean(error);
+    const optionalText = required ? "" : props.optional === true ? "(optional)" : asString(props.optional);
     const root = el("div", {
       class: "rui-form-control",
-      "data-invalid": error ? "true" : null
+      "data-invalid": invalid ? "true" : null,
+      "data-warning": !invalid && warning ? "true" : null
     });
     const fieldEl = helpers.renderNode(props.field);
     const control = fieldEl instanceof HTMLElement ? fieldEl.matches("input, select, textarea") ? fieldEl : fieldEl.querySelector("input, select, textarea, .rui-combobox-trigger, .rui-multiselect-trigger") : null;
     const controlId = asString(props.for) || control?.getAttribute("id") || "";
     const labelEl = el("label", { class: "rui-form-label", for: controlId || null }, [labelText]);
     if (required) labelEl.append(el("span", { class: "rui-field-required", "aria-hidden": "true" }, ["*"]));
-    root.append(labelEl, fieldEl);
-    let describedBy = "";
-    if (error) {
-      describedBy = controlId ? `${controlId}-error` : "";
-      root.append(el("div", { class: "rui-field-error", id: describedBy || null, role: "alert" }, [error]));
-    } else if (hint) {
-      describedBy = controlId ? `${controlId}-hint` : "";
-      root.append(el("p", { class: "rui-form-hint", id: describedBy || null }, [hint]));
+    else if (optionalText) labelEl.append(el("span", { class: "rui-field-optional" }, [optionalText]));
+    root.append(labelEl);
+    const describedByIds = [];
+    if (description || descriptionNode) {
+      const descriptionId = controlId ? `${controlId}-description` : "";
+      const wrap = el("p", { class: "rui-field-description", id: descriptionId || null });
+      if (descriptionNode) wrap.append(descriptionNode);
+      else wrap.append(document.createTextNode(description));
+      root.append(wrap);
+      if (descriptionId) describedByIds.push(descriptionId);
+    }
+    root.append(fieldEl);
+    const message = error ? { node: el("div", { class: "rui-field-error", id: controlId ? `${controlId}-error` : null, role: "alert" }, [error]), id: controlId ? `${controlId}-error` : "" } : warning ? { node: el("div", { class: "rui-field-warning", id: controlId ? `${controlId}-warning` : null, role: "status", "aria-live": "polite" }, [warning]), id: controlId ? `${controlId}-warning` : "" } : hint ? { node: el("p", { class: "rui-form-hint", id: controlId ? `${controlId}-hint` : null }, [hint]), id: controlId ? `${controlId}-hint` : "" } : null;
+    if (message) {
+      root.append(message.node);
+      if (message.id) describedByIds.push(message.id);
     }
     if (control) {
       if (required) control.setAttribute("required", "");
-      if (error) control.setAttribute("aria-invalid", "true");
-      if (describedBy) control.setAttribute("aria-describedby", describedBy);
+      if (invalid) control.setAttribute("aria-invalid", "true");
+      const authorIds = asString(props.describedBy).split(/\s+/).filter(Boolean);
+      const allIds = [...describedByIds, ...authorIds];
+      if (allIds.length > 0) {
+        const existing = (control.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
+        control.setAttribute("aria-describedby", [.../* @__PURE__ */ new Set([...existing, ...allIds])].join(" "));
+      }
       if (!controlId && labelText) control.setAttribute("aria-label", labelText);
       else if (controlId && labelText && !control.matches("input, select, textarea, button")) {
         labelEl.setAttribute("id", `${controlId}-label`);
@@ -9948,7 +10012,8 @@ const Slider = {
     { name: "format", type: "string", optional: true, description: 'Display template — `{value}` is replaced by the number (e.g. "${value}"). Without a placeholder it behaves like `suffix`.' },
     { name: "hint", type: "string", optional: true, description: "Helper text rendered below the slider" },
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the slider (marks it invalid)" },
-    { name: "marks", type: "any[]", optional: true, description: "Tick scale: numbers (`[0, 50, 100]`) or `{value, label}` objects. A mark's label becomes the readout and the announced value when the slider is on it." }
+    { name: "marks", type: "any[]", optional: true, description: "Tick scale: numbers (`[0, 50, 100]`) or `{value, label}` objects. A mark's label becomes the readout and the announced value when the slider is on it." },
+    ...fieldShellExtraProps()
   ],
   render: (node, props, helpers) => {
     const label = asString(props.label);
@@ -10170,7 +10235,8 @@ const DatePicker = {
     { name: "required", type: "boolean", optional: true, description: "Mark the field required" },
     { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves the control (validate-on-blur)" },
     { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
-    { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) the selected date is echoed in beneath the field, and the language the value is announced in. Same `locale` channel as `Table`/`Col`, so a filter and the report it filters read alike. Bound values stay ISO `YYYY-MM-DD`." }
+    { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) the selected date is echoed in beneath the field, and the language the value is announced in. Same `locale` channel as `Table`/`Col`, so a filter and the report it filters read alike. Bound values stay ISO `YYYY-MM-DD`." },
+    ...fieldShellExtraProps()
   ],
   render: (node, props, helpers) => {
     const label = asString(props.label);
@@ -10487,7 +10553,8 @@ const Combobox = {
     { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the selected value when focus leaves the control (validate-on-blur)" },
     { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
     { name: "creatable", type: "boolean", optional: true, description: 'Offer the typed text itself as an option when it matches nothing ("Create «acme-corp»") so a value outside `items` can be selected' },
-    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" }
+    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
+    ...fieldShellExtraProps()
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -10796,7 +10863,8 @@ const MultiSelect = {
     { name: "onSearch", type: "callable", optional: true, description: "Called with the query ~200ms after typing stops, for server-side search; disables local filtering" },
     { name: "loading", type: "boolean", optional: true, description: 'Matches are being fetched — shows "Loading…" instead of the (lying) empty label' },
     { name: "creatable", type: "boolean", optional: true, description: 'Offer the typed text itself as an option when it matches nothing ("Create «backend»") so a tag outside `items` can be added' },
-    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" }
+    { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
+    ...fieldShellExtraProps()
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -11161,7 +11229,8 @@ const DateRangePicker = {
     { name: "required", type: "boolean", optional: true, description: "Mark both endpoints required" },
     { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves an endpoint (validate-on-blur)" },
     { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when an endpoint gains focus" },
-    { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`) the chosen period is echoed in beneath the pair, and the language both endpoints are announced in. Same `locale` channel as `Table`/`Col`. Bound values stay ISO `YYYY-MM-DD`." }
+    { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`) the chosen period is echoed in beneath the pair, and the language both endpoints are announced in. Same `locale` channel as `Table`/`Col`. Bound values stay ISO `YYYY-MM-DD`." },
+    ...fieldShellExtraProps()
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -15077,22 +15146,28 @@ const ActionLink = {
     { name: "onClick", type: "callable", aliases: ["action", "onclick"] },
     { name: "disabled", type: "boolean", optional: true, description: "Make the action inert, e.g. while a Retry is already running" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon shown with the label" },
-    { name: "iconPosition", type: "string", optional: true, enum: ["start", "end"], description: "Which side the icon sits on (default `start`)" }
+    { name: "iconPosition", type: "string", optional: true, enum: ["start", "end"], description: "Which side the icon sits on (default `start`)" },
+    { name: "ariaLabel", type: "string", optional: true, description: 'Accessible name, when the visible label alone does not identify the target — e.g. one "Rebuild" link per table row, where every link would otherwise be announced identically' }
   ],
   render: (_node, props, helpers) => {
     const disabled = asBoolean(props.disabled);
+    const ariaLabel = asString(props.ariaLabel);
+    const iconAtEnd = asString(props.iconPosition, "start") === "end";
     const button = el("button", {
       type: "button",
       class: "rui-action-link" + (props.icon ? " has-icon" : ""),
       disabled,
-      style: "background:none;border:0;padding:0;font:inherit;text-align:inherit"
+      "aria-label": ariaLabel || null,
+      // `data-icon-position` rather than a second class, matching `Button`.
+      "data-icon-position": props.icon ? iconAtEnd ? "end" : "start" : null,
+      // The four longhands, NOT the `font` shorthand. `font: inherit` also resets
+      // `line-height` — and being inline it beat every stylesheet, so a theme that
+      // set a line-height on this control (vision does: 20px) had a rule that
+      // could never fire. These four inherit what the shorthand did without
+      // touching the fifth property nobody meant to set.
+      style: "background:none;border:0;padding:0;text-align:inherit;font-family:inherit;font-size:inherit;font-weight:inherit;font-style:inherit"
     });
     const iconNode = renderIcon(props.icon, { className: "rui-action-link-icon" });
-    const iconAtEnd = asString(props.iconPosition, "start") === "end";
-    if (iconNode) {
-      if (iconAtEnd) iconNode.style.marginInlineStart = "0.35em";
-      else iconNode.style.marginInlineEnd = "0.35em";
-    }
     if (iconNode && !iconAtEnd) button.append(iconNode);
     button.append(document.createTextNode(asString(props.label)));
     if (iconNode && iconAtEnd) button.append(iconNode);
@@ -21507,7 +21582,8 @@ const RichTextEditor = {
     { name: "label", type: "string", optional: true, description: "Field label rendered above the editor" },
     { name: "hint", type: "string", optional: true, aliases: ["helperText"], description: "Helper text rendered below the editor" },
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the editor (marks it invalid)" },
-    { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*`)" }
+    { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*`)" },
+    ...fieldShellExtraProps()
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -21748,7 +21824,8 @@ const CodeEditor = {
     { name: "label", type: "string", optional: true, description: "Field label rendered above the editor" },
     { name: "hint", type: "string", optional: true, aliases: ["helperText"], description: "Helper text rendered below the editor" },
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the editor (marks it invalid)" },
-    { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*`)" }
+    { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*`)" },
+    ...fieldShellExtraProps()
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -22355,7 +22432,8 @@ const ColorPicker = {
     { name: "name", type: "string", optional: true, description: "Form field name (defaults to `id`)" },
     { name: "hint", type: "string", optional: true, aliases: ["helperText"], description: "Helper text rendered below the control" },
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the control (marks it invalid)" },
-    { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*`)" }
+    { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*`)" },
+    ...fieldShellExtraProps()
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -24360,6 +24438,74 @@ const MultiStepForm = {
       role: "status",
       "aria-live": "polite"
     }, [`Step ${current + 1} of ${total}: ${active?.title || ""}`]));
+    return root;
+  }
+};
+function readRequirements(raw) {
+  return asArray(raw).map((entry) => {
+    if (typeof entry === "string") return entry ? { label: entry, met: null } : null;
+    if (entry && typeof entry === "object") {
+      const r = entry;
+      const label = asString(r.label ?? r.text);
+      if (!label) return null;
+      const met = r.met === void 0 || r.met === null ? null : r.met === true;
+      return { label, met };
+    }
+    return null;
+  }).filter((r) => r !== null);
+}
+const RequirementList = {
+  name: "RequirementList",
+  description: 'Checklist of rules a value has to satisfy, each marked met (check), unmet (cross) or not yet checked (dot) — password requirements, naming rules, policy checks. Pass `items` as strings or `{label, met}` objects, where `met` omitted means "not evaluated yet" and renders neutral, so an untouched field does not accuse the reader of breaking rules. Pair it with a field\'s `invalid` and `describedBy` props to keep the border red and the list as the explanation, instead of repeating the rules in an `error` string. Set `announce` to have changes read out politely as the value is edited.',
+  props: [
+    { name: "items", type: "any[]", positional: true, aliases: ["rules", "requirements"], description: "Rules: strings, or `{label, met}` where `met` is true / false / omitted" },
+    { name: "title", type: "string", optional: true, description: 'Heading above the list (e.g. "Your password must:")' },
+    { name: "pending", type: "boolean", optional: true, description: "Force every row neutral regardless of its `met` — for a field the user has not touched yet" },
+    { name: "announce", type: "boolean", optional: true, description: "Announce progress to assistive tech as rows change (a polite count, not the rule text). Off by default, because a list that talks on every keystroke is worse than one that stays quiet" },
+    { name: "announceText", type: "string", optional: true, description: 'What `announce` says; `{met}` and `{total}` are substituted (default "{met} of {total} requirements met")' },
+    { name: "metLabel", type: "string", optional: true, description: 'Screen-reader prefix for a met row (default "Met") — colour and glyph alone would not say which is which' },
+    { name: "unmetLabel", type: "string", optional: true, description: 'Screen-reader prefix for an unmet row (default "Not met")' }
+  ],
+  render: (_node, props) => {
+    const items = readRequirements(props.items);
+    const pending = asBoolean(props.pending);
+    const root = el("div", {
+      class: "rui-requirement-list",
+      "data-pending": pending ? "true" : null
+    });
+    const title = asString(props.title);
+    if (title) root.append(el("div", { class: "rui-requirement-list-title" }, [title]));
+    if (items.length === 0) return root;
+    const metLabel = asString(props.metLabel) || "Met";
+    const unmetLabel = asString(props.unmetLabel) || "Not met";
+    const list = el("ul", { class: "rui-requirement-list-items" });
+    let metCount = 0;
+    for (const item of items) {
+      const state = pending || item.met === null ? "pending" : item.met ? "true" : "false";
+      if (state === "true") metCount += 1;
+      const row = el("li", { class: "rui-requirement", "data-met": state });
+      const icon = renderIcon(
+        state === "true" ? "circle-check" : state === "false" ? "circle-xmark" : "circle",
+        { className: "rui-requirement-icon" }
+      );
+      if (icon) row.append(icon);
+      if (state !== "pending") {
+        row.append(el("span", { class: "rui-visually-hidden" }, [`${state === "true" ? metLabel : unmetLabel}: `]));
+      }
+      row.append(el("span", { class: "rui-requirement-text" }, [item.label]));
+      list.append(row);
+    }
+    root.append(list);
+    if (asBoolean(props.announce)) {
+      const template = asString(props.announceText, "{met} of {total} requirements met");
+      const text = template.split("{met}").join(String(metCount)).split("{total}").join(String(items.length));
+      root.append(el("div", {
+        class: "rui-requirement-list-status rui-visually-hidden",
+        role: "status",
+        "aria-live": "polite",
+        "aria-atomic": "true"
+      }, [text]));
+    }
     return root;
   }
 };
@@ -34643,6 +34789,7 @@ const components = [
   FormSection,
   FieldSet,
   ValidationSummary,
+  RequirementList,
   MultiStepForm,
   // Advanced patterns + state cards
   InboxPanel,
@@ -34682,9 +34829,10 @@ const components = [
   // Behavioural & styling wrappers.
   // `Link` is deliberately NOT repeated here: it is already registered above,
   // with the Content primitives. Registering it twice made `components.length`
-  // (282) disagree with the number of distinct component names (281), which in
-  // turn made every count derived from the array — the prompt, the skill
-  // reference, the extension's description — off by one.
+  // one higher than the number of DISTINCT component names, which in turn made
+  // every count derived from the array — the prompt, the skill reference, the
+  // extension's description — off by one. (No literal counts in this comment:
+  // they went stale the first time a component was added.)
   OnClick,
   OnMouse,
   OnKeyboard,
@@ -34892,6 +35040,7 @@ const componentGroups = [
       "FormSection",
       "FieldSet",
       "ValidationSummary",
+      "RequirementList",
       "Input",
       "TextArea",
       "PasswordInput",
@@ -34951,6 +35100,7 @@ const componentGroups = [
       "- `FormSection(label, children, helper?)` is the canonical wrapper for related fields. Reach for it INSTEAD of nesting fields in Card + SectionHeader by hand.",
       "- `FieldSet(legend, children, helper?)` is the accessible `<fieldset>` for radio/checkbox groups; prefer `FormSection` for purely visual grouping.",
       "- `ValidationSummary(errors, title?)` renders an aggregate error panel at the top of the form. Pass `errors` as `{label, message}` objects.",
+      "- `RequirementList(items)` marks each rule a value must satisfy met / unmet / not-yet-checked. Reach for it INSTEAD of restating every rule inside one `error` string — pair it with the field's `invalid` and `describedBy` so the border still reddens and the list is the explanation.",
       '- `PasswordInput(id, value?, placeholder?, strengthMeter?)` adds a show/hide toggle and an optional 4-step strength meter — prefer over `Input(type="password")` for sign-up flows.',
       "- `PinInput(id, length?, value?, type?)` renders per-digit code entry for 2FA / SMS verification (use `length=6` for OTP codes).",
       "- `TagInput(id, value?, placeholder?)` lets the user add comma- or Enter-separated chips bound to a `$variable` array.",

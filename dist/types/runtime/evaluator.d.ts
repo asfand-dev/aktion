@@ -446,6 +446,11 @@ export interface EvaluationContext {
      */
     toastItemsRead?: boolean;
     /**
+     * Corner the auto-rendered toast stack pins to, set by `$toast.configure`.
+     * Absent leaves the `Toasts` component's own default (`top-right`).
+     */
+    toastPosition?: string;
+    /**
      * Lazily-created singleton backing the reserved `$dom` observer namespace
      * (`$dom.onResize`, `$dom.onIntersect`, `$dom.measure`, …). Every observer
      * it creates registers on `disposers`, so all are torn down on replan.

@@ -10,3 +10,4 @@ export declare const FormSection: ComponentSpec;
 export declare const FieldSet: ComponentSpec;
 export declare const ValidationSummary: ComponentSpec;
 export declare const MultiStepForm: ComponentSpec;
+export declare const RequirementList: ComponentSpec;

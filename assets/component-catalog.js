@@ -86,6 +86,7 @@ export const SUMMARIES = {
   "FormSection": "Groups related fields under a small heading with optional explanatory helper text.",
   "FieldSet": "Wraps a radio or checkbox set in a native fieldset so screen readers announce the group.",
   "ValidationSummary": "Lists every error in one panel at the top of a form, each linking to the field it broke.",
+  "RequirementList": "Marks each rule a value has to satisfy as met, unmet, or not yet checked \u2014 password requirements, naming rules.",
   "Input": "Single-line text field for names, emails, numbers and URLs — the everyday form control.",
   "TextArea": "Multi-line box for notes, descriptions and comments that need more than one row.",
   "PasswordInput": "Password field with a show/hide eye toggle and an optional strength meter.",
@@ -370,6 +371,7 @@ export const TAGS = {
   "FormSection": ["group", "section", "heading", "related", "helper", "subsection"],
   "FieldSet": ["legend", "group", "accessibility", "radio", "checkbox", "a11y"],
   "ValidationSummary": ["errors", "summary", "validation", "panel", "alert", "submit"],
+  "RequirementList": ["requirements", "rules", "checklist", "password", "policy", "criteria", "validation", "met"],
   "Input": ["text", "textbox", "field", "email", "entry", "typing"],
   "TextArea": ["multiline", "textbox", "notes", "comment", "description", "rows"],
   "PasswordInput": ["secret", "login", "signup", "strength", "reveal", "credentials"],
@@ -1007,6 +1009,19 @@ $app(Form("profile", { buttons: submit, fields: [
   ],
   { title: "Please fix the following before continuing" }
 ))`,
+  "RequirementList": `$password = "hunter"
+function rules(value) {
+  return [
+    {label: "At least 8 characters",  met: value.length >= 8},
+    {label: "One uppercase letter",   met: value !== value.toLowerCase()},
+    {label: "One digit",              met: /[0-9]/.test(value)},
+    {label: "No spaces",              met: !value.includes(" ")}
+  ]
+}
+$app(Stack([
+  Input("pw", { label: "Password", value: $password }),
+  RequirementList(rules($password), { title: "Your password must:" })
+], { gap: "md" }))`,
   "Input": `$name = ""
 $email = ""
 $app(Stack([
