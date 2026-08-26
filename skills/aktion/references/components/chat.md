@@ -82,7 +82,7 @@ Single follow-up item.
 ### ActionLink
 
 ```
-ActionLink(label, onClick, disabled?, icon?, iconPosition?)
+ActionLink(label, onClick, disabled?, icon?, iconPosition?, ariaLabel?)
 ```
 
 Inline link that runs an action when clicked instead of navigating. `disabled` makes it inert while the work is in flight; `icon` adds a glyph before the label (or after it with `iconPosition: "end"`).
@@ -94,6 +94,7 @@ Inline link that runs an action when clicked instead of navigating. `disabled` m
 | `disabled` | `boolean` | no | Make the action inert, e.g. while a Retry is already running |
 | `icon` | `string` | no | Font Awesome icon shown with the label |
 | `iconPosition` | `"start"` \| `"end"` | no | Which side the icon sits on (default `start`) |
+| `ariaLabel` | `string` | no | Accessible name, when the visible label alone does not identify the target — e.g. one "Rebuild" link per table row, where every link would otherwise be announced identically |
 
 ### ChatBubble
 

@@ -40,7 +40,7 @@ for (const [path, script] of [
   }
 }
 
-const { linkProgram, validateProgramSchema, defaultLibrary, getLintWarnings, printProgram } =
+const { linkProgram, validateProgramSchema, defaultLibrary, getLintWarnings } =
   await import(pathToFileURL(bundle).href);
 const { createNodeResolver, loadAktionConfig, mergeResolveOptions } = await import(
   pathToFileURL(pluginBundle).href
@@ -127,19 +127,46 @@ if (result.program) {
     report(e.line, "error", e.message);
   }
 
-  // The lint pass takes source, not a Program, so run it on the LINKED source —
-  // that is the text whose component calls and bindings actually resolve. Its
-  // line numbers refer to the merged program, so they are reported with the
-  // module-local names the linker rewrote, not the author's original positions.
-  let linkedSource = null;
-  try {
-    linkedSource = printProgram(result.program);
-  } catch {
-    linkedSource = entrySource;
-  }
+  // The lint pass takes SOURCE, not a Program — so it runs over the entry and
+  // every module the linker loaded, each read from its own file.
+  //
+  // It used to run over `printProgram(result.program)` instead, and that was
+  // silently vacuous. Three things went wrong at once, and each on its own was
+  // enough to swallow every finding in every imported module:
+  //
+  //   1. the printed text does not re-parse — the formatter emits object
+  //      shorthand (`{state}`) where the parser demands `key: value`;
+  //   2. `getLintWarnings` returns `[]` for source it cannot parse rather than
+  //      reporting that it could not, so (1) reads as "nothing to report";
+  //   3. `await` is printed as the internal marker `@__rui_await__(…)`, which no
+  //      lint rule matches — so even a clean re-parse would miss the one warning
+  //      that fires most often in real code.
+  //
+  // Linting the real files is better than fixing the round-trip anyway: the line
+  // numbers point at what the author wrote, and the message can name the file.
+  const linted = new Set();
+  const lintSource = (path, source) => {
+    if (linted.has(path)) return;
+    linted.add(path);
+    const where = path === entryPath ? "" : `${path}: `;
+    for (const w of getLintWarnings(source, defaultLibrary)) {
+      report(w.line, "warning", `${where}${w.message}`);
+    }
+  };
 
-  for (const w of getLintWarnings(linkedSource, defaultLibrary)) {
-    report(w.line, "warning", w.message);
+  lintSource(entryPath, entrySource);
+  for (const dep of result.dependencies ?? []) {
+    let source;
+    try {
+      source = readFileSync(dep, "utf8");
+    } catch {
+      // The linker already resolved and read it, so a failure here is a race,
+      // not a missing file. Reported rather than skipped: a module that cannot be
+      // re-read is a module nothing linted.
+      report(0, "error", `${dep}: could not be re-read for linting`);
+      continue;
+    }
+    lintSource(dep, source);
   }
 }
 

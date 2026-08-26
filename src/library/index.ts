@@ -65,7 +65,7 @@ import {
 import {
   PinInput, PasswordInput, TagInput, MentionInput,
   TimePicker, DateTimePicker, MaskedInput,
-  FormSection, FieldSet, ValidationSummary, MultiStepForm,
+  FormSection, FieldSet, ValidationSummary, RequirementList, MultiStepForm,
 } from "./components/advanced-forms.js";
 import {
   InboxPanel, OnboardingChecklist, LoadingState, ErrorState, SuccessState,
@@ -153,7 +153,7 @@ const components: ComponentSpec[] = [
   // Advanced forms
   PinInput, PasswordInput, TagInput, MentionInput,
   TimePicker, DateTimePicker, MaskedInput,
-  FormSection, FieldSet, ValidationSummary, MultiStepForm,
+  FormSection, FieldSet, ValidationSummary, RequirementList, MultiStepForm,
   // Advanced patterns + state cards
   InboxPanel, OnboardingChecklist, LoadingState, ErrorState, SuccessState,
   Tour, Spotlight, Sticky, ResizablePanels, MasonryGrid, Drawer, TopBar,
@@ -166,9 +166,10 @@ const components: ComponentSpec[] = [
   // Behavioural & styling wrappers.
   // `Link` is deliberately NOT repeated here: it is already registered above,
   // with the Content primitives. Registering it twice made `components.length`
-  // (282) disagree with the number of distinct component names (281), which in
-  // turn made every count derived from the array — the prompt, the skill
-  // reference, the extension's description — off by one.
+  // one higher than the number of DISTINCT component names, which in turn made
+  // every count derived from the array — the prompt, the skill reference, the
+  // extension's description — off by one. (No literal counts in this comment:
+  // they went stale the first time a component was added.)
   OnClick, OnMouse, OnKeyboard, OnFocus, OnIntersect, OnMount, Css,
   // Marketing / landing / utility composites (suggestions-global Parts II, VIII)
   GradientText, Display, Heading, Eyebrow, Section, Overlay, OverlayItem,
@@ -258,7 +259,7 @@ const componentGroups: ComponentGroup[] = [
   {
     name: "Forms",
     components: [
-      "Form", "FormControl", "FormSection", "FieldSet", "ValidationSummary",
+      "Form", "FormControl", "FormSection", "FieldSet", "ValidationSummary", "RequirementList",
       "Input", "TextArea", "PasswordInput", "MaskedInput", "MentionInput", "TagInput",
       "Select", "SelectItem", "Combobox", "MultiSelect",
       "Checkbox", "CheckBoxGroup", "CheckBoxItem", "Radio", "Switch",
@@ -290,6 +291,7 @@ const componentGroups: ComponentGroup[] = [
       "- `FormSection(label, children, helper?)` is the canonical wrapper for related fields. Reach for it INSTEAD of nesting fields in Card + SectionHeader by hand.",
       "- `FieldSet(legend, children, helper?)` is the accessible `<fieldset>` for radio/checkbox groups; prefer `FormSection` for purely visual grouping.",
       "- `ValidationSummary(errors, title?)` renders an aggregate error panel at the top of the form. Pass `errors` as `{label, message}` objects.",
+      "- `RequirementList(items)` marks each rule a value must satisfy met / unmet / not-yet-checked. Reach for it INSTEAD of restating every rule inside one `error` string — pair it with the field's `invalid` and `describedBy` so the border still reddens and the list is the explanation.",
       "- `PasswordInput(id, value?, placeholder?, strengthMeter?)` adds a show/hide toggle and an optional 4-step strength meter — prefer over `Input(type=\"password\")` for sign-up flows.",
       "- `PinInput(id, length?, value?, type?)` renders per-digit code entry for 2FA / SMS verification (use `length=6` for OTP codes).",
       "- `TagInput(id, value?, placeholder?)` lets the user add comma- or Enter-separated chips bound to a `$variable` array.",

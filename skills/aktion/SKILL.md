@@ -1,6 +1,6 @@
 ---
 name: aktion
-description: Build applications in the Aktion DSL (.aktion files) — dashboards, CRUD apps, settings consoles, inboxes, admin panels, multi-page sites, landing pages, chat UIs. Use when authoring or editing .aktion source, or when a request involves $app, $http, $query, $router, $store, $form, $theme, $effect, or the Aktion component library. Covers the language, the 281-component catalogue, layout density, theming, routing, data fetching, and the mistakes the schema validator cannot catch. Not for host-page integration (embedding the <aktion-app> element, framework wiring, CDN setup) — that is README.md's job.
+description: Build applications in the Aktion DSL (.aktion files) — dashboards, CRUD apps, settings consoles, inboxes, admin panels, multi-page sites, landing pages, chat UIs. Use when authoring or editing .aktion source, or when a request involves $app, $http, $query, $router, $store, $form, $theme, $effect, or the Aktion component library. Covers the language, the 282-component catalogue, layout density, theming, routing, data fetching, and the mistakes the schema validator cannot catch. Not for host-page integration (embedding the <aktion-app> element, framework wiring, CDN setup) — that is README.md's job.
 license: MIT
 ---
 
@@ -15,7 +15,7 @@ Two things make authoring Aktion different from authoring React:
 
 1. **It streams.** Statements commit as they arrive, top to bottom. Declare the
    shell first and let details fill in.
-2. **The component library is closed and opinionated.** 281 components cover
+2. **The component library is closed and opinionated.** 282 components cover
    nearly every UI idiom, and reaching for the right composite is worth more than
    any amount of hand-composition. A prop that is not in the schema is a hard
    error, not a no-op.

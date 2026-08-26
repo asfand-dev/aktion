@@ -22,7 +22,7 @@ between similar components, which the prop tables below cannot express.
 ### RichTextEditor
 
 ```
-RichTextEditor(id, value?, placeholder?, minHeight?, disabled?, onChange?, tools?, maxHeight?, readonly?, name?, label?, hint?, error?, required?)
+RichTextEditor(id, value?, placeholder?, minHeight?, disabled?, onChange?, tools?, maxHeight?, readonly?, name?, label?, hint?, error?, required?, warning?, description?, optional?, invalid?, describedBy?)
 ```
 
 Rich-text WYSIWYG editor for CMS, email, and comment surfaces. Renders a small toolbar (bold / italic / underline / strikethrough / headings / lists / quote / link) above a `contenteditable` region; pass `tools` to subset it. Pass `$variable` as `value` for two-way binding — the HTML body is written back to state on every edit. Provide `placeholder` for the empty-state prompt, `maxHeight` to make a long document scroll, `readonly` for review flows, and `label`/`hint`/`error`/`required` for a labelled field shell.
@@ -43,11 +43,16 @@ Rich-text WYSIWYG editor for CMS, email, and comment surfaces. Renders a small t
 | `hint` | `string` | no | Helper text rendered below the editor |
 | `error` | `string` | no | Validation error rendered below the editor (marks it invalid) |
 | `required` | `boolean` | no | Mark the field required (adds a `*`) |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### CodeEditor
 
 ```
-CodeEditor(id, value?, language?, placeholder?, minHeight?, tabSize?, showGutter?, readonly?, onChange?, maxHeight?, filename?, copyable?, onSave?, name?, disabled?, label?, hint?, error?, required?)
+CodeEditor(id, value?, language?, placeholder?, minHeight?, tabSize?, showGutter?, readonly?, onChange?, maxHeight?, filename?, copyable?, onSave?, name?, disabled?, label?, hint?, error?, required?, warning?, description?, optional?, invalid?, describedBy?)
 ```
 
 Lightweight, dependency-free code editor. Pairs a styled textarea with a synchronised line-number gutter — no syntax highlighting, but the editor stays a single rendered node so it works inside Shadow DOM. Tab / Shift+Tab indent and unindent the selected lines, and Ctrl/Cmd+S calls `onSave`. Use for dev tooling, snippet editing, prompt playgrounds. Pass a `$variable` as `value` for two-way binding, `maxHeight` for a fixed-height scrolling pane, and `label`/`hint`/`error` to surface a parse error under the field. For read-only rendering with highlights prefer `CodeBlock`.
@@ -73,6 +78,11 @@ Lightweight, dependency-free code editor. Pairs a styled textarea with a synchro
 | `hint` | `string` | no | Helper text rendered below the editor |
 | `error` | `string` | no | Validation error rendered below the editor (marks it invalid) |
 | `required` | `boolean` | no | Mark the field required (adds a `*`) |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### ContextMenu
 

@@ -19,7 +19,7 @@ Android Studio.</p>
   <li><b>Diagnostics as you type</b> — unknown components (with a
       "did you mean?" suggestion), unknown props, and enum mismatches, from the
       same schema-as-truth checks the runtime itself enforces.</li>
-  <li><b>Completion</b> — all 281 library components, your own file-scoped atoms
+  <li><b>Completion</b> — all 282 library components, your own file-scoped atoms
       / components / actions, keywords, and the full <code>$</code>-builtin
       catalog. Inside a component's trailing <code>{ … }</code> you get that
       component's prop names; after a <code>.</code> you get namespace and

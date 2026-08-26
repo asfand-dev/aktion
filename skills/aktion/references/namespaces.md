@@ -6,7 +6,7 @@
 
 # Namespaces & reactive resource bags
 
-153 members across 5 namespaces, plus the bag each
+154 members across 5 namespaces, plus the bag each
 data builtin returns (8 of them).
 
 **This is the list to check before inventing a helper.** Most of what a program needs —
@@ -189,7 +189,7 @@ Console namespace forwarding to the browser console.
 
 Imperative toast namespace.
 
-8 members.
+9 members.
 
 | member | kind | signature | notes |
 | --- | --- | --- | --- |
@@ -200,6 +200,7 @@ Imperative toast namespace.
 | `warning` | method | `warning(message, options?)` | `show` with tone "warning". |
 | `dismiss` | method | `dismiss(id)` | Remove a single toast by id. |
 | `clear` | method | `clear()` | Remove every toast. |
+| `configure` | method | `configure(options)` | Settings for the auto-rendered stack, e.g. { position: "bottom-center" }. Call once at the top level of the program. |
 | `items` | property | `items` | Reactive list of live toasts (newest last). Treat as read-only. |
 
 ### `$dom`

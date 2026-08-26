@@ -99,7 +99,7 @@ async function insertComponent(): Promise<void> {
   const catalog = getComponentCatalog();
   const items: ComponentPick[] = [];
   // Bucket by the catalog's own `group`, in order of first appearance, so the
-  // picker is browsable and not 281 undifferentiated names. Separators are inert
+  // picker is browsable and not 282 undifferentiated names. Separators are inert
   // rows — hence `entry` being optional on the item type.
   const byGroup = new Map<string, ComponentEntry[]>();
   for (const entry of catalog) {

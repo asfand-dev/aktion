@@ -221,6 +221,7 @@ export const ActionLink: ComponentSpec = {
     { name: "disabled", type: "boolean", optional: true, description: "Make the action inert, e.g. while a Retry is already running" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon shown with the label" },
     { name: "iconPosition", type: "string", optional: true, enum: ["start", "end"], description: "Which side the icon sits on (default `start`)" },
+    { name: "ariaLabel", type: "string", optional: true, description: "Accessible name, when the visible label alone does not identify the target — e.g. one \"Rebuild\" link per table row, where every link would otherwise be announced identically" },
   ],
   render: (_node, props, helpers) => {
     const disabled = asBoolean(props.disabled);
@@ -229,19 +230,31 @@ export const ActionLink: ComponentSpec = {
     // an anchor, and the `#` target showed up in the status bar and on
     // middle-click. The link look is entirely class-based, so only the UA
     // button chrome needs resetting.
+    // `aria-label` OVERRIDES the visible label for assistive tech, which is the
+    // point: a repeated action in a list ("Rebuild node" on every row) is
+    // announced identically on every row, so the name has to be able to carry
+    // what the row does — while the visible column stays terse. Only set when
+    // given, so an unlabelled link keeps its text as its name.
+    const ariaLabel = asString(props.ariaLabel);
+    const iconAtEnd = asString(props.iconPosition, "start") === "end";
     const button = el("button", {
       type: "button",
       class: "rui-action-link" + (props.icon ? " has-icon" : ""),
       disabled,
-      style: "background:none;border:0;padding:0;font:inherit;text-align:inherit",
+      "aria-label": ariaLabel || null,
+      // `data-icon-position` rather than a second class, matching `Button`.
+      "data-icon-position": props.icon ? (iconAtEnd ? "end" : "start") : null,
+      // The four longhands, NOT the `font` shorthand. `font: inherit` also resets
+      // `line-height` — and being inline it beat every stylesheet, so a theme that
+      // set a line-height on this control (vision does: 20px) had a rule that
+      // could never fire. These four inherit what the shorthand did without
+      // touching the fifth property nobody meant to set.
+      style: "background:none;border:0;padding:0;text-align:inherit;font-family:inherit;font-size:inherit;font-weight:inherit;font-style:inherit",
     });
+    // The gap is a stylesheet concern now (see `.rui-action-link-icon`): an inline
+    // margin is unthemeable, and a theme with different link metrics had no way to
+    // change it.
     const iconNode = renderIcon(props.icon, { className: "rui-action-link-icon" });
-    const iconAtEnd = asString(props.iconPosition, "start") === "end";
-    if (iconNode) {
-      // The button is inline in prose, not a flex row — no gap to inherit.
-      if (iconAtEnd) iconNode.style.marginInlineStart = "0.35em";
-      else iconNode.style.marginInlineEnd = "0.35em";
-    }
     if (iconNode && !iconAtEnd) button.append(iconNode);
     button.append(document.createTextNode(asString(props.label)));
     if (iconNode && iconAtEnd) button.append(iconNode);

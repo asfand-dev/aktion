@@ -230,7 +230,7 @@ Clamp long text (or a `child` node) with an expand control. The toggle hides its
 ### InlineEdit
 
 ```
-InlineEdit(value, label?, onSave?, placeholder?, type?, onCancel?, disabled?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?)
+InlineEdit(value, label?, onSave?, placeholder?, type?, onCancel?, disabled?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
 ```
 
 Click-to-edit inline field. Enter or blur commits (only when the value actually changed), Escape discards. Pass `type: "textarea"` for multi-line, `placeholder` so an empty field still has an affordance, and `error`/`required` to surface a rejected save.
@@ -245,8 +245,13 @@ Click-to-edit inline field. Enter or blur commits (only when the value actually 
 | `onCancel` | `callable` | no | Called when the edit is discarded with Escape |
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |

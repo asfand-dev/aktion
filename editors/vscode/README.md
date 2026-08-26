@@ -5,8 +5,8 @@ Rich language support for **[Aktion](https://asfand-dev.github.io/aktion/)**
 comfort you expect from a first-class language: highlighting, diagnostics,
 completions, go-to-definition, rename, and more.
 
-**At a glance** — 281 components across 17 groups, 26 `$`-builtins, 5 namespaces
-(153 members), 8 factory resource bags, 42 snippets, and 6 built-in themes
+**At a glance** — 282 components across 17 groups, 26 `$`-builtins, 5 namespaces
+(154 members), 8 factory resource bags, 42 snippets, and 6 built-in themes
 (`light`, `dark`, `corporate`, `soft`, `glass`, `modern`). Every one of those
 numbers is read from the runtime the extension bundles, not maintained by hand.
 

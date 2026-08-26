@@ -25,8 +25,15 @@ const docsTargets = [
   {
     path: resolve(root, "docs/deployment.html"),
     replacements: [
-      { pattern: /(aktion@)\d+\.\d+\.\d+/, replacement: "$1__VERSION__" },
-      { pattern: /(aktion@)\d+\.\d+/, replacement: "$1__VERSION__" },
+      // ONE global three-component pattern, not two overlapping non-global ones.
+      // The pair this replaces appended a segment on every single build: the
+      // narrow pattern rewrote the first `aktion@x.y.z`, then the two-component
+      // pattern matched the `x.y` PREFIX of what had just been written and
+      // replaced it with the full version again — `0.6.4` → `0.6.4.4` → `0.6.4.4.4`.
+      // Being non-global, it also never reached the file's second occurrence, so
+      // one URL rotted while the other went stale. `/g` fixes both halves, and a
+      // three-component-only pattern cannot match its own output.
+      { pattern: /(aktion@)\d+\.\d+\.\d+/g, replacement: "$1__VERSION__" },
       { pattern: /(Pin a version \(\s*<code>@)\d+\.\d+\.\d+(<\/code>\))/, replacement: "$1__VERSION__$2" },
     ],
   },
@@ -64,6 +71,11 @@ const docsTargets = [
 ];
 
 function replaceOne(source, pattern, replacement, filePath) {
+  // `test` advances `lastIndex` on a /g pattern, so reset BEFORE the replace as
+  // well as relying on the reset after — a global pattern that matched at the end
+  // of the file would otherwise start its replace pass from there and silently
+  // rewrite nothing.
+  pattern.lastIndex = 0;
   if (!pattern.test(source)) {
     throw new Error(`Expected pattern not found in ${filePath}: ${pattern}`);
   }

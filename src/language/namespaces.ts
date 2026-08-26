@@ -253,6 +253,7 @@ const toastMembers: readonly NamespaceMember[] = [
   method("warning", "warning(message, options?)", '`show` with tone "warning".'),
   method("dismiss", "dismiss(id)", "Remove a single toast by id."),
   method("clear", "clear()", "Remove every toast."),
+  method("configure", "configure(options)", "Settings for the auto-rendered stack, e.g. { position: \"bottom-center\" }. Call once at the top level of the program."),
   prop("items", "Reactive list of live toasts (newest last). Treat as read-only."),
 ];
 

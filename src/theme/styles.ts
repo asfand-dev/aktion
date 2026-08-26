@@ -487,10 +487,51 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 .rui-field-required { color: var(--rui-color-danger-text); margin-left: 3px; }
 .rui-field-hint { font-size: 12.5px; color: var(--rui-color-text-muted); }
 .rui-field-error { font-size: 12.5px; color: var(--rui-color-danger-text); font-weight: 500; }
+.rui-field-warning { font-size: 12.5px; color: var(--rui-color-warning-text); font-weight: 500; }
+/* Guidance between the label and the control: body size, not hint size. It is
+   read BEFORE the field is filled in, so it is prose the reader is meant to act
+   on, not a footnote about a value they have already typed. Normal weight keeps
+   it from competing with the label above it. */
+.rui-field-description { font-size: var(--rui-font-size-13); font-weight: 400; color: var(--rui-color-text-muted); }
+/* Normal weight against a 600-weight label. One base rule is enough even where a
+   theme raises the label's weight: the cascade compares rules matching the SAME
+   element, and this one matches the span, not its parent. */
+.rui-field-optional { font-weight: 400; color: var(--rui-color-text-muted); margin-left: 4px; }
 .rui-field[data-invalid="true"] .rui-input,
 .rui-field[data-invalid="true"] .rui-textarea,
 .rui-field[data-invalid="true"] .rui-select,
 .rui-field[data-invalid="true"] .rui-number-input { border-color: var(--rui-color-danger); }
+/* A control marked invalid with no shell around it (a bare Input with only
+   invalid: true returns the element itself, not a wrapper) still has to look invalid — the
+   selectors above can only reach a control that has a .rui-field parent. */
+.rui-input[aria-invalid="true"],
+.rui-textarea[aria-invalid="true"],
+.rui-select[aria-invalid="true"] { border-color: var(--rui-color-danger); }
+.rui-field[data-warning="true"] .rui-input,
+.rui-field[data-warning="true"] .rui-textarea,
+.rui-field[data-warning="true"] .rui-select,
+.rui-field[data-warning="true"] .rui-number-input { border-color: var(--rui-color-warning); }
+
+/* Requirement list — one row per rule, met / unmet / not yet checked.
+   The tri-state is carried by data-met, and the glyph plus a visually-hidden
+   word carry it too, so it never rests on colour alone. */
+.rui-requirement-list { display: flex; flex-direction: column; gap: 4px; }
+.rui-requirement-list-title { font-size: var(--rui-font-size-13); font-weight: 600; color: var(--rui-color-text); }
+.rui-requirement-list-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.rui-requirement {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--rui-color-text-muted);
+}
+.rui-requirement-icon { flex-shrink: 0; margin-top: 0.15em; font-size: 0.9em; }
+.rui-requirement[data-met="true"] { color: var(--rui-color-success-text); }
+.rui-requirement[data-met="false"] { color: var(--rui-color-danger-text); }
+/* A rule nothing has been checked against yet reads as neutral, not as failing:
+   an untouched form must not accuse the reader of a mistake. */
+.rui-requirement[data-met="pending"] { color: var(--rui-color-text-muted); }
+.rui-requirement-list[data-pending="true"] .rui-requirement { color: var(--rui-color-text-muted); }
 
 /* Additional attributes: render the host with no background so it inherits the parent
    container's color. Useful when embedding inside a themed page where the
@@ -2006,6 +2047,21 @@ a.rui-card {
   outline: 2px solid var(--rui-color-primary);
   outline-offset: 2px;
   border-radius: 2px;
+}
+/* The component has honoured disabled functionally since it shipped — the click
+   handler is simply not attached — but looked entirely live, so the only way to
+   discover an inert link was to click it. */
+.rui-action-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+/* The gap used to be written inline, which no theme could override. It is one
+   declaration per side, flipped by the same data-icon-position Button uses. */
+.rui-action-link-icon { margin-inline-end: 0.35em; }
+.rui-action-link[data-icon-position="end"] .rui-action-link-icon {
+  margin-inline-end: 0;
+  margin-inline-start: 0.35em;
 }
 
 /* ========================================================================
@@ -5688,6 +5744,15 @@ ${below("xs")} {
   transform: rotate(-45deg);
 }
 :host([data-rui-theme="vision"]) .rui-action-link:hover { color: #095bb1; text-decoration: underline; }
+:host([data-rui-theme="vision"]) .rui-action-link:disabled { opacity: 0.38; }
+/* This control was the one vision link falling through to the base ring, which is
+   navy — every other vision control focuses in interactive blue. An outline, not
+   the inset shadow the boxed controls use: there is no box to inset into. */
+:host([data-rui-theme="vision"]) .rui-action-link:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
 :host([data-rui-theme="vision"]) .rui-link:hover,
 :host([data-rui-theme="vision"]) .rui-link:active { color: var(--rui-color-link); text-decoration: underline; }
 :host([data-rui-theme="vision"]) .rui-link:focus-visible {
@@ -7684,6 +7749,12 @@ ${below("xs")} {
 .rui-toasts[data-position="top-center"] { top: 16px; left: 50%; transform: translateX(-50%); align-items: center; }
 .rui-toasts[data-position="bottom-right"] { bottom: 16px; right: 16px; align-items: flex-end; flex-direction: column-reverse; }
 .rui-toasts[data-position="bottom-left"] { bottom: 16px; left: 16px; align-items: flex-start; flex-direction: column-reverse; }
+/* Present in the position enum and on the standalone Toast since day one, but
+   the STACK had no rule — so Toasts with position "bottom-center" pinned to
+   nothing and rendered wherever position: fixed left it (top-left of the
+   viewport, over the page's own chrome). column-reverse like the other two
+   bottom corners, so the newest toast is the one nearest the viewport edge. */
+.rui-toasts[data-position="bottom-center"] { bottom: 16px; left: 50%; transform: translateX(-50%); align-items: center; flex-direction: column-reverse; }
 /* The max cap summarises the toasts it hid; without this the +N row is bare
    text floating in the stack. align-self overrides the per-position align-items. */
 .rui-toasts-overflow {
@@ -7717,6 +7788,16 @@ ${below("xs")} {
 .rui-toasts[data-position^="top-left"] .rui-toast.is-dismissed,
 .rui-toasts[data-position="bottom-left"] .rui-toast.is-dismissed {
   transform: translateX(-12px);
+}
+/* A centre-pinned stack has no side to leave by: the sideways default slid it
+   away from the axis it is centred on, which reads as the toast drifting off
+   course rather than dismissing. Both centres leave the way they arrived —
+   towards the edge they are pinned to. */
+.rui-toasts[data-position="top-center"] .rui-toast.is-dismissed {
+  transform: translateY(-12px);
+}
+.rui-toasts[data-position="bottom-center"] .rui-toast.is-dismissed {
+  transform: translateY(12px);
 }
 .rui-toast-placeholder { display: none !important; }
 .rui-toast-icon {

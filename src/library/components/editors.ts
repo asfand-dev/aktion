@@ -13,7 +13,7 @@ import {
   valueAttr, sanitiseHref, sanitiseCssColor,
 } from "../utils.js";
 import { attachOnChange } from "./wrappers.js";
-import { withFieldShell } from "./forms-shared.js";
+import { withFieldShell, fieldShellExtraProps } from "./forms-shared.js";
 import { setSanitisedHtml, readSanitisedHtml } from "../html-sanitizer.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
 import { closeFloating, openFloating, deferToPaint, type FloatingSide } from "../floating.js";
@@ -128,6 +128,7 @@ export const RichTextEditor: ComponentSpec = {
     { name: "hint", type: "string", optional: true, aliases: ["helperText"], description: "Helper text rendered below the editor" },
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the editor (marks it invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*`)" },
+    ...fieldShellExtraProps(),
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -453,6 +454,7 @@ export const CodeEditor: ComponentSpec = {
     { name: "hint", type: "string", optional: true, aliases: ["helperText"], description: "Helper text rendered below the editor" },
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the editor (marks it invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*`)" },
+    ...fieldShellExtraProps(),
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -1329,6 +1331,7 @@ export const ColorPicker: ComponentSpec = {
     { name: "hint", type: "string", optional: true, aliases: ["helperText"], description: "Helper text rendered below the control" },
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the control (marks it invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*`)" },
+    ...fieldShellExtraProps(),
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);

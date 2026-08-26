@@ -9,7 +9,7 @@ import type { ComponentNode } from "../../runtime/evaluator.js";
 import { el, asArray, asString, asBoolean, asNumber, valueAttr, renderIcon, sanitiseHref } from "../utils.js";
 import { closeFloating, deferToPaint, syncFloatingPanel } from "../floating.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
-import { extractComboboxItems, withFieldShell, FIELD_SHELL_PROPS, attachFocusHandlers } from "./forms-shared.js";
+import { extractComboboxItems, withFieldShell, FIELD_SHELL_PROPS, attachFocusHandlers, fieldShellExtraProps } from "./forms-shared.js";
 
 /**
  * The one button vocabulary. Every button-shaped control (`Button` here,
@@ -733,6 +733,7 @@ export const Select: ComponentSpec = {
     // `bindToStateAtArg`, so anything placed ahead of it silently breaks
     // two-way binding at every existing call site.
     { name: "emptyLabel", type: "string", optional: true, description: "Shown in place of the options when there are none — the difference between \"this list is genuinely empty\" and \"something failed to load\". Defaults to \"No options\"" },
+    ...fieldShellExtraProps(),
   ],
   render: (node, props, helpers) => {
     // `onSearch` implies `searchable`. A native <select> has no query to report,
@@ -834,6 +835,7 @@ export const Checkbox: ComponentSpec = {
     { name: "hint", type: "string", optional: true, description: "Helper text rendered below the control" },
     { name: "indeterminate", type: "boolean", optional: true, description: "Tri-state \"partially checked\" dash (a parent of a partly-selected list)" },
     { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a checkbox in a table cell whose column header already carries the name" },
+    ...fieldShellExtraProps(["description"]),
   ],
   render: (node, props, helpers) => {
     const disabled = asBoolean(props.disabled);
@@ -894,7 +896,12 @@ export const Checkbox: ComponentSpec = {
     }
     // The visible label is inline next to the box, so the shell must not render
     // a second one — it only contributes the required/error/hint machinery.
-    const shell = withFieldShell(wrapper, { ...props, label: null });
+    //
+    // `description` is nulled for the same reason and it is NOT optional: this
+    // component has owned a `description` prop of its own since long before the
+    // shell had one, and it has already rendered it as the secondary line under
+    // the label above. Forwarding it would print the same sentence twice.
+    const shell = withFieldShell(wrapper, { ...props, label: null, description: null });
     // …and those attributes have to end up on the input, not on the `<label>`.
     relocateControlAria(wrapper, input);
     return shell;
@@ -963,6 +970,7 @@ export const CheckBoxGroup: ComponentSpec = {
     { name: "required", type: "boolean", optional: true, description: "Mark the group required (adds a `*` to the heading)" },
     { name: "disabled", type: "boolean", optional: true, description: "Lock every item in the group" },
     { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
+    ...fieldShellExtraProps(),
   ],
   render: (node, props, helpers) => {
     const groupName = asString(props.name);
@@ -1096,6 +1104,7 @@ export const Radio: ComponentSpec = {
     // Declared last: the controlled `value` channel reads its state ref from
     // argMeta slot 2, so nothing may be inserted ahead of it.
     { name: "slots", type: "Node[]", optional: true, description: "Per-option trailing content, aligned by index with `items` — rendered beside the option, outside its `<label>`, so a control in the slot stays independently clickable. Use `null` for an option that has none." },
+    ...fieldShellExtraProps(),
   ],
   render: (node, props, helpers) => {
     const groupName = asString(props.id);
@@ -1208,15 +1217,38 @@ export const FormControl: ComponentSpec = {
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the field (marks the control invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*` and the `required` attribute)" },
     { name: "for", type: "string", optional: true, aliases: ["htmlFor"], description: "Id of the control the label points at — only needed when the nested field has no `id` of its own" },
+    // The same five the field shell grew, implemented here rather than spread:
+    // this component wires its own label/message and does not call
+    // `withFieldShell`, so a spread would declare props nothing reads.
+    ...fieldShellExtraProps(),
   ],
   render: (_node, props, helpers) => {
     const labelText = asString(props.label);
     const hint = asString(props.hint);
     const error = asString(props.error);
+    const warning = asString(props.warning);
+    // A NODE as well as a string, unlike the field shell's: guidance often has to
+    // carry a link ("reserved via <IP Management>", "see the <docs>"), and this is
+    // the component that exists for composing a field by hand — it already takes
+    // its control as a node. The shell cannot do the same: it is a plain function
+    // with no renderer to hand.
+    const descriptionNode = isComponentNodeLike(props.description)
+      ? helpers.renderNode(props.description)
+      : null;
+    const description = descriptionNode ? "" : asString(props.description);
     const required = asBoolean(props.required);
+    const invalid = asBoolean(props.invalid) || Boolean(error);
+    // Same rule as the field shell: `required` wins, `true` means the built-in
+    // English word, a string says it another way.
+    const optionalText = required
+      ? ""
+      : props.optional === true
+        ? "(optional)"
+        : asString(props.optional);
     const root = el("div", {
       class: "rui-form-control",
-      "data-invalid": error ? "true" : null,
+      "data-invalid": invalid ? "true" : null,
+      "data-warning": !invalid && warning ? "true" : null,
     });
     // Render the field FIRST: the label needs the control's id to point at, and
     // a sibling `<label>` with no `for` leaves every wrapped field anonymous —
@@ -1230,19 +1262,43 @@ export const FormControl: ComponentSpec = {
     const controlId = asString(props.for) || control?.getAttribute("id") || "";
     const labelEl = el("label", { class: "rui-form-label", for: controlId || null }, [labelText]);
     if (required) labelEl.append(el("span", { class: "rui-field-required", "aria-hidden": "true" }, ["*"]));
-    root.append(labelEl, fieldEl);
-    let describedBy = "";
-    if (error) {
-      describedBy = controlId ? `${controlId}-error` : "";
-      root.append(el("div", { class: "rui-field-error", id: describedBy || null, role: "alert" }, [error]));
-    } else if (hint) {
-      describedBy = controlId ? `${controlId}-hint` : "";
-      root.append(el("p", { class: "rui-form-hint", id: describedBy || null }, [hint]));
+    else if (optionalText) labelEl.append(el("span", { class: "rui-field-optional" }, [optionalText]));
+    root.append(labelEl);
+    // Guidance between the label and the field, so the reader has it before the
+    // control rather than after — the order the field shell uses too.
+    const describedByIds: string[] = [];
+    if (description || descriptionNode) {
+      const descriptionId = controlId ? `${controlId}-description` : "";
+      const wrap = el("p", { class: "rui-field-description", id: descriptionId || null });
+      if (descriptionNode) wrap.append(descriptionNode);
+      else wrap.append(document.createTextNode(description));
+      root.append(wrap);
+      if (descriptionId) describedByIds.push(descriptionId);
+    }
+    root.append(fieldEl);
+    // One message slot, error > warning > hint.
+    const message = error
+      ? {node: el("div", {class: "rui-field-error", id: controlId ? `${controlId}-error` : null, role: "alert"}, [error]), id: controlId ? `${controlId}-error` : ""}
+      : warning
+        ? {node: el("div", {class: "rui-field-warning", id: controlId ? `${controlId}-warning` : null, role: "status", "aria-live": "polite"}, [warning]), id: controlId ? `${controlId}-warning` : ""}
+        : hint
+          ? {node: el("p", {class: "rui-form-hint", id: controlId ? `${controlId}-hint` : null}, [hint]), id: controlId ? `${controlId}-hint` : ""}
+          : null;
+    if (message) {
+      root.append(message.node);
+      if (message.id) describedByIds.push(message.id);
     }
     if (control) {
       if (required) control.setAttribute("required", "");
-      if (error) control.setAttribute("aria-invalid", "true");
-      if (describedBy) control.setAttribute("aria-describedby", describedBy);
+      if (invalid) control.setAttribute("aria-invalid", "true");
+      // MERGE, like the field shell: a composite field may already point at its
+      // own counter or range, and overwriting drops it.
+      const authorIds = asString(props.describedBy).split(/\s+/).filter(Boolean);
+      const allIds = [...describedByIds, ...authorIds];
+      if (allIds.length > 0) {
+        const existing = (control.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
+        control.setAttribute("aria-describedby", [...new Set([...existing, ...allIds])].join(" "));
+      }
       // No id to hang a `for` on — name the control directly instead.
       if (!controlId && labelText) control.setAttribute("aria-label", labelText);
       // `<label for>` only names *labelable* elements. A composite control does
@@ -1443,6 +1499,7 @@ export const Slider: ComponentSpec = {
     { name: "hint", type: "string", optional: true, description: "Helper text rendered below the slider" },
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the slider (marks it invalid)" },
     { name: "marks", type: "any[]", optional: true, description: "Tick scale: numbers (`[0, 50, 100]`) or `{value, label}` objects. A mark's label becomes the readout and the announced value when the slider is on it." },
+    ...fieldShellExtraProps(),
   ],
   render: (node, props, helpers) => {
     const label = asString(props.label);
@@ -1725,6 +1782,7 @@ export const DatePicker: ComponentSpec = {
     { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves the control (validate-on-blur)" },
     { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
     { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) the selected date is echoed in beneath the field, and the language the value is announced in. Same `locale` channel as `Table`/`Col`, so a filter and the report it filters read alike. Bound values stay ISO `YYYY-MM-DD`." },
+    ...fieldShellExtraProps(),
   ],
   render: (node, props, helpers) => {
     const label = asString(props.label);
@@ -2149,6 +2207,7 @@ export const Combobox: ComponentSpec = {
     { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
     { name: "creatable", type: "boolean", optional: true, description: "Offer the typed text itself as an option when it matches nothing (\"Create «acme-corp»\") so a value outside `items` can be selected" },
     { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
+    ...fieldShellExtraProps(),
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -2535,6 +2594,7 @@ export const MultiSelect: ComponentSpec = {
     { name: "loading", type: "boolean", optional: true, description: "Matches are being fetched — shows \"Loading…\" instead of the (lying) empty label" },
     { name: "creatable", type: "boolean", optional: true, description: "Offer the typed text itself as an option when it matches nothing (\"Create «backend»\") so a tag outside `items` can be added" },
     { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
+    ...fieldShellExtraProps(),
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -2994,6 +3054,7 @@ export const DateRangePicker: ComponentSpec = {
     { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves an endpoint (validate-on-blur)" },
     { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when an endpoint gains focus" },
     { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`) the chosen period is echoed in beneath the pair, and the language both endpoints are announced in. Same `locale` channel as `Table`/`Col`. Bound values stay ISO `YYYY-MM-DD`." },
+    ...fieldShellExtraProps(),
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);

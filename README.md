@@ -175,7 +175,7 @@ Everything you need at runtime ships in a single bundle:
   `<details>.open`, and stateful primitives like `Tabs` are all preserved
   across renders. Components that need to hold UI state get a
   `helpers.useInstanceState(...)` slot keyed by their position in the tree.
-- **A rich component library** of **281 components** in **17 groups** —
+- **A rich component library** of **282 components** in **17 groups** —
   Layout, Content, Forms, Data, Charts, Feedback & Media, Navigation, Chat,
   Patterns, Editors & overlays, App shell, Advanced UI, Routing, Helpers,
   Behaviour wrappers, Interop, Escape hatches. See
@@ -1155,7 +1155,7 @@ For the complete language reference see
 
 ## Component library
 
-The bundle ships **281 components** in **17 groups**, with nothing ungrouped —
+The bundle ships **282 components** in **17 groups**, with nothing ungrouped —
 so every component carries usage guidance into the generated system prompt and
 is visible in chat mode. Reach for **pattern composites**
 (`Hero`, `PageHeader`, `Stats`, `Toolbar`, `EmptyState`, `Timeline`,
@@ -1171,7 +1171,7 @@ project.
 | ------------- | ---------- |
 | **Layout** (34) | `Column`, `Row`, `Center`, `Stack`, `StackItem`, `Grid`, `GridItem`, `Box`, `Container`, `Spacer`, `Card`, `CardHeader`, `CardFooter`, `CardSection` (full-bleed tinted band inside a `Card`), `Separator`, `Tabs`, `TabItem`, `Accordion`, `AccordionItem`, `Modal`, `Drawer`, `Steps`, `AspectRatio`, `ScrollArea`, `Sticky` (with a `data-stuck` pinned hook), `ResizablePanels`, `MasonryGrid`, `Fragment`, `Section` (page band with eyebrow/title/subtitle), `Split` (sticky two-pane), `Bento`/`BentoCell` (asymmetric grid), `Overlay`/`OverlayItem` (anchored layering) |
 | **Content** (27) | `Text`, `Image`, `Badge`, `BadgeList`, `Pill` (soft tinted state label), `Callout`, `Quote`, `CodeBlock`, `Skeleton`, `Spinner`, `LoadingDots` (three sequenced dots — the quiet inline loader), `Markdown`, `Kbd`, `Icon`, `TextContent`, `GradientText`, `Display`, `Heading`, `Eyebrow`, `Prose`, `RelativeTime`, `Svg` (sanitised inline SVG), `VisuallyHidden`, `KbdShortcut`, `CountUp`, `CountdownTimer`, `TableOfContents` |
-| **Forms** (43) | `Form`, `FormControl`, `FormSection`, `FieldSet`, `ValidationSummary`, `Input`, `TextArea`, `PasswordInput`, `MaskedInput`, `MentionInput`, `TagInput`, `Select`, `SelectItem`, `Combobox`, `MultiSelect`, `Checkbox`, `CheckBoxGroup`, `CheckBoxItem`, `Radio`, `Switch`, `ToggleGroup`, `Button`, `Buttons` (gapped row), `ButtonGroup` (joined segmented row), `InputGroup` (one shell around a field + leading icon / trailing action / unit suffix), `SearchBar`, `Slider`, `NumberInput`, `ColorPicker`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker`, `FileUpload`, `PinInput`, `MultiStepForm`, `SegmentedControl`, `QuantityStepper`, `VariantSelector`, `Swatch`, `DrawingCanvas`, `SignaturePad`, `ReactionPicker` |
+| **Forms** (44) | `Form`, `FormControl`, `FormSection`, `FieldSet`, `ValidationSummary`, `RequirementList` (per-rule met / unmet / unchecked checklist), `Input`, `TextArea`, `PasswordInput`, `MaskedInput`, `MentionInput`, `TagInput`, `Select`, `SelectItem`, `Combobox`, `MultiSelect`, `Checkbox`, `CheckBoxGroup`, `CheckBoxItem`, `Radio`, `Switch`, `ToggleGroup`, `Button`, `Buttons` (gapped row), `ButtonGroup` (joined segmented row), `InputGroup` (one shell around a field + leading icon / trailing action / unit suffix), `SearchBar`, `Slider`, `NumberInput`, `ColorPicker`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker`, `FileUpload`, `PinInput`, `MultiStepForm`, `SegmentedControl`, `QuantityStepper`, `VariantSelector`, `Swatch`, `DrawingCanvas`, `SignaturePad`, `ReactionPicker` |
 | **Data** (24) | `Table`, `Col`, `DataGrid`, `List`, `ListItem`, `StatCard`, `Stats`, `Sparkline`, `Tile`, `Progress`, `ProgressRing`, `Pagination`, `Tree`, `TreeNode`, `CalendarView`, `ComparisonTable`, `InfiniteList`, `VirtualGrid` (windowed 2-D grid), `Metric`, `MetricStrip`, `Calendar` (month grid with arrow-key navigation, event chips/dots), `OrderSummary`, `Cart`, `PriceTag` |
 | **Charts** (9) | `BarChart`, `LineChart`, `PieChart`, `RadarChart`, `ScatterChart`, `Histogram`, `Heatmap`, `Gauge`, `Series` |
 | **Feedback & Media** (22) | `Avatar`, `AvatarGroup`, `PersonChip`, `Tooltip`, `HoverCard`, `Popover`, `Rating`, `Toast`, `Toasts` (only needed for custom placement — see `$toast`), `VideoPlayer`, `AudioPlayer`, `Carousel`, `Gallery`, `Lightbox`, `Map`, `TypingIndicator`, `Confetti`, `Lottie`, `QRCode`, `PresenceAvatars`, `LiveCursor`, `Backdrop` (grid/blobs/particles) |
@@ -2062,7 +2062,7 @@ consumes from the CDN.
 | `theme-customization.html`          | Token-by-token customization studio (now folded into `themes.html`, kept as a redirect for old links). |
 | `brand-themes.html`                 | One program rendered with six ready-made brand token maps — GitHub, Apple, Stripe, IONOS, Notion, Vercel — each shown as a flat `setTheme()` map and its grouped `$theme({…})` translation. |
 | `playground.html`                   | CodeMirror 6 editor with custom highlighting / autocomplete, live preview, share links, hover-over component info, and an inspection mode. |
-| `visual-editor.html`                | Drag-and-drop visual editor for the full 281-component library. Three canvas modes (Raw Edit / Visual Edit / Preview), an Outline tab for top-level entity navigation, typed prop editors, cross-entity selection, and import / export of `.aktion` + self-contained HTML via an editable Source drawer. |
+| `visual-editor.html`                | Drag-and-drop visual editor for the full 282-component library. Three canvas modes (Raw Edit / Visual Edit / Preview), an Outline tab for top-level entity navigation, typed prop editors, cross-entity selection, and import / export of `.aktion` + self-contained HTML via an editable Source drawer. |
 | `chat-bot.html`                     | OpenRouter-powered streaming chat with four generation modes (Chat Compact, Chat Full, Website Builder, App Builder), image / PDF attachment support, and download-as-standalone-HTML. |
 | `live-demos.html`                   | Catalog of every bundled demo program as zoomed-out live preview cards, sectioned by `docs/demos/` folder. |
 | `demos/index.html`                  | Shared runner shell for the bundled demos — picks the program from the `?app=<folder>/<file>.aktion` query parameter. |
@@ -2265,7 +2265,7 @@ undo/redo), the `$query` / `$mutation` data layer, `$socket` / `$sse`
 realtime, `$toast`, hooks, fine-grained reactivity + memoization, strict
 mode, the morph value/event contracts, `sx` conversion, third-party
 interop, the sanitiser + DoS security suite, registry-wide spec
-invariants over all 281 components, the testing library, DevTools, the
+invariants over all 282 components, the testing library, DevTools, the
 standalone LSP server, and the editor-tooling surfaces (navigation,
 semantic tokens, signature help, namespace members).
 

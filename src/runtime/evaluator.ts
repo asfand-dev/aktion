@@ -205,7 +205,15 @@ function buildToastLayer(ctx: EvaluationContext): ComponentNode | null {
       item.id,
     ),
   );
-  return makeRuntimeNode(ctx, "Toasts", { children }, "$toast");
+  // `position` only when the program asked for one: passing `undefined` would
+  // still occupy the prop slot, and the component's own default is the answer for
+  // every program that never calls `configure`.
+  return makeRuntimeNode(
+    ctx,
+    "Toasts",
+    ctx.toastPosition ? { children, position: ctx.toastPosition } : { children },
+    "$toast",
+  );
 }
 
 /**
@@ -1016,6 +1024,11 @@ export interface EvaluationContext {
    * don't have to wire one up. See the `$app` case in `evaluateCall`.
    */
   toastItemsRead?: boolean;
+  /**
+   * Corner the auto-rendered toast stack pins to, set by `$toast.configure`.
+   * Absent leaves the `Toasts` component's own default (`top-right`).
+   */
+  toastPosition?: string;
   /**
    * Lazily-created singleton backing the reserved `$dom` observer namespace
    * (`$dom.onResize`, `$dom.onIntersect`, `$dom.measure`, …). Every observer

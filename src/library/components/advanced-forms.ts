@@ -1647,3 +1647,130 @@ export const MultiStepForm: ComponentSpec = {
     return root;
   },
 };
+
+/* RequirementList ---------------------------------------------------------- *
+ *
+ * "Which of these rules does my value break?" — a question a single error string
+ * cannot answer. `error: "Use 3-63 characters: letters, digits, and - _ ."`
+ * restates every rule at once and leaves the reader to diff it against what they
+ * typed; this marks each rule individually so the one that failed is the one
+ * that is red.
+ *
+ * Three states, not two. A rule the value has not been tested against yet
+ * (nothing typed) is neither met nor unmet, and painting it red on an untouched
+ * form accuses the user of a mistake they have not made — which is why `met`
+ * carries `undefined` through instead of going via `asBoolean`.
+ *
+ * Not `OnboardingChecklist`: that is a panel with a progress bar, a heading, a
+ * dismiss button and a call-to-action button per row. A `<button>` inside the
+ * element a field points `aria-describedby` at is a keyboard trap.
+ * ------------------------------------------------------------------------- */
+
+/** One resolved row: the rule's text and whether the current value meets it. */
+interface Requirement {
+  label: string;
+  /** `true` met, `false` unmet, `null` not yet evaluated. */
+  met: boolean | null;
+}
+
+function readRequirements(raw: unknown): Requirement[] {
+  return asArray<unknown>(raw)
+    .map((entry): Requirement | null => {
+      if (typeof entry === "string") return entry ? { label: entry, met: null } : null;
+      if (entry && typeof entry === "object") {
+        const r = entry as Record<string, unknown>;
+        const label = asString(r.label ?? r.text);
+        if (!label) return null;
+        // Deliberately NOT `asBoolean`: it maps undefined/null to `false`, which
+        // is the difference between "you broke this rule" and "not checked yet".
+        const met = r.met === undefined || r.met === null ? null : r.met === true;
+        return { label, met };
+      }
+      return null;
+    })
+    .filter((r): r is Requirement => r !== null);
+}
+
+export const RequirementList: ComponentSpec = {
+  name: "RequirementList",
+  description:
+    "Checklist of rules a value has to satisfy, each marked met (check), unmet " +
+    "(cross) or not yet checked (dot) — password requirements, naming rules, " +
+    "policy checks. Pass `items` as strings or `{label, met}` objects, where " +
+    "`met` omitted means \"not evaluated yet\" and renders neutral, so an " +
+    "untouched field does not accuse the reader of breaking rules. Pair it with " +
+    "a field's `invalid` and `describedBy` props to keep the border red and the " +
+    "list as the explanation, instead of repeating the rules in an `error` " +
+    "string. Set `announce` to have changes read out politely as the value is " +
+    "edited.",
+  props: [
+    { name: "items", type: "any[]", positional: true, aliases: ["rules", "requirements"], description: "Rules: strings, or `{label, met}` where `met` is true / false / omitted" },
+    { name: "title", type: "string", optional: true, description: "Heading above the list (e.g. \"Your password must:\")" },
+    { name: "pending", type: "boolean", optional: true, description: "Force every row neutral regardless of its `met` — for a field the user has not touched yet" },
+    { name: "announce", type: "boolean", optional: true, description: "Announce progress to assistive tech as rows change (a polite count, not the rule text). Off by default, because a list that talks on every keystroke is worse than one that stays quiet" },
+    { name: "announceText", type: "string", optional: true, description: "What `announce` says; `{met}` and `{total}` are substituted (default \"{met} of {total} requirements met\")" },
+    { name: "metLabel", type: "string", optional: true, description: "Screen-reader prefix for a met row (default \"Met\") — colour and glyph alone would not say which is which" },
+    { name: "unmetLabel", type: "string", optional: true, description: "Screen-reader prefix for an unmet row (default \"Not met\")" },
+  ],
+  render: (_node, props) => {
+    const items = readRequirements(props.items);
+    const pending = asBoolean(props.pending);
+    const root = el("div", {
+      class: "rui-requirement-list",
+      "data-pending": pending ? "true" : null,
+    });
+    const title = asString(props.title);
+    if (title) root.append(el("div", { class: "rui-requirement-list-title" }, [title]));
+    // An empty `<ul>` is announced as "list, 0 items" — a promise of content that
+    // is not there. Nothing to list means nothing to render.
+    if (items.length === 0) return root;
+
+    // `|| default`, not just `asString(v, default)`: `asString` only falls back for
+    // null/undefined, so an EMPTY override would silently remove the prefix — and
+    // the prefix is the only channel the state has that is not colour or a glyph
+    // (both hidden from a screen reader). An empty string here is a mistake, not a
+    // request to drop the guarantee.
+    const metLabel = asString(props.metLabel) || "Met";
+    const unmetLabel = asString(props.unmetLabel) || "Not met";
+    const list = el("ul", { class: "rui-requirement-list-items" });
+    let metCount = 0;
+    for (const item of items) {
+      const state = pending || item.met === null ? "pending" : item.met ? "true" : "false";
+      if (state === "true") metCount += 1;
+      const row = el("li", { class: "rui-requirement", "data-met": state });
+      const icon = renderIcon(
+        state === "true" ? "circle-check" : state === "false" ? "circle-xmark" : "circle",
+        { className: "rui-requirement-icon" },
+      );
+      if (icon) row.append(icon);
+      // The glyph is `aria-hidden` and the colour is invisible to a screen reader
+      // and to anyone who cannot tell the two hues apart, so the state has to be
+      // in the text as well (WCAG 1.4.1). A pending row gets no prefix: "not
+      // checked yet" is the absence of a verdict, not a third one worth saying.
+      if (state !== "pending") {
+        row.append(el("span", { class: "rui-visually-hidden" }, [`${state === "true" ? metLabel : unmetLabel}: `]));
+      }
+      row.append(el("span", { class: "rui-requirement-text" }, [item.label]));
+      list.append(row);
+    }
+    root.append(list);
+
+    // One live region for the whole list, carrying a COUNT rather than the rule
+    // text. Marking each row live would utter up to one sentence per rule per
+    // keystroke; the reconciler only rewrites `textContent` when it differs, so a
+    // keystroke that changes no verdict makes no announcement at all.
+    if (asBoolean(props.announce)) {
+      const template = asString(props.announceText, "{met} of {total} requirements met");
+      const text = template
+        .split("{met}").join(String(metCount))
+        .split("{total}").join(String(items.length));
+      root.append(el("div", {
+        class: "rui-requirement-list-status rui-visually-hidden",
+        role: "status",
+        "aria-live": "polite",
+        "aria-atomic": "true",
+      }, [text]));
+    }
+    return root;
+  },
+};

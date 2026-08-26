@@ -1,7 +1,7 @@
 {
   "name": "aktion-vscode",
   "displayName": "Aktion",
-  "description": "Rich language support for Aktion (.aktion) files: syntax + semantic highlighting, diagnostics with quick fixes, hover, completions, signature help, cross-file go-to-definition, find references, rename, document + workspace outline, formatting, and snippets. Covers all 26 $-builtins — $state, $memo, $ref, $reducer, $id, $effect, $optimistic, $http, $query, $mutation, $socket, $sse, $script, $head, $dom, $form, $store, $router, $theme, $i18n, $storage, $console, $toast, $emit, $app, $util — plus sx/animate universal props, 6 built-in themes, and the full 281-component library (incl. Mount / WebComponent interop). Also highlights Aktion code embedded in <aktion-app> tags inside HTML files.",
+  "description": "Rich language support for Aktion (.aktion) files: syntax + semantic highlighting, diagnostics with quick fixes, hover, completions, signature help, cross-file go-to-definition, find references, rename, document + workspace outline, formatting, and snippets. Covers all 26 $-builtins — $state, $memo, $ref, $reducer, $id, $effect, $optimistic, $http, $query, $mutation, $socket, $sse, $script, $head, $dom, $form, $store, $router, $theme, $i18n, $storage, $console, $toast, $emit, $app, $util — plus sx/animate universal props, 6 built-in themes, and the full 282-component library (incl. Mount / WebComponent interop). Also highlights Aktion code embedded in <aktion-app> tags inside HTML files.",
   "version": "0.6.4",
   "publisher": "AsfandiyarKhan",
   "license": "MIT",

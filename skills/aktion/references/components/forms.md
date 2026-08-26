@@ -6,7 +6,7 @@
 
 # Forms
 
-43 components. [← back to the catalogue index](./index.md)
+44 components. [← back to the catalogue index](./index.md)
 
 ## When to use what
 
@@ -30,6 +30,7 @@ between similar components, which the prop tables below cannot express.
 - `FormSection(label, children, helper?)` is the canonical wrapper for related fields. Reach for it INSTEAD of nesting fields in Card + SectionHeader by hand.
 - `FieldSet(legend, children, helper?)` is the accessible `<fieldset>` for radio/checkbox groups; prefer `FormSection` for purely visual grouping.
 - `ValidationSummary(errors, title?)` renders an aggregate error panel at the top of the form. Pass `errors` as `{label, message}` objects.
+- `RequirementList(items)` marks each rule a value must satisfy met / unmet / not-yet-checked. Reach for it INSTEAD of restating every rule inside one `error` string — pair it with the field's `invalid` and `describedBy` so the border still reddens and the list is the explanation.
 - `PasswordInput(id, value?, placeholder?, strengthMeter?)` adds a show/hide toggle and an optional 4-step strength meter — prefer over `Input(type="password")` for sign-up flows.
 - `PinInput(id, length?, value?, type?)` renders per-digit code entry for 2FA / SMS verification (use `length=6` for OTP codes).
 - `TagInput(id, value?, placeholder?)` lets the user add comma- or Enter-separated chips bound to a `$variable` array.
@@ -61,7 +62,7 @@ Form container. Children FormControls render in order; buttons render at the bot
 ### FormControl
 
 ```
-FormControl(label, field, hint?, error?, required?, for?)
+FormControl(label, field, hint?, error?, required?, for?, warning?, description?, optional?, invalid?, describedBy?)
 ```
 
 Labeled wrapper around a single form field. The label is associated with the nested control automatically (override with `for`), and `error`/`required` give a validation slot to fields that have none of their own (Checkbox, Radio, CheckBoxGroup).
@@ -74,6 +75,11 @@ Labeled wrapper around a single form field. The label is associated with the nes
 | `error` | `string` | no | Validation error rendered below the field (marks the control invalid) |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
 | `for` | `string` | no | Id of the control the label points at — only needed when the nested field has no `id` of its own |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### FormSection
 
@@ -123,10 +129,28 @@ Aggregate error list rendered at the top of a form. Pass `errors` as `{label?, m
 | `count` | `boolean` | no | Use a counting heading ("There are 3 problems with this form") |
 | `onErrorClick` | `callable` | no | Called with the entry's `field` key when it is clicked |
 
+### RequirementList
+
+```
+RequirementList(items, title?, pending?, announce?, announceText?, metLabel?, unmetLabel?)
+```
+
+Checklist of rules a value has to satisfy, each marked met (check), unmet (cross) or not yet checked (dot) — password requirements, naming rules, policy checks. Pass `items` as strings or `{label, met}` objects, where `met` omitted means "not evaluated yet" and renders neutral, so an untouched field does not accuse the reader of breaking rules. Pair it with a field's `invalid` and `describedBy` props to keep the border red and the list as the explanation, instead of repeating the rules in an `error` string. Set `announce` to have changes read out politely as the value is edited.
+
+| prop | type / values | required | notes |
+| --- | --- | --- | --- |
+| `items` | `any[]` | **yes** | Rules: strings, or `{label, met}` where `met` is true / false / omitted |
+| `title` | `string` | no | Heading above the list (e.g. "Your password must:") |
+| `pending` | `boolean` | no | Force every row neutral regardless of its `met` — for a field the user has not touched yet |
+| `announce` | `boolean` | no | Announce progress to assistive tech as rows change (a polite count, not the rule text). Off by default, because a list that talks on every keystroke is worse than one that stays quiet |
+| `announceText` | `string` | no | What `announce` says; `{met}` and `{total}` are substituted (default "{met} of {total} requirements met") |
+| `metLabel` | `string` | no | Screen-reader prefix for a met row (default "Met") — colour and glyph alone would not say which is which |
+| `unmetLabel` | `string` | no | Screen-reader prefix for an unmet row (default "Not met") |
+
 ### Input
 
 ```
-Input(id, placeholder?, type?, validations?, value?, onChange?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?, readOnly?, autocomplete?, maxLength?)
+Input(id, placeholder?, type?, validations?, value?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?, readOnly?, autocomplete?, maxLength?)
 ```
 
 Text input field. Pass a $variable as `value` for two-way binding. `onChange(value)` fires on every keystroke with the current string. Pass `label`/`hint`/`error`/`required` to render a labelled field shell with validation messaging. Use `autocomplete` on sign-in and address fields so password managers and browser autofill work, and `readOnly` for a locked-but-selectable value.
@@ -142,8 +166,13 @@ Text input field. Pass a $variable as `value` for two-way binding. `onChange(val
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
@@ -155,7 +184,7 @@ Text input field. Pass a $variable as `value` for two-way binding. `onChange(val
 ### TextArea
 
 ```
-TextArea(id, placeholder?, rows?, value?, onChange?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?, maxLength?, readOnly?, autoResize?)
+TextArea(id, placeholder?, rows?, value?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?, maxLength?, readOnly?, autoResize?)
 ```
 
 Multi-line text input. `onChange(value)` fires on every keystroke with the current text. Pass `label`/`hint`/`error`/`required` for a labelled field shell, `maxLength` to cap the length (drives a "120/280" counter), and `autoResize` for a composer that grows with its content.
@@ -170,8 +199,13 @@ Multi-line text input. `onChange(value)` fires on every keystroke with the curre
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
@@ -183,7 +217,7 @@ Multi-line text input. `onChange(value)` fires on every keystroke with the curre
 ### PasswordInput
 
 ```
-PasswordInput(id, value?, placeholder?, strengthMeter?, autocomplete?, onChange?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?)
+PasswordInput(id, value?, placeholder?, strengthMeter?, autocomplete?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
 ```
 
 Password input with a show/hide toggle and an optional strength meter. Pass a `$variable` as `value` for two-way binding. Set `strengthMeter=true` to render a 4-step indicator and label. Use `autocomplete="new-password"` on sign-up / reset forms so the browser offers a generated password. Pass `label`/`hint`/`error`/`required` for the labelled field shell.
@@ -199,8 +233,13 @@ Password input with a show/hide toggle and an optional strength meter. Pass a `$
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
@@ -209,7 +248,7 @@ Password input with a show/hide toggle and an optional strength meter. Pass a `$
 ### MaskedInput
 
 ```
-MaskedInput(id, mask, value?, placeholder?, unmasked?, inputMode?, onChange?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?)
+MaskedInput(id, mask, value?, placeholder?, unmasked?, inputMode?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
 ```
 
 Text input with an inline mask — `9` matches a digit, `A` matches a letter, `*` matches any character, every other character is a fixed delimiter. Useful for phone numbers, postal codes, credit cards. Pass `mask` (e.g. `"(999) 999-9999"`) and a `$variable` as `value`. Set `unmasked: true` to bind the token characters only (no punctuation in the submitted payload). Pass `label`/`hint`/`error`/`required` for the labelled field shell.
@@ -226,8 +265,13 @@ Text input with an inline mask — `9` matches a digit, `A` matches a letter, `*
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
@@ -236,7 +280,7 @@ Text input with an inline mask — `9` matches a digit, `A` matches a letter, `*
 ### MentionInput
 
 ```
-MentionInput(id, people, value?, placeholder?, rows?, maxSuggestions?, mentionFormat?, loading?, onSearch?, onChange?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?)
+MentionInput(id, people, value?, placeholder?, rows?, maxSuggestions?, mentionFormat?, loading?, onSearch?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
 ```
 
 Multi-line input with inline @-mention suggestions. Typing `@` opens a popover listing the provided `people` (filtered by what follows). Selecting an option inserts `@handle` — the `handle`/`value` key, falling back to the display label; set `mentionFormat: "label"` to insert the display name instead. Pass a `$variable` as `value` for two-way binding. Use `onSearch` + `loading` for a server-side directory. Use for comments, task notes, chat composers.
@@ -256,8 +300,13 @@ Multi-line input with inline @-mention suggestions. Typing `@` opens a popover l
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
@@ -266,7 +315,7 @@ Multi-line input with inline @-mention suggestions. Typing `@` opens a popover l
 ### TagInput
 
 ```
-TagInput(id, value?, placeholder?, max?, suggestions?, onChange?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?)
+TagInput(id, value?, placeholder?, max?, suggestions?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
 ```
 
 Tag/chip input — type a value, press Enter (or comma) to commit, click × on a chip to remove. Tabbing away commits the pending text too. Pass a `$variable` (array of strings) as `value` for two-way binding. Use for keywords, recipients, labels, skills, allowlists. Pass `suggestions` for autocomplete and `label`/`hint`/`error` for the labelled field shell.
@@ -282,8 +331,13 @@ Tag/chip input — type a value, press Enter (or comma) to commit, click × on a
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
@@ -292,7 +346,7 @@ Tag/chip input — type a value, press Enter (or comma) to commit, click × on a
 ### Select
 
 ```
-Select(id, items, label?, placeholder?, value?, searchable?, onChange?, hint?, error?, required?, disabled?, onBlur?, onFocus?, loading?, onSearch?, labelHidden?, emptyLabel?)
+Select(id, items, label?, placeholder?, value?, searchable?, onChange?, hint?, error?, required?, disabled?, onBlur?, onFocus?, loading?, onSearch?, labelHidden?, emptyLabel?, warning?, description?, optional?, invalid?, describedBy?)
 ```
 
 Dropdown select. Pass a `$variable` as `value` for two-way binding. Set `searchable: true` for a combobox-style filter UI on long option lists, or pass `onSearch` (which implies it) to fetch the matches from the server as the user types. `onChange(value)` fires with the newly-selected value. `items` accepts `SelectItem(value, label)` nodes, `{value, label}` objects and bare strings.
@@ -316,6 +370,11 @@ Dropdown select. Pass a `$variable` as `value` for two-way binding. Set `searcha
 | `onSearch` | `callable` | no | Called with the query ~200ms after typing stops, for server-side search (implies `searchable`; supply the matches as `items`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
 | `emptyLabel` | `string` | no | Shown in place of the options when there are none — the difference between "this list is genuinely empty" and "something failed to load". Defaults to "No options" |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### SelectItem
 
@@ -335,7 +394,7 @@ Single option for a Select/Radio/Combobox list. Set `disabled` for an option tha
 ### Combobox
 
 ```
-Combobox(id, items, value?, placeholder?, emptyLabel?, disabled?, open?, onOpenChange?, onChange?, label?, hint?, error?, required?, loading?, onSearch?, clearable?, onBlur?, onFocus?, creatable?, labelHidden?)
+Combobox(id, items, value?, placeholder?, emptyLabel?, disabled?, open?, onOpenChange?, onChange?, label?, hint?, error?, required?, loading?, onSearch?, clearable?, onBlur?, onFocus?, creatable?, labelHidden?, warning?, description?, optional?, invalid?, describedBy?)
 ```
 
 Searchable single-select dropdown — type to filter, click an option to choose. Use instead of `Select` when the list is long enough that scanning is faster than scrolling (countries, currencies, repos, users). Pass a `$variable` as `value` for two-way binding; the selected option's `value` is written to state on pick. Arrow keys / Home / End / Enter / Escape operate the list. Pass `onSearch` for a server-side type-ahead (called with the query ~200ms after typing stops; local filtering is then skipped — supply the matches as `items`), `loading` while those matches are in flight, `creatable` to accept a value that is not in the list, and `label`/`hint`/`error`/`required` for a labelled field.
@@ -362,11 +421,16 @@ Searchable single-select dropdown — type to filter, click an option to choose.
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `creatable` | `boolean` | no | Offer the typed text itself as an option when it matches nothing ("Create «acme-corp»") so a value outside `items` can be selected |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### MultiSelect
 
 ```
-MultiSelect(id, items, value?, placeholder?, emptyLabel?, max?, disabled?, open?, onOpenChange?, onChange?, label?, hint?, error?, required?, min?, onSearch?, loading?, creatable?, labelHidden?)
+MultiSelect(id, items, value?, placeholder?, emptyLabel?, max?, disabled?, open?, onOpenChange?, onChange?, label?, hint?, error?, required?, min?, onSearch?, loading?, creatable?, labelHidden?, warning?, description?, optional?, invalid?, describedBy?)
 ```
 
 Multi-option searchable dropdown. Type to filter, click an option to add/remove it from the bound array. Renders the selected options as removable chips inside the trigger. Pass a `$variable` (array of values) as `value` for two-way binding. Arrow keys / Home / End move through the list and Enter or Space toggles the highlighted option. `min`/`max` bound the selection size; `onSearch` turns filtering over to the server (called with the query ~200ms after typing stops — supply the matches as `items`, with `loading` while they are in flight), and `creatable` accepts a value that is not in the list.
@@ -392,11 +456,16 @@ Multi-option searchable dropdown. Type to filter, click an option to add/remove 
 | `loading` | `boolean` | no | Matches are being fetched — shows "Loading…" instead of the (lying) empty label |
 | `creatable` | `boolean` | no | Offer the typed text itself as an option when it matches nothing ("Create «backend»") so a tag outside `items` can be added |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### Checkbox
 
 ```
-Checkbox(id, label, value?, onChange?, disabled?, description?, required?, error?, hint?, indeterminate?, labelHidden?)
+Checkbox(id, label, value?, onChange?, disabled?, description?, required?, error?, hint?, indeterminate?, labelHidden?, warning?, optional?, invalid?, describedBy?)
 ```
 
 Boolean checkbox. `onChange(checked)` fires with the new boolean state. Pass `required`/`error` for the "I accept the Terms" pattern, `description` for a secondary line, and `indeterminate` for a "select all" header over a partially-selected list.
@@ -414,11 +483,15 @@ Boolean checkbox. `onChange(checked)` fires with the new boolean state. Pass `re
 | `hint` | `string` | no | Helper text rendered below the control |
 | `indeterminate` | `boolean` | no | Tri-state "partially checked" dash (a parent of a partly-selected list) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a checkbox in a table cell whose column header already carries the name |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### CheckBoxGroup
 
 ```
-CheckBoxGroup(name, items, value?, onChange?, label?, hint?, error?, required?, disabled?, labelHidden?)
+CheckBoxGroup(name, items, value?, onChange?, label?, hint?, error?, required?, disabled?, labelHidden?, warning?, description?, optional?, invalid?, describedBy?)
 ```
 
 Group of checkboxes. Value is an object keyed by item name. Pass a `$variable` for two-way binding. `onChange(value)` fires with the full updated object. `items` accepts `CheckBoxItem(label, name, …)` nodes and plain `{label, name, description, checked, disabled}` objects. Pass `label` for the group heading ("Permissions") and `error` for "Select at least one scope".
@@ -435,6 +508,11 @@ Group of checkboxes. Value is an object keyed by item name. Pass a `$variable` f
 | `required` | `boolean` | no | Mark the group required (adds a `*` to the heading) |
 | `disabled` | `boolean` | no | Lock every item in the group |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### CheckBoxItem
 
@@ -456,7 +534,7 @@ Single option inside a CheckBoxGroup. `disabled` locks one option (a scope the c
 ### Radio
 
 ```
-Radio(id, items, value?, onChange?, label?, hint?, error?, required?, disabled?, direction?, labelHidden?, slots?)
+Radio(id, items, value?, onChange?, label?, hint?, error?, required?, disabled?, direction?, labelHidden?, slots?, warning?, description?, optional?, invalid?, describedBy?)
 ```
 
 Radio button group. `onChange(value)` fires with the newly-selected option value. Always pass `label` — the question being answered ("Shipping method") — and use `direction: "row"` for a Yes/No or Monthly/Yearly pair. `items` accepts `SelectItem(value, label)` nodes, `{value, label, disabled}` objects and bare strings. Pass `slots` to hang a control off an option's own row ("Fixed  [– 3 +]", "Card  [number]") — one entry per item, aligned by index; the slot renders OUTSIDE the `<label>`, so clicking the control does not select the option.
@@ -475,6 +553,11 @@ Radio button group. `onChange(value)` fires with the newly-selected option value
 | `direction` | `"row"` \| `"column"` | no | Layout of the options (default `column`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
 | `slots` | `Node[]` | no | Per-option trailing content, aligned by index with `items` — rendered beside the option, outside its `<label>`, so a control in the slot stays independently clickable. Use `null` for an option that has none. |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### Switch
 
@@ -569,7 +652,7 @@ Row of buttons joined edge-to-edge into a single continuous control — only the
 ### InputGroup
 
 ```
-InputGroup(field, icon?, action?, suffix?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?)
+InputGroup(field, icon?, action?, suffix?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
 ```
 
 Single field wrapped in a shared bordered shell with an optional leading `icon` and an optional trailing `action` node (button / IconButton / short text suffix). The focus ring is drawn around the whole composite. Use for search fields, password reveal, copy-to-clipboard rows, and unit-suffixed inputs.
@@ -583,8 +666,13 @@ Single field wrapped in a shared bordered shell with an optional leading `icon` 
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
@@ -616,7 +704,7 @@ Pre-styled search input with a leading magnifying-glass icon, optional trailing 
 ### Slider
 
 ```
-Slider(id, min?, max?, step?, value?, label?, showValue?, disabled?, onChange?, suffix?, format?, hint?, error?, marks?)
+Slider(id, min?, max?, step?, value?, label?, showValue?, disabled?, onChange?, suffix?, format?, hint?, error?, marks?, warning?, description?, optional?, invalid?, describedBy?)
 ```
 
 Range slider for selecting a single numeric value between `min` and `max`. Pass a `$variable` as `value` for two-way binding. Useful for filters, settings (volume, brightness), and parameter tuning. Use `suffix` ("%", " ms") or `format` ("${value}") so the displayed value carries its unit, and `marks` for a ticked or named scale (`[0, 50, 100]`, or `[{value: 1, label: "Low"}, …]` — a mark's label replaces the numeric readout when the slider sits on it). Single-thumb only: there is no two-handle range. For a `$50 – $400` filter use two Sliders that bound each other — `Slider("lo", value: $lo, max: $hi)` above `Slider("hi", value: $hi, min: $lo)` — which the browser then keeps ordered, since `min`/`max` accept `$variables`.
@@ -637,11 +725,16 @@ Range slider for selecting a single numeric value between `min` and `max`. Pass 
 | `hint` | `string` | no | Helper text rendered below the slider |
 | `error` | `string` | no | Validation error rendered below the slider (marks it invalid) |
 | `marks` | `any[]` | no | Tick scale: numbers (`[0, 50, 100]`) or `{value, label}` objects. A mark's label becomes the readout and the announced value when the slider is on it. |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### NumberInput
 
 ```
-NumberInput(id, value?, min?, max?, step?, placeholder?, onChange?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?, prefix?, suffix?, precision?)
+NumberInput(id, value?, min?, max?, step?, placeholder?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?, prefix?, suffix?, precision?)
 ```
 
 Numeric input with paired increment/decrement buttons. Use for quantity steppers, integer settings, and any field where a `<input type="number">` plus +/- controls is friendlier than the native spinner. Pass a `$variable` as `value` for two-way binding. `prefix` / `suffix` render an inline unit ("€", "GB", "%"), and `precision` fixes the number of decimals (currency fields).
@@ -658,8 +751,13 @@ Numeric input with paired increment/decrement buttons. Use for quantity steppers
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
@@ -671,7 +769,7 @@ Numeric input with paired increment/decrement buttons. Use for quantity steppers
 ### ColorPicker
 
 ```
-ColorPicker(id, value?, label?, swatches?, disabled?, onChange?, format?, allowAlpha?, showInput?, showSwatches?, name?, hint?, error?, required?)
+ColorPicker(id, value?, label?, swatches?, disabled?, onChange?, format?, allowAlpha?, showInput?, showSwatches?, name?, hint?, error?, required?, warning?, description?, optional?, invalid?, describedBy?)
 ```
 
 Hex / RGB / HSL color form control with preset swatches. Pairs a native `<input type="color">` chip with a text input and a row of preset swatches. Pass a `$variable` as `value` (e.g. `"#6366f1"`) for two-way binding; `format` picks the notation written back (`hex` by default) and `allowAlpha` keeps the alpha channel instead of dropping it. Use `showInput` / `showSwatches` to render only the half you need. Use for theme builders, label color pickers, and any "pick a color" surface.
@@ -692,11 +790,16 @@ Hex / RGB / HSL color form control with preset swatches. Pairs a native `<input 
 | `hint` | `string` | no | Helper text rendered below the control |
 | `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
 | `required` | `boolean` | no | Mark the field required (adds a `*`) |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### DatePicker
 
 ```
-DatePicker(id, value?, label?, min?, max?, placeholder?, disabled?, onChange?, hint?, error?, required?, onBlur?, onFocus?, locale?)
+DatePicker(id, value?, label?, min?, max?, placeholder?, disabled?, onChange?, hint?, error?, required?, onBlur?, onFocus?, locale?, warning?, description?, optional?, invalid?, describedBy?)
 ```
 
 Date picker that wraps the native `<input type="date">` with consistent styling. Pass a `$variable` as `value` for two-way binding. Use `min`/`max` to bound the selectable range, and `error`/`required` to make it part of the form's validation flow. Set `locale` (`de-DE`, `en-GB`) to echo the chosen date in that locale's order under the field — the native widget's own boxes always follow the viewer's browser, which is not the customer's when the app serves one market.
@@ -717,11 +820,16 @@ Date picker that wraps the native `<input type="date">` with consistent styling.
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `locale` | `string` | no | BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) the selected date is echoed in beneath the field, and the language the value is announced in. Same `locale` channel as `Table`/`Col`, so a filter and the report it filters read alike. Bound values stay ISO `YYYY-MM-DD`. |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### DateRangePicker
 
 ```
-DateRangePicker(id, from?, to?, label?, min?, max?, disabled?, onChange?, hint?, error?, required?, onBlur?, onFocus?, locale?)
+DateRangePicker(id, from?, to?, label?, min?, max?, disabled?, onChange?, hint?, error?, required?, onBlur?, onFocus?, locale?, warning?, description?, optional?, invalid?, describedBy?)
 ```
 
 Paired date inputs with a single label, sharing the same min/max range. Pass `$variable` references for both `from` and `to` to two-way-bind a date range (ISO `YYYY-MM-DD` strings). The endpoints bound each other, so the range cannot be inverted. Pass `error`/`required` for a mandatory reporting period, and `locale` (`de-DE`, `en-GB`) to echo the chosen period in that locale's date order.
@@ -742,11 +850,16 @@ Paired date inputs with a single label, sharing the same min/max range. Pass `$v
 | `onBlur` | `callable` | no | Called with the current value when focus leaves an endpoint (validate-on-blur) |
 | `onFocus` | `callable` | no | Called when an endpoint gains focus |
 | `locale` | `string` | no | BCP-47 tag (`de-DE`, `en-GB`) the chosen period is echoed in beneath the pair, and the language both endpoints are announced in. Same `locale` channel as `Table`/`Col`. Bound values stay ISO `YYYY-MM-DD`. |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 
 ### TimePicker
 
 ```
-TimePicker(id, value?, min?, max?, step?, onChange?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?)
+TimePicker(id, value?, min?, max?, step?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
 ```
 
 Time-of-day picker that wraps `<input type="time">`. Pass a `$variable` as `value` for two-way binding (HH:MM 24-hour, written on commit). Set `step` to constrain to specific increments (e.g. 900 for 15-minute buckets, or `"any"` for seconds). Pass `label`/`hint`/`error`/`required` for the labelled field shell.
@@ -762,8 +875,13 @@ Time-of-day picker that wraps `<input type="time">`. Pass a `$variable` as `valu
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
@@ -772,7 +890,7 @@ Time-of-day picker that wraps `<input type="time">`. Pass a `$variable` as `valu
 ### DateTimePicker
 
 ```
-DateTimePicker(id, value?, min?, max?, step?, onChange?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?)
+DateTimePicker(id, value?, min?, max?, step?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
 ```
 
 Combined date + time picker — wraps `<input type="datetime-local">`. Pass a `$variable` as `value` for two-way binding (ISO `YYYY-MM-DDTHH:MM`, written on commit). The field is timezone-naive, so spell the timezone out in `hint`. Pass `label`/`hint`/`error`/`required` for the labelled field shell.
@@ -788,8 +906,13 @@ Combined date + time picker — wraps `<input type="datetime-local">`. Pass a `$
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
@@ -821,7 +944,7 @@ Styled file picker. Renders a click/drop area with a leading icon, label, and he
 ### PinInput
 
 ```
-PinInput(id, length?, value?, type?, mask?, autoFocus?, onChange?, onComplete?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?)
+PinInput(id, length?, value?, type?, mask?, autoFocus?, onChange?, onComplete?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
 ```
 
 Per-digit PIN entry. Auto-advances focus as the user types and supports pasting a whole code into any slot. Pass a `$variable` as `value` for two-way binding (the bound value is the joined string). Use `type="numeric"` for PINs / 2FA codes, `"alphanumeric"` for invite codes. `onComplete` fires once every slot is filled (auto-submit hook); pass `label`/`hint`/`error` for the labelled field shell.
@@ -839,8 +962,13 @@ Per-digit PIN entry. Auto-advances focus as the user types and supports pasting 
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
@@ -947,7 +1075,7 @@ A theme/palette preview tile — color dots over a named background. For theming
 ### DrawingCanvas
 
 ```
-DrawingCanvas(width?, height?, color?, lineWidth?, background?, clearable?, value?, onChange?, onEnd?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?, ariaLabel?)
+DrawingCanvas(width?, height?, color?, lineWidth?, background?, clearable?, value?, onChange?, onEnd?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?, ariaLabel?)
 ```
 
 A freehand drawing surface (pointer / touch / stylus). `onChange(count)` fires when a stroke starts or the pad is cleared; `onEnd(dataUrl, count)` fires when a stroke finishes with a PNG data URL. Pass that URL back as `value` to restore the drawing after a re-render or route change. `color`/`lineWidth`/`background` style the ink (`background` defaults to the surface colour so the export is never ink-on-transparency). Includes a Clear button unless `clearable=false`; `disabled` locks the surface.
@@ -966,8 +1094,13 @@ A freehand drawing surface (pointer / touch / stylus). `onChange(count)` fires w
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
@@ -977,7 +1110,7 @@ A freehand drawing surface (pointer / touch / stylus). `onChange(count)` fires w
 ### SignaturePad
 
 ```
-SignaturePad(width?, height?, color?, lineWidth?, background?, clearable?, value?, onChange?, disabled?, label?, hint?, error?, required?, onBlur?, onFocus?, name?, labelHidden?, ariaLabel?)
+SignaturePad(width?, height?, color?, lineWidth?, background?, clearable?, value?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?, ariaLabel?)
 ```
 
 A signature capture pad — a DrawingCanvas tuned for signing, with a baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires when the signature changes (empty string when cleared, and also when the pad only received taps — so a stray tap cannot pass a truthiness check). Pass the URL back as `value` to restore a signature after a re-render, and `disabled` to lock the pad once it is submitted. `label`/`error`/`required` render the usual field shell. Use in contracts, delivery confirmation, and consent flows.
@@ -995,8 +1128,13 @@ A signature capture pad — a DrawingCanvas tuned for signing, with a baseline a
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
-| `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
+| `error` | `string` | no | Validation error rendered below the control (marks it invalid). Takes the message slot ahead of `warning` and `hint` |
+| `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
+| `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
+| `optional` | `boolean | string` | no | Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set |
+| `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
+| `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
 | `onFocus` | `callable` | no | Called when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |

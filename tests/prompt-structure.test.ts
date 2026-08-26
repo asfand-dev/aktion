@@ -234,7 +234,7 @@ describe("prompt — section budget and ordering", () => {
 
   it("gives the examples a non-trivial share of the prompt", () => {
     // They were 0.5% of it, and last. A checklist the model never reaches is not
-    // a checklist; nor is one example for a 281-component surface.
+    // a checklist; nor is one example for a 282-component surface.
     const examples = fullPrompt.indexOf("## Examples");
     const library = fullPrompt.indexOf("## Component library");
     const share = (library - examples) / fullPrompt.length;

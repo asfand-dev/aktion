@@ -7,6 +7,116 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-08-26
 
+### Guidance Above a Field, and an "(optional)" Marker
+
+- Every field now takes a `description` — a line of guidance that renders
+  **between the label and the control**, where a reader needs it: what to put in
+  the field, as opposed to `hint`, which is a note about the value and still sits
+  below. Apps used to hand-roll this by hiding the real label and rendering their
+  own, which cost them the label-to-control association.
+- `optional: true` marks a field optional in its label, the mirror of `required`.
+  Pass a string instead of `true` to word it differently — `optional: "(facultatif)"`
+  — because a component library cannot translate for you. `required` wins if both
+  are set.
+- Unlike the `required` star, the optional marker is **not** hidden from assistive
+  tech. HTML has a `required` attribute that announces itself; it has no `optional`
+  attribute, so this text is the only thing carrying the state.
+- Both are available on every field that has a label — `Input`, `Select`,
+  `TextArea`, `Combobox`, `MultiSelect`, `DatePicker`, `TagInput`, the rest — and
+  on `FormControl`.
+
+### A Warning Slot for a Value That Is Odd But Allowed
+
+- Fields take a `warning` alongside `hint` and `error`, for a value that is
+  accepted but probably not what was meant — a public IP address where a private
+  one is expected, a date in the past. It reads as a caution rather than a
+  rejection: the border turns amber, not red.
+- It does **not** mark the field invalid, and it announces politely instead of
+  interrupting — a warning that talks over the user's typing is worse than no
+  warning.
+- One message shows at a time, in the order error, warning, hint. A field that is
+  both wrong and unusual has nothing to gain from saying both.
+
+### Marking a Field Invalid Without Repeating Yourself
+
+- New `invalid` prop: the border reddens and the control reads as invalid, with no
+  message of its own. Until now the only way to redden a border was a non-empty
+  `error` string, which forced you to say something — even when the explanation
+  already lived somewhere better, like a requirement list or a form-level summary.
+- New `describedBy` prop: space-separated ids merged into the control's
+  `aria-describedby`, so an explanation that lives outside the field is still
+  attached to it. The universal `aria` channel could not do this — it applies to
+  the node a component returns, which for a labelled input is the wrapper, not the
+  control.
+
+### New: RequirementList
+
+- A checklist of the rules a value has to satisfy, each marked met (check), unmet
+  (cross), or **not yet checked** (dot). For password requirements, naming rules,
+  policy checks — anywhere a single error string would otherwise restate every
+  rule at once and leave the reader to work out which one they broke.
+- The third state is the point. A rule the value has not been tested against is
+  not a failed rule, and painting it red on an untouched form accuses the reader of
+  a mistake they have not made.
+- Pair it with a field's `invalid` and `describedBy` and the field stays red while
+  the list does the explaining.
+- `announce: true` has changes read out politely as the value is edited — a count,
+  not the rule text, and only when the count actually changes. Off by default,
+  because a list that speaks on every keystroke is worse than one that stays quiet.
+
+### Choosing Where Toasts Appear
+
+- `$toast.configure({position: "bottom-center"})` moves the stack the runtime
+  renders for you. Until now that layer was pinned to the top-right corner and the
+  only way to move it was to stop using it — read `$toast.items` and render your
+  own `Toasts(...)`.
+- Call it once at the top level of a program. The default is unchanged, and a
+  position that is not one of the six real corners is ignored rather than passed
+  through to pin the stack to nothing.
+
+### Fixed: a bottom-center Toast Stack Pinned to Nothing
+
+- `bottom-center` has been in the `Toasts` `position` list, and on the standalone
+  `Toast`, since both shipped — but the stack had no rule for it, so asking for it
+  left the stack wherever the viewport put it, usually over the page's own header.
+- Centre-pinned stacks now also dismiss vertically. The sideways default slid the
+  toast off the axis it was centred on, which read as drifting rather than leaving.
+
+### Fixed: ActionLink Looked Live While Disabled
+
+- `ActionLink` has honoured `disabled` since it shipped — the click never fired —
+  but looked exactly like a working link, so the only way to find out it was inert
+  was to click it. It now dims and takes a not-allowed cursor.
+- Its icon gap moved from an inline style to the stylesheet, so a theme can change
+  it. Same for `line-height`: the inline `font: inherit` also reset it, which
+  silently beat every theme rule that tried to set one.
+- New `ariaLabel`, for the case the visible label cannot cover: one "Rebuild" link
+  per table row is announced identically on every row unless the name can say
+  which row it belongs to.
+- In the `vision` theme it now focuses in that theme's own interactive blue
+  instead of falling through to the base navy.
+
+### Fixed: an App Validator That Passed Everything
+
+- `tools/validate-aktion-app.mjs` reported OK for programs with real problems in
+  every file except the entry. It linted a **re-printed** copy of the linked
+  program, and three things went wrong at once: the printed text does not re-parse
+  (the formatter emits object shorthand where the parser wants `key: value`),
+  `getLintWarnings` answers `[]` for source it cannot parse instead of saying so,
+  and `await` is printed as an internal marker no rule matches.
+- It now lints the entry and every module the linker loaded, each from its own
+  file. Findings carry the real file name and the line the author wrote, and the
+  most common warning of all — a consumed `await`, which parses but never suspends
+  — is reachable again.
+
+### Fixed: the Docs Version Sync Appended a Segment Every Build
+
+- `scripts/sync-docs-version.mjs` rewrote `aktion@0.6.4` to `aktion@0.6.4.4`, then
+  `0.6.4.4.4`, once per build. Two overlapping non-global patterns: the second
+  matched the `x.y` prefix of what the first had just written. Being non-global it
+  also never reached the file's second version string, so one URL rotted while the
+  other went stale.
+
 ### A Select No Longer Loses Its Value When Its Option List Grows
 
 - Re-rendering a `<select>` with **more** options than it currently shows used to
