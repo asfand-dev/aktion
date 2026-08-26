@@ -530,13 +530,21 @@ export const InputGroup: ComponentSpec = {
   render: (_node, props, helpers) => {
     const disabled = asBoolean(props.disabled);
     const error = asString(props.error);
+    const invalid = asBoolean(props.invalid) || Boolean(error);
+    const warning = asString(props.warning);
     const root = el("div", {
       class: "rui-input-group",
-      // The group owns the border and the focus ring, so the invalid + disabled
-      // states have to be readable on the shell itself — the nested field's own
-      // chrome is stripped by the theme and can never show them.
+      // The group owns the border and the focus ring, so the invalid, warning and
+      // disabled states have to be readable on the shell itself — the nested
+      // field's own chrome is stripped by the theme and can never show them.
+      //
+      // All three, not just `error`: the shell's own state selectors reach
+      // `.rui-input` / `.rui-select` / `.rui-textarea`, none of which is what
+      // carries the border here — so a group that did not mirror them onto itself
+      // signalled a bad value by message text alone.
       "data-disabled": disabled ? "true" : null,
-      "data-invalid": error ? "true" : null,
+      "data-invalid": invalid ? "true" : null,
+      "data-warning": !invalid && warning ? "true" : null,
     });
     const iconNode = renderIcon(props.icon, { className: "rui-input-group-icon" });
     if (iconNode) root.append(iconNode);
@@ -1269,7 +1277,15 @@ export const FormControl: ComponentSpec = {
     const describedByIds: string[] = [];
     if (description || descriptionNode) {
       const descriptionId = controlId ? `${controlId}-description` : "";
-      const wrap = el("p", { class: "rui-field-description", id: descriptionId || null });
+      // `<p>` for a string, `<div>` for a node. A paragraph may only contain
+      // PHRASING content, and a node description is whatever the author composed —
+      // `Markdown` alone renders a `<div>`. Wrapping that in a `<p>` produces markup
+      // no parser would accept, and it is the element a field points
+      // `aria-describedby` at, so it is exactly the wrong place to be invalid.
+      const wrap = el(descriptionNode ? "div" : "p", {
+        class: "rui-field-description",
+        id: descriptionId || null,
+      });
       if (descriptionNode) wrap.append(descriptionNode);
       else wrap.append(document.createTextNode(description));
       root.append(wrap);

@@ -269,6 +269,15 @@ function tonedScope(root: string, excludePrimary = false): string {
   return `${root}[data-tone]:not([data-tone="default"])${primary}`;
 }
 
+/**
+ * The whole sheet, as ONE template literal.
+ *
+ * WRITING IN HERE: never put a raw backtick in a CSS comment. It closes the literal
+ * ~13k lines early, and what you get is an esbuild parse error in every test file in
+ * the suite, pointing at whatever token happens to follow — a loud failure that says
+ * nothing about the cause. Write a class name as .rui-link, not in backticks. (An
+ * escaped \` works, and `${...}` interpolation is used deliberately below.)
+ */
 export const componentStyles = `
 :host {
   display: block;
@@ -511,6 +520,10 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 .rui-field[data-warning="true"] .rui-textarea,
 .rui-field[data-warning="true"] .rui-select,
 .rui-field[data-warning="true"] .rui-number-input { border-color: var(--rui-color-warning); }
+/* An InputGroup owns its own border — the nested control's is stripped — so the
+   state has to be readable on the group. It mirrors the shell's states onto itself
+   for exactly this. */
+.rui-input-group[data-warning="true"] { border-color: var(--rui-color-warning); }
 
 /* Requirement list — one row per rule, met / unmet / not yet checked.
    The tri-state is carried by data-met, and the glyph plus a visually-hidden
@@ -1195,6 +1208,19 @@ a.rui-card {
    reads as a note about missing content, not as body copy. */
 .rui-markdown-image-fallback { color: var(--rui-color-text-muted); font-style: italic; }
 .rui-markdown p { margin: 0; }
+/* A link inside a BLOCK OF TEXT has to be distinguishable by something other than
+   its colour (WCAG 1.4.1, and what axe reports as link-in-text-block): surrounded
+   by prose, a hue change alone is invisible to anyone who cannot separate the two
+   hues, and the two are nowhere near a 3:1 ratio in any of the themes. A standalone
+   link — a nav item, a card action, a button-shaped link — is not in this situation
+   and keeps the undecorated treatment.
+
+   These two containers are the framework's own prose: Markdown is a paragraph by
+   definition, and a field description is a sentence under a label. Scoped by the
+   CONTAINER rather than by the link, so an app never has to know which of its links
+   happen to sit in running text. */
+.rui-markdown a,
+.rui-field-description a { text-decoration: underline; text-underline-offset: 2px; }
 .rui-markdown ul { margin: 0; padding-left: var(--rui-spacing-l); }
 .rui-markdown code {
   background: var(--rui-color-surface-muted);
@@ -5725,6 +5751,10 @@ ${below("xs")} {
    defaults to the accent — so corporate-4 #1474c4 is unchanged — but keeps the
    text side separate from the accent's fill/border duties. */
 :host([data-rui-theme="vision"]) .rui-link { color: var(--rui-color-link); font-weight: 400; text-decoration: none; }
+/* …except in running text, where colour alone is not a distinction. Restated per
+   theme because each theme's own .rui-link rule out-specifies the base pair. */
+:host([data-rui-theme="vision"]) .rui-markdown a,
+:host([data-rui-theme="vision"]) .rui-field-description a { text-decoration: underline; text-underline-offset: 2px; }
 /* UI block ".link--action" is an un-underlined interactive-blue link with a
    leading chevron glyph (link.scss) — not a navy underlined link. */
 :host([data-rui-theme="vision"]) .rui-action-link {
@@ -5801,6 +5831,23 @@ ${below("xs")} {
 :host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-textarea,
 :host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-number-input {
   border-color: #ff6159; /* critical-shape-color */
+}
+/* The warning state needs the same host-scoped mirror as the invalid one above and
+   for the same reason: the vision at-rest .rui-input border is a specificity TIE
+   with the base state rule, and this block comes later, so without a mirror here a
+   warned field renders as an ordinary one. */
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-input,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-select,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-textarea,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-number-input {
+  border-color: #ffaa00; /* warning-shape-color */
+}
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-input:hover,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-input:focus,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-select:hover,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-select:focus,
+:host([data-rui-theme="vision"]) .rui-field[data-warning="true"] .rui-textarea:focus {
+  border-color: #ffaa00; outline: 1px solid #ffaa00; box-shadow: none;
 }
 :host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-input:hover,
 :host([data-rui-theme="vision"]) .rui-field[data-invalid="true"] .rui-input:focus,
@@ -6392,6 +6439,13 @@ ${below("xs")} {
 :host([data-rui-theme="vision"]) .rui-input-group[data-invalid="true"]:focus-within {
   border-color: var(--rui-color-danger);
   outline-color: var(--rui-color-danger);
+}
+/* Same mirror for the warning state, for the same reason. */
+:host([data-rui-theme="vision"]) .rui-input-group[data-warning="true"],
+:host([data-rui-theme="vision"]) .rui-input-group[data-warning="true"]:hover,
+:host([data-rui-theme="vision"]) .rui-input-group[data-warning="true"]:focus-within {
+  border-color: var(--rui-color-warning);
+  outline-color: var(--rui-color-warning);
 }
 :host([data-rui-theme="vision"]) .rui-input-group[data-disabled="true"]:hover,
 :host([data-rui-theme="vision"]) .rui-input-group[data-disabled="true"]:focus-within {
@@ -7752,8 +7806,10 @@ ${below("xs")} {
 /* Present in the position enum and on the standalone Toast since day one, but
    the STACK had no rule — so Toasts with position "bottom-center" pinned to
    nothing and rendered wherever position: fixed left it (top-left of the
-   viewport, over the page's own chrome). column-reverse like the other two
-   bottom corners, so the newest toast is the one nearest the viewport edge. */
+   viewport, over the page's own chrome). column-reverse like the other two bottom
+   corners: DOM order is append order, so reversing it lays the OLDEST toast against
+   the viewport edge and grows the stack upwards, away from it — which is what keeps
+   a burst from walking off the bottom of the screen. */
 .rui-toasts[data-position="bottom-center"] { bottom: 16px; left: 50%; transform: translateX(-50%); align-items: center; flex-direction: column-reverse; }
 /* The max cap summarises the toasts it hid; without this the +N row is bare
    text floating in the stack. align-self overrides the per-position align-items. */
