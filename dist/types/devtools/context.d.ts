@@ -53,12 +53,42 @@ export interface UiState {
         tone: string;
         at: number;
     } | null;
+    paletteOpen: boolean;
+    paletteQuery: string;
+    paletteIndex: number;
+    shortcutsOpen: boolean;
+    /** Dismissed the first-run tips on Overview (persisted). */
+    tipsDismissed: boolean;
+    /**
+     * Outline components on the page as they re-render.
+     *
+     * The single most direct answer to "why is this slow?" — you see which parts
+     * of the screen repaint on an interaction that should have touched one row.
+     */
+    highlightUpdates: boolean;
+    /** Mirror commits into `performance.measure` for the browser's own profiler. */
+    perfMarks: boolean;
     stateFilter: string;
     stateExpanded: Set<string>;
     stateSort: "name" | "activity";
     stateShowReserved: boolean;
     /** Index into `model.history` while scrubbing, or `null` when live. */
     timeTravel: number | null;
+    /** `tree` edits live state; `diff` compares two recorded snapshots. */
+    stateView: "tree" | "diff";
+    /** Snapshot indices being compared in the diff view. */
+    diffFrom: number | null;
+    diffTo: number | null;
+    /**
+     * Atom paths that break into the debugger when they change.
+     *
+     * The panel cannot pause the runtime, but it can execute `debugger` at the
+     * moment of the change — which, with the browser's own DevTools open, stops
+     * the world exactly where the write happened and gives you the stack.
+     */
+    breakOnChange: Set<string>;
+    /** Paste-JSON buffer for state import, or `null` when the form is closed. */
+    importDraft: string | null;
     inspectFilter: string;
     /** Collapsed subtrees (expanded is the default — a tree you must open is a tree you do not read). */
     inspectCollapsed: Set<string>;
@@ -67,6 +97,11 @@ export interface UiState {
     selectedElement: Element | null;
     inspectPane: "props" | "hooks" | "dom" | "styles" | "a11y" | "source";
     inspectShowLibrary: boolean;
+    /**
+     * An instance the Inspect tree should scroll to on the next render, set when
+     * the selection came from ANOTHER tab (so the row may be off-screen).
+     */
+    inspectReveal: string | null;
     propsExpanded: Set<string>;
     computedFilter: string;
     selectedCommitId: number | null;
@@ -89,6 +124,13 @@ export interface UiState {
     replDraft: string;
     replHistory: string[];
     replCursor: number;
+    /**
+     * Pinned expressions, re-evaluated on every render.
+     *
+     * A REPL answers "what is it now?"; a watch answers "what is it doing?" —
+     * which is the question you actually have while clicking through a bug.
+     */
+    watches: string[];
     routeDraft: string;
     dataPane: "queries" | "stores" | "storage";
     storageKind: "local" | "session" | "cookies";
@@ -99,8 +141,14 @@ export interface UiState {
     /** Unsaved edit buffer, or `null` when showing the live program. */
     sourceDraft: string | null;
     sourceOutline: boolean;
+    /** Filter applied to the source view + outline. */
+    sourceFilter: string;
+    /** Show the program-version history instead of the source. */
+    sourceHistoryOpen: boolean;
     testPane: "record" | "a11y" | "coverage" | "queries" | "chaos";
     a11yRun: A11yRun | null;
+    /** Set by the palette to make the Test tab run an audit as it opens. */
+    a11yRequested: boolean;
     a11ySelected: number | null;
     queryProbe: string;
     queryProbeKind: "role" | "text" | "label" | "testid" | "css";
@@ -122,6 +170,10 @@ export interface PersistedUiState {
     height?: number;
     left?: number;
     top?: number;
+    /** Tips are dismissed once, not once per session. */
+    tipsDismissed?: boolean;
+    /** Watch expressions are worth keeping across a reload — they are the setup. */
+    watches?: string[];
 }
 /**
  * Read the persisted chrome preferences.
@@ -145,6 +197,19 @@ export interface TabContext {
     overlay: InspectOverlay;
     /** Shared interaction recorder (Test tab, but the panel owns its lifetime). */
     recorder: InteractionRecorder;
+    /**
+     * Memoise an expensive derivation for the duration of one render pass.
+     *
+     * Several tabs — and the badge of every tab — ask the runtime the same
+     * questions: the component tree, the program analysis, the per-instance
+     * aggregates. Those are the calls that cost milliseconds, and the panel
+     * re-renders on every runtime event, so computing each at most once per pass
+     * is the difference between a debugger that is free and one that is the
+     * bottleneck it is meant to be measuring.
+     */
+    cache<T>(key: string, compute: () => T): T;
+    /** Panel width in pixels, for layouts that adapt (the Inspect split view). */
+    width(): number;
     /** Queue a full re-render of the panel body. */
     refresh(): void;
     /** Switch tabs. */
@@ -157,6 +222,24 @@ export interface TabContext {
     toast(message: string, tone?: string): void;
     /** Highlight an instance's DOM node (hover feedback from any tab). */
     highlightInstance(instanceKey: string | null, pin?: boolean): void;
+    /**
+     * Arm or disarm the element picker.
+     *
+     * Owned by the shell rather than the Inspect tab because three places offer it
+     * (the tab's button, the command palette, and a keyboard shortcut) and they
+     * must all mean the same thing.
+     */
+    togglePicker(): void;
+    /** Open the command palette — every action in the panel, searchable. */
+    openPalette(): void;
+    /**
+     * Write the persisted preferences now.
+     *
+     * Anything in {@link PersistedUiState} that a tab can change — dismissing the
+     * tips, adding a watch, switching dock or theme — has to say so, because the
+     * panel cannot rely on a teardown hook running before a page unload.
+     */
+    persist(): void;
     /** Steps recorded so far (the recorder's list, for codegen). */
     recordedSteps(): ReadonlyArray<RecordedStep>;
 }

@@ -37,6 +37,10 @@
  *   - **Timeline** — every event in one ordered stream, and a session export.
  *   - **Settings** — instrumentation switches, docking, and density.
  *
+ * Everything is reachable two ways: the tab strip, and a command palette
+ * (Ctrl/Cmd + K) that fuzzy-matches every tab and every action — press ? for
+ * the full shortcut list.
+ *
  * Architecture mirrors the browser-DevTools split: the runtime ("backend")
  * always emits to a global hook (`__AKTION_DEVTOOLS_HOOK__`) but the calls are
  * cheap no-ops until a frontend subscribes. This module is the in-page
@@ -55,10 +59,14 @@ export type { DevtoolsEvent, DevtoolsEventKind, DevtoolsValue, CommitRecord, Com
 export { toDevtoolsValue, parseEditedValue, previewOf, toJsonText, valueKind, } from './serialize.js';
 export { findMatchingRule, ruleMatches, verdictFor, newRule } from './rules.js';
 export { buildInstanceTree, parentKeyOf, ancestorsOf, descendantsOf, componentNameFromKey, shortInstanceLabel, } from './tree.js';
-export { emptyModel, ingest, ingestLog, clearModel, componentAggregates, instanceAggregates, effectAggregates, networkStats, hotAtoms, buildTimeline, CAPS, type AppModel, type NetworkRequest, type LogEntry, type HistoryEntry, type TimelineEntry, type ComponentAggregate, type EffectAggregate, } from './model.js';
+export { emptyModel, ingest, ingestLog, clearModel, componentAggregates, instanceAggregates, effectAggregates, networkStats, hotAtoms, buildTimeline, CAPS, type AppModel, type NetworkRequest, type LogEntry, type HistoryEntry, type TimelineEntry, type ComponentAggregate, type EffectAggregate, type ProgramVersion, type LongTask, } from './model.js';
 export { auditAccessibility, groupFindings, contrastRatio, relativeLuminance, parseColor, effectiveBackground, type A11yFinding, type A11yImpact, } from './a11y.js';
 export { InteractionRecorder, generateTest, generateSnapshotTest, chooseQuery, queryExpression, queryLabel, type RecordedStep, type QueryStrategy, type CodegenOptions, } from './recorder.js';
 export { InspectOverlay, measureBox, describeElement, cssPath, cssVariables, computedGroup, a11ySummary, accessibleName, implicitRole, deepElementFromPoint, COMPUTED_GROUPS, type BoxModel, } from './overlay.js';
 export { ConsoleCapture, type CapturedLog } from './console-capture.js';
+export { PaletteController, buildPalette, fuzzyScore, rankCommands, SHORTCUTS, type Command, type PaletteActions, type PaletteHandlers, type PaletteState, } from './palette.js';
+export { exportSessionJson } from './session.js';
+export { diffSnapshots, type Change } from './tabs/state.js';
+export { visibleNodes } from './tabs/inspect.js';
 export { mountDevtools, defineDevtoolsElement, isDevtoolsInstalled, AktionDevtoolsElement, type MountDevtoolsOptions, type DevtoolsController, } from './panel.js';
 export type { TabId, DockMode, UiState, TabContext, TabDefinition } from './context.js';

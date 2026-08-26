@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DevTools · Aktion</title>
-  <meta name="description" content="Aktion DevTools — a fourteen-tab in-page debugger for any <aktion-app>. Mount it with one line, then pick an element to find its component, edit any instance's props, hooks, and internal state, scrub $state back through commits, profile renders with a flamegraph, watch effects, mock or delay requests, evaluate Aktion expressions in a REPL, edit theme tokens live, and record your interactions into a runnable test. Full API reference for mountDevtools(), the controller, the app record, and the global hook, plus a troubleshooting guide." />
+  <meta name="description" content="Aktion DevTools — a fourteen-tab in-page debugger for any <aktion-app>. Mount it with one line, then pick an element to find its component, edit any instance's props, hooks, and internal state, scrub $state back through commits, profile renders with a flamegraph, watch effects, mock or delay requests, evaluate Aktion expressions in a REPL, edit theme tokens live, and record your interactions into a runnable test. Everything is reachable from a command palette on Ctrl/Cmd+K, with watch expressions, re-render highlighting, break-on-write, and state diffing for watching an app while you use it. Full API reference for mountDevtools(), the controller, the app record, and the global hook, plus a troubleshooting guide." />
   <script>
     (function () {
       try {
@@ -99,6 +99,16 @@
     }
     @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
     .lay-demo-preview aktion-app { display: block; }
+    kbd {
+      font: 500 11.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+      padding: 1px 5px;
+      border: 1px solid var(--doc-border);
+      border-bottom-width: 2px;
+      border-radius: 5px;
+      background: var(--doc-surface-elev);
+      color: var(--doc-text);
+      white-space: nowrap;
+    }
     .lay-demo-label {
       font-size: 11px;
       text-transform: uppercase;
@@ -124,7 +134,9 @@
           tabs over the running program: a component inspector with an element picker, a
           live editable <code>$state</code> tree with time travel, a render profiler, an
           effect timeline, a network inspector that can mock requests, a console with an
-          expression REPL, route / data / theme / source explorers, and a test toolkit.
+          expression REPL, route / data / theme / source explorers, and a test toolkit &mdash;
+          all of it reachable from a command palette on
+          <kbd>Ctrl</kbd>&#8239;/&#8239;<kbd>Cmd</kbd>&nbsp;+&nbsp;<kbd>K</kbd>.
         </p>
       </header>
 
@@ -290,7 +302,9 @@ if (new URLSearchParams(location.search).has("debug")) toggleDevtools();</code><
       <p>
         The app below is an ordinary <code>&lt;aktion-app&gt;</code> rendered from the program
         on the left. Press <strong>Launch DevTools</strong> to open the real panel over this
-        page, then interact with the app and watch the three tabs fill up.
+        page, then interact with the app and watch it fill up. Press
+        <kbd>Ctrl</kbd>&#8239;/&#8239;<kbd>Cmd</kbd>&nbsp;+&nbsp;<kbd>K</kbd> inside it for the
+        command palette, or <kbd>?</kbd> for the shortcuts.
       </p>
 
       <div class="dt-launch-bar">
@@ -342,6 +356,106 @@ $app(Column([
         </li>
       </ul>
 
+      <h2 id="palette">The command palette, and the keyboard</h2>
+      <p>
+        Fourteen tabs is more surface than anyone wants to hunt through. Press
+        <kbd>Ctrl</kbd>&#8239;/&#8239;<kbd>Cmd</kbd>&nbsp;+&nbsp;<kbd>K</kbd> anywhere on the
+        page &mdash; the panel does not need focus &mdash; and type: the palette fuzzy&#8209;matches
+        every tab and every action the panel can perform, so <em>pick an element</em>,
+        <em>arm a break</em>, <em>reset the theme</em>, or <em>export the session</em> are one
+        phrase away instead of three clicks inside a tab you have not opened.
+      </p>
+      <ul>
+        <li>Type a word that names a tab &mdash; <code>theme</code>, <code>network</code> &mdash; and
+          the first result takes you there.</li>
+        <li><kbd>&uarr;</kbd> / <kbd>&darr;</kbd> move, <kbd>Enter</kbd> runs,
+          <kbd>Escape</kbd> closes.</li>
+        <li>Matching is on the action, its group, and its synonyms, so
+          <code>curl</code> finds the copy button and <code>slow</code> finds the delay rule.</li>
+      </ul>
+      <p>
+        Press <kbd>?</kbd> for the full list of shortcuts at any time:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Key</th><th>Does</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Ctrl</kbd>&#8239;/&#8239;<kbd>Cmd</kbd>&nbsp;+&nbsp;<kbd>K</kbd></td><td>Open the command palette.</td></tr>
+          <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>Shift</kbd>&nbsp;+&nbsp;<kbd>P</kbd></td><td>Arm the element picker.</td></tr>
+          <tr><td><kbd>?</kbd></td><td>Show / hide this list.</td></tr>
+          <tr><td><kbd>Alt</kbd>&nbsp;+&nbsp;<kbd>1</kbd>&hellip;<kbd>9</kbd></td><td>Jump straight to a tab.</td></tr>
+          <tr><td><kbd>Alt</kbd>&nbsp;+&nbsp;<kbd>[</kbd> / <kbd>]</kbd></td><td>Previous / next tab.</td></tr>
+          <tr><td><kbd>/</kbd></td><td>Focus the current tab's filter box.</td></tr>
+          <tr><td><kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>F</kbd></td><td>Find &mdash; in the Source tab, search the program.</td></tr>
+          <tr><td><kbd>Escape</kbd></td><td>Close the palette, the shortcut sheet, or disarm the element picker.</td></tr>
+        </tbody>
+      </table>
+      <p class="faint">
+        The palette, the picker, and the <kbd>Alt</kbd> tab shortcuts work
+        <strong>anywhere on the page</strong> &mdash; you are usually clicking the app, not the
+        panel, when you want to change what the panel is showing &mdash; and they never fire
+        while you are typing in the app's own fields. The rest need the panel focused; click
+        it once.
+      </p>
+      <div class="callout">
+        <h4>Typing is never interrupted</h4>
+        <p>
+          The panel re&#8209;renders on every runtime event, which for a busy app is several
+          times a second. Every field declares a stable key, so your focus, your caret
+          position, and the scroll offset of whatever list you are reading survive those
+          re&#8209;renders &mdash; including the <kbd>Enter</kbd> that runs a REPL expression and
+          grows the history above the input.
+        </p>
+      </div>
+
+      <h2 id="while-you-work">Watching an app while you use it</h2>
+      <p>
+        Four things the panel can do continuously, so you can put it in a corner and go use
+        the app rather than clicking back and forth. All four are switches in
+        <strong>Settings &rarr; While you work</strong>, and each is off by default because
+        each costs something.
+      </p>
+      <ul>
+        <li>
+          <strong>Watch expressions.</strong> Pin an Aktion expression &mdash;
+          <code>$todos.length</code>, <code>$user.role</code>, <code>$cart.items[0].qty</code> &mdash;
+          in the Console tab, or with the eye button on any REPL result. It is re&#8209;evaluated
+          on every render, so the value moves as you click. Watches are remembered across a
+          page reload, and the Overview tab shows them too.
+        </li>
+        <li>
+          <strong>Highlight re&#8209;renders.</strong> Flash a box over every component that
+          actually re&#8209;rendered in the last commit &mdash; memoized instances are not
+          flashed &mdash; which is the fastest way to see that one keystroke is repainting a
+          whole page.
+        </li>
+        <li>
+          <strong>Break on change.</strong> Arm an atom from the State tab (the
+          <code>&#9679;</code> button beside it) and the browser pauses in the debugger the
+          moment anything writes to it, with the write still on the stack. Needs devtools
+          open in the browser, the way any <code>debugger</code> statement does.
+        </li>
+        <li>
+          <strong>Browser performance marks.</strong> Mirror every commit into
+          <code>performance.measure()</code>, so Aktion commits appear as named
+          measures in the browser's own performance profiler, lined up with layout, paint,
+          and your own marks.
+        </li>
+      </ul>
+      <p>
+        Alongside them, the panel reports <strong>main&#8209;thread blocking</strong> it
+        observed (via <code>PerformanceObserver</code>'s long&#8209;task entries) on the
+        Overview tab, so a janky interaction points at the frame that caused it.
+      </p>
+      <div class="callout">
+        <h4>Paused means paused</h4>
+        <p>
+          The <strong>Rec</strong> button in the header stops the panel ingesting events, which
+          is how you read a moving timeline. Those events are <em>dropped</em>, not queued, so
+          the button counts what pausing has cost you &mdash; <code>Paused &middot; 34</code> &mdash;
+          rather than looking like a hung panel.
+        </p>
+      </div>
+
       <h2 id="inspector">Component inspector</h2>
       <p>
         The <strong>Inspect</strong> tab is the one that changes how you debug an Aktion app.
@@ -384,6 +498,22 @@ $app(Column([
         keeping the hierarchy would mean showing unmatched ancestors as though they matched.
       </p>
 
+      <p>
+        Given room &mdash; a panel wider than about 700&nbsp;pixels, so any side dock or a
+        floating panel at its default size &mdash; the tab splits: the tree on the left, the
+        selected instance's detail on the right, both scrolling independently. Narrower than
+        that, the detail replaces the tree, because two 300&#8209;pixel columns help nobody.
+        <kbd>&uarr;</kbd> / <kbd>&darr;</kbd> walk the rows, <kbd>&larr;</kbd> / <kbd>&rarr;</kbd>
+        collapse and expand, and the <code>&#8863;</code> / <code>&#8862;</code> buttons in the
+        toolbar collapse or expand everything at once.
+      </p>
+      <p>
+        Every other tab that names a component links here: a bar in the flamegraph, an effect's
+        owner, a timeline row. Following one of those links clears whatever was hiding the row
+        &mdash; a collapsed ancestor, a filter that excludes it, the <strong>Library</strong>
+        toggle when the target is a library component &mdash; tells you what it cleared, and
+        scrolls the row into view, so the jump never lands on an empty&#8209;looking tree.
+      </p>
       <h3 id="editing-props">Editing props, hooks, and component state</h3>
       <p>
         Selecting an instance opens six panes. Everything editable is edited in place: click
@@ -543,6 +673,19 @@ $app(Column([
         you have already seen.
       </p>
 
+      <h3 id="state-diff">Diffing two snapshots</h3>
+      <p>
+        Reading two state trees side by side and spotting the difference is a job for a
+        computer. The State tab's <strong>Diff</strong> view takes any two of the captured
+        commits and lists only what changed between them &mdash; added, removed, or changed, at
+        the leaf, with both values &mdash; which is usually three lines instead of two hundred.
+        Coming from a bug report ("it was fine, then I clicked twice"), this is the shortest
+        path from "something changed" to "this changed".
+      </p>
+      <p>
+        It needs <code>captureSnapshots</code> on (it is, by default) because it reads the same
+        per&#8209;commit snapshots time travel uses.
+      </p>
       <h2 id="render-profiler">Render profiler</h2>
       <p>
         Every commit is captured with its trigger, its wall&#8209;clock duration, and one
@@ -916,7 +1059,9 @@ $app(Column([
           <strong>Storage</strong> &mdash; <code>localStorage</code>,
           <code>sessionStorage</code>, and cookies, read straight from the page so the view is
           correct even for keys the program has never touched. That is where stale&#8209;value
-          bugs live.
+          bugs live &mdash; and you can write there too: add a key, edit a value in place, or
+          delete one, which is how you reproduce "works for me, broken for the user who has
+          been here before" without hand&#8209;editing storage in another devtools panel.
         </li>
       </ul>
 
@@ -960,6 +1105,19 @@ $app(Column([
         whether a program is valid would be worse than no inspector.
       </p>
 
+      <p>
+        Because an edit can break the program badly enough that there is nothing left to edit,
+        the tab keeps a <strong>history</strong>: every version that has been mounted this
+        session, with the diagnostics it produced and a one&#8209;click <strong>Revert</strong>.
+        A bad apply is a two&#8209;second undo rather than a reload that loses your
+        <code>$state</code>.
+      </p>
+      <p>
+        <kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>F</kbd> searches the program and marks every hit;
+        <kbd>Ctrl</kbd>&nbsp;+&nbsp;<kbd>Enter</kbd> applies a draft. Large programs stay cheap:
+        the view renders a window of lines around what you are looking at rather than rebuilding
+        every line on every runtime event.
+      </p>
       <h2 id="test-tab">Test toolkit</h2>
       <p>
         Five tools that turn &ldquo;it broke&rdquo; into something you can commit.
@@ -1057,6 +1215,12 @@ $app(Column([
         </tbody>
       </table>
       <p>
+        A second group, <strong>While you work</strong>, holds the continuous aids described
+        under <a href="#while-you-work">Watching an app while you use it</a> &mdash; highlight
+        re&#8209;renders, flash on commit, browser performance marks, console capture. Those cost
+        the panel, not the runtime, and are off by default.
+      </p>
+      <p>
         The same tab holds the panel's own preferences &mdash; dock to any edge or float, a light
         theme for a light host page, compact rows for a narrow dock, console capture on or off
         &mdash; and they are remembered between sessions.
@@ -1080,7 +1244,10 @@ $app(Column([
           <tr><td><code>defineDevtoolsElement()</code></td><td>Register <code>&lt;aktion-devtools&gt;</code>. Idempotent, and already called on import.</td></tr>
           <tr><td><code>AktionDevtoolsElement</code></td><td>The panel class. <code>AktionDevtoolsElement.tagName</code> is <code>"aktion-devtools"</code>.</td></tr>
           <tr><td><code>HOOK_KEY</code></td><td><code>"__AKTION_DEVTOOLS_HOOK__"</code> &mdash; the property the hook lives under on <code>globalThis</code>.</td></tr>
-          <tr><td><code>DEVTOOLS_PROTOCOL_VERSION</code></td><td>Currently <code>1</code>. Bumped only when the event shapes change incompatibly.</td></tr>
+          <tr><td><code>DEVTOOLS_PROTOCOL_VERSION</code></td><td>Currently <code>2</code>. Bumped only when the event shapes change incompatibly; everything protocol&nbsp;2 added is optional, so a v1 frontend still works against a v2 runtime.</td></tr>
+          <tr><td><code>buildPalette(ctx, actions)</code></td><td>The command list the palette shows, and <code>rankCommands</code> / <code>fuzzyScore</code> behind it. Exported so a custom frontend can reuse the same commands.</td></tr>
+          <tr><td><code>exportSessionJson(ctx)</code></td><td>The whole session &mdash; events, commits, diagnostics, program history, long tasks &mdash; as one JSON document to attach to a bug report.</td></tr>
+          <tr><td><code>diffSnapshots(from, to)</code></td><td>Leaf&#8209;level changes between two <code>$state</code> snapshots. Pure; useful in a test.</td></tr>
         </tbody>
       </table>
       <p>

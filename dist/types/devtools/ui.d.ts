@@ -61,7 +61,43 @@ export declare function chipGroup<T extends string>(values: ReadonlyArray<{
     title?: string;
 }>, active: T, onPick: (value: T) => void): HTMLElement;
 /** Debounced-free search box; `onInput` fires on every keystroke. */
-export declare function searchInput(value: string, onInput: (value: string) => void, placeholder?: string): HTMLInputElement;
+export declare function searchInput(value: string, onInput: (value: string) => void, placeholder?: string, options?: {
+    focusKey?: string;
+}): HTMLInputElement;
+/**
+ * Attribute carrying a field's stable identity across re-renders.
+ *
+ * The panel re-renders on every runtime event, so a field the user is typing in
+ * is destroyed and rebuilt several times a second. Restoring focus by POSITION
+ * fails exactly when it matters — running a REPL expression grows the history
+ * above the input, so the input is no longer the same child index and focus is
+ * lost on the keystroke that mattered most. A declared key is positional-shape
+ * independent.
+ */
+export declare const FOCUS_KEY_ATTR = "data-dt-focus";
+/**
+ * Attribute marking a scroll container whose position should survive a
+ * re-render. Without it, a scrolled component tree jumps back to the top every
+ * time an event arrives.
+ */
+export declare const SCROLL_KEY_ATTR = "data-dt-scroll";
+/** A scrollable region whose scroll offset is preserved across re-renders. */
+export declare function scrollArea(key: string, attrs: Attrs, ...children: Child[]): HTMLElement;
+/** A single-line text field with a stable focus key and Enter/blur commit. */
+export declare function textField(options: {
+    focusKey: string;
+    value?: string;
+    placeholder?: string;
+    className?: string;
+    width?: string;
+    title?: string;
+    /** Fires on every keystroke. */
+    onInput?: (value: string) => void;
+    /** Fires on Enter and on blur when the value changed. */
+    onCommit?: (value: string) => void;
+    /** Fires on Enter only. */
+    onEnter?: (value: string) => void;
+}): HTMLInputElement;
 /** Muted inline note. */
 export declare function muted(...children: Child[]): HTMLElement;
 /** Even quieter note, for hints. */
@@ -141,6 +177,7 @@ export declare function editableValue(value: DevtoolsValue, onCommit: (next: unk
     title?: string;
     disabled?: boolean;
     onCancel?: () => void;
+    focusKey?: string;
 }): HTMLElement;
 export interface JsonTreeOptions {
     /** Dotted path prefix for expansion keys (`state`, `response`). */
@@ -179,20 +216,30 @@ export declare function jsonPreview(value: unknown): string;
 export interface CodeBlockOptions {
     /** Show 1-based line numbers. */
     lineNumbers?: boolean;
-    /** Lines to mark, keyed by 1-based line number → tone. */
+    /** Lines to mark, keyed by 1-based line number (within the slice) → tone. */
     markers?: Map<number, {
         tone: string;
         title: string;
     }>;
-    /** Line to scroll into view + highlight. */
+    /** Line to scroll into view + highlight, 1-based within the slice. */
     focusLine?: number | null;
-    /** Called when a line's gutter is clicked. */
+    /** Called when a line is clicked, with the 1-based line within the slice. */
     onLineClick?(line: number): void;
     /** Cap the rendered lines (a 5k-line program does not need to be in the DOM). */
     maxLines?: number;
+    /**
+     * Line number the slice starts at, when the caller is rendering a window of a
+     * larger file. Gutter numbers are absolute; every other index stays relative.
+     */
+    firstLine?: number;
+    /** Case-insensitive substring to mark inside each line. */
+    highlight?: string;
+    /** Preserve the scroll offset across re-renders under this key. */
+    scrollKey?: string;
 }
 /**
- * Render source text with optional line numbers and gutter markers.
+ * Render source text with optional line numbers, gutter markers, and search
+ * highlighting.
  *
  * Diagnostics land on the line that produced them, which is the difference
  * between "line 42: unknown prop" as a sentence and as a place you can look at.

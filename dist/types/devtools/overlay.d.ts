@@ -141,6 +141,9 @@ export declare class InspectOverlay {
     private pinnedElement;
     private pinnedLabel;
     private reflowBound;
+    /** Transient "this re-rendered" outlines — see {@link flashUpdated}. */
+    private updateFlashes;
+    private updateFlashTimer;
     private picking;
     private onPick;
     private onHover;
@@ -161,6 +164,17 @@ export declare class InspectOverlay {
     highlight(element: Element | null, label?: HighlightLabel, pin?: boolean): void;
     /** Remove a transient hover highlight, restoring the selection if there is one. */
     hideHover(): void;
+    /**
+     * Briefly outline every element that just re-rendered ("highlight updates").
+     *
+     * Drawn as its own cheap layer rather than through the box-model highlight:
+     * this fires on every commit, so it has to cost one absolutely-positioned div
+     * per element and nothing else. Overlapping flashes replace each other, which
+     * is what makes a repeated re-render read as a pulse.
+     */
+    flashUpdated(elements: ReadonlyArray<Element>): void;
+    /** Remove any update flashes without touching the highlight. */
+    clearUpdateFlashes(): void;
     /** Remove every highlight and stop tracking. */
     clear(): void;
     /** Drop the selection, so the next `hideHover()` clears the highlight. */

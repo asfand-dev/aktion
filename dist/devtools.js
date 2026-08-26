@@ -419,6 +419,13 @@ function parentKeyOf(key2, keys) {
   }
   return null;
 }
+function ancestorKeyCandidates(key2) {
+  const out = [];
+  for (let i = 1; i < key2.length; i += 1) {
+    if (SEGMENT_STARTS.has(key2[i])) out.push(key2.slice(0, i));
+  }
+  return out;
+}
 function ancestorsOf(key2, keys) {
   const out = [];
   let current = parentKeyOf(key2, keys);
@@ -430,15 +437,15 @@ function ancestorsOf(key2, keys) {
   return out.reverse();
 }
 function componentNameFromKey(key2) {
-  const hash = key2.lastIndexOf("#");
-  if (hash < 0) return key2;
-  const tail = key2.slice(hash + 1);
+  const hash2 = key2.lastIndexOf("#");
+  if (hash2 < 0) return key2;
+  const tail = key2.slice(hash2 + 1);
   const cut = tail.search(/[@=/>]/);
   return cut < 0 ? tail : tail.slice(0, cut);
 }
 function shortInstanceLabel(key2) {
-  const hash = key2.lastIndexOf("#");
-  return hash < 0 ? key2 : key2.slice(hash + 1);
+  const hash2 = key2.lastIndexOf("#");
+  return hash2 < 0 ? key2 : key2.slice(hash2 + 1);
 }
 function buildInstanceTree(records) {
   const byKey = /* @__PURE__ */ new Map();
@@ -532,6 +539,8 @@ function emptyModel() {
     changed: /* @__PURE__ */ new Map(),
     changeCounts: /* @__PURE__ */ new Map(),
     history: [],
+    programHistory: [],
+    longTasks: [],
     firstTime: null,
     lastTime: 0,
     totals: {
@@ -689,6 +698,7 @@ function clearModel(model) {
   model.logs.length = 0;
   model.errors.length = 0;
   model.history.length = 0;
+  model.longTasks.length = 0;
   model.changed.clear();
   model.changeCounts.clear();
   model.firstTime = null;
@@ -1201,6 +1211,19 @@ const OVERLAY_CSS = `
   box-shadow: 0 8px 20px rgba(0,0,0,0.4);
   pointer-events: none;
 }
+/* "Highlight updates": one cheap outline per re-rendered element, per commit. */
+.update-flash {
+  position: fixed;
+  pointer-events: none;
+  border: 1px solid rgba(90, 209, 155, 0.9);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(90, 209, 155, 0.25) inset;
+  animation: dt-update-fade 320ms ease-out forwards;
+}
+@keyframes dt-update-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
 `;
 const CHROME_TAGS = /* @__PURE__ */ new Set([OVERLAY_TAG, "aktion-devtools"]);
 function isPanelChrome(element) {
@@ -1234,6 +1257,9 @@ class InspectOverlay {
     __publicField(this, "pinnedElement", null);
     __publicField(this, "pinnedLabel", {});
     __publicField(this, "reflowBound", null);
+    /** Transient "this re-rendered" outlines — see {@link flashUpdated}. */
+    __publicField(this, "updateFlashes", []);
+    __publicField(this, "updateFlashTimer", null);
     /* ---- picking ---- */
     __publicField(this, "picking", false);
     __publicField(this, "onPick", null);
@@ -1304,6 +1330,47 @@ class InspectOverlay {
       return;
     }
     this.clear();
+  }
+  /**
+   * Briefly outline every element that just re-rendered ("highlight updates").
+   *
+   * Drawn as its own cheap layer rather than through the box-model highlight:
+   * this fires on every commit, so it has to cost one absolutely-positioned div
+   * per element and nothing else. Overlapping flashes replace each other, which
+   * is what makes a repeated re-render read as a pulse.
+   */
+  flashUpdated(elements) {
+    const root = this.ensureHost();
+    if (!root) return;
+    for (const stale of this.updateFlashes) stale.remove();
+    this.updateFlashes = [];
+    if (this.updateFlashTimer !== null) clearTimeout(this.updateFlashTimer);
+    for (const element of elements) {
+      if (!element.isConnected) continue;
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      const box = document.createElement("div");
+      box.className = "update-flash";
+      box.style.top = `${rect.top}px`;
+      box.style.left = `${rect.left}px`;
+      box.style.width = `${rect.width}px`;
+      box.style.height = `${rect.height}px`;
+      root.appendChild(box);
+      this.updateFlashes.push(box);
+    }
+    if (this.updateFlashes.length === 0) return;
+    this.updateFlashTimer = setTimeout(() => {
+      for (const box of this.updateFlashes) box.remove();
+      this.updateFlashes = [];
+      this.updateFlashTimer = null;
+    }, 320);
+  }
+  /** Remove any update flashes without touching the highlight. */
+  clearUpdateFlashes() {
+    if (this.updateFlashTimer !== null) clearTimeout(this.updateFlashTimer);
+    this.updateFlashTimer = null;
+    for (const box of this.updateFlashes) box.remove();
+    this.updateFlashes = [];
   }
   /** Remove every highlight and stop tracking. */
   clear() {
@@ -1514,6 +1581,7 @@ class InspectOverlay {
   /** Remove the overlay host from the page. */
   destroy() {
     this.stopPicking();
+    this.clearUpdateFlashes();
     this.clear();
     this.host?.remove();
     this.host = null;
@@ -2461,6 +2529,2193 @@ class ConsoleCapture {
     if (tap.sinks.size === 0) unpatch();
   }
 }
+function h(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key2, value] of Object.entries(attrs)) {
+    if (value == null || value === false) continue;
+    if (key2 === "class") node.className = String(value);
+    else if (key2 === "style") node.setAttribute("style", String(value));
+    else if (key2 === "html") node.innerHTML = String(value);
+    else if (key2.startsWith("on") && typeof value === "function") {
+      node.addEventListener(key2.slice(2).toLowerCase(), value);
+    } else if (value === true) node.setAttribute(key2, "");
+    else node.setAttribute(key2, String(value));
+  }
+  append(node, children);
+  return node;
+}
+function append(parent, children) {
+  for (const child of children) {
+    if (child == null || child === false) continue;
+    if (Array.isArray(child)) {
+      append(parent, child);
+      continue;
+    }
+    parent.appendChild(
+      typeof child === "string" || typeof child === "number" ? document.createTextNode(String(child)) : child
+    );
+  }
+}
+function fmtMs(n) {
+  if (n === void 0 || !isFinite(n)) return "—";
+  if (n >= 1e3) return `${(n / 1e3).toFixed(2)} s`;
+  if (n >= 100) return `${n.toFixed(0)} ms`;
+  if (n >= 10) return `${n.toFixed(1)} ms`;
+  return `${n.toFixed(2)} ms`;
+}
+function fmtRel(ms) {
+  if (!isFinite(ms)) return "—";
+  if (ms >= 6e4) return `${Math.floor(ms / 6e4)}m ${Math.round(ms % 6e4 / 1e3)}s`;
+  if (ms >= 1e4) return `${(ms / 1e3).toFixed(1)} s`;
+  return `${Math.round(ms)} ms`;
+}
+function fmtClock(epochMs) {
+  const d = new Date(epochMs);
+  const pad = (n, w = 2) => String(n).padStart(w, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+}
+function fmtCount(n) {
+  if (!isFinite(n)) return "—";
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e4) return `${(n / 1e3).toFixed(1)}k`;
+  return String(n);
+}
+function fmtBytes(n) {
+  if (n === void 0 || !isFinite(n)) return "—";
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${n} B`;
+}
+function fmtPct(num, den) {
+  if (den <= 0) return "—";
+  return `${Math.round(num / den * 100)}%`;
+}
+function truncateMiddle(text2, limit = 60) {
+  if (text2.length <= limit) return text2;
+  const head = Math.ceil((limit - 1) / 2);
+  const tail = Math.floor((limit - 1) / 2);
+  return `${text2.slice(0, head)}…${text2.slice(text2.length - tail)}`;
+}
+function urlPath(url) {
+  try {
+    const parsed = new URL(url, "http://localhost");
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return url;
+  }
+}
+function urlHost(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.host;
+  } catch {
+    return "";
+  }
+}
+function section(title, body, options = {}) {
+  const head = title !== null || options.actions ? h(
+    "div",
+    { class: "sec-head" },
+    title !== null ? h("p", { class: "section-title" }, title) : null,
+    h("span", { class: "grow" }),
+    ...options.actions ?? []
+  ) : null;
+  return h(
+    "div",
+    { class: `section ${options.flush ? "is-flush" : ""}`, id: options.id },
+    head,
+    ...Array.isArray(body) ? body : [body]
+  );
+}
+function toolbar(...children) {
+  return h("div", { class: "toolbar" }, ...children);
+}
+function spacer() {
+  return h("span", { class: "grow" });
+}
+function chip(label, tone = "grey", title) {
+  return h("span", { class: `chip ${tone}`, title }, label);
+}
+function button(label, onClick, options = {}) {
+  const el = h(
+    "button",
+    {
+      class: `icon-btn ${options.active ? "is-on" : ""} ${options.tone ? `t-${options.tone}` : ""}`,
+      title: options.title,
+      onclick: onClick
+    },
+    label
+  );
+  if (options.disabled) el.disabled = true;
+  return el;
+}
+function toggle(label, on, onToggle, title) {
+  return h("button", { class: `filter-chip ${on ? "is-on" : ""}`, title, onclick: onToggle }, label);
+}
+function chipGroup(values, active, onPick) {
+  return h(
+    "div",
+    { class: "filters" },
+    ...values.map(
+      (entry) => toggle(entry.label, entry.value === active, () => onPick(entry.value), entry.title)
+    )
+  );
+}
+function searchInput(value, onInput, placeholder = "Filter…", options = {}) {
+  return h("input", {
+    class: "search",
+    placeholder,
+    value,
+    // A stable focus key survives a re-render even when the surrounding tree
+    // changes shape — see `FOCUS_KEY_ATTR`.
+    [FOCUS_KEY_ATTR]: options.focusKey ?? `search:${placeholder}`,
+    oninput: (e) => onInput(e.target.value)
+  });
+}
+const FOCUS_KEY_ATTR = "data-dt-focus";
+const SCROLL_KEY_ATTR = "data-dt-scroll";
+function textField(options) {
+  const input = h("input", {
+    class: options.className ?? "search",
+    placeholder: options.placeholder,
+    title: options.title,
+    value: options.value ?? "",
+    spellcheck: "false",
+    style: options.width ? `max-width:${options.width}` : void 0,
+    [FOCUS_KEY_ATTR]: options.focusKey
+  });
+  const initial = options.value ?? "";
+  if (options.onInput) {
+    input.addEventListener("input", () => options.onInput(input.value));
+  }
+  const commit = () => {
+    if (options.onCommit && input.value !== initial) options.onCommit(input.value);
+  };
+  input.addEventListener("change", commit);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commit();
+      options.onEnter?.(input.value);
+    } else if (event.key === "Escape") {
+      input.value = initial;
+      input.blur();
+    }
+  });
+  return input;
+}
+function muted(...children) {
+  return h("span", { class: "muted" }, ...children);
+}
+function faint(...children) {
+  return h("span", { class: "faint" }, ...children);
+}
+function code(text2, title) {
+  return h("code", { class: "mono", title }, text2);
+}
+function emptyState(title, hint, action) {
+  return h(
+    "div",
+    { class: "empty" },
+    h("p", {}, title),
+    hint ? h("p", { class: "faint" }, hint) : null,
+    null
+  );
+}
+function stat(label, value, options = {}) {
+  return h(
+    "div",
+    {
+      class: `stat ${options.onClick ? "is-link" : ""}`,
+      title: options.title,
+      onclick: options.onClick
+    },
+    h("span", { class: `stat-val ${options.tone ? `t-${options.tone}` : ""}` }, value),
+    h("span", { class: "stat-label" }, label)
+  );
+}
+function statGrid(...stats) {
+  return h("div", { class: "stat-grid" }, ...stats);
+}
+function barRow(label, fraction, note, options = {}) {
+  const pct = Math.max(2, Math.min(100, Math.round(fraction * 100)));
+  return h(
+    "div",
+    { class: `bar-row ${options.onClick ? "is-link" : ""}`, title: options.title, onclick: options.onClick },
+    h("span", { class: "bar-row-label" }, label),
+    h(
+      "span",
+      { class: "bar-row-track" },
+      h("span", { class: `bar-row-fill ${options.tone ? `t-${options.tone}` : ""}`, style: `width:${pct}%` })
+    ),
+    h("span", { class: "bar-row-num" }, note)
+  );
+}
+function insight(tone, icon, body) {
+  return h(
+    "div",
+    { class: `insight t-${tone}` },
+    h("span", { class: "insight-ic" }, icon),
+    h("span", {}, body)
+  );
+}
+function insightList(items) {
+  return h("div", { class: "insights" }, ...items.map((i) => insight(i.tone, i.icon, i.text)));
+}
+function table(columns, rows, options = {}) {
+  const sorted = [...rows];
+  const active = options.sort ? columns.find((c) => c.key === options.sort.key) : void 0;
+  if (active?.sort) {
+    const dir = options.sort.dir;
+    sorted.sort((a, b) => {
+      const va = active.sort(a);
+      const vb = active.sort(b);
+      if (typeof va === "string" || typeof vb === "string") {
+        return dir * String(va).localeCompare(String(vb));
+      }
+      return dir * (va < vb ? -1 : va > vb ? 1 : 0);
+    });
+  }
+  if (sorted.length === 0) {
+    return h("div", { class: "faint pad-sm" }, options.empty ?? "Nothing to show.");
+  }
+  const arrow = (key2) => {
+    if (!options.sort || options.sort.key !== key2) return "";
+    return options.sort.dir === 1 ? " ▲" : " ▼";
+  };
+  return h(
+    "table",
+    { class: "dt-table" },
+    h("thead", {}, h("tr", {}, ...columns.map((col) => h(
+      "th",
+      {
+        class: col.sort && options.onSort ? "sortable" : "",
+        style: col.numeric ? "text-align:right" : "",
+        title: col.title,
+        onclick: col.sort && options.onSort ? () => options.onSort(col.key) : void 0
+      },
+      `${col.label}${arrow(col.key)}`
+    )))),
+    h("tbody", {}, ...sorted.map((row) => h(
+      "tr",
+      {
+        class: options.rowClass?.(row) ?? "",
+        onclick: options.onRowClick ? () => options.onRowClick(row) : void 0
+      },
+      ...columns.map((col) => h("td", { class: col.numeric ? "num" : "" }, col.render(row)))
+    )))
+  );
+}
+function nextSort(current, key2, defaultDir = -1) {
+  if (current.key === key2) return { key: key2, dir: current.dir === 1 ? -1 : 1 };
+  return { key: key2, dir: defaultDir };
+}
+function valueSpan(value, options = {}) {
+  return h("span", { class: `v t-${value.type}`, title: options.title ?? value.json ?? value.preview }, value.preview);
+}
+function editableValue(value, onCommit, options = {}) {
+  const span = valueSpan(value, {
+    title: options.title ?? (options.disabled ? "read-only" : "Click to edit · Enter commits · Esc cancels")
+  });
+  if (options.disabled) {
+    span.classList.add("is-readonly");
+    return span;
+  }
+  span.classList.add("is-editable");
+  span.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const initial = value.type === "string" ? safeParse(value.json) ?? value.preview : value.json ?? value.preview;
+    const input = h("input", {
+      class: "edit-input",
+      value: String(initial ?? ""),
+      // Keyed so a re-render mid-edit (an event arrives while you are typing)
+      // re-focuses the same field instead of dropping you out of the editor.
+      [FOCUS_KEY_ATTR]: options.focusKey ? `edit:${options.focusKey}` : void 0
+    });
+    let settled = false;
+    const settle = (apply) => {
+      if (settled) return;
+      settled = true;
+      if (apply) onCommit(parseEditedValue(input.value));
+      else options.onCancel?.();
+      if (!apply && input.isConnected) input.replaceWith(span);
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        settle(true);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        settle(false);
+      }
+    });
+    input.addEventListener("blur", () => {
+      if (input.isConnected) settle(true);
+    });
+    span.replaceWith(input);
+    input.focus();
+    input.select();
+  });
+  return span;
+}
+function safeParse(json) {
+  if (json === void 0) return void 0;
+  try {
+    return JSON.parse(json);
+  } catch {
+    return void 0;
+  }
+}
+function jsonTree(value, options) {
+  const container = h("div", { class: "tree" });
+  const prefix = options.path ?? "";
+  const entries = childEntries(value);
+  const filter = (options.filter ?? "").trim().toLowerCase();
+  let shown = 0;
+  for (const [key2, child] of entries) {
+    if (filter && !key2.toLowerCase().includes(filter)) continue;
+    shown += 1;
+    appendJsonRows(container, prefix ? `${prefix}.${key2}` : key2, key2, child, 0, options);
+  }
+  if (shown === 0) {
+    container.appendChild(h("div", { class: "empty" }, filter ? "Nothing matches the filter." : "Empty."));
+  }
+  return container;
+}
+function appendJsonRows(container, path, key2, value, depth, options) {
+  const type = jsonType(value);
+  const children = childEntries(value);
+  const expandable = children.length > 0 && depth < (options.maxDepth ?? 12);
+  const open = options.expanded.has(path);
+  const readOnly = options.readOnly?.(path, depth) ?? false;
+  const twist = h(
+    "span",
+    {
+      class: `twist ${expandable ? "" : "is-leaf"}`,
+      onclick: expandable ? (event) => {
+        event.stopPropagation();
+        if (options.expanded.has(path)) options.expanded.delete(path);
+        else options.expanded.add(path);
+        options.onToggle();
+      } : void 0
+    },
+    expandable ? open ? "▾" : "▸" : "•"
+  );
+  const described = {
+    type,
+    preview: jsonPreview(value),
+    json: type === "object" || type === "array" || type === "function" ? void 0 : JSON.stringify(value)
+  };
+  const editable = !readOnly && !expandable && type !== "function" && options.onEdit !== void 0;
+  const valueNode = editable ? editableValue(described, (next) => options.onEdit(path, next)) : valueSpan(described);
+  container.appendChild(h(
+    "div",
+    {
+      class: `row ${options.highlight?.has(path) ? "is-changed" : ""}`,
+      style: `padding-left:${8 + depth * 14}px`
+    },
+    twist,
+    h("span", { class: "k" }, key2),
+    h("span", { class: "sep" }, ": "),
+    valueNode,
+    readOnly ? h("span", { class: "tag" }, "read-only") : null,
+    h("span", { class: "grow" }),
+    options.decorate?.(path, depth) ?? null
+  ));
+  if (expandable && open) {
+    for (const [childKey, childValue] of children) {
+      appendJsonRows(container, `${path}.${childKey}`, childKey, childValue, depth + 1, options);
+    }
+  }
+}
+function jsonType(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+function childEntries(value) {
+  if (Array.isArray(value)) return value.map((item, i) => [String(i), item]);
+  if (value && typeof value === "object") {
+    try {
+      return Object.entries(value);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+function jsonPreview(value) {
+  switch (jsonType(value)) {
+    case "string": {
+      const text2 = value;
+      return JSON.stringify(text2.length > 80 ? `${text2.slice(0, 80)}…` : text2);
+    }
+    case "number":
+    case "boolean":
+      return String(value);
+    case "null":
+      return "null";
+    case "undefined":
+      return "undefined";
+    case "function":
+      return "ƒ ()";
+    case "array":
+      return `Array(${value.length})`;
+    case "object": {
+      const keys = Object.keys(value);
+      if (keys.length === 0) return "{}";
+      return `{ ${keys.slice(0, 3).join(", ")}${keys.length > 3 ? `, …${keys.length - 3}` : ""} }`;
+    }
+    default:
+      return String(value);
+  }
+}
+function codeBlock(text2, options = {}) {
+  const lines = text2.split("\n");
+  const cap2 = options.maxLines ?? 4e3;
+  const shown = lines.slice(0, cap2);
+  const offset = (options.firstLine ?? 1) - 1;
+  const needle = (options.highlight ?? "").toLowerCase();
+  const wrap = h("div", {
+    class: "code-block",
+    ...options.scrollKey ? { [SCROLL_KEY_ATTR]: options.scrollKey } : {}
+  });
+  shown.forEach((line, index) => {
+    const relative = index + 1;
+    const marker = options.markers?.get(relative);
+    const row = h(
+      "div",
+      {
+        class: [
+          "code-line",
+          marker ? `has-marker t-${marker.tone}` : "",
+          options.focusLine === relative ? "is-focus" : "",
+          needle !== "" && line.toLowerCase().includes(needle) ? "is-hit" : ""
+        ].filter(Boolean).join(" "),
+        onclick: options.onLineClick ? () => options.onLineClick(relative) : void 0
+      },
+      options.lineNumbers === false ? null : h("span", { class: "code-gutter", title: marker?.title }, String(relative + offset)),
+      renderCodeText(line, needle)
+    );
+    wrap.appendChild(row);
+  });
+  if (lines.length > cap2) {
+    wrap.appendChild(h(
+      "div",
+      { class: "code-line" },
+      h("span", { class: "code-gutter" }, "…"),
+      h("span", { class: "code-text faint" }, `${lines.length - cap2} more lines not shown`)
+    ));
+  }
+  return wrap;
+}
+function renderCodeText(line, needle) {
+  const span = h("span", { class: "code-text" });
+  if (needle === "" || !line.toLowerCase().includes(needle)) {
+    span.appendChild(document.createTextNode(line === "" ? " " : line));
+    return span;
+  }
+  const lower = line.toLowerCase();
+  let cursor = 0;
+  while (cursor < line.length) {
+    const found = lower.indexOf(needle, cursor);
+    if (found < 0) {
+      span.appendChild(document.createTextNode(line.slice(cursor)));
+      break;
+    }
+    if (found > cursor) span.appendChild(document.createTextNode(line.slice(cursor, found)));
+    span.appendChild(h("mark", {}, line.slice(found, found + needle.length)));
+    cursor = found + needle.length;
+  }
+  return span;
+}
+function copyText(text2) {
+  const clipboard = navigator.clipboard;
+  if (clipboard?.writeText) {
+    void clipboard.writeText(text2).catch(() => legacyCopy(text2));
+    return;
+  }
+  legacyCopy(text2);
+}
+function legacyCopy(text2) {
+  try {
+    const area = document.createElement("textarea");
+    area.value = text2;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  } catch {
+  }
+}
+function copyButton(getText, label = "Copy", onDone) {
+  return button(label, () => {
+    copyText(getText());
+  }, { title: "Copy to clipboard" });
+}
+function downloadText(filename, text2, mime = "application/json") {
+  try {
+    const blob = new Blob([text2], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1e4);
+  } catch {
+  }
+}
+function waterfallBar(startFraction, widthFraction, tone, title) {
+  const left = Math.max(0, Math.min(99, startFraction * 100));
+  const width = Math.max(1, Math.min(100 - left, widthFraction * 100));
+  return h(
+    "span",
+    { class: "wf-track", title },
+    h("span", { class: `wf-bar t-${tone}`, style: `left:${left}%;width:${width}%` })
+  );
+}
+function defList(rows) {
+  return h("div", { class: "deflist" }, ...rows.flatMap(([label, value]) => [
+    h("div", { class: "dt" }, label),
+    h("div", { class: "dd" }, value)
+  ]));
+}
+function fuzzyScore(query, text2) {
+  if (query === "") return 0;
+  const q = query.toLowerCase();
+  const t = text2.toLowerCase();
+  let score = 0;
+  let ti = 0;
+  let lastHit = -2;
+  for (const char of q) {
+    const found = t.indexOf(char, ti);
+    if (found < 0) return null;
+    const atWordStart = found === 0 || /[\s·:/(-]/.test(t[found - 1] ?? "");
+    score += found - ti;
+    if (found === lastHit + 1) score -= 1;
+    if (atWordStart) score -= 2;
+    lastHit = found;
+    ti = found + 1;
+  }
+  return score + text2.length / 100;
+}
+function rankCommands(commands, query) {
+  const trimmed = query.trim();
+  if (trimmed === "") return [...commands];
+  const needle = trimmed.toLowerCase();
+  const scored = [];
+  for (const command of commands) {
+    const haystack = `${command.group} · ${command.label} ${command.keywords ?? ""}`;
+    const base = fuzzyScore(trimmed, haystack);
+    if (base === null) continue;
+    const label = command.label.toLowerCase();
+    let score = base;
+    if (label === needle) score -= 100;
+    else if (label.startsWith(needle)) score -= 20;
+    if (command.group === "Go to") score -= 3;
+    scored.push({ command, score });
+  }
+  scored.sort((a, b) => a.score - b.score);
+  return scored.map((entry) => entry.command);
+}
+const TAB_COMMANDS = [
+  { id: "overview", label: "Overview", keywords: "health summary home start" },
+  { id: "inspect", label: "Inspect", keywords: "component tree element picker props hooks dom styles box model" },
+  { id: "state", label: "State", keywords: "atoms reactive edit time travel snapshot diff watch" },
+  { id: "profiler", label: "Profiler", keywords: "commits renders flamegraph memo performance slow" },
+  { id: "effects", label: "Effects", keywords: "side effects timeline triggers intervals cleanup mounted" },
+  { id: "network", label: "Network", keywords: "http requests fetch query mutation mock offline delay rules" },
+  { id: "console", label: "Console", keywords: "logs warnings errors repl evaluate expression watch" },
+  { id: "routes", label: "Routes", keywords: "router navigation path params patterns" },
+  { id: "data", label: "Data", keywords: "queries cache stores forms localstorage session cookies" },
+  { id: "theme", label: "Theme", keywords: "tokens colours colors contrast design dark light" },
+  { id: "source", label: "Source", keywords: "program code diagnostics outline edit reload history" },
+  { id: "test", label: "Test", keywords: "record test accessibility a11y coverage queries chaos fuzz" },
+  { id: "timeline", label: "Timeline", keywords: "events ordered stream export session" },
+  { id: "settings", label: "Settings", keywords: "instrumentation dock theme density shortcuts about" }
+];
+function buildPalette(ctx, actions) {
+  const commands = [];
+  const { app, ui } = ctx;
+  for (const tab of TAB_COMMANDS) {
+    commands.push({
+      id: `tab:${tab.id}`,
+      group: "Go to",
+      label: tab.label,
+      keywords: tab.keywords,
+      run: () => ctx.selectTab(tab.id)
+    });
+  }
+  commands.push(
+    {
+      id: "pick",
+      group: "Inspect",
+      label: ctx.overlay.isPicking ? "Cancel element picker" : "Pick element on the page",
+      keywords: "select click crosshair find component",
+      hint: "Ctrl+Shift+P",
+      run: () => actions.togglePicker()
+    },
+    {
+      id: "highlight",
+      group: "Inspect",
+      label: `${ui.highlightUpdates ? "Stop" : "Start"} highlighting re-renders`,
+      keywords: "flash outline updates paint which components render",
+      run: () => {
+        ui.highlightUpdates = !ui.highlightUpdates;
+        ctx.toast(ui.highlightUpdates ? "Highlighting re-renders" : "Highlighting off");
+        ctx.refresh();
+      }
+    },
+    {
+      id: "force-render",
+      group: "App",
+      label: "Force a full re-render",
+      keywords: "repaint refresh redraw",
+      run: () => {
+        app?.forceRender();
+        ctx.toast("Full re-render requested");
+      }
+    }
+  );
+  if (typeof app?.reload === "function") {
+    commands.push({
+      id: "reload",
+      group: "App",
+      label: "Re-plan the program",
+      keywords: "reload hot restart",
+      run: () => {
+        app.reload();
+        ctx.toast("Program re-planned");
+        ctx.refresh();
+      }
+    });
+  }
+  if (typeof app?.resetState === "function") {
+    commands.push({
+      id: "reset-state",
+      group: "State",
+      label: "Reset all state to declared defaults",
+      keywords: "clear wipe initial",
+      run: () => {
+        app.resetState();
+        ctx.toast("State reset");
+        ctx.refresh();
+      }
+    });
+  }
+  if (ui.timeTravel !== null) {
+    commands.push({
+      id: "live",
+      group: "State",
+      label: "Return to live state",
+      keywords: "time travel stop scrub",
+      run: () => {
+        ui.timeTravel = null;
+        ctx.selectTab("state");
+      }
+    });
+  }
+  if (typeof app?.listPropOverrides === "function" && app.listPropOverrides().length > 0) {
+    commands.push({
+      id: "clear-overrides",
+      group: "Inspect",
+      label: `Clear ${app.listPropOverrides().length} prop override(s)`,
+      keywords: "revert restore props",
+      run: () => actions.clearOverrides()
+    });
+  }
+  if (typeof app?.clearThemeTokens === "function") {
+    commands.push({
+      id: "clear-theme",
+      group: "Theme",
+      label: "Reset theme token overrides",
+      keywords: "colours colors revert",
+      run: () => {
+        app.clearThemeTokens();
+        ctx.toast("Theme overrides cleared");
+        ctx.refresh();
+      }
+    });
+  }
+  commands.push(
+    {
+      id: "audit",
+      group: "Test",
+      label: "Run the accessibility audit",
+      keywords: "a11y contrast labels roles",
+      run: () => actions.runAudit()
+    },
+    {
+      id: "record",
+      group: "Test",
+      label: ctx.recorder.isRecording ? "Stop recording interactions" : "Record interactions as a test",
+      keywords: "capture generate vitest steps",
+      run: () => actions.toggleRecording()
+    },
+    {
+      id: "export",
+      group: "Session",
+      label: "Export the session as JSON",
+      keywords: "download bug report share",
+      run: () => actions.exportSession()
+    },
+    {
+      id: "clear-session",
+      group: "Session",
+      label: "Clear captured data",
+      keywords: "reset empty commits events logs",
+      run: () => actions.clearSession()
+    },
+    {
+      id: "pause",
+      group: "Session",
+      label: ui.paused ? "Resume recording events" : "Pause recording events",
+      keywords: "freeze stop capture",
+      run: () => {
+        ui.paused = !ui.paused;
+        ctx.toast(ui.paused ? "Paused" : "Recording");
+        ctx.refresh();
+      }
+    },
+    {
+      id: "dock",
+      group: "Panel",
+      label: "Cycle dock position",
+      keywords: "float right bottom left move layout",
+      run: () => actions.cycleDock()
+    },
+    {
+      id: "theme-toggle",
+      group: "Panel",
+      label: `Switch to the ${ui.light ? "dark" : "light"} panel theme`,
+      keywords: "appearance contrast",
+      run: () => {
+        ui.light = !ui.light;
+        ctx.refresh();
+      }
+    },
+    {
+      id: "compact",
+      group: "Panel",
+      label: ui.compact ? "Use comfortable row height" : "Use compact row height",
+      keywords: "density small rows",
+      run: () => {
+        ui.compact = !ui.compact;
+        ctx.refresh();
+      }
+    },
+    {
+      id: "shortcuts",
+      group: "Help",
+      label: "Show keyboard shortcuts",
+      keywords: "keys help bindings",
+      hint: "?",
+      run: () => actions.showShortcuts()
+    }
+  );
+  return commands;
+}
+class PaletteController {
+  constructor(handlers) {
+    __publicField(this, "input");
+    __publicField(this, "list");
+    __publicField(this, "footCount");
+    __publicField(this, "root");
+    /** Results of the latest update, so Enter always runs what is on screen. */
+    __publicField(this, "results", []);
+    __publicField(this, "selected", 0);
+    this.handlers = handlers;
+    this.input = h("input", {
+      class: "pal-input",
+      placeholder: "Type a command… (tabs, actions, settings)",
+      spellcheck: "false"
+    });
+    this.list = h("div", { class: "pal-list" });
+    this.footCount = h("span", {});
+    this.input.addEventListener("input", () => this.handlers.onQuery(this.input.value));
+    this.input.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        this.handlers.onMove(1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        this.handlers.onMove(-1);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        const command = this.results[this.selected];
+        if (command) this.handlers.onRun(command);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        this.handlers.onClose();
+      }
+    });
+    this.root = h(
+      "div",
+      { class: "pal-scrim", onclick: () => this.handlers.onClose() },
+      h(
+        "div",
+        { class: "pal-box", onclick: (event) => event.stopPropagation() },
+        this.input,
+        this.list,
+        h(
+          "div",
+          { class: "pal-foot" },
+          h("span", {}, "↑↓ to move · Enter to run · Esc to close"),
+          this.footCount
+        )
+      )
+    );
+  }
+  /** Mount into `host` (idempotent) and refresh the list. Returns the count. */
+  update(host, state) {
+    if (this.root.parentElement !== host) host.replaceChildren(this.root);
+    if (this.input.value !== state.query) this.input.value = state.query;
+    this.results = rankCommands(state.commands, state.query).slice(0, 40);
+    this.selected = Math.max(0, Math.min(state.selected, this.results.length - 1));
+    this.list.replaceChildren();
+    if (this.results.length === 0) {
+      this.list.appendChild(h("div", { class: "pal-empty" }, `No command matches “${state.query}”.`));
+    }
+    this.results.forEach((command, index) => {
+      this.list.appendChild(h(
+        "button",
+        {
+          class: `pal-row ${index === this.selected ? "is-active" : ""}`,
+          onmouseenter: () => this.handlers.onMove(index - this.selected),
+          onclick: () => this.handlers.onRun(command)
+        },
+        h("span", { class: "pal-group" }, command.group),
+        h("span", { class: "pal-label" }, command.label),
+        command.hint ? h("span", { class: "pal-hint" }, command.hint) : null
+      ));
+    });
+    this.footCount.textContent = `${this.results.length} command${this.results.length === 1 ? "" : "s"}`;
+    return this.results.length;
+  }
+  /**
+   * Focus the input. The palette is the one place where taking focus is
+   * unambiguously what the user asked for.
+   */
+  focus() {
+    this.input.focus();
+    try {
+      this.input.setSelectionRange(this.input.value.length, this.input.value.length);
+    } catch {
+    }
+    this.list.querySelector(".pal-row.is-active")?.scrollIntoView({ block: "nearest" });
+  }
+  /** Reset the query so the next open starts clean. */
+  reset() {
+    this.input.value = "";
+    this.results = [];
+    this.selected = 0;
+  }
+}
+const SHORTCUTS = [
+  ["Ctrl / ⌘ K", "Open the command palette — from anywhere on the page"],
+  ["Ctrl+Shift+P", "Toggle the element picker — from anywhere on the page"],
+  ["Alt+1 … Alt+9", "Jump to a tab by position — from anywhere on the page"],
+  ["Alt+[  /  Alt+]", "Previous / next tab — from anywhere on the page"],
+  ["?", "Show this list (panel focused)"],
+  ["Ctrl / ⌘ F  or  /", "Focus the current tab's filter (panel focused)"],
+  ["Esc", "Cancel the picker, close the palette, or cancel an edit"],
+  ["Enter", "Commit an inline edit · run a REPL expression"],
+  ["↑ / ↓", "Walk REPL history · move in the palette"]
+];
+function exportSessionJson(ctx) {
+  const { model } = ctx;
+  const payload = {
+    exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    protocolVersion: ctx.hook.protocolVersion,
+    libraryVersion: ctx.hook.libraryVersion,
+    app: ctx.app ? { id: ctx.app.id, label: ctx.app.label } : null,
+    program: safeProgram(ctx),
+    diagnostics: typeof ctx.app?.getDiagnostics === "function" ? ctx.app.getDiagnostics() : [],
+    stats: typeof ctx.app?.getStats === "function" ? ctx.app.getStats() : null,
+    route: typeof ctx.app?.getRoute === "function" ? ctx.app.getRoute() : null,
+    state: model.state,
+    totals: model.totals,
+    commits: model.commits,
+    effects: model.effects,
+    network: model.network,
+    routes: model.routes,
+    emits: model.emits,
+    errors: model.errors,
+    logs: model.logs,
+    longTasks: model.longTasks,
+    // The program history is the one thing that cannot be reconstructed from the
+    // events, and it is exactly what a "it broke after my edit" report needs.
+    programVersions: model.programHistory.map((version) => ({
+      at: new Date(version.at).toISOString(),
+      lines: version.lines,
+      text: version.text
+    }))
+  };
+  try {
+    return JSON.stringify(payload, null, 2);
+  } catch {
+    return JSON.stringify({ ...payload, state: "<unserialisable>" }, null, 2);
+  }
+}
+function safeProgram(ctx) {
+  try {
+    return ctx.app?.getProgram() ?? null;
+  } catch {
+    return null;
+  }
+}
+function defaultUiState() {
+  return {
+    tab: "overview",
+    paused: false,
+    dock: "float",
+    light: false,
+    compact: false,
+    collapsed: false,
+    toast: null,
+    paletteOpen: false,
+    paletteQuery: "",
+    paletteIndex: 0,
+    shortcutsOpen: false,
+    tipsDismissed: false,
+    highlightUpdates: false,
+    perfMarks: false,
+    stateFilter: "",
+    stateExpanded: /* @__PURE__ */ new Set(),
+    stateSort: "name",
+    stateShowReserved: false,
+    timeTravel: null,
+    stateView: "tree",
+    diffFrom: null,
+    diffTo: null,
+    breakOnChange: /* @__PURE__ */ new Set(),
+    importDraft: null,
+    inspectFilter: "",
+    inspectCollapsed: /* @__PURE__ */ new Set(),
+    selectedInstance: null,
+    selectedElement: null,
+    inspectPane: "props",
+    inspectShowLibrary: true,
+    inspectReveal: null,
+    propsExpanded: /* @__PURE__ */ new Set(),
+    computedFilter: "",
+    selectedCommitId: null,
+    flashOnCommit: false,
+    rankedSort: { key: "total", dir: -1 },
+    profilerView: "commit",
+    phaseFilter: /* @__PURE__ */ new Set(["mount", "run", "cleanup", "unmount", "error"]),
+    effectView: "timeline",
+    selectedEffect: null,
+    networkFilter: "",
+    networkOnlyProblems: false,
+    selectedRequest: null,
+    networkPane: "response",
+    showRules: false,
+    rules: [],
+    logFilter: "",
+    logLevels: /* @__PURE__ */ new Set(["log", "info", "warn", "error", "debug"]),
+    captureConsole: true,
+    repl: [],
+    replDraft: "",
+    replHistory: [],
+    replCursor: -1,
+    watches: [],
+    routeDraft: "",
+    dataPane: "queries",
+    storageKind: "local",
+    dataExpanded: /* @__PURE__ */ new Set(),
+    themeFilter: "",
+    sourceIndex: 0,
+    sourceFocusLine: null,
+    sourceDraft: null,
+    sourceOutline: true,
+    sourceFilter: "",
+    sourceHistoryOpen: false,
+    testPane: "record",
+    a11yRun: null,
+    a11yRequested: false,
+    a11ySelected: null,
+    queryProbe: "",
+    queryProbeKind: "role",
+    fuzzRun: null,
+    fuzzRunning: false,
+    generatedTest: null,
+    timelineKinds: /* @__PURE__ */ new Set(["commit", "effect", "network", "route", "emit", "error"])
+  };
+}
+const STORAGE_KEY = "aktion-devtools-ui";
+function loadPersisted() {
+  try {
+    const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+function savePersisted(state) {
+  try {
+    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+  }
+}
+function can(app, capability) {
+  return app !== null && typeof app[capability] === "function";
+}
+function renderRootElement(app) {
+  if (!can(app, "getRenderRoot")) return null;
+  const root = app.getRenderRoot();
+  if (root === null) return null;
+  if (root instanceof Element) return root;
+  return root.firstElementChild ?? null;
+}
+const FLASH_MS = 1100;
+const stateTab = {
+  id: "state",
+  label: "State",
+  icon: "◆",
+  hint: "Live reactive state, editable, with change counts, time travel, and a diff",
+  badge: (ctx) => {
+    const count = Object.keys(ctx.model.state).length;
+    return count > 0 ? count : null;
+  },
+  render: (ctx) => render$d(ctx)
+};
+function render$d(ctx) {
+  const { app, model, ui } = ctx;
+  if (!app) return [emptyState("No app selected.")];
+  const meta = ctx.cache("stateMeta", () => can(app, "getStateMeta") ? app.getStateMeta() : []);
+  const metaByName = new Map(meta.map((entry2) => [entry2.name, entry2]));
+  const views = [
+    { value: "tree", label: "Tree", title: "The live store, editable" },
+    { value: "diff", label: "Diff", title: "Compare two recorded snapshots" }
+  ];
+  const bar = toolbar(
+    chipGroup(views, ui.stateView, (value) => {
+      ui.stateView = value;
+      ctx.refresh();
+    }),
+    ui.stateView === "tree" ? searchInput(ui.stateFilter, (value) => {
+      ui.stateFilter = value;
+      ctx.refresh();
+    }, "Filter atoms…", { focusKey: "state-filter" }) : null,
+    spacer(),
+    ui.stateView === "tree" ? renderTreeActions(ctx, meta) : null
+  );
+  if (ui.stateView === "diff") {
+    return [bar, ...renderDiffView(ctx)];
+  }
+  const travelling = ui.timeTravel !== null && model.history[ui.timeTravel] !== void 0;
+  const entry = travelling ? model.history[ui.timeTravel] : null;
+  const snapshot = entry ? entry.snapshot : model.state;
+  const out = [bar, renderSummary$2(ctx, meta)];
+  if (model.history.length > 1) out.push(renderTimeTravel(ctx));
+  if (ui.importDraft !== null) out.push(renderImport(ctx));
+  if (travelling && entry) {
+    out.push(section(null, h(
+      "div",
+      { class: "banner t-purple" },
+      h(
+        "span",
+        {},
+        `Viewing commit #${entry.commitId ?? "?"} — ${fmtRel(model.lastTime - entry.time)} ago. Rows are read-only while scrubbing.`
+      ),
+      spacer(),
+      can(app, "hydrateState") ? button("Restore this snapshot", () => {
+        app.hydrateState(entry.snapshot);
+        ui.timeTravel = null;
+        ctx.toast("Snapshot restored into the live store");
+        ctx.refresh();
+      }, { tone: "purple" }) : null,
+      button("Back to live", () => {
+        ui.timeTravel = null;
+        ctx.refresh();
+      })
+    ), { flush: true }));
+  }
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const maxChanges = Math.max(1, ...model.changeCounts.values());
+  const names = Object.keys(snapshot).filter((name) => ui.stateShowReserved || !(metaByName.get(name)?.reserved ?? false)).sort((a, b) => {
+    if (ui.stateSort === "activity") {
+      const diff = (model.changeCounts.get(b) ?? 0) - (model.changeCounts.get(a) ?? 0);
+      if (diff !== 0) return diff;
+    }
+    return a.localeCompare(b);
+  });
+  const ordered = {};
+  for (const name of names) ordered[name] = snapshot[name];
+  const changedRoots = /* @__PURE__ */ new Set();
+  for (const [root, at] of model.changed) {
+    if (now - at < FLASH_MS) changedRoots.add(root);
+  }
+  const tree = jsonTree(ordered, {
+    expanded: ui.stateExpanded,
+    filter: ui.stateFilter,
+    onToggle: () => ctx.refresh(),
+    onEdit: travelling ? void 0 : (path, value) => {
+      app.setState(path, value);
+      ctx.toast(`$${path} = ${previewOf(value)}`);
+      ctx.refresh();
+    },
+    readOnly: (path) => {
+      if (travelling) return true;
+      const info = metaByName.get(rootOf(path));
+      return info?.reserved ?? false;
+    },
+    highlight: changedRoots,
+    decorate: (path, depth) => depth === 0 ? renderAtomTail(ctx, path, metaByName.get(path), maxChanges) : null
+  });
+  out.push(section(null, h("div", { class: "tree-wrap", [SCROLL_KEY_ATTR]: "state-tree" }, tree), { flush: true }));
+  if (names.length === 0) {
+    out.push(section(null, faint(
+      ui.stateShowReserved ? "This program declares no reactive state." : "No author-declared atoms. Turn on “Runtime” above to see the atoms the runtime owns (route, store and form backing atoms)."
+    ), { flush: true }));
+  }
+  const lastFlush = model.commits[model.commits.length - 1];
+  if (lastFlush && lastFlush.changedPaths.length > 0) {
+    out.push(section("Last commit changed", h(
+      "div",
+      { class: "chip-row" },
+      ...lastFlush.changedPaths.map((path) => h("button", {
+        class: "chip blue is-link",
+        title: `Filter to $${rootOf(path)}`,
+        onclick: () => {
+          ui.stateFilter = rootOf(path);
+          ctx.refresh();
+        }
+      }, path))
+    )));
+  }
+  return out;
+}
+function renderTreeActions(ctx, meta) {
+  const { app, model, ui } = ctx;
+  const reservedCount = meta.filter((entry) => entry.reserved).length;
+  return h(
+    "div",
+    { class: "chip-row", style: "margin:0" },
+    toggle("Activity", ui.stateSort === "activity", () => {
+      ui.stateSort = ui.stateSort === "activity" ? "name" : "activity";
+      ctx.refresh();
+    }, "Sort by how often each atom changes"),
+    reservedCount > 0 ? toggle(`Runtime (${reservedCount})`, ui.stateShowReserved, () => {
+      ui.stateShowReserved = !ui.stateShowReserved;
+      ctx.refresh();
+    }, "Show runtime-owned atoms: route, Store / $form backing atoms") : null,
+    button("Expand", () => {
+      for (const [name, value] of Object.entries(model.state)) {
+        if (value && typeof value === "object") ui.stateExpanded.add(name);
+      }
+      ctx.refresh();
+    }, { title: "Expand every object atom" }),
+    ui.stateExpanded.size > 0 ? button("Collapse", () => {
+      ui.stateExpanded.clear();
+      ctx.refresh();
+    }, { title: "Collapse everything" }) : null,
+    copyButton(() => safeJson(model.state), "Copy"),
+    button("Export", () => downloadText("aktion-state.json", safeJson(model.state)), {
+      title: "Download this snapshot as JSON"
+    }),
+    can(app, "hydrateState") ? button("Import", () => {
+      ui.importDraft = safeJson(model.state);
+      ctx.refresh();
+    }, { title: "Paste a snapshot to restore" }) : null,
+    can(app, "resetState") ? button("Reset", () => {
+      app.resetState();
+      ctx.toast("State reset to declared defaults");
+      ctx.refresh();
+    }, { title: "Reset every atom to its declared initial value", tone: "warn" }) : null
+  );
+}
+function renderSummary$2(ctx, meta) {
+  const { model, ui } = ctx;
+  const derived = meta.filter((entry) => entry.computed).length;
+  const modules = new Set(meta.map((entry) => entry.module).filter(Boolean)).size;
+  const busiest = [...model.changeCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+  const totalChanges = [...model.changeCounts.values()].reduce((a, b) => a + b, 0);
+  return section(null, statGrid(
+    stat("atoms", String(Object.keys(model.state).length)),
+    stat("changes", fmtCount(totalChanges), {
+      title: "Individual atom changes observed this session"
+    }),
+    stat("flushes", fmtCount(model.totals.stateFlushes), {
+      title: "Reactive flushes — one per batch of writes, however many atoms it touched"
+    }),
+    derived > 0 ? stat("derived", String(derived), { title: "Atoms with a `$x = expr` initialiser — re-derived, so an edit is temporary" }) : null,
+    modules > 0 ? stat("modules", String(modules), { title: "Modules contributing atoms" }) : null,
+    busiest ? stat("busiest", `$${busiest[0]}`, {
+      title: `${busiest[1]} changes — click to filter`,
+      onClick: () => {
+        ui.stateFilter = busiest[0];
+        ctx.refresh();
+      }
+    }) : null,
+    stat("snapshots", String(model.history.length), {
+      title: "Commits retained for time travel and diffing",
+      onClick: model.history.length > 1 ? () => {
+        ui.stateView = "diff";
+        ctx.refresh();
+      } : void 0
+    }),
+    ui.breakOnChange.size > 0 ? stat("breakpoints", String(ui.breakOnChange.size), { tone: "bad", title: [...ui.breakOnChange].join(", ") }) : null
+  ), { flush: true });
+}
+function renderAtomTail(ctx, name, info, maxChanges) {
+  const { model, ui } = ctx;
+  const count = model.changeCounts.get(name) ?? 0;
+  const armed = ui.breakOnChange.has(name);
+  return h(
+    "span",
+    { class: "row-tail" },
+    info?.computed ? chip("derived", "blue", "Recomputed from its initialiser — a manual edit lasts until the next flush") : null,
+    info?.module ? chip(shortModule(info.module), "grey", `Declared in ${info.module}`) : null,
+    info?.authored && info.authored !== name ? code(`$${info.authored}`, "The name the author wrote") : null,
+    count > 0 ? h(
+      "span",
+      { class: "heat", title: `${count} change${count === 1 ? "" : "s"} this session` },
+      h(
+        "span",
+        { class: "heat-bar" },
+        h("span", { class: "heat-fill", style: `width:${Math.max(8, Math.round(count / maxChanges * 100))}%` })
+      ),
+      h("span", { class: "heat-num" }, fmtCount(count))
+    ) : null,
+    h("button", {
+      class: `brk ${armed ? "is-on" : ""}`,
+      title: armed ? `Stop breaking on changes to $${name}` : `Break into the debugger when $${name} changes (needs the browser's DevTools open)`,
+      onclick: (event) => {
+        event.stopPropagation();
+        if (armed) ui.breakOnChange.delete(name);
+        else ui.breakOnChange.add(name);
+        ctx.toast(armed ? `No longer breaking on $${name}` : `Will break when $${name} changes`);
+        ctx.refresh();
+      }
+    }, armed ? "●" : "○")
+  );
+}
+function renderTimeTravel(ctx) {
+  const { model, ui } = ctx;
+  const last = model.history.length - 1;
+  const index = ui.timeTravel ?? last;
+  const entry = model.history[index];
+  const slider = h("input", {
+    class: "slider",
+    type: "range",
+    min: "0",
+    max: String(last),
+    value: String(index),
+    [FOCUS_KEY_ATTR]: "travel",
+    oninput: (event) => {
+      const next = Number(event.target.value);
+      ui.timeTravel = next >= last ? null : next;
+      ctx.refresh();
+    }
+  });
+  return section("Time travel", [
+    h(
+      "div",
+      { class: "travel-row" },
+      button("◀", () => {
+        ui.timeTravel = Math.max(0, index - 1);
+        ctx.refresh();
+      }, { title: "Previous snapshot" }),
+      slider,
+      button("▶", () => {
+        const next = Math.min(last, index + 1);
+        ui.timeTravel = next >= last ? null : next;
+        ctx.refresh();
+      }, { title: "Next snapshot" }),
+      button("Live", () => {
+        ui.timeTravel = null;
+        ctx.refresh();
+      }, { active: ui.timeTravel === null, title: "Follow the live store" }),
+      button("Diff", () => {
+        ui.stateView = "diff";
+        ui.diffFrom = index;
+        ui.diffTo = last;
+        ctx.refresh();
+      }, { title: "Compare this snapshot with the latest" })
+    ),
+    entry ? faint(
+      `commit #${entry.commitId ?? "?"} · ${entry.changedPaths.length > 0 ? entry.changedPaths.join(", ") : "no state change"} · ${index + 1} of ${last + 1}`
+    ) : null
+  ]);
+}
+function renderDiffView(ctx) {
+  const { model, ui } = ctx;
+  const history = model.history;
+  if (history.length < 2) {
+    return [emptyState(
+      "Not enough snapshots to compare yet.",
+      "A snapshot is captured on every commit — interact with the app a couple of times."
+    )];
+  }
+  const last = history.length - 1;
+  const from = clamp(ui.diffFrom ?? Math.max(0, last - 1), 0, last);
+  const to = clamp(ui.diffTo ?? last, 0, last);
+  const picker = (label, value, onPick) => {
+    const select = h("select", {
+      class: "app-select",
+      title: label,
+      onchange: (event) => onPick(Number(event.target.value))
+    });
+    history.forEach((entry, index) => {
+      const option = h(
+        "option",
+        { value: String(index) },
+        `#${entry.commitId ?? index} · ${fmtRel(model.lastTime - entry.time)} ago`
+      );
+      if (index === value) option.selected = true;
+      select.appendChild(option);
+    });
+    return h("span", { class: "chip-row", style: "margin:0" }, muted(label), select);
+  };
+  const changes = diffSnapshots(history[from], history[to]);
+  const rows = changes.map((change) => h(
+    "div",
+    { class: `diff-row is-${change.kind}` },
+    h("span", { class: "diff-mark" }, change.kind === "added" ? "+" : change.kind === "removed" ? "−" : "~"),
+    h("span", { class: "diff-path", title: change.path }, change.path),
+    change.kind !== "added" ? h("span", { class: "diff-old" }, change.before) : null,
+    change.kind === "changed" ? h("span", { class: "diff-arrow" }, "→") : null,
+    change.kind !== "removed" ? h("span", { class: "diff-new" }, change.after) : null
+  ));
+  return [
+    section(null, [
+      h(
+        "div",
+        { class: "detail-head" },
+        picker("from", from, (next) => {
+          ui.diffFrom = next;
+          ctx.refresh();
+        }),
+        picker("to", to, (next) => {
+          ui.diffTo = next;
+          ctx.refresh();
+        }),
+        spacer(),
+        button("Latest ↔ previous", () => {
+          ui.diffFrom = Math.max(0, last - 1);
+          ui.diffTo = last;
+          ctx.refresh();
+        }, { title: "Compare the two most recent snapshots" })
+      ),
+      statGrid(
+        stat("changed", String(changes.filter((c) => c.kind === "changed").length)),
+        stat("added", String(changes.filter((c) => c.kind === "added").length)),
+        stat("removed", String(changes.filter((c) => c.kind === "removed").length)),
+        stat("apart", fmtRel(Math.abs(history[to].time - history[from].time)))
+      )
+    ], { flush: true }),
+    section(`Changes (${changes.length})`, changes.length === 0 ? h("div", { class: "diff-empty" }, "These two snapshots are identical.") : h("div", { [SCROLL_KEY_ATTR]: "diff-list" }, ...rows)),
+    section(null, [
+      h(
+        "div",
+        { class: "detail-head" },
+        spacer(),
+        copyButton(() => changes.map((c) => `${c.kind === "added" ? "+" : c.kind === "removed" ? "-" : "~"} ${c.path}: ${c.before} -> ${c.after}`).join("\n"), "Copy diff"),
+        can(ctx.app, "hydrateState") ? button("Restore “from”", () => {
+          ctx.app.hydrateState(history[from].snapshot);
+          ctx.toast("Restored the earlier snapshot");
+          ctx.refresh();
+        }, { tone: "purple", title: "Hydrate the earlier of the two snapshots" }) : null
+      ),
+      faint("Paths are compared leaf by leaf, so an object that gained one field reports that field rather than the whole object.")
+    ], { flush: true })
+  ];
+}
+function diffSnapshots(from, to) {
+  const changes = [];
+  const walk = (path, before, after, depth) => {
+    if (changes.length > 400) return;
+    const bothObjects = isPlainObject(before) && isPlainObject(after);
+    if (bothObjects && depth < 6) {
+      const keys = /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)]);
+      for (const key2 of keys) {
+        const nextPath = path === "" ? key2 : `${path}.${key2}`;
+        const b = before[key2];
+        const a = after[key2];
+        if (!(key2 in before)) changes.push({ kind: "added", path: nextPath, before: "", after: previewOf(a) });
+        else if (!(key2 in after)) changes.push({ kind: "removed", path: nextPath, before: previewOf(b), after: "" });
+        else walk(nextPath, b, a, depth + 1);
+      }
+      return;
+    }
+    if (!sameValue(before, after)) {
+      changes.push({ kind: "changed", path: path || "(root)", before: previewOf(before), after: previewOf(after) });
+    }
+  };
+  walk("", from.snapshot, to.snapshot, 0);
+  return changes;
+}
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function sameValue(a, b) {
+  if (a === b) return true;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+function renderImport(ctx) {
+  const { app, ui } = ctx;
+  const area = h("textarea", {
+    class: "source-editor",
+    style: "min-height:120px",
+    spellcheck: "false",
+    [FOCUS_KEY_ATTR]: "state-import"
+  });
+  area.value = ui.importDraft ?? "";
+  const status = h("span", {});
+  const check = () => {
+    try {
+      const parsed = JSON.parse(area.value);
+      if (!isPlainObject(parsed)) return { ok: false, message: "must be a JSON object of atom names" };
+      const keys = Object.keys(parsed);
+      return { ok: true, message: `${keys.length} atom${keys.length === 1 ? "" : "s"}`, value: parsed };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : "invalid JSON" };
+    }
+  };
+  const showStatus = () => {
+    const result = check();
+    status.replaceChildren(chip(result.message, result.ok ? "green" : "red"));
+  };
+  area.addEventListener("input", () => {
+    ui.importDraft = area.value;
+    showStatus();
+  });
+  showStatus();
+  return section("Import a snapshot", [
+    area,
+    h(
+      "div",
+      { class: "detail-head" },
+      status,
+      faint("Hydrated the way SSR restores state, so the values survive the next replan."),
+      spacer(),
+      button("Cancel", () => {
+        ui.importDraft = null;
+        ctx.refresh();
+      }),
+      button("Restore", () => {
+        const result = check();
+        if (!result.ok || !result.value || !can(app, "hydrateState")) {
+          ctx.toast(result.message, "bad");
+          return;
+        }
+        app.hydrateState(result.value);
+        ui.importDraft = null;
+        ctx.toast("Snapshot restored");
+        ctx.refresh();
+      }, { tone: "good" })
+    )
+  ]);
+}
+function shortModule(path) {
+  const parts = path.split("/");
+  return parts[parts.length - 1] ?? path;
+}
+function safeJson(snapshot) {
+  try {
+    return JSON.stringify(snapshot, null, 2);
+  } catch {
+    return "/* this snapshot holds a value that cannot be serialised */";
+  }
+}
+const SPLIT_MIN_WIDTH = 700;
+const inspectTab = {
+  id: "inspect",
+  label: "Inspect",
+  icon: "◎",
+  hint: "Component tree, live props / state editing, and DOM inspection",
+  badge: (ctx) => {
+    const overrides = can(ctx.app, "listPropOverrides") ? ctx.app.listPropOverrides().length : 0;
+    return overrides > 0 ? overrides : null;
+  },
+  render: (ctx) => render$c(ctx)
+};
+function render$c(ctx) {
+  const { app, ui } = ctx;
+  if (!can(app, "getComponentTree")) {
+    return [emptyState(
+      "This app does not expose a component tree.",
+      "The inspector needs a runtime built with DevTools protocol 2 or newer."
+    )];
+  }
+  const nodes = ctx.cache("tree", () => app.getComponentTree());
+  const aggregates = ctx.cache("instanceAggregates", () => instanceAggregates(ctx.model.commits));
+  const overrides = can(app, "listPropOverrides") ? app.listPropOverrides() : [];
+  const visible = visibleNodes(ctx, nodes);
+  const bar = toolbar(
+    button(
+      ctx.overlay.isPicking ? "◎ Picking… (Esc)" : "◎ Pick",
+      () => ctx.togglePicker(),
+      {
+        title: "Select an element on the page to inspect it — Ctrl+Shift+P, Esc to cancel",
+        active: ctx.overlay.isPicking
+      }
+    ),
+    searchInput(ui.inspectFilter, (value) => {
+      ui.inspectFilter = value;
+      ctx.refresh();
+    }, "Filter components…", { focusKey: "inspect-filter" }),
+    toggle("Library", ui.inspectShowLibrary, () => {
+      ui.inspectShowLibrary = !ui.inspectShowLibrary;
+      ctx.refresh();
+    }, "Show built-in library components as well as your own"),
+    toggle("Highlight", ui.highlightUpdates, () => {
+      ui.highlightUpdates = !ui.highlightUpdates;
+      if (!ui.highlightUpdates) ctx.overlay.clearUpdateFlashes();
+      ctx.toast(ui.highlightUpdates ? "Outlining components as they re-render" : "Highlighting off");
+      ctx.refresh();
+    }, "Outline components on the page as they re-render"),
+    spacer(),
+    muted(`${visible.length}${visible.length === nodes.length ? "" : ` / ${nodes.length}`} instance${nodes.length === 1 ? "" : "s"}`),
+    button("⊟", () => {
+      for (const node of nodes) {
+        if (nodes.some((other) => other.parentKey === node.instanceKey)) ui.inspectCollapsed.add(node.instanceKey);
+      }
+      ctx.refresh();
+    }, { title: "Collapse every subtree" }),
+    button("⊞", () => {
+      ui.inspectCollapsed.clear();
+      ctx.refresh();
+    }, { title: "Expand every subtree" })
+  );
+  const out = [bar];
+  if (overrides.length > 0) {
+    out.push(section(null, h(
+      "div",
+      { class: "banner t-amber" },
+      h("span", {}, `${overrides.length} prop override${overrides.length === 1 ? "" : "s"} active — the UI is showing DevTools values, not the program's.`),
+      spacer(),
+      button("Clear all", () => {
+        if (!can(app, "clearPropOverride")) return;
+        for (const entry of overrides) app.clearPropOverride(entry.instanceKey, entry.prop);
+        ctx.toast("Overrides cleared");
+        ctx.refresh();
+      }, { tone: "amber" })
+    ), { flush: true }));
+  }
+  const tree = renderTree(ctx, visible, aggregates);
+  const detail = renderDetailPane(ctx, nodes, aggregates);
+  if (ctx.width() >= SPLIT_MIN_WIDTH) {
+    out.push(h(
+      "div",
+      { class: "split" },
+      h("div", { class: "split-left", [SCROLL_KEY_ATTR]: "inspect-tree" }, tree),
+      h("div", { class: "split-right", [SCROLL_KEY_ATTR]: "inspect-detail" }, ...detail)
+    ));
+  } else {
+    out.push(h("div", { class: "tree-wrap", [SCROLL_KEY_ATTR]: "inspect-tree" }, tree));
+    out.push(...detail);
+  }
+  return out;
+}
+function visibleNodes(ctx, nodes) {
+  const { ui } = ctx;
+  const filter = ui.inspectFilter.trim().toLowerCase();
+  if (filter !== "") {
+    return nodes.filter((node) => node.name.toLowerCase().includes(filter) || node.instanceKey.toLowerCase().includes(filter)).map((node) => ({ ...node, depth: 0, parentKey: null }));
+  }
+  if (ui.inspectShowLibrary) return [...nodes];
+  const byKey = new Map(nodes.map((node) => [node.instanceKey, node]));
+  const keep = (node) => node.kind === "user";
+  const nearestKeptAncestor = (node) => {
+    let current = node.parentKey ? byKey.get(node.parentKey) ?? null : null;
+    let guard = 0;
+    while (current && guard++ < 200) {
+      if (keep(current)) return current;
+      current = current.parentKey ? byKey.get(current.parentKey) ?? null : null;
+    }
+    return null;
+  };
+  const depths = /* @__PURE__ */ new Map();
+  const out = [];
+  for (const node of nodes) {
+    if (!keep(node)) continue;
+    const parent = nearestKeptAncestor(node);
+    const depth = parent ? (depths.get(parent.instanceKey) ?? 0) + 1 : 0;
+    depths.set(node.instanceKey, depth);
+    out.push({ ...node, depth, parentKey: parent?.instanceKey ?? null });
+  }
+  return out;
+}
+function renderTree(ctx, visible, aggregates) {
+  const { ui } = ctx;
+  const wrap = h("div", { class: "tree comp-tree", tabindex: "0" });
+  const hasChildren = new Set(visible.map((node) => node.parentKey).filter((key2) => key2 !== null));
+  const hidden = /* @__PURE__ */ new Set();
+  const byParent = /* @__PURE__ */ new Map();
+  for (const node of visible) {
+    if (node.parentKey === null) continue;
+    const bucket = byParent.get(node.parentKey);
+    if (bucket) bucket.push(node);
+    else byParent.set(node.parentKey, [node]);
+  }
+  const hideSubtree = (key2) => {
+    for (const child of byParent.get(key2) ?? []) {
+      if (hidden.has(child.instanceKey)) continue;
+      hidden.add(child.instanceKey);
+      hideSubtree(child.instanceKey);
+    }
+  };
+  for (const node of visible) {
+    if (ui.inspectCollapsed.has(node.instanceKey)) hideSubtree(node.instanceKey);
+  }
+  const rows = visible.filter((node) => !hidden.has(node.instanceKey));
+  wrap.addEventListener("keydown", (event) => {
+    const index = rows.findIndex((node) => node.instanceKey === ui.selectedInstance);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const next = rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))];
+      if (next) selectRow(ctx, next.instanceKey);
+    } else if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      const node = rows[index];
+      if (!node) return;
+      event.preventDefault();
+      if (event.key === "ArrowRight") ui.inspectCollapsed.delete(node.instanceKey);
+      else ui.inspectCollapsed.add(node.instanceKey);
+      ctx.refresh();
+    }
+  });
+  let revealRow = null;
+  for (const node of rows) {
+    const agg = aggregates.get(node.instanceKey);
+    const collapsed = ui.inspectCollapsed.has(node.instanceKey);
+    const expandable = hasChildren.has(node.instanceKey);
+    const selected = ui.selectedInstance === node.instanceKey;
+    const row = h(
+      "div",
+      {
+        class: `row ct-row ${selected ? "is-selected" : ""} ${node.mounted === false ? "is-unmounted" : ""}`,
+        style: `padding-left:${6 + node.depth * 13}px`,
+        title: node.instanceKey,
+        onclick: () => selectRow(ctx, node.instanceKey),
+        onmouseenter: () => ctx.highlightInstance(node.instanceKey, false),
+        onmouseleave: () => ctx.overlay.hideHover()
+      },
+      h("span", {
+        class: `twist ${expandable ? "" : "is-leaf"}`,
+        onclick: expandable ? (event) => {
+          event.stopPropagation();
+          if (collapsed) ui.inspectCollapsed.delete(node.instanceKey);
+          else ui.inspectCollapsed.add(node.instanceKey);
+          ctx.refresh();
+        } : void 0
+      }, expandable ? collapsed ? "▸" : "▾" : "·"),
+      h("span", { class: `ct-name ${node.kind === "user" ? "is-user" : ""}` }, node.name),
+      node.explicitKey ? h("span", { class: "ct-key" }, `key=${truncateMiddle(node.explicitKey, 16)}`) : null,
+      node.phase === "memo" ? chip("memo", "grey", "Skipped by memoization in the last commit") : null,
+      node.mounted === false ? chip("no dom", "amber", "Renders a fragment with no host element, so there is nothing to highlight") : null,
+      h("span", { class: "grow" }),
+      node.propCount ? h("span", { class: "ct-meta", title: `${node.propCount} props` }, `${node.propCount}p`) : null,
+      agg && agg.renders > 0 ? h("span", { class: "ct-meta", title: `${agg.renders} render(s), ${agg.memo} memoized` }, `×${agg.renders}`) : null,
+      h("span", { class: "ct-time" }, node.selfTime > 0 ? fmtMs(node.selfTime) : "—")
+    );
+    if (ui.inspectReveal === node.instanceKey) revealRow = row;
+    wrap.appendChild(row);
+  }
+  if (revealRow) {
+    const target = revealRow;
+    ui.inspectReveal = null;
+    queueMicrotask(() => {
+      if (target.isConnected) target.scrollIntoView({ block: "nearest" });
+    });
+  } else if (ui.inspectReveal !== null && rows.length > 0) {
+    ui.inspectReveal = null;
+  }
+  if (rows.length === 0) {
+    wrap.appendChild(h(
+      "div",
+      { class: "empty" },
+      h("p", {}, ui.inspectFilter ? "No component matches the filter." : "No component instances yet."),
+      ui.inspectFilter ? h("p", { class: "faint" }, "Clear the filter, or search by instance key.") : !ui.inspectShowLibrary ? h("p", { class: "faint" }, "This program declares no `function` components — turn on “Library” to see the built-ins it uses.") : h("p", { class: "faint" }, "Interact with the app, or press Force render on the Overview tab.")
+    ));
+  }
+  return wrap;
+}
+function selectRow(ctx, instanceKey) {
+  ctx.ui.selectedInstance = instanceKey;
+  ctx.ui.selectedElement = null;
+  ctx.highlightInstance(instanceKey, true);
+  ctx.refresh();
+}
+function renderDetailPane(ctx, nodes, aggregates) {
+  const { app, ui } = ctx;
+  if (ui.selectedInstance) {
+    const detail = can(app, "getInstance") ? app.getInstance(ui.selectedInstance) : null;
+    if (detail) return renderDetail$1(ctx, detail, nodes, aggregates);
+    return [section("Selection", [
+      faint("That instance is no longer in the tree — it unmounted, or the program was replanned."),
+      h("div", { class: "detail-head" }, button("Clear selection", () => {
+        ui.selectedInstance = null;
+        ctx.overlay.clear();
+        ctx.refresh();
+      }))
+    ])];
+  }
+  if (ui.selectedElement) return renderElementOnly(ctx, ui.selectedElement);
+  return [section(null, [
+    faint("Select a component on the left, or use ◎ Pick to click one on the page."),
+    h(
+      "div",
+      { class: "detail-head" },
+      button("◎ Pick an element", () => ctx.togglePicker(), { tone: "good" }),
+      nodes.length > 0 ? button(`Select ${nodes[0].name}`, () => selectRow(ctx, nodes[0].instanceKey), { title: "Select the root component" }) : null
+    )
+  ], { flush: true })];
+}
+function renderDetail$1(ctx, detail, nodes, aggregates) {
+  const { app, ui } = ctx;
+  const agg = aggregates.get(detail.instanceKey);
+  const element = can(app, "nodeForInstance") ? app.nodeForInstance(detail.instanceKey) : null;
+  const crumbs = h("div", { class: "crumbs" });
+  for (const ancestor of detail.ancestors) {
+    crumbs.appendChild(h("button", {
+      class: "crumb",
+      title: ancestor,
+      onclick: () => selectRow(ctx, ancestor),
+      onmouseenter: () => ctx.highlightInstance(ancestor, false),
+      onmouseleave: () => ctx.overlay.hideHover()
+    }, shortInstanceLabel(ancestor).replace(/[@=].*$/, "")));
+    crumbs.appendChild(h("span", { class: "crumb-sep" }, "›"));
+  }
+  crumbs.appendChild(h("span", { class: "crumb is-current" }, detail.name));
+  const header = section(null, [
+    crumbs,
+    h(
+      "div",
+      { class: "detail-head" },
+      h("span", { class: "detail-title" }, detail.name),
+      chip(detail.kind, detail.kind === "user" ? "purple" : "grey"),
+      detail.source ? code(`L${detail.source.line}:${detail.source.column}`) : null,
+      spacer(),
+      element ? button("Scroll to", () => {
+        element.scrollIntoView({ block: "center", behavior: "smooth" });
+        ctx.highlightInstance(detail.instanceKey, true);
+      }, { title: "Scroll the element into view and highlight it" }) : null,
+      can(app, "remountInstance") ? button("Remount", () => {
+        app.remountInstance(detail.instanceKey);
+        ctx.toast(`Remounted ${detail.name}`);
+        ctx.refresh();
+      }, { title: "Drop this instance's memo, hooks, and UI state so it mounts fresh" }) : null,
+      copyButton(() => detail.instanceKey, "Copy key")
+    ),
+    statGrid(
+      stat("renders", String(agg?.renders ?? 0), { title: "Times this instance's body actually ran" }),
+      stat("memoized", String(agg?.memo ?? 0), { title: "Times it was skipped because nothing it reads changed" }),
+      stat("self time", fmtMs(agg?.total), { title: "Total body time across those renders" }),
+      stat("slowest", fmtMs(agg?.max)),
+      stat("dom nodes", detail.domNodes !== void 0 ? String(detail.domNodes) : "—"),
+      stat("effects", String(detail.effects.length))
+    )
+  ], { flush: true });
+  const paneCounts = {
+    props: detail.props.length,
+    hooks: detail.hooks.length + detail.uiState.length
+  };
+  const panes = [
+    { value: "props", label: `Props${paneCounts.props ? ` ${paneCounts.props}` : ""}`, title: "Arguments this instance received" },
+    { value: "hooks", label: `State${paneCounts.hooks ? ` ${paneCounts.hooks}` : ""}`, title: "Per-instance $state / $memo cells and library UI state" },
+    { value: "dom", label: "DOM", title: "Box model, attributes, and markup" },
+    { value: "styles", label: "Styles", title: "Computed styles and theme variables in effect" },
+    { value: "a11y", label: "A11y", title: "Role, accessible name, and ARIA wiring" },
+    { value: "source", label: "Source", title: "Where this instance is written in the program" }
+  ];
+  const tabs = section(null, chipGroup(panes, ui.inspectPane, (value) => {
+    ui.inspectPane = value;
+    ctx.refresh();
+  }), { flush: true });
+  const body = [];
+  switch (ui.inspectPane) {
+    case "props":
+      body.push(...renderProps(ctx, detail));
+      break;
+    case "hooks":
+      body.push(...renderComponentState(ctx, detail));
+      break;
+    case "dom":
+      body.push(...renderDom(ctx, detail, element));
+      break;
+    case "styles":
+      body.push(...renderStyles(ctx, element));
+      break;
+    case "a11y":
+      body.push(...renderA11y$1(ctx, element));
+      break;
+    case "source":
+      body.push(...renderSource(ctx, detail));
+      break;
+  }
+  const deps = detail.deps.length > 0 ? section("Reads", [
+    h("div", { class: "chip-row" }, ...detail.deps.map((dep) => h("button", {
+      class: "chip blue is-link",
+      title: `Show $${dep} in the State tab`,
+      onclick: () => {
+        ui.stateFilter = dep.split(".")[0] ?? dep;
+        ctx.selectTab("state");
+      }
+    }, `$${dep}`))),
+    faint("These are the reactive paths this body read last render — its memo dependencies. A change to any of them re-renders it.")
+  ]) : null;
+  const kids = nodes.filter((node) => node.parentKey === detail.instanceKey);
+  const children = kids.length > 0 ? section(`Children (${kids.length})`, h("div", { class: "chip-row" }, ...kids.slice(0, 24).map((kid) => h("button", {
+    class: "chip grey is-link",
+    onclick: () => selectRow(ctx, kid.instanceKey),
+    onmouseenter: () => ctx.highlightInstance(kid.instanceKey, false),
+    onmouseleave: () => ctx.overlay.hideHover()
+  }, kid.name)))) : null;
+  return [header, tabs, ...body, deps, children].filter((node) => node != null);
+}
+function renderProps(ctx, detail) {
+  const { app } = ctx;
+  const editable = can(app, "setPropOverride");
+  if (detail.props.length === 0 && (detail.overrides?.length ?? 0) === 0) {
+    return [section("Props", [
+      faint("This instance received no arguments."),
+      editable ? renderAddOverride(ctx, detail) : null
+    ].filter((node) => node != null))];
+  }
+  return [
+    section("Props", [
+      h("div", { class: "prop-list" }, ...detail.props.map((prop) => renderPropRow(ctx, detail, prop, editable))),
+      editable ? renderAddOverride(ctx, detail) : null,
+      editable ? faint("A $-bound prop writes the atom. Any other prop takes a DevTools override that lasts until you clear it.") : faint("This runtime does not support prop overrides.")
+    ].filter((node) => node != null))
+  ];
+}
+function renderPropRow(ctx, detail, prop, editable) {
+  const { app } = ctx;
+  const readOnly = prop.value.json === void 0;
+  const commit = (next) => {
+    if (prop.stateRef && app) {
+      app.setState(prop.stateRef, next);
+      ctx.toast(`$${prop.stateRef} updated`);
+    } else if (can(app, "setPropOverride")) {
+      app.setPropOverride(detail.instanceKey, prop.name, next);
+      ctx.toast(`${detail.name}.${prop.name} overridden`);
+    }
+    ctx.refresh();
+  };
+  return h(
+    "div",
+    { class: `prop-row ${prop.overridden ? "is-overridden" : ""}` },
+    h("span", { class: "prop-name" }, prop.name),
+    prop.stateRef ? chip(`$${prop.stateRef}`, "blue", "Two-way bound: editing this writes the atom") : null,
+    prop.overridden ? chip("override", "amber", "Value forced by DevTools") : null,
+    h("span", { class: "grow" }),
+    readOnly || !editable ? valueSpan(prop.value, {
+      title: readOnly ? "This value cannot be edited — it is a function, a live resource, or a DOM node" : void 0
+    }) : editableValue(prop.value, commit, { focusKey: `${detail.instanceKey}:${prop.name}` }),
+    prop.value.json !== void 0 ? copyButton(() => prop.value.json ?? "", "⧉") : null,
+    prop.overridden && can(app, "clearPropOverride") ? button("↺", () => {
+      app.clearPropOverride(detail.instanceKey, prop.name);
+      ctx.toast(`${prop.name} restored`);
+      ctx.refresh();
+    }, { title: "Restore the program's value" }) : null
+  );
+}
+function renderAddOverride(ctx, detail) {
+  let name = "";
+  let value = "";
+  const apply = () => {
+    const prop = name.trim();
+    if (prop === "" || !can(ctx.app, "setPropOverride")) return;
+    ctx.app.setPropOverride(detail.instanceKey, prop, parseEditedValue(value));
+    ctx.toast(`${detail.name}.${prop} overridden`);
+    ctx.refresh();
+  };
+  return h(
+    "div",
+    { class: "prop-row is-add" },
+    h("span", { class: "prop-name faint" }, "＋"),
+    textField({
+      focusKey: `${detail.instanceKey}:new-prop-name`,
+      placeholder: "prop name",
+      width: "120px",
+      onInput: (next) => {
+        name = next;
+      }
+    }),
+    textField({
+      focusKey: `${detail.instanceKey}:new-prop-value`,
+      placeholder: 'value — "danger", 12, true, { "gap": 8 }',
+      onInput: (next) => {
+        value = next;
+      },
+      onEnter: apply
+    }),
+    button("Override", apply, { title: "Force this prop on the selected instance" })
+  );
+}
+function renderComponentState(ctx, detail) {
+  const { app } = ctx;
+  const out = [];
+  if (detail.hooks.length > 0) {
+    out.push(section("Hooks — $state / $memo cells", [
+      h("div", { class: "prop-list" }, ...detail.hooks.map((hook) => h(
+        "div",
+        { class: "prop-row" },
+        h("span", { class: "prop-name mono", title: "Hooks are matched by call order, so the slot index is the address" }, `[${hook.slot}]`),
+        chip(hook.kind, hook.kind === "state" ? "green" : "grey"),
+        h("span", { class: "grow" }),
+        hook.editable && can(app, "setInstanceHook") ? editableValue(hook.value, (next) => {
+          const ok = app.setInstanceHook(detail.instanceKey, hook.slot, next);
+          ctx.toast(ok ? `slot ${hook.slot} updated` : `slot ${hook.slot} is read-only`, ok ? "good" : "warn");
+          ctx.refresh();
+        }, { focusKey: `${detail.instanceKey}:hook:${hook.slot}` }) : valueSpan(hook.value, {
+          title: hook.kind === "memo" ? "A $memo is recomputed from its deps — edit what it reads instead" : "read-only"
+        })
+      ))),
+      faint("These are this instance's own cells. Two instances of the same component hold different ones.")
+    ]));
+  }
+  if (detail.uiState.length > 0) {
+    out.push(section("Component UI state", [
+      h("div", { class: "prop-list" }, ...detail.uiState.map((slot) => h(
+        "div",
+        { class: "prop-row" },
+        h("span", { class: "prop-name mono" }, slot.key),
+        h("span", { class: "grow" }),
+        slot.editable && can(app, "setInstanceUiState") ? editableValue(slot.value, (next) => {
+          const ok = app.setInstanceUiState(detail.instanceKey, slot.key, next);
+          ctx.toast(ok ? `${slot.key} updated` : `${slot.key} no longer exists`, ok ? "good" : "warn");
+          ctx.refresh();
+        }, { focusKey: `${detail.instanceKey}:ui:${slot.key}` }) : valueSpan(slot.value)
+      ))),
+      faint("The slots a library component keeps for itself — a Tabs' active pane, a Popover's open flag, a DataGrid's sort. They never appear in $state.")
+    ]));
+  }
+  if (detail.effects.length > 0) {
+    out.push(section(
+      `Effects owned by this instance (${detail.effects.length})`,
+      h("div", { class: "chip-row" }, ...detail.effects.map((key2) => h("button", {
+        class: "chip purple is-link",
+        title: "Open in the Effects tab",
+        onclick: () => {
+          ctx.ui.selectedEffect = key2;
+          ctx.selectTab("effects");
+        }
+      }, key2.slice(key2.lastIndexOf("::") + 2))))
+    ));
+  }
+  if (out.length === 0) {
+    out.push(section("State", faint(
+      "This instance holds no per-instance state. A library component only allocates a slot when it needs one, and a user component only when it calls $state / $memo."
+    )));
+  }
+  return out;
+}
+function renderDom(ctx, detail, element) {
+  if (!element) {
+    return [section("DOM", faint(
+      "No DOM node carries this instance's tag. Either it renders a fragment (Show / Async / Lazy with no host), or DOM tagging is off in Settings."
+    ))];
+  }
+  return [
+    section("Element", [
+      h(
+        "div",
+        { class: "detail-head" },
+        code(describeElement(element)),
+        spacer(),
+        copyButton(() => cssPath(element, null), "Copy selector"),
+        copyButton(() => element.outerHTML, "Copy HTML"),
+        button("Log", () => {
+          console.log("[aktion-devtools] selected element", element);
+          ctx.toast("Logged to the page console");
+        }, { title: "console.log the live element so you can poke at it" })
+      ),
+      boxModelDiagram(element)
+    ]),
+    section("Attributes", attributeTable(element)),
+    section("Markup", h("pre", { class: "code-pre" }, detail.html ?? element.outerHTML))
+  ];
+}
+function boxModelDiagram(element) {
+  const box = measureBox(element);
+  if (!box) return faint("This element has no layout to measure.");
+  const side = (value) => value === 0 ? "-" : String(Math.round(value * 100) / 100);
+  const ring = (name, sides2, inner) => h(
+    "div",
+    { class: `bm bm-${name}` },
+    h("span", { class: "bm-label" }, name),
+    h("span", { class: "bm-t" }, side(sides2.top)),
+    h("span", { class: "bm-r" }, side(sides2.right)),
+    h("span", { class: "bm-b" }, side(sides2.bottom)),
+    h("span", { class: "bm-l" }, side(sides2.left)),
+    inner
+  );
+  const content = h(
+    "div",
+    { class: "bm bm-content" },
+    `${Math.round(box.content.width)} × ${Math.round(box.content.height)}`
+  );
+  return h(
+    "div",
+    { class: "bm-wrap" },
+    ring("margin", box.margin, ring("border", box.border, ring("padding", box.padding, content)))
+  );
+}
+function attributeTable(element) {
+  const attrs = [...element.attributes].filter((attr) => attr.name !== "data-aktion-instance" && attr.name !== "data-aktion-owner").map((attr) => ({ name: attr.name, value: attr.value }));
+  if (attrs.length === 0) return faint("No attributes.");
+  return table(
+    [
+      { key: "name", label: "Attribute", render: (row) => code(row.name) },
+      { key: "value", label: "Value", render: (row) => h("span", { class: "mono wrap" }, row.value === "" ? " " : row.value) }
+    ],
+    attrs
+  );
+}
+function renderStyles(ctx, element) {
+  if (!element) return [section("Styles", faint("Select an element with a DOM node to read its computed styles."))];
+  const filter = ctx.ui.computedFilter.trim().toLowerCase();
+  const out = [
+    section(null, toolbar(
+      searchInput(ctx.ui.computedFilter, (value) => {
+        ctx.ui.computedFilter = value;
+        ctx.refresh();
+      }, "Filter properties…", { focusKey: "computed-filter" })
+    ), { flush: true })
+  ];
+  for (const group of COMPUTED_GROUPS) {
+    const rows = computedGroup(element, group.props).filter(([prop, value]) => filter === "" || prop.includes(filter) || value.toLowerCase().includes(filter));
+    if (rows.length === 0) continue;
+    out.push(section(group.title, defList(rows.map(([prop, value]) => [prop, h("span", { class: "mono" }, value)]))));
+  }
+  const vars = cssVariables(element).filter(([name, value]) => filter === "" || name.includes(filter) || value.toLowerCase().includes(filter));
+  if (vars.length > 0) {
+    out.push(section(`Theme variables in effect (${vars.length})`, [
+      defList(vars.slice(0, 80).map(([name, value]) => [
+        name,
+        h(
+          "span",
+          { class: "mono" },
+          isColor$1(value) ? h("span", { class: "swatch", style: `background:${value}` }) : null,
+          value
+        )
+      ])),
+      h(
+        "div",
+        { class: "detail-head" },
+        faint("These are the resolved --rui-* custom properties."),
+        spacer(),
+        button("Edit tokens", () => ctx.selectTab("theme"), { title: "Open the Theme tab" })
+      )
+    ]));
+  }
+  if (out.length === 1) out.push(section(null, faint("No computed properties match the filter."), { flush: true }));
+  return out;
+}
+function isColor$1(value) {
+  return /^(#|rgb|hsl|color\()/i.test(value.trim());
+}
+function renderA11y$1(ctx, element) {
+  if (!element) return [section("Accessibility", faint("Select an element with a DOM node."))];
+  const summary = a11ySummary(element);
+  const audit = auditAccessibility(element.parentElement ?? element, { limit: 500 });
+  const own = audit.findings.filter((f) => f.element === element || element.contains(f.element));
+  return [
+    section("Accessibility properties", summary.length > 0 ? defList(summary.map(([key2, value]) => [key2, h("span", { class: "mono" }, value)])) : faint("No ARIA attributes, role, or accessible name.")),
+    section(`Findings in this subtree (${own.length})`, [
+      own.length === 0 ? h("div", { class: "insight t-good" }, h("span", { class: "insight-ic" }, "✓"), h("span", {}, "No accessibility problems found here.")) : h("div", {}, ...own.slice(0, 12).map((finding) => h(
+        "div",
+        { class: `insight t-${finding.impact === "critical" || finding.impact === "serious" ? "bad" : "warn"}` },
+        h("span", { class: "insight-ic" }, finding.impact === "critical" ? "✖" : "▲"),
+        h(
+          "span",
+          {},
+          h("b", {}, `${finding.rule}: `),
+          finding.message,
+          " ",
+          faint(finding.help)
+        ),
+        spacer(),
+        button("Show", () => ctx.overlay.highlight(finding.element, {}, true), { title: "Highlight the element" })
+      ))),
+      h(
+        "div",
+        { class: "detail-head" },
+        spacer(),
+        button("Audit the whole app", () => {
+          ctx.ui.testPane = "a11y";
+          ctx.ui.a11yRequested = true;
+          ctx.selectTab("test");
+        }, { title: "Run the full audit in the Test tab" })
+      )
+    ])
+  ];
+}
+function renderSource(ctx, detail) {
+  const { app } = ctx;
+  if (!detail.source || !app) {
+    return [section("Source", faint("This instance carries no source position (it may come from a compiled program)."))];
+  }
+  const program = app.getProgram();
+  const lines = program.split("\n");
+  const line = detail.source.line;
+  const from = Math.max(0, line - 6);
+  const to = Math.min(lines.length, line + 5);
+  const excerpt = h("div", { class: "code-block" });
+  for (let i = from; i < to; i += 1) {
+    excerpt.appendChild(h(
+      "div",
+      { class: `code-line ${i + 1 === line ? "is-focus" : ""}` },
+      h("span", { class: "code-gutter" }, String(i + 1)),
+      h("span", { class: "code-text" }, lines[i] ?? "")
+    ));
+  }
+  return [
+    section(`Source — line ${line}, column ${detail.source.column}`, [
+      excerpt,
+      h(
+        "div",
+        { class: "detail-head" },
+        spacer(),
+        button("Open in Source tab", () => {
+          ctx.ui.sourceFocusLine = line;
+          ctx.selectTab("source");
+        }, { title: "Jump to this line in the full program" })
+      )
+    ])
+  ];
+}
+function renderElementOnly(ctx, element) {
+  return [
+    section(null, [
+      h(
+        "div",
+        { class: "detail-head" },
+        h("span", { class: "detail-title" }, describeElement(element)),
+        chip("no component", "amber", "This node was not produced by an Aktion component"),
+        spacer(),
+        button("Clear", () => {
+          ctx.ui.selectedElement = null;
+          ctx.overlay.clear();
+          ctx.refresh();
+        }, { title: "Clear the selection" })
+      ),
+      faint("This element is not tagged with a component instance — it may be a text host, a preserved widget's internals, or part of the host page.")
+    ], { flush: true }),
+    section("Element", boxModelDiagram(element)),
+    section("Attributes", attributeTable(element)),
+    ...renderStyles(ctx, element)
+  ];
+}
 const devtoolsExtraStyles = `
 /* ---- Shared layout ---- */
 .sec-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
@@ -2983,6 +5238,225 @@ code.mono { background: var(--dt-bg-inset); padding: 0 3px; border-radius: 3px; 
 .bar-row.is-link:hover .bar-row-label { color: var(--dt-accent); }
 .bar-row-fill.t-bad { background: var(--dt-red); }
 .bar-row-fill.t-warn { background: var(--dt-amber); }
+`;
+const devtoolsPaletteStyles = `
+/* ---- Command palette + shortcut sheet ---- */
+.pal-host { position: absolute; inset: 0; z-index: 5; }
+.pal-host[hidden] { display: none; }
+.pal-scrim {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 48px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(1px);
+}
+.pal-box {
+  width: min(460px, 92%);
+  max-height: 70%;
+  display: flex;
+  flex-direction: column;
+  background: var(--dt-bg-raised);
+  border: 1px solid var(--dt-border-strong);
+  border-radius: 10px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.pal-box.is-help { padding: 12px 14px; gap: 8px; }
+.pal-title { font-weight: 700; font-size: 12.5px; }
+.pal-input {
+  border: none;
+  border-bottom: 1px solid var(--dt-border);
+  background: var(--dt-bg-inset);
+  color: var(--dt-text);
+  font: 500 13px var(--dt-sans);
+  padding: 9px 11px;
+}
+.pal-input:focus { outline: none; border-bottom-color: var(--dt-accent); }
+.pal-list { overflow: auto; padding: 4px; }
+.pal-row {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--dt-text);
+  font: 500 11.5px var(--dt-sans);
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.pal-row.is-active { background: var(--dt-accent-soft); }
+.pal-group {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--dt-text-faint);
+  min-width: 54px;
+}
+.pal-label { flex: 1; }
+.pal-hint { font-family: var(--dt-mono); font-size: 10px; color: var(--dt-text-faint); }
+.pal-empty { padding: 12px; font-size: 11px; color: var(--dt-text-faint); }
+.pal-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--dt-border);
+  font-size: 10px;
+  color: var(--dt-text-faint);
+}
+
+/* ---- First-run tips ---- */
+.tips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px;
+  border: 1px solid var(--dt-accent);
+  border-radius: 8px;
+  background: var(--dt-accent-soft);
+}
+.tips-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 11.5px; }
+.tips-list { display: flex; flex-direction: column; gap: 4px; }
+.tip-row {
+  appearance: none;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  background: none;
+  border: none;
+  text-align: left;
+  color: var(--dt-text);
+  font: 500 11px var(--dt-sans);
+  padding: 2px 0;
+  cursor: pointer;
+}
+.tip-row:hover .tip-action { color: var(--dt-accent); text-decoration: underline; }
+.tip-num {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--dt-bg-inset);
+  border: 1px solid var(--dt-border-strong);
+  font-size: 9px;
+  font-weight: 700;
+}
+.tip-action { font-weight: 700; }
+.tip-why { color: var(--dt-text-dim); }
+
+/* ---- Inspect split layout (wide panel) ---- */
+.split { display: grid; grid-template-columns: minmax(220px, 40%) minmax(0, 1fr); min-height: 0; }
+.split > .split-left { border-right: 1px solid var(--dt-border); min-width: 0; overflow: auto; max-height: 520px; }
+.split > .split-right { min-width: 0; overflow: auto; max-height: 520px; }
+.split .comp-tree { max-height: none; }
+
+/* ---- Watch expressions ---- */
+.watch-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 11px;
+}
+.watch-expr { flex: 0 0 40%; font-family: var(--dt-mono); color: var(--dt-purple); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watch-val { flex: 1; font-family: var(--dt-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watch-val.is-error { color: var(--dt-red); }
+
+/* ---- State diff ---- */
+.diff-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 11px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.diff-mark { flex: 0 0 14px; text-align: center; font-family: var(--dt-mono); font-weight: 700; }
+.diff-row.is-added .diff-mark { color: var(--dt-green); }
+.diff-row.is-removed .diff-mark { color: var(--dt-red); }
+.diff-row.is-changed .diff-mark { color: var(--dt-amber); }
+.diff-path { flex: 0 0 34%; font-family: var(--dt-mono); color: var(--dt-text); overflow: hidden; text-overflow: ellipsis; }
+.diff-old { color: var(--dt-red); font-family: var(--dt-mono); text-decoration: line-through; opacity: .8; }
+.diff-arrow { color: var(--dt-text-faint); }
+.diff-new { color: var(--dt-green); font-family: var(--dt-mono); }
+.diff-empty { padding: 8px 0; color: var(--dt-text-faint); font-size: 11px; }
+
+/* ---- Break-on-change marker ---- */
+.brk {
+  appearance: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--dt-text-faint);
+  padding: 0 2px;
+}
+.brk.is-on { color: var(--dt-red); }
+.brk:hover { color: var(--dt-red); }
+
+/* ---- Program history ---- */
+.ver-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 11px;
+}
+.ver-when { flex: 0 0 96px; font-family: var(--dt-mono); font-size: 10px; color: var(--dt-text-faint); }
+.ver-meta { flex: 1; color: var(--dt-text-dim); }
+
+/* ---- Keyboard hint chips in a toolbar ---- */
+kbd {
+  font-family: var(--dt-mono);
+  font-size: 9.5px;
+  padding: 1px 4px;
+  border: 1px solid var(--dt-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--dt-bg-inset);
+  color: var(--dt-text-dim);
+}
+`;
+const devtoolsScrollStyles = `
+/* A keyed scroll region: bounded height so the surrounding page keeps its
+   shape, and a preserved offset across re-renders (see SCROLL_KEY_ATTR). */
+.tree-wrap { max-height: 340px; overflow: auto; }
+:host(.dock-bottom) .tree-wrap { max-height: 240px; }
+[data-dt-scroll] { scrollbar-width: thin; }
+[data-dt-scroll]::-webkit-scrollbar { width: 9px; height: 9px; }
+[data-dt-scroll]::-webkit-scrollbar-thumb {
+  background: var(--dt-border-strong);
+  border-radius: 6px;
+  border: 2px solid var(--dt-bg);
+}
+`;
+const devtoolsCodeStyles = `
+.code-line.is-hit { background: rgba(240, 179, 94, 0.10); }
+.code-text mark {
+  background: var(--dt-amber);
+  color: #10121a;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+`;
+const devtoolsListStyles = `
+.list-wrap { max-height: 300px; overflow: auto; }
+:host(.dock-bottom) .list-wrap { max-height: 200px; }
+.log-list, .tlist { max-height: 420px; overflow: auto; }
+:host(.dock-bottom) .log-list, :host(.dock-bottom) .tlist { max-height: 240px; }
 `;
 const baseStyles = `
 :host {
@@ -3660,585 +6134,15 @@ table.dt-table th.sortable:hover { color: var(--dt-text-dim); }
   border-bottom-right-radius: 12px;
 }
 `;
-const devtoolsStyles = baseStyles + devtoolsExtraStyles;
-function h(tag, attrs = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [key2, value] of Object.entries(attrs)) {
-    if (value == null || value === false) continue;
-    if (key2 === "class") node.className = String(value);
-    else if (key2 === "style") node.setAttribute("style", String(value));
-    else if (key2 === "html") node.innerHTML = String(value);
-    else if (key2.startsWith("on") && typeof value === "function") {
-      node.addEventListener(key2.slice(2).toLowerCase(), value);
-    } else if (value === true) node.setAttribute(key2, "");
-    else node.setAttribute(key2, String(value));
-  }
-  append(node, children);
-  return node;
-}
-function append(parent, children) {
-  for (const child of children) {
-    if (child == null || child === false) continue;
-    if (Array.isArray(child)) {
-      append(parent, child);
-      continue;
-    }
-    parent.appendChild(
-      typeof child === "string" || typeof child === "number" ? document.createTextNode(String(child)) : child
-    );
-  }
-}
-function fmtMs(n) {
-  if (n === void 0 || !isFinite(n)) return "—";
-  if (n >= 1e3) return `${(n / 1e3).toFixed(2)} s`;
-  if (n >= 100) return `${n.toFixed(0)} ms`;
-  if (n >= 10) return `${n.toFixed(1)} ms`;
-  return `${n.toFixed(2)} ms`;
-}
-function fmtRel(ms) {
-  if (!isFinite(ms)) return "—";
-  if (ms >= 6e4) return `${Math.floor(ms / 6e4)}m ${Math.round(ms % 6e4 / 1e3)}s`;
-  if (ms >= 1e4) return `${(ms / 1e3).toFixed(1)} s`;
-  return `${Math.round(ms)} ms`;
-}
-function fmtClock(epochMs) {
-  const d = new Date(epochMs);
-  const pad = (n, w = 2) => String(n).padStart(w, "0");
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
-}
-function fmtCount(n) {
-  if (!isFinite(n)) return "—";
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e4) return `${(n / 1e3).toFixed(1)}k`;
-  return String(n);
-}
-function fmtBytes(n) {
-  if (n === void 0 || !isFinite(n)) return "—";
-  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-  if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${n} B`;
-}
-function fmtPct(num, den) {
-  if (den <= 0) return "—";
-  return `${Math.round(num / den * 100)}%`;
-}
-function truncateMiddle(text2, limit = 60) {
-  if (text2.length <= limit) return text2;
-  const head = Math.ceil((limit - 1) / 2);
-  const tail = Math.floor((limit - 1) / 2);
-  return `${text2.slice(0, head)}…${text2.slice(text2.length - tail)}`;
-}
-function urlPath(url) {
-  try {
-    const parsed = new URL(url, "http://localhost");
-    return `${parsed.pathname}${parsed.search}`;
-  } catch {
-    return url;
-  }
-}
-function urlHost(url) {
-  try {
-    const parsed = new URL(url);
-    return parsed.host;
-  } catch {
-    return "";
-  }
-}
-function section(title, body, options = {}) {
-  const head = title !== null || options.actions ? h(
-    "div",
-    { class: "sec-head" },
-    title !== null ? h("p", { class: "section-title" }, title) : null,
-    h("span", { class: "grow" }),
-    ...options.actions ?? []
-  ) : null;
-  return h(
-    "div",
-    { class: `section ${options.flush ? "is-flush" : ""}`, id: options.id },
-    head,
-    ...Array.isArray(body) ? body : [body]
-  );
-}
-function toolbar(...children) {
-  return h("div", { class: "toolbar" }, ...children);
-}
-function spacer() {
-  return h("span", { class: "grow" });
-}
-function chip(label, tone = "grey", title) {
-  return h("span", { class: `chip ${tone}`, title }, label);
-}
-function button(label, onClick, options = {}) {
-  const el = h(
-    "button",
-    {
-      class: `icon-btn ${options.active ? "is-on" : ""} ${options.tone ? `t-${options.tone}` : ""}`,
-      title: options.title,
-      onclick: onClick
-    },
-    label
-  );
-  if (options.disabled) el.disabled = true;
-  return el;
-}
-function toggle(label, on, onToggle, title) {
-  return h("button", { class: `filter-chip ${on ? "is-on" : ""}`, title, onclick: onToggle }, label);
-}
-function chipGroup(values, active, onPick) {
-  return h(
-    "div",
-    { class: "filters" },
-    ...values.map(
-      (entry) => toggle(entry.label, entry.value === active, () => onPick(entry.value), entry.title)
-    )
-  );
-}
-function searchInput(value, onInput, placeholder = "Filter…") {
-  return h("input", {
-    class: "search",
-    placeholder,
-    value,
-    oninput: (e) => onInput(e.target.value)
-  });
-}
-function muted(...children) {
-  return h("span", { class: "muted" }, ...children);
-}
-function faint(...children) {
-  return h("span", { class: "faint" }, ...children);
-}
-function code(text2, title) {
-  return h("code", { class: "mono", title }, text2);
-}
-function emptyState(title, hint, action) {
-  return h(
-    "div",
-    { class: "empty" },
-    h("p", {}, title),
-    hint ? h("p", { class: "faint" }, hint) : null,
-    null
-  );
-}
-function stat(label, value, options = {}) {
-  return h(
-    "div",
-    {
-      class: `stat ${options.onClick ? "is-link" : ""}`,
-      title: options.title,
-      onclick: options.onClick
-    },
-    h("span", { class: `stat-val ${options.tone ? `t-${options.tone}` : ""}` }, value),
-    h("span", { class: "stat-label" }, label)
-  );
-}
-function statGrid(...stats) {
-  return h("div", { class: "stat-grid" }, ...stats);
-}
-function barRow(label, fraction, note, options = {}) {
-  const pct = Math.max(2, Math.min(100, Math.round(fraction * 100)));
-  return h(
-    "div",
-    { class: `bar-row ${options.onClick ? "is-link" : ""}`, title: options.title, onclick: options.onClick },
-    h("span", { class: "bar-row-label" }, label),
-    h(
-      "span",
-      { class: "bar-row-track" },
-      h("span", { class: `bar-row-fill ${options.tone ? `t-${options.tone}` : ""}`, style: `width:${pct}%` })
-    ),
-    h("span", { class: "bar-row-num" }, note)
-  );
-}
-function insight(tone, icon, body) {
-  return h(
-    "div",
-    { class: `insight t-${tone}` },
-    h("span", { class: "insight-ic" }, icon),
-    h("span", {}, body)
-  );
-}
-function insightList(items) {
-  return h("div", { class: "insights" }, ...items.map((i) => insight(i.tone, i.icon, i.text)));
-}
-function table(columns, rows, options = {}) {
-  const sorted = [...rows];
-  const active = options.sort ? columns.find((c) => c.key === options.sort.key) : void 0;
-  if (active?.sort) {
-    const dir = options.sort.dir;
-    sorted.sort((a, b) => {
-      const va = active.sort(a);
-      const vb = active.sort(b);
-      if (typeof va === "string" || typeof vb === "string") {
-        return dir * String(va).localeCompare(String(vb));
-      }
-      return dir * (va < vb ? -1 : va > vb ? 1 : 0);
-    });
-  }
-  if (sorted.length === 0) {
-    return h("div", { class: "faint pad-sm" }, options.empty ?? "Nothing to show.");
-  }
-  const arrow = (key2) => {
-    if (!options.sort || options.sort.key !== key2) return "";
-    return options.sort.dir === 1 ? " ▲" : " ▼";
-  };
-  return h(
-    "table",
-    { class: "dt-table" },
-    h("thead", {}, h("tr", {}, ...columns.map((col) => h(
-      "th",
-      {
-        class: col.sort && options.onSort ? "sortable" : "",
-        style: col.numeric ? "text-align:right" : "",
-        title: col.title,
-        onclick: col.sort && options.onSort ? () => options.onSort(col.key) : void 0
-      },
-      `${col.label}${arrow(col.key)}`
-    )))),
-    h("tbody", {}, ...sorted.map((row) => h(
-      "tr",
-      {
-        class: options.rowClass?.(row) ?? "",
-        onclick: options.onRowClick ? () => options.onRowClick(row) : void 0
-      },
-      ...columns.map((col) => h("td", { class: col.numeric ? "num" : "" }, col.render(row)))
-    )))
-  );
-}
-function nextSort(current, key2, defaultDir = -1) {
-  if (current.key === key2) return { key: key2, dir: current.dir === 1 ? -1 : 1 };
-  return { key: key2, dir: defaultDir };
-}
-function valueSpan(value, options = {}) {
-  return h("span", { class: `v t-${value.type}`, title: options.title ?? value.json ?? value.preview }, value.preview);
-}
-function editableValue(value, onCommit, options = {}) {
-  const span = valueSpan(value, { title: options.title ?? (options.disabled ? "read-only" : "Click to edit") });
-  if (options.disabled) {
-    span.classList.add("is-readonly");
-    return span;
-  }
-  span.classList.add("is-editable");
-  span.addEventListener("click", (event) => {
-    event.stopPropagation();
-    const initial = value.type === "string" ? safeParse(value.json) ?? value.preview : value.json ?? value.preview;
-    const input = h("input", { class: "edit-input", value: String(initial ?? "") });
-    let settled = false;
-    const settle = (apply) => {
-      if (settled) return;
-      settled = true;
-      if (apply) onCommit(parseEditedValue(input.value));
-      else options.onCancel?.();
-      if (!apply) input.replaceWith(span);
-    };
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        settle(true);
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        settle(false);
-      }
-    });
-    input.addEventListener("blur", () => settle(true));
-    span.replaceWith(input);
-    input.focus();
-    input.select();
-  });
-  return span;
-}
-function safeParse(json) {
-  if (json === void 0) return void 0;
-  try {
-    return JSON.parse(json);
-  } catch {
-    return void 0;
-  }
-}
-function jsonTree(value, options) {
-  const container = h("div", { class: "tree" });
-  const prefix = options.path ?? "";
-  const entries = childEntries(value);
-  const filter = (options.filter ?? "").trim().toLowerCase();
-  let shown = 0;
-  for (const [key2, child] of entries) {
-    if (filter && !key2.toLowerCase().includes(filter)) continue;
-    shown += 1;
-    appendJsonRows(container, prefix ? `${prefix}.${key2}` : key2, key2, child, 0, options);
-  }
-  if (shown === 0) {
-    container.appendChild(h("div", { class: "empty" }, filter ? "Nothing matches the filter." : "Empty."));
-  }
-  return container;
-}
-function appendJsonRows(container, path, key2, value, depth, options) {
-  const type = jsonType(value);
-  const children = childEntries(value);
-  const expandable = children.length > 0 && depth < (options.maxDepth ?? 12);
-  const open = options.expanded.has(path);
-  const readOnly = options.readOnly?.(path, depth) ?? false;
-  const twist = h(
-    "span",
-    {
-      class: `twist ${expandable ? "" : "is-leaf"}`,
-      onclick: expandable ? (event) => {
-        event.stopPropagation();
-        if (options.expanded.has(path)) options.expanded.delete(path);
-        else options.expanded.add(path);
-        options.onToggle();
-      } : void 0
-    },
-    expandable ? open ? "▾" : "▸" : "•"
-  );
-  const described = {
-    type,
-    preview: jsonPreview(value),
-    json: type === "object" || type === "array" || type === "function" ? void 0 : JSON.stringify(value)
-  };
-  const editable = !readOnly && !expandable && type !== "function" && options.onEdit !== void 0;
-  const valueNode = editable ? editableValue(described, (next) => options.onEdit(path, next)) : valueSpan(described);
-  container.appendChild(h(
-    "div",
-    {
-      class: `row ${options.highlight?.has(path) ? "is-changed" : ""}`,
-      style: `padding-left:${8 + depth * 14}px`
-    },
-    twist,
-    h("span", { class: "k" }, key2),
-    h("span", { class: "sep" }, ": "),
-    valueNode,
-    readOnly ? h("span", { class: "tag" }, "read-only") : null,
-    h("span", { class: "grow" }),
-    options.decorate?.(path, depth) ?? null
-  ));
-  if (expandable && open) {
-    for (const [childKey, childValue] of children) {
-      appendJsonRows(container, `${path}.${childKey}`, childKey, childValue, depth + 1, options);
-    }
-  }
-}
-function jsonType(value) {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return "array";
-  return typeof value;
-}
-function childEntries(value) {
-  if (Array.isArray(value)) return value.map((item, i) => [String(i), item]);
-  if (value && typeof value === "object") {
-    try {
-      return Object.entries(value);
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-function jsonPreview(value) {
-  switch (jsonType(value)) {
-    case "string": {
-      const text2 = value;
-      return JSON.stringify(text2.length > 80 ? `${text2.slice(0, 80)}…` : text2);
-    }
-    case "number":
-    case "boolean":
-      return String(value);
-    case "null":
-      return "null";
-    case "undefined":
-      return "undefined";
-    case "function":
-      return "ƒ ()";
-    case "array":
-      return `Array(${value.length})`;
-    case "object": {
-      const keys = Object.keys(value);
-      if (keys.length === 0) return "{}";
-      return `{ ${keys.slice(0, 3).join(", ")}${keys.length > 3 ? `, …${keys.length - 3}` : ""} }`;
-    }
-    default:
-      return String(value);
-  }
-}
-function codeBlock(text2, options = {}) {
-  const lines = text2.split("\n");
-  const cap2 = options.maxLines ?? 4e3;
-  const shown = lines.slice(0, cap2);
-  const wrap = h("div", { class: "code-block" });
-  shown.forEach((line, index) => {
-    const lineNo = index + 1;
-    const marker = options.markers?.get(lineNo);
-    const row = h(
-      "div",
-      {
-        class: `code-line ${marker ? `has-marker t-${marker.tone}` : ""} ${options.focusLine === lineNo ? "is-focus" : ""}`,
-        onclick: options.onLineClick ? () => options.onLineClick(lineNo) : void 0
-      },
-      options.lineNumbers === false ? null : h("span", { class: "code-gutter", title: marker?.title }, String(lineNo)),
-      h("span", { class: "code-text" }, line === "" ? " " : line)
-    );
-    wrap.appendChild(row);
-  });
-  if (lines.length > cap2) {
-    wrap.appendChild(h(
-      "div",
-      { class: "code-line" },
-      h("span", { class: "code-gutter" }, "…"),
-      h("span", { class: "code-text faint" }, `${lines.length - cap2} more lines not shown`)
-    ));
-  }
-  return wrap;
-}
-function copyText(text2) {
-  const clipboard = navigator.clipboard;
-  if (clipboard?.writeText) {
-    void clipboard.writeText(text2).catch(() => legacyCopy(text2));
-    return;
-  }
-  legacyCopy(text2);
-}
-function legacyCopy(text2) {
-  try {
-    const area = document.createElement("textarea");
-    area.value = text2;
-    area.setAttribute("readonly", "");
-    area.style.position = "fixed";
-    area.style.opacity = "0";
-    document.body.appendChild(area);
-    area.select();
-    document.execCommand("copy");
-    area.remove();
-  } catch {
-  }
-}
-function copyButton(getText, label = "Copy", onDone) {
-  return button(label, () => {
-    copyText(getText());
-  }, { title: "Copy to clipboard" });
-}
-function downloadText(filename, text2, mime = "application/json") {
-  try {
-    const blob = new Blob([text2], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1e4);
-  } catch {
-  }
-}
-function waterfallBar(startFraction, widthFraction, tone, title) {
-  const left = Math.max(0, Math.min(99, startFraction * 100));
-  const width = Math.max(1, Math.min(100 - left, widthFraction * 100));
-  return h(
-    "span",
-    { class: "wf-track", title },
-    h("span", { class: `wf-bar t-${tone}`, style: `left:${left}%;width:${width}%` })
-  );
-}
-function defList(rows) {
-  return h("div", { class: "deflist" }, ...rows.flatMap(([label, value]) => [
-    h("div", { class: "dt" }, label),
-    h("div", { class: "dd" }, value)
-  ]));
-}
-function defaultUiState() {
-  return {
-    tab: "overview",
-    paused: false,
-    dock: "float",
-    light: false,
-    compact: false,
-    collapsed: false,
-    toast: null,
-    stateFilter: "",
-    stateExpanded: /* @__PURE__ */ new Set(),
-    stateSort: "name",
-    stateShowReserved: false,
-    timeTravel: null,
-    inspectFilter: "",
-    inspectCollapsed: /* @__PURE__ */ new Set(),
-    selectedInstance: null,
-    selectedElement: null,
-    inspectPane: "props",
-    inspectShowLibrary: true,
-    propsExpanded: /* @__PURE__ */ new Set(),
-    computedFilter: "",
-    selectedCommitId: null,
-    flashOnCommit: false,
-    rankedSort: { key: "total", dir: -1 },
-    profilerView: "commit",
-    phaseFilter: /* @__PURE__ */ new Set(["mount", "run", "cleanup", "unmount", "error"]),
-    effectView: "timeline",
-    selectedEffect: null,
-    networkFilter: "",
-    networkOnlyProblems: false,
-    selectedRequest: null,
-    networkPane: "response",
-    showRules: false,
-    rules: [],
-    logFilter: "",
-    logLevels: /* @__PURE__ */ new Set(["log", "info", "warn", "error", "debug"]),
-    captureConsole: true,
-    repl: [],
-    replDraft: "",
-    replHistory: [],
-    replCursor: -1,
-    routeDraft: "",
-    dataPane: "queries",
-    storageKind: "local",
-    dataExpanded: /* @__PURE__ */ new Set(),
-    themeFilter: "",
-    sourceIndex: 0,
-    sourceFocusLine: null,
-    sourceDraft: null,
-    sourceOutline: true,
-    testPane: "record",
-    a11yRun: null,
-    a11ySelected: null,
-    queryProbe: "",
-    queryProbeKind: "role",
-    fuzzRun: null,
-    fuzzRunning: false,
-    generatedTest: null,
-    timelineKinds: /* @__PURE__ */ new Set(["commit", "effect", "network", "route", "emit", "error"])
-  };
-}
-const STORAGE_KEY = "aktion-devtools-ui";
-function loadPersisted() {
-  try {
-    const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-function savePersisted(state) {
-  try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-  }
-}
-function can(app, capability) {
-  return app !== null && typeof app[capability] === "function";
-}
-function renderRootElement(app) {
-  if (!can(app, "getRenderRoot")) return null;
-  const root = app.getRenderRoot();
-  if (root === null) return null;
-  if (root instanceof Element) return root;
-  return root.firstElementChild ?? null;
-}
+const devtoolsStyles = baseStyles + devtoolsExtraStyles + devtoolsPaletteStyles + devtoolsScrollStyles + devtoolsCodeStyles + devtoolsListStyles;
 const overviewTab = {
   id: "overview",
   label: "Overview",
   icon: "⚡",
   hint: "Health, cost, and shape of the inspected app",
-  render: (ctx) => render$d(ctx)
+  render: (ctx) => render$b(ctx)
 };
-function render$d(ctx) {
+function render$b(ctx) {
   const { app, model } = ctx;
   if (!app) {
     return [h(
@@ -4263,16 +6167,22 @@ function render$d(ctx) {
     muted(app.label),
     chip(`protocol v${ctx.hook.protocolVersion}`, "grey"),
     spacer(),
+    button("⌘K Commands", () => ctx.openPalette(), {
+      title: "Every action in the panel, searchable (Ctrl/⌘ K)"
+    }),
     can(app, "reload") ? button("Reload program", () => {
       app.reload();
       ctx.toast("Program re-planned");
+      ctx.refresh();
     }, { title: "Re-plan and re-render from the current source" }) : null,
     button("Force render", () => {
       app.forceRender();
       ctx.toast("Full re-render requested");
+      ctx.refresh();
     }, { title: "Re-render the whole tree, bypassing memoization" })
   );
   const out = [bar];
+  if (!ctx.ui.tipsDismissed) out.push(renderTips(ctx));
   const problems = [];
   if (errors.length > 0) {
     problems.push({
@@ -4384,6 +6294,38 @@ function render$d(ctx) {
       can(app, "listPropOverrides") && app.listPropOverrides().length > 0 ? chip(`${app.listPropOverrides().length} prop override(s)`, "amber") : null
     )));
   }
+  if (ctx.ui.watches.length > 0) {
+    out.push(section("Watching", [
+      h("div", {}, ...ctx.ui.watches.map((expr) => {
+        const result = can(app, "evaluateExpression") ? app.evaluateExpression(expr) : null;
+        const text2 = result === null ? "no evaluator" : result.ok ? result.value?.preview ?? "undefined" : result.error ?? "failed";
+        return h(
+          "div",
+          { class: "watch-row" },
+          h("span", { class: "watch-expr", title: expr }, expr),
+          h("span", { class: `watch-val ${result?.ok === false ? "is-error" : ""}` }, text2)
+        );
+      })),
+      h(
+        "div",
+        { class: "detail-head" },
+        spacer(),
+        button("Manage watches", () => ctx.selectTab("console"), { title: "Add or remove watches in the Console tab" })
+      )
+    ]));
+  }
+  if (model.longTasks.length > 0) {
+    const worst = model.longTasks.reduce((max, task) => Math.max(max, task.duration), 0);
+    const total = model.longTasks.reduce((sum, task) => sum + task.duration, 0);
+    out.push(section("Main-thread blocking", [
+      statGrid(
+        stat("long tasks", fmtCount(model.longTasks.length), { tone: "warn" }),
+        stat("worst", fmtMs(worst), { tone: worst > 200 ? "bad" : "warn" }),
+        stat("total blocked", fmtMs(total))
+      ),
+      faint("A long task is >50ms of uninterrupted main-thread work. Compare it with the commit durations in the Profiler: if the commits are short and the tasks are long, the jank is not coming from your program.")
+    ]));
+  }
   const hot = hotAtoms(model.commits, 5);
   if (hot.length > 0) {
     const max = Math.max(...hot.map(([, count]) => count));
@@ -4411,6 +6353,56 @@ function render$d(ctx) {
   }
   return out;
 }
+function renderTips(ctx) {
+  const tips = [
+    {
+      action: "Pick an element",
+      why: "click anything on the page to find the component that rendered it, then edit its props",
+      run: () => ctx.togglePicker()
+    },
+    {
+      action: "Watch it re-render",
+      why: "outlines every component as it repaints — the fastest way to see work you did not expect",
+      run: () => {
+        ctx.ui.highlightUpdates = true;
+        ctx.toast("Outlining components as they re-render");
+        ctx.refresh();
+      }
+    },
+    {
+      action: "Open the command palette",
+      why: "every action in the panel, searchable — Ctrl/⌘ K from anywhere",
+      run: () => ctx.openPalette()
+    }
+  ];
+  return section(null, h(
+    "div",
+    { class: "tips" },
+    h(
+      "div",
+      { class: "tips-head" },
+      h("span", {}, "New here? Try these three."),
+      spacer(),
+      button("Dismiss", () => {
+        ctx.ui.tipsDismissed = true;
+        ctx.persist();
+        ctx.refresh();
+      }, { title: "Hide these tips for good" })
+    ),
+    h("div", { class: "tips-list" }, ...tips.map((tip, index) => h(
+      "button",
+      { class: "tip-row", onclick: tip.run },
+      h("span", { class: "tip-num" }, String(index + 1)),
+      h(
+        "span",
+        {},
+        h("span", { class: "tip-action" }, tip.action),
+        h("span", { class: "tip-why" }, ` — ${tip.why}`)
+      )
+    ))),
+    faint("Press ? at any time for the keyboard shortcuts.")
+  ), { flush: true });
+}
 function commitRate(ctx) {
   const window2 = ctx.model.commits.slice(-20);
   if (window2.length < 5) return 0;
@@ -4427,789 +6419,6 @@ function quickLink(ctx, tab, title, hint) {
     h("span", { class: "quick-title" }, title),
     h("span", { class: "quick-hint" }, hint)
   );
-}
-const inspectTab = {
-  id: "inspect",
-  label: "Inspect",
-  icon: "◎",
-  hint: "Component tree, live props / state editing, and DOM inspection",
-  badge: (ctx) => {
-    const overrides = can(ctx.app, "listPropOverrides") ? ctx.app.listPropOverrides().length : 0;
-    return overrides > 0 ? overrides : null;
-  },
-  render: (ctx) => render$c(ctx)
-};
-function render$c(ctx) {
-  const { app, ui } = ctx;
-  if (!can(app, "getComponentTree")) {
-    return [emptyState(
-      "This app does not expose a component tree.",
-      "The inspector needs a runtime built with DevTools protocol 2 or newer."
-    )];
-  }
-  const nodes = app.getComponentTree();
-  const aggregates = instanceAggregates(ctx.model.commits);
-  const overrides = can(app, "listPropOverrides") ? app.listPropOverrides() : [];
-  const bar = toolbar(
-    button(
-      ctx.overlay.isPicking ? "◎ Picking…" : "◎ Pick",
-      () => togglePicker(ctx),
-      {
-        title: "Select an element on the page to inspect it (Esc to cancel)",
-        active: ctx.overlay.isPicking
-      }
-    ),
-    searchInput(ui.inspectFilter, (value) => {
-      ui.inspectFilter = value;
-      ctx.refresh();
-    }, "Filter components…"),
-    toggle("Library", ui.inspectShowLibrary, () => {
-      ui.inspectShowLibrary = !ui.inspectShowLibrary;
-      ctx.refresh();
-    }, "Show built-in library components as well as your own"),
-    spacer(),
-    muted(`${nodes.length} instance${nodes.length === 1 ? "" : "s"}`),
-    button("Collapse all", () => {
-      for (const node of nodes) {
-        if (nodes.some((n) => n.parentKey === node.instanceKey)) ui.inspectCollapsed.add(node.instanceKey);
-      }
-      ctx.refresh();
-    }, { title: "Collapse every subtree" }),
-    button("Expand all", () => {
-      ui.inspectCollapsed.clear();
-      ctx.refresh();
-    }, { title: "Expand every subtree" })
-  );
-  const out = [bar];
-  if (overrides.length > 0) {
-    out.push(section(null, h(
-      "div",
-      { class: "banner t-amber" },
-      h("span", {}, `${overrides.length} prop override${overrides.length === 1 ? "" : "s"} active — the UI is showing DevTools values, not the program's.`),
-      spacer(),
-      button("Clear all", () => {
-        if (!can(app, "clearPropOverride")) return;
-        for (const entry of overrides) app.clearPropOverride(entry.instanceKey, entry.prop);
-        ctx.toast("Overrides cleared");
-        ctx.refresh();
-      }, { tone: "amber" })
-    ), { flush: true }));
-  }
-  out.push(renderTree(ctx, nodes, aggregates));
-  if (ui.selectedInstance) {
-    const detail = can(app, "getInstance") ? app.getInstance(ui.selectedInstance) : null;
-    if (detail) out.push(...renderDetail$1(ctx, detail, nodes, aggregates));
-    else {
-      out.push(section("Selection", faint(
-        "That instance is no longer in the tree — it unmounted, or the program was replanned."
-      )));
-    }
-  } else if (ui.selectedElement) {
-    out.push(...renderElementOnly(ctx, ui.selectedElement));
-  } else {
-    out.push(section(null, faint("Select a component above, or use ◎ Pick to click one on the page."), { flush: true }));
-  }
-  return out;
-}
-function togglePicker(ctx) {
-  if (ctx.overlay.isPicking) {
-    ctx.overlay.stopPicking();
-    ctx.refresh();
-    return;
-  }
-  const app = ctx.app;
-  ctx.overlay.startPicking({
-    onPick: (element) => {
-      ctx.ui.selectedElement = element;
-      const key2 = can(app, "instanceForNode") ? app.instanceForNode(element) : null;
-      ctx.ui.selectedInstance = key2;
-      if (key2) ctx.highlightInstance(key2, true);
-      else ctx.overlay.highlight(element, {}, true);
-      ctx.ui.inspectPane = key2 ? "props" : "dom";
-      ctx.selectTab("inspect");
-    },
-    onCancel: () => ctx.refresh()
-  });
-  ctx.refresh();
-}
-function renderTree(ctx, nodes, aggregates) {
-  const { ui } = ctx;
-  const filter = ui.inspectFilter.trim().toLowerCase();
-  const wrap = h("div", { class: "tree comp-tree" });
-  const visible = filter !== "" ? nodes.filter((node) => node.name.toLowerCase().includes(filter) || node.instanceKey.toLowerCase().includes(filter)) : nodes.filter((node) => ui.inspectShowLibrary || node.kind === "user");
-  const hasChildren = new Set(nodes.map((n) => n.parentKey).filter((k) => k !== null));
-  const hidden = /* @__PURE__ */ new Set();
-  if (filter === "") {
-    for (const node of visible) {
-      if (!ui.inspectCollapsed.has(node.instanceKey)) continue;
-      for (const key2 of descendantsOf(node.instanceKey, nodes)) hidden.add(key2);
-    }
-  }
-  let shown = 0;
-  const minDepth = visible.reduce((min, n) => Math.min(min, n.depth), Number.MAX_SAFE_INTEGER);
-  for (const node of visible) {
-    if (hidden.has(node.instanceKey)) continue;
-    shown += 1;
-    const agg = aggregates.get(node.instanceKey);
-    const collapsed = ui.inspectCollapsed.has(node.instanceKey);
-    const expandable = hasChildren.has(node.instanceKey) && filter === "";
-    const selected = ui.selectedInstance === node.instanceKey;
-    const depth = filter === "" ? Math.max(0, node.depth - (minDepth === Number.MAX_SAFE_INTEGER ? 0 : minDepth)) : 0;
-    const row = h(
-      "div",
-      {
-        class: `row ct-row ${selected ? "is-selected" : ""} ${node.mounted === false ? "is-unmounted" : ""}`,
-        style: `padding-left:${6 + depth * 13}px`,
-        onclick: () => {
-          ui.selectedInstance = node.instanceKey;
-          ui.selectedElement = null;
-          ctx.highlightInstance(node.instanceKey, true);
-          ctx.refresh();
-        },
-        onmouseenter: () => ctx.highlightInstance(node.instanceKey, false),
-        onmouseleave: () => ctx.overlay.hideHover()
-      },
-      h("span", {
-        class: `twist ${expandable ? "" : "is-leaf"}`,
-        onclick: expandable ? (event) => {
-          event.stopPropagation();
-          if (collapsed) ui.inspectCollapsed.delete(node.instanceKey);
-          else ui.inspectCollapsed.add(node.instanceKey);
-          ctx.refresh();
-        } : void 0
-      }, expandable ? collapsed ? "▸" : "▾" : "·"),
-      h("span", { class: `ct-name ${node.kind === "user" ? "is-user" : ""}` }, node.name),
-      node.explicitKey ? h("span", { class: "ct-key" }, `key=${truncateMiddle(node.explicitKey, 16)}`) : null,
-      node.phase === "memo" ? chip("memo", "grey", "Skipped by memoization in the last commit") : null,
-      node.mounted === false ? chip("no dom", "amber", "No DOM node carries this instance's tag") : null,
-      h("span", { class: "grow" }),
-      node.propCount ? h("span", { class: "ct-meta" }, `${node.propCount}p`) : null,
-      agg && agg.renders > 0 ? h("span", { class: "ct-meta", title: `${agg.renders} render(s), ${agg.memo} memoized` }, `×${agg.renders}`) : null,
-      h("span", { class: "ct-time" }, node.selfTime > 0 ? fmtMs(node.selfTime) : "—")
-    );
-    wrap.appendChild(row);
-  }
-  if (shown === 0) {
-    wrap.appendChild(h(
-      "div",
-      { class: "empty" },
-      filter ? "No component matches the filter." : "No component instances in the last commit."
-    ));
-  }
-  return section(null, wrap, { flush: true });
-}
-function renderDetail$1(ctx, detail, nodes, aggregates) {
-  const { app, ui } = ctx;
-  const agg = aggregates.get(detail.instanceKey);
-  const element = can(app, "nodeForInstance") ? app.nodeForInstance(detail.instanceKey) : null;
-  const crumbs = h("div", { class: "crumbs" });
-  for (const ancestor of detail.ancestors) {
-    crumbs.appendChild(h("button", {
-      class: "crumb",
-      title: ancestor,
-      onclick: () => {
-        ui.selectedInstance = ancestor;
-        ctx.highlightInstance(ancestor, true);
-        ctx.refresh();
-      },
-      onmouseenter: () => ctx.highlightInstance(ancestor, false),
-      onmouseleave: () => ctx.overlay.hideHover()
-    }, shortInstanceLabel(ancestor).replace(/[@=].*$/, "")));
-    crumbs.appendChild(h("span", { class: "crumb-sep" }, "›"));
-  }
-  crumbs.appendChild(h("span", { class: "crumb is-current" }, detail.name));
-  const header = section(null, [
-    crumbs,
-    h(
-      "div",
-      { class: "detail-head" },
-      h("span", { class: "detail-title" }, detail.name),
-      chip(detail.kind, detail.kind === "user" ? "purple" : "grey"),
-      detail.source ? code(`L${detail.source.line}:${detail.source.column}`) : null,
-      spacer(),
-      element ? button("Scroll to", () => {
-        element.scrollIntoView({ block: "center", behavior: "smooth" });
-        ctx.highlightInstance(detail.instanceKey, true);
-      }, { title: "Scroll the element into view" }) : null,
-      can(app, "remountInstance") ? button("Remount", () => {
-        app.remountInstance(detail.instanceKey);
-        ctx.toast(`Remounted ${detail.name}`);
-        ctx.refresh();
-      }, { title: "Drop this instance's memo, hooks, and UI state so it mounts fresh" }) : null,
-      copyButton(() => detail.instanceKey, "Copy key")
-    ),
-    statGrid(
-      stat("renders", String(agg?.renders ?? 0)),
-      stat("memoized", String(agg?.memo ?? 0)),
-      stat("self time", fmtMs(agg?.total)),
-      stat("slowest", fmtMs(agg?.max)),
-      stat("dom nodes", detail.domNodes !== void 0 ? String(detail.domNodes) : "—"),
-      stat("effects", String(detail.effects.length))
-    )
-  ], { flush: true });
-  const panes = [
-    { value: "props", label: `Props${detail.props.length ? ` (${detail.props.length})` : ""}`, title: "Arguments this instance received" },
-    { value: "hooks", label: `State${detail.hooks.length + detail.uiState.length ? ` (${detail.hooks.length + detail.uiState.length})` : ""}`, title: "Per-instance $state / $memo cells and library UI state" },
-    { value: "dom", label: "DOM", title: "Box model, attributes, and markup" },
-    { value: "styles", label: "Styles", title: "Computed styles and theme variables in effect" },
-    { value: "a11y", label: "A11y", title: "Role, accessible name, and ARIA wiring" },
-    { value: "source", label: "Source", title: "Where this instance is written in the program" }
-  ];
-  const tabs = section(null, chipGroup(panes, ui.inspectPane, (value) => {
-    ui.inspectPane = value;
-    ctx.refresh();
-  }), { flush: true });
-  const body = [];
-  switch (ui.inspectPane) {
-    case "props":
-      body.push(...renderProps(ctx, detail));
-      break;
-    case "hooks":
-      body.push(...renderComponentState(ctx, detail));
-      break;
-    case "dom":
-      body.push(...renderDom(ctx, detail, element));
-      break;
-    case "styles":
-      body.push(...renderStyles(ctx, element));
-      break;
-    case "a11y":
-      body.push(...renderA11y$1(ctx, element));
-      break;
-    case "source":
-      body.push(...renderSource(ctx, detail));
-      break;
-  }
-  const deps = detail.deps.length > 0 ? section("Reads", h("div", { class: "chip-row" }, ...detail.deps.map((dep) => h("button", {
-    class: "chip blue is-link",
-    title: `Show $${dep} in the State tab`,
-    onclick: () => {
-      ui.stateFilter = dep.split(".")[0] ?? dep;
-      ctx.selectTab("state");
-    }
-  }, `$${dep}`)))) : null;
-  const kids = nodes.filter((n) => n.parentKey === detail.instanceKey);
-  const children = kids.length > 0 ? section(`Children (${kids.length})`, h("div", { class: "chip-row" }, ...kids.slice(0, 24).map((kid) => h("button", {
-    class: "chip grey is-link",
-    onclick: () => {
-      ui.selectedInstance = kid.instanceKey;
-      ctx.highlightInstance(kid.instanceKey, true);
-      ctx.refresh();
-    },
-    onmouseenter: () => ctx.highlightInstance(kid.instanceKey, false),
-    onmouseleave: () => ctx.overlay.hideHover()
-  }, kid.name)))) : null;
-  return [header, tabs, ...body, deps, children].filter((n) => n != null);
-}
-function renderProps(ctx, detail) {
-  const { app } = ctx;
-  const editable = can(app, "setPropOverride");
-  if (detail.props.length === 0 && (detail.overrides?.length ?? 0) === 0) {
-    return [section("Props", faint("This instance received no arguments."))];
-  }
-  const rows = detail.props.map((prop) => renderPropRow(ctx, detail, prop, editable));
-  const addRow = editable ? renderAddOverride(ctx, detail) : null;
-  return [
-    section("Props", [
-      h("div", { class: "prop-list" }, ...rows),
-      addRow,
-      editable ? faint("Editing a $-bound prop writes the atom. Editing any other prop installs a DevTools override that lasts until you clear it.") : faint("This runtime does not support prop overrides.")
-    ])
-  ];
-}
-function renderPropRow(ctx, detail, prop, editable) {
-  const { app } = ctx;
-  const canWriteAtom = can(app, "setState");
-  const readOnly = prop.value.json === void 0;
-  const commit = (next) => {
-    if (prop.stateRef && canWriteAtom) {
-      app.setState(prop.stateRef, next);
-      ctx.toast(`$${prop.stateRef} = ${JSON.stringify(next)}`);
-    } else if (can(app, "setPropOverride")) {
-      app.setPropOverride(detail.instanceKey, prop.name, next);
-      ctx.toast(`${detail.name}.${prop.name} overridden`);
-    }
-    ctx.refresh();
-  };
-  return h(
-    "div",
-    { class: `prop-row ${prop.overridden ? "is-overridden" : ""}` },
-    h("span", { class: "prop-name" }, prop.name),
-    prop.stateRef ? chip(`$${prop.stateRef}`, "blue", "Two-way bound to this reactive path") : null,
-    prop.overridden ? chip("override", "amber", "Value forced by DevTools") : null,
-    h("span", { class: "grow" }),
-    readOnly || !editable ? valueSpan(prop.value, { title: readOnly ? "This value cannot be edited (function, resource, or DOM node)" : void 0 }) : editableValue(prop.value, commit),
-    prop.overridden && can(app, "clearPropOverride") ? button("↺", () => {
-      app.clearPropOverride(detail.instanceKey, prop.name);
-      ctx.toast(`${prop.name} restored`);
-      ctx.refresh();
-    }, { title: "Restore the program's value" }) : null
-  );
-}
-function renderAddOverride(ctx, detail) {
-  const nameInput = h("input", { class: "search", placeholder: "prop name", style: "max-width:120px" });
-  const valueInput = h("input", { class: "search", placeholder: 'value (JSON, e.g. "danger" or 12)' });
-  const apply = () => {
-    const name = nameInput.value.trim();
-    if (name === "" || !can(ctx.app, "setPropOverride")) return;
-    ctx.app.setPropOverride(detail.instanceKey, name, parseEditedValue(valueInput.value));
-    ctx.toast(`${detail.name}.${name} overridden`);
-    ctx.refresh();
-  };
-  valueInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") apply();
-  });
-  return h(
-    "div",
-    { class: "prop-row is-add" },
-    h("span", { class: "prop-name faint" }, "＋"),
-    nameInput,
-    valueInput,
-    button("Override", apply, { title: "Force this prop on the selected instance" })
-  );
-}
-function renderComponentState(ctx, detail) {
-  const { app } = ctx;
-  const out = [];
-  if (detail.hooks.length > 0) {
-    out.push(section("Hooks — $state / $memo cells", h(
-      "div",
-      { class: "prop-list" },
-      ...detail.hooks.map((hook) => h(
-        "div",
-        { class: "prop-row" },
-        h("span", { class: "prop-name mono" }, `[${hook.slot}]`),
-        chip(hook.kind, hook.kind === "state" ? "green" : "grey"),
-        h("span", { class: "grow" }),
-        hook.editable && can(app, "setInstanceHook") ? editableValue(hook.value, (next) => {
-          const ok = app.setInstanceHook(detail.instanceKey, hook.slot, next);
-          ctx.toast(ok ? `slot ${hook.slot} updated` : `slot ${hook.slot} is read-only`, ok ? "good" : "warn");
-          ctx.refresh();
-        }) : valueSpan(hook.value, { title: hook.kind === "memo" ? "A $memo is recomputed from its deps — edit the deps instead" : "read-only" })
-      ))
-    )));
-  }
-  if (detail.uiState.length > 0) {
-    out.push(section("Component UI state", [
-      h("div", { class: "prop-list" }, ...detail.uiState.map((slot) => h(
-        "div",
-        { class: "prop-row" },
-        h("span", { class: "prop-name mono" }, slot.key),
-        h("span", { class: "grow" }),
-        slot.editable && can(app, "setInstanceUiState") ? editableValue(slot.value, (next) => {
-          const ok = app.setInstanceUiState(detail.instanceKey, slot.key, next);
-          ctx.toast(ok ? `${slot.key} updated` : `${slot.key} no longer exists`, ok ? "good" : "warn");
-          ctx.refresh();
-        }) : valueSpan(slot.value)
-      ))),
-      faint("These are the slots a library component keeps for itself — a Tabs' active pane, a Popover's open flag, a DataGrid's sort. They never appear in $state.")
-    ]));
-  }
-  if (detail.effects.length > 0) {
-    out.push(section(
-      `Effects owned by this instance (${detail.effects.length})`,
-      h("div", { class: "chip-row" }, ...detail.effects.map((key2) => h("button", {
-        class: "chip purple is-link",
-        onclick: () => {
-          ctx.ui.selectedEffect = key2;
-          ctx.selectTab("effects");
-        }
-      }, key2.slice(key2.lastIndexOf("::") + 2))))
-    ));
-  }
-  if (out.length === 0) {
-    out.push(section("State", faint(
-      "This instance holds no per-instance state. A library component only allocates a slot when it needs one, and a user component only when it calls $state / $memo."
-    )));
-  }
-  return out;
-}
-function renderDom(ctx, detail, element) {
-  if (!element) {
-    return [section("DOM", faint(
-      "No DOM node carries this instance's tag. Either it renders a fragment (Show / Async / Lazy with no host), or DOM tagging is off in Settings."
-    ))];
-  }
-  return [
-    section("Element", [
-      h(
-        "div",
-        { class: "detail-head" },
-        code(describeElement(element)),
-        spacer(),
-        copyButton(() => cssPath(element, null), "Copy selector"),
-        copyButton(() => element.outerHTML, "Copy HTML"),
-        button("Log", () => {
-          console.log("[aktion-devtools] selected element", element);
-          ctx.toast("Logged to the page console");
-        }, { title: "console.log the live element so you can poke at it" })
-      ),
-      boxModelDiagram(element)
-    ]),
-    section("Attributes", attributeTable(element)),
-    section("Markup", h("pre", { class: "code-pre" }, detail.html ?? element.outerHTML))
-  ];
-}
-function boxModelDiagram(element) {
-  const box = measureBox(element);
-  if (!box) return faint("This element has no layout to measure.");
-  const side = (value) => value === 0 ? "-" : String(Math.round(value * 100) / 100);
-  const ring = (name, sides2, inner) => h(
-    "div",
-    { class: `bm bm-${name}` },
-    h("span", { class: "bm-label" }, name),
-    h("span", { class: "bm-t" }, side(sides2.top)),
-    h("span", { class: "bm-r" }, side(sides2.right)),
-    h("span", { class: "bm-b" }, side(sides2.bottom)),
-    h("span", { class: "bm-l" }, side(sides2.left)),
-    inner
-  );
-  const content = h(
-    "div",
-    { class: "bm bm-content" },
-    `${Math.round(box.content.width)} × ${Math.round(box.content.height)}`
-  );
-  return h(
-    "div",
-    { class: "bm-wrap" },
-    ring("margin", box.margin, ring("border", box.border, ring("padding", box.padding, content)))
-  );
-}
-function attributeTable(element) {
-  const attrs = [...element.attributes].filter((attr) => attr.name !== "data-aktion-instance" && attr.name !== "data-aktion-owner").map((attr) => ({ name: attr.name, value: attr.value }));
-  if (attrs.length === 0) return faint("No attributes.");
-  return table(
-    [
-      { key: "name", label: "Attribute", render: (row) => code(row.name) },
-      { key: "value", label: "Value", render: (row) => h("span", { class: "mono wrap" }, row.value === "" ? " " : row.value) }
-    ],
-    attrs
-  );
-}
-function renderStyles(ctx, element) {
-  if (!element) return [section("Styles", faint("Select an element with a DOM node to read its computed styles."))];
-  const filter = ctx.ui.computedFilter.trim().toLowerCase();
-  const out = [
-    section(null, toolbar(
-      searchInput(ctx.ui.computedFilter, (value) => {
-        ctx.ui.computedFilter = value;
-        ctx.refresh();
-      }, "Filter properties…")
-    ), { flush: true })
-  ];
-  for (const group of COMPUTED_GROUPS) {
-    const rows = computedGroup(element, group.props).filter(([prop, value]) => filter === "" || prop.includes(filter) || value.toLowerCase().includes(filter));
-    if (rows.length === 0) continue;
-    out.push(section(group.title, defList(rows.map(([prop, value]) => [prop, h("span", { class: "mono" }, value)]))));
-  }
-  const vars = cssVariables(element).filter(([name, value]) => filter === "" || name.includes(filter) || value.toLowerCase().includes(filter));
-  if (vars.length > 0) {
-    out.push(section(`Theme variables in effect (${vars.length})`, [
-      defList(vars.slice(0, 80).map(([name, value]) => [
-        name,
-        h(
-          "span",
-          { class: "mono" },
-          isColor$1(value) ? h("span", { class: "swatch", style: `background:${value}` }) : null,
-          value
-        )
-      ])),
-      faint("These are the resolved --rui-* custom properties. Change them live in the Theme tab.")
-    ]));
-  }
-  if (out.length === 1) out.push(section(null, faint("No computed properties match the filter."), { flush: true }));
-  return out;
-}
-function isColor$1(value) {
-  return /^(#|rgb|hsl|color\()/i.test(value.trim());
-}
-function renderA11y$1(ctx, element) {
-  if (!element) return [section("Accessibility", faint("Select an element with a DOM node."))];
-  const summary = a11ySummary(element);
-  const audit = auditAccessibility(element.parentElement ?? element, { limit: 500 });
-  const own = audit.findings.filter((f) => f.element === element || element.contains(f.element));
-  return [
-    section("Accessibility properties", summary.length > 0 ? defList(summary.map(([key2, value]) => [key2, h("span", { class: "mono" }, value)])) : faint("No ARIA attributes, role, or accessible name.")),
-    section(`Findings in this subtree (${own.length})`, own.length === 0 ? h("div", { class: "insight t-good" }, h("span", { class: "insight-ic" }, "✓"), h("span", {}, "No accessibility problems found here.")) : h("div", {}, ...own.slice(0, 12).map((finding) => h(
-      "div",
-      { class: `insight t-${finding.impact === "critical" || finding.impact === "serious" ? "bad" : "warn"}` },
-      h("span", { class: "insight-ic" }, finding.impact === "critical" ? "✖" : "▲"),
-      h(
-        "span",
-        {},
-        h("b", {}, `${finding.rule}: `),
-        finding.message,
-        " ",
-        faint(finding.help)
-      ),
-      spacer(),
-      button("Show", () => ctx.overlay.highlight(finding.element, {}, true), { title: "Highlight the element" })
-    ))))
-  ];
-}
-function renderSource(ctx, detail) {
-  const { app } = ctx;
-  if (!detail.source || !app) {
-    return [section("Source", faint("This instance carries no source position (it may come from a compiled program)."))];
-  }
-  const program = app.getProgram();
-  const lines = program.split("\n");
-  const line = detail.source.line;
-  const from = Math.max(0, line - 6);
-  const to = Math.min(lines.length, line + 5);
-  const excerpt = h("div", { class: "code-block" });
-  for (let i = from; i < to; i += 1) {
-    excerpt.appendChild(h(
-      "div",
-      { class: `code-line ${i + 1 === line ? "is-focus" : ""}` },
-      h("span", { class: "code-gutter" }, String(i + 1)),
-      h("span", { class: "code-text" }, lines[i] ?? "")
-    ));
-  }
-  return [
-    section(`Source — line ${line}, column ${detail.source.column}`, [
-      excerpt,
-      h(
-        "div",
-        { class: "detail-head" },
-        spacer(),
-        button("Open in Source tab", () => {
-          ctx.ui.sourceFocusLine = line;
-          ctx.selectTab("source");
-        }, { title: "Jump to this line in the full program" })
-      )
-    ])
-  ];
-}
-function renderElementOnly(ctx, element) {
-  return [
-    section(null, [
-      h(
-        "div",
-        { class: "detail-head" },
-        h("span", { class: "detail-title" }, describeElement(element)),
-        chip("no component", "amber", "This node was not produced by an Aktion component"),
-        spacer(),
-        button("Clear", () => {
-          ctx.ui.selectedElement = null;
-          ctx.overlay.clear();
-          ctx.refresh();
-        }, { title: "Clear the selection" })
-      ),
-      faint("This element is not tagged with a component instance — it may be a text host, a preserved widget's internals, or part of the host page.")
-    ], { flush: true }),
-    section("Element", boxModelDiagram(element)),
-    section("Attributes", attributeTable(element)),
-    ...renderStyles(ctx, element)
-  ];
-}
-const FLASH_MS = 1100;
-const stateTab = {
-  id: "state",
-  label: "State",
-  icon: "◆",
-  hint: "Live reactive state, editable, with per-atom change counts and time travel",
-  badge: (ctx) => {
-    const count = Object.keys(ctx.model.state).length;
-    return count > 0 ? count : null;
-  },
-  render: (ctx) => render$b(ctx)
-};
-function render$b(ctx) {
-  const { app, model, ui } = ctx;
-  if (!app) return [emptyState("No app selected.")];
-  const meta = can(app, "getStateMeta") ? app.getStateMeta() : [];
-  const metaByName = new Map(meta.map((entry2) => [entry2.name, entry2]));
-  const travelling = ui.timeTravel !== null && model.history[ui.timeTravel] !== void 0;
-  const entry = travelling ? model.history[ui.timeTravel] : null;
-  const snapshot = entry ? entry.snapshot : model.state;
-  const totalChanges = [...model.changeCounts.values()].reduce((a, b) => a + b, 0);
-  const reservedCount = meta.filter((m) => m.reserved).length;
-  const bar = toolbar(
-    searchInput(ui.stateFilter, (value) => {
-      ui.stateFilter = value;
-      ctx.refresh();
-    }, "Filter atoms…"),
-    toggle("Activity", ui.stateSort === "activity", () => {
-      ui.stateSort = ui.stateSort === "activity" ? "name" : "activity";
-      ctx.refresh();
-    }, "Sort by how often each atom changes"),
-    reservedCount > 0 ? toggle(`Runtime (${reservedCount})`, ui.stateShowReserved, () => {
-      ui.stateShowReserved = !ui.stateShowReserved;
-      ctx.refresh();
-    }, "Show runtime-owned atoms: route, Store / $form backing atoms") : null,
-    spacer(),
-    muted(`${Object.keys(snapshot).length} atoms · ${fmtCount(totalChanges)} changes`),
-    copyButton(() => safeJson(snapshot), "Copy"),
-    button("Export", () => downloadText("aktion-state.json", safeJson(snapshot)), {
-      title: "Download this snapshot as JSON"
-    }),
-    can(app, "resetState") ? button("Reset", () => {
-      app.resetState();
-      ctx.toast("State reset to declared defaults");
-      ctx.refresh();
-    }, { title: "Reset every atom to its declared initial value", tone: "warn" }) : null
-  );
-  const out = [bar, renderSummary$2(ctx, meta)];
-  if (model.history.length > 1) out.push(renderTimeTravel(ctx));
-  if (travelling && entry) {
-    out.push(section(null, h(
-      "div",
-      { class: "banner t-purple" },
-      h(
-        "span",
-        {},
-        `Viewing commit #${entry.commitId ?? "?"} — ${fmtRel(model.lastTime - entry.time)} ago. Rows are read-only while scrubbing.`
-      ),
-      spacer(),
-      can(app, "hydrateState") ? button("Restore this snapshot", () => {
-        app.hydrateState(entry.snapshot);
-        ui.timeTravel = null;
-        ctx.toast("Snapshot restored into the live store");
-        ctx.refresh();
-      }, { tone: "purple" }) : null,
-      button("Back to live", () => {
-        ui.timeTravel = null;
-        ctx.refresh();
-      })
-    ), { flush: true }));
-  }
-  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-  const maxChanges = Math.max(1, ...model.changeCounts.values());
-  const names = Object.keys(snapshot).filter((name) => ui.stateShowReserved || !(metaByName.get(name)?.reserved ?? false)).sort((a, b) => {
-    if (ui.stateSort === "activity") {
-      const diff = (model.changeCounts.get(b) ?? 0) - (model.changeCounts.get(a) ?? 0);
-      if (diff !== 0) return diff;
-    }
-    return a.localeCompare(b);
-  });
-  const ordered = {};
-  for (const name of names) ordered[name] = snapshot[name];
-  const changedRoots = /* @__PURE__ */ new Set();
-  for (const [root, at] of model.changed) {
-    if (now - at < FLASH_MS) changedRoots.add(root);
-  }
-  const tree = jsonTree(ordered, {
-    expanded: ui.stateExpanded,
-    filter: ui.stateFilter,
-    onToggle: () => ctx.refresh(),
-    onEdit: travelling ? void 0 : (path, value) => {
-      app.setState(path, value);
-      ctx.toast(`$${path} = ${JSON.stringify(value)}`);
-      ctx.refresh();
-    },
-    readOnly: (path, depth) => {
-      if (travelling) return true;
-      const atom = rootOf(path);
-      const info = metaByName.get(atom);
-      return depth === 0 ? info?.reserved ?? false : info?.reserved ?? false;
-    },
-    highlight: changedRoots,
-    decorate: (path, depth) => {
-      if (depth !== 0) return null;
-      const info = metaByName.get(path);
-      const count = model.changeCounts.get(path) ?? 0;
-      return h(
-        "span",
-        { class: "row-tail" },
-        info?.computed ? chip("derived", "blue", "Recomputed from its initialiser — a manual edit lasts until the next replan") : null,
-        info?.module ? chip(shortModule(info.module), "grey", `Declared in ${info.module}`) : null,
-        info?.authored && info.authored !== path ? code(`$${info.authored}`, "The name the author wrote") : null,
-        count > 0 ? h(
-          "span",
-          { class: "heat", title: `${count} change${count === 1 ? "" : "s"} this session` },
-          h(
-            "span",
-            { class: "heat-bar" },
-            h("span", { class: "heat-fill", style: `width:${Math.max(8, Math.round(count / maxChanges * 100))}%` })
-          ),
-          h("span", { class: "heat-num" }, fmtCount(count))
-        ) : null
-      );
-    }
-  });
-  out.push(section(null, tree, { flush: true }));
-  const lastFlush = model.commits[model.commits.length - 1];
-  if (lastFlush && lastFlush.changedPaths.length > 0) {
-    out.push(section("Last commit changed", h(
-      "div",
-      { class: "chip-row" },
-      ...lastFlush.changedPaths.map((path) => chip(path, "blue"))
-    )));
-  }
-  return out;
-}
-function renderSummary$2(ctx, meta) {
-  const { model } = ctx;
-  const derived = meta.filter((m) => m.computed).length;
-  const modules = new Set(meta.map((m) => m.module).filter(Boolean)).size;
-  const busiest = [...model.changeCounts.entries()].sort((a, b) => b[1] - a[1])[0];
-  return section(null, statGrid(
-    stat("atoms", String(Object.keys(model.state).length)),
-    stat("flushes", fmtCount(model.totals.stateFlushes)),
-    derived > 0 ? stat("derived", String(derived), { title: "Atoms with a `$x = expr` initialiser" }) : null,
-    modules > 0 ? stat("modules", String(modules), { title: "Modules contributing atoms" }) : null,
-    busiest ? stat("busiest", `$${busiest[0]}`, {
-      title: `${busiest[1]} changes`,
-      onClick: () => {
-        ctx.ui.stateFilter = busiest[0];
-        ctx.refresh();
-      }
-    }) : null,
-    stat("history", String(model.history.length), { title: "Snapshots retained for time travel" })
-  ), { flush: true });
-}
-function renderTimeTravel(ctx) {
-  const { model, ui } = ctx;
-  const last = model.history.length - 1;
-  const index = ui.timeTravel ?? last;
-  const entry = model.history[index];
-  const slider = h("input", {
-    class: "slider",
-    type: "range",
-    min: "0",
-    max: String(last),
-    value: String(index),
-    oninput: (event) => {
-      const next = Number(event.target.value);
-      ui.timeTravel = next >= last ? null : next;
-      ctx.refresh();
-    }
-  });
-  return section("Time travel", [
-    h(
-      "div",
-      { class: "travel-row" },
-      button("◀", () => {
-        ui.timeTravel = Math.max(0, index - 1);
-        ctx.refresh();
-      }, { title: "Previous snapshot" }),
-      slider,
-      button("▶", () => {
-        const next = Math.min(last, index + 1);
-        ui.timeTravel = next >= last ? null : next;
-        ctx.refresh();
-      }, { title: "Next snapshot" }),
-      button("Live", () => {
-        ui.timeTravel = null;
-        ctx.refresh();
-      }, { active: ui.timeTravel === null, title: "Follow the live store" })
-    ),
-    entry ? faint(
-      `commit #${entry.commitId ?? "?"} · ${entry.changedPaths.length > 0 ? entry.changedPaths.join(", ") : "no state change"} · ${index + 1} of ${last + 1}`
-    ) : null
-  ]);
-}
-function shortModule(path) {
-  const parts = path.split("/");
-  return parts[parts.length - 1] ?? path;
-}
-function safeJson(snapshot) {
-  try {
-    return JSON.stringify(snapshot, null, 2);
-  } catch {
-    return "/* this snapshot holds a value that cannot be serialised */";
-  }
 }
 const profilerTab = {
   id: "profiler",
@@ -5236,10 +6445,16 @@ function render$a(ctx) {
       }
     ),
     spacer(),
+    toggle("Highlight", ui.highlightUpdates, () => {
+      ui.highlightUpdates = !ui.highlightUpdates;
+      if (!ui.highlightUpdates) ctx.overlay.clearUpdateFlashes();
+      ctx.toast(ui.highlightUpdates ? "Outlining components as they re-render" : "Highlighting off");
+      ctx.refresh();
+    }, "Outline each component on the page as it re-renders — the fastest way to see unnecessary work"),
     toggle("Flash", ui.flashOnCommit, () => {
       ui.flashOnCommit = !ui.flashOnCommit;
       ctx.refresh();
-    }, "Outline the app element on every commit"),
+    }, "Outline the whole app element on every commit"),
     button("Clear", () => {
       model.commits.length = 0;
       ui.selectedCommitId = null;
@@ -5406,7 +6621,7 @@ Click to inspect this instance`,
 }
 function renderRanked(ctx) {
   const { model, ui } = ctx;
-  const rows = componentAggregates(model.commits);
+  const rows = ctx.cache("componentAggregates", () => componentAggregates(model.commits));
   const maxTotal = Math.max(...rows.map((r) => r.total), 1e-3);
   return section("Components — ranked by self time", table(
     [
@@ -5466,7 +6681,7 @@ function renderHotAtoms(ctx) {
 }
 function renderInsights$1(ctx) {
   const { model } = ctx;
-  const aggs = componentAggregates(model.commits);
+  const aggs = ctx.cache("componentAggregates", () => componentAggregates(model.commits));
   const items = [];
   const commitCount = model.commits.length;
   for (const agg of aggs) {
@@ -5851,7 +7066,7 @@ function render$8(ctx) {
     searchInput(ui.networkFilter, (value) => {
       ui.networkFilter = value;
       ctx.refresh();
-    }, "Filter by URL or method…"),
+    }, "Filter by URL or method…", { focusKey: "network-filter" }),
     toggle("Problems", ui.networkOnlyProblems, () => {
       ui.networkOnlyProblems = !ui.networkOnlyProblems;
       ctx.refresh();
@@ -5932,7 +7147,7 @@ function renderList(ctx) {
   const first = rows.reduce((min, r) => Math.min(min, r.startTime), Number.MAX_SAFE_INTEGER);
   const last = rows.reduce((max, r) => Math.max(max, r.endTime ?? r.startTime), 0);
   const span = Math.max(1, last - first);
-  return section(null, table(
+  return section(null, h("div", { class: "list-wrap", [SCROLL_KEY_ATTR]: "network-list" }, table(
     [
       {
         key: "status",
@@ -5992,7 +7207,7 @@ function renderList(ctx) {
       },
       empty: filter === "" ? "No requests match the current filters." : `Nothing matches "${filter}".`
     }
-  ), { flush: true });
+  )), { flush: true });
 }
 function statusChip(request) {
   if (request.phase === "pending") return chip("pending", "grey");
@@ -6126,14 +7341,13 @@ function renderRule(ctx, rule) {
     pushRules(ctx);
     ctx.refresh();
   };
-  const field = (placeholder, value, onCommit, width = "150px") => {
-    const input = h("input", { class: "search", placeholder, value, style: `max-width:${width}` });
-    input.addEventListener("change", () => onCommit(input.value));
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") onCommit(input.value);
-    });
-    return input;
-  };
+  const field = (name, placeholder, value, onCommit, width = "150px") => textField({
+    focusKey: `rule:${rule.id}:${name}`,
+    placeholder,
+    value,
+    width,
+    onCommit
+  });
   const matches = ctx.model.network.filter((request) => findMatchingRule([rule], request.method, request.url) !== null).length;
   return h(
     "div",
@@ -6143,8 +7357,8 @@ function renderRule(ctx, rule) {
       { class: "rule-head" },
       toggle(rule.enabled ? "on" : "off", rule.enabled, () => update({ enabled: !rule.enabled })),
       chip(rule.action, rule.action === "mock" ? "purple" : rule.action === "delay" ? "blue" : "red"),
-      field("URL pattern (empty = all)", rule.pattern, (value) => update({ pattern: value }), "220px"),
-      field("method", rule.method ?? "", (value) => update({ method: value.trim() === "" ? void 0 : value.trim().toUpperCase() }), "80px"),
+      field("pattern", "URL pattern (empty = all)", rule.pattern, (value) => update({ pattern: value }), "220px"),
+      field("method", "method", rule.method ?? "", (value) => update({ method: value.trim() === "" ? void 0 : value.trim().toUpperCase() }), "80px"),
       spacer(),
       muted(`${matches} match${matches === 1 ? "" : "es"}`),
       button("✕", () => {
@@ -6156,8 +7370,8 @@ function renderRule(ctx, rule) {
     h(
       "div",
       { class: "rule-body" },
-      rule.action !== "offline" ? field("delay ms", String(rule.delayMs ?? 0), (value) => update({ delayMs: Number(value) || 0 }), "90px") : null,
-      rule.action === "mock" ? field("status", String(rule.status ?? 200), (value) => update({ status: Number(value) || 200 }), "80px") : null,
+      rule.action !== "offline" ? field("delay", "delay ms", String(rule.delayMs ?? 0), (value) => update({ delayMs: Number(value) || 0 }), "90px") : null,
+      rule.action === "mock" ? field("status", "status", String(rule.status ?? 200), (value) => update({ status: Number(value) || 200 }), "80px") : null,
       rule.action === "mock" ? (() => {
         const area = h("textarea", {
           class: "rule-body-input",
@@ -6167,7 +7381,7 @@ function renderRule(ctx, rule) {
         area.addEventListener("change", () => update({ body: area.value }));
         return area;
       })() : null,
-      rule.action === "fail" || rule.action === "offline" ? field("error message", rule.message ?? "", (value) => update({ message: value }), "260px") : null
+      rule.action === "fail" || rule.action === "offline" ? field("message", "error message", rule.message ?? "", (value) => update({ message: value }), "260px") : null
     )
   );
 }
@@ -6216,7 +7430,7 @@ function render$7(ctx) {
     searchInput(ui.logFilter, (value) => {
       ui.logFilter = value;
       ctx.refresh();
-    }, "Filter output…"),
+    }, "Filter output…", { focusKey: "console-filter" }),
     h("div", { class: "filters" }, ...LEVELS.map((level) => {
       const count = model.logs.filter((entry) => entry.level === level).length;
       return toggle(
@@ -6246,6 +7460,7 @@ function render$7(ctx) {
   );
   const out = [bar];
   if (model.errors.length > 0) out.push(renderRuntimeErrors(ctx));
+  out.push(renderWatches(ctx));
   out.push(renderRepl(ctx));
   out.push(renderLogs(ctx));
   return out;
@@ -6307,7 +7522,10 @@ function renderRepl(ctx) {
     class: "repl-input",
     placeholder: "$count + 1 · $user.name · Util.range(0, 3) · $count = 5",
     value: ui.replDraft,
-    spellcheck: "false"
+    spellcheck: "false",
+    // A stable key, so running an expression (which grows the history ABOVE the
+    // input and changes the tree shape) keeps the caret in the input.
+    [FOCUS_KEY_ATTR]: "repl"
   });
   const run = () => {
     const source = input.value.trim();
@@ -6347,12 +7565,36 @@ function renderRepl(ctx) {
       ui.replDraft = input.value;
     }
   });
-  const history = h("div", { class: "repl-log" });
+  const history = h("div", { class: "repl-log", [SCROLL_KEY_ATTR]: "repl-log" });
   for (const entry of ui.repl.slice(-12)) {
     history.appendChild(h(
       "div",
       { class: "repl-entry" },
-      h("div", { class: "repl-in" }, h("span", { class: "repl-caret" }, "›"), code(entry.input)),
+      h(
+        "div",
+        { class: "repl-in" },
+        h("span", { class: "repl-caret" }, "›"),
+        code(entry.input),
+        spacer(),
+        // Re-running is the most common next action after reading a result.
+        button("↻", () => {
+          ui.replDraft = entry.input;
+          const result = app.evaluateExpression(entry.input);
+          ui.repl = [...ui.repl.slice(-40), {
+            input: entry.input,
+            ok: result.ok,
+            output: result.ok ? result.text ?? result.value?.preview ?? "undefined" : result.error ?? "evaluation failed",
+            time: Date.now()
+          }];
+          ctx.refresh();
+        }, { title: "Run this expression again" }),
+        button("👁", () => {
+          if (!ui.watches.includes(entry.input)) ui.watches = [...ui.watches, entry.input].slice(-20);
+          ctx.persist();
+          ctx.toast(`Watching ${entry.input}`);
+          ctx.refresh();
+        }, { title: "Watch this expression — it is re-evaluated on every render" })
+      ),
       h(
         "div",
         { class: `repl-out ${entry.ok ? "" : "is-error"}` },
@@ -6374,7 +7616,40 @@ function renderRepl(ctx) {
         ctx.refresh();
       }) : null
     ),
-    faint("Aktion expressions, not JavaScript — the same scope the program sees. `$atom = value` writes through the reactive pipeline.")
+    faint("Aktion expressions, not JavaScript — the same scope the program sees. `$atom = value` writes through the reactive pipeline. ↑ / ↓ walk history.")
+  ]);
+}
+function renderWatches(ctx) {
+  const { app, ui } = ctx;
+  const add = textField({
+    focusKey: "watch-add",
+    placeholder: "Watch an expression — $todos.length, $user.role …",
+    onEnter: (value) => {
+      const expr = value.trim();
+      if (expr === "") return;
+      if (!ui.watches.includes(expr)) ui.watches = [...ui.watches, expr].slice(-20);
+      ctx.persist();
+      ctx.refresh();
+    }
+  });
+  const rows = ui.watches.map((expr) => {
+    const result = can(app, "evaluateExpression") ? app.evaluateExpression(expr) : null;
+    const text2 = result === null ? "no evaluator" : result.ok ? result.value?.preview ?? "undefined" : result.error ?? "failed";
+    return h(
+      "div",
+      { class: "watch-row" },
+      h("span", { class: "watch-expr", title: expr }, expr),
+      h("span", { class: `watch-val ${result?.ok === false ? "is-error" : ""}`, title: result?.text ?? text2 }, text2),
+      button("✕", () => {
+        ui.watches = ui.watches.filter((entry) => entry !== expr);
+        ctx.persist();
+        ctx.refresh();
+      }, { title: "Stop watching" })
+    );
+  });
+  return section(`Watch (${ui.watches.length})`, [
+    h("div", { class: "detail-head" }, add),
+    ui.watches.length > 0 ? h("div", {}, ...rows) : faint("Pin an expression here and it is re-evaluated on every render — the value updates as you use the app. Watches survive a page reload.")
   ]);
 }
 function exportLogs(ctx) {
@@ -6399,25 +7674,24 @@ function render$6(ctx) {
   }
   const route = app.getRoute();
   const canNavigate = can(app, "navigate");
-  const input = h("input", {
-    class: "search",
-    placeholder: "/orders/42",
-    value: ui.routeDraft,
-    style: "max-width:220px"
-  });
   const go = () => {
-    const path = input.value.trim();
+    const path = ui.routeDraft.trim();
     if (path === "" || !can(app, "navigate")) return;
     app.navigate(path);
     ui.routeDraft = "";
     ctx.toast(`Navigated to ${path}`);
     ctx.refresh();
   };
-  input.addEventListener("input", () => {
-    ui.routeDraft = input.value;
-  });
-  input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") go();
+  const input = textField({
+    focusKey: "route-navigate",
+    value: ui.routeDraft,
+    placeholder: "/orders/42",
+    width: "220px",
+    title: "Type a path and press Enter",
+    onInput: (value) => {
+      ui.routeDraft = value;
+    },
+    onEnter: go
   });
   const bar = toolbar(
     muted("Navigate"),
@@ -6456,7 +7730,14 @@ function render$6(ctx) {
   })) : faint("No $router({...}) arms found. A single-page program declares no routes."));
   const history = section(`Navigation history (${model.routes.length})`, model.routes.length > 0 ? table(
     [
-      { key: "time", label: "When", render: (row) => faint(fmtClock(Date.now() - (model.lastTime - row.time))) },
+      {
+        key: "time",
+        label: "When",
+        // Route timestamps come from the monotonic clock, so they can only be
+        // reported RELATIVE to the newest event. Mixing them with
+        // `Date.now()` produced a wall-clock time that was simply wrong.
+        render: (row) => faint(`${fmtRel(Math.max(0, model.lastTime - row.time))} ago`)
+      },
       { key: "from", label: "From", render: (row) => code(row.from || "—") },
       { key: "to", label: "To", render: (row) => code(row.to) },
       { key: "pattern", label: "Matched", render: (row) => row.pattern ? code(row.pattern) : chip("no match", "amber") },
@@ -6534,10 +7815,22 @@ function renderQueries$1(ctx) {
   const loading = queries.filter((query) => query.loading).length;
   const failed = queries.filter((query) => query.error !== void 0).length;
   const stale = queries.filter((query) => query.state === "stale").length;
-  const invalidateInput = h("input", {
-    class: "search",
+  let invalidatePattern = "";
+  const invalidate = () => {
+    const pattern = invalidatePattern.trim();
+    if (pattern === "" || !can(app, "invalidateQueries")) return;
+    app.invalidateQueries(pattern);
+    ctx.toast(`Invalidated queries matching "${pattern}"`);
+    ctx.refresh();
+  };
+  const invalidateInput = textField({
+    focusKey: "invalidate",
     placeholder: "/api/todos",
-    style: "max-width:200px"
+    width: "200px",
+    onInput: (value) => {
+      invalidatePattern = value;
+    },
+    onEnter: invalidate
   });
   const rows = queries.map((query) => renderQueryRow(ctx, query));
   return [
@@ -6551,13 +7844,9 @@ function renderQueries$1(ctx) {
       "div",
       { class: "detail-head" },
       invalidateInput,
-      button("Invalidate", () => {
-        const pattern = invalidateInput.value.trim();
-        if (pattern === "" || !can(app, "invalidateQueries")) return;
-        app.invalidateQueries(pattern);
-        ctx.toast(`Invalidated queries matching "${pattern}"`);
-        ctx.refresh();
-      }, { title: "Refetch every cached query whose key contains this substring" }),
+      button("Invalidate", invalidate, {
+        title: "Refetch every cached query whose key contains this substring"
+      }),
       spacer(),
       faint("Matching is substring-based, so /api/posts refreshes every page and filtered variant.")
     )),
@@ -6592,12 +7881,24 @@ function renderQueryRow(ctx, query) {
         app.refetchQuery(query.key);
         ctx.toast("Refetching…");
         ctx.refresh();
-      }) : null,
+      }, { title: "Re-run this request now" }) : null,
       query.loading && can(app, "cancelQuery") ? button("Cancel", () => {
         app.cancelQuery(query.key);
         ctx.toast("Cancelled");
         ctx.refresh();
-      }, { tone: "warn" }) : null
+      }, { tone: "warn" }) : null,
+      // The two experiments you want on a cached query are "what if it were slow"
+      // and "what if it failed". Both live in the Network tab's rules, so offer
+      // them from here rather than making you copy the URL across.
+      can(app, "setNetworkRules") ? button("Mock", () => seedRule(ctx, query, "mock"), {
+        title: "Answer this request with a canned response (opens the Network tab)"
+      }) : null,
+      can(app, "setNetworkRules") ? button("Slow", () => seedRule(ctx, query, "delay"), {
+        title: "Add 2s of latency to this request, to see your own loading state"
+      }) : null,
+      can(app, "setNetworkRules") ? button("Fail", () => seedRule(ctx, query, "fail"), {
+        title: "Make this request fail, to exercise the error path"
+      }) : null
     ),
     expanded ? h(
       "div",
@@ -6613,6 +7914,27 @@ function renderQueryRow(ctx, query) {
       query.data.json !== void 0 ? h("pre", { class: "code-pre" }, query.data.json) : valueSpan(query.data)
     ) : null
   );
+}
+function seedRule(ctx, query, action) {
+  if (!can(ctx.app, "setNetworkRules")) return;
+  const url = query.key.replace(/^[A-Z]+\s+/, "").split(/\s+/)[0] ?? query.key;
+  const pattern = urlPath(url) || url;
+  const rule = newRule(
+    action === "mock" ? {
+      action,
+      pattern,
+      status: query.status ?? 200,
+      // Seed the mock with the response the app already has: editing a real
+      // payload is far easier than writing one from nothing.
+      body: query.data.json ?? "",
+      label: `mock ${pattern}`
+    } : action === "delay" ? { action, pattern, delayMs: 2e3, label: `slow ${pattern}` } : { action, pattern, message: "Request failed (DevTools rule)", label: `fail ${pattern}` }
+  );
+  ctx.ui.rules = [...ctx.ui.rules, rule];
+  ctx.app.setNetworkRules(ctx.ui.rules);
+  ctx.ui.showRules = true;
+  ctx.toast(`Rule added for ${pattern} — refetch to see it`);
+  ctx.selectTab("network");
 }
 function renderStores(ctx) {
   const { app, ui } = ctx;
@@ -6688,8 +8010,17 @@ function renderStorage(ctx) {
     spacer(),
     muted(`${entries.length} key${entries.length === 1 ? "" : "s"} · ${fmtBytes(bytes)}`)
   );
+  const label = ui.storageKind === "cookies" ? "cookies" : `${ui.storageKind}Storage`;
+  const adder = renderStorageAdder(ctx);
   if (entries.length === 0) {
-    return [bar, emptyState(`Nothing in ${ui.storageKind === "cookies" ? "cookies" : `${ui.storageKind}Storage`}.`)];
+    return [
+      bar,
+      emptyState(
+        `Nothing in ${label}.`,
+        "Anything the program writes through the `storage` namespace shows up here — and you can add a key yourself to test how the app reads it."
+      ),
+      adder
+    ];
   }
   return [
     bar,
@@ -6699,7 +8030,17 @@ function renderStorage(ctx) {
         {
           key: "value",
           label: "Value",
-          render: (row) => h("span", { class: "mono wrap", title: row.value }, truncateMiddle(row.value, 80))
+          // Editable in place: the common use is not reading a stored value but
+          // changing it to see how the app behaves on the next read.
+          render: (row) => editableValue(
+            { type: "string", preview: truncateMiddle(row.value, 80), json: JSON.stringify(row.value) },
+            (next) => {
+              const written = writeStorage(ui.storageKind, row.key, typeof next === "string" ? next : JSON.stringify(next));
+              ctx.toast(written ? `${row.key} updated` : `could not write ${row.key}`, written ? "good" : "bad");
+              ctx.refresh();
+            },
+            { focusKey: `storage:${ui.storageKind}:${row.key}`, title: row.value }
+          )
         },
         { key: "size", label: "Size", numeric: true, sort: (row) => row.value.length, render: (row) => fmtBytes(row.value.length) },
         {
@@ -6719,10 +8060,45 @@ function renderStorage(ctx) {
       ],
       entries
     ), { flush: true }),
+    adder,
     section(null, faint(
-      "Aktion's `storage` namespace round-trips non-string values through JSON, so a value that looks like JSON here is what the program reads back as an object."
+      "Aktion's `storage` namespace round-trips non-string values through JSON, so a value that looks like JSON here is what the program reads back as an object. Nothing in the app re-reads storage on its own — force a render after an edit."
     ), { flush: true })
   ];
+}
+function renderStorageAdder(ctx) {
+  const { ui } = ctx;
+  let key2 = "";
+  let value = "";
+  const write = () => {
+    const name = key2.trim();
+    if (name === "") return;
+    const ok = writeStorage(ui.storageKind, name, value);
+    ctx.toast(ok ? `${name} written` : `could not write ${name}`, ok ? "good" : "bad");
+    ctx.refresh();
+  };
+  return section(null, h(
+    "div",
+    { class: "detail-head" },
+    muted("Add a key"),
+    textField({
+      focusKey: `storage-new-key:${ui.storageKind}`,
+      placeholder: "key",
+      width: "150px",
+      onInput: (next) => {
+        key2 = next;
+      }
+    }),
+    textField({
+      focusKey: `storage-new-value:${ui.storageKind}`,
+      placeholder: 'value — plain text, or JSON like {"seen":true}',
+      onInput: (next) => {
+        value = next;
+      },
+      onEnter: write
+    }),
+    button("Write", write, { title: "Set this key in the selected store" })
+  ), { flush: true });
 }
 function readStorage(kind) {
   try {
@@ -6747,6 +8123,20 @@ function readStorage(kind) {
     return out.sort((a, b) => a.key.localeCompare(b.key));
   } catch {
     return [];
+  }
+}
+function writeStorage(kind, key2, value) {
+  try {
+    if (kind === "cookies") {
+      document.cookie = `${encodeURIComponent(key2)}=${encodeURIComponent(value)}; path=/`;
+      return true;
+    }
+    const store2 = kind === "local" ? globalThis.localStorage : globalThis.sessionStorage;
+    if (!store2) return false;
+    store2.setItem(key2, value);
+    return true;
+  } catch {
+    return false;
   }
 }
 function removeStorage(kind, key2) {
@@ -6857,28 +8247,40 @@ function renderToken(ctx, theme, token, value) {
   const overridden = theme.devtoolsOverrides.includes(token);
   const fromScript = theme.scriptOverrides.includes(token);
   const colour = isColor(value);
-  const input = h("input", {
-    class: "token-input",
+  const input = textField({
+    focusKey: `token:${token}`,
+    className: "token-input",
     value,
-    spellcheck: "false"
-  });
-  const commit = () => {
-    if (!can(app, "setThemeTokens") || input.value === value) return;
-    app.setThemeTokens({ [token]: input.value });
-    ctx.toast(`${token} = ${input.value}`);
-    ctx.refresh();
-  };
-  input.addEventListener("change", commit);
-  input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") commit();
+    onCommit: (next) => {
+      if (!can(app, "setThemeTokens")) return;
+      app.setThemeTokens({ [token]: next });
+      ctx.toast(`${token} = ${next}`);
+      ctx.refresh();
+    }
   });
   const picker = colour && can(app, "setThemeTokens") ? (() => {
-    const el = h("input", { class: "token-picker", type: "color", value: toHex(value) ?? "#000000" });
-    el.addEventListener("input", () => {
-      app.setThemeTokens({ [token]: el.value });
-      input.value = el.value;
+    const el = h("input", {
+      class: "token-picker",
+      type: "color",
+      value: toHex(value) ?? "#000000",
+      title: `Pick a colour for ${token}`
     });
-    el.addEventListener("change", () => ctx.refresh());
+    let queued = false;
+    el.addEventListener("input", () => {
+      input.value = el.value;
+      if (queued) return;
+      queued = true;
+      const flush = () => {
+        queued = false;
+        app.setThemeTokens({ [token]: el.value });
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(flush);
+      else setTimeout(flush, 16);
+    });
+    el.addEventListener("change", () => {
+      app.setThemeTokens({ [token]: el.value });
+      ctx.refresh();
+    });
     return el;
   })() : null;
   return h(
@@ -6955,27 +8357,29 @@ function asThemeBlock(theme) {
 ${lines.join("\n")}
 })`;
 }
+const WINDOW_LINES = 600;
 const sourceTab = {
   id: "source",
   label: "Source",
   icon: "≣",
-  hint: "The running program, diagnostics on their lines, an outline, and hot reload",
+  hint: "The running program, diagnostics on their lines, an outline, history, and hot reload",
   badge: (ctx) => {
     if (!can(ctx.app, "getDiagnostics")) return null;
-    const count = ctx.app.getDiagnostics().filter((d) => d.severity === "error").length;
+    const count = ctx.app.getDiagnostics().filter((entry) => entry.severity === "error").length;
     return count > 0 ? count : null;
   },
   render: (ctx) => render$3(ctx)
 };
 function render$3(ctx) {
-  const { app, ui } = ctx;
+  const { app, model, ui } = ctx;
   if (!app) return [emptyState("No app selected.")];
-  const sources = can(app, "getSources") ? app.getSources() : [{ path: "<inline>", text: app.getProgram() }];
+  const sources = ctx.cache("sources", () => can(app, "getSources") ? app.getSources() : [{ path: "<inline>", text: app.getProgram() }]);
   const index = Math.min(ui.sourceIndex, Math.max(0, sources.length - 1));
   const active = sources[index] ?? { path: "<inline>", text: "" };
   const live = ui.sourceDraft === null;
   const text2 = live ? active.text : ui.sourceDraft;
-  const diagnostics = can(app, "getDiagnostics") ? app.getDiagnostics() : [];
+  const diagnostics = ctx.cache("diagnostics", () => can(app, "getDiagnostics") ? app.getDiagnostics() : []);
+  const analysis = analyse(ctx, text2, live);
   const bar = toolbar(
     sources.length > 1 ? h("div", { class: "filters" }, ...sources.map((source, i) => h("button", {
       class: `filter-chip ${i === index ? "is-on" : ""}`,
@@ -6986,11 +8390,19 @@ function render$3(ctx) {
         ctx.refresh();
       }
     }, shortPath(source.path)))) : muted(active.path),
+    searchInput(ui.sourceFilter, (value) => {
+      ui.sourceFilter = value;
+      ctx.refresh();
+    }, "Find in source…", { focusKey: "source-filter" }),
     spacer(),
     toggle("Outline", ui.sourceOutline, () => {
       ui.sourceOutline = !ui.sourceOutline;
       ctx.refresh();
     }, "Show the program's declarations"),
+    model.programHistory.length > 1 ? toggle(`History (${model.programHistory.length})`, ui.sourceHistoryOpen, () => {
+      ui.sourceHistoryOpen = !ui.sourceHistoryOpen;
+      ctx.refresh();
+    }, "Earlier versions of this program, with one-click revert") : null,
     copyButton(() => text2, "Copy"),
     button("Download", () => downloadText("app.aktion", text2, "text/plain"), { title: "Save this source" }),
     can(app, "reload") ? button("Reload", () => {
@@ -7003,14 +8415,15 @@ function render$3(ctx) {
   out.push(section(null, statGrid(
     stat("lines", String(text2.split("\n").length)),
     stat("size", fmtBytes(text2.length)),
-    stat("errors", String(diagnostics.filter((d) => d.severity === "error").length), {
-      tone: diagnostics.some((d) => d.severity === "error") ? "bad" : "good"
+    stat("errors", String(diagnostics.filter((entry) => entry.severity === "error").length), {
+      tone: diagnostics.some((entry) => entry.severity === "error") ? "bad" : "good"
     }),
-    stat("warnings", String(diagnostics.filter((d) => d.severity === "warning").length), {
-      tone: diagnostics.some((d) => d.severity === "warning") ? "warn" : void 0
-    })
+    stat("warnings", String(diagnostics.filter((entry) => entry.severity === "warning").length), {
+      tone: diagnostics.some((entry) => entry.severity === "warning") ? "warn" : void 0
+    }),
+    analysis ? stat("declares", String(analysis.outline.length), { title: "Top-level declarations" }) : null
   ), { flush: true }));
-  const analysis = can(app, "analyzeProgram") ? app.analyzeProgram(live ? void 0 : text2) : null;
+  if (ui.sourceHistoryOpen) out.push(renderHistory(ctx));
   if (diagnostics.length > 0) out.push(renderDiagnostics(ctx, diagnostics));
   if (ui.sourceOutline) out.push(renderOutline(ctx, analysis?.outline ?? []));
   out.push(renderEditor(ctx, text2, live, diagnostics, index === 0, analysis));
@@ -7021,28 +8434,47 @@ function render$3(ctx) {
   }
   return out;
 }
+function analyse(ctx, text2, live) {
+  const { app } = ctx;
+  if (!can(app, "analyzeProgram")) return null;
+  return ctx.cache(`analysis:${live ? "live" : `draft:${text2.length}:${hash(text2)}`}`, () => app.analyzeProgram(live ? void 0 : text2));
+}
+function hash(text2) {
+  let value = 0;
+  for (let i = 0; i < text2.length; i += 1) {
+    value = value * 31 + text2.charCodeAt(i) | 0;
+  }
+  return value;
+}
 function renderDiagnostics(ctx, diagnostics) {
-  return section(`Diagnostics (${diagnostics.length})`, h("div", {}, ...diagnostics.slice(0, 40).map((diagnostic) => h(
-    "div",
-    {
-      class: `insight t-${diagnostic.severity === "error" ? "bad" : "warn"} is-link`,
-      onclick: () => {
-        ctx.ui.sourceFocusLine = diagnostic.line > 0 ? diagnostic.line : null;
-        ctx.refresh();
-      }
-    },
-    h("span", { class: "insight-ic" }, diagnostic.severity === "error" ? "✖" : "▲"),
-    h(
-      "span",
-      {},
-      chip(diagnostic.kind, diagnostic.kind === "schema" ? "purple" : "grey"),
-      diagnostic.line > 0 ? code(`L${diagnostic.line}`) : null,
-      " ",
-      diagnostic.message
-    )
-  ))));
+  const errors = diagnostics.filter((entry) => entry.severity === "error");
+  return section(`Diagnostics (${diagnostics.length})`, [
+    h("div", { [SCROLL_KEY_ATTR]: "diagnostics" }, ...diagnostics.slice(0, 40).map((diagnostic) => h(
+      "div",
+      {
+        class: `insight t-${diagnostic.severity === "error" ? "bad" : "warn"} is-link`,
+        title: diagnostic.line > 0 ? `Jump to line ${diagnostic.line}` : void 0,
+        onclick: () => {
+          ctx.ui.sourceFocusLine = diagnostic.line > 0 ? diagnostic.line : null;
+          ctx.refresh();
+        }
+      },
+      h("span", { class: "insight-ic" }, diagnostic.severity === "error" ? "✖" : "▲"),
+      h(
+        "span",
+        {},
+        chip(diagnostic.kind, diagnostic.kind === "schema" ? "purple" : "grey"),
+        diagnostic.line > 0 ? code(`L${diagnostic.line}`) : null,
+        " ",
+        diagnostic.message
+      )
+    ))),
+    errors.length > 0 ? faint("A program with errors still renders whatever it could plan — that is why the app is partly there. Fix the first error; the rest are often consequences of it.") : null
+  ].filter((node) => node != null));
 }
 function renderOutline(ctx, entries) {
+  const filter = ctx.ui.sourceFilter.trim().toLowerCase();
+  const shown = filter === "" ? entries : entries.filter((entry) => entry.name.toLowerCase().includes(filter) || entry.kind.includes(filter));
   if (entries.length === 0) {
     return section("Outline", faint("Nothing declared at the top level."));
   }
@@ -7055,26 +8487,59 @@ function renderOutline(ctx, entries) {
     binding: "grey",
     import: "grey"
   };
-  return section(`Outline (${entries.length})`, h(
-    "div",
-    { class: "outline" },
-    ...entries.map((entry) => h(
-      "button",
-      {
-        class: "outline-row",
-        title: `Line ${entry.line}`,
-        onclick: () => {
-          ctx.ui.sourceFocusLine = entry.line;
-          ctx.refresh();
-        }
-      },
-      chip(entry.kind, tone[entry.kind] ?? "grey"),
-      h("span", { class: "mono" }, entry.kind === "state" ? `$${entry.name}` : entry.name),
-      entry.exported ? chip("export", "green") : null,
+  return section(
+    `Outline (${shown.length}${shown.length === entries.length ? "" : ` / ${entries.length}`})`,
+    shown.length === 0 ? faint(`Nothing in the outline matches “${ctx.ui.sourceFilter}”.`) : h(
+      "div",
+      { class: "outline", [SCROLL_KEY_ATTR]: "outline" },
+      ...shown.map((entry) => h(
+        "button",
+        {
+          class: "outline-row",
+          title: `Line ${entry.line}`,
+          onclick: () => {
+            ctx.ui.sourceFocusLine = entry.line;
+            ctx.refresh();
+          }
+        },
+        chip(entry.kind, tone[entry.kind] ?? "grey"),
+        h("span", { class: "mono" }, entry.kind === "state" ? `$${entry.name}` : entry.name),
+        entry.exported ? chip("export", "green") : null,
+        spacer(),
+        faint(`L${entry.line}`)
+      ))
+    )
+  );
+}
+function renderHistory(ctx) {
+  const { app, model, ui } = ctx;
+  const versions = [...model.programHistory].reverse();
+  return section(`Program history (${versions.length})`, [
+    h("div", { [SCROLL_KEY_ATTR]: "prog-history" }, ...versions.map((version, index) => h(
+      "div",
+      { class: "ver-row" },
+      h("span", { class: "ver-when" }, new Date(version.at).toLocaleTimeString()),
+      index === 0 ? chip("current", "green") : null,
+      h("span", { class: "ver-meta" }, `${version.lines} lines · ${fmtBytes(version.text.length)}`),
       spacer(),
-      faint(`L${entry.line}`)
-    ))
-  ));
+      button("View", () => {
+        ui.sourceDraft = version.text;
+        ui.sourceHistoryOpen = false;
+        ctx.toast("Loaded into the editor — Apply to mount it");
+        ctx.refresh();
+      }, { title: "Load this version into the editor without mounting it" }),
+      index === 0 || !can(app, "setProgram") ? null : button("Revert", () => revert(ctx, version), { tone: "warn", title: "Mount this version now" })
+    ))),
+    faint("Versions are recorded as the program commits, so an edit that broke the app is one click from being undone.")
+  ]);
+}
+function revert(ctx, version) {
+  if (!can(ctx.app, "setProgram")) return;
+  ctx.app.setProgram(version.text);
+  ctx.ui.sourceDraft = null;
+  ctx.ui.sourceHistoryOpen = false;
+  ctx.toast("Reverted to the earlier version");
+  ctx.refresh();
 }
 function renderEditor(ctx, text2, live, diagnostics, editable, analysis) {
   const { app, ui } = ctx;
@@ -7089,21 +8554,56 @@ function renderEditor(ctx, text2, live, diagnostics, editable, analysis) {
     });
   }
   if (live) {
-    const view = codeBlock(text2, {
+    const lines = text2.split("\n");
+    const filter = ui.sourceFilter.trim().toLowerCase();
+    const hits = filter === "" ? [] : lines.map((line, i) => line.toLowerCase().includes(filter) ? i + 1 : 0).filter(Boolean);
+    const focus = ui.sourceFocusLine ?? hits[0] ?? null;
+    const { from, to } = windowFor(lines.length, focus);
+    const view = codeBlock(lines.slice(from, to).join("\n"), {
       lineNumbers: true,
-      markers,
-      focusLine: ui.sourceFocusLine,
+      markers: shiftMarkers(markers, from),
+      focusLine: focus !== null ? focus - from : null,
+      firstLine: from + 1,
+      highlight: filter,
       onLineClick: (line) => {
-        ui.sourceFocusLine = line;
+        ui.sourceFocusLine = line + from;
         ctx.refresh();
       }
     });
-    if (ui.sourceFocusLine !== null) {
+    if (focus !== null) {
       queueMicrotask(() => {
         view.querySelector(".code-line.is-focus")?.scrollIntoView({ block: "center" });
       });
     }
-    return section("Program", view, {
+    return section("Program", [
+      hits.length > 0 ? h(
+        "div",
+        { class: "detail-head" },
+        muted(`${hits.length} line${hits.length === 1 ? "" : "s"} match “${ui.sourceFilter}”`),
+        h("div", { class: "chip-row", style: "margin:0" }, ...hits.slice(0, 12).map((line) => h("button", {
+          class: `chip ${focus === line ? "blue" : "grey"} is-link`,
+          onclick: () => {
+            ui.sourceFocusLine = line;
+            ctx.refresh();
+          }
+        }, `L${line}`)))
+      ) : null,
+      to - from < lines.length ? h(
+        "div",
+        { class: "detail-head" },
+        faint(`Showing lines ${from + 1}–${to} of ${lines.length}.`),
+        spacer(),
+        from > 0 ? button("▲ Earlier", () => {
+          ui.sourceFocusLine = Math.max(1, from - Math.floor(WINDOW_LINES / 2));
+          ctx.refresh();
+        }) : null,
+        to < lines.length ? button("▼ Later", () => {
+          ui.sourceFocusLine = Math.min(lines.length, to + Math.floor(WINDOW_LINES / 2));
+          ctx.refresh();
+        }) : null
+      ) : null,
+      view
+    ].filter((node) => node != null), {
       actions: [
         editable && can(app, "setProgram") ? button("Edit", () => {
           ui.sourceDraft = text2;
@@ -7112,7 +8612,11 @@ function renderEditor(ctx, text2, live, diagnostics, editable, analysis) {
       ].filter((node) => node != null)
     });
   }
-  const area = h("textarea", { class: "source-editor", spellcheck: "false" });
+  const area = h("textarea", {
+    class: "source-editor",
+    spellcheck: "false",
+    "data-dt-focus": "source-editor"
+  });
   area.value = text2;
   const status = h("span", {});
   const errorBanner = h("div", { class: "banner t-red", style: "display:none" });
@@ -7134,6 +8638,19 @@ function renderEditor(ctx, text2, live, diagnostics, editable, analysis) {
     ui.sourceDraft = area.value;
     showVerdict(can(app, "analyzeProgram") ? app.analyzeProgram(area.value) : null);
   });
+  area.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      apply();
+    }
+  });
+  const apply = () => {
+    if (!can(app, "setProgram")) return;
+    app.setProgram(ui.sourceDraft ?? text2);
+    ui.sourceDraft = null;
+    ctx.toast("Program re-mounted");
+    ctx.refresh();
+  };
   return section("Program (editing)", [
     area,
     errorBanner,
@@ -7141,21 +8658,27 @@ function renderEditor(ctx, text2, live, diagnostics, editable, analysis) {
       "div",
       { class: "detail-head" },
       status,
-      faint("State is preserved across the diff, exactly as it is for a streamed update."),
+      faint("State is preserved across the diff, exactly as for a streamed update. Ctrl+Enter applies."),
       spacer(),
       button("Cancel", () => {
         ui.sourceDraft = null;
         ctx.refresh();
       }),
-      button("Apply", () => {
-        if (!can(app, "setProgram")) return;
-        app.setProgram(ui.sourceDraft ?? text2);
-        ui.sourceDraft = null;
-        ctx.toast("Program re-mounted");
-        ctx.refresh();
-      }, { tone: "good", title: "Mount this program" })
+      button("Apply", apply, { tone: "good", title: "Mount this program (Ctrl+Enter)" })
     )
   ]);
+}
+function windowFor(total, focus) {
+  if (total <= WINDOW_LINES) return { from: 0, to: total };
+  const centre = focus ?? 1;
+  const from = Math.max(0, Math.min(total - WINDOW_LINES, centre - Math.floor(WINDOW_LINES / 2)));
+  return { from, to: Math.min(total, from + WINDOW_LINES) };
+}
+function shiftMarkers(markers, from) {
+  if (from === 0) return markers;
+  const out = /* @__PURE__ */ new Map();
+  for (const [line, marker] of markers) out.set(line - from, marker);
+  return out;
 }
 function shortPath(path) {
   const parts = path.split("/").filter(Boolean);
@@ -7443,6 +8966,14 @@ function renderA11y(ctx) {
     ctx.toast(`${result.findings.length} finding(s) across ${result.examined} elements`);
     ctx.refresh();
   };
+  if (ui.a11yRequested) {
+    ui.a11yRequested = false;
+    if (root) {
+      const result = auditAccessibility(root);
+      ui.a11yRun = { ...result, at: Date.now() };
+      ui.a11ySelected = null;
+    }
+  }
   const controls = section(null, h(
     "div",
     { class: "detail-head" },
@@ -7641,10 +9172,15 @@ function renderQueries(ctx) {
       ui.queryProbeKind = value;
       ctx.refresh();
     }),
-    searchInput(ui.queryProbe, (value) => {
-      ui.queryProbe = value;
-      ctx.refresh();
-    }, ui.queryProbeKind === "role" ? "button" : ui.queryProbeKind === "css" ? ".rui-card > button" : "Save")
+    searchInput(
+      ui.queryProbe,
+      (value) => {
+        ui.queryProbe = value;
+        ctx.refresh();
+      },
+      ui.queryProbeKind === "role" ? "button" : ui.queryProbeKind === "css" ? ".rui-card > button" : "Save",
+      { focusKey: "query-probe" }
+    )
   );
   if (!root) return [bar, faint("No render root to query.")];
   const matches = ui.queryProbe.trim() === "" ? [] : runProbe(root, ui.queryProbeKind, ui.queryProbe.trim());
@@ -7843,7 +9379,7 @@ function render$1(ctx) {
       ctx.refresh();
     }, kind.title))),
     spacer(),
-    button("Export session", () => downloadText("aktion-session.json", exportSession(ctx)), {
+    button("Export session", () => downloadText("aktion-session.json", exportSessionJson(ctx)), {
       title: "Download every captured event as JSON"
     })
   );
@@ -7911,29 +9447,6 @@ function jump(ctx, entry) {
       break;
   }
 }
-function exportSession(ctx) {
-  const payload = {
-    exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    protocolVersion: ctx.hook.protocolVersion,
-    libraryVersion: ctx.hook.libraryVersion,
-    app: ctx.app ? { id: ctx.app.id, label: ctx.app.label } : null,
-    program: ctx.app?.getProgram() ?? null,
-    state: ctx.model.state,
-    totals: ctx.model.totals,
-    commits: ctx.model.commits,
-    effects: ctx.model.effects,
-    network: ctx.model.network,
-    routes: ctx.model.routes,
-    emits: ctx.model.emits,
-    errors: ctx.model.errors,
-    logs: ctx.model.logs
-  };
-  try {
-    return JSON.stringify(payload, null, 2);
-  } catch {
-    return JSON.stringify({ ...payload, state: "<unserialisable>" }, null, 2);
-  }
-}
 const SWITCHES = [
   {
     key: "captureProps",
@@ -7995,12 +9508,66 @@ function render(ctx) {
     ))),
     faint("These gate work inside the runtime, not inside the panel — switching one off makes the app faster, not just the panel.")
   ]);
+  const visual = section("While you work", [
+    h(
+      "div",
+      { class: "switch-list" },
+      h(
+        "div",
+        { class: "switch-row" },
+        toggle("Highlight re-renders", ui.highlightUpdates, () => {
+          ui.highlightUpdates = !ui.highlightUpdates;
+          if (!ui.highlightUpdates) ctx.overlay.clearUpdateFlashes();
+          ctx.refresh();
+        }),
+        h(
+          "span",
+          { class: "switch-hint" },
+          "Outline every component on the page as it re-renders. The quickest way to see work you did not expect — type one character and watch how much of the screen lights up."
+        )
+      ),
+      h(
+        "div",
+        { class: "switch-row" },
+        toggle("Flash on commit", ui.flashOnCommit, () => {
+          ui.flashOnCommit = !ui.flashOnCommit;
+          ctx.refresh();
+        }),
+        h("span", { class: "switch-hint" }, "Outline the whole app element on every commit — useful with several apps on one page.")
+      ),
+      h(
+        "div",
+        { class: "switch-row" },
+        toggle("Browser performance marks", ui.perfMarks, () => {
+          ui.perfMarks = !ui.perfMarks;
+          ctx.toast(ui.perfMarks ? "Commits will appear in the browser's performance timeline" : "Performance marks off");
+          ctx.refresh();
+        }),
+        h(
+          "span",
+          { class: "switch-hint" },
+          "Mirror each commit into `performance.measure`, so Aktion commits show up in the browser's own timeline next to layout, paint, and long tasks."
+        )
+      ),
+      h(
+        "div",
+        { class: "switch-row" },
+        toggle("Capture console", ui.captureConsole, () => {
+          ui.captureConsole = !ui.captureConsole;
+          ctx.persist();
+          ctx.refresh();
+        }),
+        h("span", { class: "switch-hint" }, "Mirror the page console into the Console tab, including the runtime's own [aktion] diagnostics.")
+      )
+    )
+  ]);
   const layout = section("Panel", [
     h(
       "div",
       { class: "switch-row" },
       h("div", { class: "filters" }, ...DOCKS.map((dock) => toggle(dock.label, ui.dock === dock.value, () => {
         ui.dock = dock.value;
+        ctx.persist();
         ctx.refresh();
       }))),
       h("span", { class: "switch-hint" }, "Float freely, or dock to an edge.")
@@ -8010,6 +9577,7 @@ function render(ctx) {
       { class: "switch-row" },
       toggle("Light theme", ui.light, () => {
         ui.light = !ui.light;
+        ctx.persist();
         ctx.refresh();
       }),
       h("span", { class: "switch-hint" }, "For a light host page.")
@@ -8019,6 +9587,7 @@ function render(ctx) {
       { class: "switch-row" },
       toggle("Compact rows", ui.compact, () => {
         ui.compact = !ui.compact;
+        ctx.persist();
         ctx.refresh();
       }),
       h("span", { class: "switch-hint" }, "Denser lists, for a small dock.")
@@ -8026,13 +9595,22 @@ function render(ctx) {
     h(
       "div",
       { class: "switch-row" },
-      toggle("Capture console", ui.captureConsole, () => {
-        ui.captureConsole = !ui.captureConsole;
+      button("Show keyboard shortcuts", () => {
+        ui.shortcutsOpen = true;
         ctx.refresh();
+      }, { title: "Also available with ?" }),
+      h("span", { class: "switch-hint" }, "Ctrl/⌘ K opens the command palette from anywhere — every action in the panel, searchable.")
+    ),
+    !ui.tipsDismissed ? null : h(
+      "div",
+      { class: "switch-row" },
+      button("Show the getting-started tips again", () => {
+        ui.tipsDismissed = false;
+        ctx.selectTab("overview");
       }),
-      h("span", { class: "switch-hint" }, "Mirror the page console into the Console tab, including the runtime's own [aktion] diagnostics.")
+      h("span", { class: "switch-hint" }, "The three-step introduction on the Overview tab.")
     )
-  ]);
+  ].filter((node) => node != null));
   const retention = section("Session", [
     statGrid(
       stat("commits", fmtCount(model.commits.length), { title: `${fmtCount(model.totals.commits)} seen` }),
@@ -8076,7 +9654,7 @@ function render(ctx) {
     ]),
     faint("Instrumentation stays dormant until a frontend subscribes: closing this panel returns the app to its uninstrumented speed.")
   ]);
-  return [bar, instrumentation, layout, retention, shortcuts, about];
+  return [bar, visual, instrumentation, layout, retention, shortcuts, about];
 }
 const DEVTOOLS_UI_VERSION = "0.6";
 const TABS = [
@@ -8095,7 +9673,22 @@ const TABS = [
   timelineTab,
   settingsTab
 ];
+function isEditable(target) {
+  const seen = /* @__PURE__ */ new Set();
+  let node = target instanceof Element ? target : null;
+  while (node && !seen.has(node)) {
+    seen.add(node);
+    const tag = node.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    if (node.isContentEditable) return true;
+    node = node.shadowRoot?.activeElement ?? null;
+  }
+  return false;
+}
 const TOAST_MS = 2600;
+function cssAttrValue(value) {
+  return value.replace(/(["\\])/g, "\\$1");
+}
 class AktionDevtoolsElement extends HTMLElement {
   constructor() {
     super();
@@ -8111,6 +9704,13 @@ class AktionDevtoolsElement extends HTMLElement {
     __publicField(this, "renderScheduled", false);
     __publicField(this, "flashTimer", null);
     __publicField(this, "toastTimer", null);
+    /** Memo for one render pass — see the comment in `render()`. */
+    __publicField(this, "renderCache", /* @__PURE__ */ new Map());
+    /** Events ignored since the user paused — surfaced on the Rec button. */
+    __publicField(this, "droppedWhilePaused", 0);
+    __publicField(this, "recordLabel", null);
+    __publicField(this, "windowKeyHandler", null);
+    __publicField(this, "longTaskObserver", null);
     /** Floating-mode geometry, persisted so the panel reopens where you left it. */
     __publicField(this, "geometry");
     // skeleton refs
@@ -8121,11 +9721,33 @@ class AktionDevtoolsElement extends HTMLElement {
     __publicField(this, "tabsEl");
     __publicField(this, "bodyEl");
     __publicField(this, "toastEl");
+    __publicField(this, "paletteEl");
+    /** The palette controller, created once so its input survives re-renders. */
+    __publicField(this, "palette", new PaletteController({
+      onQuery: (value) => {
+        this.ui.paletteQuery = value;
+        this.ui.paletteIndex = 0;
+        this.scheduleRender();
+      },
+      onMove: (delta) => {
+        this.ui.paletteIndex = Math.max(0, this.ui.paletteIndex + delta);
+        this.scheduleRender();
+      },
+      onRun: (command) => {
+        this.closePalette();
+        command.run();
+        this.scheduleRender();
+      },
+      onClose: () => {
+        this.closePalette();
+        this.scheduleRender();
+      }
+    }));
     const persisted = loadPersisted();
     const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
     const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-    const width = persisted.width ?? 560;
-    const height = persisted.height ?? 620;
+    const width = persisted.width ?? Math.min(760, Math.max(420, Math.round(vw * 0.55)));
+    const height = persisted.height ?? Math.min(680, Math.max(360, Math.round(vh * 0.8)));
     this.geometry = {
       width,
       height,
@@ -8137,6 +9759,8 @@ class AktionDevtoolsElement extends HTMLElement {
     if (persisted.light !== void 0) this.ui.light = persisted.light;
     if (persisted.compact !== void 0) this.ui.compact = persisted.compact;
     if (persisted.captureConsole !== void 0) this.ui.captureConsole = persisted.captureConsole;
+    if (persisted.tipsDismissed !== void 0) this.ui.tipsDismissed = persisted.tipsDismissed;
+    if (Array.isArray(persisted.watches)) this.ui.watches = persisted.watches.slice(0, 20);
   }
   connectedCallback() {
     if (!this.root) this.buildSkeleton();
@@ -8150,7 +9774,9 @@ class AktionDevtoolsElement extends HTMLElement {
     this.unsubApps = this.hook.subscribeApps((action, app) => this.onApp(action, app));
     this.discoverApps();
     this.syncConsoleCapture();
+    this.observeLongTasks();
     this.applyDock();
+    if (this.selectedAppId) this.recordProgramVersion(this.selectedAppId);
     this.scheduleRender();
   }
   disconnectedCallback() {
@@ -8163,6 +9789,12 @@ class AktionDevtoolsElement extends HTMLElement {
     this.overlay.destroy();
     if (this.flashTimer) clearTimeout(this.flashTimer);
     if (this.toastTimer) clearTimeout(this.toastTimer);
+    if (this.windowKeyHandler && typeof window !== "undefined") {
+      window.removeEventListener("keydown", this.windowKeyHandler, true);
+    }
+    this.windowKeyHandler = null;
+    this.longTaskObserver?.disconnect();
+    this.longTaskObserver = null;
     this.persist();
   }
   /* ---- public controller surface ---- */
@@ -8247,15 +9879,96 @@ class AktionDevtoolsElement extends HTMLElement {
     this.scheduleRender();
   }
   onEvent(event) {
-    if (this.ui.paused) return;
-    this.ingestEvent(event, false);
-    if (event.kind === "commit" && this.ui.flashOnCommit && event.appId === this.selectedAppId) {
-      this.flashApp(event.appId);
+    if (this.ui.paused) {
+      this.droppedWhilePaused += 1;
+      this.updateRecordLabel();
+      return;
     }
-    if (event.kind === "route" && this.recorder.isRecording && event.appId === this.selectedAppId) {
+    this.ingestEvent(event, false);
+    const mine = event.appId === this.selectedAppId;
+    if (event.kind === "commit" && mine) {
+      if (this.ui.flashOnCommit) this.flashApp(event.appId);
+      if (this.ui.highlightUpdates) this.highlightRenderedComponents(event);
+      if (this.ui.perfMarks) this.markCommitForBrowserProfiler(event);
+      this.recordProgramVersion(event.appId);
+    }
+    if (event.kind === "state" && mine) this.checkBreakOnChange(event);
+    if (event.kind === "route" && this.recorder.isRecording && mine) {
       this.recorder.addStep({ type: "navigate", value: event.to, label: `navigate to ${event.to}` });
     }
     this.scheduleRender();
+  }
+  /**
+   * Outline every component that actually rendered in this commit.
+   *
+   * The most direct answer to "why did that feel slow?" is seeing the whole
+   * screen flash when you typed one character. Memoized instances are skipped —
+   * outlining them would report the opposite of the truth.
+   */
+  highlightRenderedComponents(commit) {
+    const app = this.currentApp();
+    if (typeof app?.nodeForInstance !== "function") return;
+    const keys = commit.components.filter((record) => record.phase !== "memo").map((record) => record.instanceKey);
+    const nodes = [];
+    for (const key2 of keys.slice(0, 60)) {
+      const node = app.nodeForInstance(key2);
+      if (node) nodes.push(node);
+    }
+    this.overlay.flashUpdated(nodes);
+  }
+  /**
+   * Mirror a commit into `performance.measure` so it appears in the browser's
+   * own performance timeline next to layout, paint, and long tasks.
+   *
+   * The panel's profiler can tell you a commit took 12ms; only the browser's
+   * timeline can tell you what happened around it.
+   */
+  markCommitForBrowserProfiler(commit) {
+    if (typeof performance === "undefined" || typeof performance.measure !== "function") return;
+    try {
+      const label = commit.initial ? "aktion: initial mount" : `aktion: commit #${commit.commitId}${commit.changedPaths.length ? ` (${commit.changedPaths.join(", ")})` : ""}`;
+      performance.measure(label, { start: commit.startTime, duration: commit.duration });
+    } catch {
+    }
+  }
+  /**
+   * Break into the debugger when a watched atom changes.
+   *
+   * The panel cannot pause the runtime, but the browser can: a `debugger`
+   * statement executed here stops the world inside the state flush, one frame
+   * below the write, with the stack that caused it. That is the one thing a
+   * state inspector cannot otherwise give you.
+   */
+  checkBreakOnChange(event) {
+    if (this.ui.breakOnChange.size === 0) return;
+    const hit = event.changedPaths.find((path) => this.ui.breakOnChange.has(path) || this.ui.breakOnChange.has(rootOf(path)));
+    if (!hit) return;
+    const value = event.snapshot[rootOf(hit)];
+    console.warn(`[aktion-devtools] break on change: $${hit} =`, value);
+    debugger;
+  }
+  /**
+   * Keep a short history of program versions.
+   *
+   * A hot-swapped program that fails to parse leaves you with a blank app and no
+   * way back — the Source tab can only re-plan what is already broken. Recording
+   * each distinct version as it commits makes "undo that edit" possible.
+   */
+  recordProgramVersion(appId) {
+    const app = this.hook?.apps.get(appId);
+    if (!app) return;
+    let text2;
+    try {
+      text2 = app.getProgram();
+    } catch {
+      return;
+    }
+    if (text2 === "") return;
+    const model = this.ensureModel(appId);
+    const last = model.programHistory[model.programHistory.length - 1];
+    if (last?.text === text2) return;
+    model.programHistory.push({ text: text2, at: Date.now(), lines: text2.split("\n").length });
+    if (model.programHistory.length > 20) model.programHistory.shift();
   }
   ingestEvent(event, fromBuffer) {
     ingest(this.ensureModel(event.appId), event, fromBuffer);
@@ -8300,25 +10013,30 @@ class AktionDevtoolsElement extends HTMLElement {
   render() {
     if (this.hidden || !this.root) return;
     this.syncConsoleCapture();
+    this.renderCache = /* @__PURE__ */ new Map();
+    if (!this.ui.paused) this.droppedWhilePaused = 0;
     this.applyChrome();
     this.renderControls();
     this.renderTabs();
     const focus = this.captureFocus();
-    const scroll = this.bodyEl.scrollTop;
+    const scroll = this.captureScroll();
     this.renderBody();
-    this.bodyEl.scrollTop = scroll;
+    this.restoreScroll(scroll);
     this.restoreFocus(focus);
     this.renderToast();
+    this.renderPalette();
   }
-  /* ---- focus preservation ---- */
+  /* ---- focus + scroll preservation ---- */
   /**
    * Remember where the caret is before a re-render.
    *
-   * The panel re-renders on every event, and a filter box that loses focus (or
-   * its caret) after one keystroke is unusable. Rather than making each tab
-   * patch its own DOM in place, the shell records the focused field's position
-   * in the tree and puts the caret back afterwards — which works for every tab
-   * without any of them knowing about it.
+   * The panel re-renders on every runtime event, so a field the user is typing
+   * in is rebuilt several times a second. Restoring by POSITION is not enough:
+   * running a REPL expression grows the history above the input, so the input is
+   * no longer the same child index and focus is lost on exactly the keystroke
+   * that mattered. Fields therefore declare a stable key (see `FOCUS_KEY_ATTR`)
+   * and the shell restores by key, falling back to the position for anything
+   * that has not declared one.
    */
   captureFocus() {
     let active = null;
@@ -8344,23 +10062,61 @@ class AktionDevtoolsElement extends HTMLElement {
       end = active.selectionEnd;
     } catch {
     }
-    return { path, start: start2, end, className: active.className };
+    return {
+      key: active.getAttribute(FOCUS_KEY_ATTR),
+      path,
+      start: start2,
+      end,
+      className: active.className,
+      value: active.value
+    };
   }
   restoreFocus(focus) {
     if (!focus) return;
+    const target = this.findFocusTarget(focus);
+    if (!target) return;
+    target.focus();
+    if (focus.start !== null && focus.end !== null && target.value === focus.value) {
+      try {
+        target.setSelectionRange(focus.start, focus.end);
+      } catch {
+      }
+    }
+  }
+  findFocusTarget(focus) {
+    if (focus.key) {
+      const byKey = this.bodyEl.querySelector(`[${FOCUS_KEY_ATTR}="${cssAttrValue(focus.key)}"]`);
+      if (byKey instanceof HTMLInputElement || byKey instanceof HTMLTextAreaElement) return byKey;
+      return null;
+    }
     let node = this.bodyEl;
     for (const index of focus.path) {
       node = node?.children[index] ?? null;
-      if (!node) return;
+      if (!node) return null;
     }
-    if (!(node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)) return;
-    if (node.className !== focus.className) return;
-    node.focus();
-    if (focus.start !== null && focus.end !== null) {
-      try {
-        node.setSelectionRange(focus.start, focus.end);
-      } catch {
-      }
+    if (!(node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)) return null;
+    return node.className === focus.className ? node : null;
+  }
+  /**
+   * Scroll offsets of every keyed scroll container, so a scrolled component
+   * tree does not jump to the top each time an event arrives.
+   */
+  captureScroll() {
+    const out = /* @__PURE__ */ new Map();
+    out.set("__body", this.bodyEl.scrollTop);
+    for (const el of this.bodyEl.querySelectorAll(`[${SCROLL_KEY_ATTR}]`)) {
+      const key2 = el.getAttribute(SCROLL_KEY_ATTR);
+      if (key2) out.set(key2, el.scrollTop);
+    }
+    return out;
+  }
+  restoreScroll(offsets) {
+    const body = offsets.get("__body");
+    if (body !== void 0) this.bodyEl.scrollTop = body;
+    for (const el of this.bodyEl.querySelectorAll(`[${SCROLL_KEY_ATTR}]`)) {
+      const key2 = el.getAttribute(SCROLL_KEY_ATTR);
+      const value = key2 ? offsets.get(key2) : void 0;
+      if (value !== void 0) el.scrollTop = value;
     }
   }
   /* ---- chrome ---- */
@@ -8389,8 +10145,10 @@ class AktionDevtoolsElement extends HTMLElement {
     this.bodyEl = h("div", { class: "panel-body" });
     const grip = h("div", { class: "resize", title: "Drag to resize" });
     this.makeResizable(grip);
+    this.paletteEl = h("div", { class: "pal-host", hidden: true });
     this.panelEl = h("div", { class: "panel" }, this.headerEl, this.tabsEl, this.bodyEl, grip);
-    this.root.append(style, this.panelEl);
+    this.root.append(style, this.panelEl, this.paletteEl);
+    this.bindKeyboard();
     this.applyChrome();
   }
   /** Reflect dock mode, theme, and density onto the host + panel. */
@@ -8421,6 +10179,60 @@ class AktionDevtoolsElement extends HTMLElement {
     this.panelEl.style.width = "";
     this.panelEl.style.height = "";
   }
+  /** Rec / Paused, with a count of what pausing has cost you. */
+  recordText() {
+    if (!this.ui.paused) return "Rec";
+    return this.droppedWhilePaused > 0 ? `Paused · ${this.droppedWhilePaused}` : "Paused";
+  }
+  recordTitle() {
+    if (!this.ui.paused) return "Recording — click to pause";
+    return this.droppedWhilePaused > 0 ? `Paused — ${this.droppedWhilePaused} event${this.droppedWhilePaused === 1 ? "" : "s"} ignored since you paused. Click to resume (they are not recovered).` : "Paused — click to resume recording";
+  }
+  /** Update the button text without a render — see `droppedWhilePaused`. */
+  updateRecordLabel() {
+    if (!this.recordLabel) return;
+    this.recordLabel.textContent = this.recordText();
+    const button2 = this.recordLabel.parentElement;
+    if (button2) button2.title = this.recordTitle();
+  }
+  /**
+   * Open Inspect on an instance and make sure the row is actually visible.
+   *
+   * A jump from another tab can land on a row hidden three different ways —
+   * inside a collapsed branch, excluded by the tree filter, or a library
+   * component while the Library toggle is off. Silently showing the detail of
+   * a row you cannot see is the worst of the three outcomes, so clear all of
+   * them and say which ones were cleared.
+   */
+  revealInInspect(instanceKey) {
+    this.ui.tab = "inspect";
+    for (const ancestor of ancestorKeyCandidates(instanceKey)) {
+      this.ui.inspectCollapsed.delete(ancestor);
+    }
+    const cleared = [];
+    const name = componentNameFromKey(instanceKey);
+    const filter = this.ui.inspectFilter.trim().toLowerCase();
+    if (filter !== "" && !name.toLowerCase().includes(filter)) {
+      this.ui.inspectFilter = "";
+      cleared.push("filter");
+    }
+    if (!this.ui.inspectShowLibrary && instanceKey.lastIndexOf("#") > 0) {
+      this.ui.inspectShowLibrary = true;
+      cleared.push("library filter");
+    }
+    if (cleared.length > 0) this.toastMessage(`Cleared the ${cleared.join(" and ")} to show ${name}`);
+    this.ui.inspectReveal = instanceKey;
+  }
+  /** Show a transient message. Shared by the tabs (via `ctx.toast`) and the shell. */
+  toastMessage(message, tone = "info") {
+    this.ui.toast = { message, tone, at: Date.now() };
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => {
+      this.ui.toast = null;
+      this.scheduleRender();
+    }, TOAST_MS);
+    this.renderToast();
+  }
   renderControls() {
     const apps = this.hook ? [...this.hook.apps.values()] : [];
     const select = h("select", {
@@ -8438,14 +10250,15 @@ class AktionDevtoolsElement extends HTMLElement {
         select.appendChild(option);
       }
     }
+    this.recordLabel = h("span", { class: "rec-label" }, this.recordText());
     const record = h("button", {
       class: `icon-btn ${this.ui.paused ? "" : "is-on"}`,
-      title: this.ui.paused ? "Paused — click to resume recording" : "Recording — click to pause",
+      title: this.recordTitle(),
       onclick: () => {
         this.ui.paused = !this.ui.paused;
         this.scheduleRender();
       }
-    }, h("span", { class: `rec-dot ${this.ui.paused ? "is-paused" : ""}` }), this.ui.paused ? "Paused" : "Rec");
+    }, h("span", { class: `rec-dot ${this.ui.paused ? "is-paused" : ""}` }), this.recordLabel);
     const dockButton = h("button", {
       class: "icon-btn",
       title: `Dock: ${this.ui.dock} — click to cycle`,
@@ -8471,12 +10284,18 @@ class AktionDevtoolsElement extends HTMLElement {
   renderTabs() {
     const ctx = this.context();
     this.tabsEl.replaceChildren(...TABS.map((tab) => {
-      const badge = tab.badge?.(ctx) ?? null;
+      let badge = null;
+      try {
+        badge = tab.badge?.(ctx) ?? null;
+      } catch {
+        badge = null;
+      }
       return h(
         "button",
         {
           class: `tab ${this.ui.tab === tab.id ? "is-active" : ""}`,
-          title: tab.hint,
+          title: `${tab.label} — ${tab.hint}`,
+          "data-tab": tab.id,
           onclick: () => this.selectTab(tab.id)
         },
         h("span", { class: "tab-icon" }, tab.icon),
@@ -8484,6 +10303,251 @@ class AktionDevtoolsElement extends HTMLElement {
         badge !== null ? h("span", { class: "count" }, badge > 999 ? "999+" : String(badge)) : null
       );
     }));
+    const active = this.tabsEl.querySelector(".tab.is-active");
+    if (active) {
+      const stripBox = this.tabsEl.getBoundingClientRect();
+      const tabBox = active.getBoundingClientRect();
+      if (tabBox.left < stripBox.left || tabBox.right > stripBox.right) {
+        active.scrollIntoView({ block: "nearest", inline: "center" });
+      }
+    }
+  }
+  /* ---- command palette + shortcuts ---- */
+  /** Panel-level operations the palette can trigger. */
+  paletteActions() {
+    const ctx = this.context();
+    return {
+      togglePicker: () => this.togglePicker(),
+      clearOverrides: () => {
+        const app = this.currentApp();
+        if (typeof app?.listPropOverrides !== "function" || typeof app.clearPropOverride !== "function") return;
+        for (const entry of app.listPropOverrides()) app.clearPropOverride(entry.instanceKey, entry.prop);
+        ctx.toast("Prop overrides cleared");
+        this.scheduleRender();
+      },
+      runAudit: () => {
+        this.ui.tab = "test";
+        this.ui.testPane = "a11y";
+        this.ui.a11yRequested = true;
+        this.scheduleRender();
+      },
+      toggleRecording: () => {
+        this.ui.tab = "test";
+        this.ui.testPane = "record";
+        if (this.recorder.isRecording) {
+          this.recorder.stop();
+          ctx.toast(`Recorded ${this.recorder.list().length} step(s)`);
+        } else {
+          const root = renderRootElement(this.currentApp());
+          const started = this.recorder.start(root, () => this.scheduleRender());
+          ctx.toast(started ? "Recording — interact with the app" : "Could not attach to the app", started ? "good" : "bad");
+        }
+        this.scheduleRender();
+      },
+      exportSession: () => {
+        downloadText("aktion-session.json", exportSessionJson(this.context()));
+        ctx.toast("Session exported");
+      },
+      clearSession: () => {
+        const model = this.getModel();
+        if (model) clearModel(model);
+        this.hook?.clearBuffer();
+        this.ui.selectedCommitId = null;
+        this.ui.selectedRequest = null;
+        this.ui.timeTravel = null;
+        ctx.toast("Session data cleared");
+        this.scheduleRender();
+      },
+      cycleDock: () => this.cycleDock(),
+      showShortcuts: () => {
+        this.ui.shortcutsOpen = true;
+        this.scheduleRender();
+      }
+    };
+  }
+  /** Render (or tear down) the palette / shortcut overlay. */
+  renderPalette() {
+    if (this.ui.shortcutsOpen) {
+      this.paletteEl.hidden = false;
+      this.paletteEl.replaceChildren(h(
+        "div",
+        { class: "pal-scrim", onclick: () => {
+          this.ui.shortcutsOpen = false;
+          this.scheduleRender();
+        } },
+        h(
+          "div",
+          { class: "pal-box is-help", onclick: (event) => event.stopPropagation() },
+          h("div", { class: "pal-title" }, "Keyboard shortcuts"),
+          h("div", { class: "deflist" }, ...SHORTCUTS.flatMap(([keys, what]) => [
+            h("div", { class: "dt" }, keys),
+            h("div", { class: "dd" }, what)
+          ])),
+          h("div", { class: "pal-foot" }, h("span", {}, "Esc to close"))
+        )
+      ));
+      return;
+    }
+    if (!this.ui.paletteOpen) {
+      if (!this.paletteEl.hidden) {
+        this.paletteEl.hidden = true;
+        this.paletteEl.replaceChildren();
+      }
+      return;
+    }
+    this.paletteEl.hidden = false;
+    const ctx = this.context();
+    const count = this.palette.update(this.paletteEl, {
+      query: this.ui.paletteQuery,
+      selected: this.ui.paletteIndex,
+      commands: buildPalette(ctx, this.paletteActions())
+    });
+    if (this.ui.paletteIndex >= count) this.ui.paletteIndex = Math.max(0, count - 1);
+  }
+  openPalette() {
+    this.ui.paletteOpen = true;
+    this.ui.shortcutsOpen = false;
+    this.ui.paletteQuery = "";
+    this.ui.paletteIndex = 0;
+    this.palette.reset();
+    this.scheduleRender();
+    queueMicrotask(() => {
+      if (this.ui.paletteOpen) this.palette.focus();
+    });
+  }
+  closePalette() {
+    this.ui.paletteOpen = false;
+    this.ui.paletteQuery = "";
+    this.ui.paletteIndex = 0;
+    this.palette.reset();
+  }
+  cycleDock() {
+    const order = ["float", "right", "bottom", "left"];
+    this.ui.dock = order[(order.indexOf(this.ui.dock) + 1) % order.length];
+    this.persist();
+    this.scheduleRender();
+  }
+  /** Arm / disarm the element picker from anywhere (palette, shortcut, button). */
+  togglePicker() {
+    if (this.overlay.isPicking) {
+      this.overlay.stopPicking();
+      this.scheduleRender();
+      return;
+    }
+    const app = this.currentApp();
+    this.ui.tab = "inspect";
+    this.overlay.startPicking({
+      onPick: (element) => {
+        this.ui.selectedElement = element;
+        const key2 = typeof app?.instanceForNode === "function" ? app.instanceForNode(element) : null;
+        this.ui.selectedInstance = key2;
+        if (key2) this.highlightInstance(key2, true);
+        else this.overlay.highlight(element, {}, true);
+        this.ui.inspectPane = key2 ? "props" : "dom";
+        this.scheduleRender();
+      },
+      onCancel: () => this.scheduleRender()
+    });
+    this.scheduleRender();
+  }
+  /**
+   * Panel-wide keyboard handling.
+   *
+   * Bound on the panel's own root, not the window: a debugger that swallows the
+   * page's keystrokes is worse than one with no shortcuts. The two exceptions
+   * are the palette and the picker toggle, which are bound on the window because
+   * you reach for them while your hands are in the app.
+   */
+  bindKeyboard() {
+    this.root.addEventListener("keydown", (event) => this.onKeyDown(event));
+    if (typeof window === "undefined") return;
+    this.windowKeyHandler = (event) => {
+      const mod = event.ctrlKey || event.metaKey;
+      if (mod && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        if (this.hidden) this.open();
+        this.openPalette();
+      } else if (mod && event.shiftKey && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        if (this.hidden) this.open();
+        this.togglePicker();
+      } else if (event.altKey && !this.hidden && !isEditable(event.target)) {
+        this.tabShortcut(event);
+      }
+    };
+    window.addEventListener("keydown", this.windowKeyHandler, true);
+  }
+  /** Alt+1..9 selects a tab; Alt+[ / Alt+] cycle. Returns true if handled. */
+  tabShortcut(event) {
+    if (event.key >= "1" && event.key <= "9") {
+      const tab = TABS[Number(event.key) - 1];
+      if (!tab) return false;
+      event.preventDefault();
+      this.selectTab(tab.id);
+      return true;
+    }
+    if (event.key === "[" || event.key === "]") {
+      event.preventDefault();
+      const index = TABS.findIndex((tab) => tab.id === this.ui.tab);
+      const next = TABS[(index + (event.key === "]" ? 1 : TABS.length - 1)) % TABS.length];
+      this.selectTab(next.id);
+      return true;
+    }
+    return false;
+  }
+  onKeyDown(event) {
+    const target = event.target;
+    const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+    if (event.key === "Escape") {
+      if (this.ui.paletteOpen || this.ui.shortcutsOpen) {
+        event.preventDefault();
+        this.closePalette();
+        this.ui.shortcutsOpen = false;
+        this.scheduleRender();
+      }
+      return;
+    }
+    if (event.key === "?" && !typing) {
+      event.preventDefault();
+      this.ui.shortcutsOpen = !this.ui.shortcutsOpen;
+      this.scheduleRender();
+      return;
+    }
+    if (event.key === "/" && !typing || (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+      const search = this.bodyEl.querySelector("input.search");
+      if (search) {
+        event.preventDefault();
+        search.focus();
+        search.select();
+      }
+      return;
+    }
+    if (event.altKey && !typing) this.tabShortcut(event);
+  }
+  /**
+   * Watch for long tasks while the panel is open.
+   *
+   * A commit that measures 4ms in the profiler but janks the page is usually a
+   * long task the runtime did not cause (an image decode, a third-party script)
+   * — and being able to say so is the difference between fixing the right thing
+   * and rewriting a component that was never the problem.
+   */
+  observeLongTasks() {
+    if (typeof PerformanceObserver !== "function" || this.longTaskObserver) return;
+    try {
+      const observer = new PerformanceObserver((list) => {
+        const model = this.getModel();
+        if (!model) return;
+        for (const entry of list.getEntries()) {
+          model.longTasks.push({ start: entry.startTime, duration: entry.duration });
+        }
+        if (model.longTasks.length > 100) model.longTasks.splice(0, model.longTasks.length - 100);
+        this.scheduleRender();
+      });
+      observer.observe({ entryTypes: ["longtask"] });
+      this.longTaskObserver = observer;
+    } catch {
+    }
   }
   renderBody() {
     const ctx = this.context();
@@ -8513,6 +10577,13 @@ class AktionDevtoolsElement extends HTMLElement {
       ui: this.ui,
       overlay: this.overlay,
       recorder: this.recorder,
+      cache: (key2, compute) => {
+        if (this.renderCache.has(key2)) return this.renderCache.get(key2);
+        const value = compute();
+        this.renderCache.set(key2, value);
+        return value;
+      },
+      width: () => this.panelEl?.getBoundingClientRect().width ?? this.geometry.width,
       refresh: () => this.scheduleRender(),
       selectTab: (tab) => this.selectTab(tab),
       selectInstance: (instanceKey, options) => {
@@ -8520,20 +10591,15 @@ class AktionDevtoolsElement extends HTMLElement {
         this.ui.selectedElement = null;
         if (instanceKey) {
           this.highlightInstance(instanceKey, true);
-          if (options?.reveal !== false) this.ui.tab = "inspect";
+          if (options?.reveal !== false) this.revealInInspect(instanceKey);
         }
         this.scheduleRender();
       },
-      toast: (message, tone = "info") => {
-        this.ui.toast = { message, tone, at: Date.now() };
-        if (this.toastTimer) clearTimeout(this.toastTimer);
-        this.toastTimer = setTimeout(() => {
-          this.ui.toast = null;
-          this.scheduleRender();
-        }, TOAST_MS);
-        this.renderToast();
-      },
+      toast: (message, tone = "info") => this.toastMessage(message, tone),
       highlightInstance: (instanceKey, pin) => this.highlightInstance(instanceKey, pin ?? false),
+      togglePicker: () => this.togglePicker(),
+      openPalette: () => this.openPalette(),
+      persist: () => this.persist(),
       recordedSteps: () => this.recorder.list()
     };
   }
@@ -8635,7 +10701,9 @@ class AktionDevtoolsElement extends HTMLElement {
       width: this.geometry.width,
       height: this.geometry.height,
       left: this.geometry.left,
-      top: this.geometry.top
+      top: this.geometry.top,
+      tipsDismissed: this.ui.tipsDismissed,
+      watches: this.ui.watches
     };
     savePersisted(payload);
   }
@@ -8695,11 +10763,14 @@ export {
   HOOK_KEY,
   InspectOverlay,
   InteractionRecorder,
+  PaletteController,
+  SHORTCUTS,
   a11ySummary,
   accessibleName,
   ancestorsOf,
   auditAccessibility,
   buildInstanceTree,
+  buildPalette,
   buildTimeline,
   chooseQuery,
   clearModel,
@@ -8714,10 +10785,13 @@ export {
   descendantsOf,
   describeElement,
   devtoolsOption,
+  diffSnapshots,
   effectAggregates,
   effectiveBackground,
   emptyModel,
+  exportSessionJson,
   findMatchingRule,
+  fuzzyScore,
   generateSnapshotTest,
   generateTest,
   getDevtoolsHook,
@@ -8740,12 +10814,14 @@ export {
   previewOf,
   queryExpression,
   queryLabel,
+  rankCommands,
   relativeLuminance,
   ruleMatches,
   shortInstanceLabel,
   toDevtoolsValue,
   toJsonText,
   valueKind,
-  verdictFor
+  verdictFor,
+  visibleNodes
 };
 //# sourceMappingURL=devtools.js.map

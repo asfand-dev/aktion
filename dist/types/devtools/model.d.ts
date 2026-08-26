@@ -63,6 +63,19 @@ export interface HistoryEntry {
     changedPaths: string[];
     snapshot: Record<string, unknown>;
 }
+/** One version of the program text, for the Source tab's undo. */
+export interface ProgramVersion {
+    text: string;
+    /** Wall-clock time (epoch ms) the version was first seen. */
+    at: number;
+    lines: number;
+}
+/** A long task the browser reported while the session was recording. */
+export interface LongTask {
+    /** `performance.now()` start. */
+    start: number;
+    duration: number;
+}
 /** Per-app derived model the panel maintains from the event stream. */
 export interface AppModel {
     commits: CommitRecord[];
@@ -80,6 +93,10 @@ export interface AppModel {
     changeCounts: Map<string, number>;
     /** Bounded snapshot history for time travel. */
     history: HistoryEntry[];
+    /** Distinct program versions seen this session, oldest first. */
+    programHistory: ProgramVersion[];
+    /** Long tasks (>50ms) the browser reported, when it supports the observer. */
+    longTasks: LongTask[];
     /** Timestamp of the first observed event (timeline zero). */
     firstTime: number | null;
     /** Timestamp of the most recent observed event. */

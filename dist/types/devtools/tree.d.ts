@@ -7,6 +7,15 @@ import { ComponentRenderRecord, InstanceNode } from './protocol.js';
  * more than nine columns of indentation).
  */
 export declare function parentKeyOf(key: string, keys: ReadonlySet<string>): string | null;
+/**
+ * Every prefix of `key` that ends at a segment boundary — the ancestor keys it
+ * COULD have, without needing the set of keys that currently exist.
+ *
+ * Useful when acting on ancestors is idempotent (expanding a collapsed branch,
+ * say): a prefix that is not a real instance simply has no effect, which is
+ * cheaper than reconstructing the tree to find out.
+ */
+export declare function ancestorKeyCandidates(key: string): string[];
 /** Ancestor keys of `key`, root first. */
 export declare function ancestorsOf(key: string, keys: ReadonlySet<string>): string[];
 /**

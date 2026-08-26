@@ -375,7 +375,14 @@ export declare class AktionElement extends HTMLElement {
      * against the same component library, so its verdict cannot differ.
      */
     private devtoolsAnalyze;
-    /** Component tree of the last commit, with liveness resolved against the DOM. */
+    /**
+     * Component tree of the last commit, with liveness resolved against the DOM.
+     *
+     * Liveness comes from ONE `querySelectorAll` over the tagged attributes, not a
+     * `querySelector` per node: an inspector open on a 300-instance tree is asked
+     * for this on every event, and 300 selector queries per event is how a
+     * debugger becomes the thing it is measuring.
+     */
     private devtoolsTree;
     /**
      * Everything the inspector knows about one instance: the props it received,
