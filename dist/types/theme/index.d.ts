@@ -393,6 +393,57 @@ export declare const herouiLightTheme: ThemeTokens;
  * paints the brand hue as running text.
  */
 export declare const herouiDarkTheme: ThemeTokens;
+/**
+ * Signal (light) — the instrument console.
+ *
+ * The other themes here are re-creations; this one is a design, and it is built
+ * on a single rule the others do not follow:
+ *
+ *     Colour is signal. Chrome is not.
+ *
+ * Every other kit in this file paints its brand hue onto the furniture — the
+ * primary button, the active tab, the selected nav row. On a console that is
+ * noise: an operator watching a wall of panels for six hours needs a green to
+ * mean "healthy" and an amber to mean "look at me", and it cannot mean that if
+ * the Save button is already green. So here the chrome is graphite end to end,
+ * and the only saturated things on screen are STATUS and DATA. One interactive
+ * hue — an instrument teal — carries links, focus and selection, and is never
+ * used as a large fill.
+ *
+ * The rest follows from the same brief:
+ *   - **Density.** 13px body on a 3/6/10/14 spacing ramp and 28px controls, so
+ *     a panel holds roughly twice what a consumer theme holds.
+ *   - **Two typefaces with one job each.** IBM Plex Sans reads prose; IBM Plex
+ *     Mono carries every measured value, and every number is tabular so a
+ *     column of live figures does not jitter as it updates.
+ *   - **Hairlines, not shadows.** Nothing floats. A panel is ruled onto the
+ *     grid at 6px radius; shadows are reserved for things that genuinely
+ *     overlay, and even then they carry a hairline of their own.
+ *   - **A double-hairline focus ring**, inside and out, that stays visible on a
+ *     dense grid where a soft halo disappears.
+ *
+ * Reach for it for observability dashboards, NOC and status walls, trading and
+ * ops desks, log and telemetry viewers, and admin control planes.
+ *
+ * Contrast (worst case across `colorSurface` #ffffff and the `colorBgSubtle`
+ * #eceef0 band): link/accent 5.05:1 · textMuted 5.26:1 · borderControl 3.19:1 ·
+ * status *Text 5.4-7.6:1 · ink on every status fill >= 5.1:1.
+ */
+export declare const signalLightTheme: ThemeTokens;
+/**
+ * Signal (dark) — the same console at 3am.
+ *
+ * This is the variant most control rooms actually run: a near-black #0b0e11
+ * page under #14181d panels, so a bright status colour is the only thing in the
+ * room that draws the eye. The chrome inverts the way the light variant's does
+ * — the primary slab goes from graphite to pale steel — and the instrument teal
+ * brightens to #4bc3d4 to stay readable at 8.5:1 on a panel.
+ *
+ * The shadows gain a hairline of light rather than more darkness: a black drop
+ * shadow is invisible on a black page, so what separates an overlay here is the
+ * 1px rim inside the shadow, not the shadow.
+ */
+export declare const signalDarkTheme: ThemeTokens;
 export declare const builtInThemeFonts: Record<string, {
     import: string[];
 }>;

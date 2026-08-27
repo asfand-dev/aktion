@@ -279,9 +279,10 @@ $theme({ colors: { primary: "#e11d48" }, radius: { md: "14px" } })
 
       <div class="faq">
         <h3 id="fonts">A framework theme renders in the system font</h3>
-        <p><strong>Cause.</strong> The three framework themes declare web fonts
-          &mdash; Geist for <code>shadcn</code>, Roboto for <code>mui</code>, Inter for
-          <code>heroui</code>. Activating one appends
+        <p><strong>Cause.</strong> Four themes declare web fonts &mdash; Geist for
+          <code>shadcn</code>, Roboto for <code>mui</code>, Inter for
+          <code>heroui</code>, IBM&nbsp;Plex Sans + Mono for <code>signal</code>.
+          Activating one appends
           <code>&lt;link rel="stylesheet" href="https://fonts.googleapis.com/css2&hellip;"&gt;</code>
           to the host <code>&lt;head&gt;</code>. If that request is blocked or fails,
           each token&rsquo;s fallback chain takes over and you get
@@ -294,10 +295,9 @@ $theme({ colors: { primary: "#e11d48" }, radius: { md: "14px" } })
           shows up as a CSP violation in the console; a 404 does not. See
           <a href="deployment.html#csp">the CSP policy</a> and
           <a href="themes.html#theme-fonts">theme fonts</a>.</p>
-        <p class="fix">Two related gotchas. <code>heroui</code> and <code>soft</code>
-          name mono / display families in their tokens that they do
-          <strong>not</strong> import, so code and headings fall back to the platform
-          stack unless you import them yourself.</p>
+        <p class="fix">One related gotcha: <code>soft</code> names a display family in
+          its tokens that it does <strong>not</strong> import, so headings fall back to
+          the platform stack unless you import it yourself.</p>
         <p class="fix">And with
           <code>$theme({ fonts: { import: ["Inter:400,600"] } })</code> the family
           name must match <code>/^[A-Za-z0-9 ]{1,48}$/</code> and each weight must be

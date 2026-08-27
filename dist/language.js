@@ -5458,7 +5458,7 @@ const storeConfigKeys = [
   cfg("history", "boolean | number", "Enable undo()/redo()/clearHistory() + reactive canUndo/canRedo (number = depth).")
 ];
 const themeConfigKeys = [
-  cfg("name", "string", 'Selects a built-in base theme ("light", "dark", "shadcn"/"-light"/"-dark", "mui"/"-light"/"-dark", "heroui"/"-light"/"-dark", "soft").'),
+  cfg("name", "string", 'Selects a built-in base theme ("light", "dark", "shadcn"/"-light"/"-dark", "mui"/"-light"/"-dark", "heroui"/"-light"/"-dark", "signal"/"-light"/"-dark", "soft").'),
   cfg("direction", 'enum: "ltr" | "rtl"', "Reading direction (metadata)."),
   cfg("colors", "object", "CSS color tokens: bg, surface, border, text, primary, accent, success, warning, danger, info, …."),
   cfg("radius", "object", "Border-radius tokens: xs, sm, md, lg, pill, button, input."),
@@ -7967,11 +7967,7 @@ const CodeBlock = {
       const head = el("div", { class: "rui-code-block-head" });
       if (filename) {
         head.append(el("span", {
-          class: "rui-code-block-filename",
-          // The header uppercases and letter-spaces the language token; a file
-          // path has to stay verbatim, so the reset rides with the one element
-          // that needs it rather than adding a rule per theme.
-          style: "font-family:var(--rui-font-family-mono);text-transform:none;letter-spacing:0;"
+          class: "rui-code-block-filename"
         }, [filename]));
       } else if (language) {
         head.append(el("span", { class: "rui-code-block-language" }, [language]));
@@ -10363,14 +10359,13 @@ const FileUpload = {
         role: "progressbar",
         "aria-valuemin": "0",
         "aria-valuemax": "100",
-        "aria-valuenow": String(Math.round(pct)),
-        // Inline so the bar is visible without waiting on a theme rule; a
-        // multi-megabyte upload with no feedback is the whole complaint.
-        style: "height:4px;border-radius:999px;overflow:hidden;background:var(--rui-color-border-subtle,#e5e7eb)"
+        "aria-valuenow": String(Math.round(pct))
       });
       track.append(el("div", {
         class: "rui-file-upload-progress-bar",
-        style: `height:100%;width:${pct}%;background:var(--rui-color-primary,#2563eb)`
+        // Only the width is inline: the track's height, radius and colours are
+        // `.rui-file-upload-progress` in the sheet, where a theme can reach them.
+        style: `width:${pct}%`
       }));
       root.append(track);
     }
@@ -10973,9 +10968,8 @@ const MultiSelect = {
     if (chevron) triggerBtn.append(chevron);
     root.append(triggerBtn);
     root.append(el("span", {
-      class: "rui-multiselect-status",
-      role: "status",
-      style: "position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap"
+      class: "rui-multiselect-status rui-visually-hidden",
+      role: "status"
     }, [selectionSummary]));
     const panel = el("div", {
       class: "rui-multiselect-panel",
@@ -15013,12 +15007,9 @@ const SectionBlock = {
     heading.append(document.createTextNode(asString(props.title)));
     const actions = asArray(props.actions).filter((a) => a !== null && a !== void 0);
     if (actions.length > 0) {
-      const header = el("div", {
-        class: "rui-section-block-header",
-        style: "display:flex;align-items:center;justify-content:space-between;gap:var(--rui-spacing-s)"
-      });
+      const header = el("div", { class: "rui-section-block-header" });
       header.append(heading);
-      const trailing = el("div", { class: "rui-section-block-actions", style: "display:flex;align-items:center;gap:var(--rui-spacing-xs)" });
+      const trailing = el("div", { class: "rui-section-block-actions" });
       for (const action of actions) trailing.append(helpers.renderNode(action));
       header.append(trailing);
       root.append(header);
@@ -15170,13 +15161,10 @@ const ActionLink = {
       disabled,
       "aria-label": ariaLabel || null,
       // `data-icon-position` rather than a second class, matching `Button`.
-      "data-icon-position": props.icon ? iconAtEnd ? "end" : "start" : null,
-      // The four longhands, NOT the `font` shorthand. `font: inherit` also resets
-      // `line-height` — and being inline it beat every stylesheet, so a theme that
-      // set a line-height on this control (vision does: 20px) had a rule that
-      // could never fire. These four inherit what the shorthand did without
-      // touching the fifth property nobody meant to set.
-      style: "background:none;border:0;padding:0;text-align:inherit;font-family:inherit;font-size:inherit;font-weight:inherit;font-style:inherit"
+      "data-icon-position": props.icon ? iconAtEnd ? "end" : "start" : null
+      // No inline style at all: the UA button chrome reset lives in
+      // `.rui-action-link`, so a theme can change the padding, the background or
+      // the line box. It used to be inline, which outranked every one of them.
     });
     const iconNode = renderIcon(props.icon, { className: "rui-action-link-icon" });
     if (iconNode && !iconAtEnd) button.append(iconNode);
@@ -38006,9 +37994,178 @@ const herouiDarkTheme = {
   chart5: "#f54180",
   chart6: "#ff8f7c"
 };
+const signalLightTheme = {
+  ...lightTheme,
+  /* ----- Surface & semantic — graphite end to end ----- */
+  colorBg: "#f6f7f8",
+  colorBgSubtle: "#eceef0",
+  colorSurface: "#ffffff",
+  colorSurfaceMuted: "#f1f3f4",
+  colorBorder: "#dde1e4",
+  colorBorderSubtle: "rgba(17, 24, 31, 0.07)",
+  colorBorderControl: "#8a9199",
+  colorText: "#11181f",
+  colorTextMuted: "#5a636b",
+  // The primary is a graphite slab, not a brand colour. A console's confirm
+  // button should read as "the default action", not as a status.
+  colorPrimary: "#1f272e",
+  colorPrimaryHover: "#2c3740",
+  colorPrimaryText: "#ffffff",
+  // The one interactive hue: instrument teal. Links, focus, selection — never a
+  // full-width fill, or it starts competing with the status colours.
+  colorAccent: "#0f6f7a",
+  colorAccentHover: "#0a5a63",
+  colorAccentText: "#ffffff",
+  colorLink: "#0f6f7a",
+  colorLinkHover: "#0a5a63",
+  colorFocusRing: "#0f6f7a",
+  /* ----- Status — the LED quartet: green, amber, red, cyan ----- */
+  colorSuccess: "#00a862",
+  colorWarning: "#f0a01a",
+  colorDanger: "#cf2f26",
+  colorInfo: "#0e7f96",
+  colorSuccessText: "#0a6b45",
+  colorWarningText: "#8a4b00",
+  colorDangerText: "#b3261e",
+  colorInfoText: "#0b5c6b",
+  // Danger and info are dark enough to carry white (5.14 / 4.67:1); the green
+  // and the amber are LEDs and take a hue-matched dark ink instead.
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#ffffff",
+  colorOnInfo: "#ffffff",
+  colorSurfaceHover: "rgba(17, 24, 31, 0.045)",
+  /* ----- Typography — IBM Plex, 13px, prose and data kept apart ----- */
+  fontFamily: "'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyHeading: "'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyMono: "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontSizeBase: "13px",
+  fontSizeSm: "11px",
+  fontSizeLg: "15px",
+  fontSizeHeading: "14px",
+  fontSizeTitle: "20px",
+  fontWeightBody: "400",
+  fontWeightHeading: "600",
+  lineHeightBody: "1.45",
+  lineHeightHeading: "1.25",
+  letterSpacingHeading: "-0.006em",
+  headingTextTransform: "none",
+  /* ----- Shape — bezels, not pills ----- */
+  radiusXs: "2px",
+  radiusSm: "4px",
+  radiusMd: "6px",
+  radiusLg: "8px",
+  radiusPill: "999px",
+  radiusButton: "4px",
+  radiusInput: "4px",
+  borderWidth: "1px",
+  /* ----- Shadows — only things that genuinely overlay get one, and it carries
+     its own hairline so the panel edge survives on any background ----- */
+  shadowSm: "0 1px 0 rgba(17, 24, 31, 0.04)",
+  shadowMd: "0 8px 24px rgba(9, 13, 17, 0.12), 0 0 0 1px rgba(17, 24, 31, 0.06)",
+  shadowLg: "0 24px 64px rgba(9, 13, 17, 0.20), 0 0 0 1px rgba(17, 24, 31, 0.08)",
+  /* ----- Spacing — 3 / 6 / 10 / 14 / 24, the tightest ramp in the set ----- */
+  spacingXs: "3px",
+  spacingS: "6px",
+  spacingM: "10px",
+  spacingL: "14px",
+  spacingXl: "24px",
+  spacing2xl: "40px",
+  spacing3xl: "64px",
+  /* ----- Gradients — instrument phosphor, used on charts and hero fills ----- */
+  gradientBrand: "linear-gradient(120deg, #11181f 0%, #0f6f7a 55%, #2fb6c6 100%)",
+  gradientAccent: "linear-gradient(120deg, #0f6f7a 0%, #0e7f96 100%)",
+  gradientWarm: "linear-gradient(120deg, #f0a01a 0%, #cf2f26 100%)",
+  gradientCool: "linear-gradient(120deg, #0e7f96 0%, #00a862 100%)",
+  gradientSuccess: "linear-gradient(120deg, #00a862 0%, #0e7f96 100%)",
+  gradientDanger: "linear-gradient(120deg, #cf2f26 0%, #8a1c16 100%)",
+  /* ----- Buttons — 28px tall, medium, a hair of tracking ----- */
+  buttonFontWeight: "500",
+  buttonTextTransform: "none",
+  buttonLetterSpacing: "0.01em",
+  buttonPaddingY: "5px",
+  buttonPaddingX: "12px",
+  /* ----- Motion — instant. A console must never feel like it is animating
+     while you are trying to read it. ----- */
+  transitionDuration: "90ms",
+  motionFast: "70ms",
+  motionBase: "110ms",
+  motionSlow: "200ms",
+  motionEase: "cubic-bezier(0.2, 0, 0, 1)",
+  /* ----- Charts — an oscilloscope's six traces, chosen to stay separable for
+     the common colour-vision deficiencies as well as on a projector ----- */
+  chart1: "#0e7f96",
+  chart2: "#00a862",
+  chart3: "#f0a01a",
+  chart4: "#cf2f26",
+  chart5: "#7c5cd6",
+  chart6: "#b0468a"
+};
+const signalDarkTheme = {
+  ...signalLightTheme,
+  colorBg: "#0b0e11",
+  colorBgSubtle: "#0f1317",
+  colorSurface: "#14181d",
+  colorSurfaceMuted: "#1c2229",
+  colorBorder: "#242c34",
+  colorBorderSubtle: "rgba(230, 237, 243, 0.08)",
+  colorBorderControl: "#6c7883",
+  colorText: "#e6edf3",
+  colorTextMuted: "#93a1ad",
+  colorPrimary: "#c9d4de",
+  colorPrimaryHover: "#e2e9ef",
+  colorPrimaryText: "#0f1317",
+  colorAccent: "#4bc3d4",
+  colorAccentHover: "#7ed6e3",
+  colorAccentText: "#06222a",
+  colorLink: "#4bc3d4",
+  colorLinkHover: "#7ed6e3",
+  colorFocusRing: "#4bc3d4",
+  colorSuccess: "#2ec27e",
+  colorWarning: "#f5b544",
+  colorDanger: "#f2544b",
+  colorInfo: "#3bb8c9",
+  // 7.8 / 12.0 / 5.2 / 8.9:1 on a panel — the fills are already text-safe here,
+  // so the text partners are the hues themselves.
+  colorSuccessText: "#2ec27e",
+  colorWarningText: "#f5b544",
+  colorDangerText: "#f2544b",
+  colorInfoText: "#3bb8c9",
+  // All four fills are bright in this variant, so all four inks are dark.
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#2c0606",
+  colorOnInfo: "#04202a",
+  colorSurfaceHover: "rgba(230, 237, 243, 0.06)",
+  shadowSm: "0 1px 0 rgba(0, 0, 0, 0.4)",
+  shadowMd: "0 10px 30px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(230, 237, 243, 0.07)",
+  shadowLg: "0 28px 70px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(230, 237, 243, 0.09)",
+  gradientBrand: "linear-gradient(120deg, #0b0e11 0%, #0f6f7a 55%, #4bc3d4 100%)",
+  gradientAccent: "linear-gradient(120deg, #3bb8c9 0%, #4bc3d4 100%)",
+  gradientWarm: "linear-gradient(120deg, #f5b544 0%, #f2544b 100%)",
+  gradientCool: "linear-gradient(120deg, #3bb8c9 0%, #2ec27e 100%)",
+  gradientSuccess: "linear-gradient(120deg, #2ec27e 0%, #3bb8c9 100%)",
+  gradientDanger: "linear-gradient(120deg, #f2544b 0%, #8a1c16 100%)",
+  // A phosphor syntax palette on the #1c2229 code surface.
+  hlKeyword: "#c792ea",
+  hlString: "#7ee787",
+  hlNumber: "#f5b544",
+  hlComment: "#7d8b98",
+  hlFn: "#79c0ff",
+  hlTag: "#ff7b72",
+  hlAttr: "#f5b544",
+  hlPunct: "#93a1ad",
+  chart1: "#3bb8c9",
+  chart2: "#2ec27e",
+  chart3: "#f5b544",
+  chart4: "#f2544b",
+  chart5: "#a78bfa",
+  chart6: "#e879b8"
+};
 const SHADCN_FONTS = ["Geist:400,500,600,700", "Geist Mono:400,500"];
 const MUI_FONTS = ["Roboto:300,400,500,700", "Roboto Mono:400,500"];
 const HEROUI_FONTS = ["Inter:400,500,600,700"];
+const SIGNAL_FONTS = ["IBM Plex Sans:400,500,600,700", "IBM Plex Mono:400,500"];
 const builtInThemeFonts = {
   shadcn: { import: SHADCN_FONTS },
   "shadcn-light": { import: SHADCN_FONTS },
@@ -38019,6 +38176,9 @@ const builtInThemeFonts = {
   heroui: { import: HEROUI_FONTS },
   "heroui-light": { import: HEROUI_FONTS },
   "heroui-dark": { import: HEROUI_FONTS },
+  signal: { import: SIGNAL_FONTS },
+  "signal-light": { import: SIGNAL_FONTS },
+  "signal-dark": { import: SIGNAL_FONTS },
   vision: { import: ["Open Sans:400,600", "Overpass:400,600"] }
 };
 const builtInThemes = {
@@ -38033,6 +38193,9 @@ const builtInThemes = {
   heroui: herouiLightTheme,
   "heroui-light": herouiLightTheme,
   "heroui-dark": herouiDarkTheme,
+  signal: signalLightTheme,
+  "signal-light": signalLightTheme,
+  "signal-dark": signalDarkTheme,
   soft: softTheme
 };
 const deprecatedThemeAliases = {

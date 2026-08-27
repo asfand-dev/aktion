@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Themes · Aktion</title>
-  <meta name="description" content="Ship Aktion apps with nine built-in themes under twelve names — light, dark, soft, plus faithful re-creations of shadcn/ui, Material UI and HeroUI in light and dark — switch with one attribute, and override any of the 113 design tokens in-program with $theme({...}): colours, radius, typography, spacing, shadows, gradients, layers, motion." />
+  <meta name="description" content="Ship Aktion apps with eleven built-in themes under fifteen names — light, dark, soft, faithful re-creations of shadcn/ui, Material UI and HeroUI in light and dark, and Signal, a dense instrument-console theme for dashboards and ops — switch with one attribute, and override any of the 113 design tokens in-program with $theme({...}): colours, radius, typography, spacing, shadows, gradients, layers, motion." />
   <script>
     (function () {
       try {
@@ -126,16 +126,17 @@
 
       <h2 id="built-in">Built-in themes</h2>
       <p>
-        Nine themes come in the box, under twelve names. Select one with the
+        Eleven themes come in the box, under fifteen names. Select one with the
         <code>theme</code> attribute on the host element &mdash; <code>light</code> is the
         default if you omit it. Switching is instant: only the host's CSS variables change.
       </p>
       <p>
-        Three of them are faithful re-creations of design systems you already know
-        &mdash; <strong>shadcn/ui</strong>, <strong>Material&nbsp;UI</strong> and
-        <strong>HeroUI</strong> &mdash; each in a light and a dark variant. The bare name
-        means the light one, so <code>theme="shadcn"</code> and
-        <code>theme="shadcn-light"</code> are the same theme.
+        Four come in a light and a dark variant, and the bare name means the light one,
+        so <code>theme="shadcn"</code> and <code>theme="shadcn-light"</code> are the same
+        theme. Three of those are faithful re-creations of design systems you already
+        know &mdash; <strong>shadcn/ui</strong>, <strong>Material&nbsp;UI</strong> and
+        <strong>HeroUI</strong>. The fourth, <strong>Signal</strong>, is this library's
+        own: an instrument console for the screens people watch rather than read.
       </p>
       <pre><code>&lt;aktion-app theme="dark"&gt;&lt;/aktion-app&gt;</code></pre>
       <p>
@@ -177,6 +178,12 @@
             <td><strong>Yes</strong> &mdash; Inter</td>
           </tr>
           <tr>
+            <td><code>signal</code><br /><code>signal-light</code><br /><code>signal-dark</code></td>
+            <td><strong>The instrument console.</strong> Built on one rule: <em>colour is signal, chrome is not</em>. The furniture is graphite end to end &mdash; there is no brand hue on a button &mdash; so the only saturated things on screen are status and data. Panels are ruled with hairlines and cast no resting shadow; every measured value is IBM&nbsp;Plex&nbsp;Mono and tabular; the page is 32px graph paper; tabs are channel selectors; a status chip wears an LED; the switch is rectangular. 13px body on a 3/6/10/14 ramp &mdash; the densest theme here.</td>
+            <td>Observability dashboards, NOC and status walls, trading and ops desks, log and telemetry viewers, admin control planes. <code>signal-dark</code> is the one most control rooms run.</td>
+            <td><strong>Yes</strong> &mdash; IBM&nbsp;Plex&nbsp;Sans + IBM&nbsp;Plex&nbsp;Mono</td>
+          </tr>
+          <tr>
             <td><code>soft</code></td>
             <td>Friendly and rounded. Lavender <code>#7c4ddb</code> primary with mint accent, <code>#fdf6ff</code> page, 12/20/28px radii, tinted shadows, cards lift on hover, a wider spacing ramp.</td>
             <td>Consumer, wellness and education UIs &mdash; anything that should read as gentle.</td>
@@ -207,29 +214,30 @@
         only in colour):
       </p>
       <table class="signature-table">
-        <thead><tr><th>Token</th><th><code>light</code></th><th><code>dark</code></th><th><code>shadcn</code></th><th><code>shadcn-dark</code></th><th><code>mui</code></th><th><code>mui-dark</code></th><th><code>heroui</code></th><th><code>heroui-dark</code></th><th><code>soft</code></th></tr></thead>
+        <thead><tr><th>Token</th><th><code>light</code></th><th><code>dark</code></th><th><code>shadcn</code></th><th><code>shadcn-dark</code></th><th><code>mui</code></th><th><code>mui-dark</code></th><th><code>heroui</code></th><th><code>heroui-dark</code></th><th><code>signal</code></th><th><code>signal-dark</code></th><th><code>soft</code></th></tr></thead>
         <tbody>
-          <tr><td><code>colorBg</code></td><td><code>#ffffff</code></td><td><code>#0b1220</code></td><td><code>#ffffff</code></td><td><code>#0a0a0a</code></td><td><code>#ffffff</code></td><td><code>#121212</code></td><td><code>#ffffff</code></td><td><code>#000000</code></td><td><code>#fdf6ff</code></td></tr>
-          <tr><td><code>colorSurface</code></td><td><code>#ffffff</code></td><td><code>#111827</code></td><td><code>#ffffff</code></td><td><code>#171717</code></td><td><code>#ffffff</code></td><td><code>#1e1e1e</code></td><td><code>#ffffff</code></td><td><code>#18181b</code></td><td><code>#ffffff</code></td></tr>
-          <tr><td><code>colorText</code></td><td><code>#0f172a</code></td><td><code>#f8fafc</code></td><td><code>#0a0a0a</code></td><td><code>#fafafa</code></td><td><code>rgba(0,0,0,.87)</code></td><td><code>#ffffff</code></td><td><code>#11181c</code></td><td><code>#ecedee</code></td><td><code>#3b1f56</code></td></tr>
-          <tr><td><code>colorPrimary</code></td><td><code>#4f46e5</code></td><td><code>#818cf8</code></td><td><code>#171717</code></td><td><code>#e5e5e5</code></td><td><code>#1976d2</code></td><td><code>#90caf9</code></td><td><code>#006fee</code></td><td><code>#006fee</code></td><td><code>#7c4ddb</code></td></tr>
-          <tr><td><code>colorAccent</code></td><td><code>#4f46e5</code></td><td><code>#818cf8</code></td><td><code>#171717</code></td><td><code>#e5e5e5</code></td><td><code>#9c27b0</code></td><td><code>#ce93d8</code></td><td><code>#7828c8</code></td><td><code>#9353d3</code></td><td><code>#5eead4</code></td></tr>
-          <tr><td><code>radiusSm/Md/Lg</code></td><td>6/10/16</td><td>6/10/16</td><td>6/10/14</td><td>6/10/14</td><td>4/4/4</td><td>4/4/4</td><td>8/12/14</td><td>8/12/14</td><td>12/20/28</td></tr>
-          <tr><td><code>radiusButton</code></td><td><code>6px</code></td><td><code>6px</code></td><td><code>8px</code></td><td><code>8px</code></td><td><code>4px</code></td><td><code>4px</code></td><td><code>12px</code></td><td><code>12px</code></td><td><code>16px</code></td></tr>
-          <tr><td><code>fontSizeBase</code></td><td>14</td><td>14</td><td>14</td><td>14</td><td><strong>16</strong></td><td><strong>16</strong></td><td><strong>16</strong></td><td><strong>16</strong></td><td>14</td></tr>
-          <tr><td><code>buttonTextTransform</code></td><td>none</td><td>none</td><td>none</td><td>none</td><td><strong>uppercase</strong></td><td><strong>uppercase</strong></td><td>none</td><td>none</td><td>none</td></tr>
-          <tr><td><code>spacing</code> xs&hellip;3xl</td><td>4/8/12/20/32/48/80</td><td>same</td><td>4/8/12/24/36/56/88</td><td>same</td><td>4/8/16/24/32/48/80</td><td>same</td><td>4/8/12/16/28/48/80</td><td>same</td><td>6/12/18/28/44/66/110</td></tr>
-          <tr><td><code>buttonPaddingY/X</code></td><td>8/14</td><td>8/14</td><td>8/16</td><td>8/16</td><td><strong>6/16</strong></td><td><strong>6/16</strong></td><td>10/16</td><td>10/16</td><td>8/14</td></tr>
-          <tr><td><code>transitionDuration</code></td><td><code>120ms</code></td><td><code>120ms</code></td><td><code>150ms</code></td><td><code>150ms</code></td><td><code>150ms</code></td><td><code>150ms</code></td><td><code>250ms</code></td><td><code>250ms</code></td><td><code>120ms</code></td></tr>
+          <tr><td><code>colorBg</code></td><td><code>#ffffff</code></td><td><code>#0b1220</code></td><td><code>#ffffff</code></td><td><code>#0a0a0a</code></td><td><code>#ffffff</code></td><td><code>#121212</code></td><td><code>#ffffff</code></td><td><code>#000000</code></td><td><code>#f6f7f8</code></td><td><code>#0b0e11</code></td><td><code>#fdf6ff</code></td></tr>
+          <tr><td><code>colorSurface</code></td><td><code>#ffffff</code></td><td><code>#111827</code></td><td><code>#ffffff</code></td><td><code>#171717</code></td><td><code>#ffffff</code></td><td><code>#1e1e1e</code></td><td><code>#ffffff</code></td><td><code>#18181b</code></td><td><code>#ffffff</code></td><td><code>#14181d</code></td><td><code>#ffffff</code></td></tr>
+          <tr><td><code>colorText</code></td><td><code>#0f172a</code></td><td><code>#f8fafc</code></td><td><code>#0a0a0a</code></td><td><code>#fafafa</code></td><td><code>rgba(0,0,0,.87)</code></td><td><code>#ffffff</code></td><td><code>#11181c</code></td><td><code>#ecedee</code></td><td><code>#11181f</code></td><td><code>#e6edf3</code></td><td><code>#3b1f56</code></td></tr>
+          <tr><td><code>colorPrimary</code></td><td><code>#4f46e5</code></td><td><code>#818cf8</code></td><td><code>#171717</code></td><td><code>#e5e5e5</code></td><td><code>#1976d2</code></td><td><code>#90caf9</code></td><td><code>#006fee</code></td><td><code>#006fee</code></td><td><code>#1f272e</code></td><td><code>#c9d4de</code></td><td><code>#7c4ddb</code></td></tr>
+          <tr><td><code>colorAccent</code></td><td><code>#4f46e5</code></td><td><code>#818cf8</code></td><td><code>#171717</code></td><td><code>#e5e5e5</code></td><td><code>#9c27b0</code></td><td><code>#ce93d8</code></td><td><code>#7828c8</code></td><td><code>#9353d3</code></td><td><code>#0f6f7a</code></td><td><code>#4bc3d4</code></td><td><code>#5eead4</code></td></tr>
+          <tr><td><code>radiusSm/Md/Lg</code></td><td>6/10/16</td><td>6/10/16</td><td>6/10/14</td><td>6/10/14</td><td>4/4/4</td><td>4/4/4</td><td>8/12/14</td><td>8/12/14</td><td>4/6/8</td><td>4/6/8</td><td>12/20/28</td></tr>
+          <tr><td><code>radiusButton</code></td><td><code>6px</code></td><td><code>6px</code></td><td><code>8px</code></td><td><code>8px</code></td><td><code>4px</code></td><td><code>4px</code></td><td><code>12px</code></td><td><code>12px</code></td><td><code>4px</code></td><td><code>4px</code></td><td><code>16px</code></td></tr>
+          <tr><td><code>fontSizeBase</code></td><td>14</td><td>14</td><td>14</td><td>14</td><td><strong>16</strong></td><td><strong>16</strong></td><td><strong>16</strong></td><td><strong>16</strong></td><td><strong>13</strong></td><td><strong>13</strong></td><td>14</td></tr>
+          <tr><td><code>buttonTextTransform</code></td><td>none</td><td>none</td><td>none</td><td>none</td><td><strong>uppercase</strong></td><td><strong>uppercase</strong></td><td>none</td><td>none</td><td>none</td><td>none</td><td>none</td></tr>
+          <tr><td><code>spacing</code> xs&hellip;3xl</td><td>4/8/12/20/32/48/80</td><td>same</td><td>4/8/12/24/36/56/88</td><td>same</td><td>4/8/16/24/32/48/80</td><td>same</td><td>4/8/12/16/28/48/80</td><td>same</td><td><strong>3/6/10/14/24/40/64</strong></td><td>same</td><td>6/12/18/28/44/66/110</td></tr>
+          <tr><td><code>buttonPaddingY/X</code></td><td>8/14</td><td>8/14</td><td>8/16</td><td>8/16</td><td><strong>6/16</strong></td><td><strong>6/16</strong></td><td>10/16</td><td>10/16</td><td>5/12</td><td>5/12</td><td>8/14</td></tr>
+          <tr><td><code>transitionDuration</code></td><td><code>120ms</code></td><td><code>120ms</code></td><td><code>150ms</code></td><td><code>150ms</code></td><td><code>150ms</code></td><td><code>150ms</code></td><td><code>250ms</code></td><td><code>250ms</code></td><td><code>90ms</code></td><td><code>90ms</code></td><td><code>120ms</code></td></tr>
         </tbody>
       </table>
       <p>
         Tokens alone cannot say "hover dims instead of recolouring" or "Paper has no
-        border", so <code>shadcn</code>, <code>mui</code>, <code>heroui</code> and
-        <code>soft</code> each also ship a block of theme&#8209;specific CSS on top of
-        their tokens &mdash; that is where MUI's uppercase tabs and elevation shadows,
-        HeroUI's opacity hover and offset focus outline, and shadcn's segmented tab strip
-        and 3px focus ring live. <code>light</code> and <code>dark</code> are purely
+        border", so <code>shadcn</code>, <code>mui</code>, <code>heroui</code>,
+        <code>signal</code> and <code>soft</code> each also ship a block of
+        theme&#8209;specific CSS on top of their tokens &mdash; that is where MUI's
+        uppercase tabs and elevation shadows, HeroUI's opacity hover and offset focus
+        outline, shadcn's segmented tab strip and 3px focus ring, and Signal's graph-paper
+        page, monospace readouts and double-hairline focus ring live. <code>light</code> and <code>dark</code> are purely
         token&#8209;driven. That distinction matters for
         <a href="#precedence">how you select a theme</a>.
       </p>
@@ -237,13 +245,14 @@
       <h3 id="theme-fonts">Fonts a theme brings with it</h3>
       <p>
         Selecting a theme <em>by name</em> also loads the web fonts it declares. The
-        three framework themes each declare their own, because the typeface is half of
-        what makes them recognisable:
+        four themes that need a specific face each declare their own, because the
+        typeface is half of what makes them recognisable:
       </p>
       <pre><code>builtInThemeFonts = {
   shadcn: { import: ["Geist:400,500,600,700", "Geist Mono:400,500"] },
   mui:    { import: ["Roboto:300,400,500,700", "Roboto Mono:400,500"] },
   heroui: { import: ["Inter:400,500,600,700"] },
+  signal: { import: ["IBM Plex Sans:400,500,600,700", "IBM Plex Mono:400,500"] },
   // …the -light and -dark spellings of each declare the same families
 }</code></pre>
       <p>
