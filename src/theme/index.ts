@@ -1308,6 +1308,230 @@ export const herouiDarkTheme: ThemeTokens = {
   chart6: "#ff8f7c",
 };
 
+/* ==========================================================================
+   Signal  —  `signal` · `signal-light` · `signal-dark`
+   ========================================================================== */
+
+/**
+ * Signal (light) — the instrument console.
+ *
+ * The other themes here are re-creations; this one is a design, and it is built
+ * on a single rule the others do not follow:
+ *
+ *     Colour is signal. Chrome is not.
+ *
+ * Every other kit in this file paints its brand hue onto the furniture — the
+ * primary button, the active tab, the selected nav row. On a console that is
+ * noise: an operator watching a wall of panels for six hours needs a green to
+ * mean "healthy" and an amber to mean "look at me", and it cannot mean that if
+ * the Save button is already green. So here the chrome is graphite end to end,
+ * and the only saturated things on screen are STATUS and DATA. One interactive
+ * hue — an instrument teal — carries links, focus and selection, and is never
+ * used as a large fill.
+ *
+ * The rest follows from the same brief:
+ *   - **Density.** 13px body on a 3/6/10/14 spacing ramp and 28px controls, so
+ *     a panel holds roughly twice what a consumer theme holds.
+ *   - **Two typefaces with one job each.** IBM Plex Sans reads prose; IBM Plex
+ *     Mono carries every measured value, and every number is tabular so a
+ *     column of live figures does not jitter as it updates.
+ *   - **Hairlines, not shadows.** Nothing floats. A panel is ruled onto the
+ *     grid at 6px radius; shadows are reserved for things that genuinely
+ *     overlay, and even then they carry a hairline of their own.
+ *   - **A double-hairline focus ring**, inside and out, that stays visible on a
+ *     dense grid where a soft halo disappears.
+ *
+ * Reach for it for observability dashboards, NOC and status walls, trading and
+ * ops desks, log and telemetry viewers, and admin control planes.
+ *
+ * Contrast (worst case across `colorSurface` #ffffff and the `colorBgSubtle`
+ * #eceef0 band): link/accent 5.05:1 · textMuted 5.26:1 · borderControl 3.19:1 ·
+ * status *Text 5.4-7.6:1 · ink on every status fill >= 5.1:1.
+ */
+export const signalLightTheme: ThemeTokens = {
+  ...lightTheme,
+  /* ----- Surface & semantic — graphite end to end ----- */
+  colorBg: "#f6f7f8",
+  colorBgSubtle: "#eceef0",
+  colorSurface: "#ffffff",
+  colorSurfaceMuted: "#f1f3f4",
+  colorBorder: "#dde1e4",
+  colorBorderSubtle: "rgba(17, 24, 31, 0.07)",
+  colorBorderControl: "#8a9199",
+  colorText: "#11181f",
+  colorTextMuted: "#5a636b",
+  // The primary is a graphite slab, not a brand colour. A console's confirm
+  // button should read as "the default action", not as a status.
+  colorPrimary: "#1f272e",
+  colorPrimaryHover: "#2c3740",
+  colorPrimaryText: "#ffffff",
+  // The one interactive hue: instrument teal. Links, focus, selection — never a
+  // full-width fill, or it starts competing with the status colours.
+  colorAccent: "#0f6f7a",
+  colorAccentHover: "#0a5a63",
+  colorAccentText: "#ffffff",
+  colorLink: "#0f6f7a",
+  colorLinkHover: "#0a5a63",
+  colorFocusRing: "#0f6f7a",
+  /* ----- Status — the LED quartet: green, amber, red, cyan ----- */
+  colorSuccess: "#00a862",
+  colorWarning: "#f0a01a",
+  colorDanger: "#cf2f26",
+  colorInfo: "#0e7f96",
+  colorSuccessText: "#0a6b45",
+  colorWarningText: "#8a4b00",
+  colorDangerText: "#b3261e",
+  colorInfoText: "#0b5c6b",
+  // Danger and info are dark enough to carry white (5.14 / 4.67:1); the green
+  // and the amber are LEDs and take a hue-matched dark ink instead.
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#ffffff",
+  colorOnInfo: "#ffffff",
+  colorSurfaceHover: "rgba(17, 24, 31, 0.045)",
+  /* ----- Typography — IBM Plex, 13px, prose and data kept apart ----- */
+  fontFamily: "'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyHeading:
+    "'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  fontFamilyMono: "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  fontSizeBase: "13px",
+  fontSizeSm: "11px",
+  fontSizeLg: "15px",
+  fontSizeHeading: "14px",
+  fontSizeTitle: "20px",
+  fontWeightBody: "400",
+  fontWeightHeading: "600",
+  lineHeightBody: "1.45",
+  lineHeightHeading: "1.25",
+  letterSpacingHeading: "-0.006em",
+  headingTextTransform: "none",
+  /* ----- Shape — bezels, not pills ----- */
+  radiusXs: "2px",
+  radiusSm: "4px",
+  radiusMd: "6px",
+  radiusLg: "8px",
+  radiusPill: "999px",
+  radiusButton: "4px",
+  radiusInput: "4px",
+  borderWidth: "1px",
+  /* ----- Shadows — only things that genuinely overlay get one, and it carries
+     its own hairline so the panel edge survives on any background ----- */
+  shadowSm: "0 1px 0 rgba(17, 24, 31, 0.04)",
+  shadowMd: "0 8px 24px rgba(9, 13, 17, 0.12), 0 0 0 1px rgba(17, 24, 31, 0.06)",
+  shadowLg: "0 24px 64px rgba(9, 13, 17, 0.20), 0 0 0 1px rgba(17, 24, 31, 0.08)",
+  /* ----- Spacing — 3 / 6 / 10 / 14 / 24, the tightest ramp in the set ----- */
+  spacingXs: "3px",
+  spacingS: "6px",
+  spacingM: "10px",
+  spacingL: "14px",
+  spacingXl: "24px",
+  spacing2xl: "40px",
+  spacing3xl: "64px",
+  /* ----- Gradients — instrument phosphor, used on charts and hero fills ----- */
+  gradientBrand: "linear-gradient(120deg, #11181f 0%, #0f6f7a 55%, #2fb6c6 100%)",
+  gradientAccent: "linear-gradient(120deg, #0f6f7a 0%, #0e7f96 100%)",
+  gradientWarm: "linear-gradient(120deg, #f0a01a 0%, #cf2f26 100%)",
+  gradientCool: "linear-gradient(120deg, #0e7f96 0%, #00a862 100%)",
+  gradientSuccess: "linear-gradient(120deg, #00a862 0%, #0e7f96 100%)",
+  gradientDanger: "linear-gradient(120deg, #cf2f26 0%, #8a1c16 100%)",
+  /* ----- Buttons — 28px tall, medium, a hair of tracking ----- */
+  buttonFontWeight: "500",
+  buttonTextTransform: "none",
+  buttonLetterSpacing: "0.01em",
+  buttonPaddingY: "5px",
+  buttonPaddingX: "12px",
+  /* ----- Motion — instant. A console must never feel like it is animating
+     while you are trying to read it. ----- */
+  transitionDuration: "90ms",
+  motionFast: "70ms",
+  motionBase: "110ms",
+  motionSlow: "200ms",
+  motionEase: "cubic-bezier(0.2, 0, 0, 1)",
+  /* ----- Charts — an oscilloscope's six traces, chosen to stay separable for
+     the common colour-vision deficiencies as well as on a projector ----- */
+  chart1: "#0e7f96",
+  chart2: "#00a862",
+  chart3: "#f0a01a",
+  chart4: "#cf2f26",
+  chart5: "#7c5cd6",
+  chart6: "#b0468a",
+};
+
+/**
+ * Signal (dark) — the same console at 3am.
+ *
+ * This is the variant most control rooms actually run: a near-black #0b0e11
+ * page under #14181d panels, so a bright status colour is the only thing in the
+ * room that draws the eye. The chrome inverts the way the light variant's does
+ * — the primary slab goes from graphite to pale steel — and the instrument teal
+ * brightens to #4bc3d4 to stay readable at 8.5:1 on a panel.
+ *
+ * The shadows gain a hairline of light rather than more darkness: a black drop
+ * shadow is invisible on a black page, so what separates an overlay here is the
+ * 1px rim inside the shadow, not the shadow.
+ */
+export const signalDarkTheme: ThemeTokens = {
+  ...signalLightTheme,
+  colorBg: "#0b0e11",
+  colorBgSubtle: "#0f1317",
+  colorSurface: "#14181d",
+  colorSurfaceMuted: "#1c2229",
+  colorBorder: "#242c34",
+  colorBorderSubtle: "rgba(230, 237, 243, 0.08)",
+  colorBorderControl: "#6c7883",
+  colorText: "#e6edf3",
+  colorTextMuted: "#93a1ad",
+  colorPrimary: "#c9d4de",
+  colorPrimaryHover: "#e2e9ef",
+  colorPrimaryText: "#0f1317",
+  colorAccent: "#4bc3d4",
+  colorAccentHover: "#7ed6e3",
+  colorAccentText: "#06222a",
+  colorLink: "#4bc3d4",
+  colorLinkHover: "#7ed6e3",
+  colorFocusRing: "#4bc3d4",
+  colorSuccess: "#2ec27e",
+  colorWarning: "#f5b544",
+  colorDanger: "#f2544b",
+  colorInfo: "#3bb8c9",
+  // 7.8 / 12.0 / 5.2 / 8.9:1 on a panel — the fills are already text-safe here,
+  // so the text partners are the hues themselves.
+  colorSuccessText: "#2ec27e",
+  colorWarningText: "#f5b544",
+  colorDangerText: "#f2544b",
+  colorInfoText: "#3bb8c9",
+  // All four fills are bright in this variant, so all four inks are dark.
+  colorOnSuccess: "#04291e",
+  colorOnWarning: "#451a03",
+  colorOnDanger: "#2c0606",
+  colorOnInfo: "#04202a",
+  colorSurfaceHover: "rgba(230, 237, 243, 0.06)",
+  shadowSm: "0 1px 0 rgba(0, 0, 0, 0.4)",
+  shadowMd: "0 10px 30px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(230, 237, 243, 0.07)",
+  shadowLg: "0 28px 70px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(230, 237, 243, 0.09)",
+  gradientBrand: "linear-gradient(120deg, #0b0e11 0%, #0f6f7a 55%, #4bc3d4 100%)",
+  gradientAccent: "linear-gradient(120deg, #3bb8c9 0%, #4bc3d4 100%)",
+  gradientWarm: "linear-gradient(120deg, #f5b544 0%, #f2544b 100%)",
+  gradientCool: "linear-gradient(120deg, #3bb8c9 0%, #2ec27e 100%)",
+  gradientSuccess: "linear-gradient(120deg, #2ec27e 0%, #3bb8c9 100%)",
+  gradientDanger: "linear-gradient(120deg, #f2544b 0%, #8a1c16 100%)",
+  // A phosphor syntax palette on the #1c2229 code surface.
+  hlKeyword: "#c792ea",
+  hlString: "#7ee787",
+  hlNumber: "#f5b544",
+  hlComment: "#7d8b98",
+  hlFn: "#79c0ff",
+  hlTag: "#ff7b72",
+  hlAttr: "#f5b544",
+  hlPunct: "#93a1ad",
+  chart1: "#3bb8c9",
+  chart2: "#2ec27e",
+  chart3: "#f5b544",
+  chart4: "#f2544b",
+  chart5: "#a78bfa",
+  chart6: "#e879b8",
+};
+
 /**
  * Web fonts a built-in theme needs in order to look like itself.
  *
@@ -1335,6 +1559,7 @@ export const herouiDarkTheme: ThemeTokens = {
 const SHADCN_FONTS = ["Geist:400,500,600,700", "Geist Mono:400,500"];
 const MUI_FONTS = ["Roboto:300,400,500,700", "Roboto Mono:400,500"];
 const HEROUI_FONTS = ["Inter:400,500,600,700"];
+const SIGNAL_FONTS = ["IBM Plex Sans:400,500,600,700", "IBM Plex Mono:400,500"];
 
 export const builtInThemeFonts: Record<string, { import: string[] }> = {
   shadcn: { import: SHADCN_FONTS },
@@ -1346,6 +1571,9 @@ export const builtInThemeFonts: Record<string, { import: string[] }> = {
   heroui: { import: HEROUI_FONTS },
   "heroui-light": { import: HEROUI_FONTS },
   "heroui-dark": { import: HEROUI_FONTS },
+  signal: { import: SIGNAL_FONTS },
+  "signal-light": { import: SIGNAL_FONTS },
+  "signal-dark": { import: SIGNAL_FONTS },
   vision: { import: ["Open Sans:400,600", "Overpass:400,600"] },
 };
 
@@ -1376,6 +1604,9 @@ export const builtInThemes: Record<string, ThemeTokens> = {
   heroui: herouiLightTheme,
   "heroui-light": herouiLightTheme,
   "heroui-dark": herouiDarkTheme,
+  signal: signalLightTheme,
+  "signal-light": signalLightTheme,
+  "signal-dark": signalDarkTheme,
   soft: softTheme,
 };
 

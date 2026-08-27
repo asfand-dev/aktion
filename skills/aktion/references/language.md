@@ -193,7 +193,7 @@ const { t, setCurrentLanguage } = $i18n({
 Icon("chart-line", { size: "lg" })   // Font Awesome name, no `fa-` prefix
 ```
 
-All 9 themes (12 names) and 86 tokens: [`themes.md`](themes.md). Authoring rules:
+All 11 themes (15 names) and 86 tokens: [`themes.md`](themes.md). Authoring rules:
 [`layout.md`](layout.md).
 
 ## Helper components

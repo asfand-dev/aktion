@@ -2064,7 +2064,19 @@ a.rui-card {
   font-family: inherit;
 }
 .rui-follow-up-button:hover { background: var(--rui-color-surface-muted); }
+/* The UA button chrome reset used to be an inline style, which outranked
+   every rule a theme could write — the same trade the icon gap below was moved
+   out of. The four font LONGHANDS, never the shorthand: font: inherit also
+   resets line-height, and vision sets one (20px) on this control. */
 .rui-action-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  font-style: inherit;
   color: var(--rui-color-primary);
   cursor: pointer;
   text-decoration: underline;
@@ -4921,6 +4933,584 @@ ${below("xs")} {
   .rui-card-footer .rui-button { flex: 1 1 auto; }
   .rui-tab-trigger { padding: var(--rui-spacing-xs) var(--rui-spacing-s); font-size: var(--rui-font-size-13); }
   .rui-stat-card { width: 100%; }
+}
+
+/* ========================================================================
+   Polish pass — the classes components emit that nothing ever styled.
+
+   A component that renders <span class="rui-slider-mark"> and finds no rule
+   waiting for it does not fail: it renders, unstyled, in the middle of an
+   otherwise finished control. Nothing throws, no test complains, and the only
+   symptom is that the component looks half-built. A sweep over every class the
+   library emits found 143 of them; the ones with a visible surface are styled
+   below, and the rest — behavioural hooks, display: contents wrappers, and
+   classes that ride on an already-styled sibling — are listed in
+   tests/component-style-coverage.test.ts, which fails if a new one appears.
+
+   These rules live together rather than beside each component on purpose: they
+   are one audited batch, and keeping them in one place is what makes the batch
+   reviewable. New work belongs next to its component.
+   ======================================================================== */
+
+/* ---- The label half of a chip, tab or row -------------------------------
+   Every one of these is the text span inside a flex control that also holds an
+   icon, a count or a remove button. Without a min-width floor a long label
+   refuses to shrink and pushes the rest of the control out of its container —
+   the failure is a badge whose × has been shoved off the edge of a card. */
+.rui-badge-label,
+.rui-pill-label,
+.rui-tag-label,
+.rui-filter-chip-label,
+.rui-filter-pill-label,
+.rui-multiselect-chip-label,
+.rui-multiselect-option-label,
+.rui-navbar-item-label,
+.rui-nav-link-label,
+.rui-breadcrumb-label,
+.rui-tab-trigger-label,
+.rui-toggle-label,
+.rui-tabbar-label,
+.rui-copy-button-label,
+.rui-code-block-copy-label,
+.rui-map-marker-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* An option row in a dropdown has the panel's width to work with and no
+   competing controls, so it takes the space rather than the ellipsis. */
+.rui-multiselect-option-label {
+  flex: 1 1 auto;
+}
+.rui-breadcrumb-ellipsis {
+  color: var(--rui-color-text-muted);
+  padding: 0 2px;
+  user-select: none;
+}
+
+/* ---- Slider tick marks --------------------------------------------------
+   The render places each tick with an inline left: % and expects the class to
+   supply the positioning context it offsets from. Without it every tick
+   collapsed into a single line of run-together numbers under the track. */
+.rui-slider-marks {
+  position: relative;
+  height: 18px;
+  margin-top: 2px;
+}
+.rui-slider-mark {
+  position: absolute;
+  top: 6px;
+  transform: translateX(-50%);
+  font-size: var(--rui-font-size-11);
+  line-height: 1;
+  color: var(--rui-color-text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* A 4px riser tying the label to the point on the track it names. */
+.rui-slider-mark::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  width: 1px;
+  height: 4px;
+  background: var(--rui-color-border-control);
+}
+/* The first and last ticks would otherwise hang half-way off the track. */
+.rui-slider-mark:first-child { transform: translateX(-2px); }
+.rui-slider-mark:first-child::before { left: 2px; }
+.rui-slider-mark:last-child { transform: translateX(calc(-100% + 2px)); }
+.rui-slider-mark:last-child::before { left: auto; right: 2px; }
+
+/* ---- FileUpload progress ------------------------------------------------
+   The geometry used to be inline "so the bar is visible without waiting on a
+   theme rule", which also meant no theme could ever restyle it. It has a rule
+   now; only the width, which only the render knows, stays inline. */
+.rui-file-upload-progress {
+  height: 4px;
+  border-radius: var(--rui-radius-pill);
+  overflow: hidden;
+  background: var(--rui-color-surface-muted);
+}
+.rui-file-upload-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--rui-color-primary);
+  transition: width 240ms ease;
+}
+
+/* ---- MultiSelect panel --------------------------------------------------- */
+.rui-multiselect-group {
+  padding: var(--rui-spacing-s) 10px 4px;
+  font-size: var(--rui-font-size-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rui-color-text-muted);
+}
+.rui-multiselect-loading {
+  padding: 10px 12px;
+  font-size: var(--rui-font-size-13);
+  color: var(--rui-color-text-muted);
+}
+/* "Create <term>" is an action, not a match — it takes the interactive colour
+   so it does not read as one more thing that already exists. */
+.rui-multiselect-create,
+.rui-combobox-create {
+  color: var(--rui-color-link);
+  font-weight: 500;
+}
+
+/* ---- Date pickers: the read-only echo of the current value --------------- */
+.rui-date-picker-readout,
+.rui-date-range-picker-readout {
+  font-size: var(--rui-font-size-13);
+  color: var(--rui-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Form-level error rows ---------------------------------------------- */
+.rui-validation-summary-item {
+  line-height: 1.5;
+}
+.rui-validation-summary-item + .rui-validation-summary-item {
+  margin-top: 4px;
+}
+.rui-requirement-text {
+  min-width: 0;
+}
+/* The raw checkbox a DataGrid / QueryBuilder cell drops into a row. Every other
+   checkbox in the library is CSS-painted; this one arrived as bare UA chrome. */
+.rui-checkbox-input,
+.rui-tree-node-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid var(--rui-color-border-control, var(--rui-color-border));
+  background: var(--rui-color-surface);
+  position: relative;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.rui-checkbox-input:hover:not(:disabled),
+.rui-tree-node-checkbox:hover:not(:disabled) {
+  border-color: var(--rui-color-primary);
+}
+.rui-checkbox-input:focus-visible,
+.rui-tree-node-checkbox:focus-visible {
+  outline: none;
+  border-color: var(--rui-color-focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-focus-ring) 22%, transparent);
+}
+.rui-checkbox-input:checked,
+.rui-tree-node-checkbox:checked,
+.rui-tree-node-checkbox:indeterminate {
+  background: var(--rui-color-primary);
+  border-color: var(--rui-color-primary);
+}
+.rui-checkbox-input:checked::after,
+.rui-tree-node-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0.5px;
+  width: 4px;
+  height: 9px;
+  border: solid var(--rui-color-primary-text, #fff);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.rui-tree-node-checkbox:indeterminate::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 6px;
+  width: 8px;
+  height: 2px;
+  background: var(--rui-color-primary-text, #fff);
+}
+.rui-checkbox-input:disabled,
+.rui-tree-node-checkbox:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.rui-tree-node-check-row {
+  display: flex;
+  align-items: center;
+  gap: var(--rui-spacing-s);
+  min-width: 0;
+}
+
+/* ---- Modal body ---------------------------------------------------------
+   The dialog is a flex column with a gap; its children moved into this
+   wrapper, which had no display of its own — so a two-child Modal rendered
+   with the two children touching. */
+.rui-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rui-spacing-m);
+  min-height: 0;
+}
+.rui-modal-body:empty { display: none; }
+
+/* ---- Chat SectionBlock header ------------------------------------------- */
+.rui-section-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rui-spacing-s);
+}
+.rui-section-block-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--rui-spacing-xs);
+  flex: 0 0 auto;
+}
+
+/* ---- Tables & grids ------------------------------------------------------ */
+.rui-comparison-table-caption {
+  caption-side: top;
+  text-align: left;
+  padding: var(--rui-spacing-s) var(--rui-spacing-m);
+  font-size: var(--rui-font-size-13);
+  font-weight: 600;
+  color: var(--rui-color-text-muted);
+}
+/* The shimmer row a Table shows while its rows are in flight. */
+.rui-table-loading-row > td {
+  padding: 0;
+}
+.rui-table-loading-row .rui-skeleton-line {
+  margin: var(--rui-spacing-s) var(--rui-spacing-m);
+}
+.rui-infinite-list-empty {
+  padding: var(--rui-spacing-l);
+  text-align: center;
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-13);
+}
+.rui-infinite-list-error {
+  color: var(--rui-color-danger-text);
+  font-size: var(--rui-font-size-13);
+  font-weight: 500;
+}
+/* Col() renders a wrapper around the cell's content; without a min-width floor
+   a long value stops the column from ever shrinking. */
+.rui-col {
+  min-width: 0;
+}
+
+/* ---- Editors ------------------------------------------------------------- */
+.rui-code-editor-head-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--rui-spacing-s);
+  min-width: 0;
+}
+.rui-code-editor-filename {
+  font-family: var(--rui-font-family-mono);
+  font-size: var(--rui-font-size-11);
+  color: var(--rui-color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The invisible twin a contenteditable measures itself against. It must occupy
+   no space and never paint, but it does have to keep the live element's text
+   metrics or the caret lands in the wrong place. */
+.rui-rich-text-mirror {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  inset: 0 auto auto 0;
+  z-index: -1;
+}
+
+/* ---- Byline -------------------------------------------------------------- */
+.rui-byline-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rui-byline-role,
+.rui-byline-reading {
+  font-size: var(--rui-font-size-13);
+  color: var(--rui-color-text-muted);
+}
+
+/* ---- Marketing surfaces -------------------------------------------------- */
+.rui-footer-brand {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.rui-browserframe-body {
+  padding: var(--rui-spacing-m);
+  min-width: 0;
+}
+/* The window chrome's trailing affordance (a close/expand glyph). */
+.rui-window-action {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--rui-font-size-sm);
+  color: var(--rui-color-text-muted);
+}
+.rui-typing-name {
+  font-size: var(--rui-font-size-13);
+  color: var(--rui-color-text-muted);
+}
+/* A counter that animates its digits has to stop the layout jumping as they
+   change width. */
+.rui-countup,
+.rui-relative-time {
+  font-variant-numeric: tabular-nums;
+}
+.rui-relative-time-label {
+  color: inherit;
+}
+.rui-relative-time[title] {
+  cursor: help;
+}
+/* The stepper's − and + are one control split in two: matching hit areas, and
+   the pair reads as a unit only if both round the same way. */
+.rui-qty-minus,
+.rui-qty-plus {
+  flex: 0 0 auto;
+}
+
+/* ---- Media --------------------------------------------------------------- */
+.rui-video-player-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--rui-spacing-l);
+}
+.rui-video-player-empty-text {
+  font-size: var(--rui-font-size-13);
+  color: var(--rui-color-text-muted);
+  max-width: 40ch;
+}
+.rui-lightbox-root {
+  display: contents;
+}
+.rui-map-pins {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* Each pin is placed by an inline left/top percentage; the class supplies
+   the shape and the anchor point (the tip, not the centre). */
+.rui-map-pin {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: var(--rui-color-primary);
+  border: 2px solid var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-sm);
+}
+.rui-lottie-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ---- Overlays and guided flows ------------------------------------------- */
+.rui-spotlight-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--rui-spacing-s);
+}
+.rui-spotlight-close,
+.rui-onboarding-checklist-dismiss {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 2px 6px;
+  margin: -2px -6px -2px 0;
+  border-radius: var(--rui-radius-sm);
+  color: var(--rui-color-text-muted);
+  font: inherit;
+  font-size: var(--rui-font-size-18);
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.rui-spotlight-close:hover,
+.rui-onboarding-checklist-dismiss:hover {
+  color: var(--rui-color-text);
+  background: var(--rui-color-surface-muted);
+}
+.rui-spotlight-close:focus-visible,
+.rui-onboarding-checklist-dismiss:focus-visible {
+  outline: 2px solid var(--rui-color-focus-ring);
+  outline-offset: 2px;
+}
+.rui-onboarding-checklist-headrow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--rui-spacing-s);
+}
+.rui-command-palette-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--rui-spacing-m);
+  padding: var(--rui-spacing-s) var(--rui-spacing-m);
+  border-top: var(--rui-border-width) solid var(--rui-color-border);
+  font-size: var(--rui-font-size-11);
+  color: var(--rui-color-text-muted);
+}
+.rui-inbox-panel-group-label {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- JsonTree, Gantt, FieldRepeater -------------------------------------- */
+.rui-json-tree-node {
+  min-width: 0;
+}
+/* A monospace box around the caret keeps the rows' keys aligned whether a node
+   is expandable or not. */
+.rui-json-tree-toggle-glyph {
+  display: inline-block;
+  width: 1em;
+  font-size: 0.7em;
+  line-height: 1;
+  text-align: center;
+  color: var(--rui-color-text-muted);
+}
+.rui-gantt-track {
+  display: flex;
+  flex-direction: column;
+}
+.rui-gantt-track > .rui-gantt-row:last-child {
+  border-bottom: none;
+}
+.rui-field-repeater-field {
+  display: block;
+  min-width: 0;
+}
+.rui-field-repeater-add {
+  align-self: flex-start;
+}
+
+/* ---- Commerce and collaboration ------------------------------------------ */
+.rui-cart-error {
+  padding: var(--rui-spacing-s) 0;
+  color: var(--rui-color-danger-text);
+  font-size: var(--rui-font-size-13);
+  font-weight: 500;
+}
+.rui-cart-subtotal-label {
+  color: var(--rui-color-text-muted);
+}
+.rui-cart-subtotal-value {
+  margin-left: auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.rui-reaction-emoji {
+  font-size: 1.05em;
+  line-height: 1;
+}
+/* The "…" that follows a collaborator's cursor while they type. */
+.rui-live-cursor-typing {
+  margin-left: 4px;
+  letter-spacing: 0.08em;
+  animation: rui-live-typing 1.2s steps(4, end) infinite;
+}
+@keyframes rui-live-typing {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+.rui-pagination-per-page-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+/* ---- CodeBlock filename -------------------------------------------------
+   The header uppercases and letter-spaces the language token; a file path has
+   to stay verbatim. */
+.rui-code-block-filename {
+  font-family: var(--rui-font-family-mono);
+  text-transform: none;
+  letter-spacing: 0;
+}
+/* A healthy boundary must not become a box in its parent's flex or grid; only
+   the fallback below has a surface of its own. */
+.rui-error-boundary {
+  display: contents;
+}
+
+
+/* ---- Diagnostics --------------------------------------------------------
+   Three placeholders the runtime renders when something did not resolve. They
+   were plain text, which reads as content rather than as a problem. */
+.rui-unknown-component {
+  border: 1px dashed var(--rui-color-danger);
+  border-radius: var(--rui-radius-sm);
+  padding: 6px 10px;
+  font-family: var(--rui-font-family-mono);
+  font-size: var(--rui-font-size-sm);
+  color: var(--rui-color-danger-text);
+  background: color-mix(in srgb, var(--rui-color-danger) 6%, transparent);
+}
+.rui-error-boundary--fallback {
+  border: var(--rui-border-width) solid color-mix(in srgb, var(--rui-color-danger) 35%, transparent);
+  border-radius: var(--rui-radius-md);
+  padding: var(--rui-spacing-m);
+  background: color-mix(in srgb, var(--rui-color-danger) 6%, var(--rui-color-surface));
+  color: var(--rui-color-danger-text);
+}
+/* An icon name the pack does not know. Reserving the glyph box stops the row
+   re-flowing once a correct name is supplied. */
+.rui-icon-unresolved {
+  min-width: 1em;
+  opacity: 0.45;
+}
+.rui-dropzone-label {
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-13);
+}
+
+/* ---- QueryBuilder row ----------------------------------------------------
+   Four controls share one row. The base .rui-input / .rui-select rule is
+   width: 100%, so without a basis they fought over the row and the value
+   field ended up 40px wide. */
+.rui-query-builder-combinator { flex: 0 0 auto; width: auto; min-width: 90px; }
+.rui-query-builder-field { flex: 1 1 30%; width: auto; min-width: 120px; }
+.rui-query-builder-op { flex: 0 1 22%; width: auto; min-width: 110px; }
+.rui-query-builder-value { flex: 1 1 34%; width: auto; min-width: 120px; }
+
+/* ---- A pie slice's label sits on an arbitrary chart colour ---------------
+   fill: #ffffff is 4.6:1 on the light theme's indigo first series and 1.7:1
+   on shadcn's yellow fourth one, so the number simply vanished on half the
+   palette. Painting the glyph's own outline first keeps white legible on any
+   slice without the sheet having to know which colour it landed on. */
+.rui-chart-svg .rui-pie-chart-value,
+.rui-pie-chart .rui-pie-chart-value {
+  paint-order: stroke fill;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
 /* ========================================================================
@@ -8854,6 +9444,579 @@ ${below("xs")} {
 :host([data-rui-theme="heroui-dark"]) .rui-callout[data-variant="warning"] { background: color-mix(in srgb, var(--rui-color-warning) 18%, var(--rui-color-surface)); }
 :host([data-rui-theme="heroui-dark"]) .rui-callout[data-variant="danger"],
 :host([data-rui-theme="heroui-dark"]) .rui-callout[data-variant="error"]   { background: color-mix(in srgb, var(--rui-color-danger) 18%, var(--rui-color-surface)); }
+
+/* ============================================================================
+   Signal — signal (= signal-light), signal-light, signal-dark.
+
+   Prefix-matched like the three framework blocks above; ="signal-dark" carries
+   the deltas.
+
+   This is the only theme in the sheet that is a DESIGN rather than a
+   re-creation, and it is built on one rule the others do not follow:
+
+       Colour is signal. Chrome is not.
+
+   Everything below is that rule, plus the density an operations console needs:
+
+     - the page is graph paper — a 32px hairline grid, the quietest possible
+       statement that this is an instrument and not a document;
+     - panels are RULED, not floated: a hairline and 6px corners, no resting
+       shadow anywhere. Only things that genuinely overlay cast one, and it
+       carries its own rim so the edge survives on a black page;
+     - the primary button is a graphite slab. There is no brand colour on any
+       piece of furniture, so a green in the viewport always means healthy;
+     - every measured value is IBM Plex Mono and tabular, so a column of live
+       figures does not jitter a pixel sideways as it updates;
+     - the focus ring is a double hairline, inside and out — a soft halo
+       disappears against a dense grid;
+     - tabs are channel selectors: the live one is a filled box under a 2px
+       accent rail, the way a rack unit shows which input is patched;
+     - a status chip carries an LED before its label, so state is legible from
+       across a room and does not depend on the label being read;
+     - the switch is rectangular. Nothing on an instrument panel is a pill.
+   ============================================================================ */
+:host([data-rui-theme^="signal"]) {
+  background-color: var(--rui-color-bg);
+  background-image:
+    linear-gradient(to right, var(--rui-color-border-subtle) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--rui-color-border-subtle) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+}
+:host([data-rui-theme^="signal"][transparent]),
+:host([data-rui-theme^="signal"][transparent="true"]) {
+  background-image: none;
+  background-color: transparent;
+}
+
+/* ---- Panels — ruled onto the grid, never floating ------------------------ */
+:host([data-rui-theme^="signal"]) .rui-card,
+:host([data-rui-theme^="signal"]) .rui-stat-card,
+:host([data-rui-theme^="signal"]) .rui-chart,
+:host([data-rui-theme^="signal"]) .rui-table-wrapper,
+:host([data-rui-theme^="signal"]) .rui-media-card,
+:host([data-rui-theme^="signal"]) .rui-tile,
+:host([data-rui-theme^="signal"]) .rui-empty-state,
+:host([data-rui-theme^="signal"]) .rui-code-block,
+:host([data-rui-theme^="signal"]) .rui-accordion-item {
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface);
+  box-shadow: none;
+}
+/* A console is a grid of panels. Lifting one out of it reads as breakage, so
+   an interactive panel answers with its edge, not with elevation. */
+:host([data-rui-theme^="signal"]) .rui-card,
+:host([data-rui-theme^="signal"]) .rui-stat-card,
+:host([data-rui-theme^="signal"]) .rui-tile {
+  transition: border-color var(--rui-motion-fast, 70ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="signal"]) .rui-card[data-clickable="true"]:hover,
+:host([data-rui-theme^="signal"]) .rui-tile:hover {
+  border-color: var(--rui-color-border-control);
+}
+:host([data-rui-theme^="signal"]) .rui-modal,
+:host([data-rui-theme^="signal"]) .rui-sheet-panel {
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-lg);
+}
+:host([data-rui-theme^="signal"]) .rui-modal-title {
+  font-size: var(--rui-font-size-lg);
+  font-weight: 600;
+  letter-spacing: -0.006em;
+}
+
+/* ---- Type — a label ladder that survives at 13px ------------------------- */
+:host([data-rui-theme^="signal"]) .rui-card-title,
+:host([data-rui-theme^="signal"]) .rui-section-title,
+:host([data-rui-theme^="signal"]) .rui-text[data-variant="heading"],
+:host([data-rui-theme^="signal"]) .rui-text[data-variant="large-heavy"] {
+  font-weight: 600;
+  letter-spacing: -0.006em;
+}
+:host([data-rui-theme^="signal"]) .rui-page-header-title,
+:host([data-rui-theme^="signal"]) .rui-text[data-variant="title"] {
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+/* Every eyebrow, column head and field label is the same 10px tracked
+   uppercase: on a dense panel a label has to be unmistakably a label. */
+:host([data-rui-theme^="signal"]) .rui-card-eyebrow,
+:host([data-rui-theme^="signal"]) .rui-section-header-eyebrow,
+:host([data-rui-theme^="signal"]) .rui-stat-label,
+:host([data-rui-theme^="signal"]) .rui-sidebar-section-label,
+:host([data-rui-theme^="signal"]) .rui-multiselect-group {
+  font-size: var(--rui-font-size-10);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="signal"]) .rui-field-label,
+:host([data-rui-theme^="signal"]) .rui-form-label {
+  font-size: var(--rui-font-size-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="signal"]) .rui-link {
+  font-weight: 500;
+  text-underline-offset: 2px;
+}
+
+/* ---- Data is monospace, and every number is tabular ---------------------
+   The reason is mechanical, not decorative: a proportional 7 is narrower than
+   a proportional 0, so a live counter re-flows its own column on every tick. */
+:host([data-rui-theme^="signal"]) .rui-stat-value,
+:host([data-rui-theme^="signal"]) .rui-gauge-value,
+:host([data-rui-theme^="signal"]) .rui-progress-value,
+:host([data-rui-theme^="signal"]) .rui-countup,
+:host([data-rui-theme^="signal"]) .rui-table td[data-format="number"],
+:host([data-rui-theme^="signal"]) .rui-table td[data-format="currency"],
+:host([data-rui-theme^="signal"]) .rui-data-grid-table td[data-format="number"],
+:host([data-rui-theme^="signal"]) .rui-data-grid-table td[data-format="currency"],
+:host([data-rui-theme^="signal"]) .rui-cart-subtotal-value,
+:host([data-rui-theme^="signal"]) .rui-kbd,
+:host([data-rui-theme^="signal"]) .rui-slider-value,
+:host([data-rui-theme^="signal"]) .rui-slider-mark,
+:host([data-rui-theme^="signal"]) .rui-pagination-current {
+  font-family: var(--rui-font-family-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "zero" 1;
+}
+:host([data-rui-theme^="signal"]) .rui-table,
+:host([data-rui-theme^="signal"]) .rui-data-grid-table,
+:host([data-rui-theme^="signal"]) .rui-badge,
+:host([data-rui-theme^="signal"]) .rui-pill,
+:host([data-rui-theme^="signal"]) .rui-tag {
+  font-variant-numeric: tabular-nums;
+}
+:host([data-rui-theme^="signal"]) .rui-stat-value {
+  font-size: var(--rui-font-size-24);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+/* ---- Buttons — flat slabs with a hairline, and a real press -------------- */
+:host([data-rui-theme^="signal"]) .rui-button {
+  border-radius: var(--rui-radius-button);
+  font-weight: var(--rui-button-font-weight);
+  letter-spacing: var(--rui-button-letter-spacing);
+  background: var(--rui-color-primary);
+  color: var(--rui-color-primary-text);
+  border: var(--rui-border-width) solid var(--rui-color-primary);
+  box-shadow: none;
+  transition:
+    background var(--rui-motion-fast, 70ms) var(--rui-motion-ease, ease),
+    border-color var(--rui-motion-fast, 70ms) var(--rui-motion-ease, ease),
+    color var(--rui-motion-fast, 70ms) var(--rui-motion-ease, ease);
+}
+:host([data-rui-theme^="signal"]) .rui-button:hover:not(:disabled) {
+  background: var(--rui-color-primary-hover);
+  border-color: var(--rui-color-primary-hover);
+}
+/* Half a pixel, which is all a control this size needs to feel mechanical. */
+:host([data-rui-theme^="signal"]) .rui-button:active:not(:disabled),
+:host([data-rui-theme^="signal"]) .rui-icon-button:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+:host([data-rui-theme^="signal"]) .rui-button[data-variant="secondary"],
+:host([data-rui-theme^="signal"]) .rui-button[data-variant="outline"] {
+  background: var(--rui-color-surface);
+  color: var(--rui-color-text);
+  border-color: var(--rui-color-border-control);
+}
+:host([data-rui-theme^="signal"]) .rui-button[data-variant="secondary"]:hover:not(:disabled),
+:host([data-rui-theme^="signal"]) .rui-button[data-variant="outline"]:hover:not(:disabled) {
+  background: var(--rui-color-surface-muted);
+  border-color: var(--rui-color-text-muted);
+  color: var(--rui-color-text);
+}
+:host([data-rui-theme^="signal"]) .rui-button[data-variant="ghost"] {
+  background: transparent;
+  border-color: transparent;
+  color: var(--rui-color-text);
+}
+:host([data-rui-theme^="signal"]) .rui-button[data-variant="ghost"]:hover:not(:disabled) {
+  background: var(--rui-color-surface-muted);
+  border-color: var(--rui-color-border);
+}
+:host([data-rui-theme^="signal"]) .rui-button[data-variant="link"] {
+  background: transparent;
+  border-color: transparent;
+  color: var(--rui-color-link);
+}
+:host([data-rui-theme^="signal"]) .rui-button[data-variant="danger"] {
+  background: var(--rui-color-danger);
+  border-color: var(--rui-color-danger);
+  color: var(--rui-color-on-danger);
+}
+:host([data-rui-theme^="signal"]) .rui-button:disabled {
+  opacity: 0.45;
+}
+:host([data-rui-theme^="signal"]) .rui-icon-button {
+  border-radius: var(--rui-radius-button);
+}
+:host([data-rui-theme^="signal"]) .rui-follow-up-button {
+  border-radius: var(--rui-radius-button);
+  border-color: var(--rui-color-border-control);
+  background: var(--rui-color-surface);
+  font-weight: 500;
+  box-shadow: none;
+}
+
+/* ---- The focus ring: a double hairline, inside and out -------------------
+   A 3px translucent halo is the modern default and it is the wrong tool here —
+   on a grid of hairline panels it reads as a blur rather than as a boundary.
+   Two 1px rings, one just outside the control and one just inside it, stay
+   crisp at any density and survive on both the light and the dark page. */
+:host([data-rui-theme^="signal"]) .rui-button:focus-visible,
+:host([data-rui-theme^="signal"]) .rui-icon-button:focus-visible,
+:host([data-rui-theme^="signal"]) .rui-follow-up-button:focus-visible,
+:host([data-rui-theme^="signal"]) .rui-tab-trigger:focus-visible,
+:host([data-rui-theme^="signal"]) .rui-menu-item:focus-visible,
+:host([data-rui-theme^="signal"]) .rui-nav-link:focus-visible,
+:host([data-rui-theme^="signal"]) .rui-sidebar-item:focus-visible,
+:host([data-rui-theme^="signal"]) .rui-input:focus,
+:host([data-rui-theme^="signal"]) .rui-select:focus,
+:host([data-rui-theme^="signal"]) .rui-textarea:focus,
+:host([data-rui-theme^="signal"]) .rui-input-group:focus-within {
+  outline: 1px solid var(--rui-color-focus-ring);
+  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--rui-color-focus-ring);
+  border-color: var(--rui-color-focus-ring);
+}
+
+/* ---- Fields — square, hairline, mono where the value is a number --------- */
+:host([data-rui-theme^="signal"]) .rui-input,
+:host([data-rui-theme^="signal"]) .rui-select,
+:host([data-rui-theme^="signal"]) .rui-textarea,
+:host([data-rui-theme^="signal"]) .rui-number-input,
+:host([data-rui-theme^="signal"]) .rui-combobox-trigger,
+:host([data-rui-theme^="signal"]) .rui-input-group {
+  background: var(--rui-color-surface);
+  border-color: var(--rui-color-border-control);
+  border-radius: var(--rui-radius-input);
+  padding: 5px 8px;
+  box-shadow: none;
+}
+:host([data-rui-theme^="signal"]) .rui-input[type="number"],
+:host([data-rui-theme^="signal"]) .rui-number-input,
+:host([data-rui-theme^="signal"]) .rui-input[type="datetime-local"],
+:host([data-rui-theme^="signal"]) .rui-input[type="date"],
+:host([data-rui-theme^="signal"]) .rui-input[type="time"] {
+  font-family: var(--rui-font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+:host([data-rui-theme^="signal"]) .rui-input:hover:not(:disabled),
+:host([data-rui-theme^="signal"]) .rui-select:hover:not(:disabled),
+:host([data-rui-theme^="signal"]) .rui-textarea:hover:not(:disabled) {
+  border-color: var(--rui-color-text-muted);
+}
+:host([data-rui-theme^="signal"]) .rui-checkbox input[type="checkbox"],
+:host([data-rui-theme^="signal"]) .rui-checkbox-item input[type="checkbox"],
+:host([data-rui-theme^="signal"]) .rui-checkbox-input,
+:host([data-rui-theme^="signal"]) .rui-tree-node-checkbox,
+:host([data-rui-theme^="signal"]) .rui-data-grid-col-panel-cb {
+  border-radius: 2px;
+}
+/* The rectangular toggle. Nothing on an instrument panel is a pill, and a
+   square switch reads as a latching button rather than as a preference. */
+:host([data-rui-theme^="signal"]) .rui-switch-track {
+  width: 34px;
+  height: 18px;
+  border-radius: 3px;
+  background: var(--rui-color-surface-muted);
+  border: var(--rui-border-width) solid var(--rui-color-border-control);
+}
+:host([data-rui-theme^="signal"]) .rui-switch-thumb {
+  width: 12px;
+  height: 12px;
+  top: 2px;
+  left: 2px;
+  border-radius: 2px;
+  background: var(--rui-color-text-muted);
+  box-shadow: none;
+}
+:host([data-rui-theme^="signal"]) .rui-switch-input:checked + .rui-switch-track {
+  background: color-mix(in srgb, var(--rui-color-success) 22%, var(--rui-color-surface));
+  border-color: var(--rui-color-success);
+}
+:host([data-rui-theme^="signal"]) .rui-switch-input:checked + .rui-switch-track .rui-switch-thumb {
+  transform: translateX(16px);
+  background: var(--rui-color-success);
+}
+:host([data-rui-theme^="signal"]) .rui-switch-input:focus-visible + .rui-switch-track {
+  outline: 1px solid var(--rui-color-focus-ring);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+
+/* ---- Tabs — channel selectors -------------------------------------------- */
+:host([data-rui-theme^="signal"]) .rui-tab-list {
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+  border-radius: 0;
+}
+:host([data-rui-theme^="signal"]) .rui-tab-trigger {
+  border: var(--rui-border-width) solid transparent;
+  border-bottom: none;
+  border-radius: 0;
+  margin-bottom: -1px;
+  padding: 6px 12px;
+  font-size: var(--rui-font-size-11);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rui-color-text-muted);
+  background: transparent;
+  box-shadow: none;
+}
+:host([data-rui-theme^="signal"]) .rui-tab-trigger:hover {
+  color: var(--rui-color-text);
+  background: var(--rui-color-surface-muted);
+}
+/* The live channel: a filled box lifted out of the rule, capped by a 2px rail
+   in the interactive hue. */
+:host([data-rui-theme^="signal"]) .rui-tab-trigger[aria-selected="true"] {
+  color: var(--rui-color-text);
+  background: var(--rui-color-surface);
+  border-color: var(--rui-color-border);
+  box-shadow: inset 0 2px 0 var(--rui-color-accent);
+}
+:host([data-rui-theme^="signal"]) .rui-segmented-control {
+  border-radius: var(--rui-radius-sm);
+  border-color: var(--rui-color-border-control);
+  background: var(--rui-color-surface-muted);
+  padding: 2px;
+  gap: 2px;
+}
+:host([data-rui-theme^="signal"]) .rui-segmented-control-option {
+  border-radius: 2px;
+  font-size: var(--rui-font-size-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+:host([data-rui-theme^="signal"]) .rui-segmented-control-option[data-active="true"] {
+  background: var(--rui-color-surface);
+  box-shadow: inset 0 0 0 1px var(--rui-color-border);
+}
+
+/* ---- Navigation — square rows with a 2px rail when live ------------------ */
+:host([data-rui-theme^="signal"]) .rui-nav-link,
+:host([data-rui-theme^="signal"]) .rui-sidebar-item {
+  border-radius: var(--rui-radius-sm);
+  font-weight: 500;
+}
+:host([data-rui-theme^="signal"]) .rui-nav-link[data-active="true"],
+:host([data-rui-theme^="signal"]) .rui-sidebar-item[data-active="true"] {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 var(--rui-color-accent);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+:host([data-rui-theme^="signal"]) .rui-sidebar {
+  border-radius: var(--rui-radius-md);
+  background: var(--rui-color-surface);
+}
+
+/* ---- Status chips wear an LED -------------------------------------------
+   State has to be readable from across a room, and at 11px the label alone is
+   not. The dot is the same shape and position on every tone, so the eye learns
+   one place to look and reads only the colour after that. */
+:host([data-rui-theme^="signal"]) .rui-badge,
+:host([data-rui-theme^="signal"]) .rui-tag,
+:host([data-rui-theme^="signal"]) .rui-pill,
+:host([data-rui-theme^="signal"]) .rui-filter-pill {
+  border-radius: var(--rui-radius-xs);
+  font-size: var(--rui-font-size-11);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+}
+:host([data-rui-theme^="signal"]) .rui-pill[data-tone]::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: currentColor;
+  /* The label is the tone at text depth; the LED wants the tone at full
+     strength, so it is lifted back out of the muted text colour. */
+  filter: saturate(1.6);
+}
+/* A Pill that was given an icon already has its own leading glyph; two
+   markers in the same slot is worse than either. */
+:host([data-rui-theme^="signal"]) .rui-pill[data-tone]:has(.rui-pill-icon)::before {
+  display: none;
+}
+:host([data-rui-theme^="signal"]) .rui-status-dot {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Data tables — the densest thing in the theme ------------------------ */
+:host([data-rui-theme^="signal"]) .rui-table th,
+:host([data-rui-theme^="signal"]) .rui-data-grid-table th {
+  background: var(--rui-color-surface-muted);
+  color: var(--rui-color-text-muted);
+  font-size: var(--rui-font-size-10);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 5px var(--rui-spacing-m);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border);
+}
+:host([data-rui-theme^="signal"]) .rui-table td,
+:host([data-rui-theme^="signal"]) .rui-data-grid-table td {
+  padding: 4px var(--rui-spacing-m);
+  border-bottom: var(--rui-border-width) solid var(--rui-color-border-subtle);
+}
+/* The hovered row grows a rail in the interactive hue rather than a wash: at
+   this density a background change moves the whole table's apparent weight. */
+:host([data-rui-theme^="signal"]) .rui-table tbody tr:hover td {
+  background: var(--rui-color-surface-hover);
+}
+:host([data-rui-theme^="signal"]) .rui-table tbody tr:hover td:first-child {
+  box-shadow: inset 2px 0 0 var(--rui-color-accent);
+}
+:host([data-rui-theme^="signal"]) .rui-pagination-button {
+  border-radius: var(--rui-radius-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Messaging — a 2px status rail on a flat tint ------------------------ */
+:host([data-rui-theme^="signal"]) .rui-callout {
+  border-radius: var(--rui-radius-sm);
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  border-left: 2px solid var(--rui-color-info);
+  background: var(--rui-color-surface-muted);
+}
+:host([data-rui-theme^="signal"]) .rui-callout-section {
+  padding: var(--rui-spacing-s) var(--rui-spacing-m);
+  gap: var(--rui-spacing-s);
+}
+:host([data-rui-theme^="signal"]) .rui-callout-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  font-size: var(--rui-font-size-10);
+}
+:host([data-rui-theme^="signal"]) .rui-callout-title {
+  font-size: var(--rui-font-size-13);
+  font-weight: 600;
+}
+:host([data-rui-theme^="signal"]) .rui-callout[data-variant="success"] { border-left-color: var(--rui-color-success); }
+:host([data-rui-theme^="signal"]) .rui-callout[data-variant="warning"] { border-left-color: var(--rui-color-warning); }
+:host([data-rui-theme^="signal"]) .rui-callout[data-variant="danger"],
+:host([data-rui-theme^="signal"]) .rui-callout[data-variant="error"]   { border-left-color: var(--rui-color-danger); }
+:host([data-rui-theme^="signal"]) .rui-callout[data-variant="neutral"] { border-left-color: var(--rui-color-border-control); }
+:host([data-rui-theme^="signal"]) .rui-toast,
+:host([data-rui-theme^="signal"]) .rui-notification {
+  border-radius: var(--rui-radius-sm);
+  box-shadow: var(--rui-shadow-md);
+}
+:host([data-rui-theme^="signal"]) .rui-banner {
+  border-radius: 0;
+}
+
+/* ---- Overlays — hairline boxes with monospace shortcuts ------------------ */
+:host([data-rui-theme^="signal"]) .rui-dropdown-menu-content,
+:host([data-rui-theme^="signal"]) .rui-popover-content,
+:host([data-rui-theme^="signal"]) .rui-hover-card-content,
+:host([data-rui-theme^="signal"]) .rui-context-menu-pop,
+:host([data-rui-theme^="signal"]) .rui-command-palette-panel {
+  border-radius: var(--rui-radius-md);
+  border: var(--rui-border-width) solid var(--rui-color-border);
+  background: var(--rui-color-surface);
+  box-shadow: var(--rui-shadow-md);
+  padding: 3px;
+}
+:host([data-rui-theme^="signal"]) .rui-menu-item {
+  border-radius: 2px;
+  padding: 4px 8px;
+  font-size: var(--rui-font-size-13);
+}
+:host([data-rui-theme^="signal"]) .rui-command-palette-item-kbd,
+:host([data-rui-theme^="signal"]) .rui-command-palette-shortcut {
+  font-family: var(--rui-font-family-mono);
+}
+/* A console's tooltip is a readout, so it is set like one. */
+:host([data-rui-theme^="signal"]) .rui-tooltip-content {
+  border-radius: 2px;
+  padding: 3px 6px;
+  font-family: var(--rui-font-family-mono);
+  font-size: var(--rui-font-size-11);
+  font-weight: 400;
+  letter-spacing: 0;
+  box-shadow: none;
+}
+
+/* ---- Meters ------------------------------------------------------------- */
+:host([data-rui-theme^="signal"]) .rui-progress-track {
+  height: 3px;
+  border-radius: 0;
+  background: var(--rui-color-surface-muted);
+  border: var(--rui-border-width) solid var(--rui-color-border);
+}
+:host([data-rui-theme^="signal"]) .rui-progress-bar {
+  border-radius: 0;
+  background: var(--rui-color-accent);
+}
+:host([data-rui-theme^="signal"]) .rui-progress-label {
+  font-size: var(--rui-font-size-10);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+:host([data-rui-theme^="signal"]) .rui-steps-item::before {
+  border-radius: 2px;
+  font-family: var(--rui-font-family-mono);
+  font-weight: 500;
+}
+:host([data-rui-theme^="signal"]) .rui-separator {
+  background: var(--rui-color-border);
+}
+:host([data-rui-theme^="signal"]) .rui-skeleton-line {
+  border-radius: 2px;
+  background: var(--rui-color-surface-muted);
+}
+:host([data-rui-theme^="signal"]) .rui-avatar,
+:host([data-rui-theme^="signal"]) .rui-avatar-fallback {
+  border-radius: var(--rui-radius-xs);
+}
+:host([data-rui-theme^="signal"]) .rui-kbd {
+  border-radius: 2px;
+}
+
+/* ---- Dark deltas ---------------------------------------------------------
+   Two things the token swap cannot express. A black drop shadow is invisible
+   on a black page, so what separates a panel here is a hairline of LIGHT along
+   its top edge; and the grid has to come down a step, because the same 8% rule
+   that is a whisper on paper is a lattice on near-black. */
+:host([data-rui-theme="signal-dark"]) {
+  background-image:
+    linear-gradient(to right, rgba(230, 237, 243, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(230, 237, 243, 0.045) 1px, transparent 1px);
+}
+:host([data-rui-theme="signal-dark"]) .rui-card,
+:host([data-rui-theme="signal-dark"]) .rui-stat-card,
+:host([data-rui-theme="signal-dark"]) .rui-chart,
+:host([data-rui-theme="signal-dark"]) .rui-table-wrapper,
+:host([data-rui-theme="signal-dark"]) .rui-modal,
+:host([data-rui-theme="signal-dark"]) .rui-sheet-panel {
+  box-shadow: inset 0 1px 0 rgba(230, 237, 243, 0.05);
+}
+:host([data-rui-theme="signal-dark"]) .rui-switch-thumb {
+  background: var(--rui-color-text-muted);
+}
 
 /* ----------------------------------------------------------------------- */
 /* DropdownMenu / MenuItem / MenuSeparator / MenuLabel                     */

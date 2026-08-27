@@ -284,29 +284,36 @@ describe("ActionLink icon", () => {
   });
 });
 
-describe("ActionLink inline style stays out of the line box", () => {
-  it("resets the UA button chrome with the four font LONGHANDS, never `font`", async () => {
-    // `font: inherit` sets a fifth property — `line-height` — and inline it
-    // outranks every stylesheet, so `vision`'s `line-height: 20px` on this
-    // control was dead CSS. The four longhands inherit exactly what the
-    // shorthand did and leave the line box to the theme.
+describe("ActionLink's chrome reset is themeable", () => {
+  it("writes no inline style at all", async () => {
+    // The whole reset used to be inline, where it outranked every rule a theme
+    // could write — a theme could not give the control padding, a hover wash or
+    // a line box. It moved into `.rui-action-link`, the same move the icon gap
+    // made below and for the same reason.
     const { el } = await mount(`${COUNTER}\n$app(ActionLink("Retry", { ${BUMP} }))`);
-    expect(el.style.fontFamily).toBe("inherit");
-    expect(el.style.fontSize).toBe("inherit");
-    expect(el.style.fontWeight).toBe("inherit");
-    expect(el.style.fontStyle).toBe("inherit");
-    // The assertion that actually catches a regression to the shorthand: an
-    // inline line-height of any kind, `inherit` included, re-deadens the rule.
-    expect(el.style.lineHeight).toBe("");
-    expect(el.getAttribute("style")).not.toMatch(/(^|;)\s*font\s*:/);
+    expect(el.getAttribute("style")).toBeNull();
   });
 
-  it("keeps the rest of the UA chrome reset inline, since it is not themeable", async () => {
-    const { el } = await mount(`${COUNTER}\n$app(ActionLink("Retry", { ${BUMP} }))`);
-    const style = el.getAttribute("style")!;
-    for (const decl of ["background", "border", "padding", "text-align"]) {
-      expect(style, `missing ${decl} reset`).toContain(`${decl}:`);
+  it("resets the UA chrome with the four font LONGHANDS, never `font`", async () => {
+    // `font: inherit` sets a fifth property — `line-height` — so a theme that
+    // sets one on this control (vision does: 20px) would have a dead rule. The
+    // four longhands inherit exactly what the shorthand did and leave the line
+    // box alone.
+    const body = ruleBody(componentStyles, "\n.rui-action-link {");
+    for (const decl of [
+      "background: none",
+      "border: 0",
+      "padding: 0",
+      "text-align: inherit",
+      "font-family: inherit",
+      "font-size: inherit",
+      "font-weight: inherit",
+      "font-style: inherit",
+    ]) {
+      expect(body, `missing ${decl}`).toContain(decl);
     }
+    expect(body, "the shorthand would take line-height with it").not.toMatch(/[^-]font\s*:/);
+    expect(body).not.toContain("line-height");
   });
 
   it("no longer writes the icon gap inline", async () => {

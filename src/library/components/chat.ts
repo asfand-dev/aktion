@@ -38,12 +38,9 @@ export const SectionBlock: ComponentSpec = {
     heading.append(document.createTextNode(asString(props.title)));
     const actions = asArray<unknown>(props.actions).filter((a) => a !== null && a !== undefined);
     if (actions.length > 0) {
-      const header = el("div", {
-        class: "rui-section-block-header",
-        style: "display:flex;align-items:center;justify-content:space-between;gap:var(--rui-spacing-s)",
-      });
+      const header = el("div", { class: "rui-section-block-header" });
       header.append(heading);
-      const trailing = el("div", { class: "rui-section-block-actions", style: "display:flex;align-items:center;gap:var(--rui-spacing-xs)" });
+      const trailing = el("div", { class: "rui-section-block-actions" });
       for (const action of actions) trailing.append(helpers.renderNode(action));
       header.append(trailing);
       root.append(header);
@@ -244,12 +241,9 @@ export const ActionLink: ComponentSpec = {
       "aria-label": ariaLabel || null,
       // `data-icon-position` rather than a second class, matching `Button`.
       "data-icon-position": props.icon ? (iconAtEnd ? "end" : "start") : null,
-      // The four longhands, NOT the `font` shorthand. `font: inherit` also resets
-      // `line-height` — and being inline it beat every stylesheet, so a theme that
-      // set a line-height on this control (vision does: 20px) had a rule that
-      // could never fire. These four inherit what the shorthand did without
-      // touching the fifth property nobody meant to set.
-      style: "background:none;border:0;padding:0;text-align:inherit;font-family:inherit;font-size:inherit;font-weight:inherit;font-style:inherit",
+      // No inline style at all: the UA button chrome reset lives in
+      // `.rui-action-link`, so a theme can change the padding, the background or
+      // the line box. It used to be inline, which outranked every one of them.
     });
     // The gap is a stylesheet concern now (see `.rui-action-link-icon`): an inline
     // margin is unthemeable, and a theme with different link metrics had no way to

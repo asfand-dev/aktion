@@ -18,7 +18,7 @@
   },
   "intro": {
     "headline": "The theme decides. Your program only names meaning.",
-    "body": "Nine themes ship in the box — `light`, `dark`, `soft`, and a light and a dark variant each of `shadcn`, `mui` and `heroui` — and the host picks one. Your program does not get a vote, and that is the feature.\n\nSo you never write a colour. You write `tone: \"success\"` and `variant: \"primary\"` and `gap: \"lg\"`, and the active theme resolves each of those into a real value. The same file that looks like a shadcn/ui dashboard on `shadcn` looks like a Material console on `mui` and a rounded consumer app on `heroui-dark`, with nothing edited.\n\nWhen you *do* want to brand something, there is exactly one place for it: a `$theme({ ... })` statement. That is the only line in an Aktion program where a hex literal belongs.",
+    "body": "Eleven themes ship in the box — `light`, `dark`, `soft`, and a light and a dark variant each of `shadcn`, `mui`, `heroui` and `signal` — and the host picks one. Your program does not get a vote, and that is the feature.\n\nSo you never write a colour. You write `tone: \"success\"` and `variant: \"primary\"` and `gap: \"lg\"`, and the active theme resolves each of those into a real value. The same file that looks like a shadcn/ui dashboard on `shadcn` looks like a Material console on `mui`, a rounded consumer app on `heroui-dark`, and a dense instrument panel on `signal-dark`, with nothing edited.\n\nWhen you *do* want to brand something, there is exactly one place for it: a `$theme({ ... })` statement. That is the only line in an Aktion program where a hex literal belongs.",
     "code": "$theme({ name: \"heroui\" })\n\n$app(Card([\n  Badge(\"Active\", { tone: \"success\" }),\n  Button(\"Renew\", { variant: \"primary\", icon: \"circle-check\" })\n]))",
     "codeCaption": "no colour in the tree — correct on all six themes",
     "infographic": {
@@ -69,7 +69,7 @@
       "goal": "Rebrand a whole program with one $theme({ ... }) statement.",
       "xp": 100,
       "teach": {
-        "text": "`$theme({ ... })` is a **builtin statement**, like `$app`. It is not a component, there is no provider to wrap your tree in, and it never appears inside one.\n\n`name` selects one of the built-in palettes as the base — `light`, `dark`, `soft`, `shadcn`/`shadcn-dark`, `mui`/`mui-dark`, `heroui`/`heroui-dark` (a bare framework name means its light variant). Everything else you pass layers on top of it. Selecting a theme by name also loads whatever web fonts that theme needs to look like itself.\n\nOnly the **structured** shape is accepted. Every top-level key must be a token group — `colors`, `radius`, `font`, `spacing`, `shadows`, `gradients`, `zIndex`, `motion`, `fonts`, `icons` — or the metadata keys `name` and `direction`.",
+        "text": "`$theme({ ... })` is a **builtin statement**, like `$app`. It is not a component, there is no provider to wrap your tree in, and it never appears inside one.\n\n`name` selects one of the built-in palettes as the base — `light`, `dark`, `soft`, `shadcn`/`shadcn-dark`, `mui`/`mui-dark`, `heroui`/`heroui-dark`, `signal`/`signal-dark` (a bare family name means its light variant). Everything else you pass layers on top of it. Selecting a theme by name also loads whatever web fonts that theme needs to look like itself.\n\nOnly the **structured** shape is accepted. Every top-level key must be a token group — `colors`, `radius`, `font`, `spacing`, `shadows`, `gradients`, `zIndex`, `motion`, `fonts`, `icons` — or the metadata keys `name` and `direction`.",
         "code": {
           "src": "$theme({\n  name: \"heroui\",\n  colors: { primary: \"#635bff\", primaryHover: \"#4f46e5\" },\n  radius: { button: \"999px\" },\n  font: { weightHeading: \"600\" }\n})",
           "caption": "the one place a literal value belongs"
@@ -544,7 +544,7 @@
         "validate": {
           "must": [
             "\\$theme\\s*\\(",
-            "name\\s*:\\s*[\"'](light|dark|soft|shadcn|shadcn-light|shadcn-dark|mui|mui-light|mui-dark|heroui|heroui-light|heroui-dark)[\"']",
+            "name\\s*:\\s*[\"'](light|dark|soft|shadcn|shadcn-light|shadcn-dark|mui|mui-light|mui-dark|heroui|heroui-light|heroui-dark|signal|signal-light|signal-dark)[\"']",
             "\\$app\\s*\\(",
             "Card\\s*\\(\\s*\\[",
             "tone\\s*:\\s*[\"'][a-z-]+[\"']",
@@ -553,7 +553,7 @@
           ],
           "mustWhy": [
             "Start with the brand: a $theme({ ... }) statement.",
-            "Select one of the built-ins by name: light, dark, soft, shadcn, mui or heroui (each framework name also takes a -light or -dark suffix).",
+            "Select one of the built-ins by name: light, dark, soft, shadcn, mui, heroui or signal (each family name also takes a -light or -dark suffix).",
             "Nothing renders without $app(...).",
             "Put the content in a Card([ ... ]).",
             "Give the Badge a semantic tone — success, warning, danger, info, primary or neutral.",

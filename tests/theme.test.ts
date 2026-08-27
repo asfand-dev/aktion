@@ -20,8 +20,20 @@ import {
   muiDarkTheme,
   herouiLightTheme,
   herouiDarkTheme,
+  signalLightTheme,
+  signalDarkTheme,
 } from "../src/theme/index.js";
 import { componentStyles } from "../src/theme/styles.js";
+
+/** Split a #rrggbb into its channels. */
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const h = hex.replace("#", "");
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+}
 
 describe("resolveTheme", () => {
   it("returns the light theme for null/undefined/missing input", () => {
@@ -69,7 +81,7 @@ describe("resolveTheme", () => {
     // Each one must be visually distinct from light/dark to be useful.
     expect(builtInThemes.soft.colorPrimary).not.toBe(lightTheme.colorPrimary);
     expect(builtInThemes.soft.fontFamily).not.toBe(lightTheme.fontFamily);
-    for (const name of ["shadcn", "mui", "heroui"] as const) {
+    for (const name of ["shadcn", "mui", "heroui", "signal"] as const) {
       expect(builtInThemes[name], name).toBeDefined();
       expect(builtInThemes[name].fontFamily, name).not.toBe(lightTheme.fontFamily);
     }
@@ -83,11 +95,14 @@ describe("resolveTheme", () => {
     expect(builtInThemes["mui-light"]).toBe(muiLightTheme);
     expect(builtInThemes.heroui).toBe(herouiLightTheme);
     expect(builtInThemes["heroui-light"]).toBe(herouiLightTheme);
+    expect(builtInThemes.signal).toBe(signalLightTheme);
+    expect(builtInThemes["signal-light"]).toBe(signalLightTheme);
     // …and the shorthand keeps its own spelling on the host, so the CSS block
     // (which prefix-matches the family) has to cover all three names.
     expect(resolveTheme("shadcn").name).toBe("shadcn");
     expect(resolveTheme("mui").name).toBe("mui");
     expect(resolveTheme("heroui").name).toBe("heroui");
+    expect(resolveTheme("signal").name).toBe("signal");
   });
 
   it("pairs every family with a genuinely darker dark variant", () => {
@@ -95,6 +110,7 @@ describe("resolveTheme", () => {
       ["shadcn", shadcnLightTheme, shadcnDarkTheme],
       ["mui", muiLightTheme, muiDarkTheme],
       ["heroui", herouiLightTheme, herouiDarkTheme],
+      ["signal", signalLightTheme, signalDarkTheme],
     ] as const;
     for (const [family, light, dark] of pairs) {
       expect(builtInThemes[family + "-dark"], family).toBe(dark);
@@ -109,18 +125,19 @@ describe("resolveTheme", () => {
     }
   });
 
-  it("keeps the three families visually distinct from each other", () => {
-    // The whole point of the rename is that each one reads as its framework.
-    // Sharing a primary, a button radius or a type stack would undo that.
-    const primaries = [shadcnLightTheme, muiLightTheme, herouiLightTheme]
-      .map((t) => t.colorPrimary);
-    expect(new Set(primaries).size).toBe(3);
-    const radii = [shadcnLightTheme, muiLightTheme, herouiLightTheme]
-      .map((t) => t.radiusButton);
-    expect(new Set(radii).size).toBe(3);
-    const fonts = [shadcnLightTheme, muiLightTheme, herouiLightTheme]
-      .map((t) => t.fontFamily);
-    expect(new Set(fonts).size).toBe(3);
+  it("keeps the families visually distinct from each other", () => {
+    // The whole point of the rename is that each one reads as its framework,
+    // and that Signal reads as neither. Sharing a primary, a button radius or a
+    // type stack would undo that.
+    const families = [shadcnLightTheme, muiLightTheme, herouiLightTheme, signalLightTheme];
+    expect(new Set(families.map((t) => t.colorPrimary)).size).toBe(families.length);
+    expect(new Set(families.map((t) => t.fontFamily)).size).toBe(families.length);
+    // Material and Signal both land on 4px corners — Material because that is
+    // shape.borderRadius, Signal because an instrument bezel is nearly square —
+    // so shape alone no longer separates every pair. Shape TOGETHER with
+    // density does, and that pairing is what the eye actually reads.
+    const shape = families.map((t) => t.radiusButton + "/" + t.fontSizeBase);
+    expect(new Set(shape).size).toBe(families.length);
   });
 
   it("drops the retired neon and brutalist themes", () => {
@@ -192,6 +209,7 @@ describe("resolveTheme", () => {
       "shadcn", "shadcn-light", "shadcn-dark",
       "mui", "mui-light", "mui-dark",
       "heroui", "heroui-light", "heroui-dark",
+      "signal", "signal-light", "signal-dark",
       "soft",
     ]);
     expect(privateThemes.vision).toBe(visionTheme);
@@ -276,6 +294,53 @@ describe("resolveTheme", () => {
     // links clear 4.5:1 on content1 (see theme-focus-contrast.test.ts).
     expect(herouiDarkTheme.colorPrimary).toBe("#006fee");
     expect(herouiDarkTheme.colorLink).toBe("#66aaf9");
+  });
+
+  /*
+   * Signal is the one theme here that is a design rather than a re-creation, so
+   * what is pinned is its RULE — colour is signal, chrome is not — rather than
+   * somebody else's palette. Each assertion below is a load-bearing part of
+   * that rule; break one and the theme stops being an instrument console.
+   */
+  it("keeps Signal's chrome achromatic and its colour reserved for state", () => {
+    // The primary is graphite in light and pale steel in dark. If either ever
+    // becomes a hue, a green in the viewport stops meaning "healthy".
+    for (const theme of [signalLightTheme, signalDarkTheme]) {
+      const { r, g, b } = hexToRgb(theme.colorPrimary);
+      const spread = Math.max(r, g, b) - Math.min(r, g, b);
+      expect(spread, theme.colorPrimary + " must be near-neutral").toBeLessThanOrEqual(24);
+    }
+    // …while the status quartet is genuinely saturated. Green / amber / red /
+    // cyan are what an operator reads across a room.
+    for (const theme of [signalLightTheme, signalDarkTheme]) {
+      for (const hue of [theme.colorSuccess, theme.colorWarning, theme.colorDanger, theme.colorInfo]) {
+        const { r, g, b } = hexToRgb(hue);
+        expect(Math.max(r, g, b) - Math.min(r, g, b), hue + " must be saturated")
+          .toBeGreaterThan(60);
+      }
+    }
+    // One interactive hue, used for links and focus and nothing large.
+    expect(signalLightTheme.colorAccent).toBe(signalLightTheme.colorFocusRing);
+    expect(signalLightTheme.colorLink).toBe(signalLightTheme.colorAccent);
+  });
+
+  it("keeps Signal dense, square and set in two typefaces", () => {
+    // The densest theme in the set: 13px body on a 3/6/10/14 ramp.
+    expect(signalLightTheme.fontSizeBase).toBe("13px");
+    expect(signalLightTheme.spacingXs).toBe("3px");
+    expect(signalLightTheme.spacingM).toBe("10px");
+    // Bezels, not pills.
+    expect(signalLightTheme.radiusButton).toBe("4px");
+    expect(signalLightTheme.radiusMd).toBe("6px");
+    // Prose and data are different faces, and the data face is monospace.
+    expect(signalLightTheme.fontFamily).toContain("IBM Plex Sans");
+    expect(signalLightTheme.fontFamilyMono).toContain("IBM Plex Mono");
+    // Hairlines, not shadows: the resting shadow is a single 1px rule.
+    expect(signalLightTheme.shadowSm).toBe("0 1px 0 rgba(17, 24, 31, 0.04)");
+    // Dark separates with a rim of LIGHT — a black drop shadow is invisible on
+    // a #0b0e11 page.
+    expect(signalDarkTheme.shadowMd).toContain("rgba(230, 237, 243");
+    expect(signalDarkTheme.colorBg).toBe("#0b0e11");
   });
 });
 

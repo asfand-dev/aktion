@@ -138,7 +138,7 @@ const PAGE_KEYWORDS = {
   "routing.html": "routes navlink navigate hash router",
   "testing.html": "testing test render screen getbytext getbyrole fireevent userevent click type vitest jest assertion mock fetch http snapshot serializestate findby waitfor unit integration tdd react testing library rtl spy state events emit testid data-testid getbytestid within",
   "devtools.html": "devtools dev tools inspector debugger state inspector render profiler effect timeline flamegraph commit memoization mount update memoized hook __aktion_devtools_hook__ react devtools vue devtools profiling performance edit state live debug panel component tree element picker inspect element box model computed styles prop override edit props hooks time travel snapshot network mock request rules offline latency console repl expression evaluate routes query cache store storage theme tokens contrast source diagnostics outline hot reload test recorder generate test accessibility audit a11y coverage lcov chaos fuzz timeline session export dock command palette keyboard shortcuts ctrl+k cmd+k watch expression break on change debugger highlight re-renders performance marks long tasks main thread blocking program history revert find in source split view diff snapshots paused dropped events edit storage",
-  "themes.html": "built-in themes light dark shadcn shadcn-ui mui material-ui heroui nextui soft tokens custom studio in-script Theme dark mode",
+  "themes.html": "built-in themes light dark shadcn shadcn-ui mui material-ui heroui nextui signal instrument console observability dashboard soft tokens custom studio in-script Theme dark mode",
   "theme-generator.html": "theme generator builder studio create custom theme colors palette radius typography fonts spacing shadows gradient brand $theme tokens live preview copy generate design system",
   "brand-themes.html": "brand themes token maps partial theme tokens settheme setresponse css variables rui prefix palette gallery side-by-side comparison brand palette",
   "live-demos.html": "demos catalog showcase mini-apps blocks components",
@@ -596,6 +596,9 @@ const THEME_BG = {
   heroui: "#ffffff",
   "heroui-light": "#ffffff",
   "heroui-dark": "#000000",
+  signal: "#f6f7f8",
+  "signal-light": "#f6f7f8",
+  "signal-dark": "#0b0e11",
   soft: "#fdf6ff",
 };
 

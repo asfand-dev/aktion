@@ -720,10 +720,6 @@ export const CodeBlock: ComponentSpec = {
       if (filename) {
         head.append(el("span", {
           class: "rui-code-block-filename",
-          // The header uppercases and letter-spaces the language token; a file
-          // path has to stay verbatim, so the reset rides with the one element
-          // that needs it rather than adding a rule per theme.
-          style: "font-family:var(--rui-font-family-mono);text-transform:none;letter-spacing:0;",
         }, [filename]));
       } else if (language) {
         head.append(el("span", { class: "rui-code-block-language" }, [language]));

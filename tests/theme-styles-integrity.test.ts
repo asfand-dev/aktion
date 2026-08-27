@@ -26,6 +26,7 @@ const VISION = ':host([data-rui-theme="vision"])';
 const SHADCN = ':host([data-rui-theme^="shadcn"])';
 const MUI = ':host([data-rui-theme^="mui"])';
 const HEROUI = ':host([data-rui-theme^="heroui"])';
+const SIGNAL = ':host([data-rui-theme^="signal"])';
 /** Marks the end of the last theme block — the first rule after it. */
 const AFTER_LAST = ".rui-dropdown-menu {";
 
@@ -50,7 +51,7 @@ describe("componentStyles integrity", () => {
     // The three framework families are PREFIX-matched, so one block covers
     // `shadcn`, `shadcn-light` and `shadcn-dark` at once; the dark variant then
     // adds an exact-match delta on top.
-    for (const family of ["shadcn", "mui", "heroui"]) {
+    for (const family of ["shadcn", "mui", "heroui", "signal"]) {
       expect(componentStyles).toContain(`:host([data-rui-theme^="${family}"])`);
       expect(componentStyles).toContain(`:host([data-rui-theme="${family}-dark"])`);
     }
@@ -61,7 +62,7 @@ describe("componentStyles integrity", () => {
     // `theme="shadcn-light"` are two live spellings of the same theme and the
     // host echoes back whichever one the author wrote. An `=` selector would
     // style one of them and silently leave the other on the base sheet.
-    const families = { shadcn: SHADCN, mui: MUI, heroui: HEROUI } as const;
+    const families = { shadcn: SHADCN, mui: MUI, heroui: HEROUI, signal: SIGNAL } as const;
     for (const [family, prefixSel] of Object.entries(families)) {
       for (const name of [family, `${family}-light`, `${family}-dark`]) {
         expect(
@@ -89,11 +90,12 @@ describe("componentStyles integrity", () => {
     const shadcn = componentStyles.indexOf(SHADCN);
     const mui = componentStyles.indexOf(MUI);
     const heroui = componentStyles.indexOf(HEROUI);
+    const signal = componentStyles.indexOf(SIGNAL);
     expect(vision).toBeGreaterThan(-1);
     expect(shadcn).toBeGreaterThan(vision);
     expect(mui).toBeGreaterThan(shadcn);
     expect(heroui).toBeGreaterThan(mui);
-    expect(componentStyles.indexOf(AFTER_LAST)).toBeGreaterThan(heroui);
+    expect(signal).toBeGreaterThan(heroui);
   });
 
   it("keeps the vision block's UI block-anchored anchor values", () => {
@@ -146,7 +148,7 @@ describe("componentStyles integrity", () => {
   });
 
   it("keeps the HeroUI block's signatures", () => {
-    const block = blockBetween(HEROUI, AFTER_LAST);
+    const block = blockBetween(HEROUI, SIGNAL);
     // Hover DIMS; it does not recolour.
     expect(block).toContain("opacity: 0.8");
     // Press scales.
@@ -158,6 +160,26 @@ describe("componentStyles integrity", () => {
     expect(block).toContain("box-shadow: var(--rui-shadow-md)");
     // The blurred modal scrim.
     expect(block).toContain("backdrop-filter: blur(8px)");
+  });
+
+  it("keeps Signal's instrument signatures", () => {
+    const block = componentStyles.slice(componentStyles.indexOf(SIGNAL));
+    // The page is graph paper.
+    expect(block).toContain("background-size: 32px 32px");
+    // Panels are ruled, never floated.
+    expect(block).toContain("box-shadow: none");
+    // The double-hairline focus ring, inside and out.
+    expect(block).toContain("outline-offset: 1px");
+    expect(block).toContain("box-shadow: inset 0 0 0 1px var(--rui-color-focus-ring)");
+    // Data is monospace and tabular.
+    expect(block).toContain("font-variant-numeric: tabular-nums");
+    expect(block).toContain("font-family: var(--rui-font-family-mono)");
+    // Tabs are channel selectors: a filled box under a 2px rail.
+    expect(block).toContain("box-shadow: inset 0 2px 0 var(--rui-color-accent)");
+    // A status chip wears an LED.
+    expect(block).toContain(".rui-pill[data-tone]::before");
+    // The switch is rectangular.
+    expect(block).toContain("border-radius: 3px");
   });
 });
 
@@ -197,6 +219,7 @@ describe("framework theme web fonts", () => {
       shadcn: "Geist",
       mui: "Roboto",
       heroui: "Inter",
+      signal: "IBM Plex",
     };
     for (const [family, face] of Object.entries(expected)) {
       // Every spelling of the family, so `theme="mui-dark"` is not left bare.
@@ -214,6 +237,7 @@ describe("framework theme web fonts", () => {
       builtInThemeFonts.shadcn.import.join(),
       builtInThemeFonts.mui.import.join(),
       builtInThemeFonts.heroui.import.join(),
+      builtInThemeFonts.signal.import.join(),
       builtInThemeFonts.vision.import.join(),
     ];
     expect(new Set(decls).size).toBe(decls.length);

@@ -193,7 +193,7 @@ see this?" — not a generated page.
    complementary section — never ship a sparse response.
 9. **Never hard-code colour, spacing, or typography.** Pass semantic
    `tone` / `variant` values and let the active theme resolve them. A program
-   must look right on all 9 themes, light AND dark.
+   must look right on all 11 themes, light AND dark, roomy AND dense.
 10. **Icons are Font Awesome names without the `fa-` prefix** — `"house"`,
     `"chart-line"`, `"sack-dollar"`. Optional variant prefix: `"regular:star"`,
     `"brands:github"`. **Never emit raw emoji.**

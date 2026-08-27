@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Aktion — A new language for building UIs. Less code, any framework.</title>
-  <meta name="description" content="Aktion is a reactive UI language — a strict subset of JavaScript — that replaces your framework, component kit, router and i18n with one tag. 282 built-in components, 9 themes (incl. shadcn/ui, Material UI and HeroUI re-creations), fine-grained reactivity, full JS interop, and a fraction of the code. Can also be effectively used as a Micro-Frontend in React, Vue, Angular, Svelte, Next.js or any other Framework. LLM-friendly by design." />
+  <meta name="description" content="Aktion is a reactive UI language — a strict subset of JavaScript — that replaces your framework, component kit, router and i18n with one tag. 282 built-in components, 11 themes (incl. shadcn/ui, Material UI and HeroUI re-creations plus Signal, an instrument console for dashboards), fine-grained reactivity, full JS interop, and a fraction of the code. Can also be effectively used as a Micro-Frontend in React, Vue, Angular, Svelte, Next.js or any other Framework. LLM-friendly by design." />
 
   <link rel="icon" type="image/png" href="assets/logo.png" />
   <link rel="apple-touch-icon" href="assets/logo.png" />
@@ -545,6 +545,8 @@
     .sw-mui-dark { background:#1e1e1e; color:#90caf9; }
     .sw-heroui { background:#ffffff; color:#006fee; border:1px solid #e4e4e7; }
     .sw-heroui-dark { background:#18181b; color:#66aaf9; }
+    .sw-signal { background:#f6f7f8; color:#0f6f7a; border:1px solid #dde1e4; }
+    .sw-signal-dark { background:#14181d; color:#4bc3d4; }
     .sw-soft { background:#fff5fb; color:#7c3aed; }
     .sw-custom { background: var(--grad-brand); color:#fff; }
 
@@ -691,7 +693,7 @@
         <p class="lead">
           Aktion is a reactive UI language — a <strong>strict subset of JavaScript</strong> you
           already know. It replaces your framework, component kit, router and i18n with
-          <strong>one tag</strong>: 282 built-in components, fine-grained reactivity, 9 themes,
+          <strong>one tag</strong>: 282 built-in components, fine-grained reactivity, 11 themes,
           and full JS interop — no JSX, no bundler, no boilerplate. Can also be effectively used
           as a Micro-Frontend in React, Vue, Angular, Svelte, Next.js or any other Framework.
         </p>
@@ -850,7 +852,7 @@ $count = 0
           <article class="card span-2 reveal">
             <span class="glow g-warm"></span>
             <div class="ic g-warm"><i class="fa-solid fa-palette"></i></div>
-            <h3>9 themes + design tokens</h3>
+            <h3>11 themes + design tokens</h3>
             <p>Switch palettes with one attribute, or brand the whole UI in-script with <code>$theme({…})</code> over 113 tokens.</p>
           </article>
 
@@ -1207,8 +1209,8 @@ statusBadges = Row([
       <div class="wrap">
         <div class="section-head reveal">
           <span class="eyebrow"><span class="line"></span> Theming <span class="line"></span></span>
-          <h2>Nine themes. <span class="grad-text">Infinite brands.</span></h2>
-          <p>Three of them re-create shadcn/ui, Material&nbsp;UI and HeroUI, light and dark. Switch palettes with the <code>theme</code> attribute, or override 80+ design tokens in-script with <code>$theme({…})</code>.</p>
+          <h2>Eleven themes. <span class="grad-text">Infinite brands.</span></h2>
+          <p>Three re-create shadcn/ui, Material&nbsp;UI and HeroUI, light and dark; Signal is our own instrument console for dashboards and ops. Switch palettes with the <code>theme</code> attribute, or override 80+ design tokens in-script with <code>$theme({…})</code>.</p>
         </div>
         <div class="themes-row reveal">
           <div class="swatch sw-light"><div class="dots"><i style="background:#6366f1"></i><i style="background:#10b981"></i><i style="background:#f59e0b"></i></div><div class="name">Light</div></div>
@@ -1219,6 +1221,8 @@ statusBadges = Row([
           <div class="swatch sw-mui-dark"><div class="dots"><i style="background:#90caf9"></i><i style="background:#ce93d8"></i><i style="background:#72ccff"></i></div><div class="name">MUI&nbsp;dark</div></div>
           <div class="swatch sw-heroui"><div class="dots"><i style="background:#006fee"></i><i style="background:#7828c8"></i><i style="background:#17c964"></i></div><div class="name">HeroUI</div></div>
           <div class="swatch sw-heroui-dark"><div class="dots"><i style="background:#338ef7"></i><i style="background:#9353d3"></i><i style="background:#45d483"></i></div><div class="name">HeroUI&nbsp;dark</div></div>
+          <div class="swatch sw-signal"><div class="dots"><i style="background:#0f6f7a"></i><i style="background:#00a862"></i><i style="background:#f0a01a"></i></div><div class="name">Signal</div></div>
+          <div class="swatch sw-signal-dark"><div class="dots"><i style="background:#4bc3d4"></i><i style="background:#2ec27e"></i><i style="background:#f5b544"></i></div><div class="name">Signal&nbsp;dark</div></div>
           <div class="swatch sw-soft"><div class="dots"><i style="background:#c4b5fd"></i><i style="background:#fbcfe8"></i><i style="background:#a7f3d0"></i></div><div class="name">Soft</div></div>
           <div class="swatch sw-custom"><div class="dots"><i style="background:#fff"></i><i style="background:#fde68a"></i><i style="background:#fbcfe8"></i></div><div class="name">Your brand →</div></div>
         </div>

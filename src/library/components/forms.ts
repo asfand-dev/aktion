@@ -1932,13 +1932,12 @@ export const FileUpload: ComponentSpec = {
         "aria-valuemin": "0",
         "aria-valuemax": "100",
         "aria-valuenow": String(Math.round(pct)),
-        // Inline so the bar is visible without waiting on a theme rule; a
-        // multi-megabyte upload with no feedback is the whole complaint.
-        style: "height:4px;border-radius:999px;overflow:hidden;background:var(--rui-color-border-subtle,#e5e7eb)",
       });
       track.append(el("div", {
         class: "rui-file-upload-progress-bar",
-        style: `height:100%;width:${pct}%;background:var(--rui-color-primary,#2563eb)`,
+        // Only the width is inline: the track's height, radius and colours are
+        // `.rui-file-upload-progress` in the sheet, where a theme can reach them.
+        style: `width:${pct}%`,
       }));
       root.append(track);
     }
@@ -2764,9 +2763,8 @@ export const MultiSelect: ComponentSpec = {
     // Nothing announced the current selection count; the chips are inside the
     // (collapsed) trigger, so a keyboard user had no summary at all.
     root.append(el("span", {
-      class: "rui-multiselect-status",
+      class: "rui-multiselect-status rui-visually-hidden",
       role: "status",
-      style: "position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap",
     }, [selectionSummary]));
 
     const panel = el("div", {

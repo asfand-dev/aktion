@@ -229,7 +229,7 @@ $app(Column([
     subtitle: "Turn a compact DSL into a rich, interactive interface — in any framework, or none.",
     primary: Button("Start building", { variant: "primary", icon: "rocket" }),
     secondary: Button("Read the docs", { variant: "secondary" }),
-    highlights: ["282 components", "9 themes", "Zero dependencies"],
+    highlights: ["282 components", "11 themes", "Zero dependencies"],
   }),
   Container(Column([
     Section([

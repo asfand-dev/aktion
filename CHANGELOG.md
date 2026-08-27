@@ -7,6 +7,76 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-08-26
 
+### Signal — A Theme For Screens You Watch, Not Read
+
+A new built-in theme, and the first one here that is a design rather than a
+re-creation. It is built on one rule the other themes do not follow: **colour is
+signal, chrome is not.**
+
+- **Added `signal`, `signal-light` and `signal-dark`.** Every other kit paints
+  its brand hue onto the furniture — the primary button, the active tab, the
+  selected row. On a console that is noise: an operator watching a wall of
+  panels needs green to mean *healthy*, and it cannot mean that if the Save
+  button is already green. So Signal's chrome is graphite end to end, and the
+  only saturated things on screen are status and data. One interactive hue — an
+  instrument teal — carries links, focus and selection, and is never a large
+  fill.
+- Everything else follows from that brief: the page is 32px graph paper; panels
+  are **ruled with hairlines and cast no resting shadow**; every measured value
+  is IBM Plex Mono and **tabular**, so a column of live figures never jitters as
+  it updates; the focus ring is a **double hairline, inside and out**, which
+  stays legible on a dense grid where a soft halo disappears; tabs are channel
+  selectors — a filled box under a 2px rail; a status chip wears an **LED**; and
+  the switch is rectangular, because nothing on an instrument panel is a pill.
+- It is also the **densest theme in the set**: 13px body on a 3/6/10/14 spacing
+  ramp with 28px controls, so a panel holds roughly twice what a consumer theme
+  holds. Reach for it for observability dashboards, NOC and status walls,
+  trading and ops desks, log and telemetry viewers, and admin control planes.
+  `signal-dark` — near-black `#0b0e11` under `#14181d` panels — is the variant
+  most control rooms run.
+- Selecting it by name loads IBM Plex Sans and IBM Plex Mono, the way the other
+  named themes load theirs.
+
+### Every Component Class Now Reaches The Stylesheet
+
+A sweep over every `rui-*` class the library puts on an element found **143 that
+no selector in the sheet named**. Nothing threw and no test failed; the only
+symptom was a control that looked half-built. 94 of them are styled now, the
+rest are documented as deliberate, and a new test keeps the sweep honest.
+
+- **Visible fixes.** Slider tick marks had no positioning and collapsed into one
+  line of run-together numbers under the track. A Modal's children moved into a
+  wrapper with no `display`, so a two-child dialog rendered with the two
+  children touching. A QueryBuilder row's four `width: 100%` controls fought
+  over one line and squeezed the value field to nothing. DataGrid and
+  QueryBuilder dropped a **raw browser checkbox** into rows full of CSS-painted
+  ones. MultiSelect's group headings, loading row and "create" action were
+  unstyled text. The same for JsonTree's caret, the Gantt track, the Spotlight
+  and onboarding dismiss buttons, the command-palette footer, map pins, byline
+  meta, cart totals, the code-editor filename, and the diagnostics placeholders
+  the runtime shows when a component or icon does not resolve.
+- **Long labels stop breaking their chip.** Sixteen "label" spans — inside
+  badges, pills, tags, tabs, nav rows, breadcrumbs, filter chips and multiselect
+  chips — had no `min-width` floor, so a long label refused to shrink and pushed
+  the rest of the control out of its container.
+- **A pie slice's value is legible on any slice.** The label was a flat
+  `fill: #ffffff`, which is 4.6:1 on the light theme's indigo first series and
+  1.7:1 on shadcn's yellow fourth one — the number simply vanished on half the
+  palette. It now paints its own outline first.
+- **Presentational values moved out of `style` attributes.** An inline style
+  outranks every rule a theme can write, so a colour or a radius written inline
+  is a value no theme can ever change. FileUpload's progress bar shipped its
+  height, radius and colours inline — with a comment explaining that it was
+  there "so the bar is visible without waiting on a theme rule", which is
+  exactly the trade this fixes. ActionLink's whole button-chrome reset and the
+  CodeBlock filename's font override did the same. All three are rules now; only
+  values the render computes (a percentage, an offset, a chart series colour)
+  stay inline.
+- **New guard:** `tests/component-style-coverage.test.ts` re-runs the sweep on
+  every test run. A class that is emitted but never styled fails the build
+  unless it is added to an allowlist with a reason, and the allowlist itself is
+  checked for entries that have gone stale.
+
 ### shadcn/ui, Material UI and HeroUI, Light and Dark
 
 The three designed-in-house themes have been replaced by faithful re-creations

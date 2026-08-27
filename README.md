@@ -201,10 +201,10 @@ Everything you need at runtime ships in a single bundle:
   exposes `route.path`, `route.params`, `route.query`, `route.pattern`,
   and `route.navigate("/path")`. Hash-based, framework-agnostic, always
   wired up.
-- **Nine built-in themes under twelve names** — `light`, `dark`, `soft`, plus
-  faithful re-creations of `shadcn`/`shadcn-light`/`shadcn-dark`,
-  `mui`/`mui-light`/`mui-dark` and `heroui`/`heroui-light`/`heroui-dark` —
-  plus full custom-token support via CSS custom
+- **Eleven built-in themes under fifteen names** — `light`, `dark`, `soft`,
+  faithful re-creations of `shadcn`, `mui` and `heroui` (each light and dark),
+  and `signal`/`signal-light`/`signal-dark`, an instrument-console theme of the
+  library's own — plus full custom-token support via CSS custom
   properties. **86 design tokens** are set by every built-in theme (every
   theme spreads `light`), out of 113 declared on `ThemeTokens` — the extras
   are optional, and individual themes set a handful more. They are
@@ -1316,12 +1316,13 @@ The next call to `getSystemPrompt()` automatically includes the new component.
 
 ## Themes
 
-Nine themes are built in, under twelve names. Pick one with `theme="..."` or pass
-a custom token map.
+Eleven themes are built in, under fifteen names. Pick one with `theme="..."` or
+pass a custom token map.
 
-Three of them are faithful re-creations of design systems you already know, each
-in a light and a dark variant. The **bare name is the light one**, so
-`theme="shadcn"` and `theme="shadcn-light"` are the same theme.
+Four of them come as a light and a dark variant, and the **bare name is the light
+one**, so `theme="shadcn"` and `theme="shadcn-light"` are the same theme. Three
+are faithful re-creations of design systems you already know; `signal` is this
+library's own.
 
 | Theme        | Vibe                                                                                              |
 | ------------ | ------------------------------------------------------------------------------------------------- |
@@ -1330,11 +1331,13 @@ in a light and a dark variant. The **bare name is the light one**, so
 | `shadcn` · `shadcn-light` · `shadcn-dark` | **shadcn/ui**, default `neutral` theme. White page, ink `#171717` primary with a near-white label, one flat `#f5f5f5` wash doing secondary / muted / accent duty, `rounded-md` (8px) controls inside `rounded-xl` (14px) cards, a 3px 50%-alpha focus ring, a segmented tab strip and a `rounded-md` badge — on 14px Geist. Dark mode inverts the primary to `#e5e5e5` ink on `#0a0a0a`. |
 | `mui` · `mui-light` · `mui-dark` | **Material UI**, default theme. `#1976d2` primary, `#9c27b0` secondary, 4px radii everywhere, UPPERCASE 500-weight buttons on `0.02857em` tracking, borderless Paper separated by the real three-layer elevation shadows, 56px outlined text fields, a 2px tab indicator and the charcoal 11px tooltip — on Roboto. Dark mode is `#90caf9` on `#121212` with elevation-overlay surfaces. |
 | `heroui` · `heroui-light` · `heroui-dark` | **HeroUI**. `#006fee` primary, 12px controls in 14px borderless cards on `shadow-medium`, filled `#f4f4f5` fields, hover that DIMS to `opacity: .8` instead of recolouring, press that scales to `.97`, a hard 2px offset focus outline and a light tooltip — on 16px Inter. Dark mode is pure black behind `#18181b` surfaces. |
+| `signal` · `signal-light` · `signal-dark` | **The instrument console** — a design, not a re-creation, built on one rule: *colour is signal, chrome is not*. The furniture is graphite end to end so the only saturated things on screen are status and data; panels are ruled with hairlines instead of floated on shadows; every measured value is IBM Plex Mono and tabular so a live column never jitters; tabs are channel selectors; a status chip wears an LED; the switch is rectangular. 13px body on a 3/6/10/14 ramp — the densest theme in the set. Built for observability dashboards, NOC and status walls, trading and ops desks, log and telemetry viewers, and admin control planes. `signal-dark` is the variant most control rooms run. |
 | `soft`       | Soft, friendly, light & rounded. Violet primary + mint accent fill, generous radii, gentle shadows. |
 
 **Theme fonts.** Selecting a built-in theme *by name* loads the web fonts that
-theme needs to look like itself: `shadcn` pulls Geist, `mui` pulls Roboto and
-`heroui` pulls Inter from Google Fonts. They are declared in the exported
+theme needs to look like itself: `shadcn` pulls Geist, `mui` pulls Roboto,
+`heroui` pulls Inter and `signal` pulls IBM Plex Sans + IBM Plex Mono from
+Google Fonts. They are declared in the exported
 `builtInThemeFonts` map and fetched by both `theme="mui"` and
 `$theme({ name: "mui" })`, with no `$theme({ fonts: … })` in the program.
 `light`, `dark` and `soft` use system fonts and issue no request. If your CSP
@@ -1414,7 +1417,7 @@ numbers are coerced):
 
 | Key         | Type                | Notes                                                                                                                                                                                              |
 | ----------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`      | `string`            | Selects a built-in theme as the base palette (`"light"`, `"dark"`, `"shadcn"` / `"shadcn-light"` / `"shadcn-dark"`, `"mui"` / `"mui-light"` / `"mui-dark"`, `"heroui"` / `"heroui-light"` / `"heroui-dark"`, `"soft"`); structured overrides layer on top. Unknown names are ignored. A named theme also loads its own web fonts — see *Theme fonts* above. |
+| `name`      | `string`            | Selects a built-in theme as the base palette (`"light"`, `"dark"`, `"shadcn"` / `"shadcn-light"` / `"shadcn-dark"`, `"mui"` / `"mui-light"` / `"mui-dark"`, `"heroui"` / `"heroui-light"` / `"heroui-dark"`, `"signal"` / `"signal-light"` / `"signal-dark"`, `"soft"`); structured overrides layer on top. Unknown names are ignored. A named theme also loads its own web fonts — see *Theme fonts* above. |
 | `direction` | `"ltr"` \| `"rtl"`  | Reading direction. Metadata only — not applied as a token.                                                                                                                                        |
 | `colors`    | `{ [key]: string }` | CSS color strings. Keys: `bg`, `bgSubtle`, `surface`, `surfaceMuted`, `surfaceHover`, `border`, `borderSubtle`, `borderControl`, `text`, `textMuted`, `primary`, `primaryHover`, `primaryText`, `accent`, `accentHover`, `accentText`, `focusRing`, `link`, `linkHover`, `success`, `warning`, `danger`, `info`, plus the `successText` / `warningText` / `dangerText` / `infoText` text partners and the `onSuccess` / `onWarning` / `onDanger` / `onInfo` inks. |
 | `radius`    | `{ [key]: string }` | CSS length strings. Keys: `xs`, `sm`, `md`, `lg`, `pill`, `button`, `input`.                                                                                                                       |
@@ -2367,7 +2370,7 @@ makes a `script-src` without `'unsafe-eval'` meaningful when program text
 is not fully trusted. Two outbound requests are worth allow-listing or
 blocking deliberately: the Font Awesome stylesheet (`cdnjs.cloudflare.com`,
 skippable by self-hosting and never calling `ensureFontAwesomeLoaded`) and, for
-the `shadcn` / `mui` / `heroui` themes, their Google Fonts stylesheet — that one needs
+the `shadcn` / `mui` / `heroui` / `signal` themes, their Google Fonts stylesheet — that one needs
 `style-src`/`font-src https://fonts.googleapis.com https://fonts.gstatic.com`,
 or self-hosted families and a `fontFamily` override. See
 [SECURITY.md](SECURITY.md#content-security-policy)

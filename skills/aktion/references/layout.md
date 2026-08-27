@@ -106,12 +106,13 @@ stacking two or three components reads as a wireframe, not a product.
 
 ## Theme awareness — write tone-first, never colour-first
 
-The host page picks one of nine built-in themes, under twelve names, or supplies a
+The host page picks one of eleven built-in themes, under fifteen names, or supplies a
 partial token map. **A program must work on every one of them** — including the
 dark ones, which is the failure mode a hard-coded colour hits first.
 
-Three of them re-create a design system you already know, each in a light and a
-dark variant; the bare name means the light one, so `shadcn` is `shadcn-light`.
+Four come as a light and a dark variant, and the bare name means the light one, so
+`shadcn` is `shadcn-light`. Three of those re-create a design system you already
+know; `signal` is the library's own.
 
 | Theme | Vibe | Use for |
 | --- | --- | --- |
@@ -120,6 +121,7 @@ dark variant; the bare name means the light one, so `shadcn` is `shadcn-light`.
 | `shadcn` · `shadcn-light` · `shadcn-dark` | shadcn/ui's default neutral theme — white page, ink primary, one flat grey wash, 8px controls in 14px cards, hairline borders, Geist. | Anything that should look shadcn-built: app dashboards, admin panels, developer tools. |
 | `mui` · `mui-light` · `mui-dark` | Material UI's default theme — `#1976d2` primary, 4px radii, UPPERCASE buttons, borderless Paper on elevation shadows, tall outlined fields, Roboto. | Enterprise apps, internal tools, anywhere the house style is Material. |
 | `heroui` · `heroui-light` · `heroui-dark` | HeroUI — `#006fee` primary, 12–14px corners, borderless cards on soft shadows, filled fields, hover that dims rather than recolours, Inter at 16px. | Consumer products, marketing apps, anything rounded and modern. |
+| `signal` · `signal-light` · `signal-dark` | The instrument console. Colour is reserved for status and data and never used on furniture; graphite chrome, hairline panels with no shadows, 13px IBM Plex Sans on a 3/6/10/14 ramp, every measured value monospace and tabular. The densest theme in the set. | Observability dashboards, NOC and status walls, trading and ops desks, log and telemetry viewers, control planes. |
 | `soft` | Friendly, light, rounded. Lavender + mint, generous radii. | Onboarding, wellness, education, consumer apps. |
 
 Rules:
