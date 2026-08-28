@@ -1738,9 +1738,10 @@ export const RequirementList: ComponentSpec = {
       const state = pending || item.met === null ? "pending" : item.met ? "true" : "false";
       if (state === "true") metCount += 1;
       const row = el("li", { class: "rui-requirement", "data-met": state });
+      const iconName = state === "true" ? "check" : state === "false" ? "xmark" : "circle";
       const icon = renderIcon(
-        state === "true" ? "circle-check" : state === "false" ? "circle-xmark" : "circle",
-        { className: "rui-requirement-icon" },
+        iconName,
+        { className: iconName === "circle" ? "rui-requirement-icon-dot" : "rui-requirement-icon" },
       );
       if (icon) row.append(icon);
       // The glyph is `aria-hidden` and the colour is invisible to a screen reader
