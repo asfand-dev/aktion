@@ -25022,9 +25022,10 @@ const RequirementList = {
       const state = pending || item.met === null ? "pending" : item.met ? "true" : "false";
       if (state === "true") metCount += 1;
       const row = el("li", { class: "rui-requirement", "data-met": state });
+      const iconName = state === "true" ? "check" : state === "false" ? "xmark" : "circle";
       const icon = renderIcon(
-        state === "true" ? "circle-check" : state === "false" ? "circle-xmark" : "circle",
-        { className: "rui-requirement-icon" }
+        iconName,
+        { className: iconName === "circle" ? "rui-requirement-icon-dot" : "rui-requirement-icon" }
       );
       if (icon) row.append(icon);
       if (state !== "pending") {
@@ -47855,12 +47856,13 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 .rui-requirement-list-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .rui-requirement {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
   font-size: 12.5px;
   color: var(--rui-color-text-muted);
 }
 .rui-requirement-icon { flex-shrink: 0; margin-top: 0.15em; font-size: 0.9em; }
+.rui-requirement-icon-dot { flex-shrink: 0; margin-top: 0.15em; font-size: 0.4em; }
 .rui-requirement[data-met="true"] { color: var(--rui-color-success-text); }
 .rui-requirement[data-met="false"] { color: var(--rui-color-danger-text); }
 /* A rule nothing has been checked against yet reads as neutral, not as failing:
@@ -53286,7 +53288,7 @@ ${below("xs")} {
 :host([data-rui-theme="vision"]) .rui-form-hint {
   font-size: var(--rui-font-size-base);
   line-height: 24px;
-  margin-top: 6px;
+  margin-top: 0px;
 }
 
 /* Truncated copy keeps the UI block 14/24 body rhythm, so a single clipped line is the

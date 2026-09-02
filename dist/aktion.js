@@ -19656,11 +19656,11 @@ const BA = {
     for (const u of r) {
       const h = i || u.met === null ? "pending" : u.met ? "true" : "false";
       h === "true" && (c += 1);
-      const p = d("li", { class: "rui-requirement", "data-met": h }), b = V(
-        h === "true" ? "circle-check" : h === "false" ? "circle-xmark" : "circle",
-        { className: "rui-requirement-icon" }
+      const p = d("li", { class: "rui-requirement", "data-met": h }), b = h === "true" ? "check" : h === "false" ? "xmark" : "circle", m = V(
+        b,
+        { className: b === "circle" ? "rui-requirement-icon-dot" : "rui-requirement-icon" }
       );
-      b && p.append(b), h !== "pending" && p.append(d("span", { class: "rui-visually-hidden" }, [`${h === "true" ? n : s}: `])), p.append(d("span", { class: "rui-requirement-text" }, [u.label])), l.append(p);
+      m && p.append(m), h !== "pending" && p.append(d("span", { class: "rui-visually-hidden" }, [`${h === "true" ? n : s}: `])), p.append(d("span", { class: "rui-requirement-text" }, [u.label])), l.append(p);
     }
     if (a.append(l), z(e.announce)) {
       const h = g(e.announceText, "{met} of {total} requirements met").split("{met}").join(String(c)).split("{total}").join(String(r.length));
@@ -37109,12 +37109,13 @@ input, textarea, select, button { color: inherit; font-family: inherit; }
 .rui-requirement-list-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .rui-requirement {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
   font-size: 12.5px;
   color: var(--rui-color-text-muted);
 }
 .rui-requirement-icon { flex-shrink: 0; margin-top: 0.15em; font-size: 0.9em; }
+.rui-requirement-icon-dot { flex-shrink: 0; margin-top: 0.15em; font-size: 0.4em; }
 .rui-requirement[data-met="true"] { color: var(--rui-color-success-text); }
 .rui-requirement[data-met="false"] { color: var(--rui-color-danger-text); }
 /* A rule nothing has been checked against yet reads as neutral, not as failing:
@@ -42540,7 +42541,7 @@ ${Ke("xs")} {
 :host([data-rui-theme="vision"]) .rui-form-hint {
   font-size: var(--rui-font-size-base);
   line-height: 24px;
-  margin-top: 6px;
+  margin-top: 0px;
 }
 
 /* Truncated copy keeps the UI block 14/24 body rhythm, so a single clipped line is the
