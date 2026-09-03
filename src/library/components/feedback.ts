@@ -401,6 +401,16 @@ export const Switch: ComponentSpec = {
       // morph reads a present attribute as a deliberate assertion, and an
       // absent one as "leave the user's toggle alone".
       checked: isChecked ? "" : null,
+      // …which is why a CONTROLLED switch also publishes `data-checked`. A
+      // boolean attribute cannot say "assert off" — absent means both "off" and
+      // "not asserting" — so turning a controlled switch off left morph with
+      // nothing to apply: `input.checked` stayed true, `:checked` kept matching,
+      // and the thumb stayed on under a label that already read Disabled.
+      // Turning it ON always worked, so the defect was one-directional.
+      //
+      // Uncontrolled switches keep their attribute absent and stay user-owned;
+      // see `syncInput` in renderer/morph.ts for the receiving half.
+      "data-checked": controlled ? (isChecked ? "true" : "false") : null,
       // `role="switch"` overrides the checkbox's native mapping, so the state
       // has to be published explicitly (the change handler keeps it in sync).
       "aria-checked": isChecked ? "true" : "false",
@@ -426,6 +436,11 @@ export const Switch: ComponentSpec = {
       boundChange?.call(this, event);
       if (localSlot) localSlot.set(live.checked);
       live.setAttribute("aria-checked", live.checked ? "true" : "false");
+      // Keep the ownership marker honest between renders too. Morph reads it off
+      // the FRESH node, so this changes no reconciliation outcome — it is so a
+      // DOM inspection after a click does not show `data-checked="false"` on a
+      // switch that is visibly on.
+      if (controlled) live.setAttribute("data-checked", live.checked ? "true" : "false");
       helpers.invoke(props.onChange, live.checked);
     };
     const label = asString(props.label);

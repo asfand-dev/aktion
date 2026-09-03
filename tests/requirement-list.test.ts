@@ -108,9 +108,8 @@ describe("RequirementList tri-state", () => {
       items: [{ label: "a", met: true }, { label: "b", met: false }, { label: "c" }],
     });
     const glyphs = rows(root).map((r) => r.querySelector(".rui-requirement-icon")?.className ?? "");
-    expect(glyphs[0]).toContain("fa-circle-check");
-    expect(glyphs[1]).toContain("fa-circle-xmark");
-    expect(glyphs[2]).toContain("fa-circle");
+    expect(glyphs[0]).toContain("rui-icon rui-requirement-icon fa-solid fa-check");
+    expect(glyphs[1]).toContain("rui-icon rui-requirement-icon fa-solid fa-xmark");
     expect(glyphs[2]).not.toContain("xmark");
   });
 

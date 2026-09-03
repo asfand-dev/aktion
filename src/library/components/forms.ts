@@ -855,12 +855,23 @@ export const Checkbox: ComponentSpec = {
       "data-has-description": description ? "true" : null,
     });
     const isChecked = asBoolean(props.value);
+    // Controlled when the program supplies the value — through a `$variable`
+    // bound at arg 2 (see `bindToStateAtArg` below) or a plain `value` prop. With
+    // neither, the box owns its own state and morph must leave it alone.
+    const controlled = node.argMeta?.[2]?.stateRef != null || props.value != null;
     const input = el("input", {
       type: "checkbox",
       id: asString(props.id),
       name: asString(props.id),
       checked: isChecked ? "" : null,
       disabled: disabled ? "" : null,
+      // A boolean attribute cannot say "assert OFF" — absent means both "off"
+      // and "not asserting" — so a controlled box turning off left morph with
+      // nothing to apply and the tick survived under a form that had already
+      // moved on. `data-checked` is the assertion, honoured in both directions;
+      // see `syncInput` in renderer/morph.ts. (Reported against `Switch`, which
+      // has the identical shape.)
+      "data-checked": controlled ? (isChecked ? "true" : "false") : null,
       // The DOM property below is the thing browsers paint; the attribute is
       // what survives a morph pass, and it is what the deferred sync reads.
       "data-indeterminate": indeterminate ? "true" : null,
@@ -1139,6 +1150,10 @@ export const Radio: ComponentSpec = {
       style: isRow ? "flex-direction: row; flex-wrap: wrap" : null,
     });
     const current = asString(props.value);
+    // The GROUP is what carries a radio's value, so ownership is decided once
+    // here rather than per option. `value: ""` is a real assertion — "nothing
+    // selected" — which is why the test is against `null`, not falsiness.
+    const groupControlled = props.value != null;
     extractOptionItems(props.items).forEach((item, idx) => {
       // Fall back to the index when the value is empty: every option used to
       // resolve to `id="${group}-"`, and duplicate ids also poison morph's
@@ -1159,6 +1174,11 @@ export const Radio: ComponentSpec = {
         value: item.value,
         checked: isChecked ? "" : null,
         disabled: itemDisabled ? "" : null,
+        // See the note on `Checkbox` above. Picking a DIFFERENT option always
+        // worked — the browser unchecks the rest of a name group natively — so
+        // the broken case was CLEARING the group (`value: ""`), where no option
+        // asserted `checked` and the old selection therefore survived.
+        "data-checked": groupControlled ? (isChecked ? "true" : "false") : null,
       }) as HTMLInputElement;
       input.checked = isChecked;
       itemRoot.append(input, el("span", { class: "rui-radio-label" }, [item.label]));

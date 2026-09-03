@@ -314,6 +314,29 @@ function syncInput(oldEl: HTMLInputElement, newEl: HTMLInputElement): void {
   if (oldEl.type === "file") return;
 
   if (oldEl.type === "checkbox" || oldEl.type === "radio") {
+    // `data-checked` is the render CLAIMING ownership of the checked state, and
+    // it is honoured in BOTH directions — including "false".
+    //
+    // It exists because a boolean attribute cannot express the difference
+    // between "not asserting" and "asserting off": both are an absent
+    // `checked`. The lenient path below therefore read a controlled switch
+    // turning OFF as "leave the user's toggle alone", so `oldEl.checked` stayed
+    // true, `:checked` kept matching, and the thumb stayed on while the label
+    // beside it already said Disabled. Turning ON worked — `checked=""` is
+    // present and applied — so the defect was one-directional and easy to miss.
+    //
+    // Same contract as `value` below (an attribute that is PRESENT is a
+    // deliberate assertion), and the same reason `Checkbox` already carries
+    // `data-indeterminate`: the property is what the browser paints, the
+    // attribute is what survives a morph pass.
+    const asserted = newEl.getAttribute("data-checked");
+    if (asserted !== null) {
+      const owned = asserted === "true";
+      if (oldEl.checked !== owned) {
+        oldEl.checked = owned;
+      }
+      return;
+    }
     // Only sync when the render actually asserts a checked state. Without this
     // guard an uncontrolled checkbox (no `checked` prop) resolved to
     // `desired === false` on every re-render and silently un-ticked itself.

@@ -5,6 +5,33 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-09-02
+
+### Controlled Switches, Checkboxes And Radios Now Turn Off
+
+- Fixed a controlled `Switch` staying visibly ON after its bound value became
+  `false`. Turning one on always worked, so the label beside it could read
+  "Disabled" while the switch still showed as enabled — the two disagreed rather
+  than both being stuck, which is what made this easy to miss.
+- The cause is worth knowing if you write components: a boolean HTML attribute
+  cannot express the difference between "this render is not asserting a checked
+  state" and "this render asserts OFF". Both are an absent `checked`. The
+  reconciler treats an absent `checked` as *leave the user's toggle alone* —
+  which is correct for an uncontrolled checkbox, and was swallowing the one case
+  that really is an assertion. A controlled control now publishes
+  `data-checked="true" | "false"`, and the reconciler honours it in both
+  directions.
+- The same fix lands on `Checkbox` and on `Radio`, which had the identical
+  shape. For a radio group only one case was broken: picking a *different*
+  option always worked, because the browser unchecks the rest of a name group
+  natively, but CLEARING the group (`value: ""`) left the previous selection
+  showing.
+- Uncontrolled `Switch`, `Checkbox` and `RadioItem` are unchanged — they emit no
+  `data-checked`, keep owning their own state, and are still never re-asserted
+  by an unrelated re-render.
+
+---
+
 ## 2026-08-26
 
 ### Signal — A Theme For Screens You Watch, Not Read
