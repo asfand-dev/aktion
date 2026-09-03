@@ -1,0 +1,300 @@
+// Salt & Ember — a neighbourhood wood-fire restaurant site with a real booking flow.
+// Starting point for: restaurants, wine bars, hotels — any venue that takes reservations.
+// Uses: $theme branding, NavBar + stacked Section rhythm + Footer, Split hero, Tabs per course
+//        with FilterPill dietary filtering, Gallery, Rating summary, $form reservation with live
+//        slot availability, SuccessState + booking reference, SegmentedControl directions.
+$app(Column([nav, hero, story, menu, tasting, room, reviewsBlock, reserve, visit, closing, pageFooter], { gap: "none" }))
+
+$theme({ colors: { primary: "#a4432b", primaryHover: "#87351f", accent: "#c9873c" }, radius: { button: "999px", input: "10px" }, font: { familyHeading: "'Fraunces', Georgia, serif" }, fonts: { import: ["Fraunces:400,600,700", "Inter:400,500,700"] } })
+
+img = (seed, w, h) => `https://picsum.photos/seed/${seed}/${w}/${h}`
+money = n => $util.currency(n, "EUR")
+
+$course = "starters"
+$diets = []
+$tasting = false
+$nudge = false
+$allReviews = false
+$notified = false
+$route = "walk"
+$booked = false
+$reference = ""
+
+// ---------- data ----------
+courses = [{ id: "starters", label: "Starters", icon: "utensils" }, { id: "fire", label: "Wood-fired", icon: "fire" }, { id: "mains", label: "Mains", icon: "drumstick-bite" }, { id: "desserts", label: "Desserts", icon: "ice-cream" }, { id: "drinks", label: "Drinks", icon: "wine-glass" }]
+diets = [{ id: "veggie", label: "Vegetarian", icon: "leaf" }, { id: "vegan", label: "Vegan", icon: "seedling" }, { id: "gf", label: "Gluten-free", icon: "wheat-awn" }]
+dietLabel = { veggie: "Vegetarian", vegan: "Vegan", gf: "Gluten-free" }
+dietIcon = { veggie: "leaf", vegan: "seedling", gf: "wheat-awn" }
+
+dishes = [
+  { c: "starters", name: "Charred padrón peppers", desc: "Blistered over vine cuttings, flor de sal, burnt lemon", price: 7.5, tags: ["veggie", "vegan", "gf"] },
+  { c: "starters", name: "Ember-roasted beetroot", desc: "Azeitão goat curd, toasted walnut, aged vinegar", price: 9, tags: ["veggie", "gf"] },
+  { c: "starters", name: "Presunto de Barrancos", desc: "Twenty-four months on the bone, cut to order", price: 12, tags: ["gf"] },
+  { c: "fire", name: "Whole octopus leg", desc: "Two hours in the embers, sweet potato, pimentón", price: 18, tags: ["gf"] },
+  { c: "fire", name: "Wood-fired flatbread", desc: "Taleggio, wild honey from Serra da Estrela, thyme", price: 13.5, tags: ["veggie"] },
+  { c: "fire", name: "Fire-roasted cauliflower", desc: "Whole head, tahini, dukkah, preserved lemon", price: 12, tags: ["veggie", "vegan", "gf"] },
+  { c: "fire", name: "Iberian pork secreto", desc: "Rested over holm oak, quince, charred spring onion", price: 21, tags: ["gf"] },
+  { c: "mains", name: "Dry-aged ribeye for two", desc: "Forty days, bone-marrow butter, watercress", price: 62, tags: ["gf"] },
+  { c: "mains", name: "Line-caught robalo", desc: "Whole sea bass, salsa verde, grilled fennel", price: 26, tags: ["gf"] },
+  { c: "mains", name: "Ember-baked celeriac", desc: "Black garlic, hazelnut crumb, smoked oil", price: 19, tags: ["veggie", "vegan", "gf"] },
+  { c: "desserts", name: "Burnt Basque cheesecake", desc: "Roasted fig, thyme honey, crème fraîche", price: 8.5, tags: ["veggie", "gf"] },
+  { c: "desserts", name: "Wood-oven pastel de nata", desc: "Pulled to order, cinnamon cream, two per person", price: 4.5, tags: ["veggie"] },
+  { c: "desserts", name: "Chocolate & olive-oil mousse", desc: "Seventy percent São Tomé, Maldon salt", price: 9, tags: ["veggie", "vegan", "gf"] },
+  { c: "drinks", name: "Vinho Verde, Quinta do Ameal", desc: "Loureiro, Lima valley — by the glass", price: 6, tags: ["veggie", "vegan", "gf"] },
+  { c: "drinks", name: "Douro tinto, Casa Ferreirinha", desc: "Touriga nacional, four years in bottle", price: 7.5, tags: ["veggie", "vegan", "gf"] },
+  { c: "drinks", name: "Ember old fashioned", desc: "Smoked rosemary, Portuguese brandy, orange oil", price: 12, tags: ["veggie", "vegan", "gf"] }
+]
+services = [
+  { value: "18:00", label: "18:00 · first seating", seats: 8 }, { value: "18:45", label: "18:45", seats: 6 }, { value: "19:30", label: "19:30 · dining room", seats: 4 },
+  { value: "20:15", label: "20:15", seats: 2 }, { value: "21:00", label: "21:00 · last kitchen order", seats: 6 }, { value: "21:45", label: "21:45 · counter", seats: 0 }
+]
+transport = [
+  { id: "walk", label: "On foot", icon: "person-walking", text: "Eight minutes downhill from Miradouro da Graça — follow Rua dos Remédios past the fado houses and look for the blue tiles." },
+  { id: "tram", label: "Tram 28", icon: "train-tram", text: "Ride to Largo das Portas do Sol, then two minutes down the Escadinhas de São Miguel. Wear flat shoes." },
+  { id: "metro", label: "Metro", icon: "train-subway", text: "Blue line to Santa Apolónia, then a flat 700 m along Rua dos Remédios — the only step-free route." },
+  { id: "car", label: "By car", icon: "car", text: "Alfama is mostly pedestrian. Park at Chão do Loureiro and walk five minutes; we validate the ticket." },
+  { id: "taxi", label: "Taxi", icon: "taxi", text: "Ask for Largo do Terreiro do Trigo — drivers will not attempt the last hundred metres of cobbles." }
+]
+reviews = [
+  { name: "Marta Nogueira", role: "Booked eleven times since 2023", rating: 5, quote: "The octopus has ruined every other octopus for me. Ask for the counter and watch Inês work the fire." },
+  { name: "Tomás Ferreira", role: "Lives two streets away", rating: 5, quote: "A short menu that changes when the market changes. In four visits I have never eaten the same thing twice." },
+  { name: "Claire Whitmore", role: "Visiting from Bristol", rating: 4, quote: "Tiny room, so book ahead. We waited twenty minutes at the bar with a glass of Vinho Verde and did not mind at all." },
+  { name: "Aoife Byrne", role: "Coeliac diner", rating: 5, quote: "I flagged gluten when I booked and the kitchen rebuilt the flatbread instead of striking it off. That never happens." }
+]
+occasions = [{ value: "none", label: "No special occasion" }, { value: "birthday", label: "Birthday" }, { value: "anniversary", label: "Anniversary" }, { value: "business", label: "Business dinner" }, { value: "celebration", label: "Something worth celebrating" }]
+fieldLabels = { date: "Date", time: "Service time", name: "Name", email: "Email", phone: "Phone" }
+fieldOrder = ["date", "time", "name", "email", "phone"]
+tastingPrice = 68
+seatsLeft = $util.sum(services.map(s => s.seats))
+
+// ---------- reservation engine ----------
+function makeReference(v) {
+  const parts = v.date.split("-")
+  return `SE-${parts[1]}${parts[2]}-${v.time.split(":").join("")}-${v.party}`
+}
+
+book = $form({
+  values: { date: "2026-08-14", time: "19:30", party: 2, name: "", email: "", phone: "", occasion: "none", notes: "" },
+  rules: {
+    date: [$util.rules.required("Pick a date")],
+    time: [$util.rules.required("Pick a service time")],
+    name: [$util.rules.required("We need a name for the table"), $util.rules.minLength(2, "That looks a little short")],
+    email: [$util.rules.required("Where should the confirmation go?"), $util.rules.email("That email address looks off")],
+    phone: [$util.rules.required("A number lets us call if plans change"), $util.rules.minLength(9, "Include the full number")]
+  },
+  onSubmit: (v) => { $reference = makeReference(v); $booked = true; $toast.success(`Table confirmed — reference ${makeReference(v)}`) }
+})
+
+chosenSlot = services.find(s => s.value == book.values.time)
+slotOk = chosenSlot != null && chosenSlot.seats >= book.values.party
+estimate = book.values.party * ($tasting ? tastingPrice : 42)
+errorList = fieldOrder.filter(k => book.errors[k]).map(k => ({ field: k, label: fieldLabels[k], message: book.errors[k] }))
+slotItems = services.map(s => SelectItem(s.value, s.seats == 0 ? `${s.label} — fully booked` : s.seats < book.values.party ? `${s.label} — only ${s.seats} seats` : s.label, { disabled: s.seats < book.values.party }))
+
+function toggleDiet(id) { $diets = $diets.includes(id) ? $diets.filter(d => d != id) : [...$diets, id] }
+function clearDiets() { $diets = []; $toast.info("Showing the full menu again") }
+function nudgeBooking() { $nudge = true; $toast.info("The reservation form is below — pick a date and a service time") }
+function showMenu() { $course = "fire"; $toast.info("Everything on the wood-fired list comes off the open grill") }
+function resetBooking() { $booked = false; $tasting = false; book.reset(); $toast.info("Starting a fresh booking") }
+
+function toggleTasting() {
+  $tasting = !$tasting
+  if ($tasting) $toast.success("Chef's tasting menu added to your booking")
+  else $toast.info("Tasting menu removed — you can still order it on the night")
+}
+
+// ---------- reusable blocks ----------
+function DishRow(d) {
+  const shown = d.tags.includes("vegan") ? d.tags.filter(t => t != "veggie") : d.tags
+  return Column([
+    Row([StackItem(Text(d.name, { variant: "body-heavy" }), { grow: 1 }), PriceTag(d.price, { currency: "€", size: "sm" })], { gap: "sm", align: "center" }),
+    Text(d.desc, { variant: "small", tone: "muted" }),
+    Row(shown.map(t => Badge(dietLabel[t], { tone: t == "gf" ? "info" : "success", size: "xs", icon: dietIcon[t] })), { gap: "2xs", wrap: true })
+  ], { gap: "2xs", key: d.name })
+}
+
+function MenuList(courseId) {
+  const rows = dishes.filter(d => d.c == courseId && $diets.every(t => d.tags.includes(t)))
+  return Show(rows.length > 0, {
+    fallback: EmptyState("Nothing on this course fits those filters", { icon: "filter-circle-xmark", description: "Clear a filter — or just tell us when you book. Most plates can be rebuilt.", action: Button("Clear filters", { variant: "secondary", icon: "arrows-rotate", onClick: clearDiets }) }),
+    children: Column(rows.map(d => DishRow(d)), { gap: "lg" })
+  })
+}
+
+// ---------- page ----------
+nav = NavBar({
+  brand: Brand("Salt & Ember"),
+  links: [Link("Menu", { href: "#menu" }), Link("Reservations", { href: "#reserve" }), Link("Visit", { href: "#visit" })],
+  actions: [
+    Button("+351 21 396 4420", { variant: "ghost", size: "sm", icon: "phone", onClick: () => $toast.info("The room answers from 16:00, Tuesday to Saturday") }), ThemeToggle(),
+    Button("Book a table", { variant: "primary", size: "sm", icon: "calendar-check", onClick: nudgeBooking })
+  ],
+  sticky: true,
+  blur: true
+})
+
+hero = Section([
+  Split(Column([
+    Eyebrow("WOOD-FIRED · ALFAMA, LISBON"),
+    Display(["Everything here meets ", GradientText("the fire", { gradient: "warm" })], { size: "xl", balance: true }),
+    Text("Twenty-eight seats above the Tagus, one holm-oak grill, and a menu rewritten whenever the market gives us a reason.", { variant: "large", tone: "muted" }),
+    Row([Button("Book a table", { variant: "primary", size: "lg", icon: "calendar-check", onClick: nudgeBooking }), Button("Read the menu", { variant: "secondary", size: "lg", icon: "utensils", onClick: showMenu })], { gap: "sm", wrap: true }),
+    Row([StatusDot(`Open tonight · ${seatsLeft} seats left`, { tone: "success", pulse: true }), Pill("Bib Gourmand 2026", { tone: "promoting", icon: "award" })], { gap: "md", wrap: true })
+  ], { gap: "md" }), { right: Image(img("salt-ember-grill", 900, 720), { alt: "Lamb and spring onions turning over a holm-oak fire at Salt & Ember", ratio: "4:3", sx: { radius: "lg" } }), ratio: "1/1", gap: "xl", stackAt: "md", reverseOnStack: true, align: "center" })
+], { background: "base", width: "xl", padding: "lg" })
+
+story = Section([
+  Split(Image(img("salt-ember-kitchen", 800, 640), { alt: "Chef Inês Bastos plating at the pass beside the open grill", ratio: "4:3", sx: { radius: "lg" } }), {
+    right: Column([
+      Prose([
+        Text("Inês Bastos opened Salt & Ember in 2014 with one rule she has never broken: nothing is cooked on gas. Holm oak and vine cuttings go into the hearth at four in the afternoon, and whatever the fire is doing at seven decides how the room eats.", { variant: "body" }),
+        Text("We buy whole animals and whole boxes of fish, so the list is short and it moves. If a plate disappears mid-service it is because we ran out, not because we changed our minds.", { variant: "body" })
+      ]),
+      DescriptionList([
+        DescriptionItem("Hours", "Tuesday to Saturday · 18:00 – 23:30, closed Sunday and Monday", { icon: "clock" }),
+        DescriptionItem("Address", "Rua dos Remédios 84, 1100-443 Lisboa", { icon: "location-dot" }),
+        DescriptionItem("Phone", "+351 21 396 4420", { icon: "phone" })
+      ], { columns: 1 })
+    ], { gap: "lg" }), ratio: "2/3", gap: "xl", stackAt: "md", align: "center"
+  })
+], { background: "soft", width: "lg", padding: "lg", eyebrow: "OUR STORY", title: "Twelve years of cooking with our backs to the river" })
+
+menu = Section([
+  Reveal(Card([
+    Row([StackItem(Text("Filter by diet", { variant: "small-heavy", tone: "muted" }), { grow: 1 }), Show($diets.length > 0, { children: Button("Clear", { variant: "ghost", size: "sm", icon: "xmark", onClick: clearDiets }) })], { gap: "sm", align: "center" }),
+    Row(diets.map(x => FilterPill(x.label, { active: $diets.includes(x.id), icon: x.icon, count: dishes.filter(d => d.tags.includes(x.id)).length, onToggle: () => toggleDiet(x.id) })), { gap: "sm", wrap: true }),
+    Separator(),
+    Tabs(courses.map(c => TabItem(c.id, c.label, [MenuList(c.id)], { icon: c.icon, badge: String(dishes.filter(d => d.c == c.id && $diets.every(t => d.tags.includes(t))).length) })), { value: $course }),
+    Callout("info", { title: "Everything is cooked over live fire", description: "Timings move with the grill. Tell us about allergies when you book and the kitchen plans around them.", icon: "fire", compact: true })
+  ]), { animation: "fade-up" })
+], { background: "base", width: "lg", id: "menu", eyebrow: "THE MENU", title: "Five courses, rewritten most weeks", subtitle: "Prices include VAT. A 5% service charge is added for tables of six or more." })
+
+tasting = Section([
+  Reveal(Card([
+    Split(Column([
+      Eyebrow("CHEF'S TABLE"),
+      Heading("Seven courses, straight off the fire", { size: "lg" }),
+      Text("Inês cooks a set menu for the whole room on Thursdays and Fridays — whatever came in that morning, in the order the grill wants to give it up. Wine pairing is another €38 and worth it.", { variant: "body", tone: "muted" }),
+      Row([PriceTag(tastingPrice, { currency: "€", size: "lg", period: "guest" }), Badge("About 2h 30m", { tone: "neutral", size: "sm", icon: "hourglass-half" })], { gap: "md", wrap: true, align: "center" }),
+      Row([
+        Button($tasting ? "Remove from my booking" : "Add to my booking", { variant: $tasting ? "secondary" : "primary", icon: $tasting ? "xmark" : "plus", onClick: toggleTasting }),
+        Button("See a sample menu", { variant: "ghost", icon: "scroll", onClick: () => $toast.info("Last Friday: oyster, peppers, robalo, secreto, cauliflower, fig, nata") })
+      ], { gap: "sm", wrap: true })
+    ], { gap: "md" }), { right: Image(img("salt-ember-tasting", 760, 620), { alt: "A seven-course tasting menu laid out along the chef's counter", ratio: "4:3", sx: { radius: "lg" } }), ratio: "3/2", gap: "xl", stackAt: "md", align: "center" })
+  ]), { animation: "zoom" })
+], { background: "soft", width: "lg", padding: "lg" })
+
+room = Section([
+  Gallery([
+    { src: img("salt-ember-room-a", 640, 480), alt: "The twenty-eight seat dining room lit by candles and the grill" }, { src: img("salt-ember-room-b", 640, 480), alt: "The chef's counter facing the open holm-oak hearth" },
+    { src: img("salt-ember-room-c", 640, 480), alt: "Blue azulejo tiles along the entrance corridor" }, { src: img("salt-ember-room-d", 640, 480), alt: "A window table looking over the rooftops of Alfama" },
+    { src: img("salt-ember-room-e", 640, 480), alt: "Copper pans and split holm oak stacked beside the fire" }, { src: img("salt-ember-room-f", 640, 480), alt: "The small terrace with four tables under a fig tree" }
+  ], { columns: 3, ratio: "4:3", label: "The dining room, counter and terrace at Salt & Ember" })
+], { background: "base", width: "lg", eyebrow: "THE ROOM", title: "One floor, one fire, four tables outside" })
+
+reviewsBlock = Section([
+  Grid([
+    Card([
+      Row([Display("4.8", { size: "lg" }), Column([Rating({ value: 4.8, readonly: true, halfStep: true, size: "sm" }), Text("128 verified reviews across the last two years", { variant: "small", tone: "muted" })], { gap: "2xs" })], { gap: "lg", align: "center" }),
+      Progress(96, { max: 100, tone: "success", label: "Would book again", showValue: true }),
+      Row([StatusDot("Full four nights a week", { tone: "warning" }), StatusDot("Average wait for a Friday: 3 weeks", { tone: "info" })], { gap: "md", wrap: true })
+    ]),
+    Card([
+      SectionHeader("From the guest book", { eyebrow: "AFTER SERVICE" }),
+      Comment("Hugo Marques", { body: "Asked for a gluten-free version of the flatbread and they rebuilt the whole dish rather than dropping it from our table.", time: "3 days ago" }),
+      Comment("Inês Bastos · Chef", { body: "Thank you Hugo. Flag it in the booking notes and the kitchen plans around it — most of the menu already works.", time: "2 days ago" })
+    ])
+  ], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" }),
+  Grid(($allReviews ? reviews : reviews.slice(0, 3)).map(r => Testimonial(r.quote, r.name, { role: r.role, rating: r.rating, key: r.name })), { columns: { base: 1, md: 3 }, gap: "lg" }),
+  Row([Button($allReviews ? "Show fewer reviews" : "Read all 128 reviews", { variant: "secondary", icon: $allReviews ? "chevron-up" : "chevron-down", onClick: () => { $allReviews = !$allReviews; $toast.info($allReviews ? "Showing every review we have" : "Back to the three most recent") } })], { justify: "center" })
+], { background: "soft", width: "lg", eyebrow: "REVIEWS", title: "What the neighbourhood says" })
+
+bookingForm = Column([
+  Show($nudge, { children: Callout("info", { title: "Let's get you seated", description: "Pick a date and a service time — we hold the table for fifteen minutes.", icon: "champagne-glasses", compact: true }) }),
+  Show(errorList.length > 0, { children: ValidationSummary(errorList, { count: true }) }),
+  FormSection("When", [
+    Grid([
+      DatePicker("res-date", { label: "Date", value: book.values.date, min: "2026-08-07", max: "2026-10-06", required: true, error: book.errors.date, hint: "Closed Sunday and Monday", onChange: v => book.setField("date", v) }),
+      Select("res-time", slotItems, { label: "Service time", value: book.values.time, required: true, error: book.errors.time, hint: "Sold-out seatings are greyed out", onChange: v => book.setField("time", v) }),
+      FormControl("Party size", { field: QuantityStepper(book.values.party, { min: 1, max: 10, label: "Guests", onChange: v => book.setField("party", v) }), hint: "Ten is the whole room" })
+    ], { columns: { base: 1, md: 3 }, gap: "md", alignItems: "start" })
+  ], { helper: "Availability updates as you change the party size." }),
+  Show(!slotOk, { children: Callout("warning", { title: `No table for ${book.values.party} at ${book.values.time}`, description: "Choose another seating, or split the group across two tables and tell us in the notes.", icon: "triangle-exclamation" }) }),
+  FormSection("Who", [
+    Grid([
+      Input("res-name", { label: "Full name", placeholder: "Marta Nogueira", value: book.values.name, required: true, error: book.errors.name, autocomplete: "name", onChange: v => book.setField("name", v), onBlur: () => book.touch("name") }),
+      Input("res-email", { label: "Email", type: "email", placeholder: "marta@exemplo.pt", value: book.values.email, required: true, error: book.errors.email, autocomplete: "email", onChange: v => book.setField("email", v), onBlur: () => book.touch("email") }),
+      Input("res-phone", { label: "Phone", type: "tel", placeholder: "+351 912 345 678", value: book.values.phone, required: true, error: book.errors.phone, autocomplete: "tel", onChange: v => book.setField("phone", v), onBlur: () => book.touch("phone") })
+    ], { columns: { base: 1, md: 3 }, gap: "md", alignItems: "start" })
+  ]),
+  FormSection("Anything else", [
+    Select("res-occasion", occasions, { label: "Occasion", value: book.values.occasion, onChange: v => book.setField("occasion", v) }),
+    TextArea("res-notes", { label: "Notes for the kitchen", placeholder: "Allergies, a wheelchair, a birthday candle, a table away from the fire…", rows: 3, maxLength: 240, value: book.values.notes, onChange: v => book.setField("notes", v) })
+  ], { helper: "Allergies go straight to the pass — we would rather know now than at the table." }),
+  Button("Confirm reservation", { variant: "primary", size: "lg", icon: "calendar-check", fullWidth: true, loading: book.submitting, disabled: !slotOk, onClick: () => book.submit() }),
+  Text("No card needed. Cancel free up to four hours before the seating.", { variant: "small", tone: "muted", align: "center" })
+], { gap: "lg" })
+
+bookingDone = Column([
+  Confetti({ fire: true, count: 80 }),
+  SuccessState(`Table held for ${book.values.party}`, { icon: "calendar-check", description: `${$util.formatDate(book.values.date, "MMM D")} at ${book.values.time} · confirmation on its way to ${book.values.email}`, actions: [Button("Book another table", { variant: "primary", icon: "plus", onClick: resetBooking }), Button("Resend the confirmation", { variant: "secondary", icon: "envelope", onClick: () => $toast.success(`Confirmation ${$reference} sent again`) })] }),
+  DescriptionList([
+    DescriptionItem("Reference", $reference, { icon: "hashtag" }), DescriptionItem("Guests", String(book.values.party), { icon: "users" }),
+    DescriptionItem("Seating", book.values.time, { icon: "clock" }), DescriptionItem("Menu", $tasting ? `Chef's tasting menu · ${money(tastingPrice)} per guest` : "À la carte", { icon: "utensils" })
+  ])
+], { gap: "lg" })
+
+bookingAside = Column([
+  Card([
+    SectionHeader("Your table", { eyebrow: "LIVE SUMMARY", status: Pill($booked ? "Confirmed" : "Not booked yet", { tone: $booked ? "success" : "neutral" }) }),
+    Stats([{ label: "Guests", value: String(book.values.party) }, { label: "Seating", value: book.values.time }, { label: "Est. spend", value: money(estimate), hint: $tasting ? "Tasting menu" : "À la carte", tone: "primary" }], { layout: "strip" }),
+    Show($tasting, { children: Callout("success", { title: "Chef's tasting menu added", description: `${money(tastingPrice)} per guest, seven courses, about two and a half hours.`, icon: "fire", compact: true }) })
+  ]),
+  Card([
+    SectionHeader("Good to know"),
+    Timeline([
+      TimelineItem("We hold the table fifteen minutes", { icon: "clock", description: "Running late? Call the room and we keep it for you." }),
+      TimelineItem("Allergies are welcome", { icon: "wheat-awn", description: "Write them in the notes and the kitchen plans around them." }),
+      TimelineItem("Counter seats are walk-in", { icon: "chair", description: "Six stools face the fire, released at 21:45. Groups over ten: email reservas@saltandember.pt." })
+    ])
+  ])
+], { gap: "lg" })
+
+reserve = Section([
+  Split(Card([
+    SectionHeader("Reserve a table", { eyebrow: "TUESDAY TO SATURDAY", subtitle: "Bookings open sixty days ahead.", status: StatusDot(`${seatsLeft} seats left tonight`, { tone: seatsLeft > 12 ? "success" : "warning", pulse: true }) }),
+    Show($booked, { children: bookingDone, fallback: bookingForm })
+  ]), { right: bookingAside, ratio: "3/2", gap: "lg", stackAt: "lg", align: "start" })
+], { background: "base", width: "xl", id: "reserve", padding: "lg" })
+
+visit = Section([
+  Grid([
+    Card([
+      SectionHeader("Getting here", { eyebrow: "ALFAMA" }),
+      SegmentedControl(transport.map(t => ({ value: t.id, label: t.label, icon: t.icon })), { value: $route, label: "Getting here by", onChange: v => $toast.info(`Directions updated — ${transport.find(t => t.id == v).label}`) }),
+      Callout("neutral", { title: transport.find(t => t.id == $route).label, description: transport.find(t => t.id == $route).text, icon: transport.find(t => t.id == $route).icon }),
+      Separator(),
+      DescriptionList([DescriptionItem("Nearest stop", "Largo das Portas do Sol — tram 28", { icon: "train-tram" }), DescriptionItem("Step-free", "Yes, via Santa Apolónia — tell us and we hold a ground-floor table", { icon: "wheelchair" })], { columns: 1 })
+    ]),
+    Card([
+      Overlay(Image(img("salt-ember-street", 900, 560), { alt: "The blue-tiled façade of Salt & Ember on Rua dos Remédios, Alfama", ratio: "16:9", sx: { radius: "lg" } }), { items: [OverlayItem(Badge("Rua dos Remédios 84", { tone: "primary", icon: "location-dot" }), { anchor: "bottom-left", offset: "12px" })] }),
+      SectionHeader("Rua dos Remédios 84", { eyebrow: "1100-443 LISBOA", subtitle: "Five minutes downhill from Miradouro da Graça — look for the fig tree." }),
+      Row([Badge("Tue – Sat", { tone: "success", size: "sm", icon: "calendar-check" }), Badge("18:00 – 23:30", { tone: "neutral", size: "sm", icon: "clock" }), Badge("28 seats", { tone: "info", size: "sm", icon: "chair" })], { gap: "xs", wrap: true })
+    ])
+  ], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+], { background: "soft", width: "lg", id: "visit", eyebrow: "VISIT", title: "Find us on the hill" })
+
+closing = Section([
+  Banner("The September calendar opens on Monday at 09:00", { message: "Join the list and we message you the moment it does. Three hundred people did last month.", tone: "primary", icon: "bell", action: Button($notified ? "You're on the list" : "Notify me", { variant: $notified ? "secondary" : "primary", icon: $notified ? "check" : "bell", onClick: () => { $notified = true; $toast.success("We'll message you on Monday morning") } }) })
+], { background: "base", width: "lg", padding: "md" })
+
+pageFooter = Footer({
+  brand: Brand("Salt & Ember"),
+  tagline: "Wood-fired cooking in Alfama since 2014.",
+  columns: [
+    FooterColumn("Eat", { links: [Link("The menu", { href: "#menu" }), Link("Chef's tasting menu", { href: "#menu" }), Link("Wine list", { href: "#menu" })] }),
+    FooterColumn("Visit", { links: [Link("Reservations", { href: "#reserve" }), Link("Getting here", { href: "#visit" }), Link("Private hire", { href: "#reserve" })] }),
+    FooterColumn("Contact", { links: [Link("+351 21 396 4420", { href: "#visit" }), Link("reservas@saltandember.pt", { href: "#reserve" })] })
+  ],
+  legal: "© 2026 Salt & Ember, Rua dos Remédios 84, Lisboa — demo restaurant site"
+})
