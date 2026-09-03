@@ -9068,35 +9068,42 @@ const C0 = {
       class: "rui-checkbox",
       "data-disabled": i ? "true" : null,
       "data-has-description": o ? "true" : null
-    }), s = z(e.value), l = d("input", {
+    }), s = z(e.value), l = t.argMeta?.[2]?.stateRef != null || e.value != null, c = d("input", {
       type: "checkbox",
       id: g(e.id),
       name: g(e.id),
       checked: s ? "" : null,
       disabled: i ? "" : null,
+      // A boolean attribute cannot say "assert OFF" — absent means both "off"
+      // and "not asserting" — so a controlled box turning off left morph with
+      // nothing to apply and the tick survived under a form that had already
+      // moved on. `data-checked` is the assertion, honoured in both directions;
+      // see `syncInput` in renderer/morph.ts. (Reported against `Switch`, which
+      // has the identical shape.)
+      "data-checked": l ? s ? "true" : "false" : null,
       // The DOM property below is the thing browsers paint; the attribute is
       // what survives a morph pass, and it is what the deferred sync reads.
       "data-indeterminate": a ? "true" : null
     });
-    l.checked = s, l.indeterminate = a;
-    const c = r.useInstanceState("live-input", null), u = ge(() => {
-      const b = l.isConnected ? l : c.get();
-      b?.isConnected && (c.set(b), b.indeterminate = a);
+    c.checked = s, c.indeterminate = a;
+    const u = r.useInstanceState("live-input", null), h = ge(() => {
+      const m = c.isConnected ? c : u.get();
+      m?.isConnected && (u.set(m), m.indeterminate = a);
     });
-    r.registerDisposer(u, "checkbox-indeterminate"), Oi(l, t, 2, r), or(l, e, r, {
+    r.registerDisposer(h, "checkbox-indeterminate"), Oi(c, t, 2, r), or(c, e, r, {
       event: "change",
-      getValue: (b) => b.checked
+      getValue: (m) => m.checked
     });
-    const h = d("span", {
+    const p = d("span", {
       class: z(e.labelHidden) ? "rui-checkbox-label rui-visually-hidden" : "rui-checkbox-label"
     }, [g(e.label)]);
     if (o) {
-      const b = d("span", { class: "rui-checkbox-item-text" });
-      b.append(h, d("span", { class: "rui-checkbox-item-description" }, [o])), n.append(l, b);
+      const m = d("span", { class: "rui-checkbox-item-text" });
+      m.append(p, d("span", { class: "rui-checkbox-item-description" }, [o])), n.append(c, m);
     } else
-      n.append(l, h);
-    const p = He(n, { ...e, label: null, description: null });
-    return Br(n, l), p;
+      n.append(c, p);
+    const b = He(n, { ...e, label: null, description: null });
+    return Br(n, c), b;
   }
 }, uf = {
   name: "CheckBoxItem",
@@ -9235,42 +9242,47 @@ const C0 = {
       // The stylesheet hard-codes a column, so the inline override is what
       // actually makes `direction: "row"` work today.
       style: n ? "flex-direction: row; flex-wrap: wrap" : null
-    }), c = g(e.value);
-    cf(e.items).forEach((p, b) => {
-      const m = `${i}-${p.value || b}`, f = o || p.disabled, v = d("label", {
+    }), c = g(e.value), u = e.value != null;
+    cf(e.items).forEach((b, m) => {
+      const f = `${i}-${b.value || m}`, v = o || b.disabled, x = d("label", {
         class: "rui-radio",
-        for: m,
-        "data-disabled": f ? "true" : null
-      }), x = c !== "" && c === p.value, y = d("input", {
+        for: f,
+        "data-disabled": v ? "true" : null
+      }), y = c !== "" && c === b.value, w = d("input", {
         type: "radio",
-        id: m,
+        id: f,
         name: i,
-        value: p.value,
-        checked: x ? "" : null,
-        disabled: f ? "" : null
+        value: b.value,
+        checked: y ? "" : null,
+        disabled: v ? "" : null,
+        // See the note on `Checkbox` above. Picking a DIFFERENT option always
+        // worked — the browser unchecks the rest of a name group natively — so
+        // the broken case was CLEARING the group (`value: ""`), where no option
+        // asserted `checked` and the old selection therefore survived.
+        "data-checked": u ? y ? "true" : "false" : null
       });
-      if (y.checked = x, v.append(y, d("span", { class: "rui-radio-label" }, [p.label])), !s) {
-        l.append(v);
+      if (w.checked = y, x.append(w, d("span", { class: "rui-radio-label" }, [b.label])), !s) {
+        l.append(x);
         return;
       }
-      const w = d("div", { class: "rui-radio-row" }, [v]), S = s[b];
-      S != null && S !== !1 && S !== "" && w.append(d("div", { class: "rui-radio-slot" }, [r.renderNode(S)])), l.append(w);
+      const S = d("div", { class: "rui-radio-row" }, [x]), k = s[m];
+      k != null && k !== !1 && k !== "" && S.append(d("div", { class: "rui-radio-slot" }, [r.renderNode(k)])), l.append(S);
     });
-    const u = t.argMeta?.[2]?.stateRef;
-    u && r.bindState(l, u, { event: "change", getValue: vd }), or(l, e, r, {
+    const h = t.argMeta?.[2]?.stateRef;
+    h && r.bindState(l, h, { event: "change", getValue: vd }), or(l, e, r, {
       event: "change",
-      getValue: (p) => vd(p)
+      getValue: (b) => vd(b)
     });
-    const h = He(l, e);
-    if (h !== l) {
-      const p = h.querySelector(".rui-field-label");
-      if (p && i) {
-        p.removeAttribute("for");
-        const b = `${i}-group-label`;
-        p.setAttribute("id", b), l.setAttribute("aria-labelledby", b), l.removeAttribute("aria-label");
+    const p = He(l, e);
+    if (p !== l) {
+      const b = p.querySelector(".rui-field-label");
+      if (b && i) {
+        b.removeAttribute("for");
+        const m = `${i}-group-label`;
+        b.setAttribute("id", m), l.setAttribute("aria-labelledby", m), l.removeAttribute("aria-label");
       }
     }
-    return h;
+    return p;
   }
 };
 function vd(t) {
@@ -13353,7 +13365,7 @@ const Ef = {
       class: "rui-switch",
       for: i,
       "data-disabled": z(e.disabled) ? "true" : "false"
-    }), o = t.argMeta?.[2]?.stateRef, s = o != null || e.value != null ? null : r.useInstanceState("checked", !1), l = s ? s.get() : z(e.value), c = d("input", {
+    }), o = t.argMeta?.[2]?.stateRef, n = o != null || e.value != null, s = n ? null : r.useInstanceState("checked", !1), l = s ? s.get() : z(e.value), c = d("input", {
       type: "checkbox",
       id: i,
       name: i,
@@ -13363,6 +13375,16 @@ const Ef = {
       // morph reads a present attribute as a deliberate assertion, and an
       // absent one as "leave the user's toggle alone".
       checked: l ? "" : null,
+      // …which is why a CONTROLLED switch also publishes `data-checked`. A
+      // boolean attribute cannot say "assert off" — absent means both "off" and
+      // "not asserting" — so turning a controlled switch off left morph with
+      // nothing to apply: `input.checked` stayed true, `:checked` kept matching,
+      // and the thumb stayed on under a label that already read Disabled.
+      // Turning it ON always worked, so the defect was one-directional.
+      //
+      // Uncontrolled switches keep their attribute absent and stay user-owned;
+      // see `syncInput` in renderer/morph.ts for the receiving half.
+      "data-checked": n ? l ? "true" : "false" : null,
       // `role="switch"` overrides the checkbox's native mapping, so the state
       // has to be published explicitly (the change handler keeps it in sync).
       "aria-checked": l ? "true" : "false",
@@ -13379,7 +13401,7 @@ const Ef = {
     const h = c.onchange;
     c.onchange = function(m) {
       const f = m.currentTarget ?? m.target;
-      h?.call(this, m), s && s.set(f.checked), f.setAttribute("aria-checked", f.checked ? "true" : "false"), r.invoke(e.onChange, f.checked);
+      h?.call(this, m), s && s.set(f.checked), f.setAttribute("aria-checked", f.checked ? "true" : "false"), n && f.setAttribute("data-checked", f.checked ? "true" : "false"), r.invoke(e.onChange, f.checked);
     };
     const p = g(e.label), b = g(e.description);
     if (a.append(c, u), p || b) {
@@ -22205,9 +22227,15 @@ function B$(t, e, r) {
 function F$(t, e) {
   if (t.type === "file") return;
   if (t.type === "checkbox" || t.type === "radio") {
+    const i = e.getAttribute("data-checked");
+    if (i !== null) {
+      const o = i === "true";
+      t.checked !== o && (t.checked = o);
+      return;
+    }
     if (!e.hasAttribute("checked") && !e.checked) return;
-    const i = e.hasAttribute("checked") || e.checked;
-    t.checked !== i && (t.checked = i);
+    const a = e.hasAttribute("checked") || e.checked;
+    t.checked !== a && (t.checked = a);
     return;
   }
   if (!e.hasAttribute("value")) return;
