@@ -10063,12 +10063,20 @@ const Checkbox = {
       "data-has-description": description ? "true" : null
     });
     const isChecked = asBoolean$1(props.value);
+    const controlled = node.argMeta?.[2]?.stateRef != null || props.value != null;
     const input = el("input", {
       type: "checkbox",
       id: asString$1(props.id),
       name: asString$1(props.id),
       checked: isChecked ? "" : null,
       disabled: disabled ? "" : null,
+      // A boolean attribute cannot say "assert OFF" — absent means both "off"
+      // and "not asserting" — so a controlled box turning off left morph with
+      // nothing to apply and the tick survived under a form that had already
+      // moved on. `data-checked` is the assertion, honoured in both directions;
+      // see `syncInput` in renderer/morph.ts. (Reported against `Switch`, which
+      // has the identical shape.)
+      "data-checked": controlled ? isChecked ? "true" : "false" : null,
       // The DOM property below is the thing browsers paint; the attribute is
       // what survives a morph pass, and it is what the deferred sync reads.
       "data-indeterminate": indeterminate ? "true" : null
@@ -10281,6 +10289,7 @@ const Radio = {
       style: isRow ? "flex-direction: row; flex-wrap: wrap" : null
     });
     const current = asString$1(props.value);
+    const groupControlled = props.value != null;
     extractOptionItems(props.items).forEach((item, idx) => {
       const id = `${groupName}-${item.value || idx}`;
       const itemDisabled2 = groupDisabled || item.disabled;
@@ -10296,7 +10305,12 @@ const Radio = {
         name: groupName,
         value: item.value,
         checked: isChecked ? "" : null,
-        disabled: itemDisabled2 ? "" : null
+        disabled: itemDisabled2 ? "" : null,
+        // See the note on `Checkbox` above. Picking a DIFFERENT option always
+        // worked — the browser unchecks the rest of a name group natively — so
+        // the broken case was CLEARING the group (`value: ""`), where no option
+        // asserted `checked` and the old selection therefore survived.
+        "data-checked": groupControlled ? isChecked ? "true" : "false" : null
       });
       input.checked = isChecked;
       itemRoot.append(input, el("span", { class: "rui-radio-label" }, [item.label]));
@@ -15990,6 +16004,16 @@ const Switch = {
       // morph reads a present attribute as a deliberate assertion, and an
       // absent one as "leave the user's toggle alone".
       checked: isChecked ? "" : null,
+      // …which is why a CONTROLLED switch also publishes `data-checked`. A
+      // boolean attribute cannot say "assert off" — absent means both "off" and
+      // "not asserting" — so turning a controlled switch off left morph with
+      // nothing to apply: `input.checked` stayed true, `:checked` kept matching,
+      // and the thumb stayed on under a label that already read Disabled.
+      // Turning it ON always worked, so the defect was one-directional.
+      //
+      // Uncontrolled switches keep their attribute absent and stay user-owned;
+      // see `syncInput` in renderer/morph.ts for the receiving half.
+      "data-checked": controlled ? isChecked ? "true" : "false" : null,
       // `role="switch"` overrides the checkbox's native mapping, so the state
       // has to be published explicitly (the change handler keeps it in sync).
       "aria-checked": isChecked ? "true" : "false",
@@ -16011,6 +16035,7 @@ const Switch = {
       boundChange?.call(this, event);
       if (localSlot) localSlot.set(live.checked);
       live.setAttribute("aria-checked", live.checked ? "true" : "false");
+      if (controlled) live.setAttribute("data-checked", live.checked ? "true" : "false");
       helpers.invoke(props.onChange, live.checked);
     };
     const label = asString$1(props.label);
@@ -28525,6 +28550,14 @@ function syncFormState(oldEl, newEl, desiredSelectValue) {
 function syncInput(oldEl, newEl) {
   if (oldEl.type === "file") return;
   if (oldEl.type === "checkbox" || oldEl.type === "radio") {
+    const asserted = newEl.getAttribute("data-checked");
+    if (asserted !== null) {
+      const owned = asserted === "true";
+      if (oldEl.checked !== owned) {
+        oldEl.checked = owned;
+      }
+      return;
+    }
     if (!newEl.hasAttribute("checked") && !newEl.checked) return;
     const desired2 = newEl.hasAttribute("checked") || newEl.checked;
     if (oldEl.checked !== desired2) {
