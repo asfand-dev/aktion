@@ -429,8 +429,8 @@ watching them.
 
 ### Fixed: the Docs Version Sync Appended a Segment Every Build
 
-- `scripts/sync-docs-version.mjs` rewrote `aktion@0.6.4` to `aktion@0.6.4.4`, then
-  `0.6.4.4.4`, once per build. Two overlapping non-global patterns: the second
+- `scripts/sync-docs-version.mjs` rewrote `aktion@0.6.4` to `aktion@0.6.5`, then
+  `0.6.5`, once per build. Two overlapping non-global patterns: the second
   matched the `x.y` prefix of what the first had just written. Being non-global it
   also never reached the file's second version string, so one URL rotted while the
   other went stale.

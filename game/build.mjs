@@ -28,8 +28,8 @@ const CONFIG = {
   hintCost: 15,
   livePreview: true,
   liveValidation: true,
-  aktionSources: ["../dist/aktion.js", "https://esm.sh/aktion-runtime@0.6.1"],
-  aktionLanguageSources: ["../dist/language.js", "https://esm.sh/aktion-runtime@0.6.1/language"],
+  aktionSources: ["../dist/aktion.js", "https://esm.sh/aktion-runtime@0.6.5"],
+  aktionLanguageSources: ["../dist/language.js", "https://esm.sh/aktion-runtime@0.6.5/language"],
 };
 
 const TRACKS = [

@@ -54,8 +54,8 @@ on boot (`[aktion-quest] content warnings:`). **A clean console is the bar.**
     "hintCost": 15,             // XP deducted per hint taken
     "livePreview": true,        // allow stages to render real Aktion (see §7)
     "liveValidation": true,     // allow type-code stages to run the real validator
-    "aktionSources":         ["../dist/aktion.js",  "https://esm.sh/aktion-runtime@0.6.1"],
-    "aktionLanguageSources": ["../dist/language.js","https://esm.sh/aktion-runtime@0.6.1/language"]
+    "aktionSources":         ["../dist/aktion.js",  "https://esm.sh/aktion-runtime@0.6.5"],
+    "aktionLanguageSources": ["../dist/language.js","https://esm.sh/aktion-runtime@0.6.5/language"]
   },
   "tracks": [
     { "id": "foundations", "title": "Foundations",

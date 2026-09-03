@@ -1602,8 +1602,8 @@ function buildChallenge(c, host, stageCtx) {
 
 const Aktion = {
   _el: null, _lang: null,
-  sources() { return (App.data?.config?.aktionSources) || ["../dist/aktion.js", "https://esm.sh/aktion-runtime@0.6.1"]; },
-  langSources() { return (App.data?.config?.aktionLanguageSources) || ["../dist/language.js", "https://esm.sh/aktion-runtime@0.6.1/language"]; },
+  sources() { return (App.data?.config?.aktionSources) || ["../dist/aktion.js", "https://esm.sh/aktion-runtime@0.6.5"]; },
+  langSources() { return (App.data?.config?.aktionLanguageSources) || ["../dist/language.js", "https://esm.sh/aktion-runtime@0.6.5/language"]; },
   async element() {
     if (this._el !== null) return this._el;
     if (App.data?.config?.livePreview === false) return (this._el = false);
