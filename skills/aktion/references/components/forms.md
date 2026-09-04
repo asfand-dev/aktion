@@ -652,15 +652,16 @@ Row of buttons joined edge-to-edge into a single continuous control — only the
 ### InputGroup
 
 ```
-InputGroup(field, icon?, action?, suffix?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
+InputGroup(field, icon?, leading?, action?, suffix?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
 ```
 
-Single field wrapped in a shared bordered shell with an optional leading `icon` and an optional trailing `action` node (button / IconButton / short text suffix). The focus ring is drawn around the whole composite. Use for search fields, password reveal, copy-to-clipboard rows, and unit-suffixed inputs.
+Single field wrapped in a shared bordered shell with an optional leading adornment — `icon` for a Font Awesome name, `leading` for any node (a flag, avatar, colour swatch or badge) — and an optional trailing `action` node (button / IconButton / short text suffix). The focus ring is drawn around the whole composite, and the adornment is centred on the control at whatever height the theme gives it. Use for search fields, password reveal, copy-to-clipboard rows, unit-suffixed inputs, and locale / currency pickers that need a flag inside the box.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `field` | `Node` | **yes** | The Input/Select/etc. to wrap |
 | `icon` | `string` | no | Leading Font Awesome icon name |
+| `leading` | `Node` | no | Leading NODE in place of `icon` — a flag, avatar, colour swatch or badge, for an adornment no glyph can express. Wins over `icon` when both are given. |
 | `action` | `Node` | no | Trailing action node (Button / IconButton) |
 | `suffix` | `string` | no | Short trailing text (e.g. a unit like "GB") |
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |

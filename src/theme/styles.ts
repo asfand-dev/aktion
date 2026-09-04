@@ -1064,6 +1064,13 @@ a.rui-card {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-danger) 22%, transparent);
 }
 .rui-input-group-icon { flex: none; margin-left: 10px; color: var(--rui-color-text-muted); }
+/* The node form of the leading slot (the "leading" prop), which may be any
+   element -- a flag disc, an avatar, a swatch. display:flex so the node centres
+   on the control's own line whatever height the shell has settled at; the group
+   is already align-items:center, so nothing here needs to know that height. The
+   colour inherited from the rule above is deliberately left in place: a text or
+   glyph node still reads as an adornment, and an image node ignores it. */
+.rui-input-group-leading { display: flex; align-items: center; color: inherit; }
 .rui-input-group-field { flex: 1 1 auto; min-width: 0; display: flex; }
 /* the nested control loses its own chrome — the group owns it now.
    Descendant, not child: as soon as the field carries a label/hint/error the

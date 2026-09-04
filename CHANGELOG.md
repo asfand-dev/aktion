@@ -5,6 +5,36 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-09-04
+
+### An InputGroup's Leading Slot Now Takes A Node, Not Only An Icon Name
+
+- `InputGroup` has always had a leading slot, but it only accepted a Font
+  Awesome name. A good many real leading adornments are not glyphs: a country
+  flag on a locale picker, an avatar on an "assign to" field, a colour swatch,
+  a currency or protocol badge. Pass one as `leading` (alias `prefix`):
+
+  ```
+  InputGroup(Select("region", {items: regions}), {
+    leading: Avatar(user.name, {size: "xs"}),
+    label: "Region"
+  })
+  ```
+
+- It lands in the same slot as `icon`, carrying `rui-input-group-icon` as well
+  as the new `rui-input-group-leading`, so the group's layout and every theme's
+  leading-slot rule reach it with no second selector. Passing both `leading` and
+  `icon` renders the node; `icon` on its own is unchanged.
+- Why it is worth a component change rather than a line of app CSS: overlaying
+  an adornment on a control from outside means guessing the control's height,
+  and that height is not a constant — the coarse-pointer / narrow-viewport rule
+  raises inputs and selects to a 44px touch target. An app that positioned its
+  flag for the 36px desktop control had it sitting across the field's top border
+  on a tablet. Inside the group the adornment is a flex item on a
+  `align-items: center` row, so it is centred at whatever height the shell has.
+
+---
+
 ## 2026-09-02
 
 ### Controlled Switches, Checkboxes And Radios Now Turn Off

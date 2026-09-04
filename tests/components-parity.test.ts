@@ -91,6 +91,41 @@ describe("InputGroup", () => {
     expect(root.querySelector(".rui-input-group-suffix")?.textContent).toBe("GB");
     expect(root.querySelector(".rui-input-group-action .rui-button")).toBeTruthy();
   });
+
+  it("renders a NODE in the leading slot, before the field", async () => {
+    const root = await render(
+      `$app(InputGroup(Select({ id: "loc", items: ["fr"] }), { leading: Badge("FR") }))`,
+    );
+    const slot = root.querySelector(".rui-input-group-leading");
+    expect(slot).toBeTruthy();
+    // Same slot as the glyph form, so the group's layout and every theme's
+    // leading rule reach it without a second selector.
+    expect(slot?.classList.contains("rui-input-group-icon")).toBe(true);
+    expect(slot?.querySelector(".rui-badge")?.textContent).toBe("FR");
+    // Before the field, not after it.
+    const group = root.querySelector(".rui-input-group")!;
+    const kids = [...group.children];
+    expect(kids.indexOf(slot as Element)).toBeLessThan(
+      kids.findIndex((k) => k.classList.contains("rui-input-group-field")),
+    );
+  });
+
+  it("prefers the leading node over an icon name when both are given", async () => {
+    const root = await render(
+      `$app(InputGroup(Input({ id: "q" }), { icon: "magnifying-glass", leading: Badge("FR") }))`,
+    );
+    const slots = root.querySelectorAll(".rui-input-group-icon");
+    expect(slots).toHaveLength(1);
+    expect(slots[0].classList.contains("rui-input-group-leading")).toBe(true);
+  });
+
+  it("keeps the icon form working when no leading node is given", async () => {
+    const root = await render(
+      `$app(InputGroup(Input({ id: "q" }), { icon: "magnifying-glass" }))`,
+    );
+    expect(root.querySelector(".rui-input-group-icon")).toBeTruthy();
+    expect(root.querySelector(".rui-input-group-leading")).toBeNull();
+  });
 });
 
 describe("FilterPill", () => {
