@@ -9230,10 +9230,11 @@ const ButtonGroup = {
 };
 const InputGroup = {
   name: "InputGroup",
-  description: "Single field wrapped in a shared bordered shell with an optional leading `icon` and an optional trailing `action` node (button / IconButton / short text suffix). The focus ring is drawn around the whole composite. Use for search fields, password reveal, copy-to-clipboard rows, and unit-suffixed inputs.",
+  description: "Single field wrapped in a shared bordered shell with an optional leading adornment — `icon` for a Font Awesome name, `leading` for any node (a flag, avatar, colour swatch or badge) — and an optional trailing `action` node (button / IconButton / short text suffix). The focus ring is drawn around the whole composite, and the adornment is centred on the control at whatever height the theme gives it. Use for search fields, password reveal, copy-to-clipboard rows, unit-suffixed inputs, and locale / currency pickers that need a flag inside the box.",
   props: [
     { name: "field", type: "Node", positional: true, description: "The Input/Select/etc. to wrap" },
     { name: "icon", type: "string", optional: true, description: "Leading Font Awesome icon name" },
+    { name: "leading", type: "Node", optional: true, aliases: ["prefix"], description: "Leading NODE in place of `icon` — a flag, avatar, colour swatch or badge, for an adornment no glyph can express. Wins over `icon` when both are given." },
     { name: "action", type: "Node", optional: true, aliases: ["trailing"], description: "Trailing action node (Button / IconButton)" },
     { name: "suffix", type: "string", optional: true, description: 'Short trailing text (e.g. a unit like "GB")' },
     ...FIELD_SHELL_PROPS
@@ -9257,8 +9258,15 @@ const InputGroup = {
       "data-invalid": invalid ? "true" : null,
       "data-warning": !invalid && warning ? "true" : null
     });
-    const iconNode = renderIcon(props.icon, { className: "rui-input-group-icon" });
-    if (iconNode) root.append(iconNode);
+    const leading = props.leading;
+    if (leading !== void 0 && leading !== null) {
+      const slot = el("div", { class: "rui-input-group-icon rui-input-group-leading" });
+      slot.append(helpers.renderNode(leading));
+      root.append(slot);
+    } else {
+      const iconNode = renderIcon(props.icon, { className: "rui-input-group-icon" });
+      if (iconNode) root.append(iconNode);
+    }
     if (props.field) {
       const body = el("div", { class: "rui-input-group-field" });
       body.append(helpers.renderNode(props.field));

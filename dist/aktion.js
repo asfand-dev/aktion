@@ -8833,10 +8833,11 @@ const C0 = {
   }
 }, T0 = {
   name: "InputGroup",
-  description: "Single field wrapped in a shared bordered shell with an optional leading `icon` and an optional trailing `action` node (button / IconButton / short text suffix). The focus ring is drawn around the whole composite. Use for search fields, password reveal, copy-to-clipboard rows, and unit-suffixed inputs.",
+  description: "Single field wrapped in a shared bordered shell with an optional leading adornment — `icon` for a Font Awesome name, `leading` for any node (a flag, avatar, colour swatch or badge) — and an optional trailing `action` node (button / IconButton / short text suffix). The focus ring is drawn around the whole composite, and the adornment is centred on the control at whatever height the theme gives it. Use for search fields, password reveal, copy-to-clipboard rows, unit-suffixed inputs, and locale / currency pickers that need a flag inside the box.",
   props: [
     { name: "field", type: "Node", positional: !0, description: "The Input/Select/etc. to wrap" },
     { name: "icon", type: "string", optional: !0, description: "Leading Font Awesome icon name" },
+    { name: "leading", type: "Node", optional: !0, aliases: ["prefix"], description: "Leading NODE in place of `icon` — a flag, avatar, colour swatch or badge, for an adornment no glyph can express. Wins over `icon` when both are given." },
     { name: "action", type: "Node", optional: !0, aliases: ["trailing"], description: "Trailing action node (Button / IconButton)" },
     { name: "suffix", type: "string", optional: !0, description: 'Short trailing text (e.g. a unit like "GB")' },
     ...yt
@@ -8855,8 +8856,15 @@ const C0 = {
       "data-disabled": i ? "true" : null,
       "data-invalid": o ? "true" : null,
       "data-warning": !o && n ? "true" : null
-    }), l = V(e.icon, { className: "rui-input-group-icon" });
-    if (l && s.append(l), e.field) {
+    }), l = e.leading;
+    if (l != null) {
+      const p = d("div", { class: "rui-input-group-icon rui-input-group-leading" });
+      p.append(r.renderNode(l)), s.append(p);
+    } else {
+      const p = V(e.icon, { className: "rui-input-group-icon" });
+      p && s.append(p);
+    }
+    if (e.field) {
       const p = d("div", { class: "rui-input-group-field" });
       p.append(r.renderNode(e.field)), s.append(p);
     }
@@ -37668,6 +37676,13 @@ a.rui-card {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--rui-color-danger) 22%, transparent);
 }
 .rui-input-group-icon { flex: none; margin-left: 10px; color: var(--rui-color-text-muted); }
+/* The node form of the leading slot (the "leading" prop), which may be any
+   element -- a flag disc, an avatar, a swatch. display:flex so the node centres
+   on the control's own line whatever height the shell has settled at; the group
+   is already align-items:center, so nothing here needs to know that height. The
+   colour inherited from the rule above is deliberately left in place: a text or
+   glyph node still reads as an adornment, and an image node ignores it. */
+.rui-input-group-leading { display: flex; align-items: center; color: inherit; }
 .rui-input-group-field { flex: 1 1 auto; min-width: 0; display: flex; }
 /* the nested control loses its own chrome — the group owns it now.
    Descendant, not child: as soon as the field carries a label/hint/error the

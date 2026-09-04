@@ -44,6 +44,16 @@ export declare const ButtonGroup: ComponentSpec;
  * The nested control keeps its own behaviour (binding, validation); the group
  * only owns the shell, so the border/focus ring is drawn once around the whole
  * composite instead of around the bare input.
+ *
+ * The leading slot takes EITHER a Font Awesome name (`icon`) or an arbitrary
+ * node (`leading`). The node form exists because a good many real leading
+ * adornments are not glyphs: a country flag on a locale picker, an avatar on a
+ * "assign to" field, a colour swatch, a protocol or currency badge. Before it,
+ * the only way to put one inside the shell was to position it over the control
+ * from the app's own stylesheet — which has to guess the control's height, and
+ * that height is not a constant (the coarse-pointer media query raises inputs
+ * to a 44px touch target), so the adornment drifted off centre on the viewport
+ * the author had not tried.
  */
 export declare const InputGroup: ComponentSpec;
 export declare const Input: ComponentSpec;
