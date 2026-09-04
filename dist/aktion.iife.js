@@ -7395,7 +7395,7 @@ ${Ze("xs")} {
    follow on their own because they read the same tokens. */
 :host([data-rui-theme="vision"]) .rui-callout[data-compact="true"] {
   --rui-callout-pad-block: 10px;
-  --rui-callout-pad-inline: 14px;
+  --rui-callout-pad-inline: 18px;
   --rui-callout-icon-size: 18px;
   --rui-callout-icon-font: var(--rui-font-size-base);
   --rui-callout-icon-gap: 8px;
