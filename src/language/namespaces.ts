@@ -195,6 +195,8 @@ const utilMembers: readonly NamespaceMember[] = [
   method("vibrate", "vibrate(pattern?)", "Haptic pulse (ms or pattern array) on supporting devices."),
   method("share", "share(data)", "Native share sheet (Web Share API) — resolves true on share."),
   method("readClipboard", "readClipboard()", "Read clipboard text (async, permission-gated)."),
+  method("openUrl", "openUrl(url, options?)", "Open a URL in a new tab/window. Options: { target, features: {width,height,…}, noopener, noreferrer }. Only http/https/mailto/tel are opened. Popup-blocked unless called inside the click — use openWindow for a URL you have to fetch first."),
+  method("openWindow", "openWindow(options?)", "Open a blank window NOW and navigate it later — the popup-safe way to open a fetched URL (SSO, signed download). Returns { ok, navigate(url), close(), closed }. Options: { name, features }."),
   method("geolocate", "geolocate(options?)", "Resolve { lat, lng, accuracy } via the Geolocation API."),
   method("isOnline", "isOnline()", "Current navigator.onLine flag."),
   method("deviceType", "deviceType()", '"mobile" | "tablet" | "desktop" heuristic.'),

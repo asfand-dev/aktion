@@ -5,7 +5,100 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-09-05
+
+### Programs Can Now Open A URL — Including One They Have To Fetch First
+
+- Added `$util.openUrl(url, options?)`. `Link(label, {href, external: true})` has
+  always covered a destination known at render time; this is the other half — a
+  URL an ACTION produced, such as a documentation deep link built from the row
+  that was clicked, a signed download, or an invoice. Until now the only route
+  was reaching for `window` as a host global, which the `"safe"` global-access
+  policy exists to forbid, so any program needing it had to run unrestricted.
+
+  ```
+  MenuItem("Open the manual", {onClick: () => $util.openUrl(row.docsUrl)})
+  ```
+
+  `options.target` names the context (`"_blank"` by default; a NAME reuses one
+  window across clicks). `options.features` is a `{width, height, left, top,
+  resizable, scrollbars, menubar, toolbar, location, status}` bag — a
+  `window.open` feature string is accepted and re-parsed, so an unrecognised key
+  cannot reach the browser either way. `noopener` defaults to on for `_blank` and
+  off for a named target, because `noopener` makes the browser ignore the name
+  and open a fresh context every time.
+
+- Added `$util.openWindow(options?)` for the case that cannot be written with
+  `openUrl` at all: a URL that has to be **fetched** before it can be opened — an
+  SSO hand-off, a signed download, an OAuth start URL. Opening from the response
+  callback happens long after the click that caused it, and every browser's popup
+  blocker stops it. `openWindow` opens a blank context during the click and hands
+  back a `{ok, navigate(url), close(), closed}` handle to point somewhere once the
+  answer arrives.
+
+  ```
+  function openConsole(row) {
+    const win = $util.openWindow({name: "console", features: {width: 1024, height: 700}})
+    const req = $http({url: `/things/${row.id}/ssourl`})
+    req.onDone = () => {
+      if (req.error) { win.close(); $toast.error(t("sso_failed")); return }
+      if (!win.navigate(req.data.ssoUrl)) { $ssoFallbackUrl = req.data.ssoUrl }
+    }
+  }
+  ```
+
+  `ok: false` means the browser refused — a blocked popup is invisible otherwise,
+  and the honest response is to put the URL on screen as a link instead.
+
+- `noopener` and `noreferrer` read the same set of "on" values wherever they are
+  written — as a top-level option or as a key inside `features`. Both accept
+  `true`, `1`, `"1"`, `"yes"` and `"true"`; everything else is off. (An earlier
+  draft tested the option with `=== true`, so `{noopener: "yes"}` read as *false*
+  and silently switched the `_blank` default off, while the same `"yes"` inside
+  `features` read as true.)
+- Both builtins open only `http:`, `https:`, `mailto:` and `tel:`. `javascript:`
+  and `vbscript:` execute in the opened context, `data:` and `blob:` let a program
+  mint a document and then point a user at it from a trusted origin, and `file:`
+  reaches the host filesystem — all five are refused, and the answer is `false`
+  rather than an exception. Relative URLs are resolved against the document.
+- `openWindow` cannot use `noopener` (it would make `window.open` return nothing,
+  and the handle is the entire point), so it clears the child's `opener` while the
+  child is still the same-origin `about:blank` it just opened. That is the same
+  protection, applied in the one order that keeps the handle.
+
+---
+
 ## 2026-09-04
+
+### A Scrolled DataGrid No Longer Throws When Its Row Click Navigates Away
+
+- Fixed an uncaught `TypeError: Cannot read properties of undefined (reading
+  'headHeight')` from `DataGrid`. The grid installs an `onscroll` handler on its
+  scroll port to keep the scroll arrows, edge fades and header measurement in
+  step, and that handler was never removed when the component was disposed. Its
+  sibling `ResizeObserver` always was.
+- The failing sequence is ordinary product use, not a corner case. Where the
+  scroll port is narrower than the table, clicking a cell on the right-hand side
+  scrolls the port INTO view first and dispatches the click second — so a grid
+  with `onRowClick` navigates, the instance is disposed, and the scroll event
+  still in flight reaches a handler whose instance state has gone. Reading
+  `useInstanceState("scrollHint")` back then answers `undefined`, and the
+  measurement threw into the page.
+- Two changes, because the two failure modes are different:
+  - `onscroll` is now cleared through `registerDisposer`, which is what closes
+    the ordinary path.
+  - `syncScrollHint` bails out when its instance-state slot no longer answers.
+    `InstanceStateSlot.get()` is typed `(): T`, so nothing in the type system
+    flags this read — but a disposed instance really does return `undefined`,
+    and a callback already past its guard clause when teardown ran cannot be
+    deregistered after the fact. There is no live instance left to publish a
+    measurement to, so returning is the correct answer.
+- An app cannot work around this: the handler is the component's own, and the
+  error surfaces as an uncaught page error rather than something a caller can
+  catch. Found by a Playwright suite whose console guard fails on `pageerror`;
+  clicking an already-visible cell, or the row's own link, never showed it.
+
+---
 
 ### An InputGroup's Leading Slot Now Takes A Node, Not Only An Icon Name
 

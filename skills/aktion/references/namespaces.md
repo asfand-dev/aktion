@@ -6,7 +6,7 @@
 
 # Namespaces & reactive resource bags
 
-154 members across 5 namespaces, plus the bag each
+156 members across 5 namespaces, plus the bag each
 data builtin returns (8 of them).
 
 **This is the list to check before inventing a helper.** Most of what a program needs —
@@ -21,7 +21,7 @@ needs to be.
 
 Runtime helper + reactive-environment namespace.
 
-117 members.
+119 members.
 
 | member | kind | signature | notes |
 | --- | --- | --- | --- |
@@ -134,6 +134,8 @@ Runtime helper + reactive-environment namespace.
 | `vibrate` | method | `vibrate(pattern?)` | Haptic pulse (ms or pattern array) on supporting devices. |
 | `share` | method | `share(data)` | Native share sheet (Web Share API) — resolves true on share. |
 | `readClipboard` | method | `readClipboard()` | Read clipboard text (async, permission-gated). |
+| `openUrl` | method | `openUrl(url, options?)` | Open a URL in a new tab/window. Options: { target, features: {width,height,…}, noopener, noreferrer }. Only http/https/mailto/tel are opened. Popup-blocked unless called inside the click — use openWindow for a URL you have to fetch first. |
+| `openWindow` | method | `openWindow(options?)` | Open a blank window NOW and navigate it later — the popup-safe way to open a fetched URL (SSO, signed download). Returns { ok, navigate(url), close(), closed }. Options: { name, features }. |
 | `geolocate` | method | `geolocate(options?)` | Resolve { lat, lng, accuracy } via the Geolocation API. |
 | `isOnline` | method | `isOnline()` | Current navigator.onLine flag. |
 | `deviceType` | method | `deviceType()` | "mobile" \| "tablet" \| "desktop" heuristic. |

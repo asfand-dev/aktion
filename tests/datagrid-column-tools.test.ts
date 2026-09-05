@@ -29,6 +29,18 @@ async function settle(times = 6): Promise<void> {
   for (let i = 0; i < times; i += 1) await flush();
 }
 
+/**
+ * Let `deferToPaint` run. It races `requestAnimationFrame` against `setTimeout(fn, 0)`
+ * (`src/library/floating.ts`), so the grid's post-paint work — the scroll-hint
+ * measurement and the `onscroll` install — lands on a MACROTASK. `settle()` drains
+ * microtasks only and never reaches it.
+ */
+async function paint(): Promise<void> {
+  await settle();
+  await new Promise((resolve) => { setTimeout(resolve, 0); });
+  await settle();
+}
+
 const ROWS = `rows = [
   { name: "Charlie", age: 30 },
   { name: "Alice", age: 25 },
@@ -1196,5 +1208,71 @@ describe("DataGrid column panel keeps focus across a rebuild", () => {
 
     expect(screen.shadowRoot.querySelector(".rui-data-grid-col-panel")!.getAttribute("data-open"))
       .toBe("false");
+  });
+});
+
+describe("DataGrid scroll hint after dispose", () => {
+  /**
+   * Regression: a scroll event still in flight when the grid was disposed threw
+   * `TypeError: Cannot read properties of undefined (reading 'headHeight')`.
+   *
+   * `syncScrollHint` reads `useInstanceState("scrollHint")` back, and a disposed
+   * instance answers `undefined` — so the grid's own `onscroll`, which was never
+   * cleared on dispose (unlike its sibling ResizeObserver), reached a handler with no
+   * instance behind it. In the product this is a grid whose port is narrower than its
+   * table: clicking a right-hand cell scrolls the port first and dispatches the click
+   * second, so an `onRowClick` that navigates disposes the grid while that scroll event
+   * is still queued.
+   *
+   * The handler is captured BEFORE the route swap and fired AFTER it, which is the whole
+   * point — calling it while the grid is still mounted proves nothing.
+   */
+  it("does not throw when a queued scroll event fires after the grid is gone", async () => {
+    const screen = render(`
+      $show = true
+      $app(Column([
+        Button("hide", {onClick: () => { $show = false }}),
+        $show ? DataGrid([
+          Col("Name", ["a", "b"], "text"),
+          Col("Other", ["x", "y"], "text")
+        ], {rowIds: ["r1", "r2"]}) : Text("gone")
+      ]))
+    `);
+    await paint();
+
+    const scroller = screen.shadowRoot.querySelector(".rui-data-grid-scroll") as
+      (HTMLElement & { onscroll: ((this: GlobalEventHandlers, ev: Event) => void) | null }) | null;
+    expect(scroller).not.toBeNull();
+    const handler = scroller!.onscroll;
+    expect(handler).toBeTypeOf("function");
+
+    // Dispose the grid.
+    (screen.shadowRoot.querySelector("button") as HTMLElement).click();
+    await paint();
+    expect(screen.shadowRoot.textContent).toContain("gone");
+
+    // The captured handler is exactly what a queued scroll event would invoke.
+    expect(() => handler!.call(scroller!, new Event("scroll"))).not.toThrow();
+  });
+
+  /** The disposer clears the property, so the ordinary path never reaches the guard. */
+  it("clears its scroll handler on dispose", async () => {
+    const screen = render(`
+      $show = true
+      $app(Column([
+        Button("hide", {onClick: () => { $show = false }}),
+        $show ? DataGrid([Col("Name", ["a"], "text")], {rowIds: ["r1"]}) : Text("gone")
+      ]))
+    `);
+    await paint();
+
+    const scroller = screen.shadowRoot.querySelector(".rui-data-grid-scroll") as HTMLElement | null;
+    expect(scroller).not.toBeNull();
+    expect(scroller!.onscroll).toBeTypeOf("function");
+
+    (screen.shadowRoot.querySelector("button") as HTMLElement).click();
+    await paint();
+
+    expect(scroller!.onscroll).toBeNull();
   });
 });

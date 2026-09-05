@@ -1317,6 +1317,14 @@ export const DataGrid: ComponentSpec = {
     const syncScrollHint = (view: HTMLElement): void => {
       const scroller = view.querySelector<HTMLElement>(".rui-data-grid-scroll");
       if (!scroller) return;
+      // `InstanceStateSlot.get()` is typed `(): T`, so this read is type-correct — but a
+      // DISPOSED instance answers `undefined`, and TypeScript cannot see that. The
+      // disposers registered for the scroll handler and the ResizeObserver close the
+      // ordinary paths; this guard covers a callback already past its guard clause when
+      // teardown ran, which no amount of deregistration can win. Bailing out is right:
+      // there is no live instance left to publish a measurement to.
+      const prevHint = hintSlot.get() as ScrollHintState | undefined;
+      if (!prevHint) return;
       const headRow = view.querySelector<HTMLElement>(".rui-data-grid-table > thead > tr:first-child");
       const headHeight = headRow ? Math.round(headRow.getBoundingClientRect().height) : 0;
       const slack = scroller.scrollWidth - scroller.clientWidth;
@@ -1326,9 +1334,9 @@ export const DataGrid: ComponentSpec = {
         overflows,
         atStart: !overflows || left <= 1,
         atEnd: !overflows || left >= slack - 1,
-        headHeight: headHeight || hintSlot.get().headHeight,
+        headHeight: headHeight || prevHint.headHeight,
       };
-      const prev = hintSlot.get();
+      const prev = prevHint;
       hintSlot.set(next);
       if (
         prev.overflows === next.overflows && prev.atStart === next.atStart
@@ -2401,6 +2409,27 @@ export const DataGrid: ComponentSpec = {
       // `onscroll` from the fresh node onto the kept one, so re-renders replace
       // the handler instead of stacking a new one on every tick.
       scroller.onscroll = () => syncScrollHint(live);
+      // CLEARED ON DISPOSE, and that is a defect fix rather than housekeeping.
+      //
+      // `syncScrollHint` reads `hintSlot.get().headHeight`, and an instance-state slot
+      // stops answering once its instance leaves the tree. So a scroll event still
+      // queued when the grid is disposed reached a handler whose slot was gone and threw
+      // `TypeError: Cannot read properties of undefined (reading 'headHeight')` into the
+      // page — an uncaught error, not a swallowed one.
+      //
+      // Product-reachable, and reproduced deterministically: where the scroll port is
+      // narrower than the table, clicking a cell on the right-hand side scrolls the port
+      // first and only then dispatches the click, so a grid with `onRowClick` navigates
+      // away and disposes while that scroll event is still in flight. Found by
+      // `apps/cross-connect`'s Playwright suite in the DCD monorepo, whose console guard
+      // fails on `pageerror`; clicking an already-visible cell, or the row's own link,
+      // never showed it.
+      //
+      // The sibling ResizeObserver below has always been disconnected on dispose. This
+      // handler was the one path out.
+      helpers.registerDisposer(() => {
+        scroller.onscroll = null;
+      }, "rui-data-grid-scroll");
 
       const existing = observerSlot.get();
       if (existing && existing.node !== live) {

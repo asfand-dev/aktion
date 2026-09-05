@@ -113,6 +113,143 @@ const blobToDataUrl = (blob: BlobLike): Promise<string> => {
 const isObject = (v: unknown): v is Record<string, unknown> =>
   Boolean(v) && typeof v === "object" && !Array.isArray(v);
 
+/**
+ * Schemes `$util.openUrl` / `OpenedWindow.navigate` will hand to the browser.
+ *
+ * An allow-list rather than a deny-list, because the dangerous set is open-ended
+ * and grows: `javascript:` and `vbscript:` execute in the opened context,
+ * `data:` and `blob:` let a program mint a document of its own and then point a
+ * user at it from a trusted origin, and `file:` reaches the host filesystem. A
+ * program under the `"safe"` global-access policy has no `window`, so these two
+ * builtins are the only route it has to a new browsing context — which is
+ * exactly why the gate belongs here rather than at each call site.
+ *
+ * `mailto:` and `tel:` are included because they are handed to the OS rather
+ * than rendered, and a "contact" action is an ordinary reason to reach for
+ * `openUrl`.
+ */
+const OPENABLE_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
+
+/**
+ * Resolve a caller's URL against the document, and return it only if its scheme
+ * is openable. `""` for everything else — an empty string is the single "no"
+ * every caller below already branches on.
+ *
+ * RELATIVE URLS ARE SUPPORTED and are resolved against `document.baseURI`, so a
+ * program may open `"/help"` without knowing its own origin. That is also why
+ * the parse happens here and not in the caller: `new URL(text)` alone throws on
+ * a relative input, and a `try`/`catch` at each site would silently turn a valid
+ * relative path into "no".
+ */
+const openableUrl = (raw: unknown): string => {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) return "";
+  try {
+    const base =
+      (typeof document !== "undefined" && document.baseURI) ||
+      (typeof location !== "undefined" ? location.href : "");
+    const parsed = base ? new URL(text, base) : new URL(text);
+    return OPENABLE_PROTOCOLS.has(parsed.protocol) ? parsed.href : "";
+  } catch {
+    return "";
+  }
+};
+
+/**
+ * One reading of "on" for every window feature, wherever it was written.
+ *
+ * `openUrl` takes `noopener` BOTH as a top-level option and as a key inside
+ * `features`, and the two used to disagree: the option was tested with
+ * `=== true`, so `{noopener: "yes"}` read as false and silently switched OFF the
+ * `_blank` default, while the same `"yes"` inside `features` read as true. One
+ * value, opposite meanings, depending only on where the author put it.
+ *
+ * The set below is what a feature string can carry (`window.open` itself accepts
+ * `1`/`yes`), plus the booleans an options bag naturally uses. Anything else —
+ * `"no"`, `0`, `""`, `undefined` — is off.
+ */
+const isFeatureOn = (value: unknown): boolean =>
+  value === true || value === 1 || value === "1" || value === "yes" || value === "true";
+
+/** Window features that may be set, and how each is serialised. */
+const WINDOW_FEATURE_NUMBERS = new Set(["width", "height", "left", "top", "screenX", "screenY", "innerWidth", "innerHeight"]);
+const WINDOW_FEATURE_FLAGS = new Set(["popup", "menubar", "toolbar", "location", "status", "resizable", "scrollbars", "noopener", "noreferrer"]);
+
+/**
+ * Build the third argument to `window.open` from an options bag, dropping
+ * anything not on the allow-list above.
+ *
+ * A STRING IS ACCEPTED AND RE-PARSED rather than passed through. `window.open`'s
+ * feature string is a comma-separated `key=value` list, and forwarding an
+ * author's string verbatim would let an unknown key reach the browser — which is
+ * how a feature the allow-list exists to withhold gets set anyway. Parsing and
+ * re-emitting keeps one code path and one list.
+ *
+ * Booleans are emitted as `yes`/`no`: every engine accepts that form, while the
+ * bare key (`"popup"` with no value) is only honoured by some.
+ */
+const windowFeatures = (input: unknown, extra?: Record<string, boolean>): string => {
+  const raw: Record<string, unknown> = {};
+  if (typeof input === "string") {
+    for (const part of input.split(",")) {
+      const [key, value] = part.split("=");
+      const name = (key ?? "").trim();
+      if (name) raw[name] = value === undefined ? true : value.trim();
+    }
+  } else if (isObject(input)) {
+    Object.assign(raw, input);
+  }
+  if (extra) {
+    for (const [name, on] of Object.entries(extra)) {
+      // Explicit caller intent wins over the defaults the builtin adds.
+      if (!(name in raw) && on) raw[name] = true;
+    }
+  }
+  const parts: string[] = [];
+  for (const [name, value] of Object.entries(raw)) {
+    if (WINDOW_FEATURE_NUMBERS.has(name)) {
+      const size = Math.round(toNumber(value));
+      if (Number.isFinite(size)) parts.push(`${name}=${size}`);
+      continue;
+    }
+    if (WINDOW_FEATURE_FLAGS.has(name)) {
+      parts.push(`${name}=${isFeatureOn(value) ? "yes" : "no"}`);
+    }
+  }
+  return parts.join(",");
+};
+
+/** The four names that address an EXISTING context rather than naming a new one. */
+const RESERVED_WINDOW_TARGETS = new Set(["_blank", "_self", "_parent", "_top"]);
+
+/**
+ * The handle `$util.openWindow()` hands back.
+ *
+ * Deliberately NOT the raw `Window`: a program under the `"safe"` policy must
+ * not be given an object it can walk into `opener`, `document` or `parent`
+ * through. Four members is the whole surface, and each one re-checks the
+ * underlying context rather than trusting a flag captured at open time.
+ */
+export type OpenedWindow = {
+  /** `false` when the browser refused (a popup blocker) or there was no `window` at all. */
+  ok: boolean;
+  /** Point the context at a URL. Returns `false` for a rejected scheme or a context that is gone. */
+  navigate(url: unknown): boolean;
+  /** Close the context. Safe to call twice, and on a context that was never opened. */
+  close(): void;
+  /** Live: `true` once the context has been closed, by this program or by the user. */
+  readonly closed: boolean;
+};
+
+const CLOSED_WINDOW: OpenedWindow = {
+  ok: false,
+  navigate: () => false,
+  close: () => {},
+  get closed() {
+    return true;
+  },
+};
+
 const compare = (op: string, a: unknown, b: unknown): boolean => {
   switch (op) {
     case "==": return a === b;
@@ -811,6 +948,154 @@ export const Util = {
       }
       return blobToText(blob).then((text) => text, () => "");
     } catch { return Promise.resolve(""); }
+  },
+  /**
+   * Open a URL in a new browsing context.
+   *
+   * `Link(label, {href, external: true})` covers the case where the destination
+   * is known at render time. This is the other one: a URL an ACTION produced —
+   * a documentation deep link built from the row that was clicked, a signed
+   * download, an invoice, a support ticket. Until now the only route was
+   * reaching for `window` as a host global, which the `"safe"` global-access
+   * policy exists to forbid.
+   *
+   *   MenuItem("Open the manual", {onClick: () => $util.openUrl(row.docsUrl)})
+   *
+   * `options.target` names the context. The default `"_blank"` opens a new tab;
+   * a NAME ("report-window") reuses the same window across clicks, which is the
+   * behaviour you want for a console or a preview the user keeps open.
+   *
+   * `options.features` is a `{width, height, left, top, resizable, scrollbars,
+   * menubar, toolbar, location, status}` bag (a `window.open` feature string is
+   * accepted and re-parsed). Any key outside that list is dropped. Note that
+   * asking for a size is what makes most browsers open a WINDOW rather than a
+   * tab.
+   *
+   * `options.noopener` defaults to `true` for `_blank` and to `false` for a
+   * named target — `noopener` makes the browser ignore the name and open a fresh
+   * context every time, which would silently defeat the reuse the name was for.
+   *
+   * ONLY `http:`, `https:`, `mailto:` and `tel:` are opened. `javascript:`,
+   * `data:`, `blob:` and `file:` are rejected and answer `false`. Relative URLs
+   * are resolved against the document.
+   *
+   * THE RETURN VALUE IS "WAS THIS A REQUEST WE COULD MAKE", NOT "DID A WINDOW
+   * APPEAR". Under `noopener` the browser returns `null` on SUCCESS as well as
+   * on a blocked popup, so the two are indistinguishable from here — `false`
+   * therefore means only that the URL was rejected or the host has no `window`.
+   * Use {@link openWindow} when the program has to react to a popup blocker.
+   *
+   * A POPUP BLOCKER WILL STOP THIS unless the call happens inside the user
+   * gesture that triggered it. Calling it from a `$http` callback — "fetch the
+   * signed URL, then open it" — is exactly the shape browsers block. That is
+   * what {@link openWindow} is for.
+   */
+  openUrl: (url: unknown, options?: unknown): boolean => {
+    try {
+      const href = openableUrl(url);
+      if (!href) return false;
+      if (typeof window === "undefined" || typeof window.open !== "function") return false;
+      const opts = isObject(options) ? options : {};
+      const target = typeof opts.target === "string" && opts.target.trim() ? opts.target.trim() : "_blank";
+      const named = !RESERVED_WINDOW_TARGETS.has(target);
+      // `undefined` means "use the default for this target"; anything else is read
+      // through `isFeatureOn`, the SAME coercion the `features` bag uses — see its
+      // note for the inversion that cost.
+      const features = windowFeatures(opts.features, {
+        noopener: opts.noopener === undefined ? !named : isFeatureOn(opts.noopener),
+        noreferrer: isFeatureOn(opts.noreferrer),
+      });
+      window.open(href, target, features || undefined);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  /**
+   * Open an EMPTY browsing context now, and navigate it once you know where to.
+   *
+   * The problem this exists for is specific and otherwise unsolvable in the
+   * language: a URL that has to be FETCHED before it can be opened — an SSO
+   * hand-off, a signed download, an OAuth start URL. Written the obvious way,
+   *
+   *   const req = $http({url: `/things/${id}/ssourl`})
+   *   req.onDone = () => { $util.openUrl(req.data.ssoUrl) }   // ✗ popup-blocked
+   *
+   * the open happens in a network callback, long after the click that caused it,
+   * and every browser's popup blocker stops it. The fix is the same everywhere:
+   * open a blank context DURING the click, and point it somewhere when the
+   * answer arrives.
+   *
+   *   function openConsole(row) {
+   *     const win = $util.openWindow({name: "console", features: {width: 1024, height: 700}})
+   *     const req = $http({url: `/things/${row.id}/ssourl`})
+   *     req.onDone = () => {
+   *       if (req.error) { win.close(); $toast.error(t("sso_failed")); return }
+   *       if (!win.navigate(req.data.ssoUrl)) { $ssoFallbackUrl = req.data.ssoUrl }
+   *     }
+   *   }
+   *
+   * `ok` is `false` when the browser refused, which is the case worth handling:
+   * a blocked popup is invisible otherwise, and the honest response is to put
+   * the URL on screen as a link the operator can click themselves.
+   *
+   * `options.name` reuses one window across clicks, exactly as `window.open`'s
+   * name does. `options.features` is {@link openUrl}'s bag, same allow-list.
+   *
+   * `noopener` CANNOT be used here — it makes `window.open` return `null`, and
+   * the handle is the entire point. Instead the child's `opener` is cleared
+   * while it is still the same-origin `about:blank` this opened, so the page it
+   * is later navigated to cannot reach back into this one. That is the same
+   * protection `noopener` gives, applied in the one order that keeps the handle.
+   */
+  openWindow: (options?: unknown): OpenedWindow => {
+    try {
+      if (typeof window === "undefined" || typeof window.open !== "function") return CLOSED_WINDOW;
+      const opts = isObject(options) ? options : {};
+      const name = typeof opts.name === "string" && opts.name.trim() ? opts.name.trim() : "_blank";
+      const features = windowFeatures(opts.features);
+      const child = window.open("about:blank", name, features || undefined);
+      if (!child) return CLOSED_WINDOW;
+      try {
+        // Same-origin `about:blank` at this instant, so this write lands; once
+        // the context navigates cross-origin the null sticks.
+        (child as Window & { opener: unknown }).opener = null;
+      } catch {
+        // A host that refuses the write (a strict jsdom, an exotic embedder)
+        // still gets a usable handle — the mitigation is best-effort, and
+        // failing the open over it would be worse than the risk it covers.
+      }
+      return {
+        ok: true,
+        navigate(url: unknown): boolean {
+          const href = openableUrl(url);
+          if (!href) return false;
+          try {
+            if (child.closed) return false;
+            child.location.href = href;
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        close(): void {
+          try {
+            if (!child.closed) child.close();
+          } catch {
+            // Already gone, or a host that forbids programmatic close.
+          }
+        },
+        get closed(): boolean {
+          try {
+            return child.closed;
+          } catch {
+            return true;
+          }
+        },
+      };
+    } catch {
+      return CLOSED_WINDOW;
+    }
   },
   /** Current geolocation as a promise of { lat, lng, accuracy } (or null). */
   geolocate: (options?: unknown): Promise<{ lat: number; lng: number; accuracy: number } | null> => {
