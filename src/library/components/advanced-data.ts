@@ -437,7 +437,7 @@ export const DataGrid: ComponentSpec = {
   props: [
     { name: "columns", type: "Col[]", description: "Columns; pass sortable=true / filterable=true on each Col." },
     { name: "rowIds", type: "any[]", optional: true, description: "Stable id per row (used by `selectedIds` and as the row's morph key); defaults to row index." },
-    { name: "caption", type: "string", optional: true },
+    { name: "caption", type: "string", optional: true, description: "Visible table caption; also its accessible name." },
     { name: "sort", type: "object", optional: true, description: "`{key, direction}` — pass a $variable for two-way binding" },
     { name: "selectedIds", type: "any[]", optional: true, description: "Array of selected row ids — bind a $variable" },
     { name: "selectable", type: "boolean", optional: true, description: "Render leading selection checkboxes" },
@@ -480,6 +480,13 @@ export const DataGrid: ComponentSpec = {
     { name: "columnMenuTitle", type: "string", optional: true, description: "Heading of the column-settings panel (default \"Table settings\"). Pass a translated string in a localised app." },
     { name: "columnMenuDescription", type: "string", optional: true, description: "Sub-heading under the panel title (default \"Manage column visibility and order\"). Pass `\"\"` to drop the line." },
     { name: "columnMenuResetLabel", type: "string", optional: true, description: "Label of the panel's reset action (default \"Reset to default\")." },
+    // DECLARED LAST, and that is not a style choice. `DataGrid` resolves its
+    // two-way bindings by HARD-CODED positional slot — `sort` is `argMeta[3]`,
+    // `selectedIds` `[4]`, `page` `[6]`, `perPage` `[7]`, `globalSearch` `[29]`
+    // (see `render` below) — so inserting a prop anywhere before those shifts
+    // every one of them and silently rebinds `sort` to the caller's `selectedIds`
+    // atom. `Tabs` carries the same warning on its own `fitted`.
+    { name: "ariaLabel", type: "string", optional: true, aliases: ["arialabel"], description: "Accessible name for a grid whose visible name is already a heading beside it — a `<caption>` there would be a visible duplicate. Ignored when `caption` is set, which already names the table." },
   ],
   render: (node, props, helpers) => {
     const allCols = readDataGridCols(props.columns);
@@ -1570,6 +1577,17 @@ export const DataGrid: ComponentSpec = {
     const table = el("table", { class: "rui-data-grid-table" });
     if (loading) table.setAttribute("aria-busy", "true");
     const caption = asString(props.caption);
+    // Same rule, and the same two lines, `Table` has had since it shipped: a
+    // `<caption>` already names the table and an `aria-label` would SHADOW it, so
+    // the label only applies when there is no caption.
+    //
+    // `DataGrid` had the caption and not the label, which left a real shape
+    // unreachable: a grid whose visible name is a heading immediately above it —
+    // the ordinary form of a table inside a card — could only be named by adding a
+    // SECOND, visible copy of that heading. So in practice those grids shipped
+    // with no accessible name at all, and an axe sweep reports every one of them.
+    const ariaLabel = asString(props.ariaLabel);
+    if (!caption && ariaLabel) table.setAttribute("aria-label", ariaLabel);
     if (caption) table.append(el("caption", { class: "rui-data-grid-caption" }, [caption]));
     table.append(buildColGroup(cols, getColConfig()));
 

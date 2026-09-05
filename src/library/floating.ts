@@ -116,6 +116,65 @@ interface Registration extends FloatingHandle {
 const OPEN: WeakMap<HTMLElement, Registration> = new WeakMap();
 
 /**
+ * The panel each anchor most recently promoted into `.rui-layer`.
+ *
+ * ONLY THE REPARENTING FALLBACK NEEDS THIS, and it is not defensive bookkeeping —
+ * without it the fallback STRANDS one panel per commit, forever. The Popover path
+ * never moves a node, so a re-render simply replaces the panel in place; the
+ * fallback moves the node OUT of the component's own subtree, and a re-render
+ * then builds a fresh panel at the original position while the promoted node is
+ * still sitting in the layer. `close()` restores by node reference, so it restores
+ * the node the component no longer owns — and the stale one is never reached
+ * again, because every later open registers against the NEW panel.
+ *
+ * Measured on a `Combobox` in a Popover-less engine, counting
+ * `.rui-layer .rui-combobox-panel` / `.rui-combobox .rui-combobox-panel`:
+ *
+ *   initial            0 / 1     one panel, in place
+ *   first open         1 / 0     promoted
+ *   first COMMIT       1 / 1     <- the leak: stale in the layer, fresh in place
+ *   second open        2 / 0     both in the layer, sharing one `id`
+ *
+ * Two consequences, and the second is the one that bites in production rather
+ * than in a test: duplicate `id`s (so `getElementById` and every `#id` selector
+ * resolve to the stale node), and unbounded growth of the layer over a session.
+ * Keying on the ANCHOR is what identifies them as the same logical panel across
+ * re-renders — the panel node changes identity, the trigger does not.
+ */
+const PROMOTED_BY_ANCHOR: WeakMap<Element, { panel: HTMLElement; from: ParentNode }> = new WeakMap();
+
+/**
+ * Drop the panel this anchor promoted last time, if a re-render has since
+ * replaced it.
+ *
+ * `isConnected` is NOT the test — a stranded panel is still connected, and that
+ * is the whole problem. Strandedness is: the previous panel is still parented by
+ * the layer, and the panel now being promoted came out of the SAME slot it did.
+ * Same anchor plus same original parent is what identifies the two nodes as the
+ * same logical panel across a re-render.
+ *
+ * COMPARING THE ORIGINAL PARENT, NOT JUST THE ANCHOR, is what keeps this from
+ * evicting a legitimate second panel: one trigger can reasonably anchor both a
+ * menu and a tooltip, and those live in different parts of the tree. Only a node
+ * that replaced the previous one in place is treated as having orphaned it.
+ *
+ * The stale node is REMOVED rather than closed-and-restored. `close()` puts a
+ * panel back at `originalParent`, which for a stranded node is the slot the
+ * re-render has already refilled — so restoring it is what produces the duplicate
+ * `id` this function exists to prevent. `close()` still runs first, for its
+ * listener and ResizeObserver teardown; the node is detached afterwards.
+ */
+function dropStrandedPanel(anchor: Element, panel: HTMLElement, from: ParentNode | null, layer: HTMLElement): void {
+  const previous = PROMOTED_BY_ANCHOR.get(anchor);
+  if (!previous || previous.panel === panel) return;
+  if (previous.panel.parentNode !== layer || previous.from !== from) return;
+
+  OPEN.get(previous.panel)?.close();
+  OPEN.delete(previous.panel);
+  previous.panel.remove();
+}
+
+/**
  * Run `fn` once, as soon after the current task as the environment allows.
  *
  * Deliberately races `requestAnimationFrame` against a `setTimeout(0)` instead
@@ -192,6 +251,29 @@ function measure(
 
   const a = anchor.getBoundingClientRect();
   // Measure the panel unconstrained so flipping decisions use its natural size.
+  //
+  // THE CAP FROM THE PREVIOUS PASS HAS TO COME OFF FIRST, and leaving it on is an
+  // INFINITE LOOP rather than a small inaccuracy:
+  //
+  //   pass 1  natural height 379 > 333 available  ->  max-height: 333px
+  //   the panel shrinks, so the ResizeObserver below fires `update()`
+  //   pass 2  height is now 333, which is <= 333  ->  cap removed as unnecessary
+  //   the panel grows back, so the observer fires again
+  //   pass 3  identical to pass 1 ...
+  //
+  // The panel then oscillates for as long as it is open, at one frame per flip,
+  // and its `top` moves with it. A user sees a 1px jitter; anything that waits for
+  // the element to be stable — Playwright's actionability check, a screenshot
+  // comparison, a `scrollIntoView` — waits forever. Measured against a `DataGrid`
+  // column panel that did not fit under its trigger: `inset` alternated between
+  // `8px auto auto 839px` (capped) and `9px auto auto 839px` (uncapped) across six
+  // consecutive animation frames with the page otherwise idle.
+  //
+  // Clearing the two properties this function's own `applyPosition` set is enough:
+  // a cap the AUTHOR asked for (`maxHeight: <number>`) is re-applied unconditionally
+  // below and never consulted here, so it cannot be lost.
+  panel.style.removeProperty("max-height");
+  panel.style.removeProperty("overflow-y");
   const p = panel.getBoundingClientRect();
   const vw = window.innerWidth || document.documentElement.clientWidth || 0;
   const vh = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -366,6 +448,11 @@ export function openFloating(panel: HTMLElement, opts: FloatingOptions): Floatin
       // before the move or the panel lands in the layer as `display: none`.
       const shown = getComputedStyle(panel).display;
       const layer = ensureLayer(root);
+      // Captured BEFORE the move — after `appendChild` the parent is the layer.
+      const from = panel.parentNode;
+      // Before adding one, remove the one this anchor stranded last time.
+      dropStrandedPanel(opts.anchor, panel, from, layer);
+      if (from) PROMOTED_BY_ANCHOR.set(opts.anchor, { panel, from });
       layer.appendChild(panel);
       panel.style.setProperty("display", shown === "none" ? "flex" : shown, "important");
       panel.style.setProperty("pointer-events", "auto", "important");

@@ -7,6 +7,250 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-09-05
 
+### Old Dropdown Panels Piled Up Where The Popover API Is Missing
+
+- Fixed a leak in the fallback the positioner uses on engines without the Popover
+  API: every time a combobox, menu or tooltip committed a value and re-rendered, the
+  panel it had promoted was left behind and a fresh one took its place.
+
+  A panel that cannot use a popover is MOVED into a shared overlay layer instead,
+  and moved back when it closes. But a component that re-renders while its panel is
+  promoted builds a brand-new panel at the original position — so the promoted node
+  is orphaned: nothing points at it any more, nothing ever closes it, and it stays
+  in the layer. Counting the panels on a `Combobox` through one open-and-choose:
+
+  | | in the overlay layer | in the component |
+  |---|---|---|
+  | before opening | 0 | 1 |
+  | opened | 1 | 0 |
+  | value chosen | 1 | 1 |
+  | opened again | 2 | 0 |
+
+  Two symptoms, and the second outlasts the session: the abandoned copies keep the
+  original's `id`, so `getElementById` and every `#id` lookup start finding a
+  detached, stale panel; and the layer grows without limit for as long as the page
+  is open.
+
+  A panel is now dropped when the SAME trigger promotes a different panel out of the
+  SAME place — which is a re-render, and only a re-render. One trigger that anchors
+  two genuinely different panels (a menu and a tooltip, say) keeps both.
+
+  Nothing changes on any browser with the Popover API, which never moves the node.
+
+### A Floating Panel That Did Not Fit Never Stopped Moving
+
+- Fixed dropdowns, popovers, tooltips and the `DataGrid` column panel jittering for
+  as long as they were open, whenever the panel was taller than the space beside
+  its trigger.
+
+  The positioner caps a too-tall panel's height and gives it its own scrollbar. It
+  measured the panel to decide, but measured it with the PREVIOUS pass's cap still
+  applied — so the capped panel now looked short enough, the cap was removed as
+  unnecessary, the panel sprang back to full height, and the next pass capped it
+  again. Each flip moved the panel by a pixel and re-fired the resize observer that
+  triggered the next one.
+
+  Visible as a 1px shimmer. Worse than it looks, though: anything that waits for an
+  element to hold still — an end-to-end test's actionability check, a screenshot
+  comparison, `scrollIntoView` — waited for ever, so a panel in this state could not
+  be clicked shut by an automated test at all.
+
+  A cap you asked for yourself (`maxHeight: 240`) was never affected and still is
+  not.
+
+### Two Modules Could Silently Share One Store
+
+- Fixed `$store` and `$form` handing the **same** handle to two different
+  modules. Both return one handle per call site, and the call site was
+  identified by line and column alone — which is exact for a single file and
+  wrong the moment a program is linked, because linking merges every module into
+  one program and line 4 then exists once per module. Two modules that each
+  opened with `export view = $store({...})` collided: the second silently
+  received the first one's state, methods and persisted data, with nothing
+  reported. The module a call was authored in is now part of its identity.
+
+  The entry module and single-file programs are unaffected by design — their
+  keys, atom names and default `persist` keys are byte-for-byte what they were,
+  so nothing an earlier version stored is orphaned.
+
+### A DataGrid Can Finally Be Named Without A Visible Duplicate
+
+- `DataGrid` now takes `ariaLabel`, which `Table` has had since it shipped.
+
+  A grid's accessible name could only come from `caption`, and a `<caption>`
+  renders **visibly**. So the ordinary shape — a grid inside a card, under a
+  heading that already names it — had two options: add a second, visible copy of
+  that heading, or ship with no accessible name at all. Everyone picked the
+  second, and an axe sweep reports every one of those tables.
+
+  ```
+  Column([
+    Text("Network interfaces", {variant: "large-heavy"}),
+    DataGrid(columns, {ariaLabel: "Network interfaces"})
+  ])
+  ```
+
+  The precedence rule is `Table`'s, unchanged: a `<caption>` already names the
+  table, so `ariaLabel` applies only when there is no caption and can never
+  shadow the name a sighted reader can see.
+
+- **The prop is declared LAST**, and anyone adding another should do the same.
+  `DataGrid` resolves its two-way bindings by hard-coded positional slot —
+  `sort` is `argMeta[3]`, `selectedIds` `[4]`, `page` `[6]`, `perPage` `[7]`,
+  `globalSearch` `[29]` — so a prop inserted ahead of those shifts every one of
+  them and silently rebinds `sort` to the caller's `selectedIds` variable.
+
+### `Number.MAX_SAFE_INTEGER` And Every Other Static Constant Now Reads
+
+- Fixed a property read on a FUNCTION answering `undefined`. `Number.MAX_SAFE_INTEGER`,
+  `Number.EPSILON`, `Number.POSITIVE_INFINITY`, `Date.UTC`, `Array.isArray` named as a
+  value — all of them were empty.
+
+  It failed **silently**, which is what made it expensive. `undefined` is a legal value,
+  so nothing threw and nothing logged; only the comparison downstream went wrong:
+
+  ```
+  n <= Number.MAX_SAFE_INTEGER   →   n <= undefined   →   false
+  ```
+
+  A bounds check written the obvious way therefore rejected every value it was meant to
+  accept. It was found exactly that way — a LAN-id field in a cloud console, whose upper
+  bound was written `Number.MAX_SAFE_INTEGER`, refused the value `2`.
+
+  What hid it is that `Number.isInteger(2)` worked the whole time: a method **call**
+  resolves through a different path that never reached the property reader. So the same
+  object appeared to work for its functions and to be empty for its constants.
+
+  Both spellings are fixed — `Number.MAX_SAFE_INTEGER` and `Number["MAX_SAFE_INTEGER"]`.
+
+- The sandbox is unchanged. `constructor`, `prototype` and `__proto__` are still refused
+  on a function exactly as they are on an object, so the `(() => {}).constructor("…")`
+  route to `Function` that the `"safe"` global policy exists to close stays closed.
+
+### A Read-Only NumberInput Stays Reachable By Keyboard
+
+- `NumberInput` now takes `readOnly`, matching `Input` and `TextArea`.
+
+  The two ways to make a field uneditable are not interchangeable. A `disabled`
+  control leaves the tab order entirely; a `readonly` one is still focusable,
+  still selectable, and still announced by a screen reader. So a form that locks
+  itself while a record is busy — a common shape in a provisioning console — was
+  navigable by keyboard for its text fields and a dead zone for its numbers,
+  purely because of which component each field happened to use.
+
+  ```
+  NumberInput("replica-cores", {value: cores, label: "Cores", readOnly: !editable})
+  ```
+
+  The +/- steppers go `disabled` with it rather than `readonly`: `<button>` has no
+  such attribute, and a stepper that takes focus and then does nothing is worse
+  than one the keyboard skips. The root element also carries `data-readonly` beside
+  its existing `data-disabled`, so a theme can tell the two states apart.
+
+### Durations Are Now A Thing The Runtime Understands
+
+- Added `$util.duration` — `parse(value)`, `format(seconds, { style })` and
+  `isValid(value)` — plus a matching `$util.rules.duration(bounds?, message?)`
+  validator. Everything in the namespace speaks **seconds**, so the two compose
+  in both directions and a bound is a plain number.
+
+  A duration is a *length* of time — a cooldown, a TTL, a poll interval, a
+  retention window — as opposed to a date, which is a point on a calendar. Every
+  API that takes one writes it in one of two grammars, and most accept both:
+
+  ```
+  simple     250ms   30s   5m   2h   7d
+  ISO-8601   PT30S   PT5M  P1D  P1DT12H
+  ```
+
+  Nothing in the platform reads either one. `Date.parse` is for instants, and
+  `Intl.DurationFormat` only *formats* — it takes a components object, not a
+  string. So every app that had a cooldown field wrote its own parser, and the
+  hand-rolled ones tend to accept exactly the grammar their author happened to
+  test with.
+
+  ```
+  $util.duration.parse("5m")        // 300
+  $util.duration.parse("PT1H30M")   // 5400
+  $util.duration.format(5400)       // "90m"
+  $util.duration.format(5400, {style: "iso"})   // "PT1H30M"
+  ```
+
+  `format` picks the largest unit that divides **evenly** and never rounds:
+  `5400` is `"90m"` because that is exact, while `5401` stays `"5401s"` rather
+  than becoming a lossy `"1.5h"`.
+
+- The validator answers both questions a duration field actually has — *is this
+  a duration?* and *is it inside these bounds?* — which is why it is not
+  `pattern(...)` plus `range(...)`. A regular expression can tell you `90m` is
+  well-formed but not that it exceeds a two-hour ceiling, and a numeric range
+  cannot see through the unit at all.
+
+  ```
+  $form({
+    values: {cooldown: "5m"},
+    rules: {
+      cooldown: [$util.rules.duration({min: 120, max: 86400}, "2 minutes to 24 hours")]
+    },
+    onSubmit: (v) => save(v)
+  })
+  ```
+
+  Bounds are in seconds and apply whatever grammar the operator types in, so
+  `2h`, `120m` and `PT2H` are all accepted or all rejected together.
+
+- **The parser is deliberately stricter than ISO-8601 in three places**, and
+  each one is a case where being lenient would produce a value the server on the
+  other end cannot read:
+
+  - **Years and months are rejected.** A month has no fixed length in seconds,
+    so `P1M` cannot be resolved without a calendar. `java.time.Duration.parse`
+    refuses them for the same reason.
+  - **Weeks are rejected.** `P1W` is unambiguous, but it is a *period*
+    designator that `Duration.parse` also refuses — accepting it here would let
+    a form submit something its own backend rejects.
+  - **A unitless number is rejected.** Spring reads a bare `500` as
+    milliseconds; plenty of hand-rolled APIs read it as seconds. The two are
+    indistinguishable and differ by a factor of a thousand, so `parse("500")` is
+    `null` and the field asks for `500ms` or `500s` instead. (A JavaScript
+    *number* is passed straight through as seconds, which is this namespace's
+    own unit.)
+
+### Validators For Addresses, Ports And Whole Numbers
+
+- Added seven rules to `$util.rules`: `integer()`, `range(lo, hi)`, `port()`,
+  `ipv4()`, `ipv6()`, `ip()` and `cidr()`. Every form that asks for a network
+  address or a port used to hand-roll these as a `pattern(...)`, which is how the
+  obvious-looking IPv4 regex — the one that happily accepts `999.1.1.1` — keeps
+  being reinvented.
+
+  ```
+  $form({
+    values: {ip: "", port: "", weight: 1},
+    rules: {
+      ip: [$util.rules.required(), $util.rules.ipv4()],
+      port: [$util.rules.required(), $util.rules.port()],
+      weight: [$util.rules.integer(), $util.rules.range(1, 256)]
+    }
+  })
+  ```
+
+  The two address parsers are checked against Node's own `net.isIPv4` /
+  `isIPv6` over a corpus of valid and malformed addresses, so they accept the
+  `::` shorthand, an IPv4-mapped tail (`::ffff:192.168.0.1`) and a link-local
+  zone index (`fe80::1%eth0`), and reject the ambiguous leading zeros
+  (`010.0.0.1`) that different network stacks read differently. `port()` refuses
+  `0`, which means "assign me one" to the kernel and is never what a field naming
+  a destination means; `cidr()` refuses a bare address, because `10.0.0.0` and
+  `10.0.0.0/8` are not the same thing. As with every other rule, an empty field
+  passes — saying "that is not a valid address" about a field nobody has filled
+  in yet is `required()`'s job, not theirs.
+
+- `$util.readFile` now appears in the language catalogue, so editors complete and
+  document it. It has been implemented and usable since it shipped; only the
+  catalogue entry was missing, which made it invisible to autocomplete, hover and
+  the generated references.
+
 ### Programs Can Now Open A URL — Including One They Have To Fetch First
 
 - Added `$util.openUrl(url, options?)`. `Link(label, {href, external: true})` has

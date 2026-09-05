@@ -6,7 +6,7 @@ comfort you expect from a first-class language: highlighting, diagnostics,
 completions, go-to-definition, rename, and more.
 
 **At a glance** — 282 components across 17 groups, 26 `$`-builtins, 5 namespaces
-(156 members), 8 factory resource bags, 42 snippets, and 15 built-in themes
+(169 members), 8 factory resource bags, 42 snippets, and 15 built-in themes
 (`light`, `dark`, `shadcn`, `shadcn-light`, `shadcn-dark`, `mui`, `mui-light`,
 `mui-dark`, `heroui`, `heroui-light`, `heroui-dark`, `signal`, `signal-light`,
 `signal-dark`, `soft`). Every one of those

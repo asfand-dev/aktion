@@ -749,8 +749,13 @@ $app(pages)
   re-render on change; `$util.url.setQuery`/`.removeQuery` write query params),
   **styling/validation sub-namespaces** (`$util.style.cx`,
   `.gradient`, `.alpha`, `.clamp`, `.token`, `.toStyle`; `$util.rules.required()`,
-  `.email()`, `.min()`, `.pattern()`, `.custom()`, `.asyncCustom()` — awaited by
-  `$form` —, `.validate()`, `.validateAll()`), **computed helper**
+  `.email()`, `.min()`, `.pattern()`, `.duration({ min, max })`, `.custom()`,
+  `.asyncCustom()` — awaited by
+  `$form` —, `.validate()`, `.validateAll()`), **duration helpers**
+  (`$util.duration.parse(v)` → seconds or `null`, `$util.duration.format(seconds, { style })`,
+  `$util.duration.isValid(v)` — they read and write both the simple grammar
+  (`250ms`, `5m`, `2h`) and ISO-8601 (`PT5M`, `P1DT12H`), which is what lets one
+  cooldown/TTL/interval field serve an API documented in either), **computed helper**
   (`$util.derived(fn)`), **side-effect hooks** (`$util.onError`, `$util.onNavigate`,
   `$util.onRequest`, `$util.onResponse`, `$util.invalidate`), **file reading**
   (`$util.readFile(pick, { as?, maxSize? })` — the vetted way to read what

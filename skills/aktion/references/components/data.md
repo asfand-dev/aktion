@@ -86,7 +86,7 @@ Single column inside a Table or DataGrid. Use `align` for per-column text alignm
 ### DataGrid
 
 ```
-DataGrid(columns, rowIds?, caption?, sort?, selectedIds?, selectable?, page?, perPage?, emptyLabel?, onRowClick?, toolbar?, density?, striped?, stickyHeader?, stickyFirstColumn?, exportable?, exportFilename?, loading?, error?, loadingLabel?, maxHeight?, allowOverflow?, onSort?, onSelectionChange?, perPageOptions?, onPerPageChange?, persistKey?, resizable?, columnMenu?, globalSearch?, onGlobalSearch?, wrapCells?, rowNumbers?, highlightOnHover?, scrollArrows?, columnMenuOpen?, onColumnMenuOpenChange?, columnMenuButton?, columnMenuAnchor?, columnMenuTitle?, columnMenuDescription?, columnMenuResetLabel?)
+DataGrid(columns, rowIds?, caption?, sort?, selectedIds?, selectable?, page?, perPage?, emptyLabel?, onRowClick?, toolbar?, density?, striped?, stickyHeader?, stickyFirstColumn?, exportable?, exportFilename?, loading?, error?, loadingLabel?, maxHeight?, allowOverflow?, onSort?, onSelectionChange?, perPageOptions?, onPerPageChange?, persistKey?, resizable?, columnMenu?, globalSearch?, onGlobalSearch?, wrapCells?, rowNumbers?, highlightOnHover?, scrollArrows?, columnMenuOpen?, onColumnMenuOpenChange?, columnMenuButton?, columnMenuAnchor?, columnMenuTitle?, columnMenuDescription?, columnMenuResetLabel?, ariaLabel?)
 ```
 
 Advanced data table with sortable headers, per-column filter chips, row selection (checkboxes), sticky header / first column, optional pagination, an optional bulk-action toolbar slot, and click-to-act rows. Columns are Col(header, values, format?, align?, sortable?, filterable?) entries. Sorting, selection and pagination work on their own; bind `$sort` (`{key, direction}` object), `$selectedIds` (string[]) and `$page` (number) when the host needs to read or drive them, or use `onSort` / `onSelectionChange` for server-side work. Use `loading` / `error` for query states. Set `columnMenu=true` to let the user hide, reorder, and pin columns — the button is pinned to the top-right of the header and stays put while the grid scrolls sideways, without taking a column of its own. Pinning MOVES a column to the front of the table and above a divider in the panel; drag and arrow-key reordering both stay inside their own group, so the only way across that divider is the pin. The last visible column cannot be hidden. To drive the panel from your own toolbar, bind `columnMenuOpen` (with `onColumnMenuOpenChange`), point `columnMenuAnchor` at your button and set `columnMenuButton: false` — the panel keeps working, it just loses the in-header icon. `columnMenuTitle` / `columnMenuDescription` / `columnMenuResetLabel` take translated strings. Set `resizable=true` to let the user drag column borders to resize; the first drag pins the columns at the widths they are already rendered at and switches to a fixed layout, so a narrowed column truncates instead of pushing its neighbours around. `scrollArrows=false` turns off the small chevrons that appear in the header band when there are columns to scroll to. Pass `persistKey` to save the user's column layout to localStorage — give each grid its own key, and prefix it per app when several apps share an origin; the key is mirrored onto the grid as `data-persist-key`. Set `wrapCells=false` for single-line cells with ellipsis + hover tooltip. Use INSTEAD of `Table` when you need any of those interactions.
@@ -95,7 +95,7 @@ Advanced data table with sortable headers, per-column filter chips, row selectio
 | --- | --- | --- | --- |
 | `columns` | `Col[]` | **yes** | Columns; pass sortable=true / filterable=true on each Col. |
 | `rowIds` | `any[]` | no | Stable id per row (used by `selectedIds` and as the row's morph key); defaults to row index. |
-| `caption` | `string` | no |  |
+| `caption` | `string` | no | Visible table caption; also its accessible name. |
 | `sort` | `object` | no | `{key, direction}` — pass a $variable for two-way binding |
 | `selectedIds` | `any[]` | no | Array of selected row ids — bind a $variable |
 | `selectable` | `boolean` | no | Render leading selection checkboxes |
@@ -135,6 +135,7 @@ Advanced data table with sortable headers, per-column filter chips, row selectio
 | `columnMenuTitle` | `string` | no | Heading of the column-settings panel (default "Table settings"). Pass a translated string in a localised app. |
 | `columnMenuDescription` | `string` | no | Sub-heading under the panel title (default "Manage column visibility and order"). Pass `""` to drop the line. |
 | `columnMenuResetLabel` | `string` | no | Label of the panel's reset action (default "Reset to default"). |
+| `ariaLabel` | `string` | no | Accessible name for a grid whose visible name is already a heading beside it — a `<caption>` there would be a visible duplicate. Ignored when `caption` is set, which already names the table. |
 
 ### List
 

@@ -2856,6 +2856,53 @@ function evaluateStoreMember(
 }
 
 /**
+ * A `$store` / `$form` call site, as a string, for the singleton cache and for
+ * the name of the atom that backs it.
+ *
+ * `line:column` alone stops identifying a call site the moment a program is
+ * LINKED: {@link linkProgram} merges every module's statements into one AST, so
+ * line 4 exists once per module. Two modules that each open with
+ * `export view = $store({...})` then land on the same key, and the second one
+ * silently receives the FIRST module's handle — sharing its state, its methods
+ * and its persisted data, with nothing reported. `SourceLocation.source` is the
+ * module index the linker stamps for exactly this reason, and it is what this
+ * folds in.
+ *
+ * Source `0` (the entry) and an absent source (a single-file program, which the
+ * linker never stamps) both produce the ORIGINAL `line:column` form. That is
+ * deliberate and not a shortcut: the key is also the default `persist` key
+ * (`aktion:store:<site>`) and the backing atom's name, so widening it
+ * unconditionally would orphan every store persisted by an earlier version and
+ * rename atoms a host may have snapshotted. Only a non-entry module — the one
+ * case that could collide — gets the wider key.
+ *
+ * @param loc Call-site location, or `undefined` for a node the parser gave none.
+ * @returns A key unique per call site across a linked module graph.
+ */
+function storeCallSite(loc?: { line: number; column: number; source?: number }): string | null {
+  if (!loc) return null;
+  return loc.source ? `${loc.source}:${loc.line}:${loc.column}` : `${loc.line}:${loc.column}`;
+}
+
+/**
+ * The atom name for a `$store` / `$form` call site — `storeCallSite` with the
+ * separators the state store accepts, since a `:` is its own path separator.
+ *
+ * Mirrors the linker's own `__effect_a<id>_` convention for the same problem
+ * (`src/compiler/linker.ts`), so an imported module's atoms are recognisable as
+ * such in a DevTools state dump.
+ *
+ * @param kind Atom prefix — `"store"` or `"form"`.
+ * @param loc Call-site location.
+ * @returns The atom name, or `null` when the node has no location.
+ */
+function storeCallAtom(kind: string, loc?: { line: number; column: number; source?: number }): string | null {
+  if (!loc) return null;
+  const scope = loc.source ? `a${loc.source}_` : "";
+  return `__${kind}_${scope}${loc.line}_${loc.column}`;
+}
+
+/**
  * Evaluate `Store({ ...state, ...methods })`. Splits the config into reactive
  * state (non-function entries, held in a single atom) and methods (function
  * entries, pre-bound to receive the handle as their first argument). Returns
@@ -2865,9 +2912,9 @@ function evaluateStoreMember(
 function evaluateStoreCall(
   args: Expression[],
   ctx: EvaluationContext,
-  loc?: { line: number; column: number },
+  loc?: { line: number; column: number; source?: number },
 ): unknown {
-  const key = loc ? `${loc.line}:${loc.column}` : `anon:${ctx.stores.size}`;
+  const key = storeCallSite(loc) ?? `anon:${ctx.stores.size}`;
   const cached = ctx.stores.get(key);
   if (cached) return cached;
 
@@ -2906,7 +2953,7 @@ function evaluateStoreCall(
   // persistence hydration and history snapshots so meta never round-trips.
   const userFieldKeys = Object.keys(state);
 
-  const atom = loc ? `__store_${loc.line}_${loc.column}` : `__store_anon_${ctx.stores.size}`;
+  const atom = storeCallAtom("store", loc) ?? `__store_anon_${ctx.stores.size}`;
   // Hydrate persisted fields over the declared defaults BEFORE declaring the
   // atom, so the first render already shows the restored values. Only keys the
   // store declares are restored — a renamed/removed field in storage is
@@ -3065,9 +3112,11 @@ function attachStoreHistory(
 function evaluateFormCall(
   args: Expression[],
   ctx: EvaluationContext,
-  loc?: { line: number; column: number },
+  loc?: { line: number; column: number; source?: number },
 ): unknown {
-  const key = loc ? `${loc.line}:${loc.column}` : `form:${ctx.stores.size}`;
+  // Shares `ctx.stores` and `storeCallSite` with `$store` — see that helper for
+  // why the module index is part of the key.
+  const key = storeCallSite(loc) ?? `form:${ctx.stores.size}`;
   const cached = ctx.stores.get(key);
   if (cached) return cached;
 
@@ -3079,7 +3128,7 @@ function evaluateFormCall(
     ? config.rules as Record<string, unknown> : {};
   const onSubmit = typeof config.onSubmit === "function" ? config.onSubmit as (...a: unknown[]) => unknown : null;
 
-  const atom = loc ? `__form_${loc.line}_${loc.column}` : `__form_anon_${ctx.stores.size}`;
+  const atom = storeCallAtom("form", loc) ?? `__form_anon_${ctx.stores.size}`;
   const freshState = (): Record<string, unknown> => ({ values: { ...initialValues }, errors: {}, touched: {}, dirty: false, valid: true, submitting: false, validating: false });
   ctx.state.declare(atom, freshState());
 
@@ -5548,6 +5597,14 @@ function computedMemberAccess(target: unknown, key: unknown): unknown {
     return (target as Record<string, unknown>)[String(key ?? "")];
   }
 
+  // Same arm as `memberAccess`, and here for the same reason: `Number["MAX_SAFE_INTEGER"]`
+  // has to answer what `Number.MAX_SAFE_INTEGER` answers, or the two spellings of one read
+  // disagree. The forbidden-name guard above already covers the computed form of the
+  // `constructor` escape.
+  if (typeof target === "function") {
+    return (target as unknown as Record<string, unknown>)[String(key ?? "")];
+  }
+
   return undefined;
 }
 
@@ -5614,6 +5671,30 @@ function memberAccess(target: unknown, property: string): unknown {
   }
   if (typeof target === "object") {
     return (target as Record<string, unknown>)[property];
+  }
+  // A FUNCTION is a property bag too, and the standard library keeps real
+  // constants on one: `Number.MAX_SAFE_INTEGER`, `Number.EPSILON`,
+  // `Number.POSITIVE_INFINITY`, `Date.UTC`, `Array.isArray` read as a value.
+  // Without this arm every one of them answered `undefined` — silently, because
+  // `undefined` is a legal value and only the COMPARISON against it goes wrong:
+  //
+  //     n <= Number.MAX_SAFE_INTEGER   →  n <= undefined  →  false
+  //
+  // so a bounds check written the obvious way rejected every value it was meant
+  // to accept, with nothing thrown and nothing logged. (Found exactly that way:
+  // a LAN-id field in DCD's VM Auto Scaling console refused `2`.)
+  //
+  // `Number.isInteger(x)` already worked, which is what made this so hard to
+  // see — a method CALL resolves through `evaluateMethodCall`, a different path
+  // that never reached here. So the same object appeared to work for functions
+  // and to be empty for constants.
+  //
+  // The `FORBIDDEN_PROPERTY_NAMES` guard above still applies and is what keeps
+  // this safe: `constructor`, `prototype` and `__proto__` are refused, so the
+  // `(() => {}).constructor("…")` escape that {@link setGlobalAccessPolicy}
+  // exists to close stays closed for functions exactly as it is for objects.
+  if (typeof target === "function") {
+    return (target as unknown as Record<string, unknown>)[property];
   }
   return undefined;
 }

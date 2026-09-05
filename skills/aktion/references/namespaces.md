@@ -6,7 +6,7 @@
 
 # Namespaces & reactive resource bags
 
-156 members across 5 namespaces, plus the bag each
+169 members across 5 namespaces, plus the bag each
 data builtin returns (8 of them).
 
 **This is the list to check before inventing a helper.** Most of what a program needs —
@@ -21,7 +21,7 @@ needs to be.
 
 Runtime helper + reactive-environment namespace.
 
-119 members.
+132 members.
 
 | member | kind | signature | notes |
 | --- | --- | --- | --- |
@@ -116,6 +116,10 @@ Runtime helper + reactive-environment namespace.
 | `style.clamp` | method | `style.clamp(min, preferred, max)` | Responsive clamp(min, preferred, max) size. |
 | `style.token` | method | `style.token(path)` | Resolve a theme token path to its CSS var: "colors.primary" → var(--rui-color-primary). |
 | `style.toStyle` | method | `style.toStyle(obj)` | Serialise a CSS-declarations object to a sanitised style string. |
+| `duration` | namespace | `duration` | Length-of-time helpers in seconds: .parse / .format / .isValid. Reads both the simple grammar (5m, 250ms, 2h) and ISO-8601 (PT5M, P1DT12H). |
+| `duration.parse` | method | `duration.parse(value)` | A duration string in SECONDS, or null when it is not one. Accepts 250ms/30s/5m/2h/7d and PT30S/P1DT12H; rejects years, months, weeks and unitless numbers. |
+| `duration.format` | method | `duration.format(value, options?)` | Seconds (or a duration string) as text. Options: { style: "simple" \| "iso" } — "simple" picks the largest whole unit (120 → "2m"), "iso" emits PnDTnHnMnS. Returns "" for a non-duration. |
+| `duration.isValid` | method | `duration.isValid(value)` | Whether the value parses as a duration. |
 | `rules` | namespace | `rules` | Composable validators — compose per field; run with .validate / .validateAll or hand to $form. |
 | `rules.required` | method | `rules.required(message?)` | Non-empty value. |
 | `rules.email` | method | `rules.email(message?)` | Valid email address. |
@@ -126,6 +130,14 @@ Runtime helper + reactive-environment namespace.
 | `rules.maxLength` | method | `rules.maxLength(n, message?)` | String length ≤ n. |
 | `rules.pattern` | method | `rules.pattern(re, message?)` | Match a regular expression. |
 | `rules.oneOf` | method | `rules.oneOf(options, message?)` | Value is in the allowed list. |
+| `rules.integer` | method | `rules.integer(message?)` | A whole number — min/max bound the magnitude but not the step. |
+| `rules.range` | method | `rules.range(lo, hi, message?)` | Inclusive numeric range — min + max in one rule, so the message names both ends. |
+| `rules.port` | method | `rules.port(message?)` | A TCP/UDP port: a whole number in 1–65535 (0 excluded — it means "assign me one"). |
+| `rules.ipv4` | method | `rules.ipv4(message?)` | Dotted-quad IPv4 address. |
+| `rules.ipv6` | method | `rules.ipv6(message?)` | IPv6 address, :: shorthand and IPv4-mapped tails included. |
+| `rules.ip` | method | `rules.ip(message?)` | Either IP family. |
+| `rules.cidr` | method | `rules.cidr(message?)` | CIDR block — address/prefix, prefix bounded by the family (/0–/32, /0–/128). A bare address is rejected. |
+| `rules.duration` | method | `rules.duration(bounds?, message?)` | A duration (5m, 250ms, PT1H), optionally inside { min, max } given in SECONDS. A string in the bounds position is read as the message. |
 | `rules.matches` | method | `rules.matches(other, message?)` | Equals another value (password confirmation). |
 | `rules.custom` | method | `rules.custom(fn, message?)` | Custom sync rule — return true/null (valid), false, or an error string. |
 | `rules.asyncCustom` | method | `rules.asyncCustom(fn, message?)` | Async rule (Promise) — server-side checks; $form awaits it before submitting. |
@@ -134,6 +146,7 @@ Runtime helper + reactive-environment namespace.
 | `vibrate` | method | `vibrate(pattern?)` | Haptic pulse (ms or pattern array) on supporting devices. |
 | `share` | method | `share(data)` | Native share sheet (Web Share API) — resolves true on share. |
 | `readClipboard` | method | `readClipboard()` | Read clipboard text (async, permission-gated). |
+| `readFile` | method | `readFile(file, options?)` | Read a file picked with FileUpload — the only vetted route, since the "safe" policy grants no FileReader. Accepts a File/Blob, a FileList or an array (first readable entry). Options: { as: "text" \| "dataUrl" \| "base64", maxSize }. NEVER rejects — resolves "" on any failure. |
 | `openUrl` | method | `openUrl(url, options?)` | Open a URL in a new tab/window. Options: { target, features: {width,height,…}, noopener, noreferrer }. Only http/https/mailto/tel are opened. Popup-blocked unless called inside the click — use openWindow for a URL you have to fetch first. |
 | `openWindow` | method | `openWindow(options?)` | Open a blank window NOW and navigate it later — the popup-safe way to open a fetched URL (SSO, signed download). Returns { ok, navigate(url), close(), closed }. Options: { name, features }. |
 | `geolocate` | method | `geolocate(options?)` | Resolve { lat, lng, accuracy } via the Geolocation API. |

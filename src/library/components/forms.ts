@@ -1700,6 +1700,7 @@ export const NumberInput: ComponentSpec = {
     { name: "prefix", type: "string", optional: true, description: "Inline text before the number (e.g. \"€\")" },
     { name: "suffix", type: "string", optional: true, description: "Inline unit after the number (e.g. \"GB\", \"%\", \"ms\")" },
     { name: "precision", type: "number", optional: true, description: "Number of decimals the field keeps (rounds the value it reports)" },
+    { name: "readOnly", type: "boolean", optional: true, aliases: ["readonly"], description: "Value is visible and selectable but not editable (unlike `disabled`, it stays in tab order and is submitted). The +/- buttons are removed from the tab order with it." },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -1709,6 +1710,19 @@ export const NumberInput: ComponentSpec = {
     const min = hasMin ? asNumber(props.min, 0) : Number.NEGATIVE_INFINITY;
     const max = hasMax ? asNumber(props.max, 0) : Number.POSITIVE_INFINITY;
     const disabled = asBoolean(props.disabled);
+    // `readOnly` is the OTHER way a field can be uneditable, and the difference
+    // matters: a `disabled` control leaves the tab order, so a form that locks
+    // itself while a record is busy becomes un-navigable by keyboard — while a
+    // `readonly` one is still focusable, still selectable and still announced.
+    // `Input` and `TextArea` have had this since they shipped; a form mixing the
+    // two therefore had half its fields reachable and half not, for no reason
+    // beyond which component each field happened to use.
+    //
+    // The STEPPER BUTTONS are `disabled` rather than `readonly` — there is no such
+    // attribute on a `<button>`, and a +/- that is focusable but inert is worse
+    // than one that is skipped.
+    const readOnly = asBoolean(props.readOnly);
+    const inert = disabled || readOnly;
     const precision = props.precision === undefined || props.precision === null
       ? null
       : Math.max(0, Math.floor(asNumber(props.precision, 0)));
@@ -1720,13 +1734,17 @@ export const NumberInput: ComponentSpec = {
       if (precision !== null) return Number(n.toFixed(precision));
       return stepDecimals > 0 ? Number(n.toFixed(stepDecimals)) : n;
     };
-    const root = el("div", { class: "rui-number-input", "data-disabled": disabled ? "true" : "false" });
+    const root = el("div", {
+      class: "rui-number-input",
+      "data-disabled": disabled ? "true" : "false",
+      "data-readonly": readOnly ? "true" : "false",
+    });
     const decBtn = el("button", {
       type: "button",
       class: "rui-number-input-button",
       "data-direction": "down",
       "aria-label": "Decrement",
-      disabled: disabled ? "" : null,
+      disabled: inert ? "" : null,
     }, ["−"]);
     const input = el("input", {
       type: "number",
@@ -1739,13 +1757,14 @@ export const NumberInput: ComponentSpec = {
       max: hasMax ? String(max) : null,
       step: String(step),
       disabled: disabled ? "" : null,
+      readonly: readOnly ? "" : null,
     }) as HTMLInputElement;
     const incBtn = el("button", {
       type: "button",
       class: "rui-number-input-button",
       "data-direction": "up",
       "aria-label": "Increment",
-      disabled: disabled ? "" : null,
+      disabled: inert ? "" : null,
     }, ["+"]);
     const stateName = node.argMeta?.[1]?.stateRef;
     const readNumberValue = (n: HTMLElement): number | null => {
@@ -1772,6 +1791,12 @@ export const NumberInput: ComponentSpec = {
       const liveRoot = origin.closest(".rui-number-input");
       const live = liveRoot?.querySelector<HTMLInputElement>(".rui-number-input-field");
       if (!live) return;
+      // Read off the LIVE node rather than the render-time flag, for the same
+      // reason the input itself is: a morph can reuse this handler over a node
+      // whose read-only state has since changed. The buttons are already
+      // `disabled` in that state, so this is the second lock rather than the
+      // first — but a synthetic click is not a user click.
+      if (live.readOnly || live.disabled) return;
       const current = Number(live.value);
       const base = Number.isFinite(current) ? current : 0;
       const next = round(clampNumber(base + delta, min, max));

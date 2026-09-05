@@ -310,6 +310,152 @@ const toDate = (v: unknown): Date => {
   return new Date();
 };
 
+/* --- Durations ----------------------------------------------------------- *
+ *
+ * A *duration* is a length of time — a cooldown, a TTL, a poll interval, a
+ * retention window — as opposed to a *date*, which is a point on a calendar.
+ * Every API that takes one writes it in one of two grammars, and most accept
+ * both:
+ *
+ *   simple    `250ms`, `30s`, `5m`, `2h`, `7d`   (Spring's `DurationStyle.SIMPLE`)
+ *   ISO-8601  `PT30S`, `PT5M`, `P1D`, `P1DT12H`  (`java.time.Duration.parse`)
+ *
+ * So a form field that accepts one has to accept the other, and neither the
+ * platform nor `Intl` parses either: `Date.parse` is for instants, and
+ * `Intl.DurationFormat` only *formats*, is Baseline-2025, and takes a
+ * components object rather than a string.
+ *
+ * THE PARSER IS DELIBERATELY STRICTER THAN ISO-8601 IN TWO PLACES, because the
+ * servers on the other end are:
+ *
+ *   * YEARS AND MONTHS ARE REJECTED. `P1M` is a month, whose length depends on
+ *     which month it is, so it cannot be expressed in seconds without a
+ *     calendar. `java.time.Duration.parse` refuses them for the same reason,
+ *     and a client that quietly resolved `P1M` to 30 days would send a number
+ *     the server then disagreed with.
+ *   * WEEKS ARE REJECTED. `P1W` is unambiguous (7 × 24h) but is a *period*
+ *     designator: `Duration.parse` rejects it, so accepting it here would let a
+ *     form submit a value its own backend cannot read.
+ *
+ * A UNITLESS NUMBER IS ALSO REJECTED. Spring's simple format reads a bare `500`
+ * as milliseconds; a great many hand-rolled APIs read it as seconds. The two
+ * are indistinguishable on the wire and differ by a factor of a thousand, so
+ * this refuses to guess — `parse("500")` is `null`, and `500ms` or `500s` says
+ * which was meant.
+ * ------------------------------------------------------------------------- */
+
+/** Seconds in each simple-format unit suffix. Ordered longest-suffix-first. */
+const DURATION_UNITS: ReadonlyArray<readonly [string, number]> = [
+  ["ns", 1e-9],
+  ["us", 1e-6],
+  ["ms", 1e-3],
+  ["s", 1],
+  ["m", 60],
+  ["h", 3_600],
+  ["d", 86_400],
+];
+
+/** `-?<digits>[.<digits>]<unit>` — the simple grammar, anchored. */
+const SIMPLE_DURATION_RE = /^([+-]?\d+(?:\.\d+)?)(ns|us|ms|s|m|h|d)$/;
+
+/**
+ * `[-]PnDTnHnMn[.n]S` — ISO-8601 minus the calendar designators.
+ *
+ * Every component is optional, but at least one must be present (a bare `P` or
+ * `PT` is rejected by the digit check in `parseDuration`), and a `T` with
+ * nothing after it is not a duration either.
+ */
+const ISO_DURATION_RE =
+  /^([+-])?P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i;
+
+/**
+ * A duration string in SECONDS, or `null` when the input is not one.
+ *
+ * `null` rather than `0` or `NaN`, because every caller has to tell "not a
+ * duration" apart from "a duration of zero": the first is a typo and the second
+ * is a legitimate value that merely may be out of range.
+ *
+ * A number is passed through as seconds — that is the unit this whole namespace
+ * speaks, and it makes `parse(parse(x))` a no-op.
+ */
+export const parseDuration = (value: unknown): number | null => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const text = String(value ?? "").trim();
+  if (text === "") return null;
+
+  const simple = SIMPLE_DURATION_RE.exec(text);
+  if (simple) {
+    const unit = DURATION_UNITS.find(([suffix]) => suffix === simple[2]);
+    return unit ? Number(simple[1]) * unit[1] : null;
+  }
+
+  // Case-insensitive, but only AFTER the simple form has had its turn: `M` is
+  // minutes in ISO-8601 while `m` is minutes and `ms` milliseconds in the simple
+  // one, so upper-casing first would read `500ms` as an ISO fragment.
+  const iso = ISO_DURATION_RE.exec(text);
+  // A duration needs at least one number in it; `P`, `PT` and `-PT` match the
+  // pattern and carry none.
+  if (!iso || !/\d/.test(text)) return null;
+
+  const days = Number(iso[2] ?? 0);
+  const hours = Number(iso[3] ?? 0);
+  const minutes = Number(iso[4] ?? 0);
+  const seconds = Number(iso[5] ?? 0);
+  const total = days * 86_400 + hours * 3_600 + minutes * 60 + seconds;
+  return iso[1] === "-" ? -total : total;
+};
+
+/**
+ * Seconds as a simple-format string, in the largest unit that divides evenly —
+ * `90` → `"90s"`, `120` → `"2m"`, `5_400` → `"90m"`, `86_400` → `"1d"`.
+ *
+ * Whole units only, and that is the point: `5400` is exactly 90 minutes and
+ * `"1.5h"` would be a lossier way of saying the same thing, while `5401` has no
+ * whole-minute form and stays `"5401s"`. Nothing is ever rounded away.
+ */
+const formatSimpleDuration = (seconds: number): string => {
+  if (seconds === 0) return "0s";
+  const sign = seconds < 0 ? "-" : "";
+  const magnitude = Math.abs(seconds);
+  // Largest first, so the shortest exact spelling wins.
+  for (let i = DURATION_UNITS.length - 1; i >= 0; i -= 1) {
+    const entry = DURATION_UNITS[i];
+    if (!entry) continue;
+    const [suffix, size] = entry;
+    const scaled = magnitude / size;
+    if (scaled >= 1 && Number.isInteger(scaled)) return `${sign}${scaled}${suffix}`;
+  }
+  return `${sign}${magnitude}s`;
+};
+
+/**
+ * Seconds as an ISO-8601 duration — `P1DT2H30M`, `PT45S`, `PT0S` for zero.
+ *
+ * Zero renders as `PT0S` rather than `P`, matching `java.time.Duration.ZERO`,
+ * because `P` alone is not a duration any parser accepts — including this one.
+ */
+const formatIsoDuration = (seconds: number): string => {
+  if (seconds === 0) return "PT0S";
+  const sign = seconds < 0 ? "-" : "";
+  let rest = Math.abs(seconds);
+  const days = Math.floor(rest / 86_400);
+  rest -= days * 86_400;
+  const hours = Math.floor(rest / 3_600);
+  rest -= hours * 3_600;
+  const minutes = Math.floor(rest / 60);
+  rest -= minutes * 60;
+  // Trailing zeros trimmed: `0.5` stays `0.5`, `2` stays `2`, `2.000` never
+  // appears. `Number`'s own string form already does this.
+  const secs = Number(rest.toFixed(9));
+  const date = days > 0 ? `${days}D` : "";
+  const time = [
+    hours > 0 ? `${hours}H` : "",
+    minutes > 0 ? `${minutes}M` : "",
+    secs > 0 ? `${secs}S` : "",
+  ].join("");
+  return `${sign}P${date}${time ? `T${time}` : ""}`;
+};
+
 const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTHS_LONG  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -710,6 +856,48 @@ export const Util = {
   endOfMonth: (date: unknown): string => {
     const d = toDate(date);
     return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+  },
+
+  // ── Duration ──────────────────────────────────────────────
+  // A LENGTH of time, as opposed to the point-in-time helpers above. Every
+  // member speaks SECONDS, so `parse` and `format` compose in both directions
+  // and a bound can be written as a plain number.
+  //
+  // Grouped as a nested namespace rather than as `parseDuration` /
+  // `formatDuration` at the top level, so `$util.duration.parse(v)` reads as
+  // one idea and the pair cannot drift apart in the catalogue.
+  duration: {
+    /**
+     * A duration string in seconds, or `null` when the value is not one.
+     *
+     * Accepts the simple format (`250ms`, `30s`, `5m`, `2h`, `7d`) and ISO-8601
+     * (`PT30S`, `P1DT12H`), which is what makes one field usable against an API
+     * that documents one grammar and an operator who knows the other. Rejects
+     * years, months, weeks and unitless numbers — see the note above the
+     * parser for each reason.
+     */
+    parse: (value: unknown): number | null => parseDuration(value),
+
+    /**
+     * Seconds as a duration string.
+     *
+     * `style: "simple"` (the default) picks the largest unit that divides
+     * evenly — `120` → `"2m"` — and `style: "iso"` emits `PnDTnHnMnS`. Pass a
+     * string and it is re-formatted, so `format("PT120S")` is `"2m"`; pass
+     * something that is not a duration at all and you get `""` rather than an
+     * exception, in keeping with every other member here.
+     */
+    format: (value: unknown, options?: unknown): string => {
+      const seconds = parseDuration(value);
+      if (seconds === null) return "";
+      const opts = isObject(options) ? options : {};
+      return String(opts.style ?? "simple").toLowerCase() === "iso"
+        ? formatIsoDuration(seconds)
+        : formatSimpleDuration(seconds);
+    },
+
+    /** Whether the value parses as a duration at all. */
+    isValid: (value: unknown): boolean => parseDuration(value) !== null,
   },
 
   // ── String / regex helpers ────────────────────────────────

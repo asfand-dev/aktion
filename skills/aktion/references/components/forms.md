@@ -735,7 +735,7 @@ Range slider for selecting a single numeric value between `min` and `max`. Pass 
 ### NumberInput
 
 ```
-NumberInput(id, value?, min?, max?, step?, placeholder?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?, prefix?, suffix?, precision?)
+NumberInput(id, value?, min?, max?, step?, placeholder?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?, prefix?, suffix?, precision?, readOnly?)
 ```
 
 Numeric input with paired increment/decrement buttons. Use for quantity steppers, integer settings, and any field where a `<input type="number">` plus +/- controls is friendlier than the native spinner. Pass a `$variable` as `value` for two-way binding. `prefix` / `suffix` render an inline unit ("€", "GB", "%"), and `precision` fixes the number of decimals (currency fields).
@@ -766,6 +766,7 @@ Numeric input with paired increment/decrement buttons. Use for quantity steppers
 | `prefix` | `string` | no | Inline text before the number (e.g. "€") |
 | `suffix` | `string` | no | Inline unit after the number (e.g. "GB", "%", "ms") |
 | `precision` | `number` | no | Number of decimals the field keeps (rounds the value it reports) |
+| `readOnly` | `boolean` | no | Value is visible and selectable but not editable (unlike `disabled`, it stays in tab order and is submitted). The +/- buttons are removed from the tab order with it. |
 
 ### ColorPicker
 

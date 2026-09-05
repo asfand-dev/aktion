@@ -5,7 +5,10 @@
  * call from any expression / action / effect / lambda.
  */
 
-import { safeRegexTest } from "./util.js";
+// `parseDuration` is imported rather than reimplemented: `rules.duration` and
+// `$util.duration.parse` must agree about what a duration is, and two copies of
+// a grammar this fiddly would not stay in step.
+import { parseDuration as parseDurationSeconds, safeRegexTest } from "./util.js";
 
 /* ----------------------------------------------------------------------- *
  * $style — safe, declarative styling helpers
@@ -155,6 +158,83 @@ const isEmpty = (v: unknown): boolean =>
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL_RE = /^(https?:\/\/)[^\s/$.?#].[^\s]*$/i;
 
+/* --- Network address parsing --------------------------------------------- *
+ *
+ * Hand-written rather than regex-driven, and deliberately so: the obvious IPv4
+ * pattern (`\d{1,3}(\.\d{1,3}){3}`) accepts `999.1.1.1`, and the obvious IPv6
+ * one is either wrong about `::` or a ReDoS candidate. These are linear, total,
+ * and reject the octal-looking leading zeros (`010.0.0.1`) that different
+ * network stacks disagree about — the ambiguity is itself a reason to refuse.
+ * ------------------------------------------------------------------------- */
+
+/** A decimal integer in `[0, max]`, written without a sign or a leading zero. */
+const isPlainInt = (text: string, max: number): boolean => {
+  if (!/^\d+$/.test(text)) return false;
+  if (text.length > 1 && text.startsWith("0")) return false;
+  const value = Number(text);
+  return value <= max;
+};
+
+/** Dotted-quad IPv4, e.g. `192.168.0.1`. */
+const isIpv4Address = (text: string): boolean => {
+  const parts = text.split(".");
+  return parts.length === 4 && parts.every((part) => isPlainInt(part, 255));
+};
+
+/**
+ * IPv6, including the `::` run-of-zeros shorthand, a trailing dotted-quad
+ * (`::ffff:192.168.0.1`) and an RFC 4007 zone index (`fe80::1%eth0`). A `::`
+ * may appear at most once, and the groups on either side of it must leave room
+ * for the ones it stands in for.
+ *
+ * Matches `node:net`'s `isIPv6` on a corpus of valid and malformed addresses,
+ * which is the parser everything else in the stack agrees with — including the
+ * zone index, which a link-local address genuinely needs and which is the one
+ * case a from-scratch implementation always forgets.
+ */
+const isIpv6Address = (input: string): boolean => {
+  // The zone is an interface name, not part of the address — any non-empty
+  // string is legitimate, so it is separated off rather than validated.
+  const zoneAt = input.indexOf("%");
+  if (zoneAt !== -1 && zoneAt === input.length - 1) return false;
+  const text = zoneAt === -1 ? input : input.slice(0, zoneAt);
+  if (text.indexOf(":") === -1) return false;
+  const halves = text.split("::");
+  if (halves.length > 2) return false;
+  const compressed = halves.length === 2;
+
+  const groupsOf = (part: string): string[] | null => {
+    if (part === "") return [];
+    const groups = part.split(":");
+    // An embedded IPv4 tail occupies the last TWO 16-bit groups.
+    const tail = groups[groups.length - 1] ?? "";
+    if (tail.indexOf(".") !== -1) {
+      if (!isIpv4Address(tail)) return null;
+      groups.splice(groups.length - 1, 1, "0", "0");
+    }
+
+    return groups.every((group) => /^[0-9a-fA-F]{1,4}$/.test(group)) ? groups : null;
+  };
+
+  const head = groupsOf(halves[0] ?? "");
+  const rest = compressed ? groupsOf(halves[1] ?? "") : [];
+  if (head === null || rest === null) return false;
+  const total = head.length + rest.length;
+  // `::` stands for AT LEAST one zero group, so a compressed address that
+  // already names eight is not shorter — it is malformed.
+  return compressed ? total < 8 : total === 8;
+};
+
+/** `address/prefix`, where the prefix fits the address family. */
+const isCidrBlock = (text: string): boolean => {
+  const slash = text.indexOf("/");
+  if (slash === -1) return false;
+  const address = text.slice(0, slash);
+  const prefix = text.slice(slash + 1);
+  if (isIpv4Address(address)) return isPlainInt(prefix, 32);
+  return isIpv6Address(address) && isPlainInt(prefix, 128);
+};
+
 export const Rules = {
   required: (message = "This field is required"): Validator =>
     (v) => (isEmpty(v) ? message : null),
@@ -186,6 +266,115 @@ export const Rules = {
 
   oneOf: (options: unknown[], message = "Not an allowed value"): Validator =>
     (v) => (isEmpty(v) || (Array.isArray(options) && options.includes(v)) ? null : message),
+
+  /**
+   * A whole number. `min`/`max` bound the magnitude but say nothing about the
+   * step, so `2.5` passes `min(1)` + `max(10)` — which is wrong for every count,
+   * port, weight and retry limit a form asks for.
+   *
+   * `Number("")` is `0` and `Number(" ")` is `0` too, so the value is tested as
+   * TEXT before it is coerced: a field containing only spaces is empty, not
+   * zero. `isEmpty` still lets a genuinely blank field through untouched —
+   * "this is not a whole number" is not the complaint to make about a field the
+   * operator has not filled in yet; that is `required`'s job.
+   */
+  integer: (message = "Enter a whole number"): Validator =>
+    (v) => {
+      if (isEmpty(v)) return null;
+      if (typeof v === "number") return Number.isInteger(v) ? null : message;
+      const text = String(v).trim();
+      return text !== "" && Number.isInteger(Number(text)) ? null : message;
+    },
+
+  /**
+   * An inclusive numeric range — `min(lo)` and `max(hi)` in one rule, so the
+   * message can name both ends. A field that fails one bound almost always
+   * wants to be told the other.
+   */
+  range: (lo: number, hi: number, message?: string): Validator =>
+    (v) => {
+      if (isEmpty(v)) return null;
+      const value = Number(String(v).trim());
+      return Number.isFinite(value) && value >= lo && value <= hi
+        ? null
+        : (message ?? `Must be between ${lo} and ${hi}`);
+    },
+
+  /**
+   * A TCP/UDP port: a whole number in `[1, 65535]`. Port `0` is excluded
+   * deliberately — the kernel reads it as "assign me one", which is never what
+   * a form field that names a destination means.
+   */
+  port: (message = "Enter a port between 1 and 65535"): Validator =>
+    (v) => {
+      if (isEmpty(v)) return null;
+      const text = String(v).trim();
+      return isPlainInt(text, 65_535) && text !== "0" ? null : message;
+    },
+
+  /** A dotted-quad IPv4 address, e.g. `192.168.0.10`. */
+  ipv4: (message = "Enter a valid IPv4 address"): Validator =>
+    (v) => (isEmpty(v) || isIpv4Address(String(v).trim()) ? null : message),
+
+  /** An IPv6 address, `::` shorthand and IPv4-mapped tails included. */
+  ipv6: (message = "Enter a valid IPv6 address"): Validator =>
+    (v) => (isEmpty(v) || isIpv6Address(String(v).trim()) ? null : message),
+
+  /** Either family — for a field that accepts whatever the network runs. */
+  ip: (message = "Enter a valid IP address"): Validator =>
+    (v) => {
+      if (isEmpty(v)) return null;
+      const text = String(v).trim();
+      return isIpv4Address(text) || isIpv6Address(text) ? null : message;
+    },
+
+  /**
+   * A CIDR block — `address/prefix`, with the prefix bounded by the address
+   * family (`/0`–`/32` for IPv4, `/0`–`/128` for IPv6). A bare address without
+   * a prefix is rejected: `10.0.0.0` and `10.0.0.0/8` mean different things,
+   * and silently accepting the first is how a subnet field ends up meaning a
+   * single host.
+   */
+  cidr: (message = "Enter a valid CIDR block, e.g. 10.0.0.0/24"): Validator =>
+    (v) => (isEmpty(v) || isCidrBlock(String(v).trim()) ? null : message),
+
+  /**
+   * A duration — `5m`, `250ms`, `2h`, `PT30S`, `P1DT12H` — optionally inside an
+   * inclusive range given in SECONDS.
+   *
+   * `bounds` is `{min, max}`, either half omissible, and a STRING in that
+   * position is read as the message so the common `duration("…")` reads
+   * naturally. Both bounds are in seconds because that is the unit
+   * `$util.duration` speaks; the grammar the operator types in is theirs to
+   * choose, and `2h`, `120m` and `PT2H` all satisfy `{max: 7200}` alike.
+   *
+   * That is the whole reason this is not `pattern(…)` plus `range(…)`: a
+   * regular expression can say whether `90m` is well-formed but not whether it
+   * is under a two-hour ceiling, and a numeric range cannot see through the
+   * unit at all. Cooldowns, TTLs, timeouts, poll intervals and retention
+   * windows all want exactly this pair of questions asked together.
+   *
+   * An out-of-range value and a malformed one report the SAME message by
+   * default. Pass your own when the two are worth separating — a field with a
+   * documented floor usually is.
+   */
+  duration: (bounds?: unknown, message?: string): Validator => {
+    const asMessage = typeof bounds === "string" ? bounds : message;
+    const range = (bounds && typeof bounds === "object" ? bounds : {}) as {
+      min?: unknown;
+      max?: unknown;
+    };
+    const low = typeof range.min === "number" ? range.min : null;
+    const high = typeof range.max === "number" ? range.max : null;
+    const text = asMessage ?? "Enter a valid duration, e.g. 30s, 5m or PT1H";
+    return (v) => {
+      if (isEmpty(v)) return null;
+      const seconds = parseDurationSeconds(v);
+      if (seconds === null) return text;
+      if (low !== null && seconds < low) return text;
+      return high !== null && seconds > high ? text : null;
+    };
+  },
 
   matches: (other: unknown, message = "Values do not match"): Validator =>
     (v) => (v === other ? null : message),

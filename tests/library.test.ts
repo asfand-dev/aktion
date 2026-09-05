@@ -2152,6 +2152,69 @@ describe("NumberInput", () => {
     incBtn?.click();
     expect(input?.value).toBe("10");
   });
+
+  // `readOnly` is the OTHER way a field is uneditable, and the difference is the
+  // tab order: a `disabled` control leaves it, so a form that locks itself while a
+  // record is busy becomes un-navigable by keyboard. `Input` and `TextArea` have
+  // had this since they shipped; a form mixing them with a NumberInput therefore
+  // had half its fields reachable and half not.
+  it("marks the field readonly without disabling it", () => {
+    const root = NumberInput.render(
+      makeNode("NumberInput", ["qty", 5]),
+      { id: "qty", value: 5, readOnly: true },
+      helpers,
+    ) as HTMLElement;
+    const input = root.querySelector<HTMLInputElement>("input");
+    expect(input?.hasAttribute("readonly")).toBe(true);
+    // NOT disabled — that is the whole point.
+    expect(input?.hasAttribute("disabled")).toBe(false);
+    expect(root.getAttribute("data-readonly")).toBe("true");
+    expect(root.getAttribute("data-disabled")).toBe("false");
+  });
+
+  it("takes the steppers out of the tab order when readonly", () => {
+    // A `<button>` has no `readonly`, and a +/- that is focusable but inert is
+    // worse than one that is skipped.
+    const root = NumberInput.render(
+      makeNode("NumberInput", ["qty", 5]),
+      { id: "qty", value: 5, readOnly: true },
+      helpers,
+    ) as HTMLElement;
+    const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>("button"));
+    expect(buttons).toHaveLength(2);
+    expect(buttons.every(button => button.hasAttribute("disabled"))).toBe(true);
+  });
+
+  it("does not change the value when a readonly stepper is clicked anyway", () => {
+    const node = makeNode("NumberInput", ["qty", 5, 0, 10, 1], [{}, { stateRef: "qty" }, {}, {}, {}]);
+    const root = NumberInput.render(
+      node,
+      { id: "qty", value: 5, min: 0, max: 10, step: 1, readOnly: true },
+      helpers,
+    ) as HTMLElement;
+    const input = root.querySelector<HTMLInputElement>("input");
+    const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>("button"));
+    // A synthetic click is not a user click: `.click()` on a disabled button is a
+    // no-op in a browser but reaches the handler in some environments, so the
+    // adjuster re-reads the live node's own state rather than trusting the flag it
+    // was rendered with.
+    buttons[1]?.click();
+    expect(input?.value).toBe("5");
+  });
+
+  it("still steps normally when readOnly is absent", () => {
+    const node = makeNode("NumberInput", ["qty", 5, 0, 10, 1], [{}, { stateRef: "qty" }, {}, {}, {}]);
+    const root = NumberInput.render(
+      node,
+      { id: "qty", value: 5, min: 0, max: 10, step: 1 },
+      helpers,
+    ) as HTMLElement;
+    const input = root.querySelector<HTMLInputElement>("input");
+    expect(input?.hasAttribute("readonly")).toBe(false);
+    expect(root.getAttribute("data-readonly")).toBe("false");
+    Array.from(root.querySelectorAll<HTMLButtonElement>("button"))[1]?.click();
+    expect(input?.value).toBe("6");
+  });
 });
 
 describe("DatePicker", () => {

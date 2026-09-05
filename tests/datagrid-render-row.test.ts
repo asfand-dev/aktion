@@ -176,3 +176,45 @@ describe("DataGrid column menu close button", () => {
     ).toBe("false");
   });
 });
+
+/**
+ * `ariaLabel` — naming a grid whose visible name is a heading beside it.
+ *
+ * `Table` has had this since it shipped; `DataGrid` had only the VISIBLE
+ * `caption`, so the ordinary shape — a grid inside a card, under a heading that
+ * already names it — could be given an accessible name ONLY by adding a second,
+ * visible copy of that heading. In practice those grids shipped nameless, and an
+ * axe sweep reports every one of them.
+ *
+ * The precedence rule is `Table`'s: a `<caption>` already names the table, so an
+ * `aria-label` alongside it would shadow the name a sighted user can read.
+ */
+describe("DataGrid accessible name", () => {
+  const grid = (opts: string): string => [
+    ROWS,
+    `$app(DataGrid([Col("Name", rows.map(r => r.name))], ${opts}))`,
+  ].join("\n");
+
+  it("names the table from ariaLabel when there is no caption", () => {
+    const html = renderToStaticMarkup(grid('{ ariaLabel: "Network interfaces" }'));
+    expect(html).toContain('aria-label="Network interfaces"');
+    expect(html).not.toContain("<caption");
+  });
+
+  it("lets a visible caption win, so the label cannot shadow it", () => {
+    const html = renderToStaticMarkup(grid('{ caption: "Visible name", ariaLabel: "Hidden name" }'));
+    expect(html).toContain("Visible name");
+    expect(html).not.toContain('aria-label="Hidden name"');
+  });
+
+  it("sets no aria-label on the TABLE when neither is given", () => {
+    // Scoped to the `<table>` element: a grid emits `aria-label` elsewhere of its
+    // own accord (the sort controls, the column-settings button), so a bare
+    // whole-markup check would fail for reasons that have nothing to do with the
+    // table's own name.
+    const html = renderToStaticMarkup(grid("{}"));
+    const table = /<table class="rui-data-grid-table"[^>]*>/.exec(html);
+    expect(table, "the grid rendered a table").not.toBeNull();
+    expect(table![0]).not.toContain("aria-label=");
+  });
+});
