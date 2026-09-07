@@ -5002,7 +5002,7 @@ const builtinCatalog = [
     sigil: "$util",
     category: "namespace",
     signature: "$util",
-    summary: "Runtime helper + reactive-environment namespace: data helpers ($util.format/.sum/.range/.groupBy…), formatting ($util.slugify/.truncate/.initials/.currency/.percent/.bytes/.relativeTime), misc ($util.copy — async, resolves true on real success —/.sleep/.uuid/.debounceFn/.throttleFn — leading+trailing), styling ($util.style.cx/.gradient/.alpha/.clamp/.token/.toStyle), validators ($util.rules.required/.email/.url/.min/.max/.minLength/.maxLength/.pattern/.oneOf/.matches/.custom/.asyncCustom + .validate/.validateAll), computed ($util.derived(fn)), hooks ($util.onError/.onNavigate/.onRequest/.onResponse/.invalidate), reactive env ($util.scroll/.viewport/.breakpoint/.media/.mouse/.url incl. .url.setQuery/.removeQuery), device ($util.vibrate/.share/.readClipboard/.geolocate/.isOnline/.deviceType/.nativeShell/.isNativeApp), and platform ($util.worker/.registerServiceWorker/.webManifest).",
+    summary: "Runtime helper + reactive-environment namespace: data helpers ($util.format/.sum/.range/.groupBy…), formatting ($util.slugify/.truncate/.initials/.currency/.percent/.bytes/.relativeTime), misc ($util.copy — async, resolves true on real success —/.sleep/.uuid/.debounceFn/.throttleFn — leading+trailing), styling ($util.style.cx/.gradient/.alpha/.clamp/.token/.toStyle), validators ($util.rules.required/.email/.url/.min/.max/.range/.minLength/.maxLength/.integer/.port/.ipv4/.ipv6/.ip/.cidr/.pattern/.oneOf/.matches/.custom/.asyncCustom + .validate/.validateAll), computed ($util.derived(fn)), hooks ($util.onError/.onNavigate/.onRequest/.onResponse/.invalidate), reactive env ($util.scroll/.viewport/.breakpoint/.media/.mouse/.url incl. .url.setQuery/.removeQuery), device ($util.vibrate/.share/.readClipboard/.readFile/.geolocate/.isOnline/.deviceType/.nativeShell/.isNativeApp), browsing contexts ($util.openUrl(url, opts) — new tab/window, http/https/mailto/tel only; $util.openWindow(opts) — open blank NOW, .navigate(url) when a fetched URL lands, the popup-safe SSO pattern), and platform ($util.worker/.registerServiceWorker/.webManifest).",
     namespace: true
   },
   {
@@ -5172,6 +5172,11 @@ const utilMembers = [
   method("style.clamp", "style.clamp(min, preferred, max)", "Responsive clamp(min, preferred, max) size."),
   method("style.token", "style.token(path)", 'Resolve a theme token path to its CSS var: "colors.primary" → var(--rui-color-primary).'),
   method("style.toStyle", "style.toStyle(obj)", "Serialise a CSS-declarations object to a sanitised style string."),
+  // Durations ($util.duration)
+  { name: "duration", kind: "namespace", signature: "duration", summary: "Length-of-time helpers in seconds: .parse / .format / .isValid. Reads both the simple grammar (5m, 250ms, 2h) and ISO-8601 (PT5M, P1DT12H)." },
+  method("duration.parse", "duration.parse(value)", "A duration string in SECONDS, or null when it is not one. Accepts 250ms/30s/5m/2h/7d and PT30S/P1DT12H; rejects years, months, weeks and unitless numbers."),
+  method("duration.format", "duration.format(value, options?)", 'Seconds (or a duration string) as text. Options: { style: "simple" | "iso" } — "simple" picks the largest whole unit (120 → "2m"), "iso" emits PnDTnHnMnS. Returns "" for a non-duration.'),
+  method("duration.isValid", "duration.isValid(value)", "Whether the value parses as a duration."),
   // Validators ($util.rules)
   { name: "rules", kind: "namespace", signature: "rules", summary: "Composable validators — compose per field; run with .validate / .validateAll or hand to $form." },
   method("rules.required", "rules.required(message?)", "Non-empty value."),
@@ -5183,6 +5188,14 @@ const utilMembers = [
   method("rules.maxLength", "rules.maxLength(n, message?)", "String length ≤ n."),
   method("rules.pattern", "rules.pattern(re, message?)", "Match a regular expression."),
   method("rules.oneOf", "rules.oneOf(options, message?)", "Value is in the allowed list."),
+  method("rules.integer", "rules.integer(message?)", "A whole number — min/max bound the magnitude but not the step."),
+  method("rules.range", "rules.range(lo, hi, message?)", "Inclusive numeric range — min + max in one rule, so the message names both ends."),
+  method("rules.port", "rules.port(message?)", 'A TCP/UDP port: a whole number in 1–65535 (0 excluded — it means "assign me one").'),
+  method("rules.ipv4", "rules.ipv4(message?)", "Dotted-quad IPv4 address."),
+  method("rules.ipv6", "rules.ipv6(message?)", "IPv6 address, :: shorthand and IPv4-mapped tails included."),
+  method("rules.ip", "rules.ip(message?)", "Either IP family."),
+  method("rules.cidr", "rules.cidr(message?)", "CIDR block — address/prefix, prefix bounded by the family (/0–/32, /0–/128). A bare address is rejected."),
+  method("rules.duration", "rules.duration(bounds?, message?)", "A duration (5m, 250ms, PT1H), optionally inside { min, max } given in SECONDS. A string in the bounds position is read as the message."),
   method("rules.matches", "rules.matches(other, message?)", "Equals another value (password confirmation)."),
   method("rules.custom", "rules.custom(fn, message?)", "Custom sync rule — return true/null (valid), false, or an error string."),
   method("rules.asyncCustom", "rules.asyncCustom(fn, message?)", "Async rule (Promise) — server-side checks; $form awaits it before submitting."),
@@ -5192,6 +5205,9 @@ const utilMembers = [
   method("vibrate", "vibrate(pattern?)", "Haptic pulse (ms or pattern array) on supporting devices."),
   method("share", "share(data)", "Native share sheet (Web Share API) — resolves true on share."),
   method("readClipboard", "readClipboard()", "Read clipboard text (async, permission-gated)."),
+  method("readFile", "readFile(file, options?)", 'Read a file picked with FileUpload — the only vetted route, since the "safe" policy grants no FileReader. Accepts a File/Blob, a FileList or an array (first readable entry). Options: { as: "text" | "dataUrl" | "base64", maxSize }. NEVER rejects — resolves "" on any failure.'),
+  method("openUrl", "openUrl(url, options?)", "Open a URL in a new tab/window. Options: { target, features: {width,height,…}, noopener, noreferrer }. Only http/https/mailto/tel are opened. Popup-blocked unless called inside the click — use openWindow for a URL you have to fetch first."),
+  method("openWindow", "openWindow(options?)", "Open a blank window NOW and navigate it later — the popup-safe way to open a fetched URL (SSO, signed download). Returns { ok, navigate(url), close(), closed }. Options: { name, features }."),
   method("geolocate", "geolocate(options?)", "Resolve { lat, lng, accuracy } via the Geolocation API."),
   method("isOnline", "isOnline()", "Current navigator.onLine flag."),
   method("deviceType", "deviceType()", '"mobile" | "tablet" | "desktop" heuristic.'),
@@ -5500,6 +5516,15 @@ const LAYER_Z = {
   tooltip: "var(--rui-z-tooltip, 1500)"
 };
 const OPEN = /* @__PURE__ */ new WeakMap();
+const PROMOTED_BY_ANCHOR = /* @__PURE__ */ new WeakMap();
+function dropStrandedPanel(anchor, panel, from, layer) {
+  const previous = PROMOTED_BY_ANCHOR.get(anchor);
+  if (!previous || previous.panel === panel) return;
+  if (previous.panel.parentNode !== layer || previous.from !== from) return;
+  OPEN.get(previous.panel)?.close();
+  OPEN.delete(previous.panel);
+  previous.panel.remove();
+}
 function deferToPaint(fn) {
   let done = false;
   const run = () => {
@@ -5532,6 +5557,8 @@ function measure(panel, anchor, opts) {
   const flip = opts.flip !== false;
   const shift = opts.shift !== false;
   const a = anchor.getBoundingClientRect();
+  panel.style.removeProperty("max-height");
+  panel.style.removeProperty("overflow-y");
   const p = panel.getBoundingClientRect();
   const vw = window.innerWidth || document.documentElement.clientWidth || 0;
   const vh = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -5655,6 +5682,9 @@ function openFloating(panel, opts) {
     if (root instanceof ShadowRoot || root instanceof Document) {
       const shown = getComputedStyle(panel).display;
       const layer = ensureLayer(root);
+      const from = panel.parentNode;
+      dropStrandedPanel(opts.anchor, panel, from, layer);
+      if (from) PROMOTED_BY_ANCHOR.set(opts.anchor, { panel, from });
       layer.appendChild(panel);
       panel.style.setProperty("display", shown === "none" ? "flex" : shown, "important");
       panel.style.setProperty("pointer-events", "auto", "important");
@@ -10150,7 +10180,8 @@ const NumberInput = {
     ...FIELD_SHELL_PROPS,
     { name: "prefix", type: "string", optional: true, description: 'Inline text before the number (e.g. "€")' },
     { name: "suffix", type: "string", optional: true, description: 'Inline unit after the number (e.g. "GB", "%", "ms")' },
-    { name: "precision", type: "number", optional: true, description: "Number of decimals the field keeps (rounds the value it reports)" }
+    { name: "precision", type: "number", optional: true, description: "Number of decimals the field keeps (rounds the value it reports)" },
+    { name: "readOnly", type: "boolean", optional: true, aliases: ["readonly"], description: "Value is visible and selectable but not editable (unlike `disabled`, it stays in tab order and is submitted). The +/- buttons are removed from the tab order with it." }
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -10160,19 +10191,25 @@ const NumberInput = {
     const min = hasMin ? asNumber(props.min, 0) : Number.NEGATIVE_INFINITY;
     const max = hasMax ? asNumber(props.max, 0) : Number.POSITIVE_INFINITY;
     const disabled = asBoolean(props.disabled);
+    const readOnly = asBoolean(props.readOnly);
+    const inert = disabled || readOnly;
     const precision = props.precision === void 0 || props.precision === null ? null : Math.max(0, Math.floor(asNumber(props.precision, 0)));
     const stepDecimals = (String(step).split(".")[1] ?? "").length;
     const round = (n) => {
       if (precision !== null) return Number(n.toFixed(precision));
       return stepDecimals > 0 ? Number(n.toFixed(stepDecimals)) : n;
     };
-    const root = el("div", { class: "rui-number-input", "data-disabled": disabled ? "true" : "false" });
+    const root = el("div", {
+      class: "rui-number-input",
+      "data-disabled": disabled ? "true" : "false",
+      "data-readonly": readOnly ? "true" : "false"
+    });
     const decBtn = el("button", {
       type: "button",
       class: "rui-number-input-button",
       "data-direction": "down",
       "aria-label": "Decrement",
-      disabled: disabled ? "" : null
+      disabled: inert ? "" : null
     }, ["−"]);
     const input = el("input", {
       type: "number",
@@ -10184,14 +10221,15 @@ const NumberInput = {
       min: hasMin ? String(min) : null,
       max: hasMax ? String(max) : null,
       step: String(step),
-      disabled: disabled ? "" : null
+      disabled: disabled ? "" : null,
+      readonly: readOnly ? "" : null
     });
     const incBtn = el("button", {
       type: "button",
       class: "rui-number-input-button",
       "data-direction": "up",
       "aria-label": "Increment",
-      disabled: disabled ? "" : null
+      disabled: inert ? "" : null
     }, ["+"]);
     const stateName = node.argMeta?.[1]?.stateRef;
     const readNumberValue = (n) => {
@@ -10212,6 +10250,7 @@ const NumberInput = {
       const liveRoot = origin.closest(".rui-number-input");
       const live = liveRoot?.querySelector(".rui-number-input-field");
       if (!live) return;
+      if (live.readOnly || live.disabled) return;
       const current = Number(live.value);
       const base = Number.isFinite(current) ? current : 0;
       const next = round(clampNumber(base + delta, min, max));
@@ -17878,7 +17917,7 @@ const DataGrid = {
   props: [
     { name: "columns", type: "Col[]", description: "Columns; pass sortable=true / filterable=true on each Col." },
     { name: "rowIds", type: "any[]", optional: true, description: "Stable id per row (used by `selectedIds` and as the row's morph key); defaults to row index." },
-    { name: "caption", type: "string", optional: true },
+    { name: "caption", type: "string", optional: true, description: "Visible table caption; also its accessible name." },
     { name: "sort", type: "object", optional: true, description: "`{key, direction}` — pass a $variable for two-way binding" },
     { name: "selectedIds", type: "any[]", optional: true, description: "Array of selected row ids — bind a $variable" },
     { name: "selectable", type: "boolean", optional: true, description: "Render leading selection checkboxes" },
@@ -17920,7 +17959,14 @@ const DataGrid = {
     { name: "columnMenuAnchor", type: "string", optional: true, description: 'CSS selector for the element the panel should hang off, e.g. `"#table-settings"`. Defaults to the built-in trigger; required when `columnMenuButton` is `false`, or the panel has nothing to anchor to.' },
     { name: "columnMenuTitle", type: "string", optional: true, description: 'Heading of the column-settings panel (default "Table settings"). Pass a translated string in a localised app.' },
     { name: "columnMenuDescription", type: "string", optional: true, description: 'Sub-heading under the panel title (default "Manage column visibility and order"). Pass `""` to drop the line.' },
-    { name: "columnMenuResetLabel", type: "string", optional: true, description: `Label of the panel's reset action (default "Reset to default").` }
+    { name: "columnMenuResetLabel", type: "string", optional: true, description: `Label of the panel's reset action (default "Reset to default").` },
+    // DECLARED LAST, and that is not a style choice. `DataGrid` resolves its
+    // two-way bindings by HARD-CODED positional slot — `sort` is `argMeta[3]`,
+    // `selectedIds` `[4]`, `page` `[6]`, `perPage` `[7]`, `globalSearch` `[29]`
+    // (see `render` below) — so inserting a prop anywhere before those shifts
+    // every one of them and silently rebinds `sort` to the caller's `selectedIds`
+    // atom. `Tabs` carries the same warning on its own `fitted`.
+    { name: "ariaLabel", type: "string", optional: true, aliases: ["arialabel"], description: "Accessible name for a grid whose visible name is already a heading beside it — a `<caption>` there would be a visible duplicate. Ignored when `caption` is set, which already names the table." }
   ],
   render: (node, props, helpers) => {
     const allCols = readDataGridCols(props.columns);
@@ -18563,6 +18609,8 @@ const DataGrid = {
     const syncScrollHint = (view) => {
       const scroller = view.querySelector(".rui-data-grid-scroll");
       if (!scroller) return;
+      const prevHint = hintSlot.get();
+      if (!prevHint) return;
       const headRow2 = view.querySelector(".rui-data-grid-table > thead > tr:first-child");
       const headHeight = headRow2 ? Math.round(headRow2.getBoundingClientRect().height) : 0;
       const slack = scroller.scrollWidth - scroller.clientWidth;
@@ -18572,9 +18620,9 @@ const DataGrid = {
         overflows,
         atStart: !overflows || left <= 1,
         atEnd: !overflows || left >= slack - 1,
-        headHeight: headHeight || hintSlot.get().headHeight
+        headHeight: headHeight || prevHint.headHeight
       };
-      const prev = hintSlot.get();
+      const prev = prevHint;
       hintSlot.set(next);
       if (prev.overflows === next.overflows && prev.atStart === next.atStart && prev.atEnd === next.atEnd && prev.headHeight === next.headHeight && view.hasAttribute("data-measured")) return;
       applyHint(view, next);
@@ -18732,6 +18780,8 @@ const DataGrid = {
     const table = el("table", { class: "rui-data-grid-table" });
     if (loading) table.setAttribute("aria-busy", "true");
     const caption = asString(props.caption);
+    const ariaLabel = asString(props.ariaLabel);
+    if (!caption && ariaLabel) table.setAttribute("aria-label", ariaLabel);
     if (caption) table.append(el("caption", { class: "rui-data-grid-caption" }, [caption]));
     table.append(buildColGroup(cols, getColConfig()));
     const thead = el("thead");
@@ -19315,6 +19365,9 @@ const DataGrid = {
       const scroller = live.querySelector(".rui-data-grid-scroll");
       if (!scroller) return;
       scroller.onscroll = () => syncScrollHint(live);
+      helpers.registerDisposer(() => {
+        scroller.onscroll = null;
+      }, "rui-data-grid-scroll");
       const existing = observerSlot.get();
       if (existing && existing.node !== live) {
         existing.ro.disconnect();

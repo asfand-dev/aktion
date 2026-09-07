@@ -5673,7 +5673,7 @@ const builtinCatalog = [
     sigil: "$util",
     category: "namespace",
     signature: "$util",
-    summary: "Runtime helper + reactive-environment namespace: data helpers ($util.format/.sum/.range/.groupBy…), formatting ($util.slugify/.truncate/.initials/.currency/.percent/.bytes/.relativeTime), misc ($util.copy — async, resolves true on real success —/.sleep/.uuid/.debounceFn/.throttleFn — leading+trailing), styling ($util.style.cx/.gradient/.alpha/.clamp/.token/.toStyle), validators ($util.rules.required/.email/.url/.min/.max/.minLength/.maxLength/.pattern/.oneOf/.matches/.custom/.asyncCustom + .validate/.validateAll), computed ($util.derived(fn)), hooks ($util.onError/.onNavigate/.onRequest/.onResponse/.invalidate), reactive env ($util.scroll/.viewport/.breakpoint/.media/.mouse/.url incl. .url.setQuery/.removeQuery), device ($util.vibrate/.share/.readClipboard/.geolocate/.isOnline/.deviceType/.nativeShell/.isNativeApp), and platform ($util.worker/.registerServiceWorker/.webManifest).",
+    summary: "Runtime helper + reactive-environment namespace: data helpers ($util.format/.sum/.range/.groupBy…), formatting ($util.slugify/.truncate/.initials/.currency/.percent/.bytes/.relativeTime), misc ($util.copy — async, resolves true on real success —/.sleep/.uuid/.debounceFn/.throttleFn — leading+trailing), styling ($util.style.cx/.gradient/.alpha/.clamp/.token/.toStyle), validators ($util.rules.required/.email/.url/.min/.max/.range/.minLength/.maxLength/.integer/.port/.ipv4/.ipv6/.ip/.cidr/.pattern/.oneOf/.matches/.custom/.asyncCustom + .validate/.validateAll), computed ($util.derived(fn)), hooks ($util.onError/.onNavigate/.onRequest/.onResponse/.invalidate), reactive env ($util.scroll/.viewport/.breakpoint/.media/.mouse/.url incl. .url.setQuery/.removeQuery), device ($util.vibrate/.share/.readClipboard/.readFile/.geolocate/.isOnline/.deviceType/.nativeShell/.isNativeApp), browsing contexts ($util.openUrl(url, opts) — new tab/window, http/https/mailto/tel only; $util.openWindow(opts) — open blank NOW, .navigate(url) when a fetched URL lands, the popup-safe SSO pattern), and platform ($util.worker/.registerServiceWorker/.webManifest).",
     namespace: true
   },
   {
@@ -5837,6 +5837,11 @@ const utilMembers = [
   method("style.clamp", "style.clamp(min, preferred, max)", "Responsive clamp(min, preferred, max) size."),
   method("style.token", "style.token(path)", 'Resolve a theme token path to its CSS var: "colors.primary" → var(--rui-color-primary).'),
   method("style.toStyle", "style.toStyle(obj)", "Serialise a CSS-declarations object to a sanitised style string."),
+  // Durations ($util.duration)
+  { name: "duration", kind: "namespace", signature: "duration", summary: "Length-of-time helpers in seconds: .parse / .format / .isValid. Reads both the simple grammar (5m, 250ms, 2h) and ISO-8601 (PT5M, P1DT12H)." },
+  method("duration.parse", "duration.parse(value)", "A duration string in SECONDS, or null when it is not one. Accepts 250ms/30s/5m/2h/7d and PT30S/P1DT12H; rejects years, months, weeks and unitless numbers."),
+  method("duration.format", "duration.format(value, options?)", 'Seconds (or a duration string) as text. Options: { style: "simple" | "iso" } — "simple" picks the largest whole unit (120 → "2m"), "iso" emits PnDTnHnMnS. Returns "" for a non-duration.'),
+  method("duration.isValid", "duration.isValid(value)", "Whether the value parses as a duration."),
   // Validators ($util.rules)
   { name: "rules", kind: "namespace", signature: "rules", summary: "Composable validators — compose per field; run with .validate / .validateAll or hand to $form." },
   method("rules.required", "rules.required(message?)", "Non-empty value."),
@@ -5848,6 +5853,14 @@ const utilMembers = [
   method("rules.maxLength", "rules.maxLength(n, message?)", "String length ≤ n."),
   method("rules.pattern", "rules.pattern(re, message?)", "Match a regular expression."),
   method("rules.oneOf", "rules.oneOf(options, message?)", "Value is in the allowed list."),
+  method("rules.integer", "rules.integer(message?)", "A whole number — min/max bound the magnitude but not the step."),
+  method("rules.range", "rules.range(lo, hi, message?)", "Inclusive numeric range — min + max in one rule, so the message names both ends."),
+  method("rules.port", "rules.port(message?)", 'A TCP/UDP port: a whole number in 1–65535 (0 excluded — it means "assign me one").'),
+  method("rules.ipv4", "rules.ipv4(message?)", "Dotted-quad IPv4 address."),
+  method("rules.ipv6", "rules.ipv6(message?)", "IPv6 address, :: shorthand and IPv4-mapped tails included."),
+  method("rules.ip", "rules.ip(message?)", "Either IP family."),
+  method("rules.cidr", "rules.cidr(message?)", "CIDR block — address/prefix, prefix bounded by the family (/0–/32, /0–/128). A bare address is rejected."),
+  method("rules.duration", "rules.duration(bounds?, message?)", "A duration (5m, 250ms, PT1H), optionally inside { min, max } given in SECONDS. A string in the bounds position is read as the message."),
   method("rules.matches", "rules.matches(other, message?)", "Equals another value (password confirmation)."),
   method("rules.custom", "rules.custom(fn, message?)", "Custom sync rule — return true/null (valid), false, or an error string."),
   method("rules.asyncCustom", "rules.asyncCustom(fn, message?)", "Async rule (Promise) — server-side checks; $form awaits it before submitting."),
@@ -5857,6 +5870,9 @@ const utilMembers = [
   method("vibrate", "vibrate(pattern?)", "Haptic pulse (ms or pattern array) on supporting devices."),
   method("share", "share(data)", "Native share sheet (Web Share API) — resolves true on share."),
   method("readClipboard", "readClipboard()", "Read clipboard text (async, permission-gated)."),
+  method("readFile", "readFile(file, options?)", 'Read a file picked with FileUpload — the only vetted route, since the "safe" policy grants no FileReader. Accepts a File/Blob, a FileList or an array (first readable entry). Options: { as: "text" | "dataUrl" | "base64", maxSize }. NEVER rejects — resolves "" on any failure.'),
+  method("openUrl", "openUrl(url, options?)", "Open a URL in a new tab/window. Options: { target, features: {width,height,…}, noopener, noreferrer }. Only http/https/mailto/tel are opened. Popup-blocked unless called inside the click — use openWindow for a URL you have to fetch first."),
+  method("openWindow", "openWindow(options?)", "Open a blank window NOW and navigate it later — the popup-safe way to open a fetched URL (SSO, signed download). Returns { ok, navigate(url), close(), closed }. Options: { name, features }."),
   method("geolocate", "geolocate(options?)", "Resolve { lat, lng, accuracy } via the Geolocation API."),
   method("isOnline", "isOnline()", "Current navigator.onLine flag."),
   method("deviceType", "deviceType()", '"mobile" | "tablet" | "desktop" heuristic.'),
@@ -6039,6 +6055,15 @@ const LAYER_Z = {
   tooltip: "var(--rui-z-tooltip, 1500)"
 };
 const OPEN = /* @__PURE__ */ new WeakMap();
+const PROMOTED_BY_ANCHOR = /* @__PURE__ */ new WeakMap();
+function dropStrandedPanel(anchor, panel, from, layer) {
+  const previous = PROMOTED_BY_ANCHOR.get(anchor);
+  if (!previous || previous.panel === panel) return;
+  if (previous.panel.parentNode !== layer || previous.from !== from) return;
+  OPEN.get(previous.panel)?.close();
+  OPEN.delete(previous.panel);
+  previous.panel.remove();
+}
 function deferToPaint(fn) {
   let done = false;
   const run = () => {
@@ -6071,6 +6096,8 @@ function measure(panel, anchor, opts) {
   const flip = opts.flip !== false;
   const shift = opts.shift !== false;
   const a = anchor.getBoundingClientRect();
+  panel.style.removeProperty("max-height");
+  panel.style.removeProperty("overflow-y");
   const p = panel.getBoundingClientRect();
   const vw = window.innerWidth || document.documentElement.clientWidth || 0;
   const vh = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -6194,6 +6221,9 @@ function openFloating(panel, opts) {
     if (root instanceof ShadowRoot || root instanceof Document) {
       const shown = getComputedStyle(panel).display;
       const layer = ensureLayer(root);
+      const from = panel.parentNode;
+      dropStrandedPanel(opts.anchor, panel, from, layer);
+      if (from) PROMOTED_BY_ANCHOR.set(opts.anchor, { panel, from });
       layer.appendChild(panel);
       panel.style.setProperty("display", shown === "none" ? "flex" : shown, "important");
       panel.style.setProperty("pointer-events", "auto", "important");
@@ -10689,7 +10719,8 @@ const NumberInput = {
     ...FIELD_SHELL_PROPS,
     { name: "prefix", type: "string", optional: true, description: 'Inline text before the number (e.g. "€")' },
     { name: "suffix", type: "string", optional: true, description: 'Inline unit after the number (e.g. "GB", "%", "ms")' },
-    { name: "precision", type: "number", optional: true, description: "Number of decimals the field keeps (rounds the value it reports)" }
+    { name: "precision", type: "number", optional: true, description: "Number of decimals the field keeps (rounds the value it reports)" },
+    { name: "readOnly", type: "boolean", optional: true, aliases: ["readonly"], description: "Value is visible and selectable but not editable (unlike `disabled`, it stays in tab order and is submitted). The +/- buttons are removed from the tab order with it." }
   ],
   render: (node, props, helpers) => {
     const id = asString$1(props.id);
@@ -10699,19 +10730,25 @@ const NumberInput = {
     const min = hasMin ? asNumber(props.min, 0) : Number.NEGATIVE_INFINITY;
     const max = hasMax ? asNumber(props.max, 0) : Number.POSITIVE_INFINITY;
     const disabled = asBoolean$1(props.disabled);
+    const readOnly = asBoolean$1(props.readOnly);
+    const inert = disabled || readOnly;
     const precision = props.precision === void 0 || props.precision === null ? null : Math.max(0, Math.floor(asNumber(props.precision, 0)));
     const stepDecimals = (String(step).split(".")[1] ?? "").length;
     const round = (n) => {
       if (precision !== null) return Number(n.toFixed(precision));
       return stepDecimals > 0 ? Number(n.toFixed(stepDecimals)) : n;
     };
-    const root = el("div", { class: "rui-number-input", "data-disabled": disabled ? "true" : "false" });
+    const root = el("div", {
+      class: "rui-number-input",
+      "data-disabled": disabled ? "true" : "false",
+      "data-readonly": readOnly ? "true" : "false"
+    });
     const decBtn = el("button", {
       type: "button",
       class: "rui-number-input-button",
       "data-direction": "down",
       "aria-label": "Decrement",
-      disabled: disabled ? "" : null
+      disabled: inert ? "" : null
     }, ["−"]);
     const input = el("input", {
       type: "number",
@@ -10723,14 +10760,15 @@ const NumberInput = {
       min: hasMin ? String(min) : null,
       max: hasMax ? String(max) : null,
       step: String(step),
-      disabled: disabled ? "" : null
+      disabled: disabled ? "" : null,
+      readonly: readOnly ? "" : null
     });
     const incBtn = el("button", {
       type: "button",
       class: "rui-number-input-button",
       "data-direction": "up",
       "aria-label": "Increment",
-      disabled: disabled ? "" : null
+      disabled: inert ? "" : null
     }, ["+"]);
     const stateName = node.argMeta?.[1]?.stateRef;
     const readNumberValue = (n) => {
@@ -10751,6 +10789,7 @@ const NumberInput = {
       const liveRoot = origin.closest(".rui-number-input");
       const live = liveRoot?.querySelector(".rui-number-input-field");
       if (!live) return;
+      if (live.readOnly || live.disabled) return;
       const current = Number(live.value);
       const base = Number.isFinite(current) ? current : 0;
       const next = round(clampNumber(base + delta, min, max));
@@ -18417,7 +18456,7 @@ const DataGrid = {
   props: [
     { name: "columns", type: "Col[]", description: "Columns; pass sortable=true / filterable=true on each Col." },
     { name: "rowIds", type: "any[]", optional: true, description: "Stable id per row (used by `selectedIds` and as the row's morph key); defaults to row index." },
-    { name: "caption", type: "string", optional: true },
+    { name: "caption", type: "string", optional: true, description: "Visible table caption; also its accessible name." },
     { name: "sort", type: "object", optional: true, description: "`{key, direction}` — pass a $variable for two-way binding" },
     { name: "selectedIds", type: "any[]", optional: true, description: "Array of selected row ids — bind a $variable" },
     { name: "selectable", type: "boolean", optional: true, description: "Render leading selection checkboxes" },
@@ -18459,7 +18498,14 @@ const DataGrid = {
     { name: "columnMenuAnchor", type: "string", optional: true, description: 'CSS selector for the element the panel should hang off, e.g. `"#table-settings"`. Defaults to the built-in trigger; required when `columnMenuButton` is `false`, or the panel has nothing to anchor to.' },
     { name: "columnMenuTitle", type: "string", optional: true, description: 'Heading of the column-settings panel (default "Table settings"). Pass a translated string in a localised app.' },
     { name: "columnMenuDescription", type: "string", optional: true, description: 'Sub-heading under the panel title (default "Manage column visibility and order"). Pass `""` to drop the line.' },
-    { name: "columnMenuResetLabel", type: "string", optional: true, description: `Label of the panel's reset action (default "Reset to default").` }
+    { name: "columnMenuResetLabel", type: "string", optional: true, description: `Label of the panel's reset action (default "Reset to default").` },
+    // DECLARED LAST, and that is not a style choice. `DataGrid` resolves its
+    // two-way bindings by HARD-CODED positional slot — `sort` is `argMeta[3]`,
+    // `selectedIds` `[4]`, `page` `[6]`, `perPage` `[7]`, `globalSearch` `[29]`
+    // (see `render` below) — so inserting a prop anywhere before those shifts
+    // every one of them and silently rebinds `sort` to the caller's `selectedIds`
+    // atom. `Tabs` carries the same warning on its own `fitted`.
+    { name: "ariaLabel", type: "string", optional: true, aliases: ["arialabel"], description: "Accessible name for a grid whose visible name is already a heading beside it — a `<caption>` there would be a visible duplicate. Ignored when `caption` is set, which already names the table." }
   ],
   render: (node, props, helpers) => {
     const allCols = readDataGridCols(props.columns);
@@ -19102,6 +19148,8 @@ const DataGrid = {
     const syncScrollHint = (view) => {
       const scroller = view.querySelector(".rui-data-grid-scroll");
       if (!scroller) return;
+      const prevHint = hintSlot.get();
+      if (!prevHint) return;
       const headRow2 = view.querySelector(".rui-data-grid-table > thead > tr:first-child");
       const headHeight = headRow2 ? Math.round(headRow2.getBoundingClientRect().height) : 0;
       const slack = scroller.scrollWidth - scroller.clientWidth;
@@ -19111,9 +19159,9 @@ const DataGrid = {
         overflows,
         atStart: !overflows || left <= 1,
         atEnd: !overflows || left >= slack - 1,
-        headHeight: headHeight || hintSlot.get().headHeight
+        headHeight: headHeight || prevHint.headHeight
       };
-      const prev = hintSlot.get();
+      const prev = prevHint;
       hintSlot.set(next);
       if (prev.overflows === next.overflows && prev.atStart === next.atStart && prev.atEnd === next.atEnd && prev.headHeight === next.headHeight && view.hasAttribute("data-measured")) return;
       applyHint(view, next);
@@ -19271,6 +19319,8 @@ const DataGrid = {
     const table = el("table", { class: "rui-data-grid-table" });
     if (loading) table.setAttribute("aria-busy", "true");
     const caption = asString$1(props.caption);
+    const ariaLabel = asString$1(props.ariaLabel);
+    if (!caption && ariaLabel) table.setAttribute("aria-label", ariaLabel);
     if (caption) table.append(el("caption", { class: "rui-data-grid-caption" }, [caption]));
     table.append(buildColGroup(cols, getColConfig()));
     const thead = el("thead");
@@ -19854,6 +19904,9 @@ const DataGrid = {
       const scroller = live.querySelector(".rui-data-grid-scroll");
       if (!scroller) return;
       scroller.onscroll = () => syncScrollHint(live);
+      helpers.registerDisposer(() => {
+        scroller.onscroll = null;
+      }, "rui-data-grid-scroll");
       const existing = observerSlot.get();
       if (existing && existing.node !== live) {
         existing.ro.disconnect();
@@ -38475,6 +38528,60 @@ const blobToDataUrl = (blob) => {
   });
 };
 const isObject = (v) => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+const OPENABLE_PROTOCOLS = /* @__PURE__ */ new Set(["http:", "https:", "mailto:", "tel:"]);
+const openableUrl = (raw) => {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) return "";
+  try {
+    const base = typeof document !== "undefined" && document.baseURI || (typeof location !== "undefined" ? location.href : "");
+    const parsed = base ? new URL(text, base) : new URL(text);
+    return OPENABLE_PROTOCOLS.has(parsed.protocol) ? parsed.href : "";
+  } catch {
+    return "";
+  }
+};
+const isFeatureOn = (value) => value === true || value === 1 || value === "1" || value === "yes" || value === "true";
+const WINDOW_FEATURE_NUMBERS = /* @__PURE__ */ new Set(["width", "height", "left", "top", "screenX", "screenY", "innerWidth", "innerHeight"]);
+const WINDOW_FEATURE_FLAGS = /* @__PURE__ */ new Set(["popup", "menubar", "toolbar", "location", "status", "resizable", "scrollbars", "noopener", "noreferrer"]);
+const windowFeatures = (input, extra) => {
+  const raw = {};
+  if (typeof input === "string") {
+    for (const part of input.split(",")) {
+      const [key2, value] = part.split("=");
+      const name = (key2 ?? "").trim();
+      if (name) raw[name] = value === void 0 ? true : value.trim();
+    }
+  } else if (isObject(input)) {
+    Object.assign(raw, input);
+  }
+  if (extra) {
+    for (const [name, on] of Object.entries(extra)) {
+      if (!(name in raw) && on) raw[name] = true;
+    }
+  }
+  const parts = [];
+  for (const [name, value] of Object.entries(raw)) {
+    if (WINDOW_FEATURE_NUMBERS.has(name)) {
+      const size2 = Math.round(toNumber$1(value));
+      if (Number.isFinite(size2)) parts.push(`${name}=${size2}`);
+      continue;
+    }
+    if (WINDOW_FEATURE_FLAGS.has(name)) {
+      parts.push(`${name}=${isFeatureOn(value) ? "yes" : "no"}`);
+    }
+  }
+  return parts.join(",");
+};
+const RESERVED_WINDOW_TARGETS = /* @__PURE__ */ new Set(["_blank", "_self", "_parent", "_top"]);
+const CLOSED_WINDOW = {
+  ok: false,
+  navigate: () => false,
+  close: () => {
+  },
+  get closed() {
+    return true;
+  }
+};
 const compare = (op, a, b) => {
   switch (op) {
     case "==":
@@ -38539,6 +38646,67 @@ const toDate = (v) => {
     if (!Number.isNaN(d.getTime())) return d;
   }
   return /* @__PURE__ */ new Date();
+};
+const DURATION_UNITS = [
+  ["ns", 1e-9],
+  ["us", 1e-6],
+  ["ms", 1e-3],
+  ["s", 1],
+  ["m", 60],
+  ["h", 3600],
+  ["d", 86400]
+];
+const SIMPLE_DURATION_RE = /^([+-]?\d+(?:\.\d+)?)(ns|us|ms|s|m|h|d)$/;
+const ISO_DURATION_RE = /^([+-])?P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i;
+const parseDuration = (value) => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const text = String(value ?? "").trim();
+  if (text === "") return null;
+  const simple = SIMPLE_DURATION_RE.exec(text);
+  if (simple) {
+    const unit = DURATION_UNITS.find(([suffix]) => suffix === simple[2]);
+    return unit ? Number(simple[1]) * unit[1] : null;
+  }
+  const iso = ISO_DURATION_RE.exec(text);
+  if (!iso || !/\d/.test(text)) return null;
+  const days = Number(iso[2] ?? 0);
+  const hours = Number(iso[3] ?? 0);
+  const minutes = Number(iso[4] ?? 0);
+  const seconds = Number(iso[5] ?? 0);
+  const total = days * 86400 + hours * 3600 + minutes * 60 + seconds;
+  return iso[1] === "-" ? -total : total;
+};
+const formatSimpleDuration = (seconds) => {
+  if (seconds === 0) return "0s";
+  const sign = seconds < 0 ? "-" : "";
+  const magnitude = Math.abs(seconds);
+  for (let i = DURATION_UNITS.length - 1; i >= 0; i -= 1) {
+    const entry = DURATION_UNITS[i];
+    if (!entry) continue;
+    const [suffix, size2] = entry;
+    const scaled = magnitude / size2;
+    if (scaled >= 1 && Number.isInteger(scaled)) return `${sign}${scaled}${suffix}`;
+  }
+  return `${sign}${magnitude}s`;
+};
+const formatIsoDuration = (seconds) => {
+  if (seconds === 0) return "PT0S";
+  const sign = seconds < 0 ? "-" : "";
+  let rest = Math.abs(seconds);
+  const days = Math.floor(rest / 86400);
+  rest -= days * 86400;
+  const hours = Math.floor(rest / 3600);
+  rest -= hours * 3600;
+  const minutes = Math.floor(rest / 60);
+  rest -= minutes * 60;
+  const secs = Number(rest.toFixed(9));
+  const date = days > 0 ? `${days}D` : "";
+  const time = [
+    hours > 0 ? `${hours}H` : "",
+    minutes > 0 ? `${minutes}M` : "",
+    secs > 0 ? `${secs}S` : ""
+  ].join("");
+  return `${sign}P${date}${time ? `T${time}` : ""}`;
 };
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -38901,6 +39069,43 @@ const Util = {
     const d = toDate(date);
     return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
   },
+  // ── Duration ──────────────────────────────────────────────
+  // A LENGTH of time, as opposed to the point-in-time helpers above. Every
+  // member speaks SECONDS, so `parse` and `format` compose in both directions
+  // and a bound can be written as a plain number.
+  //
+  // Grouped as a nested namespace rather than as `parseDuration` /
+  // `formatDuration` at the top level, so `$util.duration.parse(v)` reads as
+  // one idea and the pair cannot drift apart in the catalogue.
+  duration: {
+    /**
+     * A duration string in seconds, or `null` when the value is not one.
+     *
+     * Accepts the simple format (`250ms`, `30s`, `5m`, `2h`, `7d`) and ISO-8601
+     * (`PT30S`, `P1DT12H`), which is what makes one field usable against an API
+     * that documents one grammar and an operator who knows the other. Rejects
+     * years, months, weeks and unitless numbers — see the note above the
+     * parser for each reason.
+     */
+    parse: (value) => parseDuration(value),
+    /**
+     * Seconds as a duration string.
+     *
+     * `style: "simple"` (the default) picks the largest unit that divides
+     * evenly — `120` → `"2m"` — and `style: "iso"` emits `PnDTnHnMnS`. Pass a
+     * string and it is re-formatted, so `format("PT120S")` is `"2m"`; pass
+     * something that is not a duration at all and you get `""` rather than an
+     * exception, in keeping with every other member here.
+     */
+    format: (value, options) => {
+      const seconds = parseDuration(value);
+      if (seconds === null) return "";
+      const opts = isObject(options) ? options : {};
+      return String(opts.style ?? "simple").toLowerCase() === "iso" ? formatIsoDuration(seconds) : formatSimpleDuration(seconds);
+    },
+    /** Whether the value parses as a duration at all. */
+    isValid: (value) => parseDuration(value) !== null
+  },
   // ── String / regex helpers ────────────────────────────────
   join: (arr, sep = ",") => toArray(arr).map((v) => v == null ? "" : String(v)).join(String(sep)),
   split: (text, sep = ",") => String(text ?? "").split(String(sep)),
@@ -39151,6 +39356,145 @@ const Util = {
       return Promise.resolve("");
     }
   },
+  /**
+   * Open a URL in a new browsing context.
+   *
+   * `Link(label, {href, external: true})` covers the case where the destination
+   * is known at render time. This is the other one: a URL an ACTION produced —
+   * a documentation deep link built from the row that was clicked, a signed
+   * download, an invoice, a support ticket. Until now the only route was
+   * reaching for `window` as a host global, which the `"safe"` global-access
+   * policy exists to forbid.
+   *
+   *   MenuItem("Open the manual", {onClick: () => $util.openUrl(row.docsUrl)})
+   *
+   * `options.target` names the context. The default `"_blank"` opens a new tab;
+   * a NAME ("report-window") reuses the same window across clicks, which is the
+   * behaviour you want for a console or a preview the user keeps open.
+   *
+   * `options.features` is a `{width, height, left, top, resizable, scrollbars,
+   * menubar, toolbar, location, status}` bag (a `window.open` feature string is
+   * accepted and re-parsed). Any key outside that list is dropped. Note that
+   * asking for a size is what makes most browsers open a WINDOW rather than a
+   * tab.
+   *
+   * `options.noopener` defaults to `true` for `_blank` and to `false` for a
+   * named target — `noopener` makes the browser ignore the name and open a fresh
+   * context every time, which would silently defeat the reuse the name was for.
+   *
+   * ONLY `http:`, `https:`, `mailto:` and `tel:` are opened. `javascript:`,
+   * `data:`, `blob:` and `file:` are rejected and answer `false`. Relative URLs
+   * are resolved against the document.
+   *
+   * THE RETURN VALUE IS "WAS THIS A REQUEST WE COULD MAKE", NOT "DID A WINDOW
+   * APPEAR". Under `noopener` the browser returns `null` on SUCCESS as well as
+   * on a blocked popup, so the two are indistinguishable from here — `false`
+   * therefore means only that the URL was rejected or the host has no `window`.
+   * Use {@link openWindow} when the program has to react to a popup blocker.
+   *
+   * A POPUP BLOCKER WILL STOP THIS unless the call happens inside the user
+   * gesture that triggered it. Calling it from a `$http` callback — "fetch the
+   * signed URL, then open it" — is exactly the shape browsers block. That is
+   * what {@link openWindow} is for.
+   */
+  openUrl: (url, options) => {
+    try {
+      const href = openableUrl(url);
+      if (!href) return false;
+      if (typeof window === "undefined" || typeof window.open !== "function") return false;
+      const opts = isObject(options) ? options : {};
+      const target = typeof opts.target === "string" && opts.target.trim() ? opts.target.trim() : "_blank";
+      const named = !RESERVED_WINDOW_TARGETS.has(target);
+      const features = windowFeatures(opts.features, {
+        noopener: opts.noopener === void 0 ? !named : isFeatureOn(opts.noopener),
+        noreferrer: isFeatureOn(opts.noreferrer)
+      });
+      window.open(href, target, features || void 0);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  /**
+   * Open an EMPTY browsing context now, and navigate it once you know where to.
+   *
+   * The problem this exists for is specific and otherwise unsolvable in the
+   * language: a URL that has to be FETCHED before it can be opened — an SSO
+   * hand-off, a signed download, an OAuth start URL. Written the obvious way,
+   *
+   *   const req = $http({url: `/things/${id}/ssourl`})
+   *   req.onDone = () => { $util.openUrl(req.data.ssoUrl) }   // ✗ popup-blocked
+   *
+   * the open happens in a network callback, long after the click that caused it,
+   * and every browser's popup blocker stops it. The fix is the same everywhere:
+   * open a blank context DURING the click, and point it somewhere when the
+   * answer arrives.
+   *
+   *   function openConsole(row) {
+   *     const win = $util.openWindow({name: "console", features: {width: 1024, height: 700}})
+   *     const req = $http({url: `/things/${row.id}/ssourl`})
+   *     req.onDone = () => {
+   *       if (req.error) { win.close(); $toast.error(t("sso_failed")); return }
+   *       if (!win.navigate(req.data.ssoUrl)) { $ssoFallbackUrl = req.data.ssoUrl }
+   *     }
+   *   }
+   *
+   * `ok` is `false` when the browser refused, which is the case worth handling:
+   * a blocked popup is invisible otherwise, and the honest response is to put
+   * the URL on screen as a link the operator can click themselves.
+   *
+   * `options.name` reuses one window across clicks, exactly as `window.open`'s
+   * name does. `options.features` is {@link openUrl}'s bag, same allow-list.
+   *
+   * `noopener` CANNOT be used here — it makes `window.open` return `null`, and
+   * the handle is the entire point. Instead the child's `opener` is cleared
+   * while it is still the same-origin `about:blank` this opened, so the page it
+   * is later navigated to cannot reach back into this one. That is the same
+   * protection `noopener` gives, applied in the one order that keeps the handle.
+   */
+  openWindow: (options) => {
+    try {
+      if (typeof window === "undefined" || typeof window.open !== "function") return CLOSED_WINDOW;
+      const opts = isObject(options) ? options : {};
+      const name = typeof opts.name === "string" && opts.name.trim() ? opts.name.trim() : "_blank";
+      const features = windowFeatures(opts.features);
+      const child = window.open("about:blank", name, features || void 0);
+      if (!child) return CLOSED_WINDOW;
+      try {
+        child.opener = null;
+      } catch {
+      }
+      return {
+        ok: true,
+        navigate(url) {
+          const href = openableUrl(url);
+          if (!href) return false;
+          try {
+            if (child.closed) return false;
+            child.location.href = href;
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        close() {
+          try {
+            if (!child.closed) child.close();
+          } catch {
+          }
+        },
+        get closed() {
+          try {
+            return child.closed;
+          } catch {
+            return true;
+          }
+        }
+      };
+    } catch {
+      return CLOSED_WINDOW;
+    }
+  },
   /** Current geolocation as a promise of { lat, lng, accuracy } (or null). */
   geolocate: (options) => {
     return new Promise((resolve) => {
@@ -39389,6 +39733,48 @@ const isThenable = (v) => Boolean(v) && typeof v.then === "function";
 const isEmpty = (v) => v == null || v === "" || Array.isArray(v) && v.length === 0;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const URL_RE = /^(https?:\/\/)[^\s/$.?#].[^\s]*$/i;
+const isPlainInt = (text, max) => {
+  if (!/^\d+$/.test(text)) return false;
+  if (text.length > 1 && text.startsWith("0")) return false;
+  const value = Number(text);
+  return value <= max;
+};
+const isIpv4Address = (text) => {
+  const parts = text.split(".");
+  return parts.length === 4 && parts.every((part) => isPlainInt(part, 255));
+};
+const isIpv6Address = (input) => {
+  const zoneAt = input.indexOf("%");
+  if (zoneAt !== -1 && zoneAt === input.length - 1) return false;
+  const text = zoneAt === -1 ? input : input.slice(0, zoneAt);
+  if (text.indexOf(":") === -1) return false;
+  const halves = text.split("::");
+  if (halves.length > 2) return false;
+  const compressed = halves.length === 2;
+  const groupsOf = (part) => {
+    if (part === "") return [];
+    const groups = part.split(":");
+    const tail = groups[groups.length - 1] ?? "";
+    if (tail.indexOf(".") !== -1) {
+      if (!isIpv4Address(tail)) return null;
+      groups.splice(groups.length - 1, 1, "0", "0");
+    }
+    return groups.every((group) => /^[0-9a-fA-F]{1,4}$/.test(group)) ? groups : null;
+  };
+  const head = groupsOf(halves[0] ?? "");
+  const rest = compressed ? groupsOf(halves[1] ?? "") : [];
+  if (head === null || rest === null) return false;
+  const total = head.length + rest.length;
+  return compressed ? total < 8 : total === 8;
+};
+const isCidrBlock = (text) => {
+  const slash = text.indexOf("/");
+  if (slash === -1) return false;
+  const address = text.slice(0, slash);
+  const prefix = text.slice(slash + 1);
+  if (isIpv4Address(address)) return isPlainInt(prefix, 32);
+  return isIpv6Address(address) && isPlainInt(prefix, 128);
+};
 const Rules = {
   required: (message = "This field is required") => (v) => isEmpty(v) ? message : null,
   email: (message = "Enter a valid email") => (v) => isEmpty(v) || EMAIL_RE.test(String(v)) ? null : message,
@@ -39402,6 +39788,95 @@ const Rules = {
     return (v) => isEmpty(v) || safeRegexTest(source, String(v)) ? null : message;
   },
   oneOf: (options, message = "Not an allowed value") => (v) => isEmpty(v) || Array.isArray(options) && options.includes(v) ? null : message,
+  /**
+   * A whole number. `min`/`max` bound the magnitude but say nothing about the
+   * step, so `2.5` passes `min(1)` + `max(10)` — which is wrong for every count,
+   * port, weight and retry limit a form asks for.
+   *
+   * `Number("")` is `0` and `Number(" ")` is `0` too, so the value is tested as
+   * TEXT before it is coerced: a field containing only spaces is empty, not
+   * zero. `isEmpty` still lets a genuinely blank field through untouched —
+   * "this is not a whole number" is not the complaint to make about a field the
+   * operator has not filled in yet; that is `required`'s job.
+   */
+  integer: (message = "Enter a whole number") => (v) => {
+    if (isEmpty(v)) return null;
+    if (typeof v === "number") return Number.isInteger(v) ? null : message;
+    const text = String(v).trim();
+    return text !== "" && Number.isInteger(Number(text)) ? null : message;
+  },
+  /**
+   * An inclusive numeric range — `min(lo)` and `max(hi)` in one rule, so the
+   * message can name both ends. A field that fails one bound almost always
+   * wants to be told the other.
+   */
+  range: (lo, hi, message) => (v) => {
+    if (isEmpty(v)) return null;
+    const value = Number(String(v).trim());
+    return Number.isFinite(value) && value >= lo && value <= hi ? null : message ?? `Must be between ${lo} and ${hi}`;
+  },
+  /**
+   * A TCP/UDP port: a whole number in `[1, 65535]`. Port `0` is excluded
+   * deliberately — the kernel reads it as "assign me one", which is never what
+   * a form field that names a destination means.
+   */
+  port: (message = "Enter a port between 1 and 65535") => (v) => {
+    if (isEmpty(v)) return null;
+    const text = String(v).trim();
+    return isPlainInt(text, 65535) && text !== "0" ? null : message;
+  },
+  /** A dotted-quad IPv4 address, e.g. `192.168.0.10`. */
+  ipv4: (message = "Enter a valid IPv4 address") => (v) => isEmpty(v) || isIpv4Address(String(v).trim()) ? null : message,
+  /** An IPv6 address, `::` shorthand and IPv4-mapped tails included. */
+  ipv6: (message = "Enter a valid IPv6 address") => (v) => isEmpty(v) || isIpv6Address(String(v).trim()) ? null : message,
+  /** Either family — for a field that accepts whatever the network runs. */
+  ip: (message = "Enter a valid IP address") => (v) => {
+    if (isEmpty(v)) return null;
+    const text = String(v).trim();
+    return isIpv4Address(text) || isIpv6Address(text) ? null : message;
+  },
+  /**
+   * A CIDR block — `address/prefix`, with the prefix bounded by the address
+   * family (`/0`–`/32` for IPv4, `/0`–`/128` for IPv6). A bare address without
+   * a prefix is rejected: `10.0.0.0` and `10.0.0.0/8` mean different things,
+   * and silently accepting the first is how a subnet field ends up meaning a
+   * single host.
+   */
+  cidr: (message = "Enter a valid CIDR block, e.g. 10.0.0.0/24") => (v) => isEmpty(v) || isCidrBlock(String(v).trim()) ? null : message,
+  /**
+   * A duration — `5m`, `250ms`, `2h`, `PT30S`, `P1DT12H` — optionally inside an
+   * inclusive range given in SECONDS.
+   *
+   * `bounds` is `{min, max}`, either half omissible, and a STRING in that
+   * position is read as the message so the common `duration("…")` reads
+   * naturally. Both bounds are in seconds because that is the unit
+   * `$util.duration` speaks; the grammar the operator types in is theirs to
+   * choose, and `2h`, `120m` and `PT2H` all satisfy `{max: 7200}` alike.
+   *
+   * That is the whole reason this is not `pattern(…)` plus `range(…)`: a
+   * regular expression can say whether `90m` is well-formed but not whether it
+   * is under a two-hour ceiling, and a numeric range cannot see through the
+   * unit at all. Cooldowns, TTLs, timeouts, poll intervals and retention
+   * windows all want exactly this pair of questions asked together.
+   *
+   * An out-of-range value and a malformed one report the SAME message by
+   * default. Pass your own when the two are worth separating — a field with a
+   * documented floor usually is.
+   */
+  duration: (bounds, message) => {
+    const asMessage = typeof bounds === "string" ? bounds : message;
+    const range = bounds && typeof bounds === "object" ? bounds : {};
+    const low = typeof range.min === "number" ? range.min : null;
+    const high = typeof range.max === "number" ? range.max : null;
+    const text = asMessage ?? "Enter a valid duration, e.g. 30s, 5m or PT1H";
+    return (v) => {
+      if (isEmpty(v)) return null;
+      const seconds = parseDuration(v);
+      if (seconds === null) return text;
+      if (low !== null && seconds < low) return text;
+      return high !== null && seconds > high ? text : null;
+    };
+  },
   matches: (other, message = "Values do not match") => (v) => v === other ? null : message,
   custom: (fn, message = "Invalid") => (v) => {
     if (typeof fn !== "function") return null;
@@ -42760,8 +43235,17 @@ function evaluateStoreMember(expr, ctx, handle) {
   }
   return walkAtomMember(accesses, handle.__atom, ctx);
 }
+function storeCallSite(loc) {
+  if (!loc) return null;
+  return loc.source ? `${loc.source}:${loc.line}:${loc.column}` : `${loc.line}:${loc.column}`;
+}
+function storeCallAtom(kind, loc) {
+  if (!loc) return null;
+  const scope = loc.source ? `a${loc.source}_` : "";
+  return `__${kind}_${scope}${loc.line}_${loc.column}`;
+}
 function evaluateStoreCall(args, ctx, loc) {
-  const key2 = loc ? `${loc.line}:${loc.column}` : `anon:${ctx.stores.size}`;
+  const key2 = storeCallSite(loc) ?? `anon:${ctx.stores.size}`;
   const cached = ctx.stores.get(key2);
   if (cached) return cached;
   const config = args[0] ? evaluate(args[0], ctx) : {};
@@ -42795,7 +43279,7 @@ function evaluateStoreCall(args, ctx, loc) {
     }
   }
   const userFieldKeys = Object.keys(state);
-  const atom = loc ? `__store_${loc.line}_${loc.column}` : `__store_anon_${ctx.stores.size}`;
+  const atom = storeCallAtom("store", loc) ?? `__store_anon_${ctx.stores.size}`;
   if (persistKey) {
     const stored = readPersistedStore(persistKey, persistArea);
     if (stored) {
@@ -42902,7 +43386,7 @@ function attachStoreHistory(ctx, atom, userFieldKeys, depth, methods) {
   };
 }
 function evaluateFormCall(args, ctx, loc) {
-  const key2 = loc ? `${loc.line}:${loc.column}` : `form:${ctx.stores.size}`;
+  const key2 = storeCallSite(loc) ?? `form:${ctx.stores.size}`;
   const cached = ctx.stores.get(key2);
   if (cached) return cached;
   const cfg2 = args[0] ? evaluate(args[0], ctx) : {};
@@ -42910,7 +43394,7 @@ function evaluateFormCall(args, ctx, loc) {
   const initialValues = config.values && typeof config.values === "object" && !Array.isArray(config.values) ? { ...config.values } : {};
   const rules = config.rules && typeof config.rules === "object" && !Array.isArray(config.rules) ? config.rules : {};
   const onSubmit = typeof config.onSubmit === "function" ? config.onSubmit : null;
-  const atom = loc ? `__form_${loc.line}_${loc.column}` : `__form_anon_${ctx.stores.size}`;
+  const atom = storeCallAtom("form", loc) ?? `__form_anon_${ctx.stores.size}`;
   const freshState = () => ({ values: { ...initialValues }, errors: {}, touched: {}, dirty: false, valid: true, submitting: false, validating: false });
   ctx.state.declare(atom, freshState());
   const methods = {};
@@ -44489,6 +44973,9 @@ function computedMemberAccess(target, key2) {
   if (typeof target === "object") {
     return target[String(key2 ?? "")];
   }
+  if (typeof target === "function") {
+    return target[String(key2 ?? "")];
+  }
   return void 0;
 }
 function toArrayIndex(key2, length) {
@@ -44532,6 +45019,9 @@ function memberAccess(target, property) {
     if (property === "length") return target.length;
   }
   if (typeof target === "object") {
+    return target[property];
+  }
+  if (typeof target === "function") {
     return target[property];
   }
   return void 0;
@@ -46960,6 +47450,7 @@ Pure helpers (no side effects), available in every expression, action, effect, a
 - **Dates / math**: \`.now / .today / .addDays / .diffDays / .startOfWeek\`; \`.round / .floor / .ceil / .abs / .clamp(v, min, max) / .random\`.
 - **Formatting / misc**: \`.slugify / .truncate(text, len) / .initials / .currency(v, code?) / .percent(v) / .bytes(v) / .relativeTime(date) / .copy(text)\` (async — resolves \`true\` once the clipboard write succeeds) \`/ .sleep(ms) / .uuid() / .debounceFn(fn, ms) / .throttleFn(fn, ms)\` (leading + trailing edge).
 - **Device / platform**: \`.vibrate(pattern) / .share({ title, text, url }) / .readClipboard() / .geolocate() / .isOnline() / .deviceType()\` (XII.3); \`.worker(pureFn, ...args)\` runs a closure-free function off the main thread, resolving its result (XI.5); \`.registerServiceWorker(url) / .webManifest({ name, icons, … })\` for PWA setup (XII.2).
+- **Opening a URL**: \`.openUrl(url, { target?, features?, noopener? })\` opens a new tab/window from an ACTION (\`Link(…, {external: true})\` is still the answer when the destination is known at render time). Only \`http/https/mailto/tel\` are opened. For a URL you have to FETCH first — SSO, a signed download — a call in the response callback is popup-blocked; use \`.openWindow({ name?, features? })\` inside the click instead, keep the \`{ ok, navigate(url), close(), closed }\` handle, and \`navigate\` it when the response lands (\`ok: false\` means the popup was blocked — put the URL on screen as a link instead).
 - **Files**: \`.readFile(fileOrPick, { as?, maxSize? })\` resolves the contents of a file the user picked with \`FileUpload\` — pass the whole pick (a \`FileList\`/array) or one \`File\`; \`as\` is \`"text"\` (default), \`"dataUrl"\` or \`"base64"\`. It NEVER rejects: every failure resolves \`""\`, so branch on an empty result rather than writing a \`.catch\`. This is the only vetted way to read a picked file — \`FileReader\` is not a permitted host global under the \`"safe"\` policy.
 - **Reactive env getters**: \`$util.scroll\`, \`$util.viewport\`, \`$util.breakpoint\`, \`$util.media\`, \`$util.mouse\`, \`$util.url\` (listeners attach lazily on first read, re-render on change).
 

@@ -46,6 +46,65 @@ export declare const Rules: {
     readonly maxLength: (n: number, message?: string) => Validator;
     readonly pattern: (re: unknown, message?: string) => Validator;
     readonly oneOf: (options: unknown[], message?: string) => Validator;
+    /**
+     * A whole number. `min`/`max` bound the magnitude but say nothing about the
+     * step, so `2.5` passes `min(1)` + `max(10)` — which is wrong for every count,
+     * port, weight and retry limit a form asks for.
+     *
+     * `Number("")` is `0` and `Number(" ")` is `0` too, so the value is tested as
+     * TEXT before it is coerced: a field containing only spaces is empty, not
+     * zero. `isEmpty` still lets a genuinely blank field through untouched —
+     * "this is not a whole number" is not the complaint to make about a field the
+     * operator has not filled in yet; that is `required`'s job.
+     */
+    readonly integer: (message?: string) => Validator;
+    /**
+     * An inclusive numeric range — `min(lo)` and `max(hi)` in one rule, so the
+     * message can name both ends. A field that fails one bound almost always
+     * wants to be told the other.
+     */
+    readonly range: (lo: number, hi: number, message?: string) => Validator;
+    /**
+     * A TCP/UDP port: a whole number in `[1, 65535]`. Port `0` is excluded
+     * deliberately — the kernel reads it as "assign me one", which is never what
+     * a form field that names a destination means.
+     */
+    readonly port: (message?: string) => Validator;
+    /** A dotted-quad IPv4 address, e.g. `192.168.0.10`. */
+    readonly ipv4: (message?: string) => Validator;
+    /** An IPv6 address, `::` shorthand and IPv4-mapped tails included. */
+    readonly ipv6: (message?: string) => Validator;
+    /** Either family — for a field that accepts whatever the network runs. */
+    readonly ip: (message?: string) => Validator;
+    /**
+     * A CIDR block — `address/prefix`, with the prefix bounded by the address
+     * family (`/0`–`/32` for IPv4, `/0`–`/128` for IPv6). A bare address without
+     * a prefix is rejected: `10.0.0.0` and `10.0.0.0/8` mean different things,
+     * and silently accepting the first is how a subnet field ends up meaning a
+     * single host.
+     */
+    readonly cidr: (message?: string) => Validator;
+    /**
+     * A duration — `5m`, `250ms`, `2h`, `PT30S`, `P1DT12H` — optionally inside an
+     * inclusive range given in SECONDS.
+     *
+     * `bounds` is `{min, max}`, either half omissible, and a STRING in that
+     * position is read as the message so the common `duration("…")` reads
+     * naturally. Both bounds are in seconds because that is the unit
+     * `$util.duration` speaks; the grammar the operator types in is theirs to
+     * choose, and `2h`, `120m` and `PT2H` all satisfy `{max: 7200}` alike.
+     *
+     * That is the whole reason this is not `pattern(…)` plus `range(…)`: a
+     * regular expression can say whether `90m` is well-formed but not whether it
+     * is under a two-hour ceiling, and a numeric range cannot see through the
+     * unit at all. Cooldowns, TTLs, timeouts, poll intervals and retention
+     * windows all want exactly this pair of questions asked together.
+     *
+     * An out-of-range value and a malformed one report the SAME message by
+     * default. Pass your own when the two are worth separating — a field with a
+     * documented floor usually is.
+     */
+    readonly duration: (bounds?: unknown, message?: string) => Validator;
     readonly matches: (other: unknown, message?: string) => Validator;
     readonly custom: (fn: unknown, message?: string) => Validator;
     /**
