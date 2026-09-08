@@ -10710,7 +10710,7 @@ const NumberInput = {
     { name: "max", type: "number", optional: true },
     { name: "step", type: "number", optional: true, description: "Default 1" },
     { name: "placeholder", type: "string", optional: true },
-    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new number (or null when blank)" },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new number (or null when blank). While the user is typing this is the value AS TYPED, so it can sit briefly outside `min`/`max`; it is clamped and rounded when the edit is committed — blur, Enter, or a +/- press" },
     // `disabled` comes from FIELD_SHELL_PROPS — declaring it here as well added a
     // second, unreachable slot: it inflated the positional arity the validator
     // reports, listed the name twice in the generated prompt, and let a mixed
@@ -10720,7 +10720,15 @@ const NumberInput = {
     { name: "prefix", type: "string", optional: true, description: 'Inline text before the number (e.g. "€")' },
     { name: "suffix", type: "string", optional: true, description: 'Inline unit after the number (e.g. "GB", "%", "ms")' },
     { name: "precision", type: "number", optional: true, description: "Number of decimals the field keeps (rounds the value it reports)" },
-    { name: "readOnly", type: "boolean", optional: true, aliases: ["readonly"], description: "Value is visible and selectable but not editable (unlike `disabled`, it stays in tab order and is submitted). The +/- buttons are removed from the tab order with it." }
+    { name: "readOnly", type: "boolean", optional: true, aliases: ["readonly"], description: "Value is visible and selectable but not editable (unlike `disabled`, it stays in tab order and is submitted). The +/- buttons are removed from the tab order with it." },
+    // The field shell already carries the STATIC explanation of a bound (`hint`,
+    // `description`, `warning`), and it is already in the control's
+    // `aria-describedby`, so none of that needs a prop here. What a consumer
+    // could not do is react to a REFUSED press: `adjust` clamped to the value the
+    // field already held and fired `input` anyway, which is indistinguishable
+    // from a real change. This is that channel, and the reason it exists is that
+    // only the app knows WHY a floor or a ceiling is there.
+    { name: "onLimit", type: "callable", optional: true, description: 'Called with "min" or "max" when the user presses the stepper for a direction the value has already run out of — the hook for explaining a floor or a ceiling (a 2 GB minimum, a contract quota) that the field itself cannot know the reason for' }
   ],
   render: (node, props, helpers) => {
     const id = asString$1(props.id);
@@ -10738,24 +10746,47 @@ const NumberInput = {
       if (precision !== null) return Number(n.toFixed(precision));
       return stepDecimals > 0 ? Number(n.toFixed(stepDecimals)) : n;
     };
+    const textSlot = helpers.useInstanceState("rui-number-text", null);
+    const lastText = textSlot.get();
+    const declared = props.value === null || props.value === void 0 || props.value === "" ? null : Number.isFinite(Number(props.value)) ? Number(props.value) : null;
+    const remembered = lastText !== null && lastText !== "" && Number.isFinite(Number(lastText)) ? Number(lastText) : null;
+    const effective = declared ?? remembered;
+    const atMin = effective !== null && effective <= min;
+    const atMax = effective !== null && effective >= max;
     const root = el("div", {
       class: "rui-number-input",
       "data-disabled": disabled ? "true" : "false",
-      "data-readonly": readOnly ? "true" : "false"
+      "data-readonly": readOnly ? "true" : "false",
+      // Both always present, never omitted-for-false: `syncLimits` writes the
+      // same two strings imperatively, and an attribute the render omits is one
+      // `syncAttributes` would strip straight back off.
+      "data-at-min": atMin ? "true" : "false",
+      "data-at-max": atMax ? "true" : "false"
     });
     const decBtn = el("button", {
       type: "button",
       class: "rui-number-input-button",
       "data-direction": "down",
       "aria-label": "Decrement",
-      disabled: inert ? "" : null
+      disabled: inert ? "" : null,
+      // Spent at the bound, and marked with `aria-disabled` rather than the
+      // native `disabled`. A disabled <button> cannot take focus, so the one
+      // state that says why the value will not go lower is the one state a
+      // keyboard user could never reach; and `disabled` is already the
+      // whole-control lock above, which says something different (the field is
+      // off, not this direction is used up). So: dimmed by the theme, announced
+      // as unavailable, still in the tab order — and `adjust` refuses the press.
+      "aria-disabled": !inert && atMin ? "true" : null
     }, ["−"]);
     const input = el("input", {
       type: "number",
       class: "rui-number-input-field",
       id,
       name: id,
-      value: valueAttr(props.value),
+      // The user's own spelling wins whenever it means the same number as the
+      // bound value — see `textSlot` above for why. Anything else is the
+      // canonical assertion, so a real programmatic change still applies.
+      value: declared !== null && lastText !== null && lastText !== "" && Number(lastText) === declared ? lastText : valueAttr(props.value),
       placeholder: asString$1(props.placeholder),
       min: hasMin ? String(min) : null,
       max: hasMax ? String(max) : null,
@@ -10768,22 +10799,57 @@ const NumberInput = {
       class: "rui-number-input-button",
       "data-direction": "up",
       "aria-label": "Increment",
-      disabled: inert ? "" : null
+      disabled: inert ? "" : null,
+      // Mirror of the decrement button above — see the comment there for why
+      // this is `aria-disabled` and not `disabled`.
+      "aria-disabled": !inert && atMax ? "true" : null
     }, ["+"]);
     const stateName = node.argMeta?.[1]?.stateRef;
-    const readNumberValue = (n) => {
+    const readTypedValue = (n) => {
       const raw = n.value;
+      textSlot.set(raw);
       if (raw === "") return null;
       const num2 = Number(raw);
-      if (!Number.isFinite(num2)) return null;
-      return round(clampNumber(num2, min, max));
+      return Number.isFinite(num2) ? num2 : null;
+    };
+    const readCommittedValue = (n) => {
+      const typed = readTypedValue(n);
+      return typed === null ? null : round(clampNumber(typed, min, max));
     };
     if (stateName) {
-      helpers.bindState(input, stateName, { event: "input", getValue: readNumberValue });
+      helpers.bindState(input, stateName, { event: "input", getValue: readTypedValue });
     }
     bindChangeHandler(input, props, helpers, {
       event: "input",
-      getValue: readNumberValue
+      getValue: readTypedValue
+    });
+    const syncLimits = (origin) => {
+      const liveRoot = origin.closest(".rui-number-input");
+      const live = liveRoot?.querySelector(".rui-number-input-field");
+      if (!liveRoot || !live) return;
+      const num2 = live.value === "" ? Number.NaN : Number(live.value);
+      const value = Number.isFinite(num2) ? num2 : null;
+      const lower = value !== null && value <= min;
+      const upper = value !== null && value >= max;
+      liveRoot.setAttribute("data-at-min", lower ? "true" : "false");
+      liveRoot.setAttribute("data-at-max", upper ? "true" : "false");
+      const locked = live.disabled || live.readOnly;
+      const mark = (direction, spent) => {
+        const button = liveRoot.querySelector(
+          `.rui-number-input-button[data-direction="${direction}"]`
+        );
+        if (!button) return;
+        if (spent && !locked) button.setAttribute("aria-disabled", "true");
+        else button.removeAttribute("aria-disabled");
+      };
+      mark("down", lower);
+      mark("up", upper);
+    };
+    composeHandler(input, "oninput", (event) => {
+      const live = event.currentTarget ?? event.target;
+      if (!live) return;
+      textSlot.set(live.value);
+      syncLimits(live);
     });
     const adjust = (origin, delta) => {
       const liveRoot = origin.closest(".rui-number-input");
@@ -10792,22 +10858,28 @@ const NumberInput = {
       if (live.readOnly || live.disabled) return;
       const current = Number(live.value);
       const base = Number.isFinite(current) ? current : 0;
+      if (live.value !== "" && (delta < 0 ? base <= min : base >= max)) {
+        helpers.invoke(props.onLimit, delta < 0 ? "min" : "max");
+        return;
+      }
       const next = round(clampNumber(base + delta, min, max));
       live.value = String(next);
       live.dispatchEvent(new Event("input", { bubbles: true }));
     };
     decBtn.onclick = (event) => adjust(event.currentTarget ?? event.target, -step);
     incBtn.onclick = (event) => adjust(event.currentTarget ?? event.target, step);
-    attachFocusHandlers(input, props, helpers, readNumberValue);
-    composeHandler(input, "onblur", (event) => {
+    attachFocusHandlers(input, props, helpers, readCommittedValue);
+    const commit = (event) => {
       const live = event.currentTarget ?? event.target;
       if (!live || live.value === "") return;
-      const corrected = readNumberValue(live);
+      const corrected = readCommittedValue(live);
       if (corrected !== null && String(corrected) !== live.value) {
         live.value = String(corrected);
         live.dispatchEvent(new Event("input", { bubbles: true }));
       }
-    });
+    };
+    composeHandler(input, "onblur", commit);
+    composeHandler(input, "onchange", commit);
     const prefix = asString$1(props.prefix);
     const suffix = asString$1(props.suffix);
     root.append(decBtn);
@@ -54180,7 +54252,7 @@ ${below("xs")} {
 :host([data-rui-theme="vision"]) .rui-number-input-button { background: transparent; }
 :host([data-rui-theme="vision"]) .rui-number-input-button,
 :host([data-rui-theme="vision"]) .rui-password-input-toggle { color: var(--rui-color-link); }
-:host([data-rui-theme="vision"]) .rui-number-input-button:hover:not(:disabled),
+:host([data-rui-theme="vision"]) .rui-number-input-button:hover:not(:disabled):not([aria-disabled="true"]),
 :host([data-rui-theme="vision"]) .rui-password-input-toggle:hover { color: #095bb1; }
 /* form labels — Open Sans Semibold, primary-text-color (form/label.scss) */
 :host([data-rui-theme="vision"]) .rui-field-label,
@@ -58320,16 +58392,34 @@ ${below("xs")} {
 .rui-number-input-button[data-direction="up"] {
   border-left: var(--rui-border-width) solid var(--rui-color-border);
 }
-.rui-number-input-button:hover:not(:disabled) {
+.rui-number-input-button:hover:not(:disabled):not([aria-disabled="true"]) {
   background: color-mix(in srgb, var(--rui-color-primary) 10%, var(--rui-color-surface-muted));
   color: var(--rui-color-primary);
 }
-.rui-number-input-button:active:not(:disabled) {
+.rui-number-input-button:active:not(:disabled):not([aria-disabled="true"]) {
   background: color-mix(in srgb, var(--rui-color-primary) 18%, var(--rui-color-surface-muted));
 }
-.rui-number-input-button:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Two ways a stepper is inert, and they say different things: :disabled is the
+   whole control being off (disabled / readOnly), [aria-disabled] is this one
+   direction being spent because the value sits on its bound. Same dimming, and
+   deliberately NO pointer-events: none on the aria form -- the press still has
+   to reach the handler so onLimit can explain the bound. */
+.rui-number-input-button:disabled,
+.rui-number-input-button[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 .rui-number-input-field {
-  appearance: none;
+  /* textfield, not none. Blink and WebKit hide the spin buttons for either
+     value (and the two ::-webkit-*-spin-button rules below are that engine's
+     belt regardless), while Gecko drops its spin box only for textfield:
+     appearance: none leaves it painted, which is why Firefox drew native
+     up/down arrows inside a field that already carries its own +/- buttons.
+     Gecko exposes no author-reachable spin-button pseudo-element, so it has no
+     equivalent of those two rules and this property is the only lever.
+     -moz-appearance repeats it for Firefox before 80, which does not recognise
+     the unprefixed property at all. Everything the UA textfield look would
+     otherwise bring back (border, background, padding, font) is overridden in
+     this same rule. */
+  appearance: textfield;
+  -moz-appearance: textfield;
   border: none;
   background: transparent;
   padding: 8px 12px;
@@ -58344,6 +58434,14 @@ ${below("xs")} {
 .rui-number-input-field:focus { outline: none; }
 .rui-number-input-field::-webkit-outer-spin-button,
 .rui-number-input-field::-webkit-inner-spin-button { appearance: none; margin: 0; }
+/* The value as typed is outside min/max. The commit-time normaliser (blur,
+   change, Enter, or a +/- press) corrects it; until then the field shows that it
+   will not be accepted as it stands. :out-of-range is the browser's own verdict
+   on the min/max attributes, so this needs no state and no script. */
+.rui-number-input:has(.rui-number-input-field:out-of-range) {
+  border-color: var(--rui-color-danger);
+}
+.rui-number-input-field:out-of-range { color: var(--rui-color-danger); }
 .rui-number-input[data-disabled="true"] {
   opacity: 0.6;
   cursor: not-allowed;
