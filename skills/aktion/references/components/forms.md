@@ -735,7 +735,7 @@ Range slider for selecting a single numeric value between `min` and `max`. Pass 
 ### NumberInput
 
 ```
-NumberInput(id, value?, min?, max?, step?, placeholder?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?, prefix?, suffix?, precision?, readOnly?)
+NumberInput(id, value?, min?, max?, step?, placeholder?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?, prefix?, suffix?, precision?, readOnly?, onLimit?)
 ```
 
 Numeric input with paired increment/decrement buttons. Use for quantity steppers, integer settings, and any field where a `<input type="number">` plus +/- controls is friendlier than the native spinner. Pass a `$variable` as `value` for two-way binding. `prefix` / `suffix` render an inline unit ("€", "GB", "%"), and `precision` fixes the number of decimals (currency fields).
@@ -748,7 +748,7 @@ Numeric input with paired increment/decrement buttons. Use for quantity steppers
 | `max` | `number` | no |  |
 | `step` | `number` | no | Default 1 |
 | `placeholder` | `string` | no |  |
-| `onChange` | `callable` | no | Called with the new number (or null when blank) |
+| `onChange` | `callable` | no | Called with the new number (or null when blank). While the user is typing this is the value AS TYPED, so it can sit briefly outside `min`/`max`; it is clamped and rounded when the edit is committed — blur, Enter, or a +/- press |
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
 | `hint` | `string` | no | Helper text rendered below the control |
@@ -767,6 +767,7 @@ Numeric input with paired increment/decrement buttons. Use for quantity steppers
 | `suffix` | `string` | no | Inline unit after the number (e.g. "GB", "%", "ms") |
 | `precision` | `number` | no | Number of decimals the field keeps (rounds the value it reports) |
 | `readOnly` | `boolean` | no | Value is visible and selectable but not editable (unlike `disabled`, it stays in tab order and is submitted). The +/- buttons are removed from the tab order with it. |
+| `onLimit` | `callable` | no | Called with "min" or "max" when the user presses the stepper for a direction the value has already run out of — the hook for explaining a floor or a ceiling (a 2 GB minimum, a contract quota) that the field itself cannot know the reason for |
 
 ### ColorPicker
 

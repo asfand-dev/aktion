@@ -1690,7 +1690,7 @@ export const NumberInput: ComponentSpec = {
     { name: "max", type: "number", optional: true },
     { name: "step", type: "number", optional: true, description: "Default 1" },
     { name: "placeholder", type: "string", optional: true },
-    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new number (or null when blank)" },
+    { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new number (or null when blank). While the user is typing this is the value AS TYPED, so it can sit briefly outside `min`/`max`; it is clamped and rounded when the edit is committed — blur, Enter, or a +/- press" },
     // `disabled` comes from FIELD_SHELL_PROPS — declaring it here as well added a
     // second, unreachable slot: it inflated the positional arity the validator
     // reports, listed the name twice in the generated prompt, and let a mixed
@@ -1701,6 +1701,14 @@ export const NumberInput: ComponentSpec = {
     { name: "suffix", type: "string", optional: true, description: "Inline unit after the number (e.g. \"GB\", \"%\", \"ms\")" },
     { name: "precision", type: "number", optional: true, description: "Number of decimals the field keeps (rounds the value it reports)" },
     { name: "readOnly", type: "boolean", optional: true, aliases: ["readonly"], description: "Value is visible and selectable but not editable (unlike `disabled`, it stays in tab order and is submitted). The +/- buttons are removed from the tab order with it." },
+    // The field shell already carries the STATIC explanation of a bound (`hint`,
+    // `description`, `warning`), and it is already in the control's
+    // `aria-describedby`, so none of that needs a prop here. What a consumer
+    // could not do is react to a REFUSED press: `adjust` clamped to the value the
+    // field already held and fired `input` anyway, which is indistinguishable
+    // from a real change. This is that channel, and the reason it exists is that
+    // only the app knows WHY a floor or a ceiling is there.
+    { name: "onLimit", type: "callable", optional: true, description: "Called with \"min\" or \"max\" when the user presses the stepper for a direction the value has already run out of — the hook for explaining a floor or a ceiling (a 2 GB minimum, a contract quota) that the field itself cannot know the reason for" },
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id);
@@ -1734,10 +1742,44 @@ export const NumberInput: ComponentSpec = {
       if (precision !== null) return Number(n.toFixed(precision));
       return stepDecimals > 0 ? Number(n.toFixed(stepDecimals)) : n;
     };
+    // The text the field last held, remembered across renders. Two jobs, both
+    // about surviving a morph pass:
+    //
+    //   1. `value` is asserted from `props.value`, and `syncInput` applies any
+    //      assertion that differs from the live text — deliberately even while
+    //      the field is focused — so a keystroke that parses to the same number
+    //      spelled differently ("0005", "1e3") was rewritten under the caret
+    //      mid-word. Asserting the user's OWN spelling whenever it parses to the
+    //      number the program holds makes that sync a no-op, while a genuine
+    //      programmatic change (a different number) still applies.
+    //   2. With `onChange` only and no bound $variable there is no `props.value`
+    //      at all, so the at-the-bound state below would reset to "neither
+    //      bound" on the next unrelated re-render and re-light a + at the
+    //      ceiling. `syncAttributes` strips every attribute the fresh render
+    //      omits, so the imperative refresh in `syncLimits` cannot stand on its
+    //      own — the render has to be able to reach the same answer.
+    const textSlot = helpers.useInstanceState<string | null>("rui-number-text", null);
+    const lastText = textSlot.get();
+    const declared = props.value === null || props.value === undefined || props.value === ""
+      ? null
+      : Number.isFinite(Number(props.value)) ? Number(props.value) : null;
+    const remembered = lastText !== null && lastText !== "" && Number.isFinite(Number(lastText))
+      ? Number(lastText)
+      : null;
+    // What this render should reason about: what the program says, or — when it
+    // says nothing — what the user last left in the field.
+    const effective = declared ?? remembered;
+    const atMin = effective !== null && effective <= min;
+    const atMax = effective !== null && effective >= max;
     const root = el("div", {
       class: "rui-number-input",
       "data-disabled": disabled ? "true" : "false",
       "data-readonly": readOnly ? "true" : "false",
+      // Both always present, never omitted-for-false: `syncLimits` writes the
+      // same two strings imperatively, and an attribute the render omits is one
+      // `syncAttributes` would strip straight back off.
+      "data-at-min": atMin ? "true" : "false",
+      "data-at-max": atMax ? "true" : "false",
     });
     const decBtn = el("button", {
       type: "button",
@@ -1745,13 +1787,26 @@ export const NumberInput: ComponentSpec = {
       "data-direction": "down",
       "aria-label": "Decrement",
       disabled: inert ? "" : null,
+      // Spent at the bound, and marked with `aria-disabled` rather than the
+      // native `disabled`. A disabled <button> cannot take focus, so the one
+      // state that says why the value will not go lower is the one state a
+      // keyboard user could never reach; and `disabled` is already the
+      // whole-control lock above, which says something different (the field is
+      // off, not this direction is used up). So: dimmed by the theme, announced
+      // as unavailable, still in the tab order — and `adjust` refuses the press.
+      "aria-disabled": !inert && atMin ? "true" : null,
     }, ["−"]);
     const input = el("input", {
       type: "number",
       class: "rui-number-input-field",
       id,
       name: id,
-      value: valueAttr(props.value),
+      // The user's own spelling wins whenever it means the same number as the
+      // bound value — see `textSlot` above for why. Anything else is the
+      // canonical assertion, so a real programmatic change still applies.
+      value: declared !== null && lastText !== null && lastText !== "" && Number(lastText) === declared
+        ? lastText
+        : valueAttr(props.value),
       placeholder: asString(props.placeholder),
       min: hasMin ? String(min) : null,
       max: hasMax ? String(max) : null,
@@ -1765,24 +1820,95 @@ export const NumberInput: ComponentSpec = {
       "data-direction": "up",
       "aria-label": "Increment",
       disabled: inert ? "" : null,
+      // Mirror of the decrement button above — see the comment there for why
+      // this is `aria-disabled` and not `disabled`.
+      "aria-disabled": !inert && atMax ? "true" : null,
     }, ["+"]);
     const stateName = node.argMeta?.[1]?.stateRef;
-    const readNumberValue = (n: HTMLElement): number | null => {
+    // A numeric field has two different answers, and conflating them is what made
+    // this one un-typable.
+    //
+    // WHILE TYPING the answer is what the field actually holds: no clamp, no
+    // rounding. Clamping here fed the bound $variable a corrected number, the
+    // program re-rendered, and `syncInput` wrote that number back into the box
+    // under the caret — `min: 10` showing 100, cleared, then "5" became "10", and
+    // the next digit made it "100" again. It also respelled a perfectly valid
+    // edit ("0005", "1e3") and pre-rounded "1.239" under `precision: 2` before
+    // the third decimal could be typed.
+    //
+    // The half-typed states cost nothing: `<input type="number">` sanitises its
+    // own value to "" for anything that is not a valid floating-point number, so
+    // "", "-", ".", "1." and "1e" all arrive here as "" and all report `null` —
+    // and a `null` value renders NO `value` attribute at all, which `syncInput`
+    // reads as "this render is not asserting a value" and leaves the text alone.
+    const readTypedValue = (n: HTMLElement): number | null => {
       const raw = (n as HTMLInputElement).value;
+      // Remembered HERE and not in the handler chain below: `bindState`'s write
+      // can re-render synchronously, and `getValue` is the last thing that runs
+      // before it — a slot stamped afterwards would be one keystroke stale at
+      // exactly the moment the render reads it.
+      textSlot.set(raw);
       if (raw === "") return null;
       const num = Number(raw);
-      if (!Number.isFinite(num)) return null;
-      // Browsers do not enforce min/max while typing, so without this a
-      // `min: 1, max: 10` field happily reported 500 to the bound $variable
-      // and to onChange — a value the +/- buttons would have refused.
-      return round(clampNumber(num, min, max));
+      return Number.isFinite(num) ? num : null;
+    };
+    // ON COMMIT the answer is in range and at the configured precision. This is
+    // what the normaliser below writes back into the field, what `onBlur`
+    // reports, and what a +/- press produces. So an out-of-range number can
+    // reach a bound $variable while the field is focused and is corrected the
+    // moment the edit is committed — instead of never arriving and taking the
+    // user's keystrokes with it. The field marks itself `:out-of-range` in the
+    // meantime (theme rule), and the `min`/`max` attributes still block a native
+    // form submit, so the window is visible and fenced rather than silent.
+    const readCommittedValue = (n: HTMLElement): number | null => {
+      const typed = readTypedValue(n);
+      return typed === null ? null : round(clampNumber(typed, min, max));
     };
     if (stateName) {
-      helpers.bindState(input, stateName, { event: "input", getValue: readNumberValue });
+      helpers.bindState(input, stateName, { event: "input", getValue: readTypedValue });
     }
     bindChangeHandler(input, props, helpers, {
       event: "input",
-      getValue: readNumberValue,
+      getValue: readTypedValue,
+    });
+    // Refresh the spent-direction state from the LIVE value. Everything is
+    // resolved out of the event's own target for the same reason `adjust` does it
+    // (the nodes this closure captured are detached the moment morph reuses the
+    // previous ones), and it is needed at all because an `onChange`-only field
+    // never re-renders: without this a + that reached the ceiling stayed lit
+    // until some unrelated state change happened to repaint the tree.
+    const syncLimits = (origin: Element): void => {
+      const liveRoot = origin.closest(".rui-number-input");
+      const live = liveRoot?.querySelector<HTMLInputElement>(".rui-number-input-field");
+      if (!liveRoot || !live) return;
+      const num = live.value === "" ? Number.NaN : Number(live.value);
+      const value = Number.isFinite(num) ? num : null;
+      const lower = value !== null && value <= min;
+      const upper = value !== null && value >= max;
+      liveRoot.setAttribute("data-at-min", lower ? "true" : "false");
+      liveRoot.setAttribute("data-at-max", upper ? "true" : "false");
+      // Read the lock off the LIVE node, like `adjust` does: a morph can reuse
+      // these handlers over a node whose disabled/readonly state has changed.
+      const locked = live.disabled || live.readOnly;
+      const mark = (direction: string, spent: boolean): void => {
+        const button = liveRoot.querySelector<HTMLButtonElement>(
+          `.rui-number-input-button[data-direction="${direction}"]`,
+        );
+        if (!button) return;
+        if (spent && !locked) button.setAttribute("aria-disabled", "true");
+        else button.removeAttribute("aria-disabled");
+      };
+      mark("down", lower);
+      mark("up", upper);
+    };
+    composeHandler(input, "oninput", (event) => {
+      const live = (event.currentTarget ?? event.target) as HTMLInputElement | null;
+      if (!live) return;
+      // Stamped here as well as in `readTypedValue`: a field with neither a bound
+      // $variable nor an `onChange` calls no `getValue` at all, and the render
+      // still needs the text to recompute the bounds from.
+      textSlot.set(live.value);
+      syncLimits(live);
     });
     const adjust = (origin: Element, delta: number): void => {
       // Resolve the *live* input via the DOM. The `input` captured by this
@@ -1799,26 +1925,55 @@ export const NumberInput: ComponentSpec = {
       if (live.readOnly || live.disabled) return;
       const current = Number(live.value);
       const base = Number.isFinite(current) ? current : 0;
+      // Refuse rather than dispatch a no-op. At the bound the clamp below made
+      // `next` equal to what the field already held and fired `input` anyway, so
+      // the bound $variable and `onChange` were told the value had changed when
+      // nothing had — and the press produced no other signal at all, which is why
+      // a − at the floor read as broken rather than spent. `onLimit` is the only
+      // channel a consumer has to say WHY the bound is there; the component
+      // cannot invent a reason for a 2 GB floor or a contract quota.
+      //
+      // The test is the BOUND, not `next === base`: a step too small to move the
+      // value at the configured precision is a different thing and must not be
+      // reported as a limit. A blank field is at no bound — `base` is 0 there
+      // only as a starting point for the step.
+      if (live.value !== "" && (delta < 0 ? base <= min : base >= max)) {
+        helpers.invoke(props.onLimit, delta < 0 ? "min" : "max");
+        return;
+      }
       const next = round(clampNumber(base + delta, min, max));
       live.value = String(next);
+      // Runs the composed `oninput` above, which refreshes the +/- state — so the
+      // press that consumes the last step immediately dims its own button, with
+      // or without a re-render.
       live.dispatchEvent(new Event("input", { bubbles: true }));
     };
     decBtn.onclick = (event) => adjust((event.currentTarget ?? event.target) as Element, -step);
     incBtn.onclick = (event) => adjust((event.currentTarget ?? event.target) as Element, step);
     // Must run BEFORE the blur normaliser below: `attachFocusHandlers` assigns
     // `onblur` outright, so composing has to come second or it is overwritten.
-    attachFocusHandlers(input, props, helpers, readNumberValue);
-    composeHandler(input, "onblur", (event) => {
+    attachFocusHandlers(input, props, helpers, readCommittedValue);
+    // THE commit. Typing reports what the field holds; this is where the value is
+    // brought into range and to the configured precision, and it is the whole
+    // reason typing no longer has to be.
+    const commit = (event: Event): void => {
       const live = (event.currentTarget ?? event.target) as HTMLInputElement | null;
       if (!live || live.value === "") return;
-      const corrected = readNumberValue(live);
+      const corrected = readCommittedValue(live);
       // Keep the field and the state in agreement — the reported value is
       // clamped and rounded, so the visible text has to be too.
       if (corrected !== null && String(corrected) !== live.value) {
         live.value = String(corrected);
         live.dispatchEvent(new Event("input", { bubbles: true }));
       }
-    });
+    };
+    composeHandler(input, "onblur", commit);
+    // `change` is the OTHER commit point, and blur does not cover it: pressing
+    // Enter commits the field's value and fires `change` without moving focus, so
+    // a form submitted from the keyboard ran against the text as typed. Both can
+    // fire for one edit; the second is a no-op, because the first already made
+    // the corrected value equal to the visible text.
+    composeHandler(input, "onchange", commit);
     const prefix = asString(props.prefix);
     const suffix = asString(props.suffix);
     root.append(decBtn);

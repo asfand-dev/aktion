@@ -5,6 +5,32 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-09-08
+
+### NumberInput: Firefox Spinners, Typing, And Steppers That Look Spent
+
+- Firefox no longer draws its own up/down arrows inside a `NumberInput`. The
+  field asked for `appearance: none`, which Gecko ignores for a number input, so
+  the component's +/- buttons sat beside a second, native pair of controls.
+- Typing into a `NumberInput` is no longer corrected mid-keystroke. The value was
+  clamped to `min`/`max` on every keypress and written straight back into the
+  field, so on a field with `min: 10` showing `100` you could clear it, type `5`,
+  and watch it become `10` — and the next digit made it `100` again. A typed
+  value is now reported as typed and brought into range when the edit is
+  committed: on blur, on Enter, or on a +/- press.
+- A re-render no longer respells an edit in progress. `0005` and `1e3` were
+  rewritten to `5` and `1000` under the caret, and a `precision: 2` field rounded
+  `1.239` before the third decimal could be typed.
+- The `+` and `−` buttons now show themselves as spent once the value sits on its
+  bound, instead of staying lit and promising headroom that is not there. They
+  stay focusable and announced as unavailable, so a keyboard user can still reach
+  the state, and pressing one calls the new `onLimit` prop with `"min"` or
+  `"max"` — the hook for explaining a floor or a ceiling the field itself cannot
+  know the reason for. Use the existing `hint` / `description` / `warning` for
+  the explanation itself; nothing new is needed for that.
+- A value outside `min`/`max` is now visible while it is being typed, through the
+  browser's own out-of-range state.
+
 ## 2026-09-05
 
 ### Old Dropdown Panels Piled Up Where The Popover API Is Missing

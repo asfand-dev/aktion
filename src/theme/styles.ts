@@ -6325,7 +6325,7 @@ ${below("xs")} {
 :host([data-rui-theme="vision"]) .rui-number-input-button { background: transparent; }
 :host([data-rui-theme="vision"]) .rui-number-input-button,
 :host([data-rui-theme="vision"]) .rui-password-input-toggle { color: var(--rui-color-link); }
-:host([data-rui-theme="vision"]) .rui-number-input-button:hover:not(:disabled),
+:host([data-rui-theme="vision"]) .rui-number-input-button:hover:not(:disabled):not([aria-disabled="true"]),
 :host([data-rui-theme="vision"]) .rui-password-input-toggle:hover { color: #095bb1; }
 /* form labels — Open Sans Semibold, primary-text-color (form/label.scss) */
 :host([data-rui-theme="vision"]) .rui-field-label,
@@ -10465,16 +10465,34 @@ ${below("xs")} {
 .rui-number-input-button[data-direction="up"] {
   border-left: var(--rui-border-width) solid var(--rui-color-border);
 }
-.rui-number-input-button:hover:not(:disabled) {
+.rui-number-input-button:hover:not(:disabled):not([aria-disabled="true"]) {
   background: color-mix(in srgb, var(--rui-color-primary) 10%, var(--rui-color-surface-muted));
   color: var(--rui-color-primary);
 }
-.rui-number-input-button:active:not(:disabled) {
+.rui-number-input-button:active:not(:disabled):not([aria-disabled="true"]) {
   background: color-mix(in srgb, var(--rui-color-primary) 18%, var(--rui-color-surface-muted));
 }
-.rui-number-input-button:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Two ways a stepper is inert, and they say different things: :disabled is the
+   whole control being off (disabled / readOnly), [aria-disabled] is this one
+   direction being spent because the value sits on its bound. Same dimming, and
+   deliberately NO pointer-events: none on the aria form -- the press still has
+   to reach the handler so onLimit can explain the bound. */
+.rui-number-input-button:disabled,
+.rui-number-input-button[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 .rui-number-input-field {
-  appearance: none;
+  /* textfield, not none. Blink and WebKit hide the spin buttons for either
+     value (and the two ::-webkit-*-spin-button rules below are that engine's
+     belt regardless), while Gecko drops its spin box only for textfield:
+     appearance: none leaves it painted, which is why Firefox drew native
+     up/down arrows inside a field that already carries its own +/- buttons.
+     Gecko exposes no author-reachable spin-button pseudo-element, so it has no
+     equivalent of those two rules and this property is the only lever.
+     -moz-appearance repeats it for Firefox before 80, which does not recognise
+     the unprefixed property at all. Everything the UA textfield look would
+     otherwise bring back (border, background, padding, font) is overridden in
+     this same rule. */
+  appearance: textfield;
+  -moz-appearance: textfield;
   border: none;
   background: transparent;
   padding: 8px 12px;
@@ -10489,6 +10507,14 @@ ${below("xs")} {
 .rui-number-input-field:focus { outline: none; }
 .rui-number-input-field::-webkit-outer-spin-button,
 .rui-number-input-field::-webkit-inner-spin-button { appearance: none; margin: 0; }
+/* The value as typed is outside min/max. The commit-time normaliser (blur,
+   change, Enter, or a +/- press) corrects it; until then the field shows that it
+   will not be accepted as it stands. :out-of-range is the browser's own verdict
+   on the min/max attributes, so this needs no state and no script. */
+.rui-number-input:has(.rui-number-input-field:out-of-range) {
+  border-color: var(--rui-color-danger);
+}
+.rui-number-input-field:out-of-range { color: var(--rui-color-danger); }
 .rui-number-input[data-disabled="true"] {
   opacity: 0.6;
   cursor: not-allowed;
