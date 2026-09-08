@@ -12237,8 +12237,8 @@ th[data-active="true"] .rui-data-grid-sort-icon { opacity: 1; }
 }
 .rui-data-grid-col-panel-cb {
   flex: 0 0 auto;
-  width: 15px;
-  height: 15px;
+  width: 20px;
+  height: 22px;
   accent-color: var(--rui-color-primary);
   cursor: pointer;
 }
