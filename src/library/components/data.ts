@@ -33,7 +33,10 @@ export const Col: ComponentSpec = {
     "DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. " +
     "Pass `onClick: (value, index, row) => …` to make the whole cell " +
     "clickable (pointer + keyboard). `sortable` and `filterable` only take " +
-    "effect inside `DataGrid` (Table ignores them).",
+    "effect inside `DataGrid` (Table ignores them). For an actions/kebab-menu " +
+    "column that needs no visible header, use `headerHidden: true` — NOT " +
+    "`header: \"\"`, which loses the accessible name and (in DataGrid) the " +
+    "persistence key derived from `header`.",
   props: [
     { name: "header", type: "string" },
     { name: "values", type: "any[]", description: "Column values. Plain values are formatted as text; component nodes (e.g. `rows.map(r => Badge(r.status))`) render directly. You can also pass the full row array and map each cell with `render`." },
@@ -55,6 +58,8 @@ export const Col: ComponentSpec = {
     { name: "resizable", type: "boolean", optional: true, description: "DataGrid: per-column override for resizing. Takes precedence over the grid-level `resizable` prop." },
     { name: "minWidth", type: "string", optional: true, description: "DataGrid: minimum width when the column is resized (`80px`, `5rem`)." },
     { name: "maxWidth", type: "string", optional: true, description: "DataGrid: maximum width when the column is resized (`400px`, `50%`)." },
+    // Slot 18. Appended at the end, like every prior addition — see the note above.
+    { name: "headerHidden", type: "boolean", optional: true, description: "Render the header cell visually empty (an actions/kebab-menu column needs no visible header) while `header` keeps naming the column everywhere else that reads it: the `<th>`'s accessible name, the column-settings panel row, and (DataGrid) the persistence key. Do NOT use `header: \"\"` for this — that drops the accessible name, blanks the column-settings row, and collides with any other column that also passed an empty header, since the persistence key is the header string. A sortable column keeps working: the sort button's accessible name still comes from the hidden label." },
   ],
   // Cols are read positionally inside Table.render — this render is a fallback.
   render: (_node, props) => {
@@ -158,6 +163,7 @@ export const Table: ComponentSpec = {
     for (let c = 0; c < cols.length; c += 1) {
       const col = cols[c]!;
       const headerTooltip = asString(col.args?.[11]);
+      const headerHidden = asBoolean(col.args?.[18]);
       const th = el("th", {
         // Explicit association: the implicit-header heuristic fails as soon as
         // the table gains a caption row or a merged layout.
@@ -166,7 +172,13 @@ export const Table: ComponentSpec = {
         "data-wrap": wrapAttrs[c] ?? null,
         title: headerTooltip || null,
         style: cellStyles[c] ?? null,
-      }, [asString(col.args?.[0])]);
+        // Reuses `.rui-visually-hidden` (see a11y.ts's `VisuallyHidden`)
+        // rather than a bespoke clip: the label still names the column (aria,
+        // column-settings panel) but is not drawn — e.g. an actions/kebab
+        // column that needs no visible header.
+      }, [headerHidden
+        ? el("span", { class: "rui-visually-hidden" }, [asString(col.args?.[0])])
+        : asString(col.args?.[0])]);
       headRow.append(th);
     }
     thead.append(headRow);

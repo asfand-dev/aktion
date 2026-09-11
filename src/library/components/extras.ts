@@ -428,6 +428,7 @@ export const ConfirmDialog: ComponentSpec = {
     { name: "loading", type: "boolean", optional: true, description: "Async confirm in flight — keeps the dialog open, disables both buttons" },
     { name: "confirmDisabled", type: "boolean", optional: true, description: "Guard the primary action until a condition is met" },
     { name: "icon", type: "string", optional: true, description: "Glyph beside the title (defaults from `tone`)" },
+    { name: "confirmFirst", type: "boolean", optional: true, description: "Put Confirm before Cancel in the footer (default `false`, i.e. Cancel, then Confirm) — some design systems (IONOS Exos among them) put the primary action first in a dialog footer; this flips DOM order (so visual order and tab order move together), not just visual position. Initial focus still lands on Cancel either way, the safe default for a destructive dialog." },
   ],
   render: (node, props, helpers) => {
     const open = asBoolean(props.open);
@@ -489,12 +490,29 @@ export const ConfirmDialog: ComponentSpec = {
       helpers.invoke(props.onConfirm);
       if (!managed) dismiss();
     };
-    actions.append(cancel, confirm);
+    // `confirmFirst` reorders the DOM, not just the visuals (a CSS
+    // row-reverse would leave tab order behind visual order) — so this is
+    // the one place footer order is decided, and everything downstream
+    // (dialogKeydownHandler's Tab cycle, wireDialogFocus's default
+    // first-focusable) recomputes from live DOM order rather than assuming
+    // cancel-then-confirm.
+    if (asBoolean(props.confirmFirst)) {
+      actions.append(confirm, cancel);
+    } else {
+      actions.append(cancel, confirm);
+    }
     card.append(actions);
     root.append(backdrop, card);
-    // Escape = cancel; Tab cycles between Cancel/Confirm; focus restores on close.
+    // Escape = cancel; Tab cycles between Cancel/Confirm (DOM order, so this
+    // keeps working unchanged regardless of confirmFirst); focus restores on
+    // close.
     root.onkeydown = dialogKeydownHandler(".rui-confirm-card", () => cancelAndDismiss());
-    wireDialogFocus(root, ".rui-confirm-card", helpers);
+    // Cancel is pinned as the initial-focus target explicitly: it is the safe
+    // default for a destructive dialog and must stay the target even when
+    // confirmFirst makes it the SECOND element in DOM order, where
+    // wireDialogFocus's ordinary "first focusable" default would otherwise
+    // land on Confirm instead.
+    wireDialogFocus(root, ".rui-confirm-card", helpers, ".rui-confirm-cancel");
     wireOverlayLayer(root, helpers, OVERLAY_FILL, "rui-confirm-layer");
     return root;
   },

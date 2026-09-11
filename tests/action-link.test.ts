@@ -381,3 +381,69 @@ describe("the ActionLink stylesheet block", () => {
     expect(vision).toContain("opacity: 0.38;");
   });
 });
+
+describe("ActionLink tone (destructive inline action)", () => {
+  it("default tone (or omitted) sets no data-tone attribute", async () => {
+    const { el } = await mount(`${COUNTER}\n$app(ActionLink("Retry", { tone: "default", ${BUMP} }))`);
+    expect(el.hasAttribute("data-tone")).toBe(false);
+    const { el: omitted } = await mount(`${COUNTER}\n$app(ActionLink("Retry", { ${BUMP} }))`);
+    expect(omitted.hasAttribute("data-tone")).toBe(false);
+  });
+
+  it("tone: critical sets data-tone=critical", async () => {
+    const { el } = await mount(`${COUNTER}\n$app(ActionLink("Remove", { tone: "critical", ${BUMP} }))`);
+    expect(el.getAttribute("data-tone")).toBe("critical");
+  });
+
+  it("danger and destructive are accepted synonyms of critical", async () => {
+    const { el: viaDanger } = await mount(`${COUNTER}\n$app(ActionLink("Remove", { tone: "danger", ${BUMP} }))`);
+    expect(viaDanger.getAttribute("data-tone")).toBe("critical");
+    const { el: viaDestructive } = await mount(`${COUNTER}\n$app(ActionLink("Remove", { tone: "destructive", ${BUMP} }))`);
+    expect(viaDestructive.getAttribute("data-tone")).toBe("critical");
+  });
+
+  it("variant is accepted as an alias for tone (tone/variant bridge)", async () => {
+    // Every spec that declares `tone` must accept `variant` as an alias — see
+    // tests/tone-variant-bridge.test.ts.
+    const { el } = await mount(`${COUNTER}\n$app(ActionLink("Remove", { variant: "critical", ${BUMP} }))`);
+    expect(el.getAttribute("data-tone")).toBe("critical");
+  });
+
+  it("does not attach data-tone=\"default\" — null means absent, matching the rest of the catalogue", async () => {
+    // A literal `tone: "nonsense"` would be a validate.ts hard-error (an
+    // enum-carrying prop rejects an unrecognised string literal) — an author
+    // can never actually ship that program. The normaliser's fallback is
+    // reachable only through a BOUND value (e.g. untrusted data threaded
+    // through a $variable), so that is what this exercises.
+    const { el } = await mount(`${COUNTER}\n$t = "nonsense"\n$app(ActionLink("Retry", { tone: $t, ${BUMP} }))`);
+    // An unrecognised tone value normalises to "default", which is absent, not
+    // a literal "default" attribute value.
+    expect(el.getAttribute("data-tone")).toBeNull();
+  });
+
+  it("the base stylesheet colours a critical link with the text-safe danger token and keeps it on hover", async () => {
+    // TEXT, not a fill: the bare --rui-color-danger fill token measures 3.76:1
+    // on the base white surface (documented next to the token's own
+    // declaration in styles.ts) — below WCAG 1.4.3's 4.5:1. -text is the
+    // partner every other status-text rule uses (.rui-text[data-color],
+    // .rui-pill[data-tone]).
+    const base = ruleBody(componentStyles, '\n.rui-action-link[data-tone="critical"] {');
+    expect(base).toContain("var(--rui-color-danger-text)");
+    expect(base).not.toContain("var(--rui-color-danger);");
+    const hover = ruleBody(componentStyles, '\n.rui-action-link[data-tone="critical"]:hover {');
+    expect(hover).toContain("var(--rui-color-danger-text)");
+    expect(hover).toContain("text-decoration: underline;");
+  });
+
+  it("vision overrides the critical link with its own critical-5 token (base rule would otherwise lose the cascade)", async () => {
+    // vision's plain `.rui-action-link` rule sets `color` unconditionally and
+    // out-specifies a bare `.rui-action-link[data-tone="critical"]` selector
+    // (:host([data-rui-theme="vision"]) adds specificity a base-scoped
+    // attribute selector does not have) — so vision needs its own rule, or the
+    // critical tone would be silently overridden here.
+    const vision = ruleBody(componentStyles, `${VISION} .rui-action-link[data-tone="critical"] {`);
+    expect(vision).toContain("#c80a00");
+    const hover = ruleBody(componentStyles, `${VISION} .rui-action-link[data-tone="critical"]:hover {`);
+    expect(hover).toContain("#a00800");
+  });
+});

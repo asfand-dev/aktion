@@ -146,7 +146,7 @@ A mobile bottom sheet — Sheet pinned to the bottom edge. The grip is draggable
 ### ConfirmDialog
 
 ```
-ConfirmDialog(title, open?, message?, confirmLabel?, cancelLabel?, tone?, onConfirm?, onCancel?, loading?, confirmDisabled?, icon?)
+ConfirmDialog(title, open?, message?, confirmLabel?, cancelLabel?, tone?, onConfirm?, onCancel?, loading?, confirmDisabled?, icon?, confirmFirst?)
 ```
 
 A confirm/cancel modal dialog. Bind `open` to a $variable; `onConfirm` fires on accept, `onCancel`/backdrop on dismiss. `tone` colors the confirm button (danger for destructive actions) and picks a matching icon. Binding `loading` keeps the dialog open on confirm and disables both buttons so an async action can report progress — write `false` to `open` yourself once it resolves.
@@ -164,6 +164,7 @@ A confirm/cancel modal dialog. Bind `open` to a $variable; `onConfirm` fires on 
 | `loading` | `boolean` | no | Async confirm in flight — keeps the dialog open, disables both buttons |
 | `confirmDisabled` | `boolean` | no | Guard the primary action until a condition is met |
 | `icon` | `string` | no | Glyph beside the title (defaults from `tone`) |
+| `confirmFirst` | `boolean` | no | Put Confirm before Cancel in the footer (default `false`, i.e. Cancel, then Confirm) — some design systems (IONOS Exos among them) put the primary action first in a dialog footer; this flips DOM order (so visual order and tab order move together), not just visual position. Initial focus still lands on Cancel either way, the safe default for a destructive dialog. |
 
 ### SpeedDial
 

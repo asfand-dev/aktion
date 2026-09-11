@@ -57,10 +57,10 @@ Tabular data view. Children must be Col components. `density="compact"` tightens
 ### Col
 
 ```
-Col(header, values, format?, align?, sortable?, filterable?, render?, onClick?, currency?, width?, wrap?, headerTooltip?, locale?, initiallyHidden?, pinned?, resizable?, minWidth?, maxWidth?)
+Col(header, values, format?, align?, sortable?, filterable?, render?, onClick?, currency?, width?, wrap?, headerTooltip?, locale?, initiallyHidden?, pinned?, resizable?, minWidth?, maxWidth?, headerHidden?)
 ```
 
-Single column inside a Table or DataGrid. Use `align` for per-column text alignment, `format` for cell rendering (`text|number|currency|date`), `currency` for the money code used by `format: "currency"`, `locale` for the BCP-47 tag those formats are rendered in, and `width`/`wrap` to stop one long column from forcing the whole table into horizontal scroll. `values` may be plain values OR an array of component nodes — e.g. `Col("Status", rows.map(r => Badge(r.status)))` or `Col("Actions", rows.map(r => Button("Edit")))` — each component renders directly in its cell. Pass `render: (value, index, row) => …` for the same effect when you prefer to keep `values` as the raw row data (return a component, string, or array). `row` is the whole row (header-keyed) and stays correct even when DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. Pass `onClick: (value, index, row) => …` to make the whole cell clickable (pointer + keyboard). `sortable` and `filterable` only take effect inside `DataGrid` (Table ignores them).
+Single column inside a Table or DataGrid. Use `align` for per-column text alignment, `format` for cell rendering (`text|number|currency|date`), `currency` for the money code used by `format: "currency"`, `locale` for the BCP-47 tag those formats are rendered in, and `width`/`wrap` to stop one long column from forcing the whole table into horizontal scroll. `values` may be plain values OR an array of component nodes — e.g. `Col("Status", rows.map(r => Badge(r.status)))` or `Col("Actions", rows.map(r => Button("Edit")))` — each component renders directly in its cell. Pass `render: (value, index, row) => …` for the same effect when you prefer to keep `values` as the raw row data (return a component, string, or array). `row` is the whole row (header-keyed) and stays correct even when DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. Pass `onClick: (value, index, row) => …` to make the whole cell clickable (pointer + keyboard). `sortable` and `filterable` only take effect inside `DataGrid` (Table ignores them). For an actions/kebab-menu column that needs no visible header, use `headerHidden: true` — NOT `header: ""`, which loses the accessible name and (in DataGrid) the persistence key derived from `header`.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -82,6 +82,7 @@ Single column inside a Table or DataGrid. Use `align` for per-column text alignm
 | `resizable` | `boolean` | no | DataGrid: per-column override for resizing. Takes precedence over the grid-level `resizable` prop. |
 | `minWidth` | `string` | no | DataGrid: minimum width when the column is resized (`80px`, `5rem`). |
 | `maxWidth` | `string` | no | DataGrid: maximum width when the column is resized (`400px`, `50%`). |
+| `headerHidden` | `boolean` | no | Render the header cell visually empty (an actions/kebab-menu column needs no visible header) while `header` keeps naming the column everywhere else that reads it: the `<th>`'s accessible name, the column-settings panel row, and (DataGrid) the persistence key. Do NOT use `header: ""` for this — that drops the accessible name, blanks the column-settings row, and collides with any other column that also passed an empty header, since the persistence key is the header string. A sortable column keeps working: the sort button's accessible name still comes from the hidden label. |
 
 ### DataGrid
 

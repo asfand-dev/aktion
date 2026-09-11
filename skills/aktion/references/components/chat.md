@@ -82,10 +82,10 @@ Single follow-up item.
 ### ActionLink
 
 ```
-ActionLink(label, onClick, disabled?, icon?, iconPosition?, ariaLabel?)
+ActionLink(label, onClick, disabled?, icon?, iconPosition?, ariaLabel?, tone?)
 ```
 
-Inline link that runs an action when clicked instead of navigating. `disabled` makes it inert while the work is in flight; `icon` adds a glyph before the label (or after it with `iconPosition: "end"`).
+Inline link that runs an action when clicked instead of navigating. `disabled` makes it inert while the work is in flight; `icon` adds a glyph before the label (or after it with `iconPosition: "end"`). `tone: "critical"` marks a destructive inline action ("Remove from group", "Delete") in the danger colour — the inline-link equivalent of `Button`'s `danger` variant, for a row/list context where a full button would be too heavy (`danger`/`destructive` are accepted synonyms).
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -95,6 +95,7 @@ Inline link that runs an action when clicked instead of navigating. `disabled` m
 | `icon` | `string` | no | Font Awesome icon shown with the label |
 | `iconPosition` | `"start"` \| `"end"` | no | Which side the icon sits on (default `start`) |
 | `ariaLabel` | `string` | no | Accessible name, when the visible label alone does not identify the target — e.g. one "Rebuild" link per table row, where every link would otherwise be announced identically |
+| `tone` | `"default"` \| `"critical"` \| `"danger"` \| `"destructive"` | no | `default` (the primary link colour) or `critical` for a destructive action ("✕ Remove", "✕ Delete") — the only real destructive affordance elsewhere in the catalogue is a DropdownMenu's `MenuItem variant: "danger"`, which is too heavy for an inline row action |
 
 ### ChatBubble
 

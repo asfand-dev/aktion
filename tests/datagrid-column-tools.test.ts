@@ -1192,6 +1192,46 @@ describe("DataGrid column panel keeps focus across a rebuild", () => {
     expect(screen.shadowRoot.activeElement?.classList.contains("rui-data-grid-col-panel-pin")).toBe(true);
   });
 
+  it("closes on Escape when the panel was opened from an EXTERNAL trigger", async () => {
+    // The `columnMenuButton: false` + `columnMenuAnchor` shape — the documented
+    // way to drive this panel from your own toolbar — used to leave the panel
+    // undismissable by keyboard. The two focus-scoped handlers cannot see the key
+    // in that shape: the in-header `menuBtn` is `display: none` and never
+    // focused, and `panel.onkeydown` only fires while focus is INSIDE the panel,
+    // while opening from an outside button leaves focus on that button. For a
+    // `role="dialog"` that is a WCAG 2.1.2 failure, not a nicety.
+    //
+    // So the key is dispatched from the external button, where focus genuinely
+    // is — dispatching it from inside the panel would pass on the old code too
+    // and prove nothing.
+    const screen = render([
+      ROWS,
+      '$open = false',
+      '$app(Container([',
+      '  Button("Table settings", {id: "outside-trigger", onClick: () => { $open = !$open }}),',
+      '  DataGrid([',
+      '    Col("Name", rows.map(r => r.name), "text", "left", true),',
+      '    Col("Age", rows.map(r => r.age), "number")',
+      '  ], {columnMenu: true, columnMenuButton: false, columnMenuAnchor: "#outside-trigger", columnMenuOpen: $open})',
+      ']))',
+    ].join("\n"));
+    await settle();
+
+    const trigger = screen.shadowRoot.querySelector("#outside-trigger") as HTMLElement;
+    await screen.click(trigger);
+    await settle();
+    const panel = screen.shadowRoot.querySelector(".rui-data-grid-col-panel")!;
+    expect(panel.getAttribute("data-open")).toBe("true");
+
+    trigger.focus();
+    trigger.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Escape", bubbles: true, cancelable: true, composed: true,
+    }));
+    await settle();
+
+    expect(panel.getAttribute("data-open")).toBe("false");
+  });
+
   it("leaves Escape able to close the panel after a column is hidden", async () => {
     const screen = render(grid("{columnMenu: true}", COLS));
     await settle();
@@ -1274,5 +1314,52 @@ describe("DataGrid scroll hint after dispose", () => {
     await paint();
 
     expect(scroller!.onscroll).toBeNull();
+  });
+});
+
+describe("DataGrid Col headerHidden", () => {
+  it("renders the header cell's label visually-hidden, not a blank header", async () => {
+    const screen = render(grid("{}", [
+      '  Col("Name", rows.map(r => r.name), "text", "left", true),',
+      '  Col("Actions", rows.map(r => r.name), { headerHidden: true })',
+    ].join("\n")));
+    await settle();
+    const nameTh = screen.shadowRoot.querySelector('th[data-col-key="Name"]')!;
+    const actionsTh = screen.shadowRoot.querySelector('th[data-col-key="Actions"]')!;
+    // The unaffected column keeps its plain (non-wrapped) text node.
+    expect(nameTh.querySelector(".rui-visually-hidden")).toBeNull();
+    // headerHidden still names the column — as visually-hidden text, not a
+    // blank <th> (which would lose the accessible name).
+    expect(actionsTh.textContent).toBe("Actions");
+    expect(actionsTh.querySelector(".rui-visually-hidden")?.textContent).toBe("Actions");
+  });
+
+  it("keeps a sortable column's sort button working and named when its header is hidden", async () => {
+    const screen = render(grid("{}", [
+      '  Col("Name", rows.map(r => r.name), { sortable: true, headerHidden: true })',
+    ].join("\n")));
+    await settle();
+    const th = screen.shadowRoot.querySelector('th[data-col-key="Name"]')!;
+    const btn = th.querySelector(".rui-data-grid-sort") as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+    // The accessible name still comes from the (visually-hidden) label.
+    expect(btn.querySelector(".rui-visually-hidden")?.textContent).toBe("Name");
+    btn.click();
+    await settle();
+    expect(th.getAttribute("aria-sort")).toBe("ascending");
+  });
+
+  it("still shows the real label in the column-settings panel", async () => {
+    const screen = render(grid("{columnMenu: true}", [
+      '  Col("Name", rows.map(r => r.name), "text", "left", true),',
+      '  Col("Actions", rows.map(r => r.name), { headerHidden: true })',
+    ].join("\n")));
+    await settle();
+    await screen.click(screen.getByRole("button", { name: "Column settings" }));
+    await settle();
+    // colDef.header (unaffected by headerHidden) still drives the panel row's
+    // label, its "Show <label>" checkbox name, and — per the same header
+    // string — the persistence key.
+    expect(screen.getByRole("checkbox", { name: "Show Actions" })).toBeTruthy();
   });
 });

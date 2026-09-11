@@ -77,6 +77,9 @@ interface ColDef {
   minWidth: string;
   /** CSS max-width for resize, already sanitised. */
   maxWidth: string;
+  /** Render the header cell's label visually-hidden (`.rui-visually-hidden`).
+   * `header`/`key` are unaffected — this only changes what `buildColTh` draws. */
+  headerHidden: boolean;
 }
 
 function readDataGridCols(raw: unknown): ColDef[] {
@@ -107,6 +110,7 @@ function readDataGridCols(raw: unknown): ColDef[] {
       resizable: rawResizable === undefined || rawResizable === null ? undefined : asBoolean(rawResizable),
       minWidth: sanitiseCssLength(args[16], ""),
       maxWidth: sanitiseCssLength(args[17], ""),
+      headerHidden: asBoolean(args[18]),
     };
   });
 }
@@ -860,9 +864,15 @@ export const DataGrid: ComponentSpec = {
       });
       if (col.sortable) {
         const btn = el("button", { type: "button", class: "rui-data-grid-sort" });
-        btn.append(el("span", {}, [col.header]));
+        // Visually hidden, not removed: the label still names the sort
+        // button (its accessible name is its text content), so a
+        // headerHidden + sortable column keeps working for everyone but
+        // sighted users, who read the sort direction off the icon instead.
+        btn.append(el("span", { class: col.headerHidden ? "rui-visually-hidden" : null }, [col.header]));
         btn.onclick = (event) => writeSort(col.key, event.currentTarget as Element);
         th.append(btn);
+      } else if (col.headerHidden) {
+        th.append(el("span", { class: "rui-visually-hidden" }, [col.header]));
       } else {
         th.append(document.createTextNode(col.header));
       }
@@ -2296,10 +2306,36 @@ export const DataGrid: ComponentSpec = {
         }
         closePanel();
       };
+      /**
+       * Escape, from wherever the focus actually is.
+       *
+       * The two handlers above are not enough once the trigger is EXTERNAL
+       * (`columnMenuButton: false` + `columnMenuAnchor`, which is the documented
+       * way to drive this panel from your own toolbar): `menuBtn` is
+       * `display: none` and never focused, and `panel.onkeydown` only fires while
+       * focus is inside the panel — opening from an outside button leaves focus on
+       * that button, so neither one ever sees the key. Measured in
+       * `apps/user-management`, whose ten grids all use an external trigger: the
+       * panel opened and Escape did nothing, which for a `role="dialog"` is a
+       * WCAG 2.1.2 / 2.1.1 failure as well as an ordinary annoyance.
+       *
+       * Registered at the document, in the same place and with the same disposer
+       * as the outside-click handler, because it answers the same question —
+       * "dismiss, from outside the panel". It is a no-op while the panel is
+       * closed, and the two focus-scoped handlers stay: when focus IS inside the
+       * panel they stop the event from escaping to the page, which this one
+       * deliberately does not do.
+       */
+      const closeOnEscape = (event: KeyboardEvent): void => {
+        if (event.key !== "Escape" || !colConfigPanelOpen.get()) return;
+        closePanel();
+      };
       if (typeof document !== "undefined") {
         document.addEventListener("mousedown", closeOnOutside);
+        document.addEventListener("keydown", closeOnEscape);
         helpers.registerDisposer(() => {
           document.removeEventListener("mousedown", closeOnOutside);
+          document.removeEventListener("keydown", closeOnEscape);
           closeFloating(livePanelSlot.get());
         }, "col-menu-outside");
       }

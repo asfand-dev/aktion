@@ -2102,6 +2102,23 @@ a.rui-card {
   cursor: not-allowed;
   text-decoration: none;
 }
+/* Destructive inline action ("✕ Remove from group") — the ActionLink
+   equivalent of Button's danger variant. This is TEXT, not a fill, so it takes
+   the -text partner documented next to --rui-color-danger-text's own
+   declaration above, not the bare --rui-color-danger fill token Button paints
+   as a background: painted as text on the base white surface the fill token
+   measures 3.76:1, below WCAG 1.4.3's 4.5:1, exactly the failure that comment
+   documents. Same token .rui-text[data-color="danger"] and
+   .rui-pill[data-tone="critical"] already use for status text.
+   No pre-existing base :hover rule exists for .rui-action-link to mirror (the
+   base link is unconditionally underlined, not underlined-on-hover), so this
+   hover rule is written explicitly to keep the critical colour and underline
+   stable under hover rather than relying on inheritance. */
+.rui-action-link[data-tone="critical"] { color: var(--rui-color-danger-text); }
+.rui-action-link[data-tone="critical"]:hover {
+  color: var(--rui-color-danger-text);
+  text-decoration: underline;
+}
 /* The gap used to be written inline, which no theme could override. It is one
    declaration per side, flipped by the same data-icon-position Button uses. */
 .rui-action-link-icon { margin-inline-end: 0.35em; }
@@ -6222,6 +6239,17 @@ ${below("xs")} {
 }
 :host([data-rui-theme="vision"]) .rui-action-link:hover { color: #095bb1; text-decoration: underline; }
 :host([data-rui-theme="vision"]) .rui-action-link:disabled { opacity: 0.38; }
+/* Destructive inline action — same critical-5 vision uses for
+   .rui-pill[data-tone="critical"]'s text further below in this same theme
+   block. Needs its own selector: vision's plain .rui-action-link rule above
+   already sets color unconditionally, and
+   :host([data-rui-theme="vision"]) .rui-action-link is MORE specific than a
+   bare .rui-action-link[data-tone="critical"], so without this the base
+   critical rule would be silently overridden here. */
+:host([data-rui-theme="vision"]) .rui-action-link[data-tone="critical"] { color: #c80a00; }   /* critical-5 */
+:host([data-rui-theme="vision"]) .rui-action-link[data-tone="critical"]:hover {
+  color: #a00800; text-decoration: underline;                            /* critical-5, darkened 20% — the ramp has no critical-6 to step to */
+}
 /* This control was the one vision link falling through to the base ring, which is
    navy — every other vision control focuses in interactive blue. An outline, not
    the inset shadow the boxed controls use: there is no box to inset into. */

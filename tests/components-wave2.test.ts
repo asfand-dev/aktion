@@ -224,6 +224,65 @@ $app(ConfirmDialog("Delete item?", { open: $open, message: "Cannot undo", tone: 
     expect(el.shadowRoot?.querySelector(".rui-confirm-ok")?.getAttribute("data-tone")).toBe("danger");
   });
 
+  it("ConfirmDialog defaults to cancel-then-confirm in the DOM (unchanged default)", async () => {
+    const el = create();
+    el.setResponse(`$open = true
+$app(ConfirmDialog("Delete item?", { open: $open }))`);
+    await settle();
+    const actions = [...(el.shadowRoot?.querySelector(".rui-confirm-actions")?.children ?? [])];
+    expect(actions.map((n) => n.className)).toEqual(["rui-confirm-cancel", "rui-confirm-ok"]);
+  });
+
+  it("ConfirmDialog confirmFirst puts Confirm before Cancel in the DOM (visual order = tab order)", async () => {
+    const el = create();
+    el.setResponse(`$open = true
+$app(ConfirmDialog("Delete item?", { open: $open, confirmFirst: true }))`);
+    await settle();
+    const actions = [...(el.shadowRoot?.querySelector(".rui-confirm-actions")?.children ?? [])];
+    expect(actions.map((n) => n.className)).toEqual(["rui-confirm-ok", "rui-confirm-cancel"]);
+  });
+
+  it("ConfirmDialog keeps initial focus on Cancel even when confirmFirst reorders the DOM", async () => {
+    const el = create();
+    el.setResponse(`$open = true
+$app(ConfirmDialog("Delete item?", { open: $open, confirmFirst: true }))`);
+    await settle();
+    // wireDialogFocus's open-focus logic runs inside a setTimeout(0) macrotask
+    // (see src/library/components/_internal.ts) — a microtask-only flush loop
+    // never observes it, so a real macrotask tick is required here.
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+    await settle();
+    const cancel = el.shadowRoot?.querySelector(".rui-confirm-cancel") as HTMLButtonElement;
+    expect(el.shadowRoot?.activeElement).toBe(cancel);
+    // An `activeElement` match alone does not prove focus actually moved:
+    // jsdom/happy-dom let `.focus()` "succeed" on a disabled control, which
+    // every real browser refuses. Assert the pinned target is genuinely
+    // focusable, not merely selected.
+    expect(cancel.disabled).toBe(false);
+  });
+
+  it("ConfirmDialog does not pin focus onto a disabled Cancel — falls back instead of escaping the dialog", async () => {
+    // Regression for the pinned-focus guard in wireDialogFocus: `loading`
+    // disables BOTH buttons (Cancel via `disabled: loading`, Confirm via
+    // `confirmBlocked`), so the pinned Cancel selector resolves to a disabled
+    // element. `.focus()` on it is a no-op in a real browser, and the
+    // fallback must land inside the dialog (its tabindex="-1" card), never
+    // silently leave focus outside the modal.
+    const el = create();
+    el.setResponse(`$open = true
+$app(ConfirmDialog("Delete item?", { open: $open, confirmFirst: true, loading: true }))`);
+    await settle();
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+    await settle();
+    const cancel = el.shadowRoot?.querySelector(".rui-confirm-cancel") as HTMLButtonElement;
+    const confirm = el.shadowRoot?.querySelector(".rui-confirm-ok") as HTMLButtonElement;
+    const card = el.shadowRoot?.querySelector(".rui-confirm-card");
+    expect(cancel.disabled).toBe(true);
+    expect(confirm.disabled).toBe(true);
+    expect(el.shadowRoot?.activeElement).not.toBe(cancel);
+    expect(el.shadowRoot?.activeElement).toBe(card);
+  });
+
   it("VariantSelector marks the selected variant", async () => {
     const el = create();
     el.setResponse(`$size = "M"

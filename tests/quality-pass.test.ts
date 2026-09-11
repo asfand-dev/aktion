@@ -393,6 +393,45 @@ $app(Column([
     expect(textOf(el)).toContain("c:yes");
   });
 
+  it("ConfirmDialog still cancels on Escape when confirmFirst reorders the footer", async () => {
+    // dialogKeydownHandler's Tab-cycle recomputes first/last from live DOM
+    // order, and Escape does not depend on order at all — both must survive
+    // confirmFirst flipping which button is first in the DOM.
+    const el = create();
+    el.setResponse(`$open = true
+$cancelled = "no"
+$app(Column([
+  Text(\`c:\${$cancelled}\`),
+  ConfirmDialog("Delete?", { open: $open, confirmFirst: true, onCancel: () => { $cancelled = "yes" } })
+]))`);
+    await settle();
+    const card = el.shadowRoot?.querySelector(".rui-confirm-card") as HTMLElement;
+    card.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await settle();
+    expect(textOf(el)).toContain("c:yes");
+  });
+
+  it("ConfirmDialog Tab cycles Confirm -> Cancel -> Confirm when confirmFirst reorders the DOM", async () => {
+    const el = create();
+    el.setResponse(`$open = true
+$app(ConfirmDialog("Delete?", { open: $open, confirmFirst: true }))`);
+    await settle();
+    const card = el.shadowRoot?.querySelector(".rui-confirm-card") as HTMLElement;
+    const confirm = el.shadowRoot?.querySelector(".rui-confirm-ok") as HTMLElement;
+    const cancel = el.shadowRoot?.querySelector(".rui-confirm-cancel") as HTMLElement;
+    // Confirm is first in the DOM now, so Shift+Tab from it must wrap to the
+    // LAST focusable — Cancel — not fall through to whatever is outside the
+    // panel.
+    confirm.focus();
+    card.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }));
+    await settle();
+    expect(el.shadowRoot?.activeElement).toBe(cancel);
+    // Tab from the (now last) Cancel wraps back to the first — Confirm.
+    card.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+    await settle();
+    expect(el.shadowRoot?.activeElement).toBe(confirm);
+  });
+
   it("Calendar arrow keys move focus across the grid", async () => {
     const el = create();
     el.setResponse(`$app(Calendar({ month: 1, year: 2024 }))`);

@@ -2758,6 +2758,34 @@ describe("new components — phase 1-4 rollout", () => {
     expect(stubs[0]?.getAttribute("data-component-name")).toBe("Button");
   });
 
+  it("Table Col headerHidden renders the label as visually-hidden text, not a blank header", () => {
+    // Col args (slots 0-18): header, values, format, align, sortable,
+    // filterable, render, onClick, currency, width, wrap, headerTooltip,
+    // locale, initiallyHidden, pinned, resizable, minWidth, maxWidth,
+    // headerHidden.
+    const visibleCol = makeNode("Col", ["Name", ["Ada"]]);
+    const hiddenCol = makeNode("Col", [
+      "Actions", ["x"], undefined, undefined, undefined, undefined, undefined, undefined,
+      undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      undefined, undefined, true,
+    ]);
+    const node = Table.render(
+      makeNode("Table", [[visibleCol, hiddenCol]]),
+      { columns: [visibleCol, hiddenCol] },
+      helpers,
+    ) as HTMLElement;
+    const ths = node.querySelectorAll("th");
+    expect(ths).toHaveLength(2);
+    // The visible column is unaffected — plain text, no visually-hidden wrapper.
+    expect(ths[0]?.textContent).toBe("Name");
+    expect(ths[0]?.querySelector(".rui-visually-hidden")).toBeNull();
+    // The headerHidden column still carries its label — as the <th>'s
+    // accessible name via visually-hidden text — not a blank header.
+    expect(ths[1]?.textContent).toBe("Actions");
+    const hidden = ths[1]?.querySelector(".rui-visually-hidden");
+    expect(hidden?.textContent).toBe("Actions");
+  });
+
   it("Table Col onClick makes cells clickable and fires with (value, rowIndex)", () => {
     const calls: Array<{ value: unknown; index: unknown }> = [];
     const localHelpers = {

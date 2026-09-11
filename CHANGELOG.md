@@ -5,6 +5,42 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-09-10
+
+### Destructive Inline Links, Flippable Dialog Footers, And Headerless Actions Columns
+
+- `ActionLink` gained a `tone` prop. `tone: "critical"` (accepting `danger`/
+  `destructive` as synonyms, and `variant` as the usual `tone` alias) colours
+  the link with the same text-safe danger token `Text(tone: "danger")` and
+  `Pill(tone: "critical")` already use, for a destructive row/list action
+  ("✕ Remove from group") too light for a full button. Every built-in theme
+  that styles `.rui-action-link` (base and `vision`) draws it in red at a
+  WCAG-AA-passing contrast; the default tone is unchanged.
+- `ConfirmDialog` gained `confirmFirst` (default `false`). Some design systems
+  put the primary action first in a dialog footer; setting it moves Confirm
+  before Cancel in the DOM itself — not just visually — so tab order follows
+  visual order. Initial focus still lands on Cancel either way, since it is
+  the safe default for a destructive dialog, and Escape/Tab behave exactly as
+  before.
+- The DataGrid column-settings panel now closes on Escape when it was opened
+  from an EXTERNAL trigger (`columnMenuButton: false` + `columnMenuAnchor`, the
+  documented way to drive it from your own toolbar). Escape was handled only on
+  the in-header button — which that shape hides, so it is never focused — and on
+  the panel itself, which only sees the key while focus is inside it; opening
+  from an outside button leaves focus on that button, so the panel could not be
+  dismissed by keyboard at all. For a `role="dialog"` that is a WCAG 2.1.2
+  failure. The listener sits at the document alongside the existing
+  outside-click dismissal, shares its disposer, and is a no-op while the panel
+  is closed; the two focus-scoped handlers stay, since they also stop the key
+  from escaping to the page when focus really is inside the panel.
+- `Col` gained `headerHidden`, for an actions/kebab-menu column that needs no
+  visible header. The column's `header` still names it everywhere that isn't
+  the header cell itself — the `<th>`'s accessible name, the DataGrid
+  column-settings panel row, and the persistence key — via the existing
+  visually-hidden pattern, so a screen-reader user, the settings panel, and
+  `persistKey` all keep working. A sortable column with a hidden header keeps
+  its sort button working and named.
+
 ## 2026-09-08
 
 ### NumberInput: Firefox Spinners, Typing, And Steppers That Look Spent

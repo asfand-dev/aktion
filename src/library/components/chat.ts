@@ -206,12 +206,26 @@ export const FollowUpItem: ComponentSpec = {
   },
 };
 
+/** Accepted values for `ActionLink`'s `tone` prop; `danger`/`destructive` are
+ * synonyms of `critical` (same synonym pattern as `Pill`'s `tone`). */
+const ACTION_LINK_TONE_ENUM = ["default", "critical", "danger", "destructive"] as const;
+
+/** Map ActionLink's generic tone synonyms onto `default`/`critical`. */
+function normaliseActionLinkTone(value: unknown): "default" | "critical" {
+  const raw = asString(value, "default").toLowerCase();
+  return raw === "critical" || raw === "danger" || raw === "destructive" ? "critical" : "default";
+}
+
 export const ActionLink: ComponentSpec = {
   name: "ActionLink",
   description:
     "Inline link that runs an action when clicked instead of navigating. " +
     "`disabled` makes it inert while the work is in flight; `icon` adds a " +
-    "glyph before the label (or after it with `iconPosition: \"end\"`).",
+    "glyph before the label (or after it with `iconPosition: \"end\"`). " +
+    "`tone: \"critical\"` marks a destructive inline action (\"Remove from " +
+    "group\", \"Delete\") in the danger colour — the inline-link equivalent " +
+    "of `Button`'s `danger` variant, for a row/list context where a full " +
+    "button would be too heavy (`danger`/`destructive` are accepted synonyms).",
   props: [
     { name: "label", type: "string" },
     { name: "onClick", type: "callable", aliases: ["action", "onclick"] },
@@ -219,9 +233,11 @@ export const ActionLink: ComponentSpec = {
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon shown with the label" },
     { name: "iconPosition", type: "string", optional: true, enum: ["start", "end"], description: "Which side the icon sits on (default `start`)" },
     { name: "ariaLabel", type: "string", optional: true, description: "Accessible name, when the visible label alone does not identify the target — e.g. one \"Rebuild\" link per table row, where every link would otherwise be announced identically" },
+    { name: "tone", type: "string", optional: true, enum: ACTION_LINK_TONE_ENUM, aliases: ["variant"], description: "`default` (the primary link colour) or `critical` for a destructive action (\"✕ Remove\", \"✕ Delete\") — the only real destructive affordance elsewhere in the catalogue is a DropdownMenu's `MenuItem variant: \"danger\"`, which is too heavy for an inline row action" },
   ],
   render: (_node, props, helpers) => {
     const disabled = asBoolean(props.disabled);
+    const tone = normaliseActionLinkTone(props.tone);
     // A real <button>: `role="button"` on an `<a href="#">` promised Space
     // activation a native anchor never delivers, `disabled` does not apply to
     // an anchor, and the `#` target showed up in the status bar and on
@@ -241,6 +257,9 @@ export const ActionLink: ComponentSpec = {
       "aria-label": ariaLabel || null,
       // `data-icon-position` rather than a second class, matching `Button`.
       "data-icon-position": props.icon ? (iconAtEnd ? "end" : "start") : null,
+      // `null` means "absent" (never `data-tone="default"`), matching the
+      // rest of the catalogue's null-means-absent attribute convention.
+      "data-tone": tone === "critical" ? "critical" : null,
       // No inline style at all: the UA button chrome reset lives in
       // `.rui-action-link`, so a theme can change the padding, the background or
       // the line box. It used to be inline, which outranked every one of them.
