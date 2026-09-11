@@ -9260,7 +9260,7 @@ function dialogKeydownHandler(panelSelector, close) {
     }
   };
 }
-function wireDialogFocus(root, panelSelector, helpers) {
+function wireDialogFocus(root, panelSelector, helpers, initialFocusSelector) {
   if (typeof MutationObserver === "undefined") return;
   setTimeout(() => {
     if (!root.isConnected) return;
@@ -9271,7 +9271,9 @@ function wireDialogFocus(root, panelSelector, helpers) {
         lastFocus = doc.activeElement ?? null;
         const panel = root.querySelector(panelSelector);
         if (panel && !panel.contains(doc.activeElement)) {
-          (panel.querySelector(FOCUSABLE_SELECTOR$1) ?? panel).focus?.();
+          const pinnedRaw = initialFocusSelector ? panel.querySelector(initialFocusSelector) : null;
+          const pinned = pinnedRaw?.matches(FOCUSABLE_SELECTOR$1) ? pinnedRaw : null;
+          (pinned ?? panel.querySelector(FOCUSABLE_SELECTOR$1) ?? panel).focus?.();
         }
       } else {
         lastFocus?.focus?.();
@@ -13838,7 +13840,7 @@ const COL_ALIGN$1 = ["left", "center", "right"];
 const SURFACE_TONES = ["default", "primary", "success", "warning", "danger", "info"];
 const Col = {
   name: "Col",
-  description: 'Single column inside a Table or DataGrid. Use `align` for per-column text alignment, `format` for cell rendering (`text|number|currency|date`), `currency` for the money code used by `format: "currency"`, `locale` for the BCP-47 tag those formats are rendered in, and `width`/`wrap` to stop one long column from forcing the whole table into horizontal scroll. `values` may be plain values OR an array of component nodes — e.g. `Col("Status", rows.map(r => Badge(r.status)))` or `Col("Actions", rows.map(r => Button("Edit")))` — each component renders directly in its cell. Pass `render: (value, index, row) => …` for the same effect when you prefer to keep `values` as the raw row data (return a component, string, or array). `row` is the whole row (header-keyed) and stays correct even when DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. Pass `onClick: (value, index, row) => …` to make the whole cell clickable (pointer + keyboard). `sortable` and `filterable` only take effect inside `DataGrid` (Table ignores them).',
+  description: 'Single column inside a Table or DataGrid. Use `align` for per-column text alignment, `format` for cell rendering (`text|number|currency|date`), `currency` for the money code used by `format: "currency"`, `locale` for the BCP-47 tag those formats are rendered in, and `width`/`wrap` to stop one long column from forcing the whole table into horizontal scroll. `values` may be plain values OR an array of component nodes — e.g. `Col("Status", rows.map(r => Badge(r.status)))` or `Col("Actions", rows.map(r => Button("Edit")))` — each component renders directly in its cell. Pass `render: (value, index, row) => …` for the same effect when you prefer to keep `values` as the raw row data (return a component, string, or array). `row` is the whole row (header-keyed) and stays correct even when DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. Pass `onClick: (value, index, row) => …` to make the whole cell clickable (pointer + keyboard). `sortable` and `filterable` only take effect inside `DataGrid` (Table ignores them). For an actions/kebab-menu column that needs no visible header, use `headerHidden: true` — NOT `header: ""`, which loses the accessible name and (in DataGrid) the persistence key derived from `header`.',
   props: [
     { name: "header", type: "string" },
     { name: "values", type: "any[]", description: "Column values. Plain values are formatted as text; component nodes (e.g. `rows.map(r => Badge(r.status))`) render directly. You can also pass the full row array and map each cell with `render`." },
@@ -13859,7 +13861,9 @@ const Col = {
     { name: "pinned", type: "string", optional: true, enum: ["left", "right"], description: "DataGrid: pin this column to the left (or right) edge so it stays visible during horizontal scrolling." },
     { name: "resizable", type: "boolean", optional: true, description: "DataGrid: per-column override for resizing. Takes precedence over the grid-level `resizable` prop." },
     { name: "minWidth", type: "string", optional: true, description: "DataGrid: minimum width when the column is resized (`80px`, `5rem`)." },
-    { name: "maxWidth", type: "string", optional: true, description: "DataGrid: maximum width when the column is resized (`400px`, `50%`)." }
+    { name: "maxWidth", type: "string", optional: true, description: "DataGrid: maximum width when the column is resized (`400px`, `50%`)." },
+    // Slot 18. Appended at the end, like every prior addition — see the note above.
+    { name: "headerHidden", type: "boolean", optional: true, description: "Render the header cell visually empty (an actions/kebab-menu column needs no visible header) while `header` keeps naming the column everywhere else that reads it: the `<th>`'s accessible name, the column-settings panel row, and (DataGrid) the persistence key. Do NOT use `header: \"\"` for this — that drops the accessible name, blanks the column-settings row, and collides with any other column that also passed an empty header, since the persistence key is the header string. A sortable column keeps working: the sort button's accessible name still comes from the hidden label." }
   ],
   // Cols are read positionally inside Table.render — this render is a fallback.
   render: (_node, props) => {
@@ -13933,6 +13937,7 @@ const Table = {
     for (let c = 0; c < cols.length; c += 1) {
       const col = cols[c];
       const headerTooltip = asString$1(col.args?.[11]);
+      const headerHidden = asBoolean$1(col.args?.[18]);
       const th = el("th", {
         // Explicit association: the implicit-header heuristic fails as soon as
         // the table gains a caption row or a merged layout.
@@ -13941,7 +13946,11 @@ const Table = {
         "data-wrap": wrapAttrs[c] ?? null,
         title: headerTooltip || null,
         style: cellStyles[c] ?? null
-      }, [asString$1(col.args?.[0])]);
+        // Reuses `.rui-visually-hidden` (see a11y.ts's `VisuallyHidden`)
+        // rather than a bespoke clip: the label still names the column (aria,
+        // column-settings panel) but is not drawn — e.g. an actions/kebab
+        // column that needs no visible header.
+      }, [headerHidden ? el("span", { class: "rui-visually-hidden" }, [asString$1(col.args?.[0])]) : asString$1(col.args?.[0])]);
       headRow.append(th);
     }
     thead.append(headRow);
@@ -15812,19 +15821,26 @@ const FollowUpItem = {
     return button;
   }
 };
+const ACTION_LINK_TONE_ENUM = ["default", "critical", "danger", "destructive"];
+function normaliseActionLinkTone(value) {
+  const raw = asString$1(value, "default").toLowerCase();
+  return raw === "critical" || raw === "danger" || raw === "destructive" ? "critical" : "default";
+}
 const ActionLink = {
   name: "ActionLink",
-  description: 'Inline link that runs an action when clicked instead of navigating. `disabled` makes it inert while the work is in flight; `icon` adds a glyph before the label (or after it with `iconPosition: "end"`).',
+  description: 'Inline link that runs an action when clicked instead of navigating. `disabled` makes it inert while the work is in flight; `icon` adds a glyph before the label (or after it with `iconPosition: "end"`). `tone: "critical"` marks a destructive inline action ("Remove from group", "Delete") in the danger colour — the inline-link equivalent of `Button`\'s `danger` variant, for a row/list context where a full button would be too heavy (`danger`/`destructive` are accepted synonyms).',
   props: [
     { name: "label", type: "string" },
     { name: "onClick", type: "callable", aliases: ["action", "onclick"] },
     { name: "disabled", type: "boolean", optional: true, description: "Make the action inert, e.g. while a Retry is already running" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon shown with the label" },
     { name: "iconPosition", type: "string", optional: true, enum: ["start", "end"], description: "Which side the icon sits on (default `start`)" },
-    { name: "ariaLabel", type: "string", optional: true, description: 'Accessible name, when the visible label alone does not identify the target — e.g. one "Rebuild" link per table row, where every link would otherwise be announced identically' }
+    { name: "ariaLabel", type: "string", optional: true, description: 'Accessible name, when the visible label alone does not identify the target — e.g. one "Rebuild" link per table row, where every link would otherwise be announced identically' },
+    { name: "tone", type: "string", optional: true, enum: ACTION_LINK_TONE_ENUM, aliases: ["variant"], description: '`default` (the primary link colour) or `critical` for a destructive action ("✕ Remove", "✕ Delete") — the only real destructive affordance elsewhere in the catalogue is a DropdownMenu\'s `MenuItem variant: "danger"`, which is too heavy for an inline row action' }
   ],
   render: (_node, props, helpers) => {
     const disabled = asBoolean$1(props.disabled);
+    const tone = normaliseActionLinkTone(props.tone);
     const ariaLabel = asString$1(props.ariaLabel);
     const iconAtEnd = asString$1(props.iconPosition, "start") === "end";
     const button = el("button", {
@@ -15833,7 +15849,10 @@ const ActionLink = {
       disabled,
       "aria-label": ariaLabel || null,
       // `data-icon-position` rather than a second class, matching `Button`.
-      "data-icon-position": props.icon ? iconAtEnd ? "end" : "start" : null
+      "data-icon-position": props.icon ? iconAtEnd ? "end" : "start" : null,
+      // `null` means "absent" (never `data-tone="default"`), matching the
+      // rest of the catalogue's null-means-absent attribute convention.
+      "data-tone": tone === "critical" ? "critical" : null
       // No inline style at all: the UA button chrome reset lives in
       // `.rui-action-link`, so a theme can change the padding, the background or
       // the line box. It used to be inline, which outranked every one of them.
@@ -18374,7 +18393,8 @@ function readDataGridCols(raw) {
       pinned: asString$1(args[14]) === "left" ? "left" : "",
       resizable: rawResizable === void 0 || rawResizable === null ? void 0 : asBoolean$1(rawResizable),
       minWidth: sanitiseCssLength(args[16], ""),
-      maxWidth: sanitiseCssLength(args[17], "")
+      maxWidth: sanitiseCssLength(args[17], ""),
+      headerHidden: asBoolean$1(args[18])
     };
   });
 }
@@ -18818,9 +18838,11 @@ const DataGrid = {
       });
       if (col.sortable) {
         const btn = el("button", { type: "button", class: "rui-data-grid-sort" });
-        btn.append(el("span", {}, [col.header]));
+        btn.append(el("span", { class: col.headerHidden ? "rui-visually-hidden" : null }, [col.header]));
         btn.onclick = (event) => writeSort(col.key, event.currentTarget);
         th.append(btn);
+      } else if (col.headerHidden) {
+        th.append(el("span", { class: "rui-visually-hidden" }, [col.header]));
       } else {
         th.append(document.createTextNode(col.header));
       }
@@ -19878,10 +19900,16 @@ const DataGrid = {
         }
         closePanel();
       };
+      const closeOnEscape = (event) => {
+        if (event.key !== "Escape" || !colConfigPanelOpen.get()) return;
+        closePanel();
+      };
       if (typeof document !== "undefined") {
         document.addEventListener("mousedown", closeOnOutside);
+        document.addEventListener("keydown", closeOnEscape);
         helpers.registerDisposer(() => {
           document.removeEventListener("mousedown", closeOnOutside);
+          document.removeEventListener("keydown", closeOnEscape);
           closeFloating(livePanelSlot.get());
         }, "col-menu-outside");
       }
@@ -34676,7 +34704,8 @@ const ConfirmDialog = {
     { name: "onCancel", type: "callable", optional: true },
     { name: "loading", type: "boolean", optional: true, description: "Async confirm in flight — keeps the dialog open, disables both buttons" },
     { name: "confirmDisabled", type: "boolean", optional: true, description: "Guard the primary action until a condition is met" },
-    { name: "icon", type: "string", optional: true, description: "Glyph beside the title (defaults from `tone`)" }
+    { name: "icon", type: "string", optional: true, description: "Glyph beside the title (defaults from `tone`)" },
+    { name: "confirmFirst", type: "boolean", optional: true, description: "Put Confirm before Cancel in the footer (default `false`, i.e. Cancel, then Confirm) — some design systems (IONOS Exos among them) put the primary action first in a dialog footer; this flips DOM order (so visual order and tab order move together), not just visual position. Initial focus still lands on Cancel either way, the safe default for a destructive dialog." }
   ],
   render: (node, props, helpers) => {
     const open = asBoolean$1(props.open);
@@ -34738,11 +34767,15 @@ const ConfirmDialog = {
       helpers.invoke(props.onConfirm);
       if (!managed) dismiss();
     };
-    actions.append(cancel, confirm);
+    if (asBoolean$1(props.confirmFirst)) {
+      actions.append(confirm, cancel);
+    } else {
+      actions.append(cancel, confirm);
+    }
     card.append(actions);
     root.append(backdrop, card);
     root.onkeydown = dialogKeydownHandler(".rui-confirm-card", () => cancelAndDismiss());
-    wireDialogFocus(root, ".rui-confirm-card", helpers);
+    wireDialogFocus(root, ".rui-confirm-card", helpers, ".rui-confirm-cancel");
     wireOverlayLayer(root, helpers, OVERLAY_FILL, "rui-confirm-layer");
     return root;
   }
@@ -50029,6 +50062,23 @@ a.rui-card {
   cursor: not-allowed;
   text-decoration: none;
 }
+/* Destructive inline action ("✕ Remove from group") — the ActionLink
+   equivalent of Button's danger variant. This is TEXT, not a fill, so it takes
+   the -text partner documented next to --rui-color-danger-text's own
+   declaration above, not the bare --rui-color-danger fill token Button paints
+   as a background: painted as text on the base white surface the fill token
+   measures 3.76:1, below WCAG 1.4.3's 4.5:1, exactly the failure that comment
+   documents. Same token .rui-text[data-color="danger"] and
+   .rui-pill[data-tone="critical"] already use for status text.
+   No pre-existing base :hover rule exists for .rui-action-link to mirror (the
+   base link is unconditionally underlined, not underlined-on-hover), so this
+   hover rule is written explicitly to keep the critical colour and underline
+   stable under hover rather than relying on inheritance. */
+.rui-action-link[data-tone="critical"] { color: var(--rui-color-danger-text); }
+.rui-action-link[data-tone="critical"]:hover {
+  color: var(--rui-color-danger-text);
+  text-decoration: underline;
+}
 /* The gap used to be written inline, which no theme could override. It is one
    declaration per side, flipped by the same data-icon-position Button uses. */
 .rui-action-link-icon { margin-inline-end: 0.35em; }
@@ -54149,6 +54199,17 @@ ${below("xs")} {
 }
 :host([data-rui-theme="vision"]) .rui-action-link:hover { color: #095bb1; text-decoration: underline; }
 :host([data-rui-theme="vision"]) .rui-action-link:disabled { opacity: 0.38; }
+/* Destructive inline action — same critical-5 vision uses for
+   .rui-pill[data-tone="critical"]'s text further below in this same theme
+   block. Needs its own selector: vision's plain .rui-action-link rule above
+   already sets color unconditionally, and
+   :host([data-rui-theme="vision"]) .rui-action-link is MORE specific than a
+   bare .rui-action-link[data-tone="critical"], so without this the base
+   critical rule would be silently overridden here. */
+:host([data-rui-theme="vision"]) .rui-action-link[data-tone="critical"] { color: #c80a00; }   /* critical-5 */
+:host([data-rui-theme="vision"]) .rui-action-link[data-tone="critical"]:hover {
+  color: #a00800; text-decoration: underline;                            /* critical-5, darkened 20% — the ramp has no critical-6 to step to */
+}
 /* This control was the one vision link falling through to the base ring, which is
    navy — every other vision control focuses in interactive blue. An outline, not
    the inset shadow the boxed controls use: there is no box to inset into. */

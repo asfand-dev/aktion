@@ -85,8 +85,21 @@ interface DisposerHelpers {
  * instance — re-render snapshots that the morph discards skip themselves via
  * the `isConnected` check, and the observer is torn down through a keyed
  * disposer when the dialog unmounts.
+ *
+ * `initialFocusSelector` overrides "first focusable element in DOM order" —
+ * for a dialog whose footer button order is author-configurable (see
+ * `ConfirmDialog`'s `confirmFirst`), the safe default action is not always
+ * the first element in the panel, so the caller can pin it explicitly. The
+ * pin is honoured only when it currently matches `FOCUSABLE_SELECTOR`
+ * (i.e. not disabled): `ConfirmDialog` pins its Cancel button, which can
+ * itself be `disabled` while `loading` is true, and `.focus()` on a disabled
+ * control is a no-op in every real browser (though jsdom/happy-dom do NOT
+ * enforce this, so a test asserting the pin alone cannot catch a regression
+ * here — assert the target is actually focusable too). Falling through to
+ * the ordinary first-focusable search keeps focus inside the panel instead
+ * of silently landing nowhere.
  */
-export declare function wireDialogFocus(root: HTMLElement, panelSelector: string, helpers: DisposerHelpers): void;
+export declare function wireDialogFocus(root: HTMLElement, panelSelector: string, helpers: DisposerHelpers, initialFocusSelector?: string): void;
 export declare function pickIconForLabel(label: string | null | undefined): string | null;
 export declare function pickIconForTone(tone: string | null | undefined): string | null;
 /**
