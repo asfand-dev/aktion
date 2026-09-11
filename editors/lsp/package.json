@@ -45,7 +45,7 @@
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
-    "aktion-runtime": "^0.6.7"
+    "aktion-runtime": "^0.6.8"
   },
   "devDependencies": {
     "@types/node": "^20.19.41",
