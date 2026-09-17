@@ -60,7 +60,22 @@ const RECONNECT_MAX_MS = 15_000;
  */
 export function createSocketResource(config: unknown, ctx: EvaluationContext): SocketResource {
   const cfg = asRecord(config);
-  const url = typeof cfg.url === "string" ? cfg.url : "";
+  const rawUrl = typeof cfg.url === "string" ? cfg.url : "";
+  let socketUrl = "";
+  if (rawUrl) {
+    try {
+      const parsed = new URL(rawUrl);
+      const isAllowedProtocol = parsed.protocol === "ws:" || parsed.protocol === "wss:";
+      const host = parsed.hostname.toLowerCase();
+      const isLoopbackHost = host === "localhost" || host.endsWith(".localhost")
+        || host === "127.0.0.1" || host === "::1";
+      if (isAllowedProtocol && !isLoopbackHost) {
+        socketUrl = parsed.toString();
+      }
+    } catch {
+      socketUrl = "";
+    }
+  }
   const bufferSize = typeof cfg.bufferSize === "number" && cfg.bufferSize > 0 ? Math.floor(cfg.bufferSize) : 50;
   const onMessage = typeof cfg.onMessage === "function" ? (cfg.onMessage as (m: unknown) => void) : null;
   const maxAttempts = cfg.reconnect === true ? Infinity
@@ -85,8 +100,8 @@ export function createSocketResource(config: unknown, ctx: EvaluationContext): S
     notify();
   };
 
-  if (!url || typeof WebSocket === "undefined") {
-    resource.error = { message: "WebSocket not available" };
+  if (!socketUrl || typeof WebSocket === "undefined") {
+    resource.error = { message: !socketUrl ? "Invalid or disallowed WebSocket URL" : "WebSocket not available" };
     return resource;
   }
 
@@ -113,8 +128,8 @@ export function createSocketResource(config: unknown, ctx: EvaluationContext): S
     let socket: WebSocket;
     try {
       socket = cfg.protocols != null
-        ? new WebSocket(url, cfg.protocols as string | string[])
-        : new WebSocket(url);
+        ? new WebSocket(socketUrl, cfg.protocols as string | string[])
+        : new WebSocket(socketUrl);
     } catch (err) {
       resource.error = err;
       setStatus("closed");
