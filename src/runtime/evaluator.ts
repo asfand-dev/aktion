@@ -5250,7 +5250,9 @@ function evaluateTimerCall(
   const callback = args[0] ? evaluate(args[0], ctx) : null;
   if (typeof callback !== "function") return null;
   const fn = callback as (...a: unknown[]) => unknown;
-  const delay = args[1] ? toNumber(evaluate(args[1], ctx)) : 0;
+  const rawDelay = args[1] ? toNumber(evaluate(args[1], ctx)) : 0;
+  const normalizedDelay = Number.isFinite(rawDelay) ? Math.floor(rawDelay) : 0;
+  const safeDelay = Math.min(Math.max(normalizedDelay, 0), MAX_TIMER_DELAY_MS);
   const extra: unknown[] = [];
   for (let i = 2; i < args.length; i += 1) {
     extra.push(evaluate(args[i]!, ctx));
@@ -5273,11 +5275,11 @@ function evaluateTimerCall(
       // before running so a slow callback can't leave a dead handle behind.
       ctx.timers.timeouts.delete(id);
       tick();
-    }, delay);
+    }, safeDelay);
     ctx.timers.timeouts.add(id);
     return id;
   }
-  const id = setInterval(tick, delay);
+  const id = setInterval(tick, safeDelay);
   ctx.timers.intervals.add(id);
   return id;
 }
@@ -5698,6 +5700,8 @@ function memberAccess(target: unknown, property: string): unknown {
   }
   return undefined;
 }
+
+const MAX_TIMER_DELAY_MS = 60_000;
 
 function toNumber(v: unknown): number {
   if (typeof v === "number") return v;
