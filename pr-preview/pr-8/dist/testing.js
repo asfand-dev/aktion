@@ -44867,7 +44867,9 @@ function evaluateTimerCall(callee, args, ctx) {
   const callback = args[0] ? evaluate(args[0], ctx) : null;
   if (typeof callback !== "function") return null;
   const fn = callback;
-  const delay = args[1] ? toNumber(evaluate(args[1], ctx)) : 0;
+  const rawDelay = args[1] ? toNumber(evaluate(args[1], ctx)) : 0;
+  const normalizedDelay = Number.isFinite(rawDelay) ? Math.floor(rawDelay) : 0;
+  const safeDelay = Math.min(Math.max(normalizedDelay, 0), MAX_TIMER_DELAY_MS);
   const extra = [];
   for (let i = 2; i < args.length; i += 1) {
     extra.push(evaluate(args[i], ctx));
@@ -44885,11 +44887,11 @@ function evaluateTimerCall(callee, args, ctx) {
     const id2 = setTimeout(() => {
       ctx.timers.timeouts.delete(id2);
       tick();
-    }, delay);
+    }, safeDelay);
     ctx.timers.timeouts.add(id2);
     return id2;
   }
-  const id = setInterval(tick, delay);
+  const id = setInterval(tick, safeDelay);
   ctx.timers.intervals.add(id);
   return id;
 }
@@ -45145,6 +45147,7 @@ function memberAccess(target, property) {
   }
   return void 0;
 }
+const MAX_TIMER_DELAY_MS = 6e4;
 function toNumber(v) {
   if (typeof v === "number") return v;
   if (typeof v === "string") {

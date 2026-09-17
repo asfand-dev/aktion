@@ -1881,7 +1881,7 @@ function _v(t) {
   let e = t.replace(/_/g, ""), r = 1;
   return e.startsWith("-") ? (r = -1, e = e.slice(1)) : e.startsWith("+") && (e = e.slice(1)), r * Number(e);
 }
-function LP(t) {
+function RP(t) {
   const e = mt(t);
   return qv(t, e);
 }
@@ -1915,7 +1915,7 @@ function qv(t, e) {
     errors: e.errors
   };
 }
-function RP(t, e) {
+function PP(t, e) {
   if (e.length === 0) return !0;
   const r = new Set(t.committedBindings);
   for (const i of e)
@@ -1949,10 +1949,10 @@ function Hv(t) {
   const e = t;
   return e.__aktionCompiled === Wl && typeof e.source == "string" && typeof e.path == "string" && !!e.program && Array.isArray(e.program.statements);
 }
-function PP(t) {
+function DP(t) {
   return t;
 }
-function DP(t, e = {}) {
+function OP(t, e = {}) {
   const r = mt(t);
   return {
     __aktionCompiled: Wl,
@@ -4145,7 +4145,7 @@ function vn(t, e) {
     a < e.length && (r[i.name] = e[a]);
   }), r;
 }
-function OP(t, e) {
+function BP(t, e) {
   const r = mt(t), i = Xo(r, e);
   return i.length > 0 && (r.errors = [...r.errors, ...i]), r;
 }
@@ -4518,7 +4518,7 @@ function Nw(t, e) {
   }
   return n[o];
 }
-function BP(t, e, r = 3) {
+function FP(t, e, r = 3) {
   const i = String(t ?? "").trim();
   if (!i) return [];
   const a = Gm(e).map((n) => n.name);
@@ -5050,7 +5050,7 @@ function tx(t) {
   }
   return r.length > 0 && (e._unmapped = r), e;
 }
-function FP(t) {
+function jP(t) {
   let r = (Array.isArray(t) ? t.join(" ") : String(t ?? "")).replace(/\$\{[^}]*\}/g, "").trim();
   const i = [];
   r = r.replace(/[^{};]+\{[^{}]*\}/g, (o) => (i.push(o.trim()), ""));
@@ -5064,7 +5064,7 @@ function FP(t) {
 function Dt(t) {
   return t.replace(/[&<>"]/g, (e) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[e]);
 }
-function jP(t, e = {}) {
+function _P(t, e = {}) {
   const r = e.title ?? "Aktion Components", i = Ew(t), a = e.include ? i.components.filter((s) => e.include(s.name)) : i.components, o = a.map((s) => {
     const l = s.props.map((c) => {
       const u = [
@@ -5662,10 +5662,10 @@ const ax = {
 ), nx = Object.freeze(
   Object.fromEntries(ec.map((t) => [t.name, t]))
 );
-function _P(t) {
+function qP(t) {
   return nx[t];
 }
-function qP(t) {
+function UP(t) {
   return ox.has(t);
 }
 const F = (t, e, r) => ({
@@ -5950,27 +5950,27 @@ const F = (t, e, r) => ({
   Object.fromEntries(Km.map((t) => [t.factory, t]))
 ), Ym = new Set(
   Km.map((t) => t.factory)
-), UP = [
+), HP = [
   ve("path", "Current URL path, e.g. `/users/42`."),
   ve("params", "Captured path segments from the matched route pattern (`route.params.id`)."),
   ve("query", "Parsed query-string parameters as an object."),
   ve("pattern", "The matched route pattern, or `null`."),
   F("navigate", "navigate(to)", "Imperatively navigate to a path.")
-], HP = [
+], WP = [
   F("t", "t(key, vars?)", "Translate a key for the current language; interpolates {name} placeholders + ICU plural/select."),
   F("setCurrentLanguage", "setCurrentLanguage(lang)", "Switch the active language."),
   F("getCurrentLanguage", "getCurrentLanguage()", "Return the active language code.")
 ];
-function WP(t) {
+function GP(t) {
   return yn[t];
 }
-function GP(t) {
+function VP(t) {
   return t in yn;
 }
-function VP(t) {
+function KP(t) {
   return wx[t];
 }
-function KP(t, e = []) {
+function YP(t, e = []) {
   const r = yn[t];
   if (!r) return [];
   if (e.length === 0) return r.members.slice();
@@ -5979,7 +5979,7 @@ function KP(t, e = []) {
     o.name.startsWith(i) && a.push({ ...o, name: o.name.slice(i.length) });
   return a;
 }
-function YP(t, e) {
+function XP(t, e) {
   const r = yn[t];
   if (r)
     return r.members.find((i) => i.name === e);
@@ -6078,7 +6078,7 @@ const se = (t, e, r) => ({ name: t, type: e, summary: r }), Xm = [
   theme: zx,
   i18n: Mx
 });
-function XP(t) {
+function ZP(t) {
   return Ex[t];
 }
 const Nx = 6, xt = 8, Lx = {
@@ -28265,7 +28265,7 @@ const uM = {
     description: "End-to-end test hook: renders `data-testid` on the component's ROOT element. Works on every component, including the six that shadow the `data` channel. Prefer role/label queries; reach for this where they are genuinely ambiguous."
   },
   testid: { type: "string", description: "Alias of `testId`." }
-}, ZP = [...bn].map((t) => {
+}, QP = [...bn].map((t) => {
   const e = uM[t];
   return {
     name: t,
@@ -28433,7 +28433,7 @@ function vM(t) {
     }
   return e;
 }
-function QP(t) {
+function JP(t) {
   const e = typeof t == "string" ? t : "", i = (bM(e) ?? vM(e)).map(cb).filter((a) => a != null);
   return i.length === 0 ? '$app(Text(""))' : i.length === 1 ? `$app(${i[0]})` : `$app(Column([
   ${i.join(`,
@@ -32263,7 +32263,7 @@ function $s(t) {
 function JE(t) {
   return Gi[t] ?? null;
 }
-function JP() {
+function e4() {
   return Object.keys(Gi);
 }
 function Eh(t, e) {
@@ -32954,7 +32954,7 @@ const TN = /* @__PURE__ */ new Set([
   "console"
 ]);
 let Hc = "all";
-function e4(t) {
+function t4(t) {
   Hc = t;
 }
 function IN() {
@@ -34206,7 +34206,7 @@ function eL(t, e) {
           const h = s;
           h.icons && $m(h.icons), h.fonts && El(h.fonts), h.font && El(h.font);
         }
-        const l = LL(s), c = NL(s);
+        const l = RL(s), c = LL(s);
         c && gb(c);
         const u = c ? Uc(c) : null;
         return { kind: "Theme", tokens: u ? { ...u, ...l } : l };
@@ -35051,26 +35051,26 @@ function Mr(t, e, r) {
 function SL(t, e, r) {
   const i = e[0] ? G(e[0], r) : null;
   if (typeof i != "function") return null;
-  const a = i, o = e[1] ? Ne(G(e[1], r)) : 0, n = [];
-  for (let c = 2; c < e.length; c += 1)
-    n.push(G(e[c], r));
-  const s = () => {
+  const a = i, o = e[1] ? Ne(G(e[1], r)) : 0, n = Number.isFinite(o) ? Math.floor(o) : 0, s = Math.min(Math.max(n, 0), IL), l = [];
+  for (let p = 2; p < e.length; p += 1)
+    l.push(G(e[p], r));
+  const c = () => {
     try {
-      a(...n);
-    } catch (c) {
-      console.error(`[aktion] ${t} callback threw`, c);
+      a(...l);
+    } catch (p) {
+      console.error(`[aktion] ${t} callback threw`, p);
     } finally {
       r.notify?.();
     }
   };
   if (t === "setTimeout") {
-    const c = setTimeout(() => {
-      r.timers.timeouts.delete(c), s();
-    }, o);
-    return r.timers.timeouts.add(c), c;
+    const p = setTimeout(() => {
+      r.timers.timeouts.delete(p), c();
+    }, s);
+    return r.timers.timeouts.add(p), p;
   }
-  const l = setInterval(s, o);
-  return r.timers.intervals.add(l), l;
+  const u = setInterval(c, s);
+  return r.timers.intervals.add(u), u;
 }
 function CL(t, e) {
   const [r, i, a] = t;
@@ -35267,6 +35267,7 @@ function Zc(t, e) {
       return t[e];
   }
 }
+const IL = 6e4;
 function Ne(t) {
   if (typeof t == "number") return t;
   if (typeof t == "string") {
@@ -35276,7 +35277,7 @@ function Ne(t) {
   }
   return typeof t == "boolean" && t ? 1 : 0;
 }
-const IL = /* @__PURE__ */ new Set([
+const zL = /* @__PURE__ */ new Set([
   "colors",
   "radius",
   "font",
@@ -35286,11 +35287,11 @@ const IL = /* @__PURE__ */ new Set([
   "gradients",
   "zIndex",
   "motion"
-]), zL = /* @__PURE__ */ new Set(["name", "direction"]), ML = {
+]), ML = /* @__PURE__ */ new Set(["name", "direction"]), EL = {
   sm: "s",
   md: "m",
   lg: "l"
-}, EL = {
+}, NL = {
   colors: "color",
   radius: "radius",
   font: "font",
@@ -35300,29 +35301,29 @@ const IL = /* @__PURE__ */ new Set([
   zIndex: "z",
   motion: "motion"
 };
-function NL(t) {
+function LL(t) {
   if (!t || typeof t != "object" || Array.isArray(t)) return null;
   const e = t.name;
   if (typeof e != "string") return null;
   const r = e.trim().toLowerCase();
   return Uc(r) ? r : null;
 }
-function LL(t) {
+function RL(t) {
   const e = {};
   if (!t || typeof t != "object" || Array.isArray(t)) return e;
   const r = t;
   for (const [i, a] of Object.entries(r))
-    if (a != null && !zL.has(i) && IL.has(i) && a && typeof a == "object" && !Array.isArray(a)) {
-      const o = EL[i] ?? i, n = i === "gradients";
+    if (a != null && !ML.has(i) && zL.has(i) && a && typeof a == "object" && !Array.isArray(a)) {
+      const o = NL[i] ?? i, n = i === "gradients";
       for (const [s, l] of Object.entries(a)) {
         if (l == null) continue;
-        const c = i === "spacing" ? ML[s] ?? s : s, u = o + PL(c), p = n ? RL(l) : DL(l);
+        const c = i === "spacing" ? EL[s] ?? s : s, u = o + DL(c), p = n ? PL(l) : OL(l);
         p && (e[u] = p);
       }
     }
   return e;
 }
-function RL(t) {
+function PL(t) {
   const e = (r) => {
     const i = typeof r == "string" ? r.trim() : "";
     return !i || i.length > 64 || !/^[a-zA-Z0-9#%.,()\s+-]+$/.test(i) || /url\s*\(|expression\s*\(|javascript\s*:|@import/i.test(i) ? "" : i;
@@ -35342,10 +35343,10 @@ function RL(t) {
   }
   return "";
 }
-function PL(t) {
+function DL(t) {
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : "";
 }
-function DL(t) {
+function OL(t) {
   return typeof t == "string" ? t : typeof t == "number" ? String(t) : "";
 }
 function _l(t) {
@@ -35365,12 +35366,12 @@ function _l(t) {
     return String(t);
   }
 }
-const OL = "__AKTION_DEVTOOLS_HOOK__";
-function BL() {
+const BL = "__AKTION_DEVTOOLS_HOOK__";
+function FL() {
   return globalThis;
 }
 function Oi() {
-  return BL()[OL];
+  return FL()[BL];
 }
 function Ci() {
   const t = Oi();
@@ -35383,13 +35384,13 @@ function wi(t) {
 function gr(t) {
   Oi()?.emit(t);
 }
-function FL(t) {
+function jL(t) {
   Oi()?.unregisterApp(t);
 }
 function Ye() {
   return typeof performance < "u" && typeof performance.now == "function" ? performance.now() : Date.now();
 }
-const jL = 120, _L = 2e4, So = 6, Jt = 200;
+const _L = 120, qL = 2e4, So = 6, Jt = 200;
 function Va(t) {
   if (t === null) return "null";
   if (t === void 0) return "undefined";
@@ -35399,7 +35400,7 @@ function Va(t) {
   const r = t;
   return r.__kind === "Store" ? "store" : typeof r.refetch == "function" && "state" in r && "loading" in r ? "resource" : typeof r.send == "function" && "connected" in r ? "socket" : typeof Node < "u" && t instanceof Node ? "node" : t instanceof Date ? "date" : t instanceof Map ? "map" : t instanceof Set ? "set" : t instanceof RegExp ? "regexp" : t instanceof Error ? "error" : "object";
 }
-function Pr(t, e = jL) {
+function Pr(t, e = _L) {
   return t.length <= e ? t : `${t.slice(0, e)}…`;
 }
 function Ta(t) {
@@ -35438,7 +35439,7 @@ function Ta(t) {
       case "array": {
         const r = t;
         if (r.length === 0) return "[]";
-        const i = r.slice(0, 3).map((a) => qL(a)).join(", ");
+        const i = r.slice(0, 3).map((a) => UL(a)).join(", ");
         return Pr(`[${i}${r.length > 3 ? `, …${r.length - 3} more` : ""}]`);
       }
       case "store": {
@@ -35462,7 +35463,7 @@ function Ta(t) {
     return "<unreadable>";
   }
 }
-function qL(t) {
+function UL(t) {
   switch (Va(t)) {
     case "string":
       return Pr(JSON.stringify(t) ?? '""', 24);
@@ -35579,7 +35580,7 @@ function jb(t, e = 2) {
     return null;
   try {
     const i = ma(t, 0, /* @__PURE__ */ new WeakSet()), a = JSON.stringify(i, null, e);
-    return a === void 0 || a.length > _L ? null : a;
+    return a === void 0 || a.length > qL ? null : a;
   } catch {
     return null;
   }
@@ -35588,7 +35589,7 @@ function ar(t) {
   const e = Va(t), r = { type: e, preview: Ta(t) }, i = jb(t, 0);
   return i !== null && (r.json = i), e === "array" ? r.size = t.length : e === "object" ? r.size = Qc(t).length : e === "string" && (r.size = t.length), r;
 }
-function UL(t) {
+function HL(t) {
   if (t == null) return 0;
   if (typeof t == "string") return t.length;
   try {
@@ -35603,7 +35604,7 @@ function Qh(t, e = 4e3) {
   const r = jb(t);
   return r === null ? Ta(t) : Pr(r, e);
 }
-const fa = "data-aktion-instance", ti = "data-aktion-owner", HL = 40, WL = "$";
+const fa = "data-aktion-instance", ti = "data-aktion-owner", WL = 40, GL = "$";
 function Jh(t, e) {
   if (t.length !== e.length) return !1;
   for (let r = 0; r < t.length; r += 1)
@@ -35617,20 +35618,20 @@ function em(t, e) {
     if (!Object.prototype.hasOwnProperty.call(e, a) || !Object.is(t[a], e[a])) return !1;
   return !0;
 }
-function GL(t) {
+function VL(t) {
   typeof queueMicrotask == "function" ? queueMicrotask(t) : Promise.resolve().then(t);
 }
-function VL(t) {
+function KL(t) {
   return t.nodeType === Node.DOCUMENT_FRAGMENT_NODE ? t.childNodes.length === 0 : t.nodeType === Node.TEXT_NODE && (t.textContent ?? "") === "";
 }
-function KL(t, e) {
+function YL(t, e) {
   if (t instanceof Element)
     return Us(t, e), t;
-  if (!Object.values(e).some((a) => a != null) || VL(t)) return t;
+  if (!Object.values(e).some((a) => a != null) || KL(t)) return t;
   const i = document.createElement("span");
   return i.className = "rui-universal-host", i.append(t), Us(i, e), i;
 }
-function YL(t, e, r) {
+function XL(t, e, r) {
   const i = [...t.args];
   let a = t.universal, o = !1;
   for (const [n, s] of r) {
@@ -35643,7 +35644,7 @@ function YL(t, e, r) {
   }
   return { ...t, args: i, universal: a };
 }
-function XL(t, e) {
+function ZL(t, e) {
   const r = [...t.positional], i = { ...t.named };
   for (const [a, o] of e) {
     const n = t.decl.params.findIndex((s) => s.name === a);
@@ -35980,7 +35981,7 @@ class _b {
    */
   buildPropRecords(e, r, i, a, o, n) {
     const s = [], l = (c, u, p) => {
-      if (s.length >= HL) return;
+      if (s.length >= WL) return;
       const h = { name: c, value: ar(u) };
       p && (h.stateRef = p), n?.has(c) && (h.overridden = !0), s.push(h);
     };
@@ -36055,7 +36056,7 @@ class _b {
   render(e) {
     this.passDepth += 1;
     try {
-      return this.renderAt(Array.isArray(e) ? e : [e], WL);
+      return this.renderAt(Array.isArray(e) ? e : [e], GL);
     } finally {
       this.passDepth -= 1;
     }
@@ -36112,7 +36113,7 @@ class _b {
     const a = i(), o = e.explicitKey != null ? `=${String(e.explicitKey)}` : `@${e.source?.line ?? 0}:${e.source?.column ?? 0}`, n = `${r}#${e.decl.name}${o}`;
     this.markAlive(n);
     const s = this.propOverrides.get(n);
-    s && s.size > 0 && (e = XL(e, s));
+    s && s.size > 0 && (e = ZL(e, s));
     const l = this.memoCache.get(n);
     if (this.memoEnabled && l && Jh(e.positional, l.positional) && em(e.named, l.named) && !nn(this.changedPaths, l.deps)) {
       const h = a.trackedState;
@@ -36182,11 +36183,11 @@ class _b {
     const a = e.explicitKey != null ? `=${String(e.explicitKey)}` : `@${e.source?.line ?? 0}:${e.source?.column ?? 0}`, o = `${r}#${e.name}${a}`;
     this.markAlive(o);
     const n = this.propOverrides.get(o);
-    n && n.size > 0 && (e = YL(e, i, n));
+    n && n.size > 0 && (e = XL(e, i, n));
     const s = vn(i, e.args);
     let l = 0, c = !1, u = 0;
     const p = {
-      renderNode: (m) => this.passDepth > 0 ? this.renderAt(m, `${o}>${l++}`) : (c || (c = !0, l = 0, GL(() => {
+      renderNode: (m) => this.passDepth > 0 ? this.renderAt(m, `${o}>${l++}`) : (c || (c = !0, l = 0, VL(() => {
         c = !1;
       })), this.renderExternal(m, `${o}>${l++}`, o)),
       invoke: (m, ...f) => {
@@ -36238,7 +36239,7 @@ class _b {
       router: this.options.router
     }, h = this.profiledInstances.has(o) ? "update" : "mount", b = this.profiling ? Ye() : 0;
     try {
-      const m = i.render(e, s, p), f = e.universal ? KL(m, e.universal) : m;
+      const m = i.render(e, s, p), f = e.universal ? YL(m, e.universal) : m;
       return e.explicitKey != null && f instanceof Element && !f.hasAttribute("data-rui-key") && f.setAttribute("data-rui-key", String(e.explicitKey)), this.tagDom && this.tagInstance(f, o, fa), this.profiling && this.profile(
         o,
         e.name,
@@ -36282,11 +36283,11 @@ class _b {
     } : e instanceof HTMLInputElement && e.type === "range" ? (r) => Number(r.value) : (r) => r.value;
   }
 }
-function ZL() {
+function QL() {
   return typeof document < "u" && typeof document.createElement == "function";
 }
-function QL(t, e = {}) {
-  if (!ZL())
+function JL(t, e = {}) {
+  if (!QL())
     throw new Error(
       "[aktion] renderToString requires a DOM. In Node, register happy-dom or jsdom globals before calling it."
     );
@@ -36331,10 +36332,10 @@ function QL(t, e = {}) {
   const b = h.innerHTML, m = e.container === !1 ? b : h.outerHTML, f = kb(n), v = f.serialize(), x = f.htmlAttrs();
   return { html: m, state: i.snapshot(), head: v, headAttrs: x };
 }
-function t4(t, e = {}) {
-  return QL(t, e).html;
-}
 function r4(t, e = {}) {
+  return JL(t, e).html;
+}
+function i4(t, e = {}) {
   const r = e.library ?? Wi, i = [], a = mt(t);
   for (const h of a.errors) i.push(`parse ${h.line}:${h.column}: ${h.message}`);
   for (const h of Xo(a, r)) i.push(`schema ${h.line}:${h.column}: ${h.message}`);
@@ -36406,11 +36407,11 @@ function Fo(t, e, r, i, a, o, n) {
     return;
   }
 }
-function JL(t) {
+function eR(t) {
   return t.kind === "Invoke" && t.callee.kind === "StateRef" && t.callee.name === "emit";
 }
-const sa = "::", eR = /* @__PURE__ */ new Map();
-class tR {
+const sa = "::", tR = /* @__PURE__ */ new Map();
+class rR {
   constructor(e) {
     Q(this, "mounted", /* @__PURE__ */ new Map());
     Q(this, "errors", []);
@@ -36435,7 +36436,7 @@ class tR {
     for (const a of [...this.mounted.keys()])
       a.includes(sa) || i.has(a) || this.unmount(a);
     for (const a of e)
-      this.mounted.has(a.name) || this.mount(a.name, a, r, [], eR);
+      this.mounted.has(a.name) || this.mount(a.name, a, r, [], tR);
   }
   /**
    * Mount per-instance effects discovered inside a function body.
@@ -36527,7 +36528,7 @@ class tR {
       capturedLoopVars: o
     };
     this.mounted.set(e, n), this.emitEffect(e, r, "mount", "mount");
-    const l = rR((h) => {
+    const l = iR((h) => {
       const b = n.cleanups.splice(0);
       if (b.length > 0) {
         for (const f of b)
@@ -36564,7 +36565,7 @@ class tR {
           break;
         }
         case "state": {
-          const b = aR(h.name, a), m = `state:${h.name}`, f = this.options.state.subscribe((v) => {
+          const b = oR(h.name, a), m = `state:${h.name}`, f = this.options.state.subscribe((v) => {
             ub(v, b) && l(m);
           });
           n.unsubscribers.push(f);
@@ -36627,7 +36628,7 @@ class tR {
     this.emitEffect(e, r.decl, "unmount", "unmount");
   }
 }
-function rR(t, e, r) {
+function iR(t, e, r) {
   if (!e || e.ms <= 0) return t;
   if (e.kind === "debounce") {
     let n = null;
@@ -36669,7 +36670,7 @@ function tm(t, e, r, i) {
   };
   try {
     for (const s of t.body.body)
-      iR(s, e, r, i);
+      aR(s, e, r, i);
   } finally {
     if (e.cleanupSink = n, a) {
       e.stateAliases.length = 0;
@@ -36681,7 +36682,7 @@ function tm(t, e, r, i) {
     }
   }
 }
-function iR(t, e, r, i) {
+function aR(t, e, r, i) {
   if (e.coverage) {
     const a = t.loc;
     a && qa(e.coverage, a);
@@ -36694,7 +36695,7 @@ function iR(t, e, r, i) {
         typeof o == "function" && r.cleanups.push(o);
         return;
       }
-      if (JL(a)) {
+      if (eR(a)) {
         const o = a.arguments, n = o[0] ? String(G(o[0], e)) : "", s = o[1] ? G(o[1], e) : void 0;
         i.onEmit?.(n, s);
         return;
@@ -36742,7 +36743,7 @@ function am(t) {
   const e = t.triggers.map((r) => r.kind === "lifecycle" ? `"${r.name}"` : r.kind === "every" ? `every(${r.intervalMs})` : `$${r.name}`);
   return t.rateLimit && e.push(`${t.rateLimit.kind}(${t.rateLimit.ms})`), e.length > 0 ? `[${e.join(", ")}]` : "[mount]";
 }
-function aR(t, e) {
+function oR(t, e) {
   const r = t.indexOf("."), i = r < 0 ? t : t.slice(0, r), a = r < 0 ? "" : t.slice(r);
   for (let o = e.length - 1; o >= 0; o -= 1) {
     const n = e[o].get(i);
@@ -36751,38 +36752,38 @@ function aR(t, e) {
   return t;
 }
 function Ub(t, e = {}) {
-  return e.mode === "chat" ? nR(t, e) : oR(t, e);
+  return e.mode === "chat" ? sR(t, e) : nR(t, e);
 }
-function i4(t) {
+function a4(t) {
   return fn(t);
 }
-function oR(t, e) {
-  const r = e.bindings ?? !0, i = e.toolCalls ?? !0, a = [];
-  a.push(sR(e.preamble)), a.push(lR()), a.push(cR()), a.push(uR()), a.push(pR()), a.push(hR()), r && a.push(mR()), a.push(fR()), a.push(gR()), i && a.push(bR()), a.push(vR()), a.push(yR()), a.push(wR()), a.push(dR()), a.push(xR()), a.push(kR()), a.push(CR()), a.push(SR()), a.push(AR()), a.push($R()), e.tools && e.tools.length > 0 && a.push(WR(e.tools)), e.toolExamples && e.toolExamples.length > 0 && a.push(ql("Endpoint examples", e.toolExamples));
-  const o = e.examples ?? ER();
-  return o.length > 0 && a.push(ql("Examples", o)), a.push(TR(t)), e.inlineMode && a.push(IR()), e.editMode && a.push(zR()), e.additionalRules && e.additionalRules.length > 0 && a.push(Hb(e.additionalRules)), a.push(MR()), a.join(`
-
-`).trim() + `
-`;
-}
 function nR(t, e) {
-  const r = [];
-  r.push(RR(e.preamble)), r.push(DR()), r.push(PR()), r.push(OR(t)), r.push(BR()), e.tools && e.tools.length > 0 && r.push(jR(e.tools));
-  const i = e.examples ?? _R();
-  return i.length > 0 && r.push(ql("Examples", i)), e.additionalRules && e.additionalRules.length > 0 && r.push(Hb(e.additionalRules)), r.push(FR()), r.push(qR()), r.push(UR()), r.join(`
+  const r = e.bindings ?? !0, i = e.toolCalls ?? !0, a = [];
+  a.push(lR(e.preamble)), a.push(cR()), a.push(uR()), a.push(dR()), a.push(hR()), a.push(mR()), r && a.push(fR()), a.push(gR()), a.push(bR()), i && a.push(vR()), a.push(yR()), a.push(wR()), a.push(xR()), a.push(pR()), a.push(kR()), a.push(SR()), a.push(AR()), a.push(CR()), a.push($R()), a.push(TR()), e.tools && e.tools.length > 0 && a.push(GR(e.tools)), e.toolExamples && e.toolExamples.length > 0 && a.push(ql("Endpoint examples", e.toolExamples));
+  const o = e.examples ?? NR();
+  return o.length > 0 && a.push(ql("Examples", o)), a.push(IR(t)), e.inlineMode && a.push(zR()), e.editMode && a.push(MR()), e.additionalRules && e.additionalRules.length > 0 && a.push(Hb(e.additionalRules)), a.push(ER()), a.join(`
 
 `).trim() + `
 `;
 }
-function sR(t) {
+function sR(t, e) {
+  const r = [];
+  r.push(PR(e.preamble)), r.push(OR()), r.push(DR()), r.push(BR(t)), r.push(FR()), e.tools && e.tools.length > 0 && r.push(_R(e.tools));
+  const i = e.examples ?? qR();
+  return i.length > 0 && r.push(ql("Examples", i)), e.additionalRules && e.additionalRules.length > 0 && r.push(Hb(e.additionalRules)), r.push(jR()), r.push(UR()), r.push(HR()), r.join(`
+
+`).trim() + `
+`;
+}
+function lR(t) {
   return `${t?.trim() || "You are a UI engineer building complete, working apps in Aktion — a declarative language that is a strict subset of JavaScript: every program is valid JS, and the runtime adds reactivity on top. Respond ONLY in Aktion — no prose, JSON, markdown, or HTML."}
 
 Register the UI root with \`$app(...)\` on the first line. Pass it one node (\`$app(Component())\`), an array (\`$app([Component1(), Component2()])\`), or variadic nodes (\`$app(Component1(), Component2())\`). Wrap a dashboard/app in \`AppShell\` (left sidebar + topbar); build a website or marketing page from a top \`Navbar\` + stacked sections — never an \`AppShell\`. References resolve across the whole program, so call \`$app(...)\` first and let the rest stream in below it. There should be only one \`$app(...)\` in the program, as the runtime treats it as the UI root.`;
 }
-function lR() {
+function cR() {
   return "## The host element — `<aktion-app>`\n\nSet by the HOST PAGE, never from Aktion code. Listed so you know what is configurable and never try to set it yourself.\n\n| Attribute | Values | Effect |\n| --- | --- | --- |\n| `theme` | `light` `dark` `shadcn` `shadcn-dark` `mui` `mui-dark` `heroui` `heroui-dark` `signal` `signal-dark` `soft` | Base palette. `shadcn`, `mui` and `heroui` re-create shadcn/ui, Material UI and HeroUI; `signal` is a dense instrument-console theme for dashboards and ops. Each also answers to an explicit `-light` spelling. `$theme({...})` layers on top. A theme selected by name also loads its web fonts. |\n| `dir` | `ltr` `rtl` `auto` | Flips the whole tree. Programs need no change. |\n| `margin` | `0` `12` `1rem` | Outer gutter (default 20px). |\n| `scroll-restoration` | `auto` `top` | Scroll behaviour on navigation. |\n| `router-mode` | `hash` (default) `history` | Whether `route.navigate()` uses clean paths or hashes. |\n| `router-base` | e.g. `/app` | Path prefix in history mode. |\n| `streaming` `response` `src` | — | How the program text is delivered. |\n| `showerrors` | — | Renders the error banner instead of hiding failures. |\n| `strict` | — | Dev mode: surfaces silent failures (unknown identifiers, unmatched props) as console warnings. |";
 }
-function cR() {
+function uR() {
   return `## Cheat sheet — every construct, one line each
 
 \`\`\`
@@ -36808,58 +36809,58 @@ $util.* $storage.* $console.* $toast.* $dom.*     // the five reserved namespace
 route.path route.params route.query route.pattern route.navigate(to)     // always in scope, reactive
 \`\`\``;
 }
-function uR() {
+function dR() {
   return '## Common mistakes — read before writing\n\n```\n✗ Alert("Failed", { tone: "danger" })          ✓ Callout("Failed", { tone: "danger" })\n   Alert / Tag / Chip / Panel / Textbox DO NOT EXIST. Every component name must appear\n   verbatim in the Component library section below. An unknown name renders NOTHING,\n   silently — no error. When unsure, pick the nearest listed name.\n\n✗ Column([Header, Body])                        ✓ Column([Header(), Body()])\n   A bare identifier is a value, not a call. Components need ().\n\n✗ Button("Save", "primary")                     ✓ Button("Save", { variant: "primary" })\n   Slot 2 of Button is onClick, not variant. Non-adjacent props go in the trailing object.\n\n✗ Card([x], { p: "md" }, { gap: "sm" })         ✓ Card([x], { p: "md", gap: "sm" })\n   One trailing object per call. Never split named props across two objects.\n\n✗ Column([$count += 1, Text($count)])           ✓ Button("Add", { action: () => { $count += 1 } })\n   State writes belong in handlers and effects, never in render position.\n\n✗ $theme({ colorPrimary: "#09f" })              ✓ $theme({ colors: { primary: "#09f" } })\n   Flat token keys were removed in 0.5 and raise a schema error.\n\n✗ Table([{ name: "Ada", age: 36 }])             ✓ Table([Col("Name", rows.name), Col("Age", rows.age)])\n   Tables are COLUMN-oriented — pluck an array per column.\n\n✗ util.format(n)  /  toast.success("Hi")        ✓ $util.format(n)  /  $toast.success("Hi")\n   $util, $toast and $dom exist ONLY with the sigil. Without it they resolve to nothing.\n\n✗ $toasts = [...$toasts, { msg }]               ✓ $toast.success("Saved")\n   $toast renders its own stacked layer. Never hand-manage a toast array.\n\n✗ Icon("fa-house")  /  Text("🎉 Done")          ✓ Icon("house")  /  Text("Done", { icon: "party-horn" })\n   Font Awesome names carry no fa- prefix, and raw emoji are never acceptable.\n\n✗ $effect(() => { … }, [route.path])            ✓ $effect(() => { … }, [$util.url.path])\n   Effect deps accept $atoms and the string tokens only — route is a parse error.\n\n✗ Stack([...], { direction: "row" })            ✓ Row([...], { gap: "md" })\n   Reserve Stack for a direction that CHANGES across breakpoints.\n```\n\n### Confusable names — all of these are real, distinct components\n\n- `Navbar` top nav bar for a site · `NavBar` marketing-page variant · `TopBar` compact strip above scrolling content · `AppShell` full sidebar+content product shell.\n- `Toast` one transient notice · `Toasts` a stack container (usually unnecessary — `$toast.*` auto-renders).\n- `Button` one control · `Buttons` a gapped row · `ButtonGroup` buttons joined edge-to-edge · `SegmentedControl`/`ToggleGroup` a padded track with a selected chip.\n- `Split` a two-pane layout primitive · `SplitView` master/detail with scrollable panes · `ResizablePanels` user-draggable divider.\n- `Calendar` scheduling grid · `CalendarView` month/week event grid · `DatePicker` an input.\n- `Table` static columns · `DataGrid` sortable/filterable/paged/selectable · `ComparisonTable` feature-matrix rows.\n- `Text` one string with a type variant · `TextContent` a block of prose nodes · `Prose` long-form article styling · `Markdown` parses markdown source.\n- `Badge` solid attention chip ("Recommended") · `Pill` soft tinted state label ("SSL active") · `StatusDot` inline pip · `Chip` does not exist.\n- `Spinner` rotating ring · `LoadingDots` three-dot pulse · `Skeleton` content placeholder · `LoadingState` full-card state.';
 }
-function dR() {
+function pR() {
   return '## Overlays & floating layers\n\n`Modal`, `Drawer`, `Sheet`, `BottomSheet`, `ConfirmDialog`, `Tooltip`, `HoverCard`, `Popover`, `DropdownMenu`, `ContextMenu`, `CommandPalette` and `Lightbox` all render through one shared positioning engine:\n\n- **Never clipped.** They render in the browser\'s top layer, so no `overflow: hidden` and no transformed ancestor can cut them off. You do not need to hoist them out of a Card or use `Portal`.\n- **Shared placement vocabulary.** `side: "top"|"bottom"|"left"|"right"` × `align: "start"|"center"|"end"` gives 12 placements, and they flip automatically when there is not enough room.\n- **Shared dismissal contract.** Escape, an outside click, and the × control all close them; focus moves in on open and is restored on close.\n- **Controlled or uncontrolled.** Bind `open` to a `$variable` and handle `onOpenChange` to drive one yourself. A `Modal` given a literal `open: true` MUST also get `onRequestClose`, or the user cannot dismiss it.\n- **Stacking** is token-driven — `sx: { zIndex: "dropdown" | "sticky" | "modal" | "toast" }` — so a custom overlay layers correctly against the built-ins.';
 }
-function pR() {
+function hR() {
   return '## Core syntax\n\nA program is a flat list of `name = expression` statements, one per line (newlines end statements; semicolons optional).\n\n```\n$app(Column([header, kpis, table]))      // UI root — always first\nheader  = PageHeader("Sales", { subtitle: "Q4 2026" })\n$count  = 0                              // reactive atom — the \'$\' prefix is the contract\nfunction Counter(label) { return Text(`${label}: ${$count}`) }   // component (returns a tree)\nfunction inc() { $count += 1 }           // action (no return — runs for side effects)\n$effect(() => $console.log($count), [$count])                     // declarative side effect\n```\n\n### Three kinds of name\n- `name = value` — plain binding, captured once (not reactive).\n- `$name = value` — reactive atom: reading subscribes, writing notifies.\n- `function name(...)` — declares a component AND an action of that name. First-letter case is NOT significant (`Card`/`card`, `SaveOrder`/`saveOrder`); same for arrow bindings (`row = item => Row(...)`).\n\n### Two rules, broken constantly — always check\n1. **Invoke components with parentheses.** A component is a function; the bare name is just its value. Render it by calling it, even with no args: `$app(MyApp())` not `$app(MyApp)`; `Column([Header(), Body()])` not `Column([Header, Body])`. (Exception: passing a component as a callback, e.g. `render: UserCard`.)\n2. **Argument forms** (per call, pick ONE): the canonical form is one bare positional — the prop tagged `(positional)` in the signature — plus a trailing `{ }` object for every other prop. Also supported: ALL-positional (arguments bind to the signature\'s props in listed order, so only use it for adjacent leading props), and ALL-named (a single `{ }` object naming every prop). Never split one object between roles.\n\n```\nButton("Save", { variant: "primary", loading: $isSaving })   // canonical: positional + trailing object\nStatCard("Revenue", { value: "$48k", trend: "up", delta: "+12%" })\nStatCard("Revenue", "$48k", "up")                            // all-positional, signature order\nButton({ label: "Save", variant: "primary" })                // all-named single object\nRow([Card1(), Card2()], { gap: "md" })\n```\n\nMind the signature order with all-positional calls: `Button("Save", "primary")` puts `"primary"` in the second slot (`onClick`), NOT `variant` — prefer the trailing object for non-adjacent props. A lone object argument to a component whose positional prop is itself object-typed is that prop\'s payload, not named props. Any call also accepts `{ key: ... }` to pin per-instance state across reorders.\n\n### Reserved top-level names\nNever declare or shadow any of these.\n- `$app(...)` — registers the UI root (REQUIRED, and exactly ONE per program).\n- `$theme({...})` — optional brand override (written as a bare statement, before `$app`).\n- `route` — the reactive router handle (`route.path`, `route.params`, `route.query`, `route.pattern`, `route.navigate("/x")`).\n- `$util`, `$storage`, `$console`, `$toast`, `$dom` — the five runtime namespaces.\n- `params` — the captured path segments, in scope inside a `$router` arm.\n- `outlet` — the matched child, in scope inside a nested route\'s `layout`.\n- `slots` — the named-props bag, in scope inside a component body.\n- `cleanup(fn)` — registers an effect teardown, in scope inside `$effect`.';
 }
-function hR() {
+function mR() {
   return '## JavaScript is fully supported\n\nAktion *is* JavaScript — every standard feature works inside expressions, action bodies, effect callbacks, and lambdas. Use whatever is clearest.\n\n### Ways to produce the UI\nThere is no single required shape — compose however the content suggests, and mix these freely:\n- **Inline in `$app(...)`** — `$app(Column([Hero(), Features(), Footer()]))` for a self-contained tree.\n- **Named statements** — pull pieces into `name = ...` bindings and reference them; they hoist and stream in independently.\n- **`.map` / `.filter` over data** — turn arrays into nodes: `rows = $items.map(i => Row(i))`.\n- **`function` components** — factor reusable or parameterised UI into components; invoke them with `()`.\n- **`$router({...})` pages** — split a multi-page app into route arms.\n\n### In expressions (right of `=`) — value-producing JS only\n```\nbanner = $error ? Banner($error, { tone: "danger" }) : null     // ternary\nrows   = $todos.filter(t => !t.done).map(t => TodoRow(t))        // map / filter / reduce\ntotal  = $cart.reduce((sum, i) => sum + i.price, 0)\nmerged = { ...$base, status: "done" }                           // spread / destructuring\nname   = $user?.profile?.name ?? "Guest"                        // optional chain / nullish\ntitle  = `${rows.length} ${$util.plural(rows.length, "result", "results")}`   // template literal\n```\n`if` / `switch` / `for` / `while` / `try` are statements — they can\'t sit on the right of `=`. Use a ternary, an array method, or wrap them in a function and call it.\n\n### In action / effect / lambda bodies — full statement surface\n`if`/`else`, `switch`, every `for` and `while`, `try`/`catch`/`finally`, `throw`, `return`, plus all assignment operators (`= += -= *= /= ??= ++ --`) against `$atoms` and member chains (`$user.name = "Alex"`).\n\n```\nfunction submit(payload) {\n  if (!payload.email) return\n  for (let tag of payload.tags) $tags = [...$tags, tag]\n  $emit("submitted", { id: payload.id })\n}\n```\n\n### Lambdas, continuations, comments, timers\n- Arrow functions in every form: `() => expr`, `x => expr`, `(a, b = 0) => { ...; return ... }`, `(...args) => ...`.\n- A leading operator (`.`, `?.`, `&&`, `??`, `?`/`:`, arithmetic) continues an expression onto the next line.\n- Comments: `// line` and `/* block */` only.\n- `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` work and are torn down on re-plan — create them in an `$effect` and clear them in its `cleanup`, or prefer `$effect(..., ["every(1000)"])` for simple repeats.\n- Every JavaScript global resolves by name (see *Built-in globals*).';
 }
-function mR() {
+function fR() {
   return '## Reactive State\n\nThe `$` sigil is the only thing that makes a binding reactive; `let`/`const`/`var` are optional and don\'t affect reactivity.\n\n```\n$count = 0\n$user  = { name: "Ada", role: "Engineer" }\n```\n\n- **Read** `$name` anywhere — it auto-subscribes whoever reads it (component, derived value, effect).\n- **Write** `$name = ...` (and `+= -= ??= ++ --`) only from event handlers, effects, and lambdas — never while building the UI. Member writes (`$user.name = "Alex"`) update immutably so subscribers see a fresh reference.\n- **Never write reactive state in render position.** A write that runs while the UI is built loops; the runtime applies it but skips the re-render and warns. Hold component-local state by declaring it at the top of a component body (set-once per instance) or with the `$state` hook.\n\n### Fine-grained reactivity (path-level)\nSubscriptions track the exact **path** you read. Reading `$user.name` subscribes to `user.name` alone — writing `$user.role` won\'t recompute it, but replacing `$user` will; effect deps work the same (`$effect(..., [$user.name])`). Prefer reading the precise field for the tightest updates. A component re-executes only when its own inputs change — its args or a `$` path its body read — like `React.memo`, but automatic. Args compare shallowly, so hoist inline-lambda props to a stable binding to avoid needless child re-renders.\n\n### Per-instance state\n`$name = value` inside a function body is per-instance when the function renders as a component — two `Counter()`s each own their `$count`. Add `{ key: id }` to keep state attached when siblings reorder.\n\n### Hooks\nFor composable local state, use hooks — a function whose name starts with `$`, called only at the top level of a component (or another hook) in a stable order:\n- `$state(initial)` → `[value, setValue]` (like `useState`; `setValue(prev => next)` supported, `initial` runs once).\n- `$memo(() => value, [deps])` → a cached value (like `useMemo`).\n- `$ref(initial)` → a stable `{ current }` box (like `useRef`; writing `.current` does NOT re-render — for DOM nodes, timer ids, previous values).\n- `$reducer((state, action) => next, initial)` → `[state, dispatch]` (like `useReducer`; the clean way to manage many related transitions).\n- `$id(prefix?)` → a stable unique id per instance (like `useId`; for `for`/`aria-*` wiring).\n- `function $name(...)` declares a custom hook composing the built-ins.\n\n```\nfunction Counter() {\n  const [count, setCount] = $state(0)\n  const label = $memo(() => `Count: ${count}`, [count])\n  return Stack([Text(label), Button("+1", { onClick: () => setCount(c => c + 1) })])\n}\n```\n\n### Two-way binding\nPass a `$variable` (or member chain — `value: $form.email`) as the value prop of any input/select/checkbox/switch/slider and the runtime wires the change handler automatically; add `onChange: v => ...` for an extra side effect.\n\n```\n$draft = ""\nfield  = Input("draft", { value: $draft })\n```\n\n### Computed values\nNo separate "computed" tier — just compute. Every `$` reference in an expression auto-tracks: `$open = $todos.filter(t => !t.done)`.\n\n### Global stores — `$store({...})`\nFor app-wide state without prop-drilling, declare a store. Non-function entries are reactive state; function entries are methods that receive the store handle `s` first. Read `store.field` (fine-grained) and call `store.method(args)`.\n\n```\ncart = $store({\n  items: [],\n  total: (s) => $util.sum(s.items.map(i => i.price)),   // → cart.total()\n  add:   (s, item) => { s.items = [...s.items, item] }, // → cart.add(item)\n})\nfunction CartBadge() { return Badge(`${cart.items.length} items`) }\n```\n\nUse a store for shared state; use a component\'s local `$state` / `$name` for state one component owns.\n\nAdd `persist: "key"` to mirror the store\'s data to `localStorage` (or `persistIn: "session"` for `sessionStorage`): declared fields hydrate from the saved snapshot on first render and every change writes back. `persist` / `persistIn` are config, not state fields.\n\n```\nprefs = $store({\n  persist: "user-prefs",          // restored on reload, saved on every change\n  theme: "system",\n  setTheme: (s, t) => { s.theme = t },\n})\n```\n\nAdd `history: true` (or `history: 50` for a depth cap) for **undo/redo**: the store gains `store.undo()` / `store.redo()` / `store.clearHistory()` methods and reactive `store.canUndo` / `store.canRedo` flags (wire them to button `disabled`). Each user mutation records a snapshot; a fresh edit after undo clears the redo branch.\n\n```\ndoc = $store({\n  history: true,\n  title: "", body: "",\n  setTitle: (s, t) => { s.title = t },\n})\nundoBtn = Button("Undo", { onClick: () => doc.undo(), disabled: !doc.canUndo })\n```';
 }
-function fR() {
+function gR() {
   return '## Components & Actions\n\nA `function` declaration is both a **component** (call it in render position → its return value renders) and an **action** (call it from an event handler → its body runs). Name case is not significant, and a function with no `return` renders nothing.\n\n### Components\n```\nfunction UserCard(user, { tone = "default" } = {}) {\n  return Card([\n    Avatar(user.name, { size: "md" }),\n    Text(user.name, { variant: "large-heavy" }),\n    Badge(tone, { tone })\n  ])\n}\n$app(Column([UserCard($currentUser), UserCard($other, { tone: "primary" })]))\n```\n\n- The positional argument lands in the component\'s first parameter (the `children` slot for container-style components).\n- User components shadow built-ins of the same name — wrap a library component to add telemetry or styling.\n- Use a lambda (`row = item => Row(item)`) for one-off helpers that don\'t need a named component.\n- **Named slots** (XIII.1): once positional args fill the params, extra named props become both a `slots` object and direct bindings — `function Panel(children) { return Column([slots.header, children, footer]) }` called as `Panel(body, { header: H, footer: F })`.\n- **Component-local helpers** (XIII.4): a `function Row() {…}` declared inside another component\'s body is scoped to it (callable by siblings, not leaked globally).\n\n### Actions\nA `function` whose body runs for side effects is an action — use it as a handler (`onClick: save`) or call it for its result. `return` is optional; the full JS statement surface applies. Wrap optimistic writes in `$optimistic(() => { … })` to snapshot state and auto-roll-back if the callback throws (or its promise rejects).\n\n```\nfunction save(item) {\n  $items = [...$items, item]\n  $save  = $http({ url: "https://api.example.com/save", method: "POST", body: { item } })\n  $emit("saved", { id: item.id })\n}\nfunction addTodo(text) {\n  $optimistic(() => {\n    $todos = [...$todos, { id: $todos.length + 1, text }]   // optimistic write\n    if (text == "") throw new Error("empty")                // → rolls $todos back\n  })\n}\nsaveBtn  = Button("Save",  { onClick: save })\nresetBtn = Button("Reset", { onClick: () => { $count = 0; $message = "" } })\n```\n\n### `$emit("name", { detail })`\nFrom any action / effect / lambda, `$emit` dispatches a `CustomEvent` on the host `<aktion-app>` (listen with `el.addEventListener`). Reserved names: `assistant-message`, `error`, `route-change`.\n\n### Reactive environment globals (under `$util`)\nRead-only reactive namespaces the UI branches on without manual listeners (listeners attach lazily on first read, re-render on change). They live under `$util` so the top-level `$`-name space stays free for your own atoms:\n- `$util.viewport.width` / `.height`\n- `$util.breakpoint.active` (`base|sm|md|lg|xl`) + `.sm` / `.md` / `.lg` / `.xl` booleans\n- `$util.scroll.y` / `.x` / `.progress` (0–1) / `.direction` (`up|down`)\n- `$util.media.prefersDark` / `.prefersReducedMotion` / `.online` / `.pointer` (`coarse|fine`) / `.portrait`\n- `$util.mouse.x` / `.y`\n- `$util.url.path` / `.params` (route params) / `.query` (parsed object) / `.hash` + `.navigate(to)` / `.setQuery(name, value)` / `.setQuery({…})` / `.removeQuery(name)` — a reactive snapshot of the current URL plus query-param writers (IV.6).\n\n```\nShow($util.breakpoint.md, { children: Sidebar(), fallback: Drawer() })\nNavBar({ blur: $util.scroll.y > 12 })\n```\n\n### `$util.onError(fn)`\nRegister a program-level error sink: `fn({ error, source })` fires when a user action body throws (before the default logging) — report to a telemetry sink or surface a toast so a bad row never blanks the page.\n\n### `$util.onNavigate(fn)`\nRegister a navigation guard: `fn({ to, from })` runs before every route change (in-app `navigate(...)` and browser back/forward). Return `false` to block, a path string to redirect, or nothing to allow. `$util.onNavigate(null)` clears it.\n\n### `$util.onRequest(fn)` / `$util.onResponse(fn)`\nCross-cutting HTTP interceptors for every `$http` / `$query` / `$mutation` request (VI.5). `$util.onRequest(req => ({ headers: { Authorization: "Bearer " + $token } }))` returns a partial that is merged over the request (headers shallow-merged) — ideal for auth tokens. `$util.onResponse((res, retry) => …)` can inspect/replace the response or `return retry()` to re-issue once (e.g. after refreshing a token on a 401) — the client awaits what the interceptor RETURNS, while `await` inside an Aktion body never suspends. They reset on each new program.';
 }
-function gR() {
+function bR() {
   return '## Effects — Declarative side effects\n\n`$effect(() => { ... }, [...deps])` runs side effects. Dep entries: `$atom` (re-run on change), `"mount"` / `"unmount"` (once), `"every(N)"` (every N ms), `"debounce(N)"` / `"throttle(N)"` (trailing-edge rate limit). No second argument ≡ `["mount"]`.\n\nTop-level effects mount on parse and tear down on the next response; effects inside a component mount per-instance and tear down — running their `cleanup(fn)` — when the instance leaves the tree.\n\n```\n$effect(() => {\n  $results = $http({ url: "https://api.example.com/search", query: { q: $term } })\n}, [$term, "debounce(250)"])\n\n$effect(() => {\n  const onKey = e => { if (e.key == "/") $palette = true }\n  document.addEventListener("keydown", onKey)\n  cleanup(() => document.removeEventListener("keydown", onKey))\n}, ["mount"])\n```';
 }
-function bR() {
+function vR() {
   return '## Data — `$http({...})`\n\n`$http({ ... })` is the only HTTP primitive. Each call is self-contained: pass an absolute `url`, optional `method` (default `GET`), `query` (serialised into the URL), `headers`, `body` (JSON-encoded automatically), and any `fetch` option. No host-wide defaults.\n\n```\n$orders = $http({ url: `https://api.example.com/users/${$userId}/orders`, query: { limit: 5 } })\n```\n\nIt fires once when the binding mounts and exposes a reactive bag:\n```\n$orders.data    $orders.error    $orders.status    $orders.loading\n$orders.headers $orders.lastUpdated\n$orders.refetch()   $orders.cancel()   $orders.onDone = fn\n```\n\nRe-run with `.refetch()`, or wrap the call in `$effect(..., [$dep])` to re-issue when a dep changes. After a write, refresh a list from the write\'s `onDone` (fires on every settle — the initial load and each refetch):\n\n```\nfunction saveOrder(payload) {\n  $save = $http({ url: "https://api.example.com/orders", method: "POST", body: payload })\n  $save.onDone = () => $orders.refetch()\n}\n```\n\nBranch on resource state with `Async`:\n```\nview = Async($orders, {\n  loading: LoadingState("Loading orders…"),\n  error:   ErrorState("Couldn\'t fetch orders"),\n  empty:   EmptyState("No orders yet"),\n  data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, { format: "currency" })])\n})\n```\n\n### `$query({...})` and `$mutation({...})`\nSame config shape as `$http`, for two common needs:\n- `$query({ url, key?, ttl?, refetchInterval?, refetchOnFocus?, refetchOnReconnect? })` — a **cached, deduplicated** read. Identical queries (same `key`, or same method+url+query+body) share one in-flight request and one cached bag, so calling it from several components fetches once. Pass `ttl` (ms) to auto-refetch stale data, `refetchInterval` (ms) to poll a live dashboard, and `refetchOnFocus` / `refetchOnReconnect` to refresh on tab focus / network reconnect. Same bag as `$http` (`.data`/`.loading`/`.error`/`.refetch()`).\n- `$mutation({ url, method? })` — a **deferred** write that fires only when you call `.mutate(overrides?)`, not on render (method defaults to `POST`). Assign it to an atom, then trigger it from a handler:\n```\n$save = $mutation({ url: "https://api.example.com/orders" })\n$save.onDone = () => $orders.refetch()\n...\nButton("Save", { onClick: () => $save.mutate({ body: { item: $item } }) })\n```\n`.mutate()` resolves with the response body; the bag exposes `.loading`/`.error`/`.data` plus `.reset()`.\n\n**Optimistic + invalidation (VI.2):** `$mutation({ url, optimistic: () => { … }, invalidates: ["key"] })` — `optimistic` runs synchronously before the request so the UI updates instantly (auto-rolled-back if it fails); `invalidates` refetches every cached `$query` whose key contains a listed substring once the write succeeds. `$util.invalidate("key")` does the same on demand.\n\n**Infinite / paginated reads (VI.1):** `$feed = $query({ url, infinite: { param?: "page", start?: 1, limit?: 20, mode?: "page"|"offset", select?: body => body.items } })` — `.data` is the flattened item list across loaded pages; call `.loadMore()` (often from `OnIntersect`) while `.hasMore` is true; `.loadingMore` flags the in-flight next page.\n\n**GraphQL (VI.6):** add `gql` (+ optional `variables`) to any `$http`/`$query`/`$mutation`: it POSTs `{ query, variables }` and `.data` is the unwrapped GraphQL `data` (a GraphQL `errors` array surfaces through `.error`).\n\n```\n$repos = $query({ url: "/graphql", gql: "query($n:Int){ repos(first:$n){ name } }", variables: { n: 10 } })\n```\n\n### Realtime — `$socket({...})` and `$sse({...})` (VI.3)\n- `$socket({ url, protocols?, bufferSize?, onMessage?, reconnect? })` — a reactive WebSocket. Read `.status` (`"connecting"|"open"|"closed"`), `.connected`, `.last`, `.messages` (re-render on change); `.send(data)` (objects auto-JSON; messages sent while connecting queue and flush on open); `.close()` (stops for good). `reconnect: true` (or a max-attempt number) retries dropped connections with exponential backoff — `.attempts` counts the current streak.\n- `$sse({ url, event?, withCredentials?, bufferSize? })` — a reactive Server-Sent Events stream with the same `.status`/`.connected`/`.last`/`.messages`/`.close()` surface (EventSource reconnects natively). Both tear down automatically on the next program.\n```\n$chat = $socket({ url: "wss://example.com/room/42" })\nsend = () => { $chat.send({ text: $draft }); $draft = "" }\nfeed = Column(map($chat.messages, m => Bubble(m.text)))\n```';
 }
-function vR() {
+function yR() {
   return '## Routing\n\n`$router({ ... })` is a plain function call — assign it and drop the result into your page shell.\n\n```\npages = $router({\n  "/":           Dashboard(),\n  "/orders/:id": OrderDetail({ id: params.id }),\n  "/docs/*":     Docs({ rest: params._ }),\n  default:       NotFound()\n})\nnav = Sidebar([SidebarSection("Main", [SidebarItem("Dashboard", { to: "/", icon: "gauge" }), SidebarItem("Orders", { to: "/orders", icon: "receipt", badge: "12" })])], { brand: "Acme", tagline: "Ops console" })\n$app(AppShell(nav, pages))             // app/dashboard shell — Sidebar is a real component, build it\n```\n\n- **Pick the shell for the surface.** `AppShell(Sidebar(...), pages)` for an app/dashboard (left sidebar + optional topbar); a top `Navbar(...)` above the pages inside a `Column` for a website / marketing / docs layout (no sidebar) — never wrap a website in `AppShell`. The router result is just a node, so it drops into either.\n- Patterns: literal, `:param` (read `params.id`), trailing `*` (read `params._`), and `default:` for the catch-all (unknown paths render `null` without it).\n- The read-only `route` handle: `route.path`, `route.params.x`, `route.query.tab`; navigate with `route.navigate("/path")` from an action/effect. `$util.url` mirrors this (`$util.url.path` / `.params` / `.query` / `.hash`).\n- **Query-param ↔ state** (IV.6): write the URL query without leaving the page — `$util.url.setQuery("tab", "billing")`, `$util.url.setQuery({ sort: "name", page: 2 })` (a `null`/`""` value drops the key), or `$util.url.removeQuery("tab")`. Read it back reactively via `$util.url.query.tab` (or `route.query.tab`), so a tab/sort/filter survives reload and is shareable.\n- **Navigation guards** (IV.2): `$util.onNavigate(fn)` registers a guard. `fn({ to, from })` returns `false` to block, a path string to redirect, or nothing to allow — covers in-app `navigate(...)` and browser back/forward. Call `$util.onNavigate(null)` to clear.\n- **Scroll restoration** (IV.5): set `scroll-restoration="auto"` on `<aktion-app>` to restore scroll on back/forward and jump to top on a fresh navigation (`"top"` always jumps to top).\n- **Nested / layout routes** (IV.1): an arm whose value is `{ layout, routes }` matches as a path PREFIX and slots the matched child into the `outlet` identifier — so a shell (sidebar/topbar) stays mounted while only the inner page swaps. Child route keys are matched against the remaining path; `params` merges parent + child captures.\n```\npages = $router({\n  "/app": {\n    layout: AppShell(nav, outlet),               // `outlet` = the matched child; `nav` from above\n    routes: {\n      "/":            Dashboard(),\n      "/orders/:id":  OrderDetail({ id: params.id }),\n      default:        AppHome()\n    }\n  },\n  default: Landing()\n})\n```\n- `NavLink(label, { to, exact?, icon? })` and `SidebarItem(label, { to, icon?, badge? })` derive active state from `route.path`. Never declare `route` yourself.\n\n```\n$util.onNavigate(({ to }) => $isLoggedIn || to === "/login" ? true : "/login")   // auth gate\nfunction selectTab(name) { $util.url.setQuery("tab", name) }                       // shareable tab\nactiveTab = $util.url.query.tab ?? "overview"\n```';
 }
-function yR() {
+function wR() {
   return '## Runtime namespaces — `$util`, `$storage`, `$console`, `$toast`, `$dom`\n\nFive reserved namespaces, always in scope, no imports. **All five carry the `$` sigil.** The sigil is REQUIRED for `$util`, `$toast` and `$dom` — bare `util.format(...)` / `toast.success(...)` / `dom.measure(...)` resolve to nothing and fail silently. `$storage` and `$console` additionally accept the bare spelling for backwards compatibility, but use the sigil everywhere for consistency. These names are reserved: you cannot shadow them.\n\n`$storage.set/get/remove/clear` target localStorage; the same four methods also exist on `$storage.local`, `$storage.session` and `$storage.cookies`.\n\n```\n$storage.set("name", "John");  $name = $storage.get("name");  $storage.remove("name")\n$storage.session.set("draft", $draft)\n$storage.cookies.set("user", "John", { expires: 7, path: "/" })\n$console.log("Hello", $user)\n```\n\nNon-string values JSON-roundtrip; missing keys return `null`. Beyond these, every JavaScript global resolves by name — `Math`, `JSON`, `Date`, `crypto`, `fetch`, `URL`, `navigator`, `window`, `document`, dialogs like `confirm`, … — and your declarations and components shadow same-named globals. Prefer reactive `$http({...})` over raw `fetch` for UI data, and keep timers/listeners inside `$effect` so they\'re cleaned up.\n\n```\nfunction copyLink() { navigator.clipboard.writeText(window.location.href); $toast.show("Copied", { tone: "success" }) }\nid = crypto.randomUUID()\n```\n\n### `$toast` — imperative notifications\nInstead of hand-managing a `$toasts = [...]` array, use the reserved `$toast` namespace. `$toast.show(message, { tone?, title?, duration? })` shows a toast (auto-dismisses after `duration` ms, default 4000; pass `0` to keep it). Shortcuts: `$toast.success/.error/.info/.warning`. Remove with `$toast.dismiss(id)` / `$toast.clear()`. **Toasts render themselves** (stacked top-right) — just call `$toast.*`; you do NOT add a `Toasts(...)` to `$app`:\n\n```\nfunction save() { $save = $http({ url, method: "POST", body }); $save.onDone = () => $toast.success("Saved") }\n$app(Button("Save", { onClick: save }))   // the "Saved" toast appears on its own\n```\n\nOnly if you want custom placement, render the reactive `$toast.items` list yourself — the auto-layer steps aside when you do: `Toasts($toast.items.map(t => Toast({ title: t.title, message: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))`.';
 }
-function wR() {
+function xR() {
   return '## Behaviour wrappers\n\nThese attach behaviour or styling to ANY node via `display: contents` (the visual tree is unchanged):\n- `OnClick(child, { onClick, disabled?, stopPropagation? })` — pointer + keyboard activatable. (Don\'t wrap `Button` — it already has `onClick`; use this for clickable cards / list rows.)\n- `OnMouse(child, { enter?, leave?, move?, down?, up?, drag?, drop?, dragOver?, ... })` — pass only the events you need.\n- `OnKeyboard(child, { onKeyDown?, onKeyUp?, focusable? })` and `OnFocus(child, { onFocus?, onBlur? })`.\n- `OnIntersect(child, { onEnter?, onLeave?, threshold?, once? })` — IntersectionObserver (lazy-load, infinite scroll).\n- `OnMount(child, { onMount?, onUnmount? })` — DOM-ref / lifecycle. `onMount(node)` fires once after attach (grab a node, focus it, hand it to a chart/map/editor); `onUnmount(node)` on teardown. Stash the node in a `$ref(...)`.\n- `Css(child, { class?, style? })` — last-resort class/style merge.\n- `Link(childOrLabel, { to?, href?, external?, variant? })` — anchor; `to` for router nav, `href`+`external: true` for outbound links.\n\n```\nOnClick(Card([Text("View order")]), { onClick: () => route.navigate("/orders/4821") })\nOnIntersect(Skeleton({ variant: "card" }), { onEnter: $items.refetch, once: true })\n```';
 }
-function xR() {
+function kR() {
   return '## Escape hatches — `HTMLTag` & `Styles`\n\nOnly when the catalogue can\'t express the markup/styling you need:\n- `HTMLTag(tag, { attributes?, children? })` — an allow-listed HTML tag (`on*` attributes, `javascript:` URLs, and unsafe `style` are stripped; unknown tags become `div`).\n- `Styles(css)` — inject a `<style>` block (`</style>`, `<script>`, `@import`, `javascript:` are dropped).\n\n```\n$app(Column([\n  Styles(`.hero { background: linear-gradient(135deg, #6366f1, #10b981); padding: 24px; border-radius: 12px; }`),\n  HTMLTag("div", { attributes: { class: "hero" }, children: [Text("Custom block")] })\n]))\n```';
 }
-function kR() {
+function SR() {
   return '## Third-party widgets & document head\n\n### Imperative / third-party widget interop\nFor a library that owns its own DOM (chart, map, editor, payment element, captcha) — NOT for normal markup (use components). The host carries `data-rui-preserve`, so the reconciler never touches the widget\'s DOM.\n- `Mount({ setup, update?, cleanup?, props?, tag?, sx? })` — managed imperative host. `setup(node, props)` runs once after attach and **returns the instance handle**; `update(instance, props)` runs when the (shallow-compared) `props` bag changes; `cleanup(instance)` runs on unmount. `props` is the reactive boundary; `tag` sets the host (default `"div"`).\n- `WebComponent(tag, { attributes?, properties?, on?, children? })` — render + hydrate a native custom element (tag must contain a hyphen). `attributes` is reactive, `properties` assigns rich JS props, `on` binds listeners that stay current.\n- `$script({ src, global?, type?, as?, attributes? })` — load an external script/stylesheet once (de-duplicated per `src`) → reactive `{ ready, loading, error, value }`. Gate a widget on `.ready`; `value` = `window[global]`. Stays un-ready under SSR.\n- `$dom` — managed observers, auto-disposed on replan: `$dom.onResize(node, cb)`, `$dom.onIntersect(node, cb, opts?)`, `$dom.onMutation(node, cb, opts?)`, and one-shot `$dom.measure(node)` → `{ rect, scroll, viewport }`. Pair with an `OnMount` / `Mount` node ref.\n\n```\n$chartjs = $script({ src: "https://cdn.jsdelivr.net/npm/chart.js", global: "Chart" })\nfunction SalesChart() {\n  if (!$chartjs.ready) return Skeleton({ sx: { h: "320px" } })\n  return Mount({\n    sx: { h: "320px" },\n    setup: (node, p) => new $chartjs.value(node, { type: "bar", data: { datasets: [{ data: p.series }] } }),\n    update: (chart, p) => { chart.data.datasets[0].data = p.series; chart.update() },\n    cleanup: (chart) => chart.destroy(),\n    props: { series: $series }\n  })\n}\n```\n\n### Document head — `$head({...})`\nReactive head manager: call it from a page component body. Sets the title, meta, canonical/alternate links, Open Graph + Twitter cards, JSON-LD, and `<html>` attrs. Reads `$state`, so it re-applies on change; per-route calls compose (later wins). `renderToString` returns the resolved `head` + `headAttrs` for crawlable SSR.\n\n```\nfunction ProductPage() {\n  $head({\n    title: `${$product.name} — Acme`,\n    meta:  { description: $product.summary },\n    og:    { title: $product.name, image: $product.image, type: "product" },\n    link:  [{ rel: "canonical", href: $canonicalUrl }],\n    jsonLd: { "@type": "Product", name: $product.name }\n  })\n  return Column([ /* … */ ])\n}\n```';
 }
-function SR() {
+function CR() {
   return '## Theming, i18n & icons\n\n### `$theme({ ... })`\nA bare `$theme({...})` statement (before `$app`) brands the response. Omit it entirely to inherit the host theme.\n\n**Shape rules.** Only the structured form is accepted: every top-level key must be one of the ten token groups below, or a metadata key (`name`, `direction`). Flat keys like `$theme({ colorPrimary: … })` raise a schema error — the flat shape was removed in 0.5. Unknown keys INSIDE a group are silently ignored, so typos there fail quietly: check names before you ship.\n\n| Group | Value type | Notes |\n| --- | --- | --- |\n| `colors` | CSS colour string | `{ primary, primaryHover, accent, bg, surface, text, textMuted, border, success, warning, danger, info, … }` |\n| `radius` | CSS length string | `{ xs, sm, md, lg, pill, button, input }` |\n| `spacing` | CSS length string | `{ xs, s, m, l, xl }` |\n| `shadows` | CSS box-shadow string | `{ sm, md, lg }` |\n| `font` | CSS string | `{ family, familyHeading, familyMono, sizeBase, weightHeading, … }` |\n| `fonts` | `{ import: string[] }` | Google-Fonts shorthand: `fonts: { import: ["Inter:400,700", "JetBrains Mono"] }` |\n| `gradients` | string **or** string[] of stops | `gradients: { brand: ["#6366f1", "#ec4899"] }`; use as `gradient.brand` in `sx` / `GradientText` |\n| `zIndex` | **number** | Layer tokens `{ dropdown, sticky, modal, toast }` — these feed `sx.zIndex` |\n| `motion` | CSS duration / easing string | `{ fast, base, slow, ease }` → `--rui-motion-*` |\n| `icons` | inline SVG markup string | `icons: { logo: "<path …/>" }`, then usable anywhere a Font Awesome name is: `Icon("logo")` |\n\nNote that `zIndex` values are numbers and `gradients` accepts an array — do not quote them.\n\nCore group keys (all optional):\n- `name?: string` — selects a built-in theme as the base palette (`"light"`, `"dark"`, `"shadcn"`/`"shadcn-light"`/`"shadcn-dark"`, `"mui"`/`"mui-light"`/`"mui-dark"`, `"heroui"`/`"heroui-light"`/`"heroui-dark"`, `"signal"`/`"signal-light"`/`"signal-dark"`, `"soft"`; unknown names are ignored).\n- `direction?: "ltr" | "rtl"` — reading direction (metadata; not applied as a token).\n- `colors?: { ... }` — CSS color strings. Keys: `bg`, `bgSubtle`, `surface`, `surfaceMuted`, `border`, `borderSubtle`, `text`, `textMuted`, `primary`, `primaryHover`, `primaryText`, `accent`, `accentHover`, `accentText`, `focusRing`, `success`, `warning`, `danger`, `info`.\n- `radius?: { ... }` — CSS length strings. Keys: `xs`, `sm`, `md`, `lg`, `pill`, `button`, `input`.\n- `font?: { ... }` — CSS strings. Keys: `family`, `familyHeading`, `familyMono`, `sizeBase`, `sizeSm`, `sizeLg`, `sizeHeading`, `sizeTitle`, `weightBody`, `weightHeading`.\n\n```\n$theme({\n  colors: { primary: "#635bff", primaryHover: "#4f46e5", accent: "#1f6feb", bg: "#0a0a23", surface: "#10103a", text: "#fff", textMuted: "#a5b4fc", focusRing: "#635bff" },\n  radius: { md: "0.5rem", button: "999px", input: "8px" },\n  font:   { family: "Inter, sans-serif", familyHeading: "Inter, sans-serif", weightHeading: "600" }\n})\n```\n\nThe host picks one of fifteen base theme names (`light`, `dark`, `soft`, and a light + dark variant each of `shadcn`, `mui`, `heroui` and `signal`) — author theme-neutral UI (use `tone:` / `variant:`, not hard-coded colours), and never assume a light background or a roomy one: `signal` is 13px on a 3/6/10/14 spacing ramp.\n\n### i18n\n```\nconst { t, setCurrentLanguage } = $i18n({\n  defaultLanguage: "en", currentLanguage: $lang,\n  translations: { greeting: { en: "Hello, {name}!", fr: "Bonjour, {name}!" } }\n})\nwelcome = Text(t("greeting", { name: $user.name }))\n```\n`t(key, vars?)` resolves `translations[key][currentLanguage]`, falling back to the default language then the bare key; `{name}` placeholders interpolate. Drive `currentLanguage` from a reactive atom for live switching. ICU plural and select forms are supported: `{ n, plural, =0{No items} one{1 item} other{# items} }`.\n\n### RTL / bidirectional text\nSet `dir="rtl"` / `"ltr"` / `"auto"` on the host `<aktion-app>` element (not in code). The runtime reflects it onto the render root so the whole tree — text direction, flex order, logical spacing — flips automatically. Programs do not need any code change; use logical CSS properties (no hard-coded `left`/`right`) in raw CSS.\n\n### Accessibility primitives\n- `VisuallyHidden(child)` — hides content visually, keeps it in the a11y tree.\n- `SkipLink({ to: "#main", label: "Skip to content" })` — first tab stop for keyboard users.\n- `LiveRegion($status, { politeness: "polite" })` — announces dynamic changes (`"polite"` queues; `"assertive"` interrupts). The first argument is a plain string, not a component.\n- `FocusTrap(child, { active: $isOpen })` — Tab cycles within the subtree; required for dialogs.\n- Pass `aria: { label, labelledBy, describedBy, ... }` to any component via the universal props channel.\n\n### Icons\nIcon props take a Font Awesome name (no `fa-` prefix, never an emoji): `"house"`, `"chart-line"`, `"regular:star"`, `"brands:github"`. `Icon(name, { variant?, size? })` renders a standalone glyph.';
 }
-function CR() {
+function AR() {
   return '## Universal style props (`sx` / `animate`) — every component\n\nEVERY component accepts a universal style/behaviour channel as named props, in addition to its own props. These are **bounded** (tokens & enums, never raw CSS) so they stay theme-safe — prefer them over the `Css`/`Styles`/`HTMLTag` escape hatches.\n\n- **`sx: { … }`** — token-aware inline styling. Keys (all optional):\n  - Spacing (`none|3xs|2xs|xs|sm|md|lg|xl|2xl|3xl|auto` (`none` = 0), the `safe`/`safe-top`/`safe-right`/`safe-bottom`/`safe-left` notch insets, or a CSS length): `p px py pt pr pb pl`, `m mx my mt mr mb ml`, `gap`. `px`/`mx` are logical (`padding-inline`) and `ps pe ms me` set the inline start/end sides, so RTL apps mirror automatically.\n  - Sizing (`full|half|screen|dvh|min|max|fit|auto` or length): `w h minW maxW minH maxH`.\n  - Color (token `surface|surface-muted|bg|bg-subtle|text|text-muted|muted|primary|primary-hover|primary-text|accent|success|warning|danger|border|border-subtle`, a gradient ref `gradient.brand|accent|warm|cool|success|danger`, or a raw color): `bg color borderColor`.\n  - Surface: `border: none|subtle|strong|<color>`, `radius: xs|sm|md|lg|pill|full`, `shadow: sm|md|lg|none`, `opacity`, `backdrop: "blur"`, `bgImage` (http(s)/relative/data:image only) + `bgOverlay` (color or `gradient.*` wash over the image), `bgSize: cover|contain`.\n  - Typography: `fontSize: xs|sm|base|lg|xl|2xl|3xl|4xl` (or a length), `weight: 100…900|bold|normal`, `textDecoration: underline|line-through|none`, `textAlign`.\n  - Flex/grid: `display direction align justify wrap grow shrink basis columns`.\n  - Position: `position top right bottom left inset zIndex(base|dropdown|sticky|modal|toast|…)`, `overflow cursor`. Layer tokens resolve through `--rui-z-*` so `$theme({ zIndex: {...} })` rebrands them.\n  - Interaction: `hover: { lift|grow|glow|bright|border|scale }`, `focus: { glow|border }` (mapped to bounded utility classes). For arbitrary state CSS use `states: { hover|focus|active|disabled|focus-visible|checked|group-hover: { bg, color, borderColor, shadow, radius, opacity, scale, translateX, translateY, rotate, cursor } }` — compiled to scoped `:state` rules in the adopted stylesheet. Example: `sx: { states: { hover: { scale: 1.04, shadow: "lg" }, focus: { borderColor: "primary" } } }` (I.4).\n  - Responsive: any value may be `{ base, sm, md, lg, xl }` (resolves to `base`).\n- **`animate: "fade-up"`** (or `{ preset, delay?, duration?, repeat? }`) — entrance/loop motion. Presets: `fade fade-up/down/left/right zoom slide-up/down/left/right pulse float shimmer bounce spin ping wiggle`. Auto-respects `prefers-reduced-motion`.\n- **`id` / `anchor`** — set the element id (smooth-scroll targets).\n- **`className` / `class` / `style`** — extra classes (either spelling) / a sanitised inline style string.\n- **`aria: {…}` / `data: {…}` / `dataAttrs: {…}` / `role` / `tooltip` / `hidden`** — accessibility & metadata passthrough. `role` overrides the component\'s own ARIA role. Use `dataAttrs` instead of `data` on the components that declare a `data` prop of their own (`LineChart`, `JsonTree`, `Async`, `Draggable`, `Lottie`, `QRCode`) — there, `data:` is the component\'s prop and the universal channel is otherwise unreachable.\n- **`testId: "users-table"`** (alias `testid`) — renders `data-testid` on the component\'s ROOT element, for end-to-end tests. Works on every component, the six `data`-shadowing ones included. Prefer role/label queries; add a `testId` only where they are genuinely ambiguous.\n\n```\nCard([Text("Lift on hover")], { sx: { p: "lg", radius: "lg", bg: "surface", shadow: "md", hover: { lift: true } } })\nBadge("Live", { tone: "success", animate: "pulse" })\nDisplay(["Build in ", GradientText("record time")], { size: "hero", align: "center", animate: "fade-up" })\n```';
 }
-function AR() {
+function $R() {
   return '## `$util` — runtime helper namespace\n\nPure helpers (no side effects), available in every expression, action, effect, and lambda. Reach for `$util` when plain JS would be verbose (formatting, dates, grouping); use plain JS when it\'s just as clear (`arr.length`, `arr.slice(0, 5)`).\n\n- **Collections**: `$util.sort(arr, field, dir?)`, `$util.groupBy(arr, field)`, `$util.unique(arr, field?)`, `$util.sum / .avg / .min / .max / .count`, `.first / .last`, `.filter(arr, field, op, value)`, `.find`, `.partition(arr, field, op, value)`, `.keyBy(arr, field)`, `.chunk(arr, size)`, `.flatten(arr, depth?)`, `.zip(...arrays)`, `.range(start, end, step?)`.\n- **Objects**: `$util.pick(obj, keys)`, `.omit(obj, keys)`, `.merge(target, ...sources)` (deep), `.cloneDeep(value)`.\n- **Strings**: `$util.capitalize / .titlecase / .uppercase / .lowercase`, `.plural(n, singular, plural)`, `.trim / .replace / .split / .match`.\n- **Formatting**: `$util.format(value, mode, opts?)` (number, currency, percent, compact) and `$util.formatDate(value, mode)` (`"short" | "long" | "time" | "relative"` or a token string).\n- **Dates / math**: `.now / .today / .addDays / .diffDays / .startOfWeek`; `.round / .floor / .ceil / .abs / .clamp(v, min, max) / .random`.\n- **Formatting / misc**: `.slugify / .truncate(text, len) / .initials / .currency(v, code?) / .percent(v) / .bytes(v) / .relativeTime(date) / .copy(text)` (async — resolves `true` once the clipboard write succeeds) `/ .sleep(ms) / .uuid() / .debounceFn(fn, ms) / .throttleFn(fn, ms)` (leading + trailing edge).\n- **Device / platform**: `.vibrate(pattern) / .share({ title, text, url }) / .readClipboard() / .geolocate() / .isOnline() / .deviceType()` (XII.3); `.worker(pureFn, ...args)` runs a closure-free function off the main thread, resolving its result (XI.5); `.registerServiceWorker(url) / .webManifest({ name, icons, … })` for PWA setup (XII.2).\n- **Opening a URL**: `.openUrl(url, { target?, features?, noopener? })` opens a new tab/window from an ACTION (`Link(…, {external: true})` is still the answer when the destination is known at render time). Only `http/https/mailto/tel` are opened. For a URL you have to FETCH first — SSO, a signed download — a call in the response callback is popup-blocked; use `.openWindow({ name?, features? })` inside the click instead, keep the `{ ok, navigate(url), close(), closed }` handle, and `navigate` it when the response lands (`ok: false` means the popup was blocked — put the URL on screen as a link instead).\n- **Files**: `.readFile(fileOrPick, { as?, maxSize? })` resolves the contents of a file the user picked with `FileUpload` — pass the whole pick (a `FileList`/array) or one `File`; `as` is `"text"` (default), `"dataUrl"` or `"base64"`. It NEVER rejects: every failure resolves `""`, so branch on an empty result rather than writing a `.catch`. This is the only vetted way to read a picked file — `FileReader` is not a permitted host global under the `"safe"` policy.\n- **Reactive env getters**: `$util.scroll`, `$util.viewport`, `$util.breakpoint`, `$util.media`, `$util.mouse`, `$util.url` (listeners attach lazily on first read, re-render on change).\n\n```\nsorted  = $util.sort($users.filter(u => u.team === $team), "joinedAt", "desc")\nsummary = `${rows.length} ${$util.plural(rows.length, "order", "orders")} · ${$util.format($util.sum(rows.amount), "currency")}`\n```\n\n## `$util.style`, `$util.rules` and `$util.derived` — styling, validation & computed helpers\n\n- **`$util.style`** — bounded, sanitised CSS helpers (return safe strings for the `sx.style` / inline use): `$util.style.cx("a", { active: cond })` (classnames), `$util.style.gradient(["#6366f1", "#ec4899"], 120)`, `$util.style.alpha("primary", 0.12)` (color-mix), `$util.style.clamp("16px", "2vw", "24px")`, `$util.style.token("spacing.l")` → `var(--rui-spacing-l)`, `$util.style.toStyle({ padding: "8px" })`.\n- **`$util.rules`** — composable validators that return `(value) => message | null`: `$util.rules.required() / .email() / .url() / .min(n) / .max(n) / .minLength(n) / .maxLength(n) / .pattern(re) / .oneOf([...]) / .matches(other) / .custom(fn) / .asyncCustom(fn)` (`fn` may return a Promise — server-side checks like username uniqueness; `$form` awaits it before submitting). Run them with `$util.rules.validate(value, [..])` (first error or null; a Promise when an async rule is hit) or `$util.rules.validateAll(values, schema)` (→ `{ field: message }`).\n- **`$util.derived(fn)`** — a computed value: `total = $util.derived(() => $util.sum($cart.map(i => i.price)))` recomputes reactively from the atoms `fn` reads.\n\n```\n$email = ""\nerror = $util.rules.validate($email, [$util.rules.required(), $util.rules.email()])\nInput("email", { value: $email, error: error })\n```\n\n### `$form({...})` — the form engine (managed forms)\nFor anything beyond one or two fields, reach for `$form` instead of wiring atoms by hand. `$form({ values: {...initial}, rules: { field: [validators] }, onSubmit: (values) => {...} })` returns a managed bag:\n- `form.values.x` — two-way binds straight onto an input (`Input("email", { value: form.values.email })`).\n- `form.errors.x` / `form.touched.x` / `form.dirty` / `form.valid` / `form.submitting` / `form.validating` — reactive reads (`dirty` flips on the first edit and clears on `reset()`; `validating` is true while async rules are in flight).\n- `form.field("email")` — returns `{ value, error, name, onChange, onBlur }` to spread for a controlled, validated field.\n- `form.validate()` (all) / `form.validateField(name)` / `form.touch(name)` / `form.setField(name, v)` / `form.setValues({...})` / `form.reset()`.\n- `form.submit()` (alias `form.handleSubmit()`) — marks fields touched, validates (awaiting async rules), then calls `onSubmit(values)` only when valid. `form.submitting` stays true until an async `onSubmit` settles.\n\n```\nform = $form({\n  values: { email: "", age: "" },\n  rules: { email: [$util.rules.required(), $util.rules.email()], age: [$util.rules.min(18)] },\n  onSubmit: (v) => { $saved = $mutation({ url: "/signup", body: v }); $saved.mutate() }\n})\n$app(Column([\n  Input("email", { value: form.values.email, error: form.errors.email, onBlur: () => form.touch("email") }),\n  Button("Submit", { onClick: () => form.handleSubmit(), disabled: form.submitting })\n]))\n```';
 }
-function $R() {
+function TR() {
   return '## Standard helper components\n\n| Component | Purpose |\n|---|---|\n| `Async(resource, { loading, error, empty, data })` | Branch on an `$http({...})` resource state. |\n| `Show(when, { fallback?, children })` | Sugar for `when ? children : fallback`. |\n| `Portal(children, { target? })` | Render outside the parent subtree. |\n| `Redirect(path)` | Navigate and unmount the rest of the subtree. |\n| `Lazy(loader, { fallback?, children })` | Defer rendering until the async `loader` resolves; show `fallback` while pending. |\n| `ErrorBoundary(children, { fallback?, onError? })` | Catch render errors thrown by descendants. |\n| `VirtualList(items, { itemHeight?, renderItem? })` | Virtualised 1-D list — preferred for >100 rows. |\n| `VirtualGrid(items, { columns?, itemHeight?, gap?, height? })` | Virtualised 2-D grid — only visible rows mount; essential for tables/grids >100 rows. |\n| `VisuallyHidden(child)` | Hides content visually but keeps it in the accessibility tree (extra context for screen readers). |\n| `SkipLink({ to, label })` | "Skip to main content" link that appears on focus — the first tab stop for keyboard users. |\n| `LiveRegion(text, { politeness?, visible? })` | `aria-live` region (`politeness: "polite"` default or `"assertive"`). Announces dynamic changes to screen readers. Takes a plain STRING, not a node. |\n| `FocusTrap(child, { active })` | Cycles Tab within its subtree and autofocuses the first control — required for accessible dialogs. |\n| `Fragment(children)` | Groups siblings without a layout box (`display:contents`) so a component can return several nodes into a parent Grid/Stack. |\n| `Transition(child, { show, preset, duration? })` | Enter/exit transition — keeps child mounted through exit animation; reduced-motion safe. |\n| `FlipList(children, { duration? })` | FLIP reorder animation — keyed children physically move to their new positions. |';
 }
-function TR(t) {
+function IR(t) {
   const e = t.componentGroups ?? [{ name: "Components", components: t.components.map((n) => n.name) }], r = new Map(t.components.map((n) => [n.name, n])), i = [];
   i.push("## Component library"), i.push("Use ONLY these components. A PascalCase call that does not appear verbatim below renders NOTHING, silently — if you are unsure, pick the nearest listed name rather than inventing one."), i.push(""), i.push("Each signature lists props in declaration order; optional props end with `?`. The prop tagged `(positional)` is the canonical positional slot. Canonical call: pass it bare and put every other prop in a trailing `{ prop: value }` object. Also valid: all-positional in the listed order (the first positional fills the `(positional)` slot, the rest fill the remaining slots top-to-bottom), or a single `{ prop: value }` object naming every prop. `(positional, object payload)` means the positional prop is itself object-typed, so a lone object argument is that prop's value — not a named-props bag."), i.push("Props marked `[also: …]` accept those spellings as synonyms for the same slot (`tone`/`variant`/`status`, `children`/`child`, `onClick`/`action`); the signature shows the canonical name."), i.push("");
   for (const n of e) {
@@ -36881,16 +36882,16 @@ function TR(t) {
   return i.join(`
 `).trim();
 }
-function IR() {
+function zR() {
   return "## Inline mode\n\nYou may answer questions in plain text. When you do, wrap any UI you produce in a fenced ```aktion``` block. Otherwise output Aktion directly with no surrounding prose.";
 }
-function zR() {
+function MR() {
   return "## Edit mode\n\nWhen the user asks for an incremental change to a prior response, output ONLY the statements that need to change (additions, replacements, removals). Do NOT re-emit the whole UI. To remove a statement, write `name = null`.";
 }
-function MR() {
+function ER() {
   return '## Streaming & verification\n\n### Hoisting & streaming (CRITICAL)\nReferences resolve across the whole top-level scope, not source order — undefined refs render empty until they arrive, giving a smooth top-down reveal. Emit in this order: (1) `$app(...)` first; (2) `function` declarations and `$effect(...)`; (3) leaf data (arrays, objects, strings) last. Give each `Col` / `TabItem` / `Series` its own named binding so it streams independently. Never split a statement across lines unless it sits inside an unmatched `[`, `(`, or `{`.\n\n### Before finishing, check\n1. `$app(...)` is first; every name it reaches is defined below, and every defined name is reachable from it.\n2. Every component reference is invoked with `()` — scan the root, array elements, and prop values for bare identifiers (callback props like `render: UserCard` are the one exception).\n3. State uses `$name = ...`; writes happen only in handlers/effects, never in render position.\n4. `$http({...})` uses an absolute URL and exposes `.data` / `.error` / `.loading` / `.refetch()`; `$router({...})` arms use `:` and `default`; effects are `$effect(() => {...}, [deps])`.\n5. Build a complete surface — `PageHeader`, multi-section layout, wired buttons, 5–20 rows of realistic seed data — not a lone Card. Lay out with `Column` / `Row` / `Grid`; use responsive maps (`{ base: 1, md: 2 }`) where they help.\n6. Tables are column-oriented (`Table([Col("Label", arr)])`, cells may be components via `rows.map(r => Badge(r.status))`); charts take numeric arrays (`PieChart(rows.label, rows.value)`); icons are Font Awesome names; the five runtime namespaces carry the `$` sigil (`$util`, `$storage`, `$console`, `$toast`, `$dom`); `route` is reserved.';
 }
-function ER() {
+function NR() {
   return [
     `// Tasks dashboard — $http, Async, an action, multi-section layout
 $tasks = $http({ url: "https://api.example.com/tasks" })
@@ -37070,7 +37071,7 @@ $app(Column([
 ], { gap: "lg" }))`
   ];
 }
-const NR = /* @__PURE__ */ new Set([
+const LR = /* @__PURE__ */ new Set([
   // Structure — the containers a reply is built from.
   "Column",
   "Row",
@@ -37131,29 +37132,29 @@ const NR = /* @__PURE__ */ new Set([
   "EmptyState",
   "ErrorState"
 ]);
-function LR(t, e) {
-  return NR.has(e);
+function RR(t, e) {
+  return LR.has(e);
 }
-function RR(t) {
+function PR(t) {
   return `${t?.trim() || "You respond in Aktion — a declarative language that is a strict subset of JavaScript. The host renders your reply as a rich, read-only UI. Output ONLY Aktion: no markdown, prose, or JSON."}
 
 Register the UI root with \`$app(...)\` on the first line (typically \`$app(Column([...]))\`). Answer the question exactly as you otherwise would — same substance, same length, same care — but emit that answer as components instead of Markdown prose.
 
 This is read-only display mode. Do NOT emit state writes, actions, effects, HTTP, routing, form controls, or clickable buttons. The single exception is \`FollowUpBlock\`, which the host renders as suggested follow-up prompts.`;
 }
-function PR() {
+function DR() {
   return '## Markdown → Aktion\n\nCompose the answer you would have written, then emit each piece as its component. Never put Markdown syntax inside a string — `Text("## Results")` renders the literal hashes.\n\n| You would have written | Emit instead |\n| --- | --- |\n| `# Title` / `## Section` | `Heading("Title", { level: 2 })`, or `SectionBlock("Section", { children: [...] })` for a titled block with body |\n| A paragraph | `Text("…")` for a sentence or two; `Markdown("…")` when the prose itself carries **bold**, inline code, links, or nested lists |\n| `- bullet` / `1. step` | `ListBlock(["…", "…"])` (`ordered: true` for numbers); `List([ListItem(…)])` when each row needs an icon, badge, or description |\n| A numbered procedure | `Steps([{ title, details }])` — clearer than a numbered list for anything the reader follows in order |\n| `> quote` | `Quote("…", { cite: "…" })` |\n| A fenced code block | `CodeBlock(source, { language: "ts", filename: "…" })`; `Terminal(lines)` for shell sessions, `DiffViewer(before, after)` for before/after |\n| A Markdown table | `Table([Col("Header", values)])` — column-oriented; `ComparisonTable` for a feature-by-option matrix |\n| **Note:** / **Warning:** | `Callout("Heads up", { tone: "warning", description: "…" })` — the positional slot is the TITLE, not the body |\n| `key: value` lines | `DescriptionList([DescriptionItem("Key", "Value")])` |\n| A bolded figure inside a sentence | `StatCard` / `Stats` — lift the number out of the prose |\n| `---` | `Separator()` |\n| `![alt](url)` | `Image(url, { alt: "…" })` |\n| Describing a trend, split, or ranking in words | A chart — `LineChart` over time, `BarChart` to rank, `PieChart` for a breakdown |\n| Recounting dates or a history in words | `Timeline([TimelineItem(…)])` |\n| "I couldn\'t find anything" | `EmptyState` |\n| "That failed because…" | `ErrorState` |\n\nGroup related pieces in a `Card` with a `CardHeader`. Put long supporting detail behind `Accordion` and parallel alternatives behind `Tabs`, so a long answer stays scannable instead of becoming a wall.';
 }
-function DR() {
+function OR() {
   return '## Syntax (read-only subset)\n\nA program is a flat list of `name = expression` statements in standard JavaScript. `$app(...)` registers the entry point (always first); every other binding hoists, so order is free — emit `$app(...)`, then containers, then leaf data last for a smooth streaming reveal.\n\n- Strings, numbers, booleans, `null`, arrays, objects; template literals `Found ${rows.length}` over `+` concatenation.\n- Operators `+ - * / %`, comparisons, `&& || !`, ternary `cond ? a : b`, nullish `a ?? b`, spread, member `obj.field`, optional chaining `obj?.field`.\n\n### Component calls\n- **Case doesn\'t matter** — `Card` and `card` are equivalent.\n- **Always invoke with parentheses** — `Column([Header(), Body()])`, never `Column([Header, Body])`; write `Separator()` even with no args.\n- **Canonical call: the prop tagged `(positional)` goes bare, everything else in a trailing object** — `Callout("Heads up", { tone: "info", icon: "circle-info" })`, `Badge("Live", { tone: "success" })`. The tagged prop is not always the first one listed: `Callout`\'s is `title`, `CodeBlock`\'s is `codeString`. All-positional (signature order) and all-named (single `{ }` object) calls also work.\n\n### Build UI from data — JS is fully supported\n`.map` / `.filter` arrays into nodes (`rows.map(r => ListItem(r.title))`), ternaries for branching, and the array-pluck shortcut `rows.title` → `[each row.title]` to feed columns (`Col("Title", rows.title)`) and chart series (`PieChart(rows.label, rows.value)`). `if` / `for` are statements — not usable on the right of `=`.\n\n```\n$app(Column([title, table, follow]))\ntitle  = Text("Q4 results", { variant: "large-heavy" })\ntable  = Table([Col("Region", rows.region), Col("Revenue", rows.revenue, { format: "currency" })])\nfollow = FollowUpBlock(["Break down by region", "Compare to Q3"])\nrows   = [{ region: "NA", revenue: 184000 }, { region: "EU", revenue: 122000 }]\n```';
 }
-function OR(t) {
+function BR(t) {
   const e = t.componentGroups ?? [{ name: "Components", components: t.components.map((a) => a.name) }], r = new Map(t.components.map((a) => [a.name, a])), i = [
     "## Component library (read-only)",
     "This is the complete vocabulary for a chat reply — a name that does not appear here does not exist in this mode and renders nothing at all. Each signature lists props in declaration order; optional props end with `?`. Pass the positional prop bare, then all other props in a trailing `{ prop: value }` object."
   ];
   for (const a of e) {
-    const o = a.components.filter((n) => LR(a.name, n));
+    const o = a.components.filter((n) => RR(a.name, n));
     if (o.length !== 0) {
       i.push(`
 ### ${a.name}`);
@@ -37166,13 +37167,13 @@ function OR(t) {
   return i.join(`
 `);
 }
-function BR() {
+function FR() {
   return '## `$util` — runtime helper namespace\n\nPure helpers — no side effects. Use `$util` anywhere in expressions for data shaping, formatting, math, and strings. Prefer plain JavaScript where it is just as clear (`arr.length`, `arr.slice(0, 5)`, `s.toUpperCase()`).\n\n### Most useful helpers\n- Collections: `$util.sum / .avg / .min / .max / .sort(arr, field, dir?) / .groupBy(arr, field) / .unique(arr, field?) / .chunk / .partition / .keyBy`.\n- Objects: `$util.pick / .omit / .merge / .cloneDeep`.\n- Strings: `$util.capitalize / .titlecase / .plural(n, singular, plural)`.\n- Formatting: `$util.format(value, mode, opts?)` (numbers, currency, percent, compact) and `$util.formatDate(value, mode)` (`"short"` | `"long"` | `"time"` | `"relative"`).\n\nIcons are Font Awesome names — `"house"`, `"chart-line"`, `"regular:star"`, `"brands:github"`. Never use `fa-` prefixes or emoji characters.';
 }
-function FR() {
+function jR() {
   return "## Hoisting & streaming (CRITICAL)\n\nReferences resolve from the whole scope, not source order — undefined refs render empty until they arrive, producing a smooth top-down reveal. Order: (1) `$app(...)` first; (2) container statements; (3) leaf data (arrays, objects, strings) last. Give each `Col` / `TabItem` / `Series` / `FollowUpItem` its own binding so it streams independently. Never split a statement across lines unless it sits inside an unmatched `[`, `(`, or `{`.";
 }
-function jR(t) {
+function _R(t) {
   const e = [
     "## Available data sources (context only)",
     "These endpoints are available to the host. You cannot call them from read-only mode, but you may incorporate the data they describe when composing the UI:"
@@ -37182,7 +37183,7 @@ function jR(t) {
   return e.join(`
 `);
 }
-function _R() {
+function qR() {
   return [
     `// Comparison table with a template-literal summary and follow-ups
 $app(Column([title, tbl, totals, follow]))
@@ -37220,20 +37221,20 @@ answer = Text("Mount Everest is 8,849 m (29,032 ft) above sea level — remeasur
 follow = FollowUpBlock(["How does that compare to K2?", "How long does the climb take?"])`
   ];
 }
-function qR() {
+function UR() {
   return "## Important rules\n\n- **The answer comes first, the layout second.** Say everything you would have said. A prettier reply that dropped half the explanation is a worse reply.\n- **Match the component to the content** — see the Markdown → Aktion table above. `Table` for comparisons, a chart for trends, `Callout` for warnings and asides, `Markdown` for real paragraphs, `Text` for short labels, `Heading`/`SectionBlock` for titles, `Stats` for KPI strips.\n- **Scale the structure to the question.** A one-line factual answer is `Text` plus `FollowUpBlock` — do not wrap it in a Card, a header and three sections. Reach for `Card`/`SectionBlock` only once the reply has genuinely separate parts.\n- **Never invent data to fill a component.** Only chart or tabulate numbers you actually have; if the answer is prose, `Markdown` is the right answer.\n- **Template literals** for any string mixing copy with values.\n- **End conversational replies with `FollowUpBlock([...])`** — 2–4 short next-prompt suggestions.\n- **Compose freely** — vary the structure and component mix to fit each request rather than reaching for the same template every time.";
 }
-function UR() {
+function HR() {
   return '## Final verification\n\n1. `$app(...)` is first; every referenced name is defined below and reachable from the root.\n2. Every component is invoked with `()` — `Separator()`, never bare `Separator`. Every name appears verbatim in the catalogue above; an unlisted name renders NOTHING, silently.\n3. Only the read-only display components above — no forms, clickable buttons, state writes, actions, effects, HTTP, or routing.\n4. Tables are column-oriented (`Table([Col("Label", arr)])`, cells may be components via `rows.map(r => Badge(r.status))`); charts take numeric arrays (array-pluck `rows.value`).\n5. Prefer one positional arg per call with everything else in a trailing `{ }` object; no statement split across lines outside an unmatched bracket.';
 }
 function fn(t) {
   const e = _m(t), r = t.props.map((i) => {
-    const a = i.enum ? i.enum.map((l) => `"${l}"`).join("|") : i.type, o = i === e ? ba(i) ? " (positional, object payload)" : " (positional)" : "", n = i.aliases?.length ? ` [also: ${i.aliases.join(", ")}]` : "", s = i.description && HR.has(i.type) ? ` (${i.description})` : "";
+    const a = i.enum ? i.enum.map((l) => `"${l}"`).join("|") : i.type, o = i === e ? ba(i) ? " (positional, object payload)" : " (positional)" : "", n = i.aliases?.length ? ` [also: ${i.aliases.join(", ")}]` : "", s = i.description && WR.has(i.type) ? ` (${i.description})` : "";
     return `${i.name}${i.optional ? "?" : ""}: ${a}${o}${n}${s}`;
   }).join(", ");
   return `- ${t.name}(${r}) — ${t.description}`;
 }
-const HR = /* @__PURE__ */ new Set([
+const WR = /* @__PURE__ */ new Set([
   "object",
   "object[]",
   "any",
@@ -37252,7 +37253,7 @@ function Hb(t) {
   return e.join(`
 `);
 }
-function WR(t) {
+function GR(t) {
   const e = [
     "## Available endpoints",
     "These endpoints are provided by the host. Fire requests with `$http({ url, method, body, headers, ... })` and observe the reactive bag (`.data`, `.error`, `.loading`, `.status`, `.refetch()`)."
@@ -37265,7 +37266,7 @@ ${a}`);
   return e.join(`
 `);
 }
-const GR = [
+const VR = [
   ["none", "0"],
   ["3xs", "var(--rui-spacing-3xs)"],
   ["2xs", "var(--rui-spacing-2xs)"],
@@ -37281,10 +37282,10 @@ const GR = [
   ["l", "var(--rui-spacing-l)"]
 ];
 function kt(t, e, r) {
-  return GR.map(([i, a]) => `${t}[${e}="${i}"] { ${r(a)} }`).join(`
+  return VR.map(([i, a]) => `${t}[${e}="${i}"] { ${r(a)} }`).join(`
 `);
 }
-const VR = [
+const KR = [
   ".rui-tag",
   ".rui-badge",
   ".rui-status-dot",
@@ -37297,7 +37298,7 @@ function la(t) {
   return [
     `${e}[data-uniform="true"] > *:not(.rui-stack-item) { flex: 1 1 auto; min-width: 0; }`,
     `${e} > * { min-width: 0; }`,
-    `${VR.map((r) => `${e} > ${r}`).join(`,
+    `${KR.map((r) => `${e} > ${r}`).join(`,
 `)} { flex: 0 0 auto; }`
   ].join(`
 `);
@@ -37319,12 +37320,12 @@ function Ke(t) {
   return `@media ${Ul(t)}`;
 }
 const jo = ["sm", "md", "lg", "xl"].map((t) => [t, `${Jc[t]}px`]);
-function KR(t, e, r) {
+function YR(t, e, r) {
   return jo.slice(0, e).reduce((i, [a]) => `var(${t}-${a}, ${i})`, `var(${t}-base, ${r})`);
 }
 function ca(t) {
   return [["row", "row-gap"], ["column", "column-gap"]].map(([e, r]) => {
-    const i = KR(`--rui-grid-${e}-gap`, t, "var(--rui-spacing-m)");
+    const i = YR(`--rui-grid-${e}-gap`, t, "var(--rui-spacing-m)");
     return `.rui-grid[data-responsive-${e}-gap] { ${r}: ${i}; }`;
   }).join(`
 `);
@@ -37347,7 +37348,7 @@ function Ns(t, e, r, i) {
   return o.join(`
 `);
 }
-const YR = [
+const XR = [
   ".rui-hero",
   ".rui-timeline-item",
   ".rui-feature-item",
@@ -37356,21 +37357,21 @@ const YR = [
   ".rui-kanban-column",
   ".rui-tile",
   ".rui-notification"
-], XR = [
+], ZR = [
   ["primary", "var(--rui-color-primary)", "18%", "28%"],
   ["success", "var(--rui-color-success)", "18%", "28%"],
   ["warning", "var(--rui-color-warning)", "22%", "32%"],
   ["danger", "var(--rui-color-danger)", "18%", "32%"],
   ["info", "var(--rui-color-info)", "18%", "30%"]
 ];
-function ZR() {
-  const t = (r) => YR.map((i) => `${i}${r}`).join(`,
+function QR() {
+  const t = (r) => XR.map((i) => `${i}${r}`).join(`,
 `), e = [`${t("[data-tone]")} {
   --rui-tone-color: var(--rui-color-border);
   --rui-tone-surface-mix: 0%;
   --rui-tone-border-mix: 0%;
 }`];
-  for (const [r, i, a, o] of XR)
+  for (const [r, i, a, o] of ZR)
     e.push(`${t(`[data-tone="${r}"]`)} {
   --rui-tone-color: ${i};
   --rui-tone-surface-mix: ${a};
@@ -40165,7 +40166,7 @@ ${st("xl")} {
    so the enum and the stylesheet can no longer disagree about which tones exist.
    Both the reset and the per-tone blocks are keyed on the same [data-tone]
    attribute the specs already emit, so nothing has to change in the renders. */
-${ZR()}
+${QR()}
 
 /* Hero */
 .rui-hero {
@@ -53086,28 +53087,28 @@ ${Ke("sm")} {
   .rui-parallax { transform: none !important; }
 }
 `;
-function QR(t) {
+function JR(t) {
   const e = t.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
   return new RegExp(`^${e}$`);
 }
-function JR(t, e, r) {
+function eP(t, e, r) {
   if (!t.enabled || t.method && t.method.toUpperCase() !== e.toUpperCase()) return !1;
   const i = t.pattern.trim();
   if (i === "" || i === "*") return !0;
   if (i.includes("*"))
     try {
-      return QR(i).test(r);
+      return JR(i).test(r);
     } catch {
       return !1;
     }
   return r.includes(i);
 }
-function eP(t, e, r) {
+function tP(t, e, r) {
   for (const i of t)
-    if (JR(i, e, r)) return i;
+    if (eP(i, e, r)) return i;
   return null;
 }
-function tP(t) {
+function rP(t) {
   const e = t.label || t.pattern || t.action;
   switch (t.action) {
     case "delay":
@@ -53135,23 +53136,23 @@ function tP(t) {
       return { rule: e };
   }
 }
-const rP = /* @__PURE__ */ new Set(["/", ">", "#"]);
+const iP = /* @__PURE__ */ new Set(["/", ">", "#"]);
 function Na(t, e) {
   for (let r = t.length - 1; r > 0; r -= 1) {
-    if (!rP.has(t[r])) continue;
+    if (!iP.has(t[r])) continue;
     const i = t.slice(0, r);
     if (i !== t && e.has(i)) return i;
   }
   return null;
 }
-function iP(t, e) {
+function aP(t, e) {
   const r = [];
   let i = Na(t, e), a = 0;
   for (; i !== null && a++ < 200; )
     r.push(i), i = Na(i, e);
   return r.reverse();
 }
-function aP(t) {
+function oP(t) {
   const e = /* @__PURE__ */ new Map(), r = /* @__PURE__ */ new Map();
   for (const s of t)
     e.set(s.instanceKey, s), r.set(s.instanceKey, (r.get(s.instanceKey) ?? 0) + 1);
@@ -53175,9 +53176,9 @@ function aP(t) {
       propCount: l.props?.length ?? 0,
       renders: r.get(s) ?? 1
     });
-  return oP(n);
+  return nP(n);
 }
-function oP(t) {
+function nP(t) {
   const e = /* @__PURE__ */ new Map();
   for (const a of t) {
     const o = e.get(a.parentKey);
@@ -53194,7 +53195,7 @@ function oP(t) {
   }
   return r;
 }
-function nP(t) {
+function sP(t) {
   return t ? t.map((e, r) => {
     const i = e.kind === "ref" ? e.box.current : e.value, a = ar(i);
     return {
@@ -53209,25 +53210,25 @@ function nP(t) {
     };
   }) : [];
 }
-function sP(t) {
+function lP(t) {
   return t.map(({ key: e, value: r }) => {
     const i = ar(r);
     return { key: e, value: i, editable: i.json !== void 0 };
   });
 }
-const lP = ["__store_", "__form_", "__query_", "__effect_"];
-function cP(t) {
-  return t === "route" ? !0 : lP.some((e) => t.startsWith(e));
-}
+const cP = ["__store_", "__form_", "__query_", "__effect_"];
 function uP(t) {
+  return t === "route" ? !0 : cP.some((e) => t.startsWith(e));
+}
+function dP(t) {
   const e = /^__a(\d+)_(.+)$/.exec(t);
   return e ? { authored: e[2], moduleIndex: Number(e[1]) } : null;
 }
-function dP(t, e, r) {
+function pP(t, e, r) {
   return t.map((i) => {
-    const a = uP(i), o = {
+    const a = dP(i), o = {
       name: i,
-      reserved: cP(i),
+      reserved: uP(i),
       computed: e.has(i)
     };
     if (a) {
@@ -53238,7 +53239,7 @@ function dP(t, e, r) {
     return o;
   }).sort((i, a) => i.name.localeCompare(a.name));
 }
-function pP(t) {
+function hP(t) {
   const e = [];
   for (const [r, i] of t) {
     const a = {
@@ -53251,7 +53252,7 @@ function pP(t) {
   }
   return e;
 }
-function hP(t, e) {
+function mP(t, e) {
   const r = [];
   for (const [i, a] of t) {
     const o = a.__atom, n = o.startsWith("__form_") ? "form" : "store", s = /^(\d+):(\d+)$/.exec(i);
@@ -53265,7 +53266,7 @@ function hP(t, e) {
   }
   return r.sort((i, a) => i.atom.localeCompare(a.atom));
 }
-function mP(t) {
+function fP(t) {
   const e = /* @__PURE__ */ new Set(), r = (i, a) => {
     const o = i;
     if (!(o?.kind !== "Object" || !Array.isArray(o.properties)))
@@ -53297,7 +53298,7 @@ function nm(t) {
     e.push({ line: 0, column: 0, message: r, kind: "src", severity: "error" });
   return e;
 }
-function fP(t) {
+function gP(t) {
   const e = [];
   for (const r of t) {
     const i = r.loc, a = i?.line ?? 0, o = i?.column ?? 0;
@@ -53330,8 +53331,8 @@ function fP(t) {
   }
   return e;
 }
-const Co = "theme", ua = "streaming", Ls = "response", Ai = "showerrors", xi = "src", gP = "scroll-restoration", Rs = "dir", Ps = "margin", sm = "route";
-function bP(t) {
+const Co = "theme", ua = "streaming", Ls = "response", Ai = "showerrors", xi = "src", bP = "scroll-restoration", Rs = "dir", Ps = "margin", sm = "route";
+function vP(t) {
   const e = t.getPath(), r = { ...t.getParams() }, i = t.getActivePattern(), a = {};
   if (typeof window < "u" && window.location) {
     const o = window.location.search || "";
@@ -53353,7 +53354,7 @@ function bP(t) {
     }
   };
 }
-function vP(t, e) {
+function yP(t, e) {
   if (!t || !e || typeof t != "object" || typeof e != "object") return !1;
   const r = t, i = e;
   return r.path !== i.path || r.pattern !== i.pattern ? !1 : lm(r.params ?? {}, i.params ?? {}) && lm(r.query ?? {}, i.query ?? {});
@@ -53365,8 +53366,8 @@ function lm(t, e) {
     if (t[a] !== e[a]) return !1;
   return !0;
 }
-let Ds = null, Ao = null, yP = 0, Os = !1;
-const wP = [
+let Ds = null, Ao = null, wP = 0, Os = !1;
+const xP = [
   ".rui-modal-overlay",
   ".rui-sheet-overlay",
   ".rui-lightbox-overlay",
@@ -53385,7 +53386,7 @@ function Bs(t) {
   const e = t.tagName.toLowerCase(), r = t.id ? `#${t.id}` : "", i = t.classList.length > 0 ? `.${t.classList[0]}` : "";
   return `${e}${i}${r}`;
 }
-function xP(t) {
+function kP(t) {
   const e = (a) => (t.getPropertyValue(a) || "").trim().toLowerCase();
   for (const a of ["transform", "filter", "backdrop-filter", "-webkit-backdrop-filter", "perspective"]) {
     const o = e(a);
@@ -53396,7 +53397,7 @@ function xP(t) {
   const i = e("will-change");
   return /\b(?:transform|perspective|filter|backdrop-filter|contain)\b/.test(i) ? `will-change: ${i}` : null;
 }
-function kP() {
+function SP() {
   if (Ao === !1) return null;
   if (Ds) return Ds;
   try {
@@ -53517,7 +53518,7 @@ class _o extends HTMLElement {
      */
     Q(this, "containingBlockTrap", null);
     /** Stable DevTools id for this element (`aktion-app-N`). */
-    Q(this, "devtoolsId", `aktion-app-${yP += 1}`);
+    Q(this, "devtoolsId", `aktion-app-${wP += 1}`);
     /** Monotonic commit sequence for the render profiler (0 = initial mount). */
     Q(this, "devtoolsCommitId", 0);
     /** True once this element has been registered with the DevTools hook. */
@@ -53551,7 +53552,7 @@ class _o extends HTMLElement {
     /** Whether the "state write during render" warning has already fired. */
     Q(this, "warnedStateWriteDuringRender", !1);
     this.root = this.attachShadow({ mode: "open" }), this.errorEl = document.createElement("div"), this.errorEl.className = "rui-error-banner", this.errorEl.hidden = !0, this.rootEl = document.createElement("div"), this.rootEl.className = "rui-root";
-    const r = kP();
+    const r = SP();
     if (r)
       try {
         const a = Xl(), o = a ? [r, a] : [r];
@@ -53568,7 +53569,7 @@ class _o extends HTMLElement {
         composed: !0
       }));
     };
-    this.effectRunner = new tR({
+    this.effectRunner = new rR({
       state: this.state,
       notify: () => this.requestFullRender(),
       onEmit: (a, o) => this.emitCustomEvent(a, o),
@@ -53676,7 +53677,7 @@ class _o extends HTMLElement {
     for (let a = 0; i && a < 64; a += 1, i = i.parentElement) {
       let o = null;
       try {
-        o = xP(r.getComputedStyle(i));
+        o = kP(r.getComputedStyle(i));
       } catch {
         return null;
       }
@@ -53692,7 +53693,7 @@ class _o extends HTMLElement {
       this.containingBlockTrap = null;
       return;
     }
-    const i = this.rootEl.querySelector(wP);
+    const i = this.rootEl.querySelector(xP);
     i && (Os = !0, this.containingBlockTrap = null, console.warn(
       `[aktion] <aktion-app> is inside ${r}. That element becomes the containing block for \`position: fixed\`, so <${Bs(i)}> (and any other Modal / Sheet / BottomSheet / Toasts / FAB) is positioned against it instead of the viewport — the overlay covers only the embed box. Move \`<aktion-app>\` out of that wrapper, or drop the property while an overlay is open. Anchored popups (menus, tooltips, selects) are unaffected: they use the browser top layer.`
     ));
@@ -53752,7 +53753,7 @@ class _o extends HTMLElement {
     }
   }
   disconnectedCallback() {
-    this.effectRunner.reset(), this.context && _h(this.context), this.morphGuard?.disconnect(), this.morphGuard = null, this.imperativeAttrWrites = null, this.router.stop(), this.devtoolsRegistered && (FL(this.devtoolsId), this.devtoolsRegistered = !1), this.devtoolsTapInstalled && (this.http.setDevtoolsTap(null), this.devtoolsTapInstalled = !1, this.devtoolsRequests.clear());
+    this.effectRunner.reset(), this.context && _h(this.context), this.morphGuard?.disconnect(), this.morphGuard = null, this.imperativeAttrWrites = null, this.router.stop(), this.devtoolsRegistered && (jL(this.devtoolsId), this.devtoolsRegistered = !1), this.devtoolsTapInstalled && (this.http.setDevtoolsTap(null), this.devtoolsTapInstalled = !1, this.devtoolsRequests.clear());
   }
   attributeChangedCallback(r, i, a) {
     if (r === Co && this.applyThemeFromAttribute(), r === Rs && this.applyDir(), r === Ps && this.applyMargin(), r === ua && (this.updateErrorBanner(), this.scheduleRender()), r === Ai && this.updateErrorBanner(), r === Ls) {
@@ -54167,7 +54168,7 @@ class _o extends HTMLElement {
       });
       return {
         diagnostics: n,
-        outline: fP(a.statements),
+        outline: gP(a.statements),
         ok: n.every((s) => s.severity !== "error")
       };
     } catch (a) {
@@ -54188,7 +54189,7 @@ class _o extends HTMLElement {
    * debugger becomes the thing it is measuring.
    */
   devtoolsTree() {
-    const r = aP(this.devtoolsComponents), i = /* @__PURE__ */ new Set();
+    const r = oP(this.devtoolsComponents), i = /* @__PURE__ */ new Set();
     try {
       for (const a of this.rootEl.querySelectorAll(`[${fa}], [${ti}]`)) {
         const o = a.getAttribute(fa);
@@ -54222,11 +54223,11 @@ class _o extends HTMLElement {
       source: i?.source,
       explicitKey: i?.explicitKey,
       props: i?.props ? [...i.props] : [],
-      hooks: nP(this.context.hookStore.get(r)),
-      uiState: sP(this.renderer.listInstanceUiState(r)),
+      hooks: sP(this.context.hookStore.get(r)),
+      uiState: lP(this.renderer.listInstanceUiState(r)),
       deps: i?.deps ? [...i.deps] : [],
       effects: s,
-      ancestors: iP(r, a),
+      ancestors: aP(r, a),
       mounted: o !== null
     };
     return o && (l.html = Pr(o.outerHTML ?? "", 4e3), l.domNodes = Fs(o)), n && n.size > 0 && (l.overrides = [...n].map(([c, u]) => ({ prop: c, value: ar(u) }))), l;
@@ -54250,7 +54251,7 @@ class _o extends HTMLElement {
   }
   /** The element an instance rendered, or `null` when it is not in the DOM. */
   devtoolsNodeForInstance(r) {
-    const i = SP(r), a = `[${fa}="${i}"], [${ti}="${i}"]`;
+    const i = CP(r), a = `[${fa}="${i}"], [${ti}="${i}"]`;
     try {
       return this.rootEl.querySelector(a);
     } catch {
@@ -54286,7 +54287,7 @@ class _o extends HTMLElement {
     const r = Object.keys(this.state.snapshot()), i = /* @__PURE__ */ new Set(), a = /* @__PURE__ */ new Map();
     for (const n of this.devtoolsProgram?.statements ?? [])
       n.kind !== "Assignment" || !n.isState || (n.loc && a.set(n.identifier, { line: n.loc.line, column: n.loc.column }), Ma(n.expression) || i.add(n.identifier));
-    const o = dP(r, i, this.devtoolsProgram?.sources);
+    const o = pP(r, i, this.devtoolsProgram?.sources);
     for (const n of o) {
       const s = a.get(n.name) ?? (n.authored ? a.get(n.authored) : void 0);
       s && (n.source = s);
@@ -54330,10 +54331,10 @@ class _o extends HTMLElement {
   }
   /* ---- DevTools: data layer -------------------------------------------- */
   devtoolsQueries() {
-    return pP(this.context.queryCache);
+    return hP(this.context.queryCache);
   }
   devtoolsStores() {
-    return hP(this.context.stores, (r) => this.state.get(r));
+    return mP(this.context.stores, (r) => this.state.get(r));
   }
   /** Invoke a method on a live `Store` / `$form` handle from the Data tab. */
   devtoolsCallStoreMethod(r, i, a) {
@@ -54359,7 +54360,7 @@ class _o extends HTMLElement {
       mode: this.router.getMode(),
       basePath: this.getAttribute("router-base") ?? void 0,
       guarded: this.router.hasGuard(),
-      declared: this.devtoolsProgram ? mP(this.devtoolsProgram) : []
+      declared: this.devtoolsProgram ? fP(this.devtoolsProgram) : []
     };
   }
   /* ---- DevTools: theme ------------------------------------------------- */
@@ -54454,15 +54455,15 @@ class _o extends HTMLElement {
           status: l?.status,
           responseHeaders: l ? { ...l.headers } : void 0,
           responseBody: Qh(l?.body),
-          responseSize: UL(l?.body),
+          responseSize: HL(l?.body),
           rule: a.rule,
           injectedDelay: a.injectedDelay
         });
       },
       gate: (i) => {
         if (this.devtoolsNetworkRules.length === 0) return;
-        const a = eP(this.devtoolsNetworkRules, i.method, i.url);
-        return a ? tP(a) : void 0;
+        const a = tP(this.devtoolsNetworkRules, i.method, i.url);
+        return a ? rP(a) : void 0;
       }
     };
     this.http.setDevtoolsTap(r), this.devtoolsTapInstalled = !0;
@@ -54555,8 +54556,8 @@ class _o extends HTMLElement {
    * `routesEqual` for the structural comparison.
    */
   writeRouteState() {
-    const r = bP(this.router);
-    vP(this.state.get(sm), r) || this.state.set(sm, r);
+    const r = vP(this.router);
+    yP(this.state.get(sm), r) || this.state.set(sm, r);
   }
   /**
    * React to any path change: write the new value into the route slot (so
@@ -54583,7 +54584,7 @@ class _o extends HTMLElement {
    */
   handleScrollRestoration(r) {
     if (typeof window > "u") return;
-    const i = (this.getAttribute(gP) || "").toLowerCase();
+    const i = (this.getAttribute(bP) || "").toLowerCase();
     if (i !== "auto" && i !== "top" || r.source === "init") return;
     i === "auto" && r.previousPath != null && this.routeScrollPositions.set(r.previousPath, {
       x: window.scrollX || 0,
@@ -54772,8 +54773,8 @@ class _o extends HTMLElement {
   }
   restoreFocus(r) {
     if (!r) return;
-    const i = this.rootEl.querySelector(`#${CP(r.id)}`);
-    !i || i.tagName !== r.tagName || this.root.activeElement === i || (i.focus(), (i instanceof HTMLInputElement || i instanceof HTMLTextAreaElement) && r.selectionStart != null && r.selectionEnd != null && $P(
+    const i = this.rootEl.querySelector(`#${AP(r.id)}`);
+    !i || i.tagName !== r.tagName || this.root.activeElement === i || (i.focus(), (i instanceof HTMLInputElement || i instanceof HTMLTextAreaElement) && r.selectionStart != null && r.selectionEnd != null && TP(
       i,
       r.selectionStart,
       r.selectionEnd,
@@ -54844,7 +54845,7 @@ class _o extends HTMLElement {
   }
 }
 Q(_o, "tagName", "aktion-app");
-function SP(t) {
+function CP(t) {
   return t.replace(/(["\\])/g, "\\$1");
 }
 function Fs(t, e = 2e5) {
@@ -54858,10 +54859,10 @@ function Fs(t, e = 2e5) {
   }
   return r;
 }
-function CP(t) {
+function AP(t) {
   return typeof CSS < "u" && typeof CSS.escape == "function" ? CSS.escape(t) : t.replace(/([^A-Za-z0-9_-])/g, "\\$1");
 }
-const AP = /* @__PURE__ */ new Set([
+const $P = /* @__PURE__ */ new Set([
   "email",
   "number",
   "tel",
@@ -54873,8 +54874,8 @@ const AP = /* @__PURE__ */ new Set([
   "time",
   "color"
 ]);
-function $P(t, e, r, i) {
-  if (t instanceof HTMLInputElement && AP.has(t.type)) {
+function TP(t, e, r, i) {
+  if (t instanceof HTMLInputElement && $P.has(t.type)) {
     const a = t.type;
     try {
       t.type = "text", t.setSelectionRange(e, r, i);
@@ -54897,10 +54898,10 @@ function cm(t) {
 function $o(t) {
   return t instanceof Error && t.message ? t.message : String(t);
 }
-function TP() {
+function IP() {
   customElements.get(_o.tagName) || customElements.define(_o.tagName, _o);
 }
-const IP = [
+const zP = [
   {
     name: "App",
     description: "Top-level `$app(...)` root — every program needs one.",
@@ -55241,10 +55242,10 @@ Column([
 ])`
   }
 ];
-function zP() {
-  return IP;
+function MP() {
+  return zP;
 }
-function a4(t = Wi) {
+function o4(t = Wi) {
   const e = cM(t);
   return {
     grammar: Vs,
@@ -55253,14 +55254,14 @@ function a4(t = Wi) {
     components: e,
     componentsByName: dM(e),
     builtins: ec,
-    snippets: zP(),
+    snippets: MP(),
     keywordDocs: rx,
     themeNames: Object.keys(_c),
     severityTokenMap: { "parse-error": "error" },
-    iconAliases: MP
+    iconAliases: EP
   };
 }
-const MP = [
+const EP = [
   "house",
   "user",
   "users",
@@ -55362,15 +55363,15 @@ const MP = [
   "thumbs-down",
   "thumbtack"
 ];
-TP();
-const o4 = Ub(Wi);
+IP();
+const n4 = Ub(Wi);
 export {
   _o as AktionElement,
   Xt as BreakSignal,
   Wl as COMPILED_PROGRAM_VERSION,
   ur as ContinueSignal,
   zs as DEFAULT_RUNTIME_BUDGET,
-  tR as EffectRunner,
+  rR as EffectRunner,
   Bc as HttpRuntime,
   fa as INSTANCE_ATTR,
   ti as OWNER_ATTR,
@@ -55379,14 +55380,14 @@ export {
   Mc as Router,
   Rr as RuntimeBudgetError,
   TN as SAFE_HOST_GLOBALS,
-  o4 as SYSTEM_PROMPT_TEXT,
+  n4 as SYSTEM_PROMPT_TEXT,
   Dc as StateStore,
   ub as anyPathAffects,
   Nh as applyPartialTheme,
   Eh as applyTheme,
   gw as assertOnePositionalMax,
   qv as buildFrontier,
-  jP as buildGallery,
+  _P as buildGallery,
   XE as builtInThemeFonts,
   _c as builtInThemes,
   ec as builtinCatalog,
@@ -55398,9 +55399,9 @@ export {
   Xh as clearInstanceHooks,
   Lh as clearTokenOverrides,
   ga as collectPatternNames,
-  DP as compileLite,
+  OP as compileLite,
   Ew as componentSchema,
-  LP as computeFrontier,
+  RP as computeFrontier,
   mN as consoleNs,
   hn as createContext,
   db as createHttpResource,
@@ -55415,10 +55416,10 @@ export {
   UE as darkTheme,
   Wi as defaultLibrary,
   ax as defaultTagMap,
-  PP as defineCompiledProgram,
-  TP as defineElement,
+  DP as defineCompiledProgram,
+  IP as defineElement,
   ZE as deprecatedThemeAliases,
-  i4 as describeComponentSpec,
+  a4 as describeComponentSpec,
   _h as disposeContext,
   Ll as enterUserComponent,
   G as evaluate,
@@ -55426,12 +55427,12 @@ export {
   Gc as extractStatePath,
   Km as factoryResourceCatalog,
   Ym as factoryResourceNames,
-  _P as findBuiltin,
-  XP as findBuiltinConfig,
+  qP as findBuiltin,
+  ZP as findBuiltinConfig,
   Ft as findComponent,
-  VP as findFactoryResource,
-  WP as findNamespace,
-  YP as findNamespaceMember,
+  KP as findFactoryResource,
+  GP as findNamespace,
+  XP as findNamespaceMember,
   Jl as findPositionalIndex,
   _m as findPositionalProp,
   Uc as findThemeByName,
@@ -55439,22 +55440,22 @@ export {
   cM as getComponentCatalog,
   IN as getGlobalAccessPolicy,
   kb as getHeadManager,
-  a4 as getLanguageSpec,
-  zP as getSnippets,
+  o4 as getLanguageSpec,
+  MP as getSnippets,
   Vs as grammarSpec,
   KE as herouiDarkTheme,
   zl as herouiLightTheme,
-  QP as htmlToAktion,
-  HP as i18nResultMembers,
+  JP as htmlToAktion,
+  WP as i18nResultMembers,
   dM as indexCatalog,
   Fc as invalidateQueries,
-  qP as isBuiltinName,
+  UP as isBuiltinName,
   Hv as isCompiledProgram,
   Pl as isComponentNode,
   MM as isEndpointResource,
-  GP as isNamespaceName,
+  VP as isNamespaceName,
   Ma as isPureLiteralExpression,
-  RP as isQuiescent,
+  PP as isQuiescent,
   Wc as isStoreHandle,
   yM as isThemeNode,
   Dl as isUserComponentNode,
@@ -55474,7 +55475,7 @@ export {
   VE as muiDarkTheme,
   Il as muiLightTheme,
   px as namespaceCatalog,
-  KP as namespaceMembersAt,
+  YP as namespaceMembersAt,
   bt as normalisePath,
   mt as parse,
   xM as pathAffects,
@@ -55482,19 +55483,19 @@ export {
   Vc as planProgram,
   QE as privateThemes,
   ba as propExpectsObject,
-  t4 as renderToStaticMarkup,
-  QL as renderToString,
-  r4 as renderToTextTree,
+  r4 as renderToStaticMarkup,
+  JL as renderToString,
+  i4 as renderToTextTree,
   NN as resetMutableBindings,
   jh as resetRuntimeBudget,
   li as resolvePatternBindings,
   Cm as resolveSpecifier,
   Cr as resolveStateAlias,
   $s as resolveTheme,
-  UP as routeMembers,
+  HP as routeMembers,
   Bl as runControlFlowStatement,
   Rh as sanitiseThemeTokens,
-  e4 as setGlobalAccessPolicy,
+  t4 as setGlobalAccessPolicy,
   GE as shadcnDarkTheme,
   Tl as shadcnLightTheme,
   YE as signalDarkTheme,
@@ -55503,14 +55504,14 @@ export {
   HE as softTheme,
   hv as stampSourceIndex,
   wb as storage,
-  FP as styledToSx,
-  BP as suggestComponent,
+  jP as styledToSx,
+  FP as suggestComponent,
   Ww as tailwindToSx,
   JE as themeTokenCssVar,
-  JP as themeTokenNames,
+  e4 as themeTokenNames,
   pv as tokenize,
-  ZP as universalPropCatalog,
-  OP as validateProgram,
+  QP as universalPropCatalog,
+  BP as validateProgram,
   Xo as validateProgramSchema,
   WE as visionTheme,
   dm as walk,
