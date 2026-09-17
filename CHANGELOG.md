@@ -5,6 +5,17 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-09-17
+
+### Configurable Formatter Indentation
+
+- `formatProgram`/`printProgram` (the `aktion-runtime/language` pretty-printer)
+  now accept an optional second `FormatOptions` argument: `indentStyle`
+  (`"space"`, the default, or `"tab"`) and `indentWidth` (spaces per level,
+  default `2`, ignored for `"tab"`). Calling either function with no options
+  produces byte-identical output to before — every existing consumer is
+  unaffected.
+
 ## 2026-09-10
 
 ### Destructive Inline Links, Flippable Dialog Footers, And Headerless Actions Columns

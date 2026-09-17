@@ -99,7 +99,7 @@ export {
   type ConfigKey,
 } from "./language/index.js";
 
-export { formatProgram, type FormatResult } from "./tooling/formatter.js";
+export { formatProgram, type FormatOptions, type FormatResult } from "./tooling/formatter.js";
 
 /**
  * Re-emit a `Program` as source.
