@@ -1,5 +1,6 @@
 /**
- * `formatProgram` / `printProgram` — configurable indentation (`FormatOptions`).
+ * `formatProgram` / `printProgram` — configurable indentation (`FormatOptions`)
+ * and the idempotency guarantee for desugared operator syntax.
  *
  * Backward compatibility is load-bearing here: `formatProgram(source)` with
  * no options is a real, published, already-depended-on API, so its output
@@ -103,5 +104,109 @@ describe("printProgram — same FormatOptions shape as formatProgram", () => {
   it("printProgram with no options matches printProgram's historical default", () => {
     const program = parse(SAMPLE);
     expect(printProgram(program)).toBe(formatProgram(SAMPLE).formatted);
+  });
+});
+
+describe("formatProgram — idempotency for desugared assignment-as-expression syntax", () => {
+  it("reproduces the bug: a computed-member assignment inside a function body used to lose its `@` marker on a second format", () => {
+    // Real repro (DCD-monorepo issue): `next[field] = value` — a plain
+    // assignment statement whose target is a computed member expression —
+    // is not a top-level `Assignment` node; the parser desugars it into a
+    // `BuiltinCall` named `__rui_assign__`. The printer used to re-emit that
+    // node as a literal `@__rui_assign__(next[field], value, "=")` call,
+    // which is not valid Aktion surface syntax (the lexer has no `@` token
+    // and silently drops it), so re-parsing that text read it back as a
+    // *plain call* to an identifier named `__rui_assign__` — the assignment
+    // semantics were gone. This test pins the fixed behaviour: the printer
+    // must re-emit the actual `target = value` syntax instead.
+    const source = [
+      "function f(next, field, value) {",
+      "  next[field] = value",
+      "}",
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+
+    const first = formatProgram(source);
+    expect(first.errors).toEqual([]);
+    expect(first.formatted).toContain("next[field] = value");
+    expect(first.formatted).not.toContain("__rui_assign__");
+    expect(first.formatted).not.toContain("@");
+
+    const second = formatProgram(first.formatted);
+    expect(second.errors).toEqual([]);
+    expect(second.formatted).toBe(first.formatted);
+  });
+
+  it("is stable across compound assignment operators on a computed member", () => {
+    const source = [
+      "function f(totals, key, amount) {",
+      "  totals[key] += amount",
+      "}",
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const first = formatProgram(source);
+    expect(first.formatted).toContain("totals[key] += amount");
+    const second = formatProgram(first.formatted);
+    expect(second.formatted).toBe(first.formatted);
+  });
+
+  it("is stable for an assignment used as a bare arrow-function body", () => {
+    const source = [
+      "function f(rows) {",
+      "  return rows.map((row) => row.selected = true)",
+      "}",
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const first = formatProgram(source);
+    expect(first.errors).toEqual([]);
+    expect(first.formatted).toContain("row.selected = true");
+    expect(first.formatted).not.toContain("__rui_assign__");
+    const second = formatProgram(first.formatted);
+    expect(second.formatted).toBe(first.formatted);
+  });
+
+  it("is stable for postfix/prefix increment nested in a larger expression", () => {
+    const source = [
+      "function f(i, total) {",
+      "  return total + i++",
+      "}",
+      "function g(i) {",
+      "  return ++i",
+      "}",
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const first = formatProgram(source);
+    expect(first.errors).toEqual([]);
+    expect(first.formatted).toContain("total + i++");
+    expect(first.formatted).toContain("return ++i");
+    expect(first.formatted).not.toContain("__rui_postfix__");
+    expect(first.formatted).not.toContain("__rui_prefix__");
+    const second = formatProgram(first.formatted);
+    expect(second.formatted).toBe(first.formatted);
+  });
+
+  it("is stable for `await` used as an expression", () => {
+    const source = [
+      "async function f() {",
+      "  const r = await $http(\"/api\")",
+      "  return r",
+      "}",
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const first = formatProgram(source);
+    expect(first.errors).toEqual([]);
+    expect(first.formatted).not.toContain("__rui_await__");
+    const second = formatProgram(first.formatted);
+    expect(second.formatted).toBe(first.formatted);
   });
 });

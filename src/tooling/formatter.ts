@@ -5,7 +5,9 @@
  * of the input. The output is:
  *
  *   - **Idempotent.** `format(format(x)) === format(x)` for every input
- *     that parses cleanly.
+ *     that parses cleanly. (Every `BuiltinCall` node printed by this module
+ *     must re-parse back to the same node kind, or this guarantee silently
+ *     breaks — see `printDesugaredOperator`'s doc comment.)
  *   - **Canonical.** Statements one per line; two-space indentation by
  *     default inside `{ … }` blocks (configurable via `FormatOptions`);
  *     named args always use `prop: value` (the legacy `prop=value` form is
@@ -31,6 +33,7 @@
 
 import { parse } from "../parser/index.js";
 import type {
+  BuiltinCallExpr,
   DestructuringPattern,
   Expression,
   ObjectProperty,
@@ -41,7 +44,17 @@ import type {
 } from "../parser/types.js";
 
 const SAFE_IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const NEEDS_DOUBLE_QUOTE = /[\\"]/;
+// Characters that cannot appear literally inside a canonical double-quoted
+// string and must be escaped: `\` and `"` themselves, plus the raw control
+// characters a real Aktion string literal can carry once the lexer's
+// `decodeEscape` has turned a source `\n`/`\r`/`\t` escape into the actual
+// control character in the AST's `Literal.value`. The lexer's own string
+// scanner stops at a bare newline (`if (peek() === "\n") { break; }` in
+// `tokenize`), so printing one unescaped truncates the string and corrupts
+// everything the parser reads after it — a real round-trip failure the
+// idempotency sweep in tests/formatter-idempotency-sweep.test.ts caught
+// (`docs/demos/mini-apps/palette-studio.aktion`'s `.join("\n")` call).
+const NEEDS_ESCAPE = /[\\"\n\r\t]/;
 
 /**
  * Configures the printer's indentation. Every default matches today's
@@ -304,6 +317,60 @@ function printBlock(stmts: ReadonlyArray<Statement>, indent: number, opts: Resol
   return stmts.map((s) => printStatement(s, indent, opts)).join("\n");
 }
 
+/**
+ * Builtin calls named `__rui_*` are desugared forms of ordinary operator
+ * syntax — `x = y`, `x++`, `++x`, `await x` — produced by
+ * `parseExpressionStatement` / `parseAssignmentLikeExpression` / `parseUnary`
+ * in the parser whenever that operator appears somewhere the grammar can't
+ * express as a plain statement (a computed-member assignment target like
+ * `next[field] = value`, an arrow-function body, a nested increment). They
+ * MUST be printed back as that original surface syntax, not as a literal
+ * `@name(args)` call: the lexer has no `@` token at all (an unrecognised
+ * character is silently dropped — see `tokenize`'s "Unknown char" branch),
+ * so re-parsing `@name(args)` reads as an ordinary call to an identifier
+ * literally named `name`, silently discarding the desugared operator
+ * semantics. That is the formatter's idempotency bug: `next[field] = value`
+ * formatted once printed as `@__rui_assign__(next[field], value, "=")`
+ * (a real `BuiltinCall`, re-parses fine, no errors — so the idempotency
+ * guard in `formatProgram` never caught the drift), and formatting that
+ * output a second time silently turned it into a plain call expression,
+ * dropping the assignment. Returns `null` for any other/future builtin
+ * name, which still falls back to the (equally unparseable) `@name(args)`
+ * form below — there are no other `__rui_*` names in the grammar today.
+ */
+function printDesugaredOperator(expr: BuiltinCallExpr, indent: number, opts: ResolvedFormatOptions): string | null {
+  const literalOperator = (arg: Expression | undefined): string | null =>
+    arg && arg.kind === "Literal" && typeof arg.value === "string" ? arg.value : null;
+
+  switch (expr.name) {
+    case "__rui_assign__": {
+      const [target, value, opNode] = expr.arguments;
+      const op = literalOperator(opNode);
+      if (!target || !value || op === null) return null;
+      return `${printExpression(target, indent, opts)} ${op} ${printExpression(value, indent, opts)}`;
+    }
+    case "__rui_postfix__": {
+      const [target, opNode] = expr.arguments;
+      const op = literalOperator(opNode);
+      if (!target || op === null) return null;
+      return `${printExpression(target, indent, opts)}${op}`;
+    }
+    case "__rui_prefix__": {
+      const [target, opNode] = expr.arguments;
+      const op = literalOperator(opNode);
+      if (!target || op === null) return null;
+      return `${op}${printExpression(target, indent, opts)}`;
+    }
+    case "__rui_await__": {
+      const [argument] = expr.arguments;
+      if (!argument) return null;
+      return `await ${printExpression(argument, indent, opts)}`;
+    }
+    default:
+      return null;
+  }
+}
+
 function printExpression(expr: Expression, indent: number, opts: ResolvedFormatOptions): string {
   switch (expr.kind) {
     case "Literal":
@@ -361,7 +428,7 @@ function printExpression(expr: Expression, indent: number, opts: ResolvedFormatO
       return `new ${printCall(callee, expr.arguments, indent, opts)}`;
     }
     case "BuiltinCall":
-      return printCall(`@${expr.name}`, expr.arguments, indent, opts);
+      return printDesugaredOperator(expr, indent, opts) ?? printCall(`@${expr.name}`, expr.arguments, indent, opts);
     case "Template":
       return printTemplate(expr.quasis, expr.expressions, indent, opts);
     case "Spread":
@@ -397,10 +464,20 @@ function printCall(callee: string, args: Expression[], indent: number, opts: Res
 function printSwitchCase(c: SwitchCase, indent: number, opts: ResolvedFormatOptions): string {
   const padStr = pad(indent, opts);
   const body = c.body.map((s) => printStatement(s, indent + 1, opts)).join("\n");
-  if (c.test === null) {
-    return `${padStr}default:\n${body}\n${printStatement({ kind: "ExpressionStatement", expression: { kind: "Identifier", name: "break" } } as Statement, indent + 1, opts)}`;
-  }
-  return `${padStr}case ${printExpression(c.test, indent, opts)}:\n${body}\n${pad(indent + 1, opts)}break`;
+  const head = c.test === null
+    ? `${padStr}default:`
+    : `${padStr}case ${printExpression(c.test, indent, opts)}:`;
+  // Canonicalise every case/default arm to end with an explicit `break` —
+  // UNLESS the body already ends with one. Appending unconditionally used
+  // to double the break on a second `formatProgram` pass: the appended
+  // break re-parses back into a real trailing `BreakStatement` in `c.body`,
+  // so printing it again on the next pass appended yet another one,
+  // breaking idempotency (caught by the whole-repo sweep in
+  // tests/formatter-idempotency-sweep.test.ts —
+  // docs/demos/blocks/profile-header.aktion's `switch` arms).
+  const lastStmt = c.body[c.body.length - 1];
+  const trailingBreak = lastStmt?.kind === "BreakStatement" ? "" : `\n${pad(indent + 1, opts)}break`;
+  return `${head}\n${body}${trailingBreak}`;
 }
 
 function printObjectProp(prop: ObjectProperty, indent: number, opts: ResolvedFormatOptions): string {
@@ -426,13 +503,20 @@ function printLiteral(value: string | number | boolean | null): string {
 }
 
 function printStringLiteral(value: string): string {
-  // Double quotes by default. If the body contains both `"` and `\\`,
-  // escape `"` so the output round-trips. Single-quote and template
-  // forms are only emitted when the AST distinguishes them, which it
-  // does not — string literals carry no quote-style metadata, so
-  // canonical double-quoting is fine.
-  if (NEEDS_DOUBLE_QUOTE.test(value)) {
-    const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  // Double quotes by default. Single-quote and template forms are only
+  // emitted when the AST distinguishes them, which it does not — string
+  // literals carry no quote-style metadata, so canonical double-quoting is
+  // fine. When the body contains `\`, `"`, or a raw control character that
+  // can't survive inside a single-line double-quoted literal, escape it —
+  // order matters: backslash must be escaped first, or the backslashes
+  // introduced by the later replacements would themselves get doubled.
+  if (NEEDS_ESCAPE.test(value)) {
+    const escaped = value
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r")
+      .replace(/\t/g, "\\t");
     return `"${escaped}"`;
   }
   return `"${value}"`;
