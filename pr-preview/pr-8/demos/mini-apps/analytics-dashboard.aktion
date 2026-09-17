@@ -1,0 +1,90 @@
+// Analytics Dashboard — a product-analytics overview: KPI tiles with sparklines,
+// a sessions/users trend, traffic by channel, device split, and a top-pages
+// table. A range switch (7 / 30 / 90 days) reshapes every number. Starting
+// point for: any metrics, reporting or observability dashboard.
+// Uses: range-driven derived data, LineChart / BarChart / PieChart, Sparkline KPIs, Table.
+$app(Column([header, kpis, Grid([trendCard, channelCard], { columns: { base: 1, lg: 3 }, gap: "lg", alignItems: "start" }), Grid([deviceCard, pagesCard], { columns: { base: 1, lg: 3 }, gap: "lg", alignItems: "start" })], { gap: "lg", padding: "md" }))
+
+$range = "30d"
+
+// A little deterministic pseudo-data shaped by the chosen range.
+ranges = {
+  "7d": { mult: 1, points: 7, label: "7 days", step: "day" },
+  "30d": { mult: 4, points: 6, label: "30 days", step: "week" },
+  "90d": { mult: 12, points: 6, label: "90 days", step: "2 weeks" }
+}
+cfg = ranges[$range]
+
+base = [820, 932, 901, 1290, 1330, 1450, 1610]
+sessions = $util.range(0, cfg.points - 1).map(i => Math.round(base[i % base.length] * cfg.mult * (0.9 + (i % 3) * 0.05)))
+users = sessions.map(v => Math.round(v * 0.72))
+labels = $util.range(0, cfg.points - 1).map(i => $range == "7d" ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i] : `W${i + 1}`)
+
+totalSessions = $util.sum(sessions)
+totalUsers = $util.sum(users)
+avgDuration = 2.4 + (cfg.mult * 0.05)
+bounce = 38 - cfg.mult
+
+money = n => $util.format(n, "compact")
+
+header = PageHeader("Analytics", {
+  subtitle: `Overview · last ${cfg.label}`,
+  badge: Badge("Live", { tone: "success", icon: "wave-square" }),
+  actions: [SegmentedControl(["7d", "30d", "90d"], { value: $range, onChange: (v) => { $range = v } })]
+})
+
+function kpi(label, value, delta, tone, spark, icon) {
+  return Card([Column([
+    Row([Icon(icon, { color: `var(--rui-color-${tone})` }), StackItem(Text(label, { variant: "small-heavy", tone: "muted" }), { grow: 1 }), Badge(delta, { tone, size: "xs", icon: "arrow-trend-up" })], { align: "center" }),
+    Text(value, { variant: "title" }),
+    Sparkline(spark, { tone })
+  ], { gap: "sm" })])
+}
+
+kpis = Grid([
+  kpi("Sessions", money(totalSessions), "+12%", "primary", sessions, "chart-line"),
+  kpi("Users", money(totalUsers), "+9%", "info", users, "users"),
+  kpi("Avg. duration", `${$util.round(avgDuration, 1)}m`, "+3%", "success", [2, 2.2, 2.1, 2.4, 2.5, 2.6], "clock"),
+  kpi("Bounce rate", `${$util.round(bounce, 0)}%`, "-2%", "warning", [44, 42, 41, 40, 39, bounce], "arrow-trend-down")
+], { columns: { base: 1, sm: 2, lg: 4 }, gap: "md" })
+
+trendCard = GridItem(Card([
+  SectionHeader("Sessions & users", { eyebrow: "TREND", subtitle: `Aggregated over the last ${cfg.label}` }),
+  LineChart(labels, { series: [Series("Sessions", { values: sessions }), Series("Users", { values: users })], filled: true })
+]), { span: "2/3" })
+
+channels = [
+  { name: "Organic", value: Math.round(totalSessions * 0.42) },
+  { name: "Direct", value: Math.round(totalSessions * 0.24) },
+  { name: "Referral", value: Math.round(totalSessions * 0.18) },
+  { name: "Social", value: Math.round(totalSessions * 0.1) },
+  { name: "Paid", value: Math.round(totalSessions * 0.06) }
+]
+
+channelCard = GridItem(Card([
+  SectionHeader("Traffic by channel", { eyebrow: "ACQUISITION" }),
+  BarChart(channels.map(c => c.name), { series: [Series("Sessions", { values: channels.map(c => c.value) })] })
+]), { span: "1/3" })
+
+deviceCard = GridItem(Card([
+  SectionHeader("Devices", { eyebrow: "SPLIT" }),
+  PieChart(["Desktop", "Mobile", "Tablet"], { values: [58, 36, 6], valueFormat: "percent" })
+]), { span: "1/3" })
+
+topPages = [
+  { path: "/", views: 0.28, change: "up" },
+  { path: "/pricing", views: 0.19, change: "up" },
+  { path: "/docs/get-started", views: 0.14, change: "down" },
+  { path: "/blog/aktion-1-0", views: 0.11, change: "up" },
+  { path: "/changelog", views: 0.08, change: "down" }
+]
+
+pagesCard = GridItem(Card([
+  SectionHeader("Top pages", { eyebrow: "CONTENT" }),
+  Table([
+    Col("Page", topPages.map(p => Text(p.path, { variant: "body-heavy" }))),
+    Col("Views", topPages.map(p => money(Math.round(totalSessions * p.views))), { align: "right" }),
+    Col("Share", topPages.map(p => Badge($util.percent(p.views), { tone: "neutral", size: "sm" })), { align: "right" }),
+    Col("Trend", topPages.map(p => Icon(p.change == "up" ? "arrow-up" : "arrow-down", { color: p.change == "up" ? "var(--rui-color-success)" : "var(--rui-color-danger)" })), { align: "center" })
+  ], { striped: true })
+]), { span: "2/3" })

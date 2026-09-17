@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Performance &amp; optimization · Aktion</title>
+  <meta name="description" content="How to keep Aktion apps fast: re-render avoidance, the memoization rules, the morph reconciler contract, large lists, the per-render safety budget, measured bundle sizes, and streaming throughput." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .callout {
+      border: 1px solid var(--doc-border);
+      border-left: 4px solid var(--doc-accent, #6366f1);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 18px 0;
+      background: var(--doc-surface-elev);
+    }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout h4 { margin: 0 0 6px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
+    /* Checklist */
+    .checklist { list-style: none; padding: 0; margin: 18px 0; }
+    .checklist li { position: relative; padding: 6px 0 6px 28px; border-bottom: 1px solid var(--doc-border); }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist li::before { content: "\2713"; position: absolute; left: 4px; top: 6px; color: #10b981; font-weight: 700; }
+    /* Live demo */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+  </style>
+</head>
+<body data-page="performance">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Guide</span>
+        <h1>Performance &amp; optimization.</h1>
+        <p class="lead">
+          Aktion is fast by default &mdash; every commit re-renders the whole
+          tree in memory, then a reconciler patches only the live DOM nodes that
+          actually changed. The work that remains is avoiding needless full
+          re-renders, keeping props stable enough to memoize, and not fighting
+          the reconciler.
+        </p>
+      </header>
+
+      <div class="callout warn">
+        <p><strong>Measure first.</strong> Before you restructure anything, open
+          <a href="devtools.html">DevTools</a>, record a commit, and read the
+          &ldquo;why did this render&rdquo; reason. Almost every real slowdown
+          traces back to one of two causes: a full re-render you didn&rsquo;t
+          need, or an unstable prop defeating memoization.</p>
+      </div>
+
+      <h2 id="measure">Measure before you change anything</h2>
+      <span id="profile"></span>
+      <p>
+        The <a href="devtools.html">DevTools</a> panel is the only way to tell a
+        full re-render apart from a fine-grained one, and that distinction
+        decides which of the sections below applies to you. Work through it in
+        this order:
+      </p>
+      <ol>
+        <li>Open the panel and reproduce the slow interaction once.</li>
+        <li>Read the <strong>commit strip</strong>. Wide, frequent commits mean
+          full re-renders; narrow ones mean the fine-grained path is working and
+          the cost is inside one component.</li>
+        <li>Open the <strong>components table</strong> and sort by self time.
+          The top row is what to look at &mdash; not the component you suspected.</li>
+        <li>Read that row&rsquo;s <strong>render reason</strong>. It is one of
+          <code>initial mount</code>, <code>positional args changed</code>,
+          <code>named args changed</code>, <code>state dependency changed</code>,
+          <code>no memo (full render)</code>, or
+          <code>memoized (args + deps unchanged)</code>.</li>
+      </ol>
+      <p>
+        The reason names the fix. <code>named args changed</code> on a component
+        whose data did not change is an unstable prop &mdash; go to
+        <a href="#memo">Help the memoizer</a>. <code>no memo (full render)</code>
+        everywhere means something is forcing full re-renders &mdash; go to
+        <a href="#renders">Minimise full re-renders</a>.
+      </p>
+
+      <h2 id="renders">Minimise full re-renders</h2>
+      <p>
+        Aktion has two render gates. A write to a tracked state path invalidates
+        only the components that read that path; anything the path tracker
+        cannot see forces a <strong>full</strong> re-render of the whole tree,
+        with memoization disabled. Read
+        <a href="reactivity.html">Reactivity &amp; rendering</a> for the
+        mechanics; the levers are:
+      </p>
+      <ul>
+        <li>Prefer top-level <code>$name = value</code> atoms and
+          <code>$store</code> fields for shared state &mdash; writes invalidate
+          only the readers of the exact path.</li>
+        <li>Write narrow paths (<code>$user.name = &hellip;</code>) instead of
+          reassigning whole objects. <code>$user = { &hellip;$user, name }</code>
+          invalidates every reader of <code>$user</code>.</li>
+        <li>Remember that <code>$state</code>/<code>$memo</code> setters,
+          <code>$http</code> transitions, timers, effect bodies, and
+          <code>$emit</code> each force a full re-render. Use them where the
+          subtree is small or the update is infrequent.</li>
+      </ul>
+      <p>
+        Memoization is armed only when the change set is fully known &mdash; not
+        on the first paint, not after a re-plan, and not when something forced
+        the render. So the payoff from the next section is proportional to how
+        few full re-renders you trigger.
+      </p>
+
+      <h2 id="memo">Help the memoizer</h2>
+      <p>
+        On a fine-grained update, a <code>PascalCase</code> component is skipped
+        entirely &mdash; body not executed, previous output reused &mdash; when
+        all three of these hold: its positional args are unchanged, its named
+        args are unchanged, and none of the state paths it read last render
+        changed. Argument comparison is <strong>shallow
+        <code>Object.is</code></strong>, per positional slot and per named key.
+      </p>
+      <p>
+        Shallow identity is the whole game. A fresh object or array literal built
+        during render is a different value every time, so the component always
+        re-renders even when the data is identical:
+      </p>
+<pre><code>// ❌ filter runs every render; Table sees a "new" array each time
+function Orders() {
+  return Table([Col("Customer", $orders.filter(o =&gt; o.open).map(o =&gt; o.name))])
+}
+
+// ✅ $memo caches the filtered rows until $orders changes
+function Orders() {
+  open = $memo(() =&gt; $orders.filter(o =&gt; o.open), [$orders])
+  return Table([Col("Customer", open.map(o =&gt; o.name))])
+}</code></pre>
+      <p>
+        With <code>$memo</code> the derived array keeps the same identity across
+        renders, so <code>Orders</code> reports
+        <code>memoized (args + deps unchanged)</code> in the profiler instead of
+        <code>named args changed</code>. The same reasoning applies to inline
+        <code>sx</code> objects and inline option arrays &mdash; hoist them to a
+        top-level binding or wrap them in <code>$memo</code>.
+      </p>
+      <p>
+        Give list items a <code>key</code> as well. Without one, a component
+        instance is identified by its source location plus its position in the
+        tree, so reordering a list shifts every instance onto a different
+        neighbour&rsquo;s cached state.
+      </p>
+<pre><code>$rows.map(row =&gt; OrderRow(row.name, row.total, { key: row.id }))
+// key: is stripped before props are compared, and stamped on the
+// rendered root as data-rui-key so the reconciler MOVES the node.</code></pre>
+      <p>
+        A keyed instance keeps its per-instance state, its focus, and its media
+        playback position across a reorder. An unkeyed one does not.
+      </p>
+
+      <h2 id="morph">The morph contract</h2>
+      <p>
+        Every commit builds a complete fresh tree and hands it to the morph
+        reconciler, which walks the live DOM in parallel and keeps as many
+        existing nodes as it can.
+      </p>
+      <p>
+        Its rules are worth knowing because breaking them produces the class of
+        bug that reads as a performance problem: a field that clears itself, a
+        drawer that snaps shut, a handler that goes stale.
+      </p>
+      <div class="callout">
+        <h4>The one sentence to remember</h4>
+        <p><strong>Attributes the fresh tree omits are removed.</strong> The
+          reconciler makes the live node&rsquo;s attributes match the
+          freshly&#8209;rendered one exactly, so any attribute your render does
+          not emit is deleted on the next commit &mdash; and a commit can be
+          triggered by anything, anywhere in the app.</p>
+      </div>
+
+      <h3 id="morph-identity">Node identity and keys</h3>
+      <p>
+        A live node is reused when its node type and its <code>tagName</code>
+        both match the fresh node; otherwise it is replaced outright, losing
+        every piece of browser-owned state it held. Identity within a child list
+        is resolved in this order:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Identity</th><th>Source</th><th>Behaviour on reorder</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>#id</code></td>
+            <td>The element&rsquo;s <code>id</code> attribute (from the universal <code>id</code> prop).</td>
+            <td>Matched and <strong>moved</strong> to its new slot.</td>
+          </tr>
+          <tr>
+            <td><code>@key</code></td>
+            <td><code>data-rui-key</code>, stamped from the author&rsquo;s <code>key:</code> prop.</td>
+            <td>Matched and <strong>moved</strong> to its new slot.</td>
+          </tr>
+          <tr>
+            <td>positional</td>
+            <td>No <code>id</code> and no key &mdash; the child&rsquo;s index.</td>
+            <td>Patched <strong>in place</strong>; state stays with the slot, not the row.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Surplus live children are removed from the tail of the list. An
+        <code>id</code> therefore doubles as a reconciliation key, which is
+        useful to know when two sibling components share one.
+      </p>
+
+      <h3 id="morph-forms">Uncontrolled form state</h3>
+      <p>
+        The contract for text-ish inputs is: <strong>an absent
+        <code>value</code> attribute means the render is not asserting a
+        value</strong>, so the live DOM value is left alone. An attribute that
+        <em>is</em> present &mdash; including <code>value=""</code> &mdash; is a
+        deliberate assertion and is applied.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Control</th><th>Rule</th><th>Consequence</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>&lt;input type="file"&gt;</code></td>
+            <td>Never touched at all.</td>
+            <td>A <code>FileList</code> cannot be assigned, and <code>value = ""</code> would empty the user&rsquo;s selection.</td>
+          </tr>
+          <tr>
+            <td>checkbox / radio</td>
+            <td>Skipped unless the fresh node carries <code>checked</code> or is itself checked.</td>
+            <td>An uncontrolled checkbox no longer un-ticks itself on every commit.</td>
+          </tr>
+          <tr>
+            <td>text, email, number, &hellip;</td>
+            <td>Skipped when the fresh node has no <code>value</code> attribute.</td>
+            <td>Typing survives a commit triggered from anywhere else in the app.</td>
+          </tr>
+          <tr>
+            <td><code>&lt;select&gt;</code></td>
+            <td>Applied whenever <code>oldEl.value !== newEl.value</code>.</td>
+            <td>Children are reconciled first, so the value can resolve against freshly&#8209;patched <code>&lt;option&gt;</code>s.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        If you write your own component, this is the rule you must honour: pass
+        <code>null</code>, never <code>""</code>, for an unset value. The
+        library helper <code>valueAttr(value)</code> does exactly that &mdash; it
+        returns <code>null</code> for <code>null</code>/<code>undefined</code>,
+        and <code>el()</code> skips null attributes.
+      </p>
+<pre><code>// ❌ collapses "unset" to "", which morph applies as a deliberate clear
+el("input", { type: "text", value: asString(props.value) })
+
+// ✅ emits no value attribute at all when the prop is absent
+el("input", { type: "text", value: valueAttr(props.value) })</code></pre>
+      <p>
+        The shipped form components route their <code>value</code> through
+        <code>valueAttr</code> for exactly this reason &mdash;
+        <code>Input</code>, <code>SearchBar</code>, <code>NumberInput</code>,
+        <code>PasswordInput</code>, <code>MaskedInput</code>,
+        <code>DatePicker</code>, <code>DateRangePicker</code>,
+        <code>TimePicker</code>, <code>DateTimePicker</code>,
+        <code>InlineEdit</code> and <code>RichTextEditor</code> among them.
+      </p>
+      <div class="callout warn">
+        <h4>Current limitation &mdash; uncontrolled <code>TextArea</code> and <code>Select</code></h4>
+        <p><strong>Bind these two to state.</strong> The attribute guard above
+          protects <code>&lt;input&gt;</code> only. A <code>&lt;textarea&gt;</code>
+          and a <code>&lt;select&gt;</code> are compared against the fresh
+          node&rsquo;s <code>value</code> <em>property</em>, which is always a
+          string &mdash; so &ldquo;the render asserts nothing&rdquo; is
+          indistinguishable from &ldquo;the render asserts empty&rdquo;.</p>
+        <p>Typed text in an uncontrolled <code>TextArea</code>, and the option a
+          user picked in an uncontrolled <code>Select</code>, are therefore still
+          lost on the next commit. The runtime tracks all three cases as
+          executable failing tests. Make them controlled instead:
+          <code>TextArea({ value: $note, onChange: v =&gt; $note = v })</code>.</p>
+      </div>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; the counter commits every second; keep typing in the field</span>
+<pre><code>$ticks = 0
+$note = ""
+
+$effect(() => { $ticks = $ticks + 1 }, ["every(1000)"])
+
+$app(Column([
+  CardHeader("Uncontrolled vs controlled", { subtitle: "A commit fires every second" }),
+  Input({ id: "free", label: "Uncontrolled — no value prop", placeholder: "Type here; text survives" }),
+  TextArea({ id: "bound", label: "Controlled — bound to $note", value: $note, onChange: (v) => $note = v, rows: 2 }),
+  Text(`Commits so far: ${$ticks}`, { variant: "small", tone: "muted" })
+], { gap: "md" }))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        The first field keeps what you type because its render emits no
+        <code>value</code> attribute. The second keeps it because the program
+        owns the value and re-asserts it on every commit. Both carry an
+        <code>id</code>, which matters: the host&rsquo;s focus backstop only
+        snapshots and restores the active element when it has one.
+      </p>
+
+      <h3 id="morph-focus">Focus, caret and IME</h3>
+      <p>
+        When the reconciler does write a value into a focused field it preserves
+        the caret rather than bouncing it to the end. If the caret was already at
+        the end it follows to the new end; otherwise both selection offsets are
+        clamped into the new length, which is what makes a controlled transform
+        such as uppercase-as-you-type usable.
+      </p>
+      <p>
+        Reading and writing the selection is wrapped in
+        <code>try</code>/<code>catch</code>, because <code>number</code>,
+        <code>email</code>, <code>url</code> and <code>date</code> inputs throw
+        on <code>selectionStart</code>. The value still lands; only the caret
+        restore is skipped.
+      </p>
+      <p>
+        The value sync is also deliberately <em>not</em> focus-gated. On macOS
+        clicking a button does not blur the input, so skipping focused fields
+        would silently drop a programmatic <code>$input = ""</code>.
+      </p>
+      <p>
+        In-flight IME composition is safe for the same reason uncontrolled text
+        is safe &mdash; while the render asserts no <code>value</code>, morph
+        never writes, so there is nothing to interrupt.
+      </p>
+
+      <h3 id="morph-events">Event handlers</h3>
+      <p>
+        Handlers are attached as DOM properties (<code>el.onclick = fn</code>),
+        never with <code>addEventListener</code>. That is what lets the fresh
+        closure be copied onto a kept node, so a handler always sees the current
+        props and state. Forty-seven handler properties are transferred, covering
+        pointer, keyboard, focus, drag, touch, scroll, form, animation and media
+        events.
+      </p>
+      <div class="callout">
+        <p><strong>A listener registered with <code>addEventListener</code>
+          cannot be transferred.</strong> If you attach one inside a custom
+          component, attach it once against a node you also mark
+          <code>data-rui-preserve</code>, or re-derive it from props on every
+          render as a property assignment instead.</p>
+      </div>
+
+      <h3 id="morph-preserve">Handing a subtree to imperative code</h3>
+      <p>
+        A third-party widget &mdash; a chart, a map, a rich-text editor, a
+        hydrated custom element &mdash; owns its own DOM, and reconciling it
+        would destroy it. Marking the host element
+        <code>data-rui-preserve</code> switches morph into a minimal mode:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Pass</th><th>On a normal element</th><th>With <code>data-rui-preserve</code></th></tr></thead>
+        <tbody>
+          <tr><td>Attribute removal</td><td>Attributes the fresh tree omits are removed.</td><td><strong>Never</strong> &mdash; the widget&rsquo;s own reflected attributes survive.</td></tr>
+          <tr><td>Attribute apply</td><td>New and changed attributes applied.</td><td>Applied, so a reactive <code>sx</code> / <code>class</code> update still reaches the host.</td></tr>
+          <tr><td>Event handlers</td><td>Synced.</td><td>Synced.</td></tr>
+          <tr><td>Children</td><td>Reconciled.</td><td><strong>Never touched.</strong></td></tr>
+          <tr><td>Form state</td><td>Synced per the rules above.</td><td><strong>Never touched.</strong></td></tr>
+        </tbody>
+      </table>
+      <p>
+        This is the contract behind <code>Mount(&hellip;)</code> and
+        <code>WebComponent(&hellip;)</code> &mdash; see
+        <a href="interop.html">Interop</a>.
+      </p>
+      <p>
+        A few attributes are element-owned even without the marker:
+        <code>open</code> on <code>&lt;details&gt;</code> (user-toggleable),
+        <code>width</code>/<code>height</code> on <code>&lt;canvas&gt;</code>
+        (removing them resets the drawing buffer and erases the bitmap), and the
+        <code>popover</code>/<code>style</code>/<code>data-floating-side</code>
+        trio on a popup that is currently promoted to the browser top layer.
+      </p>
+      <p>
+        The last one has a consequence worth stating plainly: <strong>while a
+        dropdown, tooltip or popover panel is open, a re-render cannot restyle
+        that panel&rsquo;s root.</strong> Ownership returns automatically when
+        the panel closes.
+      </p>
+
+      <h3 id="morph-imperative">Never store UI state on the live DOM</h3>
+      <p>
+        This is the single rule component authors break most often. An event
+        handler that writes <code>class</code>, <code>style</code> or a
+        <code>data-*</code> attribute straight onto the live DOM is describing a
+        UI state the next render cannot reproduce.
+      </p>
+      <p>
+        So the next commit removes it again. The drawer closes itself, the
+        dragged divider snaps back, the &ldquo;Copied!&rdquo; label reverts
+        mid&#8209;timeout.
+      </p>
+<pre><code>// ❌ the next commit — from any state change anywhere — reverts this
+onclick = () =&gt; { panel.setAttribute("data-open", "true") }
+
+// ✅ put the bit somewhere the render reads
+onclick = () =&gt; { slot.set({ open: true }) }   // helpers.useInstanceState
+// …then emit data-open from slot.get().open during render.</code></pre>
+      <p>
+        Treat an imperative write as a paint&#8209;time optimisation, never as
+        the state. For a <code>$</code>&#8209;bound prop use
+        <code>helpers.setState</code>; otherwise use
+        <code>helpers.useInstanceState(key, initial)</code>.
+      </p>
+      <p>
+        <a href="errors.html#strict">Strict mode</a> catches this for you. With
+        the <code>strict</code> attribute on <code>&lt;aktion-app&gt;</code> a
+        <code>MutationObserver</code> snapshots handler writes immediately
+        before each reconcile and re-checks immediately after, then warns once
+        per program naming the reverted attribute and the element.
+      </p>
+
+      <h2 id="lists">Large lists</h2>
+      <p>
+        A 100k-row table renders 100k rows of DOM, and no amount of memoization
+        makes that cheap. Window it, page it, or precompute it.
+      </p>
+
+      <h3 id="virtual">VirtualList and VirtualGrid</h3>
+      <p>
+        Both components take an array of <strong>pre-built nodes</strong> as
+        <code>items</code> and mount only the visible window, so map your data
+        to component nodes first and hand the array over.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Prop</th><th><code>VirtualList</code></th><th><code>VirtualGrid</code></th></tr></thead>
+        <tbody>
+          <tr><td><code>items</code></td><td>Pre-built nodes, or plain rows plus <code>renderItem</code>.</td><td>Pre-built nodes, or plain values.</td></tr>
+          <tr><td><code>itemHeight</code></td><td>Fixed row height in px. Default <strong>40</strong>, floor 24.</td><td>Cell height in px. Default <strong>120</strong>, floor 24.</td></tr>
+          <tr><td><code>height</code></td><td>Viewport height in px. Default <strong>12 rows</strong>.</td><td>Viewport height in px. Default <strong>480</strong>, floor 120.</td></tr>
+          <tr><td><code>columns</code></td><td>&mdash;</td><td>Cells per row. Default <strong>4</strong>, clamped to 1&ndash;12.</td></tr>
+          <tr><td><code>minItemWidth</code></td><td>&mdash;</td><td>Minimum cell width in px. Set it and the grid auto-fills and reflows instead of forcing <code>columns</code>.</td></tr>
+          <tr><td><code>gap</code></td><td>&mdash;</td><td>Gap between cells in px. Default <strong>8</strong>.</td></tr>
+          <tr><td><code>renderItem</code></td><td><code>(row, index) =&gt; Node</code>, invoked per visible row.</td><td>&mdash;</td></tr>
+          <tr><td><code>onItemClick</code></td><td>Receives the clicked row and its index.</td><td>Receives the clicked item and its index.</td></tr>
+          <tr><td><code>empty</code> / <code>loading</code></td><td>Node or text for an empty <code>items</code>; <code>loading</code> shows a pending state instead.</td><td>Same.</td></tr>
+        </tbody>
+      </table>
+<pre><code>// Only the visible rows of a large grid are ever in the DOM.
+VirtualGrid($cells.map(cell =&gt; Card([Text(cell.label)])), {
+  minItemWidth: 180,   // prefer this over `columns` — it reflows on narrow screens
+  itemHeight: 120,     // 120 is the default
+})</code></pre>
+      <p>
+        Scrolling swaps the mounted window rather than growing the DOM, so cost
+        stays flat as <code>items</code> grows. Prefer
+        <code>minItemWidth</code> to a fixed <code>columns</code>: four columns
+        on a phone gives you 55&nbsp;px cells.
+      </p>
+      <p>
+        Both components box every row at <code>itemHeight</code> so the
+        virtualization maths matches the real layout &mdash; neither one measures
+        variable-height rows.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; 2,000 rows, only the visible window is mounted</span>
+<pre><code>$rows = $util.range(1, 2000).map(n =&gt; Row([
+  Badge(`#${n}`, "primary"),
+  Text(`Row ${n}`),
+], { gap: "sm" }))
+
+function Big() {
+  return Card([
+    CardHeader("Virtualized list", { subtitle: "Scroll — the DOM holds only a handful of rows" }),
+    VirtualList($rows, { itemHeight: 44 })
+  ])
+}
+$app(Big())</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h3 id="paged">Paged and server-windowed data</h3>
+      <p>
+        Windowing helps the DOM; it does not help the network or the parser. If
+        the dataset itself is large, page it at the source with
+        <a href="http.html#infinite"><code>$query</code> infinite mode</a> and
+        append pages as the user scrolls.
+      </p>
+      <p>
+        Keep per-row work cheap too. Derive display fields once with
+        <code>$memo</code> or <code>$util</code> outside the row component, so
+        formatting a currency or a date happens per page rather than per row per
+        render.
+      </p>
+
+      <h2 id="worker">Offload heavy work to a worker</h2>
+      <p>
+        Long synchronous computation blocks the main thread and stalls every
+        commit behind it. Move a <strong>pure</strong> function off&#8209;thread
+        with <code>$util.worker(fn, ...args)</code>, which serialises
+        <code>fn</code> with <code>toString()</code>, runs it in a
+        Blob&#8209;URL Web Worker, and resolves with the result.
+      </p>
+<pre><code>$result = 0
+
+function crunch() {
+  $util.worker((n) =&gt; {
+    let total = 0
+    for (let i = 0; i &lt; n; i++) total += Math.sqrt(i)
+    return total
+  }, 5e7).then(r =&gt; { $result = r })
+}
+
+$app(Column([
+  Button("Crunch 50M square roots", { onClick: crunch, variant: "primary" }),
+  Text(`Result: ${$result}`)
+], { gap: "md" }))</code></pre>
+      <p>
+        Because the function is serialised it <strong>must not close over outer
+        variables</strong> &mdash; pass everything it needs as arguments. When
+        <code>Worker</code>, <code>Blob</code> or
+        <code>URL.createObjectURL</code> is unavailable, the call falls back to
+        running inline (still async), so the promise contract never changes.
+      </p>
+      <p>
+        The worker is created from a <code>blob:</code> URL, so a strict
+        <a href="security.html">Content Security Policy</a> needs
+        <code>worker-src blob:</code> for the off&#8209;thread path to work.
+      </p>
+
+      <h2 id="lazy">Deferred rendering</h2>
+      <p>
+        <code>Lazy(loader, { fallback })</code> defers <em>work</em>: it renders
+        <code>fallback</code> while the loader is pending, then renders whatever
+        the loader resolved. Reach for it when a panel is expensive to build and
+        is not visible on first paint.
+      </p>
+<pre><code>$app(Column([
+  Text("Dashboard", { variant: "heading" }),
+  Lazy(() =&gt; Report(), { fallback: Skeleton({ lines: 6 }) })
+], { gap: "md" }))
+
+function Report() {
+  return Card([CardHeader("Quarterly report"), Text("…heavy content…")])
+}</code></pre>
+      <p>
+        The loader runs <strong>exactly once per instance</strong> &mdash; the
+        settled result is kept in per-instance state, so a re-render does not
+        re-run it. A synchronous return value renders immediately; a promise
+        shows the fallback first. Add <code>error</code>,
+        <code>onError</code> and <code>retry</code> for the rejection path.
+      </p>
+      <div class="callout warn">
+        <p><strong>Aktion has no dynamic <code>import()</code> expression.</strong>
+          <code>import { &hellip; } from "./ui.aktion"</code> is resolved at build or
+          link time, so a code-split chunk is something your <em>host</em>
+          bundler produces, not something a program requests at runtime. See
+          <a href="modules.html#lazy">Modules</a> for how the two layers fit
+          together.</p>
+      </div>
+
+      <h2 id="streaming">Streaming throughput: <code>setResponse</code> vs <code>appendChunk</code></h2>
+      <p>
+        Both host methods replace the program text and schedule a render on the
+        next microtask, and both re-parse the whole buffer when they do. The
+        difference is how much state they throw away.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Method</th><th>Use when</th><th>What it keeps</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>setResponse(full)</code></td>
+            <td>You have the complete program text &mdash; a finished message, a saved snippet, a new document.</td>
+            <td><strong>Nothing.</strong> Every state atom is rebound to its declared default, every per-instance UI state slot is dropped, every disposer runs, the memo cache is cleared, and queued parse errors are reset. A no-op when the text is unchanged.</td>
+          </tr>
+          <tr>
+            <td><code>appendChunk(delta)</code></td>
+            <td>You are streaming tokens from an LLM as they arrive.</td>
+            <td><strong>Everything.</strong> State values, per-instance UI state, effects and the memo cache all survive, so the growing program keeps its scroll position, its open tab and its typed input.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        So calling <code>setResponse</code> per token is not merely a slower
+        parse &mdash; it resets the app on every token. Stream with
+        <code>appendChunk</code> and reserve <code>setResponse</code> for
+        whole-document swaps.
+      </p>
+<pre><code>const app = document.querySelector("aktion-app");
+app.streaming = true;                       // suppress the error banner mid-stream
+for await (const delta of tokens) {
+  app.appendChunk(delta);                   // renders coalesce into one per task
+}
+app.streaming = false;                      // now parse errors surface
+</code></pre>
+      <p>
+        Renders are coalesced: the host schedules at most one render per
+        microtask, so appending many chunks inside one task costs one render, not
+        one per chunk. Setting <code>streaming</code> also defers the
+        <code>error</code> event, because a mid&#8209;token tail almost always
+        fails to parse &mdash; see <a href="errors.html#parse">Parse errors</a>.
+      </p>
+
+      <h2 id="budget">The per-render safety budget</h2>
+      <p>
+        Every render runs under a budget so a partial or accidentally-recursive
+        program cannot freeze the tab. This page is the reference for those
+        limits; <a href="errors.html#guards">Error handling</a> covers how a trip
+        is surfaced.
+      </p>
+
+      <h3 id="budget-limits">What the budget bounds</h3>
+      <table class="signature-table">
+        <thead><tr><th>Limit</th><th>Default</th><th>Counted across</th><th>Trips on</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>componentDepthLimit</code></td>
+            <td>150</td>
+            <td>Simultaneous depth of user-component invocations.</td>
+            <td><code>function Foo() { return Foo() }</code> &mdash; direct or transitive recursion.</td>
+          </tr>
+          <tr>
+            <td><code>iterationLimit</code></td>
+            <td>250&nbsp;000</td>
+            <td>Every <code>for</code>, <code>for&hellip;of</code>, <code>for&hellip;in</code>, <code>while</code> and <code>do&hellip;while</code> body evaluation in the whole render.</td>
+            <td>An unbounded loop, or many nested loops that multiply out.</td>
+          </tr>
+          <tr>
+            <td><code>arrayLengthLimit</code></td>
+            <td>100&nbsp;000</td>
+            <td>Carried on the budget object &mdash; see the note below.</td>
+            <td>&mdash;</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        The counters are cumulative for the pass and reset before each render.
+        Because they are cumulative across <em>all</em> loops, a thousand small
+        loops still get caught before they add up to seconds of work. When a
+        limit trips the evaluator throws <code>RuntimeBudgetError</code>, the
+        render aborts, and the previous tick&rsquo;s DOM is left on screen:
+      </p>
+<pre><code>[aktion] runtime aborted at component "Foo": component recursion exceeded 150 levels
+  — check for a component that calls itself directly or transitively.
+
+[aktion] runtime aborted at `while` loop: exceeded 250000 total loop iterations
+  in a single render — narrow the iterable or split the loop.</code></pre>
+      <p>
+        The error carries <code>kind</code>
+        (<code>"component-depth"</code>, <code>"iterations"</code> or
+        <code>"array-length"</code>), <code>limit</code> and <code>source</code>,
+        and the host turns it into a banner line plus an <code>error</code> event
+        with <code>{ line: 0, column: 0, message }</code>.
+      </p>
+      <div class="callout warn">
+        <h4>Two gaps to know about</h4>
+        <p><strong>Array methods are not counted.</strong> The iteration counter
+          only sees loop <em>statements</em>, so
+          <code>$rows.map(&hellip;)</code> over a 100k array costs nothing
+          against the budget. Windowing, not the budget, is what protects you
+          there.</p>
+        <p><strong><code>arrayLengthLimit</code> is not the knob it looks
+          like.</strong> The <code>@Range</code>/<code>@Repeat</code> cap is
+          enforced inside <code>$util</code> as a fixed 100&nbsp;000, and it
+          throws a plain <code>RangeError</code> rather than a
+          <code>RuntimeBudgetError</code>:
+          <code>$util.range refusing to allocate 300001 entries (limit
+          100000).</code></p>
+        <p>That error is logged and the tree renders empty &mdash; no banner, no
+          <code>error</code> event. Raising <code>arrayLengthLimit</code> on a
+          custom budget does not raise the <code>$util</code> cap.</p>
+      </div>
+
+      <h3 id="budget-tuning">Tuning the budget</h3>
+      <p>
+        <code>&lt;aktion-app&gt;</code> always uses the defaults &mdash; there is
+        no attribute for this. The limits are only reachable if you drive the
+        evaluator yourself, by building a budget and passing it into a context.
+        Both functions are public exports.
+      </p>
+<pre><code>import { createRuntimeBudget, createContext, DEFAULT_RUNTIME_BUDGET } from "aktion-runtime";
+
+DEFAULT_RUNTIME_BUDGET;
+// → { componentDepthLimit: 150, iterationLimit: 250000, arrayLengthLimit: 100000 }
+
+// Every field is optional; omitted fields fall back to the default.
+const budget = createRuntimeBudget({ iterationLimit: 1_000_000 });
+// → { componentDepthLimit: 150, iterationLimit: 1000000,
+//     arrayLengthLimit: 100000, componentDepth: 0, iterations: 0 }
+
+const ctx = createContext(state, { library, budget });   // caller-supplied limits
+const trusted = createContext(state, { budget: null });  // enforcement OFF
+</code></pre>
+      <p>
+        Omitting <code>budget</code> gives you a fresh budget with the default
+        limits; <code>null</code> disables enforcement entirely. Only reach for
+        <code>null</code> in a trusted offline pipeline &mdash; a server-side
+        batch render of your own programs, for example &mdash; never for program
+        text you did not write.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Export</th><th>Signature</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>DEFAULT_RUNTIME_BUDGET</code></td><td><code>Readonly&lt;{ componentDepthLimit, iterationLimit, arrayLengthLimit }&gt;</code></td><td>The three defaults, without the running counters.</td></tr>
+          <tr><td><code>createRuntimeBudget</code></td><td><code>(overrides?) =&gt; RuntimeBudget</code></td><td>Adds <code>componentDepth: 0</code> and <code>iterations: 0</code>.</td></tr>
+          <tr><td><code>resetRuntimeBudget</code></td><td><code>(budget) =&gt; void</code></td><td>Clears the counters, keeps the limits. Call between renders.</td></tr>
+          <tr><td><code>createContext</code></td><td><code>(state, options?) =&gt; EvaluationContext</code></td><td><code>options.budget</code> takes a <code>RuntimeBudget</code>, or <code>null</code> to disable.</td></tr>
+          <tr><td><code>RuntimeBudgetError</code></td><td><code>class extends Error</code></td><td>Carries <code>kind</code>, <code>limit</code>, <code>source</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="data-bounds">Data-driven bounds</h3>
+      <p>
+        The budget bounds the <em>program</em>. A second set of fixed bounds
+        protects the render thread from a single oversized <em>value</em>
+        &mdash; an LLM reply, a pasted payload, an API field &mdash; because
+        every one of these drives a loop whose cost grows with its input.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Bound</th><th>Limit</th><th>Behaviour past the limit</th></tr></thead>
+        <tbody>
+          <tr><td><code>Markdown</code> document</td><td>128 KB</td><td>Truncated, so the beginning still renders.</td></tr>
+          <tr><td><code>Markdown</code> single line</td><td>8 KB</td><td>That line is truncated.</td></tr>
+          <tr><td><code>Styles</code> CSS payload</td><td>64 KB</td><td>Sheet dropped, with a <code>console.warn</code>.</td></tr>
+          <tr><td><code>Styles</code> <code>scope</code> selector</td><td>128 chars</td><td>Sheet dropped, with a <code>console.warn</code>.</td></tr>
+          <tr><td>Inline SVG input / nodes / depth</td><td>64 KB / 4096 / 32</td><td>Rejected by the SVG sanitiser.</td></tr>
+          <tr><td>Rich-text HTML input / nodes / depth</td><td>512 KB / 8192 / 64</td><td>Rejected by the HTML sanitiser.</td></tr>
+          <tr><td>Custom icon markup</td><td>16 KB</td><td>Registration is skipped.</td></tr>
+          <tr><td><code>Progress.segments</code></td><td>200</td><td>Clamped &mdash; it drives a DOM-creation loop.</td></tr>
+          <tr><td><code>Text.lines</code></td><td>20</td><td>Clamped.</td></tr>
+          <tr><td><code>CodeBlock.highlightLines</code> range</td><td>the block&rsquo;s line count, hard ceiling 10&nbsp;000</td><td>Clamped, so <code>"1-99999999"</code> cannot build a huge set.</td></tr>
+          <tr><td><code>$util.match</code> / <code>$util.rules.pattern</code> pattern</td><td>1024 chars</td><td>Returns <code>false</code>.</td></tr>
+          <tr><td><code>$util.match</code> / <code>$util.rules.pattern</code> subject</td><td>8 KB</td><td>Truncated &mdash; only the first 8192 characters are tested.</td></tr>
+          <tr><td>State write array index</td><td>1&nbsp;000&nbsp;000</td><td>The write is a silent no&#8209;op.</td></tr>
+          <tr><td><code>$util.range</code> / <code>$util.repeat</code></td><td>100&nbsp;000 entries</td><td>Throws <code>RangeError</code>; the tree renders empty.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        These are ceilings, not targets &mdash; anything a real app renders fits
+        far below them. <a href="security.html">Security &amp; the trust
+        model</a> explains why they exist: they are what stops untrusted
+        <em>data</em> flowing through a trusted program from freezing the host
+        page.
+      </p>
+
+      <h2 id="bundle">Bundle size</h2>
+      <p>
+        The runtime ships as one bundle that registers the
+        <code>&lt;aktion-app&gt;</code> element, the component library, the
+        themes and the interpreter. Because components are resolved by name at
+        runtime &mdash; an LLM may emit any of the 282 &mdash; the library is
+        intentionally <em>not</em> tree-shaken per app.
+      </p>
+      <p>
+        Measured on the published build with <code>gzip -9</code> and
+        <code>brotli -q 11</code>:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Entry</th><th>Raw</th><th>Gzip</th><th>Brotli</th><th>Ships to the browser?</th></tr></thead>
+        <tbody>
+          <tr><td><code>dist/aktion.iife.js</code> &mdash; CDN <code>&lt;script&gt;</code></td><td>1,780,638&nbsp;B</td><td><strong>493,087&nbsp;B</strong> (482&nbsp;KB)</td><td>387,471&nbsp;B (378&nbsp;KB)</td><td>Yes.</td></tr>
+          <tr><td><code>dist/aktion.js</code> &mdash; ESM, as published</td><td>2,179,995&nbsp;B</td><td>563,229&nbsp;B (550&nbsp;KB)</td><td>435,112&nbsp;B (425&nbsp;KB)</td><td>Yes, after your bundler.</td></tr>
+          <tr><td><code>dist/aktion.js</code> &mdash; after minification</td><td>1,784,473&nbsp;B</td><td><strong>492,813&nbsp;B</strong> (481&nbsp;KB)</td><td>387,220&nbsp;B (378&nbsp;KB)</td><td>This is what your users download.</td></tr>
+          <tr><td><code>dist/devtools.js</code> &mdash; the 14&#8209;tab panel</td><td>308,963&nbsp;B</td><td>77,278&nbsp;B (75.5&nbsp;KB)</td><td>63,549&nbsp;B (62.1&nbsp;KB)</td><td>Only when you import it. Minifies to 203,947&nbsp;B / 61,934&nbsp;B gzip.</td></tr>
+          <tr><td><code>dist/plugin.js</code> &mdash; Vite plugin</td><td>87,286&nbsp;B</td><td>15,577&nbsp;B (15.2&nbsp;KB)</td><td>13,542&nbsp;B (13.2&nbsp;KB)</td><td>No &mdash; build time only.</td></tr>
+          <tr><td><code>dist/testing.js</code></td><td>2,541,206&nbsp;B</td><td>600,797&nbsp;B (587&nbsp;KB)</td><td>455,691&nbsp;B (445&nbsp;KB)</td><td>No &mdash; test time only.</td></tr>
+          <tr><td><code>dist/language.js</code></td><td>1,636,750&nbsp;B</td><td>402,341&nbsp;B (393&nbsp;KB)</td><td>304,874&nbsp;B (298&nbsp;KB)</td><td>Only in editor / tooling surfaces.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The published ESM entry keeps its newlines because bundlers minify
+        downstream; run it through esbuild or terser and it lands within 300
+        bytes of the pre-minified IIFE. Plan for roughly
+        <strong>480&nbsp;KB gzipped or 380&nbsp;KB brotli</strong> for the
+        runtime, once, shared by every app on the page.
+      </p>
+      <p>
+        There is no smaller build to pick, so the levers are all about paying
+        for it once:
+      </p>
+      <ul>
+        <li>Serve it from a CDN so it is cached across pages and across apps.</li>
+        <li>Enable brotli at the edge &mdash; that is a 105&nbsp;KB saving over
+          gzip on the same file.</li>
+        <li>Import the runtime once per page and share it across every
+          <code>&lt;aktion-app&gt;</code>, rather than per component.</li>
+        <li>Keep your own custom component packs in a separate module so they
+          only load on the routes that use them.</li>
+        <li>Import <code>aktion-runtime/devtools</code>,
+          <code>/test</code> and <code>/language</code> only where you actually
+          need them &mdash; none of the three is pulled in by the main entry.</li>
+      </ul>
+
+      <h2 id="ssr">Server-side rendering &amp; SSG</h2>
+      <p>
+        Rendering a program to HTML ahead of time cuts time&#8209;to&#8209;first&#8209;paint
+        and makes the page crawlable. <code>renderToString(program, options?)</code>
+        returns four fields:
+      </p>
+<pre><code>import { renderToString } from "aktion-runtime"
+
+const { html, state, head, headAttrs } = renderToString(programSource, { path: "/" })
+// html      → inject into the shell's container
+// state     → serialise into a &lt;script&gt; for hydration
+// head      → inject into the shell's <head> ("" when no $head ran)
+// headAttrs → spread onto <html>, e.g. { lang: "en", dir: "ltr" }</code></pre>
+      <p>
+        For a fully static page, <code>renderToStaticMarkup(program)</code>
+        returns only the markup. <a href="head.html">Document head</a> is the
+        reference for what <code>head</code> and <code>headAttrs</code> can
+        contain.
+      </p>
+      <p>
+        The renderer is DOM&#8209;based, so in Node you register a DOM shim
+        (<code>happy-dom</code> or <code>jsdom</code>) on
+        <code>globalThis</code> before calling it &mdash; the same setup the test
+        suite uses. Pair the returned <code>state</code> with the client&rsquo;s
+        hydration seam so the first paint does not re&#8209;fetch.
+      </p>
+      <div class="callout warn">
+        <p><strong><code>renderToString</code> evaluates the program.</strong>
+          On a server that makes untrusted program text remote code execution,
+          not merely XSS. If the text is not yours, call
+          <code>setGlobalAccessPolicy("safe")</code> in the server entry before
+          rendering and isolate the process &mdash; see
+          <a href="security.html">Security &amp; the trust model</a>.</p>
+      </div>
+
+      <h2 id="checklist">Performance checklist</h2>
+      <ul class="checklist">
+        <li>Measure with <a href="devtools.html">DevTools</a> and read the render reason before changing anything.</li>
+        <li>Keep state on the <strong>fine-grained path</strong> &mdash; top-level atoms and <code>$store</code> fields, written by narrow paths.</li>
+        <li>Pass <strong>stable props</strong>; wrap derived arrays and objects in <code>$memo</code> so their identity survives a render.</li>
+        <li>Give list rows a <strong><code>key</code></strong> so instance state, focus and animation travel with the row.</li>
+        <li>Emit no <code>value</code> attribute for an unset field, and bind <code>TextArea</code> / <code>Select</code> to state.</li>
+        <li>Never store UI state on the live DOM &mdash; use <code>helpers.setState</code> or <code>helpers.useInstanceState</code>.</li>
+        <li>Window long lists with <strong><code>VirtualList</code></strong> / <strong><code>VirtualGrid</code></strong>; page big datasets at the source.</li>
+        <li>Push heavy compute off-thread with <strong><code>$util.worker</code></strong>; defer expensive panels with <code>Lazy</code>.</li>
+        <li>Stream with <strong><code>appendChunk</code></strong>, never <code>setResponse</code> per token.</li>
+        <li>Serve the runtime once, from a CDN, with brotli enabled.</li>
+        <li>Turn on <a href="errors.html#strict"><code>strict</code></a> in development so reverted DOM writes and unknown identifiers announce themselves.</li>
+      </ul>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="reactivity.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Reactivity &amp; rendering</h3>
+          <p>The two render gates and exactly what forces a full re-render.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="troubleshooting.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Troubleshooting / FAQ</h3>
+          <p>Focus loss, effects not firing, memoized-away components, and more.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="devtools.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>DevTools</h3>
+          <p>State inspector, commit profiler, and the effect timeline.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+  <script type="module">
+    import "./dist/aktion.js";
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[performance demo] render failed", err);
+      }
+    }
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>
