@@ -13,6 +13,14 @@ jobs:
   console:
     runs-on: ubuntu-latest
     name: Get console logs
+    # The "Deploy PR previews" workflow only deploys to Pages for a same-repo
+    # PR (`.github/workflows/preview.yml`'s own `Deploy preview` step has the
+    # identical guard) — a fork PR's build succeeds, but PREVIEW_URL below is
+    # never actually deployed. Without this guard, `wait-for-build` still
+    # reports the build check as successful, so this job proceeds to poll a
+    # URL that will 404 for the full 180s timeout and fail — on every fork
+    # PR, regardless of whether the change itself is fine.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     env:
       PREVIEW_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-preview/pr-${{ github.event.number }}/
     steps:
