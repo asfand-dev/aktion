@@ -1964,6 +1964,10 @@ function FP(t, e = {}) {
 const Du = /^[A-Za-z_$][A-Za-z0-9_$]*$/, Wv = /[\\"\n\r\t]/, Gv = 2;
 function Vv(t) {
   const e = Gv;
+  if (!Number.isInteger(e) || e < 0)
+    throw new RangeError(
+      `FormatOptions.indentWidth must be a non-negative integer, got ${e}`
+    );
   return { unit: " ".repeat(e) };
 }
 function ir(t, e) {

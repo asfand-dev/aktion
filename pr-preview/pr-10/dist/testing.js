@@ -2415,6 +2415,11 @@ const NEEDS_ESCAPE = /[\\"\n\r\t]/;
 const DEFAULT_INDENT_WIDTH = 2;
 function resolveFormatOptions(options) {
   const width = DEFAULT_INDENT_WIDTH;
+  if (!Number.isInteger(width) || width < 0) {
+    throw new RangeError(
+      `FormatOptions.indentWidth must be a non-negative integer, got ${width}`
+    );
+  }
   return { unit: " ".repeat(width) };
 }
 function pad(indent, opts) {

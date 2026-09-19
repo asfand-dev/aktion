@@ -38909,6 +38909,11 @@ function resolveFormatOptions(options) {
     return { unit: "	" };
   }
   const width = options?.indentWidth ?? DEFAULT_INDENT_WIDTH;
+  if (!Number.isInteger(width) || width < 0) {
+    throw new RangeError(
+      `FormatOptions.indentWidth must be a non-negative integer, got ${width}`
+    );
+  }
   return { unit: " ".repeat(width) };
 }
 function pad(indent, opts) {
