@@ -1,0 +1,92 @@
+// Selection — 11 reusable choosers, toggles and pickers (controlled via $state).
+$app(Column([header, Column(demos, { gap: "lg" })], { gap: "lg", padding: "md" }))
+
+header = PageHeader("Selection controls", { subtitle: "11 reusable selection components", badge: Badge("Components", { tone: "primary", icon: "list-check" }) })
+function Demo(name, desc, body) { return Card([SectionHeader(name, { eyebrow: "COMPONENT", subtitle: desc }), body]) }
+
+opts = ["Design", "Engineering", "Marketing", "Sales", "Support"]
+toItems = arr => arr.map(o => SelectItem(o, { label: o }))
+
+// 1 — single-select dropdown
+function Dropdown(label, { options = opts, initial } = {}) {
+  const [v, setV] = $state(initial || options[0])
+  return FormControl(label || "Team", { field: Select("sel", { items: toItems(options), value: v, onChange: setV }) })
+}
+
+// 2 — searchable single-select
+function SearchableSelect(label, { options = opts } = {}) {
+  const [v, setV] = $state("")
+  return FormControl(label || "Country", { field: Combobox("cb", { items: toItems(options), value: v, onChange: setV, placeholder: "Search…" }) })
+}
+
+// 3 — multi-select with chips
+function MultiPicker(label, { options = opts } = {}) {
+  const [v, setV] = $state([])
+  return FormControl(label || "Departments", { hint: `${v.length} selected`, field: MultiSelect("ms", { items: toItems(options), value: v, onChange: setV, placeholder: "Pick a few…" }) })
+}
+
+// 4 — radio group
+function RadioCards(label, { options = ["Monthly", "Yearly"], initial } = {}) {
+  const [v, setV] = $state(initial || options[0])
+  return FormControl(label || "Billing", { field: Radio("rad", { items: toItems(options), value: v, onChange: setV }) })
+}
+
+// 5 — checkbox group bound to an object
+function CheckList(label, {} = {}) {
+  const [v, setV] = $state({ product: true, security: false, newsletter: false })
+  return FormControl(label || "Email me about", { field: CheckBoxGroup("cbg", { items: [
+    CheckBoxItem("Product updates", { name: "product" }),
+    CheckBoxItem("Security alerts", { name: "security" }),
+    CheckBoxItem("Newsletter", { name: "newsletter" })
+  ], value: v, onChange: setV }) })
+}
+
+// 6 — labelled on/off switch with description
+function SettingSwitch(label, { desc, initial = false } = {}) {
+  const [on, setOn] = $state(initial)
+  return Switch("sw", { label: label || "Enable", description: desc, value: on, onChange: setOn })
+}
+
+// 7 — segmented (single-select toggle) control
+function SegmentChooser({ options = ["Day", "Week", "Month"], initial } = {}) {
+  const [v, setV] = $state(initial || options[0])
+  return ToggleGroup("seg", { items: options.map(o => ({ value: o, label: o })), value: v, onChange: setV })
+}
+
+// 8 — slider with a live value readout
+function RangeSlider(label, { min = 0, max = 100, step = 1, initial = 50 } = {}) {
+  const [v, setV] = $state(initial)
+  return FormControl(label || "Volume", { hint: String(v), field: Slider("sld", { min, max, step, value: v, showValue: true, onChange: setV }) })
+}
+
+// 9 — interactive star rating
+function StarRating({ initial = 0 } = {}) {
+  const [v, setV] = $state(initial)
+  return Row([Rating(v, { interactive: true, value: v, max: 5, onChange: setV }), Text(v ? `${v}/5` : "Tap to rate", { tone: "muted" })], { gap: "md", align: "center" })
+}
+
+// 10 — color picker with swatches
+function ColorField(label, { initial = "#6366f1" } = {}) {
+  const [c, setC] = $state(initial)
+  return FormControl(label || "Brand color", { hint: c, field: ColorPicker("clr", { value: c, onChange: setC, swatches: ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#0ea5e9"] }) })
+}
+
+// 11 — date picker
+function DateField(label, { initial = "2026-06-15" } = {}) {
+  const [d, setD] = $state(initial)
+  return FormControl(label || "Date", { field: DatePicker("dt", { value: d, onChange: setD }) })
+}
+
+demos = [
+  Demo("Dropdown", "Single-select dropdown", Dropdown("Team")),
+  Demo("SearchableSelect", "Type-to-filter combobox", SearchableSelect("Country", { options: ["United States", "United Kingdom", "Germany", "Japan", "Brazil", "India"] })),
+  Demo("MultiPicker", "Multi-select with chips", MultiPicker("Departments")),
+  Demo("RadioCards", "Radio group", RadioCards("Billing cycle")),
+  Demo("CheckList", "Checkbox group → object", CheckList("Notifications")),
+  Demo("SettingSwitch", "On/off with description", Column([SettingSwitch("Dark mode", { desc: "Use the dark color scheme" }), SettingSwitch("Auto-save", { desc: "Save drafts every minute", initial: true })], { gap: "sm" })),
+  Demo("SegmentChooser", "Single-select segmented toggle", SegmentChooser({ options: ["Day", "Week", "Month", "Year"] })),
+  Demo("RangeSlider", "Slider with value readout", Column([RangeSlider("Volume", { initial: 65 }), RangeSlider("Brightness", { initial: 40 })], { gap: "md" })),
+  Demo("StarRating", "Interactive 0–5 rating", Row([StarRating(), StarRating({ initial: 4 })], { gap: "xl", wrap: true })),
+  Demo("ColorField", "Color picker + swatches", ColorField("Accent")),
+  Demo("DateField", "Date picker", DateField("Start date"))
+]

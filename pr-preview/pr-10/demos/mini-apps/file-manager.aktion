@@ -1,0 +1,146 @@
+// File Manager — a folder tree beside a file grid, with breadcrumbs, search,
+// list/grid view toggle, sortable files and a details panel for the selected
+// file. Starting point for: any file browser, document library or asset manager.
+// Uses: SplitView, recursive Tree/TreeNode, $store selection, DescriptionList, $util.bytes.
+$app(Column([header, SplitView([treePane], [mainPane], { primaryWidth: "260px" })], { gap: "md", padding: "md" }))
+
+// ---- folder hierarchy ------------------------------------------------------
+tree = [
+  { id: "root", name: "My Drive", icon: "house", children: [
+    { id: "docs", name: "Documents", icon: "folder", children: [
+      { id: "contracts", name: "Contracts", icon: "folder", children: [] },
+      { id: "invoices", name: "Invoices", icon: "folder", children: [] }
+    ]},
+    { id: "projects", name: "Projects", icon: "folder", children: [
+      { id: "aktion", name: "Aktion", icon: "folder", children: [] }
+    ]},
+    { id: "media", name: "Media", icon: "folder", children: [] }
+  ]}
+]
+
+files = {
+  root: [{ name: "Welcome.pdf", type: "pdf", size: 184320, modified: "2026-06-10" }, { name: "todo.txt", type: "text", size: 1240, modified: "2026-06-12" }],
+  docs: [{ name: "Handbook.docx", type: "doc", size: 482000, modified: "2026-05-30" }, { name: "Roadmap.md", type: "text", size: 8200, modified: "2026-06-09" }],
+  contracts: [{ name: "MSA-Northwind.pdf", type: "pdf", size: 920000, modified: "2026-04-21" }, { name: "NDA-Acme.pdf", type: "pdf", size: 311000, modified: "2026-03-15" }],
+  invoices: [{ name: "INV-1042.pdf", type: "pdf", size: 64000, modified: "2026-06-11" }, { name: "INV-1041.pdf", type: "pdf", size: 61000, modified: "2026-06-10" }, { name: "summary.csv", type: "sheet", size: 4400, modified: "2026-06-11" }],
+  projects: [{ name: "ideas.md", type: "text", size: 3100, modified: "2026-06-08" }],
+  aktion: [{ name: "app.aktion", type: "code", size: 12400, modified: "2026-06-13" }, { name: "theme.css", type: "code", size: 5600, modified: "2026-06-13" }, { name: "logo.png", type: "image", size: 88000, modified: "2026-06-01" }],
+  media: [{ name: "hero.jpg", type: "image", size: 2400000, modified: "2026-05-12" }, { name: "demo.mp4", type: "video", size: 18400000, modified: "2026-05-20" }, { name: "cover.png", type: "image", size: 640000, modified: "2026-05-22" }]
+}
+
+nav = $store({
+  folder: "root",
+  selected: null,
+  view: "grid",
+  sort: "name",
+  open: (s, id) => { s.folder = id; s.selected = null },
+  pick: (s, name) => { s.selected = name }
+})
+$search = ""
+
+// Pure recursive search for the ancestor path of a folder id — returns
+// [{ id, label }] from the root down to the target (no mutable lookup maps,
+// no while loops).
+function pathTo(nodes, id, trail) {
+  for (let n of nodes) {
+    const next = [...trail, { id: n.id, label: n.name }]
+    if (n.id == id) return next
+    const found = (n.children && n.children.length > 0) ? pathTo(n.children, id, next) : null
+    if (found) return found
+  }
+  return null
+}
+function labelFor(id) {
+  const p = pathTo(tree, id, [])
+  return p ? p[p.length - 1].label : id
+}
+
+typeMeta = {
+  pdf: { icon: "file-pdf", tone: "danger" }, doc: { icon: "file-word", tone: "info" },
+  sheet: { icon: "file-csv", tone: "success" }, text: { icon: "file-lines", tone: "neutral" },
+  code: { icon: "file-code", tone: "primary" }, image: { icon: "file-image", tone: "warning" },
+  video: { icon: "file-video", tone: "primary" }
+}
+metaFor = t => typeMeta[t] ?? { icon: "file", tone: "neutral" }
+
+currentFiles = (files[nav.folder] ?? [])
+  .filter(f => $search == "" ? true : f.name.toLowerCase().includes($search.toLowerCase()))
+selectedFile = currentFiles.find(f => f.name == nav.selected)
+sorted = nav.sort == "size" ? $util.sort(currentFiles, "size", "desc") : nav.sort == "modified" ? $util.sort(currentFiles, "modified", "desc") : $util.sort(currentFiles, "name", "asc")
+
+header = PageHeader("File Manager", {
+  subtitle: `${(files[nav.folder] ?? []).length} ${$util.plural((files[nav.folder] ?? []).length, "file")} in ${labelFor(nav.folder)}`,
+  badge: Badge("My Drive", { tone: "primary", icon: "hard-drive" }),
+  actions: [Button("Upload", { variant: "primary", icon: "upload", size: "sm" })]
+})
+
+function folderNode(n) {
+  return TreeNode(n.name, {
+    icon: n.icon,
+    expanded: true,
+    active: nav.folder == n.id,
+    badge: files[n.id] && files[n.id].length > 0 ? String(files[n.id].length) : null,
+    onClick: () => nav.open(n.id),
+    children: (n.children ?? []).map(c => folderNode(c))
+  })
+}
+
+treePane = Column([
+  SectionHeader("Folders"),
+  Tree(tree.map(n => folderNode(n)))
+], { gap: "sm" })
+
+crumbs = pathTo(tree, nav.folder, []) ?? [{ id: "root", label: "My Drive" }]
+breadcrumb = Row(crumbs.flatMap((c, i) => i < crumbs.length - 1
+  ? [Button(c.label, { variant: "ghost", size: "sm", icon: "folder", onClick: () => nav.open(c.id) }), Text("/", { tone: "muted" })]
+  : [Text(c.label, { variant: "body-heavy" })]
+), { gap: "2xs", align: "center", wrap: true })
+
+toolbar = Toolbar({
+  left: [breadcrumb],
+  right: [
+    Select("sort", { items: [SelectItem("name", { label: "Name" }), SelectItem("size", { label: "Size" }), SelectItem("modified", { label: "Modified" })], value: nav.sort, onChange: (v) => { nav.sort = v } }),
+    SegmentedControl(["grid", "list"], { value: nav.view, onChange: (v) => { nav.view = v } })
+  ]
+})
+
+function fileTile(f) {
+  const m = metaFor(f.type)
+  return OnClick(Box([Column([
+    Icon(m.icon, { size: "xl", color: `var(--rui-color-${m.tone == "neutral" ? "text-muted" : m.tone})` }),
+    Text($util.truncate(f.name, 18), { variant: "small-heavy" }),
+    Text($util.bytes(f.size), { variant: "small", tone: "muted" })
+  ], { gap: "2xs", align: "center" })], {
+    key: f.name,
+    padding: "md",
+    border: nav.selected == f.name ? "strong" : "subtle",
+    background: nav.selected == f.name ? "muted" : "surface",
+    sx: { borderRadius: "var(--rui-radius-md)", states: { hover: { translateY: "-2px", shadow: "md" } } }
+  }), { onClick: () => nav.pick(f.name) })
+}
+
+filesView = currentFiles.length == 0
+  ? EmptyState("This folder is empty", { icon: "folder-open", description: $search ? "No files match your search." : "Upload a file or pick another folder." })
+  : nav.view == "grid"
+    ? Grid(sorted.map(f => fileTile(f)), { columns: { base: 2, sm: 3, md: 4 }, gap: "md" })
+    : Table([
+        Col("Name", sorted.map(f => Row([Icon(metaFor(f.type).icon), Text(f.name)], { gap: "sm", align: "center" })), { onClick: (v, i) => nav.pick(sorted[i].name) }),
+        Col("Type", sorted.map(f => Badge(f.type, { tone: metaFor(f.type).tone == "neutral" ? "default" : metaFor(f.type).tone, size: "xs" }))),
+        Col("Size", sorted.map(f => $util.bytes(f.size)), { align: "right" }),
+        Col("Modified", sorted.map(f => $util.formatDate(f.modified, "date")))
+      ], { striped: true })
+
+detailsPanel = Show(selectedFile != null, {
+  children: selectedFile ? Card([
+    SectionHeader(selectedFile.name, { eyebrow: "DETAILS", actions: [IconButton("xmark", { label: "Close", variant: "ghost", size: "sm", onClick: () => { nav.selected = null } })] }),
+    DescriptionList([
+      DescriptionItem("Type", { value: selectedFile.type, icon: metaFor(selectedFile.type).icon }),
+      DescriptionItem("Size", { value: $util.bytes(selectedFile.size), icon: "weight-scale" }),
+      DescriptionItem("Modified", { value: $util.formatDate(selectedFile.modified, "date"), icon: "clock" }),
+      DescriptionItem("Location", { value: crumbs.map(c => c.label).join(" / "), icon: "folder-tree" })
+    ], { columns: 2 }),
+    Row([Button("Download", { variant: "primary", icon: "download", size: "sm" }), Button("Share", { variant: "secondary", icon: "share-nodes", size: "sm" }), Button("Delete", { variant: "ghost", icon: "trash", size: "sm" })], { gap: "sm" })
+  ]) : null
+})
+
+mainPane = Column([toolbar, Card([filesView]), detailsPanel], { gap: "md" })
