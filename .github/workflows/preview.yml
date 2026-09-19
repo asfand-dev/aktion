@@ -1,10 +1,25 @@
 name: Deploy PR previews
 
-# Builds every PR (including from forks) with a read-only token and no
-# secrets, then hands the result off to the trusted `Deploy PR preview`
-# workflow (deploy-preview.yml) via artifacts. This job must NEVER be given
-# write access — see that workflow's header comment for why the split
-# exists and how the two halves talk to each other.
+# Builds every PR (including from forks) and hands the built site off to
+# the trusted `Deploy PR preview` workflow (deploy-preview.yml) via an
+# artifact — that workflow does the actual deploy, using its OWN
+# independently-derived idea of which PR this is and whether to deploy or
+# remove, never anything this job claims (see its header comment for why:
+# an earlier version of this split had this job also write a `pr-metadata`
+# artifact naming its own PR number/lifecycle action, which the trusted job
+# then trusted outright — since THIS workflow file is itself read from the
+# PR's own branch, a malicious PR could edit that step to claim to BE any
+# other PR, and had the trusted job deploying or deleting arbitrary
+# previews on its say-so).
+#
+# The `contents: write`/`pull-requests: write` below look like they
+# contradict that — they exist ONLY for the TEMPORARY same-repo fallback
+# step at the bottom of this job (see its own comment for why it exists and
+# when to remove it). For a fork PR, GitHub forces GITHUB_TOKEN to be
+# read-only on a `pull_request`-triggered run no matter what is declared
+# here, so granting this claim changes nothing for the untrusted case this
+# job exists to handle safely — it only ever takes effect for a genuine
+# same-repo PR, where the fallback step's own condition also requires it.
 
 on:
   pull_request:
@@ -15,12 +30,20 @@ on:
       - closed
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
   build-preview:
     runs-on: ubuntu-latest
     name: Make sure it builds. Then show a preview.
+    # TEMPORARY: matches deploy-preview.yml's environment declaration so the
+    # fallback deploy step below (also temporary) gets the same "View
+    # deployment" URL badge the trusted workflow will provide once it's
+    # live. Drop this once the fallback below is removed.
+    environment:
+      name: pr-preview/pr-${{ github.event.number }}
+      url: ${{ format('https://{0}.github.io/{1}/pr-preview/pr-{2}/', github.repository_owner, github.event.repository.name, github.event.number) }}
     steps:
       - name: Checkout
         if: github.event.action != 'closed'
@@ -49,24 +72,21 @@ jobs:
           path: ./site/
           retention-days: 1
 
-      # A `workflow_run` event (which the trusted deploy workflow triggers
-      # on) carries only the id of the run that fired it — deliberately not
-      # the pull_request payload that run itself saw, since that payload
-      # would include data an attacker fully controls (PR number aside,
-      # things like the PR title). Recording just the two fields the deploy
-      # workflow actually needs, ourselves, keeps that trust boundary
-      # explicit rather than relying on the runtime to sanitise a bigger
-      # payload for us.
-      - name: Record PR metadata for the trusted deploy workflow
-        run: |
-          mkdir -p ./pr-metadata
-          cat > ./pr-metadata/pr.json <<JSON
-          {"number": ${{ github.event.number }}, "action": "${{ github.event.action }}"}
-          JSON
-
-      - name: Upload PR metadata
-        uses: actions/upload-artifact@v7
+      # TEMPORARY FALLBACK — remove once deploy-preview.yml is confirmed
+      # live on the default branch (see its header comment for why: GitHub
+      # only fires a `workflow_run` trigger for a listener workflow that
+      # already exists on the default branch, so until this repo's `main`
+      # has that file, `workflow_run` can never fire at all — for ANY PR,
+      # fork or not). Without this fallback, every same-repo PR opened
+      # before that merge would regress: they deployed fine, same-job,
+      # before this split existed. This step only runs for a same-repo PR
+      # (a fork's GITHUB_TOKEN is forced read-only here regardless of the
+      # `permissions:` above, so it inertly no-ops for a fork either way),
+      # so it carries none of the cross-PR trust-boundary risk the split
+      # exists to avoid — it only ever acts on ITS OWN PR's real event data.
+      - name: Deploy preview (temporary same-repo fallback until deploy-preview.yml is bootstrapped)
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: rossjrw/pr-preview-action@v1
         with:
-          name: pr-metadata
-          path: ./pr-metadata/
-          retention-days: 1
+          source-dir: ./site/
+          wait-for-pages-deployment: true
