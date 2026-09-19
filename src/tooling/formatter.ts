@@ -384,7 +384,18 @@ function printDesugaredOperator(expr: BuiltinCallExpr, indent: number, opts: Res
     case "__rui_await__": {
       const [argument] = expr.arguments;
       if (!argument) return null;
-      return `await ${printExpression(argument, indent, opts)}`;
+      // Always parenthesize: this printer has no precedence table (see the
+      // top-of-file doc comment's known exception), so it cannot tell
+      // whether the argument needs grouping to keep `await`'s precedence.
+      // Without it, `await (ready ? value : fallback)` prints as
+      // `await ready ? value : fallback`, which reparses as
+      // `(await ready) ? value : fallback` — a different program — and
+      // `await (x => x)` prints as `await x => x`, which does not reparse
+      // at all. Unconditional parens are always correct here (worst case,
+      // one redundant pair around a simple identifier) and idempotent:
+      // `await (expr)` desugars to the same argument AST regardless of
+      // whether the source had parens, so re-printing it stays stable.
+      return `await (${printExpression(argument, indent, opts)})`;
     }
     default:
       return null;

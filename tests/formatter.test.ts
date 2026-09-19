@@ -226,3 +226,45 @@ describe("formatProgram — idempotency for desugared assignment-as-expression s
     expect(second.formatted).toBe(first.formatted);
   });
 });
+
+describe("formatProgram — `await` preserves grouping around its argument", () => {
+  it("parenthesizes a ternary argument so precedence against `?:` is preserved", () => {
+    const source = [
+      "async function f(ready, value, fallback) {",
+      "  const r = await (ready ? value : fallback)",
+      "  return r",
+      "}",
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const first = formatProgram(source);
+    expect(first.errors).toEqual([]);
+    expect(first.formatted).toContain("await (ready ? value : fallback)");
+    // Idempotent, and re-parsing must keep the ternary as the awaited
+    // value rather than reinterpreting it as `(await ready) ? value :
+    // fallback` — if grouping were lost, the SECOND format would drift.
+    const second = formatProgram(first.formatted);
+    expect(second.errors).toEqual([]);
+    expect(second.formatted).toBe(first.formatted);
+  });
+
+  it("parenthesizes a lambda argument so the result is re-parseable at all", () => {
+    const source = [
+      "async function f(x) {",
+      "  const r = await (v => v)",
+      "  return r",
+      "}",
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const first = formatProgram(source);
+    expect(first.errors).toEqual([]);
+    expect(first.formatted).toContain("await (v => v)");
+    const second = formatProgram(first.formatted);
+    expect(second.errors).toEqual([]);
+    expect(second.formatted).toBe(first.formatted);
+  });
+});
+

@@ -37,6 +37,18 @@ Each entry is dated and summarises what was added, changed, or fixed.
   with `break` (because a previous format pass added one) had a second
   `break` appended on top, growing by one on every subsequent format.
 
+### Two More Formatter Fixes
+
+- `FormatOptions.indentWidth` now rejects a negative, infinite, `NaN`, or
+  fractional value with a clear error instead of letting it reach
+  `String.repeat` (which throws an opaque error for some of those and
+  silently produces wrong indentation for others).
+- `await` printed its argument without parentheses, so `await (ready ? value
+  : fallback)` reprinted as `await ready ? value : fallback` — a different
+  program, since that reparses as `(await ready) ? value : fallback` — and
+  `await (x => x)` reprinted as unparseable syntax entirely. `await`'s
+  argument is now always parenthesized when reprinted.
+
 ## 2026-09-10
 
 ### Destructive Inline Links, Flippable Dialog Footers, And Headerless Actions Columns

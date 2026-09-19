@@ -1,25 +1,45 @@
 name: Deploy PR previews
 
-# Builds every PR (including from forks) and hands the built site off to
-# the trusted `Deploy PR preview` workflow (deploy-preview.yml) via an
-# artifact — that workflow does the actual deploy, using its OWN
-# independently-derived idea of which PR this is and whether to deploy or
-# remove, never anything this job claims (see its header comment for why:
-# an earlier version of this split had this job also write a `pr-metadata`
-# artifact naming its own PR number/lifecycle action, which the trusted job
-# then trusted outright — since THIS workflow file is itself read from the
-# PR's own branch, a malicious PR could edit that step to claim to BE any
-# other PR, and had the trusted job deploying or deleting arbitrary
-# previews on its say-so).
+# Builds every PR (including from forks) with a READ-ONLY token and no
+# secrets, then hands the built site off to the trusted `Deploy PR preview`
+# workflow (deploy-preview.yml) via an artifact — that workflow does the
+# actual deploy, using its OWN independently-derived idea of which PR this
+# is and whether to deploy or remove, never anything this job claims (see
+# its header comment for the full story: an earlier version of this job
+# also wrote a `pr-metadata` artifact naming its own PR number/lifecycle
+# action, which the trusted job then trusted outright — since THIS workflow
+# file is itself read from the PR's own branch, a malicious PR could edit
+# that step to claim to BE any other PR and had the trusted job deploying
+# or deleting arbitrary previews on nothing but the attacker's say-so).
 #
-# The `contents: write`/`pull-requests: write` below look like they
-# contradict that — they exist ONLY for the TEMPORARY same-repo fallback
-# step at the bottom of this job (see its own comment for why it exists and
-# when to remove it). For a fork PR, GitHub forces GITHUB_TOKEN to be
-# read-only on a `pull_request`-triggered run no matter what is declared
-# here, so granting this claim changes nothing for the untrusted case this
-# job exists to handle safely — it only ever takes effect for a genuine
-# same-repo PR, where the fallback step's own condition also requires it.
+# This job stays `contents: read` — no more, ever — even for a same-repo
+# PR. An earlier revision granted `contents: write`/`pull-requests: write`
+# here for a temporary same-repo fallback deploy step, reasoning that forks
+# are the only untrusted case since GitHub forces their token read-only
+# regardless. That reasoning doesn't hold: a same-repo PR still runs THIS
+# JOB'S OWN `npm ci`/`npm run build:preview` from the PR branch, and
+# `actions/checkout` persists whatever token this job has into
+# `.git/config` on disk — readable, and exfiltratable, by any of that
+# untrusted build/install code (a malicious dependency, a compromised
+# contributor account, a hostile `postinstall` script), independent of
+# which specific step declared the need for write access. A same-repo PR
+# not being from a fork does not make its build step's code trustworthy.
+# The fallback was removed rather than patched.
+#
+# KNOWN, ACCEPTED, SELF-RESOLVING LIMITATION: `workflow_run` (which
+# deploy-preview.yml listens on) only fires for a listener workflow that
+# already exists on the repository's DEFAULT BRANCH — see that workflow's
+# header comment. Until deploy-preview.yml is merged to `main`, NO PR gets
+# a real preview deploy, including same-repo ones that deployed fine,
+# same-job, before this split existed — their console-log/screenshot
+# checks will fail waiting on a preview that was never deployed, exactly
+# like a fork PR's always have. That is a real, known regression for the
+# bootstrap window, and deliberately not patched around here: every way to
+# avoid it either reintroduces the write-access-to-untrusted-code problem
+# above, or requires standing up a second temporary trusted workflow just
+# to retire immediately after the first one lands — more moving parts than
+# a short-lived, well-understood, self-resolving gap justifies. It ends
+# permanently the moment deploy-preview.yml reaches `main`.
 
 on:
   pull_request:
@@ -30,20 +50,12 @@ on:
       - closed
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   build-preview:
     runs-on: ubuntu-latest
     name: Make sure it builds. Then show a preview.
-    # TEMPORARY: matches deploy-preview.yml's environment declaration so the
-    # fallback deploy step below (also temporary) gets the same "View
-    # deployment" URL badge the trusted workflow will provide once it's
-    # live. Drop this once the fallback below is removed.
-    environment:
-      name: pr-preview/pr-${{ github.event.number }}
-      url: ${{ format('https://{0}.github.io/{1}/pr-preview/pr-{2}/', github.repository_owner, github.event.repository.name, github.event.number) }}
     steps:
       - name: Checkout
         if: github.event.action != 'closed'
@@ -71,22 +83,3 @@ jobs:
           name: preview-site
           path: ./site/
           retention-days: 1
-
-      # TEMPORARY FALLBACK — remove once deploy-preview.yml is confirmed
-      # live on the default branch (see its header comment for why: GitHub
-      # only fires a `workflow_run` trigger for a listener workflow that
-      # already exists on the default branch, so until this repo's `main`
-      # has that file, `workflow_run` can never fire at all — for ANY PR,
-      # fork or not). Without this fallback, every same-repo PR opened
-      # before that merge would regress: they deployed fine, same-job,
-      # before this split existed. This step only runs for a same-repo PR
-      # (a fork's GITHUB_TOKEN is forced read-only here regardless of the
-      # `permissions:` above, so it inertly no-ops for a fork either way),
-      # so it carries none of the cross-PR trust-boundary risk the split
-      # exists to avoid — it only ever acts on ITS OWN PR's real event data.
-      - name: Deploy preview (temporary same-repo fallback until deploy-preview.yml is bootstrapped)
-        if: github.event.pull_request.head.repo.full_name == github.repository
-        uses: rossjrw/pr-preview-action@v1
-        with:
-          source-dir: ./site/
-          wait-for-pages-deployment: true

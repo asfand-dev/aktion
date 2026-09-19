@@ -40,12 +40,18 @@ name: Deploy PR preview (trusted)
 # triggering PR's own code can never influence: `github.event.workflow_run
 # .head_sha` is populated by GitHub's own event system from the actual
 # commit that was built, not from anything inside that build. It asks the
-# REST API which PR that commit belongs to (`GET /commits/{sha}/pulls`) and
-# what that PR's CURRENT state is (`GET /pulls/{number}`) — never what a
-# workflow run claimed about itself. The only artifact this workflow still
-# downloads is the built `site/` — static content that only ever lands
-# under the SAME PR number this job independently verified, so a fork
-# controlling its own preview's content is expected and harmless.
+# REST API which PR that commit belongs to (`GET /commits/{sha}/pulls` —
+# refusing to guess if that's not EXACTLY one PR) and what that PR's
+# CURRENT state and head SHA are (`GET /pulls/{number}`) — never what a
+# workflow run claimed about itself, and never the ORIGINAL triggering
+# event's own action/head, since either can be stale by the time this runs
+# (a slower run for an older push can finish after a newer one; the shared
+# `gh-pages` concurrency group below only serialises the two deploys, it
+# doesn't reorder them by recency). The built `site/` artifact is still
+# fine to trust once the PR number itself is verified — that's just static
+# content landing under the SAME PR a fork controls its own preview's
+# content for anyway — but it is never DEPLOYED once `resolve-pr` notices
+# its SHA no longer matches the PR's current head.
 
 on:
   workflow_run:
@@ -84,23 +90,42 @@ jobs:
         run: |
           set -euo pipefail
 
-          # The commit a workflow_run was triggered by can, in principle, be
-          # associated with more than one PR (e.g. after a rebase onto
-          # another PR's tip) — picking the first is fine here: we only need
-          # A pull request this exact commit really belongs to, and every
-          # match is equally real, GitHub-verified data, never something the
-          # PR's own code could have claimed.
-          number=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls" --jq '.[0].number // empty')
-          if [ -z "$number" ]; then
-            echo "::error::No pull request found for commit ${HEAD_SHA} — nothing to deploy."
+          # The commit a workflow_run was triggered by COULD, in principle,
+          # be associated with more than one open PR — pick a wrong one and
+          # this job would publish one PR's site under another's preview (or
+          # remove the wrong one). Require EXACTLY one match rather than
+          # guessing: ambiguous is treated the same as "none found", below.
+          matches=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls" --jq '[.[].number]')
+          count=$(echo "$matches" | jq 'length')
+          if [ "$count" -ne 1 ]; then
+            echo "::error::Expected exactly one pull request for commit ${HEAD_SHA}, found $count ($matches) — refusing to guess which one this deploy is for."
             exit 1
           fi
+          number=$(echo "$matches" | jq '.[0]')
 
-          # Deploy for an open PR, remove for anything else (closed, with or
-          # without having been merged) — read fresh from the API, not from
-          # the ORIGINAL triggering event, since by the time this runs the
-          # PR could already have moved on again.
-          state=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}" --jq '.state')
+          # Read the PR's CURRENT state fresh from the API — never the
+          # ORIGINAL triggering event's — since by the time this runs the PR
+          # could already have moved on again: deploy for an open PR, remove
+          # for anything else (closed, with or without being merged).
+          #
+          # ALSO compare its CURRENT head SHA against the one this specific
+          # run actually built. A slower run for an OLDER push can finish
+          # after a newer one — the shared gh-pages concurrency group below
+          # only serialises the two deploys, it doesn't reorder them by
+          # recency — so without this check, the stale run would overwrite
+          # the fresher, already-live preview once its turn came up. Treat a
+          # stale run as nothing to do, not an error: it lost a race, it
+          # didn't fail.
+          pr=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}")
+          current_sha=$(echo "$pr" | jq -r '.head.sha')
+          if [ "$current_sha" != "${HEAD_SHA}" ]; then
+            echo "This run built ${HEAD_SHA}, but PR #$number's head is now $current_sha — a newer push has superseded it. Skipping."
+            echo "pr-number=$number" >> "$GITHUB_OUTPUT"
+            echo "pr-action=skip" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          state=$(echo "$pr" | jq -r '.state')
           action="deploy"
           if [ "$state" != "open" ]; then
             action="remove"
@@ -111,6 +136,7 @@ jobs:
 
   deploy:
     needs: resolve-pr
+    if: needs.resolve-pr.outputs.pr-action != 'skip'
     runs-on: ubuntu-latest
     name: Deploy PR preview
     environment:
