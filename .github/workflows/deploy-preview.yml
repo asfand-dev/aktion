@@ -1,0 +1,110 @@
+name: Deploy PR preview (trusted)
+
+# WHY THIS IS A SEPARATE WORKFLOW, TRIGGERED BY `workflow_run`
+# ---------------------------------------------------------------------------
+# "Deploy PR previews" (preview.yml) builds every PR — including one from a
+# fork — with `npm ci && npm run build:preview`. That means it runs code
+# an external contributor wrote, so GitHub forces its `GITHUB_TOKEN` to be
+# read-only for any fork PR, no matter what `permissions:` that workflow
+# claims. `rossjrw/pr-preview-action` needs to `git push` to `gh-pages`,
+# which a read-only token can't do — so previously that step (and the two
+# after it) just skipped for fork PRs entirely, and the downstream console-
+# log/screenshot checks failed every time waiting on a preview that was
+# never deployed.
+#
+# A `workflow_run` job is the standard, secure way around this: it ALWAYS
+# executes using the workflow file as committed on the repository's default
+# branch (never the PR branch, fork or not), gets a normal write-capable
+# token, and — this is the part that keeps it safe — never checks out or
+# executes the PR's own code. It only consumes two artifacts the untrusted
+# build already produced: the prebuilt static `site/` and a small
+# `pr.json` recording which PR number and event action (opened/closed/etc.)
+# triggered it. Nothing here evaluates anything the PR author wrote. This is
+# the pattern GitHub's own docs recommend for "build untrusted, deploy
+# trusted" — see "Preventing pwn requests" in their Actions security guide.
+#
+# Do NOT add a `pull_request` trigger to this workflow, and do NOT make the
+# `deploy` job depend on anything checked out from the triggering PR's ref —
+# either would reintroduce exactly the risk this split exists to avoid.
+
+on:
+  workflow_run:
+    workflows: ["Deploy PR previews"]
+    types:
+      - completed
+
+# Every PR's deploy writes to the same `gh-pages` branch, so concurrent
+# deploys from different PRs (or a deploy racing a removal) must be
+# serialised — the same reasoning `preview.yml` used to state here before
+# this split moved the actual writing to this workflow. cancel-in-progress:
+# false ensures a queued run still executes (important for the "closed"
+# event that removes a preview).
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-pr:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      pr-number: ${{ steps.metadata.outputs.pr-number }}
+      pr-action: ${{ steps.metadata.outputs.pr-action }}
+    steps:
+      - name: Download PR metadata
+        uses: actions/download-artifact@v7
+        with:
+          name: pr-metadata
+          path: ./pr-metadata/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Read PR metadata
+        id: metadata
+        run: |
+          number=$(node -pe "require('./pr-metadata/pr.json').number")
+          action=$(node -pe "require('./pr-metadata/pr.json').action")
+          echo "pr-number=$number" >> "$GITHUB_OUTPUT"
+          echo "pr-action=$action" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: resolve-pr
+    runs-on: ubuntu-latest
+    name: Deploy PR preview
+    environment:
+      name: pr-preview/pr-${{ needs.resolve-pr.outputs.pr-number }}
+      url: ${{ format('https://{0}.github.io/{1}/pr-preview/pr-{2}/', github.repository_owner, github.event.repository.name, needs.resolve-pr.outputs.pr-number) }}
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      # Deliberately no `ref:` override — for a `workflow_run` job this
+      # checks out the repository's OWN default branch, never the PR's
+      # branch. That's exactly what we want: this step only needs the repo
+      # present for `rossjrw/pr-preview-action` to operate git against
+      # `gh-pages`, not any content from the PR itself.
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download built site
+        if: needs.resolve-pr.outputs.pr-action != 'closed'
+        uses: actions/download-artifact@v7
+        with:
+          name: preview-site
+          path: ./site/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Deploy preview
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: ./site/
+          pr-number: ${{ needs.resolve-pr.outputs.pr-number }}
+          action: ${{ needs.resolve-pr.outputs.pr-action == 'closed' && 'remove' || 'deploy' }}
+          wait-for-pages-deployment: true

@@ -27,12 +27,19 @@ jobs:
         if: steps.wait-for-build.outputs.conclusion == 'failure'
         run: exit 1
         shell: bash
+      # The preview is no longer deployed within this same check — a separate
+      # "Deploy PR preview (trusted)" workflow does that, triggered only
+      # after this build's own check (which this job already waited for,
+      # above) completes, then itself waits out the GitHub Pages build.
+      # 600s comfortably covers that whole chain (workflow_run dispatch +
+      # its own two jobs + Pages propagation) without matching its full
+      # 15-minute internal budget for a merely-informational retry loop.
       - name: Wait for preview URL to be available
         if: steps.wait-for-build.outputs.conclusion == 'success'
         shell: bash
         run: |
           echo "Polling ${PREVIEW_URL} ..."
-          timeout=180
+          timeout=600
           elapsed=0
           until [ "$elapsed" -ge "$timeout" ]; do
             status=$(curl --silent --output /dev/null --write-out "%{http_code}" "${PREVIEW_URL}" || true)
