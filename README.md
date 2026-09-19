@@ -1745,8 +1745,12 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
 
 - `formatProgram` projects the parsed AST back to canonical source —
   object-literal named args, double-quoted strings, two-space block
-  indentation, template literals intact. A file with parse errors is left
-  untouched, so a mid-edit document is never mangled.
+  indentation by default, template literals intact. A file with parse errors
+  is left untouched, so a mid-edit document is never mangled. An optional
+  second `FormatOptions` argument (`{ indentStyle: "space" | "tab", indentWidth }`)
+  overrides the block indentation; omit it and the output is unchanged from
+  before. `printProgram` (re-emit a parsed `Program`, no re-parse) takes the
+  same options.
 - `inspectAST(source)` returns a JSON-friendly view of the Committed +
   Drafting ASTs at the current byte position — bindings (with
   kind / line / column / summary), in-flight names, and any parse errors.
