@@ -87,6 +87,22 @@ describe("formatProgram — FormatOptions.indentWidth: 4", () => {
   });
 });
 
+describe("formatProgram — FormatOptions.indentWidth validation", () => {
+  it.each([-1, Infinity, -Infinity, Number.NaN, 1.5])(
+    "rejects a non-integer or negative indentWidth (%s)",
+    (indentWidth) => {
+      expect(() => formatProgram(SAMPLE, { indentWidth })).toThrow(RangeError);
+    },
+  );
+
+  it("accepts 0 (no indentation at all)", () => {
+    const { formatted, errors } = formatProgram(SAMPLE, { indentWidth: 0 });
+    expect(errors).toEqual([]);
+    expect(formatted).toContain("let [count, setCount] = $state(initial)");
+    expect(formatted).not.toMatch(/\n +\S/);
+  });
+});
+
 describe("printProgram — same FormatOptions shape as formatProgram", () => {
   it("applies indentStyle/indentWidth identically to a pre-parsed Program", () => {
     const program = parse(SAMPLE);

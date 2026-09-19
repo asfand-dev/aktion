@@ -4,10 +4,19 @@
  * `formatProgram(source, options?)` re-emits a syntactically clean version
  * of the input. The output is:
  *
- *   - **Idempotent.** `format(format(x)) === format(x)` for every input
- *     that parses cleanly. (Every `BuiltinCall` node printed by this module
- *     must re-parse back to the same node kind, or this guarantee silently
- *     breaks — see `printDesugaredOperator`'s doc comment.)
+ *   - **Idempotent, with one known exception.** `format(format(x)) ===
+ *     format(x)` for every input that parses cleanly, EXCEPT where a
+ *     parenthesized sub-expression's grouping affects precedence against a
+ *     tighter-binding operator applied to it (e.g. `(a || b).c()`) — the
+ *     grammar has no `Paren`/grouping AST node at all, so the printer
+ *     cannot always preserve that grouping on the first pass. See
+ *     `tests/formatter-idempotency-sweep.test.ts`'s
+ *     `KNOWN_PRE_EXISTING_LIMITATIONS` for the one known real-world
+ *     instance and the full explanation; fixing it needs a real precedence
+ *     table across `Binary`/`Ternary`/`Lambda`/`Unary`, tracked separately.
+ *     Every `BuiltinCall` node printed by this module must also re-parse
+ *     back to the same node kind, or this guarantee silently breaks in a
+ *     second, unrelated way — see `printDesugaredOperator`'s doc comment.
  *   - **Canonical.** Statements one per line; two-space indentation by
  *     default inside `{ … }` blocks (configurable via `FormatOptions`);
  *     named args always use `prop: value` (the legacy `prop=value` form is
@@ -86,6 +95,17 @@ function resolveFormatOptions(options?: FormatOptions): ResolvedFormatOptions {
     return { unit: "\t" };
   }
   const width = options?.indentWidth ?? DEFAULT_INDENT_WIDTH;
+  // `String.prototype.repeat` throws a RangeError for a negative or
+  // infinite count and silently misbehaves for NaN/fractional ones
+  // (`" ".repeat(1.5)` truncates to 1 with no indication anything was
+  // wrong) — reject all of those explicitly rather than let a bad public
+  // input surface as either an opaque low-level exception or quietly
+  // wrong indentation.
+  if (!Number.isInteger(width) || width < 0) {
+    throw new RangeError(
+      `FormatOptions.indentWidth must be a non-negative integer, got ${width}`,
+    );
+  }
   return { unit: " ".repeat(width) };
 }
 

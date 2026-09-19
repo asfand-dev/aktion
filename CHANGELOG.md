@@ -5,7 +5,7 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
-## 2026-09-17
+## 2026-09-19
 
 ### Configurable Formatter Indentation
 
