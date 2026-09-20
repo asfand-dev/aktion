@@ -1,0 +1,173 @@
+name: Deploy PR preview (trusted)
+
+# WHY THIS IS A SEPARATE WORKFLOW, TRIGGERED BY `workflow_run`
+# ---------------------------------------------------------------------------
+# "Deploy PR previews" (preview.yml) builds every PR — including one from a
+# fork — with `npm ci && npm run build:preview`. That means it runs code
+# an external contributor wrote, so GitHub forces its `GITHUB_TOKEN` to be
+# read-only for any fork PR, no matter what `permissions:` that workflow
+# claims. `rossjrw/pr-preview-action` needs to `git push` to `gh-pages`,
+# which a read-only token can't do — so previously that step (and the two
+# after it) just skipped for fork PRs entirely, and the downstream console-
+# log/screenshot checks failed every time waiting on a preview that was
+# never deployed.
+#
+# A `workflow_run` job is the standard, secure way around this: it ALWAYS
+# executes using the workflow file as committed on the repository's default
+# branch (never the PR branch, fork or not), gets a normal write-capable
+# token, and — this is the part that keeps it safe — never checks out or
+# executes the PR's own code. This is the pattern GitHub's own docs
+# recommend for "build untrusted, deploy trusted" — see "Preventing pwn
+# requests" in their Actions security guide.
+#
+# Do NOT add a `pull_request` trigger to this workflow, and do NOT make the
+# `deploy` job depend on anything checked out from the triggering PR's ref —
+# either would reintroduce exactly the risk this split exists to avoid.
+#
+# WHERE THE PR NUMBER AND DEPLOY-VS-REMOVE DECISION COME FROM — AND WHERE
+# THEY MUST NEVER COME FROM
+# ---------------------------------------------------------------------------
+# An earlier version of this workflow trusted a `pr-metadata` artifact that
+# `preview.yml` produced, naming its own PR number and triggering action.
+# That was a real vulnerability: `preview.yml` is a `pull_request`-triggered
+# workflow, which means it runs using the WORKFLOW FILE FROM THE PR'S OWN
+# BRANCH — so a malicious PR could edit that step to write any PR number and
+# any action it liked (e.g. claim to be a completely different, real PR,
+# with action "remove"), and this job would have deployed or deleted that
+# OTHER PR's preview on the strength of nothing but the attacker's say-so.
+#
+# `resolve-pr` below derives both facts itself instead, from data the
+# triggering PR's own code can never influence: `github.event.workflow_run
+# .head_sha` is populated by GitHub's own event system from the actual
+# commit that was built, not from anything inside that build. It asks the
+# REST API which PR that commit belongs to (`GET /commits/{sha}/pulls` —
+# refusing to guess if that's not EXACTLY one PR) and what that PR's
+# CURRENT state and head SHA are (`GET /pulls/{number}`) — never what a
+# workflow run claimed about itself, and never the ORIGINAL triggering
+# event's own action/head, since either can be stale by the time this runs
+# (a slower run for an older push can finish after a newer one; the shared
+# `gh-pages` concurrency group below only serialises the two deploys, it
+# doesn't reorder them by recency). The built `site/` artifact is still
+# fine to trust once the PR number itself is verified — that's just static
+# content landing under the SAME PR a fork controls its own preview's
+# content for anyway — but it is never DEPLOYED once `resolve-pr` notices
+# its SHA no longer matches the PR's current head.
+
+on:
+  workflow_run:
+    workflows: ["Deploy PR previews"]
+    types:
+      - completed
+
+# Every PR's deploy writes to the same `gh-pages` branch, so concurrent
+# deploys from different PRs (or a deploy racing a removal) must be
+# serialised — the same reasoning `preview.yml` used to state here before
+# this split moved the actual writing to this workflow. cancel-in-progress:
+# false ensures a queued run still executes (important for the "closed"
+# event that removes a preview).
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-pr:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      pr-number: ${{ steps.resolve.outputs.pr-number }}
+      pr-action: ${{ steps.resolve.outputs.pr-action }}
+    steps:
+      - name: Resolve PR number and lifecycle state from the GitHub API
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          # The commit a workflow_run was triggered by COULD, in principle,
+          # be associated with more than one open PR — pick a wrong one and
+          # this job would publish one PR's site under another's preview (or
+          # remove the wrong one). Require EXACTLY one match rather than
+          # guessing: ambiguous is treated the same as "none found", below.
+          matches=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls" --jq '[.[].number]')
+          count=$(echo "$matches" | jq 'length')
+          if [ "$count" -ne 1 ]; then
+            echo "::error::Expected exactly one pull request for commit ${HEAD_SHA}, found $count ($matches) — refusing to guess which one this deploy is for."
+            exit 1
+          fi
+          number=$(echo "$matches" | jq '.[0]')
+
+          # Read the PR's CURRENT state fresh from the API — never the
+          # ORIGINAL triggering event's — since by the time this runs the PR
+          # could already have moved on again: deploy for an open PR, remove
+          # for anything else (closed, with or without being merged).
+          #
+          # ALSO compare its CURRENT head SHA against the one this specific
+          # run actually built. A slower run for an OLDER push can finish
+          # after a newer one — the shared gh-pages concurrency group below
+          # only serialises the two deploys, it doesn't reorder them by
+          # recency — so without this check, the stale run would overwrite
+          # the fresher, already-live preview once its turn came up. Treat a
+          # stale run as nothing to do, not an error: it lost a race, it
+          # didn't fail.
+          pr=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}")
+          current_sha=$(echo "$pr" | jq -r '.head.sha')
+          if [ "$current_sha" != "${HEAD_SHA}" ]; then
+            echo "This run built ${HEAD_SHA}, but PR #$number's head is now $current_sha — a newer push has superseded it. Skipping."
+            echo "pr-number=$number" >> "$GITHUB_OUTPUT"
+            echo "pr-action=skip" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          state=$(echo "$pr" | jq -r '.state')
+          action="deploy"
+          if [ "$state" != "open" ]; then
+            action="remove"
+          fi
+
+          echo "pr-number=$number" >> "$GITHUB_OUTPUT"
+          echo "pr-action=$action" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: resolve-pr
+    if: needs.resolve-pr.outputs.pr-action != 'skip'
+    runs-on: ubuntu-latest
+    name: Deploy PR preview
+    environment:
+      name: pr-preview/pr-${{ needs.resolve-pr.outputs.pr-number }}
+      url: ${{ format('https://{0}.github.io/{1}/pr-preview/pr-{2}/', github.repository_owner, github.event.repository.name, needs.resolve-pr.outputs.pr-number) }}
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      # Deliberately no `ref:` override — for a `workflow_run` job this
+      # checks out the repository's OWN default branch, never the PR's
+      # branch. That's exactly what we want: this step only needs the repo
+      # present for `rossjrw/pr-preview-action` to operate git against
+      # `gh-pages`, not any content from the PR itself.
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download built site
+        if: needs.resolve-pr.outputs.pr-action != 'remove'
+        uses: actions/download-artifact@v7
+        with:
+          name: preview-site
+          path: ./site/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Deploy preview
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: ./site/
+          pr-number: ${{ needs.resolve-pr.outputs.pr-number }}
+          action: ${{ needs.resolve-pr.outputs.pr-action }}
+          wait-for-pages-deployment: true
