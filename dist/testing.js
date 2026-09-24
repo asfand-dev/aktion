@@ -2410,26 +2410,39 @@ function isCompiledProgram(value) {
 function defineCompiledProgram(compiled) {
   return compiled;
 }
-const INDENT = "  ";
 const SAFE_IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const NEEDS_DOUBLE_QUOTE = /[\\"]/;
-function printPattern(pattern, indent) {
+const NEEDS_ESCAPE = /[\\"\n\r\t]/;
+const DEFAULT_INDENT_WIDTH = 2;
+function resolveFormatOptions(options) {
+  const width = DEFAULT_INDENT_WIDTH;
+  if (!Number.isInteger(width) || width < 0) {
+    throw new RangeError(
+      `FormatOptions.indentWidth must be a non-negative integer, got ${width}`
+    );
+  }
+  return { unit: " ".repeat(width) };
+}
+function pad(indent, opts) {
+  return opts.unit.repeat(indent);
+}
+function printPattern(pattern, indent, opts) {
   const open = pattern.kind === "array" ? "[" : "{";
   const close = pattern.kind === "array" ? "]" : "}";
   const parts = pattern.bindings.map((b) => {
     const lead = b.rest ? "..." : "";
-    const target = b.pattern ? pattern.kind === "object" && b.sourceKey ? `${b.sourceKey}: ${printPattern(b.pattern, indent)}` : printPattern(b.pattern, indent) : b.sourceKey ? `${b.sourceKey}: ${b.name}` : b.name || "";
-    const def = b.defaultValue ? ` = ${printExpression(b.defaultValue, indent)}` : "";
+    const target = b.pattern ? pattern.kind === "object" && b.sourceKey ? `${b.sourceKey}: ${printPattern(b.pattern, indent, opts)}` : printPattern(b.pattern, indent, opts) : b.sourceKey ? `${b.sourceKey}: ${b.name}` : b.name || "";
+    const def = b.defaultValue ? ` = ${printExpression(b.defaultValue, indent, opts)}` : "";
     return `${lead}${target}${def}`;
   });
   return `${open}${parts.join(", ")}${close}`;
 }
-function printProgram(program) {
+function printProgram(program, options) {
+  const opts = resolveFormatOptions();
   const lines = [];
   let prev = null;
   for (const stmt of program.statements) {
     if (prev && needsBlankLineBetween(prev, stmt)) lines.push("");
-    lines.push(printStatement(stmt, 0));
+    lines.push(printStatement(stmt, 0, opts));
     prev = stmt;
   }
   return lines.join("\n") + "\n";
@@ -2444,8 +2457,8 @@ function needsBlankLineBetween(prev, next) {
   if (heavy.has(prev.kind) || heavy.has(next.kind)) return true;
   return false;
 }
-function printStatement(stmt, indent) {
-  const pad = INDENT.repeat(indent);
+function printStatement(stmt, indent, opts) {
+  const padStr = pad(indent, opts);
   const exp = "exported" in stmt && stmt.exported ? "export " : "";
   switch (stmt.kind) {
     case "Import": {
@@ -2455,150 +2468,150 @@ function printStatement(stmt, indent) {
         const local2 = s.isState ? `$${s.local}` : s.local;
         return `${imported} as ${local2}`;
       }).join(", ");
-      return `${pad}import { ${specs} } from "${stmt.source}"`;
+      return `${padStr}import { ${specs} } from "${stmt.source}"`;
     }
     case "Assignment": {
       const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
-      const expr = printExpression(stmt.expression, indent);
-      return `${pad}${exp}${lhs} = ${expr}`;
+      const expr = printExpression(stmt.expression, indent, opts);
+      return `${padStr}${exp}${lhs} = ${expr}`;
     }
     case "ComponentDeclaration": {
-      const params = stmt.params.map(printDeclParam).join(", ");
-      const head = `${pad}${exp}function ${stmt.name}(${params}) {`;
-      const body = printBlock(stmt.body.body, indent + 1);
+      const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
+      const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
+      const body = printBlock(stmt.body.body, indent + 1, opts);
       return body.length > 0 ? `${head}
 ${body}
-${pad}}` : `${head}
-${pad}}`;
+${padStr}}` : `${head}
+${padStr}}`;
     }
     case "EffectDeclaration": {
       const deps = stmt.triggers.map(printTrigger).filter((s) => s.length > 0);
       if (stmt.rateLimit) {
         deps.push(`"${stmt.rateLimit.kind}(${stmt.rateLimit.ms})"`);
       }
-      const body = printBlock(stmt.body.body, indent + 1);
+      const body = printBlock(stmt.body.body, indent + 1, opts);
       const depsArray = `[${deps.join(", ")}]`;
-      return `${pad}$effect(() => {
+      return `${padStr}$effect(() => {
 ${body}
-${pad}}, ${depsArray})`;
+${padStr}}, ${depsArray})`;
     }
     case "ActionDeclaration": {
-      const params = stmt.params.map(printDeclParam).join(", ");
-      const head = `${pad}${exp}function ${stmt.name}(${params}) {`;
-      const body = printBlock(stmt.body.body, indent + 1);
+      const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
+      const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
+      const body = printBlock(stmt.body.body, indent + 1, opts);
       return `${head}
 ${body}
-${pad}}`;
+${padStr}}`;
     }
     case "HookDeclaration": {
-      const params = stmt.params.map(printDeclParam).join(", ");
-      const head = `${pad}${exp}function $${stmt.name}(${params}) {`;
-      const body = printBlock(stmt.body.body, indent + 1);
+      const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
+      const head = `${padStr}${exp}function $${stmt.name}(${params}) {`;
+      const body = printBlock(stmt.body.body, indent + 1, opts);
       return `${head}
 ${body}
-${pad}}`;
+${padStr}}`;
     }
     case "Await": {
-      return `${pad}await ${printExpression(stmt.argument, indent)}`;
+      return `${padStr}await ${printExpression(stmt.argument, indent, opts)}`;
     }
     case "Return": {
-      return stmt.argument ? `${pad}return ${printExpression(stmt.argument, indent)}` : `${pad}return`;
+      return stmt.argument ? `${padStr}return ${printExpression(stmt.argument, indent, opts)}` : `${padStr}return`;
     }
     case "ExpressionStatement": {
-      return `${pad}${printExpression(stmt.expression, indent)}`;
+      return `${padStr}${printExpression(stmt.expression, indent, opts)}`;
     }
     case "IfStatement": {
-      const test = printExpression(stmt.test, indent);
+      const test = printExpression(stmt.test, indent, opts);
       const cons = `{
-${printBlock(stmt.consequent.body, indent + 1)}
-${pad}}`;
-      if (!stmt.alternate) return `${pad}if (${test}) ${cons}`;
-      const alt = stmt.alternate.kind === "IfStatement" ? printStatement(stmt.alternate, indent).trimStart() : `{
-${printBlock(stmt.alternate.body, indent + 1)}
-${pad}}`;
-      return `${pad}if (${test}) ${cons} else ${alt}`;
+${printBlock(stmt.consequent.body, indent + 1, opts)}
+${padStr}}`;
+      if (!stmt.alternate) return `${padStr}if (${test}) ${cons}`;
+      const alt = stmt.alternate.kind === "IfStatement" ? printStatement(stmt.alternate, indent, opts).trimStart() : `{
+${printBlock(stmt.alternate.body, indent + 1, opts)}
+${padStr}}`;
+      return `${padStr}if (${test}) ${cons} else ${alt}`;
     }
     case "SwitchStatement": {
-      const disc = printExpression(stmt.discriminant, indent);
-      const cases = stmt.cases.map((c) => printSwitchCase(c, indent + 1)).join("\n");
-      return `${pad}switch (${disc}) {
+      const disc = printExpression(stmt.discriminant, indent, opts);
+      const cases = stmt.cases.map((c) => printSwitchCase(c, indent + 1, opts)).join("\n");
+      return `${padStr}switch (${disc}) {
 ${cases}
-${pad}}`;
+${padStr}}`;
     }
     case "ForOfStatement": {
-      const iter = printExpression(stmt.iterable, indent);
+      const iter = printExpression(stmt.iterable, indent, opts);
       const body = `{
-${printBlock(stmt.body.body, indent + 1)}
-${pad}}`;
-      const binding = stmt.pattern ? printPattern(stmt.pattern, indent) : stmt.item;
-      return `${pad}for (let ${binding} of ${iter}) ${body}`;
+${printBlock(stmt.body.body, indent + 1, opts)}
+${padStr}}`;
+      const binding = stmt.pattern ? printPattern(stmt.pattern, indent, opts) : stmt.item;
+      return `${padStr}for (let ${binding} of ${iter}) ${body}`;
     }
     case "ForClassicStatement": {
-      const init = stmt.init ? printStatement(stmt.init, 0).trimStart() : "";
-      const test = stmt.test ? printExpression(stmt.test, indent) : "";
-      const update = stmt.update ? printExpression(stmt.update, indent) : "";
+      const init = stmt.init ? printStatement(stmt.init, 0, opts).trimStart() : "";
+      const test = stmt.test ? printExpression(stmt.test, indent, opts) : "";
+      const update = stmt.update ? printExpression(stmt.update, indent, opts) : "";
       const body = `{
-${printBlock(stmt.body.body, indent + 1)}
-${pad}}`;
-      return `${pad}for (${init}; ${test}; ${update}) ${body}`;
+${printBlock(stmt.body.body, indent + 1, opts)}
+${padStr}}`;
+      return `${padStr}for (${init}; ${test}; ${update}) ${body}`;
     }
     case "WhileStatement": {
-      const test = printExpression(stmt.test, indent);
+      const test = printExpression(stmt.test, indent, opts);
       const body = `{
-${printBlock(stmt.body.body, indent + 1)}
-${pad}}`;
-      return `${pad}while (${test}) ${body}`;
+${printBlock(stmt.body.body, indent + 1, opts)}
+${padStr}}`;
+      return `${padStr}while (${test}) ${body}`;
     }
     case "DoWhileStatement": {
-      const test = printExpression(stmt.test, indent);
+      const test = printExpression(stmt.test, indent, opts);
       const body = `{
-${printBlock(stmt.body.body, indent + 1)}
-${pad}}`;
-      return `${pad}do ${body} while (${test})`;
+${printBlock(stmt.body.body, indent + 1, opts)}
+${padStr}}`;
+      return `${padStr}do ${body} while (${test})`;
     }
     case "ForInStatement": {
-      const iter = printExpression(stmt.iterable, indent);
+      const iter = printExpression(stmt.iterable, indent, opts);
       const body = `{
-${printBlock(stmt.body.body, indent + 1)}
-${pad}}`;
-      return `${pad}for (let ${stmt.item} in ${iter}) ${body}`;
+${printBlock(stmt.body.body, indent + 1, opts)}
+${padStr}}`;
+      return `${padStr}for (let ${stmt.item} in ${iter}) ${body}`;
     }
     case "DestructureStatement": {
-      const pattern = printPattern({ kind: stmt.patternKind, bindings: stmt.bindings }, indent);
-      const expr = printExpression(stmt.expression, indent);
-      return `${pad}let ${pattern} = ${expr}`;
+      const pattern = printPattern({ kind: stmt.patternKind, bindings: stmt.bindings }, indent, opts);
+      const expr = printExpression(stmt.expression, indent, opts);
+      return `${padStr}let ${pattern} = ${expr}`;
     }
     case "BreakStatement":
-      return `${pad}break`;
+      return `${padStr}break`;
     case "ContinueStatement":
-      return `${pad}continue`;
+      return `${padStr}continue`;
     case "ThrowStatement":
-      return `${pad}throw ${printExpression(stmt.argument, indent)}`;
+      return `${padStr}throw ${printExpression(stmt.argument, indent, opts)}`;
     case "TryStatement": {
       const block = `{
-${printBlock(stmt.block.body, indent + 1)}
-${pad}}`;
-      let out = `${pad}try ${block}`;
+${printBlock(stmt.block.body, indent + 1, opts)}
+${padStr}}`;
+      let out = `${padStr}try ${block}`;
       if (stmt.catchBlock) {
         const catchHead = stmt.catchParam ? ` (${stmt.catchParam})` : "";
         const catchBody = `{
-${printBlock(stmt.catchBlock.body, indent + 1)}
-${pad}}`;
+${printBlock(stmt.catchBlock.body, indent + 1, opts)}
+${padStr}}`;
         out += ` catch${catchHead} ${catchBody}`;
       }
       if (stmt.finallyBlock) {
         const finBody = `{
-${printBlock(stmt.finallyBlock.body, indent + 1)}
-${pad}}`;
+${printBlock(stmt.finallyBlock.body, indent + 1, opts)}
+${padStr}}`;
         out += ` finally ${finBody}`;
       }
       return out;
     }
   }
 }
-function printDeclParam(p) {
+function printDeclParam(p, opts) {
   if (p.defaultValue) {
-    return `${p.name} = ${printExpression(p.defaultValue, 0)}`;
+    return `${p.name} = ${printExpression(p.defaultValue, 0, opts)}`;
   }
   return p.name;
 }
@@ -2608,10 +2621,40 @@ function printTrigger(t) {
   if (t.kind === "state") return `$${t.name}`;
   return "";
 }
-function printBlock(stmts, indent) {
-  return stmts.map((s) => printStatement(s, indent)).join("\n");
+function printBlock(stmts, indent, opts) {
+  return stmts.map((s) => printStatement(s, indent, opts)).join("\n");
 }
-function printExpression(expr, indent) {
+function printDesugaredOperator(expr, indent, opts) {
+  const literalOperator = (arg) => arg && arg.kind === "Literal" && typeof arg.value === "string" ? arg.value : null;
+  switch (expr.name) {
+    case "__rui_assign__": {
+      const [target, value, opNode] = expr.arguments;
+      const op = literalOperator(opNode);
+      if (!target || !value || op === null) return null;
+      return `${printExpression(target, indent, opts)} ${op} ${printExpression(value, indent, opts)}`;
+    }
+    case "__rui_postfix__": {
+      const [target, opNode] = expr.arguments;
+      const op = literalOperator(opNode);
+      if (!target || op === null) return null;
+      return `${printExpression(target, indent, opts)}${op}`;
+    }
+    case "__rui_prefix__": {
+      const [target, opNode] = expr.arguments;
+      const op = literalOperator(opNode);
+      if (!target || op === null) return null;
+      return `${op}${printExpression(target, indent, opts)}`;
+    }
+    case "__rui_await__": {
+      const [argument] = expr.arguments;
+      if (!argument) return null;
+      return `await (${printExpression(argument, indent, opts)})`;
+    }
+    default:
+      return null;
+  }
+}
+function printExpression(expr, indent, opts) {
   switch (expr.kind) {
     case "Literal":
       return printLiteral(expr.value);
@@ -2621,101 +2664,99 @@ function printExpression(expr, indent) {
       return `$${expr.name}`;
     case "Array": {
       if (expr.elements.length === 0) return "[]";
-      const items = expr.elements.map((e) => printExpression(e, indent));
+      const items = expr.elements.map((e) => printExpression(e, indent, opts));
       const inline = `[${items.join(", ")}]`;
       if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
-      const pad = INDENT.repeat(indent + 1);
+      const innerPad = pad(indent + 1, opts);
       return `[
-${items.map((s) => `${pad}${s}`).join(",\n")}
-${INDENT.repeat(indent)}]`;
+${items.map((s) => `${innerPad}${s}`).join(",\n")}
+${pad(indent, opts)}]`;
     }
     case "Object": {
       if (expr.properties.length === 0) return "{}";
-      const items = expr.properties.map((p) => printObjectProp(p, indent));
+      const items = expr.properties.map((p) => printObjectProp(p, indent, opts));
       const inline = `{ ${items.join(", ")} }`;
       if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
-      const pad = INDENT.repeat(indent + 1);
+      const innerPad = pad(indent + 1, opts);
       return `{
-${items.map((s) => `${pad}${s}`).join(",\n")}
-${INDENT.repeat(indent)}}`;
+${items.map((s) => `${innerPad}${s}`).join(",\n")}
+${pad(indent, opts)}}`;
     }
     case "Member": {
-      const obj = printExpression(expr.object, indent);
+      const obj = printExpression(expr.object, indent, opts);
       const dot = expr.optional ? "?." : ".";
       if (expr.property) return `${obj}${dot}${expr.property}`;
       if (expr.computed) {
-        const inner = printExpression(expr.computed, indent);
+        const inner = printExpression(expr.computed, indent, opts);
         return expr.optional ? `${obj}?.[${inner}]` : `${obj}[${inner}]`;
       }
       return obj;
     }
     case "Unary":
-      return `${expr.operator}${printExpression(expr.argument, indent)}`;
+      return `${expr.operator}${printExpression(expr.argument, indent, opts)}`;
     case "Binary":
-      return `${printExpression(expr.left, indent)} ${expr.operator} ${printExpression(expr.right, indent)}`;
+      return `${printExpression(expr.left, indent, opts)} ${expr.operator} ${printExpression(expr.right, indent, opts)}`;
     case "Ternary":
-      return `${printExpression(expr.test, indent)} ? ${printExpression(expr.consequent, indent)} : ${printExpression(expr.alternate, indent)}`;
+      return `${printExpression(expr.test, indent, opts)} ? ${printExpression(expr.consequent, indent, opts)} : ${printExpression(expr.alternate, indent, opts)}`;
     case "Call":
-      return printCall(expr.callee, expr.arguments, indent);
+      return printCall(expr.callee, expr.arguments, indent, opts);
     case "MethodCall": {
-      const target = printExpression(expr.object, indent);
+      const target = printExpression(expr.object, indent, opts);
       const sep = expr.optional ? "?." : ".";
-      return printCall(`${target}${sep}${expr.method}`, expr.arguments, indent);
+      return printCall(`${target}${sep}${expr.method}`, expr.arguments, indent, opts);
     }
     case "Invoke": {
-      const callee = printExpression(expr.callee, indent);
+      const callee = printExpression(expr.callee, indent, opts);
       const sep = expr.optional ? "?." : "";
-      return printCall(`${callee}${sep}`, expr.arguments, indent);
+      return printCall(`${callee}${sep}`, expr.arguments, indent, opts);
     }
     case "New": {
-      const callee = printExpression(expr.callee, indent);
-      return `new ${printCall(callee, expr.arguments, indent)}`;
+      const callee = printExpression(expr.callee, indent, opts);
+      return `new ${printCall(callee, expr.arguments, indent, opts)}`;
     }
     case "BuiltinCall":
-      return printCall(`@${expr.name}`, expr.arguments, indent);
+      return printDesugaredOperator(expr, indent, opts) ?? printCall(`@${expr.name}`, expr.arguments, indent, opts);
     case "Template":
-      return printTemplate(expr.quasis, expr.expressions, indent);
+      return printTemplate(expr.quasis, expr.expressions, indent, opts);
     case "Spread":
-      return `...${printExpression(expr.argument, indent)}`;
+      return `...${printExpression(expr.argument, indent, opts)}`;
     case "Lambda": {
       const params = expr.params.map((p) => {
         const prefix = p.rest ? "..." : "";
-        return p.defaultValue ? `${prefix}${p.name} = ${printExpression(p.defaultValue, indent)}` : `${prefix}${p.name}`;
+        return p.defaultValue ? `${prefix}${p.name} = ${printExpression(p.defaultValue, indent, opts)}` : `${prefix}${p.name}`;
       }).join(", ");
       const head = expr.params.length === 1 && !expr.params[0].defaultValue && !expr.params[0].rest ? expr.params[0].name : `(${params})`;
-      return `${head} => ${printExpression(expr.body, indent)}`;
+      return `${head} => ${printExpression(expr.body, indent, opts)}`;
     }
     case "Block":
       return `{
-${printBlock(expr.body, indent + 1)}
-${INDENT.repeat(indent)}}`;
+${printBlock(expr.body, indent + 1, opts)}
+${pad(indent, opts)}}`;
   }
 }
-function printCall(callee, args, indent) {
+function printCall(callee, args, indent, opts) {
   if (args.length === 0) return `${callee}()`;
-  const parts = args.map((a) => printExpression(a, indent));
+  const parts = args.map((a) => printExpression(a, indent, opts));
   const inline = `${callee}(${parts.join(", ")})`;
   if (inline.length <= 80 && !parts.some((s) => s.includes("\n"))) return inline;
-  const pad = INDENT.repeat(indent + 1);
+  const innerPad = pad(indent + 1, opts);
   return `${callee}(
-${parts.map((s) => `${pad}${s}`).join(",\n")}
-${INDENT.repeat(indent)})`;
+${parts.map((s) => `${innerPad}${s}`).join(",\n")}
+${pad(indent, opts)})`;
 }
-function printSwitchCase(c, indent) {
-  const pad = INDENT.repeat(indent);
-  const body = c.body.map((s) => printStatement(s, indent + 1)).join("\n");
-  if (c.test === null) {
-    return `${pad}default:
-${body}
-${printStatement({ kind: "ExpressionStatement", expression: { kind: "Identifier", name: "break" } }, indent + 1)}`;
-  }
-  return `${pad}case ${printExpression(c.test, indent)}:
-${body}
-${INDENT.repeat(indent + 1)}break`;
+function printSwitchCase(c, indent, opts) {
+  const padStr = pad(indent, opts);
+  const body = c.body.map((s) => printStatement(s, indent + 1, opts)).join("\n");
+  const head = c.test === null ? `${padStr}default:` : `${padStr}case ${printExpression(c.test, indent, opts)}:`;
+  const lastStmt = c.body[c.body.length - 1];
+  const trailingBreak = lastStmt?.kind === "BreakStatement" ? "" : `
+${pad(indent + 1, opts)}break`;
+  return `${head}
+${body}${trailingBreak}`;
 }
-function printObjectProp(prop2, indent) {
-  if (prop2.spread) return `...${printExpression(prop2.value, indent)}`;
-  const value = printExpression(prop2.value, indent);
+function printObjectProp(prop2, indent, opts) {
+  if (prop2.spread) return `...${printExpression(prop2.value, indent, opts)}`;
+  const value = printExpression(prop2.value, indent, opts);
   if (prop2.value.kind === "Identifier" && prop2.value.name === prop2.key && SAFE_IDENT.test(prop2.key)) {
     return prop2.key;
   }
@@ -2729,19 +2770,19 @@ function printLiteral(value) {
   return String(value);
 }
 function printStringLiteral(value) {
-  if (NEEDS_DOUBLE_QUOTE.test(value)) {
-    const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  if (NEEDS_ESCAPE.test(value)) {
+    const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
     return `"${escaped}"`;
   }
   return `"${value}"`;
 }
-function printTemplate(quasis, expressions, indent) {
+function printTemplate(quasis, expressions, indent, opts) {
   const parts = [];
   for (let i = 0; i < quasis.length; i += 1) {
     parts.push(quasis[i] ?? "");
     if (i < expressions.length) {
       parts.push("${");
-      parts.push(printExpression(expressions[i], indent));
+      parts.push(printExpression(expressions[i], indent, opts));
       parts.push("}");
     }
   }
@@ -6568,8 +6609,8 @@ function renderFlexContainer(directionValue, uniform, alignDefault, props, helpe
   const alignContent = asString$1(props.alignContent);
   if (alignContent) attrs["data-align-content"] = alignContent;
   if (padding.kind === "single") {
-    const pad = padding.value ? normalizeSpacingToken(padding.value, String(padding.value)) : null;
-    if (pad) attrs["data-padding"] = pad;
+    const pad3 = padding.value ? normalizeSpacingToken(padding.value, String(padding.value)) : null;
+    if (pad3) attrs["data-padding"] = pad3;
   } else {
     attrs["data-padding"] = "responsive";
     attrs["data-responsive-padding"] = "true";
@@ -7285,8 +7326,8 @@ const Box = {
     const maxWidth = asString$1(props.maxWidth);
     if (maxWidth) styleParts.push(`max-width:${sanitiseCssLength(maxWidth, "none")}`);
     if (padding.kind === "single") {
-      const pad = padding.value ? normalizeSpacingToken(padding.value, String(padding.value)) : null;
-      if (pad) attrs["data-padding"] = pad;
+      const pad3 = padding.value ? normalizeSpacingToken(padding.value, String(padding.value)) : null;
+      if (pad3) attrs["data-padding"] = pad3;
     } else {
       attrs["data-padding"] = "responsive";
       attrs["data-responsive-padding"] = "true";
@@ -31478,7 +31519,7 @@ const CountdownTimer = {
       endedSlot.set(true);
       helpers.invoke(props.onEnd);
     };
-    const pad = (n) => String(Math.max(0, n)).padStart(2, "0");
+    const pad3 = (n) => String(Math.max(0, n)).padStart(2, "0");
     const paint = (host) => {
       const diff = target - Date.now();
       if (!Number.isFinite(target) || diff <= 0) {
@@ -31495,7 +31536,7 @@ const CountdownTimer = {
       };
       for (const unit of units) {
         const cell = host.querySelector(`.rui-countdown-unit[data-unit="${unit}"] .rui-countdown-value`);
-        if (cell) cell.textContent = pad(values[unit] ?? 0);
+        if (cell) cell.textContent = pad3(values[unit] ?? 0);
       }
       const live = host.querySelector(".rui-countdown-summary");
       if (live) {
@@ -33042,7 +33083,7 @@ function encodeQr(text, ecc = "M") {
   const dataCapacityBits = getNumDataCodewords(version, ecc) * 8;
   appendBits(0, Math.min(4, dataCapacityBits - bits.length));
   while (bits.length % 8 !== 0) bits.push(0);
-  for (let pad = 236; bits.length < dataCapacityBits; pad ^= 236 ^ 17) appendBits(pad, 8);
+  for (let pad3 = 236; bits.length < dataCapacityBits; pad3 ^= 236 ^ 17) appendBits(pad3, 8);
   const dataCodewords = new Uint8Array(bits.length >>> 3);
   for (let i = 0; i < bits.length; i += 1) dataCodewords[i >>> 3] = dataCodewords[i >>> 3] | bits[i] << 7 - (i & 7);
   const allCodewords = addEccAndInterleave(dataCodewords, version, ecc);
@@ -34017,19 +34058,19 @@ function padConfig(canvas) {
     background
   };
 }
-function paintBackground(canvas, pad) {
-  if (!pad.ctx) return;
+function paintBackground(canvas, pad3) {
+  if (!pad3.ctx) return;
   const { background } = padConfig(canvas);
   if (isTransparent(background)) return;
-  pad.ctx.fillStyle = background;
-  pad.ctx.fillRect(0, 0, pad.width, pad.height);
+  pad3.ctx.fillStyle = background;
+  pad3.ctx.fillRect(0, 0, pad3.width, pad3.height);
 }
-function applyInk(canvas, pad) {
+function applyInk(canvas, pad3) {
   const { stroke, lineWidth } = padConfig(canvas);
-  if (pad.ctx) {
-    pad.ctx.strokeStyle = stroke;
-    pad.ctx.fillStyle = stroke;
-    pad.ctx.lineWidth = lineWidth;
+  if (pad3.ctx) {
+    pad3.ctx.strokeStyle = stroke;
+    pad3.ctx.fillStyle = stroke;
+    pad3.ctx.lineWidth = lineWidth;
   }
   return lineWidth;
 }
@@ -34047,39 +34088,39 @@ function drawPath(ctx, path, lineWidth) {
   for (let i = 1; i < path.length; i += 1) ctx.lineTo(path[i].x, path[i].y);
   ctx.stroke();
 }
-function drawIncremental(canvas, pad, prev, next) {
-  if (!pad.ctx) return;
-  const lineWidth = applyInk(canvas, pad);
+function drawIncremental(canvas, pad3, prev, next) {
+  if (!pad3.ctx) return;
+  const lineWidth = applyInk(canvas, pad3);
   if (!prev) {
-    drawPath(pad.ctx, [next], lineWidth);
+    drawPath(pad3.ctx, [next], lineWidth);
     return;
   }
-  pad.ctx.beginPath();
-  pad.ctx.moveTo(prev.x, prev.y);
-  pad.ctx.lineTo(next.x, next.y);
-  pad.ctx.stroke();
+  pad3.ctx.beginPath();
+  pad3.ctx.moveTo(prev.x, prev.y);
+  pad3.ctx.lineTo(next.x, next.y);
+  pad3.ctx.stroke();
 }
 function redrawPad(canvas) {
-  const pad = PADS.get(canvas);
-  if (!pad?.ctx) return;
-  pad.ctx.clearRect(0, 0, pad.width, pad.height);
-  paintBackground(canvas, pad);
-  if (pad.base) {
+  const pad3 = PADS.get(canvas);
+  if (!pad3?.ctx) return;
+  pad3.ctx.clearRect(0, 0, pad3.width, pad3.height);
+  paintBackground(canvas, pad3);
+  if (pad3.base) {
     try {
-      pad.ctx.drawImage(pad.base, 0, 0, pad.width, pad.height);
+      pad3.ctx.drawImage(pad3.base, 0, 0, pad3.width, pad3.height);
     } catch {
     }
   }
-  const lineWidth = applyInk(canvas, pad);
-  for (const path of pad.strokes) drawPath(pad.ctx, path, lineWidth);
+  const lineWidth = applyInk(canvas, pad3);
+  for (const path of pad3.strokes) drawPath(pad3.ctx, path, lineWidth);
 }
 function clearPad(canvas) {
-  const pad = PADS.get(canvas);
-  if (!pad) return;
-  pad.strokes = [];
-  pad.current = [];
-  pad.base = null;
-  pad.value = "";
+  const pad3 = PADS.get(canvas);
+  if (!pad3) return;
+  pad3.strokes = [];
+  pad3.current = [];
+  pad3.base = null;
+  pad3.value = "";
   redrawPad(canvas);
 }
 function padDataUrl(canvas) {
@@ -34089,73 +34130,73 @@ function padDataUrl(canvas) {
     return "";
   }
 }
-const padResult = (pad) => ({
-  strokes: pad.strokes.length,
-  inked: pad.strokes.some((path) => path.length >= 2)
+const padResult = (pad3) => ({
+  strokes: pad3.strokes.length,
+  inked: pad3.strokes.some((path) => path.length >= 2)
 });
-function resizePad(canvas, pad, width, height, applyCssSize) {
-  const sx = pad.width > 0 ? width / pad.width : 1;
-  const sy = pad.height > 0 ? height / pad.height : 1;
+function resizePad(canvas, pad3, width, height, applyCssSize) {
+  const sx = pad3.width > 0 ? width / pad3.width : 1;
+  const sy = pad3.height > 0 ? height / pad3.height : 1;
   if (sx !== 1 || sy !== 1) {
-    for (const path of pad.strokes) {
+    for (const path of pad3.strokes) {
       for (const point of path) {
         point.x *= sx;
         point.y *= sy;
       }
     }
   }
-  pad.ctx = sizeCanvas(canvas, width, height, applyCssSize);
-  pad.width = width;
-  pad.height = height;
-  pad.painted = true;
+  pad3.ctx = sizeCanvas(canvas, width, height, applyCssSize);
+  pad3.width = width;
+  pad3.height = height;
+  pad3.painted = true;
   redrawPad(canvas);
 }
 function refitPad(canvas) {
-  const pad = PADS.get(canvas);
-  if (!pad || pad.drawing) return;
+  const pad3 = PADS.get(canvas);
+  if (!pad3 || pad3.drawing) return;
   const rect = canvas.getBoundingClientRect();
   const width = Math.round(rect.width);
   const height = Math.round(rect.height);
   if (width < 1 || height < 1) return;
-  if (Math.abs(width - pad.width) <= 1 && Math.abs(height - pad.height) <= 1) return;
-  resizePad(canvas, pad, width, height, false);
+  if (Math.abs(width - pad3.width) <= 1 && Math.abs(height - pad3.height) <= 1) return;
+  resizePad(canvas, pad3, width, height, false);
 }
 function syncPad(canvas, cfg2) {
-  const pad = PADS.get(canvas);
-  if (!pad) return;
+  const pad3 = PADS.get(canvas);
+  if (!pad3) return;
   const dpr = devicePixels();
-  if (pad.propWidth !== cfg2.width || pad.propHeight !== cfg2.height) {
-    pad.propWidth = cfg2.width;
-    pad.propHeight = cfg2.height;
-    resizePad(canvas, pad, cfg2.width, cfg2.height, true);
-  } else if (canvas.width !== Math.round(pad.width * dpr) || canvas.height !== Math.round(pad.height * dpr)) {
-    resizePad(canvas, pad, pad.width, pad.height, false);
-  } else if (!pad.painted) {
-    pad.painted = true;
+  if (pad3.propWidth !== cfg2.width || pad3.propHeight !== cfg2.height) {
+    pad3.propWidth = cfg2.width;
+    pad3.propHeight = cfg2.height;
+    resizePad(canvas, pad3, cfg2.width, cfg2.height, true);
+  } else if (canvas.width !== Math.round(pad3.width * dpr) || canvas.height !== Math.round(pad3.height * dpr)) {
+    resizePad(canvas, pad3, pad3.width, pad3.height, false);
+  } else if (!pad3.painted) {
+    pad3.painted = true;
     redrawPad(canvas);
   }
-  if (cfg2.value !== pad.value) {
-    pad.value = cfg2.value;
+  if (cfg2.value !== pad3.value) {
+    pad3.value = cfg2.value;
     importValue(canvas, cfg2.value);
   }
 }
 function importValue(canvas, url) {
-  const pad = PADS.get(canvas);
-  if (!pad) return;
+  const pad3 = PADS.get(canvas);
+  if (!pad3) return;
   if (!url) {
-    pad.base = null;
-    pad.strokes = [];
-    pad.current = [];
+    pad3.base = null;
+    pad3.strokes = [];
+    pad3.current = [];
     redrawPad(canvas);
     return;
   }
   if (typeof Image === "undefined") return;
   const img = new Image();
   img.onload = () => {
-    if (PADS.get(canvas) !== pad || pad.value !== url) return;
-    pad.base = img;
-    pad.strokes = [];
-    pad.current = [];
+    if (PADS.get(canvas) !== pad3 || pad3.value !== url) return;
+    pad3.base = img;
+    pad3.strokes = [];
+    pad3.current = [];
     redrawPad(canvas);
   };
   img.onerror = () => {
@@ -34183,7 +34224,7 @@ function makeDrawingSurface(spec) {
   });
   root.append(canvas);
   const ctx = sizeCanvas(canvas, width, height, true);
-  const pad = {
+  const pad3 = {
     strokes: [],
     current: [],
     drawing: false,
@@ -34196,8 +34237,8 @@ function makeDrawingSurface(spec) {
     base: null,
     painted: false
   };
-  PADS.set(canvas, pad);
-  paintBackground(canvas, pad);
+  PADS.set(canvas, pad3);
+  paintBackground(canvas, pad3);
   const liveCanvas = (e) => e.currentTarget ?? canvas;
   const pointFrom = (cv, e) => {
     const live = PADS.get(cv);
@@ -38818,7 +38859,7 @@ const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "Ju
 const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAYS_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const formatDateTokens = (date, pattern) => {
-  const pad = (n, w = 2) => String(n).padStart(w, "0");
+  const pad3 = (n, w = 2) => String(n).padStart(w, "0");
   const hours = date.getHours();
   const hour12 = (hours + 11) % 12 + 1;
   const tokens = [
@@ -38826,14 +38867,14 @@ const formatDateTokens = (date, pattern) => {
     [/YY/g, String(date.getFullYear()).slice(-2)],
     [/MMMM/g, MONTHS_LONG[date.getMonth()]],
     [/MMM/g, MONTHS_SHORT[date.getMonth()]],
-    [/MM/g, pad(date.getMonth() + 1)],
+    [/MM/g, pad3(date.getMonth() + 1)],
     [/dddd/g, DAYS_LONG[date.getDay()]],
     [/ddd/g, DAYS_SHORT[date.getDay()]],
-    [/DD/g, pad(date.getDate())],
-    [/HH/g, pad(hours)],
-    [/hh/g, pad(hour12)],
-    [/mm/g, pad(date.getMinutes())],
-    [/ss/g, pad(date.getSeconds())],
+    [/DD/g, pad3(date.getDate())],
+    [/HH/g, pad3(hours)],
+    [/hh/g, pad3(hour12)],
+    [/mm/g, pad3(date.getMinutes())],
+    [/ss/g, pad3(date.getSeconds())],
     [/\bM\b/g, String(date.getMonth() + 1)],
     [/\bD\b/g, String(date.getDate())],
     [/\bH\b/g, String(hours)],

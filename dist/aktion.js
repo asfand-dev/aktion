@@ -534,12 +534,12 @@ function hm(t) {
 }
 function mv(t) {
   const e = t.peek();
-  let r = ze(t);
+  let r = Me(t);
   const i = t.peek();
   if (i.type === "Operator" && mm(i.value)) {
     if (Au(r)) {
       t.consume();
-      const a = ze(t);
+      const a = Me(t);
       r = {
         kind: "BuiltinCall",
         name: "__rui_assign__",
@@ -604,13 +604,13 @@ function fm(t) {
       if (!r && i.type === "Punctuation" && (i.value === "{" || i.value === "[")) {
         const a = Ii(t);
         let o;
-        t.peek().type === "Operator" && t.peek().value === "=" && (t.consume(), o = ze(t));
+        t.peek().type === "Operator" && t.peek().value === "=" && (t.consume(), o = Me(t));
         const n = { name: "", pattern: a };
         o && (n.defaultValue = o), e.push(n);
       } else if (i.type === "Identifier" || i.type === "Keyword") {
         const a = t.consume();
         let o;
-        !r && t.peek().type === "Operator" && t.peek().value === "=" && (t.consume(), o = ze(t));
+        !r && t.peek().type === "Operator" && t.peek().value === "=" && (t.consume(), o = Me(t));
         const n = { name: a.value };
         o && (n.defaultValue = o), r && (n.rest = !0), e.push(n);
       } else
@@ -636,7 +636,7 @@ function fm(t) {
 function fv(t) {
   const e = t.consume();
   t.expect("Punctuation", "("), ae(t);
-  const r = ze(t);
+  const r = Me(t);
   let i;
   r.kind === "Lambda" ? i = r.body.kind === "Block" ? r.body : { kind: "Block", body: [{ kind: "ExpressionStatement", expression: r.body }] } : i = { kind: "Block", body: [] };
   const a = [];
@@ -649,7 +649,7 @@ function fv(t) {
         }), ae(t), t.peek().type === "Punctuation" && t.peek().value === "," && (t.consume(), ae(t));
       t.expect("Punctuation", "]");
     } else
-      ze(t);
+      Me(t);
   ae(t), t.expect("Punctuation", ")"), tt(t);
   const n = {
     kind: "EffectDeclaration",
@@ -723,7 +723,7 @@ function Hl(t) {
       column: r.column
     };
   t.expect("Operator", "=");
-  const o = ze(t);
+  const o = Me(t);
   return tt(t), {
     kind: "Assignment",
     identifier: i,
@@ -735,7 +735,7 @@ function Hl(t) {
 function bv(t, e) {
   const r = Ii(t);
   t.expect("Operator", "=");
-  const i = ze(t);
+  const i = Me(t);
   return tt(t), {
     kind: "DestructureStatement",
     patternKind: r.kind,
@@ -756,7 +756,7 @@ function Ii(t) {
       if (t.peek().type === "Operator" && t.peek().value === "..." && (t.consume(), a = !0), !a && t.peek().type === "Punctuation" && (t.peek().value === "[" || t.peek().value === "{")) {
         const l = Ii(t);
         let c;
-        t.peek().type === "Operator" && t.peek().value === "=" && (t.consume(), c = ze(t));
+        t.peek().type === "Operator" && t.peek().value === "=" && (t.consume(), c = Me(t));
         const u = { name: "", pattern: l };
         if (c && (u.defaultValue = c), i.push(u), ae(t), t.peek().type === "Punctuation" && t.peek().value === ",") {
           t.consume(), ae(t);
@@ -766,7 +766,7 @@ function Ii(t) {
       }
       const o = t.expect("Identifier");
       let n;
-      !a && t.peek().type === "Operator" && t.peek().value === "=" && (t.consume(), n = ze(t));
+      !a && t.peek().type === "Operator" && t.peek().value === "=" && (t.consume(), n = Me(t));
       const s = { name: o.value };
       if (a && (s.rest = !0), n && (s.defaultValue = n), i.push(s), ae(t), t.peek().type === "Punctuation" && t.peek().value === ",") {
         t.consume(), ae(t);
@@ -789,7 +789,7 @@ function Ii(t) {
           s = o.value, n = h.value;
         }
       let c;
-      !a && t.peek().type === "Operator" && t.peek().value === "=" && (t.consume(), c = ze(t));
+      !a && t.peek().type === "Operator" && t.peek().value === "=" && (t.consume(), c = Me(t));
       const u = l ? { name: "", sourceKey: s, pattern: l } : { name: n };
       if (!l && s && (u.sourceKey = s), a && (u.rest = !0), c && (u.defaultValue = c), i.push(u), ae(t), t.peek().type === "Punctuation" && t.peek().value === ",") {
         t.consume(), ae(t);
@@ -801,10 +801,10 @@ function Ii(t) {
   }
   return { kind: r, bindings: i };
 }
-function ga(t) {
+function fa(t) {
   const e = [];
   for (const r of t.bindings)
-    r.pattern ? e.push(...ga(r.pattern)) : r.name && e.push(r.name);
+    r.pattern ? e.push(...fa(r.pattern)) : r.name && e.push(r.name);
   return e;
 }
 function ri(t) {
@@ -830,7 +830,7 @@ function zi(t) {
   };
 }
 function vv(t) {
-  const e = t.expect("Keyword", "await"), r = ze(t);
+  const e = t.expect("Keyword", "await"), r = Me(t);
   return tt(t), {
     kind: "Await",
     argument: r,
@@ -841,7 +841,7 @@ function yv(t) {
   const e = t.expect("Keyword", "return");
   let r;
   const i = t.peek();
-  return i.type !== "Newline" && i.type !== "Semicolon" && !(i.type === "Punctuation" && i.value === "}") && (r = ze(t)), tt(t), {
+  return i.type !== "Newline" && i.type !== "Semicolon" && !(i.type === "Punctuation" && i.value === "}") && (r = Me(t)), tt(t), {
     kind: "Return",
     argument: r,
     loc: { line: e.line, column: e.column }
@@ -900,7 +900,7 @@ function gm(t) {
       line: e.line,
       column: e.column
     };
-  const a = t.expect("Operator", "="), o = ze(t);
+  const a = t.expect("Operator", "="), o = Me(t);
   return tt(t), {
     kind: "Assignment",
     identifier: r,
@@ -1007,7 +1007,7 @@ function kv(t) {
     column: e.column
   };
 }
-function ze(t) {
+function Me(t) {
   return Av(t);
 }
 function Sv(t) {
@@ -1043,9 +1043,9 @@ function Av(t) {
   if (Ct(t, (r) => r.type === "Punctuation" && r.value === "?")) {
     const r = t.consume();
     ae(t);
-    const i = ze(t);
+    const i = Me(t);
     ae(t), t.expect("Punctuation", ":"), ae(t);
-    const a = ze(t);
+    const a = Me(t);
     return { kind: "Ternary", test: e, consequent: i, alternate: a, loc: Mt(r) };
   }
   return e;
@@ -1188,14 +1188,14 @@ function Nu(t) {
   return e;
 }
 function Lu(t) {
-  let e = js(t);
+  let e = _s(t);
   for (; Ct(
     t,
     (r) => r.type === "Operator" && (r.value === "*" || r.value === "/" || r.value === "%")
   ); ) {
     const r = t.consume();
     ae(t);
-    const i = js(t);
+    const i = _s(t);
     e = {
       kind: "Binary",
       operator: r.value,
@@ -1206,28 +1206,28 @@ function Lu(t) {
   }
   return e;
 }
-function js(t) {
-  const e = da(t);
+function _s(t) {
+  const e = ua(t);
   if (Ct(t, (r) => r.type === "Operator" && r.value === "**")) {
     const r = t.consume();
     ae(t);
-    const i = js(t);
+    const i = _s(t);
     return { kind: "Binary", operator: "**", left: e, right: i, loc: Mt(r) };
   }
   return e;
 }
-function da(t) {
+function ua(t) {
   const e = t.peek();
   if (e.type === "Operator" && (e.value === "!" || e.value === "-" || e.value === "+" || e.value === "~")) {
     t.consume();
-    const r = da(t);
+    const r = ua(t);
     return { kind: "Unary", operator: e.value, argument: r };
   }
   if (e.type === "Keyword" && e.value === "await")
     return t.consume(), {
       kind: "BuiltinCall",
       name: "__rui_await__",
-      arguments: [da(t)],
+      arguments: [ua(t)],
       loc: { line: e.line, column: e.column }
     };
   if (e.type === "Operator" && (e.value === "++" || e.value === "--"))
@@ -1235,14 +1235,14 @@ function da(t) {
       kind: "BuiltinCall",
       name: "__rui_prefix__",
       arguments: [
-        da(t),
+        ua(t),
         { kind: "Literal", value: e.value }
       ],
       loc: { line: e.line, column: e.column }
     };
   if (e.type === "Keyword" && (e.value === "typeof" || e.value === "void" || e.value === "delete")) {
     t.consume();
-    const r = da(t);
+    const r = ua(t);
     return {
       kind: "Unary",
       operator: e.value,
@@ -1271,7 +1271,7 @@ function da(t) {
         }
         if (o.type === "Punctuation" && o.value === "[") {
           t.consume();
-          const n = ze(t);
+          const n = Me(t);
           t.expect("Punctuation", "]"), r = { kind: "Member", object: r, computed: n };
           continue;
         }
@@ -1340,7 +1340,7 @@ function vm(t, e) {
     if (i.type === "Operator" && i.value === "?.") {
       if (t.consume(), t.peek().type === "Punctuation" && t.peek().value === "[") {
         t.consume();
-        const a = ze(t);
+        const a = Me(t);
         t.expect("Punctuation", "]"), r = { kind: "Member", object: r, computed: a, optional: !0 };
       } else if (t.peek().type === "Punctuation" && t.peek().value === "(") {
         t.consume();
@@ -1380,7 +1380,7 @@ function vm(t, e) {
     }
     if (i.type === "Punctuation" && i.value === "[") {
       t.consume();
-      const a = ze(t);
+      const a = Me(t);
       t.expect("Punctuation", "]"), r = { kind: "Member", object: r, computed: a };
       continue;
     }
@@ -1439,7 +1439,7 @@ function ym(t) {
     }
   }
   if (e.type === "Number")
-    return t.consume(), { kind: "Literal", value: _v(e.value) };
+    return t.consume(), { kind: "Literal", value: jv(e.value) };
   if (e.type === "String")
     return t.consume(), { kind: "Literal", value: e.value };
   if (e.type === "Regex") {
@@ -1516,14 +1516,14 @@ function ym(t) {
   }
   if (e.type === "Punctuation" && e.value === "{") {
     t.consume();
-    const r = jv(t);
+    const r = _v(t);
     return t.expect("Punctuation", "}"), { kind: "Object", properties: r };
   }
   if (e.type === "Punctuation" && e.value === "(") {
     const r = t.snapshot(), i = Fv(t);
     if (i) return i;
     t.restore(r), t.consume();
-    const a = ze(t);
+    const a = Me(t);
     return t.expect("Punctuation", ")"), a;
   }
   throw {
@@ -1553,14 +1553,14 @@ function br(t) {
 function Ru(t) {
   if (t.peek().type === "Operator" && t.peek().value === "...") {
     const e = t.consume();
-    return { kind: "Spread", argument: ze(t), loc: { line: e.line, column: e.column } };
+    return { kind: "Spread", argument: Me(t), loc: { line: e.line, column: e.column } };
   }
-  return ze(t);
+  return Me(t);
 }
 function wm(t) {
   const e = t.expect("Keyword", "if");
   t.expect("Punctuation", "(");
-  const r = ze(t);
+  const r = Me(t);
   t.expect("Punctuation", ")");
   const i = zi(t);
   let a;
@@ -1575,13 +1575,13 @@ function wm(t) {
 function Mv(t) {
   const e = t.expect("Keyword", "switch");
   t.expect("Punctuation", "(");
-  const r = ze(t);
+  const r = Me(t);
   t.expect("Punctuation", ")"), t.expect("Punctuation", "{");
   const i = [];
   for (ae(t); !(t.peek().type === "Punctuation" && t.peek().value === "}"); ) {
     let a = null;
     if (t.peek().type === "Keyword" && t.peek().value === "case")
-      t.consume(), a = ze(t);
+      t.consume(), a = Me(t);
     else if (t.peek().type === "Keyword" && t.peek().value === "default")
       t.consume(), a = null;
     else
@@ -1635,7 +1635,7 @@ function Ev(t) {
   t.peek().type === "Keyword" && (t.peek().value === "let" || t.peek().value === "const" || t.peek().value === "var") && t.consume(), ae(t);
   let a = "__row", o;
   t.peek().type === "Punctuation" && (t.peek().value === "[" || t.peek().value === "{") ? o = Ii(t) : a = t.expect("Identifier").value, i === "for-in" ? t.expect("Keyword", "in") : t.expect("Keyword", "of");
-  const n = ze(t);
+  const n = Me(t);
   t.expect("Punctuation", ")");
   const s = zi(t);
   return tt(t), i === "for-in" ? {
@@ -1663,14 +1663,14 @@ function Nv(t, e) {
       const n = t.peek();
       r = {
         kind: "ExpressionStatement",
-        expression: ze(t),
+        expression: Me(t),
         loc: { line: n.line, column: n.column }
       }, t.expect("Semicolon"), ae(t);
     }
   else
     t.expect("Semicolon"), ae(t);
   let i;
-  t.peek().type !== "Semicolon" && (i = ze(t)), t.expect("Semicolon"), ae(t);
+  t.peek().type !== "Semicolon" && (i = Me(t)), t.expect("Semicolon"), ae(t);
   let a;
   t.peek().type === "Punctuation" && t.peek().value === ")" || (a = km(t)), t.expect("Punctuation", ")");
   const o = zi(t);
@@ -1686,7 +1686,7 @@ function Nv(t, e) {
 function Lv(t) {
   const e = t.expect("Keyword", "while");
   t.expect("Punctuation", "(");
-  const r = ze(t);
+  const r = Me(t);
   t.expect("Punctuation", ")");
   const i = zi(t);
   return tt(t), {
@@ -1699,7 +1699,7 @@ function Lv(t) {
 function Rv(t) {
   const e = t.expect("Keyword", "do"), r = zi(t);
   ae(t), t.expect("Keyword", "while"), t.expect("Punctuation", "(");
-  const i = ze(t);
+  const i = Me(t);
   return t.expect("Punctuation", ")"), tt(t), {
     kind: "DoWhileStatement",
     test: i,
@@ -1716,7 +1716,7 @@ function Dv(t) {
   return tt(t), { kind: "ContinueStatement", loc: { line: e.line, column: e.column } };
 }
 function Ov(t) {
-  const e = t.expect("Keyword", "throw"), r = ze(t);
+  const e = t.expect("Keyword", "throw"), r = Me(t);
   return tt(t), {
     kind: "ThrowStatement",
     argument: r,
@@ -1757,7 +1757,7 @@ function Fv(t) {
         if (t.peek().type === "Operator" && t.peek().value === "=") {
           t.consume();
           try {
-            l.defaultValue = ze(t);
+            l.defaultValue = Me(t);
           } catch {
             return null;
           }
@@ -1774,7 +1774,7 @@ function Fv(t) {
       if (a && (n.rest = !0), !a && t.peek().type === "Operator" && t.peek().value === "=") {
         t.consume();
         try {
-          n.defaultValue = ze(t);
+          n.defaultValue = Me(t);
         } catch {
           return null;
         }
@@ -1801,11 +1801,11 @@ function xm(t) {
   return ae(t), t.peek().type === "Punctuation" && t.peek().value === "{" ? ri(t) : km(t);
 }
 function km(t) {
-  const e = ze(t), r = t.peek();
+  const e = Me(t), r = t.peek();
   if (r.type === "Operator") {
     if (mm(r.value)) {
       t.consume();
-      const i = ze(t);
+      const i = Me(t);
       return {
         kind: "BuiltinCall",
         name: "__rui_assign__",
@@ -1830,7 +1830,7 @@ function km(t) {
   }
   return e;
 }
-function jv(t) {
+function _v(t) {
   const e = [];
   if (ae(t), t.peek().type === "Punctuation" && t.peek().value === "}") return e;
   for (; ; ) {
@@ -1838,7 +1838,7 @@ function jv(t) {
     const r = t.peek();
     if (r.type === "Operator" && r.value === "...") {
       t.consume();
-      const l = ze(t);
+      const l = Me(t);
       if (e.push({ key: "", value: l, spread: !0 }), ae(t), t.peek().type === "Punctuation" && t.peek().value === ",") {
         if (t.consume(), ae(t), t.peek().type === "Punctuation" && t.peek().value === "}") break;
         continue;
@@ -1847,7 +1847,7 @@ function jv(t) {
     }
     let i, a;
     if (r.type === "Punctuation" && r.value === "[")
-      t.consume(), ae(t), a = ze(t), ae(t), t.expect("Punctuation", "]"), i = "";
+      t.consume(), ae(t), a = Me(t), ae(t), t.expect("Punctuation", "]"), i = "";
     else if (r.type === "Number")
       i = t.consume().value;
     else if (r.type === "Identifier" || r.type === "String" || r.type === "Keyword")
@@ -1860,7 +1860,7 @@ function jv(t) {
       };
     const o = t.peek();
     let n;
-    !a && r.type === "Identifier" && o.type === "Punctuation" && (o.value === "," || o.value === "}") ? n = { kind: "Identifier", name: i, loc: { line: r.line, column: r.column } } : (t.expect("Punctuation", ":"), n = ze(t));
+    !a && r.type === "Identifier" && o.type === "Punctuation" && (o.value === "," || o.value === "}") ? n = { kind: "Identifier", name: i, loc: { line: r.line, column: r.column } } : (t.expect("Punctuation", ":"), n = Me(t));
     const s = { key: i, value: n };
     if (a && (s.computedKey = a), e.push(s), ae(t), t.peek().type === "Punctuation" && t.peek().value === ",") {
       if (t.consume(), ae(t), t.peek().type === "Punctuation" && t.peek().value === "}") break;
@@ -1877,11 +1877,11 @@ function ae(t) {
 function tt(t) {
   t.isEnd() || t.match("Newline") || t.match("Semicolon");
 }
-function _v(t) {
+function jv(t) {
   let e = t.replace(/_/g, ""), r = 1;
   return e.startsWith("-") ? (r = -1, e = e.slice(1)) : e.startsWith("+") && (e = e.slice(1)), r * Number(e);
 }
-function LP(t) {
+function DP(t) {
   const e = mt(t);
   return qv(t, e);
 }
@@ -1915,7 +1915,7 @@ function qv(t, e) {
     errors: e.errors
   };
 }
-function RP(t, e) {
+function OP(t, e) {
   if (e.length === 0) return !0;
   const r = new Set(t.committedBindings);
   for (const i of e)
@@ -1949,10 +1949,10 @@ function Hv(t) {
   const e = t;
   return e.__aktionCompiled === Wl && typeof e.source == "string" && typeof e.path == "string" && !!e.program && Array.isArray(e.program.statements);
 }
-function PP(t) {
+function BP(t) {
   return t;
 }
-function DP(t, e = {}) {
+function FP(t, e = {}) {
   const r = mt(t);
   return {
     __aktionCompiled: Wl,
@@ -1961,24 +1961,35 @@ function DP(t, e = {}) {
     path: e.path ?? "<inline>"
   };
 }
-const ir = "  ", Du = /^[A-Za-z_$][A-Za-z0-9_$]*$/, Wv = /[\\"]/;
-function Wo(t, e) {
-  const r = t.kind === "array" ? "[" : "{", i = t.kind === "array" ? "]" : "}", a = t.bindings.map((o) => {
-    const n = o.rest ? "..." : "", s = o.pattern ? t.kind === "object" && o.sourceKey ? `${o.sourceKey}: ${Wo(o.pattern, e)}` : Wo(o.pattern, e) : o.sourceKey ? `${o.sourceKey}: ${o.name}` : o.name || "", l = o.defaultValue ? ` = ${Ee(o.defaultValue, e)}` : "";
-    return `${n}${s}${l}`;
-  });
-  return `${r}${a.join(", ")}${i}`;
+const Du = /^[A-Za-z_$][A-Za-z0-9_$]*$/, Wv = /[\\"\n\r\t]/, Gv = 2;
+function Vv(t) {
+  const e = Gv;
+  if (!Number.isInteger(e) || e < 0)
+    throw new RangeError(
+      `FormatOptions.indentWidth must be a non-negative integer, got ${e}`
+    );
+  return { unit: " ".repeat(e) };
 }
-function Gv(t) {
-  const e = [];
-  let r = null;
-  for (const i of t.statements)
-    r && Vv(r, i) && e.push(""), e.push(Mi(i, 0)), r = i;
-  return e.join(`
+function ir(t, e) {
+  return e.unit.repeat(t);
+}
+function Wo(t, e, r) {
+  const i = t.kind === "array" ? "[" : "{", a = t.kind === "array" ? "]" : "}", o = t.bindings.map((n) => {
+    const s = n.rest ? "..." : "", l = n.pattern ? t.kind === "object" && n.sourceKey ? `${n.sourceKey}: ${Wo(n.pattern, e, r)}` : Wo(n.pattern, e, r) : n.sourceKey ? `${n.sourceKey}: ${n.name}` : n.name || "", c = n.defaultValue ? ` = ${Ae(n.defaultValue, e, r)}` : "";
+    return `${s}${l}${c}`;
+  });
+  return `${i}${o.join(", ")}${a}`;
+}
+function Kv(t, e) {
+  const r = Vv(), i = [];
+  let a = null;
+  for (const o of t.statements)
+    a && Yv(a, o) && i.push(""), i.push(Ta(o, 0, r)), a = o;
+  return i.join(`
 `) + `
 `;
 }
-function Vv(t, e) {
+function Yv(t, e) {
   const r = /* @__PURE__ */ new Set([
     "ComponentDeclaration",
     "EffectDeclaration",
@@ -1987,267 +1998,288 @@ function Vv(t, e) {
   ]);
   return !!(r.has(t.kind) || r.has(e.kind));
 }
-function Mi(t, e) {
-  const r = ir.repeat(e), i = "exported" in t && t.exported ? "export " : "";
+function Ta(t, e, r) {
+  const i = ir(e, r), a = "exported" in t && t.exported ? "export " : "";
   switch (t.kind) {
     case "Import": {
-      const a = t.specifiers.map((o) => {
-        const n = o.isState ? `$${o.imported}` : o.imported;
-        if (o.local === o.imported) return n;
-        const s = o.isState ? `$${o.local}` : o.local;
-        return `${n} as ${s}`;
+      const o = t.specifiers.map((n) => {
+        const s = n.isState ? `$${n.imported}` : n.imported;
+        if (n.local === n.imported) return s;
+        const l = n.isState ? `$${n.local}` : n.local;
+        return `${s} as ${l}`;
       }).join(", ");
-      return `${r}import { ${a} } from "${t.source}"`;
+      return `${i}import { ${o} } from "${t.source}"`;
     }
     case "Assignment": {
-      const a = t.isState ? `$${t.identifier}` : t.identifier, o = Ee(t.expression, e);
-      return `${r}${i}${a} = ${o}`;
+      const o = t.isState ? `$${t.identifier}` : t.identifier, n = Ae(t.expression, e, r);
+      return `${i}${a}${o} = ${n}`;
     }
     case "ComponentDeclaration": {
-      const a = t.params.map(Hn).join(", "), o = `${r}${i}function ${t.name}(${a}) {`, n = gt(t.body.body, e + 1);
-      return n.length > 0 ? `${o}
-${n}
-${r}}` : `${o}
-${r}}`;
+      const o = t.params.map((l) => Hn(l, r)).join(", "), n = `${i}${a}function ${t.name}(${o}) {`, s = gt(t.body.body, e + 1, r);
+      return s.length > 0 ? `${n}
+${s}
+${i}}` : `${n}
+${i}}`;
     }
     case "EffectDeclaration": {
-      const a = t.triggers.map(Kv).filter((s) => s.length > 0);
-      t.rateLimit && a.push(`"${t.rateLimit.kind}(${t.rateLimit.ms})"`);
-      const o = gt(t.body.body, e + 1), n = `[${a.join(", ")}]`;
-      return `${r}$effect(() => {
-${o}
-${r}}, ${n})`;
+      const o = t.triggers.map(Xv).filter((l) => l.length > 0);
+      t.rateLimit && o.push(`"${t.rateLimit.kind}(${t.rateLimit.ms})"`);
+      const n = gt(t.body.body, e + 1, r), s = `[${o.join(", ")}]`;
+      return `${i}$effect(() => {
+${n}
+${i}}, ${s})`;
     }
     case "ActionDeclaration": {
-      const a = t.params.map(Hn).join(", "), o = `${r}${i}function ${t.name}(${a}) {`, n = gt(t.body.body, e + 1);
-      return `${o}
-${n}
-${r}}`;
+      const o = t.params.map((l) => Hn(l, r)).join(", "), n = `${i}${a}function ${t.name}(${o}) {`, s = gt(t.body.body, e + 1, r);
+      return `${n}
+${s}
+${i}}`;
     }
     case "HookDeclaration": {
-      const a = t.params.map(Hn).join(", "), o = `${r}${i}function $${t.name}(${a}) {`, n = gt(t.body.body, e + 1);
-      return `${o}
-${n}
-${r}}`;
+      const o = t.params.map((l) => Hn(l, r)).join(", "), n = `${i}${a}function $${t.name}(${o}) {`, s = gt(t.body.body, e + 1, r);
+      return `${n}
+${s}
+${i}}`;
     }
     case "Await":
-      return `${r}await ${Ee(t.argument, e)}`;
+      return `${i}await ${Ae(t.argument, e, r)}`;
     case "Return":
-      return t.argument ? `${r}return ${Ee(t.argument, e)}` : `${r}return`;
+      return t.argument ? `${i}return ${Ae(t.argument, e, r)}` : `${i}return`;
     case "ExpressionStatement":
-      return `${r}${Ee(t.expression, e)}`;
+      return `${i}${Ae(t.expression, e, r)}`;
     case "IfStatement": {
-      const a = Ee(t.test, e), o = `{
-${gt(t.consequent.body, e + 1)}
-${r}}`;
-      if (!t.alternate) return `${r}if (${a}) ${o}`;
-      const n = t.alternate.kind === "IfStatement" ? Mi(t.alternate, e).trimStart() : `{
-${gt(t.alternate.body, e + 1)}
-${r}}`;
-      return `${r}if (${a}) ${o} else ${n}`;
+      const o = Ae(t.test, e, r), n = `{
+${gt(t.consequent.body, e + 1, r)}
+${i}}`;
+      if (!t.alternate) return `${i}if (${o}) ${n}`;
+      const s = t.alternate.kind === "IfStatement" ? Ta(t.alternate, e, r).trimStart() : `{
+${gt(t.alternate.body, e + 1, r)}
+${i}}`;
+      return `${i}if (${o}) ${n} else ${s}`;
     }
     case "SwitchStatement": {
-      const a = Ee(t.discriminant, e), o = t.cases.map((n) => Yv(n, e + 1)).join(`
+      const o = Ae(t.discriminant, e, r), n = t.cases.map((s) => Qv(s, e + 1, r)).join(`
 `);
-      return `${r}switch (${a}) {
-${o}
-${r}}`;
+      return `${i}switch (${o}) {
+${n}
+${i}}`;
     }
     case "ForOfStatement": {
-      const a = Ee(t.iterable, e), o = `{
-${gt(t.body.body, e + 1)}
-${r}}`, n = t.pattern ? Wo(t.pattern, e) : t.item;
-      return `${r}for (let ${n} of ${a}) ${o}`;
+      const o = Ae(t.iterable, e, r), n = `{
+${gt(t.body.body, e + 1, r)}
+${i}}`, s = t.pattern ? Wo(t.pattern, e, r) : t.item;
+      return `${i}for (let ${s} of ${o}) ${n}`;
     }
     case "ForClassicStatement": {
-      const a = t.init ? Mi(t.init, 0).trimStart() : "", o = t.test ? Ee(t.test, e) : "", n = t.update ? Ee(t.update, e) : "", s = `{
-${gt(t.body.body, e + 1)}
-${r}}`;
-      return `${r}for (${a}; ${o}; ${n}) ${s}`;
+      const o = t.init ? Ta(t.init, 0, r).trimStart() : "", n = t.test ? Ae(t.test, e, r) : "", s = t.update ? Ae(t.update, e, r) : "", l = `{
+${gt(t.body.body, e + 1, r)}
+${i}}`;
+      return `${i}for (${o}; ${n}; ${s}) ${l}`;
     }
     case "WhileStatement": {
-      const a = Ee(t.test, e), o = `{
-${gt(t.body.body, e + 1)}
-${r}}`;
-      return `${r}while (${a}) ${o}`;
+      const o = Ae(t.test, e, r), n = `{
+${gt(t.body.body, e + 1, r)}
+${i}}`;
+      return `${i}while (${o}) ${n}`;
     }
     case "DoWhileStatement": {
-      const a = Ee(t.test, e), o = `{
-${gt(t.body.body, e + 1)}
-${r}}`;
-      return `${r}do ${o} while (${a})`;
+      const o = Ae(t.test, e, r), n = `{
+${gt(t.body.body, e + 1, r)}
+${i}}`;
+      return `${i}do ${n} while (${o})`;
     }
     case "ForInStatement": {
-      const a = Ee(t.iterable, e), o = `{
-${gt(t.body.body, e + 1)}
-${r}}`;
-      return `${r}for (let ${t.item} in ${a}) ${o}`;
+      const o = Ae(t.iterable, e, r), n = `{
+${gt(t.body.body, e + 1, r)}
+${i}}`;
+      return `${i}for (let ${t.item} in ${o}) ${n}`;
     }
     case "DestructureStatement": {
-      const a = Wo({ kind: t.patternKind, bindings: t.bindings }, e), o = Ee(t.expression, e);
-      return `${r}let ${a} = ${o}`;
+      const o = Wo({ kind: t.patternKind, bindings: t.bindings }, e, r), n = Ae(t.expression, e, r);
+      return `${i}let ${o} = ${n}`;
     }
     case "BreakStatement":
-      return `${r}break`;
+      return `${i}break`;
     case "ContinueStatement":
-      return `${r}continue`;
+      return `${i}continue`;
     case "ThrowStatement":
-      return `${r}throw ${Ee(t.argument, e)}`;
+      return `${i}throw ${Ae(t.argument, e, r)}`;
     case "TryStatement": {
-      const a = `{
-${gt(t.block.body, e + 1)}
-${r}}`;
-      let o = `${r}try ${a}`;
+      const o = `{
+${gt(t.block.body, e + 1, r)}
+${i}}`;
+      let n = `${i}try ${o}`;
       if (t.catchBlock) {
-        const n = t.catchParam ? ` (${t.catchParam})` : "", s = `{
-${gt(t.catchBlock.body, e + 1)}
-${r}}`;
-        o += ` catch${n} ${s}`;
+        const s = t.catchParam ? ` (${t.catchParam})` : "", l = `{
+${gt(t.catchBlock.body, e + 1, r)}
+${i}}`;
+        n += ` catch${s} ${l}`;
       }
       if (t.finallyBlock) {
-        const n = `{
-${gt(t.finallyBlock.body, e + 1)}
-${r}}`;
-        o += ` finally ${n}`;
+        const s = `{
+${gt(t.finallyBlock.body, e + 1, r)}
+${i}}`;
+        n += ` finally ${s}`;
       }
-      return o;
+      return n;
     }
   }
 }
-function Hn(t) {
-  return t.defaultValue ? `${t.name} = ${Ee(t.defaultValue, 0)}` : t.name;
+function Hn(t, e) {
+  return t.defaultValue ? `${t.name} = ${Ae(t.defaultValue, 0, e)}` : t.name;
 }
-function Kv(t) {
+function Xv(t) {
   return t.kind === "lifecycle" ? `"${t.name}"` : t.kind === "every" ? `"every(${t.intervalMs})"` : t.kind === "state" ? `$${t.name}` : "";
 }
-function gt(t, e) {
-  return t.map((r) => Mi(r, e)).join(`
+function gt(t, e, r) {
+  return t.map((i) => Ta(i, e, r)).join(`
 `);
 }
-function Ee(t, e) {
+function Zv(t, e, r) {
+  const i = (a) => a && a.kind === "Literal" && typeof a.value == "string" ? a.value : null;
+  switch (t.name) {
+    case "__rui_assign__": {
+      const [a, o, n] = t.arguments, s = i(n);
+      return !a || !o || s === null ? null : `${Ae(a, e, r)} ${s} ${Ae(o, e, r)}`;
+    }
+    case "__rui_postfix__": {
+      const [a, o] = t.arguments, n = i(o);
+      return !a || n === null ? null : `${Ae(a, e, r)}${n}`;
+    }
+    case "__rui_prefix__": {
+      const [a, o] = t.arguments, n = i(o);
+      return !a || n === null ? null : `${n}${Ae(a, e, r)}`;
+    }
+    case "__rui_await__": {
+      const [a] = t.arguments;
+      return a ? `await (${Ae(a, e, r)})` : null;
+    }
+    default:
+      return null;
+  }
+}
+function Ae(t, e, r) {
   switch (t.kind) {
     case "Literal":
-      return Zv(t.value);
+      return ey(t.value);
     case "Identifier":
       return t.name;
     case "StateRef":
       return `$${t.name}`;
     case "Array": {
       if (t.elements.length === 0) return "[]";
-      const r = t.elements.map((o) => Ee(o, e)), i = `[${r.join(", ")}]`;
-      if (i.length <= 80 && !r.some((o) => o.includes(`
-`))) return i;
-      const a = ir.repeat(e + 1);
+      const i = t.elements.map((n) => Ae(n, e, r)), a = `[${i.join(", ")}]`;
+      if (a.length <= 80 && !i.some((n) => n.includes(`
+`))) return a;
+      const o = ir(e + 1, r);
       return `[
-${r.map((o) => `${a}${o}`).join(`,
+${i.map((n) => `${o}${n}`).join(`,
 `)}
-${ir.repeat(e)}]`;
+${ir(e, r)}]`;
     }
     case "Object": {
       if (t.properties.length === 0) return "{}";
-      const r = t.properties.map((o) => Xv(o, e)), i = `{ ${r.join(", ")} }`;
-      if (i.length <= 80 && !r.some((o) => o.includes(`
-`))) return i;
-      const a = ir.repeat(e + 1);
+      const i = t.properties.map((n) => Jv(n, e, r)), a = `{ ${i.join(", ")} }`;
+      if (a.length <= 80 && !i.some((n) => n.includes(`
+`))) return a;
+      const o = ir(e + 1, r);
       return `{
-${r.map((o) => `${a}${o}`).join(`,
+${i.map((n) => `${o}${n}`).join(`,
 `)}
-${ir.repeat(e)}}`;
+${ir(e, r)}}`;
     }
     case "Member": {
-      const r = Ee(t.object, e), i = t.optional ? "?." : ".";
-      if (t.property) return `${r}${i}${t.property}`;
+      const i = Ae(t.object, e, r), a = t.optional ? "?." : ".";
+      if (t.property) return `${i}${a}${t.property}`;
       if (t.computed) {
-        const a = Ee(t.computed, e);
-        return t.optional ? `${r}?.[${a}]` : `${r}[${a}]`;
+        const o = Ae(t.computed, e, r);
+        return t.optional ? `${i}?.[${o}]` : `${i}[${o}]`;
       }
-      return r;
+      return i;
     }
     case "Unary":
-      return `${t.operator}${Ee(t.argument, e)}`;
+      return `${t.operator}${Ae(t.argument, e, r)}`;
     case "Binary":
-      return `${Ee(t.left, e)} ${t.operator} ${Ee(t.right, e)}`;
+      return `${Ae(t.left, e, r)} ${t.operator} ${Ae(t.right, e, r)}`;
     case "Ternary":
-      return `${Ee(t.test, e)} ? ${Ee(t.consequent, e)} : ${Ee(t.alternate, e)}`;
+      return `${Ae(t.test, e, r)} ? ${Ae(t.consequent, e, r)} : ${Ae(t.alternate, e, r)}`;
     case "Call":
-      return Zi(t.callee, t.arguments, e);
+      return Xi(t.callee, t.arguments, e, r);
     case "MethodCall": {
-      const r = Ee(t.object, e), i = t.optional ? "?." : ".";
-      return Zi(`${r}${i}${t.method}`, t.arguments, e);
+      const i = Ae(t.object, e, r), a = t.optional ? "?." : ".";
+      return Xi(`${i}${a}${t.method}`, t.arguments, e, r);
     }
     case "Invoke": {
-      const r = Ee(t.callee, e), i = t.optional ? "?." : "";
-      return Zi(`${r}${i}`, t.arguments, e);
+      const i = Ae(t.callee, e, r), a = t.optional ? "?." : "";
+      return Xi(`${i}${a}`, t.arguments, e, r);
     }
     case "New": {
-      const r = Ee(t.callee, e);
-      return `new ${Zi(r, t.arguments, e)}`;
+      const i = Ae(t.callee, e, r);
+      return `new ${Xi(i, t.arguments, e, r)}`;
     }
     case "BuiltinCall":
-      return Zi(`@${t.name}`, t.arguments, e);
+      return Zv(t, e, r) ?? Xi(`@${t.name}`, t.arguments, e, r);
     case "Template":
-      return Qv(t.quasis, t.expressions, e);
+      return ty(t.quasis, t.expressions, e, r);
     case "Spread":
-      return `...${Ee(t.argument, e)}`;
+      return `...${Ae(t.argument, e, r)}`;
     case "Lambda": {
-      const r = t.params.map((a) => {
-        const o = a.rest ? "..." : "";
-        return a.defaultValue ? `${o}${a.name} = ${Ee(a.defaultValue, e)}` : `${o}${a.name}`;
+      const i = t.params.map((o) => {
+        const n = o.rest ? "..." : "";
+        return o.defaultValue ? `${n}${o.name} = ${Ae(o.defaultValue, e, r)}` : `${n}${o.name}`;
       }).join(", ");
-      return `${t.params.length === 1 && !t.params[0].defaultValue && !t.params[0].rest ? t.params[0].name : `(${r})`} => ${Ee(t.body, e)}`;
+      return `${t.params.length === 1 && !t.params[0].defaultValue && !t.params[0].rest ? t.params[0].name : `(${i})`} => ${Ae(t.body, e, r)}`;
     }
     case "Block":
       return `{
-${gt(t.body, e + 1)}
-${ir.repeat(e)}}`;
+${gt(t.body, e + 1, r)}
+${ir(e, r)}}`;
   }
 }
-function Zi(t, e, r) {
+function Xi(t, e, r, i) {
   if (e.length === 0) return `${t}()`;
-  const i = e.map((n) => Ee(n, r)), a = `${t}(${i.join(", ")})`;
-  if (a.length <= 80 && !i.some((n) => n.includes(`
-`))) return a;
-  const o = ir.repeat(r + 1);
+  const a = e.map((s) => Ae(s, r, i)), o = `${t}(${a.join(", ")})`;
+  if (o.length <= 80 && !a.some((s) => s.includes(`
+`))) return o;
+  const n = ir(r + 1, i);
   return `${t}(
-${i.map((n) => `${o}${n}`).join(`,
+${a.map((s) => `${n}${s}`).join(`,
 `)}
-${ir.repeat(r)})`;
+${ir(r, i)})`;
 }
-function Yv(t, e) {
-  const r = ir.repeat(e), i = t.body.map((a) => Mi(a, e + 1)).join(`
-`);
-  return t.test === null ? `${r}default:
-${i}
-${Mi({ kind: "ExpressionStatement", expression: { kind: "Identifier", name: "break" } }, e + 1)}` : `${r}case ${Ee(t.test, e)}:
-${i}
-${ir.repeat(e + 1)}break`;
+function Qv(t, e, r) {
+  const i = ir(e, r), a = t.body.map((l) => Ta(l, e + 1, r)).join(`
+`), o = t.test === null ? `${i}default:` : `${i}case ${Ae(t.test, e, r)}:`, s = t.body[t.body.length - 1]?.kind === "BreakStatement" ? "" : `
+${ir(e + 1, r)}break`;
+  return `${o}
+${a}${s}`;
 }
-function Xv(t, e) {
-  if (t.spread) return `...${Ee(t.value, e)}`;
-  const r = Ee(t.value, e);
-  return t.value.kind === "Identifier" && t.value.name === t.key && Du.test(t.key) ? t.key : `${Du.test(t.key) ? t.key : Sm(t.key)}: ${r}`;
+function Jv(t, e, r) {
+  if (t.spread) return `...${Ae(t.value, e, r)}`;
+  const i = Ae(t.value, e, r);
+  return t.value.kind === "Identifier" && t.value.name === t.key && Du.test(t.key) ? t.key : `${Du.test(t.key) ? t.key : Sm(t.key)}: ${i}`;
 }
-function Zv(t) {
+function ey(t) {
   return t === null ? "null" : typeof t == "string" ? Sm(t) : typeof t == "boolean" ? t ? "true" : "false" : String(t);
 }
 function Sm(t) {
-  return Wv.test(t) ? `"${t.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` : `"${t}"`;
+  return Wv.test(t) ? `"${t.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t")}"` : `"${t}"`;
 }
-function Qv(t, e, r) {
-  const i = [];
-  for (let a = 0; a < t.length; a += 1)
-    i.push(t[a] ?? ""), a < e.length && (i.push("${"), i.push(Ee(e[a], r)), i.push("}"));
-  return `\`${i.join("")}\``;
+function ty(t, e, r, i) {
+  const a = [];
+  for (let o = 0; o < t.length; o += 1)
+    a.push(t[o] ?? ""), o < e.length && (a.push("${"), a.push(Ae(e[o], r, i)), a.push("}"));
+  return `\`${a.join("")}\``;
 }
 function eo(t, e) {
   return `__a${t}_${e}`;
 }
-const Jv = /^__a(\d+)_(.+)$/;
-function ey(t) {
-  const e = Jv.exec(t);
+const ry = /^__a(\d+)_(.+)$/;
+function iy(t) {
+  const e = ry.exec(t);
   return e ? e[2] : null;
 }
-function ty(t, e, r) {
+function ay(t, e, r) {
   const i = /* @__PURE__ */ new Map(), a = [], o = /* @__PURE__ */ new Set(), n = [];
   let s = 0;
   const l = (v, x, y, w) => {
@@ -2287,7 +2319,7 @@ function ty(t, e, r) {
       renamePlain: /* @__PURE__ */ new Map(),
       renameState: /* @__PURE__ */ new Map()
     };
-    i.set(v, k), ry(k);
+    i.set(v, k), oy(k);
     for (const C of S.statements) {
       if (C.kind !== "Import") continue;
       const A = r.resolve(C.source, v);
@@ -2332,9 +2364,9 @@ function ty(t, e, r) {
     p.has(v) || (p.set(v, h.length), h.push(v));
   const b = h.length > 1;
   for (const v of a) {
-    const x = i.get(v), y = ay(x), w = p.get(v);
+    const x = i.get(v), y = sy(x), w = p.get(v);
     for (const S of x.program.statements)
-      S.kind !== "Import" && (y.renameTopLevel(S), iy(S), b && hv(S, w), S.kind === "EffectDeclaration" && x.path !== e && (S.name = `__effect_a${x.id}_${S.name.replace(/^__effect_/, "")}`), u.push(S));
+      S.kind !== "Import" && (y.renameTopLevel(S), ny(S), b && hv(S, w), S.kind === "EffectDeclaration" && x.path !== e && (S.name = `__effect_a${x.id}_${S.name.replace(/^__effect_/, "")}`), u.push(S));
   }
   const m = i.get(e), f = {
     statements: u,
@@ -2346,7 +2378,7 @@ function ty(t, e, r) {
     dependencies: a.filter((v) => v !== e)
   };
 }
-function ry(t) {
+function oy(t) {
   for (const e of t.program.statements)
     switch (e.kind) {
       case "Assignment":
@@ -2360,15 +2392,15 @@ function ry(t) {
         t.declaredState.add(e.name), e.exported && t.exportedState.add(e.name);
         break;
       case "DestructureStatement":
-        for (const r of ga({ kind: e.patternKind, bindings: e.bindings }))
+        for (const r of fa({ kind: e.patternKind, bindings: e.bindings }))
           t.declaredPlain.add(r);
         break;
     }
 }
-function iy(t) {
+function ny(t) {
   (t.kind === "Assignment" || t.kind === "ComponentDeclaration" || t.kind === "ActionDeclaration" || t.kind === "HookDeclaration") && delete t.exported;
 }
-function ay(t) {
+function sy(t) {
   const e = [], r = (f) => {
     for (const v of e) if (v.has(f)) return !0;
     return !1;
@@ -2376,7 +2408,7 @@ function ay(t) {
     e.push(new Set(f));
   }, n = () => {
     e.pop();
-  }, s = (f) => ga(f), l = (f) => {
+  }, s = (f) => fa(f), l = (f) => {
     const v = [];
     for (const x of f)
       x.name && v.push(x.name), x.pattern && v.push(...s(x.pattern));
@@ -2455,7 +2487,7 @@ function ay(t) {
   }
   function p(f, v) {
     if (f.kind === "DestructureStatement")
-      for (const x of ga({ kind: f.patternKind, bindings: f.bindings })) v.add(x);
+      for (const x of fa({ kind: f.patternKind, bindings: f.bindings })) v.add(x);
     else (f.kind === "ComponentDeclaration" || f.kind === "ActionDeclaration") && v.add(f.name);
   }
   function b(f) {
@@ -2509,7 +2541,7 @@ function ay(t) {
         return;
       case "ForOfStatement": {
         u(f.iterable);
-        const x = f.pattern ? ga(f.pattern) : [f.item];
+        const x = f.pattern ? fa(f.pattern) : [f.item];
         o(x), h(f.body), n();
         return;
       }
@@ -2543,7 +2575,7 @@ function ay(t) {
   }
   return { renameTopLevel: b };
 }
-function _s(t) {
+function js(t) {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(t);
 }
 function Ou(t) {
@@ -2552,26 +2584,26 @@ function Ou(t) {
     r === "" || r === "." || (r === ".." ? e.pop() : e.push(r));
   return e.join("/");
 }
-function oy(t) {
+function ly(t) {
   const e = t.lastIndexOf("/");
   return e < 0 ? "" : t.slice(0, e);
 }
 function Cm(t, e) {
-  if (_s(t))
+  if (js(t))
     try {
       return new URL(t).href;
     } catch {
       return null;
     }
-  if (_s(e))
+  if (js(e))
     try {
       return new URL(t, e).href;
     } catch {
       return null;
     }
-  return t.startsWith("/") ? Ou(t.split("/")) : t.startsWith("./") || t.startsWith("../") ? Ou(`${oy(e)}/${t}`.split("/")) : null;
+  return t.startsWith("/") ? Ou(t.split("/")) : t.startsWith("./") || t.startsWith("../") ? Ou(`${ly(e)}/${t}`.split("/")) : null;
 }
-function ny(t) {
+function cy(t) {
   return {
     resolve: (e, r) => Cm(e, r),
     load: (e) => {
@@ -2581,19 +2613,19 @@ function ny(t) {
     }
   };
 }
-async function sy(t) {
+async function uy(t) {
   if (typeof fetch != "function")
     throw new Error("global fetch is unavailable; cannot load URL imports");
   const e = await fetch(t);
   if (!e.ok) throw new Error(`HTTP ${e.status}`);
   return e.text();
 }
-async function ly(t) {
-  const { entry: e, files: r } = t, i = t.fetch ?? sy, a = [], o = { ...r }, n = /* @__PURE__ */ new Set();
+async function dy(t) {
+  const { entry: e, files: r } = t, i = t.fetch ?? uy, a = [], o = { ...r }, n = /* @__PURE__ */ new Set();
   async function s(u) {
     if (n.has(u)) return;
     if (n.add(u), o[u] === void 0)
-      if (_s(u))
+      if (js(u))
         try {
           o[u] = await i(u);
         } catch (b) {
@@ -2631,10 +2663,10 @@ async function ly(t) {
       dependencies: []
     };
   await s(e);
-  const l = ty(o[e], e, ny(o));
+  const l = ay(o[e], e, cy(o));
   let c;
   try {
-    c = Gv(l.program);
+    c = Kv(l.program);
   } catch {
     c = o[e];
   }
@@ -2645,7 +2677,7 @@ async function ly(t) {
     dependencies: l.dependencies
   };
 }
-function cy(t, e) {
+function py(t, e) {
   const r = [], i = {};
   let a = t;
   for (const o of e) {
@@ -2653,12 +2685,12 @@ function cy(t, e) {
       i[o.target] = o.value;
       continue;
     }
-    const n = uy(a, o);
+    const n = hy(a, o);
     a = n.programText, n.warning && r.push(n.warning);
   }
   return { programText: a, stateUpdates: i, warnings: r };
 }
-function uy(t, e) {
+function hy(t, e) {
   const r = mt(t);
   if (r.errors.length > 0)
     return {
@@ -2723,9 +2755,9 @@ function uy(t, e) {
   }
 }
 function Wn(t, e) {
-  return t.statements.findIndex((r) => dy(r) === e);
+  return t.statements.findIndex((r) => my(r) === e);
 }
-function dy(t) {
+function my(t) {
   switch (t.kind) {
     case "Assignment":
       return t.identifier;
@@ -2783,7 +2815,7 @@ function Bu(t) {
   return t.length > 40 ? `${t.slice(0, 37)}...` : t;
 }
 const Fu = /* @__PURE__ */ new WeakMap();
-function py(t) {
+function fy(t) {
   let e = Fu.get(t.components);
   if (!e) {
     e = /* @__PURE__ */ new Map();
@@ -2793,7 +2825,7 @@ function py(t) {
   }
   return e;
 }
-function hy(t, e) {
+function gy(t, e) {
   const r = /* @__PURE__ */ new Map();
   for (const i of t.components) r.set(i.name, i);
   for (const i of e.components) r.set(i.name, i);
@@ -2804,9 +2836,9 @@ function hy(t, e) {
   };
 }
 function Ft(t, e) {
-  return py(t).get(e);
+  return fy(t).get(e);
 }
-const qs = "http://www.w3.org/2000/svg", my = /* @__PURE__ */ new Set([
+const qs = "http://www.w3.org/2000/svg", by = /* @__PURE__ */ new Set([
   "svg",
   "g",
   "defs",
@@ -3042,7 +3074,7 @@ const qs = "http://www.w3.org/2000/svg", my = /* @__PURE__ */ new Set([
   "aria-labelledby",
   "aria-describedby",
   "aria-hidden"
-]), fy = /* @__PURE__ */ new Set([
+]), vy = /* @__PURE__ */ new Set([
   "x",
   "y",
   "cx",
@@ -3075,9 +3107,9 @@ const qs = "http://www.w3.org/2000/svg", my = /* @__PURE__ */ new Set([
   "y2",
   "gradientTransform",
   "patternTransform"
-]), gy = /* @__PURE__ */ new Set(["use", "mpath", "textPath"]), by = 64 * 1024, vy = 4096, yy = 32;
+]), yy = /* @__PURE__ */ new Set(["use", "mpath", "textPath"]), wy = 64 * 1024, xy = 4096, ky = 32;
 let to = null;
-function wy() {
+function Sy() {
   if (to) return to;
   try {
     return typeof document > "u" || !document.implementation?.createHTMLDocument ? null : (to = document.implementation.createHTMLDocument(""), to);
@@ -3085,21 +3117,21 @@ function wy() {
     return null;
   }
 }
-function xy(t, e) {
+function Cy(t, e) {
   const r = t.replace(/[\u0000-\u001F\u007F]/g, "").trim();
-  return !r.startsWith("#") || !gy.has(e) || !/^#[A-Za-z_][\w.:-]*$/.test(r) ? null : r;
+  return !r.startsWith("#") || !yy.has(e) || !/^#[A-Za-z_][\w.:-]*$/.test(r) ? null : r;
 }
-function ky(t) {
+function Ay(t) {
   const e = t.trim();
   return !e || e.length > 512 || /[<>{}@\\"']/.test(e) || /url\s*\(|expression\s*\(|behavior\s*:|image-set\s*\(|element\s*\(|--/i.test(e) || !/^[a-zA-Z0-9#%.,()\s:;+/*_-]+$/.test(e) ? null : e;
 }
-function Sy(t) {
+function $y(t) {
   let e = 0;
   const r = (i, a) => {
-    if (a > yy || (e += 1, e > vy)) return !1;
+    if (a > ky || (e += 1, e > xy)) return !1;
     for (const o of Array.from(i.children)) {
       const n = o.localName;
-      if (o.namespaceURI !== qs || !my.has(n)) {
+      if (o.namespaceURI !== qs || !by.has(n)) {
         o.remove();
         continue;
       }
@@ -3112,17 +3144,17 @@ function Sy(t) {
         continue;
       }
       if (n === "href" || n === "xlink:href") {
-        const l = xy(s, i.localName);
+        const l = Cy(s, i.localName);
         i.removeAttribute(o), l && i.setAttribute("href", l);
         continue;
       }
       if (n === "style") {
-        const l = ky(s);
+        const l = Ay(s);
         i.removeAttribute(o), l && i.setAttribute("style", l);
         continue;
       }
       if (n === "attributename") {
-        if (!fy.has(s.trim()))
+        if (!vy.has(s.trim()))
           return i.remove(), !0;
         continue;
       }
@@ -3134,8 +3166,8 @@ function Sy(t) {
 }
 function Gl(t) {
   const e = typeof t == "string" ? t : "";
-  if (!e || e.length > by) return null;
-  const r = wy();
+  if (!e || e.length > wy) return null;
+  const r = Sy();
   if (!r) return null;
   let i;
   try {
@@ -3145,7 +3177,7 @@ function Gl(t) {
   }
   let a = i;
   const o = {}, n = i.children.length === 1 ? i.firstElementChild : null;
-  if (n && n.localName === "svg" && n.namespaceURI === qs && (a = n), !Sy(a)) return null;
+  if (n && n.localName === "svg" && n.namespaceURI === qs && (a = n), !$y(a)) return null;
   if (a !== i)
     for (const l of a.getAttributeNames()) {
       const c = l.toLowerCase();
@@ -3156,59 +3188,59 @@ function Gl(t) {
     l.nodeType === 1 ? s.push(document.importNode(l, !0)) : l.nodeType === 3 && s.push(document.createTextNode(l.textContent ?? ""));
   return s.length === 0 ? null : { children: s, rootAttrs: o };
 }
-function Cy(t) {
+function Ty(t) {
   return Gl(t) !== null;
 }
-const Ay = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css", ju = "6.7.2", _u = "data-rui-font-awesome", $y = /* @__PURE__ */ new Set(["solid", "regular", "brands"]), qu = "solid";
-function Ty(t) {
+const Iy = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css", _u = "6.7.2", ju = "data-rui-font-awesome", zy = /* @__PURE__ */ new Set(["solid", "regular", "brands"]), qu = "solid";
+function My(t) {
   typeof document < "u" && Uu(document.head, document), Uu(t, t.ownerDocument ?? document);
 }
 function Uu(t, e) {
-  if (Iy() || t.querySelector(
-    `link[${_u}="${ju}"]`
+  if (Ey() || t.querySelector(
+    `link[${ju}="${_u}"]`
   )) return;
   const i = e.createElement("link");
-  i.rel = "stylesheet", i.href = Ay, i.crossOrigin = "anonymous", i.referrerPolicy = "no-referrer", i.setAttribute(_u, ju);
+  i.rel = "stylesheet", i.href = Iy, i.crossOrigin = "anonymous", i.referrerPolicy = "no-referrer", i.setAttribute(ju, _u);
   try {
     t.appendChild(i);
   } catch {
   }
 }
-function Iy() {
+function Ey() {
   return typeof globalThis.happyDOM < "u";
 }
 function La(t) {
   if (typeof t != "string") return [];
-  const e = My(t).trim();
+  const e = Ly(t).trim();
   if (!e) return [];
-  if (!Ny(e)) return [];
-  const [r, i] = Ey(e);
+  if (!Py(e)) return [];
+  const [r, i] = Ry(e);
   return i ? [`fa-${r}`, `fa-${i}`] : [];
 }
-const zy = /[\uFE0E\uFE0F\u200D\u200C\uFEFF]/g;
-function My(t) {
-  return t.replace(zy, "");
+const Ny = /[\uFE0E\uFE0F\u200D\u200C\uFEFF]/g;
+function Ly(t) {
+  return t.replace(Ny, "");
 }
-function Ey(t) {
+function Ry(t) {
   const e = t.indexOf(":");
   if (e === -1) return [qu, t];
   const r = t.slice(0, e).trim().toLowerCase(), i = t.slice(e + 1).trim();
-  return $y.has(r) ? [r, i] : [qu, i || t];
+  return zy.has(r) ? [r, i] : [qu, i || t];
 }
-function Ny(t) {
+function Py(t) {
   return /^[a-zA-Z0-9:_-]+$/.test(t);
 }
-const Ly = ["xs", "sm", "md", "lg", "xl"], Vl = /* @__PURE__ */ new Map(), Ry = /^[a-zA-Z0-9:_-]+$/;
-function Py(t) {
+const Dy = ["xs", "sm", "md", "lg", "xl"], Vl = /* @__PURE__ */ new Map(), Oy = /^[a-zA-Z0-9:_-]+$/;
+function By(t) {
   const e = typeof t == "string" ? t : "";
-  return !e || e.length > 16 * 1024 || !Cy(e) ? "" : e;
+  return !e || e.length > 16 * 1024 || !Ty(e) ? "" : e;
 }
 function $m(t) {
   if (!t || typeof t != "object" || Array.isArray(t)) return [];
   const e = [];
   for (const [r, i] of Object.entries(t)) {
-    if (!Ry.test(r)) continue;
-    const a = Py(i);
+    if (!Oy.test(r)) continue;
+    const a = By(i);
     a && (Vl.set(r, a), e.push(r));
   }
   return e;
@@ -3216,7 +3248,7 @@ function $m(t) {
 function Tm(t) {
   return typeof t != "string" ? null : Vl.get(t.trim()) ?? null;
 }
-function Dy(t) {
+function Fy(t) {
   return typeof t == "string" && Vl.has(t.trim());
 }
 function d(t, e, r) {
@@ -3252,7 +3284,7 @@ function R(t, e = 0) {
   }
   return e;
 }
-const et = ["none", "3xs", "2xs", "xs", "sm", "md", "lg", "xl", "2xl", "3xl"], Oy = {
+const et = ["none", "3xs", "2xs", "xs", "sm", "md", "lg", "xl", "2xl", "3xl"], _y = {
   s: "sm",
   m: "md",
   l: "lg",
@@ -3262,7 +3294,7 @@ const et = ["none", "3xs", "2xs", "xs", "sm", "md", "lg", "xl", "2xl", "3xl"], O
 };
 function Kt(t) {
   const e = typeof t == "string" ? t.trim() : "";
-  return Oy[e] ?? e;
+  return _y[e] ?? e;
 }
 function ft(t, e = "") {
   const r = Kt(t);
@@ -3282,21 +3314,21 @@ function St(t) {
     Br.includes(a) && (r[a] = o, i = !0);
   return i ? { kind: "responsive", values: r } : { kind: "single", value: t };
 }
-const By = /["'\\\n\r<>;{}]/g;
-function Fy(t) {
-  return t ? t.replace(By, "").trim() : "";
+const jy = /["'\\\n\r<>;{}]/g;
+function qy(t) {
+  return t ? t.replace(jy, "").trim() : "";
 }
-const jy = /^[a-zA-Z0-9.%+\-*/\s(),]+$/;
+const Uy = /^[a-zA-Z0-9.%+\-*/\s(),]+$/;
 function me(t, e) {
   const r = (g(t) ?? "").trim();
-  return !r || r.length > 64 || !jy.test(r) ? e : r;
+  return !r || r.length > 64 || !Uy.test(r) ? e : r;
 }
-const _y = /^[a-zA-Z0-9#%.,()\s+\-]+$/;
+const Hy = /^[a-zA-Z0-9#%.,()\s+\-]+$/;
 function At(t) {
   const e = g(t).trim();
-  return !e || e.length > 64 || !_y.test(e) || /\burl\s*\(|\bexpression\s*\(|javascript\s*:|@import\b/i.test(e) ? "" : e;
+  return !e || e.length > 64 || !Hy.test(e) || /\burl\s*\(|\bexpression\s*\(|javascript\s*:|@import\b/i.test(e) ? "" : e;
 }
-const qy = /* @__PURE__ */ new Set(["http", "https", "mailto", "tel"]);
+const Wy = /* @__PURE__ */ new Set(["http", "https", "mailto", "tel"]);
 function Fe(t, e = "#") {
   const r = g(t).trim();
   if (!r) return e;
@@ -3308,10 +3340,10 @@ function Fe(t, e = "#") {
   if (!a)
     return i;
   const o = a[1].toLowerCase();
-  return qy.has(o) ? i : e;
+  return Wy.has(o) ? i : e;
 }
-const Uy = /* @__PURE__ */ new Set(["http", "https", "data", "blob"]);
-function je(t) {
+const Gy = /* @__PURE__ */ new Set(["http", "https", "data", "blob"]);
+function _e(t) {
   const e = g(t).trim();
   if (!e) return "";
   const r = e.replace(/[\u0000-\u001F\u007F]/g, "");
@@ -3321,7 +3353,7 @@ function je(t) {
   const i = /^([a-zA-Z][a-zA-Z0-9+.\-]*):/.exec(r);
   if (!i) return r;
   const a = i[1].toLowerCase();
-  return !Uy.has(a) || a === "data" && !/^data:image\//i.test(r) ? "" : r;
+  return !Gy.has(a) || a === "data" && !/^data:image\//i.test(r) ? "" : r;
 }
 function $t(t) {
   if (t === null || typeof t != "object") return !1;
@@ -3395,7 +3427,7 @@ function Y(t, e = {}) {
     "aria-hidden": "true"
   });
 }
-const Hy = {
+const Vy = {
   base: 0,
   sm: 640,
   md: 768,
@@ -3413,7 +3445,7 @@ function Xl() {
     return gi = null, null;
   }
 }
-function Wy(t) {
+function Ky(t) {
   const e = Xl();
   if (!e) return null;
   const r = [...t].filter((s) => s.decls.length > 0).sort((s, l) => (Wu[s.bp] ?? 0) - (Wu[l.bp] ?? 0));
@@ -3422,7 +3454,7 @@ function Wy(t) {
   if (a) return a;
   const o = `ak-r${(Mm++).toString(36)}`, n = `.${o}.${o}.${o}`;
   for (const s of r) {
-    const l = s.decls.map(([h, p]) => `${h}:${p}`).join(";"), c = Hy[s.bp] ?? 0, u = c > 0 ? `@media (min-width:${c}px){${n}{${l}}}` : `${n}{${l}}`;
+    const l = s.decls.map(([h, p]) => `${h}:${p}`).join(";"), c = Vy[s.bp] ?? 0, u = c > 0 ? `@media (min-width:${c}px){${n}{${l}}}` : `${n}{${l}}`;
     try {
       e.insertRule(u, e.cssRules.length);
     } catch {
@@ -3430,7 +3462,7 @@ function Wy(t) {
   }
   return Go.set(i, o), o;
 }
-function Gy(t) {
+function Yy(t) {
   if (!t || typeof t != "object" || Array.isArray(t)) return !1;
   const e = t;
   return "base" in e || "sm" in e || "md" in e || "lg" in e || "xl" in e;
@@ -3446,7 +3478,7 @@ const Gu = {
   "group-hover": ""
   // handled specially below
 };
-function Vy(t) {
+function Xy(t) {
   const e = Xl();
   if (!e) return null;
   const r = t.filter((n) => n.decls.length > 0 && n.state in Gu);
@@ -3515,7 +3547,7 @@ const Vu = {
   info: "var(--rui-color-info)",
   transparent: "transparent",
   current: "currentColor"
-}, Ei = {
+}, Mi = {
   none: "0",
   xs: "var(--rui-radius-xs)",
   sm: "var(--rui-radius-sm)",
@@ -3524,7 +3556,7 @@ const Vu = {
   pill: "var(--rui-radius-pill)",
   full: "9999px",
   circle: "50%"
-}, Ni = {
+}, Ei = {
   none: "none",
   sm: "var(--rui-shadow-sm)",
   md: "var(--rui-shadow-md)",
@@ -3575,8 +3607,8 @@ const Vu = {
   "2xl": "1.5rem",
   "3xl": "1.875rem",
   "4xl": "2.25rem"
-}, Ky = /* @__PURE__ */ new Set(["100", "200", "300", "400", "500", "600", "700", "800", "900", "normal", "bold"]), Em = /* @__PURE__ */ new Set(["flex", "grid", "block", "inline", "inline-flex", "inline-block", "none", "contents"]), Nm = /* @__PURE__ */ new Set(["row", "column", "row-reverse", "column-reverse"]), Lm = /* @__PURE__ */ new Set(["relative", "absolute", "fixed", "sticky", "static"]), Rm = /* @__PURE__ */ new Set(["hidden", "auto", "scroll", "visible", "clip"]), Pm = /* @__PURE__ */ new Set(["pointer", "default", "not-allowed", "grab", "grabbing", "text", "move", "wait", "help", "none"]), Dm = /* @__PURE__ */ new Set(["left", "center", "right", "justify", "start", "end"]);
-function $e(t) {
+}, Zy = /* @__PURE__ */ new Set(["100", "200", "300", "400", "500", "600", "700", "800", "900", "normal", "bold"]), Em = /* @__PURE__ */ new Set(["flex", "grid", "block", "inline", "inline-flex", "inline-block", "none", "contents"]), Nm = /* @__PURE__ */ new Set(["row", "column", "row-reverse", "column-reverse"]), Lm = /* @__PURE__ */ new Set(["relative", "absolute", "fixed", "sticky", "static"]), Rm = /* @__PURE__ */ new Set(["hidden", "auto", "scroll", "visible", "clip"]), Pm = /* @__PURE__ */ new Set(["pointer", "default", "not-allowed", "grab", "grabbing", "text", "move", "wait", "help", "none"]), Dm = /* @__PURE__ */ new Set(["left", "center", "right", "justify", "start", "end"]);
+function Te(t) {
   const e = g(t).trim();
   return e ? e in Vu ? Vu[e] : me(e, "") || null : null;
 }
@@ -3606,20 +3638,20 @@ function Om(t) {
 }
 function Bm(t) {
   const e = g(t).trim();
-  return Ky.has(e) ? e : null;
+  return Zy.has(e) ? e : null;
 }
-function Yy(t) {
+function Qy(t) {
   const e = t.replace(/["'\\\n\r<>;{})(]/g, "").trim();
   return !e || e.length > 512 ? null : /^(https?:)?\/\//i.test(e) || /^data:image\//i.test(e) ? e : /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(e) ? null : e;
 }
-function Xy(t) {
+function Jy(t) {
   const e = g(t).trim();
   if (!e) return null;
   if (e.startsWith("gradient.")) return `var(--rui-gradient-${Ql(e.slice(9))})`;
   const r = wr(e);
   return r ? `linear-gradient(${r}, ${r})` : null;
 }
-function Zy(t) {
+function ew(t) {
   if (t && typeof t == "object" && !Array.isArray(t)) {
     const e = t;
     if ("base" in e || "sm" in e || "md" in e || "lg" in e || "xl" in e)
@@ -3627,50 +3659,50 @@ function Zy(t) {
   }
   return t;
 }
-const Qy = {
-  p: (t) => Ie("padding", $e(t)),
+const tw = {
+  p: (t) => ze("padding", Te(t)),
   // `px`/`mx` use logical inline properties so RTL documents mirror (X.1) —
   // identical rendering in LTR, correct mirroring under `dir="rtl"`.
-  px: (t) => Ie("padding-inline", $e(t)),
+  px: (t) => ze("padding-inline", Te(t)),
   py: (t) => {
-    const e = $e(t);
+    const e = Te(t);
     return e ? [["padding-top", e], ["padding-bottom", e]] : [];
   },
-  pt: (t) => Ie("padding-top", $e(t)),
-  pr: (t) => Ie("padding-right", $e(t)),
-  pb: (t) => Ie("padding-bottom", $e(t)),
-  pl: (t) => Ie("padding-left", $e(t)),
+  pt: (t) => ze("padding-top", Te(t)),
+  pr: (t) => ze("padding-right", Te(t)),
+  pb: (t) => ze("padding-bottom", Te(t)),
+  pl: (t) => ze("padding-left", Te(t)),
   // Logical single-side spacing (X.1): `ps`/`pe` = inline start/end.
-  ps: (t) => Ie("padding-inline-start", $e(t)),
-  pe: (t) => Ie("padding-inline-end", $e(t)),
-  m: (t) => Ie("margin", $e(t)),
-  mx: (t) => Ie("margin-inline", $e(t)),
+  ps: (t) => ze("padding-inline-start", Te(t)),
+  pe: (t) => ze("padding-inline-end", Te(t)),
+  m: (t) => ze("margin", Te(t)),
+  mx: (t) => ze("margin-inline", Te(t)),
   my: (t) => {
-    const e = $e(t);
+    const e = Te(t);
     return e ? [["margin-top", e], ["margin-bottom", e]] : [];
   },
-  mt: (t) => Ie("margin-top", $e(t)),
-  mr: (t) => Ie("margin-right", $e(t)),
-  mb: (t) => Ie("margin-bottom", $e(t)),
-  ml: (t) => Ie("margin-left", $e(t)),
-  ms: (t) => Ie("margin-inline-start", $e(t)),
-  me: (t) => Ie("margin-inline-end", $e(t)),
-  gap: (t) => Ie("gap", $e(t)),
-  w: (t) => Ie("width", Xe(t)),
-  h: (t) => Ie("height", Xe(t)),
-  minW: (t) => Ie("min-width", Xe(t)),
-  maxW: (t) => Ie("max-width", Xe(t)),
-  minH: (t) => Ie("min-height", Xe(t)),
-  maxH: (t) => Ie("max-height", Xe(t)),
-  bg: (t) => Ie("background", Zl(t)),
-  color: (t) => Ie("color", wr(t)),
+  mt: (t) => ze("margin-top", Te(t)),
+  mr: (t) => ze("margin-right", Te(t)),
+  mb: (t) => ze("margin-bottom", Te(t)),
+  ml: (t) => ze("margin-left", Te(t)),
+  ms: (t) => ze("margin-inline-start", Te(t)),
+  me: (t) => ze("margin-inline-end", Te(t)),
+  gap: (t) => ze("gap", Te(t)),
+  w: (t) => ze("width", Xe(t)),
+  h: (t) => ze("height", Xe(t)),
+  minW: (t) => ze("min-width", Xe(t)),
+  maxW: (t) => ze("max-width", Xe(t)),
+  minH: (t) => ze("min-height", Xe(t)),
+  maxH: (t) => ze("max-height", Xe(t)),
+  bg: (t) => ze("background", Zl(t)),
+  color: (t) => ze("color", wr(t)),
   radius: (t) => {
     const e = g(t).trim();
-    return Ie("border-radius", e in Ei ? Ei[e] : me(e, "") || null);
+    return ze("border-radius", e in Mi ? Mi[e] : me(e, "") || null);
   },
   shadow: (t) => {
     const e = g(t).trim();
-    return e in Ni ? [["box-shadow", Ni[e]]] : [];
+    return e in Ei ? [["box-shadow", Ei[e]]] : [];
   },
   display: (t) => {
     const e = g(t).trim();
@@ -3698,41 +3730,41 @@ const Qy = {
   },
   // Spec I.5 says EVERY sx value accepts a breakpoint map — cover the rest of
   // the bounded surface so responsive maps never silently no-op.
-  border: (t) => jm(t),
-  borderColor: (t) => Ie("border-color", wr(t)),
-  opacity: (t) => Ie("opacity", zt(t)),
+  border: (t) => _m(t),
+  borderColor: (t) => ze("border-color", wr(t)),
+  opacity: (t) => ze("opacity", zt(t)),
   zIndex: (t) => {
     const e = g(t).trim();
-    return Ie("z-index", e in Yo ? Yo[e] : zt(e));
+    return ze("z-index", e in Yo ? Yo[e] : zt(e));
   },
   overflow: (t) => {
     const e = g(t).trim();
     return Rm.has(e) ? [["overflow", e]] : [];
   },
-  grow: (t) => Ie("flex-grow", zt(t)),
-  shrink: (t) => Ie("flex-shrink", zt(t)),
-  basis: (t) => Ie("flex-basis", Xe(t)),
+  grow: (t) => ze("flex-grow", zt(t)),
+  shrink: (t) => ze("flex-shrink", zt(t)),
+  basis: (t) => ze("flex-basis", Xe(t)),
   wrap: (t) => t === !0 || g(t) === "true" ? [["flex-wrap", "wrap"]] : t === !1 || g(t) === "false" ? [["flex-wrap", "nowrap"]] : [],
   position: (t) => {
     const e = g(t).trim();
     return Lm.has(e) ? [["position", e]] : [];
   },
-  top: (t) => Ie("top", Xe(t)),
-  right: (t) => Ie("right", Xe(t)),
-  bottom: (t) => Ie("bottom", Xe(t)),
-  left: (t) => Ie("left", Xe(t)),
+  top: (t) => ze("top", Xe(t)),
+  right: (t) => ze("right", Xe(t)),
+  bottom: (t) => ze("bottom", Xe(t)),
+  left: (t) => ze("left", Xe(t)),
   inset: (t) => {
     const e = g(t).trim();
-    return Ie("inset", e === "0" ? "0" : me(e, "") || null);
+    return ze("inset", e === "0" ? "0" : me(e, "") || null);
   },
-  fontSize: (t) => Ie("font-size", Om(t)),
-  weight: (t) => Ie("font-weight", Bm(t)),
+  fontSize: (t) => ze("font-size", Om(t)),
+  weight: (t) => ze("font-weight", Bm(t)),
   textDecoration: (t) => {
     const e = g(t).trim();
     return Fm.has(e) ? [["text-decoration", e]] : [];
   }
 }, Fm = /* @__PURE__ */ new Set(["underline", "none", "line-through", "overline"]);
-function jm(t) {
+function _m(t) {
   const e = g(t).trim();
   if (!e) return [];
   if (e === "none") return [["border", "none"]];
@@ -3742,14 +3774,14 @@ function jm(t) {
   const r = wr(e);
   return r ? [["border", `1px solid ${r}`]] : [];
 }
-function Ie(t, e) {
+function ze(t, e) {
   return e ? [[t, e]] : [];
 }
-function Jy(t, e) {
+function rw(t, e) {
   const r = /* @__PURE__ */ new Set();
-  for (const [i, a] of Object.entries(Qy)) {
+  for (const [i, a] of Object.entries(tw)) {
     const o = t[i];
-    if (!Gy(o)) continue;
+    if (!Yy(o)) continue;
     const n = [];
     for (const l of ["base", "sm", "md", "lg", "xl"]) {
       if (!(l in o)) continue;
@@ -3757,31 +3789,31 @@ function Jy(t, e) {
       c.length > 0 && n.push({ bp: l, decls: c });
     }
     if (n.length === 0) continue;
-    const s = Wy(n);
+    const s = Ky(n);
     s && (e.push(s), r.add(i));
   }
   return r;
 }
-function ew(t) {
+function iw(t) {
   const e = [];
   if (!t || typeof t != "object" || Array.isArray(t)) return { style: "", classes: e };
-  const r = t, i = Jy(r, e), a = [], o = (N) => i.has(N) ? void 0 : Zy(r[N]);
-  a.push(["padding", $e(o("p"))]), a.push(["padding-inline", $e(o("px"))]), a.push(["padding-top", $e(o("py"))], ["padding-bottom", $e(o("py"))]), a.push(["padding-top", $e(o("pt"))]), a.push(["padding-right", $e(o("pr"))]), a.push(["padding-bottom", $e(o("pb"))]), a.push(["padding-left", $e(o("pl"))]), a.push(["padding-inline-start", $e(o("ps"))]), a.push(["padding-inline-end", $e(o("pe"))]), a.push(["margin", $e(o("m"))]), a.push(["margin-inline", $e(o("mx"))]), a.push(["margin-top", $e(o("my"))], ["margin-bottom", $e(o("my"))]), a.push(["margin-top", $e(o("mt"))]), a.push(["margin-right", $e(o("mr"))]), a.push(["margin-bottom", $e(o("mb"))]), a.push(["margin-left", $e(o("ml"))]), a.push(["margin-inline-start", $e(o("ms"))]), a.push(["margin-inline-end", $e(o("me"))]), a.push(["gap", $e(o("gap"))]), a.push(["width", Xe(o("w"))]), a.push(["height", Xe(o("h"))]), a.push(["min-width", Xe(o("minW"))]), a.push(["max-width", Xe(o("maxW"))]), a.push(["min-height", Xe(o("minH"))]), a.push(["max-height", Xe(o("maxH"))]);
+  const r = t, i = rw(r, e), a = [], o = (N) => i.has(N) ? void 0 : ew(r[N]);
+  a.push(["padding", Te(o("p"))]), a.push(["padding-inline", Te(o("px"))]), a.push(["padding-top", Te(o("py"))], ["padding-bottom", Te(o("py"))]), a.push(["padding-top", Te(o("pt"))]), a.push(["padding-right", Te(o("pr"))]), a.push(["padding-bottom", Te(o("pb"))]), a.push(["padding-left", Te(o("pl"))]), a.push(["padding-inline-start", Te(o("ps"))]), a.push(["padding-inline-end", Te(o("pe"))]), a.push(["margin", Te(o("m"))]), a.push(["margin-inline", Te(o("mx"))]), a.push(["margin-top", Te(o("my"))], ["margin-bottom", Te(o("my"))]), a.push(["margin-top", Te(o("mt"))]), a.push(["margin-right", Te(o("mr"))]), a.push(["margin-bottom", Te(o("mb"))]), a.push(["margin-left", Te(o("ml"))]), a.push(["margin-inline-start", Te(o("ms"))]), a.push(["margin-inline-end", Te(o("me"))]), a.push(["gap", Te(o("gap"))]), a.push(["width", Xe(o("w"))]), a.push(["height", Xe(o("h"))]), a.push(["min-width", Xe(o("minW"))]), a.push(["max-width", Xe(o("maxW"))]), a.push(["min-height", Xe(o("minH"))]), a.push(["max-height", Xe(o("maxH"))]);
   const n = Zl(o("bg"));
   n && a.push(["background", n]), a.push(["color", wr(o("color"))]);
   const s = o("border");
-  if (s != null) for (const N of jm(s)) a.push(N);
+  if (s != null) for (const N of _m(s)) a.push(N);
   const l = wr(o("borderColor"));
   l && a.push(["border-color", l]);
   const c = o("radius");
   if (c != null) {
     const N = g(c).trim();
-    a.push(["border-radius", N in Ei ? Ei[N] : me(N, "") || null]);
+    a.push(["border-radius", N in Mi ? Mi[N] : me(N, "") || null]);
   }
   const u = o("shadow");
   if (u != null) {
     const N = g(u).trim();
-    N in Ni && a.push(["box-shadow", Ni[N]]);
+    N in Ei && a.push(["box-shadow", Ei[N]]);
   }
   const h = zt(o("opacity"));
   h && a.push(["opacity", h]);
@@ -3822,15 +3854,15 @@ function ew(t) {
   Pm.has(T) && a.push(["cursor", T]);
   const I = g(o("textAlign")).trim();
   Dm.has(I) && a.push(["text-align", I]), g(o("backdrop")).trim() === "blur" && (a.push(["backdrop-filter", "blur(12px)"]), a.push(["-webkit-backdrop-filter", "blur(12px)"]));
-  const E = g(o("bgImage")).trim(), L = Xy(o("bgOverlay"));
+  const E = g(o("bgImage")).trim(), L = Jy(o("bgOverlay"));
   if (E) {
-    const N = Yy(E);
+    const N = Qy(E);
     if (N) {
       const O = `url("${N}")`;
       a.push(["background-image", L ? `${L}, ${O}` : O]), a.push(["background-size", g(o("bgSize")).trim() === "contain" ? "contain" : "cover"]), a.push(["background-position", "center"]);
     }
   } else L && a.push(["background-image", L]);
-  return Qu(o("hover"), "hover", e), Qu(o("focus"), "focus", e), rw(r, e), { style: a.filter((N) => N[1] != null && N[1] !== "").map(([N, O]) => `${N}:${O}`).join(";"), classes: e };
+  return Qu(o("hover"), "hover", e), Qu(o("focus"), "focus", e), ow(r, e), { style: a.filter((N) => N[1] != null && N[1] !== "").map(([N, O]) => `${N}:${O}`).join(";"), classes: e };
 }
 const Zu = /* @__PURE__ */ new Set(["lift", "grow", "glow", "bright", "border", "underline", "scale"]);
 function Qu(t, e, r) {
@@ -3844,7 +3876,7 @@ function Qu(t, e, r) {
         a && Zu.has(i) && r.push(`ak-${e}-${i}`);
   }
 }
-const tw = /* @__PURE__ */ new Set([
+const aw = /* @__PURE__ */ new Set([
   "hover",
   "focus",
   "focus-visible",
@@ -3854,30 +3886,30 @@ const tw = /* @__PURE__ */ new Set([
   "checked",
   "group-hover"
 ]);
-function rw(t, e) {
+function ow(t, e) {
   const r = [], i = (n, s) => {
     if (!s || typeof s != "object" || Array.isArray(s)) return;
-    const l = iw(s);
+    const l = nw(s);
     l.length > 0 && r.push({ state: n, decls: l });
   }, a = t.states;
   if (a && typeof a == "object" && !Array.isArray(a))
     for (const [n, s] of Object.entries(a))
-      tw.has(n) && i(n, s);
+      aw.has(n) && i(n, s);
   if (i("hover", t.hover), i("focus", t.focus), r.length === 0) return;
-  const o = Vy(r);
+  const o = Xy(r);
   o && e.push(o);
 }
-function iw(t) {
+function nw(t) {
   const e = [], r = (c, u) => {
     u && e.push([c, u]);
   }, i = [];
   if (r("background", Zl(t.bg)), r("color", wr(t.color)), r("border-color", wr(t.borderColor)), t.shadow != null) {
     const c = g(t.shadow).trim();
-    c in Ni && r("box-shadow", Ni[c]);
+    c in Ei && r("box-shadow", Ei[c]);
   }
   if (t.radius != null) {
     const c = g(t.radius).trim();
-    r("border-radius", c in Ei ? Ei[c] : me(c, "") || null);
+    r("border-radius", c in Mi ? Mi[c] : me(c, "") || null);
   }
   const a = zt(t.opacity);
   a && r("opacity", a);
@@ -3897,7 +3929,7 @@ function iw(t) {
   }
   return i.length > 0 && r("transform", i.join(" ")), e;
 }
-const aw = /* @__PURE__ */ new Set([
+const sw = /* @__PURE__ */ new Set([
   "fade",
   "fade-up",
   "fade-down",
@@ -3917,7 +3949,7 @@ const aw = /* @__PURE__ */ new Set([
   "ping",
   "wiggle"
 ]);
-function ow(t) {
+function lw(t) {
   const e = [], r = [];
   if (!t) return { classes: e, style: "" };
   let i = "", a = null, o = null, n = null;
@@ -3927,7 +3959,7 @@ function ow(t) {
     const s = t;
     i = g(s.preset ?? s.name).trim(), s.delay != null && (a = R(s.delay)), s.duration != null && (o = R(s.duration)), n = s.repeat;
   }
-  if (!aw.has(i)) return { classes: e, style: "" };
+  if (!sw.has(i)) return { classes: e, style: "" };
   if (e.push("ak-anim", `ak-anim-${i}`), a != null && a >= 0 && a <= 2e4 && r.push(`animation-delay:${Math.round(a)}ms`), o != null && o > 0 && o <= 2e4 && r.push(`animation-duration:${Math.round(o)}ms`), n === "infinite" || n === !0) r.push("animation-iteration-count:infinite");
   else {
     const s = zt(n);
@@ -3935,7 +3967,7 @@ function ow(t) {
   }
   return { classes: e, style: r.join(";") };
 }
-const nw = /* @__PURE__ */ new Set([
+const cw = /* @__PURE__ */ new Set([
   // Landmarks and document structure
   "banner",
   "complementary",
@@ -4009,42 +4041,42 @@ const nw = /* @__PURE__ */ new Set([
   // unknown prop is a hard validation error, not a warning.
   "testId",
   "testid"
-]), sw = /^[A-Za-z_][\w-]*$/;
+]), uw = /^[A-Za-z_][\w-]*$/;
 function Ju(t) {
   const e = [], r = (i) => {
     const a = g(i).trim();
     for (const o of a.split(/\s+/))
-      o && sw.test(o) && e.push(o);
+      o && uw.test(o) && e.push(o);
   };
   return Array.isArray(t) ? t.forEach(r) : r(t), e;
 }
-const lw = /<\/?\w|expression\s*\(|javascript\s*:|@import\b|url\s*\(\s*['"]?\s*(javascript|data:text)/i;
-function cw(t) {
+const dw = /<\/?\w|expression\s*\(|javascript\s*:|@import\b|url\s*\(\s*['"]?\s*(javascript|data:text)/i;
+function pw(t) {
   const e = g(t).trim();
-  return !e || e.length > 2048 || lw.test(e) ? "" : e;
+  return !e || e.length > 2048 || dw.test(e) ? "" : e;
 }
-const uw = /^[a-z][a-z-]{1,32}$/, dw = /(?:^|;)\s*(?:padding|margin|width|height|min-width|max-width|min-height|max-height|background|border|box-shadow|outline|overflow|gap|position|inset|top|right|bottom|left|aspect-ratio)\b/i, pw = /(?:^|;)\s*display\s*:/i, hw = /(?:^|;)\s*display\s*:\s*contents\s*(?:;|$)/i, mw = ["rui-universal-host", "rui-route", "rui-transition", "rui-focus-trap"];
-function fw(t) {
+const hw = /^[a-z][a-z-]{1,32}$/, mw = /(?:^|;)\s*(?:padding|margin|width|height|min-width|max-width|min-height|max-height|background|border|box-shadow|outline|overflow|gap|position|inset|top|right|bottom|left|aspect-ratio)\b/i, fw = /(?:^|;)\s*display\s*:/i, gw = /(?:^|;)\s*display\s*:\s*contents\s*(?:;|$)/i, bw = ["rui-universal-host", "rui-route", "rui-transition", "rui-focus-trap"];
+function vw(t) {
   return t.split(";").map((e) => e.trim()).filter((e) => e !== "" && !/^display\s*:/i.test(e)).join(";");
 }
 function Us(t, e) {
   if (!e || !(t instanceof Element)) return;
   const r = t, i = [], a = [];
   if (e.sx != null) {
-    const { style: v, classes: x } = ew(e.sx);
+    const { style: v, classes: x } = iw(e.sx);
     v && i.push(v), a.push(...x);
   }
   let o = !1;
   if (e.animate != null) {
-    const { classes: v, style: x } = ow(e.animate);
+    const { classes: v, style: x } = lw(e.animate);
     a.push(...v), x && i.push(x), v.length > 0 && (o = !0);
   }
-  const n = cw(e.style);
+  const n = pw(e.style);
   n && i.push(n);
-  const s = i.join(";"), l = r.getAttribute("style") ?? "", c = hw.test(l) || mw.some((v) => r.classList.contains(v));
+  const s = i.join(";"), l = r.getAttribute("style") ?? "", c = gw.test(l) || bw.some((v) => r.classList.contains(v));
   let u = null;
-  if (c && (e.hidden === !0 ? u = "none" : !pw.test(s) && (o || dw.test(s)) && (u = "block")), s || u) {
-    const x = [u ? fw(l) : l, u ? `display:${u}` : "", s].filter(Boolean).join(";");
+  if (c && (e.hidden === !0 ? u = "none" : !fw.test(s) && (o || mw.test(s)) && (u = "block")), s || u) {
+    const x = [u ? vw(l) : l, u ? `display:${u}` : "", s].filter(Boolean).join(";");
     r.setAttribute("style", x);
   }
   a.push(...Ju(e.className)), a.push(...Ju(e.class));
@@ -4054,10 +4086,10 @@ function Us(t, e) {
   const p = g(e.tooltip).trim();
   p && r.setAttribute("title", p);
   const b = g(e.role).trim().toLowerCase();
-  if (b && nw.has(b) && r.setAttribute("role", b), e.aria && typeof e.aria == "object")
+  if (b && cw.has(b) && r.setAttribute("role", b), e.aria && typeof e.aria == "object")
     for (const [v, x] of Object.entries(e.aria)) {
       const y = v.toLowerCase();
-      uw.test(y) && x != null && r.setAttribute(y.startsWith("aria-") ? y : `aria-${y}`, g(x));
+      hw.test(y) && x != null && r.setAttribute(y.startsWith("aria-") ? y : `aria-${y}`, g(x));
     }
   const m = e.dataAttrs && typeof e.dataAttrs == "object" ? e.dataAttrs : e.data && typeof e.data == "object" ? e.data : null;
   if (m)
@@ -4072,11 +4104,11 @@ function Jl(t) {
   const e = t.props.findIndex((r) => r.positional === !0);
   return e >= 0 ? e : t.props.length > 0 ? 0 : -1;
 }
-function _m(t) {
+function jm(t) {
   const e = Jl(t);
   return e >= 0 ? t.props[e] : void 0;
 }
-function gw(t) {
+function yw(t) {
   for (const e of t) {
     const r = e.props.filter((i) => i.positional === !0);
     if (r.length > 1) {
@@ -4087,10 +4119,10 @@ function gw(t) {
     }
   }
 }
-function ba(t) {
+function ga(t) {
   return /\bobject\b|\bRecord\b|\{|\bany\b/i.test(t.type);
 }
-function bw(t) {
+function ww(t) {
   const e = /* @__PURE__ */ new Set();
   for (const r of t.props)
     if (e.add(r.name), r.aliases) for (const i of r.aliases) e.add(i);
@@ -4122,17 +4154,17 @@ function Um(t, e) {
       break;
     }
   if (r < 0) return -1;
-  const i = t[r].objectKeys, a = bw(e), o = i.reduce(
+  const i = t[r].objectKeys, a = ww(e), o = i.reduce(
     (u, h) => u + (a.has(h) || bn.has(h) ? 1 : 0),
     0
-  ), n = i.length > 0 && o === i.length, s = o > 0, l = _m(e);
+  ), n = i.length > 0 && o === i.length, s = o > 0, l = jm(e);
   if (t.length === 1)
-    return e.props.length === 1 ? ba(e.props[0]) ? -1 : n ? 0 : -1 : n ? 0 : !s && l && ba(l) ? -1 : 0;
+    return e.props.length === 1 ? ga(e.props[0]) ? -1 : n ? 0 : -1 : n ? 0 : !s && l && ga(l) ? -1 : 0;
   if (r !== t.length - 1)
     return s ? r : -1;
   if (s || i.length === 0) return r;
   const c = qm(e, t.length - 1);
-  return c && ba(c) ? -1 : r;
+  return c && ga(c) ? -1 : r;
 }
 function Hm(t) {
   return t.map((e) => ({
@@ -4145,38 +4177,38 @@ function vn(t, e) {
     a < e.length && (r[i.name] = e[a]);
   }), r;
 }
-function OP(t, e) {
+function _P(t, e) {
   const r = mt(t), i = Xo(r, e);
   return i.length > 0 && (r.errors = [...r.errors, ...i]), r;
 }
 function Xo(t, e) {
   const r = [];
-  Hs = xw(t);
+  Hs = Cw(t);
   try {
     for (const i of t.statements)
       lt(i, e, r);
-    vw(t, r);
+    xw(t, r);
   } finally {
     Hs = Wm;
   }
   return r;
 }
-function vw(t, e) {
+function xw(t, e) {
   let r;
   for (const a of t.statements)
-    a.kind === "ExpressionStatement" && yw(a.expression) ? r = a.expression.arguments[0] : a.kind === "Assignment" && !a.isState && a.identifier === "aktion" && (r = a.expression);
+    a.kind === "ExpressionStatement" && kw(a.expression) ? r = a.expression.arguments[0] : a.kind === "Assignment" && !a.isState && a.identifier === "aktion" && (r = a.expression);
   if (!r) return;
-  const i = ww(r);
+  const i = Sw(r);
   i && e.push({
     message: `The UI root must be a component tree (e.g. \`Text(...)\`, \`Column([...])\`), not a bare ${i}. Wrap it — \`$app(Text(...))\` — or render a component. (root-not-renderable)`,
     line: r.loc?.line ?? 0,
     column: r.loc?.column ?? 0
   });
 }
-function yw(t) {
+function kw(t) {
   return t.kind === "Invoke" && t.callee.kind === "StateRef" && t.callee.name === "app";
 }
-function ww(t) {
+function Sw(t) {
   if (t.kind === "Template") return "string";
   if (t.kind === "Literal") {
     const e = t.value;
@@ -4188,7 +4220,7 @@ function ww(t) {
 }
 const Wm = /* @__PURE__ */ new Set();
 let Hs = Wm;
-function xw(t) {
+function Cw(t) {
   const e = /* @__PURE__ */ new Set(), r = (i) => {
     if (!i || typeof i != "object") return;
     if (Array.isArray(i)) {
@@ -4205,13 +4237,13 @@ function xw(t) {
 function lt(t, e, r) {
   switch (t.kind) {
     case "Assignment":
-      Me(t.expression, e, r);
+      Ee(t.expression, e, r);
       return;
     case "ExpressionStatement":
-      Me(t.expression, e, r);
+      Ee(t.expression, e, r);
       return;
     case "ComponentDeclaration":
-      kw(t, e, r);
+      Aw(t, e, r);
       for (const i of t.body.body) lt(i, e, r);
       return;
     case "ActionDeclaration":
@@ -4220,13 +4252,13 @@ function lt(t, e, r) {
       for (const i of t.body.body) lt(i, e, r);
       return;
     case "Return":
-      t.argument && Me(t.argument, e, r);
+      t.argument && Ee(t.argument, e, r);
       return;
     case "Await":
-      Me(t.argument, e, r);
+      Ee(t.argument, e, r);
       return;
     case "IfStatement":
-      Me(t.test, e, r);
+      Ee(t.test, e, r);
       for (const i of t.consequent.body) lt(i, e, r);
       if (t.alternate)
         if (t.alternate.kind === "IfStatement")
@@ -4235,33 +4267,33 @@ function lt(t, e, r) {
           for (const i of t.alternate.body) lt(i, e, r);
       return;
     case "SwitchStatement":
-      Me(t.discriminant, e, r);
+      Ee(t.discriminant, e, r);
       for (const i of t.cases) {
-        i.test && Me(i.test, e, r);
+        i.test && Ee(i.test, e, r);
         for (const a of i.body) lt(a, e, r);
       }
       return;
     case "ForOfStatement":
-      Me(t.iterable, e, r);
+      Ee(t.iterable, e, r);
       for (const i of t.body.body) lt(i, e, r);
       return;
     case "ForClassicStatement":
-      t.init && lt(t.init, e, r), t.test && Me(t.test, e, r), t.update && Me(t.update, e, r);
+      t.init && lt(t.init, e, r), t.test && Ee(t.test, e, r), t.update && Ee(t.update, e, r);
       for (const i of t.body.body) lt(i, e, r);
       return;
     case "WhileStatement":
     case "DoWhileStatement":
-      Me(t.test, e, r);
+      Ee(t.test, e, r);
       for (const i of t.body.body) lt(i, e, r);
       return;
     case "ForInStatement":
-      Me(t.iterable, e, r);
+      Ee(t.iterable, e, r);
       for (const i of t.body.body) lt(i, e, r);
       return;
     case "DestructureStatement":
-      Me(t.expression, e, r);
+      Ee(t.expression, e, r);
       for (const i of t.bindings)
-        i.defaultValue && Me(i.defaultValue, e, r);
+        i.defaultValue && Ee(i.defaultValue, e, r);
       return;
     case "TryStatement":
       for (const i of t.block.body) lt(i, e, r);
@@ -4269,66 +4301,66 @@ function lt(t, e, r) {
       if (t.finallyBlock) for (const i of t.finallyBlock.body) lt(i, e, r);
       return;
     case "ThrowStatement":
-      Me(t.argument, e, r);
+      Ee(t.argument, e, r);
       return;
     default:
       return;
   }
 }
-function Me(t, e, r) {
+function Ee(t, e, r) {
   if (t)
     switch (t.kind) {
       case "Call": {
-        Aw(t, e, r);
-        for (const i of t.arguments) Me(i, e, r);
+        Iw(t, e, r);
+        for (const i of t.arguments) Ee(i, e, r);
         return;
       }
       case "MethodCall": {
-        Me(t.object, e, r);
-        for (const i of t.arguments) Me(i, e, r);
+        Ee(t.object, e, r);
+        for (const i of t.arguments) Ee(i, e, r);
         return;
       }
       case "BuiltinCall": {
-        for (const i of t.arguments) Me(i, e, r);
+        for (const i of t.arguments) Ee(i, e, r);
         return;
       }
       case "Array":
-        for (const i of t.elements) Me(i, e, r);
+        for (const i of t.elements) Ee(i, e, r);
         return;
       case "Object":
-        for (const i of t.properties) Me(i.value, e, r);
+        for (const i of t.properties) Ee(i.value, e, r);
         return;
       case "Template":
-        for (const i of t.expressions) Me(i, e, r);
+        for (const i of t.expressions) Ee(i, e, r);
         return;
       case "Binary":
-        Me(t.left, e, r), Me(t.right, e, r);
+        Ee(t.left, e, r), Ee(t.right, e, r);
         return;
       case "Unary":
-        Me(t.argument, e, r);
+        Ee(t.argument, e, r);
         return;
       case "Ternary":
-        Me(t.test, e, r), Me(t.consequent, e, r), Me(t.alternate, e, r);
+        Ee(t.test, e, r), Ee(t.consequent, e, r), Ee(t.alternate, e, r);
         return;
       case "Member":
-        Me(t.object, e, r), t.computed && Me(t.computed, e, r);
+        Ee(t.object, e, r), t.computed && Ee(t.computed, e, r);
         return;
       case "Spread":
-        Me(t.argument, e, r);
+        Ee(t.argument, e, r);
         return;
       case "Invoke":
-        t.callee.kind === "StateRef" && t.callee.name === "theme" && Iw(t, r), Me(t.callee, e, r);
-        for (const i of t.arguments) Me(i, e, r);
+        t.callee.kind === "StateRef" && t.callee.name === "theme" && Ew(t, r), Ee(t.callee, e, r);
+        for (const i of t.arguments) Ee(i, e, r);
         return;
       case "New":
-        Me(t.callee, e, r);
-        for (const i of t.arguments) Me(i, e, r);
+        Ee(t.callee, e, r);
+        for (const i of t.arguments) Ee(i, e, r);
         return;
       case "Lambda":
         if (t.body.kind === "Block")
           for (const i of t.body.body) lt(i, e, r);
         else
-          Me(t.body, e, r);
+          Ee(t.body, e, r);
         return;
       case "Block":
         for (const i of t.body) lt(i, e, r);
@@ -4337,7 +4369,7 @@ function Me(t, e, r) {
         return;
     }
 }
-function kw(t, e, r) {
+function Aw(t, e, r) {
   Ft(e, t.name) && (Ws(t.body, t.name) || r.push({
     message: `function ${t.name}(...) — "${t.name}" is a built-in component name. Rename the custom component (e.g. "App${t.name}"), or call ${t.name}(...) inside the body to wrap the built-in (inside its own body the name refers to the built-in component).`,
     line: t.loc?.line ?? 0,
@@ -4354,7 +4386,7 @@ function Ws(t, e) {
       return !0;
   return !1;
 }
-function Sw(t, e) {
+function $w(t, e) {
   const r = t.length, i = e.length;
   if (r === 0) return i;
   if (i === 0) return r;
@@ -4369,20 +4401,20 @@ function Sw(t, e) {
   }
   return a[i];
 }
-function Cw(t, e) {
+function Tw(t, e) {
   const r = t.toLowerCase();
   let i = null, a = 1 / 0;
   for (const o of e) {
-    const n = Sw(r, o.toLowerCase());
+    const n = $w(r, o.toLowerCase());
     n < a && (a = n, i = o);
   }
   return i === null || i.toLowerCase() === r ? null : a <= 2 && a < Math.min(t.length, i.length) ? i : null;
 }
 function Vn(t, e, r) {
-  const i = Cw(e, r);
+  const i = Tw(e, r);
   return i ? `${t} Did you mean "${i}"?` : t;
 }
-function Aw(t, e, r) {
+function Iw(t, e, r) {
   if (Hs.has(t.callee)) return;
   const i = Ft(e, t.callee);
   if (!i) return;
@@ -4413,7 +4445,7 @@ function Aw(t, e, r) {
           column: u.loc?.column ?? t.loc?.column ?? 0
         });
       }
-      u.kind === "Object" && !ba(p) && r.push({
+      u.kind === "Object" && !ga(p) && r.push({
         message: `<${t.callee}> — object passed positionally for "${p.name}" (${p.type}). Use named props from: ${i.props.map((b) => b.name).join(", ")}.`,
         line: u.loc?.line ?? t.loc?.line ?? 0,
         column: u.loc?.column ?? t.loc?.column ?? 0
@@ -4459,13 +4491,13 @@ function Aw(t, e, r) {
     }
   }
 }
-const $w = /* @__PURE__ */ new Set(["colors", "radius", "font", "fonts", "spacing", "shadows", "gradients", "icons", "zIndex", "motion"]), Tw = /* @__PURE__ */ new Set(["name", "direction"]);
-function Iw(t, e) {
+const zw = /* @__PURE__ */ new Set(["colors", "radius", "font", "fonts", "spacing", "shadows", "gradients", "icons", "zIndex", "motion"]), Mw = /* @__PURE__ */ new Set(["name", "direction"]);
+function Ew(t, e) {
   const r = t.arguments[0];
   if (!(!r || r.kind !== "Object"))
     for (const i of r.properties) {
-      if (i.spread || $w.has(i.key) || Tw.has(i.key)) continue;
-      const a = zw(i.key), o = i.key.startsWith("--") ? `$theme({"${i.key}": ...}) — free-form CSS variable keys are removed in Aktion 0.5. Use the structured form: $theme({ colors: {...}, radius: {...}, font: {...} }).` : `$theme({${i.key}: ...}) — legacy flat-shape token is removed in Aktion 0.5. Use ${a}.`;
+      if (i.spread || zw.has(i.key) || Mw.has(i.key)) continue;
+      const a = Nw(i.key), o = i.key.startsWith("--") ? `$theme({"${i.key}": ...}) — free-form CSS variable keys are removed in Aktion 0.5. Use the structured form: $theme({ colors: {...}, radius: {...}, font: {...} }).` : `$theme({${i.key}: ...}) — legacy flat-shape token is removed in Aktion 0.5. Use ${a}.`;
       e.push({
         message: o,
         line: t.loc?.line ?? 0,
@@ -4473,7 +4505,7 @@ function Iw(t, e) {
       });
     }
 }
-function zw(t) {
+function Nw(t) {
   const e = [
     { prefix: "color", group: "colors" },
     { prefix: "radius", group: "radius" },
@@ -4486,7 +4518,7 @@ function zw(t) {
     }
   return "$theme({ colors: {...}, radius: {...}, font: {...} })";
 }
-function Mw(t) {
+function Lw(t) {
   const e = {
     name: t.name,
     type: t.type,
@@ -4496,14 +4528,14 @@ function Mw(t) {
   };
   return t.enum && (e.enum = t.enum), t.aliases && (e.aliases = t.aliases), t.description && (e.description = t.description), e;
 }
-function Ew(t) {
+function Rw(t) {
   return { version: 1, components: Gm(t).map((i) => ({
     name: i.name,
     description: i.description,
-    props: i.props.map(Mw)
+    props: i.props.map(Lw)
   })).sort((i, a) => i.name.localeCompare(a.name)) };
 }
-function Nw(t, e) {
+function Pw(t, e) {
   const r = t.toLowerCase(), i = e.toLowerCase(), a = r.length, o = i.length;
   if (a === 0) return o;
   if (o === 0) return a;
@@ -4518,13 +4550,13 @@ function Nw(t, e) {
   }
   return n[o];
 }
-function BP(t, e, r = 3) {
+function jP(t, e, r = 3) {
   const i = String(t ?? "").trim();
   if (!i) return [];
   const a = Gm(e).map((n) => n.name);
   if (a.includes(i)) return [i];
   const o = Math.max(2, Math.ceil(i.length / 3));
-  return a.map((n) => ({ n, d: Nw(i, n) })).filter((n) => n.d > 0 && n.d <= o).sort((n, s) => n.d - s.d || n.n.localeCompare(s.n)).slice(0, Math.max(1, r)).map((n) => n.n);
+  return a.map((n) => ({ n, d: Pw(i, n) })).filter((n) => n.d > 0 && n.d <= o).sort((n, s) => n.d - s.d || n.n.localeCompare(s.n)).slice(0, Math.max(1, r)).map((n) => n.n);
 }
 function Gm(t) {
   const e = t;
@@ -4587,7 +4619,7 @@ const Gs = {
   black: "text",
   transparent: "transparent",
   current: "current"
-}, Lw = {
+}, Dw = {
   none: "none",
   sm: "sm",
   "": "md",
@@ -4597,7 +4629,7 @@ const Gs = {
   "2xl": "lg",
   "3xl": "lg",
   full: "full"
-}, Rw = { sm: "sm", "": "md", md: "md", lg: "lg", xl: "lg", "2xl": "lg", none: "none" }, Pw = { start: "start", center: "center", end: "end", stretch: "stretch", baseline: "baseline" }, Dw = { start: "start", center: "center", end: "end", between: "between", around: "around", evenly: "evenly" }, Ow = {
+}, Ow = { sm: "sm", "": "md", md: "md", lg: "lg", xl: "lg", "2xl": "lg", none: "none" }, Bw = { start: "start", center: "center", end: "end", stretch: "stretch", baseline: "baseline" }, Fw = { start: "start", center: "center", end: "end", between: "between", around: "around", evenly: "evenly" }, _w = {
   xs: "xs",
   sm: "sm",
   base: "base",
@@ -4608,7 +4640,7 @@ const Gs = {
   "4xl": "4xl",
   "5xl": "4xl",
   "6xl": "4xl"
-}, Bw = {
+}, jw = {
   thin: "100",
   extralight: "200",
   light: "300",
@@ -4618,7 +4650,7 @@ const Gs = {
   bold: "700",
   extrabold: "800",
   black: "900"
-}, Fw = {
+}, qw = {
   xs: "320px",
   sm: "384px",
   md: "448px",
@@ -4648,14 +4680,14 @@ function Xr(t) {
   }
   return null;
 }
-const ed = { sm: "sm", md: "md", lg: "lg", xl: "xl", "2xl": "xl" }, jw = /* @__PURE__ */ new Set(["hover", "focus", "focus-visible", "active", "disabled", "group-hover", "checked"]), _w = /* @__PURE__ */ new Set(["bg", "color", "borderColor", "shadow", "radius", "opacity", "cursor", "textDecoration", "scale"]);
-function qw(t) {
+const ed = { sm: "sm", md: "md", lg: "lg", xl: "xl", "2xl": "xl" }, Uw = /* @__PURE__ */ new Set(["hover", "focus", "focus-visible", "active", "disabled", "group-hover", "checked"]), Hw = /* @__PURE__ */ new Set(["bg", "color", "borderColor", "shadow", "radius", "opacity", "cursor", "textDecoration", "scale"]);
+function Ww(t) {
   const e = t.match(/^(.+?)-\[(.+)\]$/);
   if (!e) return null;
   const r = e[2].replace(/_/g, " ").trim();
   return { prefix: e[1], value: r };
 }
-function Uw(t, e) {
+function Gw(t, e) {
   switch (t) {
     case "w":
       return { w: e };
@@ -4727,10 +4759,10 @@ function Uw(t, e) {
       return null;
   }
 }
-function Hw(t) {
+function Vw(t) {
   let e;
-  const r = (a) => Gs[a] ?? null, i = qw(t);
-  if (i) return Uw(i.prefix, i.value);
+  const r = (a) => Gs[a] ?? null, i = Ww(t);
+  if (i) return Gw(i.prefix, i.value);
   if (e = t.match(/^p([xytrblse]?)-(.+)$/)) {
     const a = r(e[2]) ?? e[2];
     return { [e[1] === "" ? "p" : `p${e[1]}`]: a };
@@ -4744,14 +4776,14 @@ function Hw(t) {
     return a ? { gap: a } : null;
   }
   if (e = t.match(/^text-(.+)$/)) {
-    const a = Ow[e[1]];
+    const a = _w[e[1]];
     if (a) return { fontSize: a };
     if (["left", "center", "right", "justify"].includes(e[1])) return { textAlign: e[1] };
     const o = Kn[e[1].split("-")[0]];
     return o ? { color: o } : null;
   }
   if (e = t.match(/^font-(.+)$/)) {
-    const a = Bw[e[1]];
+    const a = jw[e[1]];
     return a ? { weight: a } : null;
   }
   if (e = t.match(/^bg-(.+)$/)) {
@@ -4765,11 +4797,11 @@ function Hw(t) {
     return a ? { borderColor: a } : null;
   }
   if (e = t.match(/^rounded(?:-(.+))?$/)) {
-    const a = Lw[e[1] ?? ""];
+    const a = Dw[e[1] ?? ""];
     return a ? { radius: a } : null;
   }
   if (e = t.match(/^shadow(?:-(.+))?$/)) {
-    const a = Rw[e[1] ?? ""];
+    const a = Ow[e[1] ?? ""];
     return a ? { shadow: a } : null;
   }
   if (t === "flex") return { display: "flex" };
@@ -4789,11 +4821,11 @@ function Hw(t) {
   if (t === "grow-0") return { grow: 0 };
   if (t === "shrink-0" || t === "flex-shrink-0") return { shrink: 0 };
   if (e = t.match(/^items-(.+)$/)) {
-    const a = Pw[e[1]];
+    const a = Bw[e[1]];
     return a ? { align: a } : null;
   }
   if (e = t.match(/^justify-(.+)$/)) {
-    const a = Dw[e[1]];
+    const a = Fw[e[1]];
     return a ? { justify: a } : null;
   }
   if (e = t.match(/^grid-cols-(\d+)$/)) return { columns: Number(e[1]) };
@@ -4813,7 +4845,7 @@ function Hw(t) {
     return a ? { h: a } : null;
   }
   if (e = t.match(/^max-w-(.+)$/)) {
-    const a = Fw[e[1]] ?? Xr(e[1]);
+    const a = qw[e[1]] ?? Xr(e[1]);
     return a ? { maxW: a } : null;
   }
   if (e = t.match(/^min-w-(.+)$/)) {
@@ -4838,7 +4870,7 @@ function Hw(t) {
   }
   return t === "overflow-hidden" ? { overflow: "hidden" } : t === "overflow-auto" ? { overflow: "auto" } : t === "overflow-scroll" ? { overflow: "scroll" } : t === "overflow-visible" ? { overflow: "visible" } : t === "cursor-pointer" ? { cursor: "pointer" } : t === "cursor-default" ? { cursor: "default" } : t === "cursor-not-allowed" ? { cursor: "not-allowed" } : t === "cursor-grab" ? { cursor: "grab" } : t === "cursor-grabbing" ? { cursor: "grabbing" } : t === "cursor-text" ? { cursor: "text" } : t === "cursor-move" ? { cursor: "move" } : t === "cursor-wait" ? { cursor: "wait" } : t.startsWith("backdrop-blur") ? { backdrop: "blur" } : t === "bg-cover" ? { bgSize: "cover" } : t === "bg-contain" ? { bgSize: "contain" } : t === "underline" ? { textDecoration: "underline" } : t === "line-through" ? { textDecoration: "line-through" } : t === "no-underline" ? { textDecoration: "none" } : (e = t.match(/^scale-(\d+)$/)) ? { scale: Number(e[1]) / 100 } : null;
 }
-function Ww(t) {
+function Kw(t) {
   const e = {}, r = [], i = String(t ?? "").split(/\s+/).filter(Boolean), a = (n) => !!n && typeof n == "object" && !Array.isArray(n), o = (n, s, l) => {
     if (!l) {
       const u = e[n];
@@ -4852,12 +4884,12 @@ function Ww(t) {
     const s = n.split(":"), l = s[s.length - 1], c = s.slice(0, -1);
     let u = null, h = null, p = !1;
     for (const f of c)
-      ed[f] ? u = ed[f] : jw.has(f) ? h = f : p = !0;
+      ed[f] ? u = ed[f] : Uw.has(f) ? h = f : p = !0;
     if (p) {
       r.push(n);
       continue;
     }
-    const b = Hw(l);
+    const b = Vw(l);
     if (!b) {
       r.push(n);
       continue;
@@ -4866,7 +4898,7 @@ function Ww(t) {
       const f = {};
       let v = !1;
       for (const [w, S] of Object.entries(b))
-        _w.has(w) && (f[w] = S, v = !0);
+        Hw.has(w) && (f[w] = S, v = !0);
       if (!v) {
         r.push(n);
         continue;
@@ -4900,8 +4932,8 @@ const td = {
   "space-around": "around",
   "space-evenly": "evenly",
   stretch: "stretch"
-}, Gw = /* @__PURE__ */ new Set(["flex", "grid", "block", "inline", "inline-flex", "inline-block", "none", "contents"]), Vw = /* @__PURE__ */ new Set(["row", "column", "row-reverse", "column-reverse"]), Kw = /* @__PURE__ */ new Set(["relative", "absolute", "fixed", "sticky", "static"]), Yw = /* @__PURE__ */ new Set(["hidden", "auto", "scroll", "visible", "clip"]), Xw = /* @__PURE__ */ new Set(["pointer", "default", "not-allowed", "grab", "grabbing", "text", "move", "wait", "help", "none"]), Zw = /* @__PURE__ */ new Set(["left", "center", "right", "justify", "start", "end"]), Qw = /* @__PURE__ */ new Set(["underline", "none", "line-through", "overline"]);
-function Jw(t, e) {
+}, Yw = /* @__PURE__ */ new Set(["flex", "grid", "block", "inline", "inline-flex", "inline-block", "none", "contents"]), Xw = /* @__PURE__ */ new Set(["row", "column", "row-reverse", "column-reverse"]), Zw = /* @__PURE__ */ new Set(["relative", "absolute", "fixed", "sticky", "static"]), Qw = /* @__PURE__ */ new Set(["hidden", "auto", "scroll", "visible", "clip"]), Jw = /* @__PURE__ */ new Set(["pointer", "default", "not-allowed", "grab", "grabbing", "text", "move", "wait", "help", "none"]), ex = /* @__PURE__ */ new Set(["left", "center", "right", "justify", "start", "end"]), tx = /* @__PURE__ */ new Set(["underline", "none", "line-through", "overline"]);
+function rx(t, e) {
   const r = e.trim();
   if (!r) return null;
   const i = (a, o) => a.has(r) ? { [o]: r } : null;
@@ -4963,9 +4995,9 @@ function Jw(t, e) {
       return Number.isFinite(a) ? { opacity: a } : null;
     }
     case "display":
-      return i(Gw, "display");
+      return i(Yw, "display");
     case "flex-direction":
-      return i(Vw, "direction");
+      return i(Xw, "direction");
     case "align-items":
       return r in td ? { align: td[r] } : null;
     case "justify-content":
@@ -4979,7 +5011,7 @@ function Jw(t, e) {
     case "flex-wrap":
       return r === "wrap" ? { wrap: !0 } : r === "nowrap" ? { wrap: !1 } : null;
     case "position":
-      return i(Kw, "position");
+      return i(Zw, "position");
     case "top":
       return { top: r };
     case "right":
@@ -4999,21 +5031,21 @@ function Jw(t, e) {
     case "font-weight":
       return { weight: r };
     case "text-align":
-      return i(Zw, "textAlign");
+      return i(ex, "textAlign");
     case "text-decoration":
     case "text-decoration-line":
-      return i(Qw, "textDecoration");
+      return i(tx, "textDecoration");
     case "overflow":
-      return i(Yw, "overflow");
+      return i(Qw, "overflow");
     case "cursor":
-      return i(Xw, "cursor");
+      return i(Jw, "cursor");
     case "background-image":
       return { bgImage: r };
     default:
       return null;
   }
 }
-function ex(t) {
+function ix(t) {
   const e = [];
   let r = 0, i = "";
   const a = () => {
@@ -5031,7 +5063,7 @@ function ex(t) {
   }
   return a(), e;
 }
-function tx(t) {
+function ax(t) {
   const e = {}, r = [];
   let i = String(t ?? "").trim();
   if (!i) return e;
@@ -5040,21 +5072,21 @@ function tx(t) {
     const o = i.lastIndexOf("}");
     i = i.slice(a + 1, o > a ? o : void 0);
   }
-  for (const [o, n] of ex(i)) {
+  for (const [o, n] of ix(i)) {
     if (o.startsWith("--")) {
       r.push(`${o}: ${n}`);
       continue;
     }
-    const s = Jw(o, n);
+    const s = rx(o, n);
     s ? Object.assign(e, s) : r.push(`${o}: ${n}`);
   }
   return r.length > 0 && (e._unmapped = r), e;
 }
-function FP(t) {
+function qP(t) {
   let r = (Array.isArray(t) ? t.join(" ") : String(t ?? "")).replace(/\$\{[^}]*\}/g, "").trim();
   const i = [];
   r = r.replace(/[^{};]+\{[^{}]*\}/g, (o) => (i.push(o.trim()), ""));
-  const a = tx(r);
+  const a = ax(r);
   if (i.length > 0) {
     const o = Array.isArray(a._unmapped) ? a._unmapped : [];
     a._unmapped = [...o, ...i];
@@ -5064,8 +5096,8 @@ function FP(t) {
 function Dt(t) {
   return t.replace(/[&<>"]/g, (e) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[e]);
 }
-function jP(t, e = {}) {
-  const r = e.title ?? "Aktion Components", i = Ew(t), a = e.include ? i.components.filter((s) => e.include(s.name)) : i.components, o = a.map((s) => {
+function UP(t, e = {}) {
+  const r = e.title ?? "Aktion Components", i = Rw(t), a = e.include ? i.components.filter((s) => e.include(s.name)) : i.components, o = a.map((s) => {
     const l = s.props.map((c) => {
       const u = [
         c.required ? "required" : c.optional ? "optional" : "",
@@ -5165,7 +5197,7 @@ const Vs = {
     part: /[A-Za-z0-9_]/
   },
   sigils: { state: "$" }
-}, rx = {
+}, ox = {
   aktion: {
     summary: "Legacy entry-point binding — prefer the `$app(...)` builtin to register the root of the rendered UI tree.",
     syntax: "$app(Component(...))",
@@ -5363,7 +5395,7 @@ import { $count } from "./store.aktion"`
     example: "void sideEffect()"
   }
 };
-function ix(t = Vs) {
+function nx(t = Vs) {
   const e = () => ({ inBacktick: !1, inBlockComment: !1 }), r = (h) => ({ ...h }), i = new Set(t.atoms), a = new Set(t.keywords), o = /^[A-Z][A-Za-z0-9_]*/, n = /^[a-z_][A-Za-z0-9_]*/, s = /^-?\d+(?:\.\d+)?/, l = /* @__PURE__ */ new Set([...t.operators.join(""), ..."=<>!&|"]), c = (h, p) => {
     for (; !h.eol(); ) {
       const b = h.next();
@@ -5451,7 +5483,7 @@ function ix(t = Vs) {
     }
   };
 }
-const ax = {
+const sx = {
   comment: "comment",
   string: "string",
   number: "number",
@@ -5657,16 +5689,16 @@ const ax = {
     signature: "$i18n({ translations, … })",
     summary: "Translation bundle → { t, setCurrentLanguage, getCurrentLanguage }."
   }
-], ox = new Set(
+], lx = new Set(
   ec.map((t) => t.name)
-), nx = Object.freeze(
+), cx = Object.freeze(
   Object.fromEntries(ec.map((t) => [t.name, t]))
 );
-function _P(t) {
-  return nx[t];
+function HP(t) {
+  return cx[t];
 }
-function qP(t) {
-  return ox.has(t);
+function WP(t) {
+  return lx.has(t);
 }
 const F = (t, e, r) => ({
   name: t,
@@ -5678,7 +5710,7 @@ const F = (t, e, r) => ({
   kind: "property",
   signature: t,
   summary: e
-}), sx = [
+}), ux = [
   // Aggregation
   F("count", "count(items)", "Number of items in an array."),
   F("sum", "sum(items)", "Sum of the numeric values."),
@@ -5830,7 +5862,7 @@ const F = (t, e, r) => ({
   F(`${t}get`, `${t}get(key)`, `${e} read. Returns null when missing.`),
   F(`${t}remove`, `${t}remove(key, options?)`, `Delete a key from ${e.toLowerCase()}.`),
   F(`${t}clear`, `${t}clear()`, `Wipe every ${e.toLowerCase()} entry.`)
-], lx = [
+], dx = [
   ...Yn("", "localStorage (default namespace)"),
   { name: "local", kind: "namespace", signature: "local", summary: "localStorage backend — set/get/remove/clear." },
   ...Yn("local.", "localStorage"),
@@ -5841,13 +5873,13 @@ const F = (t, e, r) => ({
   F("cookies.get", "cookies.get(key)", "Read a cookie value."),
   F("cookies.remove", "cookies.remove(key, options?)", "Delete a cookie. Path/domain must match the original set call."),
   F("cookies.clear", "cookies.clear()", "Clear every cookie on this document.")
-], cx = [
+], px = [
   F("log", "log(...args)", "Log a message at the default level."),
   F("error", "error(...args)", "Log an error."),
   F("warn", "warn(...args)", "Log a warning."),
   F("info", "info(...args)", "Log an informational message."),
   F("debug", "debug(...args)", "Log a verbose debug message.")
-], ux = [
+], hx = [
   F("show", "show(message, options?)", "Show a toast; returns its id. Options: { title?, tone?, duration? }."),
   F("success", "success(message, options?)", '`show` with tone "success".'),
   F("error", "error(message, options?)", '`show` with tone "danger".'),
@@ -5857,19 +5889,19 @@ const F = (t, e, r) => ({
   F("clear", "clear()", "Remove every toast."),
   F("configure", "configure(options)", 'Settings for the auto-rendered stack, e.g. { position: "bottom-center" }. Call once at the top level of the program.'),
   ve("items", "Reactive list of live toasts (newest last). Treat as read-only.")
-], dx = [
+], mx = [
   F("onResize", "onResize(node, callback)", "Observe element size with a ResizeObserver; callback gets { width, height, entry }. Returns a disposer; auto-disposed on replan."),
   F("onIntersect", "onIntersect(node, callback, options?)", "Observe viewport intersection with an IntersectionObserver; callback gets the entry. Options: { root?, rootMargin?, threshold? }."),
   F("onMutation", "onMutation(node, callback, options?)", "Observe DOM mutations with a MutationObserver. Options: { childList?, attributes?, subtree?, characterData? }."),
   F("measure", "measure(node)", "One-shot read → { rect, scroll, viewport } (getBoundingClientRect + scroll offsets + window size).")
-], px = [
-  { name: "util", sigil: "$util", summary: "Runtime helper + reactive-environment namespace.", members: sx },
-  { name: "storage", sigil: "$storage", summary: "Browser storage namespace (local / session / cookies).", members: lx },
-  { name: "console", sigil: "$console", summary: "Console namespace forwarding to the browser console.", members: cx },
-  { name: "toast", sigil: "$toast", summary: "Imperative toast namespace.", members: ux },
-  { name: "dom", sigil: "$dom", summary: "Managed DOM-observer namespace (resize / intersection / mutation / measure).", members: dx }
+], fx = [
+  { name: "util", sigil: "$util", summary: "Runtime helper + reactive-environment namespace.", members: ux },
+  { name: "storage", sigil: "$storage", summary: "Browser storage namespace (local / session / cookies).", members: dx },
+  { name: "console", sigil: "$console", summary: "Console namespace forwarding to the browser console.", members: px },
+  { name: "toast", sigil: "$toast", summary: "Imperative toast namespace.", members: hx },
+  { name: "dom", sigil: "$dom", summary: "Managed DOM-observer namespace (resize / intersection / mutation / measure).", members: mx }
 ], yn = Object.freeze(
-  Object.fromEntries(px.map((t) => [t.name, t]))
+  Object.fromEntries(fx.map((t) => [t.name, t]))
 ), Vm = [
   ve("data", "Parsed response body — `null` until the request resolves."),
   ve("error", "`null` on success; `{ status, body }` on a non-2xx; the thrown error on network failure."),
@@ -5880,20 +5912,20 @@ const F = (t, e, r) => ({
   F("refetch", "refetch()", "Re-issue the original request."),
   F("cancel", "cancel()", "Abort the in-flight request."),
   ve("onDone", "Settable callback fired each time the request settles (success or error).")
-], hx = [
+], gx = [
   ...Vm,
   F("loadMore", "loadMore()", "Fetch the next page (infinite mode)."),
   ve("hasMore", "`true` while more pages are available (infinite mode)."),
   ve("loadingMore", "`true` while a `loadMore()` page is in flight."),
   ve("pages", "Raw page bodies loaded so far (infinite mode); `.data` is the flattened items.")
-], mx = [
+], bx = [
   F("mutate", "mutate(overrides?)", "Fire the request; overrides shallow-merge over the config. `optimistic` applies instantly and rolls back on failure."),
   ve("data", "Response body of the last successful mutation."),
   ve("error", "`null` on success; error details on failure."),
   ve("loading", "`true` while the mutation request is in flight."),
   ve("status", "HTTP status code of the last response."),
   ve("onDone", "Settable callback fired when the mutation settles.")
-], fx = [
+], vx = [
   ve("status", 'Connection lifecycle: "connecting" | "open" | "closed".'),
   ve("connected", '`true` while status is "open".'),
   ve("last", "Most recent message (JSON auto-parsed), or null."),
@@ -5902,14 +5934,14 @@ const F = (t, e, r) => ({
   ve("error", "Last socket error event, if any."),
   F("send", "send(data)", "Send a message (objects JSON-stringified). Queues while connecting; flushes on open."),
   F("close", "close()", "Close for good — disables auto-reconnect.")
-], gx = [
+], yx = [
   ve("status", '"connecting" | "open" | "closed" (EventSource retries natively).'),
   ve("connected", "`true` while the stream is open."),
   ve("last", "Most recent event payload (JSON auto-parsed)."),
   ve("messages", "Buffered events, newest last (capped to bufferSize)."),
   ve("error", "Last stream error, if any."),
   F("close", "close()", "Close the stream.")
-], bx = [
+], wx = [
   ve("values", "Reactive field values — two-way bind with an input's `value`."),
   ve("errors", "Per-field error messages (set after validate/touch/submit)."),
   ve("touched", "Per-field booleans — true once the user has interacted."),
@@ -5926,12 +5958,12 @@ const F = (t, e, r) => ({
   F("submit", "submit()", "Touch all → validate → onSubmit(values) when valid. Alias: handleSubmit()."),
   F("handleSubmit", "handleSubmit()", "Alias of submit()."),
   F("reset", "reset()", "Restore initial values; clears errors/touched/dirty.")
-], vx = [
+], xx = [
   ve("ready", "`true` once the external script / stylesheet has loaded successfully."),
   ve("loading", "`true` while the resource is still downloading."),
   ve("error", "The load error, or `null` on success."),
   ve("value", "The resolved value — `window[global]` for a script with a `global` (e.g. window.Stripe), else `true`. `null` until ready.")
-], yx = [
+], kx = [
   F("undo", "undo()", "Undo the last change (`history: true|depth` stores)."),
   F("redo", "redo()", "Redo the last undone change."),
   ve("canUndo", "Reactive — `true` when an undo step is available."),
@@ -5939,38 +5971,38 @@ const F = (t, e, r) => ({
   F("clearHistory", "clearHistory()", "Drop the undo/redo stacks.")
 ], Km = [
   { factory: "http", summary: "Reactive HTTP resource bag.", members: Vm },
-  { factory: "query", summary: "Cached query bag (HTTP + pagination).", members: hx },
-  { factory: "mutation", summary: "Deferred mutation bag (fires on .mutate()).", members: mx },
-  { factory: "socket", summary: "Reactive WebSocket bag.", members: fx },
-  { factory: "sse", summary: "Reactive Server-Sent Events bag.", members: gx },
-  { factory: "script", summary: "External script / stylesheet load bag.", members: vx },
-  { factory: "form", summary: "Managed form engine bag.", members: bx },
-  { factory: "store", summary: "Global store handle (built-in history methods).", members: yx }
-], wx = Object.freeze(
+  { factory: "query", summary: "Cached query bag (HTTP + pagination).", members: gx },
+  { factory: "mutation", summary: "Deferred mutation bag (fires on .mutate()).", members: bx },
+  { factory: "socket", summary: "Reactive WebSocket bag.", members: vx },
+  { factory: "sse", summary: "Reactive Server-Sent Events bag.", members: yx },
+  { factory: "script", summary: "External script / stylesheet load bag.", members: xx },
+  { factory: "form", summary: "Managed form engine bag.", members: wx },
+  { factory: "store", summary: "Global store handle (built-in history methods).", members: kx }
+], Sx = Object.freeze(
   Object.fromEntries(Km.map((t) => [t.factory, t]))
 ), Ym = new Set(
   Km.map((t) => t.factory)
-), UP = [
+), GP = [
   ve("path", "Current URL path, e.g. `/users/42`."),
   ve("params", "Captured path segments from the matched route pattern (`route.params.id`)."),
   ve("query", "Parsed query-string parameters as an object."),
   ve("pattern", "The matched route pattern, or `null`."),
   F("navigate", "navigate(to)", "Imperatively navigate to a path.")
-], HP = [
+], VP = [
   F("t", "t(key, vars?)", "Translate a key for the current language; interpolates {name} placeholders + ICU plural/select."),
   F("setCurrentLanguage", "setCurrentLanguage(lang)", "Switch the active language."),
   F("getCurrentLanguage", "getCurrentLanguage()", "Return the active language code.")
 ];
-function WP(t) {
+function KP(t) {
   return yn[t];
 }
-function GP(t) {
+function YP(t) {
   return t in yn;
 }
-function VP(t) {
-  return wx[t];
+function XP(t) {
+  return Sx[t];
 }
-function KP(t, e = []) {
+function ZP(t, e = []) {
   const r = yn[t];
   if (!r) return [];
   if (e.length === 0) return r.members.slice();
@@ -5979,7 +6011,7 @@ function KP(t, e = []) {
     o.name.startsWith(i) && a.push({ ...o, name: o.name.slice(i.length) });
   return a;
 }
-function YP(t, e) {
+function QP(t, e) {
   const r = yn[t];
   if (r)
     return r.members.find((i) => i.name === e);
@@ -5995,7 +6027,7 @@ const se = (t, e, r) => ({ name: t, type: e, summary: r }), Xm = [
   se("cache", 'enum: "default" | "no-store" | "reload" | "no-cache" | "force-cache"', "Fetch cache mode."),
   se("gql", "string", "GraphQL query — POSTs { query, variables }; `.data` is the unwrapped GraphQL data."),
   se("variables", "object", "GraphQL variables paired with `gql`.")
-], xx = [
+], Cx = [
   ...Xm,
   se("key", "string", "Cache key — identical keys share one in-flight request + cached bag."),
   se("ttl", "number", "Milliseconds before cached data is considered stale and auto-refetched."),
@@ -6003,7 +6035,7 @@ const se = (t, e, r) => ({ name: t, type: e, summary: r }), Xm = [
   se("refetchOnFocus", "boolean", "Refetch when the tab regains focus."),
   se("refetchOnReconnect", "boolean", "Refetch when the network reconnects."),
   se("infinite", "object", "Pagination config: { param?, start?, limit?, mode?, select? } → .loadMore()/.hasMore.")
-], kx = [
+], Ax = [
   se("url", "string", "Absolute request URL."),
   se("method", 'enum: "POST" | "PUT" | "PATCH" | "DELETE"', "HTTP method. Defaults to POST."),
   se("body", "object", "Default body; shallow-merged with `.mutate(overrides)`."),
@@ -6013,24 +6045,24 @@ const se = (t, e, r) => ({ name: t, type: e, summary: r }), Xm = [
   se("invalidates", "string[]", "Refetch every cached $query whose key contains a listed substring on success."),
   se("gql", "string", "GraphQL mutation document."),
   se("variables", "object", "GraphQL variables paired with `gql`.")
-], Sx = [
+], $x = [
   se("url", "string", "WebSocket URL (ws:// or wss://)."),
   se("protocols", "string | string[]", "Optional sub-protocol(s)."),
   se("bufferSize", "number", "Max buffered messages kept in `.messages`."),
   se("onMessage", "(msg) => void", "Callback fired for each received message."),
   se("reconnect", "boolean | number", "Retry dropped connections (true, or a max-attempt count) with backoff.")
-], Cx = [
+], Tx = [
   se("url", "string", "EventSource URL."),
   se("event", "string", "Named event to listen for (defaults to message)."),
   se("withCredentials", "boolean", "Send credentials with the EventSource request."),
   se("bufferSize", "number", "Max buffered events kept in `.messages`.")
-], Ax = [
+], Ix = [
   se("src", "string", "URL of the script (or stylesheet) to load. De-duplicated per src."),
   se("global", "string", 'Name of the window global the script defines — read into `.value` once ready (e.g. "Stripe").'),
   se("type", "string", 'Script type attribute (e.g. "module" for ESM).'),
   se("as", 'enum: "script" | "style"', "Force the resource kind. Inferred from a `.css` src otherwise."),
   se("attributes", "object", "Extra attributes to set on the injected <script>/<link> (e.g. crossorigin, integrity).")
-], $x = [
+], zx = [
   se("title", "string", "Document title (sets document.title + <title>)."),
   se("titleTemplate", "string", 'Wrap `title` with a template, e.g. "%s — Acme".'),
   se("meta", "object", 'Named meta tags: { description, "theme-color", keywords, … } → <meta name content>.'),
@@ -6040,15 +6072,15 @@ const se = (t, e, r) => ({ name: t, type: e, summary: r }), Xm = [
   se("jsonLd", "object | object[]", 'JSON-LD structured data → <script type="application/ld+json">. @context defaults to schema.org.'),
   se("base", "string | object", "<base href> for the document."),
   se("htmlAttrs", "object", 'Attributes for the <html> element, e.g. { lang: "en", dir: "ltr" }.')
-], Tx = [
+], Mx = [
   se("values", "object", "Initial field values — the clean snapshot."),
   se("rules", "object", "Per-field validator arrays: { field: [$util.rules.required(), …] }."),
   se("onSubmit", "(values) => void", "Called with the values once validation passes.")
-], Ix = [
+], Ex = [
   se("persist", "string", "Mirror the store's data to localStorage under this key (hydrates on first render)."),
   se("persistIn", 'enum: "local" | "session"', "Storage backend for `persist` (defaults to local)."),
   se("history", "boolean | number", "Enable undo()/redo()/clearHistory() + reactive canUndo/canRedo (number = depth).")
-], zx = [
+], Nx = [
   se("name", "string", 'Selects a built-in base theme ("light", "dark", "shadcn"/"-light"/"-dark", "mui"/"-light"/"-dark", "heroui"/"-light"/"-dark", "signal"/"-light"/"-dark", "soft").'),
   se("direction", 'enum: "ltr" | "rtl"', "Reading direction (metadata)."),
   se("colors", "object", "CSS color tokens: bg, surface, border, text, primary, accent, success, warning, danger, info, …."),
@@ -6061,32 +6093,32 @@ const se = (t, e, r) => ({ name: t, type: e, summary: r }), Xm = [
   se("motion", "object", "Motion tokens: { fast, base, slow, ease } → --rui-motion-*."),
   se("fonts", "object", 'Web-font import: { import: ["Inter:400,700"] }.'),
   se("icons", "object", "Custom inline-SVG icons by name, usable anywhere an icon name is.")
-], Mx = [
+], Lx = [
   se("defaultLanguage", "string", "Fallback language when a key is missing for the current language."),
   se("currentLanguage", "string", "Active language — drive from a reactive atom for live switching."),
   se("translations", "object", '{ key: { lang: "text {name}" } }. Supports ICU plural/select.')
-], Ex = Object.freeze({
+], Rx = Object.freeze({
   http: Xm,
-  query: xx,
-  mutation: kx,
-  socket: Sx,
-  sse: Cx,
-  script: Ax,
-  head: $x,
-  form: Tx,
-  store: Ix,
-  theme: zx,
-  i18n: Mx
+  query: Cx,
+  mutation: Ax,
+  socket: $x,
+  sse: Tx,
+  script: Ix,
+  head: zx,
+  form: Mx,
+  store: Ex,
+  theme: Nx,
+  i18n: Lx
 });
-function XP(t) {
-  return Ex[t];
+function JP(t) {
+  return Rx[t];
 }
-const Nx = 6, xt = 8, Lx = {
+const Px = 6, xt = 8, Dx = {
   dropdown: "var(--rui-z-dropdown, 1000)",
   popover: "var(--rui-z-popover, 1350)",
   tooltip: "var(--rui-z-tooltip, 1500)"
 }, vr = /* @__PURE__ */ new WeakMap(), Zm = /* @__PURE__ */ new WeakMap();
-function Rx(t, e, r, i) {
+function Ox(t, e, r, i) {
   const a = Zm.get(t);
   !a || a.panel === e || a.panel.parentNode !== i || a.from !== r || (vr.get(a.panel)?.close(), vr.delete(a.panel), a.panel.remove());
 }
@@ -6100,14 +6132,14 @@ function be(t) {
   };
 }
 const tc = () => typeof HTMLElement < "u" && typeof HTMLElement.prototype.showPopover == "function";
-function Px(t) {
+function Bx(t) {
   const e = t.querySelector(".rui-layer");
   if (e) return e;
   const r = document.createElement("div");
   return r.className = "rui-layer", r.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:var(--rui-z-popover,1350)", t.appendChild(r), r;
 }
-function Dx(t, e, r) {
-  const i = r.side ?? "bottom", a = r.align ?? "start", o = r.offset ?? Nx, n = r.flip !== !1, s = r.shift !== !1, l = e.getBoundingClientRect();
+function Fx(t, e, r) {
+  const i = r.side ?? "bottom", a = r.align ?? "start", o = r.offset ?? Px, n = r.flip !== !1, s = r.shift !== !1, l = e.getBoundingClientRect();
   t.style.removeProperty("max-height"), t.style.removeProperty("overflow-y");
   const c = t.getBoundingClientRect(), u = window.innerWidth || document.documentElement.clientWidth || 0, h = window.innerHeight || document.documentElement.clientHeight || 0;
   if (u <= 0 || h <= 0) {
@@ -6152,9 +6184,9 @@ function Dx(t, e, r) {
   } else typeof y == "number" && (x = y);
   return { left: Math.round(f), top: Math.round(v), side: m, maxHeight: x };
 }
-function Ox(t, e, r) {
+function _x(t, e, r) {
   const i = t.style;
-  i.setProperty("position", "fixed", "important"), i.setProperty("inset", "auto", "important"), i.setProperty("margin", "0", "important"), i.setProperty("left", `${e.left}px`, "important"), i.setProperty("top", `${e.top}px`, "important"), i.setProperty("right", "auto", "important"), i.setProperty("bottom", "auto", "important"), i.setProperty("transform", "none", "important"), e.maxHeight != null ? (i.setProperty("max-height", `${e.maxHeight}px`, "important"), i.setProperty("overflow-y", "auto", "important")) : (i.removeProperty("max-height"), i.removeProperty("overflow-y")), t.setAttribute("data-floating-side", e.side), tc() || i.setProperty("z-index", Lx[r.layer ?? "dropdown"], "important");
+  i.setProperty("position", "fixed", "important"), i.setProperty("inset", "auto", "important"), i.setProperty("margin", "0", "important"), i.setProperty("left", `${e.left}px`, "important"), i.setProperty("top", `${e.top}px`, "important"), i.setProperty("right", "auto", "important"), i.setProperty("bottom", "auto", "important"), i.setProperty("transform", "none", "important"), e.maxHeight != null ? (i.setProperty("max-height", `${e.maxHeight}px`, "important"), i.setProperty("overflow-y", "auto", "important")) : (i.removeProperty("max-height"), i.removeProperty("overflow-y")), t.setAttribute("data-floating-side", e.side), tc() || i.setProperty("z-index", Dx[r.layer ?? "dropdown"], "important");
 }
 function Ra(t, e) {
   const r = vr.get(t);
@@ -6175,12 +6207,12 @@ function Ra(t, e) {
   if (n === "none") {
     const p = t.getRootNode();
     if (p instanceof ShadowRoot || p instanceof Document) {
-      const b = getComputedStyle(t).display, m = Px(p), f = t.parentNode;
-      Rx(e.anchor, t, f, m), f && Zm.set(e.anchor, { panel: t, from: f }), m.appendChild(t), t.style.setProperty("display", b === "none" ? "flex" : b, "important"), t.style.setProperty("pointer-events", "auto", "important"), n = "layer", Ks(t, "A floating panel");
+      const b = getComputedStyle(t).display, m = Bx(p), f = t.parentNode;
+      Ox(e.anchor, t, f, m), f && Zm.set(e.anchor, { panel: t, from: f }), m.appendChild(t), t.style.setProperty("display", b === "none" ? "flex" : b, "important"), t.style.setProperty("pointer-events", "auto", "important"), n = "layer", Ks(t, "A floating panel");
     }
   }
   const s = () => {
-    t.isConnected && Ox(t, Dx(t, e.anchor, e), e);
+    t.isConnected && _x(t, Fx(t, e.anchor, e), e);
   };
   s();
   const l = be(s), c = () => s();
@@ -6214,19 +6246,19 @@ function Ra(t, e) {
 function at(t) {
   t && vr.get(t)?.close();
 }
-function Bx(t) {
+function jx(t) {
   t && vr.get(t)?.update();
 }
 function id(t) {
   return !!t && vr.has(t);
 }
-const ad = "width:auto;height:auto;max-width:none;max-height:none;margin:0;border:0;color:inherit", rc = "inset:0;padding:0;background:transparent;overflow:visible", Fx = "inset:0;padding:0;background:transparent;overflow:hidden", jx = "padding:0;background:transparent;overflow:visible", va = /* @__PURE__ */ new WeakMap();
+const ad = "width:auto;height:auto;max-width:none;max-height:none;margin:0;border:0;color:inherit", rc = "inset:0;padding:0;background:transparent;overflow:visible", qx = "inset:0;padding:0;background:transparent;overflow:hidden", Ux = "padding:0;background:transparent;overflow:visible", ba = /* @__PURE__ */ new WeakMap();
 function od(t) {
   if (t.parentElement) return t.parentElement;
   const e = t.getRootNode();
   return typeof ShadowRoot < "u" && e instanceof ShadowRoot ? e.host : null;
 }
-function _x(t) {
+function Hx(t) {
   const e = (i) => t.getPropertyValue(i) || "", r = (i) => {
     const a = e(i).trim();
     return a !== "" && a !== "none";
@@ -6240,7 +6272,7 @@ function Ks(t, e) {
   for (let i = 0; r && i < 64; i += 1) {
     let a = !1;
     try {
-      a = _x(getComputedStyle(r));
+      a = Hx(getComputedStyle(r));
     } catch {
       return;
     }
@@ -6256,7 +6288,7 @@ function Ks(t, e) {
   }
 }
 function wn(t, e) {
-  if (va.has(t) || t.hasAttribute("data-floating-side")) return !0;
+  if (ba.has(t) || t.hasAttribute("data-floating-side")) return !0;
   const r = `<${t.tagName.toLowerCase()}> overlay`;
   if (!tc())
     return Ks(t, r), !1;
@@ -6266,14 +6298,14 @@ function wn(t, e) {
   } catch {
     return t.removeAttribute("popover"), Ks(t, r), !1;
   }
-  va.set(t, i);
+  ba.set(t, i);
   const a = e ? `${ad};${e}` : ad;
   return t.setAttribute("style", i ? `${i};${a}` : a), t.setAttribute("data-floating-side", "overlay"), !0;
 }
-function Li(t) {
-  if (!t || !va.has(t)) return;
-  const e = va.get(t) ?? null;
-  va.delete(t);
+function Ni(t) {
+  if (!t || !ba.has(t)) return;
+  const e = ba.get(t) ?? null;
+  ba.delete(t);
   try {
     t.hidePopover();
   } catch {
@@ -6303,12 +6335,12 @@ function Jm(t, e, r) {
     a && (e.set(a), r(a));
   });
 }
-const qx = {
+const Wx = {
   start: "flex-start",
   center: "center",
   end: "flex-end",
   stretch: "stretch"
-}, Ux = {
+}, Gx = {
   start: "flex-start",
   center: "center",
   end: "flex-end",
@@ -6316,11 +6348,11 @@ const qx = {
   around: "space-around",
   evenly: "space-evenly"
 };
-function Hx(t) {
-  return qx[t] ?? "stretch";
+function Vx(t) {
+  return Wx[t] ?? "stretch";
 }
-function Wx(t) {
-  return Ux[t] ?? "flex-start";
+function Kx(t) {
+  return Gx[t] ?? "flex-start";
 }
 function sd(t, e) {
   return e ? t === "row" ? "row-reverse" : t === "column" ? "column-reverse" : t.endsWith("-reverse") ? t : `${t}-reverse` : t;
@@ -6331,7 +6363,7 @@ function ii(t, e, r) {
     a && t.push(`${r}-${i}:${Yl(a) || `var(--rui-spacing-${a}, ${a})`}`);
   }
 }
-function Gx(t, e, r, i) {
+function Yx(t, e, r, i) {
   for (const a of Br) {
     const o = e.values[a];
     o && t.push(`${r}-${a}:${i(String(o))}`);
@@ -6344,16 +6376,16 @@ function ld(t, e, r, i) {
     r[i.attrName] = o;
     return;
   }
-  r[i.attrName] = "responsive", r[i.responsiveFlag] = "true", Gx(e, a, i.cssVarPrefix, i.mapper);
+  r[i.attrName] = "responsive", r[i.responsiveFlag] = "true", Yx(e, a, i.cssVarPrefix, i.mapper);
 }
-function Vx(t, e) {
+function Xx(t, e) {
   return !!(t && typeof t == "object" && t.__kind === "Component" && t.name === e);
 }
-function Kx(t) {
+function Zx(t) {
   const e = St(t.direction);
   return e.kind === "single" ? e.value ? String(e.value) : "column" : e.values.base ? String(e.values.base) : "column";
 }
-const Yx = {
+const Qx = {
   name: "StackItem",
   description: "Per-child flex control inside a `Row`, `Column`, or `Stack`. Wraps one child so it can `grow` to fill leftover space, `shrink`, set a `basis`, override `alignSelf`, or change visual `order` — the building block for asymmetric rows like `Row([StackItem(searchInput, { grow: 1 }), saveButton])` (input expands, button hugs).",
   props: [
@@ -6421,13 +6453,13 @@ function ac(t, e, r, i, a) {
     responsiveFlag: "data-responsive-align",
     cssVarPrefix: "--rui-stack-align",
     defaultToken: r,
-    mapper: Hx
+    mapper: Vx
   }), ld(i.justify, u, c, {
     attrName: "data-justify",
     responsiveFlag: "data-responsive-justify",
     cssVarPrefix: "--rui-stack-justify",
     defaultToken: "start",
-    mapper: Wx
+    mapper: Kx
   });
   const h = g(i.alignContent);
   if (h && (c["data-align-content"] = h), s.kind === "single") {
@@ -6441,7 +6473,7 @@ function ac(t, e, r, i, a) {
     p.append(a.renderNode(b));
   return p;
 }
-const Xx = { name: "gap", type: "string | object", optional: !0, enum: et, description: "Spacing between children. May be a responsive map." }, oc = { name: "justify", type: "string | object", optional: !0, enum: ["start", "center", "end", "between", "around", "evenly"], description: "Main-axis distribution. May be a responsive map." }, nc = { name: "wrap", type: "boolean", optional: !0, description: "Wrap children onto multiple lines when they overflow" }, sc = { name: "reverse", type: "boolean", optional: !0, description: "Reverse the visual order of children" }, lc = { name: "padding", type: "string | object", optional: !0, enum: et, description: "Inner padding token. May be a responsive map." }, cc = { name: "inline", type: "boolean", optional: !0, description: "Use inline-flex (shrink-to-fit) instead of a full-width block" }, uc = { name: "alignContent", type: "string", optional: !0, enum: ["start", "center", "end", "between", "around", "stretch"], description: "Alignment of wrapped lines (only when `wrap` is on)" }, Zx = {
+const Jx = { name: "gap", type: "string | object", optional: !0, enum: et, description: "Spacing between children. May be a responsive map." }, oc = { name: "justify", type: "string | object", optional: !0, enum: ["start", "center", "end", "between", "around", "evenly"], description: "Main-axis distribution. May be a responsive map." }, nc = { name: "wrap", type: "boolean", optional: !0, description: "Wrap children onto multiple lines when they overflow" }, sc = { name: "reverse", type: "boolean", optional: !0, description: "Reverse the visual order of children" }, lc = { name: "padding", type: "string | object", optional: !0, enum: et, description: "Inner padding token. May be a responsive map." }, cc = { name: "inline", type: "boolean", optional: !0, description: "Use inline-flex (shrink-to-fit) instead of a full-width block" }, uc = { name: "alignContent", type: "string", optional: !0, enum: ["start", "center", "end", "between", "around", "stretch"], description: "Alignment of wrapped lines (only when `wrap` is on)" }, ek = {
   name: "Row",
   description: "Lay children out horizontally (left → right) with even spacing. The developer-friendly default: children keep their natural width and are vertically centered. Set `grow=true` to make children share the row equally (for equal-width columns prefer `Grid(columns: N)`); drop a `Spacer()` between children to push them apart; wrap a child in `StackItem` for per-child grow/shrink/alignment. Use `wrap=true` for chips/tags that should flow onto multiple lines.",
   props: [
@@ -6457,7 +6489,7 @@ const Xx = { name: "gap", type: "string | object", optional: !0, enum: et, descr
     { ...uc }
   ],
   render: (t, e, r) => ac("row", z(e.grow), "center", e, r)
-}, Qx = {
+}, tk = {
   name: "Column",
   description: "Lay children out vertically (top → bottom) with even spacing — the most common page/section layout. Children stretch to the full width by default; set `align` to `start`/`center`/`end` to change that. This is the recommended root container for a page or a card body.",
   props: [
@@ -6472,13 +6504,13 @@ const Xx = { name: "gap", type: "string | object", optional: !0, enum: et, descr
     { ...uc }
   ],
   render: (t, e, r) => ac("column", !1, "stretch", e, r)
-}, Jx = {
+}, rk = {
   name: "Stack",
   description: 'Low-level flex container with a configurable, optionally responsive `direction`. Reach for `Row` or `Column` first — they are clearer for fixed-direction layouts. Use `Stack` when the direction itself must change across breakpoints, e.g. `direction: {base: "column", md: "row"}` for a sidebar that stacks on mobile. `gap`, `align`, `justify`, and `padding` also accept responsive maps. NOTE: a `row` Stack grows its children equally by default (`uniform=true`); set `uniform=false` for natural widths (this is `Row`\'s default).',
   props: [
     { name: "children", aliases: ["child"], type: "Node[]", description: "Child components to stack" },
     { name: "direction", type: "string | object", optional: !0, enum: ["column", "row"], description: 'Layout direction (default column). May be a responsive map like `{base: "column", md: "row"}`.' },
-    { ...Xx },
+    { ...Jx },
     { name: "align", type: "string | object", optional: !0, enum: ["start", "center", "end", "stretch"], description: "Cross-axis alignment (default stretch). May be a responsive map." },
     { ...oc },
     { ...uc },
@@ -6489,10 +6521,10 @@ const Xx = { name: "gap", type: "string | object", optional: !0, enum: et, descr
     { ...lc }
   ],
   render: (t, e, r) => {
-    const a = Kx(e) === "row", o = e.uniform === void 0 ? a : z(e.uniform, a);
+    const a = Zx(e) === "row", o = e.uniform === void 0 ? a : z(e.uniform, a);
     return ac(e.direction, o, "stretch", e, r);
   }
-}, ek = {
+}, ik = {
   name: "Center",
   description: 'Centers its children on both axes — the easy way to drop a spinner, an empty state, a hero call-to-action, or a modal body into the middle of a region. Give it `minHeight` (e.g. `"60vh"`) to center vertically inside a tall area, or `axis` to center on only one axis. Multiple children stack in a column and are centered as a group.',
   props: [
@@ -6517,7 +6549,7 @@ const Xx = { name: "gap", type: "string | object", optional: !0, enum: et, descr
     for (const l of P(e.children)) s.append(r.renderNode(l));
     return s;
   }
-}, tk = {
+}, ak = {
   name: "Card",
   description: 'Vertical card container. Set `padding: "none"` for a full-bleed body (a Table, image, or list that should meet the card\'s edges). Pass `onClick` or `href` to make the whole card a single interactive target — it then renders as a `button` / `a` so it is keyboard-operable.',
   props: [
@@ -6542,7 +6574,7 @@ const Xx = { name: "gap", type: "string | object", optional: !0, enum: et, descr
     for (const l of P(e.children)) s.append(r.renderNode(l));
     return s;
   }
-}, rk = {
+}, ok = {
   name: "CardHeader",
   description: 'Card header with title, an optional `eyebrow` line rendered ABOVE the title (category / kicker / pre-headline), and an optional `subtitle` rendered below it. `actions` puts nodes (a Badge, an overflow Menu, an "Edit" Button) on the trailing edge of the title row; `level` sets the heading tag so a page of cards keeps a sane document outline.',
   props: [
@@ -6575,12 +6607,12 @@ const Xx = { name: "gap", type: "string | object", optional: !0, enum: et, descr
     }
     return a;
   }
-}, ik = ["start", "center", "end", "between"], ak = {
+}, nk = ["start", "center", "end", "between"], sk = {
   name: "CardFooter",
   description: 'Card footer for actions. Defaults to trailing-aligned buttons; use `justify: "between"` for the "destructive action far left, confirm actions far right" shape, or `start` to left-align them.',
   props: [
     { name: "children", aliases: ["child"], type: "Node[]" },
-    { name: "justify", type: "string", optional: !0, enum: ik, description: "Horizontal distribution of the actions (default `end`)" }
+    { name: "justify", type: "string", optional: !0, enum: nk, description: "Horizontal distribution of the actions (default `end`)" }
   ],
   render: (t, e, r) => {
     const i = d("footer", {
@@ -6590,7 +6622,7 @@ const Xx = { name: "gap", type: "string | object", optional: !0, enum: et, descr
     for (const a of P(e.children)) i.append(r.renderNode(a));
     return i;
   }
-}, ok = [
+}, lk = [
   "default",
   "activating",
   "success",
@@ -6599,12 +6631,12 @@ const Xx = { name: "gap", type: "string | object", optional: !0, enum: et, descr
   "neutral",
   "corporate",
   "promoting"
-], nk = {
+], ck = {
   name: "CardSection",
   description: "Full-bleed, colour-coded band inside a `Card` that groups and semantically tints a chunk of the card's content (edge-to-edge tinted background with a rule above/below). Use to mark a region of a card as activating / success / warning / critical / neutral. For a standalone bordered notice use `Callout` instead.",
   props: [
     { name: "children", aliases: ["child"], type: "Node[]", positional: !0 },
-    { name: "tone", type: "string", optional: !0, enum: ok, aliases: ["variant", "status"] },
+    { name: "tone", type: "string", optional: !0, enum: lk, aliases: ["variant", "status"] },
     { name: "align", type: "string", optional: !0, enum: ["left", "center", "right"] }
   ],
   render: (t, e, r) => {
@@ -6616,7 +6648,7 @@ const Xx = { name: "gap", type: "string | object", optional: !0, enum: et, descr
     for (const a of P(e.children)) i.append(r.renderNode(a));
     return i;
   }
-}, sk = {
+}, uk = {
   name: "Separator",
   description: "Visual divider between content sections. Supports horizontal or vertical orientation, and an optional center `label` (lifted from the legacy `Divider`). Use `decorative=false` to expose the separator to assistive tech.",
   props: [
@@ -6642,10 +6674,10 @@ const Xx = { name: "gap", type: "string | object", optional: !0, enum: et, descr
       "aria-orientation": i ? null : r
     });
   }
-}, lk = ["pending", "active", "complete", "error"];
-function ck(t) {
+}, dk = ["pending", "active", "complete", "error"];
+function pk(t) {
   const e = g(t.status).toLowerCase();
-  return lk.includes(e) ? e : t.complete !== void 0 && t.complete !== null && z(t.complete) ? "complete" : z(t.active) ? "active" : "pending";
+  return dk.includes(e) ? e : t.complete !== void 0 && t.complete !== null && z(t.complete) ? "complete" : z(t.active) ? "active" : "pending";
 }
 const ud = (t, e, r = "pending") => {
   const i = d("li", {
@@ -6657,7 +6689,7 @@ const ud = (t, e, r = "pending") => {
     "data-complete": r === "complete" ? "true" : null
   });
   return i.append(d("div", { class: "rui-steps-title" }, [t])), e && i.append(d("div", { class: "rui-steps-details" }, [e])), i;
-}, uk = {
+}, hk = {
   name: "Steps",
   description: 'Numbered step-by-step guide. Pass items as `{title, details?, active?, status?}` objects. `active` marks the current step; `status` (`pending|active|complete|error`) additionally distinguishes finished and failed steps. `orientation: "horizontal"` lays the steps across the top of a wizard instead of down the page.',
   props: [
@@ -6679,7 +6711,7 @@ const ud = (t, e, r = "pending") => {
         i.append(ud(
           g(o.title),
           g(o.details),
-          ck(o)
+          pk(o)
         ));
         continue;
       }
@@ -6687,7 +6719,7 @@ const ud = (t, e, r = "pending") => {
     }
     return i;
   }
-}, dk = {
+}, mk = {
   name: "TabItem",
   description: "Single tab definition (used inside Tabs). Add `badge` for a count chip in the tab trigger, `icon` for a leading Font Awesome icon, and `disabled` for a tab that cannot be selected yet.",
   props: [
@@ -6713,8 +6745,8 @@ const ud = (t, e, r = "pending") => {
     return i;
   }
 };
-let pk = 0;
-function hk(t, e, r) {
+let fk = 0;
+function gk(t, e, r) {
   const i = r.renderNode(t);
   let a;
   i instanceof HTMLElement ? a = i : (a = d("div", { class: "rui-tab-content", role: "tabpanel" }), a.append(i));
@@ -6728,7 +6760,7 @@ function hk(t, e, r) {
     disabled: s.disabled === "true" || z(o?.args?.[5])
   };
 }
-const mk = {
+const bk = {
   name: "Tabs",
   description: 'Tabbed container. Children must be TabItem components. Supports `orientation="vertical"` for sidebar-style tabs and built-in keyboard navigation (←/→ or ↑/↓, Home, End). Provide `onChange` to react when the user switches tabs (called with the new tab\'s value). Pass a `$variable` as `value` for a controlled strip — it is kept in sync both ways, so a button elsewhere on the page (or a route) can switch tabs and a user click updates the variable; `defaultValue` is the initial tab only. Set `fitted` for a strip that spans its container with equal-width triggers (the shape a two- or three-tab section header usually wants).',
   props: [
@@ -6750,8 +6782,8 @@ const mk = {
       class: "rui-tab-list",
       role: "tablist",
       "aria-orientation": a
-    }), l = d("div", { class: "rui-tab-panels" }), c = i.map((k, C) => hk(k, C, r)), u = r.useInstanceState("rui-tabs-id", "");
-    u.get() || u.set(`rui-tabs-${pk += 1}`);
+    }), l = d("div", { class: "rui-tab-panels" }), c = i.map((k, C) => gk(k, C, r)), u = r.useInstanceState("rui-tabs-id", "");
+    u.get() || u.set(`rui-tabs-${fk += 1}`);
     const h = u.get(), p = g(e.defaultValue), b = c.find((k) => !k.disabled) ?? c[0], m = p || (b ? b.value : ""), f = r.useInstanceState("activeTab", m), v = r.useInstanceState("seenDefaultValue", null);
     p && v.get() !== p && (v.set(p), f.set(p));
     const x = new Set(c.map((k) => k.value));
@@ -6784,21 +6816,21 @@ const mk = {
           disabled: M ? "" : null,
           tabindex: L && !M ? "0" : "-1"
         }
-      ), q = I ? fk(I) : null;
-      q && O.append(q), O.append(d("span", { class: "rui-tab-trigger-label" }, [$])), T && O.append(d("span", { class: "rui-tab-trigger-badge" }, [T])), O.onclick = (j) => {
-        const _ = j.currentTarget ?? j.target;
-        S(A, _);
-      }, O.onkeydown = (j) => {
-        const _ = j, V = a !== "vertical", re = V ? _.key === "ArrowRight" : _.key === "ArrowDown", pe = V ? _.key === "ArrowLeft" : _.key === "ArrowUp";
-        if (!re && !pe && _.key !== "Home" && _.key !== "End") return;
-        _.preventDefault();
-        const K = _.currentTarget ?? _.target, Z = K.closest(".rui-tab-list");
+      ), q = I ? vk(I) : null;
+      q && O.append(q), O.append(d("span", { class: "rui-tab-trigger-label" }, [$])), T && O.append(d("span", { class: "rui-tab-trigger-badge" }, [T])), O.onclick = (_) => {
+        const j = _.currentTarget ?? _.target;
+        S(A, j);
+      }, O.onkeydown = (_) => {
+        const j = _, V = a !== "vertical", re = V ? j.key === "ArrowRight" : j.key === "ArrowDown", pe = V ? j.key === "ArrowLeft" : j.key === "ArrowUp";
+        if (!re && !pe && j.key !== "Home" && j.key !== "End") return;
+        j.preventDefault();
+        const K = j.currentTarget ?? j.target, Z = K.closest(".rui-tab-list");
         if (!Z) return;
         const W = Array.from(Z.querySelectorAll(".rui-tab-trigger")).filter((he) => !he.disabled);
         if (W.length === 0) return;
         const J = W.indexOf(K);
         let U = J;
-        _.key === "Home" ? U = 0 : _.key === "End" ? U = W.length - 1 : re ? U = (J + 1) % W.length : pe && (U = (J - 1 + W.length) % W.length);
+        j.key === "Home" ? U = 0 : j.key === "End" ? U = W.length - 1 : re ? U = (J + 1) % W.length : pe && (U = (J - 1 + W.length) % W.length);
         const ie = W[U];
         if (!ie) return;
         ie.focus();
@@ -6808,10 +6840,10 @@ const mk = {
     }), n.append(s, l), n;
   }
 };
-function fk(t) {
+function vk(t) {
   return Y(t, { className: "rui-tab-trigger-icon" });
 }
-const gk = ["success", "warning", "danger", "neutral", "info"], bk = {
+const yk = ["success", "warning", "danger", "neutral", "info"], wk = {
   name: "AccordionItem",
   description: 'Single accordion section. Pass a `$variable` as `open` to control it from host state (a "Collapse all" button then works); `onToggle` fires with the new open state, which is where lazy-loading a section\'s content belongs. `variant` paints a semantic left-edge stripe for check-list style accordions, and `disabled` marks a section that cannot be opened yet.',
   props: [
@@ -6820,7 +6852,7 @@ const gk = ["success", "warning", "danger", "neutral", "info"], bk = {
     { name: "open", type: "boolean", optional: !0 },
     { name: "subtitle", type: "string", optional: !0, aliases: ["summary"], description: 'Second line inside the trigger, under the title — a preview of what the collapsed section holds ("Labels | Taints | Maintenance window")' },
     { name: "showArrow", type: "boolean", optional: !0, description: "Show a chevron icon on the right (default false). Inherits from parent Accordion when unset." },
-    { name: "variant", type: "string", optional: !0, enum: gk, aliases: ["tone"], description: "Semantic left-edge stripe (success / warning / danger / neutral / info)" },
+    { name: "variant", type: "string", optional: !0, enum: yk, aliases: ["tone"], description: "Semantic left-edge stripe (success / warning / danger / neutral / info)" },
     { name: "disabled", type: "boolean", optional: !0, description: "Section cannot be expanded (e.g. a step that is not available yet)" },
     { name: "onToggle", type: "callable", optional: !0, aliases: ["onOpenChange", "ontoggle"], description: "Called with the new open state whenever the section expands or collapses" }
   ],
@@ -6859,8 +6891,8 @@ const gk = ["success", "warning", "danger", "neutral", "info"], bk = {
     })), h;
   }
 };
-let vk = 0;
-function yk(t) {
+let xk = 0;
+function kk(t) {
   if (t instanceof HTMLElement && t.classList.contains("rui-accordion-item"))
     return [t];
   const e = [];
@@ -6868,7 +6900,7 @@ function yk(t) {
     r instanceof HTMLElement && r.classList.contains("rui-accordion-item") && e.push(r);
   return e;
 }
-const wk = {
+const Sk = {
   name: "Accordion",
   description: 'Accordion container. Children must be AccordionItem components. Set `showArrow: true` to add a chevron indicator to every item; individual `AccordionItem`s can override via their own `showArrow` prop. `type: "single"` keeps only one section open at a time (the browser closes the previous one); `onChange` is called with the section\'s title and its new open state whenever any section toggles.',
   props: [
@@ -6879,14 +6911,14 @@ const wk = {
   ],
   render: (t, e, r) => {
     const i = g(e.type, "multiple") === "single", a = r.useInstanceState("rui-accordion-group", "");
-    i && !a.get() && a.set(`rui-accordion-${vk += 1}`);
+    i && !a.get() && a.set(`rui-accordion-${xk += 1}`);
     const o = i ? a.get() : "", n = d("div", {
       class: "rui-accordion",
       "data-show-arrow": z(e.showArrow) ? "true" : "false",
       "data-type": i ? "single" : "multiple"
     }), s = e.onChange != null;
     for (const l of P(e.items)) {
-      const c = r.renderNode(l), u = yk(c);
+      const c = r.renderNode(l), u = kk(c);
       for (const h of u) {
         if (o && h.setAttribute("name", o), !s) continue;
         const p = h.ontoggle;
@@ -6912,10 +6944,10 @@ function Xn(t) {
   }
   return e === "auto" || e === "fit" || e === "auto-fit" || e === "full" || e === "100%" ? 12 : Zo(R(t, 12));
 }
-function xk(t) {
+function Ck(t) {
   return me(g(t.minChildWidth) || "220px", "220px");
 }
-const kk = {
+const Ak = {
   name: "GridItem",
   description: 'Wraps a child in a 12-column grid cell with `span`, `offset`, `rowSpan`, and responsive `spanAt` maps. Parent `Grid` auto-enables 12-column mode when any child is a `GridItem`. Fraction spans like `"1/3"` resolve against the 12-column track. With no `span` the item takes one cell, so `GridItem` wrappers are safe inside a `Grid(columns: N)`.',
   props: [
@@ -6954,7 +6986,7 @@ const kk = {
   md: "var(--rui-radius-md)",
   lg: "var(--rui-radius-lg)",
   pill: "var(--rui-radius-pill)"
-}, Sk = {
+}, $k = {
   name: "Box",
   description: "Spacing and surface wrapper for padding, margin, borders, semantic backgrounds, and max-width constraints. Use when a `Card` is too heavy but the content needs a subtle surface or inset. `radius` rounds the surface independently of `border`.",
   props: [
@@ -6990,7 +7022,7 @@ const kk = {
     for (const p of P(e.children)) h.append(r.renderNode(p));
     return h;
   }
-}, Ck = {
+}, Tk = {
   name: "Fragment",
   description: "Groups several siblings into one value WITHOUT adding a layout box — the children become direct children of the parent, so they participate in its flex/grid layout exactly as if they had been written inline. Use to return multiple nodes from a component, or to conditionally group siblings, without a stray `div` that would break a Grid/Stack's spacing. Because there is no element, universal style props (`sx`, `animate`, `id`) have nothing to attach to — wrap the group in a `Box` if you need those.",
   props: [
@@ -7016,7 +7048,7 @@ const kk = {
     { name: "dense", type: "boolean", optional: !0, description: "Dense auto-flow packing — let later items backfill earlier gaps" }
   ],
   render: (t, e, r) => {
-    const i = P(e.children), a = i.some((x) => Vx(x, "GridItem")), o = St(e.columns), n = St(e.gap), s = St(e.rowGap), l = St(e.columnGap), c = {
+    const i = P(e.children), a = i.some((x) => Xx(x, "GridItem")), o = St(e.columns), n = St(e.gap), s = St(e.rowGap), l = St(e.columnGap), c = {
       class: "rui-grid"
     }, u = [];
     let h = !1, p = !1;
@@ -7028,7 +7060,7 @@ const kk = {
         const w = g(e.minChildWidth);
         w && (c["data-min-child-width"] = "true", u.push(`--rui-grid-min-child:${me(w, "220px")}`));
       } else
-        u.push(`--rui-grid-min-item:${xk(e)}`);
+        u.push(`--rui-grid-min-item:${Ck(e)}`);
     } else {
       c["data-responsive-cols"] = "true";
       for (const y of Br) {
@@ -7047,7 +7079,7 @@ const kk = {
     for (const x of i) v.append(r.renderNode(x));
     return v;
   }
-}, Ak = {
+}, Ik = {
   name: "AspectRatio",
   description: 'Container that constrains its child to a fixed aspect ratio (e.g. 16:9 for video embeds, 1:1 for thumbnails). The FIRST child fills the box; any further children are overlays positioned on top of it (a "LIVE" badge over a thumbnail), not stacked below.',
   props: [
@@ -7055,7 +7087,7 @@ const kk = {
     { name: "children", aliases: ["child"], type: "Node[]" }
   ],
   render: (t, e, r) => {
-    const i = $k(g(e.ratio, "16:9")), a = P(e.children), o = d("div", {
+    const i = zk(g(e.ratio, "16:9")), a = P(e.children), o = d("div", {
       class: "rui-aspect-ratio",
       // Marks the overlay case for CSS: every direct child is sized to
       // 100%×100%, so a second child would otherwise be pushed out of the
@@ -7067,7 +7099,7 @@ const kk = {
     return o;
   }
 };
-function $k(t) {
+function zk(t) {
   if (t.includes(":")) {
     const [r, i] = t.split(":"), a = Number(r), o = Number(i);
     if (Number.isFinite(a) && a > 0 && Number.isFinite(o) && o > 0) return `${a} / ${o}`;
@@ -7075,7 +7107,7 @@ function $k(t) {
   const e = Number(t);
   return Number.isFinite(e) && e > 0 ? `${e} / 1` : "16 / 9";
 }
-const pd = /* @__PURE__ */ new WeakMap(), Tk = 24, Ik = (t) => t.scrollHeight - t.clientHeight - t.scrollTop <= Tk, zk = {
+const pd = /* @__PURE__ */ new WeakMap(), Mk = 24, Ek = (t) => t.scrollHeight - t.clientHeight - t.scrollTop <= Mk, Nk = {
   name: "ScrollArea",
   description: "Bounded scroll container. Use to clip long lists / logs / chat panels to a fixed max height with a clean scrollbar. `height` gives the pane a stable box (it does not grow with its content); `maxHeight` lets it grow up to a cap. `stickToBottom` keeps the newest line in view as content is appended, until the user scrolls up.",
   props: [
@@ -7097,7 +7129,7 @@ const pd = /* @__PURE__ */ new WeakMap(), Tk = 24, Ik = (t) => t.scrollHeight - 
     for (const s of P(e.children)) n.append(r.renderNode(s));
     return o && (n.onscroll = (s) => {
       const l = s.currentTarget ?? s.target;
-      pd.set(l, Ik(l));
+      pd.set(l, Ek(l));
     }, typeof MutationObserver < "u" && ic(n, (s) => {
       const l = () => {
         s.getAttribute("data-stick-to-bottom") === "true" && pd.get(s) !== !1 && (s.scrollTop = s.scrollHeight);
@@ -7107,37 +7139,37 @@ const pd = /* @__PURE__ */ new WeakMap(), Tk = 24, Ik = (t) => t.scrollHeight - 
       c.observe(s, { childList: !0, subtree: !0, characterData: !0 }), r.registerDisposer(() => c.disconnect(), "rui-scroll-stick");
     })), n;
   }
-}, Mk = ["sm", "md", "lg", "xl", "full"], Ek = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-let Nk = 0;
+}, Lk = ["sm", "md", "lg", "xl", "full"], Rk = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+let Pk = 0;
 function hd(t) {
-  const e = [...t.querySelectorAll(Ek)], r = e.filter((i) => i.offsetParent !== null || i.getClientRects().length > 0);
+  const e = [...t.querySelectorAll(Rk)], r = e.filter((i) => i.offsetParent !== null || i.getClientRects().length > 0);
   return r.length > 0 ? r : e;
 }
 function md(t) {
   return t.getRootNode().activeElement ?? null;
 }
 const Ys = /* @__PURE__ */ new WeakSet();
-let ya = 0, Xs = "";
-function Lk(t) {
-  typeof document > "u" || !document.body || Ys.has(t) || (Ys.add(t), ya += 1, ya === 1 && (Xs = document.body.style.overflow, document.body.style.overflow = "hidden"));
+let va = 0, Xs = "";
+function Dk(t) {
+  typeof document > "u" || !document.body || Ys.has(t) || (Ys.add(t), va += 1, va === 1 && (Xs = document.body.style.overflow, document.body.style.overflow = "hidden"));
 }
 function tf(t) {
-  typeof document > "u" || !document.body || Ys.delete(t) && (ya = Math.max(0, ya - 1), ya === 0 && (document.body.style.overflow = Xs, Xs = ""));
+  typeof document > "u" || !document.body || Ys.delete(t) && (va = Math.max(0, va - 1), va === 0 && (document.body.style.overflow = Xs, Xs = ""));
 }
 const Zn = /* @__PURE__ */ new WeakSet();
-function Rk(t, e) {
+function Ok(t, e) {
   Zn.has(t) || (Zn.add(t), e.registerDisposer(() => {
-    Li(t), tf(t), Zn.delete(t);
+    Ni(t), tf(t), Zn.delete(t);
   }, "rui-modal-teardown"));
 }
-const Pk = {
+const Bk = {
   name: "Modal",
   description: "Dialog overlay shown when `open` is true. Pass a `$variable` as `open` to control it — the × button, Escape and the backdrop close the dialog by writing that variable, so a literal `true` or an expression needs `onRequestClose` instead or the dialog cannot be dismissed. The header always renders a × close button (disable via `closable: false`); the optional `footer` slot is the canonical place for action buttons. `closeOnBackdrop=true` opts in to backdrop-click dismissal. `onClose` fires once every time the modal actually closes, however it closed (× button, Escape, backdrop, or a state write from a Cancel/Save button). `lazy: true` skips rendering the body while closed. Accessible by default: the dialog is labelled by its title, renders in the browser's top layer so no transformed ancestor can clip it, moves focus into itself on open and restores it on close, traps Tab, locks background scrolling, and closes on Escape (unless `closable: false`).",
   props: [
     { name: "title", type: "string" },
     { name: "open", type: "boolean", description: "Open/closed state — usually a $variable" },
     { name: "children", aliases: ["child"], type: "Node[]" },
-    { name: "size", type: "string", optional: !0, enum: Mk, description: "Width preset (default `md`)" },
+    { name: "size", type: "string", optional: !0, enum: Lk, description: "Width preset (default `md`)" },
     { name: "footer", type: "Node[]", optional: !0, description: "Footer slot — typically a row of action Buttons" },
     { name: "closable", type: "boolean", optional: !0, description: "Render the header × button (default true)" },
     { name: "closeOnBackdrop", type: "boolean", optional: !0, description: "Close when the overlay is clicked (default false)" },
@@ -7150,7 +7182,7 @@ const Pk = {
       class: "rui-modal-overlay",
       "data-open": o ? "true" : "false"
     }), s = r.useInstanceState("rui-modal-title-id", "");
-    s.get() || s.set(`rui-modal-title-${Nk += 1}`);
+    s.get() || s.set(`rui-modal-title-${Pk += 1}`);
     const l = s.get(), c = d("div", {
       class: "rui-modal",
       role: "dialog",
@@ -7211,12 +7243,12 @@ const Pk = {
     if (o !== y.open) {
       const w = v.get(), S = w && w.isConnected ? w : n, k = o ? null : y.prev;
       x.set({ open: o, prev: o ? md(S) : null }), Jm(n, v, (C) => {
-        if (Rk(C, r), o) {
-          wn(C), Lk(C);
+        if (Ok(C, r), o) {
+          wn(C), Dk(C);
           const A = C.querySelector(".rui-modal") ?? C;
           (hd(A)[0] ?? A).focus();
         } else
-          Li(C), tf(C), k && typeof k.focus == "function" && k.focus();
+          Ni(C), tf(C), k && typeof k.focus == "function" && k.focus();
       }), o || r.invoke(e.onClose);
     }
     return n;
@@ -7318,11 +7350,11 @@ function rf(t) {
   const e = t.toLowerCase();
   return ["js", "jsx", "ts", "tsx", "javascript", "typescript", "mjs", "cjs", "aktion"].includes(e) ? "js" : ["py", "python"].includes(e) ? "py" : ["css", "scss", "less"].includes(e) ? "css" : ["json", "jsonc"].includes(e) ? "json" : ["html", "xml", "svg", "vue"].includes(e) ? "html" : "generic";
 }
-const gd = /[A-Za-z_$][\w$]*/y, bd = /0[xX][0-9a-fA-F]+|\d*\.?\d+(?:[eE][+-]?\d+)?/y, vd = /\s+/y, Dk = 4096;
-function Ok(t, e, r) {
-  if (t.length > Dk) return [{ text: t, cls: null }];
+const gd = /[A-Za-z_$][\w$]*/y, bd = /0[xX][0-9a-fA-F]+|\d*\.?\d+(?:[eE][+-]?\d+)?/y, vd = /\s+/y, Fk = 4096;
+function _k(t, e, r) {
+  if (t.length > Fk) return [{ text: t, cls: null }];
   const i = rf(e);
-  if (i === "html") return Bk(t);
+  if (i === "html") return jk(t);
   const a = [], o = fd[i === "generic" ? "js" : i] ?? fd.js;
   let n = 0;
   const s = t.length, l = (c, u) => {
@@ -7391,17 +7423,17 @@ function Ok(t, e, r) {
   }
   return a;
 }
-function Bk(t) {
+function jk(t) {
   const e = [], r = /(<\/?[\w-]+)|(\/?>)|([\w-]+)(?==)|("[^"]*"|'[^']*')|(<!--.*?-->)/g;
   let i = 0, a;
   for (; (a = r.exec(t)) !== null; )
     a.index > i && e.push({ text: t.slice(i, a.index), cls: null }), a[1] ? e.push({ text: a[1], cls: "tag" }) : a[2] ? e.push({ text: a[2], cls: "tag" }) : a[3] ? e.push({ text: a[3], cls: "attr" }) : a[4] ? e.push({ text: a[4], cls: "string" }) : a[5] && e.push({ text: a[5], cls: "comment" }), i = r.lastIndex;
   return i < t.length && e.push({ text: t.slice(i), cls: null }), e;
 }
-function Fk(t) {
+function qk(t) {
   return rf(t) !== "generic" || t.length > 0;
 }
-const jk = /* @__PURE__ */ new Set([
+const Uk = /* @__PURE__ */ new Set([
   "p",
   "br",
   "hr",
@@ -7452,7 +7484,7 @@ const jk = /* @__PURE__ */ new Set([
   "figure",
   "figcaption",
   "time"
-]), _k = /* @__PURE__ */ new Set([
+]), Hk = /* @__PURE__ */ new Set([
   "class",
   "title",
   "dir",
@@ -7469,7 +7501,7 @@ const jk = /* @__PURE__ */ new Set([
   "cite",
   "loading",
   "decoding"
-]), qk = 512 * 1024, Uk = 8192, Hk = 64;
+]), Wk = 512 * 1024, Gk = 8192, Vk = 64;
 let ro = null;
 function af() {
   if (ro) return ro;
@@ -7482,9 +7514,9 @@ function af() {
 function of(t) {
   let e = 0;
   const r = (i, a) => {
-    if (a > Hk || (e += 1, e > Uk)) return !1;
+    if (a > Vk || (e += 1, e > Gk)) return !1;
     for (const o of Array.from(i.children)) {
-      if (!jk.has(o.localName)) {
+      if (!Uk.has(o.localName)) {
         const n = o.parentNode;
         if (n)
           for (; o.firstChild; ) n.insertBefore(o.firstChild, o);
@@ -7507,7 +7539,7 @@ function of(t) {
       }
       if (n === "src") {
         i.removeAttribute(o);
-        const l = je(s);
+        const l = _e(s);
         l && i.setAttribute("src", l);
         continue;
       }
@@ -7515,15 +7547,15 @@ function of(t) {
         i.removeAttribute(o), s === "_blank" && (i.setAttribute("target", "_blank"), i.setAttribute("rel", "noopener noreferrer"));
         continue;
       }
-      n !== "rel" && (n.startsWith("data-") || n.startsWith("aria-") || _k.has(n) || i.removeAttribute(o));
+      n !== "rel" && (n.startsWith("data-") || n.startsWith("aria-") || Hk.has(n) || i.removeAttribute(o));
     }
     return !0;
   };
   return r(t, 0);
 }
-function Wk(t) {
+function Kk(t) {
   const e = typeof t == "string" ? t : "";
-  if (!e || e.length > qk) return [];
+  if (!e || e.length > Wk) return [];
   const r = af();
   if (!r) return [];
   let i;
@@ -7539,7 +7571,7 @@ function Wk(t) {
   return a;
 }
 function Zs(t, e) {
-  t.replaceChildren(...Wk(e));
+  t.replaceChildren(...Kk(e));
 }
 function io(t) {
   const e = af();
@@ -7553,34 +7585,34 @@ function io(t) {
   return of(r) ? r.innerHTML : "";
 }
 function yd(t, e, r, i) {
-  const a = Ok(e, r, i);
+  const a = _k(e, r, i);
   for (const o of a)
     o.cls ? t.append(d("span", { class: `rui-hl-${o.cls}` }, [o.text])) : t.append(document.createTextNode(o.text));
 }
-const Gk = ["solid", "regular", "brands"], Pa = ["xs", "sm", "md", "lg", "xl"], nf = ["default", "neutral", "primary", "success", "warning", "danger", "info"];
+const Yk = ["solid", "regular", "brands"], Pa = ["xs", "sm", "md", "lg", "xl"], nf = ["default", "neutral", "primary", "success", "warning", "danger", "info"];
 function kn(t, e = "md") {
   const r = g(t).trim().toLowerCase();
   if (!r) return e;
   const i = Kt(r);
   return Pa.includes(i) ? i : e;
 }
-function Vk(t) {
+function Xk(t) {
   return Array.from(t.trim()).length === 1;
 }
-const Kk = {
+const Zk = {
   name: "Icon",
   description: 'Single Font Awesome icon. `name` is the FA name without the `fa-` prefix (e.g. `"house"`, `"chart-line"`). Use `variant` for non-solid styles (`regular`/`brands`) or prefix the name (`"regular:star"`). `color` accepts any CSS colour (`"#00ff00"`, `"tomato"`, `"var(--rui-color-primary)"`). Icons are decorative (hidden from screen readers) by default — pass `label` when the glyph carries the only meaning in its slot (a tick meaning "verified", a padlock next to a plan name) and it becomes an announced `role="img"`. `title` adds a native hover tooltip.',
   props: [
     { name: "name", type: "string", description: "FA name without the fa- prefix" },
-    { name: "variant", type: "string", optional: !0, aliases: ["tone"], enum: Gk },
-    { name: "size", type: "string", optional: !0, enum: Ly },
+    { name: "variant", type: "string", optional: !0, aliases: ["tone"], enum: Yk },
+    { name: "size", type: "string", optional: !0, enum: Dy },
     { name: "color", type: "string", optional: !0, description: "CSS colour applied to the glyph (hex, named, rgb()/hsl(), or var(--token))" },
     { name: "label", type: "string", optional: !0, aliases: ["ariaLabel", "alt"], description: 'Accessible name — set when the icon is not decorative; announced as role="img"' },
     { name: "title", type: "string", optional: !0, description: "Native hover tooltip (also used as the accessible name when `label` is omitted)" }
   ],
   render: (t, e) => {
-    const r = g(e.name), i = g(e.variant, ""), a = g(e.size, "md"), o = g(e.color, ""), n = i ? `${i}:${r}` : r, s = g(e.label).trim(), l = g(e.title).trim(), c = Dy(n) || La(n).length > 0;
-    if (r && !c && !Vk(r))
+    const r = g(e.name), i = g(e.variant, ""), a = g(e.size, "md"), o = g(e.color, ""), n = i ? `${i}:${r}` : r, s = g(e.label).trim(), l = g(e.title).trim(), c = Fy(n) || La(n).length > 0;
+    if (r && !c && !Xk(r))
       return d("i", {
         class: "rui-icon rui-icon-unresolved",
         "data-icon-size": a,
@@ -7593,7 +7625,7 @@ const Kk = {
     }
     return d("span", { class: "rui-icon", "data-icon-size": a }, [r]);
   }
-}, Yk = [
+}, Qk = [
   "small",
   "small-heavy",
   "body",
@@ -7603,13 +7635,13 @@ const Kk = {
   "heading",
   "title"
 ];
-function Xk(t) {
+function Jk(t) {
   const e = g(t).trim();
   return !e || /[<>]/.test(e) || /\bexpression\s*\(|\bjavascript\s*:|\bbehavior\s*:|@import\b/i.test(e) ? "" : e;
 }
-const sf = ["span", "p", "div", "h1", "h2", "h3", "h4", "h5", "h6"], Zk = { title: "2", heading: "3" }, lf = [
+const sf = ["span", "p", "div", "h1", "h2", "h3", "h4", "h5", "h6"], e0 = { title: "2", heading: "3" }, lf = [
   { name: "value", type: "string" },
-  { name: "variant", type: "string", optional: !0, enum: Yk },
+  { name: "variant", type: "string", optional: !0, enum: Qk },
   { name: "tone", type: "string", optional: !0, enum: ["default", "muted", "primary", "success", "warning", "danger"], description: "Visual accent" },
   { name: "align", type: "string", optional: !0, enum: ["left", "center", "right"], description: "Horizontal text alignment — the text becomes its own block-level line" },
   {
@@ -7622,11 +7654,11 @@ const sf = ["span", "p", "div", "h1", "h2", "h3", "h4", "h5", "h6"], Zk = { titl
   { name: "truncate", type: "boolean", optional: !0, description: "Clip to a single line with a trailing ellipsis" },
   { name: "lines", type: "number", optional: !0, aliases: ["clamp"], description: "Clamp to N lines with a trailing ellipsis (implies `truncate`)" }
 ];
-function Qk(t, e) {
+function t0(t, e) {
   return e > 1 ? `display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:${e};overflow:hidden` : t || e === 1 ? "display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" : "";
 }
 const cf = (t, e) => {
-  const r = g(e.variant, "body"), i = g(e.tone, "default"), a = g(e.align), o = Xk(e.style), n = Number(e.lines), s = Number.isFinite(n) && n > 0 ? Math.min(20, Math.floor(n)) : 0, c = [Qk(z(e.truncate), s), o].filter(Boolean).join(";"), u = g(e.as).trim().toLowerCase(), h = sf.includes(u) ? u : "span", p = h === "span" || h === "p" || h === "div" ? Zk[r] : void 0;
+  const r = g(e.variant, "body"), i = g(e.tone, "default"), a = g(e.align), o = Jk(e.style), n = Number(e.lines), s = Number.isFinite(n) && n > 0 ? Math.min(20, Math.floor(n)) : 0, c = [t0(z(e.truncate), s), o].filter(Boolean).join(";"), u = g(e.as).trim().toLowerCase(), h = sf.includes(u) ? u : "span", p = h === "span" || h === "p" || h === "div" ? e0[r] : void 0;
   return d(h, {
     class: "rui-text",
     "data-variant": r,
@@ -7638,17 +7670,17 @@ const cf = (t, e) => {
     "aria-level": p ?? null,
     style: c || null
   }, [g(e.value)]);
-}, Jk = {
+}, r0 = {
   name: "Text",
   description: 'Renders plain text with a typographic variant. `align` (left|center|right) sets the horizontal alignment (the text renders as its own block). `as` picks the element — pass `h1`..`h6` for real heading semantics (or use `Heading`); the `heading`/`title` variants otherwise get `role="heading"` so they still appear in the document outline. `truncate` clips to one line with an ellipsis and `lines: N` clamps to N lines. Optional `style` prop accepts a CSS declaration string (e.g. "font-size: 16px; color: #000;") applied directly to the rendered element.',
   props: lf,
   render: cf
-}, e0 = {
+}, i0 = {
   name: "TextContent",
   description: "Deprecated alias for `Text`. Prefer `Text(...)` — both render identically.",
   props: lf,
   render: cf
-}, t0 = ["cover", "contain", "fill", "none", "scale-down"], r0 = {
+}, a0 = ["cover", "contain", "fill", "none", "scale-down"], o0 = {
   name: "Image",
   description: 'Inline image. `ratio` constrains the box to a fixed aspect ratio (e.g. `16:9`, `1:1`) so callers do not need an outer `AspectRatio` (and it reserves space to avoid layout shift). `fit` controls how the image fills that box. `placeholder: "blur"` fades the image in once loaded; `sizes`/`srcset` enable responsive loading; `loading: "eager"` opts out of lazy-loading. When `src` is missing/unsafe or fails to load it shows the `fallback` text/icon.',
   props: [
@@ -7656,7 +7688,7 @@ const cf = (t, e) => {
     { name: "alt", type: "string", optional: !0 },
     { name: "caption", type: "string", optional: !0 },
     { name: "ratio", type: "string", optional: !0, description: "Aspect ratio shorthand (e.g. `16:9`, `1:1`, `4:3`)" },
-    { name: "fit", type: "string", optional: !0, enum: t0, description: "object-fit value (default `cover`)" },
+    { name: "fit", type: "string", optional: !0, enum: a0, description: "object-fit value (default `cover`)" },
     { name: "fallback", type: "string", optional: !0, description: "Text label or Font Awesome icon shown when src is missing/unsafe/errored" },
     { name: "placeholder", type: "string", optional: !0, enum: ["blur", "none"], description: "`blur` fades the image in on load" },
     { name: "loading", type: "string", optional: !0, enum: ["lazy", "eager"], description: "Native loading strategy (default lazy)" },
@@ -7665,7 +7697,7 @@ const cf = (t, e) => {
     { name: "onClick", type: "callable", optional: !0, aliases: ["onclick", "action"], description: "Makes the image activatable (gallery thumbnail, clickable avatar) — adds button semantics and keyboard activation" }
   ],
   render: (t, e, r) => {
-    const i = e.ratio ? i0(g(e.ratio)) : "", a = e.onClick !== void 0 && e.onClick !== null, o = g(e.alt), n = [
+    const i = e.ratio ? n0(g(e.ratio)) : "", a = e.onClick !== void 0 && e.onClick !== null, o = g(e.alt), n = [
       i ? `aspect-ratio:${i}` : "",
       // A ratio only reserves the box; without clipping, an image whose
       // intrinsic ratio differs spills over whatever follows.
@@ -7676,7 +7708,7 @@ const cf = (t, e) => {
       "data-fit": g(e.fit, "cover"),
       "data-ratio": i ? "true" : null,
       style: n ? `${n};` : null
-    }), l = i ? "width:100%;height:100%;min-height:0;" : null, c = je(e.src), u = () => {
+    }), l = i ? "width:100%;height:100%;min-height:0;" : null, c = _e(e.src), u = () => {
       const m = g(e.fallback), f = o || m, v = d("div", {
         class: "rui-image-placeholder",
         role: f ? "img" : "presentation",
@@ -7719,7 +7751,7 @@ const cf = (t, e) => {
     }), s;
   }
 };
-function i0(t) {
+function n0(t) {
   if (!t) return "auto";
   if (t.includes(":")) {
     const [r, i] = t.split(":"), a = Number(r), o = Number(i);
@@ -7737,7 +7769,7 @@ function Qs(t, e, r, i) {
   }), o = Y(i, t ? { className: "rui-badge-icon" } : {});
   return o && a.append(o), t && a.append(d("span", { class: "rui-badge-label" }, [t])), a;
 }
-const a0 = {
+const s0 = {
   name: "Badge",
   description: "Small pill-style tag for status, counts, categories. Accepts an optional leading `icon` and a `size`.",
   props: [
@@ -7760,35 +7792,35 @@ const a0 = {
   "critical",
   "promoting",
   "corporate"
-], o0 = [
+], l0 = [
   ...df,
   "danger",
   "error",
   "info",
   "primary"
 ];
-function n0(t) {
+function c0(t) {
   const e = g(t, "neutral").toLowerCase();
   return e === "danger" || e === "error" ? "critical" : e === "info" ? "activating" : e === "primary" ? "corporate" : df.includes(e) ? e : "neutral";
 }
-const s0 = {
+const u0 = {
   name: "Pill",
   description: 'Soft, tinted **state** label — pale semantic background with dark semantic text, regular weight, fully rounded. Use for the current state of a thing ("SSL active", "pending", "broken", "open ticket"). For a solid, high-attention marketing/status chip use `Badge` instead. Tones: neutral, activating, success, warning, critical, promoting, corporate (danger/error/info/primary are accepted as synonyms).',
   props: [
     { name: "label", type: "string", positional: !0 },
-    { name: "tone", type: "string", optional: !0, enum: o0, aliases: ["variant", "status"], description: "Semantic state tone" },
+    { name: "tone", type: "string", optional: !0, enum: l0, aliases: ["variant", "status"], description: "Semantic state tone" },
     { name: "icon", type: "string", optional: !0, description: "Optional leading Font Awesome icon name" }
   ],
   render: (t, e) => {
     const r = d("span", {
       class: "rui-pill",
-      "data-tone": n0(e.tone)
+      "data-tone": c0(e.tone)
     }), i = Y(e.icon, { className: "rui-pill-icon" });
     i && r.append(i);
     const a = g(e.label);
     return a && r.append(d("span", { class: "rui-pill-label" }, [a])), r;
   }
-}, l0 = {
+}, d0 = {
   name: "BadgeList",
   description: "Cluster of Badge pills rendered from an array of strings. `tone` sets the whole cluster; `tones` / `icons` are index-aligned arrays that override it per item (so one item can be `success` and the next `danger`). `max` caps how many pills render and appends a `+N` overflow pill for the rest.",
   props: [
@@ -7812,11 +7844,11 @@ const s0 = {
     }
     return n;
   }
-}, c0 = ["neutral", "info", "success", "warning", "danger", "error"], u0 = {
+}, p0 = ["neutral", "info", "success", "warning", "danger", "error"], h0 = {
   name: "Callout",
   description: 'Highlighted callout banner with variant, title, description, and leading icon. This is the library\'s alert primitive: it is announced to assistive tech by default (`role="alert"` for danger/error/warning, `role="status"` otherwise) — pass `live: false` for a static, decorative note that should stay quiet. Pass `compact: true` for a one-line inline-note rendering, `hideIcon: true` to drop the icon medallion, and `dismissible: true` (with an optional `onDismiss`) for a closable banner.',
   props: [
-    { name: "tone", type: "string", optional: !0, enum: c0, aliases: ["variant"] },
+    { name: "tone", type: "string", optional: !0, enum: p0, aliases: ["variant"] },
     { name: "title", type: "string", positional: !0, required: !0 },
     { name: "description", type: "string", optional: !0, aliases: ["text"], description: "Body text" },
     { name: "icon", type: "string", optional: !0, description: "Optional Font Awesome icon name" },
@@ -7837,7 +7869,7 @@ const s0 = {
     const i = g(e.tone, "info"), a = z(e.compact), o = z(e.dismissible) || e.onDismiss !== void 0 && e.onDismiss !== null, n = r?.useInstanceState("dismissed", !1);
     if (o && n?.get() === !0)
       return d("div", { class: "rui-callout", "data-dismissed": "true", hidden: !0 });
-    const s = e.live === void 0 ? !0 : z(e.live), l = i === "danger" || i === "error" || i === "warning", u = z(e.hideIcon) || e.icon === !1 ? "" : g(e.icon) || h0(i), h = u ? Y(u, { className: "rui-callout-icon" }) : null, p = d("div", {
+    const s = e.live === void 0 ? !0 : z(e.live), l = i === "danger" || i === "error" || i === "warning", u = z(e.hideIcon) || e.icon === !1 ? "" : g(e.icon) || g0(i), h = u ? Y(u, { className: "rui-callout-icon" }) : null, p = d("div", {
       class: "rui-callout",
       "data-variant": i,
       "data-compact": a ? "true" : "false",
@@ -7891,7 +7923,7 @@ const s0 = {
     { name: "wrap", type: "boolean", optional: !0, description: "Soft-wrap long lines instead of scrolling horizontally" }
   ],
   render: (t, e, r) => {
-    const i = g(e.language), a = g(e.codeString), o = z(e.showLineNumbers), n = p0(g(e.highlightLines), a), s = e.copy === void 0 ? !0 : z(e.copy), l = e.header === void 0 ? !0 : z(e.header), c = g(e.filename), u = z(e.wrap), h = me(e.width, ""), p = me(e.height, ""), b = [h ? `width:${h}` : "", p ? `height:${p}` : ""].filter(Boolean).join(";"), m = d("div", {
+    const i = g(e.language), a = g(e.codeString), o = z(e.showLineNumbers), n = f0(g(e.highlightLines), a), s = e.copy === void 0 ? !0 : z(e.copy), l = e.header === void 0 ? !0 : z(e.header), c = g(e.filename), u = z(e.wrap), h = me(e.width, ""), p = me(e.height, ""), b = [h ? `width:${h}` : "", p ? `height:${p}` : ""].filter(Boolean).join(";"), m = d("div", {
       class: "rui-code-block",
       "data-headerless": l ? null : "true",
       style: b || null
@@ -7912,7 +7944,7 @@ const s0 = {
           // Announce the Copy → Copied swap; the button's own name is static.
           "aria-live": "polite"
         }, [w?.get() === !0 ? "Copied" : "Copy"])), S.onclick = (C) => {
-          const A = C.currentTarget ?? C.target, $ = A.closest(".rui-code-block"), T = d0($, a), M = (typeof navigator < "u" ? navigator : null)?.clipboard;
+          const A = C.currentTarget ?? C.target, $ = A.closest(".rui-code-block"), T = m0($, a), M = (typeof navigator < "u" ? navigator : null)?.clipboard;
           M?.writeText && M.writeText(T).catch(() => {
           });
           const E = A.querySelector(".rui-code-block-copy-label");
@@ -7936,7 +7968,7 @@ const s0 = {
       role: "region",
       "aria-label": i ? `${i} code` : "Code",
       style: u ? "white-space:pre-wrap;overflow-wrap:anywhere;" : null
-    }), v = u ? "white-space:pre-wrap;overflow-wrap:anywhere;min-width:0;" : null, x = (e.highlight === void 0 ? !0 : z(e.highlight)) && !!i && Fk(i);
+    }), v = u ? "white-space:pre-wrap;overflow-wrap:anywhere;min-width:0;" : null, x = (e.highlight === void 0 ? !0 : z(e.highlight)) && !!i && qk(i);
     if (o || n.size > 0) {
       const y = a.split(/\r?\n/), w = d("code", {}), S = { inBlockComment: !1 };
       y.forEach((k, C) => {
@@ -7960,14 +7992,14 @@ const s0 = {
     return m.append(f), m;
   }
 };
-function d0(t, e) {
+function m0(t, e) {
   const r = t?.querySelector("code");
   if (!r) return e;
   const i = r.querySelectorAll(".rui-code-block-code");
   return i.length === 0 ? r.textContent ?? e : Array.from(i).map((a) => a.textContent ?? "").join(`
 `);
 }
-function p0(t, e = "") {
+function f0(t, e = "") {
   const r = /* @__PURE__ */ new Set();
   if (!t) return r;
   const i = e ? e.split(/\r?\n/).length : wd, a = Math.min(i, wd);
@@ -7988,7 +8020,7 @@ function p0(t, e = "") {
   return r;
 }
 const wd = 1e4;
-function h0(t) {
+function g0(t) {
   switch (t) {
     case "success":
       return "circle-check";
@@ -8003,22 +8035,22 @@ function h0(t) {
       return "circle-info";
   }
 }
-const m0 = ["paragraph", "card", "table-row", "avatar", "image"], f0 = ["rect", "circle"], g0 = {
+const b0 = ["paragraph", "card", "table-row", "avatar", "image"], v0 = ["rect", "circle"], y0 = {
   name: "Skeleton",
   description: 'Loading placeholder. Pass a `variant` for common shapes — `paragraph` (default), `card`, `table-row`, `avatar`, `image` — or use `shape` / `width` / `height` to build a custom one. All variants use a shimmer animation that respects `prefers-reduced-motion`. The placeholder is a polite live region announcing `label` (default "Loading"), so a screen reader hears the wait instead of silence — when you stack several Skeletons into one loading view, pass `live: false` on all but the first so the announcement happens once rather than once per placeholder.',
   props: [
-    { name: "variant", aliases: ["tone"], type: "string", optional: !0, enum: m0 },
+    { name: "variant", aliases: ["tone"], type: "string", optional: !0, enum: b0 },
     { name: "lines", type: "number", optional: !0, aliases: ["count", "columns"], description: "Lines for the `paragraph` variant (default 3) / cells for `table-row` (default 4)" },
     { name: "height", type: "number | string", optional: !0, description: "Line height in px (paragraph) or CSS height for custom shape; a bare number is px" },
-    { name: "shape", type: "string", optional: !0, enum: f0, description: "Force a primitive shape (rect/circle)" },
+    { name: "shape", type: "string", optional: !0, enum: v0, description: "Force a primitive shape (rect/circle)" },
     { name: "width", type: "string", optional: !0, description: "CSS width for shape-only skeletons" },
     { name: "label", type: "string", optional: !0, description: 'What is loading, announced to assistive tech (default "Loading")' },
     { name: "live", type: "boolean", optional: !0, description: "Announce the wait (default true); `false` keeps this placeholder silent when a sibling already announces" }
   ],
   render: (t, e) => {
     const r = g(e.variant), i = g(e.shape);
-    if (i) return b0(i, e);
-    if (r && r !== "paragraph") return v0(r, e);
+    if (i) return w0(i, e);
+    if (r && r !== "paragraph") return x0(r, e);
     const a = Number(e.lines), o = Math.max(1, Math.min(50, Number.isFinite(a) ? Math.floor(a) : 3)), n = Number(e.height), s = Number.isFinite(n) && n > 0 ? Math.min(200, Math.floor(n)) : 12, l = dc(e, { class: "rui-skeleton", "data-variant": "paragraph" });
     for (let c = 0; c < o; c += 1)
       l.append(d("div", { class: "rui-skeleton-line", style: `height:${s}px`, "aria-hidden": "true" }));
@@ -8035,14 +8067,14 @@ function dc(t, e) {
   });
   return i && a.append(d("span", { class: "rui-visually-hidden" }, [r])), a;
 }
-function wa(t, e) {
+function ya(t, e) {
   if (typeof t == "number")
     return Number.isFinite(t) ? `${t}px` : e;
   const r = g(t).trim();
   return r ? /^\d+(\.\d+)?$/.test(r) ? `${r}px` : me(r, e) : e;
 }
-function b0(t, e) {
-  const r = wa(e.width, "100%"), i = e.height !== void 0 && e.height !== null && g(e.height) !== "" ? wa(e.height, "16px") : t === "circle" ? r : "16px", a = t === "circle" ? "circle" : "rect", o = dc(e, {
+function w0(t, e) {
+  const r = ya(e.width, "100%"), i = e.height !== void 0 && e.height !== null && g(e.height) !== "" ? ya(e.height, "16px") : t === "circle" ? r : "16px", a = t === "circle" ? "circle" : "rect", o = dc(e, {
     class: "rui-skeleton",
     "data-variant": "shape",
     "data-shape": a,
@@ -8055,11 +8087,11 @@ function b0(t, e) {
     "aria-hidden": "true"
   })), o;
 }
-function v0(t, e) {
+function x0(t, e) {
   const r = dc(e, { class: "rui-skeleton", "data-variant": t });
   switch (t) {
     case "avatar": {
-      const i = wa(e.width, "40px");
+      const i = ya(e.width, "40px");
       return r.append(d("div", {
         class: "rui-skeleton-shape",
         "data-shape": "circle",
@@ -8068,7 +8100,7 @@ function v0(t, e) {
       })), r;
     }
     case "image": {
-      const i = wa(e.width, "100%"), a = wa(e.height, "160px");
+      const i = ya(e.width, "100%"), a = ya(e.height, "160px");
       return r.append(d("div", {
         class: "rui-skeleton-shape",
         "data-shape": "rect",
@@ -8088,7 +8120,7 @@ function v0(t, e) {
       return r;
   }
 }
-const xd = ["_self", "_blank"], y0 = {
+const xd = ["_self", "_blank"], k0 = {
   name: "Markdown",
   description: "Render markdown-flavoured text. Supports **bold**, *italic*, `code`, headings (`#` through `######`), blockquotes (`>`), bullet (`-`/`*`) and numbered (`1.`) lists, thematic breaks (`---`), fenced code blocks (```), images (`![alt](src)`), inline links, and auto-linked bare URLs. Multi-line paragraphs collapse into `<p>` blocks. Links to a fragment or a root-relative path stay in the tab; absolute URLs open in a new one — pass `linkTarget` to force one or the other.",
   props: [
@@ -8096,10 +8128,10 @@ const xd = ["_self", "_blank"], y0 = {
     { name: "linkTarget", type: "string", optional: !0, enum: xd, aliases: ["target"], description: "Force every link's target (default: `_self` for in-app links, `_blank` for absolute URLs)" }
   ],
   render: (t, e) => {
-    const r = g(e.content), i = g(e.linkTarget).trim(), a = xd.includes(i) ? i : "", o = T0(r, a), n = d("div", { class: "rui-markdown" });
+    const r = g(e.content), i = g(e.linkTarget).trim(), a = xd.includes(i) ? i : "", o = M0(r, a), n = d("div", { class: "rui-markdown" });
     return Zs(n, o), n;
   }
-}, w0 = {
+}, S0 = {
   name: "Container",
   description: "Centered, max-width content wrapper. Use when a page is wider than comfortable reading width — landing pages, marketing sections, long documents. Picks a sensible default max-width per size; pass `maxWidth` to override with any CSS value.",
   props: [
@@ -8118,7 +8150,7 @@ const xd = ["_self", "_blank"], y0 = {
     for (const o of P(e.children)) a.append(r.renderNode(o));
     return a;
   }
-}, x0 = {
+}, C0 = {
   name: "Spacer",
   description: 'Explicit space element for fine layout control. By default acts as a flex spacer that pushes following content to the far edge (use inside `Stack(direction="row")`). Pass `size` to render a fixed vertical/horizontal gap instead.',
   props: [
@@ -8134,7 +8166,7 @@ const xd = ["_self", "_blank"], y0 = {
       "aria-hidden": "true"
     });
   }
-}, k0 = {
+}, A0 = {
   name: "LoadingDots",
   description: "Three dots that pulse in sequence — an inline indeterminate loader. Lighter and quieter than `Spinner`'s rotating ring; use inside buttons, beside labels, or in table cells. Pass `label` for an announced caption.",
   props: [
@@ -8154,7 +8186,7 @@ const xd = ["_self", "_blank"], y0 = {
     for (let o = 0; o < 3; o += 1) a.append(d("span", { class: "rui-loading-dots-dot" }));
     return i.append(a), r ? i.append(d("span", { class: "rui-loading-dots-label" }, [r])) : i.append(d("span", { class: "rui-visually-hidden" }, ["Loading"])), i;
   }
-}, S0 = {
+}, $0 = {
   name: "Spinner",
   description: "Indeterminate inline loader (a rotating ring). Use for tiny loading states inside buttons, toolbars, table cells, or chat bubbles where `Skeleton` and `Progress(indeterminate=true)` are too heavy. For a quieter three-dot pulse instead of a ring use `LoadingDots`. Pass `label` to render an inline caption beside the spinner (also announced via `aria-label`).",
   props: [
@@ -8173,7 +8205,7 @@ const xd = ["_self", "_blank"], y0 = {
     });
     return o.append(d("span", { class: "rui-spinner-ring", "aria-hidden": "true" })), a ? o.append(d("span", { class: "rui-spinner-label" }, [a])) : o.append(d("span", { class: "rui-visually-hidden" }, ["Loading"])), o;
   }
-}, C0 = {
+}, T0 = {
   name: "Quote",
   description: "Inline pull-quote with optional citation. Lighter than `Testimonial` — use inside articles, blog posts, marketing sections, or anywhere you need to highlight a sentence without the full quote/author/role + rating shape.",
   props: [
@@ -8190,9 +8222,9 @@ const xd = ["_self", "_blank"], y0 = {
     const i = g(e.cite);
     return i && r.append(d("figcaption", { class: "rui-quote-cite" }, [i])), r;
   }
-}, kd = "\0", A0 = /\u0000(\d+)\u0000/g, $0 = 128 * 1024, Sd = 8 * 1024;
-function T0(t, e = "") {
-  const r = (m) => m.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"), i = t.slice(0, $0).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").split(/\r?\n/).map((m) => m.length > Sd ? m.slice(0, Sd) : m), a = [];
+}, kd = "\0", I0 = /\u0000(\d+)\u0000/g, z0 = 128 * 1024, Sd = 8 * 1024;
+function M0(t, e = "") {
+  const r = (m) => m.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"), i = t.slice(0, z0).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").split(/\r?\n/).map((m) => m.length > Sd ? m.slice(0, Sd) : m), a = [];
   let o = null, n = !1, s = !1, l = "", c = [];
   const u = () => {
     o && (a.push(o === "ul" ? "</ul>" : "</ol>"), o = null);
@@ -8256,7 +8288,7 @@ function T0(t, e = "") {
       return `<a class="rui-link" href="${k}" target="${$}"${$ === "_blank" ? ' rel="noopener noreferrer"' : ""}>${C}</a>`;
     };
     let S = m.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (k, C, A) => {
-      const $ = je(pf(A));
+      const $ = _e(pf(A));
       return v(
         $ ? `<img class="rui-markdown-image" src="${y($)}" alt="${x(C)}" loading="lazy">` : `<span class="rui-markdown-image-fallback">${C}</span>`
       );
@@ -8270,19 +8302,19 @@ function T0(t, e = "") {
         const C = Cd(k);
         return v(w(C, x(k)));
       }
-    ), S.replace(A0, (k, C) => f[Number(C)] ?? "");
+    ), S.replace(I0, (k, C) => f[Number(C)] ?? "");
   }
 }
 function pf(t) {
   let e = t;
   for (let r = 0; r < 5; r += 1) {
-    const i = I0(e);
+    const i = E0(e);
     if (i === e) break;
     e = i;
   }
   return e;
 }
-function I0(t) {
+function E0(t) {
   return t.replace(/&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]{1,31});?/g, (e, r) => {
     if (r.startsWith("#")) {
       const a = r[1] === "x" || r[1] === "X", o = Number.parseInt(a ? r.slice(2) : r.slice(1), a ? 16 : 10);
@@ -8329,7 +8361,7 @@ function Da(t, e, r, i) {
     role: a ? "img" : null,
     "aria-label": a || null,
     "aria-hidden": a ? null : "true"
-  }), n = je(t), s = n ? i.useInstanceState(`avatar-error:${n}`, !1) : null;
+  }), n = _e(t), s = n ? i.useInstanceState(`avatar-error:${n}`, !1) : null;
   if (n && !s?.get()) {
     const l = d("img", { src: n, alt: e, loading: "lazy" });
     l.onerror = (c) => {
@@ -8346,7 +8378,7 @@ function Dr(t) {
   return e ? e.split(/\s+/).slice(0, 2).map((i) => i.charAt(0).toUpperCase()).join("") || e.charAt(0).toUpperCase() : "?";
 }
 const Io = /* @__PURE__ */ new WeakMap(), ao = /* @__PURE__ */ new Map(), $i = [], Ad = /* @__PURE__ */ new WeakSet();
-function z0() {
+function N0() {
   for (let t = $i.length - 1; t >= 0; t -= 1) {
     const e = $i[t];
     if (e.root.isConnected) return e;
@@ -8367,7 +8399,7 @@ function Sr(t) {
     const m = b.target;
     m && e.contains(m) || (h.dispose(), r());
   }, l = (b) => {
-    if (b.key !== "Escape" || Ad.has(b) || z0()?.handle !== h) return;
+    if (b.key !== "Escape" || Ad.has(b) || N0()?.handle !== h) return;
     Ad.add(b), b.preventDefault(), b.stopPropagation();
     const f = (typeof b.composedPath == "function" ? b.composedPath() : []).includes(e) || e.contains(b.target);
     h.dispose(), r(), f && e.querySelector("[aria-expanded]")?.focus?.();
@@ -8443,7 +8475,7 @@ function Fr(t, e, r, i) {
     s.observe(t, { attributes: !0, attributeFilter: ["data-open"] }), r.registerDisposer(() => s.disconnect(), "rui-dialog-focus");
   }, 0);
 }
-const M0 = [
+const L0 = [
   { match: /\b(revenue|sales|sale|income|payment|charges?|invoices?|billing)\b/i, icon: "sack-dollar" },
   { match: /\b(profit|earnings?|margin|roi)\b/i, icon: "chart-line" },
   { match: /\b(customers?|clients?|users?|members?|people|accounts?)\b/i, icon: "users" },
@@ -8488,11 +8520,11 @@ const M0 = [
 ];
 function hf(t) {
   if (!t) return null;
-  for (const e of M0)
+  for (const e of L0)
     if (e.match.test(t)) return e.icon;
   return null;
 }
-const E0 = {
+const R0 = {
   default: "circle-info",
   info: "circle-info",
   primary: "bolt",
@@ -8503,9 +8535,9 @@ const E0 = {
   neutral: "circle-info"
 };
 function mf(t) {
-  return t ? E0[t.toLowerCase()] ?? null : null;
+  return t ? R0[t.toLowerCase()] ?? null : null;
 }
-function N0(t, e = "shapes") {
+function P0(t, e = "shapes") {
   const r = t.trim() || "anon";
   return `https://api.dicebear.com/9.x/${/^[a-z0-9-]+$/i.test(e) ? e : "shapes"}/svg?seed=${encodeURIComponent(r)}`;
 }
@@ -8557,7 +8589,7 @@ const wt = [
   { name: "onFocus", type: "callable", optional: !0, aliases: ["onfocus"], description: "Called when the control gains focus" },
   { name: "name", type: "string", optional: !0, description: "Form field name submitted to the server (defaults to `id`)" },
   { name: "labelHidden", type: "boolean", optional: !0, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context" }
-], L0 = [
+], D0 = [
   "description",
   "warning",
   "optional",
@@ -8566,7 +8598,7 @@ const wt = [
 ];
 function Et(t = []) {
   return wt.filter(
-    (e) => L0.includes(e.name) && !t.includes(e.name)
+    (e) => D0.includes(e.name) && !t.includes(e.name)
   );
 }
 function yt(t, e, r, i = (a) => a.value) {
@@ -8584,7 +8616,7 @@ function yt(t, e, r, i = (a) => a.value) {
     r.invoke(e.onFocus, i(n));
   });
 }
-const R0 = ["value", "id", "key", "code"], P0 = ["label", "name", "title", "text", "description"];
+const O0 = ["value", "id", "key", "code"], B0 = ["label", "name", "title", "text", "description"];
 function ff(t) {
   return P(t).map((r) => {
     if (r && typeof r == "object") {
@@ -8598,7 +8630,7 @@ function ff(t) {
           group: g(a.args[3]) || void 0
         };
       }
-      const o = R0.find((s) => a[s] !== void 0), n = P0.find((s) => a[s] !== void 0);
+      const o = O0.find((s) => a[s] !== void 0), n = B0.find((s) => a[s] !== void 0);
       if (o || n) {
         const s = g(o ? a[o] : a[n]);
         return {
@@ -8614,7 +8646,7 @@ function ff(t) {
     return { value: i, label: i };
   }).filter((r) => r !== null && (r.value !== "" || r.label !== ""));
 }
-const gf = ["primary", "secondary", "outline", "ghost", "link", "danger", "default"], bf = ["xs", "sm", "md", "lg", "xl"], D0 = [
+const gf = ["primary", "secondary", "outline", "ghost", "link", "danger", "default"], bf = ["xs", "sm", "md", "lg", "xl"], F0 = [
   "text",
   "email",
   "password",
@@ -8643,7 +8675,7 @@ function or(t, e, r) {
     a?.call(t, o), r(o);
   };
 }
-function jr(t, e) {
+function _r(t, e) {
   const r = e instanceof HTMLInputElement || e instanceof HTMLSelectElement || e instanceof HTMLTextAreaElement, i = r || e instanceof HTMLButtonElement;
   for (const a of ["disabled", "required", "aria-invalid", "aria-describedby"]) {
     const o = t.getAttribute(a);
@@ -8718,7 +8750,7 @@ function xf(t) {
   }
   return e.filter((r) => r.value !== "" || r.label !== "");
 }
-function O0(t, e, r) {
+function _0(t, e, r) {
   const i = `${e}-${r}`;
   if (Sn(t)) {
     const o = t.args ?? [], n = g(o[1], i);
@@ -8745,7 +8777,7 @@ function O0(t, e, r) {
   const a = g(t);
   return { label: a, name: a || i, description: "", checked: !1, disabled: !1, value: a || i };
 }
-function B0(t, e, r) {
+function j0(t, e, r) {
   const i = [];
   for (const a of P(t)) {
     if (a && typeof a == "object") {
@@ -8767,7 +8799,7 @@ function Td(t) {
     r /= 1024, i += 1;
   return `${r >= 10 || i === 0 ? Math.round(r) : r.toFixed(1)} ${e[i]}`;
 }
-const F0 = {
+const q0 = {
   name: "Button",
   description: 'Clickable button. `onClick` (a callable) runs when the user presses the button. The legacy `action` prop is an alias and is still accepted. Pass `href` to navigate instead (renders an `<a>` that keeps the button styling — combine with `variant: "link"` for "Read the docs" / "View invoice" links).',
   props: [
@@ -8815,7 +8847,7 @@ const F0 = {
       r.invoke(e.onClick);
     }, h;
   }
-}, j0 = {
+}, U0 = {
   name: "Buttons",
   description: "Group of buttons laid out horizontally or vertically.",
   props: [
@@ -8830,7 +8862,7 @@ const F0 = {
     for (const a of P(e.items)) i.append(r.renderNode(a));
     return i;
   }
-}, _0 = {
+}, H0 = {
   name: "ButtonGroup",
   description: "Row of buttons joined edge-to-edge into a single continuous control — only the outer corners are rounded and adjoining borders are shared. Use for related actions that form one unit (segmented actions, split/paired buttons, view switchers with real actions). For a single-select pill track use `SegmentedControl`; for spaced-out independent actions use `Buttons`.",
   props: [
@@ -8856,7 +8888,7 @@ const F0 = {
       a.append(l);
     }), a;
   }
-}, q0 = {
+}, W0 = {
   name: "InputGroup",
   description: "Single field wrapped in a shared bordered shell with an optional leading adornment — `icon` for a Font Awesome name, `leading` for any node (a flag, avatar, colour swatch or badge) — and an optional trailing `action` node (button / IconButton / short text suffix). The focus ring is drawn around the whole composite, and the adornment is centred on the control at whatever height the theme gives it. Use for search fields, password reveal, copy-to-clipboard rows, unit-suffixed inputs, and locale / currency pickers that need a flag inside the box.",
   props: [
@@ -8908,19 +8940,19 @@ const F0 = {
     }
     const h = He(s, e);
     if (u) {
-      jr(s, u);
+      _r(s, u);
       const p = u.getAttribute("id"), b = h === s ? null : h.querySelector(".rui-field-label");
       b && p && b.setAttribute("for", p);
     }
     return h;
   }
-}, U0 = {
+}, G0 = {
   name: "Input",
   description: "Text input field. Pass a $variable as `value` for two-way binding. `onChange(value)` fires on every keystroke with the current string. Pass `label`/`hint`/`error`/`required` to render a labelled field shell with validation messaging. Use `autocomplete` on sign-in and address fields so password managers and browser autofill work, and `readOnly` for a locked-but-selectable value.",
   props: [
     { name: "id", type: "string", description: "Input identifier" },
     { name: "placeholder", type: "string", optional: !0 },
-    { name: "type", type: "string", optional: !0, enum: D0 },
+    { name: "type", type: "string", optional: !0, enum: F0 },
     { name: "validations", type: "any", optional: !0, description: "Array or object of validation hints (`required`, `minLength:n`, `maxLength:n`, `pattern:re`, `email`)" },
     { name: "value", type: "any", optional: !0, description: "Bound value (typically $variable)" },
     { name: "onChange", type: "callable", optional: !0, aliases: ["onchange"], description: "Called with the current value on every keystroke" },
@@ -8944,12 +8976,12 @@ const F0 = {
       autocomplete: g(e.autocomplete) || null,
       maxlength: a > 0 ? String(a) : null
     });
-    return Bi(o, t, 4, r), cr(o, e, r, {
+    return Oi(o, t, 4, r), cr(o, e, r, {
       event: "input",
       getValue: (n) => n.value
-    }), yt(o, e, r), n1(o, e.validations, i !== ""), He(o, e);
+    }), yt(o, e, r), c1(o, e.validations, i !== ""), He(o, e);
   }
-}, H0 = {
+}, V0 = {
   name: "TextArea",
   description: 'Multi-line text input. `onChange(value)` fires on every keystroke with the current text. Pass `label`/`hint`/`error`/`required` for a labelled field shell, `maxLength` to cap the length (drives a "120/280" counter), and `autoResize` for a composer that grows with its content.',
   props: [
@@ -8975,7 +9007,7 @@ const F0 = {
       readonly: z(e.readOnly) ? "" : null,
       "data-auto-resize": a ? "true" : null
     });
-    if (l.value = i, Bi(l, t, 3, r), cr(l, e, r, {
+    if (l.value = i, Oi(l, t, 3, r), cr(l, e, r, {
       event: "input",
       getValue: (c) => c.value
     }), a) {
@@ -8993,7 +9025,7 @@ const F0 = {
     }
     return yt(l, e, r, (c) => c.value), He(l, e);
   }
-}, W0 = {
+}, K0 = {
   name: "SelectItem",
   description: 'Single option for a Select/Radio/Combobox list. Set `disabled` for an option that must stay visible but unselectable ("Out of stock", "Enterprise plan — upgrade required"), and `group` to bucket long lists under `<optgroup>` headings.',
   props: [
@@ -9008,7 +9040,7 @@ const F0 = {
     // Read back by Select to bucket the option under an `<optgroup>`.
     "data-group": g(e.group) || null
   }, [g(e.label)])
-}, G0 = {
+}, Y0 = {
   name: "Select",
   description: "Dropdown select. Pass a `$variable` as `value` for two-way binding. Set `searchable: true` for a combobox-style filter UI on long option lists, or pass `onSearch` (which implies it) to fetch the matches from the server as the user types. `onChange(value)` fires with the newly-selected value. `items` accepts `SelectItem(value, label)` nodes, `{value, label}` objects and bare strings.",
   props: [
@@ -9036,7 +9068,7 @@ const F0 = {
   ],
   render: (t, e, r) => {
     if (z(e.searchable) || e.onSearch != null)
-      return o1(t, e, r);
+      return l1(t, e, r);
     const i = z(e.loading), a = d("select", {
       class: "rui-select",
       id: g(e.id),
@@ -9074,12 +9106,12 @@ const F0 = {
     }
     return s === 0 && !i && a.append(d("option", { value: "", disabled: "", selected: "" }, [
       g(e.emptyLabel) || "No options"
-    ])), a.value = g(e.value), Bi(a, t, 4, r), cr(a, e, r, {
+    ])), a.value = g(e.value), Oi(a, t, 4, r), cr(a, e, r, {
       event: "change",
       getValue: (c) => c.value
     }), yt(a, e, r, (c) => c.value), He(a, e);
   }
-}, V0 = {
+}, X0 = {
   name: "Checkbox",
   description: 'Boolean checkbox. `onChange(checked)` fires with the new boolean state. Pass `required`/`error` for the "I accept the Terms" pattern, `description` for a secondary line, and `indeterminate` for a "select all" header over a partially-selected list.',
   props: [
@@ -9123,7 +9155,7 @@ const F0 = {
       const m = c.isConnected ? c : u.get();
       m?.isConnected && (u.set(m), m.indeterminate = a);
     });
-    r.registerDisposer(h, "checkbox-indeterminate"), Bi(c, t, 2, r), cr(c, e, r, {
+    r.registerDisposer(h, "checkbox-indeterminate"), Oi(c, t, 2, r), cr(c, e, r, {
       event: "change",
       getValue: (m) => m.checked
     });
@@ -9136,7 +9168,7 @@ const F0 = {
     } else
       n.append(c, p);
     const b = He(n, { ...e, label: null, description: null });
-    return jr(n, c), b;
+    return _r(n, c), b;
   }
 }, kf = {
   name: "CheckBoxItem",
@@ -9165,7 +9197,7 @@ const F0 = {
     const c = d("div", { class: "rui-checkbox-item-text" });
     return c.append(d("div", { class: "rui-checkbox-item-label" }, [i])), a && c.append(d("div", { class: "rui-checkbox-item-description" }, [a])), s.append(l, c), s;
   }
-}, K0 = {
+}, Z0 = {
   name: "CheckBoxGroup",
   description: 'Group of checkboxes. Value is an object keyed by item name. Pass a `$variable` for two-way binding. `onChange(value)` fires with the full updated object. `items` accepts `CheckBoxItem(label, name, …)` nodes and plain `{label, name, description, checked, disabled}` objects. Pass `label` for the group heading ("Permissions") and `error` for "Select at least one scope".',
   props: [
@@ -9193,7 +9225,7 @@ const F0 = {
       "aria-label": o || null
     }), s = e.value && typeof e.value == "object" ? e.value : {};
     P(e.items).forEach((h, p) => {
-      const b = O0(h, i, p), m = Sn(h) ? r.renderNode(h) : kf.render(h, {
+      const b = _0(h, i, p), m = Sn(h) ? r.renderNode(h) : kf.render(h, {
         label: b.label,
         name: b.name,
         description: b.description,
@@ -9241,7 +9273,7 @@ const F0 = {
     }
     return u;
   }
-}, Y0 = {
+}, Q0 = {
   name: "Radio",
   description: 'Radio button group. `onChange(value)` fires with the newly-selected option value. Always pass `label` — the question being answered ("Shipping method") — and use `direction: "row"` for a Yes/No or Monthly/Yearly pair. `items` accepts `SelectItem(value, label)` nodes, `{value, label, disabled}` objects and bare strings. Pass `slots` to hang a control off an option\'s own row ("Fixed  [– 3 +]", "Card  [number]") — one entry per item, aligned by index; the slot renders OUTSIDE the `<label>`, so clicking the control does not select the option.',
   props: [
@@ -9321,7 +9353,7 @@ const F0 = {
 function Id(t) {
   return t instanceof HTMLInputElement ? t.value : t.querySelector('input[type="radio"]:checked')?.value ?? "";
 }
-const X0 = {
+const J0 = {
   name: "FormControl",
   description: "Labeled wrapper around a single form field. The label is associated with the nested control automatically (override with `for`), and `error`/`required` give a validation slot to fields that have none of their own (Checkbox, Radio, CheckBoxGroup).",
   props: [
@@ -9408,7 +9440,7 @@ const X0 = {
       // it disappears the moment the user types.
       "aria-label": g(e.ariaLabel) || n || "Search"
     });
-    if (Bi(c, t, 2, r), cr(c, e, r, {
+    if (Oi(c, t, 2, r), cr(c, e, r, {
       event: "input",
       getValue: (h) => h.value
     }), s.append(c), z(e.clearable, !0) && o !== "" && !i) {
@@ -9433,7 +9465,7 @@ const X0 = {
     }
     return s;
   }
-}, Z0 = {
+}, e1 = {
   name: "Form",
   description: 'Form container. Children FormControls render in order; buttons render at the bottom. Provide `onSubmit` to handle form submission (invoked when the user presses Enter on a focused input or clicks a `type="submit"` Button inside the form).',
   props: [
@@ -9464,7 +9496,7 @@ const X0 = {
     }
     return o;
   }
-}, Q0 = {
+}, t1 = {
   name: "Slider",
   description: 'Range slider for selecting a single numeric value between `min` and `max`. Pass a `$variable` as `value` for two-way binding. Useful for filters, settings (volume, brightness), and parameter tuning. Use `suffix` ("%", " ms") or `format` ("${value}") so the displayed value carries its unit, and `marks` for a ticked or named scale (`[0, 50, 100]`, or `[{value: 1, label: "Low"}, …]` — a mark\'s label replaces the numeric readout when the slider sits on it). Single-thumb only: there is no two-handle range. For a `$50 – $400` filter use two Sliders that bound each other — `Slider("lo", value: $lo, max: $hi)` above `Slider("hi", value: $hi, min: $lo)` — which the browser then keeps ordered, since `min`/`max` accept `$variables`.',
   props: [
@@ -9485,7 +9517,7 @@ const X0 = {
     ...Et()
   ],
   render: (t, e, r) => {
-    const i = g(e.label), a = g(e.id), o = a || yf("rui-slider", i), n = R(e.min, 0), s = R(e.max, 100), l = R(e.step, 1), c = R(e.value, n), u = g(e.suffix), h = g(e.format), p = B0(e.marks, n, s), b = (k) => p.find((C) => C.label && C.value === Number(k))?.label ?? "", m = (k) => {
+    const i = g(e.label), a = g(e.id), o = a || yf("rui-slider", i), n = R(e.min, 0), s = R(e.max, 100), l = R(e.step, 1), c = R(e.value, n), u = g(e.suffix), h = g(e.format), p = j0(e.marks, n, s), b = (k) => p.find((C) => C.label && C.value === Number(k))?.label ?? "", m = (k) => {
       const C = String(k), A = b(k);
       return A || (h.includes("{value}") ? h.replace("{value}", C) : h.includes("{}") ? h.replace("{}", C) : h ? `${C}${h}` : u ? `${C}${u}` : C);
     }, f = (k) => !!(h || u || b(k)), v = d("div", { class: "rui-slider", "data-disabled": z(e.disabled) ? "true" : "false" }), x = z(e.showValue);
@@ -9533,9 +9565,9 @@ const X0 = {
       v.append(C);
     }
     const S = He(v, { ...e, label: null }, { idKey: "id" });
-    return jr(v, y), S;
+    return _r(v, y), S;
   }
-}, J0 = {
+}, r1 = {
   name: "NumberInput",
   description: 'Numeric input with paired increment/decrement buttons. Use for quantity steppers, integer settings, and any field where a `<input type="number">` plus +/- controls is friendlier than the native spinner. Pass a `$variable` as `value` for two-way binding. `prefix` / `suffix` render an inline unit ("€", "GB", "%"), and `precision` fixes the number of decimals (currency fields).',
   props: [
@@ -9566,7 +9598,7 @@ const X0 = {
     { name: "onLimit", type: "callable", optional: !0, description: 'Called with "min" or "max" when the user presses the stepper for a direction the value has already run out of — the hook for explaining a floor or a ceiling (a 2 GB minimum, a contract quota) that the field itself cannot know the reason for' }
   ],
   render: (t, e, r) => {
-    const i = g(e.id), a = R(e.step, 1), o = e.min !== void 0 && e.min !== null, n = e.max !== void 0 && e.max !== null, s = o ? R(e.min, 0) : Number.NEGATIVE_INFINITY, l = n ? R(e.max, 0) : Number.POSITIVE_INFINITY, c = z(e.disabled), u = z(e.readOnly), h = c || u, p = e.precision === void 0 || e.precision === null ? null : Math.max(0, Math.floor(R(e.precision, 0))), b = (String(a).split(".")[1] ?? "").length, m = (_) => p !== null ? Number(_.toFixed(p)) : b > 0 ? Number(_.toFixed(b)) : _, f = r.useInstanceState("rui-number-text", null), v = f.get(), x = e.value === null || e.value === void 0 || e.value === "" ? null : Number.isFinite(Number(e.value)) ? Number(e.value) : null, y = v !== null && v !== "" && Number.isFinite(Number(v)) ? Number(v) : null, w = x ?? y, S = w !== null && w <= s, k = w !== null && w >= l, C = d("div", {
+    const i = g(e.id), a = R(e.step, 1), o = e.min !== void 0 && e.min !== null, n = e.max !== void 0 && e.max !== null, s = o ? R(e.min, 0) : Number.NEGATIVE_INFINITY, l = n ? R(e.max, 0) : Number.POSITIVE_INFINITY, c = z(e.disabled), u = z(e.readOnly), h = c || u, p = e.precision === void 0 || e.precision === null ? null : Math.max(0, Math.floor(R(e.precision, 0))), b = (String(a).split(".")[1] ?? "").length, m = (j) => p !== null ? Number(j.toFixed(p)) : b > 0 ? Number(j.toFixed(b)) : j, f = r.useInstanceState("rui-number-text", null), v = f.get(), x = e.value === null || e.value === void 0 || e.value === "" ? null : Number.isFinite(Number(e.value)) ? Number(e.value) : null, y = v !== null && v !== "" && Number.isFinite(Number(v)) ? Number(v) : null, w = x ?? y, S = w !== null && w <= s, k = w !== null && w >= l, C = d("div", {
       class: "rui-number-input",
       "data-disabled": c ? "true" : "false",
       "data-readonly": u ? "true" : "false",
@@ -9613,21 +9645,21 @@ const X0 = {
       // Mirror of the decrement button above — see the comment there for why
       // this is `aria-disabled` and not `disabled`.
       "aria-disabled": !h && k ? "true" : null
-    }, ["+"]), I = t.argMeta?.[1]?.stateRef, M = (_) => {
-      const V = _.value;
+    }, ["+"]), I = t.argMeta?.[1]?.stateRef, M = (j) => {
+      const V = j.value;
       if (f.set(V), V === "") return null;
       const re = Number(V);
       return Number.isFinite(re) ? re : null;
-    }, E = (_) => {
-      const V = M(_);
+    }, E = (j) => {
+      const V = M(j);
       return V === null ? null : m(Md(V, s, l));
     };
     I && r.bindState($, I, { event: "input", getValue: M }), cr($, e, r, {
       event: "input",
       getValue: M
     });
-    const L = (_) => {
-      const V = _.closest(".rui-number-input"), re = V?.querySelector(".rui-number-input-field");
+    const L = (j) => {
+      const V = j.closest(".rui-number-input"), re = V?.querySelector(".rui-number-input-field");
       if (!V || !re) return;
       const pe = re.value === "" ? Number.NaN : Number(re.value), K = Number.isFinite(pe) ? pe : null, Z = K !== null && K <= s, W = K !== null && K >= l;
       V.setAttribute("data-at-min", Z ? "true" : "false"), V.setAttribute("data-at-max", W ? "true" : "false");
@@ -9639,12 +9671,12 @@ const X0 = {
       };
       U("down", Z), U("up", W);
     };
-    or($, "oninput", (_) => {
-      const V = _.currentTarget ?? _.target;
+    or($, "oninput", (j) => {
+      const V = j.currentTarget ?? j.target;
       V && (f.set(V.value), L(V));
     });
-    const D = (_, V) => {
-      const pe = _.closest(".rui-number-input")?.querySelector(".rui-number-input-field");
+    const D = (j, V) => {
+      const pe = j.closest(".rui-number-input")?.querySelector(".rui-number-input-field");
       if (!pe || pe.readOnly || pe.disabled) return;
       const K = Number(pe.value), Z = Number.isFinite(K) ? K : 0;
       if (pe.value !== "" && (V < 0 ? Z <= s : Z >= l)) {
@@ -9654,9 +9686,9 @@ const X0 = {
       const W = m(Md(Z + V, s, l));
       pe.value = String(W), pe.dispatchEvent(new Event("input", { bubbles: !0 }));
     };
-    A.onclick = (_) => D(_.currentTarget ?? _.target, -a), T.onclick = (_) => D(_.currentTarget ?? _.target, a), yt($, e, r, E);
-    const N = (_) => {
-      const V = _.currentTarget ?? _.target;
+    A.onclick = (j) => D(j.currentTarget ?? j.target, -a), T.onclick = (j) => D(j.currentTarget ?? j.target, a), yt($, e, r, E);
+    const N = (j) => {
+      const V = j.currentTarget ?? j.target;
       if (!V || V.value === "") return;
       const re = E(V);
       re !== null && String(re) !== V.value && (V.value = String(re), V.dispatchEvent(new Event("input", { bubbles: !0 })));
@@ -9664,14 +9696,14 @@ const X0 = {
     or($, "onblur", N), or($, "onchange", N);
     const O = g(e.prefix), q = g(e.suffix);
     C.append(A), O && C.append(d("span", { class: "rui-number-input-prefix", "aria-hidden": "true" }, [O])), C.append($), q && C.append(d("span", { class: "rui-number-input-suffix", "aria-hidden": "true" }, [q])), C.append(T);
-    const j = He(C, e, { idKey: "id" });
-    if (jr(C, $), q || O) {
-      const _ = [O, q].filter(Boolean).join(" "), V = g(e.label);
-      V && $.setAttribute("aria-label", `${V} (${_})`);
+    const _ = He(C, e, { idKey: "id" });
+    if (_r(C, $), q || O) {
+      const j = [O, q].filter(Boolean).join(" "), V = g(e.label);
+      V && $.setAttribute("aria-label", `${V} (${j})`);
     }
-    return j;
+    return _;
   }
-}, e1 = {
+}, i1 = {
   name: "DatePicker",
   description: "Date picker that wraps the native `<input type=\"date\">` with consistent styling. Pass a `$variable` as `value` for two-way binding. Use `min`/`max` to bound the selectable range, and `error`/`required` to make it part of the form's validation flow. Set `locale` (`de-DE`, `en-GB`) to echo the chosen date in that locale's order under the field — the native widget's own boxes always follow the viewer's browser, which is not the customer's when the app serves one market.",
   props: [
@@ -9715,7 +9747,7 @@ const X0 = {
       // exactly why the readout below exists.
       lang: s ?? null
     });
-    Bi(c, t, 1, r), cr(c, e, r, {
+    Oi(c, t, 1, r), cr(c, e, r, {
       event: "change",
       getValue: (h) => h.value
     }), yt(c, e, r), l.append(c), s && (l.append(d("span", {
@@ -9723,9 +9755,9 @@ const X0 = {
       "aria-hidden": "true"
     }, [Jo(e.value, s)])), el(c, ".rui-date-picker", ".rui-date-picker-readout", (h) => Jo(h.querySelector(".rui-date-picker-input")?.value, s)));
     const u = He(l, { ...e, label: null }, { idKey: "id" });
-    return jr(l, c), u;
+    return _r(l, c), u;
   }
-}, t1 = {
+}, a1 = {
   name: "FileUpload",
   description: "Styled file picker. Renders a click/drop area with a leading icon, label, and helper text. Files cannot round-trip through `$variables` (they are not serialisable), so pass a callable as `action` to handle the picked files. Read one with `$util.readFile(files)` — pass the whole pick and it resolves the first file's text (or a data URL), resolving an empty string rather than rejecting on any failure. Set `maxSize` (in bytes) to reject oversized files before the upload starts, `error` to show why one was refused, and `progress` (0–100) while it transfers.",
   props: [
@@ -9814,14 +9846,14 @@ const X0 = {
       M.forEach((D) => {
         const N = d("div", { class: "rui-file-upload-preview-item" });
         if (m(D, E)) {
-          const j = URL.createObjectURL(D);
-          f.push(j);
-          const _ = d("img", { src: j, alt: D.name, class: "rui-file-upload-thumbnail" }), V = () => {
-            URL.revokeObjectURL(j);
-            const re = f.indexOf(j);
+          const _ = URL.createObjectURL(D);
+          f.push(_);
+          const j = d("img", { src: _, alt: D.name, class: "rui-file-upload-thumbnail" }), V = () => {
+            URL.revokeObjectURL(_);
+            const re = f.indexOf(_);
             re >= 0 && f.splice(re, 1);
           };
-          _.onload = V, _.onerror = V, N.append(_);
+          j.onload = V, j.onerror = V, N.append(j);
         }
         N.append(d("span", { class: "rui-file-upload-filename" }, [D.name]));
         const O = Td(D.size);
@@ -9831,9 +9863,9 @@ const X0 = {
           class: "rui-file-upload-remove",
           "aria-label": `Remove ${D.name}`
         }, ["×"]);
-        q.onclick = (j) => {
-          j.preventDefault(), j.stopPropagation();
-          const V = (j.currentTarget ?? j.target).closest(".rui-file-upload"), re = V?.querySelector(".rui-file-upload-input") ?? null, pe = Array.from(re?.files ?? M).filter((K) => K !== D);
+        q.onclick = (_) => {
+          _.preventDefault(), _.stopPropagation();
+          const V = (_.currentTarget ?? _.target).closest(".rui-file-upload"), re = V?.querySelector(".rui-file-upload-input") ?? null, pe = Array.from(re?.files ?? M).filter((K) => K !== D);
           y(re, pe), r.invoke(e.onRemove, D), r.invoke(e.onSelect, re?.files ?? pe), V && w(V, pe);
         }, N.append(q), L.append(N);
       });
@@ -9884,7 +9916,7 @@ const X0 = {
   be(() => {
     t.isConnected && t.getAttribute("data-open") === "true" && xr(t, !0, e, r, en);
   });
-}, r1 = 200;
+}, o1 = 200;
 function Cf(t, e, r) {
   const i = e.useInstanceState("searchTimer", null), a = () => {
     const n = i.get();
@@ -9895,7 +9927,7 @@ function Cf(t, e, r) {
     a(), e.registerDisposer(a, r);
     const s = setTimeout(() => {
       i.set(null), e.invoke(t.onSearch, n);
-    }, r1);
+    }, o1);
     i.set(s);
   }, cancel: a };
 }
@@ -9973,14 +10005,14 @@ const Af = {
     $.append(T);
     const I = d("div", { class: "rui-combobox-list" });
     $.append(I);
-    const M = (q, j) => {
+    const M = (q, _) => {
       if (q.replaceChildren(), u) {
         q.append(d("div", { class: "rui-combobox-loading" }, ["Loading…"]));
         return;
       }
-      const _ = j.trim(), V = _.toLowerCase(), re = V === "" || h ? a : a.filter(
+      const j = _.trim(), V = j.toLowerCase(), re = V === "" || h ? a : a.filter(
         (W) => W.label.toLowerCase().includes(V) || W.value.toLowerCase().includes(V)
-      ), pe = p && _ !== "" && o.toLowerCase() !== V && !a.some((W) => W.value.toLowerCase() === V || W.label.toLowerCase() === V);
+      ), pe = p && j !== "" && o.toLowerCase() !== V && !a.some((W) => W.value.toLowerCase() === V || W.label.toLowerCase() === V);
       if (re.length === 0 && !pe) {
         q.append(d("div", { class: "rui-combobox-empty" }, [l]));
         return;
@@ -10019,91 +10051,91 @@ const Af = {
           role: "option",
           id: S(re.length),
           tabindex: "-1",
-          "data-value": _,
+          "data-value": j,
           "data-create": "true",
           "data-active": re.length === K ? "true" : null,
           "aria-selected": "false"
-        }, [`Create “${_}”`]);
+        }, [`Create “${j}”`]);
         W.onclick = (J) => {
-          J.stopPropagation(), L(J.currentTarget, _);
+          J.stopPropagation(), L(J.currentTarget, j);
         }, q.append(W);
       }
     }, E = (q) => {
       f.set(!1), r.invoke(e.onOpenChange, !1), b.cancel(), v.set(""), x.set(-1);
-      const j = q.closest(".rui-combobox");
-      if (!j) return;
-      j.setAttribute("data-open", "false"), j.querySelector(".rui-combobox-trigger")?.setAttribute("aria-expanded", "false"), at(j.querySelector(oo)), vt(j);
-    }, L = (q, j) => {
-      const _ = t.argMeta?.[2]?.stateRef;
-      _ && r.setState(_, j), r.invoke(e.onChange, j), E(q);
+      const _ = q.closest(".rui-combobox");
+      if (!_) return;
+      _.setAttribute("data-open", "false"), _.querySelector(".rui-combobox-trigger")?.setAttribute("aria-expanded", "false"), at(_.querySelector(oo)), vt(_);
+    }, L = (q, _) => {
+      const j = t.argMeta?.[2]?.stateRef;
+      j && r.setState(j, _), r.invoke(e.onChange, _), E(q);
     };
     M(I, v.get());
-    const D = (q) => Array.from(q.querySelectorAll(".rui-combobox-option[data-value]")), N = (q, j, _) => {
+    const D = (q) => Array.from(q.querySelectorAll(".rui-combobox-option[data-value]")), N = (q, _, j) => {
       const V = D(q);
       if (V.length === 0) return;
-      const re = (j % V.length + V.length) % V.length;
+      const re = (_ % V.length + V.length) % V.length;
       x.set(re), V.forEach((pe, K) => {
         if (K !== re) {
           pe.removeAttribute("data-active");
           return;
         }
-        pe.setAttribute("data-active", "true"), pe.id && _?.setAttribute("aria-activedescendant", pe.id), typeof pe.scrollIntoView == "function" && pe.scrollIntoView({ block: "nearest" });
+        pe.setAttribute("data-active", "true"), pe.id && j?.setAttribute("aria-activedescendant", pe.id), typeof pe.scrollIntoView == "function" && pe.scrollIntoView({ block: "nearest" });
       });
     };
     if (T.oninput = (q) => {
-      const j = q.currentTarget;
-      v.set(j.value), x.set(-1), j.removeAttribute("aria-activedescendant"), b.schedule(j.value);
-      const _ = j.closest(".rui-combobox-panel")?.querySelector(".rui-combobox-list");
-      _ && M(_, j.value);
+      const _ = q.currentTarget;
+      v.set(_.value), x.set(-1), _.removeAttribute("aria-activedescendant"), b.schedule(_.value);
+      const j = _.closest(".rui-combobox-panel")?.querySelector(".rui-combobox-list");
+      j && M(j, _.value);
     }, T.onkeydown = (q) => {
-      const j = q, _ = j.currentTarget, V = _.closest(".rui-combobox-panel");
+      const _ = q, j = _.currentTarget, V = j.closest(".rui-combobox-panel");
       if (!V) return;
       const re = x.get();
-      if (j.key === "ArrowDown") {
-        j.preventDefault(), N(V, re + 1, _);
+      if (_.key === "ArrowDown") {
+        _.preventDefault(), N(V, re + 1, j);
         return;
       }
-      if (j.key === "ArrowUp") {
-        j.preventDefault(), N(V, re <= 0 ? D(V).length - 1 : re - 1, _);
+      if (_.key === "ArrowUp") {
+        _.preventDefault(), N(V, re <= 0 ? D(V).length - 1 : re - 1, j);
         return;
       }
-      if (j.key === "Home") {
-        j.preventDefault(), N(V, 0, _);
+      if (_.key === "Home") {
+        _.preventDefault(), N(V, 0, j);
         return;
       }
-      if (j.key === "End") {
-        j.preventDefault(), N(V, D(V).length - 1, _);
+      if (_.key === "End") {
+        _.preventDefault(), N(V, D(V).length - 1, j);
         return;
       }
-      if (j.key === "Enter") {
-        j.preventDefault();
+      if (_.key === "Enter") {
+        _.preventDefault();
         const pe = D(V), K = (re >= 0 ? pe[re] : pe[0]) ?? null, Z = K?.getAttribute("data-value");
         K && Z !== null && Z !== void 0 && L(K, Z);
         return;
       }
-      if (j.key === "Escape") {
-        j.preventDefault(), E(_);
+      if (_.key === "Escape") {
+        _.preventDefault(), E(j);
         return;
       }
     }, C.onclick = (q) => {
       if (c) return;
       q.stopPropagation();
-      const j = !f.get();
-      f.set(j), r.invoke(e.onOpenChange, j);
-      const _ = q.currentTarget.closest(".rui-combobox");
-      if (_?.setAttribute("data-open", j ? "true" : "false"), _?.querySelector(".rui-combobox-trigger")?.setAttribute("aria-expanded", j ? "true" : "false"), !_) return;
-      if (xr(_, j, oo, zd, en), !j) {
-        b.cancel(), vt(_);
+      const _ = !f.get();
+      f.set(_), r.invoke(e.onOpenChange, _);
+      const j = q.currentTarget.closest(".rui-combobox");
+      if (j?.setAttribute("data-open", _ ? "true" : "false"), j?.querySelector(".rui-combobox-trigger")?.setAttribute("aria-expanded", _ ? "true" : "false"), !j) return;
+      if (xr(j, _, oo, zd, en), !_) {
+        b.cancel(), vt(j);
         return;
       }
       x.set(-1);
       const V = be(() => {
-        (_.querySelector(".rui-combobox-filter") ?? (T.isConnected ? T : null))?.focus();
+        (j.querySelector(".rui-combobox-filter") ?? (T.isConnected ? T : null))?.focus();
       });
       r.registerDisposer(V, "combobox-focus"), Sr({
-        liveRoot: _,
+        liveRoot: j,
         onDismiss: () => {
-          f.set(!1), r.invoke(e.onOpenChange, !1), b.cancel(), v.set(""), x.set(-1), _.setAttribute("data-open", "false"), _.querySelector(".rui-combobox-trigger")?.setAttribute("aria-expanded", "false"), at(_.querySelector(oo));
+          f.set(!1), r.invoke(e.onOpenChange, !1), b.cancel(), v.set(""), x.set(-1), j.setAttribute("data-open", "false"), j.querySelector(".rui-combobox-trigger")?.setAttribute("aria-expanded", "false"), at(j.querySelector(oo));
         }
       });
     }, z(e.clearable) && o !== "" && !c) {
@@ -10112,17 +10144,17 @@ const Af = {
         class: "rui-combobox-clear",
         "aria-label": "Clear selection"
       }, ["×"]);
-      q.onclick = (j) => {
-        j.stopPropagation();
-        const _ = t.argMeta?.[2]?.stateRef;
-        _ && r.setState(_, ""), r.invoke(e.onChange, "");
+      q.onclick = (_) => {
+        _.stopPropagation();
+        const j = t.argMeta?.[2]?.stateRef;
+        j && r.setState(j, ""), r.invoke(e.onChange, "");
       }, k.append(q);
     }
     k.append($), y && Sf(k, oo, zd);
     const O = He(k, e, { idKey: "id" });
-    return jr(k, C), O;
+    return _r(k, C), O;
   }
-}, i1 = {
+}, n1 = {
   name: "MultiSelect",
   description: "Multi-option searchable dropdown. Type to filter, click an option to add/remove it from the bound array. Renders the selected options as removable chips inside the trigger. Pass a `$variable` (array of values) as `value` for two-way binding. Arrow keys / Home / End move through the list and Enter or Space toggles the highlighted option. `min`/`max` bound the selection size; `onSearch` turns filtering over to the server (called with the query ~200ms after typing stops — supply the matches as `items`, with `loading` while they are in flight), and `creatable` accepts a value that is not in the list.",
   props: [
@@ -10206,7 +10238,7 @@ const Af = {
       role: "listbox",
       "aria-multiselectable": "true",
       "aria-busy": p ? "true" : null
-    }), j = d("input", {
+    }), _ = d("input", {
       type: "text",
       class: "rui-multiselect-filter",
       // See the Combobox filter: an id is what lets element.ts recover focus and
@@ -10219,56 +10251,56 @@ const Af = {
       "aria-controls": $,
       "aria-autocomplete": "list"
     });
-    q.append(j);
-    const _ = d("div", { class: "rui-multiselect-list" });
     q.append(_);
+    const j = d("div", { class: "rui-multiselect-list" });
+    q.append(j);
     const V = (Z, W) => {
       if (Z.replaceChildren(), p) {
         Z.append(d("div", { class: "rui-multiselect-loading" }, ["Loading…"]));
         return;
       }
       const J = W.trim(), U = J.toLowerCase(), ie = U === "" || b ? a : a.filter(
-        (Ae) => Ae.label.toLowerCase().includes(U) || Ae.value.toLowerCase().includes(U)
-      ), ee = c > 0 && v.length >= c, he = m && J !== "" && !ee && !x.has(J) && !a.some((Ae) => Ae.value.toLowerCase() === U || Ae.label.toLowerCase() === U);
+        ($e) => $e.label.toLowerCase().includes(U) || $e.value.toLowerCase().includes(U)
+      ), ee = c > 0 && v.length >= c, he = m && J !== "" && !ee && !x.has(J) && !a.some(($e) => $e.value.toLowerCase() === U || $e.label.toLowerCase() === U);
       if (ie.length === 0 && !he) {
         Z.append(d("div", { class: "rui-multiselect-empty" }, [n]));
         return;
       }
       const Oe = C.get();
       let xe;
-      if (ie.forEach((Ae, Be) => {
-        Ae.group && Ae.group !== xe && (Z.append(d("div", {
+      if (ie.forEach(($e, Be) => {
+        $e.group && $e.group !== xe && (Z.append(d("div", {
           class: "rui-multiselect-group",
           role: "presentation"
-        }, [Ae.group])), xe = Ae.group);
-        const _e = x.has(Ae.value), dr = !_e && ee, Qe = d("button", {
+        }, [$e.group])), xe = $e.group);
+        const je = x.has($e.value), dr = !je && ee, Qe = d("button", {
           type: "button",
           class: "rui-multiselect-option",
           role: "option",
           id: T(Be),
           // Driven by `aria-activedescendant`, so not individually tabbable.
           tabindex: "-1",
-          "data-value": Ae.value,
-          "data-selected": _e ? "true" : "false",
+          "data-value": $e.value,
+          "data-selected": je ? "true" : "false",
           "data-active": Be === Oe ? "true" : null,
-          "data-disabled": Ae.disabled ? "true" : null,
+          "data-disabled": $e.disabled ? "true" : null,
           // `aria-disabled` rather than the `disabled` attribute for an option
           // the author marked unavailable: a listbox option must stay
           // arrow-reachable and be announced as unavailable, which `disabled`
           // prevents. The selection cap keeps `disabled` — that row is not
           // unavailable in itself, it is the "no room left" state of a
           // still-selectable option.
-          "aria-disabled": Ae.disabled ? "true" : null,
-          "aria-selected": _e ? "true" : "false",
+          "aria-disabled": $e.disabled ? "true" : null,
+          "aria-selected": je ? "true" : "false",
           disabled: dr ? "" : null
-        }), Nt = d("span", { class: "rui-multiselect-option-check" }), Zt = Y(_e ? "check" : "", { className: "rui-multiselect-option-check-icon" });
-        Zt && Nt.append(Zt), Qe.append(Nt), Qe.append(d("span", { class: "rui-multiselect-option-label" }, [Ae.label])), Ae.disabled || (Qe.onclick = (Ar) => {
+        }), Nt = d("span", { class: "rui-multiselect-option-check" }), Zt = Y(je ? "check" : "", { className: "rui-multiselect-option-check-icon" });
+        Zt && Nt.append(Zt), Qe.append(Nt), Qe.append(d("span", { class: "rui-multiselect-option-label" }, [$e.label])), $e.disabled || (Qe.onclick = (Ar) => {
           if (Ar.stopPropagation(), dr) return;
-          const dt = _e ? v.filter((rt) => rt !== Ae.value) : [...v, Ae.value];
+          const dt = je ? v.filter((rt) => rt !== $e.value) : [...v, $e.value];
           N(Ar.currentTarget, dt);
         }), Z.append(Qe);
       }), he) {
-        const Ae = d("button", {
+        const $e = d("button", {
           type: "button",
           class: "rui-multiselect-option rui-multiselect-create",
           role: "option",
@@ -10279,12 +10311,12 @@ const Af = {
           "data-active": ie.length === Oe ? "true" : null,
           "aria-selected": "false"
         }, [`Create “${J}”`]);
-        Ae.onclick = (Be) => {
+        $e.onclick = (Be) => {
           Be.stopPropagation(), N(Be.currentTarget, [...v, J]);
-        }, Z.append(Ae);
+        }, Z.append($e);
       }
     };
-    V(_, k.get());
+    V(j, k.get());
     const re = (Z) => Array.from(Z.querySelectorAll(".rui-multiselect-option[data-value]")), pe = (Z, W, J) => {
       const U = re(Z);
       if (U.length === 0) return;
@@ -10297,12 +10329,12 @@ const Af = {
         ee.setAttribute("data-active", "true"), ee.id && J?.setAttribute("aria-activedescendant", ee.id), typeof ee.scrollIntoView == "function" && ee.scrollIntoView({ block: "nearest" });
       });
     };
-    j.oninput = (Z) => {
+    _.oninput = (Z) => {
       const W = Z.currentTarget;
       k.set(W.value), C.set(-1), W.removeAttribute("aria-activedescendant"), f.schedule(W.value);
       const J = W.closest(".rui-multiselect-panel")?.querySelector(".rui-multiselect-list");
       J && V(J, W.value);
-    }, j.onkeydown = (Z) => {
+    }, _.onkeydown = (Z) => {
       const W = Z, J = W.currentTarget, U = J.closest(".rui-multiselect-panel");
       if (!U) return;
       const ie = C.get();
@@ -10347,7 +10379,7 @@ const Af = {
       }
       C.set(-1);
       const U = be(() => {
-        (J.querySelector(".rui-multiselect-filter") ?? (j.isConnected ? j : null))?.focus();
+        (J.querySelector(".rui-multiselect-filter") ?? (_.isConnected ? _ : null))?.focus();
       });
       r.registerDisposer(U, "multiselect-focus"), Sr({
         liveRoot: J,
@@ -10370,9 +10402,9 @@ const Af = {
       W.key === "Escape" && U && (W.preventDefault(), J.click());
     }, I.append(q), A && Sf(I, Zr, Qn);
     const K = He(I, e, { idKey: "id" });
-    return jr(I, L), K;
+    return _r(I, L), K;
   }
-}, a1 = {
+}, s1 = {
   name: "DateRangePicker",
   description: "Paired date inputs with a single label, sharing the same min/max range. Pass `$variable` references for both `from` and `to` to two-way-bind a date range (ISO `YYYY-MM-DD` strings). The endpoints bound each other, so the range cannot be inverted. Pass `error`/`required` for a mandatory reporting period, and `locale` (`de-DE`, `en-GB`) to echo the chosen period in that locale's date order.",
   props: [
@@ -10471,7 +10503,7 @@ const Af = {
     }
     yt(f, e, r), yt(v, e, r);
     const k = He(b, { ...e, label: null }, { idKey: "id" });
-    jr(b, f);
+    _r(b, f);
     for (const C of ["required", "aria-invalid", "aria-describedby"]) {
       const A = f.getAttribute(C);
       A !== null && v.setAttribute(C, A);
@@ -10482,7 +10514,7 @@ const Af = {
 function Md(t, e, r) {
   return Number.isNaN(t) ? e === Number.NEGATIVE_INFINITY ? 0 : e : Math.min(Math.max(t, e), r);
 }
-function o1(t, e, r) {
+function l1(t, e, r) {
   const i = t.argMeta ? [...t.argMeta] : [];
   for (; i.length < 5; ) i.push({});
   i[4]?.stateRef && (i[2] = i[4]);
@@ -10523,7 +10555,7 @@ function o1(t, e, r) {
   );
   return (a.classList.contains("rui-combobox") ? a : a.querySelector(".rui-combobox") ?? a).classList.add("rui-select-searchable"), a;
 }
-function Bi(t, e, r, i) {
+function Oi(t, e, r, i) {
   const a = e.argMeta?.[r]?.stateRef;
   if (a) {
     if (t instanceof HTMLInputElement && t.type === "checkbox") {
@@ -10536,7 +10568,7 @@ function Bi(t, e, r, i) {
     i.bindState(t, a);
   }
 }
-function n1(t, e, r = !1) {
+function c1(t, e, r = !1) {
   if (!e) return;
   const i = Array.isArray(e) ? e.map((o) => String(o)) : typeof e == "object" ? Object.entries(e).map(([o, n]) => n ? `${o}:${n}` : o) : [], a = (o, n) => {
     const s = Number(o);
@@ -10556,7 +10588,7 @@ function n1(t, e, r = !1) {
       n && (t.pattern = n);
     } else o.startsWith("min:") ? t.min = o.slice(4) : o.startsWith("max:") ? t.max = o.slice(4) : o === "email" ? r || (t.type = "email") : console.warn(`[aktion] Input validations: unrecognised hint "${o}" — ignored.`);
 }
-const _r = ["default", "primary", "success", "warning", "danger", "info"], s1 = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])", qr = (t, e) => {
+const jr = ["default", "primary", "success", "warning", "danger", "info"], u1 = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])", qr = (t, e) => {
   const r = P(t);
   if (r.length === 0) return null;
   const i = d("div", { class: "rui-pattern-actions" });
@@ -10564,7 +10596,7 @@ const _r = ["default", "primary", "success", "warning", "danger", "info"], s1 = 
   return i;
 }, tr = (t, e) => (t instanceof Element ? t : null)?.closest(e) ?? null, $f = (t) => "#" + (t.startsWith("/") ? t : "/" + t), Tf = (t) => t !== null && typeof t == "object" && !Array.isArray(t) && !$t(t) ? t : null, Oa = (t) => (e) => {
   e.key !== "Enter" && e.key !== " " || (e.preventDefault(), t());
-}, l1 = [
+}, d1 = [
   { match: /\bbeta\b/i, label: "Beta" },
   { match: /\b(early\s?access|preview)\b/i, label: "Preview" },
   { match: /\b(introduc(?:ing|e)|launch(?:ed|ing)?|announcing)\b/i, label: "Introducing" },
@@ -10574,15 +10606,15 @@ const _r = ["default", "primary", "success", "warning", "danger", "info"], s1 = 
   { match: /\bupgrade\b/i, label: "Upgrade" },
   { match: /\b(sale|discount|deal)\b/i, label: "Limited time" }
 ];
-function c1(t, e) {
+function p1(t, e) {
   const r = `${t} ${e}`.trim();
   if (!r) return "";
-  for (const i of l1)
+  for (const i of d1)
     if (i.match.test(r)) return i.label;
   return "";
 }
 const Jn = 0.62;
-function u1(t) {
+function h1(t) {
   if (t == null || t === "") return Jn;
   const e = R(t, Jn);
   return Number.isFinite(e) ? Math.max(0, Math.min(1, e > 1 ? e / 100 : e)) : Jn;
@@ -10602,7 +10634,7 @@ function Ed(t, e) {
   }
   return o > 0 ? a : null;
 }
-const d1 = {
+const m1 = {
   name: "Hero",
   description: 'Eye-catching landing/marketing header with eyebrow tag, title, subtitle, optional bullet highlights, and primary/secondary CTA buttons. Use `layout="cover"` with `imageSrc` for an image-backed hero band (pass `height`, optional `caption`, and `overlay` to tune the scrim). Default layout shows an optional side illustration. `align="center"` centers the text block.',
   props: [
@@ -10617,14 +10649,14 @@ const d1 = {
     { name: "height", type: "string", optional: !0, description: "Min-height for cover layout (default 280px)" },
     { name: "actions", type: "Node[]", optional: !0, description: "CTA row (cover layout; alternative to primary/secondary)" },
     { name: "layout", type: "string", optional: !0, enum: ["default", "cover"], description: "default = text-first; cover = image-backed band" },
-    { name: "tone", aliases: ["variant"], type: "string", optional: !0, enum: _r, description: "Accent tone" },
+    { name: "tone", aliases: ["variant"], type: "string", optional: !0, enum: jr, description: "Accent tone" },
     { name: "overlay", type: "string | number", optional: !0, description: "Cover scrim strength — 0–1 alpha or 0–100 percent (default 0.62). Use a low value over a light photo, `0` for none." },
     { name: "align", type: "string", optional: !0, enum: ["start", "center"], description: "Text alignment inside the band (default start)" }
   ],
   render: (t, e, r) => {
-    const i = g(e.layout, "default"), a = g(e.title), o = g(e.subtitle), s = g(e.eyebrow) || c1(a, o), l = g(e.tone, "primary"), c = g(e.align, "start");
+    const i = g(e.layout, "default"), a = g(e.title), o = g(e.subtitle), s = g(e.eyebrow) || p1(a, o), l = g(e.tone, "primary"), c = g(e.align, "start");
     if (i === "cover") {
-      const f = Fy(g(e.imageSrc)), v = me(g(e.height), "280px"), x = u1(e.overlay), y = [];
+      const f = qy(g(e.imageSrc)), v = me(g(e.height), "280px"), x = h1(e.overlay), y = [];
       if (x > 0) {
         const $ = (x * 0.08).toFixed(3);
         y.push(`linear-gradient(180deg, rgba(15, 23, 42, ${$}) 0%, rgba(15, 23, 42, ${x.toFixed(3)}) 100%)`);
@@ -10654,7 +10686,7 @@ const d1 = {
       }
       return w.append(S), w;
     }
-    const u = je(e.imageSrc), h = d("section", {
+    const u = _e(e.imageSrc), h = d("section", {
       class: "rui-hero",
       "data-tone": l,
       "data-align": c,
@@ -10676,7 +10708,7 @@ const d1 = {
     return h;
   }
 };
-function p1(t, e, r, i, a) {
+function f1(t, e, r, i, a) {
   const o = Tf(t), n = g(o ? o.label ?? o.title : t), s = g(o ? o.to ?? o.href ?? o.path : "");
   if (!(!r && (s !== "" || typeof i == "function")))
     return d("span", {
@@ -10691,7 +10723,7 @@ function p1(t, e, r, i, a) {
     h.defaultPrevented || h.button !== 0 || h.metaKey || h.ctrlKey || h.shiftKey || h.altKey || (h.preventDefault(), c && a.router.navigate(c), a.invoke(i, n, e));
   }, u;
 }
-const h1 = {
+const g1 = {
   name: "PageHeader",
   description: 'Page-level header with breadcrumbs, title, subtitle, status tag, and a right-aligned actions row. The canonical first child for any dashboard, settings, or detail page — replaces ad-hoc Stack+Header+Buttons stitching. If `breadcrumbs` is omitted the component auto-derives `["Home", title]` so the page never lacks a trail. Pass `breadcrumbs=false` to opt out.',
   props: [
@@ -10714,7 +10746,7 @@ const h1 = {
             h.append(r.renderNode(b));
             return;
           }
-          h.append(p1(b, m, m === p, e.onCrumbClick, r));
+          h.append(f1(b, m, m === p, e.onCrumbClick, r));
         });
       } else
         h.append(r.renderNode(o));
@@ -10727,7 +10759,7 @@ const h1 = {
     const u = qr(e.actions, r);
     return u && (u.classList.add("rui-page-header-actions"), n.append(u)), i.append(n), i;
   }
-}, m1 = {
+}, b1 = {
   name: "EmptyState",
   description: "Zero-state placeholder for empty lists, searches, dashboards. Renders a centered icon (or illustration), title, description, and either a single `action` Button or an `actions` row (primary + secondary). Always preferable to an empty Card with raw text.",
   props: [
@@ -10739,7 +10771,7 @@ const h1 = {
     { name: "actions", type: "Node[]", optional: !0, description: "Row of CTA Buttons / Links — preferred over `action` for primary + secondary affordances" }
   ],
   render: (t, e, r) => {
-    const i = d("div", { class: "rui-empty-state" }), a = je(e.illustration);
+    const i = d("div", { class: "rui-empty-state" }), a = _e(e.illustration);
     if (a)
       i.append(d("img", {
         class: "rui-empty-state-illustration",
@@ -10765,7 +10797,7 @@ const h1 = {
     }
     return i;
   }
-}, f1 = (t) => /^\d{4}-\d{2}-\d{2}([T ]|$)/.test(t), g1 = {
+}, v1 = (t) => /^\d{4}-\d{2}-\d{2}([T ]|$)/.test(t), y1 = {
   name: "TimelineItem",
   description: "Single event on a Timeline. Pass `content` for rich children (Badge, Link, Button) beside the plain-text `description`, and `href`/`onClick` to make the row navigable.",
   props: [
@@ -10773,7 +10805,7 @@ const h1 = {
     { name: "time", type: "string", optional: !0, description: "Display label (ISO, relative, etc.)" },
     { name: "description", type: "string", optional: !0 },
     { name: "icon", type: "string", optional: !0, description: "Font Awesome icon name rendered inside the marker" },
-    { name: "tone", aliases: ["variant"], type: "string", optional: !0, enum: _r },
+    { name: "tone", aliases: ["variant"], type: "string", optional: !0, enum: jr },
     { name: "content", type: "Node[]", optional: !0, description: "Rich children below the description (Badge, Link, Button, …)" },
     { name: "href", type: "string", optional: !0, description: "Turns the title into a link (changelog entry → PR, commit, release)" },
     { name: "onClick", type: "callable", optional: !0, aliases: ["action", "onclick"], description: "Called when the row is clicked" }
@@ -10798,7 +10830,7 @@ const h1 = {
     const h = g(e.time);
     h && c.append(d("time", {
       class: "rui-timeline-time",
-      datetime: f1(h) ? h : null
+      datetime: v1(h) ? h : null
     }, [h])), l.append(c);
     const p = g(e.description);
     p && l.append(d("div", { class: "rui-timeline-description" }, [p]));
@@ -10814,7 +10846,7 @@ const h1 = {
     }
     return o.append(l), o;
   }
-}, b1 = {
+}, w1 = {
   name: "Timeline",
   description: "Vertical event timeline. Children must be TimelineItem entries. Ideal for activity feeds, changelogs, and process flows.",
   props: [{ name: "items", type: "TimelineItem[]" }],
@@ -10823,14 +10855,14 @@ const h1 = {
     for (const a of P(e.items)) i.append(r.renderNode(a));
     return i;
   }
-}, v1 = {
+}, x1 = {
   name: "FeatureItem",
   description: "Single tile on a FeatureGrid. Pass `href` or `onClick` to make the whole tile a link/button — a category or capability tile is normally the way into that section.",
   props: [
     { name: "title", type: "string" },
     { name: "description", type: "string", optional: !0 },
     { name: "icon", type: "string", optional: !0, description: "Font Awesome icon name shown in a colored disc" },
-    { name: "tone", aliases: ["variant"], type: "string", optional: !0, enum: _r },
+    { name: "tone", aliases: ["variant"], type: "string", optional: !0, enum: jr },
     { name: "href", type: "string", optional: !0, description: "Render the tile as a link to this URL" },
     { name: "onClick", type: "callable", optional: !0, aliases: ["action", "onclick"], description: "Called when the tile is clicked" }
   ],
@@ -10852,7 +10884,7 @@ const h1 = {
     const l = g(e.description);
     return l && o.append(d("p", { class: "rui-feature-description" }, [l])), o;
   }
-}, y1 = {
+}, k1 = {
   name: "FeatureGrid",
   description: "Responsive grid of FeatureItem tiles (typically 2–3 columns). Use to highlight product capabilities or page categories.",
   props: [
@@ -10867,7 +10899,7 @@ const h1 = {
     for (const n of P(e.items)) o.append(r.renderNode(n));
     return o;
   }
-}, w1 = {
+}, S1 = {
   name: "Testimonial",
   description: "Quote card with author, role, and optional avatar.",
   props: [
@@ -10894,14 +10926,14 @@ const h1 = {
     r.append(d("blockquote", { class: "rui-testimonial-quote" }, [
       g(e.quote)
     ]));
-    const a = d("figcaption", { class: "rui-testimonial-author" }), o = je(e.avatarSrc);
+    const a = d("figcaption", { class: "rui-testimonial-author" }), o = _e(e.avatarSrc);
     o && a.append(d("img", { class: "rui-testimonial-avatar", src: o, alt: "" }));
     const n = d("div", { class: "rui-testimonial-meta" });
     n.append(d("div", { class: "rui-testimonial-name" }, [g(e.author)]));
     const s = g(e.role);
     return s && n.append(d("div", { class: "rui-testimonial-role" }, [s])), a.append(n), r.append(a), r;
   }
-}, x1 = {
+}, C1 = {
   name: "ProfileCard",
   description: "Compact profile/user card with avatar, name, role, optional bio, social tags, and a row of action buttons. Use for team rosters, contributor lists, and contact panels.",
   props: [
@@ -10935,7 +10967,7 @@ const h1 = {
     const c = qr(e.actions, r);
     return c && (c.classList.add("rui-profile-card-actions"), i.append(c)), i;
   }
-}, k1 = {
+}, A1 = {
   name: "Comment",
   description: "Single comment / message bubble. Renders avatar, author, timestamp, body, and an optional row of toolbar buttons (reply, like, …).",
   props: [
@@ -10957,7 +10989,7 @@ const h1 = {
     const l = qr(e.actions, r);
     return l && (l.classList.add("rui-comment-actions"), a.append(l)), i.append(a), i;
   }
-}, S1 = {
+}, $1 = {
   name: "Banner",
   description: "Full-width announcement banner. Use at the top of a page for promos, release notes, or downtime notices. Pass `dismissible: true` for a close button, or `href`/`onClick` to make the whole band a click target. For inline notices prefer Callout or Alert.",
   props: [
@@ -10965,7 +10997,7 @@ const h1 = {
     { name: "message", type: "string", optional: !0, aliases: ["description"] },
     { name: "action", type: "Button", optional: !0 },
     { name: "icon", type: "string", optional: !0, description: "Font Awesome icon name" },
-    { name: "tone", type: "string", optional: !0, aliases: ["variant"], enum: _r },
+    { name: "tone", type: "string", optional: !0, aliases: ["variant"], enum: jr },
     { name: "dismissible", type: "boolean", optional: !0, aliases: ["closable"], description: "Show a close button that hides the banner" },
     { name: "onDismiss", type: "callable", optional: !0, aliases: ["onClose"], description: "Called when the banner is dismissed (implies `dismissible`)" },
     { name: "href", type: "string", optional: !0, description: "Make the whole banner a link (release notes → changelog)" },
@@ -11018,7 +11050,7 @@ const h1 = {
     }
     return u;
   }
-}, C1 = {
+}, T1 = {
   name: "KanbanCard",
   description: "Single card on a Kanban board.",
   props: [
@@ -11026,7 +11058,7 @@ const h1 = {
     { name: "description", type: "string", optional: !0 },
     { name: "tags", type: "string[]", optional: !0 },
     { name: "assignee", type: "string", optional: !0, description: "Name shown next to avatar initials" },
-    { name: "tone", type: "string", optional: !0, aliases: ["variant"], enum: _r },
+    { name: "tone", type: "string", optional: !0, aliases: ["variant"], enum: jr },
     { name: "icon", type: "string", optional: !0, description: "Optional Font Awesome icon name shown beside the title" },
     { name: "onClick", type: "callable", optional: !0, aliases: ["action", "onclick"], description: "Optional callable fired when the card is clicked" }
   ],
@@ -11061,13 +11093,13 @@ const h1 = {
     }
     return i;
   }
-}, A1 = {
+}, I1 = {
   name: "KanbanColumn",
   description: 'Single column inside a KanbanBoard. Children must be KanbanCard entries. Pass `actions` for the header\'s "+ Add card" / overflow menu and `limit` for a WIP limit (the count chip renders "3 / 5" and flags an overflow).',
   props: [
     { name: "title", type: "string" },
     { name: "items", type: "KanbanCard[]", aliases: ["cards"] },
-    { name: "tone", aliases: ["variant"], type: "string", optional: !0, enum: _r, description: "Header accent tone" },
+    { name: "tone", aliases: ["variant"], type: "string", optional: !0, enum: jr, description: "Header accent tone" },
     { name: "actions", type: "Node[]", optional: !0, description: "Header buttons — add card, column menu" },
     { name: "limit", type: "number", optional: !0, description: 'WIP limit; the count chip becomes "items / limit"' }
   ],
@@ -11088,7 +11120,7 @@ const h1 = {
     return i.length === 0 && u.append(d("div", { class: "rui-kanban-column-empty" }, ["No items"])), s.append(u), s;
   }
 };
-function $1(t, e, r) {
+function z1(t, e, r) {
   const i = (s, l) => g(s?.querySelector(l)?.textContent).trim(), a = (s) => i(s, ".rui-kanban-card-title"), o = (s) => i(s, ".rui-kanban-column-title"), n = (s) => {
     for (const l of s.querySelectorAll("[data-drop-target]"))
       l.removeAttribute("data-drop-target");
@@ -11116,7 +11148,7 @@ function $1(t, e, r) {
     n(tr(s.currentTarget ?? s.target, ".rui-kanban-board") ?? t);
   };
 }
-const T1 = {
+const M1 = {
   name: "KanbanBoard",
   description: "Horizontal Kanban board. Children must be KanbanColumn entries. The board scrolls horizontally on narrow viewports so columns stay readable. Pass `onCardMove` to enable drag & drop — it is called with (cardTitle, toColumn, fromColumn) so the author moves the data.",
   props: [
@@ -11127,9 +11159,9 @@ const T1 = {
   render: (t, e, r) => {
     const i = d("div", { class: "rui-kanban-board" });
     for (const a of P(e.columns)) i.append(r.renderNode(a));
-    return (typeof e.onCardMove == "function" || z(e.draggable)) && $1(i, e.onCardMove, r), i;
+    return (typeof e.onCardMove == "function" || z(e.draggable)) && z1(i, e.onCardMove, r), i;
   }
-}, I1 = {
+}, E1 = {
   name: "SectionHeader",
   description: "Compact section header for the top of a Card or panel. Renders a small eyebrow, a title, an optional subtitle, an optional status Tag/Badge, and a right-aligned actions row. Use this inside a Card to introduce a section instead of a bare `CardHeader`.",
   props: [
@@ -11151,7 +11183,7 @@ const T1 = {
   }
 };
 let Nd = 0;
-function z1(t, e, r) {
+function N1(t, e, r) {
   const i = r.useInstanceState("searchId", "");
   let a = g(e.searchId);
   a || (a = i.get(), a || (Nd += 1, a = `toolbar-search-${Nd}`, i.set(a)));
@@ -11187,7 +11219,7 @@ const If = {
       class: "rui-toolbar",
       "data-has-center": i.length > 0 ? "true" : "false"
     }), o = d("div", { class: "rui-toolbar-side rui-toolbar-left" });
-    z(e.searchable) && o.append(z1(t, e, r));
+    z(e.searchable) && o.append(N1(t, e, r));
     for (const s of P(e.left)) o.append(r.renderNode(s));
     if (a.append(o), i.length > 0) {
       const s = d("div", { class: "rui-toolbar-side rui-toolbar-center" });
@@ -11198,7 +11230,7 @@ const If = {
     for (const s of P(e.right)) n.append(r.renderNode(s));
     return a.append(n), a;
   }
-}, Ld = If.props.findIndex((t) => t.name === "searchValue"), Rd = pc.props.findIndex((t) => t.name === "value"), M1 = {
+}, Ld = If.props.findIndex((t) => t.name === "searchValue"), Rd = pc.props.findIndex((t) => t.name === "value"), L1 = {
   name: "SidebarItem",
   description: "Single navigation item inside a Sidebar. Pass `active=true` to mark as the current page, a `to` path to navigate via the runtime router on click, an `onClick` callable for arbitrary click handling, or an optional `badge` (string/number) for a trailing chip. `to` and `onClick` can coexist — `onClick` is invoked AFTER the router navigates so authors can do extra work (analytics, side-effects). Items with `to`/`href` render as real links, so Cmd/middle-click opens a new tab; `disabled: true` greys a gated item out.",
   props: [
@@ -11237,7 +11269,7 @@ const If = {
       i && !x && (v.preventDefault(), r.router.navigate(i)), e.onClick != null && r.invoke(e.onClick);
     }), p;
   }
-}, E1 = {
+}, R1 = {
   name: "SidebarSection",
   description: "Grouping inside a Sidebar — small uppercase label followed by SidebarItem entries. Use this to chunk a long sidebar into sections.",
   props: [
@@ -11250,7 +11282,7 @@ const If = {
     for (const o of P(e.items)) i.append(r.renderNode(o));
     return i;
   }
-}, N1 = {
+}, P1 = {
   name: "Sidebar",
   description: "Vertical app navigation panel. Supports a brand header, navigation items (`SidebarItem` or `SidebarSection`), an optional footer, and a `collapsed` mode that hides labels to leave just an icon rail. Use inside `AppShell` for SaaS-style left navigation.",
   props: [
@@ -11322,7 +11354,7 @@ const If = {
         S?.setAttribute("aria-expanded", y ? "true" : "false");
         const k = w.querySelector(".rui-app-shell-sidebar");
         be(() => {
-          y ? (k?.querySelector(s1) ?? k)?.focus?.() : S?.focus?.();
+          y ? (k?.querySelector(u1) ?? k)?.focus?.() : S?.focus?.();
         });
       }
       n && r.setState(n, y), r.invoke(e.onSidebarOpenChange, y);
@@ -11366,7 +11398,7 @@ const If = {
   }
 }, Pd = zf.props.findIndex((t) => t.name === "sidebarOpen");
 let Dd = 0;
-const L1 = {
+const D1 = {
   name: "SplitView",
   description: "Two-pane master/detail layout — a narrow primary pane on the left, wider detail pane on the right. Collapses to a single column on narrow viewports. Use for inboxes, file browsers, contact lists. On a phone pass `showDetail` (typically a `$variable`) so only the list or only the selected item is shown.",
   props: [
@@ -11386,7 +11418,7 @@ const L1 = {
     for (const l of P(e.detail)) s.append(r.renderNode(l));
     return o.append(n, s), o;
   }
-}, R1 = {
+}, O1 = {
   name: "DescriptionItem",
   description: "Single row inside a DescriptionList. Renders a small uppercase label on the left and a value (string or arbitrary Node) on the right.",
   props: [
@@ -11400,7 +11432,7 @@ const L1 = {
     const n = d("dd", { class: "rui-description-value" });
     return $t(e.value) || Array.isArray(e.value) ? n.append(r.renderNode(e.value)) : n.append(document.createTextNode(g(e.value))), i.append(a, n), i;
   }
-}, P1 = {
+}, B1 = {
   name: "ActionStripe",
   description: "Full-width clickable navigation row — leading icon, label + optional description, an optional trailing `value` string or `trailing` node (Switch, Badge, Avatar), and a chevron affordance. Stack them for settings screens, product menus, and drill-down lists. Use `ListItem` instead for a non-interactive content row.",
   props: [
@@ -11441,7 +11473,7 @@ const L1 = {
       b.preventDefault();
     } : typeof e.onClick == "function" && (l.onclick = () => r.invoke(e.onClick)), l;
   }
-}, D1 = {
+}, F1 = {
   name: "DescriptionList",
   description: "Compact key/value summary for detail pages — replaces a row of `Text`s with a properly aligned `<dl>`. Children must be DescriptionItem entries. Two columns by default on wide viewports.",
   props: [
@@ -11456,7 +11488,7 @@ const L1 = {
     for (const n of P(e.items)) o.append(r.renderNode(n));
     return o;
   }
-}, O1 = {
+}, _1 = {
   name: "StatusDot",
   description: "Inline status pip + label. Use for compact health/state indicators in toolbars, sidebars, lists, and table cells.",
   props: [
@@ -11475,7 +11507,7 @@ const L1 = {
     });
     return r.append(d("span", { class: "rui-status-dot-marker" })), r.append(d("span", { class: "rui-status-dot-label" }, [g(e.label)])), r;
   }
-}, B1 = {
+}, j1 = {
   name: "PricingCard",
   description: 'Single pricing tier card with plan name, price, billing period, description, bullet features, and a CTA button. Mark one tier as `featured=true` to highlight it (raises the card and shows a ribbon — "Most popular" unless `ribbon`/`badge` says otherwise). `features` entries may be plain strings or `{label, included: false}` objects so a cheaper tier can show what it does NOT include.',
   props: [
@@ -11524,7 +11556,7 @@ const L1 = {
     }
     return a;
   }
-}, F1 = {
+}, q1 = {
   name: "PricingTable",
   description: "Responsive grid of PricingCard tiers. Items size uniformly across a row and wrap onto multiple rows on narrow viewports. Use as the centerpiece of any pricing or upgrade page.",
   props: [
@@ -11539,7 +11571,7 @@ const L1 = {
     for (const n of P(e.tiers)) o.append(r.renderNode(n));
     return o;
   }
-}, j1 = {
+}, U1 = {
   name: "MediaCard",
   description: 'Card with a media (image) header followed by title, body, optional tags, footer meta, and an actions row. Use for article previews, product cards, project highlights, gallery items — anywhere a Card needs a leading image. Orient with `orientation="horizontal"` for side-by-side media + content on wide viewports. Pass `href` (or `onClick`) to make the whole card the click target, which is what the hover lift implies.',
   props: [
@@ -11568,10 +11600,10 @@ const L1 = {
       const y = () => r.invoke(e.onClick);
       n.onclick = y, a || (n.onkeydown = Oa(y));
     }
-    const s = _1(g(e.ratio, i === "horizontal" ? "4:3" : "16:9")), l = d("div", {
+    const s = H1(g(e.ratio, i === "horizontal" ? "4:3" : "16:9")), l = d("div", {
       class: "rui-media-card-media",
       style: `aspect-ratio:${s};`
-    }), c = () => Y("image", { className: "rui-media-card-placeholder" }) ?? d("span", { class: "rui-media-card-placeholder" }), u = je(e.imageSrc), h = u ? r.useInstanceState(`media-error:${u}`, !1) : null, p = h?.get() ? "" : u;
+    }), c = () => Y("image", { className: "rui-media-card-placeholder" }) ?? d("span", { class: "rui-media-card-placeholder" }), u = _e(e.imageSrc), h = u ? r.useInstanceState(`media-error:${u}`, !1) : null, p = h?.get() ? "" : u;
     if (p) {
       const y = d("img", { src: p, alt: g(e.title), loading: "lazy" });
       y.onerror = (w) => {
@@ -11607,7 +11639,7 @@ const L1 = {
     return x && (x.classList.add("rui-media-card-actions"), (a || o) && (x.onclick = (y) => y.stopPropagation()), b.append(x)), n.append(b), n;
   }
 };
-function _1(t) {
+function H1(t) {
   if (t.includes(":")) {
     const [r, i] = t.split(":"), a = Number(r), o = Number(i);
     if (Number.isFinite(a) && a > 0 && Number.isFinite(o) && o > 0) return `${a} / ${o}`;
@@ -11626,7 +11658,7 @@ function Mf(t, e = "primary") {
   const m = document.createElementNS(a, "path");
   return m.setAttribute("d", h), m.setAttribute("class", "rui-sparkline-line"), m.setAttribute("fill", "none"), o.appendChild(m), o;
 }
-const q1 = {
+const W1 = {
   name: "Stats",
   description: 'KPI strip or grid. Pass `items` as `{label, value, hint?, tone?, spark?}` objects for strip layout, or as `StatCard(...)` nodes when `layout="grid"`.',
   props: [
@@ -11662,7 +11694,7 @@ const q1 = {
     }
     return s;
   }
-}, U1 = {
+}, G1 = {
   name: "Tile",
   description: 'Compact icon + label + optional value tile. Smaller and denser than `StatCard`, ideal for menu grids, quick-action panels, category directories, and category filters. Pair with `Grid` for uniform rows. Pass `href` for a directory tile that links to a route, and `selected` for the on-state of a filter tile. `iconPosition: "end"` moves the mark to the trailing edge — the shape a choice card wants, where the copy reads first and the illustration sits opposite it.',
   props: [
@@ -11670,7 +11702,7 @@ const q1 = {
     { name: "icon", type: "string", optional: !0, description: "Font Awesome icon name shown in a colored disc" },
     { name: "value", type: "string", optional: !0, description: "Secondary value rendered next to/under the label" },
     { name: "description", type: "string", optional: !0 },
-    { name: "tone", type: "string", optional: !0, aliases: ["variant"], enum: _r },
+    { name: "tone", type: "string", optional: !0, aliases: ["variant"], enum: jr },
     { name: "onClick", type: "callable", optional: !0, aliases: ["action", "onclick"] },
     { name: "href", type: "string", optional: !0, description: "Render the tile as a link to this URL" },
     { name: "selected", type: "boolean", optional: !0, aliases: ["active"], description: "Mark the tile as currently applied/current (filter grids, category directories)" },
@@ -11706,7 +11738,7 @@ const q1 = {
     { name: "time", type: "string", optional: !0, description: "Relative or absolute timestamp" },
     { name: "icon", type: "string", optional: !0, description: "Font Awesome icon name shown in a colored disc" },
     { name: "avatarSrc", type: "string", optional: !0, aliases: ["src"], description: "Avatar URL (alternative to `icon`)" },
-    { name: "tone", type: "string", optional: !0, aliases: ["variant"], enum: _r },
+    { name: "tone", type: "string", optional: !0, aliases: ["variant"], enum: jr },
     { name: "unread", type: "boolean", optional: !0, description: "Highlights the card with an accent" },
     { name: "actions", type: "Node[]", optional: !0 },
     // New props are appended, never inserted: a positional call fills slots in
@@ -11767,7 +11799,7 @@ const q1 = {
     }
     return s;
   }
-}, H1 = {
+}, V1 = {
   name: "PersonChip",
   description: 'Inline avatar + name + optional role/meta pill. Use anywhere a person needs to be referenced compactly: table cells, list rows, comments, kanban cards, sidebar footers. Pair multiple chips with `Stack(direction="row", wrap=true)` for assignee lists.',
   props: [
@@ -11798,7 +11830,7 @@ const q1 = {
     const h = g(e.role);
     return h && u.append(d("span", { class: "rui-person-chip-role" }, [h])), s.append(u), i && (s.onclick = () => r.invoke(e.onClick)), s;
   }
-}, Nf = ["left", "center", "right"], Lf = ["default", "primary", "success", "warning", "danger", "info"], W1 = {
+}, Nf = ["left", "center", "right"], Lf = ["default", "primary", "success", "warning", "danger", "info"], K1 = {
   name: "Col",
   description: 'Single column inside a Table or DataGrid. Use `align` for per-column text alignment, `format` for cell rendering (`text|number|currency|date`), `currency` for the money code used by `format: "currency"`, `locale` for the BCP-47 tag those formats are rendered in, and `width`/`wrap` to stop one long column from forcing the whole table into horizontal scroll. `values` may be plain values OR an array of component nodes — e.g. `Col("Status", rows.map(r => Badge(r.status)))` or `Col("Actions", rows.map(r => Button("Edit")))` — each component renders directly in its cell. Pass `render: (value, index, row) => …` for the same effect when you prefer to keep `values` as the raw row data (return a component, string, or array). `row` is the whole row (header-keyed) and stays correct even when DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. Pass `onClick: (value, index, row) => …` to make the whole cell clickable (pointer + keyboard). `sortable` and `filterable` only take effect inside `DataGrid` (Table ignores them). For an actions/kebab-menu column that needs no visible header, use `headerHidden: true` — NOT `header: ""`, which loses the accessible name and (in DataGrid) the persistence key derived from `header`.',
   props: [
@@ -11830,13 +11862,13 @@ const q1 = {
     const r = d("div", { class: "rui-col" });
     return r.append(d("strong", {}, [g(e.header)])), r;
   }
-}, G1 = ["comfortable", "compact"], V1 = {
+}, Y1 = ["comfortable", "compact"], X1 = {
   name: "Table",
   description: 'Tabular data view. Children must be Col components. `density="compact"` tightens row padding for dense data, `striped=true` zebra-stripes the rows, `sticky=true` pins the header row when the table scrolls, and `maxHeight` sizes that scroll box. Set `loading=true` while a query is in flight so the table shows skeleton rows instead of its empty state, `onRowClick` for row-level navigation, and `allowOverflow=true` when a cell renders an overlay that must escape the scroll box. The empty-state row uses `emptyLabel` when set.',
   props: [
     { name: "columns", type: "Col[]" },
     { name: "caption", type: "string", optional: !0, aliases: ["title"] },
-    { name: "density", type: "string", optional: !0, enum: G1, description: "Row padding (default `comfortable`)" },
+    { name: "density", type: "string", optional: !0, enum: Y1, description: "Row padding (default `comfortable`)" },
     { name: "striped", type: "boolean", optional: !0, description: "Zebra-stripe alternating rows" },
     { name: "sticky", type: "boolean", optional: !0, description: "Pin the header row when the table scrolls" },
     { name: "emptyLabel", type: "string", optional: !0, description: "Text shown when the table has no rows (default `No data`)" },
@@ -11876,7 +11908,7 @@ const q1 = {
     y.some((N) => N === "true") && (m.style.minWidth = "0");
     const w = d("thead"), S = d("tr");
     for (let N = 0; N < i.length; N += 1) {
-      const O = i[N], q = g(O.args?.[11]), j = z(O.args?.[18]), _ = d("th", {
+      const O = i[N], q = g(O.args?.[11]), _ = z(O.args?.[18]), j = d("th", {
         // Explicit association: the implicit-header heuristic fails as soon as
         // the table gains a caption row or a merged layout.
         scope: "col",
@@ -11888,38 +11920,38 @@ const q1 = {
         // rather than a bespoke clip: the label still names the column (aria,
         // column-settings panel) but is not drawn — e.g. an actions/kebab
         // column that needs no visible header.
-      }, [j ? d("span", { class: "rui-visually-hidden" }, [g(O.args?.[0])]) : g(O.args?.[0])]);
-      S.append(_);
+      }, [_ ? d("span", { class: "rui-visually-hidden" }, [g(O.args?.[0])]) : g(O.args?.[0])]);
+      S.append(j);
     }
     w.append(S), m.append(w);
-    const k = d("tbody"), C = i.map((N) => P(N.args?.[1])), A = i.map((N) => g(N.args?.[2], "text")), $ = i.map((N) => N.args?.[6]), T = i.map((N) => N.args?.[7]), I = Bf(e.locale), M = i.map((N) => yS(N.args, I)), E = Math.max(0, ...C.map((N) => N.length)), L = e.onRowClick, D = i.map((N, O) => g(N.args?.[0]) || `col-${O}`);
+    const k = d("tbody"), C = i.map((N) => P(N.args?.[1])), A = i.map((N) => g(N.args?.[2], "text")), $ = i.map((N) => N.args?.[6]), T = i.map((N) => N.args?.[7]), I = Bf(e.locale), M = i.map((N) => kS(N.args, I)), E = Math.max(0, ...C.map((N) => N.length)), L = e.onRowClick, D = i.map((N, O) => g(N.args?.[0]) || `col-${O}`);
     for (let N = 0; N < E; N += 1) {
       const O = d("tr"), q = {};
-      if (C.forEach((j, _) => {
-        q[D[_]] = j[N];
-      }), C.forEach((j, _) => {
-        const V = A[_] ?? "text", re = f[_], pe = d("td", {
+      if (C.forEach((_, j) => {
+        q[D[j]] = _[N];
+      }), C.forEach((_, j) => {
+        const V = A[j] ?? "text", re = f[j], pe = d("td", {
           "data-format": V,
           "data-align": re || null,
-          "data-wrap": y[_] ?? null,
-          style: x[_] ?? null
+          "data-wrap": y[j] ?? null,
+          style: x[j] ?? null
         });
         zm(
           pe,
-          { format: V, render: $[_], onClick: T[_] },
-          j[N],
+          { format: V, render: $[j], onClick: T[j] },
+          _[N],
           N,
           r,
-          M[_] ?? hc,
+          M[j] ?? hc,
           q
         ), O.append(pe);
       }), typeof L == "function") {
         O.setAttribute("data-clickable", "true"), O.tabIndex = 0;
-        const j = (_) => _.target?.closest("input,button,a,label,select,textarea") ? !1 : (r.invoke(L, N, q), !0);
-        O.onclick = (_) => {
-          j(_);
-        }, O.onkeydown = (_) => {
-          _.key !== "Enter" && _.key !== " " || j(_) && _.preventDefault();
+        const _ = (j) => j.target?.closest("input,button,a,label,select,textarea") ? !1 : (r.invoke(L, N, q), !0);
+        O.onclick = (j) => {
+          _(j);
+        }, O.onkeydown = (j) => {
+          j.key !== "Enter" && j.key !== " " || _(j) && j.preventDefault();
         };
       }
       k.append(O);
@@ -11927,12 +11959,12 @@ const q1 = {
     if (E === 0 && n) {
       const N = Math.max(1, Math.min(20, Math.round(R(e.loadingRows, 3)))), O = Math.max(1, i.length);
       for (let q = 0; q < N; q += 1) {
-        const j = d("tr", { class: "rui-table-loading-row", "aria-hidden": "true" });
-        for (let _ = 0; _ < O; _ += 1) {
+        const _ = d("tr", { class: "rui-table-loading-row", "aria-hidden": "true" });
+        for (let j = 0; j < O; j += 1) {
           const V = d("td");
-          V.append(d("div", { class: "rui-skeleton-line", style: "height:12px;" })), j.append(V);
+          V.append(d("div", { class: "rui-skeleton-line", style: "height:12px;" })), _.append(V);
         }
-        k.append(j);
+        k.append(_);
       }
     } else if (E === 0) {
       const N = d("tr"), O = g(e.emptyLabel, "No data");
@@ -11943,7 +11975,7 @@ const q1 = {
     }
     return m.append(k), h.append(m), h;
   }
-}, K1 = {
+}, Z1 = {
   name: "ListItem",
   description: "Single list row: title, optional description, optional leading icon, and an optional `trailing` slot for a badge / switch / chevron. Pass `onClick` (or `href`) to make the row activatable, `active=true` to mark it as the current selection, and `tone` for per-row status emphasis.",
   props: [
@@ -11969,7 +12001,7 @@ const q1 = {
       trailing: P(e.trailing).map((a) => r.renderNode(a))
     });
   }
-}, Y1 = {
+}, Q1 = {
   name: "List",
   description: "Vertical list. `items` are normally `ListItem(...)` nodes, but plain strings and `{title, description, icon}` objects are accepted and coerced into rows. `divided=true` renders a flush list with hairline separators instead of a bordered card per row, `gap` spaces the rows, and `emptyLabel` is shown when `items` is empty.",
   props: [
@@ -11985,10 +12017,10 @@ const q1 = {
       "data-divided": z(e.divided) ? "true" : null,
       style: a ? `gap:${a};` : null
     }), n = P(e.items);
-    for (const s of n) o.append(uS(s, r));
+    for (const s of n) o.append(hS(s, r));
     return n.length === 0 && o.append(d("li", { class: "rui-list-empty" }, [g(e.emptyLabel, "No items")])), o;
   }
-}, X1 = {
+}, J1 = {
   name: "StatCard",
   description: 'Single KPI card with label, value, optional delta, optional icon, optional `hint` ("vs. last quarter"), and optional inline sparkline (`spark=[…numbers]`). Pass `onClick` to make the whole tile a drill-down target. Use inside `Stats` for a uniform KPI strip.',
   props: [
@@ -12008,11 +12040,11 @@ const q1 = {
       type: a ? "button" : null,
       "data-tone": i,
       "data-clickable": a ? "true" : null
-    }), n = d("div", { class: "rui-stat-label-row" }), s = g(e.label), l = lS(e.icon) ?? hf(s) ?? "", c = Y(l, { className: "rui-stat-icon" });
+    }), n = d("div", { class: "rui-stat-label-row" }), s = g(e.label), l = dS(e.icon) ?? hf(s) ?? "", c = Y(l, { className: "rui-stat-icon" });
     c && n.append(c), n.append(d("div", { class: "rui-stat-label" }, [s])), o.append(n), o.append(d("div", { class: "rui-stat-value" }, [g(e.value)]));
     const u = g(e.delta), h = g(e.trend);
     if (u || h) {
-      const m = h ? sS(h) : "";
+      const m = h ? uS(h) : "";
       o.append(d("div", {
         class: "rui-stat-trend",
         "data-trend": h || "flat",
@@ -12028,7 +12060,7 @@ const q1 = {
     }
     return a && (o.onclick = () => r.invoke(e.onClick)), o;
   }
-}, Z1 = {
+}, eS = {
   name: "Sparkline",
   description: 'Tiny inline trend chart for KPIs, table cells, and dashboards. Renders an SVG line with a soft fill — use anywhere you would otherwise reach for `LineChart` but a single value series should stay inline with surrounding text. `width`/`height` size it (default 80x24), `min`/`max` fix the scale so a strip of sparklines shares one baseline, and `label` gives screen readers the trend ("7-day trend, up 12%").',
   props: [
@@ -12044,7 +12076,7 @@ const q1 = {
     const r = g(e.tone, "primary"), i = Pf(e.values), a = d("span", { class: "rui-sparkline-wrap" });
     if (i.length === 0)
       return a.append(d("span", { class: "rui-sparkline-empty" }, ["—"])), a;
-    const o = cS(i, r, {
+    const o = pS(i, r, {
       width: e.width,
       height: e.height,
       min: e.min === void 0 || e.min === null ? null : R(e.min),
@@ -12055,7 +12087,7 @@ const q1 = {
     const n = o.getAttribute("width") ?? "";
     return tl(n) === null && (a.style.width = n), a;
   }
-}, Q1 = {
+}, tS = {
   name: "TreeNode",
   description: "Single node in a Tree view. When `children` is provided the node renders as an expandable branch with a chevron; otherwise it renders as a leaf. `onClick` fires on click, `href` makes the row a real link, `onToggle` fires with the new open state, and `disabled=true` makes the row inert. Set `hasChildren=true` (with no `children` yet) plus `onToggle` to lazy-load a subtree the first time the branch is opened. `expanded` is the INITIAL open state — a branch the user collapsed stays collapsed across re-renders. Use `active=true` to highlight the current selection, or drive selection from `Tree(selectedId:)` instead. In a checkable Tree it is the node's `nodeId` (or label) that appears in `Tree(checkedIds:)`.",
   props: [
@@ -12119,13 +12151,13 @@ const q1 = {
       // Flatten the disclosure wrapper: the <details> is the treeitem, and an
       // extra button between `tree` and `treeitem` breaks the ARIA structure.
       role: "none",
-      style: rS
+      style: oS
     }), k = d("button", {
       type: "button",
       class: "rui-tree-node-chevron-button",
       "aria-label": `Toggle ${s}`,
       "aria-expanded": m ? "true" : "false",
-      style: iS
+      style: nS
     }), C = Y("chevron-right", { className: "rui-tree-node-chevron" });
     C && k.append(C), k.onclick = ($) => {
       $.preventDefault(), $.stopPropagation();
@@ -12141,7 +12173,7 @@ const q1 = {
       role: "treeitem",
       "aria-level": "1",
       "aria-disabled": "true",
-      style: aS
+      style: sS
     }, ["Loading…"]));
     for (const $ of A.querySelectorAll('[role="treeitem"]'))
       $.setAttribute(
@@ -12150,7 +12182,7 @@ const q1 = {
       );
     return w.append(A), w;
   }
-}, J1 = {
+}, rS = {
   name: "Tree",
   description: "Hierarchical tree view. Children must be TreeNode entries. Use for file browsers, nested navigation, category pickers, and any parent/child structure with arbitrary depth. Bind `selectedId` to a `$variable` (and/or pass `onSelect`) for container-level single selection instead of wiring `active` + `onClick` on every node; `expandedIds` opens the named branches (reveal a search hit, expand all). `checkable=true` puts a checkbox on every node and binds `checkedIds` — the standard shape for a folder-sync / permission picker; checking a branch checks its whole subtree and a partly-checked branch renders mixed. The tree implements the standard keyboard model: Up/Down move, Right/Left expand/collapse, Home/End jump, Enter activates, Space checks.",
   props: [
@@ -12184,27 +12216,27 @@ const q1 = {
     if (c.size > 0)
       for (const m of n.querySelectorAll("details.rui-tree-node"))
         c.has(m.dataset.treeId ?? "") && (m.setAttribute("open", ""), m.setAttribute("aria-expanded", "true"));
-    o && (hS(n), _d(n, new Set(l())));
+    o && (gS(n), jd(n, new Set(l())));
     const u = g(e.selectedId);
-    u && jd(n, u), qd(n);
+    u && _d(n, u), qd(n);
     const h = t.argMeta?.[1]?.stateRef, p = typeof e.onSelect == "function" || h !== void 0, b = (m, f) => {
       if (m.getAttribute("aria-disabled") === "true") return;
       const v = m.getAttribute("aria-checked") !== "true", x = new Set(l());
-      for (const w of [m, ...bS(m)]) {
+      for (const w of [m, ...wS(m)]) {
         if (w.getAttribute("aria-disabled") === "true") continue;
         const S = w.dataset.treeId ?? "";
         S && (v ? x.add(S) : x.delete(S));
       }
-      vS(f, x);
+      xS(f, x);
       const y = Array.from(x);
-      a ? r.setState(a, y) : s.set(y), r.invoke(e.onCheck, y), _d(f, new Set(y));
+      a ? r.setState(a, y) : s.set(y), r.invoke(e.onCheck, y), jd(f, new Set(y));
     };
     return (p || o) && (n.onclick = (m) => {
       const f = m.target;
       if (!f) return;
       const v = m.currentTarget ?? m.target;
       if (o && f.classList.contains("rui-tree-node-checkbox")) {
-        const w = mS(f);
+        const w = bS(f);
         w && b(w, v);
         return;
       }
@@ -12212,15 +12244,15 @@ const q1 = {
       const x = f.closest(".rui-tree-node-row");
       if (!(x instanceof HTMLElement) || x.getAttribute("aria-disabled") === "true") return;
       const y = x.dataset.treeId ?? "";
-      jd(v, y), qd(v), h && r.setState(h, y), r.invoke(e.onSelect, y);
+      _d(v, y), qd(v), h && r.setState(h, y), r.invoke(e.onSelect, y);
     }), n.onkeydown = (m) => {
-      if (!dS.has(m.key)) return;
-      const f = m.currentTarget ?? m.target, v = pS(f);
+      if (!mS.has(m.key)) return;
+      const f = m.currentTarget ?? m.target, v = fS(f);
       if (v.length === 0) return;
       const x = m.target?.closest('[role="treeitem"]'), y = x instanceof HTMLElement ? x : null, w = y ? v.indexOf(y) : -1, S = (A) => {
         const $ = v[Math.max(0, Math.min(v.length - 1, A))];
         if ($) {
-          for (const T of Fi(f)) T.tabIndex = T === $ ? 0 : -1;
+          for (const T of Bi(f)) T.tabIndex = T === $ ? 0 : -1;
           $.focus();
         }
       };
@@ -12262,11 +12294,11 @@ const q1 = {
       m.preventDefault(), C instanceof HTMLElement && C.tagName !== "DIV" ? C.click() : k && (k.open = !k.open);
     }, n;
   }
-}, Rf = "appearance:none;background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:none;cursor:pointer", eS = `${Rf};display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 auto;text-align:left`, tS = "margin-left:auto;display:flex;align-items:center;gap:var(--rui-spacing-xs);flex:0 0 auto", rS = "display:flex;align-items:center;gap:2px;list-style:none", iS = `${Rf};display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto`, aS = "color:var(--rui-color-text-muted);cursor:default", oS = "flex:0 0 auto;width:14px;height:14px;margin:0;cursor:pointer;accent-color:var(--rui-color-primary)", nS = "display:flex;align-items:center;gap:2px";
-function sS(t) {
+}, Rf = "appearance:none;background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:none;cursor:pointer", iS = `${Rf};display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 auto;text-align:left`, aS = "margin-left:auto;display:flex;align-items:center;gap:var(--rui-spacing-xs);flex:0 0 auto", oS = "display:flex;align-items:center;gap:2px;list-style:none", nS = `${Rf};display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto`, sS = "color:var(--rui-color-text-muted);cursor:default", lS = "flex:0 0 auto;width:14px;height:14px;margin:0;cursor:pointer;accent-color:var(--rui-color-primary)", cS = "display:flex;align-items:center;gap:2px";
+function uS(t) {
   return t === "up" ? "▲" : t === "down" ? "▼" : "—";
 }
-function lS(t) {
+function dS(t) {
   if (t == null) return null;
   if (t === !1) return "";
   const e = g(t).trim();
@@ -12281,20 +12313,20 @@ function Pf(t) {
   }
   return e;
 }
-const Od = 80, Bd = 24, Qi = "http://www.w3.org/2000/svg";
-function cS(t, e, r) {
-  const i = Fd(r.width, String(Od)), a = Fd(r.height, String(Bd)), o = tl(i) ?? Od, n = tl(a) ?? Bd, s = document.createElementNS(Qi, "svg");
+const Od = 80, Bd = 24, Zi = "http://www.w3.org/2000/svg";
+function pS(t, e, r) {
+  const i = Fd(r.width, String(Od)), a = Fd(r.height, String(Bd)), o = tl(i) ?? Od, n = tl(a) ?? Bd, s = document.createElementNS(Zi, "svg");
   s.setAttribute("class", "rui-sparkline"), s.setAttribute("data-tone", e), s.setAttribute("viewBox", `0 0 ${o} ${n}`), s.setAttribute("width", i), s.setAttribute("height", a), s.setAttribute("preserveAspectRatio", "none"), r.label ? (s.setAttribute("role", "img"), s.setAttribute("aria-label", r.label)) : s.setAttribute("aria-hidden", "true");
   const l = r.min ?? Math.min(...t), c = r.max ?? Math.max(...t), u = Math.min(l, c), h = Math.max(l, c), p = h - u || 1, b = (y) => 2 + (h - Math.min(h, Math.max(u, y))) / p * (n - 4);
   if (t.length === 1) {
-    const y = (n / 2).toFixed(1), w = document.createElementNS(Qi, "path");
+    const y = (n / 2).toFixed(1), w = document.createElementNS(Zi, "path");
     w.setAttribute("class", "rui-sparkline-baseline"), w.setAttribute("d", `M0,${y} L${o},${y}`), w.setAttribute("stroke", "currentColor"), w.setAttribute("stroke-width", "1.5"), w.setAttribute("stroke-opacity", "0.4"), w.setAttribute("fill", "none"), w.setAttribute("vector-effect", "non-scaling-stroke"), s.appendChild(w);
-    const S = document.createElementNS(Qi, "circle");
+    const S = document.createElementNS(Zi, "circle");
     return S.setAttribute("class", "rui-sparkline-dot"), S.setAttribute("cx", (o / 2).toFixed(1)), S.setAttribute("cy", y), S.setAttribute("r", "2"), S.setAttribute("fill", "currentColor"), s.appendChild(S), s;
   }
-  const m = o / (t.length - 1), f = t.map((y, w) => `${w === 0 ? "M" : "L"}${(w * m).toFixed(1)},${b(y).toFixed(1)}`).join(" "), v = document.createElementNS(Qi, "path");
+  const m = o / (t.length - 1), f = t.map((y, w) => `${w === 0 ? "M" : "L"}${(w * m).toFixed(1)},${b(y).toFixed(1)}`).join(" "), v = document.createElementNS(Zi, "path");
   v.setAttribute("d", `${f} L${o},${n} L0,${n} Z`), v.setAttribute("class", "rui-sparkline-area"), s.appendChild(v);
-  const x = document.createElementNS(Qi, "path");
+  const x = document.createElementNS(Zi, "path");
   return x.setAttribute("d", f), x.setAttribute("class", "rui-sparkline-line"), x.setAttribute("fill", "none"), x.setAttribute("vector-effect", "non-scaling-stroke"), s.appendChild(x), s;
 }
 function Fd(t, e) {
@@ -12319,18 +12351,18 @@ function rl(t) {
     class: i ? "rui-list-text rui-list-action" : "rui-list-text",
     type: n === "button" ? "button" : null,
     href: e || null,
-    style: i ? eS : null
+    style: i ? iS : null
   });
   s.append(d("div", { class: "rui-list-title" }, [t.title])), t.description && s.append(d("div", { class: "rui-list-description" }, [t.description])), r && (s.onclick = () => r()), a.append(s);
   const l = t.trailing ?? [];
   if (l.length > 0) {
-    const c = d("div", { class: "rui-list-trailing", style: tS });
+    const c = d("div", { class: "rui-list-trailing", style: aS });
     for (const u of l) c.append(u);
     a.append(c);
   }
   return a;
 }
-function uS(t, e) {
+function hS(t, e) {
   if ($t(t)) return e.renderNode(t);
   if (t == null) return document.createTextNode("");
   if (typeof t == "string" || typeof t == "number" || typeof t == "boolean")
@@ -12350,12 +12382,12 @@ function uS(t, e) {
     `Unsupported list item (${Array.isArray(t) ? "array" : typeof t})`
   ]);
 }
-const dS = /* @__PURE__ */ new Set(["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", "Enter", " "]);
-function Fi(t) {
+const mS = /* @__PURE__ */ new Set(["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", "Enter", " "]);
+function Bi(t) {
   return Array.from(t.querySelectorAll('[role="treeitem"]'));
 }
-function pS(t) {
-  return Fi(t).filter((e) => {
+function fS(t) {
+  return Bi(t).filter((e) => {
     let r = e.parentElement;
     for (; r && r !== t; ) {
       if (r instanceof HTMLDetailsElement && !r.open) return !1;
@@ -12364,7 +12396,7 @@ function pS(t) {
     return !0;
   });
 }
-function jd(t, e) {
+function _d(t, e) {
   for (const r of t.querySelectorAll("[data-tree-id]")) {
     const i = (r.dataset.treeId ?? "") === e;
     r.classList.contains("rui-tree-node-row") && r.setAttribute("data-active", i ? "true" : "false"), r.getAttribute("role") === "treeitem" && r.setAttribute("aria-selected", i ? "true" : "false");
@@ -12376,34 +12408,34 @@ function ni(t, e) {
     if (r.classList.contains(e)) return r;
   return null;
 }
-function hS(t) {
-  for (const e of Fi(t)) {
+function gS(t) {
+  for (const e of Bi(t)) {
     if (e.classList.contains("rui-tree-node-pending")) continue;
     const r = d("input", {
       type: "checkbox",
       class: "rui-tree-node-checkbox",
       tabindex: "-1",
       "aria-hidden": "true",
-      style: oS
+      style: lS
     }), i = ni(e, "rui-tree-node-summary");
     if (i) {
       const o = ni(i, "rui-tree-node-row");
       o ? i.insertBefore(r, o) : i.append(r);
       continue;
     }
-    const a = d("div", { class: "rui-tree-node-check-row", style: nS });
+    const a = d("div", { class: "rui-tree-node-check-row", style: cS });
     e.replaceWith(a), a.append(r), a.append(e);
   }
 }
-function mS(t) {
+function bS(t) {
   const e = t.parentElement;
   return e ? e.classList.contains("rui-tree-node-summary") ? e.parentElement instanceof HTMLElement ? e.parentElement : null : ni(e, "rui-tree-node-row") : null;
 }
-function fS(t) {
+function vS(t) {
   const e = ni(t, "rui-tree-node-summary") ?? t.parentElement, r = ni(e, "rui-tree-node-checkbox");
   return r instanceof HTMLInputElement ? r : null;
 }
-function gS(t) {
+function yS(t) {
   const e = ni(t, "rui-tree-node-children");
   if (!e) return [];
   const r = [];
@@ -12417,27 +12449,27 @@ function gS(t) {
   }
   return r;
 }
-function bS(t) {
+function wS(t) {
   return Array.from(t.querySelectorAll('[role="treeitem"]')).filter((e) => !e.classList.contains("rui-tree-node-pending"));
 }
 function Df(t) {
-  return gS(t).filter((e) => e.getAttribute("aria-disabled") !== "true" && !e.classList.contains("rui-tree-node-pending"));
+  return yS(t).filter((e) => e.getAttribute("aria-disabled") !== "true" && !e.classList.contains("rui-tree-node-pending"));
 }
-function vS(t, e) {
-  for (const r of Fi(t).reverse()) {
+function xS(t, e) {
+  for (const r of Bi(t).reverse()) {
     const i = Df(r);
     if (i.length === 0) continue;
     const a = r.dataset.treeId ?? "";
     a && (i.every((o) => e.has(o.dataset.treeId ?? "")) ? e.add(a) : e.delete(a));
   }
 }
-function _d(t, e) {
-  for (const r of Fi(t).reverse()) {
+function jd(t, e) {
+  for (const r of Bi(t).reverse()) {
     if (r.classList.contains("rui-tree-node-pending")) continue;
     const i = r.dataset.treeId ?? "", a = Df(r);
     let o;
     a.length === 0 ? o = e.has(i) ? "true" : "false" : a.every((s) => s.getAttribute("aria-checked") === "true") ? o = "true" : a.some((s) => s.getAttribute("aria-checked") !== "false") ? o = "mixed" : o = "false", r.setAttribute("aria-checked", o);
-    const n = fS(r);
+    const n = vS(r);
     n && (n.checked = o === "true", o === "true" ? n.setAttribute("checked", "") : n.removeAttribute("checked"), n.indeterminate = o === "mixed", o === "mixed" ? n.setAttribute("data-indeterminate", "true") : n.removeAttribute("data-indeterminate"));
   }
 }
@@ -12446,7 +12478,7 @@ function qd(t) {
     ".rui-tree-node-summary, .rui-tree-node-summary .rui-tree-node-row, .rui-tree-node-chevron-button"
   ))
     i.tabIndex = -1;
-  const e = Fi(t), r = e.find((i) => i.getAttribute("aria-selected") === "true") ?? e[0];
+  const e = Bi(t), r = e.find((i) => i.getAttribute("aria-selected") === "true") ?? e[0];
   for (const i of e) i.tabIndex = i === r ? 0 : -1;
 }
 function Of(t) {
@@ -12462,7 +12494,7 @@ function Bf(t) {
       return;
     }
 }
-function yS(t, e) {
+function kS(t, e) {
   const r = Of(t?.[8]), i = Bf(t?.[12]) ?? e;
   return (a, o) => hc(a, o, r, i);
 }
@@ -12491,12 +12523,12 @@ const es = [
   "var(--rui-chart-4, #ef4444)",
   "var(--rui-chart-5, #06b6d4)",
   "var(--rui-chart-6, #8b5cf6)"
-], si = (t) => es[t % es.length] ?? es[0], wS = ["primary", "success", "warning", "danger", "info"];
+], si = (t) => es[t % es.length] ?? es[0], SS = ["primary", "success", "warning", "danger", "info"];
 function Cn(t, e = "primary") {
   const r = g(t).trim().toLowerCase();
-  return wS.includes(r) ? r : e;
+  return SS.includes(r) ? r : e;
 }
-const ji = "No data", An = "Loading…", Ur = [
+const Fi = "No data", An = "Loading…", Ur = [
   {
     name: "ariaLabel",
     type: "string",
@@ -12510,7 +12542,7 @@ const ji = "No data", An = "Loading…", Ur = [
     optional: !0,
     description: "Take the graphic out of the accessibility tree. Only for a chart that repeats information already present in the surrounding text"
   }
-], xS = {
+], CS = {
   name: "Series",
   description: "Named data series for charts. Used inside BarChart, LineChart, PieChart, RadarChart and ScatterChart — the chart reads the series definition itself, so a Series is never placed on its own. Pass `values` for numeric charts, `points` for ScatterChart, and `color` to override this series' palette slot.",
   props: [
@@ -12543,7 +12575,7 @@ const ji = "No data", An = "Loading…", Ur = [
 }, mc = (t) => t.map((e, r) => {
   const i = e, a = g(i.args?.[0], `Series ${r + 1}`), o = P(i.args?.[1]).map((s) => R(s)), n = g(i.args?.[2]).trim();
   return n ? { name: a, values: o, color: n } : { name: a, values: o };
-}), _i = (t, e) => t.color || si(e), kS = {
+}), _i = (t, e) => t.color || si(e), AS = {
   name: "BarChart",
   description: "Bar chart. `labels` define the category axis, `series` define the bars. Pass `stacked: true` to stack the series instead of grouping them, `horizontal: true` when the category names are too long for a vertical axis, and `onBarClick(label, value, seriesName)` for drill-down.",
   props: [
@@ -12563,23 +12595,23 @@ const ji = "No data", An = "Loading…", Ur = [
   ],
   render: (t, e, r) => {
     const i = P(e.labels).map((C) => g(C)), a = mc(P(e.series)), o = g(e.title), n = Hr(e, typeof e.onBarClick == "function"), s = z(e.stacked), l = z(e.horizontal), c = e.showLegend == null ? !0 : z(e.showLegend), u = e.onBarClick, h = d("div", { class: "rui-chart rui-bar-chart" });
-    if (o && h.append(d("div", { class: "rui-chart-title" }, [o])), z(e.loading)) return _t(h, An, !0);
+    if (o && h.append(d("div", { class: "rui-chart-title" }, [o])), z(e.loading)) return jt(h, An, !0);
     if (!a.some((C) => C.values.length > 0))
-      return _t(h, g(e.emptyText) || ji, !1);
-    const p = Math.max(i.length, ...a.map((C) => C.values.length)), b = Array.from({ length: p }, (C, A) => i[A] ?? `#${A + 1}`), m = b.map((C, A) => a.reduce(($, T) => $ + Math.max(0, T.values[A] ?? 0), 0)), f = s ? Math.max(1, ...m) : Math.max(1, ...a.flatMap((C) => C.values)), v = g(e.xAxisLabel), x = g(e.yAxisLabel), y = 640, w = qi(e.height, 240), S = fc(0, f), k = l ? CS({
+      return jt(h, g(e.emptyText) || Fi, !1);
+    const p = Math.max(i.length, ...a.map((C) => C.values.length)), b = Array.from({ length: p }, (C, A) => i[A] ?? `#${A + 1}`), m = b.map((C, A) => a.reduce(($, T) => $ + Math.max(0, T.values[A] ?? 0), 0)), f = s ? Math.max(1, ...m) : Math.max(1, ...a.flatMap((C) => C.values)), v = g(e.xAxisLabel), x = g(e.yAxisLabel), y = 640, w = ji(e.height, 240), S = fc(0, f), k = l ? TS({
       width: y,
       height: w,
       categories: b,
       series: a,
       stacked: s,
       max: f,
-      categoryGutter: Math.max(48, Math.min(180, RS(b, 18) + 12)),
+      categoryGutter: Math.max(48, Math.min(180, OS(b, 18) + 12)),
       valueGutter: S,
       xAxisLabel: v,
       yAxisLabel: x,
       helpers: r,
       onBarClick: u
-    }) : SS({
+    }) : $S({
       width: y,
       height: w,
       categories: b,
@@ -12596,7 +12628,7 @@ const ji = "No data", An = "Loading…", Ur = [
       l ? "Horizontal bar chart" : "Bar chart",
       o,
       `${a.length} series across ${b.length} categories.`
-    )), w !== 240 && k.setAttribute("style", `max-height:${w}px`), h.append(k), n.decorative || h.append(Ui(
+    )), w !== 240 && k.setAttribute("style", `max-height:${w}px`), h.append(k), n.decorative || h.append(qi(
       o || "Bar chart data",
       b,
       a.map((C) => ({
@@ -12606,7 +12638,7 @@ const ji = "No data", An = "Loading…", Ur = [
     )), c && a.length > 0 && h.append(Fa(a)), h;
   }
 };
-function SS(t) {
+function $S(t) {
   const {
     width: e,
     height: r,
@@ -12635,7 +12667,7 @@ function SS(t) {
       if ($ === void 0) return;
       const T = o ? Math.max(0, $) : $, I = Math.max(0, T / n * f), M = o ? p.left + A * x + x * 0.15 : p.left + A * x + x * 0.15 + k * y, L = p.top + f - w[A] - I;
       o && (w[A] = w[A] + I);
-      const D = Te("rect", {
+      const D = Ie("rect", {
         x: M.toFixed(1),
         y: L.toFixed(1),
         width: Math.max(y - 2, 1).toFixed(1),
@@ -12643,7 +12675,7 @@ function SS(t) {
         fill: _i(S, k),
         rx: "2"
       });
-      D.append(Te("title", {}, [`${S.name} — ${C}: ${$}`])), typeof h == "function" && di(D, `${S.name} — ${C}: ${$}`, () => {
+      D.append(Ie("title", {}, [`${S.name} — ${C}: ${$}`])), typeof h == "function" && di(D, `${S.name} — ${C}: ${$}`, () => {
         u.invoke(h, C, $, S.name);
       }), v.append(D);
     });
@@ -12656,7 +12688,7 @@ function SS(t) {
     (S) => p.left + (S + 0.5) * x
   ), Ba(v, p, b, f, r, l, c), v;
 }
-function CS(t) {
+function TS(t) {
   const {
     width: e,
     height: r,
@@ -12679,20 +12711,20 @@ function CS(t) {
   Ff(v, b, m, f, n);
   const x = f / Math.max(i.length, 1), y = o ? x * 0.7 : x * 0.7 / Math.max(a.length, 1), w = i.map(() => 0), S = Math.max(4, Math.floor((l - 10) / Tn));
   return i.forEach((k, C) => {
-    const A = b.top + C * x, $ = bc(k, S), T = Te("text", {
+    const A = b.top + C * x, $ = bc(k, S), T = Ie("text", {
       x: (b.left - 8).toFixed(1),
       y: (A + x / 2 + 3).toFixed(1),
       "text-anchor": "end",
       class: "rui-chart-label"
     }, [$]);
-    $ !== k && T.append(Te("title", {}, [k])), v.append(T);
+    $ !== k && T.append(Ie("title", {}, [k])), v.append(T);
   }), a.forEach((k, C) => {
     i.forEach((A, $) => {
       const T = k.values[$];
       if (T === void 0) return;
       const I = o ? Math.max(0, T) : T, M = Math.max(0, I / n * m), E = b.top + $ * x, L = o ? E + x * 0.15 : E + x * 0.15 + C * y, D = b.left + w[$];
       o && (w[$] = w[$] + M);
-      const N = Te("rect", {
+      const N = Ie("rect", {
         x: D.toFixed(1),
         y: L.toFixed(1),
         width: M.toFixed(1),
@@ -12700,13 +12732,13 @@ function CS(t) {
         fill: _i(k, C),
         rx: "2"
       });
-      N.append(Te("title", {}, [`${k.name} — ${A}: ${T}`])), typeof p == "function" && di(N, `${k.name} — ${A}: ${T}`, () => {
+      N.append(Ie("title", {}, [`${k.name} — ${A}: ${T}`])), typeof p == "function" && di(N, `${k.name} — ${A}: ${T}`, () => {
         h.invoke(p, A, T, k.name);
       }), v.append(N);
     });
   }), Ba(v, b, m, f, r, u, c), v;
 }
-const AS = {
+const IS = {
   name: "LineChart",
   description: 'Line chart. `labels` define the x-axis, each Series is a line. As a shortcut you can pass `data=[{x: "Jan", revenue: 12, signups: 4}, …]` and the labels + series will be derived automatically (one line per non-`x` numeric key; a row that omits a key leaves a gap in that line). Use `data` when the dataset is already row-shaped; use `series` when you have explicit Series objects.',
   props: [
@@ -12731,25 +12763,25 @@ const AS = {
     let i = P(e.labels).map((O) => g(O)), a = mc(P(e.series));
     const o = P(e.data);
     if (o.length > 0 && (i.length === 0 || a.length === 0)) {
-      const O = $S(o);
+      const O = zS(o);
       i.length === 0 && (i = O.labels), a.length === 0 && (a = O.series);
     }
     const n = g(e.title), s = Hr(e, typeof e.onPointClick == "function"), l = z(e.filled), c = z(e.stacked), u = e.showLegend == null ? !0 : z(e.showLegend), h = e.onPointClick, p = d("div", { class: "rui-chart rui-line-chart" });
-    if (n && p.append(d("div", { class: "rui-chart-title" }, [n])), z(e.loading)) return _t(p, An, !0);
+    if (n && p.append(d("div", { class: "rui-chart-title" }, [n])), z(e.loading)) return jt(p, An, !0);
     if (!a.some((O) => O.values.some((q) => q != null)))
-      return _t(p, g(e.emptyText) || ji, !1);
+      return jt(p, g(e.emptyText) || Fi, !1);
     const b = Math.max(i.length, ...a.map((O) => O.values.length), 1), m = a.map(() => Array(b).fill(0));
     if (l && c)
       for (let O = 0; O < b; O += 1) {
         let q = 0;
-        a.forEach((j, _) => {
-          q += j.values[O] ?? 0, m[_][O] = q;
+        a.forEach((_, j) => {
+          q += _.values[O] ?? 0, m[j][O] = q;
         });
       }
     const f = l && c ? m.flat() : a.flatMap((O) => O.values).filter((O) => O != null), v = e.yMin == null ? null : R(e.yMin), x = e.yMax == null ? null : R(e.yMax), y = v ?? (l && c ? 0 : Math.min(0, ...f));
     let w = x ?? Math.max(1, ...f);
     w <= y && (w = y + 1);
-    const S = g(e.xAxisLabel), k = g(e.yAxisLabel), C = 640, A = qi(e.height, 240), $ = {
+    const S = g(e.xAxisLabel), k = g(e.yAxisLabel), C = 640, A = ji(e.height, 240), $ = {
       left: fc(y, w) + (k ? sr : 0),
       right: 12,
       top: 12,
@@ -12764,7 +12796,7 @@ const AS = {
     )), A !== 240 && E.setAttribute("style", `max-height:${A}px`), In(E, $, T, M, w, y);
     const L = T / Math.max(b - 1, 1), D = (O) => $.left + O * L, N = (O) => $.top + M - (O - y) / (w - y) * M;
     return a.forEach((O, q) => {
-      const j = _i(O, q), _ = l && c ? m[q] : O.values, V = l && c && q > 0 ? m[q - 1] : null, re = _.map((Z, W) => Z == null ? null : [D(W), N(Z), W]), pe = TS(re);
+      const _ = _i(O, q), j = l && c ? m[q] : O.values, V = l && c && q > 0 ? m[q - 1] : null, re = j.map((Z, W) => Z == null ? null : [D(W), N(Z), W]), pe = MS(re);
       if (l)
         for (const Z of pe) {
           if (Z.length === 0) continue;
@@ -12775,15 +12807,15 @@ const AS = {
             const J = ($.top + M).toFixed(1), U = Z[0], ie = Z[Z.length - 1];
             W += ` L${ie[0].toFixed(1)},${J} L${U[0].toFixed(1)},${J} Z`;
           }
-          E.append(Te("path", { d: W, fill: j, "fill-opacity": "0.2", stroke: "none" }));
+          E.append(Ie("path", { d: W, fill: _, "fill-opacity": "0.2", stroke: "none" }));
         }
       for (const Z of pe) {
         if (Z.length === 0) continue;
         const W = Z.map(([J, U], ie) => `${ie === 0 ? "M" : "L"}${J.toFixed(1)},${U.toFixed(1)}`).join(" ");
-        E.append(Te("path", {
+        E.append(Ie("path", {
           d: W,
           fill: "none",
-          stroke: j,
+          stroke: _,
           "stroke-width": "2",
           "stroke-linejoin": "round",
           "stroke-linecap": "round"
@@ -12793,27 +12825,27 @@ const AS = {
       if (!(O.values.length > 30 && !K))
         for (const Z of re) {
           if (!Z) continue;
-          const [W, J, U] = Z, ie = O.values[U], ee = Te("circle", {
+          const [W, J, U] = Z, ie = O.values[U], ee = Ie("circle", {
             cx: W.toFixed(1),
             cy: J.toFixed(1),
             r: K ? "4" : "3",
-            fill: j
+            fill: _
           }), he = `${O.name} — ${i[U] ?? `#${U + 1}`}: ${ie}`;
-          ee.append(Te("title", {}, [he])), K && di(ee, he, () => {
+          ee.append(Ie("title", {}, [he])), K && di(ee, he, () => {
             r.invoke(h, i[U] ?? `#${U + 1}`, ie, O.name);
           }), E.append(ee);
         }
-    }), vc(E, i, $, M, I, D), Ba(E, $, T, M, A, S, k), p.append(E), s.decorative || p.append(Ui(
+    }), vc(E, i, $, M, I, D), Ba(E, $, T, M, A, S, k), p.append(E), s.decorative || p.append(qi(
       n || "Line chart data",
       Array.from({ length: b }, (O, q) => i[q] ?? `#${q + 1}`),
       a.map((O) => ({
         label: O.name,
-        cells: Array.from({ length: b }, (q, j) => $n(O.values[j]))
+        cells: Array.from({ length: b }, (q, _) => $n(O.values[_]))
       }))
     )), u && a.length > 0 && p.append(Fa(a)), p;
   }
 };
-function $S(t) {
+function zS(t) {
   const e = [], r = /* @__PURE__ */ new Map();
   t.forEach((a) => {
     const o = a;
@@ -12835,7 +12867,7 @@ function $S(t) {
   });
   return { labels: e, series: i };
 }
-function TS(t) {
+function MS(t) {
   const e = [];
   let r = [];
   for (const i of t) {
@@ -12847,7 +12879,7 @@ function TS(t) {
   }
   return r.length > 0 && e.push(r), e;
 }
-const IS = {
+const ES = {
   name: "PieChart",
   description: 'Pie / Donut chart. Each segment maps to a label/value pair. Pass `donut: true` (or an `innerRadius` fraction) for a donut. Numeric labels are rendered on every segment by default — set `showValues: false` to hide them, or `valueFormat: "percent"` to show the share instead of the raw value.',
   props: [
@@ -12868,11 +12900,11 @@ const IS = {
   ],
   render: (t, e, r) => {
     const i = P(e.labels).map((I) => g(I)), a = P(e.values).map((I) => R(I)), o = g(e.title), n = Hr(e, typeof e.onSliceClick == "function"), s = e.showValues == null ? !0 : z(e.showValues), l = e.showLegend == null ? !0 : z(e.showLegend), c = g(e.legendPosition).toLowerCase() === "right", u = g(e.valueFormat, "value").toLowerCase(), h = u === "percent" ? "percent" : u === "both" ? "both" : "value", p = e.onSliceClick, b = d("div", { class: "rui-chart rui-pie-chart" }), m = o ? d("div", { class: "rui-chart-title" }, [o]) : null;
-    if (m && b.append(m), z(e.loading)) return _t(b, An, !0);
+    if (m && b.append(m), z(e.loading)) return jt(b, An, !0);
     const f = i.map((I, M) => ({ name: I, value: a[M] ?? 0 })).filter((I) => I.value > 0);
     if (f.length === 0)
-      return _t(b, g(e.emptyText) || ji, !1);
-    const v = Math.max(120, Math.min(640, qi(e.size, 240))), x = ES(e.innerRadius, z(e.donut)), y = f.reduce((I, M) => I + M.value, 0), w = Wr(v, v);
+      return jt(b, g(e.emptyText) || Fi, !1);
+    const v = Math.max(120, Math.min(640, ji(e.size, 240))), x = RS(e.innerRadius, z(e.donut)), y = f.reduce((I, M) => I + M.value, 0), w = Wr(v, v);
     ui(w, n, ci(
       x > 0 ? "Donut chart" : "Pie chart",
       o,
@@ -12881,17 +12913,17 @@ const IS = {
     const S = v / 2, k = v / 2, C = v / 2 - 30, A = C * x, $ = 0.05;
     let T = -Math.PI / 2;
     if (f.forEach((I, M) => {
-      const E = I.value / y, L = E * Math.PI * 2, D = T + L, N = L > Math.PI ? 1 : 0, O = Te("path", {
-        d: zS(S, k, C, A, T, D, N),
+      const E = I.value / y, L = E * Math.PI * 2, D = T + L, N = L > Math.PI ? 1 : 0, O = Ie("path", {
+        d: NS(S, k, C, A, T, D, N),
         fill: si(M),
         stroke: "var(--rui-color-surface, #fff)",
         "stroke-width": "2"
       }), q = `${I.name}: ${I.value} (${(E * 100).toFixed(1)}%)`;
-      if (O.append(Te("title", {}, [q])), typeof p == "function" && di(O, q, () => {
+      if (O.append(Ie("title", {}, [q])), typeof p == "function" && di(O, q, () => {
         r.invoke(p, I.name, I.value, E);
       }), w.append(O), s && E >= $) {
-        const j = T + L / 2, _ = A > 0 ? (A + C) / 2 : C * 0.62, V = S + _ * Math.cos(j), re = k + _ * Math.sin(j);
-        w.append(Te("text", {
+        const _ = T + L / 2, j = A > 0 ? (A + C) / 2 : C * 0.62, V = S + j * Math.cos(_), re = k + j * Math.sin(_);
+        w.append(Ie("text", {
           x: V.toFixed(1),
           y: re.toFixed(1),
           class: "rui-pie-chart-value",
@@ -12902,10 +12934,10 @@ const IS = {
           "stroke-width": "3",
           "stroke-linejoin": "round",
           fill: "#fff"
-        }, [NS(I.value, E, h)]));
+        }, [PS(I.value, E, h)]));
       }
       T = D;
-    }), c && (b.setAttribute("style", "flex-direction:row;align-items:center;flex-wrap:wrap"), m?.setAttribute("style", "flex:1 0 100%")), b.append(w), n.decorative || b.append(Ui(
+    }), c && (b.setAttribute("style", "flex-direction:row;align-items:center;flex-wrap:wrap"), m?.setAttribute("style", "flex:1 0 100%")), b.append(w), n.decorative || b.append(qi(
       o || "Pie chart data",
       ["Value", "Share"],
       i.map((I, M) => {
@@ -12922,27 +12954,27 @@ const IS = {
     return b;
   }
 };
-function zS(t, e, r, i, a, o, n) {
-  if (o - a >= Math.PI * 2 - 1e-6) return MS(t, e, r, i);
+function NS(t, e, r, i, a, o, n) {
+  if (o - a >= Math.PI * 2 - 1e-6) return LS(t, e, r, i);
   const s = t + r * Math.cos(a), l = e + r * Math.sin(a), c = t + r * Math.cos(o), u = e + r * Math.sin(o);
   if (i <= 0)
     return `M${t.toFixed(1)},${e.toFixed(1)} L${s.toFixed(1)},${l.toFixed(1)} A${r},${r} 0 ${n} 1 ${c.toFixed(1)},${u.toFixed(1)} Z`;
   const h = t + i * Math.cos(o), p = e + i * Math.sin(o), b = t + i * Math.cos(a), m = e + i * Math.sin(a);
   return `M${s.toFixed(1)},${l.toFixed(1)} A${r},${r} 0 ${n} 1 ${c.toFixed(1)},${u.toFixed(1)} L${h.toFixed(1)},${p.toFixed(1)} A${i.toFixed(1)},${i.toFixed(1)} 0 ${n} 0 ${b.toFixed(1)},${m.toFixed(1)} Z`;
 }
-function MS(t, e, r, i) {
+function LS(t, e, r, i) {
   const a = (o, n) => {
     const s = (t - o).toFixed(1), l = (t + o).toFixed(1), c = e.toFixed(1), u = o.toFixed(1);
     return `M${s},${c} A${u},${u} 0 1 ${n} ${l},${c} A${u},${u} 0 1 ${n} ${s},${c} Z`;
   };
   return i > 0 ? `${a(r, 1)} ${a(i, 0)}` : a(r, 1);
 }
-function ES(t, e) {
+function RS(t, e) {
   if (t == null) return e ? 0.6 : 0;
   const r = R(t, 0), i = r > 1 ? r / 100 : r;
   return !Number.isFinite(i) || i <= 0 ? e ? 0.6 : 0 : Math.min(0.9, i);
 }
-function NS(t, e, r) {
+function PS(t, e, r) {
   const i = `${Math.round(e * 100)}%`, a = nr(t);
   return r === "percent" ? i : r === "both" ? `${a} (${i})` : a;
 }
@@ -12954,12 +12986,12 @@ function nr(t) {
 function $n(t) {
   return t == null ? "—" : String(t);
 }
-function qi(t, e) {
+function ji(t, e) {
   if (t == null) return e;
   const r = typeof t == "string" ? Number.parseFloat(t) : t, i = R(r, e);
   return !Number.isFinite(i) || i <= 0 ? e : Math.max(80, Math.min(1200, Math.round(i)));
 }
-function _t(t, e, r) {
+function jt(t, e, r) {
   return r && t.setAttribute("aria-busy", "true"), t.append(d("div", { class: "rui-chart-empty" }, [e])), t;
 }
 function ci(t, e, r = "") {
@@ -12979,7 +13011,7 @@ function ui(t, e, r) {
   }
   t.setAttribute("aria-label", e.name || r);
 }
-function Ui(t, e, r, i = "") {
+function qi(t, e, r, i = "") {
   const a = d("div", { class: "rui-visually-hidden" }), o = d("table");
   o.append(d("caption", {}, [t]));
   const n = d("tr");
@@ -13003,15 +13035,15 @@ function di(t, e, r) {
     a.key !== "Enter" && a.key !== " " || (a.preventDefault(), r());
   };
 }
-const Tn = 7, LS = 6, Ri = 4, sr = 18, Ud = 12;
-function RS(t, e = 40) {
+const Tn = 7, DS = 6, Li = 4, sr = 18, Ud = 12;
+function OS(t, e = 40) {
   return t.reduce((i, a) => Math.max(i, Math.min(a.length, e)), 0) * Tn;
 }
 function fc(t, e) {
   let r = 0;
-  for (let i = 0; i <= Ri; i += 1)
-    r = Math.max(r, nr(t + (e - t) * (i / Ri)).length);
-  return Math.max(32, Math.min(96, Math.ceil(r * LS) + 10));
+  for (let i = 0; i <= Li; i += 1)
+    r = Math.max(r, nr(t + (e - t) * (i / Li)).length);
+  return Math.max(32, Math.min(96, Math.ceil(r * DS) + 10));
 }
 function gc(t, e, r = t.length) {
   if (t.length === 0)
@@ -13025,7 +13057,7 @@ function gc(t, e, r = t.length) {
 function bc(t, e) {
   return t.length <= e ? t : t.slice(0, Math.max(e - 1, 1)) + "…";
 }
-function PS(t, e) {
+function BS(t, e) {
   return bc(t, Math.max(2, Math.floor(e / Tn)));
 }
 function vc(t, e, r, i, a, o) {
@@ -13039,12 +13071,12 @@ function vc(t, e, r, i, a, o) {
       "text-anchor": a.rotated ? "end" : "middle"
     };
     a.rotated && (h.transform = `rotate(-45, ${c}, ${n})`);
-    const p = Te("text", h, [u]);
-    u !== s && p.append(Te("title", {}, [s])), t.append(p);
+    const p = Ie("text", h, [u]);
+    u !== s && p.append(Ie("title", {}, [s])), t.append(p);
   });
 }
 function Ba(t, e, r, i, a, o, n) {
-  if (o && t.append(Te("text", {
+  if (o && t.append(Ie("text", {
     x: (e.left + r / 2).toFixed(1),
     y: (a - 4).toFixed(1),
     "text-anchor": "middle",
@@ -13052,7 +13084,7 @@ function Ba(t, e, r, i, a, o, n) {
     "font-weight": "500"
   }, [o])), n) {
     const l = e.top + i / 2;
-    t.append(Te("text", {
+    t.append(Ie("text", {
       x: String(12),
       y: String(l),
       "text-anchor": "middle",
@@ -13066,7 +13098,7 @@ function Wr(t, e) {
   const r = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   return r.setAttribute("viewBox", `0 0 ${t} ${e}`), r.setAttribute("class", "rui-chart-svg"), r.setAttribute("role", "img"), r;
 }
-function Te(t, e, r) {
+function Ie(t, e, r) {
   const i = document.createElementNS("http://www.w3.org/2000/svg", t);
   for (const [a, o] of Object.entries(e)) i.setAttribute(a, o);
   if (r)
@@ -13075,15 +13107,15 @@ function Te(t, e, r) {
   return i;
 }
 function In(t, e, r, i, a, o = 0) {
-  for (let n = 0; n <= Ri; n += 1) {
-    const s = n / Ri, l = e.top + i - s * i;
-    t.append(Te("line", {
+  for (let n = 0; n <= Li; n += 1) {
+    const s = n / Li, l = e.top + i - s * i;
+    t.append(Ie("line", {
       x1: String(e.left),
       x2: String(e.left + r),
       y1: String(l),
       y2: String(l),
       stroke: "var(--rui-color-border-subtle, rgba(0,0,0,0.08))"
-    })), t.append(Te("text", {
+    })), t.append(Ie("text", {
       x: String(e.left - 6),
       y: String(l + 3),
       "text-anchor": "end",
@@ -13093,15 +13125,15 @@ function In(t, e, r, i, a, o = 0) {
 }
 function Ff(t, e, r, i, a, o = 0) {
   const n = e.top + i;
-  for (let s = 0; s <= Ri; s += 1) {
-    const l = s / Ri, c = e.left + l * r;
-    t.append(Te("line", {
+  for (let s = 0; s <= Li; s += 1) {
+    const l = s / Li, c = e.left + l * r;
+    t.append(Ie("line", {
       x1: String(c),
       x2: String(c),
       y1: String(e.top),
       y2: String(n),
       stroke: "var(--rui-color-border-subtle, rgba(0,0,0,0.08))"
-    })), t.append(Te("text", {
+    })), t.append(Ie("text", {
       x: String(c),
       y: String(n + 16),
       "text-anchor": "middle",
@@ -13119,7 +13151,7 @@ function Fa(t) {
     })), a.append(d("span", {}, [r.name])), e.append(a);
   }), e;
 }
-const DS = {
+const FS = {
   name: "SectionBlock",
   description: 'Titled chat block with a description and child content. `level` sets the heading level (2-6, default 3) so nested sections keep a valid outline; `actions` renders trailing controls in the header row (a "View all" link, an overflow menu).',
   props: [
@@ -13147,7 +13179,7 @@ const DS = {
     for (const c of P(e.children)) i.append(r.renderNode(c));
     return i;
   }
-}, Hd = ["bullet", "none", "check"], OS = {
+}, Hd = ["bullet", "none", "check"], _S = {
   name: "ListBlock",
   description: "Chat-styled list with bullets, useful for steps or summaries. `items` takes plain strings or component nodes (Text, ActionLink, Badge, …), which render inline. `marker` switches to an unmarked or checklist list; `start` continues an `ordered` list that was split across blocks.",
   props: [
@@ -13174,8 +13206,8 @@ const DS = {
     return l;
   }
 };
-let BS = 0;
-const FS = {
+let jS = 0;
+const qS = {
   name: "FollowUpBlock",
   description: 'Suggested follow-up prompts shown as buttons. Each item dispatches its label as an assistant message (equivalent to `emit "assistant-message" { message }`) unless `onSelect` is supplied, which receives `(message, label)` instead. `disabled` makes the row inert while the assistant is responding; `layout: "stack"` puts one suggestion per line.',
   props: [
@@ -13187,7 +13219,7 @@ const FS = {
   ],
   render: (t, e, r) => {
     const i = d("div", { class: "rui-follow-up" }), a = g(e.title, "You can also ask"), o = g(e.layout, "wrap") === "stack" ? "stack" : "wrap", n = z(e.disabled), s = r.useInstanceState("rui-follow-up-title-id", "");
-    s.get() || s.set(`rui-follow-up-title-${BS += 1}`);
+    s.get() || s.set(`rui-follow-up-title-${jS += 1}`);
     const l = s.get();
     a && i.append(d("div", { class: "rui-follow-up-title", id: l }, [a]));
     const c = d("div", {
@@ -13201,20 +13233,20 @@ const FS = {
       style: o === "stack" ? "flex-direction:column;align-items:stretch" : null
     });
     for (const u of P(e.items)) {
-      const h = jS(u, r, n, e.onSelect);
+      const h = US(u, r, n, e.onSelect);
       h && c.append(h);
     }
     return i.append(c), i;
   }
-}, jS = (t, e, r, i) => {
-  const { label: a, message: o, disabled: n } = _S(t);
+}, US = (t, e, r, i) => {
+  const { label: a, message: o, disabled: n } = HS(t);
   if (!a) return null;
   const s = r || n, l = d("button", { class: "rui-follow-up-button", type: "button", disabled: s }, [a]);
   return s || (l.onclick = (c) => {
     const u = c.currentTarget ?? c.target;
     u && (u.disabled = !0), i == null ? e.sendToAssistant(o) : e.invoke(i, o, a);
   }), l;
-}, _S = (t) => {
+}, HS = (t) => {
   if (typeof t == "string") return { label: t, message: t, disabled: !1 };
   if (t && typeof t == "object") {
     const r = t;
@@ -13227,7 +13259,7 @@ const FS = {
   }
   const e = g(t);
   return { label: e, message: e, disabled: !1 };
-}, qS = {
+}, WS = {
   name: "FollowUpItem",
   description: "Single follow-up item.",
   props: [
@@ -13240,12 +13272,12 @@ const FS = {
       r.sendToAssistant(a);
     }, o;
   }
-}, US = ["default", "critical", "danger", "destructive"];
-function HS(t) {
+}, GS = ["default", "critical", "danger", "destructive"];
+function VS(t) {
   const e = g(t, "default").toLowerCase();
   return e === "critical" || e === "danger" || e === "destructive" ? "critical" : "default";
 }
-const WS = {
+const KS = {
   name: "ActionLink",
   description: 'Inline link that runs an action when clicked instead of navigating. `disabled` makes it inert while the work is in flight; `icon` adds a glyph before the label (or after it with `iconPosition: "end"`). `tone: "critical"` marks a destructive inline action ("Remove from group", "Delete") in the danger colour — the inline-link equivalent of `Button`\'s `danger` variant, for a row/list context where a full button would be too heavy (`danger`/`destructive` are accepted synonyms).',
   props: [
@@ -13255,10 +13287,10 @@ const WS = {
     { name: "icon", type: "string", optional: !0, description: "Font Awesome icon shown with the label" },
     { name: "iconPosition", type: "string", optional: !0, enum: ["start", "end"], description: "Which side the icon sits on (default `start`)" },
     { name: "ariaLabel", type: "string", optional: !0, description: 'Accessible name, when the visible label alone does not identify the target — e.g. one "Rebuild" link per table row, where every link would otherwise be announced identically' },
-    { name: "tone", type: "string", optional: !0, enum: US, aliases: ["variant"], description: '`default` (the primary link colour) or `critical` for a destructive action ("✕ Remove", "✕ Delete") — the only real destructive affordance elsewhere in the catalogue is a DropdownMenu\'s `MenuItem variant: "danger"`, which is too heavy for an inline row action' }
+    { name: "tone", type: "string", optional: !0, enum: GS, aliases: ["variant"], description: '`default` (the primary link colour) or `critical` for a destructive action ("✕ Remove", "✕ Delete") — the only real destructive affordance elsewhere in the catalogue is a DropdownMenu\'s `MenuItem variant: "danger"`, which is too heavy for an inline row action' }
   ],
   render: (t, e, r) => {
-    const i = z(e.disabled), a = HS(e.tone), o = g(e.ariaLabel), n = g(e.iconPosition, "start") === "end", s = d("button", {
+    const i = z(e.disabled), a = VS(e.tone), o = g(e.ariaLabel), n = g(e.iconPosition, "start") === "end", s = d("button", {
       type: "button",
       class: "rui-action-link" + (e.icon ? " has-icon" : ""),
       disabled: i,
@@ -13280,7 +13312,7 @@ const WS = {
 function yc(t) {
   return t instanceof HTMLElement ? t.matches(Wd) || t.querySelector(Wd) !== null : !1;
 }
-function GS(t, e) {
+function YS(t, e) {
   if (!(t instanceof HTMLElement)) return;
   const r = t.getAttribute("aria-describedby");
   if (!r) {
@@ -13290,15 +13322,15 @@ function GS(t, e) {
   r.split(/\s+/).includes(e) || t.setAttribute("aria-describedby", `${r} ${e}`);
 }
 let Gd = 0;
-function jf(t, e) {
+function _f(t, e) {
   const r = t.get();
   if (r) return r;
   Gd += 1;
   const i = `${e}-${Gd}`;
   return t.set(i), i;
 }
-const _f = ["xs", "sm", "md", "lg", "xl"], qf = ["initials", "dicebear", "gradient"];
-function VS(t) {
+const jf = ["xs", "sm", "md", "lg", "xl"], qf = ["initials", "dicebear", "gradient"];
+function XS(t) {
   let e = 0;
   for (let a = 0; a < t.length; a += 1) e = e * 31 + t.charCodeAt(a) >>> 0;
   const r = e % 360, i = (r + 40) % 360;
@@ -13310,7 +13342,7 @@ const Uf = {
   props: [
     { name: "name", type: "string", description: "Accessible name + initials fallback" },
     { name: "src", type: "string", optional: !0, description: "Image URL" },
-    { name: "size", type: "string", optional: !0, enum: _f },
+    { name: "size", type: "string", optional: !0, enum: jf },
     { name: "status", type: "string", optional: !0, enum: ["online", "offline", "busy", "away"] },
     {
       name: "fallback",
@@ -13326,9 +13358,9 @@ const Uf = {
       "data-size": i,
       role: a ? "img" : "presentation",
       "aria-label": a ? n : null
-    }), l = g(e.fallback, "dicebear"), c = je(e.src), u = !c && l === "dicebear" && a ? je(N0(a)) : "", h = c || u, p = () => l === "gradient" && a ? d("span", {
+    }), l = g(e.fallback, "dicebear"), c = _e(e.src), u = !c && l === "dicebear" && a ? _e(P0(a)) : "", h = c || u, p = () => l === "gradient" && a ? d("span", {
       class: "rui-avatar-fallback rui-avatar-gradient",
-      style: VS(a)
+      style: XS(a)
     }, [Dr(a)]) : d("span", { class: "rui-avatar-fallback" }, [Dr(a)]), b = h ? r.useInstanceState(`img-error:${h}`, !1) : null;
     if (h && !b?.get()) {
       const m = d("img", { src: h, alt: "", loading: "lazy" });
@@ -13347,13 +13379,13 @@ const Uf = {
       title: o
     })), s;
   }
-}, KS = {
+}, ZS = {
   name: "AvatarGroup",
   description: 'Stack of overlapping avatars with a `+N` chip when the list overflows. Pass either Avatar(...) nodes or plain {name, src, status?, fallback?} objects. Set `total` when the list is only a page of a larger set (5 avatars out of 200 members renders `+195`), and `fallback: "initials"` to keep the whole pile offline (the default DiceBear illustration is a network request per member).',
   props: [
     { name: "items", type: "Avatar[]", description: "Avatar(...) nodes or {name, src, status?, fallback?} objects" },
     { name: "max", type: "number", optional: !0, description: "Maximum avatars to show (default 4)" },
-    { name: "size", type: "string", optional: !0, enum: _f },
+    { name: "size", type: "string", optional: !0, enum: jf },
     { name: "total", type: "number", optional: !0, description: "Total member count when `items` is only a page of it — drives the `+N` chip" },
     {
       name: "fallback",
@@ -13384,7 +13416,7 @@ const Uf = {
       "data-size": o
     }, [d("span", { class: "rui-avatar-fallback" }, [`+${c}`])])), u;
   }
-}, il = "Progress", YS = {
+}, il = "Progress", QS = {
   name: "Progress",
   description: "Linear progress bar. `value` is clamped between 0 and `max` (default 100). `indeterminate=true` renders a looping animation when the total is unknown. Provide `segments` to render a segmented progress strip (steps in an onboarding flow), or `buffered` for a secondary buffer indicator (downloads, video buffering) — a segmented bar shows the buffer as pre-lit segments. `label` also becomes the bar's accessible name.",
   props: [
@@ -13456,7 +13488,7 @@ const Uf = {
       style: i ? "" : `width:${o}%`
     })), c.append(p), c;
   }
-}, XS = {
+}, JS = {
   name: "Switch",
   description: "Compact on/off toggle. Pass a `$variable` as `value` for two-way binding — prefer Switch over Checkbox when the control represents a setting. `onChange(checked)` fires with the new boolean.",
   props: [
@@ -13518,14 +13550,14 @@ const Uf = {
     }
     return a;
   }
-}, ZS = ["default", "outline", "ghost"], QS = {
+}, e2 = ["default", "outline", "ghost"], t2 = {
   name: "ToggleGroup",
   description: "Group of Toggle-style buttons. Items are `[value, label]` arrays, `{value, label, icon?, disabled?}` objects, or plain strings (used for both value and label). Single-select by default — pass `multiple: true` for an independently toggleable set (a bold/italic/underline toolbar), which reads and writes an ARRAY of values. Pass a `$variable` as `value` for two-way binding; item values keep their original type, so numeric items write numbers back. `onChange(value)` fires with the new selection. Left/Right arrows move between items; give the group a `label` so screen readers can tell two groups apart.",
   props: [
     { name: "id", type: "string" },
     { name: "items", type: "any[]" },
     { name: "value", type: "any", optional: !0 },
-    { name: "variant", aliases: ["tone"], type: "string", optional: !0, enum: ZS },
+    { name: "variant", aliases: ["tone"], type: "string", optional: !0, enum: e2 },
     { name: "size", type: "string", optional: !0, enum: ["sm", "md", "lg"] },
     { name: "onChange", type: "callable", optional: !0, aliases: ["onchange"], description: "Called with the newly-selected value (an array when `multiple`)" },
     // Appended below `onChange` on purpose: `value` is read from its declared
@@ -13536,7 +13568,7 @@ const Uf = {
     { name: "label", type: "string", optional: !0, aliases: ["ariaLabel"], description: "Accessible name for the group (required by the radiogroup role)" }
   ],
   render: (t, e, r) => {
-    const i = Array.isArray(e.id) && e.items == null, a = i ? "" : g(e.id), o = z(e.multiple) || g(e.type) === "multiple", n = g(e.variant, "outline"), s = g(e.size, "md"), l = z(e.disabled), c = g(e.label), u = t.argMeta?.[2]?.stateRef, h = u ? null : r.useInstanceState("toggle-value", e.value), p = h ? h.get() : e.value, b = P(i ? e.id : e.items).map(JS), m = Hf(p, o), f = d("div", {
+    const i = Array.isArray(e.id) && e.items == null, a = i ? "" : g(e.id), o = z(e.multiple) || g(e.type) === "multiple", n = g(e.variant, "outline"), s = g(e.size, "md"), l = z(e.disabled), c = g(e.label), u = t.argMeta?.[2]?.stateRef, h = u ? null : r.useInstanceState("toggle-value", e.value), p = h ? h.get() : e.value, b = P(i ? e.id : e.items).map(r2), m = Hf(p, o), f = d("div", {
       class: "rui-toggle-group",
       // The declared prop used to swallow the universal `id` channel without
       // applying it, so `ToggleGroup(id: "view")` produced an element with no id.
@@ -13558,7 +13590,7 @@ const Uf = {
         $ = T.some((I) => g(I) === C.key) ? T.filter((I) => g(I) !== C.key) : [...T, C.value];
       } else
         $ = C.value;
-      u && r.setState(u, $), h && h.set($), e2(k.closest(".rui-toggle-group"), $, o), r.invoke(e.onChange, $);
+      u && r.setState(u, $), h && h.set($), i2(k.closest(".rui-toggle-group"), $, o), r.invoke(e.onChange, $);
     }, x = (k) => {
       const C = k.getAttribute("data-value") ?? "", A = b.find(($) => $.key === C);
       A && v(k, A);
@@ -13579,11 +13611,11 @@ const Uf = {
       }), I = Y(k.icon, { className: "rui-toggle-icon" });
       I && T.append(I), T.append(d("span", { class: "rui-toggle-label" }, [k.label])), $ || (T.onclick = (M) => {
         x(M.currentTarget ?? M.target);
-      }, o || (T.onkeydown = (M) => t2(M, x))), f.append(T);
+      }, o || (T.onkeydown = (M) => a2(M, x))), f.append(T);
     }), f;
   }
 };
-function JS(t) {
+function r2(t) {
   if (typeof t == "string") return { value: t, key: t, label: t, icon: "", disabled: !1 };
   if (typeof t == "number" || typeof t == "boolean") {
     const e = String(t);
@@ -13614,7 +13646,7 @@ function JS(t) {
 function Hf(t, e) {
   return e ? new Set(P(t).map((r) => g(r))) : t == null ? /* @__PURE__ */ new Set() : /* @__PURE__ */ new Set([g(t)]);
 }
-function e2(t, e, r) {
+function i2(t, e, r) {
   if (!t) return;
   const i = Hf(e, r), a = [...t.querySelectorAll(".rui-toggle")];
   for (const s of a) {
@@ -13625,7 +13657,7 @@ function e2(t, e, r) {
   const o = a.filter((s) => !s.hasAttribute("disabled")), n = o.find((s) => i.has(s.getAttribute("data-value") ?? "")) ?? o[0];
   for (const s of o) s.setAttribute("tabindex", s === n ? "0" : "-1");
 }
-function t2(t, e) {
+function a2(t, e) {
   const r = t.key === "ArrowRight" || t.key === "ArrowDown", i = t.key === "ArrowLeft" || t.key === "ArrowUp";
   if (!r && !i && t.key !== "Home" && t.key !== "End") return;
   const a = t.currentTarget ?? t.target, o = a?.closest(".rui-toggle-group");
@@ -13639,7 +13671,7 @@ function t2(t, e) {
     l.focus(), e(l);
   }
 }
-const r2 = ["bottom", "top", "left", "right"], wc = ["start", "center", "end"], Wf = (t, e, r, i) => ({
+const o2 = ["bottom", "top", "left", "right"], wc = ["start", "center", "end"], Wf = (t, e, r, i) => ({
   resolve: (a) => (a.currentTarget ?? a.target)?.closest(t) ?? null,
   open: (a) => {
     const o = a.querySelector(e);
@@ -13655,10 +13687,10 @@ const r2 = ["bottom", "top", "left", "right"], wc = ["start", "center", "end"], 
   close: (a) => {
     a.setAttribute("data-open", "false");
     const o = a.querySelector(e);
-    i2(o), at(o);
+    n2(o), at(o);
   }
 });
-function i2(t) {
+function n2(t) {
   t && (t.setAttribute("aria-hidden", "true"), t.setAttribute("inert", ""));
 }
 const Gf = (t, e, r, i) => {
@@ -13688,7 +13720,7 @@ const Gf = (t, e, r, i) => {
     t.set(null), a();
   }, i);
   t.set(n), e.registerDisposer(() => clearTimeout(n), r);
-}, a2 = {
+}, s2 = {
   name: "Tooltip",
   description: "Wraps a trigger node and shows `label` when the user hovers or focuses it — text, or a node when the hint needs a `Kbd` chip. The tooltip hides on click/touch (so it does not stay stuck on touch devices) and on Escape, and `side` + `align` place it on any of the 12 edge positions — it is never clipped by a scrolling or `overflow: hidden` container. Pass `delay` (ms) so sweeping across a toolbar does not pop every hint, or `open: true` to force one open for a product tour. `onOpenChange(open)` fires on every transition, so a tour step can advance when the hint is dismissed. Use for short hints (≤6 words); reach for HoverCard when you need rich content.",
   props: [
@@ -13706,7 +13738,7 @@ const Gf = (t, e, r, i) => {
   render: (t, e, r) => {
     const i = g(e.side, "top"), a = g(e.align, "center"), o = Math.max(0, R(e.delay, 0)), n = z(e.open), s = r.useInstanceState("open", n), l = n || s.get(), c = (w) => {
       s.get() !== w && (s.set(w), r.invoke(e.onOpenChange, w));
-    }, u = r.useInstanceState("delay-timer", null), h = r.useInstanceState("content-id", ""), p = jf(h, "rui-tooltip"), b = r.renderNode(e.trigger), m = d("span", {
+    }, u = r.useInstanceState("delay-timer", null), h = r.useInstanceState("content-id", ""), p = _f(h, "rui-tooltip"), b = r.renderNode(e.trigger), m = d("span", {
       class: "rui-tooltip",
       "data-side": i,
       // Read live off the root by the floating controller, so this is what gives
@@ -13740,7 +13772,7 @@ const Gf = (t, e, r, i) => {
       // while the label was stringified. Strings keep the text-node fast path.
       $t(e.label) ? r.renderNode(e.label) : g(e.label)
     ]);
-    GS(b, p), f.append(d("span", { class: "rui-tooltip-arrow", "aria-hidden": "true" })), m.append(f);
+    YS(b, p), f.append(d("span", { class: "rui-tooltip-arrow", "aria-hidden": "true" })), m.append(f);
     const v = (w) => {
       c(!0), Wt.open(w);
     }, x = (w) => {
@@ -13788,7 +13820,7 @@ const Gf = (t, e, r, i) => {
   // A rich card can be tall, so the floating layer's default height cap (fit
   // the chosen side, scroll internally) is the behaviour we want here.
   { align: "start", layer: "popover" }
-), o2 = {
+), l2 = {
   name: "HoverCard",
   description: "Wraps a trigger node and reveals a card with rich content on hover/focus (tap toggles it on touch devices, Escape closes it). Use for previewing a referenced item (profile, link target, definition). `openDelay` / `closeDelay` keep a paragraph full of mentions from flashing cards and give the user time to move onto the card; `width` and `align` size and place it. `onOpenChange(open)` fires on every transition, so the preview can be fetched on open and cancelled on close. Give it a `label` when the card is interactive so the popup has an accessible name.",
   props: [
@@ -13883,7 +13915,7 @@ const Gf = (t, e, r, i) => {
   thumb: { full: "thumbs-up", half: "thumbs-up", empty: "regular:thumbs-up" },
   fire: { full: "fire", half: "fire", empty: "regular:fire" },
   bolt: { full: "bolt", half: "bolt", empty: "regular:bolt" }
-}, n2 = {
+}, c2 = {
   name: "Rating",
   description: "Compact 0–5 star rating with optional numeric badge and review count. Use in product cards, testimonials, reviews, and KPI rows. Pass `interactive: true` (or an `onChange` handler) to let users pick a rating; bind `value: $rating` for two-way binding, or read the new value from `onChange: (v) => …`. With `halfStep: true` clicking the left half of a star sets a fractional value; keyboard users get whole steps with Enter/Space and half steps with the arrow keys. `allowClear: true` lets clicking the current rating remove it. `icon` swaps the glyph family — `star` (default), `heart`, `thumb`, `fire`, `bolt`, or any custom Font Awesome name — and `tone` recolours it (amber by default).",
   props: [
@@ -13901,7 +13933,7 @@ const Gf = (t, e, r, i) => {
     { name: "tone", type: "string", optional: !0, aliases: ["variant", "color"], enum: ["primary", "success", "warning", "danger", "info"], description: "Colour of the filled icons (default warning/amber)" }
   ],
   render: (t, e, r) => {
-    const i = Math.max(1, Math.floor(R(e.max, 5))), a = g(e.size, "md"), o = z(e.halfStep), n = z(e.allowClear), s = g(e.tone), l = t.argMeta?.[0]?.stateRef, c = (z(e.interactive) || e.onChange != null) && !z(e.readonly), h = c && !l ? r.useInstanceState("rating-value", R(e.value, 0)) : null, p = R(h ? h.get() : e.value, 0), b = Math.max(0, Math.min(i, p)), m = l2(g(e.icon)), f = g(e.label), v = d("div", {
+    const i = Math.max(1, Math.floor(R(e.max, 5))), a = g(e.size, "md"), o = z(e.halfStep), n = z(e.allowClear), s = g(e.tone), l = t.argMeta?.[0]?.stateRef, c = (z(e.interactive) || e.onChange != null) && !z(e.readonly), h = c && !l ? r.useInstanceState("rating-value", R(e.value, 0)) : null, p = R(h ? h.get() : e.value, 0), b = Math.max(0, Math.min(i, p)), m = d2(g(e.icon)), f = g(e.label), v = d("div", {
       class: "rui-rating",
       "data-size": a,
       "data-tone": s || null,
@@ -13917,7 +13949,7 @@ const Gf = (t, e, r, i) => {
       "aria-label": c ? f || "Rating" : `${b} of ${i}`
     }), y = b > 0 ? Math.min(i, Math.max(1, Math.ceil(b))) : 1, w = () => h ? Math.max(0, Math.min(i, R(h.get(), 0))) : b, S = (C, A) => {
       const $ = Math.max(0, Math.min(i, A));
-      l && r.setState(l, $), h && h.set($), s2(C.closest(".rui-rating"), $, i, m), r.invoke(e.onChange, $);
+      l && r.setState(l, $), h && h.set($), u2(C.closest(".rui-rating"), $, i, m), r.invoke(e.onChange, $);
     };
     for (let C = 1; C <= i; C += 1) {
       const A = Math.max(0, Math.min(1, b - (C - 1))), $ = A >= 1 ? m.full : A > 0 ? m.half : m.empty, T = La($).join(" "), I = d(c ? "button" : "span", {
@@ -13940,8 +13972,8 @@ const Gf = (t, e, r, i) => {
           const D = L, N = D.currentTarget ?? D.target, O = D.detail === 0 && D.clientX === 0 && D.clientY === 0;
           let q = M;
           if (o && !O) {
-            const j = N.getBoundingClientRect();
-            j.width > 0 && D.clientX - j.left < j.width / 2 && (q = E);
+            const _ = N.getBoundingClientRect();
+            _.width > 0 && D.clientX - _.left < _.width / 2 && (q = E);
           }
           n && q === w() && (q = 0), S(N, q);
         }, I.onkeydown = (L) => {
@@ -13960,7 +13992,7 @@ const Gf = (t, e, r, i) => {
     return k !== null && k >= 0 && v.append(d("span", { class: "rui-rating-count" }, [`(${k.toLocaleString()})`])), v;
   }
 };
-function s2(t, e, r, i) {
+function u2(t, e, r, i) {
   if (!t) return;
   const a = Math.max(0, Math.min(r, e)), o = t.getAttribute("data-interactive") === "true", n = a > 0 ? Math.min(r, Math.max(1, Math.ceil(a))) : 0;
   if (t.querySelectorAll(".rui-rating-star").forEach((l, c) => {
@@ -13972,11 +14004,11 @@ function s2(t, e, r, i) {
   } else
     t.querySelector(".rui-rating-stars")?.setAttribute("aria-label", `${a} of ${r}`);
 }
-function l2(t) {
+function d2(t) {
   const e = t.trim().toLowerCase();
   return e ? ts[e] ? ts[e] : { full: e, half: e, empty: `regular:${e}` } : ts.star;
 }
-const c2 = {
+const p2 = {
   name: "ProgressRing",
   description: "Circular progress indicator. Use for KPIs, quotas, completion rings, and any metric better shown as a circle than a bar. Renders the value (or a custom `label`) inside the ring; pass `icon` for a glyph instead (completion checkmarks). `size` takes `sm|md|lg` or a plain number of px (`size: 40`), so the ring fits a table cell or fills a hero card.",
   props: [
@@ -14012,15 +14044,15 @@ const c2 = {
     w.setAttribute("class", "rui-progress-ring-track"), w.setAttribute("cx", String(c / 2)), w.setAttribute("cy", String(c / 2)), w.setAttribute("r", String(h)), w.setAttribute("stroke-width", String(u)), w.setAttribute("fill", "none"), y.appendChild(w);
     const S = document.createElementNS(x, "circle");
     S.setAttribute("class", "rui-progress-ring-bar"), S.setAttribute("cx", String(c / 2)), S.setAttribute("cy", String(c / 2)), S.setAttribute("r", String(h)), S.setAttribute("stroke-width", String(u)), S.setAttribute("fill", "none"), S.setAttribute("stroke-linecap", "round"), S.setAttribute("stroke-dasharray", String(p)), S.setAttribute("stroke-dashoffset", String(b)), y.appendChild(S), v.append(y);
-    const k = g(e.label, i ? "…" : `${o}%`), C = d("span", { class: "rui-progress-ring-value" }), $ = g(e.icon) || (u2(k) ? k : ""), T = $ ? Y($, { className: "rui-progress-ring-icon" }) : null;
+    const k = g(e.label, i ? "…" : `${o}%`), C = d("span", { class: "rui-progress-ring-value" }), $ = g(e.icon) || (h2(k) ? k : ""), T = $ ? Y($, { className: "rui-progress-ring-icon" }) : null;
     return T && La($).length > 0 ? (C.append(T), i || f.setAttribute("aria-valuetext", `${o}%`)) : (C.append(document.createTextNode(k)), !i && g(e.label) && f.setAttribute("aria-valuetext", k)), v.append(C), f.append(v), m && f.append(d("span", { class: "rui-progress-ring-caption" }, [m])), f;
   }
 };
-function u2(t) {
+function h2(t) {
   const e = t.trim();
   return e ? Tm(e) || /^(solid|regular|brands):[a-z0-9-]+$/.test(e) ? !0 : /^[a-z0-9]+(-[a-z0-9]+)+$/.test(e) : !1;
 }
-const d2 = {
+const m2 = {
   name: "ChatBubble",
   description: 'Single chat-style message bubble with author, time, and body. Use for conversation threads, agent transcripts, support chats, and any message-style UI. Set `from="me"` for the active speaker — the bubble aligns to the right with a primary tint. `from="agent"` (default) renders as the canonical incoming bubble on the left, and `from="system"` as an avatar-less transcript annotation. Pass `content: [...]` for rich bodies (CodeBlock, Image, Link, Table) and `onRetry` alongside `status: "error"` so a failed send is recoverable.',
   props: [
@@ -14069,10 +14101,10 @@ const d2 = {
   }
 };
 function Vd(t, e) {
-  const r = d("span", { class: "rui-chat-bubble-avatar" }), i = je(t);
+  const r = d("span", { class: "rui-chat-bubble-avatar" }), i = _e(t);
   return i ? r.append(d("img", { src: i, alt: e, loading: "lazy" })) : r.append(d("span", { class: "rui-chat-bubble-fallback" }, [Dr(e)])), r;
 }
-const p2 = {
+const f2 = {
   name: "Kbd",
   description: "Renders a keyboard shortcut chip (e.g. `Cmd+K`). Pass a single label, or multiple labels as an array to render a `key + key + …` combo.",
   props: [
@@ -14086,14 +14118,14 @@ const p2 = {
       s && (n > 0 && i.append(d("span", { class: "rui-kbd-sep" }, ["+"])), i.append(d("kbd", { class: "rui-kbd" }, [s])));
     }), i;
   }
-}, h2 = {
+}, g2 = {
   name: "Popover",
   description: "Click-triggered popup with arbitrary rich content. Use when HoverCard's hover trigger is too eager and Modal/Sheet is too heavy — perfect for filter panels, color pickers, share menus, and small settings flyouts. The trigger stays visible while the popover is open — clicking it again, clicking outside, pressing Escape, or clicking the built-in × button all close it (pass `showClose: false` to drop the × and its header row). Focus moves into the panel while it is open and returns to the trigger on close. `onOpenChange(open)` fires on every transition, so a filter flyout can apply its draft on close.",
   props: [
     { name: "trigger", type: "Node", description: "Clickable trigger element (Button, Avatar, IconButton, …). The trigger remains visible while the popover is open." },
     { name: "content", type: "Node[]", aliases: ["children"], description: "Body rendered inside the popover" },
     { name: "title", type: "string", optional: !0, description: "Optional bold heading rendered above the content (also names the dialog)" },
-    { name: "side", type: "string", optional: !0, enum: r2, aliases: ["placement"], description: 'Where the popover opens relative to the trigger (default "bottom")' },
+    { name: "side", type: "string", optional: !0, enum: o2, aliases: ["placement"], description: 'Where the popover opens relative to the trigger (default "bottom")' },
     { name: "align", type: "string", optional: !0, enum: wc, description: 'Alignment along the trigger edge (default "start")' },
     { name: "width", type: "string", optional: !0, description: 'CSS width for the popover panel (default "280px")' },
     { name: "open", type: "boolean", optional: !0, description: "Initial open state — use to demo or pre-open the popover" },
@@ -14102,7 +14134,7 @@ const p2 = {
     { name: "disabled", type: "boolean", optional: !0, description: "Make the trigger inert (e.g. while a request is in flight)" }
   ],
   render: (t, e, r) => {
-    const i = z(e.open), a = r.useInstanceState("open", i), o = a.get(), n = me(e.width, ""), s = z(e.disabled), l = e.showClose == null || z(e.showClose), c = g(e.title), u = r.useInstanceState("title-id", ""), h = c ? jf(u, "rui-popover-title") : "", p = e.onOpenChange, b = (C) => {
+    const i = z(e.open), a = r.useInstanceState("open", i), o = a.get(), n = me(e.width, ""), s = z(e.disabled), l = e.showClose == null || z(e.showClose), c = g(e.title), u = r.useInstanceState("title-id", ""), h = c ? _f(u, "rui-popover-title") : "", p = e.onOpenChange, b = (C) => {
       r.invoke(p, C);
     }, m = d("div", {
       class: "rui-popover",
@@ -14197,15 +14229,15 @@ const p2 = {
       i?.setAttribute("aria-expanded", "false"), i?.setAttribute("data-state", "closed"), at(t.querySelector(".rui-popover-content")), r?.(!1);
     }
   });
-}, m2 = ["default", "primary", "success", "warning", "danger", "info"], Vf = [
+}, b2 = ["default", "primary", "success", "warning", "danger", "info"], Vf = [
   "top-right",
   "top-left",
   "top-center",
   "bottom-right",
   "bottom-left",
   "bottom-center"
-], f2 = (t) => {
-  if (g2(t)) return !0;
+], v2 = (t) => {
+  if (y2(t)) return !0;
   if (typeof t.showPopover == "function" && getComputedStyle(t).getPropertyValue("--rui-toast-top-layer").trim() === "1")
     try {
       return t.setAttribute("popover", "manual"), t.showPopover(), !0;
@@ -14213,20 +14245,20 @@ const p2 = {
     }
   return t.removeAttribute("popover"), !1;
 };
-function g2(t) {
+function y2(t) {
   try {
     return t.matches(":popover-open");
   } catch {
     return !1;
   }
 }
-const b2 = {
+const w2 = {
   name: "Toast",
   description: "Single transient notification card. Always shows a close (×) button that removes the toast from the DOM (and fires `onClose` if set). Pass `duration` (ms) to auto-dismiss — with `pauseOnHover: true` the countdown stops while the pointer is over the card — or `position` for a standalone one-off toast (the renderer will pin it to the viewport corner so you do not have to wrap a single notification in `Stack(...)`). Use `Toasts` for grouped stacks; prefer `Banner` for top-of-page announcements and `Notification` for permanent inbox entries.",
   props: [
     { name: "title", type: "string" },
     { name: "message", type: "string", optional: !0, aliases: ["description"] },
-    { name: "tone", type: "string", optional: !0, aliases: ["variant"], enum: m2, description: 'Visual accent (default "default")' },
+    { name: "tone", type: "string", optional: !0, aliases: ["variant"], enum: b2, description: 'Visual accent (default "default")' },
     { name: "icon", type: "string", optional: !0, description: "Font Awesome icon name (default picked from tone)" },
     { name: "duration", type: "number", optional: !0, description: "Auto-dismiss after N milliseconds (e.g. 4000). Omit to keep the toast until the user closes it." },
     { name: "action", type: "Button", optional: !0, description: "Optional inline `Button` action shown above the message" },
@@ -14248,8 +14280,8 @@ const b2 = {
       // the entry animation and dropping focus mid-interaction. A content-derived
       // key lets `keyFor` match them across the shift. An author `key:` (and the
       // runtime's own `$toast` id key) always wins.
-      "data-rui-key": t.explicitKey == null ? v2(s) : null
-    }), c = g(e.icon) || w2(i), u = Y(c, { className: "rui-toast-icon" });
+      "data-rui-key": t.explicitKey == null ? x2(s) : null
+    }), c = g(e.icon) || S2(i), u = Y(c, { className: "rui-toast-icon" });
     u && l.append(u);
     const h = d("div", { class: "rui-toast-body" });
     if (h.append(d("div", { class: "rui-toast-title" }, [o])), n && h.append(d("div", { class: "rui-toast-message" }, [n])), e.action) {
@@ -14263,7 +14295,7 @@ const b2 = {
     });
     const w = r.useInstanceState("promoted", !1);
     a && (w.get() && l.setAttribute("popover", "manual"), be(() => {
-      l.isConnected && w.set(f2(l));
+      l.isConnected && w.set(v2(l));
     }));
     const S = (I) => {
       if (I) {
@@ -14309,12 +14341,12 @@ const b2 = {
     }), A > 0 && m.get() === null && !b() && $(A), b() ? d("div", { class: "rui-toast-placeholder", hidden: "" }) : l;
   }
 };
-function v2(t) {
+function x2(t) {
   let e = 0;
   for (let r = 0; r < t.length; r += 1) e = e * 31 + t.charCodeAt(r) >>> 0;
   return `toast-${e.toString(36)}`;
 }
-const y2 = {
+const k2 = {
   name: "Toasts",
   description: "Stacked container for transient `Toast` notifications, pinned to a viewport corner. Usually unnecessary: `$toast.success(...)` (and `.show/.error/.info/.warning`) auto-render their own stack. Reach for `Toasts` only for custom placement — render the reactive `$toast.items` list into it and the auto-layer steps aside: `Toasts($toast.items.map(t => Toast({ title: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))` — add `key: t.id` there when the list can reorder. `max` caps how many are shown at once (the rest are summarised as `+N more`). Use a standalone `Toast` with `position` for a single one-off notice.",
   props: [
@@ -14334,7 +14366,7 @@ const y2 = {
     return s > 0 && i.append(d("div", { class: "rui-toasts-overflow", role: "status" }, [`+${s} more`])), i;
   }
 };
-function w2(t) {
+function S2(t) {
   switch (t) {
     case "success":
       return "circle-check";
@@ -14353,14 +14385,14 @@ function w2(t) {
 function Kf(t) {
   return `#${t.startsWith("/") ? t : `/${t}`}`;
 }
-const x2 = "house";
-function k2(t) {
+const C2 = "house";
+function A2(t) {
   return t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
-function S2(t, e) {
+function $2(t, e) {
   const r = [];
   for (let i = 0; i <= e; i += 1) {
-    const a = k2(t[i] ?? "");
+    const a = A2(t[i] ?? "");
     if (!a) return "";
     r.push(a);
   }
@@ -14369,7 +14401,7 @@ function S2(t, e) {
 function Yd(t) {
   return !t || typeof t != "object" || Array.isArray(t) || t.__kind === "Component" ? null : t;
 }
-function C2(t, e) {
+function T2(t, e) {
   if (t.querySelector(".rui-breadcrumb-icon")) return;
   const r = t.querySelector(
     ".rui-breadcrumb-link, .rui-breadcrumb-current, .rui-breadcrumb-text"
@@ -14403,7 +14435,7 @@ function Xf(t, e) {
   }
   return r.append(d("span", { class: "rui-breadcrumb-text" }, i)), r;
 }
-const A2 = {
+const I2 = {
   name: "BreadcrumbItem",
   description: "Single item inside a Breadcrumb trail. Pass `to` for an in-app route (navigated through the built-in router), `href` for an external URL, or `onClick` to handle the click yourself. Omit all three for the current/leaf page (rendered with emphasis).",
   props: [
@@ -14425,7 +14457,7 @@ const A2 = {
       current: !i && !a && typeof e.onClick != "function"
     }, r);
   }
-}, $2 = {
+}, z2 = {
   name: "Breadcrumb",
   description: 'Trail showing the user\'s location. Every crumb except the last one is a link that navigates. Items may be BreadcrumbItem(label, { to?, href? }) nodes, `{ label, to }` / `{ label, href }` objects, or plain strings — a string trail derives its own cumulative route from the labels (`["Workspace", "Reports", "Q3"]` → `/workspace`, `/workspace/reports`), which `autoLink: false` turns off. The first crumb carries a home icon unless `homeIcon: false`; pass an icon name to change it. `maxItems` collapses the middle of a long trail behind an ellipsis.',
   props: [
@@ -14437,7 +14469,7 @@ const A2 = {
     { name: "autoLink", type: "boolean", optional: !0, description: "Derive a cumulative route from plain-string labels so they navigate (default `true`). Set `false` for a trail that is pure text unless an item names its own `to`/`href`" }
   ],
   render: (t, e, r) => {
-    const i = P(e.items), a = g(e.separator, "/"), o = Math.max(0, Math.floor(R(e.maxItems, 0))), n = typeof e.onItemClick == "function" ? e.onItemClick : null, s = z(e.autoLink, !0), l = e.homeIcon, c = l === !1 || l === "false" ? "" : typeof l == "string" && l.trim() !== "" ? l.trim() : x2, u = i.map((m) => {
+    const i = P(e.items), a = g(e.separator, "/"), o = Math.max(0, Math.floor(R(e.maxItems, 0))), n = typeof e.onItemClick == "function" ? e.onItemClick : null, s = z(e.autoLink, !0), l = e.homeIcon, c = l === !1 || l === "false" ? "" : typeof l == "string" && l.trim() !== "" ? l.trim() : C2, u = i.map((m) => {
       const f = Yd(m);
       return g(f ? f.label ?? f.title : m);
     }), h = d("nav", { class: "rui-breadcrumb", "aria-label": "Breadcrumb" }), p = d("ol", { class: "rui-breadcrumb-list" }), b = [];
@@ -14459,10 +14491,10 @@ const A2 = {
       const v = i[m], x = m === i.length - 1, y = m === 0;
       if (v && typeof v == "object" && v.__kind === "Component") {
         const T = r.renderNode(v);
-        y && c && T instanceof HTMLElement && C2(T, c), p.append(T);
+        y && c && T instanceof HTMLElement && T2(T, c), p.append(T);
         return;
       }
-      const w = Yd(v), S = u[m] ?? "", k = w ? g(w.href) : "", A = (w ? g(w.to ?? w.path) : "") || (!k && s && !x ? S2(u, m) : ""), $ = w && w.icon != null ? w.icon : y && c ? c : void 0;
+      const w = Yd(v), S = u[m] ?? "", k = w ? g(w.href) : "", A = (w ? g(w.to ?? w.path) : "") || (!k && s && !x ? $2(u, m) : ""), $ = w && w.icon != null ? w.icon : y && c ? c : void 0;
       p.append(Xf({
         label: S,
         icon: $,
@@ -14475,7 +14507,7 @@ const A2 = {
       }, r));
     }), h.append(p), h;
   }
-}, T2 = [10, 20, 50, 100], I2 = {
+}, M2 = [10, 20, 50, 100], E2 = {
   name: "Pagination",
   description: 'Page navigator with Prev/Next, page numbers, and ellipses. Pass a `$variable` as `page` for two-way binding — clicking a page button sets that state to the new (1-indexed) value. Add `total` to render a "Showing N–M of T" summary, pass `$variable` as `perPage` to expose a per-page selector, or set `compact: true` to drop the page-number row for tight toolbars. For server-side paging pass `onChange` — it receives the new page number.',
   props: [
@@ -14524,7 +14556,7 @@ const A2 = {
     if (v.append(x("‹", a - 1, { disabled: a <= 1, ariaLabel: "Previous page" })), n)
       v.append(d("span", { class: "rui-pagination-current" }, [`${a} / ${i}`]));
     else {
-      const S = z2(a, i, o);
+      const S = N2(a, i, o);
       for (const k of S)
         k === "…" ? v.append(x("…", 0, { ellipsis: !0 })) : v.append(x(String(k), k, { active: k === a }));
     }
@@ -14535,7 +14567,7 @@ const A2 = {
         document.createTextNode("Show ")
       ]);
       if (y || w) {
-        const k = P(e.perPageOptions).length > 0 ? P(e.perPageOptions).map((A) => Math.max(1, Math.floor(Number(A) || 0))).filter((A) => A > 0) : Array.from(T2), C = d("select", {
+        const k = P(e.perPageOptions).length > 0 ? P(e.perPageOptions).map((A) => Math.max(1, Math.floor(Number(A) || 0))).filter((A) => A > 0) : Array.from(M2), C = d("select", {
           class: "rui-pagination-per-page-select",
           disabled: u ? "" : null
         });
@@ -14565,7 +14597,7 @@ const A2 = {
     return p;
   }
 };
-function z2(t, e, r) {
+function N2(t, e, r) {
   const i = [], a = (l, c) => {
     for (let u = l; u <= c; u += 1) i.push(u);
   }, o = r * 2 + 5;
@@ -14574,7 +14606,7 @@ function z2(t, e, r) {
   const n = Math.max(2, t - r), s = Math.min(e - 1, t + r);
   return i.push(1), n > 2 && i.push("…"), a(n, s), s < e - 1 && i.push("…"), i.push(e), i;
 }
-const M2 = {
+const L2 = {
   name: "NavbarItem",
   description: "Single link inside a Navbar's main item slot. Renders as an inline anchor / button — pass `to` for a router-aware link, `href` for an external link, or `onClick` for a click handler (`onClick` also runs alongside `to`/`href`, e.g. to log the navigation). `active=true` highlights the current page; `disabled=true` greys it out and makes it unclickable.",
   props: [
@@ -14607,13 +14639,13 @@ const M2 = {
     }), p;
   }
 };
-let E2 = 0;
+let R2 = 0;
 function Xd(t, e, r) {
   r.set(e);
   const i = t.closest(".rui-navbar");
   i && (i.setAttribute("data-menu-open", e ? "true" : "false"), i.querySelector(".rui-navbar-burger")?.setAttribute("aria-expanded", e ? "true" : "false"));
 }
-const N2 = {
+const P2 = {
   name: "Navbar",
   description: "Top navigation bar with a brand on the left, primary nav items in the middle, and a right-aligned actions slot (user avatar, DropdownMenu, CTA buttons, …). Use `sticky=true` to pin it to the top of the page and `collapsible=true` to fold the item row behind a burger toggle on narrow viewports. The canonical companion of `Sidebar` for product surfaces; prefer Navbar for marketing/docs pages without a sidebar.",
   props: [
@@ -14641,7 +14673,7 @@ const N2 = {
     let l = "";
     if (i) {
       const h = r.useInstanceState("rui-navbar-items-id", "");
-      h.get() || h.set(`rui-navbar-items-${E2 += 1}`), l = h.get();
+      h.get() || h.set(`rui-navbar-items-${R2 += 1}`), l = h.get();
     }
     const c = P(e.items);
     if (c.length > 0) {
@@ -14673,7 +14705,7 @@ const N2 = {
     }
     return n;
   }
-}, L2 = ["bottom", "top", "left", "right"], R2 = ["start", "center", "end"], P2 = ["default", "danger"], Zf = ["menuitem", "menuitemcheckbox", "menuitemradio"], Qf = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+}, D2 = ["bottom", "top", "left", "right"], O2 = ["start", "center", "end"], B2 = ["default", "danger"], Zf = ["menuitem", "menuitemcheckbox", "menuitemradio"], Qf = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 function kc(t, e) {
   t.setAttribute("data-open", e ? "true" : "false");
   const r = t.querySelector(".rui-dropdown-menu-trigger");
@@ -14694,13 +14726,13 @@ function zn(t) {
 function Zd(t) {
   return Array.from(zn(t)?.querySelectorAll(".rui-menu-item") ?? []);
 }
-const D2 = (t) => t.getAttribute("aria-disabled") === "true";
-function O2(t) {
+const F2 = (t) => t.getAttribute("aria-disabled") === "true";
+function _2(t) {
   const e = t.querySelector(".rui-dropdown-menu-trigger");
   return e ? e.querySelector(Qf) ?? e : null;
 }
 const ki = /* @__PURE__ */ new WeakMap();
-function B2(t, e) {
+function j2(t, e) {
   ki.get(t)?.();
   const r = t.ownerDocument, i = zn(t);
   function a(n) {
@@ -14721,9 +14753,9 @@ function Qd(t, e) {
   const r = () => {
     e.set(!1), kc(t, !1), at(zn(t)), Sc(t);
   };
-  Sr({ liveRoot: t, onDismiss: r }), B2(t, r);
+  Sr({ liveRoot: t, onDismiss: r }), j2(t, r);
 }
-const pa = (t, e, r) => {
+const da = (t, e, r) => {
   r.set(e);
   const i = Jf(t);
   return i ? (kc(i, e), eg(i, e), e || Sc(i), i) : null;
@@ -14789,7 +14821,7 @@ function rg(t) {
   const a = Y(t.icon, { className: "rui-menu-item-icon" });
   return a && i.append(a), i.append(d("span", { class: "rui-menu-item-label" }, [t.label])), t.shortcut && i.append(d("span", { class: "rui-menu-item-shortcut" }, [t.shortcut])), i;
 }
-function F2(t) {
+function q2(t) {
   if (!t || typeof t != "object" || Array.isArray(t)) return null;
   const e = t;
   if (e.__kind !== void 0) return null;
@@ -14807,7 +14839,7 @@ function Jd(t, e) {
     const o = a.currentTarget ?? a.target;
     if (!o) return;
     const n = o.closest(".rui-menu-item");
-    !n || n.getAttribute("aria-disabled") === "true" || (i || pa(n, !1, e), r?.call(n, a));
+    !n || n.getAttribute("aria-disabled") === "true" || (i || da(n, !1, e), r?.call(n, a));
   };
 }
 function ig(t, e = 4) {
@@ -14816,15 +14848,15 @@ function ig(t, e = 4) {
     Array.isArray(i) && e > 0 ? r.push(...ig(i, e - 1)) : r.push(i);
   return r;
 }
-let j2 = 0;
-const _2 = {
+let U2 = 0;
+const H2 = {
   name: "DropdownMenu",
   description: "Click-triggered dropdown menu. Click the trigger to toggle, click a MenuItem to run its action and close, click outside or press Escape to close without acting; ArrowUp/ArrowDown/Home/End and typeahead move between items. Items may be MenuItem / MenuSeparator / MenuLabel nodes, nested arrays of them, or plain `{label, onClick, icon?, shortcut?, disabled?, checked?, separator?}` objects. Bind a `$variable` to `open` for two-way control, or watch `onOpenChange(isOpen)`.",
   props: [
     { name: "trigger", type: "Node", description: "Clickable trigger element (typically a Button or Avatar)" },
     { name: "items", type: "(MenuItem | MenuSeparator | MenuLabel)[]" },
-    { name: "side", type: "string", optional: !0, enum: L2, description: 'Where the menu opens relative to the trigger (default "bottom")' },
-    { name: "align", type: "string", optional: !0, enum: R2, description: 'How the menu aligns along the trigger edge (default "start")' },
+    { name: "side", type: "string", optional: !0, enum: D2, description: 'Where the menu opens relative to the trigger (default "bottom")' },
+    { name: "align", type: "string", optional: !0, enum: O2, description: 'How the menu aligns along the trigger edge (default "start")' },
     { name: "label", type: "string", optional: !0, description: "Optional ARIA label for the menu" },
     { name: "open", type: "boolean", optional: !0, description: "Open state — bind a `$variable` for two-way control (an action can then close the menu); a plain `true` pre-opens it" },
     { name: "onOpenChange", type: "callable", optional: !0, description: "(isOpen) => … fired whenever the menu opens or closes (lazy-load contents, keep a row highlighted, log usage)" },
@@ -14840,7 +14872,7 @@ const _2 = {
         A && A.value === C || (n.set({ prop: o, value: C }), a && r.setState(a, C), r.invoke(e.onOpenChange, C));
       }
     }, h = r.useInstanceState("rui-dropdown-id", "");
-    h.get() || h.set(`rui-menu-${j2 += 1}`);
+    h.get() || h.set(`rui-menu-${U2 += 1}`);
     const p = h.get(), b = d("div", {
       class: "rui-dropdown-menu",
       "data-menu-id": p,
@@ -14858,10 +14890,10 @@ const _2 = {
     const f = m.querySelector(Qf);
     f ? (f.setAttribute("aria-haspopup", "menu"), f.setAttribute("aria-expanded", c ? "true" : "false"), i && f.setAttribute("aria-disabled", "true")) : (m.setAttribute("role", "button"), m.setAttribute("aria-haspopup", "menu"), i || m.setAttribute("tabindex", "0"));
     const v = (C, A, $) => {
-      const T = pa(C, A, u);
+      const T = da(C, A, u);
       if (!T || !A || (Qd(T, u), !$)) return;
       const I = Zd(T);
-      (I.find((M) => !D2(M)) ?? I[0])?.focus();
+      (I.find((M) => !F2(M)) ?? I[0])?.focus();
     };
     i || (m.onclick = (C) => {
       C.stopPropagation();
@@ -14877,7 +14909,7 @@ const _2 = {
         A.preventDefault(), v($, !0, !0);
         return;
       }
-      A.key === "Escape" && u.get() && (A.preventDefault(), pa($, !1, u));
+      A.key === "Escape" && u.get() && (A.preventDefault(), da($, !1, u));
     }), b.append(m);
     const x = d("div", {
       class: "rui-dropdown-menu-content",
@@ -14911,7 +14943,7 @@ const _2 = {
         }, [g((C.args ?? [])[0])])), x.append(y);
         return;
       }
-      const $ = F2(C);
+      const $ = q2(C);
       if ($ === "separator") {
         y = null, x.append(S());
         return;
@@ -14929,11 +14961,11 @@ const _2 = {
       const A = C, $ = A.currentTarget ?? A.target, T = $ ? Jf($) : null;
       if (!T) return;
       if (A.key === "Escape") {
-        A.preventDefault(), A.stopPropagation(), pa(T, !1, u), O2(T)?.focus?.();
+        A.preventDefault(), A.stopPropagation(), da(T, !1, u), _2(T)?.focus?.();
         return;
       }
       if (A.key === "Tab") {
-        pa(T, !1, u);
+        da(T, !1, u);
         return;
       }
       const I = Zd(T);
@@ -14981,7 +15013,7 @@ const _2 = {
     { name: "onClick", type: "callable", optional: !0, aliases: ["action", "onclick"], description: "Callable to execute on click" },
     { name: "icon", type: "string", optional: !0, description: "Font Awesome icon name shown before the label" },
     { name: "shortcut", type: "string", optional: !0, description: 'Trailing keyboard-shortcut hint (e.g. "⌘ K")' },
-    { name: "variant", aliases: ["tone"], type: "string", optional: !0, enum: P2, description: 'Use "danger" for destructive actions' },
+    { name: "variant", aliases: ["tone"], type: "string", optional: !0, enum: B2, description: 'Use "danger" for destructive actions' },
     { name: "disabled", type: "boolean", optional: !0, description: "Unavailable action — the row stays visible and reachable by keyboard, is announced as disabled, and does nothing when activated" },
     { name: "checked", type: "boolean", optional: !0, description: 'Render as a checkable item showing this state (implies `role="menuitemcheckbox"`)' },
     { name: "role", type: "string", optional: !0, enum: Zf, description: 'ARIA role — use "menuitemradio" with `checked` for a one-of-many group' },
@@ -14995,25 +15027,25 @@ const _2 = {
       r.invoke(e.onClick);
     }), a;
   }
-}, q2 = {
+}, W2 = {
   name: "MenuSeparator",
   description: "Thin horizontal rule used inside a DropdownMenu to group items.",
   props: [],
   render: () => d("div", { class: "rui-menu-separator", role: "separator" })
-}, U2 = {
+}, G2 = {
   name: "MenuLabel",
   description: 'Small uppercase section header inside a DropdownMenu. Use to group related MenuItems (e.g. "Account", "Workspace", "Danger zone").',
   props: [{ name: "label", type: "string" }],
   render: (t, e) => d("div", { class: "rui-menu-label" }, [g(e.label)])
-}, H2 = ["left", "center", "right"], W2 = "position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0";
-function G2(t) {
+}, V2 = ["left", "center", "right"], K2 = "position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0";
+function Y2(t) {
   return Im(t).map((e, r) => {
     const i = e.args ?? [], a = g(i[0]), o = Of(i[8]), n = i[10], s = i[15];
     return {
       header: a,
       values: P(i[1]),
       format: g(i[2], "text"),
-      align: H2.includes(g(i[3])) ? g(i[3]) : "",
+      align: V2.includes(g(i[3])) ? g(i[3]) : "",
       sortable: z(i[4]),
       filterable: z(i[5]),
       render: i[6],
@@ -15034,7 +15066,7 @@ function G2(t) {
     };
   });
 }
-function V2(t, e, r) {
+function X2(t, e, r) {
   if (t == null) return e == null ? 0 : 1;
   if (e == null) return -1;
   if (r === "number" || r === "currency")
@@ -15049,27 +15081,27 @@ function ep(t) {
   const e = /^[=+\-@\t\r]/.test(t) ? `'${t}` : t;
   return /[",\n\r]/.test(e) ? `"${e.replace(/"/g, '""')}"` : e;
 }
-function K2(t, e) {
+function Z2(t, e) {
   const r = t.map((a) => ep(a.header)).join(","), i = e.map(
     (a) => t.map((o) => ep(o.fmt(o.values[a], o.format))).join(",")
   );
   return [r, ...i].join(`\r
 `);
 }
-function Y2(t) {
+function Q2(t) {
   const r = (t.replace(/[\u0000-\u001f\u007f]/g, "").split(/[/\\]/).pop() ?? "").replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, "");
   return r ? /\.csv$/i.test(r) ? r : `${r}.csv` : "data.csv";
 }
-function X2(t, e) {
+function J2(t, e) {
   try {
     if (typeof Blob > "u" || typeof URL > "u" || typeof document > "u") return;
     const r = URL.createObjectURL(new Blob([t], { type: "text/csv;charset=utf-8" })), i = document.createElement("a");
-    i.href = r, i.download = Y2(e), document.body.appendChild(i), i.click(), i.remove(), setTimeout(() => URL.revokeObjectURL(r), 0);
+    i.href = r, i.download = Q2(e), document.body.appendChild(i), i.click(), i.remove(), setTimeout(() => URL.revokeObjectURL(r), 0);
   } catch {
   }
 }
 const ag = 1;
-function Z2(t) {
+function eC(t) {
   try {
     const e = localStorage.getItem(`aktion-datagrid-${t}`);
     if (!e) return null;
@@ -15079,7 +15111,7 @@ function Z2(t) {
     return null;
   }
 }
-function Q2(t, e) {
+function tC(t, e) {
   try {
     localStorage.setItem(`aktion-datagrid-${t}`, JSON.stringify(e));
   } catch {
@@ -15111,7 +15143,7 @@ function tn(t, e) {
   for (const a of t) (e.has(a) ? r : i).push(a);
   return [...r, ...i];
 }
-function J2(t, e) {
+function rC(t, e) {
   const r = t.map((c) => c.key), i = new Set(r), a = e.order.filter((c) => i.has(c)), o = r.filter((c) => !a.includes(c));
   if (o.length === 0 && a.length === e.order.length) return e;
   const n = (c) => new Set([...c].filter((u) => i.has(u))), s = {};
@@ -15131,7 +15163,7 @@ function lo(t, e) {
   const r = new Map(t.map((i) => [i.key, i]));
   return e.order.filter((i) => !e.hidden.has(i) && r.has(i)).map((i) => r.get(i));
 }
-function eC(t) {
+function iC(t) {
   return {
     v: ag,
     order: t.order,
@@ -15140,12 +15172,12 @@ function eC(t) {
     widths: t.widths
   };
 }
-const tC = 36, rC = 42, co = "@@select", uo = "@@rownum";
+const aC = 36, oC = 42, co = "@@select", uo = "@@rownum";
 function rp(t) {
   const e = globalThis.CSS?.escape;
   return typeof e == "function" ? e(t) : t.replace(/["\\]/g, "\\$&");
 }
-const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
+const nC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
   name: "DataGrid",
   description: "Advanced data table with sortable headers, per-column filter chips, row selection (checkboxes), sticky header / first column, optional pagination, an optional bulk-action toolbar slot, and click-to-act rows. Columns are Col(header, values, format?, align?, sortable?, filterable?) entries. Sorting, selection and pagination work on their own; bind `$sort` (`{key, direction}` object), `$selectedIds` (string[]) and `$page` (number) when the host needs to read or drive them, or use `onSort` / `onSelectionChange` for server-side work. Use `loading` / `error` for query states. Set `columnMenu=true` to let the user hide, reorder, and pin columns — the button is pinned to the top-right of the header and stays put while the grid scrolls sideways, without taking a column of its own. Pinning MOVES a column to the front of the table and above a divider in the panel; drag and arrow-key reordering both stay inside their own group, so the only way across that divider is the pin. The last visible column cannot be hidden. To drive the panel from your own toolbar, bind `columnMenuOpen` (with `onColumnMenuOpenChange`), point `columnMenuAnchor` at your button and set `columnMenuButton: false` — the panel keeps working, it just loses the in-header icon. `columnMenuTitle` / `columnMenuDescription` / `columnMenuResetLabel` take translated strings. Set `resizable=true` to let the user drag column borders to resize; the first drag pins the columns at the widths they are already rendered at and switches to a fixed layout, so a narrowed column truncates instead of pushing its neighbours around. `scrollArrows=false` turns off the small chevrons that appear in the header band when there are columns to scroll to. Pass `persistKey` to save the user's column layout to localStorage — give each grid its own key, and prefix it per app when several apps share an origin; the key is mirrored onto the grid as `data-persist-key`. Set `wrapCells=false` for single-line cells with ellipsis + hover tooltip. Use INSTEAD of `Table` when you need any of those interactions.",
   props: [
@@ -15203,16 +15235,16 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
     { name: "ariaLabel", type: "string", optional: !0, aliases: ["arialabel"], description: "Accessible name for a grid whose visible name is already a heading beside it — a `<caption>` there would be a visible duplicate. Ignored when `caption` is set, which already names the table." }
   ],
   render: (t, e, r) => {
-    const i = G2(e.columns), a = Math.max(0, ...i.map((B) => B.values.length)), o = P(e.rowIds), n = (B) => g(o[B] ?? B), s = t.argMeta?.[3]?.stateRef, l = t.argMeta?.[4]?.stateRef, c = t.argMeta?.[6]?.stateRef, u = t.argMeta?.[7]?.stateRef, h = t.argMeta?.[29]?.stateRef, p = z(e.selectable) || l !== void 0, b = z(e.allowOverflow), m = b ? !1 : e.stickyHeader === void 0 ? !0 : z(e.stickyHeader), f = z(e.stickyFirstColumn), v = g(e.density, "comfortable"), x = z(e.striped), y = z(e.loading), w = g(e.error), S = g(e.emptyLabel, "No results"), k = g(e.loadingLabel, "Loading…"), C = P(e.perPageOptions).map((B) => Math.floor(R(B, 0))).filter((B) => B > 0), A = g(e.persistKey), $ = z(e.resizable), T = z(e.columnMenu), I = z(e.rowNumbers), M = e.highlightOnHover === void 0 ? !0 : z(e.highlightOnHover), E = e.scrollArrows === void 0 ? !0 : z(e.scrollArrows), L = e.wrapCells, D = L == null ? null : z(L) ? "true" : "false", N = r.useInstanceState("filters", {}), O = r.useInstanceState("sort", null), q = r.useInstanceState("selected", null), j = r.useInstanceState("page", null), _ = r.useInstanceState("perPage", null), V = r.useInstanceState("globalSearch", ""), re = A ? Z2(A) : null, pe = r.useInstanceState(
+    const i = Y2(e.columns), a = Math.max(0, ...i.map((B) => B.values.length)), o = P(e.rowIds), n = (B) => g(o[B] ?? B), s = t.argMeta?.[3]?.stateRef, l = t.argMeta?.[4]?.stateRef, c = t.argMeta?.[6]?.stateRef, u = t.argMeta?.[7]?.stateRef, h = t.argMeta?.[29]?.stateRef, p = z(e.selectable) || l !== void 0, b = z(e.allowOverflow), m = b ? !1 : e.stickyHeader === void 0 ? !0 : z(e.stickyHeader), f = z(e.stickyFirstColumn), v = g(e.density, "comfortable"), x = z(e.striped), y = z(e.loading), w = g(e.error), S = g(e.emptyLabel, "No results"), k = g(e.loadingLabel, "Loading…"), C = P(e.perPageOptions).map((B) => Math.floor(R(B, 0))).filter((B) => B > 0), A = g(e.persistKey), $ = z(e.resizable), T = z(e.columnMenu), I = z(e.rowNumbers), M = e.highlightOnHover === void 0 ? !0 : z(e.highlightOnHover), E = e.scrollArrows === void 0 ? !0 : z(e.scrollArrows), L = e.wrapCells, D = L == null ? null : z(L) ? "true" : "false", N = r.useInstanceState("filters", {}), O = r.useInstanceState("sort", null), q = r.useInstanceState("selected", null), _ = r.useInstanceState("page", null), j = r.useInstanceState("perPage", null), V = r.useInstanceState("globalSearch", ""), re = A ? eC(A) : null, pe = r.useInstanceState(
       "colConfig",
       tp(i, re)
-    ), K = r.useInstanceState("colConfigOpen", !1), Z = r.useInstanceState("livePanel", null), W = r.useInstanceState("autoWidths", {}), J = r.useInstanceState("scrollHint", iC), U = r.useInstanceState("stickyLeft", {}), ie = r.useInstanceState("liveViewport", null), ee = r.useInstanceState("resizeObserver", null), he = () => {
-      const B = pe.get(), H = J2(i, B);
+    ), K = r.useInstanceState("colConfigOpen", !1), Z = r.useInstanceState("livePanel", null), W = r.useInstanceState("autoWidths", {}), J = r.useInstanceState("scrollHint", nC), U = r.useInstanceState("stickyLeft", {}), ie = r.useInstanceState("liveViewport", null), ee = r.useInstanceState("resizeObserver", null), he = () => {
+      const B = pe.get(), H = rC(i, B);
       return H !== B && pe.set(H), H;
     }, Oe = (B) => {
       const X = { ...he(), ...B };
-      X.order = tn(X.order, X.pinned), pe.set(X), A && Q2(A, eC(X));
-    }, xe = lo(i, he()), Ae = (B) => B.resizable === void 0 ? $ : B.resizable, Be = i.some(Ae), _e = (B, H) => H.widths[B.key] || W.get()[B.key] || "", dr = Be && xe.length > 0 && xe.every((B) => _e(B, he()) !== ""), Qe = () => {
+      X.order = tn(X.order, X.pinned), pe.set(X), A && tC(A, iC(X));
+    }, xe = lo(i, he()), $e = (B) => B.resizable === void 0 ? $ : B.resizable, Be = i.some($e), je = (B, H) => H.widths[B.key] || W.get()[B.key] || "", dr = Be && xe.length > 0 && xe.every((B) => je(B, he()) !== ""), Qe = () => {
       const B = e.sort && typeof e.sort == "object" ? e.sort : null, H = s ? B : O.get() ?? B;
       return {
         key: g(H?.key),
@@ -15222,7 +15254,7 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
       const B = l ? e.selectedIds : q.get() ?? e.selectedIds;
       return P(B).map((H) => g(H));
     }, Zt = () => {
-      const B = u ? null : _.get();
+      const B = u ? null : j.get();
       return Math.max(1, Math.floor(R(B ?? e.perPage, 20)));
     }, Ar = () => h ? g(e.globalSearch).trim().toLowerCase() : (V.get() || g(e.globalSearch)).trim().toLowerCase(), dt = () => {
       const B = N.get(), { key: H, dir: X } = Qe(), oe = Ar(), ce = [];
@@ -15250,11 +15282,11 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
       if (H) {
         const Se = i.find((Ue) => Ue.key === H);
         Se && Se.sortable && ce.sort((Ue, we) => {
-          const ue = V2(Se.values[Ue], Se.values[we], Se.format);
+          const ue = X2(Se.values[Ue], Se.values[we], Se.format);
           return X === "desc" ? -ue : ue;
         });
       }
-      const fe = ce.length, te = Zt(), le = Math.max(1, Math.ceil(fe / te)), ge = c ? e.page : j.get() ?? e.page, ke = Math.max(1, Math.floor(R(ge, 1))), Pe = Math.min(ke, le);
+      const fe = ce.length, te = Zt(), le = Math.max(1, Math.ceil(fe / te)), ge = c ? e.page : _.get() ?? e.page, ke = Math.max(1, Math.floor(R(ge, 1))), Pe = Math.min(ke, le);
       return {
         indices: ce,
         total: fe,
@@ -15298,9 +15330,9 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
       `.rui-data-grid-table > colgroup > col[data-col-key="${rp(H)}"]`
     ), tu = (B, H) => {
       const X = d("colgroup");
-      p && X.append(d("col", { class: "rui-data-grid-col-lead", style: `width:${tC}px` })), I && X.append(d("col", { class: "rui-data-grid-col-lead", style: `width:${rC}px` }));
+      p && X.append(d("col", { class: "rui-data-grid-col-lead", style: `width:${aC}px` })), I && X.append(d("col", { class: "rui-data-grid-col-lead", style: `width:${oC}px` }));
       for (const oe of B) {
-        const ce = _e(oe, H);
+        const ce = je(oe, H);
         X.append(d("col", { "data-col-key": oe.key, style: ce ? `width:${ce}` : null }));
       }
       return Be && X.append(d("col", { class: "rui-data-grid-col-filler" })), X;
@@ -15323,7 +15355,7 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
         const te = Math.max(120, Math.round(fe.clientWidth * 0.75));
         fe.scrollBy({ left: B === "left" ? -te : te, behavior: "smooth" });
       }, H;
-    }, Ki = (B, H) => {
+    }, Vi = (B, H) => {
       const X = he();
       Oe({ widths: { ...X.widths, [B]: H } });
     }, iu = (B, H, X, oe) => {
@@ -15343,7 +15375,7 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
         const te = d("button", { type: "button", class: "rui-data-grid-sort" });
         te.append(d("span", { class: B.headerHidden ? "rui-visually-hidden" : null }, [B.header])), te.onclick = (le) => Jb(B.key, le.currentTarget), fe.append(te);
       } else B.headerHidden ? fe.append(d("span", { class: "rui-visually-hidden" }, [B.header])) : fe.append(document.createTextNode(B.header));
-      if (Ae(B)) {
+      if ($e(B)) {
         const te = B.key, le = ip(B.minWidth) || 50, ge = ip(B.maxWidth) || 2e3, ke = d("div", {
           class: "rui-data-grid-resize-handle",
           "data-resize-col": te,
@@ -15387,21 +15419,21 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
               ue.releasePointerCapture(Tt);
             } catch {
             }
-            Ki(te, Lt);
+            Vi(te, Lt);
           };
           document.addEventListener("pointermove", qt), document.addEventListener("pointerup", Ut), document.addEventListener("pointercancel", Ut);
         }, ke.ondblclick = (we) => {
           we.preventDefault(), we.stopPropagation();
           const ue = we.currentTarget;
-          Ki(te, Se(ue, Ue(ue)));
+          Vi(te, Se(ue, Ue(ue)));
         }, ke.onkeydown = (we) => {
           const ue = we.currentTarget, De = we.shiftKey ? 48 : 12;
           if (we.key === "ArrowLeft")
-            Ki(te, Se(ue, Pe(ue) - De));
+            Vi(te, Se(ue, Pe(ue) - De));
           else if (we.key === "ArrowRight")
-            Ki(te, Se(ue, Pe(ue) + De));
+            Vi(te, Se(ue, Pe(ue) + De));
           else if (we.key === "Home" || we.key === "Enter")
-            Ki(te, Se(ue, Ue(ue)));
+            Vi(te, Se(ue, Ue(ue)));
           else
             return;
           we.preventDefault();
@@ -15432,7 +15464,7 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
       B.order.join(""),
       [...B.hidden].sort().join(""),
       [...B.pinned].sort().join(""),
-      H.map((X) => `${X.key}=${_e(X, B)}`).join("")
+      H.map((X) => `${X.key}=${je(X, B)}`).join("")
     ].join(""), Vb = (B) => {
       const H = he(), X = lo(i, H), oe = ou(H, X);
       if (B.getAttribute("data-col-sig") === oe) return;
@@ -15674,7 +15706,7 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
     }, Qt = (B, H = dt()) => cu(it(B), H);
     let uu = null;
     const Ya = (B) => {
-      c ? r.setState(c, B) : j.set(B);
+      c ? r.setState(c, B) : _.set(B);
     }, Jb = (B, H) => {
       const X = Qe(), oe = X.key === B && X.dir === "asc" ? "desc" : "asc";
       s ? r.setState(s, { key: B, direction: oe }) : O.set({ key: B, direction: oe }), r.invoke(e.onSort, B, oe), Qt(H);
@@ -15709,8 +15741,8 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
       if (z(e.exportable)) {
         const X = d("button", { type: "button", class: "rui-data-grid-export" }), oe = Y("download", { className: "rui-data-grid-export-icon" });
         oe && X.append(oe), X.append(d("span", {}, ["Export CSV"])), X.onclick = () => {
-          const ce = K2(xe, dt().indices);
-          X2(ce, g(e.exportFilename, "data.csv") || "data.csv");
+          const ce = Z2(xe, dt().indices);
+          J2(ce, g(e.exportFilename, "data.csv") || "data.csv");
         }, H.append(X);
       }
       B.append(H), rt.append(B);
@@ -15719,7 +15751,7 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
       class: "rui-data-grid-status",
       role: "status",
       "aria-live": "polite",
-      style: W2
+      style: K2
     }));
     const pi = J.get(), Gr = d("div", {
       class: "rui-data-grid-viewport",
@@ -15741,7 +15773,7 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
     y && Vr.setAttribute("aria-busy", "true");
     const On = g(e.caption), hu = g(e.ariaLabel);
     !On && hu && Vr.setAttribute("aria-label", hu), On && Vr.append(d("caption", { class: "rui-data-grid-caption" }, [On])), Vr.append(tu(xe, he()));
-    const Bn = d("thead"), Yi = d("tr");
+    const Bn = d("thead"), Ki = d("tr");
     if (p) {
       const B = he().pinned.size > 0, H = d("th", {
         class: "rui-data-grid-cell-select",
@@ -15759,11 +15791,11 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
           const ge = le.getAttribute("data-row-id") ?? "";
           ce.checked ? te.add(ge) : te.delete(ge);
         }), du(Array.from(te), ce);
-      }, H.append(X), Yi.append(H);
+      }, H.append(X), Ki.append(H);
     }
     if (I) {
       const B = he().pinned.size > 0;
-      Yi.append(d("th", {
+      Ki.append(d("th", {
         class: "rui-data-grid-cell-rownum",
         scope: "col",
         "data-pinned": B ? "true" : null,
@@ -15772,8 +15804,8 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
     }
     const Fn = he();
     if (xe.forEach((B, H) => {
-      Yi.append(iu(B, H, Fn, H === xe.length - 1));
-    }), Be && Yi.append(Dn("th")), T) {
+      Ki.append(iu(B, H, Fn, H === xe.length - 1));
+    }), Be && Ki.append(Dn("th")), T) {
       const B = `${kr(r, "rui-data-grid-col")}-reorder-hint`, H = g(e.columnMenuTitle) || "Table settings", X = e.columnMenuDescription === void 0 ? "Manage column visibility and order" : g(e.columnMenuDescription), oe = g(e.columnMenuResetLabel) || "Reset to default", ce = og.props.findIndex((ne) => ne.name === "columnMenuOpen"), fe = ce >= 0 ? t.argMeta?.[ce]?.stateRef : void 0, te = e.columnMenuOpen !== void 0, le = g(e.columnMenuAnchor), ge = e.columnMenuButton === void 0 ? !0 : z(e.columnMenuButton);
       te && K.set(z(e.columnMenuOpen));
       const ke = (ne) => {
@@ -15808,8 +15840,8 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
         const Ht = d("button", {
           type: "button",
           class: "rui-data-grid-col-panel-reset"
-        }), Xi = Y("rotate-left", { className: "rui-data-grid-col-panel-reset-icon" });
-        Xi && Ht.append(Xi), Ht.append(d("span", {}, [oe])), Ht.onclick = (de) => {
+        }), Yi = Y("rotate-left", { className: "rui-data-grid-col-panel-reset-icon" });
+        Yi && Ht.append(Yi), Ht.append(d("span", {}, [oe])), Ht.onclick = (de) => {
           if (de.stopPropagation(), pe.set(tp(i, null)), W.set({}), A)
             try {
               localStorage.removeItem(`aktion-datagrid-${A}`);
@@ -15871,7 +15903,7 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
           if (!Re.active || (rv(Re), !de || Re.toIndex === Re.fromIndex)) return;
           const ot = [...he().order], Je = ot.indexOf(Re.key);
           Je < 0 || (ot.splice(Je, 1), ot.splice(Re.toIndex, 0, Re.key), Oe({ order: ot }), Ge(ne), Qt(qe));
-        }, _n = (de) => {
+        }, jn = (de) => {
           const qe = Le.order.filter((Re) => Le.pinned.has(Re)).length;
           return de < qe ? { start: 0, end: qe - 1 } : { start: qe, end: Le.order.length - 1 };
         }, qn = (de, qe) => {
@@ -15883,7 +15915,7 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
         }, ov = (de, qe, Re) => {
           const ot = [...he().order], Je = ot.indexOf(de), mi = Je + qe;
           if (Je < 0) return;
-          const fi = _n(Je);
+          const fi = jn(Je);
           mi < fi.start || mi > fi.end || (ot.splice(Je, 1), ot.splice(mi, 0, de), Oe({ order: ot }), Ge(ne), Qt(Re), qn(de, ".rui-data-grid-col-panel-handle"));
         }, nv = Le.order.filter((de) => !Le.hidden.has(de)).length;
         let wu = !1;
@@ -15963,8 +15995,8 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
                 node: ht,
                 active: !1,
                 lastY: Ce.clientY,
-                groupStart: _n(Yr).start,
-                groupEnd: _n(Yr).end
+                groupStart: jn(Yr).start,
+                groupEnd: jn(Yr).end
               };
               try {
                 ht.setPointerCapture(Ce.pointerId);
@@ -16004,8 +16036,8 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
         for (const Ht of [$r, Rt, typeof document > "u" ? null : document])
           if (Ht)
             try {
-              const Xi = Ht.querySelector?.(le);
-              if (Xi instanceof HTMLElement) return Xi;
+              const Yi = Ht.querySelector?.(le);
+              if (Yi instanceof HTMLElement) return Yi;
             } catch {
             }
         return Le;
@@ -16026,7 +16058,7 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
           ne.panel && id(ne.panel) && (at(ne.panel), ne.panel.setAttribute("data-open", "false"), ne.btn?.setAttribute("aria-expanded", "false"));
           return;
         }
-        !ne.panel || !ne.btn || (id(ne.panel) ? Bx(ne.panel) : Lt(ne.btn));
+        !ne.panel || !ne.btn || (id(ne.panel) ? jx(ne.panel) : Lt(ne.btn));
       }, Se.onclick = (ne) => {
         ne.stopPropagation();
         const Le = ne.currentTarget;
@@ -16053,7 +16085,7 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
         document.removeEventListener("mousedown", qt), document.removeEventListener("keydown", Ut), at(Z.get());
       }, "col-menu-outside")), Ge(we), Pe.append(we), Gr.append(Pe);
     }
-    if (Bn.append(Yi), xe.some((B) => B.filterable)) {
+    if (Bn.append(Ki), xe.some((B) => B.filterable)) {
       const B = N.get(), H = Fn.pinned.size > 0, X = d("tr", { class: "rui-data-grid-filter-row" });
       p && X.append(d("td", {
         class: "rui-data-grid-cell-select",
@@ -16071,8 +16103,8 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
     Vr.append(Bn);
     const ev = d("tbody");
     Vr.append(ev), Xa.append(Vr), Gr.append(Xa), E && !b && Gr.append(ru("left"), ru("right")), rt.append(Gr);
-    const jn = dt();
-    if (C.length > 0 || a > jn.perPage) {
+    const _n = dt();
+    if (C.length > 0 || a > _n.perPage) {
       const B = d("div", { class: "rui-data-grid-footer" });
       if (B.append(d("span", { class: "rui-data-grid-footer-summary" })), C.length > 0) {
         const fe = d("select", {
@@ -16082,8 +16114,8 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
         for (const te of C)
           fe.append(d("option", { value: String(te) }, [`${te} / page`]));
         fe.onchange = (te) => {
-          const le = te.currentTarget, ge = Math.max(1, Math.floor(R(le.value, jn.perPage)));
-          u ? r.setState(u, ge) : _.set(ge), r.invoke(e.onPerPageChange, ge), Ya(1), Qt(le);
+          const le = te.currentTarget, ge = Math.max(1, Math.floor(R(le.value, _n.perPage)));
+          u ? r.setState(u, ge) : j.set(ge), r.invoke(e.onPerPageChange, ge), Ya(1), Qt(le);
         }, B.append(fe);
       }
       const H = d("div", { class: "rui-data-grid-footer-buttons" }), X = d("button", { type: "button", class: "rui-data-grid-page-button" }, ["‹ Prev"]), oe = d("button", { type: "button", class: "rui-data-grid-page-button" }, ["Next ›"]), ce = (fe) => (te) => {
@@ -16092,7 +16124,7 @@ const iC = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, og = {
       };
       X.onclick = ce(-1), oe.onclick = ce(1), H.append(X), H.append(d("span", { class: "rui-data-grid-page-current" })), H.append(oe), B.append(H), rt.append(B);
     }
-    return cu(rt, jn), be(() => {
+    return cu(rt, _n), be(() => {
       const B = Gr.isConnected ? Gr : ie.get();
       if (!B?.isConnected) return;
       ie.set(B), nu(B.closest(".rui-data-grid") ?? B), Ka(B), uu?.();
@@ -16121,7 +16153,7 @@ function ip(t) {
   const e = /^(\d+(?:\.\d+)?)px$/i.exec(t.trim());
   return e ? Number(e[1]) : 0;
 }
-function aC(t) {
+function sC(t) {
   const e = [];
   return P(t).forEach((r, i) => {
     if (!r || typeof r != "object") return;
@@ -16137,12 +16169,12 @@ function aC(t) {
     });
   }), e;
 }
-const oC = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/;
+const lC = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/;
 function is(t) {
-  const e = oC.exec(t.trim());
+  const e = lC.exec(t.trim());
   return e ? new Date(Number(e[1]), Number(e[2]) - 1, e[3] ? Number(e[3]) : 1) : null;
 }
-function Ji(t, e) {
+function Qi(t, e) {
   const r = new Date(t.getFullYear(), t.getMonth(), t.getDate()), a = (r.getDay() - e + 7) % 7;
   return r.setDate(r.getDate() - a), r;
 }
@@ -16153,11 +16185,11 @@ function bi(t) {
   const e = t.getFullYear(), r = String(t.getMonth() + 1).padStart(2, "0"), i = String(t.getDate()).padStart(2, "0");
   return `${e}-${r}-${i}`;
 }
-function nC(t, e) {
+function cC(t, e) {
   const r = t.getMonth() === e.getMonth() && t.getFullYear() === e.getFullYear(), i = t.toLocaleDateString(void 0, r ? { day: "numeric" } : { day: "numeric", month: "short" }), a = e.toLocaleDateString(void 0, { day: "numeric", month: "short", year: "numeric" });
   return `${i} – ${a}`;
 }
-const sC = "border:0;font-family:inherit;cursor:pointer;width:100%", lC = "border:0;background:none;font:inherit;font-size:11px;cursor:pointer;color:inherit;text-align:left", cC = "opacity:0.45;cursor:default", uC = "width:100%;height:100%;border-radius:50%;object-fit:cover;display:block", dC = {
+const uC = "border:0;font-family:inherit;cursor:pointer;width:100%", dC = "border:0;background:none;font:inherit;font-size:11px;cursor:pointer;color:inherit;text-align:left", pC = "opacity:0.45;cursor:default", hC = "width:100%;height:100%;border-radius:50%;object-fit:cover;display:block", mC = {
   name: "CalendarView",
   description: "Full-month or week calendar grid for scheduling apps — distinct from the form-input `DatePicker`. Pass events as an array of `{date: 'YYYY-MM-DD', title, tone?, time?, id?}` objects. Bind `value` to a `$variable` for the selected date (ISO string) and `month` for the visible month; the built-in ‹ / › / Today controls write both. Use `view=\"week\"` for a single-week strip. `firstDay=1` (Monday) matches most business apps. `onEventClick` makes the event chips clickable, `min` / `max` / `disabledDates` block days.",
   props: [
@@ -16176,7 +16208,7 @@ const sC = "border:0;font-family:inherit;cursor:pointer;width:100%", lC = "borde
     { name: "hideNav", type: "boolean", optional: !0, description: "Hide the built-in prev / next / today controls" }
   ],
   render: (t, e, r) => {
-    const i = g(e.view, "month"), a = aC(e.events), o = /* @__PURE__ */ new Date(), n = bi(o), s = (R(e.firstDay, 1) % 7 + 7) % 7, l = Math.max(1, Math.floor(R(e.maxEventsPerDay, 3))), c = t.argMeta?.[0]?.stateRef, u = t.argMeta?.[1]?.stateRef, h = r.useInstanceState("selected", ""), p = !c && !g(e.value), b = p ? h.get() : g(e.value), m = /^\d{4}-\d{2}-\d{2}$/.test(b) ? b : "", f = r.useInstanceState("anchor", ""), x = (u ? "" : f.get()) || g(e.month) || g(e.value), y = is(x) ?? (x ? new Date(x) : o), w = Number.isNaN(y.getTime()) ? o : y, S = g(e.min).slice(0, 10), k = g(e.max).slice(0, 10), C = new Set(P(e.disabledDates).map((U) => g(U).slice(0, 10))), A = (U) => S !== "" && U < S || k !== "" && U > k || C.has(U), $ = /* @__PURE__ */ new Map();
+    const i = g(e.view, "month"), a = sC(e.events), o = /* @__PURE__ */ new Date(), n = bi(o), s = (R(e.firstDay, 1) % 7 + 7) % 7, l = Math.max(1, Math.floor(R(e.maxEventsPerDay, 3))), c = t.argMeta?.[0]?.stateRef, u = t.argMeta?.[1]?.stateRef, h = r.useInstanceState("selected", ""), p = !c && !g(e.value), b = p ? h.get() : g(e.value), m = /^\d{4}-\d{2}-\d{2}$/.test(b) ? b : "", f = r.useInstanceState("anchor", ""), x = (u ? "" : f.get()) || g(e.month) || g(e.value), y = is(x) ?? (x ? new Date(x) : o), w = Number.isNaN(y.getTime()) ? o : y, S = g(e.min).slice(0, 10), k = g(e.max).slice(0, 10), C = new Set(P(e.disabledDates).map((U) => g(U).slice(0, 10))), A = (U) => S !== "" && U < S || k !== "" && U > k || C.has(U), $ = /* @__PURE__ */ new Map();
     for (const U of a) {
       const ie = U.date.slice(0, 10), ee = $.get(ie) ?? [];
       ee.push(U), $.set(ie, ee);
@@ -16184,16 +16216,16 @@ const sC = "border:0;font-family:inherit;cursor:pointer;width:100%", lC = "borde
     const T = r.useInstanceState("focus", ""), I = r.useInstanceState("expanded", ""), M = typeof e.onEventClick == "function", E = d("div", { class: "rui-calendar", "data-view": i }), L = (U) => U?.closest(".rui-calendar") ?? E, D = (U) => {
       const ie = [];
       if (i === "week") {
-        const Ae = Ji(U, s);
+        const $e = Qi(U, s);
         for (let Be = 0; Be < 7; Be += 1) {
-          const _e = Tr(Ae, Be);
-          ie.push({ date: _e, inMonth: _e.getMonth() === U.getMonth() });
+          const je = Tr($e, Be);
+          ie.push({ date: je, inMonth: je.getMonth() === U.getMonth() });
         }
         return ie;
       }
-      const ee = new Date(U.getFullYear(), U.getMonth(), 1), he = new Date(U.getFullYear(), U.getMonth() + 1, 0), Oe = Ji(ee, s), xe = Math.ceil((he.getDate() + (ee.getDay() - s + 7) % 7) / 7) * 7;
-      for (let Ae = 0; Ae < xe; Ae += 1) {
-        const Be = Tr(Oe, Ae);
+      const ee = new Date(U.getFullYear(), U.getMonth(), 1), he = new Date(U.getFullYear(), U.getMonth() + 1, 0), Oe = Qi(ee, s), xe = Math.ceil((he.getDate() + (ee.getDay() - s + 7) % 7) / 7) * 7;
+      for (let $e = 0; $e < xe; $e += 1) {
+        const Be = Tr(Oe, $e);
         ie.push({ date: Be, inMonth: Be.getMonth() === U.getMonth() });
       }
       return ie;
@@ -16201,40 +16233,40 @@ const sC = "border:0;font-family:inherit;cursor:pointer;width:100%", lC = "borde
       u ? r.setState(u, U) : f.set(U), r.invoke(e.onMonthChange, U);
       const ee = is(U);
       ee && K(L(ie), ee);
-    }, O = (U) => bi(i === "week" ? Tr(Ji(w, s), U * 7) : new Date(w.getFullYear(), w.getMonth() + U, 1)), q = (U, ie) => {
+    }, O = (U) => bi(i === "week" ? Tr(Qi(w, s), U * 7) : new Date(w.getFullYear(), w.getMonth() + U, 1)), q = (U, ie) => {
       U.querySelectorAll(".rui-calendar-day").forEach((ee) => {
         const he = ee.getAttribute("data-date") === ie;
         ee.setAttribute("data-selected", he ? "true" : "false"), ee.setAttribute("aria-selected", he ? "true" : "false");
       });
-    }, j = (U, ie) => {
-      A(U) || (c ? r.setState(c, U) : p && h.set(U), r.invoke(e.onSelect, U), (c || p) && q(L(ie), U));
     }, _ = (U, ie) => {
+      A(U) || (c ? r.setState(c, U) : p && h.set(U), r.invoke(e.onSelect, U), (c || p) && q(L(ie), U));
+    }, j = (U, ie) => {
       T.set(ie), U.querySelectorAll(".rui-calendar-day").forEach((ee) => {
         ee.tabIndex = ee.getAttribute("data-date") === ie ? 0 : -1;
       });
     }, V = (U, ie) => {
       const ee = bi(ie), he = L(U), Oe = () => {
         const xe = he.querySelector(`.rui-calendar-day[data-date="${ee}"]`);
-        return xe ? (_(he, ee), xe.focus(), !0) : !1;
+        return xe ? (j(he, ee), xe.focus(), !0) : !1;
       };
       Oe() || (N(ee, U), Oe());
     }, re = (U, ie, ee, he) => {
       U.replaceChildren();
       const Oe = he ? ie : ie.slice(0, l);
       for (const xe of Oe) {
-        const Ae = {
+        const $e = {
           class: "rui-calendar-event",
           "data-tone": xe.tone ?? "primary",
           "data-event-id": xe.id,
           title: xe.time ? `${xe.time} — ${xe.title}` : xe.title
         };
         if (!M) {
-          U.append(d("span", Ae, [xe.title]));
+          U.append(d("span", $e, [xe.title]));
           continue;
         }
-        const Be = d("button", { ...Ae, type: "button", style: sC }, [xe.title]);
-        Be.onclick = (_e) => {
-          _e.stopPropagation(), r.invoke(e.onEventClick, xe.id, {
+        const Be = d("button", { ...$e, type: "button", style: uC }, [xe.title]);
+        Be.onclick = (je) => {
+          je.stopPropagation(), r.invoke(e.onEventClick, xe.id, {
             id: xe.id,
             date: xe.date,
             title: xe.title,
@@ -16247,41 +16279,41 @@ const sC = "border:0;font-family:inherit;cursor:pointer;width:100%", lC = "borde
         const xe = d("button", {
           type: "button",
           class: "rui-calendar-event-more",
-          style: lC
+          style: dC
         }, [`+${ie.length - l} more`]);
-        xe.onclick = (Ae) => {
-          Ae.stopPropagation(), I.set(ee);
-          const Be = Ae.currentTarget.closest(".rui-calendar-day-events");
+        xe.onclick = ($e) => {
+          $e.stopPropagation(), I.set(ee);
+          const Be = $e.currentTarget.closest(".rui-calendar-day-events");
           Be && re(Be, ie, ee, !0);
         }, U.append(xe);
       }
     }, pe = (U, ie) => {
       U.replaceChildren();
-      const ee = D(ie), he = I.get(), Oe = ee.map((_e) => bi(_e.date)), xe = (_e) => !A(_e), Ae = [T.get(), m, n].find((_e) => _e && Oe.includes(_e) && xe(_e)) ?? Oe.find((_e, dr) => ee[dr].inMonth && xe(_e)) ?? Oe[0] ?? "";
+      const ee = D(ie), he = I.get(), Oe = ee.map((je) => bi(je.date)), xe = (je) => !A(je), $e = [T.get(), m, n].find((je) => je && Oe.includes(je) && xe(je)) ?? Oe.find((je, dr) => ee[dr].inMonth && xe(je)) ?? Oe[0] ?? "";
       let Be = null;
-      ee.forEach((_e, dr) => {
+      ee.forEach((je, dr) => {
         dr % 7 === 0 && (Be = d("div", { class: "rui-calendar-row", role: "row", style: "display:contents" }), U.append(Be));
         const Qe = Oe[dr], Nt = A(Qe), Zt = d("div", {
           class: "rui-calendar-day",
           role: "gridcell",
           "data-date": Qe,
-          "data-in-month": _e.inMonth ? "true" : "false",
+          "data-in-month": je.inMonth ? "true" : "false",
           "data-today": Qe === n ? "true" : "false",
           "data-selected": Qe === m ? "true" : "false",
           "data-disabled": Nt ? "true" : null,
           "aria-selected": Qe === m ? "true" : "false",
           "aria-current": Qe === n ? "date" : null,
           "aria-disabled": Nt ? "true" : null,
-          "aria-label": _e.date.toLocaleDateString(void 0, {
+          "aria-label": je.date.toLocaleDateString(void 0, {
             weekday: "long",
             year: "numeric",
             month: "long",
             day: "numeric"
           }),
-          tabindex: Qe === Ae ? "0" : "-1",
-          style: Nt ? cC : null
+          tabindex: Qe === $e ? "0" : "-1",
+          style: Nt ? pC : null
         });
-        Zt.append(d("span", { class: "rui-calendar-daynumber" }, [String(_e.date.getDate())]));
+        Zt.append(d("span", { class: "rui-calendar-daynumber" }, [String(je.date.getDate())]));
         const Ar = $.get(Qe) ?? [];
         if (Ar.length > 0) {
           const dt = d("div", { class: "rui-calendar-day-events" });
@@ -16289,9 +16321,9 @@ const sC = "border:0;font-family:inherit;cursor:pointer;width:100%", lC = "borde
         }
         Nt || (Zt.onclick = (dt) => {
           const rt = dt.currentTarget;
-          _(L(rt), Qe), j(Qe, rt);
+          j(L(rt), Qe), _(Qe, rt);
         }), Zt.onkeydown = (dt) => {
-          const rt = dt.currentTarget, pt = is(rt.getAttribute("data-date") ?? "") ?? _e.date;
+          const rt = dt.currentTarget, pt = is(rt.getAttribute("data-date") ?? "") ?? je.date;
           let it = null;
           switch (dt.key) {
             case "ArrowLeft":
@@ -16307,10 +16339,10 @@ const sC = "border:0;font-family:inherit;cursor:pointer;width:100%", lC = "borde
               it = Tr(pt, 7);
               break;
             case "Home":
-              it = Ji(pt, s);
+              it = Qi(pt, s);
               break;
             case "End":
-              it = Tr(Ji(pt, s), 6);
+              it = Tr(Qi(pt, s), 6);
               break;
             case "PageUp":
               it = new Date(pt.getFullYear(), pt.getMonth() - 1, pt.getDate());
@@ -16320,7 +16352,7 @@ const sC = "border:0;font-family:inherit;cursor:pointer;width:100%", lC = "borde
               break;
             case "Enter":
             case " ":
-              dt.preventDefault(), Nt || j(bi(pt), rt);
+              dt.preventDefault(), Nt || _(bi(pt), rt);
               return;
             default:
               return;
@@ -16330,7 +16362,7 @@ const sC = "border:0;font-family:inherit;cursor:pointer;width:100%", lC = "borde
       });
     }, K = (U, ie) => {
       const ee = D(ie), he = U.querySelector(".rui-calendar-title");
-      he && (he.textContent = i === "week" && ee.length > 0 ? nC(ee[0].date, ee[ee.length - 1].date) : ie.toLocaleDateString(void 0, { month: "long", year: "numeric" }));
+      he && (he.textContent = i === "week" && ee.length > 0 ? cC(ee[0].date, ee[ee.length - 1].date) : ie.toLocaleDateString(void 0, { month: "long", year: "numeric" }));
       const Oe = U.querySelector(".rui-calendar-grid");
       if (Oe) {
         pe(Oe, ie);
@@ -16345,7 +16377,7 @@ const sC = "border:0;font-family:inherit;cursor:pointer;width:100%", lC = "borde
           class: "rui-data-grid-page-button rui-calendar-nav-button",
           "aria-label": he
         }, [ee]);
-        return xe.onclick = (Ae) => Oe(Ae.currentTarget), xe;
+        return xe.onclick = ($e) => Oe($e.currentTarget), xe;
       };
       U.append(ie(
         "‹",
@@ -16366,7 +16398,7 @@ const sC = "border:0;font-family:inherit;cursor:pointer;width:100%", lC = "borde
     return E.append(W), E.append(d("div", { class: "rui-calendar-grid", "data-view": i, role: "grid" })), K(E, w), E;
   }
 };
-function pC(t) {
+function fC(t) {
   const e = [];
   for (const r of P(t)) {
     if (!r || typeof r != "object") continue;
@@ -16385,17 +16417,17 @@ function pC(t) {
   }
   return e;
 }
-const hC = "border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left";
-function mC(t, e, r) {
+const gC = "border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left";
+function bC(t, e, r) {
   const i = d("ol", { class: t, "data-variant": r.variant }), a = typeof r.onItemClick == "function";
   if (e.forEach((o, n) => {
     const s = d("li", {
       class: `${t}-item`,
       "data-tone": o.tone,
       "data-clickable": a || o.href ? "true" : null
-    }), l = d("span", { class: `${t}-marker` }), c = je(o.avatarSrc);
+    }), l = d("span", { class: `${t}-marker` }), c = _e(o.avatarSrc);
     if (c)
-      l.append(d("img", { class: `${t}-avatar`, src: c, alt: "", style: uC }));
+      l.append(d("img", { class: `${t}-avatar`, src: c, alt: "", style: hC }));
     else {
       const p = Y(o.icon, { className: `${t}-icon` });
       p && l.append(p);
@@ -16411,7 +16443,7 @@ function mC(t, e, r) {
       const p = d("button", {
         type: "button",
         class: `${t}-title`,
-        style: hC
+        style: gC
       }, [o.title]);
       p.onclick = () => r.helpers.invoke(r.onItemClick, n, o), h.append(p);
     } else
@@ -16423,7 +16455,7 @@ function mC(t, e, r) {
   }
   return i;
 }
-const fC = {
+const vC = {
   name: "ActivityLog",
   description: 'Purpose-built feed of user/system activity. Each entry has `actor`, `title`, `description?`, `time?`, `icon?`, `avatarSrc?`, `tone?`, `href?`, and optional `meta` (IP, browser, request id). An entry\'s `href` renders its title as a link; `onItemClick` makes every title a button. Use `variant="audit"` to render `meta` in monospace for security/admin trails. Pass items as `{actor, title, description, time, icon, tone, avatarSrc, href, meta}` objects.',
   props: [
@@ -16438,7 +16470,7 @@ const fC = {
   ],
   render: (t, e, r) => {
     const i = g(e.variant, "default");
-    return mC(i === "audit" ? "rui-audit-trail" : "rui-activity-log", pC(e.items), {
+    return bC(i === "audit" ? "rui-audit-trail" : "rui-activity-log", fC(e.items), {
       variant: i,
       emptyLabel: g(e.emptyLabel, "No activity yet"),
       loading: z(e.loading),
@@ -16447,7 +16479,7 @@ const fC = {
       helpers: r
     });
   }
-}, ap = "position:sticky;left:0;z-index:1;background:var(--rui-color-surface, var(--rui-color-bg))", gC = {
+}, ap = "position:sticky;left:0;z-index:1;background:var(--rui-color-surface, var(--rui-color-bg))", yC = {
   name: "ComparisonTable",
   description: "Feature/spec comparison table — generic counterpart of `PricingTable`. Pass `columns` (e.g. plan/product names) and `rows` of `{label, values}` where `values` aligns 1-to-1 with `columns`. Each value can be a boolean (✓/—), a string, or a node. Rows sharing a `group` are kept together under one group header.",
   props: [
@@ -16507,7 +16539,7 @@ const fC = {
     }
     return l.append(f), s.append(l), s;
   }
-}, bC = {
+}, wC = {
   name: "InfiniteList",
   description: "Vertical list that fires `onLoadMore` when the user scrolls near the bottom. Pass already-rendered child nodes as `items`; wire `onLoadMore` to an `action` that awaits a `$mutation` or `$query` (e.g. `await loadMore.invoke()`) and appends to the bound state. Use `loading=true` to show the spinner row, `hasMore=false` to suppress further loads, and `error` + `onRetry` when a page fails.",
   props: [
@@ -16593,12 +16625,12 @@ const fC = {
     }
     return i;
   }
-}, vC = /^(https?:|blob:|data:(audio|video)\/)/i, yC = /^(https?:|blob:|data:text\/vtt)/i;
+}, xC = /^(https?:|blob:|data:(audio|video)\/)/i, kC = /^(https?:|blob:|data:text\/vtt)/i;
 function ng(t, e) {
   const r = g(t).trim();
   return !r || r.startsWith("//") ? "" : r.startsWith("/") || r.startsWith(".") || e.test(r) ? r : "";
 }
-const rn = (t) => ng(t, vC), wC = (t) => ng(t, yC), xC = ["subtitles", "captions", "descriptions", "chapters", "metadata"], kC = "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;text-align:center;color:#fff;font-size:13px;", SC = "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:56px;height:56px;border:0;border-radius:50%;background:rgba(0,0,0,0.55);color:#fff;font-size:20px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;";
+const rn = (t) => ng(t, xC), SC = (t) => ng(t, kC), CC = ["subtitles", "captions", "descriptions", "chapters", "metadata"], AC = "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;text-align:center;color:#fff;font-size:13px;", $C = "position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:56px;height:56px;border:0;border-radius:50%;background:rgba(0,0,0,0.55);color:#fff;font-size:20px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;";
 function nl(t, e) {
   const i = (t.currentTarget ?? t.target)?.closest(e)?.querySelector("video, audio");
   if (!i) return;
@@ -16637,7 +16669,7 @@ function lg(t, e, r) {
   }), a = Y(e ? "pause" : "play");
   return a && i.append(a), i;
 }
-const CC = {
+const TC = {
   name: "VideoPlayer",
   description: "Themed native `<video>` wrapper. Pass a `src` URL (or `sources` array for multi-codec fallback) and optional `poster`. Standard controls are visible by default; `controls=false` swaps them for a single play/pause button (click the video too). `autoplay` only works alongside `muted` — browsers block unmuted autoplay. Add `tracks` for captions/subtitles (required for prerecorded video, WCAG 1.2.2). `onEnded` fires on completion; a missing, unsafe, or failing source shows `fallback` and calls `onError`. Use for product demos, tutorials, and any inline video.",
   props: [
@@ -16665,7 +16697,7 @@ const CC = {
       autoplay: z(e.autoplay) ? "" : null,
       loop: z(e.loop) ? "" : null,
       muted: z(e.muted) ? "" : null,
-      poster: je(e.poster) || null,
+      poster: _e(e.poster) || null,
       playsinline: "",
       preload: "metadata"
     });
@@ -16683,12 +16715,12 @@ const CC = {
     }
     for (const m of P(e.tracks)) {
       if (!m || typeof m != "object") continue;
-      const f = m, v = wC(f.src);
+      const f = m, v = SC(f.src);
       if (!v) continue;
       const x = g(f.kind, "subtitles");
       s.append(d("track", {
         src: v,
-        kind: xC.includes(x) ? x : "subtitles",
+        kind: CC.includes(x) ? x : "subtitles",
         label: g(f.label) || null,
         srclang: g(f.srclang) || null,
         default: z(f.default) ? "" : null
@@ -16708,7 +16740,7 @@ const CC = {
       const v = (m.currentTarget ?? m.target)?.closest(".rui-video-player-frame");
       v && !v.querySelector(".rui-video-player-empty") && v.append(op(h || "This video could not be loaded.")), r.invoke(e.onError);
     }, !n) {
-      const m = lg("rui-video-player-play", c.get(), SC);
+      const m = lg("rui-video-player-play", c.get(), $C);
       m.onclick = (f) => nl(f, ".rui-video-player-frame"), s.onclick = (f) => nl(f, ".rui-video-player-frame"), o.append(m);
     }
     i.append(o);
@@ -16717,11 +16749,11 @@ const CC = {
   }
 };
 function op(t) {
-  const e = d("div", { class: "rui-video-player-empty", style: kC }), r = Y("circle-exclamation", { className: "rui-video-player-empty-icon" });
+  const e = d("div", { class: "rui-video-player-empty", style: AC }), r = Y("circle-exclamation", { className: "rui-video-player-empty-icon" });
   return r && e.append(r), e.append(d("span", { class: "rui-video-player-empty-text" }, [t])), e;
 }
-let AC = 0;
-const $C = {
+let IC = 0;
+const zC = {
   name: "AudioPlayer",
   description: "Themed native `<audio>` wrapper with a title, optional artist, and standard transport controls. Pass `src` (or `sources`) plus a `title` — the title names the player for assistive tech. `controls=false` replaces the native bar with a single play/pause button so the row still works. `autoplay` needs `muted: true` to be allowed by the browser. `onEnded` fires on completion (advance a playlist, mark an episode listened). Use for podcasts, voice notes, and demo audio.",
   props: [
@@ -16740,7 +16772,7 @@ const $C = {
     const i = d("div", { class: "rui-audio-player" }), a = d("div", { class: "rui-audio-player-meta" }), o = Y(g(e.icon, "music"), { className: "rui-audio-player-icon" });
     o && a.append(o);
     const n = d("div", { class: "rui-audio-player-text" }), s = r.useInstanceState("labelId", "");
-    s.get() || s.set(`rui-audio-player-${AC += 1}`);
+    s.get() || s.set(`rui-audio-player-${IC += 1}`);
     const l = s.get(), c = g(e.title);
     c && n.append(d("div", { class: "rui-audio-player-title", id: `${l}-title` }, [c]));
     const u = g(e.artist);
@@ -16781,16 +16813,16 @@ const $C = {
     return i.append(b), i;
   }
 };
-function TC(t, e) {
+function MC(t, e) {
   if (t == null) return null;
   if ($t(t))
     return e.renderNode(t);
   if (typeof t == "string") {
-    const r = je(t);
+    const r = _e(t);
     return r ? d("img", { src: r, alt: "", loading: "lazy", class: "rui-carousel-image" }) : null;
   }
   if (typeof t == "object") {
-    const r = t, i = je(r.src);
+    const r = t, i = _e(r.src);
     if (i) {
       const a = d("figure", { class: "rui-carousel-figure" });
       a.append(d("img", {
@@ -16805,14 +16837,14 @@ function TC(t, e) {
   }
   return e.renderNode(t);
 }
-const IC = 40;
-function zC(t, e) {
+const EC = 40;
+function NC(t, e) {
   e ? (t.removeAttribute("aria-hidden"), t.removeAttribute("inert")) : (t.setAttribute("aria-hidden", "true"), t.setAttribute("inert", ""));
 }
 function np(t, e) {
   e <= 0 ? t.style.removeProperty("transform") : t.style.transform = `translateX(${e * -100}%)`;
 }
-const MC = {
+const LC = {
   name: "Carousel",
   description: "Horizontal slider with prev/next buttons, dot navigation, arrow-key and swipe support. Each child slide takes full width. Slides may be Component nodes (Image, Card, MediaCard, …), URL strings, or plain `{src, alt, caption?}` image objects — bare image objects are auto-wrapped into a captioned figure. Bind a `$variable` to `activeIndex` to drive or observe the active slide, or use `onChange`. `autoplay` rotates every `interval` ms (paused while hovered or focused) for hero banners. Give it a `label` so screen readers can tell two carousels apart, and `empty`/`emptyText` for the no-slides case. The active slide is preserved across re-renders via instance state.",
   props: [
@@ -16863,7 +16895,7 @@ const MC = {
         "aria-label": `${w + 1} of ${a}`,
         "aria-hidden": w === u ? null : "true",
         inert: w === u ? null : ""
-      }), k = TC(y, r);
+      }), k = MC(y, r);
       k && S.append(k), f.append(S);
     }), m.append(f);
     const v = (y, w) => {
@@ -16871,7 +16903,7 @@ const MC = {
       S && np(S, w);
       const k = y.querySelector(".rui-carousel-frame");
       k && k.scrollLeft !== 0 && (k.scrollLeft = 0), y.querySelectorAll(".rui-carousel-slide").forEach((C, A) => {
-        zC(C, A === w);
+        NC(C, A === w);
       }), y.querySelectorAll(".rui-carousel-dot").forEach((C, A) => {
         C.setAttribute("data-active", A === w ? "true" : "false"), C.setAttribute("aria-current", A === w ? "true" : "false");
       });
@@ -16905,7 +16937,7 @@ const MC = {
         const S = y.get();
         if (y.set(null), S === null) return;
         const k = w.clientX - S;
-        Math.abs(k) < IC || x(w.currentTarget, l.get() + (k < 0 ? 1 : -1));
+        Math.abs(k) < EC || x(w.currentTarget, l.get() + (k < 0 ? 1 : -1));
       }, m.onpointercancel = () => y.set(null), n.onkeydown = (w) => {
         if (w.target?.closest("input,textarea,select,[contenteditable='true']")) return;
         const k = w.currentTarget ?? w.target;
@@ -16953,7 +16985,7 @@ const MC = {
     }
     return n;
   }
-}, EC = ["cover", "contain"], NC = {
+}, RC = ["cover", "contain"], PC = {
   name: "Gallery",
   description: 'Responsive image grid. Pass items as plain URL strings, `{src, alt, caption?}` objects, or `Image(...)` nodes (rendered in full, so their own `fit`/`fallback`/`srcset` apply). `fit: "contain"` stops logos and screenshots being centre-cropped. When `onSelect` is provided each tile becomes a button; bind it through an Action that opens a `Lightbox`. `empty`/`emptyText` cover the no-results case.',
   props: [
@@ -16961,7 +16993,7 @@ const MC = {
     { name: "columns", type: "number", optional: !0, description: "Preferred column count 1–6 (default auto)" },
     { name: "ratio", type: "string", optional: !0, description: "Per-tile aspect ratio (default `1:1`)" },
     { name: "onSelect", type: "callable", optional: !0, description: "Callable fired when a tile is clicked" },
-    { name: "fit", type: "string", optional: !0, enum: EC, description: "How each image fills its tile (default `cover`)" },
+    { name: "fit", type: "string", optional: !0, enum: RC, description: "How each image fills its tile (default `cover`)" },
     { name: "label", type: "string", optional: !0, description: "Accessible name for the grid" },
     { name: "empty", type: "Node", optional: !0, description: "Node rendered when `items` is empty" },
     { name: "emptyText", type: "string", optional: !0, description: "Message shown when `items` is empty (default `No images to show.`)" }
@@ -16992,7 +17024,7 @@ const MC = {
       if ($t(h))
         b.append(r.renderNode(h));
       else {
-        const { src: m, alt: f, caption: v } = cg(h), x = je(m);
+        const { src: m, alt: f, caption: v } = cg(h), x = _e(m);
         if (x)
           b.append(d("img", { src: x, alt: f, loading: "lazy", style: `object-fit:${n};` }));
         else {
@@ -17021,11 +17053,11 @@ function cg(t) {
   }
   return { src: "", alt: "", caption: "" };
 }
-const LC = "width:auto;height:auto;max-width:none;max-height:none;border:0;overflow:hidden;";
+const DC = "width:auto;height:auto;max-width:none;max-height:none;border:0;overflow:hidden;";
 function sp(t, e, r) {
   return t.alt || t.caption || `Image ${e + 1} of ${r}`;
 }
-const RC = {
+const OC = {
   name: "Lightbox",
   description: "Image overlay. Pass `items` (string URLs or `{src, alt, caption?}` objects). `open` and `index` work as literals or as `$variable` bindings; without a bound `open` the component manages itself and renders a clickable thumbnail of the current image (suppress it with `showThumbnail: false` when something else does the opening). Clicking the backdrop or ×, or pressing Escape, closes and fires `onClose`; the arrows and ArrowLeft/ArrowRight step through the array. Focus moves into the viewer on open, is trapped while it is open, and is restored on close.",
   props: [
@@ -17036,7 +17068,7 @@ const RC = {
     { name: "showThumbnail", type: "boolean", optional: !0, description: "Render the clickable thumbnail (default: only when `open` is not bound)" }
   ],
   render: (t, e, r) => {
-    const i = P(e.items).map((K) => cg(K)).filter((K) => je(K.src) !== ""), a = i.length, o = t.argMeta?.[2]?.stateRef, n = t.argMeta?.[1]?.stateRef, s = e.open !== void 0, l = e.index !== void 0, c = r.useInstanceState("open", s ? z(e.open) : !1), u = r.useInstanceState(
+    const i = P(e.items).map((K) => cg(K)).filter((K) => _e(K.src) !== ""), a = i.length, o = t.argMeta?.[2]?.stateRef, n = t.argMeta?.[1]?.stateRef, s = e.open !== void 0, l = e.index !== void 0, c = r.useInstanceState("open", s ? z(e.open) : !1), u = r.useInstanceState(
       "index",
       l ? Math.floor(R(e.index, 0)) : 0
     ), h = r.useInstanceState("openSeed", null);
@@ -17069,7 +17101,7 @@ const RC = {
     }, T = (K, Z) => {
       const W = i[Z];
       if (!W) return;
-      const J = je(W.src), U = K.querySelector(".rui-lightbox");
+      const J = _e(W.src), U = K.querySelector(".rui-lightbox");
       if (U) {
         U.setAttribute("aria-label", sp(W, Z, a));
         const ee = U.querySelector(".rui-lightbox-image-wrap img");
@@ -17120,7 +17152,7 @@ const RC = {
         type: "button",
         class: "rui-lightbox-thumb",
         "aria-label": K.alt || "Open image"
-      }), W = je(K.src);
+      }), W = _e(K.src);
       W && Z.append(d("img", { src: W, alt: K.alt, loading: "lazy" })), Z.onclick = (J) => {
         J.stopPropagation(), E(!0, M(J));
       }, D.append(Z);
@@ -17131,14 +17163,14 @@ const RC = {
       // `manual` only: dismissal stays entirely ours, so native light-dismiss
       // cannot fight the Escape handler below.
       popover: "manual",
-      style: LC
+      style: DC
     });
     if (D.append(O), a === 0) return D;
-    const q = i[v], j = je(q.src);
+    const q = i[v], _ = _e(q.src);
     O.onclick = (K) => {
       K.target === K.currentTarget && E(!1, M(K));
     };
-    const _ = lr(".rui-lightbox", (K) => {
+    const j = lr(".rui-lightbox", (K) => {
       E(!1, K.closest(".rui-lightbox-root") ?? S.get());
     });
     O.onkeydown = (K) => {
@@ -17146,7 +17178,7 @@ const RC = {
         K.preventDefault(), L(f() + (K.key === "ArrowLeft" ? -1 : 1), M(K));
         return;
       }
-      _(K);
+      j(K);
     };
     const V = d("div", {
       class: "rui-lightbox",
@@ -17183,13 +17215,13 @@ const RC = {
       }, V.append(K, W);
     }
     const pe = d("div", { class: "rui-lightbox-image-wrap" });
-    return j && pe.append(d("img", { src: j, alt: q.alt })), V.append(pe), V.append(d("div", {
+    return _ && pe.append(d("img", { src: _, alt: q.alt })), V.append(pe), V.append(d("div", {
       class: "rui-lightbox-caption",
       hidden: q.caption ? null : ""
     }, [q.caption])), a > 1 && V.append(d("div", { class: "rui-lightbox-counter" }, [`${v + 1} / ${a}`])), O.append(V), D;
   }
 }, lp = 85, sl = 180, cp = (t) => Math.max(-lp, Math.min(lp, t)), up = (t) => Math.max(-sl, Math.min(sl, t));
-function PC(t) {
+function BC(t) {
   if (!t) return null;
   if (typeof t == "object" && !Array.isArray(t)) {
     const e = t, r = R(e.lat ?? e.latitude, NaN), i = R(e.lng ?? e.longitude, NaN);
@@ -17209,7 +17241,7 @@ function PC(t) {
 function zo(t, e) {
   return Number.isFinite(t) && Number.isFinite(e) && Math.abs(t) <= 90 && Math.abs(e) <= sl;
 }
-const DC = {
+const FC = {
   name: "Map",
   description: "Static map view centered on a lat/lng coordinate. Renders an OpenStreetMap embed inside a sandboxed `<iframe>` (no external JS, no API key). Pass `lat` (-90…90) and `lng` (-180…180) as bare numbers; `zoom` controls the level (1–18, default 13). Optional `markers` are projected onto the map as pins and listed as labelled chips beneath it. Use for store locators, address cards, itinerary previews.",
   props: [
@@ -17242,7 +17274,7 @@ const DC = {
     });
     a.append(x);
     const y = P(e.markers).map((w) => {
-      const S = PC(w), k = w && typeof w == "object" ? g(w.label) : "";
+      const S = BC(w), k = w && typeof w == "object" ? g(w.label) : "";
       return S ? { ...S, label: k } : null;
     }).filter((w) => w !== null);
     if (y.length > 0) {
@@ -17293,9 +17325,9 @@ function Or(t, e) {
   }
   return typeof e == "string" ? document.createTextNode(e) : t.renderNode(e);
 }
-const OC = ["sx", "style", "animate", "className", "class"];
+const _C = ["sx", "style", "animate", "className", "class"];
 function Ac(t, e) {
-  return t ? t.hidden === !0 ? "display: none;" : OC.some((i) => t[i] != null) ? "display: block;" : e : e;
+  return t ? t.hidden === !0 ? "display: none;" : _C.some((i) => t[i] != null) ? "display: block;" : e : e;
 }
 function Mn(t, e, r) {
   return d("span", {
@@ -17304,7 +17336,7 @@ function Mn(t, e, r) {
     ...r ?? {}
   });
 }
-function ja(t, e, r) {
+function _a(t, e, r) {
   const i = t.useInstanceState(e, r).get();
   return i.props = r.props, i;
 }
@@ -17316,7 +17348,7 @@ function ug(t, e, r, i) {
   const a = t.useInstanceState(e, null);
   a.get() !== r && (a.set(r), i(r));
 }
-const BC = [
+const jC = [
   "a",
   "button",
   "input",
@@ -17334,21 +17366,21 @@ const BC = [
   '[role="tab"]',
   '[role="textbox"]'
 ].join(",");
-function FC(t, e) {
+function qC(t, e) {
   const r = e.target;
   if (!r || r === t || typeof r.closest != "function") return !1;
-  const i = r.closest(BC);
+  const i = r.closest(jC);
   return i != null && i !== t && t.contains(i);
 }
-function jC(t) {
+function UC(t) {
   const e = g(t).trim();
   return !e || /[<>]/.test(e) || /\bexpression\s*\(|\bjavascript\s*:|\bbehavior\s*:|@import\b/i.test(e) ? "" : e;
 }
-const _C = /^[A-Za-z_][A-Za-z0-9_\-:/]*$/;
-function qC(t) {
-  return (Array.isArray(t) ? t.map((r) => g(r)) : g(t).split(/\s+/)).map((r) => r.trim()).filter((r) => r.length > 0 && r.length <= 64 && _C.test(r));
+const HC = /^[A-Za-z_][A-Za-z0-9_\-:/]*$/;
+function WC(t) {
+  return (Array.isArray(t) ? t.map((r) => g(r)) : g(t).split(/\s+/)).map((r) => r.trim()).filter((r) => r.length > 0 && r.length <= 64 && HC.test(r));
 }
-const UC = {
+const GC = {
   name: "OnClick",
   description: "Make any component clickable. Wraps the child in a transparent span and dispatches `onClick(event)` when the user clicks or taps it. Clicks that land on a self-acting child (a Button, Link, or form control) are left to that child, so nesting is safe. Enter / Space activate it too unless `keyboard: false`. Use to attach click behaviour to components that do not expose an `action` / `onClick` prop (cards, list rows, media tiles, custom layouts).",
   props: [
@@ -17372,7 +17404,7 @@ const UC = {
     const s = z(e.stopPropagation), l = (c) => {
       if (i) return !1;
       const u = c.currentTarget ?? c.target;
-      return FC(u, c) ? !1 : (s && c.stopPropagation(), r.invoke(e.onClick, c), !0);
+      return qC(u, c) ? !1 : (s && c.stopPropagation(), r.invoke(e.onClick, c), !0);
     };
     return n.onclick = (c) => {
       l(c);
@@ -17380,7 +17412,7 @@ const UC = {
       c.key !== "Enter" && c.key !== " " || l(c) && c.preventDefault();
     } : null, n;
   }
-}, HC = [
+}, VC = [
   { prop: "enter", handler: "onmouseenter" },
   { prop: "leave", handler: "onmouseleave" },
   { prop: "hover", handler: "onmouseover" },
@@ -17401,7 +17433,7 @@ const UC = {
   { prop: "dragEnter", handler: "ondragenter" },
   { prop: "dragLeave", handler: "ondragleave" },
   { prop: "dragOver", handler: "ondragover" }
-], WC = {
+], KC = {
   name: "OnMouse",
   description: "Attach any combination of mouse / pointer / drag listeners to a component. Pass only the props you need — unused events install no handler so the wrapper is essentially free. Each handler receives the native MouseEvent / PointerEvent / DragEvent / WheelEvent. Use for hover tracking, custom drag-and-drop, context menus, scroll-aware UIs.",
   props: [
@@ -17435,13 +17467,13 @@ const UC = {
       draggable: z(e.draggable) ? "true" : null
     });
     i.append(Or(r, e.child));
-    for (const { prop: o, handler: n } of HC) {
+    for (const { prop: o, handler: n } of VC) {
       const s = e[o];
       s != null && (i[n] = (l) => {
         r.invoke(s, l);
       });
     }
-    const a = ja(r, "rui-on-mouse", { props: e, wantsScroll: !1 });
+    const a = _a(r, "rui-on-mouse", { props: e, wantsScroll: !1 });
     if (e.scroll != null && (a.wantsScroll = !0), a.wantsScroll) {
       const o = e.passiveScroll === void 0 ? !0 : z(e.passiveScroll), n = $c(r, i, "rui-on-mouse-node");
       ug(r, "rui-on-mouse-scroll", n, (s) => {
@@ -17456,7 +17488,7 @@ const UC = {
   { prop: "onKeyDown", event: "keydown", handler: "onkeydown" },
   { prop: "onKeyUp", event: "keyup", handler: "onkeyup" },
   { prop: "onKeyPress", event: "keypress", handler: "onkeypress" }
-], GC = {
+], YC = {
   name: "OnKeyboard",
   description: 'Attach keyboard listeners to a component. Pass any combination of `onKeyDown`, `onKeyUp`, and `onKeyPress`; each handler receives the native KeyboardEvent. Use for navigation and custom focusable widgets. The wrapper is focusable by default (tabindex="0") so it can be reached via Tab; pass `focusable=false` when the child is already focusable. For an app-wide shortcut (Cmd+K, `?`) pass `global: true`, which listens on the window instead so the keys fire wherever focus is.',
   props: [
@@ -17474,7 +17506,7 @@ const UC = {
       a ? { tabindex: "0" } : {}
     );
     o.append(Or(r, e.child));
-    const n = ja(r, "rui-on-keyboard", {
+    const n = _a(r, "rui-on-keyboard", {
       props: e,
       detachGlobal: null,
       disposerInstalled: !1
@@ -17501,7 +17533,7 @@ const UC = {
     } else !i && n.detachGlobal != null && (n.detachGlobal(), n.detachGlobal = null);
     return o;
   }
-}, VC = {
+}, XC = {
   name: "OnFocus",
   description: "Attach focus / blur listeners to a component. Use to track input focus rings, custom focus indicators, or autosave-on-blur flows. Listens for the bubbling `focusin` / `focusout` events, so focus entering or leaving any descendant is observed.",
   props: [
@@ -17512,7 +17544,7 @@ const UC = {
   render: (t, e, r) => {
     const i = Mn("rui-on-focus", t.universal);
     i.append(Or(r, e.child));
-    const a = ja(r, "rui-on-focus", { props: e }), o = $c(r, i, "rui-on-focus-node");
+    const a = _a(r, "rui-on-focus", { props: e }), o = $c(r, i, "rui-on-focus-node");
     return ug(r, "rui-on-focus-listeners", o, (n) => {
       n.addEventListener("focusin", (s) => {
         r.invoke(a.props.onFocus, s);
@@ -17521,14 +17553,14 @@ const UC = {
       });
     }), i;
   }
-}, KC = /^[+-]?(?:\d+|\d*\.\d+)(?:px|%)$|^[+-]?0$/;
-function YC(t) {
+}, ZC = /^[+-]?(?:\d+|\d*\.\d+)(?:px|%)$|^[+-]?0$/;
+function QC(t) {
   const e = g(t).trim();
   if (!e) return "";
   const r = e.split(/\s+/);
-  return r.length > 4 ? "" : r.every((i) => KC.test(i)) ? e : "";
+  return r.length > 4 ? "" : r.every((i) => ZC.test(i)) ? e : "";
 }
-function XC(t, e) {
+function JC(t, e) {
   try {
     const r = t.closest(e);
     if (r && r !== t) return r;
@@ -17539,7 +17571,7 @@ function XC(t, e) {
   }
   return null;
 }
-const ZC = {
+const eA = {
   name: "OnIntersect",
   description: "Observe whether a component is visible in the viewport (or a scroll container passed as `root`) using IntersectionObserver. Fires `onEnter` the first time the wrapped element becomes visible, `onLeave` when it leaves, and `onChange({visible, ratio})` for every transition. Use for lazy-load sentinels, infinite-scroll triggers, impression analytics, and reveal-on-scroll animations. Set `disabled: true` once there is nothing left to load.",
   props: [
@@ -17561,16 +17593,16 @@ const ZC = {
     i.append(Or(r, e.child));
     const a = typeof IntersectionObserver < "u" ? IntersectionObserver : void 0;
     if (!a) return i;
-    const o = ja(r, "rui-on-intersect", {
+    const o = _a(r, "rui-on-intersect", {
       props: e,
       observer: null,
       node: null,
       optionsKey: "",
       lastVisible: null
-    }), n = R(e.threshold, 0.05), s = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.05, l = YC(e.rootMargin), c = g(e.root).trim(), u = `${s}|${l}|${c}`, h = (b) => {
+    }), n = R(e.threshold, 0.05), s = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.05, l = QC(e.rootMargin), c = g(e.root).trim(), u = `${s}|${l}|${c}`, h = (b) => {
       if (o.observer && o.node === b && o.optionsKey === u) return;
       o.observer?.disconnect(), o.observer = null;
-      const m = c ? XC(b, c) : null;
+      const m = c ? JC(b, c) : null;
       let f;
       try {
         f = new a((v) => {
@@ -17598,7 +17630,7 @@ const ZC = {
     }) : h(p), i;
   }
 };
-function QC(t) {
+function tA(t) {
   return t == null ? null : (Array.isArray(t) ? t : [t]).map((r) => {
     if (r == null) return String(r);
     const i = typeof r;
@@ -17620,7 +17652,7 @@ function pp(t, e) {
   const r = t.live, i = t.props.onUnmount;
   r == null || i == null || dg(() => e.invoke(i, r));
 }
-const JC = {
+const rA = {
   name: "OnMount",
   description: "Run imperative code against the wrapped component's rendered DOM node. `onMount(node)` fires once, on a microtask after the child is attached to the DOM — the Aktion way to get a DOM ref (measure an element, focus it, or hand it to an imperative library such as a chart / map / editor). `onUnmount(node)` fires when the component leaves the tree. Pass `deps` to tear down and re-run the pair when the values in it change. Pair with `$ref(...)` to stash the node across renders.",
   props: [
@@ -17635,13 +17667,13 @@ const JC = {
       style: Ac(t.universal, "display: contents;")
     });
     i.append(Or(r, e.child));
-    const a = ja(r, "rui-on-mount", {
+    const a = _a(r, "rui-on-mount", {
       props: e,
       live: null,
       mounted: !1,
       depsKey: null,
       disposer: null
-    }), o = QC(e.deps);
+    }), o = tA(e.deps);
     return a.mounted && o !== a.depsKey && pp(a, r), a.mounted || (a.depsKey = o, dg(() => {
       if (a.mounted) return;
       const s = i.firstElementChild ?? i, l = s.isConnected ? s : a.live?.isConnected ? a.live : null;
@@ -17651,16 +17683,16 @@ const JC = {
     }), r.registerDisposer(a.disposer, "rui-on-mount-unmount"), i;
   }
 };
-function eA(t, e) {
+function iA(t, e) {
   return e == null ? [] : typeof e == "string" ? [document.createTextNode(e)] : Array.isArray(e) ? e.filter((r) => r != null).map((r) => typeof r == "string" ? document.createTextNode(r) : t.renderNode(r)) : [t.renderNode(e)];
 }
-const tA = /^[a-zA-Z][a-zA-Z0-9+.-]*:|^\/\//, rA = /^[A-Za-z0-9._ ()-]{1,128}$/;
-function iA(t, e) {
+const aA = /^[a-zA-Z][a-zA-Z0-9+.-]*:|^\/\//, oA = /^[A-Za-z0-9._ ()-]{1,128}$/;
+function nA(t, e) {
   if (e.startsWith("#")) return e;
   const r = e.startsWith("/") ? e : `/${e}`;
   return (typeof t.router?.getMode == "function" ? t.router.getMode() : "hash") === "history" ? r : `#${r}`;
 }
-const aA = {
+const sA = {
   name: "Link",
   description: 'Anchor link. Accepts either a plain string label or a wrapped component as its positional child. Pass `to` for client-side router navigation (no page reload) or `href` for a regular anchor. `external: true` opens the link in a new tab with `rel="noopener noreferrer"`. `disabled: true` renders a non-navigating link (pagination edges, gated steps). Use to make any component clickable as a link — cards, icons, badges, list rows.',
   props: [
@@ -17674,7 +17706,7 @@ const aA = {
     { name: "download", type: "boolean | string", optional: !0, description: "Download the target instead of navigating. Pass a string to suggest a filename." }
   ],
   render: (t, e, r) => {
-    const i = g(e.to).trim(), a = z(e.external), o = z(e.disabled), n = i !== "" && !tA.test(i), s = o ? null : n ? iA(r, i) : Fe(i || e.href, "#"), l = e.download, c = typeof l == "string" ? l.trim() : "", u = l === !0 || c === "true" ? "" : c !== "" && c !== "false" && rA.test(c) ? c : null, h = g(e.variant, "default"), p = d("a", {
+    const i = g(e.to).trim(), a = z(e.external), o = z(e.disabled), n = i !== "" && !aA.test(i), s = o ? null : n ? nA(r, i) : Fe(i || e.href, "#"), l = e.download, c = typeof l == "string" ? l.trim() : "", u = l === !0 || c === "true" ? "" : c !== "" && c !== "false" && oA.test(c) ? c : null, h = g(e.variant, "default"), p = d("a", {
       class: "rui-link",
       "data-variant": h,
       href: s,
@@ -17688,7 +17720,7 @@ const aA = {
       rel: a && !o ? "noopener noreferrer" : null,
       download: u
     });
-    for (const b of eA(r, e.label)) p.append(b);
+    for (const b of iA(r, e.label)) p.append(b);
     return a && !o && p.append(d("span", { class: "rui-visually-hidden" }, [" (opens in new tab)"])), p.onclick = (b) => {
       if (o) {
         b.preventDefault();
@@ -17704,7 +17736,7 @@ function as(t, e, r) {
   const i = t.getAttribute("style");
   t.setAttribute("style", i ? `${i};${r}` : r);
 }
-const oA = {
+const lA = {
   name: "Css",
   description: "Apply raw CSS class names and / or an inline style string to a wrapped component. The styling is merged onto the rendered child's DOM element — no extra wrapper element is added when the child renders as one element (including an `Svg` root). Several children are each styled individually; a plain-text child gets a wrapping span to carry the styling. Reach for `Css` only when the component's own props cannot express the styling (use `Box`/`Stack`/`Grid` props for layout, `Theme` for tokens, `Styles` + selector classes for sweeping changes).",
   props: [
@@ -17713,7 +17745,7 @@ const oA = {
     { name: "class", type: "string | string[]", optional: !0, aliases: ["className", "classes"], description: "Class name (space-separated string or array). Tokens must match `[A-Za-z_][A-Za-z0-9_-:/]*`." }
   ],
   render: (t, e, r) => {
-    const i = qC(e.class), a = jC(e.style);
+    const i = WC(e.class), a = UC(e.style);
     if (Array.isArray(e.child)) {
       const s = Or(r, e.child);
       for (const l of Array.from(s.children)) as(l, i, a);
@@ -17726,7 +17758,7 @@ const oA = {
     return n.append(o), as(n, i, a), n;
   }
 };
-function _a(t, e, r, i) {
+function ja(t, e, r, i) {
   if (e == null) return;
   const a = i.event ?? "change";
   t.addEventListener(a, () => {
@@ -17743,8 +17775,8 @@ const ll = [
   { key: "bulletList", command: "insertUnorderedList", icon: "list-ul", label: "Bullet list" },
   { key: "numberedList", command: "insertOrderedList", icon: "list-ol", label: "Numbered list" },
   { key: "link", command: "createLink", icon: "link", label: "Link" }
-], nA = ll.map((t) => t.key);
-function sA(t) {
+], cA = ll.map((t) => t.key);
+function uA(t) {
   const e = P(t).map((i) => g(i).trim().toLowerCase()).filter(Boolean);
   if (e.length === 0) return ll;
   const r = [];
@@ -17778,7 +17810,7 @@ const os = (t) => {
       }
     i.setAttribute("aria-pressed", n ? "true" : "false");
   }
-}, lA = {
+}, dA = {
   name: "RichTextEditor",
   description: "Rich-text WYSIWYG editor for CMS, email, and comment surfaces. Renders a small toolbar (bold / italic / underline / strikethrough / headings / lists / quote / link) above a `contenteditable` region; pass `tools` to subset it. Pass `$variable` as `value` for two-way binding — the HTML body is written back to state on every edit. Provide `placeholder` for the empty-state prompt, `maxHeight` to make a long document scroll, `readonly` for review flows, and `label`/`hint`/`error`/`required` for a labelled field shell.",
   props: [
@@ -17788,7 +17820,7 @@ const os = (t) => {
     { name: "minHeight", type: "string", optional: !0, description: "CSS min-height for the editor area (default 160px)" },
     { name: "disabled", type: "boolean", optional: !0 },
     { name: "onChange", type: "callable", optional: !0, aliases: ["onchange"], description: "Called with the current HTML on every keystroke" },
-    { name: "tools", type: "string[]", optional: !0, enum: nA, description: "Subset (and order) of toolbar tools — defaults to all of them" },
+    { name: "tools", type: "string[]", optional: !0, enum: cA, description: "Subset (and order) of toolbar tools — defaults to all of them" },
     { name: "maxHeight", type: "string", optional: !0, description: "CSS max-height for the editor area; the body scrolls past it" },
     { name: "readonly", type: "boolean", optional: !0, description: "Content stays readable and selectable at full contrast but cannot be edited" },
     { name: "name", type: "string", optional: !0, description: "Form field name — the HTML body is mirrored into a hidden input for native submission" },
@@ -17803,7 +17835,7 @@ const os = (t) => {
       class: "rui-rich-text",
       "data-disabled": o ? "true" : "false",
       "data-readonly": n ? "true" : "false"
-    }), c = sA(e.tools), u = d("div", { class: "rui-rich-text-toolbar", role: "toolbar", "aria-label": "Formatting" });
+    }), c = uA(e.tools), u = d("div", { class: "rui-rich-text-toolbar", role: "toolbar", "aria-label": "Formatting" });
     let h = !0;
     for (const $ of c) {
       const T = d("button", {
@@ -17902,12 +17934,12 @@ const os = (t) => {
       C($.currentTarget ?? $.target);
     }, S.onblur = ($) => {
       C($.currentTarget ?? $.target);
-    }, S.onkeyup = ($) => os($.currentTarget ?? $.target), S.onmouseup = ($) => os($.currentTarget ?? $.target), _a(S, e.onChange, r, {
+    }, S.onkeyup = ($) => os($.currentTarget ?? $.target), S.onmouseup = ($) => os($.currentTarget ?? $.target), ja(S, e.onChange, r, {
       event: "input",
       getValue: ($) => io($)
     }), l.append(S), He(l, e, { idKey: "id" });
   }
-}, cA = ["text", "javascript", "typescript", "json", "html", "css", "bash", "python", "sql", "markdown"], hp = 20, mp = (t, e) => {
+}, pA = ["text", "javascript", "typescript", "json", "html", "css", "bash", "python", "sql", "markdown"], hp = 20, mp = (t, e) => {
   t.replaceChildren();
   const r = Math.max(1, e.split(/\r?\n/).length);
   for (let i = 1; i <= r; i += 1)
@@ -17919,7 +17951,7 @@ const os = (t) => {
   } catch {
     return !1;
   }
-}, uA = (t, e, r) => {
+}, hA = (t, e, r) => {
   const i = t.value, a = t.selectionStart ?? 0, o = t.selectionEnd ?? a;
   if (a === o && !e) {
     fp(t, r) || (typeof t.setRangeText == "function" ? t.setRangeText(r, a, o, "end") : t.value = i.slice(0, a) + r + i.slice(o), t.selectionStart = t.selectionEnd = a + r.length, t.dispatchEvent(new Event("input", { bubbles: !0 })));
@@ -17943,13 +17975,13 @@ const os = (t) => {
   t.setSelectionRange(n, s), fp(t, p) || (typeof t.setRangeText == "function" ? t.setRangeText(p, n, s, "end") : t.value = i.slice(0, n) + p + i.slice(s), t.dispatchEvent(new Event("input", { bubbles: !0 })));
   const b = Math.max(n, a + c);
   t.setSelectionRange(b, Math.max(b, o + u));
-}, dA = {
+}, mA = {
   name: "CodeEditor",
   description: "Lightweight, dependency-free code editor. Pairs a styled textarea with a synchronised line-number gutter — no syntax highlighting, but the editor stays a single rendered node so it works inside Shadow DOM. Tab / Shift+Tab indent and unindent the selected lines, and Ctrl/Cmd+S calls `onSave`. Use for dev tooling, snippet editing, prompt playgrounds. Pass a `$variable` as `value` for two-way binding, `maxHeight` for a fixed-height scrolling pane, and `label`/`hint`/`error` to surface a parse error under the field. For read-only rendering with highlights prefer `CodeBlock`.",
   props: [
     { name: "id", type: "string" },
     { name: "value", type: "string", optional: !0, description: "Bound source text (typically $variable)" },
-    { name: "language", type: "string", optional: !0, enum: cA, description: "Language label shown on the header (default `text`)" },
+    { name: "language", type: "string", optional: !0, enum: pA, description: "Language label shown on the header (default `text`)" },
     { name: "placeholder", type: "string", optional: !0 },
     { name: "minHeight", type: "string", optional: !0, description: "CSS min-height for the editor area (default 200px)" },
     { name: "tabSize", type: "number", optional: !0, description: "Spaces per Tab (default 2)" },
@@ -18043,14 +18075,14 @@ const os = (t) => {
         T.preventDefault(), r.invoke(e.onSave, I.value);
         return;
       }
-      T.key !== "Tab" || T.altKey || T.ctrlKey || T.metaKey || I.readOnly || I.disabled || (T.preventDefault(), uA(I, T.shiftKey, " ".repeat(n)));
-    }, c || _a(k, e.onChange, r, {
+      T.key !== "Tab" || T.altKey || T.ctrlKey || T.metaKey || I.readOnly || I.disabled || (T.preventDefault(), hA(I, T.shiftKey, " ".repeat(n)));
+    }, c || ja(k, e.onChange, r, {
       event: "input",
       getValue: C
     }), w.append(k), f.append(w), He(f, e, { idKey: "id" });
   }
-}, pA = ["contextmenu", "click", "longpress"], hA = ["bottom", "top", "left", "right"], mA = 500, gp = 10;
-function fA(t) {
+}, fA = ["contextmenu", "click", "longpress"], gA = ["bottom", "top", "left", "right"], bA = 500, gp = 10;
+function vA(t) {
   if (!t) return null;
   if (typeof t == "object") {
     const e = t;
@@ -18081,10 +18113,10 @@ function fA(t) {
   }
   return null;
 }
-const Jr = /* @__PURE__ */ new WeakMap(), xa = /* @__PURE__ */ new WeakMap(), vi = (t) => {
+const Jr = /* @__PURE__ */ new WeakMap(), wa = /* @__PURE__ */ new WeakMap(), vi = (t) => {
   if (!t) return;
-  const e = xa.get(t);
-  e && (clearTimeout(e.timer), xa.delete(t));
+  const e = wa.get(t);
+  e && (clearTimeout(e.timer), wa.delete(t));
 }, Tc = (t) => {
   if (!t) return null;
   const e = t.closest(".rui-context-menu"), r = e ? Jr.get(e) : void 0;
@@ -18103,7 +18135,7 @@ const Jr = /* @__PURE__ */ new WeakMap(), xa = /* @__PURE__ */ new WeakMap(), vi
   }
   const r = pg(t);
   r && (r.setAttribute("data-open", "false"), t?.closest(".rui-context-menu")?.setAttribute("data-open", "false"), at(r), vt(r), vt(t?.closest(".rui-context-menu")));
-}, gA = (t, e) => {
+}, yA = (t, e) => {
   const r = {
     x: t,
     y: e,
@@ -18150,16 +18182,16 @@ const Jr = /* @__PURE__ */ new WeakMap(), xa = /* @__PURE__ */ new WeakMap(), vi
   (a.querySelector("[role=menuitem]:not([aria-disabled='true'])") ?? p[0])?.focus();
 }, ns = (t, e, r, i) => {
   i.openSlot.set(e), i.stateName && i.helpers.setState(i.stateName, e), e ? hg(t, r, i) : an(t), i.helpers.invoke(i.onOpenChange, e);
-}, bA = {
+}, wA = {
   name: "ContextMenu",
   description: 'Right-click (or long-press on touch) menu that attaches to a child node. Wraps `target` and shows the menu at the pointer. Items are `MenuItem(...)` nodes, `MenuSeparator()` entries, or `{label, action, icon?, shortcut?, variant?, disabled?, separator?}` objects. Set `trigger: "click"` for the overflow-menu pattern, `disabled` to suppress it on locked rows, and pass a `$variable` as `open` to observe or drive the open state. Shift+F10 (or the ContextMenu key) opens it from the keyboard, and ArrowUp/ArrowDown/Home/End plus typeahead move between items while Escape closes it and returns focus to the target. Use on table rows, tree nodes, kanban cards, file browser entries.',
   props: [
     { name: "target", type: "Node", description: "Child node the menu is bound to" },
     { name: "items", type: "any[]", description: "MenuItem nodes or {label, action} objects" },
     { name: "label", type: "string", optional: !0, description: "ARIA label for the menu" },
-    { name: "trigger", type: "string", optional: !0, enum: pA, description: "What opens the menu (default `contextmenu`)" },
+    { name: "trigger", type: "string", optional: !0, enum: fA, description: "What opens the menu (default `contextmenu`)" },
     { name: "disabled", type: "boolean", optional: !0, description: "Never open the menu (locked / read-only rows)" },
-    { name: "placement", type: "string", optional: !0, enum: hA, aliases: ["side"], description: "Which side of the anchor the menu opens on (default `bottom`)" },
+    { name: "placement", type: "string", optional: !0, enum: gA, aliases: ["side"], description: "Which side of the anchor the menu opens on (default `bottom`)" },
     { name: "offset", type: "number", optional: !0, description: "Gap in px between the anchor and the menu (default 0)" },
     { name: "open", type: "boolean", optional: !0, description: "Open state — pass a $variable for two-way binding" },
     { name: "onOpenChange", type: "callable", optional: !0, description: "Called with the new boolean open state" }
@@ -18196,7 +18228,7 @@ const Jr = /* @__PURE__ */ new WeakMap(), xa = /* @__PURE__ */ new WeakMap(), vi
       role: "menu",
       "aria-label": g(e.label) || null,
       "data-open": u ? "true" : "false"
-    }), f = P(e.items).map(fA).filter((y) => y !== null);
+    }), f = P(e.items).map(vA).filter((y) => y !== null);
     for (const y of f) {
       if (y.separator) {
         m.append(d("div", { class: "rui-menu-separator", role: "separator" }));
@@ -18222,7 +18254,7 @@ const Jr = /* @__PURE__ */ new WeakMap(), xa = /* @__PURE__ */ new WeakMap(), vi
     }
     p.append(m);
     const v = (y, w, S) => {
-      ns(y, !0, gA(w, S), h);
+      ns(y, !0, yA(w, S), h);
     };
     !i && (a === "contextmenu" || a === "longpress") && (b.oncontextmenu = (y) => {
       y.preventDefault(), v(y.currentTarget ?? y.target, y.clientX, y.clientY);
@@ -18235,11 +18267,11 @@ const Jr = /* @__PURE__ */ new WeakMap(), xa = /* @__PURE__ */ new WeakMap(), vi
       const S = w.currentTarget ?? w.target;
       vi(S);
       const k = setTimeout(() => {
-        xa.delete(S), v(S, w.clientX, w.clientY);
-      }, mA);
-      xa.set(S, { timer: k, x: w.clientX, y: w.clientY }), r.registerDisposer(() => vi(S), "rui-context-longpress");
+        wa.delete(S), v(S, w.clientX, w.clientY);
+      }, bA);
+      wa.set(S, { timer: k, x: w.clientX, y: w.clientY }), r.registerDisposer(() => vi(S), "rui-context-longpress");
     }, b.onpointermove = (y) => {
-      const w = y, S = w.currentTarget ?? w.target, k = xa.get(S);
+      const w = y, S = w.currentTarget ?? w.target, k = wa.get(S);
       k && (Math.abs(w.clientX - k.x) > gp || Math.abs(w.clientY - k.y) > gp) && vi(S);
     }, b.onpointerup = (y) => vi(y.currentTarget ?? y.target), b.onpointercancel = (y) => vi(y.currentTarget ?? y.target), b.onpointerleave = (y) => vi(y.currentTarget ?? y.target));
     const x = (y) => {
@@ -18286,7 +18318,7 @@ const Jr = /* @__PURE__ */ new WeakMap(), xa = /* @__PURE__ */ new WeakMap(), vi
       y && !Tc(p) && hg(y, y, h);
     }), p;
   }
-}, vA = ["hex", "rgb", "hsl"], yA = [
+}, xA = ["hex", "rgb", "hsl"], kA = [
   "#0f172a",
   "#334155",
   "#64748b",
@@ -18299,12 +18331,12 @@ const Jr = /* @__PURE__ */ new WeakMap(), xa = /* @__PURE__ */ new WeakMap(), vi
   "#3b82f6",
   "#6366f1",
   "#8b5cf6"
-], ka = (t) => Math.max(0, Math.min(255, Math.round(t))), Mo = (t) => Math.max(0, Math.min(1, t));
+], xa = (t) => Math.max(0, Math.min(255, Math.round(t))), Mo = (t) => Math.max(0, Math.min(1, t));
 function bp(t) {
   const e = (r) => parseInt(t.slice(r, r + 2), 16);
   return { r: e(0), g: e(2), b: e(4), a: t.length === 8 ? e(6) / 255 : 1 };
 }
-function wA(t, e, r) {
+function SA(t, e, r) {
   const i = (t % 360 + 360) % 360, a = (1 - Math.abs(2 * r - 1)) * e, o = a * (1 - Math.abs(i / 60 % 2 - 1)), n = r - a / 2, s = [
     [a, o, 0],
     [o, a, 0],
@@ -18313,9 +18345,9 @@ function wA(t, e, r) {
     [o, 0, a],
     [a, 0, o]
   ], [l, c, u] = s[Math.floor(i / 60) % 6] ?? [0, 0, 0];
-  return { r: ka((l + n) * 255), g: ka((c + n) * 255), b: ka((u + n) * 255) };
+  return { r: xa((l + n) * 255), g: xa((c + n) * 255), b: xa((u + n) * 255) };
 }
-function xA(t) {
+function CA(t) {
   const e = t.r / 255, r = t.g / 255, i = t.b / 255, a = Math.max(e, r, i), o = Math.min(e, r, i), n = (a + o) / 2, s = a - o;
   if (s === 0) return { h: 0, s: 0, l: Math.round(n * 100) };
   const l = s / (1 - Math.abs(2 * n - 1)), c = a === e ? 60 * ((r - i) / s % 6) : a === r ? 60 * ((i - e) / s + 2) : 60 * ((e - r) / s + 4);
@@ -18340,28 +18372,28 @@ function Si(t) {
   if (r[1].startsWith("rgb")) {
     const [u, h, p] = [a(i[0]), a(i[1]), a(i[2])];
     if ([u, h, p].some(Number.isNaN)) return null;
-    const b = (i[0] ?? "").endsWith("%"), m = (f) => ka(b ? f / 100 * 255 : f);
+    const b = (i[0] ?? "").endsWith("%"), m = (f) => xa(b ? f / 100 * 255 : f);
     return { r: m(u), g: m(h), b: m(p), a: n };
   }
   const [s, l, c] = [a(i[0]), a(i[1]), a(i[2])];
-  return [s, l, c].some(Number.isNaN) ? null : { ...wA(s, Mo(l / 100), Mo(c / 100)), a: n };
+  return [s, l, c].some(Number.isNaN) ? null : { ...SA(s, Mo(l / 100), Mo(c / 100)), a: n };
 }
-const Eo = (t) => ka(t).toString(16).padStart(2, "0"), Sa = (t) => `#${Eo(t.r)}${Eo(t.g)}${Eo(t.b)}`;
+const Eo = (t) => xa(t).toString(16).padStart(2, "0"), ka = (t) => `#${Eo(t.r)}${Eo(t.g)}${Eo(t.b)}`;
 function No(t, e, r) {
   const i = r ? Mo(t.a) : 1, a = String(Math.round(i * 1e3) / 1e3);
   if (e === "rgb")
     return i < 1 ? `rgba(${t.r}, ${t.g}, ${t.b}, ${a})` : `rgb(${t.r}, ${t.g}, ${t.b})`;
   if (e === "hsl") {
-    const { h: o, s: n, l: s } = xA(t);
+    const { h: o, s: n, l: s } = CA(t);
     return i < 1 ? `hsla(${o}, ${n}%, ${s}%, ${a})` : `hsl(${o}, ${n}%, ${s}%)`;
   }
-  return i < 1 ? `${Sa(t)}${Eo(i * 255)}` : Sa(t);
+  return i < 1 ? `${ka(t)}${Eo(i * 255)}` : ka(t);
 }
 function po(t, e = !1) {
   const r = Si(t);
   return r ? No(r, "hex", e) : "";
 }
-const kA = {
+const AA = {
   name: "ColorPicker",
   description: 'Hex / RGB / HSL color form control with preset swatches. Pairs a native `<input type="color">` chip with a text input and a row of preset swatches. Pass a `$variable` as `value` (e.g. `"#6366f1"`) for two-way binding; `format` picks the notation written back (`hex` by default) and `allowAlpha` keeps the alpha channel instead of dropping it. Use `showInput` / `showSwatches` to render only the half you need. Use for theme builders, label color pickers, and any "pick a color" surface.',
   props: [
@@ -18371,7 +18403,7 @@ const kA = {
     { name: "swatches", type: "string[]", optional: !0, description: "Preset colors (default to a 12-color palette)" },
     { name: "disabled", type: "boolean", optional: !0 },
     { name: "onChange", type: "callable", optional: !0, aliases: ["onchange"], description: "Called with the newly-selected color string" },
-    { name: "format", type: "string", optional: !0, enum: vA, description: "Notation written back to state / onChange (default `hex`)" },
+    { name: "format", type: "string", optional: !0, enum: xA, description: "Notation written back to state / onChange (default `hex`)" },
     { name: "allowAlpha", type: "boolean", optional: !0, description: "Keep the alpha channel (8-digit hex / rgba / hsla) instead of dropping it" },
     { name: "showInput", type: "boolean", optional: !0, description: "Show the text input (default true)" },
     { name: "showSwatches", type: "boolean", optional: !0, description: "Show the preset swatch row (default true)" },
@@ -18382,7 +18414,7 @@ const kA = {
     ...Et()
   ],
   render: (t, e, r) => {
-    const i = g(e.id), a = z(e.disabled), o = g(e.format, "hex"), n = z(e.allowAlpha), s = e.showInput === void 0 ? !0 : z(e.showInput), l = e.showSwatches === void 0 ? !0 : z(e.showSwatches), c = g(e.label), u = Si(e.value), h = u ? No(u, o, n) : g(e.value), p = u ? Sa(u) : "#000000", b = d("div", { class: "rui-color-picker", "data-disabled": a ? "true" : "false" }), m = d("div", { class: "rui-color-picker-row" }), f = d("input", {
+    const i = g(e.id), a = z(e.disabled), o = g(e.format, "hex"), n = z(e.allowAlpha), s = e.showInput === void 0 ? !0 : z(e.showInput), l = e.showSwatches === void 0 ? !0 : z(e.showSwatches), c = g(e.label), u = Si(e.value), h = u ? No(u, o, n) : g(e.value), p = u ? ka(u) : "#000000", b = d("div", { class: "rui-color-picker", "data-disabled": a ? "true" : "false" }), m = d("div", { class: "rui-color-picker-row" }), f = d("input", {
       type: "color",
       class: "rui-color-picker-color",
       id: i,
@@ -18423,7 +18455,7 @@ const kA = {
     }, y = t.argMeta?.[1]?.stateRef;
     if (y && !a ? r.bindState(f, y, { event: "input", getValue: x }) : a || (f.oninput = (w) => {
       x(w.currentTarget ?? w.target);
-    }), a || _a(f, e.onChange, r, { event: "input", getValue: x }), a || (v.oninput = (w) => {
+    }), a || ja(f, e.onChange, r, { event: "input", getValue: x }), a || (v.oninput = (w) => {
       const S = w.currentTarget ?? w.target, k = Si(S.value);
       if (!k) {
         S.setAttribute("aria-invalid", "true");
@@ -18431,9 +18463,9 @@ const kA = {
       }
       S.removeAttribute("aria-invalid");
       const C = S.closest(".rui-color-picker")?.querySelector(".rui-color-picker-color");
-      C && (C.value = Sa(k), C.dispatchEvent(new Event("input", { bubbles: !0 })));
+      C && (C.value = ka(k), C.dispatchEvent(new Event("input", { bubbles: !0 })));
     }), s || (v.setAttribute("hidden", ""), v.setAttribute("aria-hidden", "true"), v.setAttribute("tabindex", "-1")), m.append(f, v), b.append(m), l) {
-      const w = d("div", { class: "rui-color-picker-swatches" }), S = P(e.swatches).map((A) => g(A)).filter(Boolean), k = S.length > 0 ? S : yA, C = po(h, n);
+      const w = d("div", { class: "rui-color-picker-swatches" }), S = P(e.swatches).map((A) => g(A)).filter(Boolean), k = S.length > 0 ? S : kA, C = po(h, n);
       for (const A of k) {
         const $ = po(A, n) || At(A);
         if (!$) continue;
@@ -18453,14 +18485,14 @@ const kA = {
           const N = Si(E.getAttribute("data-color") ?? $);
           if (!N) return;
           const O = L?.querySelector(".rui-color-picker-hex");
-          O && (O.value = No(N, o, n)), D.value = Sa(N), D.dispatchEvent(new Event("input", { bubbles: !0 }));
+          O && (O.value = No(N, o, n)), D.value = ka(N), D.dispatchEvent(new Event("input", { bubbles: !0 }));
         }, w.append(I);
       }
       b.append(w);
     }
     return He(b, e, { idKey: "id" });
   }
-}, SA = {
+}, $A = {
   name: "Gauge",
   description: 'Half-doughnut gauge indicator for a single value between `min` and `max`. The inner value renders as a plain number — pass `unit` ("%", "ms", "pts") or `format: "percent"` for a suffix, or `label` to override the text entirely. Pass `thresholds: [{value, tone}]` to band the track and recolour the arc as the value crosses each band. Use for KPI thresholds (uptime %, score, capacity, NPS, page-speed).',
   props: [
@@ -18478,7 +18510,7 @@ const kA = {
     ...Ur
   ],
   render: (t, e) => {
-    const r = Hr(e), i = R(e.min, 0), a = Math.max(i + 1, R(e.max, 100)), o = Math.max(i, Math.min(a, R(e.value, i))), n = (o - i) / (a - i), s = CA(e.thresholds, i, a), l = s.filter((D) => o >= D.value), c = l.length > 0 ? l[l.length - 1].tone : Cn(e.tone), u = g(e.size, "md"), h = z(e.showRange), p = u === "lg" ? 220 : u === "sm" ? 140 : 180, b = p / 2, m = u === "lg" ? 18 : u === "sm" ? 10 : 14, f = b - m, v = d("div", {
+    const r = Hr(e), i = R(e.min, 0), a = Math.max(i + 1, R(e.max, 100)), o = Math.max(i, Math.min(a, R(e.value, i))), n = (o - i) / (a - i), s = TA(e.thresholds, i, a), l = s.filter((D) => o >= D.value), c = l.length > 0 ? l[l.length - 1].tone : Cn(e.tone), u = g(e.size, "md"), h = z(e.showRange), p = u === "lg" ? 220 : u === "sm" ? 140 : 180, b = p / 2, m = u === "lg" ? 18 : u === "sm" ? 10 : 14, f = b - m, v = d("div", {
       // `rui-chart` supplies the card frame every sibling chart gets; without
       // it a Gauge next to a BarChart rendered as an unframed transparent block.
       class: "rui-chart rui-gauge",
@@ -18487,7 +18519,7 @@ const kA = {
     }), x = Wr(p, b + m + (h ? 22 : 4));
     ui(x, { name: "", decorative: !0 }, "");
     const y = b, w = b, S = y - f, k = w, C = y + f, $ = `M${S},${k} A${f},${f} 0 0 1 ${C},${w}`;
-    if (x.append(Te("path", {
+    if (x.append(Ie("path", {
       d: $,
       fill: "none",
       stroke: "var(--rui-color-border, #e2e8f0)",
@@ -18496,9 +18528,9 @@ const kA = {
     })), s.forEach((D, N) => {
       const O = (D.value - i) / (a - i), q = N + 1 < s.length ? (s[N + 1].value - i) / (a - i) : 1;
       if (q <= O) return;
-      const [j, _] = vp(y, w, f, O), [V, re] = vp(y, w, f, q);
-      x.append(Te("path", {
-        d: `M${j.toFixed(2)},${_.toFixed(2)} A${f},${f} 0 0 1 ${V.toFixed(2)},${re.toFixed(2)}`,
+      const [_, j] = vp(y, w, f, O), [V, re] = vp(y, w, f, q);
+      x.append(Ie("path", {
+        d: `M${_.toFixed(2)},${j.toFixed(2)} A${f},${f} 0 0 1 ${V.toFixed(2)},${re.toFixed(2)}`,
         fill: "none",
         stroke: `var(--rui-color-${D.tone}, ${si(0)})`,
         "stroke-width": String(m),
@@ -18507,7 +18539,7 @@ const kA = {
       }));
     }), n > 0) {
       const D = Math.PI * f;
-      x.append(Te("path", {
+      x.append(Ie("path", {
         d: $,
         fill: "none",
         stroke: `var(--rui-color-${c}, ${si(0)})`,
@@ -18519,12 +18551,12 @@ const kA = {
     }
     if (h) {
       const D = w + m / 2 + 14;
-      x.append(Te("text", {
+      x.append(Ie("text", {
         x: String(Math.max(2, S - m / 2)),
         y: D.toFixed(1),
         "text-anchor": "start",
         class: "rui-chart-tick"
-      }, [nr(i)])), x.append(Te("text", {
+      }, [nr(i)])), x.append(Ie("text", {
         x: String(Math.min(p - 2, C + m / 2)),
         y: D.toFixed(1),
         "text-anchor": "end",
@@ -18532,7 +18564,7 @@ const kA = {
       }, [nr(a)]));
     }
     v.append(x);
-    const T = g(e.unit).trim(), I = g(e.format, "number").toLowerCase(), M = AA(o, I, T), E = g(e.label) || M, L = g(e.caption);
+    const T = g(e.unit).trim(), I = g(e.format, "number").toLowerCase(), M = IA(o, I, T), E = g(e.label) || M, L = g(e.caption);
     return r.decorative || (v.setAttribute("role", "meter"), v.setAttribute("aria-valuenow", String(o)), v.setAttribute("aria-valuemin", String(i)), v.setAttribute("aria-valuemax", String(a)), v.setAttribute("aria-valuetext", E), v.setAttribute("aria-label", r.name || L || g(e.label) || "Gauge")), v.append(d("div", { class: "rui-gauge-value" }, [E])), L && v.append(d("div", { class: "rui-gauge-caption" }, [L])), v;
   }
 };
@@ -18540,7 +18572,7 @@ function vp(t, e, r, i) {
   const a = Math.PI * Math.max(0, Math.min(1, i));
   return [t - r * Math.cos(a), e - r * Math.sin(a)];
 }
-function CA(t, e, r) {
+function TA(t, e, r) {
   return P(t).map((i) => {
     const a = i ?? {};
     return {
@@ -18549,14 +18581,14 @@ function CA(t, e, r) {
     };
   }).filter((i) => Number.isFinite(i.value) && i.value > e && i.value <= r).sort((i, a) => i.value - a.value);
 }
-function AA(t, e, r) {
-  const i = e === "compact" ? nr(t) : $A(t), a = r || (e === "percent" ? "%" : "");
+function IA(t, e, r) {
+  const i = e === "compact" ? nr(t) : zA(t), a = r || (e === "percent" ? "%" : "");
   return a ? /^[a-z]/i.test(a) ? `${i} ${a}` : `${i}${a}` : i;
 }
-function $A(t) {
+function zA(t) {
   return Math.abs(t) >= 1e3 ? Math.round(t).toLocaleString() : t % 1 === 0 ? String(t) : t.toFixed(2).replace(/\.?0+$/, "");
 }
-const TA = {
+const MA = {
   name: "Heatmap",
   description: "Color-intensity matrix grid (calendar-style or correlation-style). Pass `xLabels`, `yLabels`, and a `values` array of arrays (rows × columns). Cell intensity scales across the data range — pin it with `min`/`max` when two heatmaps must be comparable (or for a -1..1 correlation matrix). Set `showValues: false` for a GitHub-style colour-only grid. Use for activity heatmaps, schedule density, correlation matrices.",
   props: [
@@ -18576,7 +18608,7 @@ const TA = {
   render: (t, e, r) => {
     const i = P(e.xLabels).map((C) => g(C)), a = P(e.yLabels).map((C) => g(C)), o = P(e.values).map((C) => P(C).map((A) => R(A, 0))), n = Cn(e.tone), s = e.showValues == null ? !0 : z(e.showValues), l = g(e.valueFormat, "value").toLowerCase(), c = e.onCellClick, u = g(e.title), h = d("div", { class: "rui-chart rui-heatmap", "data-tone": n });
     if (u && h.append(d("div", { class: "rui-chart-title" }, [u])), !o.some((C) => C.length > 0))
-      return _t(h, g(e.emptyText) || ji, !1);
+      return jt(h, g(e.emptyText) || Fi, !1);
     const p = o.flat(), b = e.min == null ? Math.min(0, ...p) : R(e.min, 0), f = (e.max == null ? Math.max(1, ...p) : R(e.max, 1)) - b || 1, v = Math.max(1, i.length, ...o.map((C) => C.length)), x = typeof c == "function", y = Hr(e, x), w = d("div", {
       class: "rui-heatmap-table",
       style: `--rui-heatmap-cols:${v}`
@@ -18618,7 +18650,7 @@ const TA = {
           title: `${E} · ${$}: ${M}`,
           role: S
         });
-        s && N.append(d("span", {}, [IA(M, l)])), x && (di(N, `${E} · ${$}: ${M}`, () => {
+        s && N.append(d("span", {}, [EA(M, l)])), x && (di(N, `${E} · ${$}: ${M}`, () => {
           r.invoke(c, M, E, $);
         }), N.setAttribute("role", S)), T.append(N);
       }
@@ -18626,10 +18658,10 @@ const TA = {
     }), h.append(w), h;
   }
 };
-function IA(t, e) {
+function EA(t, e) {
   return e === "compact" ? nr(t) : e === "percent" ? `${Math.round(t)}%` : String(t);
 }
-const zA = {
+const NA = {
   name: "RadarChart",
   description: "Polygon chart with one axis per category (at least three). Use for skill maps, scorecards, capability comparisons, and any multi-dimensional snapshot. Each Series renders as a filled polygon — overlapping is expected for comparisons. Set `showValues: true` to print the number at each vertex.",
   props: [
@@ -18646,10 +18678,10 @@ const zA = {
   render: (t, e) => {
     const r = P(e.axes).map((y) => g(y)), i = mc(P(e.series)), a = g(e.title), o = Hr(e), n = e.showDots == null ? !0 : z(e.showDots), s = z(e.showValues), l = d("div", { class: "rui-chart rui-radar-chart" });
     if (a && l.append(d("div", { class: "rui-chart-title" }, [a])), r.length < 3)
-      return _t(l, "A radar chart needs at least 3 axes", !1);
+      return jt(l, "A radar chart needs at least 3 axes", !1);
     if (!i.some((y) => y.values.length > 0))
-      return _t(l, g(e.emptyText) || ji, !1);
-    const c = r.length, u = Math.max(160, Math.min(640, qi(e.size, 280))), h = Math.round(u * 1.45), p = h / 2, b = u / 2, m = u / 2 - 26, f = Math.max(1, R(e.max, i.flatMap((y) => y.values).reduce((y, w) => Math.max(y, w), 1))), v = Wr(h, u);
+      return jt(l, g(e.emptyText) || Fi, !1);
+    const c = r.length, u = Math.max(160, Math.min(640, ji(e.size, 280))), h = Math.round(u * 1.45), p = h / 2, b = u / 2, m = u / 2 - 26, f = Math.max(1, R(e.max, i.flatMap((y) => y.values).reduce((y, w) => Math.max(y, w), 1))), v = Wr(h, u);
     ui(v, o, ci(
       "Radar chart",
       a,
@@ -18662,7 +18694,7 @@ const zA = {
         const C = Math.PI * 2 * k / c - Math.PI / 2;
         S.push(`${(p + w * Math.cos(C)).toFixed(1)},${(b + w * Math.sin(C)).toFixed(1)}`);
       }
-      v.append(Te("polygon", {
+      v.append(Ie("polygon", {
         points: S.join(" "),
         fill: "none",
         stroke: "var(--rui-color-border-subtle, rgba(0,0,0,0.08))",
@@ -18671,7 +18703,7 @@ const zA = {
     }
     for (let y = 0; y < c; y += 1) {
       const w = Math.PI * 2 * y / c - Math.PI / 2, S = p + m * Math.cos(w), k = b + m * Math.sin(w);
-      v.append(Te("line", {
+      v.append(Ie("line", {
         x1: String(p),
         y1: String(b),
         x2: S.toFixed(1),
@@ -18679,7 +18711,7 @@ const zA = {
         stroke: "var(--rui-color-border-subtle, rgba(0,0,0,0.08))",
         "stroke-width": "1"
       }));
-      const C = p + (m + 14) * Math.cos(w), A = b + (m + 14) * Math.sin(w), $ = Math.cos(w), T = $ > 0.15 ? "start" : $ < -0.15 ? "end" : "middle", I = T === "start" ? h - C - 2 : T === "end" ? C - 2 : Math.min(C, h - C) * 2 - 2, M = r[y] ?? "", E = PS(M, I), L = Te("text", {
+      const C = p + (m + 14) * Math.cos(w), A = b + (m + 14) * Math.sin(w), $ = Math.cos(w), T = $ > 0.15 ? "start" : $ < -0.15 ? "end" : "middle", I = T === "start" ? h - C - 2 : T === "end" ? C - 2 : Math.min(C, h - C) * 2 - 2, M = r[y] ?? "", E = BS(M, I), L = Ie("text", {
         x: C.toFixed(1),
         y: A.toFixed(1),
         "text-anchor": T,
@@ -18688,7 +18720,7 @@ const zA = {
         "font-size": "13",
         "font-weight": "500"
       }, [E]);
-      E !== M && L.append(Te("title", {}, [M])), v.append(L);
+      E !== M && L.append(Ie("title", {}, [M])), v.append(L);
     }
     return i.forEach((y, w) => {
       const S = _i(y, w), k = [];
@@ -18704,7 +18736,7 @@ const zA = {
         });
       }
       if (k.length < 2) return;
-      const C = k.map((T) => `${T.x.toFixed(1)},${T.y.toFixed(1)}`).join(" "), A = k.length === c, $ = Te(A ? "polygon" : "polyline", {
+      const C = k.map((T) => `${T.x.toFixed(1)},${T.y.toFixed(1)}`).join(" "), A = k.length === c, $ = Ie(A ? "polygon" : "polyline", {
         points: C,
         fill: A ? S : "none",
         "fill-opacity": "0.2",
@@ -18715,27 +18747,27 @@ const zA = {
         // axis" rather than silently describing a different shape.
         ...A ? {} : { "stroke-dasharray": "5 4" }
       });
-      if ($.append(Te("title", {}, [
+      if ($.append(Ie("title", {}, [
         A ? y.name : `${y.name} (${k.length} of ${c} axes)`
       ])), v.append($), n || s)
         for (const T of k) {
           if (n) {
-            const I = Te("circle", {
+            const I = Ie("circle", {
               cx: T.x.toFixed(1),
               cy: T.y.toFixed(1),
               r: "3.5",
               fill: S
             });
-            I.append(Te("title", {}, [`${y.name} — ${T.axis}: ${T.value}`])), v.append(I);
+            I.append(Ie("title", {}, [`${y.name} — ${T.axis}: ${T.value}`])), v.append(I);
           }
-          s && v.append(Te("text", {
+          s && v.append(Ie("text", {
             x: T.x.toFixed(1),
             y: (T.y - 7).toFixed(1),
             "text-anchor": "middle",
             class: "rui-chart-tick"
           }, [nr(T.value)]));
         }
-    }), l.append(v), o.decorative || l.append(Ui(
+    }), l.append(v), o.decorative || l.append(qi(
       a || "Radar chart data",
       r,
       i.map((y) => ({
@@ -18745,7 +18777,7 @@ const zA = {
     )), i.length > 0 && l.append(Fa(i)), l;
   }
 };
-function MA(t) {
+function LA(t) {
   return t.map((e, r) => {
     const i = e, a = g(i.args?.[0], `Series ${r + 1}`), o = g(i.args?.[2]).trim(), n = i.args?.[3] ?? i.args?.[1], s = P(n).map((l) => {
       if (Array.isArray(l))
@@ -18759,7 +18791,7 @@ function MA(t) {
     return o ? { name: a, points: s, color: o } : { name: a, points: s };
   });
 }
-const EA = {
+const RA = {
   name: "ScatterChart",
   description: 'XY scatter plot — one dot per data point, optionally grouped by series. Pass each `Series(name, points)` with points as `{x, y, label?}` objects or `[x, y, label?]` tuples. Tune `pointSize` / `pointOpacity` for dense distributions and pin `xMin`/`xMax`/`yMin`/`yMax` when two plots must share a scale. Use for correlations, distributions, and "price vs. rating" style charts.',
   props: [
@@ -18780,12 +18812,12 @@ const EA = {
     ...Ur
   ],
   render: (t, e, r) => {
-    const i = MA(P(e.series)), a = g(e.title), o = e.showLegend == null ? !0 : z(e.showLegend), n = e.onPointClick, s = Hr(e, typeof n == "function"), l = d("div", { class: "rui-chart rui-scatter-chart" });
+    const i = LA(P(e.series)), a = g(e.title), o = e.showLegend == null ? !0 : z(e.showLegend), n = e.onPointClick, s = Hr(e, typeof n == "function"), l = d("div", { class: "rui-chart rui-scatter-chart" });
     a && l.append(d("div", { class: "rui-chart-title" }, [a]));
     const c = i.flatMap((N) => N.points);
     if (c.length === 0)
-      return _t(l, g(e.emptyText) || "No points", !1);
-    const u = g(e.xLabel), h = g(e.yLabel), p = 640, b = qi(e.height, 280), m = c.map((N) => N.x), f = c.map((N) => N.y), v = e.xMin == null ? Math.min(...m) : R(e.xMin), x = e.xMax == null ? Math.max(...m) : R(e.xMax), y = e.yMin == null ? Math.min(...f) : R(e.yMin), w = e.yMax == null ? Math.max(...f) : R(e.yMax), S = x > v ? x : v + 1, k = w > y ? w : y + 1, C = S - v, A = k - y, $ = {
+      return jt(l, g(e.emptyText) || "No points", !1);
+    const u = g(e.xLabel), h = g(e.yLabel), p = 640, b = ji(e.height, 280), m = c.map((N) => N.x), f = c.map((N) => N.y), v = e.xMin == null ? Math.min(...m) : R(e.xMin), x = e.xMax == null ? Math.max(...m) : R(e.xMax), y = e.yMin == null ? Math.min(...f) : R(e.yMin), w = e.yMax == null ? Math.max(...f) : R(e.yMax), S = x > v ? x : v + 1, k = w > y ? w : y + 1, C = S - v, A = k - y, $ = {
       left: fc(y, k) + (h ? sr : 0),
       right: 16,
       top: 16,
@@ -18795,7 +18827,7 @@ const EA = {
       "Scatter plot",
       a,
       `${c.length} points across ${i.length} series${u || h ? `, ${u || "x"} against ${h || "y"}` : ""}.`
-    )), b !== 280 && M.setAttribute("style", `max-height:${b}px`), In(M, $, T, I, k, y), Ff(M, $, T, I, S, v), M.append(Te("line", {
+    )), b !== 280 && M.setAttribute("style", `max-height:${b}px`), In(M, $, T, I, k, y), Ff(M, $, T, I, S, v), M.append(Ie("line", {
       x1: String($.left),
       y1: String($.top + I),
       x2: String($.left + T),
@@ -18805,9 +18837,9 @@ const EA = {
     const E = Math.max(1, Math.min(24, R(e.pointSize, 7))), L = Math.max(0.05, Math.min(1, R(e.pointOpacity, 0.8)));
     i.forEach((N, O) => {
       const q = _i(N, O);
-      N.points.forEach((j) => {
-        const _ = $.left + (j.x - v) / C * T, V = $.top + I - (j.y - y) / A * I, re = Te("circle", {
-          cx: _.toFixed(1),
+      N.points.forEach((_) => {
+        const j = $.left + (_.x - v) / C * T, V = $.top + I - (_.y - y) / A * I, re = Ie("circle", {
+          cx: j.toFixed(1),
           cy: V.toFixed(1),
           r: String(E),
           fill: q,
@@ -18816,12 +18848,12 @@ const EA = {
           // `--rui-color-surface`; a literal #fff haloed every point in dark mode.
           stroke: "var(--rui-color-surface, #fff)",
           "stroke-width": "1.5"
-        }), pe = j.label || `${N.name}: ${j.x}, ${j.y}`;
-        re.append(Te("title", {}, [pe])), typeof n == "function" && di(re, pe, () => {
-          r.invoke(n, j.x, j.y, j.label, N.name);
+        }), pe = _.label || `${N.name}: ${_.x}, ${_.y}`;
+        re.append(Ie("title", {}, [pe])), typeof n == "function" && di(re, pe, () => {
+          r.invoke(n, _.x, _.y, _.label, N.name);
         }), M.append(re);
       });
-    }), Ba(M, $, T, I, b, u, h), l.append(M), s.decorative || l.append(Ui(
+    }), Ba(M, $, T, I, b, u, h), l.append(M), s.decorative || l.append(qi(
       a || "Scatter plot data",
       [u || "x", h || "y", "Label"],
       i.flatMap((N) => N.points.map((O, q) => ({
@@ -18836,7 +18868,7 @@ const EA = {
     }));
     return o && D.length > 0 && l.append(Fa(D)), l;
   }
-}, NA = {
+}, PA = {
   name: "Histogram",
   description: "Frequency distribution from raw numeric values. Pass `values` directly (the component bins them automatically, `binCount` bins) or pre-computed `bins` of `{label, count}` objects. Use for response-time histograms, score distributions, age buckets.",
   props: [
@@ -18878,10 +18910,10 @@ const EA = {
       }
     }
     const a = g(e.title), o = Cn(e.tone, ""), n = e.onBinClick, s = Hr(e, typeof n == "function"), l = d("div", { class: "rui-chart rui-histogram" });
-    if (a && l.append(d("div", { class: "rui-chart-title" }, [a])), z(e.loading)) return _t(l, An, !0);
+    if (a && l.append(d("div", { class: "rui-chart-title" }, [a])), z(e.loading)) return jt(l, An, !0);
     if (i.length === 0)
-      return _t(l, g(e.emptyText) || ji, !1);
-    const c = g(e.xLabel), u = g(e.yLabel), h = 640, p = qi(e.height, 240), b = Math.max(1, ...i.map((C) => C.count)), m = i.map((C) => C.label), f = {
+      return jt(l, g(e.emptyText) || Fi, !1);
+    const c = g(e.xLabel), u = g(e.yLabel), h = 640, p = ji(e.height, 240), b = Math.max(1, ...i.map((C) => C.count)), m = i.map((C) => C.label), f = {
       left: 40 + (u ? sr : 0),
       right: 12,
       top: 16,
@@ -18890,7 +18922,7 @@ const EA = {
     f.bottom = x.bottomPadding + (c ? sr : 0);
     const y = p - f.top - f.bottom, w = v / i.length, S = o ? `var(--rui-color-${o}, ${si(0)})` : si(0), k = Wr(h, p);
     return ui(k, s, ci("Histogram", a, `${i.length} bins.`)), p !== 240 && k.setAttribute("style", `max-height:${p}px`), In(k, f, v, y, b), i.forEach((C, A) => {
-      const $ = f.left + A * w + w * 0.1, T = w * 0.8, I = C.count / b * y, M = f.top + y - I, E = Te("rect", {
+      const $ = f.left + A * w + w * 0.1, T = w * 0.8, I = C.count / b * y, M = f.top + y - I, E = Ie("rect", {
         x: $.toFixed(1),
         y: M.toFixed(1),
         width: T.toFixed(1),
@@ -18898,7 +18930,7 @@ const EA = {
         fill: S,
         rx: "2"
       });
-      E.append(Te("title", {}, [`${C.label}: ${C.count}`])), typeof n == "function" && di(E, `${C.label}: ${C.count}`, () => {
+      E.append(Ie("title", {}, [`${C.label}: ${C.count}`])), typeof n == "function" && di(E, `${C.label}: ${C.count}`, () => {
         r.invoke(n, C.label, C.count, A);
       }), k.append(E);
     }), vc(
@@ -18908,7 +18940,7 @@ const EA = {
       y,
       x,
       (C) => f.left + C * w + w / 2
-    ), Ba(k, f, v, y, p, c, u), l.append(k), s.decorative || l.append(Ui(
+    ), Ba(k, f, v, y, p, c, u), l.append(k), s.decorative || l.append(qi(
       a || "Histogram data",
       m,
       [{ label: u || "Count", cells: i.map((C) => String(C.count)) }]
@@ -18918,8 +18950,8 @@ const EA = {
 function yp(t) {
   return Number.isFinite(t) ? Math.abs(t) >= 1e3 ? Math.round(t).toLocaleString() : Math.abs(t) >= 10 ? t.toFixed(0) : t.toFixed(1) : "?";
 }
-const LA = ["numeric", "alphanumeric"];
-function Hi(t, e, r = {}) {
+const DA = ["numeric", "alphanumeric"];
+function Ui(t, e, r = {}) {
   for (const i of ["aria-invalid", "aria-describedby"]) {
     const a = t.getAttribute(i);
     a !== null && (t.removeAttribute(i), e.setAttribute(i, a));
@@ -18934,7 +18966,7 @@ function cl(t, e) {
   for (; r.length < e; ) r.push("");
   return r;
 }
-function RA(t) {
+function OA(t) {
   const { id: e, length: r, type: i, chars: a, disabled: o, mask: n, groupLabel: s, onSlots: l, onFocusChange: c } = t, u = i === "alphanumeric", h = d("div", {
     class: "rui-pin-input",
     "data-disabled": o ? "true" : "false",
@@ -19004,14 +19036,14 @@ function RA(t) {
     };
   }), h;
 }
-const PA = {
+const BA = {
   name: "PinInput",
   description: 'Per-digit PIN entry. Auto-advances focus as the user types and supports pasting a whole code into any slot. Pass a `$variable` as `value` for two-way binding (the bound value is the joined string). Use `type="numeric"` for PINs / 2FA codes, `"alphanumeric"` for invite codes. `onComplete` fires once every slot is filled (auto-submit hook); pass `label`/`hint`/`error` for the labelled field shell.',
   props: [
     { name: "id", type: "string" },
     { name: "length", type: "number", optional: !0, description: "Number of slots (default 4)" },
     { name: "value", type: "string", optional: !0, description: "Bound value (typically $variable)" },
-    { name: "type", type: "string", optional: !0, enum: LA },
+    { name: "type", type: "string", optional: !0, enum: DA },
     { name: "mask", type: "boolean", optional: !0, description: "Render slots as `<input type=password>`" },
     { name: "autoFocus", type: "boolean", optional: !0, aliases: ["autofocus"], description: "Focus the first slot on mount" },
     { name: "onChange", type: "callable", optional: !0, aliases: ["onchange"], description: "Called with the current joined string on every keystroke" },
@@ -19019,7 +19051,7 @@ const PA = {
     ...wt
   ],
   render: (t, e, r) => {
-    const i = g(e.id) || kr(r, "rui-pin-input"), a = Math.max(1, Math.min(12, Math.floor(R(e.length, 4)))), o = g(e.type, "numeric"), n = g(e.value), s = z(e.disabled), l = z(e.mask), c = t.argMeta?.[2]?.stateRef, u = r.useInstanceState("slots", []), h = u.get(), p = e.value !== null && e.value !== void 0, b = h.length === a && h.join("") === n, m = cl(!p || b ? h : n.split(""), a), f = RA({
+    const i = g(e.id) || kr(r, "rui-pin-input"), a = Math.max(1, Math.min(12, Math.floor(R(e.length, 4)))), o = g(e.type, "numeric"), n = g(e.value), s = z(e.disabled), l = z(e.mask), c = t.argMeta?.[2]?.stateRef, u = r.useInstanceState("slots", []), h = u.get(), p = e.value !== null && e.value !== void 0, b = h.length === a && h.join("") === n, m = cl(!p || b ? h : n.split(""), a), f = OA({
       id: i,
       length: a,
       type: o,
@@ -19042,15 +19074,15 @@ const PA = {
       y && (v.set(!0), y.focus());
     });
     const x = He(f, { ...e, id: i });
-    return Hi(f, f, { native: !1 }), x;
+    return Ui(f, f, { native: !1 }), x;
   }
-}, DA = ["current-password", "new-password", "off"];
+}, FA = ["current-password", "new-password", "off"];
 function wp(t) {
   if (!t) return { score: 0, label: "" };
   let e = 0;
   return t.length >= 8 && (e += 1), t.length >= 12 && (e += 1), /[A-Z]/.test(t) && /[a-z]/.test(t) && (e += 1), /[0-9]/.test(t) && (e += 1), /[^A-Za-z0-9]/.test(t) && (e += 1), e = Math.min(4, e), { score: e, label: ["Too short", "Weak", "Fair", "Good", "Strong"][e] ?? "" };
 }
-const OA = {
+const _A = {
   name: "PasswordInput",
   description: 'Password input with a show/hide toggle and an optional strength meter. Pass a `$variable` as `value` for two-way binding. Set `strengthMeter=true` to render a 4-step indicator and label. Use `autocomplete="new-password"` on sign-up / reset forms so the browser offers a generated password. Pass `label`/`hint`/`error`/`required` for the labelled field shell.',
   props: [
@@ -19058,7 +19090,7 @@ const OA = {
     { name: "value", type: "string", optional: !0, description: "Bound value (typically $variable)" },
     { name: "placeholder", type: "string", optional: !0 },
     { name: "strengthMeter", type: "boolean", optional: !0, aliases: ["showStrength"] },
-    { name: "autocomplete", type: "string", optional: !0, enum: DA, description: 'Password-manager hint (default "current-password")' },
+    { name: "autocomplete", type: "string", optional: !0, enum: FA, description: 'Password-manager hint (default "current-password")' },
     { name: "onChange", type: "callable", optional: !0, aliases: ["onchange"], description: "Called with the current value on every keystroke" },
     ...wt
   ],
@@ -19118,9 +19150,9 @@ const OA = {
       y.append(x), y.append(d("span", { class: "rui-password-input-strength-label" }, [v.label])), l.append(y);
     }
     const f = He(l, { ...e, id: i });
-    return Hi(l, u), f;
+    return Ui(l, u), f;
   }
-}, BA = {
+}, jA = {
   name: "TagInput",
   description: "Tag/chip input — type a value, press Enter (or comma) to commit, click × on a chip to remove. Tabbing away commits the pending text too. Pass a `$variable` (array of strings) as `value` for two-way binding. Use for keywords, recipients, labels, skills, allowlists. Pass `suggestions` for autocomplete and `label`/`hint`/`error` for the labelled field shell.",
   props: [
@@ -19191,10 +19223,10 @@ const OA = {
       u.append(v);
     }
     const f = He(u, { ...e, id: i });
-    return Hi(u, b, { native: !1 }), f;
+    return Ui(u, b, { native: !1 }), f;
   }
-}, FA = ["handle", "label"];
-function jA(t) {
+}, qA = ["handle", "label"];
+function UA(t) {
   return P(t).map((e) => {
     if (typeof e == "string") return { value: e, label: e };
     if (e && typeof e == "object") {
@@ -19215,13 +19247,13 @@ const fg = /* @__PURE__ */ new WeakMap(), ul = (t, e) => {
     minWidth: 220,
     layer: "dropdown"
   }));
-}, _A = (t) => {
+}, HA = (t) => {
   be(() => {
     if (!t.isConnected) return;
     const e = t.querySelector(".rui-mention-input-suggestions"), r = t.querySelector(".rui-mention-input-field");
     !e || !r || e.getAttribute("data-open") !== "true" || ul(e, r);
   });
-}, qA = {
+}, WA = {
   name: "MentionInput",
   description: 'Multi-line input with inline @-mention suggestions. Typing `@` opens a popover listing the provided `people` (filtered by what follows). Selecting an option inserts `@handle` — the `handle`/`value` key, falling back to the display label; set `mentionFormat: "label"` to insert the display name instead. Pass a `$variable` as `value` for two-way binding. Use `onSearch` + `loading` for a server-side directory. Use for comments, task notes, chat composers.',
   props: [
@@ -19231,14 +19263,14 @@ const fg = /* @__PURE__ */ new WeakMap(), ul = (t, e) => {
     { name: "placeholder", type: "string", optional: !0 },
     { name: "rows", type: "number", optional: !0, description: "TextArea rows (default 3)" },
     { name: "maxSuggestions", type: "number", optional: !0, description: "Maximum options listed (default 6)" },
-    { name: "mentionFormat", type: "string", optional: !0, enum: FA, description: "Insert `@handle` (default) or `@label`" },
+    { name: "mentionFormat", type: "string", optional: !0, enum: qA, description: "Insert `@handle` (default) or `@label`" },
     { name: "loading", type: "boolean", optional: !0, description: 'Show "Searching…" while `onSearch` results are in flight' },
     { name: "onSearch", type: "callable", optional: !0, description: "Called with the text typed after `@` so the app can fetch `people`" },
     { name: "onChange", type: "callable", optional: !0, aliases: ["onchange"], description: "Called with the current text on every keystroke" },
     ...wt
   ],
   render: (t, e, r) => {
-    const i = g(e.id) || kr(r, "rui-mention-input"), a = `${i}-suggestions`, o = jA(e.people), n = z(e.disabled), s = z(e.loading), l = Math.max(1, Math.floor(R(e.maxSuggestions, 6))), c = g(e.mentionFormat, "handle") === "label", u = d("div", { class: "rui-mention-input", "data-disabled": n ? "true" : "false" }), h = d("textarea", {
+    const i = g(e.id) || kr(r, "rui-mention-input"), a = `${i}-suggestions`, o = UA(e.people), n = z(e.disabled), s = z(e.loading), l = Math.max(1, Math.floor(R(e.maxSuggestions, 6))), c = g(e.mentionFormat, "handle") === "label", u = d("div", { class: "rui-mention-input", "data-disabled": n ? "true" : "false" }), h = d("textarea", {
       class: "rui-mention-input-field",
       id: i,
       name: i,
@@ -19269,10 +19301,10 @@ const fg = /* @__PURE__ */ new WeakMap(), ul = (t, e) => {
     }, y = (T) => T.closest(".rui-mention-input")?.querySelector(".rui-mention-input-field") ?? null, w = (T, I) => {
       const M = T.value, E = T.selectionStart ?? M.length, L = M.slice(0, E), D = L.lastIndexOf("@");
       if (D === -1) return;
-      const N = M.slice(E), q = `@${c ? I.label || I.value : I.value || I.label} `, j = L.slice(0, D) + q + N;
-      T.value = j;
-      const _ = D + q.length;
-      T.selectionStart = T.selectionEnd = _, T.dispatchEvent(new Event("input", { bubbles: !0 })), T.focus();
+      const N = M.slice(E), q = `@${c ? I.label || I.value : I.value || I.label} `, _ = L.slice(0, D) + q + N;
+      T.value = _;
+      const j = D + q.length;
+      T.selectionStart = T.selectionEnd = j, T.dispatchEvent(new Event("input", { bubbles: !0 })), T.focus();
     }, S = (T, I, M) => {
       const E = T.querySelectorAll(".rui-mention-input-option");
       E.forEach((D, N) => {
@@ -19299,20 +19331,20 @@ const fg = /* @__PURE__ */ new WeakMap(), ul = (t, e) => {
         return;
       }
       const O = Math.min(Math.max(0, b.get()), N.length - 1);
-      b.set(O), N.forEach((q, j) => {
-        const _ = d("button", {
+      b.set(O), N.forEach((q, _) => {
+        const j = d("button", {
           type: "button",
           class: "rui-mention-input-option",
-          id: `${a}-option-${j}`,
+          id: `${a}-option-${_}`,
           role: "option",
-          "aria-selected": j === O ? "true" : "false",
+          "aria-selected": _ === O ? "true" : "false",
           "data-value": q.value,
-          "data-active": j === O ? "true" : "false"
+          "data-active": _ === O ? "true" : "false"
         });
-        _.append(d("span", { class: "rui-mention-input-option-label" }, [q.label])), q.value && q.value !== q.label && _.append(d("span", { class: "rui-mention-input-option-handle" }, [`@${q.value}`])), _.onmousedown = (V) => V.preventDefault(), _.onclick = (V) => {
+        j.append(d("span", { class: "rui-mention-input-option-label" }, [q.label])), q.value && q.value !== q.label && j.append(d("span", { class: "rui-mention-input-option-handle" }, [`@${q.value}`])), j.onmousedown = (V) => V.preventDefault(), j.onclick = (V) => {
           const re = V.currentTarget, pe = M ?? y(re), K = x(pe || re);
           pe && w(pe, q), f.set(null), K && k(K, null, pe);
-        }, T.append(_);
+        }, T.append(j);
       }), S(T, E, O), M && ul(T, M);
     }, C = (T) => {
       const I = x(T);
@@ -19356,11 +19388,11 @@ const fg = /* @__PURE__ */ new WeakMap(), ul = (t, e) => {
     }, e.onFocus != null && (h.onfocus = (T) => {
       const I = T.currentTarget ?? T.target;
       r.invoke(e.onFocus, I.value);
-    }), u.append(h), u.append(p), k(p, f.get()), p.getAttribute("data-open") === "true" && _A(u);
+    }), u.append(h), u.append(p), k(p, f.get()), p.getAttribute("data-open") === "true" && HA(u);
     const $ = He(u, { ...e, id: i });
-    return Hi(u, h), $;
+    return Ui(u, h), $;
   }
-}, UA = {
+}, GA = {
   name: "TimePicker",
   description: 'Time-of-day picker that wraps `<input type="time">`. Pass a `$variable` as `value` for two-way binding (HH:MM 24-hour, written on commit). Set `step` to constrain to specific increments (e.g. 900 for 15-minute buckets, or `"any"` for seconds). Pass `label`/`hint`/`error`/`required` for the labelled field shell.',
   props: [
@@ -19387,14 +19419,14 @@ const fg = /* @__PURE__ */ new WeakMap(), ul = (t, e) => {
     n && r.bindState(o, n, {
       event: "change",
       getValue: (l) => l.value
-    }), _a(o, e.onChange, r, {
+    }), ja(o, e.onChange, r, {
       event: "change",
       getValue: (l) => l.value
     }), yt(o, e, r), a.append(o);
     const s = He(a, { ...e, id: i });
-    return Hi(a, o), s;
+    return Ui(a, o), s;
   }
-}, HA = {
+}, VA = {
   name: "DateTimePicker",
   description: 'Combined date + time picker — wraps `<input type="datetime-local">`. Pass a `$variable` as `value` for two-way binding (ISO `YYYY-MM-DDTHH:MM`, written on commit). The field is timezone-naive, so spell the timezone out in `hint`. Pass `label`/`hint`/`error`/`required` for the labelled field shell.',
   props: [
@@ -19421,12 +19453,12 @@ const fg = /* @__PURE__ */ new WeakMap(), ul = (t, e) => {
     n && r.bindState(o, n, {
       event: "change",
       getValue: (l) => l.value
-    }), _a(o, e.onChange, r, {
+    }), ja(o, e.onChange, r, {
       event: "change",
       getValue: (l) => l.value
     }), yt(o, e, r), a.append(o);
     const s = He(a, { ...e, id: i });
-    return Hi(a, o), s;
+    return Ui(a, o), s;
   }
 };
 function ss(t, e) {
@@ -19457,12 +19489,12 @@ function xp(t, e) {
     Ic(e[i]) && (r += t[i]);
   return r;
 }
-const WA = ["text", "numeric", "decimal", "tel", "none"];
-function GA(t) {
+const KA = ["text", "numeric", "decimal", "tel", "none"];
+function YA(t) {
   const e = Array.from(t).filter((r) => Ic(r));
   return e.length === 0 || e.some((r) => r !== "9") ? null : "numeric";
 }
-const VA = {
+const XA = {
   name: "MaskedInput",
   description: 'Text input with an inline mask — `9` matches a digit, `A` matches a letter, `*` matches any character, every other character is a fixed delimiter. Useful for phone numbers, postal codes, credit cards. Pass `mask` (e.g. `"(999) 999-9999"`) and a `$variable` as `value`. Set `unmasked: true` to bind the token characters only (no punctuation in the submitted payload). Pass `label`/`hint`/`error`/`required` for the labelled field shell.',
   props: [
@@ -19471,7 +19503,7 @@ const VA = {
     { name: "value", type: "string", optional: !0, description: "Bound value (typically $variable)" },
     { name: "placeholder", type: "string", optional: !0 },
     { name: "unmasked", type: "boolean", optional: !0, aliases: ["rawValue"], description: "Bind/report the token characters only, without the mask's delimiters" },
-    { name: "inputMode", type: "string", optional: !0, aliases: ["inputmode"], enum: WA, description: "Mobile keyboard hint (derived from the mask when omitted)" },
+    { name: "inputMode", type: "string", optional: !0, aliases: ["inputmode"], enum: KA, description: "Mobile keyboard hint (derived from the mask when omitted)" },
     { name: "onChange", type: "callable", optional: !0, aliases: ["onchange"], description: "Called with the current value on every keystroke" },
     ...wt
   ],
@@ -19483,7 +19515,7 @@ const VA = {
       name: g(e.name, i),
       value: s,
       placeholder: g(e.placeholder, a),
-      inputmode: g(e.inputMode) || GA(a),
+      inputmode: g(e.inputMode) || YA(a),
       disabled: o ? "" : null,
       autocomplete: "off"
     });
@@ -19509,7 +19541,7 @@ const VA = {
       return n ? xp(p, a) : p;
     }), He(l, { ...e, id: i });
   }
-}, KA = ["h2", "h3", "h4", "h5", "h6"], YA = {
+}, ZA = ["h2", "h3", "h4", "h5", "h6"], QA = {
   name: "FormSection",
   description: "Semantic grouping for related form fields — renders a small heading (`label`), optional helper paragraph, and stacks the children with consistent spacing. Use INSTEAD of wrapping fields in `Card` + `SectionHeader` by hand. Set `level` (2-6, default 3) so the heading fits the surrounding document outline. Pair with `FieldSet` when the group is a true `<fieldset>` (radio sets, checkbox groups).",
   props: [
@@ -19524,7 +19556,7 @@ const VA = {
       const s = d("header", { class: "rui-form-section-header" });
       if (a) {
         const l = Math.max(2, Math.min(6, Math.floor(R(e.level, 3))));
-        s.append(d(KA[l - 2] ?? "h3", { class: "rui-form-section-label" }, [a]));
+        s.append(d(ZA[l - 2] ?? "h3", { class: "rui-form-section-label" }, [a]));
       }
       o && s.append(d("p", { class: "rui-form-section-helper" }, [o])), i.append(s);
     }
@@ -19532,7 +19564,7 @@ const VA = {
     for (const s of P(e.children)) n.append(r.renderNode(s));
     return i.append(n), i;
   }
-}, XA = {
+}, JA = {
   name: "FieldSet",
   description: 'Native `<fieldset>`/`<legend>` wrapper for accessible grouping of related controls. Use when assistive tech should announce the wrapper (radio sets, checkbox groups). `error` renders a GROUP-level validation message ("Select at least one contact method") that belongs to the set rather than to any single control. For purely visual grouping prefer `FormSection`.',
   props: [
@@ -19569,7 +19601,7 @@ const VA = {
     for (const u of P(e.children)) s.append(r.renderNode(u));
     return s;
   }
-}, ZA = {
+}, e$ = {
   name: "ValidationSummary",
   description: 'Aggregate error list rendered at the top of a form. Pass `errors` as `{label?, message, field?}` objects or plain strings; an entry with a `field` renders as a link that focuses that control (or calls `onErrorClick(field)`). Set `count: true` to lead with "There are 3 problems with this form". Pair with individual field hints via `FormControl(hint=...)`.',
   props: [
@@ -19652,7 +19684,7 @@ const VA = {
     }), s;
   }
 };
-function QA(t) {
+function t$(t) {
   return P(t).map((e) => {
     if (!e || typeof e != "object")
       return { title: g(e), details: "", content: null };
@@ -19664,7 +19696,7 @@ function QA(t) {
     };
   });
 }
-const JA = {
+const r$ = {
   name: "MultiStepForm",
   description: 'Multi-step / wizard form composite. Renders a `Steps` indicator, the active step\'s `content`, and Prev/Next buttons that drive a `$variable` for the current 0-indexed step (or call `onStepChange` when `current` is a literal). Use INSTEAD of hand-rolling `Steps` + content + manual prev/next wiring. Set `nextDisabled` to block advancing past an incomplete step and `submitting` while the submit is in flight. The submit button is rendered on the final step (override via `submitLabel`). Step indicator direction defaults to `column` (stacked next to the content); set `stepsLayout: "row"` for a classic horizontal stepper.',
   props: [
@@ -19685,7 +19717,7 @@ const JA = {
     { name: "emptyText", type: "string", optional: !0, description: "Message shown while `steps` is empty (e.g. before a fetch lands)" }
   ],
   render: (t, e, r) => {
-    const i = QA(e.steps), a = i.length, o = g(e.stepsLayout, "column").toLowerCase(), n = o === "row" || o === "horizontal" ? "row" : "column";
+    const i = t$(e.steps), a = i.length, o = g(e.stepsLayout, "column").toLowerCase(), n = o === "row" || o === "horizontal" ? "row" : "column";
     if (a === 0) {
       const y = d("div", { class: "rui-multi-step-form", "data-empty": "true" }), w = d("div", { class: "rui-empty-state" });
       return w.append(d("p", { class: "rui-empty-state-description" }, [
@@ -19764,7 +19796,7 @@ const JA = {
     }, [`Step ${s + 1} of ${a}: ${v?.title || ""}`])), b;
   }
 };
-function e$(t) {
+function i$(t) {
   return P(t).map((e) => {
     if (typeof e == "string") return e ? { label: e, met: null } : null;
     if (e && typeof e == "object") {
@@ -19776,7 +19808,7 @@ function e$(t) {
     return null;
   }).filter((e) => e !== null);
 }
-const t$ = {
+const a$ = {
   name: "RequirementList",
   description: 'Checklist of rules a value has to satisfy, each marked met (check), unmet (cross) or not yet checked (dot) — password requirements, naming rules, policy checks. Pass `items` as strings or `{label, met}` objects, where `met` omitted means "not evaluated yet" and renders neutral, so an untouched field does not accuse the reader of breaking rules. Pair it with a field\'s `invalid` and `describedBy` props to keep the border red and the list as the explanation, instead of repeating the rules in an `error` string. Set `announce` to have changes read out politely as the value is edited.',
   props: [
@@ -19789,7 +19821,7 @@ const t$ = {
     { name: "unmetLabel", type: "string", optional: !0, description: 'Screen-reader prefix for an unmet row (default "Not met")' }
   ],
   render: (t, e) => {
-    const r = e$(e.items), i = z(e.pending), a = d("div", {
+    const r = i$(e.items), i = z(e.pending), a = d("div", {
       class: "rui-requirement-list",
       "data-pending": i ? "true" : null
     }), o = g(e.title);
@@ -19817,12 +19849,12 @@ const t$ = {
     return a;
   }
 };
-let r$ = 0;
+let o$ = 0;
 function zc(t, e, r) {
   const i = t.useInstanceState(e, "");
-  return i.get() || i.set(`${r}-${r$ += 1}`), i.get();
+  return i.get() || i.set(`${r}-${o$ += 1}`), i.get();
 }
-function i$(t) {
+function n$(t) {
   return P(t).map((e) => {
     if (!e || typeof e != "object") return null;
     const r = e;
@@ -19839,7 +19871,7 @@ function i$(t) {
     };
   }).filter((e) => e !== null);
 }
-const a$ = "input,button,a,label,select,textarea", o$ = {
+const s$ = "input,button,a,label,select,textarea", l$ = {
   name: "InboxPanel",
   description: "Grouped notification list — entries are grouped into Unread/Earlier sections, with a count chip on each group header. Pass `items` as `{title, message, time, icon?, tone?, unread?, avatarSrc?, onClick?, actions?}` objects (`action` is also accepted as an alias for `onClick`; `actions` takes Button(...) entries rendered inside the row). Pair with a `SectionHeader` for the panel title (the component does not render its own title to avoid duplication). Set `loading` while entries are still being fetched so the panel does not claim the inbox is empty. Use for top-bar notification trays, activity drawers, and alert center pages.",
   props: [
@@ -19853,7 +19885,7 @@ const a$ = "input,button,a,label,select,textarea", o$ = {
     { name: "earlierLabel", type: "string", optional: !0, description: 'Read group heading (default "Earlier")' }
   ],
   render: (t, e, r) => {
-    const i = i$(e.items), a = i.filter((c) => c.unread), o = i.filter((c) => !c.unread), n = z(e.loading), s = d("div", { class: "rui-inbox-panel", "aria-busy": n ? "true" : null });
+    const i = n$(e.items), a = i.filter((c) => c.unread), o = i.filter((c) => !c.unread), n = z(e.loading), s = d("div", { class: "rui-inbox-panel", "aria-busy": n ? "true" : null });
     if (typeof e.onMarkAllRead == "function" && a.length > 0) {
       const c = d("div", { class: "rui-inbox-panel-toolbar" }), u = d("button", { type: "button", class: "rui-inbox-panel-mark-all" }, [
         g(e.markAllLabel, "Mark all as read")
@@ -19888,7 +19920,7 @@ const a$ = "input,button,a,label,select,textarea", o$ = {
         );
         if (typeof b.onClick == "function") {
           m.setAttribute("data-clickable", "true"), m.setAttribute("role", "button"), m.tabIndex = 0;
-          const f = (v) => v.target?.closest(a$) ? !1 : (r.invoke(b.onClick), !0);
+          const f = (v) => v.target?.closest(s$) ? !1 : (r.invoke(b.onClick), !0);
           m.onclick = (v) => {
             f(v);
           }, m.onkeydown = (v) => {
@@ -19902,7 +19934,7 @@ const a$ = "input,button,a,label,select,textarea", o$ = {
     return l(g(e.unreadLabel, "Unread"), a), l(g(e.earlierLabel, "Earlier"), o), s;
   }
 };
-function n$(t) {
+function c$(t) {
   return P(t).map((e) => {
     if (!e || typeof e != "object") return null;
     const r = e;
@@ -19915,7 +19947,7 @@ function n$(t) {
     };
   }).filter((e) => e !== null);
 }
-const s$ = {
+const u$ = {
   name: "OnboardingChecklist",
   description: 'Step-by-step product checklist with completion progress at the top. Pass `items` as `{title, description?, done?, onClick?, cta?}` objects (`action` is also accepted as an alias). The progress percentage is computed automatically from `done`; `onComplete` fires once every step is done. An item\'s `onClick` stays available after it is completed (the button label defaults to "Start", or "Review" for a done step). Use on first-run dashboards, empty workspaces, and "complete your profile" surfaces.',
   props: [
@@ -19926,7 +19958,7 @@ const s$ = {
     { name: "onComplete", type: "callable", optional: !0, description: "Callable fired once, when the last remaining step flips to done" }
   ],
   render: (t, e, r) => {
-    const i = n$(e.items), a = i.filter((m) => m.done).length, o = Math.max(1, i.length), n = Math.round(a / o * 100), s = d("div", { class: "rui-onboarding-checklist" }), l = d("header", { class: "rui-onboarding-checklist-header" }), c = d("div", { class: "rui-onboarding-checklist-headrow" });
+    const i = c$(e.items), a = i.filter((m) => m.done).length, o = Math.max(1, i.length), n = Math.round(a / o * 100), s = d("div", { class: "rui-onboarding-checklist" }), l = d("header", { class: "rui-onboarding-checklist-header" }), c = d("div", { class: "rui-onboarding-checklist-headrow" });
     if (c.append(d("h3", { class: "rui-onboarding-checklist-title" }, [
       g(e.title, "Getting started")
     ])), typeof e.onDismiss == "function") {
@@ -20000,7 +20032,7 @@ function gg(t) {
   }
   return e;
 }
-const l$ = {
+const d$ = {
   name: "LoadingState",
   description: "Full-card loading state — large spinner + title + description. Use while a query is in flight or while a long-running tool runs. Pass `actions` for escape hatches (Cancel / Run in background) and `icon` to replace the spinner for a queued/waiting state. For tiny inline loaders prefer `Spinner`; for skeleton placeholders prefer `Skeleton`.",
   props: [
@@ -20033,7 +20065,7 @@ const l$ = {
     }
     return i;
   }
-}, c$ = {
+}, p$ = {
   name: "ErrorState",
   description: "Full-card error placeholder. Pairs a danger icon with title, description, and a row of recovery actions (Retry / Contact support / Go home). Pass `actions` as Button(...) entries.",
   props: [
@@ -20054,7 +20086,7 @@ const l$ = {
     role: "alert",
     helpers: r
   })
-}, u$ = {
+}, h$ = {
   name: "SuccessState",
   description: 'Full-card success placeholder. Use for confirmation screens ("Order placed", "Payment succeeded", "Account verified") at the end of a flow. Pass `actions` for follow-up CTAs.',
   props: [
@@ -20076,7 +20108,7 @@ const l$ = {
     live: "polite",
     helpers: r
   })
-}, d$ = {
+}, m$ = {
   name: "Tour",
   description: "Product-tour controller — renders the current step's title, description, and a Prev/Next/Skip row. Bind `current` to a `$variable` (0-indexed) to drive the step from your own state; without a binding the component advances itself. Bind `open` to a `$variable` so Skip/Finish can close it (otherwise it closes itself). Pass `steps` as `{title, description, target?}` objects; the optional `target` is a CSS selector that renders alongside the step for designers to reference.",
   props: [
@@ -20180,7 +20212,7 @@ function kp(t, e, r) {
   };
   r.set(n), t.setAttribute("data-ring", "true"), i.style.cssText = bg(n);
 }
-function p$(t, e, r, i) {
+function f$(t, e, r, i) {
   be(() => {
     if (!t.isConnected) return;
     kp(t, e, r);
@@ -20190,7 +20222,7 @@ function p$(t, e, r, i) {
     }, "rui-spotlight-ring");
   });
 }
-const h$ = {
+const g$ = {
   name: "Spotlight",
   description: 'Single-step product highlight — a dimmed full-page overlay with an explainer card, plus a ring around the element named by `target` (a CSS selector). Omit `target` for a centred callout on a plain dim. Use for one-off feature reveals ("Try the new commands menu"). Bind `open` to a `$variable` to control it; the × button, a backdrop click and Escape all dismiss and fire `onClose`.',
   props: [
@@ -20240,9 +20272,9 @@ const h$ = {
     }
     return h.append(b), h.onclick = (w) => {
       w.target === w.currentTarget && p(w.currentTarget);
-    }, h.onkeydown = lr(".rui-spotlight-card", (w) => p(w)), Fr(h, ".rui-spotlight-card", r), s && p$(h, s, c, r), h;
+    }, h.onkeydown = lr(".rui-spotlight-card", (w) => p(w)), Fr(h, ".rui-spotlight-card", r), s && f$(h, s, c, r), h;
   }
-}, m$ = {
+}, b$ = {
   name: "Sticky",
   description: 'Wraps content in a `position: sticky` container so it pins to the top (or bottom / left / right) of the nearest scrollable ancestor. Use for toolbar action rows above tables, in-page navs, status banners, and pinned first/last columns in a horizontally scrolling row. Sets `data-stuck="true"` on itself once pinned, so a CSS hook (a shadow/border) can flag the pinned state.',
   props: [
@@ -20278,7 +20310,7 @@ const h$ = {
 }, dl = 15, pl = 85, ls = (t) => Math.max(dl, Math.min(pl, t)), Sp = (t) => {
   const e = /^(\d+(?:\.\d+)?)%$/.exec(t.trim());
   return e ? Number(e[1]) : null;
-}, f$ = {
+}, v$ = {
   name: "ResizablePanels",
   description: "Two-pane horizontal split with a draggable divider. The user can drag the divider (or focus it and use the arrow keys / Home / End) to resize the primary pane; `onResize` reports the new percentage so the split can be persisted. Use for code editors, file browsers, master/detail layouts that need user-controllable proportions.",
   props: [
@@ -20360,7 +20392,7 @@ const h$ = {
       v.preventDefault(), r.invoke(e.onResize, f(y, x, S));
     }, c;
   }
-}, Cp = (t) => Math.max(1, Math.min(6, Math.floor(t))), g$ = {
+}, Cp = (t) => Math.max(1, Math.min(6, Math.floor(t))), y$ = {
   name: "MasonryGrid",
   description: "Pinterest-style column grid. Children flow into columns that reflow on viewport changes. Use for galleries, social-style feeds, and mixed-height card walls. `columns` accepts a responsive map like `{base: 1, md: 2, lg: 4}`. Prefer `Grid` when children should share the same height per row.",
   props: [
@@ -20390,7 +20422,7 @@ const h$ = {
     }
     return s;
   }
-}, b$ = {
+}, w$ = {
   name: "Drawer",
   description: "Side drawer overlay shown when `open` is true. Pass a `$variable` as `open` to control it. Choose `side` for slide direction (default right) and `width` for a wide detail drawer. `onClose` fires whenever the drawer is dismissed (× button, Escape, or backdrop click — set `closeOnBackdrop: false` to keep a form safe from stray clicks).",
   props: [
@@ -20448,7 +20480,7 @@ const h$ = {
     }
     return o.append(h), o.onkeydown = lr(".rui-sheet", () => f()), Fr(o, ".rui-sheet", r), o;
   }
-}, v$ = {
+}, x$ = {
   name: "TopBar",
   description: 'Compact header strip that pairs a title (or breadcrumb) with search and action slots. Use INSTEAD of hand-rolling a `Stack(direction="row")` above a page. For full SaaS shells use `Navbar` (links) or `AppShell` (sidebar + topbar + content).',
   props: [
@@ -20480,7 +20512,7 @@ const h$ = {
     for (const c of P(e.right)) l.append(r.renderNode(c));
     return l.childNodes.length > 0 && i.append(l), i;
   }
-}, y$ = {
+}, k$ = {
   name: "NavLink",
   description: 'Anchor that navigates to a route on click and stays in sync with the URL hash. Reflects `data-active="true"` (and `aria-current="page"` for assistive tech) when the current path matches `to` (set `exact=true` to require exact equality instead of prefix matching).',
   props: [
@@ -20544,8 +20576,8 @@ const h$ = {
     }), h;
   }
 };
-let w$ = 0;
-const En = (t) => `${t}-${(w$ += 1).toString(36)}`, vg = [
+let S$ = 0;
+const En = (t) => `${t}-${(S$ += 1).toString(36)}`, vg = [
   ["inset", "auto"],
   ["margin", "0"],
   ["padding", "0"],
@@ -20556,7 +20588,7 @@ const En = (t) => `${t}-${(w$ += 1).toString(36)}`, vg = [
   ["overflow", "visible"],
   ["color", "inherit"]
 ];
-function x$(t) {
+function C$(t) {
   const e = t;
   if (typeof e.showPopover == "function" && !t.hasAttribute("popover")) {
     t.setAttribute("popover", "manual");
@@ -20594,7 +20626,7 @@ function Ia(t) {
     (e) => !!e && typeof e == "object" && !Array.isArray(e)
   );
 }
-function k$(t) {
+function A$(t) {
   return P(t).map((e) => {
     if (e && typeof e == "object") {
       const i = e, a = g(i.value ?? i.label);
@@ -20627,7 +20659,7 @@ function wg(t) {
     return { name: r, label: r, type: "text" };
   }).filter((e) => e.name !== "");
 }
-function S$(t) {
+function $$(t) {
   return Ia(t).map((e, r) => ({
     id: g(e.id, `task-${r}`),
     label: g(e.label ?? e.name, `Task ${r + 1}`),
@@ -20637,16 +20669,16 @@ function S$(t) {
     tone: g(e.tone ?? e.status) || void 0
   }));
 }
-function ea(t) {
+function Ji(t) {
   const e = Date.parse(t);
   return Number.isNaN(e) ? null : e;
 }
-const C$ = 1e6;
-function A$(t, e) {
+const T$ = 1e6;
+function I$(t, e) {
   const r = t.split(`
 `), i = e.split(`
 `), a = [], o = r.length, n = i.length;
-  if (o * n > C$) {
+  if (o * n > T$) {
     const h = Math.max(o, n);
     for (let p = 0; p < h; p += 1) {
       const b = r[p], m = i[p];
@@ -20667,7 +20699,7 @@ function A$(t, e) {
     a.push({ type: "add", text: i[u], rightNo: u + 1 }), u += 1;
   return a;
 }
-function $$(t, e) {
+function z$(t, e) {
   if (e < 0) return t;
   const r = new Array(t.length).fill(!1);
   t.forEach((o, n) => {
@@ -20688,7 +20720,7 @@ function hl(t) {
     return String(t);
   }
 }
-const T$ = {
+const M$ = {
   name: "IconButton",
   description: "Icon-only button with an accessible label. Use for toolbars, table row actions, and compact controls. `active` makes it a toggle (reflected as `aria-pressed`), `loading` shows a spinner and blocks clicks, and `href` renders it as a link instead of a button.",
   props: [
@@ -20739,7 +20771,7 @@ const T$ = {
       i || r.invoke(e.onClick);
     }, u;
   }
-}, I$ = 1, ta = ".rui-command-palette-panel", z$ = {
+}, E$ = 1, ea = ".rui-command-palette-panel", N$ = {
   name: "CommandPalette",
   description: "Cmd-K style searchable command list. Pass `items` as `{label, value, group?, shortcut?, action?}` objects. Arrow keys move the selection, Enter runs it, Escape closes. Bind `open` to a `$variable` (or pass `onClose`) so dismissing the palette is written back — otherwise the next re-render re-opens it.",
   props: [
@@ -20755,13 +20787,13 @@ const T$ = {
     { name: "maxResults", type: "number", optional: !0, description: "Rows rendered before the list is truncated (default 50)" }
   ],
   render: (t, e, r) => {
-    const i = k$(e.items), a = z(e.loading), o = Math.max(1, Math.floor(R(e.maxResults, 50))), n = e.open !== void 0, s = n ? z(e.open) : !0, l = r.useInstanceState("open", s);
+    const i = A$(e.items), a = z(e.loading), o = Math.max(1, Math.floor(R(e.maxResults, 50))), n = e.open !== void 0, s = n ? z(e.open) : !0, l = r.useInstanceState("open", s);
     n && l.get() !== s && l.set(s);
-    const c = r.useInstanceState("filter", ""), u = r.useInstanceState("active", 0), h = r.useInstanceState("id", En("rui-cmd")), p = n ? s : l.get(), b = t.argMeta?.[I$]?.stateRef, m = `${h.get()}-list`, f = (E) => `${h.get()}-opt-${E}`, v = d("div", { class: "rui-command-palette", "data-open": p ? "true" : "false" });
-    Fr(v, ta, r);
+    const c = r.useInstanceState("filter", ""), u = r.useInstanceState("active", 0), h = r.useInstanceState("id", En("rui-cmd")), p = n ? s : l.get(), b = t.argMeta?.[E$]?.stateRef, m = `${h.get()}-list`, f = (E) => `${h.get()}-opt-${E}`, v = d("div", { class: "rui-command-palette", "data-open": p ? "true" : "false" });
+    Fr(v, ea, r);
     const x = (E) => {
       l.set(!1), c.set(""), u.set(0);
-      const L = E?.closest(".rui-command-palette") ?? null, D = L?.querySelector(ta) ?? null;
+      const L = E?.closest(".rui-command-palette") ?? null, D = L?.querySelector(ea) ?? null;
       L?.setAttribute("data-open", "false"), vt(D ?? void 0), Ap(L), b && r.setState(b, !1), r.invoke(e.onClose, !1);
     };
     if (!p) return v;
@@ -20800,27 +20832,27 @@ const T$ = {
       r.invoke(L.action), r.invoke(e.onSelect, L.value), x(E);
     }, I = (E, L) => {
       if (E.replaceChildren(), a) {
-        const j = d("div", { class: "rui-command-palette-empty", role: "status" }), _ = Y("spinner", { className: "rui-command-palette-spinner" });
-        _ && j.append(_), E.append(j), E.setAttribute("aria-busy", "true");
+        const _ = d("div", { class: "rui-command-palette-empty", role: "status" }), j = Y("spinner", { className: "rui-command-palette-spinner" });
+        j && _.append(j), E.append(_), E.setAttribute("aria-busy", "true");
         return;
       }
       E.removeAttribute("aria-busy");
       const D = $(L), N = D.slice(0, o), O = Math.max(0, Math.min(u.get(), N.length - 1));
       u.set(O);
       let q = "";
-      N.forEach((j, _) => {
-        j.group && j.group !== q && (q = j.group, E.append(d("div", { class: "rui-command-palette-group" }, [q])));
+      N.forEach((_, j) => {
+        _.group && _.group !== q && (q = _.group, E.append(d("div", { class: "rui-command-palette-group" }, [q])));
         const V = d("div", {
           class: "rui-command-palette-item",
           role: "option",
-          id: f(_),
-          "data-value": j.value,
-          "data-index": String(_),
-          "data-active": _ === O ? "true" : null,
-          "aria-selected": _ === O ? "true" : "false"
-        }, [j.label]);
-        j.shortcut && V.append(d("span", { class: "rui-command-palette-item-kbd" }, [j.shortcut])), V.onclick = (re) => {
-          re.stopPropagation(), T(re.currentTarget, j);
+          id: f(j),
+          "data-value": _.value,
+          "data-index": String(j),
+          "data-active": j === O ? "true" : null,
+          "aria-selected": j === O ? "true" : "false"
+        }, [_.label]);
+        _.shortcut && V.append(d("span", { class: "rui-command-palette-item-kbd" }, [_.shortcut])), V.onclick = (re) => {
+          re.stopPropagation(), T(re.currentTarget, _);
         }, E.append(V);
       }), D.length === 0 ? E.append(d("div", { class: "rui-command-palette-empty" }, [
         g(e.emptyLabel, "No commands found")
@@ -20832,22 +20864,22 @@ const T$ = {
     const M = (E, L, D) => {
       if (L.length === 0) return;
       const N = (D % L.length + L.length) % L.length;
-      L.forEach((q, j) => {
-        j === N ? q.setAttribute("data-active", "true") : q.removeAttribute("data-active"), q.setAttribute("aria-selected", j === N ? "true" : "false");
+      L.forEach((q, _) => {
+        _ === N ? q.setAttribute("data-active", "true") : q.removeAttribute("data-active"), q.setAttribute("aria-selected", _ === N ? "true" : "false");
       });
       const O = L[N];
       u.set(Number(O.getAttribute("data-index") ?? N)), E.setAttribute("aria-activedescendant", O.id), O.scrollIntoView?.({ block: "nearest" });
     };
     return k.oninput = (E) => {
-      const L = E.currentTarget, D = L.closest(ta)?.querySelector(".rui-command-palette-list");
+      const L = E.currentTarget, D = L.closest(ea)?.querySelector(".rui-command-palette-list");
       if (c.set(L.value), u.set(0), !D) return;
       I(D, L.value);
       const N = Array.from(D.querySelectorAll(".rui-command-palette-item"));
       N.length > 0 ? M(L, N, 0) : L.setAttribute("aria-activedescendant", "");
     }, k.onkeydown = (E) => {
-      const L = E, D = L.currentTarget ?? L.target, N = D.closest(ta)?.querySelector(".rui-command-palette-list"), O = N ? Array.from(N.querySelectorAll(".rui-command-palette-item")) : [];
+      const L = E, D = L.currentTarget ?? L.target, N = D.closest(ea)?.querySelector(".rui-command-palette-list"), O = N ? Array.from(N.querySelectorAll(".rui-command-palette-item")) : [];
       if (O.length === 0) return;
-      const q = Math.max(0, O.findIndex((j) => j.getAttribute("data-active") === "true"));
+      const q = Math.max(0, O.findIndex((_) => _.getAttribute("data-active") === "true"));
       if (L.key === "ArrowDown") {
         L.preventDefault(), M(D, O, q + 1);
         return;
@@ -20865,11 +20897,11 @@ const T$ = {
         return;
       }
       L.key === "Enter" && (L.preventDefault(), O[q]?.click());
-    }, v.onkeydown = lr(ta, (E) => x(E)), be(() => {
+    }, v.onkeydown = lr(ea, (E) => x(E)), be(() => {
       if (!w.isConnected) return;
       const E = w.closest(".rui-command-palette");
       if (!E || E.getAttribute("data-open") !== "true") return;
-      x$(E);
+      C$(E);
       const L = Sr({
         liveRoot: w,
         key: "command-palette",
@@ -20880,7 +20912,7 @@ const T$ = {
       }, "rui-command-palette");
     }), v;
   }
-}, M$ = {
+}, L$ = {
   name: "FilterPill",
   description: "Toggleable filter pill — click to switch a filter on/off. Reflects state through `active` (and `aria-pressed` for assistive tech), with an optional leading `icon` and trailing `count`. Use for filter bars; use `FilterChips` to show already-applied filters that can be removed.",
   props: [
@@ -20901,7 +20933,7 @@ const T$ = {
     }), n = Y(e.icon, { className: "rui-filter-pill-icon" });
     return n && o.append(n), o.append(d("span", { class: "rui-filter-pill-label" }, [g(e.label)])), e.count !== null && e.count !== void 0 && g(e.count) !== "" && o.append(d("span", { class: "rui-filter-pill-count" }, [g(R(e.count, 0))])), a || (o.onclick = () => r.invoke(e.onToggle, !i)), o;
   }
-}, E$ = {
+}, R$ = {
   name: "FilterChips",
   description: 'Removable filter chips with an optional clear-all control. Set `max` to collapse the tail into a "+N" chip, and `disabled` to freeze the row while a filtered query is in flight.',
   props: [
@@ -20955,7 +20987,7 @@ const T$ = {
     }
     return l;
   }
-}, N$ = /* @__PURE__ */ new Set([
+}, P$ = /* @__PURE__ */ new Set([
   "text",
   "number",
   "email",
@@ -20969,7 +21001,7 @@ const T$ = {
   "datetime-local",
   "month",
   "week"
-]), L$ = 0, R$ = {
+]), D$ = 0, O$ = {
   name: "FieldRepeater",
   description: "Dynamic list of field groups (invoice lines, recipients, key/value pairs). Pass `items` as row objects and `fields` as `{name, label, type?, options?, placeholder?}` definitions — `type` accepts the native input types plus `checkbox`, `textarea` and `select` (with `options`). Bind `items` to a `$variable` for two-way capture, or read edits from `onChange(index, field, value, rows)`.",
   props: [
@@ -20984,7 +21016,7 @@ const T$ = {
     { name: "max", type: "number", optional: !0, description: 'Maximum rows — "Add row" is disabled at the cap' }
   ],
   render: (t, e, r) => {
-    const i = Ia(e.items), a = wg(e.fields), o = t.argMeta?.[L$]?.stateRef, n = Math.max(0, Math.floor(R(e.min, 0))), s = e.max != null ? Math.max(1, Math.floor(R(e.max, 1))) : 1 / 0, l = g(e.removeLabel, "Remove"), c = d("div", { class: "rui-field-repeater" }), u = (p, b, m) => {
+    const i = Ia(e.items), a = wg(e.fields), o = t.argMeta?.[D$]?.stateRef, n = Math.max(0, Math.floor(R(e.min, 0))), s = e.max != null ? Math.max(1, Math.floor(R(e.max, 1))) : 1 / 0, l = g(e.removeLabel, "Remove"), c = d("div", { class: "rui-field-repeater" }), u = (p, b, m) => {
       const f = p.closest(".rui-field-repeater-row"), v = Number(f?.getAttribute("data-index")), x = Number.isFinite(v) ? v : -1;
       if (x < 0) return;
       const w = Ia(e.items).map((S, k) => k === x ? { ...S, [b]: m } : S);
@@ -21029,7 +21061,7 @@ const T$ = {
       }
       const x = d("input", {
         class: "rui-input",
-        type: N$.has(p.type) ? p.type : "text",
+        type: P$.has(p.type) ? p.type : "text",
         name: f,
         placeholder: p.placeholder ?? null,
         // `valueAttr`, not `asString`: a row that simply has no value for this
@@ -21076,7 +21108,7 @@ function xg(t, e, r) {
   const i = d("div", { class: e });
   return t && typeof t == "object" ? i.append(r.renderNode(t)) : i.append(document.createTextNode(g(t))), i;
 }
-const P$ = {
+const B$ = {
   name: "VirtualList",
   description: "Windowed vertical list for large datasets. Pass pre-rendered nodes as `items` or plain row objects plus a `renderItem` lambda (`row => Node`) invoked per row. Every row is boxed at `itemHeight` so the virtualization maths matches the real layout.",
   props: [
@@ -21163,7 +21195,7 @@ const P$ = {
       r.registerDisposer(() => y.disconnect(), "rui-virtual-list-resize");
     }), c;
   }
-}, D$ = {
+}, F$ = {
   name: "VirtualGrid",
   description: "Windowed 2-D grid for very large collections (galleries, tiles, thumbnails). Only the visible rows of cells are mounted. Pass pre-rendered nodes (or plain values) as `items`; set `columns`, `itemHeight`, and `gap`. Prefer `minItemWidth` over a fixed `columns` count so the grid reflows on narrow screens (XI.3).",
   props: [
@@ -21223,11 +21255,11 @@ const P$ = {
       const N = Number.isFinite(T) ? T : 0, O = Math.max(0, Math.floor(N / u) - 1);
       if (!I && O === k) return;
       k = O;
-      const q = Math.ceil(n / u) + 2, j = Math.min(E, O + q);
+      const q = Math.ceil(n / u) + 2, _ = Math.min(E, O + q);
       A.replaceChildren(), A.style.transform = `translateY(${O * u}px)`;
-      for (let _ = O; _ < j; _ += 1)
+      for (let j = O; j < _; j += 1)
         for (let V = 0; V < M; V += 1) {
-          const re = _ * M + V;
+          const re = j * M + V;
           if (re >= c) break;
           A.append(S(l[re], re));
         }
@@ -21291,7 +21323,7 @@ function Tp(t) {
     return { value: r, label: ml[r] ?? r };
   }).filter((e) => e.value !== "");
 }
-const O$ = /* @__PURE__ */ new Set(["number", "date", "time", "datetime-local", "month", "week"]), B$ = 1, F$ = {
+const _$ = /* @__PURE__ */ new Set(["number", "date", "time", "datetime-local", "month", "week"]), j$ = 1, q$ = {
   name: "QueryBuilder",
   description: "Visual AND/OR filter builder. Pass `fields` as `{name, label, type?, operators?}` and bind `value` to a rule array of `{field, op, value, combinator?}`. Every rule after the first carries an AND/OR combinator; operators default to a sensible set per field `type` and can be overridden globally (`operators`) or per field.",
   props: [
@@ -21303,7 +21335,7 @@ const O$ = /* @__PURE__ */ new Set(["number", "date", "time", "datetime-local", 
     { name: "maxRules", type: "number", optional: !0, description: "Maximum number of rules (default unlimited)" }
   ],
   render: (t, e, r) => {
-    const i = wg(e.fields), a = z(e.disabled), o = e.maxRules != null ? Math.max(1, Math.floor(R(e.maxRules, 1))) : 1 / 0, n = Tp(e.operators), s = t.argMeta?.[B$]?.stateRef, l = Ia(e.value), c = r.useInstanceState("seed", ""), u = r.useInstanceState("rules", l), h = hl(l);
+    const i = wg(e.fields), a = z(e.disabled), o = e.maxRules != null ? Math.max(1, Math.floor(R(e.maxRules, 1))) : 1 / 0, n = Tp(e.operators), s = t.argMeta?.[j$]?.stateRef, l = Ia(e.value), c = r.useInstanceState("seed", ""), u = r.useInstanceState("rules", l), h = hl(l);
     c.get() !== h && (c.set(h), u.set(l));
     const p = d("div", { class: "rui-query-builder", "data-disabled": a ? "true" : null }), b = (v) => {
       const x = Tp(v?.operators);
@@ -21327,8 +21359,8 @@ const O$ = /* @__PURE__ */ new Set(["number", "date", "time", "datetime-local", 
             disabled: a ? "" : null
           });
           N.append(d("option", { value: "and" }, ["AND"])), N.append(d("option", { value: "or" }, ["OR"])), N.value = g(S.combinator, "and").toLowerCase() === "or" ? "or" : "and", a || (N.onchange = (O) => {
-            const q = O.currentTarget ?? O.target, j = x.map((_, V) => V === k ? { ..._, combinator: q.value } : _);
-            m(q, j);
+            const q = O.currentTarget ?? O.target, _ = x.map((j, V) => V === k ? { ...j, combinator: q.value } : j);
+            m(q, _);
           }), C.append(N);
         }
         const $ = i.find((N) => N.name === g(S.field)) ?? i[0], T = d("select", {
@@ -21348,23 +21380,23 @@ const O$ = /* @__PURE__ */ new Set(["number", "date", "time", "datetime-local", 
         M.value = I.some((N) => N.value === E) ? E : I[0]?.value ?? "equals";
         const L = d("input", {
           class: "rui-input rui-query-builder-value",
-          type: O$.has($?.type ?? "text") ? $.type : "text",
+          type: _$.has($?.type ?? "text") ? $.type : "text",
           "aria-label": `Rule ${A} value`,
           disabled: a ? "" : null,
           value: ut(S.value)
         });
         a || (T.onchange = (N) => {
-          const O = N.currentTarget ?? N.target, q = i.find((V) => V.name === O.value), j = b(q), _ = x.map((V, re) => re === k ? {
+          const O = N.currentTarget ?? N.target, q = i.find((V) => V.name === O.value), _ = b(q), j = x.map((V, re) => re === k ? {
             ...V,
             field: O.value,
-            op: j.some((pe) => pe.value === g(V.op)) ? V.op : j[0]?.value ?? "equals"
+            op: _.some((pe) => pe.value === g(V.op)) ? V.op : _[0]?.value ?? "equals"
           } : V);
-          m(O, _);
+          m(O, j);
         }, M.onchange = (N) => {
-          const O = N.currentTarget ?? N.target, q = x.map((j, _) => _ === k ? { ...j, op: O.value } : j);
+          const O = N.currentTarget ?? N.target, q = x.map((_, j) => j === k ? { ..._, op: O.value } : _);
           m(O, q);
         }, L.oninput = (N) => {
-          const O = N.currentTarget ?? N.target, q = x.map((j, _) => _ === k ? { ...j, value: O.value } : j);
+          const O = N.currentTarget ?? N.target, q = x.map((_, j) => j === k ? { ..._, value: O.value } : _);
           m(O, q);
         }), C.append(T, M, L);
         const D = d("button", {
@@ -21374,7 +21406,7 @@ const O$ = /* @__PURE__ */ new Set(["number", "date", "time", "datetime-local", 
           disabled: a ? "" : null
         }, ["×"]);
         a || (D.onclick = (N) => {
-          const O = N.currentTarget ?? N.target, q = x.filter((j, _) => _ !== k).map((j, _) => _ === 0 ? { ...j, combinator: void 0 } : j);
+          const O = N.currentTarget ?? N.target, q = x.filter((_, j) => j !== k).map((_, j) => j === 0 ? { ..._, combinator: void 0 } : _);
           m(O, q);
         }), C.append(D), v.append(C);
       });
@@ -21395,7 +21427,7 @@ const O$ = /* @__PURE__ */ new Set(["number", "date", "time", "datetime-local", 
     };
     return f(p, u.get()), p;
   }
-}, j$ = {
+}, U$ = {
   name: "DiffViewer",
   description: "Side-by-side or unified diff of two text blobs, aligned by a line-level LCS diff so an inserted line does not mark the rest of the file as changed. Set `leftTitle`/`rightTitle` to label the columns, `lineNumbers` to number them, and `contextLines` to collapse unchanged runs.",
   props: [
@@ -21409,7 +21441,7 @@ const O$ = /* @__PURE__ */ new Set(["number", "date", "time", "datetime-local", 
     { name: "maxHeight", type: "number", optional: !0, description: "Scroller height in px (default 320)" }
   ],
   render: (t, e) => {
-    const r = g(e.left), i = g(e.right), a = g(e.mode, "split"), o = z(e.lineNumbers), n = e.contextLines != null ? Math.max(0, Math.floor(R(e.contextLines, 3))) : -1, s = Math.max(40, Math.floor(R(e.maxHeight, 320))), l = $$(A$(r, i), n), c = d("div", { class: "rui-diff-viewer", "data-mode": a }), u = `max-height:${s}px;overflow:auto`, h = (x) => o ? d("span", { class: "rui-diff-line-num", "aria-hidden": "true" }, [x != null ? String(x) : ""]) : null, p = (x) => `⋯ ${x ?? 0} ⋯`;
+    const r = g(e.left), i = g(e.right), a = g(e.mode, "split"), o = z(e.lineNumbers), n = e.contextLines != null ? Math.max(0, Math.floor(R(e.contextLines, 3))) : -1, s = Math.max(40, Math.floor(R(e.maxHeight, 320))), l = z$(I$(r, i), n), c = d("div", { class: "rui-diff-viewer", "data-mode": a }), u = `max-height:${s}px;overflow:auto`, h = (x) => o ? d("span", { class: "rui-diff-line-num", "aria-hidden": "true" }, [x != null ? String(x) : ""]) : null, p = (x) => `⋯ ${x ?? 0} ⋯`;
     if (a === "unified") {
       const x = d("pre", { class: "rui-diff-viewer-unified", style: u });
       for (const y of l) {
@@ -21448,7 +21480,7 @@ const O$ = /* @__PURE__ */ new Set(["number", "date", "time", "datetime-local", 
     }
     return c.append(b), c;
   }
-}, Ip = 16, _$ = {
+}, Ip = 16, H$ = {
   name: "JsonTree",
   description: "Expandable JSON tree viewer for objects and arrays. Arrow keys walk the tree, Enter/Space toggles a branch. Cycles render as `[Circular]`, so a normalised store or a parent back-reference is safe to inspect.",
   props: [
@@ -21515,15 +21547,15 @@ const O$ = /* @__PURE__ */ new Set(["number", "date", "time", "datetime-local", 
         d("span", { class: "rui-json-tree-toggle-glyph" }, [D ? "▼" : "▶"])
       ]);
       O.append(q), M && O.append(d("span", { class: "rui-json-tree-key" }, [M])), O.append(d("span", { class: "rui-json-tree-summary" }, [b(k, L.length)]));
-      const j = d("div", {
+      const _ = d("div", {
         class: "rui-json-tree-children",
         role: "group",
         id: N,
         "data-open": D ? "true" : "false"
-      }), _ = [...T, k];
-      return D && v(j, L, A, $, _), O.onclick = (V) => {
-        y(V.currentTarget ?? V.target, L, A, $, _);
-      }, I.append(O, j), I;
+      }), j = [...T, k];
+      return D && v(_, L, A, $, j), O.onclick = (V) => {
+        y(V.currentTarget ?? V.target, L, A, $, j);
+      }, I.append(O, _), I;
     }
     const y = (k, C, A, $, T) => {
       const I = k.parentElement, M = I ? Array.from(I.children).find((D) => D.classList.contains("rui-json-tree-children")) : void 0;
@@ -21573,13 +21605,13 @@ const O$ = /* @__PURE__ */ new Set(["number", "date", "time", "datetime-local", 
     }, c.append(x(e.data, null, 0, "$", [])), c;
   }
 }, zp = /* @__PURE__ */ new Set();
-function q$(t, e, r) {
+function W$(t, e, r) {
   const i = `${t}|${e}|${r}`;
   zp.has(i) || (zp.add(i), console.warn(
     `[aktion] Gantt task "${t}" has unparseable dates (start: "${e}", end: "${r}") — expected ISO strings like 2026-03-01. The bar was skipped.`
   ));
 }
-const U$ = {
+const G$ = {
   name: "Gantt",
   description: "Simple Gantt chart. Pass `tasks` as `{id, label, start, end, progress?, tone?}` with ISO date strings; `progress` accepts either a 0-1 fraction or a 0-100 percentage, and `tone` colours the bar (`success`, `warning`, `danger`, …). Set `axis` for a date scale and `today` for a now marker.",
   props: [
@@ -21592,13 +21624,13 @@ const U$ = {
     { name: "onTaskClick", type: "callable", optional: !0, description: "Receives the clicked task's id" }
   ],
   render: (t, e, r) => {
-    const a = S$(e.tasks).map((y) => {
-      const w = ea(y.start), S = ea(y.end);
-      (w === null || S === null) && q$(y.id, y.start, y.end);
+    const a = $$(e.tasks).map((y) => {
+      const w = Ji(y.start), S = Ji(y.end);
+      (w === null || S === null) && W$(y.id, y.start, y.end);
       const k = w !== null && S !== null ? Math.min(w, S) : w ?? S, C = w !== null && S !== null ? Math.max(w, S) : S ?? w;
       return { task: y, start: k, end: C, valid: w !== null && S !== null };
     }), o = a.filter((y) => y.start !== null).map((y) => y.start), n = a.filter((y) => y.end !== null).map((y) => y.end);
-    let s = e.startDate ? ea(g(e.startDate)) ?? (o.length ? Math.min(...o) : Date.now()) : o.length ? Math.min(...o) : Date.now(), l = e.endDate ? ea(g(e.endDate)) ?? (n.length ? Math.max(...n) : s + 864e5) : n.length ? Math.max(...n) : s + 864e5;
+    let s = e.startDate ? Ji(g(e.startDate)) ?? (o.length ? Math.min(...o) : Date.now()) : o.length ? Math.min(...o) : Date.now(), l = e.endDate ? Ji(g(e.endDate)) ?? (n.length ? Math.max(...n) : s + 864e5) : n.length ? Math.max(...n) : s + 864e5;
     l < s && ([s, l] = [l, s]), l === s && (l = s + 864e5);
     const c = l - s, u = (y) => (y - s) / c * 100, h = d("div", { class: "rui-gantt" }), p = e.ticks != null ? Math.max(2, Math.min(12, Math.floor(R(e.ticks, 5)))) : 5, b = z(e.axis) || e.ticks != null, m = (y) => {
       try {
@@ -21606,7 +21638,7 @@ const U$ = {
       } catch {
         return new Date(y).toISOString().slice(0, 10);
       }
-    }, f = e.today === void 0 || e.today === !1 ? null : typeof e.today == "string" ? ea(e.today) : Date.now();
+    }, f = e.today === void 0 || e.today === !1 ? null : typeof e.today == "string" ? Ji(e.today) : Date.now();
     if (b) {
       const y = d("div", { class: "rui-gantt-axis", "aria-hidden": "true" });
       y.append(d("div", { class: "rui-gantt-label" }));
@@ -21664,7 +21696,7 @@ const U$ = {
     }
     return h.append(v), h;
   }
-}, H$ = 4, W$ = {
+}, V$ = 4, K$ = {
   name: "Truncate",
   description: 'Clamp long text (or a `child` node) with an expand control. The toggle hides itself when the content already fits, and `expanded` + `onToggle` make the state controllable for "expand all" flows.',
   props: [
@@ -21679,7 +21711,7 @@ const U$ = {
   render: (t, e, r) => {
     const i = Math.max(1, Math.floor(R(e.maxLines, 3))), a = e.expanded !== void 0, o = a ? z(e.expanded) : !1, n = r.useInstanceState("expanded", o);
     a && n.get() !== o && n.set(o);
-    const s = r.useInstanceState("overflow", null), l = r.useInstanceState("id", En("rui-truncate")), c = t.argMeta?.[H$]?.stateRef, u = a ? o : n.get(), h = g(e.expandLabel, "Show more"), p = g(e.collapseLabel, "Show less"), b = l.get(), m = d("div", {
+    const s = r.useInstanceState("overflow", null), l = r.useInstanceState("id", En("rui-truncate")), c = t.argMeta?.[V$]?.stateRef, u = a ? o : n.get(), h = g(e.expandLabel, "Show more"), p = g(e.collapseLabel, "Show less"), b = l.get(), m = d("div", {
       class: "rui-truncate",
       "data-expanded": u ? "true" : "false",
       "data-overflow": s.get() === null ? null : String(s.get()),
@@ -21722,7 +21754,7 @@ const U$ = {
       r.registerDisposer(() => w.disconnect(), "rui-truncate-resize");
     }), m;
   }
-}, G$ = /* @__PURE__ */ new Set([
+}, Y$ = /* @__PURE__ */ new Set([
   "text",
   "number",
   "email",
@@ -21736,7 +21768,7 @@ const U$ = {
   "datetime-local",
   "month",
   "week"
-]), V$ = {
+]), X$ = {
   name: "InlineEdit",
   description: 'Click-to-edit inline field. Enter or blur commits (only when the value actually changed), Escape discards. Pass `type: "textarea"` for multi-line, `placeholder` so an empty field still has an affordance, and `error`/`required` to surface a rejected save.',
   props: [
@@ -21782,7 +21814,7 @@ const U$ = {
       const A = g(e.type, "text").trim().toLowerCase();
       w = d("input", {
         ...y,
-        type: G$.has(A) ? A : "text",
+        type: Y$.has(A) ? A : "text",
         // `valueAttr` keeps "unset" distinct from "empty" for the morph
         // reconciler; while editing the draft is the asserted value.
         value: p ? a.get() : ut(e.value)
@@ -21823,11 +21855,11 @@ const U$ = {
       r.invoke(e.onFocus, $.value);
     }), f.append(x, w), He(f, e);
   }
-}, ra = ".rui-notification-bell-panel", mo = ".rui-notification-bell-trigger", Mp = (t) => ({
+}, ta = ".rui-notification-bell-panel", mo = ".rui-notification-bell-trigger", Mp = (t) => ({
   side: "bottom",
   align: t === "left" ? "start" : "end",
   layer: "dropdown"
-}), K$ = {
+}), Z$ = {
   name: "NotificationBell",
   description: "Bell icon with unread count badge and dropdown notification list. Pass `items` as `{title, message?, time?, href?, unread?}` objects; `onItemClick` receives the clicked item and `onMarkAllRead` renders a footer control. Arrow keys walk the list, Escape closes.",
   props: [
@@ -21931,7 +21963,7 @@ const U$ = {
       }
       if (w.key !== "Escape") return;
       const A = S.closest(".rui-notification-bell");
-      A && (w.preventDefault(), c.set(!1), A.setAttribute("data-open", "false"), A.querySelector(mo)?.setAttribute("aria-expanded", "false"), at(A.querySelector(ra)), vt(A), A.querySelector(mo)?.focus?.());
+      A && (w.preventDefault(), c.set(!1), A.setAttribute("data-open", "false"), A.querySelector(mo)?.setAttribute("aria-expanded", "false"), at(A.querySelector(ta)), vt(A), A.querySelector(mo)?.focus?.());
     }, p.append(f);
     const x = (y, w) => {
       const S = y.closest(".rui-notification-bell");
@@ -21939,7 +21971,7 @@ const U$ = {
         if (c.set(w), S.setAttribute("data-open", w ? "true" : "false"), y.setAttribute("aria-expanded", w ? "true" : "false"), xr(
           S,
           w,
-          ra,
+          ta,
           mo,
           Mp(s)
         ), !w) {
@@ -21950,7 +21982,7 @@ const U$ = {
           liveRoot: S,
           key: "notification-bell",
           onDismiss: () => {
-            c.set(!1), S.setAttribute("data-open", "false"), y.setAttribute("aria-expanded", "false"), at(S.querySelector(ra));
+            c.set(!1), S.setAttribute("data-open", "false"), y.setAttribute("aria-expanded", "false"), at(S.querySelector(ta));
           }
         });
       }
@@ -21963,19 +21995,19 @@ const U$ = {
       w.preventDefault();
       const S = w.currentTarget ?? w.target;
       c.get() || x(S, !0);
-      const k = S.closest(".rui-notification-bell")?.querySelector(ra);
+      const k = S.closest(".rui-notification-bell")?.querySelector(ta);
       k && v(k, w.key === "ArrowDown" ? 0 : -1);
     }, u && be(() => {
       p.isConnected && p.getAttribute("data-open") === "true" && xr(
         p,
         !0,
-        ra,
+        ta,
         mo,
         Mp(s)
       );
     }), p;
   }
-}, Y$ = 8;
+}, Q$ = 8;
 function bt(t) {
   if (!t) return "/";
   let e = String(t);
@@ -22114,7 +22146,7 @@ class Mc {
    * active link). The state store is NOT touched here.
    */
   setActiveMatch(e, r) {
-    this.currentPattern = e, X$(this.currentParams, r) || (this.currentParams = r);
+    this.currentPattern = e, J$(this.currentParams, r) || (this.currentParams = r);
   }
   /**
    * Navigate to the given path. When enabled, this updates the URL hash and
@@ -22165,7 +22197,7 @@ class Mc {
     if (i === this.currentPath) return;
     const a = this.runGuard(i);
     if (a !== !1) {
-      if (typeof a == "string" && r < Y$) {
+      if (typeof a == "string" && r < Q$) {
         this.navigateInternal(bt(a), r + 1);
         return;
       }
@@ -22206,14 +22238,14 @@ function Ep(t) {
   let e = String(t).trim();
   return e === "" || e === "/" ? "" : (e.startsWith("/") || (e = "/" + e), e.endsWith("/") && (e = e.slice(0, -1)), e);
 }
-function X$(t, e) {
+function J$(t, e) {
   const r = Object.keys(t), i = Object.keys(e);
   if (r.length !== i.length) return !1;
   for (const a of r)
     if (t[a] !== e[a]) return !1;
   return !0;
 }
-const Z$ = [
+const eT = [
   // Pointer / click
   "onclick",
   "ondblclick",
@@ -22290,29 +22322,29 @@ function Np(t, e) {
   if (t.nodeType !== Node.ELEMENT_NODE)
     return t;
   const r = t, i = e;
-  return r.tagName !== i.tagName ? Lp(r, i) : (Q$(r, i), r);
+  return r.tagName !== i.tagName ? Lp(r, i) : (tT(r, i), r);
 }
 function Lp(t, e) {
   return t.parentNode?.replaceChild(e, t), e;
 }
-function Q$(t, e) {
+function tT(t, e) {
   if (t.hasAttribute("data-rui-preserve") || e.hasAttribute("data-rui-preserve")) {
-    J$(t, e), Rp(t, e);
+    rT(t, e), Rp(t, e);
     return;
   }
-  eT(t, e), Rp(t, e);
+  iT(t, e), Rp(t, e);
   const r = t instanceof HTMLSelectElement && e instanceof HTMLSelectElement ? e.value : null;
-  Tg(t, Array.from(e.childNodes)), tT(t, e, r);
+  Tg(t, Array.from(e.childNodes)), aT(t, e, r);
 }
 const fl = /* @__PURE__ */ new Set(["popover", "style", "data-floating-side"]), Ag = (t) => t.hasAttribute("data-floating-side");
-function J$(t, e) {
+function rT(t, e) {
   const r = Ag(t), i = e.attributes;
   for (let a = 0; a < i.length; a += 1) {
     const o = i[a];
     r && fl.has(o.name) || t.getAttribute(o.name) !== o.value && t.setAttribute(o.name, o.value);
   }
 }
-function eT(t, e) {
+function iT(t, e) {
   const r = Ag(t), i = t.attributes;
   for (let o = i.length - 1; o >= 0; o -= 1) {
     const n = i[o];
@@ -22325,18 +22357,18 @@ function eT(t, e) {
   }
 }
 function Rp(t, e) {
-  for (const r of Z$) {
+  for (const r of eT) {
     const i = e[r], a = t[r];
     i !== a && (t[r] = i ?? null);
   }
 }
-function tT(t, e, r) {
+function aT(t, e, r) {
   if (t instanceof HTMLInputElement && e instanceof HTMLInputElement) {
-    rT(t, e);
+    oT(t, e);
     return;
   }
   if (t instanceof HTMLTextAreaElement && e instanceof HTMLTextAreaElement) {
-    iT(t, e);
+    nT(t, e);
     return;
   }
   if (t instanceof HTMLSelectElement && e instanceof HTMLSelectElement) {
@@ -22345,7 +22377,7 @@ function tT(t, e, r) {
     return;
   }
 }
-function rT(t, e) {
+function oT(t, e) {
   if (t.type === "file") return;
   if (t.type === "checkbox" || t.type === "radio") {
     const i = e.getAttribute("data-checked");
@@ -22363,12 +22395,12 @@ function rT(t, e) {
   const r = e.getAttribute("value") ?? "";
   t.value !== r && $g(t, r);
 }
-function iT(t, e) {
+function nT(t, e) {
   const r = e.value ?? e.textContent ?? "";
   t.value !== r && $g(t, r);
 }
 function $g(t, e) {
-  if (!aT(t)) {
+  if (!sT(t)) {
     t.value = e;
     return;
   }
@@ -22385,7 +22417,7 @@ function $g(t, e) {
   } catch {
   }
 }
-function aT(t) {
+function sT(t) {
   const e = t.getRootNode();
   return e instanceof ShadowRoot || e instanceof Document ? e.activeElement === t : t.ownerDocument?.activeElement === t;
 }
@@ -22426,16 +22458,16 @@ function cs(t) {
   const r = e.getAttribute("data-rui-key");
   return r ? `@${r}` : null;
 }
-const Pi = (t, e) => e == null ? document.createDocumentFragment() : t.renderNode(e), Ec = (t, e) => d("button", {
+const Ri = (t, e) => e == null ? document.createDocumentFragment() : t.renderNode(e), Ec = (t, e) => d("button", {
   type: "button",
   class: `rui-button ${e}`,
   "data-variant": "secondary",
   "data-size": "sm"
-}, [t]), oT = (t) => {
+}, [t]), lT = (t) => {
   if (!t || typeof t != "object" || Array.isArray(t)) return !1;
   const e = t;
   return "state" in e || "loading" in e || "error" in e || "data" in e;
-}, Pp = (t) => t == null || Array.isArray(t) && t.length === 0, nT = {
+}, Pp = (t) => t == null || Array.isArray(t) && t.length === 0, cT = {
   name: "Async",
   description: "Render `loading`, `error`, `empty`, or `data` slot based on an `$http({...})` resource's state. A value that is not a resource (a plain array or object) is treated as already-resolved data. Pass `retry` to add a Retry button to the error branch. State transitions are announced to screen readers.",
   props: [
@@ -22462,7 +22494,7 @@ const Pi = (t, e) => e == null ? document.createDocumentFragment() : t.renderNod
         class: "rui-visually-hidden rui-async-status",
         role: "status",
         "aria-live": "polite"
-      }, [sT(u)])), p.append(Pi(r, c)), p;
+      }, [uT(u)])), p.append(Ri(r, c)), p;
     }, n = () => {
       const c = o(a.error ?? null, "error", !1);
       if (e.retry != null) {
@@ -22473,7 +22505,7 @@ const Pi = (t, e) => e == null ? document.createDocumentFragment() : t.renderNod
       }
       return c;
     };
-    if (!oT(i))
+    if (!lT(i))
       return Pp(i) ? o(a.empty ?? a.data ?? null, "empty", !1) : o(a.data ?? a.empty ?? null, "loaded", !1);
     const s = i.state;
     if (s === "loading" || i.loading)
@@ -22484,10 +22516,10 @@ const Pi = (t, e) => e == null ? document.createDocumentFragment() : t.renderNod
     return Pp(l) ? o(a.empty ?? a.data ?? null, "empty", !1) : o(a.data ?? null, "loaded", !1);
   }
 };
-function sT(t) {
+function uT(t) {
   return t === "loading" ? "Loading…" : t === "error" ? "Could not load the data" : t === "empty" ? "No results" : "Loaded";
 }
-const lT = {
+const dT = {
   name: "Show",
   description: "Conditional renderer. Sugar over `if expr { children } else { fallback }`.",
   props: [
@@ -22495,9 +22527,9 @@ const lT = {
     { name: "children", aliases: ["child"], type: "Node[]", optional: !0 },
     { name: "fallback", type: "Node", optional: !0 }
   ],
-  render: (t, e, r) => e.when ? Pi(r, e.children ?? null) : Pi(r, e.fallback ?? null)
+  render: (t, e, r) => e.when ? Ri(r, e.children ?? null) : Ri(r, e.fallback ?? null)
 };
-function cT(t) {
+function pT(t) {
   const e = t.querySelector(".rui-portal-layer");
   if (e) return e;
   const r = d("div", {
@@ -22508,7 +22540,7 @@ function cT(t) {
   });
   return t.appendChild(r), r;
 }
-function uT(t, e) {
+function hT(t, e) {
   const r = t.getRootNode(), i = r instanceof ShadowRoot || r instanceof Document ? r : null;
   if (e)
     try {
@@ -22518,9 +22550,9 @@ function uT(t, e) {
       if (o) return o;
     } catch {
     }
-  return i ? cT(i) : null;
+  return i ? pT(i) : null;
 }
-const dT = {
+const mT = {
   name: "Portal",
   description: "Render children outside the parent subtree — into a layer at the top of the app root by default, or into `target` (a CSS selector, resolved inside the app first, then the document).",
   props: [
@@ -22546,12 +22578,12 @@ const dT = {
       l.append(r.renderNode(c));
     return Cg(s, l), be(() => {
       if (!a.isConnected) return;
-      const c = uT(a, i);
+      const c = hT(a, i);
       c && s.parentNode !== c && c.append(s);
     }), a;
   }
 };
-function pT(t, e) {
+function fT(t, e) {
   const r = typeof window < "u" ? window.history : void 0;
   if (!r || typeof r.replaceState != "function") {
     t.navigate(e);
@@ -22572,7 +22604,7 @@ function pT(t, e) {
   }
   t.navigate(e);
 }
-const hT = {
+const gT = {
   name: "Redirect",
   description: "Navigate to `path` and unmount the rest of the subtree. Replaces the current history entry by default (guard semantics — Back must not return to the route that redirected); pass `replace: false` to push one instead.",
   props: [
@@ -22583,12 +22615,12 @@ const hT = {
     const i = g(e.path), a = e.replace === void 0 ? !0 : e.replace !== !1 && e.replace !== "false";
     if (i)
       try {
-        a ? pT(r.router, i) : r.router.navigate(i);
+        a ? fT(r.router, i) : r.router.navigate(i);
       } catch {
       }
     return d("span", { class: "rui-redirect", "data-path": i, hidden: "true" });
   }
-}, mT = {
+}, bT = {
   name: "Lazy",
   description: "Defer rendering until an async `loader` resolves: show `fallback` while pending, then render the resolved value (or `children`). If the loader rejects, the `error` slot renders and `onError(err)` fires; `retry` adds a Retry button that runs the loader again. A synchronous loader value renders immediately.",
   props: [
@@ -22601,10 +22633,10 @@ const hT = {
   ],
   render: (t, e, r) => {
     const i = e.loader, a = r.useInstanceState("rui-lazy", { status: "init" }), o = d("span", { class: "rui-lazy", style: "display: contents;" }), n = (b, m) => {
-      b.replaceChildren(Pi(r, m));
+      b.replaceChildren(Ri(r, m));
     }, s = () => e.fallback ?? null, l = (b) => b ?? e.children ?? null, c = (b) => {
       const m = document.createDocumentFragment();
-      if (m.append(Pi(r, e.error ?? s())), e.retry != null) {
+      if (m.append(Ri(r, e.error ?? s())), e.retry != null) {
         const f = Ec("Retry", "rui-lazy-retry");
         f.onclick = (v) => {
           const x = (v.currentTarget ?? v.target)?.closest(".rui-lazy") ?? b;
@@ -22641,7 +22673,7 @@ const hT = {
     }, p = a.get();
     return p.status === "resolved" ? (n(o, l(p.value)), o) : p.status === "pending" ? (n(o, s()), o) : p.status === "error" ? (c(o), o) : (h(o), o);
   }
-}, fT = {
+}, vT = {
   name: "ErrorBoundary",
   description: "Render a fallback subtree when rendering children fails. Pass a `fallback` node (or omit it for a built-in friendly error card, which shows a Retry button when `onRetry` is set); `onError(err)` fires with the error. Set `showDetails=true` to reveal the message inline (great in dev).",
   props: [
@@ -22669,7 +22701,7 @@ const hT = {
     }
     const o = a instanceof Error ? a.message : String(a), n = d("div", { class: "rui-error-boundary rui-error-boundary--fallback" });
     if (n.setAttribute("role", "alert"), e.fallback != null)
-      n.append(Pi(r, e.fallback));
+      n.append(Ri(r, e.fallback));
     else {
       const s = d("div", { class: "rui-error-card" }), l = Y("triangle-exclamation", { className: "rui-error-card-icon" });
       if (l && s.append(l), s.append(d("div", { class: "rui-error-card-title" }, ["Something went wrong"])), (e.showDetails === !0 || e.showDetails === "true") && s.append(d("div", { class: "rui-error-card-message" }, [o])), e.onRetry != null) {
@@ -22682,7 +22714,7 @@ const hT = {
     }
     return n.setAttribute("data-error", o), n;
   }
-}, gT = /* @__PURE__ */ new Set([
+}, yT = /* @__PURE__ */ new Set([
   "div",
   "span",
   "p",
@@ -22764,7 +22796,7 @@ const hT = {
   "progress",
   "meter",
   "output"
-]), bT = /^[a-zA-Z][a-zA-Z0-9_:-]*$/, vT = /* @__PURE__ */ new Set(["href", "ping", "action", "formaction"]), yT = /* @__PURE__ */ new Set(["src", "poster"]), Dp = /* @__PURE__ */ new Set([
+]), wT = /^[a-zA-Z][a-zA-Z0-9_:-]*$/, xT = /* @__PURE__ */ new Set(["href", "ping", "action", "formaction"]), kT = /* @__PURE__ */ new Set(["src", "poster"]), Dp = /* @__PURE__ */ new Set([
   "srcset",
   "imagesrcset",
   "srcdoc",
@@ -22780,38 +22812,38 @@ const hT = {
   // *different*, host-defined element than the tag we allow-listed.
   "is"
 ]);
-function wT(t) {
+function ST(t) {
   const e = g(t).trim();
   return !e || /[<>]/.test(e) || /\bexpression\s*\(|\bjavascript\s*:|\bbehavior\s*:|@import\b/i.test(e) ? "" : e;
 }
 const Op = /* @__PURE__ */ new Set();
-function xT(t) {
+function CT(t) {
   const e = g(t).trim().toLowerCase();
-  return e ? gT.has(e) ? e : (Op.has(e) || (Op.add(e), console.warn(
+  return e ? yT.has(e) ? e : (Op.has(e) || (Op.add(e), console.warn(
     `[aktion] HTMLTag: tag "${e}" is not in the allow-list — rendered as <div>. For vector graphics use \`Svg\` or \`Icon\`.`
   )), "div") : "div";
 }
-function kT(t) {
+function AT(t) {
   if (!t || typeof t != "object" || Array.isArray(t)) return {};
   const e = {};
   for (const [i, a] of Object.entries(t)) {
     const o = i.trim();
-    if (!o || !bT.test(o)) continue;
+    if (!o || !wT.test(o)) continue;
     const n = o.toLowerCase();
     if (n.startsWith("on") || a == null || a === !1) continue;
     const s = n.includes(":") ? n.slice(n.lastIndexOf(":") + 1) : n;
     if (s === "style") {
-      const l = wT(a);
+      const l = ST(a);
       l && (e.style = l);
       continue;
     }
-    if (vT.has(s)) {
+    if (xT.has(s)) {
       const l = Fe(a, "");
       l && (e[o] = l);
       continue;
     }
-    if (yT.has(s)) {
-      const l = je(a);
+    if (kT.has(s)) {
+      const l = _e(a);
       l && (e[o] = l);
       continue;
     }
@@ -22824,7 +22856,7 @@ function kT(t) {
   }
   return e;
 }
-const ST = {
+const $T = {
   name: "HTMLTag",
   description: "Escape-hatch primitive that renders an allow-listed HTML tag with the given attributes and children. Use ONLY when the standard component catalogue cannot express the markup (custom semantic elements, third-party widget mounts). SVG is NOT supported here — use `Svg` for vector markup and `Icon` for glyphs. Tag names outside the allow-list collapse to `div` (with a console warning). Attribute names matching `on*` (event handlers) are dropped, `href`/`src` are sanitised, `srcset`/`srcdoc` are dropped, and `style` is filtered for `expression()` / `javascript:` / `@import`. Pass children as an array of components — strings render as text nodes.",
   props: [
@@ -22833,7 +22865,7 @@ const ST = {
     { name: "children", aliases: ["child"], type: "Node[]", optional: !0, description: "Child components or text nodes to render inside the tag." }
   ],
   render: (t, e, r) => {
-    const i = xT(e.tag), a = kT(e.attributes), o = document.createElement(i);
+    const i = CT(e.tag), a = AT(e.attributes), o = document.createElement(i);
     for (const [n, s] of Object.entries(a)) o.setAttribute(n, s);
     for (const n of P(e.children))
       if (n != null) {
@@ -22850,7 +22882,7 @@ const ST = {
     return o;
   }
 }, Ig = /<\/style|<script|expression\s*\(|javascript\s*:|behavior\s*:|@import\b/i, Bp = 64 * 1024;
-function CT(t) {
+function TT(t) {
   const e = g(t);
   return e ? e.length > Bp ? (console.warn(
     `[aktion] Styles: payload rejected — ${e.length} characters exceeds the ${Bp}-character cap.`
@@ -22858,18 +22890,18 @@ function CT(t) {
     "[aktion] Styles: payload rejected — it contains one of `</style`, `<script`, `expression(`, `javascript:`, `behavior:` or `@import`."
   ), "") : e : "";
 }
-const AT = /^[.#]?[A-Za-z_][\w-]*(?:\s*[>+~]?\s*[.#]?[A-Za-z_][\w-]*)*$/, $T = 128;
-function TT(t) {
+const IT = /^[.#]?[A-Za-z_][\w-]*(?:\s*[>+~]?\s*[.#]?[A-Za-z_][\w-]*)*$/, zT = 128;
+function MT(t) {
   const e = g(t).trim();
-  return e ? e.length > $T || Ig.test(e) || !AT.test(e) ? null : e : "";
+  return e ? e.length > zT || Ig.test(e) || !IT.test(e) ? null : e : "";
 }
-function IT(t) {
+function ET(t) {
   return t.replace(/\{\s*([a-zA-Z]+)\.([a-zA-Z0-9-]+)\s*\}/g, (e, r, i) => {
     const a = i.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase(), o = r === "colors" || r === "color" ? "color" : r === "spacing" ? "spacing" : r === "radius" ? "radius" : r === "shadows" || r === "shadow" ? "shadow" : r === "gradients" || r === "gradient" ? "gradient" : r === "font" || r === "fonts" ? "font" : null;
     return o ? `var(--rui-${o}-${a})` : e;
   });
 }
-const zT = /* @__PURE__ */ new Set([
+const NT = /* @__PURE__ */ new Set([
   "@media",
   "@supports",
   "@container",
@@ -22877,7 +22909,7 @@ const zT = /* @__PURE__ */ new Set([
   "@scope",
   "@document"
 ]);
-function MT(t) {
+function LT(t) {
   const e = [];
   let r = 0, i = "", a = 0;
   for (let o = 0; o < t.length; o += 1) {
@@ -22906,7 +22938,7 @@ function MT(t) {
   }
   return e.push(t.slice(a)), e;
 }
-function ET(t, e) {
+function RT(t, e) {
   const r = t.trim();
   if (!r || r.startsWith(":root") || r.startsWith(":host")) return r;
   if (r.startsWith("&")) return `${e}${r.slice(1)}`;
@@ -22932,12 +22964,12 @@ function zg(t, e) {
     for (; l < a && s > 0; l += 1)
       t[l] === "{" ? s += 1 : t[l] === "}" && (s -= 1);
     const c = s === 0 ? t.slice(o + 1, l - 1) : t.slice(o + 1, a), u = /^@[-a-zA-Z]+/.exec(n)?.[0]?.toLowerCase();
-    if (u && zT.has(u))
+    if (u && NT.has(u))
       r.push(`${n} { ${zg(c, e)} }`);
     else if (u)
       r.push(`${n} { ${c} }`);
     else {
-      const h = MT(n).map((p) => ET(p, e)).join(", ");
+      const h = LT(n).map((p) => RT(p, e)).join(", ");
       r.push(`${h} { ${c} }`);
     }
     i = l;
@@ -22945,7 +22977,7 @@ function zg(t, e) {
   return r.join(`
 `);
 }
-const NT = {
+const PT = {
   name: "Styles",
   description: "Escape-hatch primitive that injects a `<style>` block containing the given CSS rules. Use ONLY when a layout cannot be expressed via component props or the `$theme(...)` token map. The CSS is rendered verbatim into the document so authors can target their own `HTMLTag` markup or scope rules to a wrapper class. Payloads containing `</style>`, `<script>`, `expression(`, `javascript:`, `behavior:`, or `@import` are dropped for safety — as is a `scope` that is not a plain selector. Every rejection is logged with `console.warn`, so an empty `<style>` is always explained.",
   props: [
@@ -22954,9 +22986,9 @@ const NT = {
     { name: "tokens", type: "boolean", optional: !0, description: "Interpolate `{group.key}` token refs to CSS vars (default true)" }
   ],
   render: (t, e) => {
-    let r = CT(e.css);
-    r && (e.tokens === void 0 || e.tokens === !0 || e.tokens === "true") && (r = IT(r));
-    const i = TT(e.scope);
+    let r = TT(e.css);
+    r && (e.tokens === void 0 || e.tokens === !0 || e.tokens === "true") && (r = ET(r));
+    const i = MT(e.scope);
     i === null ? (console.warn(
       `[aktion] Styles: scope="${g(e.scope)}" is not a plain selector (class/id/tag with combinators) — the stylesheet was dropped.`
     ), r = "") : r && i && (r = zg(r, i));
@@ -22972,7 +23004,7 @@ function Fp(t) {
   const e = Object.getPrototypeOf(t);
   return e === Object.prototype || e === null;
 }
-const LT = 4;
+const DT = 4;
 function gl(t, e, r) {
   if (Object.is(t, e)) return !0;
   if (r <= 0) return !1;
@@ -22991,16 +23023,16 @@ function gl(t, e, r) {
   }
   return !1;
 }
-function jp(t, e) {
-  return gl(t, e, LT);
+function _p(t, e) {
+  return gl(t, e, DT);
 }
 function on(t) {
   typeof queueMicrotask == "function" ? queueMicrotask(t) : Promise.resolve().then(t);
 }
-let RT = 0;
+let OT = 0;
 function Mg(t, e) {
   const r = t == null ? "" : String(t);
-  return r && /^[A-Za-z0-9_.:-]+$/.test(r) ? r : `${e}-${RT += 1}`;
+  return r && /^[A-Za-z0-9_.:-]+$/.test(r) ? r : `${e}-${OT += 1}`;
 }
 function Eg(t, e, r) {
   const i = t.querySelector(e);
@@ -23018,7 +23050,7 @@ function Eg(t, e, r) {
 function Ng(t, e) {
   return t.isConnected ? t : typeof document > "u" ? null : Eg(document, `[data-rui-key="${e}"]`, 4);
 }
-const PT = /* @__PURE__ */ new Set([
+const BT = /* @__PURE__ */ new Set([
   "div",
   "span",
   "section",
@@ -23030,11 +23062,11 @@ const PT = /* @__PURE__ */ new Set([
   "pre",
   "form"
 ]);
-function DT(t) {
+function FT(t) {
   const e = g(t).trim().toLowerCase();
-  return PT.has(e) ? e : "div";
+  return BT.has(e) ? e : "div";
 }
-function _p(t, e, r, i) {
+function jp(t, e, r, i) {
   console.error(`[aktion] Mount ${r} threw`, i), e && t.onError != null && e(t.onError, i, r);
 }
 function qp(t) {
@@ -23047,7 +23079,7 @@ function qp(t) {
     }
   });
 }
-const OT = {
+const _T = {
   name: "Mount",
   description: "First-class host for an imperative / third-party widget that owns its own DOM (chart, map, editor, payment element, captcha, video SDK). Aktion creates the host element; `setup(node, props)` runs once after it attaches and returns an instance handle, `update(instance, props)` runs when `props` change (or when `deps` change, if you pass them), and `cleanup(instance)` runs on unmount. `onError(err, stage)` fires if `setup`/`update` throws, so a failed map / payment element / captcha can show a fallback. The host is preserved across re-renders so the widget is never rebuilt. Apply layout with `sx`.",
   props: [
@@ -23060,7 +23092,7 @@ const OT = {
     { name: "onError", type: "callable", optional: !0, description: '`(err, stage) => void` — fired when `setup` or `update` throws (stage is "setup" / "update").' }
   ],
   render: (t, e, r) => {
-    const i = DT(e.tag), a = Lo(e.props), o = e.deps === void 0 ? null : P(e.deps), s = r.useInstanceState("rui-mount", {
+    const i = FT(e.tag), a = Lo(e.props), o = e.deps === void 0 ? null : P(e.deps), s = r.useInstanceState("rui-mount", {
       started: !1,
       instance: void 0,
       props: a,
@@ -23094,34 +23126,34 @@ const OT = {
           try {
             s.instance = typeof e.setup == "function" ? e.setup(h, s.props) : void 0;
           } catch (p) {
-            _p(s, r.invoke, "setup", p);
+            jp(s, r.invoke, "setup", p);
           }
         }
       }), l;
     s.prevProps = s.props, s.props = a;
     const c = s.deps;
     s.deps = o;
-    const u = o !== null ? !jp(c, o) : !jp(s.prevProps, a);
+    const u = o !== null ? !_p(c, o) : !_p(s.prevProps, a);
     if (s.instance !== void 0 && typeof e.update == "function" && u) {
       const h = e.update, p = s.instance;
       on(() => {
         try {
           h(p, a);
         } catch (b) {
-          _p(s, r.invoke, "update", b);
+          jp(s, r.invoke, "update", b);
         }
       });
     }
     return l;
   }
-}, BT = /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/, Up = /* @__PURE__ */ new Set();
-function FT(t) {
+}, jT = /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/, Up = /* @__PURE__ */ new Set();
+function qT(t) {
   const e = g(t).trim().toLowerCase();
-  return BT.test(e) ? e : (e && !Up.has(e) && (Up.add(e), console.warn(
+  return jT.test(e) ? e : (e && !Up.has(e) && (Up.add(e), console.warn(
     `[aktion] WebComponent("${e}") is not a valid custom-element name (it must contain a hyphen) — rendering a <div> instead.`
   )), "div");
 }
-const jT = /* @__PURE__ */ new Set(["href", "src", "action", "formaction", "poster", "ping"]);
+const UT = /* @__PURE__ */ new Set(["href", "src", "action", "formaction", "poster", "ping"]);
 function Hp(t, e) {
   for (const [r, i] of Object.entries(e)) {
     if (/^on/i.test(r)) continue;
@@ -23131,8 +23163,8 @@ function Hp(t, e) {
         t.removeAttribute(r);
         continue;
       }
-      if (jT.has(a)) {
-        const o = a === "src" || a === "poster" ? je(i) : Fe(i, "");
+      if (UT.has(a)) {
+        const o = a === "src" || a === "poster" ? _e(i) : Fe(i, "");
         o ? t.setAttribute(r, o) : t.removeAttribute(r);
         continue;
       }
@@ -23140,7 +23172,7 @@ function Hp(t, e) {
     }
   }
 }
-const _T = /* @__PURE__ */ new Set([
+const HT = /* @__PURE__ */ new Set([
   "innerhtml",
   "outerhtml",
   "insertadjacenthtml",
@@ -23162,14 +23194,14 @@ function Wp(t, e) {
   const r = t;
   for (const [i, a] of Object.entries(e)) {
     const o = i.toLowerCase();
-    if (!o.startsWith("on") && !_T.has(o))
+    if (!o.startsWith("on") && !HT.has(o))
       try {
         r[i] = a;
       } catch {
       }
   }
 }
-const qT = {
+const WT = {
   name: "WebComponent",
   description: "Render and hydrate any native custom element / web component with reactive `attributes`, JS `properties`, and `on` event hooks. Use to drop a third-party web component (`<stripe-pricing-table>`, `<model-viewer>`, a design-system element) into an Aktion app. The element is preserved across re-renders; attribute changes flow through reactively and listeners stay current. Invalid (hyphen-less) tag names fall back to a `div`.",
   props: [
@@ -23180,7 +23212,7 @@ const qT = {
     { name: "children", aliases: ["child"], type: "Node[]", optional: !0, description: "Light-DOM child nodes / text to slot inside the element." }
   ],
   render: (t, e, r) => {
-    const i = FT(e.tag), a = Lo(e.on), o = Lo(e.attributes), n = Lo(e.properties), l = r.useInstanceState("rui-web-component", {
+    const i = qT(e.tag), a = Lo(e.on), o = Lo(e.attributes), n = Lo(e.properties), l = r.useInstanceState("rui-web-component", {
       bound: /* @__PURE__ */ new Set(),
       handlers: a,
       node: null,
@@ -23211,7 +23243,7 @@ const qT = {
       }
     }), c;
   }
-}, UT = {
+}, GT = {
   name: "GradientText",
   description: 'Inline text painted with a brand gradient. Use inside a Display/Heading title to emphasise a phrase: `Display(["Build in ", GradientText("record time")])`. `gradient` selects a named theme gradient (brand|accent|warm|cool|success|danger).',
   props: [
@@ -23227,7 +23259,7 @@ function Nn(t, e, r) {
   for (const i of P(e))
     i != null && (typeof i == "string" || typeof i == "number" ? t.append(document.createTextNode(String(i))) : t.append(r.renderNode(i)));
 }
-const HT = {
+const VT = {
   name: "Display",
   description: "Oversized display headline with built-in responsive `clamp()` sizing. The positional argument may be a plain string OR an array mixing strings and `GradientText(...)` runs. `size`: hero|xl|lg. `balance` wraps for even line lengths.",
   props: [
@@ -23247,7 +23279,7 @@ const HT = {
     });
     return Nn(i, e.content, r), i;
   }
-}, WT = {
+}, KT = {
   name: "Heading",
   description: "Section/subsection heading with token-driven sizing. `level` sets the semantic tag (1–6); `size`: section|lg|md|sm. Accepts string or mixed string/GradientText array like Display.",
   props: [
@@ -23264,12 +23296,12 @@ const HT = {
     });
     return Nn(a, e.content, r), a;
   }
-}, GT = {
+}, YT = {
   name: "Eyebrow",
   description: "Small uppercase, letter-spaced, primary-toned label above a heading.",
   props: [{ name: "text", type: "string", positional: !0, required: !0, aliases: ["label", "children"] }],
   render: (t, e) => d("span", { class: "rui-eyebrow" }, [g(e.text)])
-}, VT = {
+}, XT = {
   name: "Section",
   description: "Full-bleed page band → centered max-width container → optional tinted background → optional eyebrow/title/subtitle header. The single most useful primitive for marketing, docs, and settings pages. Children render below the header.",
   props: [
@@ -23313,7 +23345,7 @@ const HT = {
     }
     return u.length > 0 && (a.append(...u), o.setAttribute("style", "position:relative;z-index:1")), a.append(o), a;
   }
-}, KT = {
+}, ZT = {
   name: "OverlayItem",
   description: "A child positioned over an Overlay's base. `anchor` picks a corner/edge/center.",
   props: [
@@ -23331,7 +23363,7 @@ const HT = {
     });
     return e.child != null && i.append(r.renderNode(e.child)), i;
   }
-}, YT = {
+}, QT = {
   name: "Overlay",
   description: "Layers OverlayItem children on top of a base node — corner badges, play buttons over thumbnails, sale ribbons, floating actions. Pass the base as the positional argument and `items` as OverlayItem entries.",
   props: [
@@ -23347,7 +23379,7 @@ const HT = {
     for (const a of P(e.items)) i.append(r.renderNode(a));
     return i;
   }
-}, XT = {
+}, JT = {
   name: "Brand",
   description: "Logo + product name (+ optional version pill), linking home. Use in NavBar/Footer.",
   props: [
@@ -23360,7 +23392,7 @@ const HT = {
     { name: "href", type: "string", optional: !0 }
   ],
   render: (t, e) => {
-    const r = d("a", { class: "rui-brand", href: Fe(e.href, "#") }), i = je(e.logoSrc), a = g(e.name);
+    const r = d("a", { class: "rui-brand", href: Fe(e.href, "#") }), i = _e(e.logoSrc), a = g(e.name);
     i && r.append(d("img", { class: "rui-brand-logo", src: i, alt: a || "" })), r.append(d("span", {}, [a]));
     const o = g(e.version);
     return o && r.append(d("span", { class: "rui-brand-version" }, [o])), r;
@@ -23370,7 +23402,7 @@ let Gp = 0;
 function Vp(t, e) {
   t.setAttribute("data-menu-open", e ? "true" : "false"), t.querySelector(".rui-navbar2-burger")?.setAttribute("aria-expanded", e ? "true" : "false");
 }
-const ZT = {
+const eI = {
   name: "NavBar",
   description: "Marketing top navigation: brand on the left, links in the middle, actions (buttons/toggles) on the right. `sticky` pins it; `blur` adds a frosted-glass backdrop. On narrow viewports the links collapse behind a burger toggle. Distinct from the app-shell Navbar/TopBar.",
   props: [
@@ -23425,7 +23457,7 @@ const ZT = {
     for (const l of P(e.actions)) s.append(r.renderNode(l));
     return n.append(s), n;
   }
-}, QT = {
+}, tI = {
   name: "FooterColumn",
   description: "A titled column of links inside a Footer.",
   props: [
@@ -23439,7 +23471,7 @@ const ZT = {
     for (const o of P(e.links)) a.append(r.renderNode(o));
     return i.append(a), i;
   }
-}, JT = {
+}, rI = {
   name: "Footer",
   description: "Site footer: brand + tagline in a wide first column, then link columns, and a legal/copyright line. Pass `columns` as FooterColumn nodes.",
   props: [
@@ -23472,7 +23504,7 @@ const ZT = {
     }
     return i;
   }
-}, eI = {
+}, iI = {
   name: "LogoChip",
   description: "A single labelled chip for a LogoCloud: a Font Awesome `icon` or a customer wordmark `image`, plus the name. Give it an `href` to link the chip at its integration/partner page.",
   props: [
@@ -23482,7 +23514,7 @@ const ZT = {
     { name: "href", type: "string", optional: !0, description: "Link target — the chip's hover lift already advertises interactivity" }
   ],
   render: (t, e) => {
-    const r = g(e.label), i = e.href != null ? Fe(e.href, "") : "", a = i ? d("a", { class: "rui-logochip", href: i }) : d("span", { class: "rui-logochip" }), o = je(e.imageSrc);
+    const r = g(e.label), i = e.href != null ? Fe(e.href, "") : "", a = i ? d("a", { class: "rui-logochip", href: i }) : d("span", { class: "rui-logochip" }), o = _e(e.imageSrc);
     if (o)
       a.append(d("img", { class: "rui-logochip-logo", src: o, alt: r, loading: "lazy" }));
     else {
@@ -23491,7 +23523,7 @@ const ZT = {
     }
     return a.append(document.createTextNode(r)), a;
   }
-}, tI = {
+}, aI = {
   name: "LogoCloud",
   description: "A centered, wrapping row of LogoChip items with an optional label — 'works with' / 'trusted by' bands.",
   props: [
@@ -23506,7 +23538,7 @@ const ZT = {
     return i.append(o), i;
   }
 }, Kp = /* @__PURE__ */ new WeakSet();
-function rI(t) {
+function oI(t) {
   if (!Number.isFinite(t) || Number.isInteger(t)) return 0;
   const e = String(t), r = e.indexOf(".");
   return r === -1 ? 0 : Math.min(4, e.length - r - 1);
@@ -23550,7 +23582,7 @@ function Rg(t, e, r, i) {
     t.isConnected || s();
   }, `${i}-defer`);
 }
-const iI = {
+const nI = {
   name: "CountUp",
   description: "A number that animates from 0 to `value` when scrolled into view. `prefix`/`suffix` wrap it (e.g. `$`, `+`, `%`). `decimals` keeps fraction digits (default: as many as `value` has, so 99.9 stays 99.9). Respects reduced motion.",
   props: [
@@ -23566,13 +23598,13 @@ const iI = {
       prefix: g(e.prefix),
       suffix: g(e.suffix),
       duration: Math.max(200, R(e.duration, 1e3)),
-      decimals: e.decimals != null ? Math.max(0, Math.min(4, Math.round(R(e.decimals, 0)))) : rI(a),
+      decimals: e.decimals != null ? Math.max(0, Math.min(4, Math.round(R(e.decimals, 0)))) : oI(a),
       group: !1
     };
     return typeof matchMedia < "u" && matchMedia("(prefers-reduced-motion: reduce)").matches ? i.textContent = `${o.prefix}${Lg(a, o)}${o.suffix}` : Rg(i, o, r, "rui-countup"), i;
   }
 };
-function aI(t) {
+function sI(t) {
   const e = /^(\D*?)(\d[\d.,\s\u00A0\u202F]*)([\s\S]*)$/.exec(t.trim());
   if (!e) return { prefix: "", numeric: NaN, suffix: "", decimals: 0, group: !1 };
   const r = e[1] ?? "";
@@ -23588,7 +23620,7 @@ function aI(t) {
     group: o
   };
 }
-const oI = {
+const lI = {
   name: "Metric",
   description: "A single big-number metric tile: the value (gradient-painted by default), an optional label and an optional `trend` delta. Use inside MetricStrip. Set `countUp` to animate the number in on scroll — currency prefixes, thousands separators and decimals survive the animation.",
   props: [
@@ -23600,7 +23632,7 @@ const oI = {
     { name: "trend", type: "string", optional: !0, aliases: ["delta", "change"], description: 'Period-over-period delta, e.g. "+12.5%" or "-3 vs last week"' }
   ],
   render: (t, e, r) => {
-    const i = d("div", { class: "rui-metric" }), a = e.gradient === void 0 ? !0 : z(e.gradient), o = d("div", { class: "rui-metric-value", "data-gradient": a ? "true" : null }), n = g(e.value), s = aI(n), l = typeof matchMedia < "u" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const i = d("div", { class: "rui-metric" }), a = e.gradient === void 0 ? !0 : z(e.gradient), o = d("div", { class: "rui-metric-value", "data-gradient": a ? "true" : null }), n = g(e.value), s = sI(n), l = typeof matchMedia < "u" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     z(e.countUp) && Number.isFinite(s.numeric) && s.numeric > 0 && !l ? Rg(o, {
       target: s.numeric,
       prefix: s.prefix,
@@ -23618,7 +23650,7 @@ const oI = {
     }
     return i;
   }
-}, nI = {
+}, cI = {
   name: "MetricStrip",
   description: "A responsive row/grid of Metric tiles. `columns` sets the preferred count.",
   props: [
@@ -23643,13 +23675,13 @@ function Pg(t, e, r, i) {
   }
   return a;
 }
-function sI(t) {
+function uI(t) {
   if (typeof t == "string") return t;
   if (t == null || typeof t != "object") return "";
   const e = t;
   return e.__kind !== "Component" || !Array.isArray(e.args) ? "" : e.name === "CodeBlock" ? g(vn(Qo, e.args).codeString) : g(e.args.find((r) => typeof r == "string"));
 }
-const lI = {
+const dI = {
   aktion: "aktion",
   js: "js",
   mjs: "js",
@@ -23674,11 +23706,11 @@ const lI = {
   yaml: "yaml",
   sql: "sql"
 };
-function cI(t) {
+function pI(t) {
   const e = /\.([a-z0-9]+)$/i.exec(t.trim())?.[1]?.toLowerCase();
-  return e ? lI[e] ?? "" : "";
+  return e ? dI[e] ?? "" : "";
 }
-const Yp = /* @__PURE__ */ new WeakSet(), uI = {
+const Yp = /* @__PURE__ */ new WeakSet(), hI = {
   name: "CodeWindow",
   description: "An editor/IDE window chrome (traffic-light dots + filename + status area) around source code. Pass the code as a plain STRING — it renders through a chromeless CodeBlock that fills the pane (no inner border, language label, or copy button), syntax-highlighted via `language` (default: inferred from the `file` extension, else aktion). Set `preview: true` to run the source as a LIVE app beside the code (split view with a pulsing 'Live render' badge); a custom node is also accepted for non-Aktion previews. `copy` adds a copy-to-clipboard button to the title bar, `height`/`maxHeight` cap the pane (long snippets scroll), and `showLineNumbers`/`highlightLines` point the reader at a specific line. The canonical way to show code in docs/marketing.",
   props: [
@@ -23694,9 +23726,9 @@ const Yp = /* @__PURE__ */ new WeakSet(), uI = {
     { name: "highlightLines", type: "string", optional: !0, description: 'Highlight ranges, e.g. "3-5,8"' }
   ],
   render: (t, e, r) => {
-    const i = g(e.file), a = e.code != null && typeof e.code == "object" ? e.code : null, o = sI(e.code);
+    const i = g(e.file), a = e.code != null && typeof e.code == "object" ? e.code : null, o = uI(e.code);
     let n = g(e.language);
-    !n && a?.name === "CodeBlock" && Array.isArray(a.args) && (n = g(vn(Qo, a.args).language)), n || (n = cI(i) || "aktion");
+    !n && a?.name === "CodeBlock" && Array.isArray(a.args) && (n = g(vn(Qo, a.args).language)), n || (n = pI(i) || "aktion");
     const s = e.preview === !0 || e.preview === "true", l = !s && e.preview != null && e.preview !== !1 && e.preview !== "false" ? e.preview : null, c = s || l != null, u = d("div", { class: "rui-codewindow" }), h = c && e.status == null ? d("span", { class: "rui-window-live" }, [d("span", { class: "rui-window-live-dot" }), "Live render"]) : e.status, p = z(e.copy) && o ? Og.render(
       { __kind: "Component", name: "CopyButton", args: [], argMeta: [] },
       { text: o, label: "Copy code", iconOnly: !0 },
@@ -23720,12 +23752,12 @@ const Yp = /* @__PURE__ */ new WeakSet(), uI = {
       r
     )) : v.append(r.renderNode(a)), f.append(v), c) {
       const x = d("div", { class: "rui-codewindow-preview" });
-      s ? x.append(dI(o, u, r)) : x.append(r.renderNode(l)), f.append(x);
+      s ? x.append(mI(o, u, r)) : x.append(r.renderNode(l)), f.append(x);
     }
     return u.append(f), u;
   }
 };
-function dI(t, e, r) {
+function mI(t, e, r) {
   const i = document.createElement("aktion-app");
   i.setAttribute("response", t.replace(/preview\s*:\s*true\b/g, "preview: false"));
   const a = r.useInstanceState("rui-codewindow-theme", "");
@@ -23743,7 +23775,7 @@ function dI(t, e, r) {
     l.observe(n, { attributes: !0, attributeFilter: ["theme"] }), r.registerDisposer(() => l.disconnect(), "rui-codewindow-theme-sync");
   }, 0), i;
 }
-const pI = {
+const fI = {
   name: "BrowserFrame",
   description: "A browser-window chrome (dots + URL bar) wrapping a child — for screenshots/demos of web UIs. `height` fixes the mock viewport and scrolls inside it. The frame does NOT clip its child, so dropdowns/tooltips in the wrapped UI stay visible; set `clip: true` for a hard-edged screenshot look.",
   props: [
@@ -23761,7 +23793,7 @@ const pI = {
     });
     return e.child != null && l.append(r.renderNode(e.child)), a.append(l), a;
   }
-}, hI = {
+}, gI = {
   name: "Terminal",
   description: 'A terminal window rendering monospace lines. Pass `lines` as an array of strings. `prompt` (e.g. "$" or "❯") prefixes each command line with a non-selectable marker — indented lines count as output and get none, so copying the block yields just the commands. `height`/`maxHeight` cap a long log and scroll it.',
   props: [
@@ -23786,12 +23818,12 @@ const pI = {
     }) : l.textContent = c.join(`
 `), a.append(l), a;
   }
-}, mI = [
+}, bI = [
   { t: "-160px", l: "-120px", d: "0s" },
   { t: "-80px", r: "-120px", d: "-6s" },
   { t: "46%", l: "34%", d: "-12s" }
 ], bl = ["network", "drift", "snow", "stars", "bubbles"], Dg = ["#6366f1", "#8b5cf6", "#ec4899", "#22d3ee"], Xp = (t, e) => /^[#a-zA-Z0-9(),.%\s-]+$/.test(t) && t.length <= 64 && t.trim() !== "" ? t.trim() : e, fo = /* @__PURE__ */ new WeakSet();
-function fI(t, e) {
+function vI(t, e) {
   if (!t.isConnected || fo.has(t)) return;
   const r = t.getContext("2d");
   if (!r) return;
@@ -23861,7 +23893,7 @@ function fI(t, e) {
     c && cancelAnimationFrame(c), x?.disconnect(), fo.delete(t);
   }, "rui-backdrop-engine");
 }
-const gI = {
+const yI = {
   name: "Backdrop",
   description: "Decorative background layer for hero/marketing sections: a masked grid, floating blurred color 'blobs', and an animated canvas particle field. `type` picks the particle behaviour — `network` (drifting dots joined by constellation lines, the default), `drift`, `snow`, `stars`, or `bubbles` — tuned via `particleColors`, `speed`, `linkDistance`, and `particleSize`. All theme-aware and motion-safe. Place as the first child of a Section (which is `position: relative`).",
   props: [
@@ -23878,7 +23910,7 @@ const gI = {
   render: (t, e, r) => {
     const i = d("div", { class: "rui-backdrop", "data-fixed": z(e.fixed) ? "true" : null, "aria-hidden": "true" });
     z(e.grid) && i.append(d("div", { class: "rui-backdrop-grid" })), P(e.blobs).slice(0, 3).forEach((n, s) => {
-      const l = g(n), c = mI[s], u = 460 - s * 40, h = [
+      const l = g(n), c = bI[s], u = 460 - s * 40, h = [
         `width:${u}px`,
         `height:${u}px`,
         c.t ? `top:${c.t}` : "",
@@ -23900,11 +23932,11 @@ const gI = {
         "data-size": String(Math.max(0.5, Math.min(6, R(e.particleSize, 2.2)))),
         "data-colors": (s.length > 0 ? s : Dg).join(",")
       });
-      i.append(l), setTimeout(() => fI(l, r), 0);
+      i.append(l), setTimeout(() => vI(l, r), 0);
     }
     return i;
   }
-}, bI = {
+}, wI = {
   name: "ThemeToggle",
   description: "A sun/moon button that toggles the host between light and dark themes — no host glue required. It flips the <aktion-app> `theme` attribute and dispatches a `theme-change` event the host can listen for.",
   props: [
@@ -23939,7 +23971,7 @@ const gI = {
       o.set(v), p && u(p, v);
     }, s;
   }
-}, vI = {
+}, xI = {
   name: "Swatch",
   description: "A theme/palette preview tile — color dots over a named background. For theming galleries: give it `onClick` to make the tile pick that theme and `selected` to mark the active one.",
   props: [
@@ -24020,7 +24052,7 @@ const gI = {
       r.registerDisposer(() => clearTimeout(x), "rui-copy-reset");
     }, l;
   }
-}, yI = {
+}, kI = {
   name: "SegmentedControl",
   description: "A compact segmented toggle (iOS-style). `options` is an array of strings or {label, value, icon?, disabled?}. Bind `value` to a $variable; `onChange(value)` fires on select. Left/Right arrows move between segments; `size` sets the height and `disabled` locks the whole control.",
   props: [
@@ -24069,7 +24101,7 @@ const gI = {
 }, Nc = ["bottom-right", "bottom-left", "bottom-center"], Bg = (t) => {
   const e = g(t, "bottom-right");
   return Nc.includes(e) ? e : "bottom-right";
-}, wI = {
+}, SI = {
   name: "FloatingActionButton",
   description: "A fixed circular action button (FAB). `icon` + `onClick`; `position` picks the corner (bottom-right default — move it to sit beside a BackToTop or a chat launcher, or for RTL), `extended: true` shows `label` as visible text next to the icon, and `disabled` locks it while a request is in flight.",
   props: [
@@ -24093,7 +24125,7 @@ const gI = {
       o || r.invoke(e.onClick);
     }, n;
   }
-}, xI = {
+}, CI = {
   name: "Prose",
   description: "A styled long-form reading container — applies typographic defaults to headings, lists, blockquotes, code, links inside. Wrap Markdown(...) or raw nodes for blog posts, docs bodies, product descriptions.",
   props: [
@@ -24106,7 +24138,7 @@ const gI = {
       typeof a == "string" ? i.append(document.createTextNode(a)) : i.append(r.renderNode(a));
     return i;
   }
-}, kI = [
+}, AI = [
   ["year", 31536e6],
   ["month", 2592e6],
   ["week", 6048e5],
@@ -24119,14 +24151,14 @@ function Zp(t) {
   const e = t.getTime() - Date.now(), r = Math.abs(e);
   try {
     const i = new Intl.RelativeTimeFormat(void 0, { numeric: "auto" });
-    for (const [a, o] of kI)
+    for (const [a, o] of AI)
       if (r >= o || a === "second") return i.format(Math.trunc(e / o), a);
   } catch {
     return t.toLocaleString();
   }
   return "just now";
 }
-const SI = {
+const $I = {
   name: "RelativeTime",
   description: "Renders a human relative time ('3m ago', 'in 2 days') from an ISO date/timestamp, localized via Intl. Emits a `<time datetime=…>` carrying the absolute instant and refreshes itself on a coarse schedule, so a list left open does not keep claiming 'just now'.",
   props: [
@@ -24203,7 +24235,7 @@ const Fg = {
     }
     return l;
   }
-}, CI = {
+}, TI = {
   name: "QuantityStepper",
   description: "A −/value/+ numeric stepper. Bind `value` to a $variable; `onChange(value)` fires on change. Respects min/max (an out-of-range bound value is corrected once), exposes the value as a spinbutton with Arrow/Home/End keys, and `label` names it so several steppers in one cart are distinguishable.",
   props: [
@@ -24259,7 +24291,7 @@ const Fg = {
       !h.isConnected || v.get() === s || (v.set(s), p(s));
     }), h;
   }
-}, AI = {
+}, II = {
   name: "ProductCard",
   description: "An e-commerce product card: image, title, optional rating, a PriceTag, and an add-to-cart action. Pass `price`/`compareAt` directly or a custom `price` node. Give it `href` or `onClick` to make the whole card open the product (the card's hover lift promises it), `rating` + `reviewCount` for credible stars, and `soldOut` to dim it and stop the add button firing.",
   props: [
@@ -24278,7 +24310,7 @@ const Fg = {
     { name: "soldOut", type: "boolean", optional: !0, aliases: ["disabled"], description: "Dim the card and disable the add action" }
   ],
   render: (t, e, r) => {
-    const i = g(e.title), a = z(e.soldOut), o = d("div", { class: "rui-product-card", "data-sold-out": a ? "true" : null }), n = d("div", { class: "rui-product-media" }), s = je(e.image);
+    const i = g(e.title), a = z(e.soldOut), o = d("div", { class: "rui-product-card", "data-sold-out": a ? "true" : null }), n = d("div", { class: "rui-product-media" }), s = _e(e.image);
     s && n.append(d("img", { src: s, alt: i, loading: "lazy" }));
     const l = g(e.badge);
     l ? n.append(d("span", { class: "rui-product-badge" }, [l])) : a && n.append(d("span", { class: "rui-product-badge" }, ["Sold out"])), o.append(n);
@@ -24324,7 +24356,7 @@ const Fg = {
     }
     return c.append(m), o.append(c), o;
   }
-}, $I = {
+}, zI = {
   name: "TableOfContents",
   description: "A navigable table of contents. `items` is an array of {label, href, level?}. A `#fragment` href scrolls to the matching `id` INSIDE the app (the browser cannot resolve a fragment into the shadow tree, and touching `location.hash` would drive the router), marks that entry active, and fires `onSelect(href)`. `activeHref` sets the current entry from state.",
   props: [
@@ -24355,7 +24387,7 @@ const Fg = {
     }
     return i.append(s), i;
   }
-}, TI = {
+}, MI = {
   name: "TypingIndicator",
   description: "Three animated bouncing dots — a chat 'is typing…' affordance. Optional `name` prefix.",
   props: [{ name: "name", type: "string", optional: !0, positional: !0 }],
@@ -24365,12 +24397,12 @@ const Fg = {
     const a = d("span", { class: "rui-typing-dots", "aria-hidden": "true" });
     return a.append(d("i"), d("i"), d("i")), r.append(a), r;
   }
-}, us = ["days", "hours", "minutes", "seconds"], II = {
+}, us = ["days", "hours", "minutes", "seconds"], EI = {
   days: "days",
   hours: "hrs",
   minutes: "min",
   seconds: "sec"
-}, ia = /* @__PURE__ */ new WeakSet(), zI = {
+}, ra = /* @__PURE__ */ new WeakSet(), NI = {
   name: "CountdownTimer",
   description: "Live countdown to a target date/time (ISO string or timestamp). Ticks every second, then shows `endLabel` and fires `onEnd` (enable checkout, reveal a link, refresh a price). `units` trims the boxes — a 10-minute flash sale should not render two zeroed day/hour cells.",
   props: [
@@ -24389,7 +24421,7 @@ const Fg = {
       const f = d("div", { class: "rui-countdown-unit", "data-unit": m });
       f.append(
         d("div", { class: "rui-countdown-value" }, ["00"]),
-        d("div", { class: "rui-countdown-label" }, [II[m] ?? m])
+        d("div", { class: "rui-countdown-label" }, [EI[m] ?? m])
       ), s.append(f);
     }
     const l = d("span", { class: "rui-countdown-summary rui-visually-hidden", role: "status", "aria-live": "polite" });
@@ -24419,21 +24451,21 @@ const Fg = {
     };
     p(s);
     const b = be(() => {
-      if (!s.isConnected || ia.has(s)) return;
+      if (!s.isConnected || ra.has(s)) return;
       if (!p(s)) {
         u();
         return;
       }
-      ia.add(s);
+      ra.add(s);
       const m = setInterval(() => {
         if (!s.isConnected) {
-          clearInterval(m), ia.delete(s);
+          clearInterval(m), ra.delete(s);
           return;
         }
-        p(s) || (clearInterval(m), ia.delete(s), u());
+        p(s) || (clearInterval(m), ra.delete(s), u());
       }, 1e3);
       r.registerDisposer(() => {
-        clearInterval(m), ia.delete(s);
+        clearInterval(m), ra.delete(s);
       }, "countdown");
     });
     return r.registerDisposer(() => {
@@ -24441,7 +24473,7 @@ const Fg = {
     }, "countdown-defer"), s;
   }
 };
-function MI(t) {
+function LI(t) {
   let e = typeof window < "u" && (window.scrollY || document.documentElement.scrollTop) || 0;
   const r = t.getRootNode();
   let i = r instanceof ShadowRoot ? r.host.parentElement : t.parentElement;
@@ -24449,7 +24481,7 @@ function MI(t) {
     i.scrollTop > e && (e = i.scrollTop), i = i.parentElement;
   return e;
 }
-const EI = {
+const RI = {
   name: "BackToTop",
   description: "A floating button that smoothly scrolls the page (and the host) back to the top. It appears only after `showAfter` px of scrolling (default 400) so it does not sit over the hero, and stacks above a FloatingActionButton rather than on top of it.",
   props: [
@@ -24478,7 +24510,7 @@ const EI = {
       const l = be(() => {
         if (!n.isConnected) return;
         const c = () => {
-          const u = MI(n) > i;
+          const u = LI(n) > i;
           u !== (n.getAttribute("data-visible") === "true") && (a.set(u), n.setAttribute("data-visible", u ? "true" : "false"), n.style.display = u ? "" : "none");
         };
         c(), window.addEventListener("scroll", c, { passive: !0, capture: !0 }), r.registerDisposer(
@@ -24499,7 +24531,7 @@ function Jp(t) {
   const r = t.getRootNode();
   return r instanceof ShadowRoot ? r.host : null;
 }
-function jg(t) {
+function _g(t) {
   if (typeof getComputedStyle != "function") return null;
   let e = Jp(t);
   for (; e; ) {
@@ -24519,7 +24551,7 @@ function Yt(t, e) {
   }
   return typeof e == "string" ? document.createTextNode(e) : t.renderNode(e);
 }
-const NI = {
+const PI = {
   "1/1": "1fr 1fr",
   "1/2": "1fr 2fr",
   "2/1": "2fr 1fr",
@@ -24529,18 +24561,18 @@ const NI = {
   "3/1": "3fr 1fr",
   "2/5": "2fr 5fr",
   "5/2": "5fr 2fr"
-}, LI = /^(\d{1,3}(?:\.\d{1,2})?)\s*[/:]\s*(\d{1,3}(?:\.\d{1,2})?)$/;
-function RI(t) {
-  const e = g(t, "1/1").trim(), r = NI[e];
+}, DI = /^(\d{1,3}(?:\.\d{1,2})?)\s*[/:]\s*(\d{1,3}(?:\.\d{1,2})?)$/;
+function OI(t) {
+  const e = g(t, "1/1").trim(), r = PI[e];
   if (r) return r;
-  const i = LI.exec(e);
+  const i = DI.exec(e);
   if (i) {
     const a = Number(i[1]), o = Number(i[2]);
     if (a > 0 && o > 0) return `${a}fr ${o}fr`;
   }
   return "1fr 1fr";
 }
-const PI = {
+const BI = {
   name: "Split",
   description: "Two-pane layout: a left/primary node and a right/secondary node, with a controllable `ratio` (1/1, 3/2, 2/3 — or any `a/b` pair like \"60/40\"), optional `divider`, an optional `sticky` pane that pins on scroll (`stickyOffset` sets how far below the top it pins), and a `stackAt` breakpoint where it collapses to a single column — `reverseOnStack` puts the right pane first once stacked, the usual want for 'text + media'. The canonical 'text + media' / 'code + preview' / 'content + sidebar' section.",
   props: [
@@ -24556,7 +24588,7 @@ const PI = {
     { name: "align", type: "string", optional: !0, enum: ["start", "center", "stretch"] }
   ],
   render: (t, e, r) => {
-    const i = RI(e.ratio), a = Yl(g(e.gap, "lg")) || "var(--rui-spacing-l)", o = d("div", {
+    const i = OI(e.ratio), a = Yl(g(e.gap, "lg")) || "var(--rui-spacing-l)", o = d("div", {
       class: "rui-split",
       "data-divider": z(e.divider) ? "true" : null,
       "data-stack": g(e.stackAt, "md"),
@@ -24574,7 +24606,7 @@ const PI = {
   tall: { col: 1, row: 2 },
   hero: { col: 2, row: 2 }
 };
-function DI(t) {
+function FI(t) {
   const e = (i) => Math.max(1, Math.min(8, Math.round(i))), r = (i) => Math.max(1, Math.min(4, Math.round(i)));
   if (typeof t == "number") return { col: e(t), row: 1, name: null };
   if (typeof t == "string") {
@@ -24592,34 +24624,34 @@ function DI(t) {
   }
   return { col: 1, row: 1, name: null };
 }
-function OI(t, e, r) {
+function _I(t, e, r) {
   return r === "full" ? "full" : t >= 2 ? e >= 2 ? "hero" : "wide" : e >= 2 ? "tall" : "tile";
 }
-const BI = [
+const jI = [
   ...Object.keys(vl),
   "full",
   ...Array.from({ length: 8 }, (t, e) => Array.from({ length: 4 }, (r, i) => `${e + 1}x${i + 1}`)).flat(),
   ...Array.from({ length: 8 }, (t, e) => String(e + 1))
-], FI = {
+], qI = {
   name: "BentoCell",
   description: 'A single cell in a Bento grid. `span` names a size — `tile` 1×1, `wide` 2×1 (2 columns), `tall` 1×2 (2 rows), `hero` 2×2, `full` (a whole row) — or use a "CxR" string ("2x1"), a bare column-span number, or `{ col, row }`; `rowSpan` adds rows to a named/numeric span. The child stretches to fill the cell, so images/cards crop to the cell\'s shape. Pick spans that tile the parent Bento with no leftover tracks.',
   props: [
     { name: "child", type: "Node", positional: !0, required: !0, aliases: ["children"] },
-    { name: "span", type: "string | number | object", optional: !0, enum: BI, description: 'tile (1×1) | wide (2×1) | tall (1×2) | hero (2×2) | full (whole row), "2x1", 2, or { col, row }' },
+    { name: "span", type: "string | number | object", optional: !0, enum: jI, description: 'tile (1×1) | wide (2×1) | tall (1×2) | hero (2×2) | full (whole row), "2x1", 2, or { col, row }' },
     { name: "rowSpan", type: "number", optional: !0, description: "Rows to span (combines with a numeric/named span)" }
   ],
   render: (t, e, r) => {
-    let { col: i, row: a, name: o } = DI(e.span);
+    let { col: i, row: a, name: o } = FI(e.span);
     e.rowSpan !== void 0 && (a = Math.max(1, Math.min(4, Math.round(R(e.rowSpan, a)))));
     const n = d("div", {
       class: "rui-bento-cell",
-      "data-span": OI(i, a, o),
+      "data-span": _I(i, a, o),
       style: `--rui-cell-col:${i};--rui-cell-row:${a}`
     });
     return n.append(Yt(r, e.child)), n;
   }
 };
-function jI(t) {
+function UI(t) {
   if (t instanceof HTMLElement && t.classList.contains("rui-bento-cell")) return t;
   const e = d("div", {
     class: "rui-bento-cell",
@@ -24632,7 +24664,7 @@ function jI(t) {
   }
   return e.append(t), e;
 }
-const _I = {
+const HI = {
   name: "Bento",
   description: "Asymmetric 'bento box' grid — the marquee feature-section layout. Children must be BentoCell nodes (a plain node becomes a 1×1 tile). Two rules make it look right: (1) spans must tile the grid exactly — each row's column spans sum to `columns` and row-spans pair up with neighbouring cells, never leaving a dangling track (e.g. `columns: 3` with 4 cells: hero 2×2 + tall 1×2 fill rows 1–2, wide 2×1 + tile fill row 3); (2) set a fixed `rowHeight` (e.g. \"180px\") whenever cells hold images or cards — the default auto row stretches to the tallest cell and makes the mosaic ragged. Give 1–2 standout cells a big span (hero/wide/tall) and keep the rest 1×1 tiles. `dense` (default true) backfills gaps. Collapses to 2 columns below 920px and 1 below 640px.",
   props: [
@@ -24662,7 +24694,7 @@ const _I = {
     s.length > 0 && (n.style = s.join(";"));
     const c = d("div", n);
     for (const u of P(e.items)) {
-      const h = jI(r.renderNode(u));
+      const h = UI(r.renderNode(u));
       if (h instanceof HTMLElement) {
         const p = Number.parseInt(h.style.getPropertyValue("--rui-cell-col"), 10);
         Number.isFinite(p) && p > i && h.style.setProperty("--rui-cell-col", String(i));
@@ -24671,7 +24703,7 @@ const _I = {
     }
     return c;
   }
-}, eh = /* @__PURE__ */ new Set(["fade", "fade-up", "fade-down", "fade-left", "fade-right", "zoom", "slide-up"]), qI = {
+}, eh = /* @__PURE__ */ new Set(["fade", "fade-up", "fade-down", "fade-left", "fade-right", "zoom", "slide-up"]), WI = {
   name: "Reveal",
   description: "Animates its child in the first time it scrolls into view (scroll choreography). `animation` is a preset (fade-up|fade|zoom|…), `delay` staggers it (ms), `duration` sets the animation length (default 600ms), `threshold` how much of it must be visible to trigger (0–1, default 0.15), `once` (default true) plays a single time. Honours prefers-reduced-motion (renders immediately).",
   props: [
@@ -24722,7 +24754,7 @@ function go(t) {
 function bo(t) {
   t.longTimer && (clearTimeout(t.longTimer), t.longTimer = null);
 }
-const UI = {
+const GI = {
   name: "OnGesture",
   description: "Attach high-level pointer gestures to any component without raw DOM: `swipe(dir)` (left/right/up/down), `longPress()`, `doubleTap()`, `pan({dx, dy})` during a drag and `onPanEnd({dx, dy})` on release — `onPanEnd` is what lets a pan snap back or commit, so pull-to-refresh and swipe-to-dismiss need it. `disabled` suppresses every gesture. Gestures are pointer-only, so the wrapper is also focusable and mirrors them onto the keyboard (Enter/Space → doubleTap, arrows → swipe, the context-menu key → longPress); pass `ariaLabel` to say what it does, or keep a visible control for the same action.",
   props: [
@@ -24804,11 +24836,11 @@ const UI = {
       (u.key === "ContextMenu" || u.key === "F10" && u.shiftKey) && e.longPress != null && (u.preventDefault(), r.invoke(e.longPress));
     }), o;
   }
-}, aa = { from: -1, over: -1, keyboard: !1 };
+}, ia = { from: -1, over: -1, keyboard: !1 };
 function rh(t, e) {
   return t.from < 0 || !t.keyboard ? "" : `Item ${t.from + 1} of ${e} picked up. Use the arrow keys to move it, Enter to drop, Escape to cancel.`;
 }
-const HI = {
+const VI = {
   name: "Sortable",
   description: "A list whose items can be reordered by dragging a row (or, for keyboard users, by focusing one, pressing Space to pick it up and using the arrow keys). Pass already-rendered `items`; `onReorder(fromIndex, toIndex)` fires after a drop so you can reorder the backing reactive array. `horizontal` lays the rows out in a row instead of a column; `disabled` freezes it. Dragging uses native HTML5 drag-and-drop, which fires no events on touch devices — on mobile, expose the keyboard path (the rows are focusable) or move/reorder buttons instead.",
   props: [
@@ -24820,7 +24852,7 @@ const HI = {
     { name: "ariaLabel", type: "string", optional: !0, description: 'Name for the list, announced to screen readers (e.g. "Task order")' }
   ],
   render: (t, e, r) => {
-    const i = P(e.items), a = z(e.disabled), o = z(e.horizontal), n = e.handle === void 0 ? !0 : z(e.handle), s = r.useInstanceState("rui-sortable-drag", aa), l = s.get(), c = d("div", {
+    const i = P(e.items), a = z(e.disabled), o = z(e.horizontal), n = e.handle === void 0 ? !0 : z(e.handle), s = r.useInstanceState("rui-sortable-drag", ia), l = s.get(), c = d("div", {
       class: "rui-sortable",
       role: "listbox",
       "aria-label": g(e.ariaLabel) || null,
@@ -24843,7 +24875,7 @@ const HI = {
       const x = f.querySelector(".rui-sortable-status");
       x && (x.textContent = rh(v, i.length));
     }, m = (f, v, x) => {
-      b(f, aa), !(v < 0 || x < 0 || v === x || x >= i.length) && (r.invoke(e.onReorder, v, x), be(() => {
+      b(f, ia), !(v < 0 || x < 0 || v === x || x >= i.length) && (r.invoke(e.onReorder, v, x), be(() => {
         (f?.isConnected ? f : null)?.querySelector(`.rui-sortable-item[data-index="${x}"]`)?.focus();
       }));
     };
@@ -24874,7 +24906,7 @@ const HI = {
           }
           b(p(S), { from: k, over: -1, keyboard: !1 });
         }
-      }, x.ondragend = (w) => b(p(u(w)), aa), x.ondragover = (w) => {
+      }, x.ondragend = (w) => b(p(u(w)), ia), x.ondragover = (w) => {
         w.preventDefault();
         const S = u(w), k = h(S), C = s.get();
         C.over !== k && b(p(S), { ...C, over: k });
@@ -24888,11 +24920,11 @@ const HI = {
       }, x.onkeydown = (w) => {
         const S = u(w), k = h(S), C = p(S), A = s.get(), $ = o ? "ArrowLeft" : "ArrowUp", T = o ? "ArrowRight" : "ArrowDown";
         if (w.key === " " || w.key === "Enter" && A.from < 0) {
-          w.preventDefault(), b(C, A.from === k ? aa : { from: k, over: -1, keyboard: !0 });
+          w.preventDefault(), b(C, A.from === k ? ia : { from: k, over: -1, keyboard: !0 });
           return;
         }
         if (w.key === "Escape" && A.from >= 0) {
-          w.preventDefault(), b(C, aa);
+          w.preventDefault(), b(C, ia);
           return;
         }
         if (w.key === "Enter" && A.from >= 0) {
@@ -24915,18 +24947,18 @@ const HI = {
       [rh(l, i.length)]
     )), c;
   }
-}, WI = "application/x-aktion.", _g = (t) => `${WI}${t}`;
+}, KI = "application/x-aktion.", jg = (t) => `${KI}${t}`;
 function qg(t) {
   return g(t).trim().toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 40);
 }
 let ei = null;
-function GI(t) {
+function YI(t) {
   const e = t?.getRootNode?.();
   if (!(!(e instanceof ShadowRoot) && !(e instanceof Document)))
     for (const r of Array.from(e.querySelectorAll(".rui-draggable[aria-grabbed='true']")))
       r.classList.remove("is-dragging"), r.removeAttribute("aria-grabbed");
 }
-const VI = {
+const XI = {
   name: "Draggable",
   description: "Makes its child draggable, carrying a `data` payload picked up by a DropZone. `type` tags the payload so a DropZone can `accept` (or refuse) it before the drop; `disabled` makes it immovable without re-rendering a different child. `onDragStart`/`onDragEnd` optional. Keyboard users focus it and press Space/Enter to pick up (Escape cancels), then Space/Enter on a DropZone to drop — give it an `ariaLabel` so they know what it is.",
   props: [
@@ -24959,7 +24991,7 @@ const VI = {
     return c.ondragstart = (b) => {
       try {
         const m = u();
-        b.dataTransfer?.setData("text/plain", m), a && b.dataTransfer?.setData(_g(a), m);
+        b.dataTransfer?.setData("text/plain", m), a && b.dataTransfer?.setData(jg(a), m);
       } catch {
       }
       h(p(b), "pointer"), r.invoke(e.onDragStart, e.data);
@@ -24980,7 +25012,7 @@ const VI = {
       }
     }, c;
   }
-}, KI = {
+}, ZI = {
   name: "DropZone",
   description: "A target that accepts a Draggable. `onDrop(data)` receives the dropped payload (parsed JSON when possible). `accept` lists the Draggable `type`s this zone can take (comma-separated) — anything else is refused before it is dropped, so a 'To do' / 'Done' / 'Archive' board can express what goes where; `disabled` makes the zone inert. Pass `child` for the zone's content, or just `label` for a bare labelled target. Keyboard users focus the zone and press Space/Enter to drop what a Draggable picked up.",
   props: [
@@ -25006,7 +25038,7 @@ const VI = {
     }, u = (p) => {
       if (a.length === 0) return !0;
       const b = Array.from(p?.types ?? []);
-      return a.some((m) => b.includes(_g(m)));
+      return a.some((m) => b.includes(jg(m)));
     }, h = (p, b) => {
       c(p, !1), r.invoke(e.onDrop, b);
     };
@@ -25040,17 +25072,17 @@ const VI = {
       if (!b || a.length > 0 && !a.includes(b.type)) return;
       p.preventDefault(), ei = null;
       const m = l(p);
-      GI(m), h(m, b.data);
+      YI(m), h(m, b.data);
     }, s;
   }
 };
-function YI(t, e) {
+function QI(t, e) {
   const r = me(t, ""), i = /^(\d+(?:\.\d+)?)(px)?$/.exec(r);
   if (i) return Number(i[1]);
   const a = /^(\d+(?:\.\d+)?)%$/.exec(r);
   return a ? Number(a[1]) / 100 * e : e / 2;
 }
-const XI = {
+const JI = {
   name: "Parallax",
   description: "Translates its child vertically as the page scrolls for a depth effect. `speed` (−1…1) sets intensity/direction. Travel is capped by `maxOffset` (default: half the layer's own height) so the layer cannot slide out of its section and over the content above or below it. Honours prefers-reduced-motion.",
   props: [
@@ -25076,7 +25108,7 @@ const XI = {
       let l = 0;
       const c = () => {
         l = 0;
-        const h = o.getBoundingClientRect(), p = window.innerHeight || 800, b = h.top + h.height / 2 - p / 2, m = s.get(), f = YI(m.maxOffset, h.height), v = Math.max(-f, Math.min(f, -b * m.speed));
+        const h = o.getBoundingClientRect(), p = window.innerHeight || 800, b = h.top + h.height / 2 - p / 2, m = s.get(), f = QI(m.maxOffset, h.height), v = Math.max(-f, Math.min(f, -b * m.speed));
         i.set(v), o.style.transform = `translateY(${v.toFixed(1)}px)`;
       }, u = () => {
         l || (l = requestAnimationFrame(c));
@@ -25086,7 +25118,7 @@ const XI = {
       }, "rui-parallax");
     }), o;
   }
-}, ZI = {
+}, ez = {
   name: "ReadingProgress",
   description: 'A thin progress bar that fills as the reader scrolls — article/docs reading affordance. Optional `gradient` fill or a `color` override. By default it measures whichever container actually scrolls the app (the page when the app owns the page scroll, otherwise the nearest scrolling ancestor — a chat pane, a dashboard panel, a modal body), and pins itself inside that container instead of the browser viewport. `target` overrides the choice with a CSS selector, or "page" to force the document.',
   props: [
@@ -25113,7 +25145,7 @@ const XI = {
         } catch {
         }
       }
-      const h = u ?? (o === "page" ? null : jg(s));
+      const h = u ?? (o === "page" ? null : _g(s));
       h && (a.set(!0), s.style.setProperty("position", "sticky"), s.style.setProperty("left", "auto"), s.style.setProperty("right", "auto"));
       const p = () => h ?? document.scrollingElement ?? document.documentElement;
       let b = 0;
@@ -25131,7 +25163,7 @@ const XI = {
       }, "rui-reading-progress");
     }), s;
   }
-}, ih = /* @__PURE__ */ new Set(["fade", "scale", "slide-up", "slide-down", "slide-left", "slide-right"]), QI = {
+}, ih = /* @__PURE__ */ new Set(["fade", "scale", "slide-up", "slide-down", "slide-left", "slide-right"]), tz = {
   name: "Transition",
   description: "Animates its child IN when `show` becomes true and OUT when it becomes false (mount/unmount choreography) — modals, toasts, dropdowns, list rows. `preset` is fade|scale|slide-up|slide-down|slide-left|slide-right, `duration` is ms. The child stays mounted through the exit animation, then is removed and `onExited` fires — use it to drop the row from the backing array, release a lock, or restore focus. Honours prefers-reduced-motion (instant swap).",
   props: [
@@ -25178,7 +25210,7 @@ const XI = {
     }
     return h.setAttribute("data-state", v), f && h.append(Yt(r, e.child)), l.set({ phase: m, ever: !0 }), h;
   }
-}, ah = "cubic-bezier(.22,1,.36,1)", JI = {
+}, ah = "cubic-bezier(.22,1,.36,1)", rz = {
   name: "FlipList",
   description: "Smoothly animates its children when they reorder or are added (the FLIP technique — First/Last/Invert/Play). Wrap a keyed list whose order changes (drag-sort, filter, sort toggle) so items glide to their new positions instead of jumping, and new items fade in rather than popping. Removed items are dropped straight away — wrap a row in `Transition` if it needs to animate out. `horizontal` lays the items out in a row; `duration` is ms. Honours prefers-reduced-motion (no animation). Use stable `key:`s on the items so their DOM nodes persist across the reorder.",
   props: [
@@ -25239,7 +25271,7 @@ const XI = {
       ));
     }), o;
   }
-}, oh = /* @__PURE__ */ new Set(["fade", "fade-up", "fade-down", "fade-left", "fade-right", "zoom", "slide-up"]), ez = {
+}, oh = /* @__PURE__ */ new Set(["fade", "fade-up", "fade-down", "fade-left", "fade-right", "zoom", "slide-up"]), iz = {
   name: "RouteView",
   description: "Wraps a router's output so the page animates whenever the route changes. Pass `routeKey: route.path` so it knows when to replay the entrance animation; `animation` is fade|fade-up|zoom|… and `duration` is ms. Works by swapping a keyed inner wrapper, so the fresh page element plays its CSS entrance on mount. On every route change it also does what a real navigation does: scrolls back to the top (`scrollToTop`, default true), moves focus to the new page so keyboard users continue from there, and announces the new route politely (`announce` overrides the announced text). Honours prefers-reduced-motion.",
   props: [
@@ -25277,7 +25309,7 @@ const XI = {
         p.focus();
       }
       if (!s) return;
-      const b = jg(p);
+      const b = _g(p);
       if (b) {
         b.scrollTop = 0;
         return;
@@ -25287,7 +25319,7 @@ const XI = {
     }), c;
   }
 };
-function tz() {
+function az() {
   if (typeof document > "u") return null;
   let t = document.activeElement;
   for (; t; ) {
@@ -25303,7 +25335,7 @@ function Lc(t, e) {
     i != null && r.append(typeof i == "string" ? document.createTextNode(i) : t.renderNode(i));
   return r;
 }
-const rz = {
+const oz = {
   name: "VisuallyHidden",
   description: "Renders content that is invisible on screen but available to screen readers (the `sr-only` pattern). Use for icon-button labels, form hints, and context that sighted users get from layout but assistive tech needs.",
   props: [
@@ -25313,7 +25345,7 @@ const rz = {
     const i = d("span", { class: "rui-visually-hidden" });
     return i.append(Lc(r, e.children)), i;
   }
-}, iz = {
+}, nz = {
   name: "SkipLink",
   description: "A keyboard-only 'skip to content' link that is hidden until focused, then jumps to the element with the given id. Place it as the first node in a page so keyboard users can bypass the nav.",
   props: [
@@ -25353,7 +25385,7 @@ const rz = {
       }
     }, a;
   }
-}, az = {
+}, sz = {
   name: "LiveRegion",
   description: "An aria-live region that announces its text to screen readers whenever it changes — toasts, validation summaries, async status. `politeness` is `polite` (default) or `assertive`. Visually hidden by default; set `visible` to also show it.",
   props: [
@@ -25381,7 +25413,7 @@ const rz = {
   "select:not([disabled])",
   "textarea:not([disabled])",
   "[tabindex]:not([tabindex='-1'])"
-].join(","), oz = {
+].join(","), lz = {
   name: "FocusTrap",
   description: "Confines keyboard focus to its subtree while `active` (default true) — Tab from the last focusable wraps to the first and vice-versa. Use inside modals, drawers, and command palettes. Auto-focuses the first focusable when it opens (`autoFocus: false` to opt out, or a CSS selector to pick the control), returns focus to whatever opened it on close (`restoreFocus: false` to opt out), and calls `onEscape` on the Escape key.",
   props: [
@@ -25429,7 +25461,7 @@ const rz = {
       const b = p[0], m = p[p.length - 1], f = h.activeElement;
       c.shiftKey && f === b ? (c.preventDefault(), m.focus()) : !c.shiftKey && f === m && (c.preventDefault(), b.focus());
     }, !o.armed) {
-      o.armed = !0, o.prev = tz();
+      o.armed = !0, o.prev = az();
       const l = e.autoFocus, c = typeof l == "string" && l !== "true" && l !== "false" ? l.trim() : "";
       if (l === void 0 || !!c || z(l, !0)) {
         const h = be(() => {
@@ -25458,7 +25490,7 @@ const rz = {
   M: [-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5, 5, 8, 9, 9, 10, 10, 11, 13, 14, 16, 17, 17, 18, 20, 21, 23, 25, 26, 28, 29, 31, 33, 35, 37, 38, 40, 43, 45, 47, 49],
   Q: [-1, 1, 1, 2, 2, 4, 4, 6, 6, 8, 8, 8, 10, 12, 16, 12, 17, 16, 18, 21, 20, 23, 23, 25, 27, 29, 34, 34, 35, 38, 40, 43, 45, 48, 51, 53, 56, 59, 62, 65, 68],
   H: [-1, 1, 1, 2, 4, 4, 4, 5, 6, 8, 8, 11, 11, 16, 16, 18, 16, 19, 21, 25, 25, 25, 34, 30, 32, 35, 37, 40, 42, 45, 48, 51, 54, 57, 60, 63, 66, 70, 74, 77, 81]
-}, nz = (() => {
+}, cz = (() => {
   const t = [[]];
   for (let e = 1; e <= 40; e += 1) {
     if (e === 1) {
@@ -25480,7 +25512,7 @@ const rz = {
 function wl(t, e) {
   return t === 0 || e === 0 ? 0 : Ro[yl[t] + yl[e]];
 }
-function sz(t) {
+function uz(t) {
   const e = new Uint8Array(t);
   e[t - 1] = 1;
   let r = 1;
@@ -25491,7 +25523,7 @@ function sz(t) {
   }
   return e;
 }
-function lz(t, e) {
+function dz(t, e) {
   const r = new Uint8Array(e.length);
   for (const i of t) {
     const a = i ^ r[0];
@@ -25512,9 +25544,9 @@ function Wg(t) {
   }
   return e;
 }
-const cz = { L: 1, M: 0, Q: 3, H: 2 };
-function uz(t, e = "M") {
-  const r = gz(t);
+const pz = { L: 1, M: 0, Q: 3, H: 2 };
+function hz(t, e = "M") {
+  const r = yz(t);
   let i = 1;
   for (; i <= 40; i += 1) {
     const c = sh(i, e) * 8;
@@ -25531,16 +25563,16 @@ function uz(t, e = "M") {
   for (let c = 236; a.length < n; c ^= 253) o(c, 8);
   const s = new Uint8Array(a.length >>> 3);
   for (let c = 0; c < a.length; c += 1) s[c >>> 3] = s[c >>> 3] | a[c] << 7 - (c & 7);
-  const l = dz(s, i, e);
-  return pz(i, e, l);
+  const l = mz(s, i, e);
+  return fz(i, e, l);
 }
-function dz(t, e, r) {
-  const i = Hg[r][e], a = Ug[r][e], o = Wg(e) >>> 3, n = i - o % i, s = Math.floor(o / i), l = [], c = sz(a);
+function mz(t, e, r) {
+  const i = Hg[r][e], a = Ug[r][e], o = Wg(e) >>> 3, n = i - o % i, s = Math.floor(o / i), l = [], c = uz(a);
   let u = 0;
   for (let b = 0; b < i; b += 1) {
     const m = s - a + (b < n ? 0 : 1), f = t.slice(u, u + m);
     u += m;
-    const v = lz(f, c), x = new Uint8Array(s + 1);
+    const v = dz(f, c), x = new Uint8Array(s + 1);
     x.set(f, 0), x.set(v, x.length - a), l.push(x);
   }
   const h = new Uint8Array(o);
@@ -25550,7 +25582,7 @@ function dz(t, e, r) {
       (b !== s - a || m >= n) && (h[p++] = l[m][b]);
   return h;
 }
-function pz(t, e, r) {
+function fz(t, e, r) {
   const i = t * 4 + 17, a = Array.from({ length: i }, () => new Array(i).fill(!1)), o = Array.from({ length: i }, () => new Array(i).fill(!1)), n = (m, f, v) => {
     a[f][m] = v, o[f][m] = !0;
   }, s = (m, f) => {
@@ -25563,7 +25595,7 @@ function pz(t, e, r) {
   for (let m = 0; m < i; m += 1)
     n(6, m, m % 2 === 0), n(m, 6, m % 2 === 0);
   s(3, 3), s(i - 4, 3), s(3, i - 4);
-  const l = nz[t];
+  const l = cz[t];
   for (const m of l)
     for (const f of l)
       if (!(f === 6 && m === 6 || f === 6 && m === i - 7 || f === i - 7 && m === 6))
@@ -25596,13 +25628,13 @@ function pz(t, e, r) {
   let p = 1 / 0, b = a;
   for (let m = 0; m < 8; m += 1) {
     const f = a.map((x) => x.slice());
-    hz(f, o, m), mz(f, o, e, m, i);
-    const v = fz(f, i);
+    gz(f, o, m), bz(f, o, e, m, i);
+    const v = vz(f, i);
     v < p && (p = v, b = f);
   }
   return b;
 }
-function hz(t, e, r) {
+function gz(t, e, r) {
   const i = t.length;
   for (let a = 0; a < i; a += 1)
     for (let o = 0; o < i; o += 1) {
@@ -25637,8 +25669,8 @@ function hz(t, e, r) {
       n && (t[a][o] = !t[a][o]);
     }
 }
-function mz(t, e, r, i, a) {
-  const o = cz[r] << 3 | i;
+function bz(t, e, r, i, a) {
+  const o = pz[r] << 3 | i;
   let n = o;
   for (let c = 0; c < 10; c += 1) n = n << 1 ^ (n >>> 9) * 1335;
   const s = (o << 10 | n) ^ 21522, l = (c) => (s >>> c & 1) !== 0;
@@ -25649,7 +25681,7 @@ function mz(t, e, r, i, a) {
   for (let c = 8; c < 15; c += 1) t[a - 15 + c][8] = l(c);
   t[a - 8][8] = !0;
 }
-function fz(t, e) {
+function vz(t, e) {
   let r = 0;
   for (let i = 0; i < e; i += 1) {
     let a = t[i][0], o = 1;
@@ -25668,7 +25700,7 @@ function fz(t, e) {
     }
   return r;
 }
-function gz(t) {
+function yz(t) {
   if (typeof TextEncoder < "u") return new TextEncoder().encode(t);
   const e = [];
   for (const r of t) {
@@ -25677,14 +25709,14 @@ function gz(t) {
   }
   return new Uint8Array(e);
 }
-const bz = "http://www.w3.org/2000/svg";
-function Ca(t, e) {
-  const r = document.createElementNS(bz, t);
+const wz = "http://www.w3.org/2000/svg";
+function Sa(t, e) {
+  const r = document.createElementNS(wz, t);
   for (const [i, a] of Object.entries(e))
     a != null && r.setAttribute(i, a);
   return r;
 }
-const vz = {
+const xz = {
   name: "QRCode",
   description: "Renders an offline QR code as crisp SVG from `data` (a URL or text). `size` is the pixel side length and acts as a maximum — the code scales down to fit a narrower container. `ecc` is the error-correction level (L|M|Q|H, default M), `color`/`background` override the modules, `label` sets the accessible name. No network — encodes fully in the browser.",
   props: [
@@ -25700,11 +25732,11 @@ const vz = {
     const r = g(e.data), i = Math.max(48, Math.min(1024, R(e.size, 160))), a = g(e.label), o = g(e.ecc, "M").toUpperCase(), n = ["L", "M", "Q", "H"].includes(o) ? o : "M", s = At(e.color) || "#000000", l = At(e.background) || "#ffffff", c = Math.max(0, Math.min(8, R(e.margin, 2))), u = d("div", { class: "rui-qrcode" });
     let h;
     try {
-      h = uz(r || " ", n);
+      h = hz(r || " ", n);
     } catch {
       return u.append(d("div", { class: "rui-qrcode-error" }, ["Data too long for QR"])), u;
     }
-    const p = h.length, b = p + c * 2, m = Ca("svg", {
+    const p = h.length, b = p + c * 2, m = Sa("svg", {
       viewBox: `0 0 ${b} ${b}`,
       width: String(i),
       height: String(i),
@@ -25718,14 +25750,14 @@ const vz = {
       // so the constraint holds no matter which theme is adopted.
       style: "max-width:100%;height:auto"
     });
-    m.append(Ca("rect", { x: "0", y: "0", width: String(b), height: String(b), fill: l }));
+    m.append(Sa("rect", { x: "0", y: "0", width: String(b), height: String(b), fill: l }));
     let f = "";
     for (let v = 0; v < p; v += 1)
       for (let x = 0; x < p; x += 1)
         h[v][x] && (f += `M${x + c},${v + c}h1v1h-1z`);
-    return m.append(Ca("path", { d: f, fill: s })), u.append(m), u;
+    return m.append(Sa("path", { d: f, fill: s })), u.append(m), u;
   }
-}, yz = {
+}, kz = {
   name: "ReactionPicker",
   description: 'A row of emoji reactions with counts. `reactions` is a list of { emoji, count?, active?, label? } — `label` names the reaction ("You and 2 others") for the tooltip and the accessible name. `onReact(emoji)` fires on click; `disabled` makes the whole bar read-only. Use under messages, comments, and posts.',
   props: [
@@ -25754,7 +25786,7 @@ function lh(t, e) {
   const r = e === "left" ? `;right:${xl}px;left:auto` : "";
   return `background:${t}${r}`;
 }
-const wz = {
+const Sz = {
   name: "LiveCursor",
   description: 'A floating collaborator cursor positioned at `x`/`y` with a name label — drive it from presence/`$socket` state for multiplayer UIs. `space` declares what x/y are measured against: "parent" (default) is the nearest positioned ancestor, so give the shared surface `position: relative`; "viewport" treats them as viewport coordinates and escapes `overflow: hidden` clipping. `smooth` glides between presence ticks, `typing` shows a typing indicator. Pointer-events are disabled so it never blocks interaction.',
   props: [
@@ -25784,8 +25816,8 @@ const wz = {
         n === "viewport" ? "position:fixed" : "",
         l ? "transition:transform 90ms linear" : ""
       ].filter(Boolean).join(";")
-    }), f = Ca("svg", { width: "20", height: "20", viewBox: "0 0 20 20", fill: "none" });
-    f.append(Ca("path", { d: "M3 3l14 6-6 2-2 6z", fill: o, stroke: "#fff", "stroke-width": "1" })), m.append(f);
+    }), f = Sa("svg", { width: "20", height: "20", viewBox: "0 0 20 20", fill: "none" });
+    f.append(Sa("path", { d: "M3 3l14 6-6 2-2 6z", fill: o, stroke: "#fff", "stroke-width": "1" })), m.append(f);
     let v = null;
     if ((u || c) && (v = d("span", {
       class: "rui-live-cursor-label",
@@ -25806,7 +25838,7 @@ const wz = {
     }
     return m;
   }
-}, xz = {
+}, Cz = {
   name: "TabBar",
   description: 'Bottom navigation bar for mobile layouts — a row of icon+label tabs. `items` is [{ id, label, icon?, badge?, href?, disabled? }]; an item with `href` renders a real link ("/reports" targets a route, so middle-click and copy-link work); `active` is the current id; `onChange(id)` fires on tap. `pinned` (default true) sticks the bar to the bottom of its scroll container; safe-area padding is always applied.',
   props: [
@@ -25852,10 +25884,10 @@ const wz = {
     return n;
   }
 };
-function kz(t, e) {
+function Az(t, e) {
   return e == null ? null : typeof e == "string" ? document.createTextNode(e) : t.renderNode(e);
 }
-const Sz = {
+const $z = {
   name: "Cart",
   description: "A shopping-cart line list: each item shows image, name, unit price, a quantity stepper, and a remove button, with a running subtotal. `items` is [{ id, name, price, qty, image?, max? }] — `max` caps the stepper at available stock. `onQty(id, qty)` and `onRemove(id)` fire on interaction; omit `onQty` for a read-only receipt view. `disabled` freezes every control (e.g. while checkout submits), `loading` shows placeholder lines, `error` renders a message above the lines. `currency` is an ISO code (default USD).",
   props: [
@@ -25895,7 +25927,7 @@ const Sz = {
     for (const f of i) {
       const v = f && typeof f == "object" ? f : {}, x = g(v.id ?? v.name), y = g(v.name), w = R(v.price, 0), S = Math.max(0, R(v.qty, 1)), k = v.max == null ? 1 / 0 : Math.max(0, R(v.max, 1 / 0));
       p += w * S;
-      const C = d("div", { class: "rui-cart-line" }), A = je(v.image);
+      const C = d("div", { class: "rui-cart-line" }), A = _e(v.image);
       A && C.append(d("img", { class: "rui-cart-thumb", src: A, alt: y, loading: "lazy" }));
       const $ = d("div", { class: "rui-cart-body" });
       $.append(d("div", { class: "rui-cart-name" }, [y])), $.append(d("div", { class: "rui-cart-price" }, [u(w)])), C.append($);
@@ -25912,7 +25944,7 @@ const Sz = {
           "aria-label": "Increase quantity",
           disabled: o || S >= k
         }, ["+"]), E = (L, D) => {
-          const O = (L.currentTarget ?? L.target)?.closest(".rui-cart-line")?.querySelector(".rui-cart-qty-value") ?? null, q = g(O?.textContent).trim(), j = q === "" ? NaN : Number(q), _ = Number.isFinite(j) ? j : S, V = Math.min(k, Math.max(0, _ + D));
+          const O = (L.currentTarget ?? L.target)?.closest(".rui-cart-line")?.querySelector(".rui-cart-qty-value") ?? null, q = g(O?.textContent).trim(), _ = q === "" ? NaN : Number(q), j = Number.isFinite(_) ? _ : S, V = Math.min(k, Math.max(0, j + D));
           O && (O.textContent = String(V)), r.invoke(e.onQty, x, V);
         };
         I.onclick = (L) => E(L, -1), M.onclick = (L) => E(L, 1), T.append(I, d("span", { class: "rui-cart-qty-value" }, [String(S)]), M);
@@ -25931,10 +25963,10 @@ const Sz = {
     }
     const b = d("div", { class: "rui-cart-foot" });
     b.append(d("span", { class: "rui-cart-subtotal-label" }, ["Subtotal"])), b.append(d("span", { class: "rui-cart-subtotal-value" }, [u(p)])), h.append(b);
-    const m = kz(r, e.footer);
+    const m = Az(r, e.footer);
     return m && h.append(m), h;
   }
-}, Cz = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"], Gg = [
+}, Tz = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"], Gg = [
   "January",
   "February",
   "March",
@@ -25954,7 +25986,7 @@ const Sz = {
   danger: "var(--rui-color-danger, #ef4444)",
   info: "var(--rui-color-info, #06b6d4)"
 }, uh = (t) => String(t).padStart(2, "0"), Vg = (t, e, r) => `${t}-${uh(e + 1)}-${uh(r)}`, ds = (t) => g(t).slice(0, 10);
-function Az(t) {
+function Iz(t) {
   const e = /* @__PURE__ */ new Map(), r = /* @__PURE__ */ new Map();
   for (const i of P(t)) {
     if (i == null) continue;
@@ -25976,8 +26008,8 @@ function Az(t) {
   }
   return { chips: e, dots: r };
 }
-function $z(t, e, r) {
-  let i = Cz.slice(), a = Gg.slice();
+function zz(t, e, r) {
+  let i = Tz.slice(), a = Gg.slice();
   if (t && typeof Intl < "u")
     try {
       const s = new Intl.DateTimeFormat(t, { weekday: "short", timeZone: "UTC" });
@@ -25991,10 +26023,10 @@ function $z(t, e, r) {
   const n = P(r).map((s) => g(s)).filter(Boolean);
   return n.length === 12 && (a = n), { weekdays: i, months: a };
 }
-function Tz(t, e) {
+function Mz(t, e) {
   return t.minIso && e < t.minIso || t.maxIso && e > t.maxIso ? !0 : t.blocked.has(e);
 }
-function Iz(t) {
+function Ez(t) {
   const r = t.getRootNode().activeElement;
   if (!r || !t.contains(r)) return null;
   if (r.classList.contains("rui-gcal-today")) return ".rui-gcal-today";
@@ -26003,7 +26035,7 @@ function Iz(t) {
   const a = r.closest(".rui-gcal-day")?.getAttribute("data-iso");
   return a ? `.rui-gcal-day[data-iso="${a}"]` : null;
 }
-function zz(t, e) {
+function Nz(t, e) {
   if (!e) return;
   (t.querySelector(e) ?? (e.startsWith(".rui-gcal-day") ? t.querySelector('.rui-gcal-day[tabindex="0"]') : null))?.focus();
 }
@@ -26058,7 +26090,7 @@ function Kg(t, e, r, i) {
   let x = null;
   for (let k = 0; k < m; k += 1) {
     k % 7 === 0 && (x = d("div", { class: "rui-gcal-row", role: "row", style: "display:contents" }), c.append(x));
-    const C = new Date(f.getFullYear(), f.getMonth(), f.getDate() + k), A = Vg(C.getFullYear(), C.getMonth(), C.getDate()), $ = C.getMonth() === r, T = !!i.selected && A === i.selected, I = Tz(i, A), M = d("button", {
+    const C = new Date(f.getFullYear(), f.getMonth(), f.getDate() + k), A = Vg(C.getFullYear(), C.getMonth(), C.getDate()), $ = C.getMonth() === r, T = !!i.selected && A === i.selected, I = Mz(i, A), M = d("button", {
       type: "button",
       class: "rui-gcal-day",
       role: "gridcell",
@@ -26082,19 +26114,19 @@ function Kg(t, e, r, i) {
     if (E.length > 0 || L > 0) {
       const D = d("div", { class: "rui-gcal-events" }), N = E.slice(0, 2);
       for (const q of N) {
-        const j = d("span", {
+        const _ = d("span", {
           class: "rui-gcal-chip",
           style: `--rui-gcal-chip:${q.color}`,
           title: q.time ? `${q.time} — ${q.label}` : q.label,
           "data-clickable": i.onEventClick != null ? "true" : null
         }, [q.time ? `${q.time} ${q.label}` : q.label]);
-        i.onEventClick != null && (j.onclick = (_) => {
-          _.stopPropagation(), i.helpers.invoke(i.onEventClick, q.raw, A);
-        }), D.append(j);
+        i.onEventClick != null && (_.onclick = (j) => {
+          j.stopPropagation(), i.helpers.invoke(i.onEventClick, q.raw, A);
+        }), D.append(_);
       }
       if (L > 0) {
         const q = d("div", { class: "rui-gcal-dots" });
-        for (let j = 0; j < Math.min(3, L); j += 1) q.append(d("span", { class: "rui-gcal-dot" }));
+        for (let _ = 0; _ < Math.min(3, L); _ += 1) q.append(d("span", { class: "rui-gcal-dot" }));
         D.append(q);
       }
       const O = E.length - N.length;
@@ -26102,8 +26134,8 @@ function Kg(t, e, r, i) {
     }
     I || (M.onclick = (D) => {
       const N = a(D);
-      for (const j of N.querySelectorAll('.rui-gcal-day[data-selected="true"]'))
-        j.removeAttribute("data-selected"), j.setAttribute("aria-selected", "false");
+      for (const _ of N.querySelectorAll('.rui-gcal-day[data-selected="true"]'))
+        _.removeAttribute("data-selected"), _.setAttribute("aria-selected", "false");
       const q = (D.currentTarget ?? D.target)?.closest?.(".rui-gcal-day");
       q?.setAttribute("data-selected", "true"), q?.setAttribute("aria-selected", "true"), i.selected = A, i.activeSlot.set(A), i.selRef ? i.helpers.setState(i.selRef, A) : i.selSlot.set({ prop: i.propSelected, value: A }), i.helpers.invoke(i.onSelect, A);
     }), (x ?? c).append(M), v.push(M);
@@ -26113,10 +26145,10 @@ function Kg(t, e, r, i) {
   for (const k of y)
     if (w = v.find((C) => C.getAttribute("data-iso") === k && !C.disabled), w) break;
   w ?? (w = v.find((k) => !k.disabled && k.getAttribute("data-in-month") === "true") ?? v.find((k) => !k.disabled)), w?.setAttribute("tabindex", "0");
-  const S = Iz(t);
-  t.replaceChildren(l, c), zz(t, S);
+  const S = Ez(t);
+  t.replaceChildren(l, c), Nz(t, S);
 }
-const Mz = {
+const Lz = {
   name: "Calendar",
   description: "A Google Calendar-style month grid with Today/prev/next navigation. `month` (0–11) and `year` set the view (default current month); `selected` is an ISO date (YYYY-MM-DD) to highlight — bind a $variable for two-way selection; `onSelect(iso)` fires on a day click. `events` mixes bare ISO strings (rendered as dots) and `{date, label, color?, time?}` objects (rendered as colored chips with a '+N more' overflow; `color` is a tone name or CSS color); `onEventClick(event, iso)` fires when a chip is clicked. `minDate`/`maxDate`/`disabledDates` block days from being selected at all (booking windows, blackout days). `onNavigate(year, month)` fires when the user pages months; `navigable=false` hides the toolbar buttons; `locale` (or `weekdayLabels`/`monthLabels`) localises the names. Use for schedules, bookings, and availability calendars.",
   props: [
@@ -26141,7 +26173,7 @@ const Mz = {
     l.set(h);
     const p = t.argMeta?.[2]?.stateRef, b = g(e.selected), m = r.useInstanceState("rui-gcal-selected", null), f = m.get(), v = !f || f.prop !== b;
     !p && v && m.set({ prop: b, value: b });
-    const x = p || v ? b : f.value, { chips: y, dots: w } = Az(e.events), { weekdays: S, months: k } = $z(g(e.locale), e.weekdayLabels, e.monthLabels), C = g(e.locale), A = {
+    const x = p || v ? b : f.value, { chips: y, dots: w } = Iz(e.events), { weekdays: S, months: k } = zz(g(e.locale), e.weekdayLabels, e.monthLabels), C = g(e.locale), A = {
       todayIso: Vg(i.getFullYear(), i.getMonth(), i.getDate()),
       selected: x,
       propSelected: b,
@@ -26180,7 +26212,7 @@ function Xg(t, e, r, i) {
   const o = t.getContext("2d");
   return o && (o.setTransform(1, 0, 0, 1, 0, 0), o.scale(a, a), o.lineCap = "round", o.lineJoin = "round"), o;
 }
-const Ez = (t) => !t || t === "transparent" || /^rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)$/.test(t);
+const Rz = (t) => !t || t === "transparent" || /^rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)$/.test(t);
 function Zg(t) {
   let e = t.dataset.stroke ?? "";
   if (!e)
@@ -26205,7 +26237,7 @@ function Zg(t) {
 function Qg(t, e) {
   if (!e.ctx) return;
   const { background: r } = Zg(t);
-  Ez(r) || (e.ctx.fillStyle = r, e.ctx.fillRect(0, 0, e.width, e.height));
+  Rz(r) || (e.ctx.fillStyle = r, e.ctx.fillRect(0, 0, e.width, e.height));
 }
 function Jg(t, e) {
   const { stroke: r, lineWidth: i } = Zg(t);
@@ -26254,7 +26286,7 @@ function Rc(t) {
     return "";
   }
 }
-const Nz = (t) => ({
+const Pz = (t) => ({
   strokes: t.strokes.length,
   inked: t.strokes.some((e) => e.length >= 2)
 });
@@ -26266,19 +26298,19 @@ function kl(t, e, r, i, a) {
         l.x *= o, l.y *= n;
   e.ctx = Xg(t, r, i, a), e.width = r, e.height = i, e.painted = !0, za(t);
 }
-function Lz(t) {
+function Dz(t) {
   const e = Gt.get(t);
   if (!e || e.drawing) return;
   const r = t.getBoundingClientRect(), i = Math.round(r.width), a = Math.round(r.height);
   i < 1 || a < 1 || Math.abs(i - e.width) <= 1 && Math.abs(a - e.height) <= 1 || kl(t, e, i, a, !1);
 }
-function Rz(t, e) {
+function Oz(t, e) {
   const r = Gt.get(t);
   if (!r) return;
   const i = Yg();
-  r.propWidth !== e.width || r.propHeight !== e.height ? (r.propWidth = e.width, r.propHeight = e.height, kl(t, r, e.width, e.height, !0)) : t.width !== Math.round(r.width * i) || t.height !== Math.round(r.height * i) ? kl(t, r, r.width, r.height, !1) : r.painted || (r.painted = !0, za(t)), e.value !== r.value && (r.value = e.value, Pz(t, e.value));
+  r.propWidth !== e.width || r.propHeight !== e.height ? (r.propWidth = e.width, r.propHeight = e.height, kl(t, r, e.width, e.height, !0)) : t.width !== Math.round(r.width * i) || t.height !== Math.round(r.height * i) ? kl(t, r, r.width, r.height, !1) : r.painted || (r.painted = !0, za(t)), e.value !== r.value && (r.value = e.value, Bz(t, e.value));
 }
-function Pz(t, e) {
+function Bz(t, e) {
   const r = Gt.get(t);
   if (!r) return;
   if (!e) {
@@ -26332,7 +26364,7 @@ function rb(t) {
     const S = Rc(y);
     w.value = S;
     const k = y.closest(`.${n}`)?.querySelector("input.rui-canvas-value");
-    k && (k.value = S), t.onEnd?.(S, Nz(w));
+    k && (k.value = S), t.onEnd?.(S, Pz(w));
   };
   if (!s) {
     u.onpointerdown = (w) => {
@@ -26371,10 +26403,10 @@ function rb(t) {
   return be(() => {
     const y = u.isConnected ? u : v.get();
     if (!y?.isConnected) return;
-    v.set(y), Rz(y, t);
+    v.set(y), Oz(y, t);
     const w = x.get();
     if (w && w.node !== y && (w.ro.disconnect(), x.set(null)), !x.get() && typeof ResizeObserver < "u") {
-      const S = new ResizeObserver(() => Lz(y));
+      const S = new ResizeObserver(() => Dz(y));
       try {
         S.observe(y);
       } catch {
@@ -26391,7 +26423,7 @@ function ib(t, e, r) {
 function ab(t, e) {
   return t ? d("input", { type: "hidden", class: "rui-canvas-value", name: t, value: ut(e) }) : null;
 }
-const Dz = {
+const Fz = {
   name: "DrawingCanvas",
   description: "A freehand drawing surface (pointer / touch / stylus). `onChange(count)` fires when a stroke starts or the pad is cleared; `onEnd(dataUrl, count)` fires when a stroke finishes with a PNG data URL. Pass that URL back as `value` to restore the drawing after a re-render or route change. `color`/`lineWidth`/`background` style the ink (`background` defaults to the surface colour so the export is never ink-on-transparency). Includes a Clear button unless `clearable=false`; `disabled` locks the surface.",
   props: [
@@ -26436,7 +26468,7 @@ const Dz = {
     }
     return He(s.root, e);
   }
-}, Oz = {
+}, _z = {
   name: "SignaturePad",
   description: "A signature capture pad — a DrawingCanvas tuned for signing, with a baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires when the signature changes (empty string when cleared, and also when the pad only received taps — so a stray tap cannot pass a truthiness check). Pass the URL back as `value` to restore a signature after a re-render, and `disabled` to lock the pad once it is submitted. `label`/`error`/`required` render the usual field shell. Use in contracts, delivery confirmation, and consent flows.",
   props: [
@@ -26484,12 +26516,12 @@ const Dz = {
     return He(s.root, e);
   }
 };
-let Bz = 0;
+let jz = 0;
 function Ln(t, e, r) {
   const i = t.useInstanceState(e, "");
-  return i.get() || i.set(`${r}-${Bz += 1}`), i.get();
+  return i.get() || i.set(`${r}-${jz += 1}`), i.get();
 }
-function Di(t, e, r, i) {
+function Pi(t, e, r, i) {
   const a = e.useInstanceState(`${r}-wired`, !1);
   if (a.get()) return;
   a.set(!0);
@@ -26498,31 +26530,31 @@ function Di(t, e, r, i) {
   });
   e.registerDisposer(o, `${r}-timer`);
 }
-let oa = 0, ps = null;
+let aa = 0, ps = null;
 function ph(t) {
   if (typeof document > "u" || !document.documentElement) return;
   const e = document.documentElement;
   if (t) {
-    oa === 0 && (ps = e.style.overflow, e.style.overflow = "hidden"), oa += 1;
+    aa === 0 && (ps = e.style.overflow, e.style.overflow = "hidden"), aa += 1;
     return;
   }
-  oa !== 0 && (oa -= 1, oa === 0 && (e.style.overflow = ps ?? "", ps = null));
+  aa !== 0 && (aa -= 1, aa === 0 && (e.style.overflow = ps ?? "", ps = null));
 }
 function Pc(t, e, r, i) {
-  typeof MutationObserver > "u" || Di(t, e, i, (a) => {
+  typeof MutationObserver > "u" || Pi(t, e, i, (a) => {
     let o = !1;
     const n = () => {
       const l = a.getAttribute("data-open") === "true";
-      l ? wn(a, r) : Li(a), l !== o && (o = l, ph(l));
+      l ? wn(a, r) : Ni(a), l !== o && (o = l, ph(l));
     };
     n();
     const s = new MutationObserver(n);
     s.observe(a, { attributes: !0, attributeFilter: ["data-open"] }), e.registerDisposer(() => {
-      s.disconnect(), Li(a), o && (o = !1, ph(!1));
+      s.disconnect(), Ni(a), o && (o = !1, ph(!1));
     }, i);
   });
 }
-const Fz = /^[\d.\s-]+$/, hs = /^[a-zA-Z#()0-9,.\s-]+$/, jz = /^[a-zA-Z\s]+$/, _z = {
+const qz = /^[\d.\s-]+$/, hs = /^[a-zA-Z#()0-9,.\s-]+$/, Uz = /^[a-zA-Z\s]+$/, Hz = {
   name: "Svg",
   description: "Render inline SVG markup safely (paths, shapes, gradients) — for brand illustrations, custom icons, and data-viz overlays without the HTMLTag escape hatch. Pass the inner markup (everything inside <svg>) plus a `viewBox`, or paste a whole `<svg …>` element and its viewBox/fill/stroke are picked up. `label` names the graphic for assistive tech (unlabelled graphics are hidden as decorative). Script/event-handler payloads are stripped.",
   props: [
@@ -26540,7 +26572,7 @@ const Fz = /^[\d.\s-]+$/, hs = /^[a-zA-Z#()0-9,.\s-]+$/, jz = /^[a-zA-Z\s]+$/, _
     const i = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     i.setAttribute("class", "rui-svg");
     const a = Gl(g(e.content)), o = a?.rootAttrs ?? {}, n = g(e.viewBox) || o.viewbox || "0 0 24 24";
-    i.setAttribute("viewBox", Fz.test(n) ? n : "0 0 24 24");
+    i.setAttribute("viewBox", qz.test(n) ? n : "0 0 24 24");
     const s = g(e.fill) || o.fill || "currentColor";
     i.setAttribute("fill", hs.test(s) ? s : "currentColor");
     const l = g(e.stroke) || o.stroke || "";
@@ -26548,7 +26580,7 @@ const Fz = /^[\d.\s-]+$/, hs = /^[a-zA-Z#()0-9,.\s-]+$/, jz = /^[a-zA-Z\s]+$/, _
     const c = g(e.strokeWidth) || o["stroke-width"] || "";
     c && hs.test(c) && i.setAttribute("stroke-width", c);
     const u = g(e.preserveAspectRatio) || o.preserveaspectratio || "";
-    u && jz.test(u) && i.setAttribute("preserveAspectRatio", u);
+    u && Uz.test(u) && i.setAttribute("preserveAspectRatio", u);
     const h = me(e.width, "");
     h && i.setAttribute("width", h);
     const p = me(e.height, "");
@@ -26557,7 +26589,7 @@ const Fz = /^[\d.\s-]+$/, hs = /^[a-zA-Z#()0-9,.\s-]+$/, jz = /^[a-zA-Z\s]+$/, _
     if (b ? (i.setAttribute("role", "img"), i.setAttribute("aria-label", b)) : i.setAttribute("aria-hidden", "true"), a) for (const m of a.children) i.appendChild(m);
     return i;
   }
-}, qz = {
+}, Wz = {
   name: "Sheet",
   description: "A panel that slides in from an edge over a dimmed backdrop. `side` is left|right|top|bottom. Bind `open` to a $variable; `onClose` fires on backdrop click / Escape (set `dismissible: false` to require an explicit action). `footer` pins an action row below the scrolling body. Use BottomSheet for the mobile bottom variant.",
   props: [
@@ -26601,7 +26633,7 @@ const Fz = /^[\d.\s-]+$/, hs = /^[a-zA-Z#()0-9,.\s-]+$/, jz = /^[a-zA-Z\s]+$/, _
       s && l();
     }), Fr(o, ".rui-sheet-panel", r), Pc(o, r, rc, "rui-sheet-layer"), o;
   }
-}, Uz = {
+}, Gz = {
   name: "BottomSheet",
   description: "A mobile bottom sheet — Sheet pinned to the bottom edge. The grip is draggable: swiping it down dismisses the sheet. Bind `open`; `onClose` on dismiss. `height` fixes the panel size so a filtering list scrolls instead of resizing the sheet; `footer` pins a primary action.",
   props: [
@@ -26674,7 +26706,7 @@ const Fz = /^[\d.\s-]+$/, hs = /^[a-zA-Z#()0-9,.\s-]+$/, jz = /^[a-zA-Z\s]+$/, _
     }
     return a.append(s, c), a.onkeydown = lr(".rui-sheet-panel", () => n()), Fr(a, ".rui-sheet-panel", r), Pc(a, r, rc, "rui-bottomsheet-layer"), a;
   }
-}, Hz = {
+}, Vz = {
   name: "ConfirmDialog",
   description: "A confirm/cancel modal dialog. Bind `open` to a $variable; `onConfirm` fires on accept, `onCancel`/backdrop on dismiss. `tone` colors the confirm button (danger for destructive actions) and picks a matching icon. Binding `loading` keeps the dialog open on confirm and disables both buttons so an async action can report progress — write `false` to `open` yourself once it resolves.",
   props: [
@@ -26732,7 +26764,7 @@ function ob(t, e, r) {
     (a.currentTarget ?? a.target)?.replaceWith(d("span", { class: r }, [Dr(e)]));
   };
 }
-const Wz = {
+const Kz = {
   name: "PresenceAvatars",
   description: "An overlapping stack of avatars with online status dots — 'who's here' for collab/social. Pass `people` as {name, src?, online?}. `onClick` makes each avatar activatable (receives the person object).",
   props: [
@@ -26758,7 +26790,7 @@ const Wz = {
         "aria-label": p ? `${p} (${m})` : m
       });
       c && (f.onclick = () => r.invoke(e.onClick, u));
-      const v = je(h.src);
+      const v = _e(h.src);
       if (v) {
         const x = d("img", { src: v, alt: "" });
         ob(x, p, "rui-presence-initials"), f.append(x);
@@ -26777,7 +26809,7 @@ const Wz = {
   }
 }, hh = ["twitter", "facebook", "linkedin", "reddit", "email", "whatsapp", "telegram", "mastodon", "copy"], ms = /* @__PURE__ */ new WeakMap(), mh = (t) => t === "copied" ? "Copied" : t === "failed" ? "Copy failed" : "Copy link", fh = (t) => t === "copied" ? "Link copied" : t === "failed" ? "Could not copy link" : "";
 let gh = !1, bh = !1;
-const Gz = {
+const Yz = {
   name: "ShareButtons",
   description: "A row of social share buttons (twitter|facebook|linkedin|reddit|email|whatsapp|telegram|mastodon) plus a copy-link button, for the given `url`/`title`. `showLabels` renders text beside each icon.",
   props: [
@@ -26849,7 +26881,7 @@ const Gz = {
     }
     return p.includes("copy") && n.append(f), n;
   }
-}, Vz = {
+}, Xz = {
   name: "AuthorByline",
   description: "An author byline: avatar, name, optional role, date and reading time — for articles/blog posts. `href` links the name to the author's page; `date` is emitted as a machine-readable <time>.",
   props: [
@@ -26861,7 +26893,7 @@ const Gz = {
     { name: "readingTime", type: "string", optional: !0, description: 'e.g. "8 min read"' }
   ],
   render: (t, e) => {
-    const r = g(e.name), i = d("div", { class: "rui-byline" }), a = je(e.avatar), o = d("div", { class: "rui-byline-avatar" });
+    const r = g(e.name), i = d("div", { class: "rui-byline" }), a = _e(e.avatar), o = d("div", { class: "rui-byline-avatar" });
     if (a) {
       const f = d("img", { src: a, alt: "" });
       ob(f, r, "rui-byline-initials"), o.append(f);
@@ -26881,7 +26913,7 @@ const Gz = {
     }
     return i.append(n), i;
   }
-}, Kz = {
+}, Zz = {
   name: "VariantSelector",
   description: "Product variant picker — color swatches or size pills. `options` is an array of strings or {label, value, color?, disabled?}. Bind `value` to a $variable; `onChange(value)` fires on select. `multiple: true` toggles a set and binds an array. Arrow keys move between options.",
   props: [
@@ -26948,7 +26980,7 @@ const Gz = {
     }, l.append(c), l;
   }
 };
-function Yz(t, e) {
+function Qz(t, e) {
   const r = /^[A-Za-z]{3}$/.test(t) ? t.toUpperCase() : "";
   let i = null;
   try {
@@ -26964,7 +26996,7 @@ function Yz(t, e) {
     return Number.isFinite(n) ? i ? r ? i.format(n) : `${t}${i.format(n)}` : r ? `${r} ${n.toFixed(2)}` : `${t}${n.toFixed(2)}` : o;
   };
 }
-const Xz = {
+const Jz = {
   name: "OrderSummary",
   description: 'An order/cart summary: line items, subtotal, discount, shipping, tax, and a bold total. Pass `items` as {label, amount, qty?} and the named totals. `currency` takes an ISO code ("EUR" — properly localised via `locale`) or a bare symbol prefix. `loading` shows placeholders while an async shipping/tax quote resolves.',
   props: [
@@ -26981,7 +27013,7 @@ const Xz = {
     { name: "empty", type: "string", optional: !0, description: "Message when `items` is empty" }
   ],
   render: (t, e) => {
-    const r = g(e.currency, "$"), i = Yz(r, g(e.locale)), a = z(e.loading), o = d("div", { class: "rui-order-summary", "data-loading": a ? "true" : null }), n = P(e.items);
+    const r = g(e.currency, "$"), i = Qz(r, g(e.locale)), a = z(e.loading), o = d("div", { class: "rui-order-summary", "data-loading": a ? "true" : null }), n = P(e.items);
     if (n.length > 0) {
       const c = d("div", { class: "rui-order-lines" });
       for (const u of n) {
@@ -27007,7 +27039,7 @@ const Xz = {
     const l = g(e.note);
     return l && o.append(d("div", { class: "rui-order-note" }, [l])), o;
   }
-}, Zz = {
+}, eM = {
   name: "ScrollSpy",
   description: "A sticky in-page nav that highlights the section currently in view. `sections` is an array of {label, id} matching element ids on the page (set via the universal `id` prop). Clicking smooth-scrolls to a section; `offset` clears a sticky header and `top` sets the sticky offset.",
   props: [
@@ -27045,7 +27077,7 @@ const Xz = {
             y.scrollIntoView({ behavior: "smooth", block: "start" });
       }, p.append(m), l.append(p);
     }
-    return n.append(l), typeof IntersectionObserver < "u" && c.length > 0 && Di(n, r, "rui-scrollspy-io", (h) => {
+    return n.append(l), typeof IntersectionObserver < "u" && c.length > 0 && Pi(n, r, "rui-scrollspy-io", (h) => {
       const p = h.getRootNode(), b = new IntersectionObserver((m) => {
         for (const f of m) {
           if (!f.isIntersecting) continue;
@@ -27072,7 +27104,7 @@ const Xz = {
   "bottom-left": "top:auto;right:auto;bottom:24px;left:24px",
   "top-right": "bottom:auto;left:auto;top:24px;right:24px",
   "top-left": "bottom:auto;right:auto;top:24px;left:24px"
-}, Qz = {
+}, tM = {
   name: "SpeedDial",
   description: "A floating action button that expands a stack of mini-actions on click. Pass `actions` as {icon, label, onClick} (`action` is accepted as a synonym for `onClick`). Bind `open` to control it from outside; `position` picks the corner. Outside-click and Escape close it.",
   props: [
@@ -27134,13 +27166,13 @@ const Xz = {
       if (m.key !== "Escape") return;
       const f = m.currentTarget ?? m.target;
       !f || !f.classList.contains("is-open") || (m.stopPropagation(), h(f, !1), f.querySelector(".rui-speeddial-fab")?.focus());
-    }, Di(l, r, "rui-speeddial-layer", (m) => {
-      wn(m, `${jx};${yh[s] ?? yh["bottom-right"]}`), r.registerDisposer(() => {
-        vt(m), Li(m);
+    }, Pi(l, r, "rui-speeddial-layer", (m) => {
+      wn(m, `${Ux};${yh[s] ?? yh["bottom-right"]}`), r.registerDisposer(() => {
+        vt(m), Ni(m);
       }, "rui-speeddial-layer");
     }), l;
   }
-}, Jz = [
+}, rM = [
   "var(--rui-color-primary, #6366f1)",
   "var(--rui-color-accent, #8b5cf6)",
   "var(--rui-color-danger, #ec4899)",
@@ -27148,7 +27180,7 @@ const Xz = {
   "var(--rui-color-success, #10b981)",
   "var(--rui-color-warning, #f59e0b)"
 ];
-function eM(t, e) {
+function iM(t, e) {
   let r = 0;
   for (let i = 0; i < e.count; i += 1) {
     const a = Math.round((i * 53 + 7) % 100), o = i * 17 % 50 / 100, n = e.duration * (0.7 + i * 7 % 10 / 30), s = e.colors[i % e.colors.length], l = i * 47 % 360;
@@ -27166,7 +27198,7 @@ function eM(t, e) {
   }
   return r;
 }
-const tM = {
+const aM = {
   name: "Confetti",
   description: "A one-shot confetti burst — celebration affordance after a success (checkout, completion). Renders a short CSS particle animation each time `fire` becomes true, once per transition. `colors`/`duration` tune the look; `onDone` fires when the burst finishes. Honours prefers-reduced-motion.",
   props: [
@@ -27184,7 +27216,7 @@ const tM = {
       "data-fire": i ? "true" : "false"
     }), o = typeof matchMedia < "u" && matchMedia("(prefers-reduced-motion: reduce)").matches, n = (() => {
       const p = P(e.colors).map((b) => At(b)).filter(Boolean);
-      return p.length > 0 ? p : Jz;
+      return p.length > 0 ? p : rM;
     })(), s = {
       count: Math.max(1, Math.min(120, Math.round(R(e.count, 40)))),
       colors: n,
@@ -27193,10 +27225,10 @@ const tM = {
       if (e.onDone == null) return;
       const b = setTimeout(() => r.invoke(e.onDone), Math.round(p * 1e3) + 50);
       r.registerDisposer(() => clearTimeout(b), "rui-confetti-done");
-    }, c = r.useInstanceState("rui-confetti-primed", !1), u = r.useInstanceState("rui-confetti-fired", !1), h = (p) => l(o ? 0 : eM(p, s));
-    return c.get() || (c.set(!0), i && (u.set(!0), h(a))), o || Di(a, r, "rui-confetti-layer", (p) => {
-      wn(p, Fx), r.registerDisposer(() => Li(p), "rui-confetti-layer");
-    }), typeof MutationObserver < "u" && Di(a, r, "rui-confetti-watch", (p) => {
+    }, c = r.useInstanceState("rui-confetti-primed", !1), u = r.useInstanceState("rui-confetti-fired", !1), h = (p) => l(o ? 0 : iM(p, s));
+    return c.get() || (c.set(!0), i && (u.set(!0), h(a))), o || Pi(a, r, "rui-confetti-layer", (p) => {
+      wn(p, qx), r.registerDisposer(() => Ni(p), "rui-confetti-layer");
+    }), typeof MutationObserver < "u" && Pi(a, r, "rui-confetti-watch", (p) => {
       const b = () => {
         const f = p.getAttribute("data-fire") === "true";
         f !== u.get() && (u.set(f), p.replaceChildren(), f && h(p));
@@ -27207,7 +27239,7 @@ const tM = {
     }), a;
   }
 };
-function rM(t, e) {
+function oM(t, e) {
   if (e !== "+")
     return t.split(e).map((a) => a.trim()).filter(Boolean);
   const r = [];
@@ -27225,7 +27257,7 @@ function rM(t, e) {
   }
   return i.trim() && r.push(i.trim()), r;
 }
-const iM = {
+const nM = {
   name: "KbdShortcut",
   description: 'Render a keyboard shortcut as styled key caps — the multi-key form of `Kbd`, sharing its markup and size scale. Pass `keys` as an array (e.g. ["Cmd", "K"]) or a \'+\'-joined string; `separator` changes the joiner ("" for the compact ⌘K style, " then " for sequential chords).',
   props: [
@@ -27234,7 +27266,7 @@ const iM = {
     { name: "separator", type: "string", optional: !0, description: 'Joiner between caps (default "+")' }
   ],
   render: (t, e) => {
-    const r = e.keys, i = e.separator === void 0 ? "+" : g(e.separator), a = Array.isArray(r) ? r.map((n) => g(n)).filter(Boolean) : rM(g(r), i || "+"), o = d("span", {
+    const r = e.keys, i = e.separator === void 0 ? "+" : g(e.separator), a = Array.isArray(r) ? r.map((n) => g(n)).filter(Boolean) : oM(g(r), i || "+"), o = d("span", {
       class: "rui-kbd-group rui-kbd-shortcut",
       "data-size": Kt(g(e.size, "md"))
     });
@@ -27242,7 +27274,7 @@ const iM = {
       s > 0 && i && o.append(d("span", { class: "rui-kbd-sep rui-kbd-plus" }, [i])), o.append(d("kbd", { class: "rui-kbd rui-kbd-key" }, [n]));
     }), o;
   }
-}, fs = () => typeof window < "u" ? window.lottie ?? null : null, aM = {
+}, fs = () => typeof window < "u" ? window.lottie ?? null : null, sM = {
   name: "Lottie",
   description: "Plays a Lottie/Bodymovin vector animation from `src` (a .json URL) or inline `data`. Uses the `lottie-web` library when it is present on the page (`window.lottie`), waiting briefly for a deferred script; otherwise shows the `fallback` (or a poster image) so the layout never breaks. `loop`/`autoplay` default true; `playing` pauses/resumes, `speed` scales playback, `onComplete`/`onError` report the outcome. No dependency is bundled.",
   props: [
@@ -27268,7 +27300,7 @@ const iM = {
       "aria-label": o || null,
       "aria-hidden": o ? null : "true",
       "data-playing": n === null ? null : n ? "true" : "false"
-    }), l = e.data && typeof e.data == "object" ? e.data : null, c = je(e.src);
+    }), l = e.data && typeof e.data == "object" ? e.data : null, c = _e(e.src);
     if (!l && !c)
       return wh(s, e, r, o), s;
     fs() || wh(s, e, r, o);
@@ -27298,7 +27330,7 @@ const iM = {
         return p.classList.add("rui-lottie-empty"), r.invoke(e.onError, "load-failed"), !1;
       }
     };
-    return Di(s, r, "rui-lottie-mount", (p) => {
+    return Pi(s, r, "rui-lottie-mount", (p) => {
       const b = fs();
       if (b) {
         h(p, b);
@@ -27319,7 +27351,7 @@ const iM = {
   }
 };
 function wh(t, e, r, i) {
-  const a = je(e.poster);
+  const a = _e(e.poster);
   a ? t.append(d("img", {
     src: a,
     alt: i,
@@ -27328,211 +27360,211 @@ function wh(t, e, r, i) {
   })) : e.fallback != null ? t.append(r.renderNode(e.fallback)) : t.classList.add("rui-lottie-empty");
 }
 const nb = [
-  Zx,
-  Qx,
   ek,
-  Jx,
-  Yx,
-  ef,
-  kk,
-  Sk,
-  Ck,
   tk,
+  ik,
   rk,
-  ak,
-  nk,
-  sk,
-  mk,
-  dk,
-  wk,
-  bk,
-  Pk,
-  uk,
+  Qx,
+  ef,
   Ak,
-  zk,
-  w0,
-  x0,
-  Jk,
-  e0,
-  r0,
-  aA,
-  a0,
-  l0,
-  s0,
-  u0,
-  Qo,
-  g0,
-  y0,
-  C0,
-  Kk,
+  $k,
+  Tk,
+  ak,
+  ok,
+  sk,
+  ck,
+  uk,
+  bk,
+  mk,
+  Sk,
+  wk,
+  Bk,
+  hk,
+  Ik,
+  Nk,
   S0,
+  C0,
+  r0,
+  i0,
+  o0,
+  sA,
+  s0,
+  d0,
+  u0,
+  h0,
+  Qo,
+  y0,
   k0,
-  Z0,
+  T0,
+  Zk,
+  $0,
+  A0,
+  e1,
+  J0,
+  G0,
+  V0,
+  Y0,
+  K0,
   X0,
+  Z0,
+  kf,
+  Q0,
+  q0,
   U0,
   H0,
-  G0,
   W0,
-  V0,
-  K0,
-  kf,
-  Y0,
-  F0,
-  j0,
-  _0,
-  q0,
   pc,
-  Q0,
-  J0,
-  e1,
   t1,
-  Af,
+  r1,
   i1,
   a1,
-  V1,
-  W1,
-  Y1,
-  K1,
+  Af,
+  n1,
+  s1,
   X1,
+  K1,
+  Q1,
   Z1,
   J1,
-  Q1,
-  kS,
+  eS,
+  rS,
+  tS,
   AS,
   IS,
-  xS,
-  DS,
-  OS,
+  ES,
+  CS,
   FS,
+  _S,
   qS,
   WS,
-  d2,
-  Uf,
   KS,
-  YS,
-  c2,
-  XS,
+  m2,
+  Uf,
+  ZS,
   QS,
-  a2,
-  o2,
-  h2,
-  b2,
-  y2,
   p2,
-  n2,
-  $2,
-  A2,
+  JS,
+  t2,
+  s2,
+  l2,
+  g2,
+  w2,
+  k2,
+  f2,
+  c2,
+  z2,
   I2,
-  N2,
-  M2,
-  _2,
+  E2,
+  P2,
+  L2,
+  H2,
   ol,
-  q2,
-  U2,
-  d1,
-  h1,
-  q1,
-  U1,
+  W2,
+  G2,
   m1,
-  b1,
   g1,
-  y1,
-  v1,
+  W1,
+  G1,
+  b1,
   w1,
-  x1,
-  H1,
+  y1,
   k1,
+  x1,
   S1,
-  Ef,
-  P1,
-  j1,
-  T1,
-  A1,
   C1,
-  I1,
-  If,
-  N1,
-  E1,
-  M1,
-  zf,
-  L1,
-  D1,
-  R1,
-  O1,
-  F1,
+  V1,
+  A1,
+  $1,
+  Ef,
   B1,
+  U1,
+  M1,
+  I1,
+  T1,
+  E1,
+  If,
+  P1,
+  R1,
+  L1,
+  zf,
+  D1,
+  F1,
+  O1,
+  _1,
+  q1,
+  j1,
   // Advanced data
   og,
-  dC,
-  fC,
-  gC,
-  bC,
+  mC,
+  vC,
+  yC,
+  wC,
   // Media
-  CC,
-  $C,
-  MC,
-  NC,
-  RC,
-  DC,
+  TC,
+  zC,
+  LC,
+  PC,
+  OC,
+  FC,
   // Editors
-  lA,
   dA,
-  bA,
-  kA,
+  mA,
+  wA,
+  AA,
   // More charts
-  SA,
-  TA,
-  zA,
-  EA,
+  $A,
+  MA,
   NA,
-  // Advanced forms
+  RA,
   PA,
-  OA,
+  // Advanced forms
   BA,
-  qA,
-  UA,
-  HA,
+  _A,
+  jA,
+  WA,
+  GA,
   VA,
-  YA,
   XA,
-  ZA,
-  t$,
+  QA,
   JA,
+  e$,
+  a$,
+  r$,
   // Advanced patterns + state cards
-  o$,
-  s$,
   l$,
-  c$,
   u$,
   d$,
+  p$,
   h$,
   m$,
-  f$,
   g$,
   b$,
   v$,
   y$,
-  T$,
-  z$,
-  E$,
+  w$,
+  x$,
+  k$,
   M$,
+  N$,
   R$,
-  P$,
-  D$,
+  L$,
+  O$,
+  B$,
   F$,
-  j$,
-  _$,
+  q$,
   U$,
-  W$,
-  V$,
+  H$,
+  G$,
   K$,
+  X$,
+  Z$,
   // Aktion 0.5 standard helpers
-  nT,
-  lT,
+  cT,
   dT,
-  hT,
   mT,
-  fT,
+  gT,
+  bT,
+  vT,
   // Behavioural & styling wrappers.
   // `Link` is deliberately NOT repeated here: it is already registered above,
   // with the Content primitives. Registering it twice made `components.length`
@@ -27540,100 +27572,100 @@ const nb = [
   // every count derived from the array — the prompt, the skill reference, the
   // extension's description — off by one. (No literal counts in this comment:
   // they went stale the first time a component was added.)
-  UC,
-  WC,
   GC,
-  VC,
-  ZC,
-  JC,
-  oA,
+  KC,
+  YC,
+  XC,
+  eA,
+  rA,
+  lA,
   // Marketing / landing / utility composites (suggestions-global Parts II, VIII)
-  UT,
-  HT,
-  WT,
   GT,
   VT,
-  YT,
   KT,
+  YT,
   XT,
+  QT,
   ZT,
   JT,
-  QT,
-  tI,
   eI,
+  rI,
+  tI,
+  aI,
   iI,
-  oI,
   nI,
-  uI,
-  pI,
+  lI,
+  cI,
   hI,
+  fI,
   gI,
-  bI,
-  vI,
-  Og,
   yI,
   wI,
   xI,
+  Og,
+  kI,
   SI,
-  Fg,
   CI,
-  AI,
   $I,
+  Fg,
   TI,
+  II,
   zI,
-  EI,
+  MI,
+  NI,
+  RI,
   // Layout & motion (suggestions-global Parts II.2, III.2/3/4/5/6/7, IV.4)
-  PI,
-  _I,
-  FI,
-  qI,
-  UI,
+  BI,
   HI,
+  qI,
+  WI,
+  GI,
   VI,
-  KI,
   XI,
   ZI,
-  QI,
   JI,
   ez,
+  tz,
+  rz,
+  iz,
   // Media / overlay / social / e-commerce / utility extras (Parts VIII, IX)
-  _z,
-  qz,
-  Uz,
   Hz,
   Wz,
   Gz,
   Vz,
   Kz,
+  Yz,
   Xz,
   Zz,
-  Qz,
+  Jz,
+  eM,
   tM,
-  iM,
   aM,
+  nM,
+  sM,
   // Accessibility primitives (suggestions-global X.3)
-  rz,
-  iz,
-  az,
   oz,
+  nz,
+  sz,
+  lz,
   // Wave-3: QR, reactions, presence, mobile tab bar, cart (VIII.2/4/8, XII.1)
-  vz,
-  yz,
-  wz,
   xz,
+  kz,
   Sz,
+  Cz,
+  $z,
   // Scheduling (VIII.6)
-  Mz,
+  Lz,
   // Interactive canvas / editor (VIII.7)
-  Dz,
-  Oz,
+  Fz,
+  _z,
   // Escape hatches for raw HTML / CSS — last-resort primitives
-  ST,
-  NT,
+  $T,
+  PT,
   // Imperative / third-party widget interop
-  OT,
-  qT
-], oM = [
+  _T,
+  WT
+], lM = [
   {
     name: "Layout",
     components: [
@@ -28197,38 +28229,38 @@ const nb = [
     ]
   }
 ];
-gw(nb);
-const Wi = {
+yw(nb);
+const Hi = {
   root: "Column",
   components: nb,
-  componentGroups: oM
-}, nM = (t) => {
+  componentGroups: lM
+}, cM = (t) => {
   const e = {
     name: t.name,
     type: t.type,
     required: !t.optional
   };
   return t.description && (e.description = t.description), t.enum && t.enum.length > 0 && (e.enumValues = t.enum), e;
-}, sM = (t) => {
+}, uM = (t) => {
   const e = t.props.map((r) => r.optional ? `${r.name}?` : r.name);
   return `${t.name}(${e.join(", ")})`;
-}, lM = (t) => {
+}, dM = (t) => {
   const e = /* @__PURE__ */ new Map();
   for (const r of t.componentGroups ?? [])
     for (const i of r.components) e.set(i, r.name);
   return e;
 };
-function cM(t = Wi) {
-  const e = lM(t);
+function pM(t = Hi) {
+  const e = dM(t);
   return t.components.map((r) => ({
     name: r.name,
     group: e.get(r.name) ?? "Other",
     description: r.description,
-    params: r.props.map(nM),
-    signature: sM(r)
+    params: r.props.map(cM),
+    signature: uM(r)
   }));
 }
-const uM = {
+const hM = {
   sx: {
     type: "object",
     description: 'Style channel accepted by EVERY component: layout, colour, typography, spacing, borders, effects. Values may be responsive maps (`{base, sm, md, lg}`), interaction states (`{_hover, _focus, _active}`), or theme-token refs (`"primary"`, `"gradient.brand"`, `"space.md"`).'
@@ -28265,8 +28297,8 @@ const uM = {
     description: "End-to-end test hook: renders `data-testid` on the component's ROOT element. Works on every component, including the six that shadow the `data` channel. Prefer role/label queries; reach for this where they are genuinely ambiguous."
   },
   testid: { type: "string", description: "Alias of `testId`." }
-}, ZP = [...bn].map((t) => {
-  const e = uM[t];
+}, e4 = [...bn].map((t) => {
+  const e = hM[t];
   return {
     name: t,
     type: e?.type ?? "any",
@@ -28274,19 +28306,19 @@ const uM = {
     description: e?.description ?? "Universal prop accepted by every component."
   };
 });
-function dM(t) {
+function mM(t) {
   const e = {};
   for (const r of t) e[r.name] = r;
   return e;
 }
 [...Ym].join("|");
 [...Ym].join("|");
-const pM = /* @__PURE__ */ new Set(["img", "input", "br", "hr", "meta", "link", "source", "area", "base", "col", "embed", "param", "track", "wbr"]), hM = /* @__PURE__ */ new Set(["script", "style", "head", "meta", "link", "title", "noscript"]);
-function mM(t, e) {
+const fM = /* @__PURE__ */ new Set(["img", "input", "br", "hr", "meta", "link", "source", "area", "base", "col", "embed", "param", "track", "wbr"]), gM = /* @__PURE__ */ new Set(["script", "style", "head", "meta", "link", "title", "noscript"]);
+function bM(t, e) {
   const r = Number(t[1]);
   return r === 1 ? `Display(${Ze(e)})` : r === 2 ? `Heading(${Ze(e)})` : `Heading(${Ze(e)}, { level: ${r} })`;
 }
-const fM = /* @__PURE__ */ new Set(["span", "p", "strong", "em", "b", "i", "small", "label", "figcaption", "blockquote", "code", "pre", "td", "th", "caption"]);
+const vM = /* @__PURE__ */ new Set(["span", "p", "strong", "em", "b", "i", "small", "label", "figcaption", "blockquote", "code", "pre", "td", "th", "caption"]);
 function Ze(t) {
   return JSON.stringify(t.replace(/\s+/g, " ").trim());
 }
@@ -28296,14 +28328,14 @@ function Po(t) {
 function sb(t) {
   const e = t.attrs.class ?? "";
   if (!e.trim()) return { sx: {}, rest: "" };
-  const r = Ww(e), i = Array.isArray(r._unmapped) ? r._unmapped : [];
+  const r = Kw(e), i = Array.isArray(r._unmapped) ? r._unmapped : [];
   return delete r._unmapped, { sx: r, rest: i.join(" ") };
 }
 function lb(t, e) {
   const r = [];
   return Object.keys(t).length > 0 && r.push(`sx: ${JSON.stringify(t)}`), e && r.push(`className: ${Ze(e)}`), r.length > 0 ? `, { ${r.join(", ")} }` : "";
 }
-function gM(t, e) {
+function yM(t, e) {
   const { sx: r, rest: i } = sb(t);
   let a = "Stack";
   return r.display === "flex" && (a = r.direction === "column" || r.direction === "column-reverse" ? "Column" : "Row", delete r.display, typeof r.direction == "string" && delete r.direction), `${a}(${e || "[]"}${lb(r, i)})`;
@@ -28314,7 +28346,7 @@ function cb(t) {
     return a ? `Text(${Ze(a)})` : null;
   }
   const e = t.tag.toLowerCase();
-  if (hM.has(e)) return null;
+  if (gM.has(e)) return null;
   const r = t.children.map(cb).filter((a) => a != null), i = r.length > 0 ? `[${r.join(", ")}]` : "";
   switch (e) {
     case "h1":
@@ -28323,7 +28355,7 @@ function cb(t) {
     case "h4":
     case "h5":
     case "h6":
-      return mM(e, Po(t) || er(t));
+      return bM(e, Po(t) || er(t));
     case "p":
       return `Text(${Ze(er(t))})`;
     case "a": {
@@ -28352,7 +28384,7 @@ function cb(t) {
     case "aside":
     case "div":
     case "form":
-      return gM(t, i);
+      return yM(t, i);
     case "span":
     case "strong":
     case "em":
@@ -28386,9 +28418,9 @@ function cb(t) {
   }
 }
 function er(t) {
-  return t.tag === "#text" ? t.text ?? "" : fM.has(t.tag.toLowerCase()) || t.children.every((e) => e.tag === "#text") ? t.children.map(er).join(" ").replace(/\s+/g, " ").trim() : Po(t);
+  return t.tag === "#text" ? t.text ?? "" : vM.has(t.tag.toLowerCase()) || t.children.every((e) => e.tag === "#text") ? t.children.map(er).join(" ").replace(/\s+/g, " ").trim() : Po(t);
 }
-function bM(t) {
+function wM(t) {
   if (typeof document > "u" || typeof DOMParser > "u") return null;
   try {
     const e = new DOMParser().parseFromString(`<body>${t}</body>`, "text/html"), r = (i) => {
@@ -28406,7 +28438,7 @@ function bM(t) {
     return null;
   }
 }
-function vM(t) {
+function xM(t) {
   const e = [], r = [], i = (n) => {
     r.length === 0 ? e.push(n) : r[r.length - 1].children.push(n);
   }, a = /<!--[\s\S]*?-->|<\/([a-zA-Z][\w-]*)\s*>|<([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>|([^<]+)/g;
@@ -28425,7 +28457,7 @@ function vM(t) {
         for (; (c = l.exec(o[3] ?? "")) !== null; )
           s[c[1]] = (c[2] ?? "").replace(/^["']|["']$/g, "");
         const u = { tag: n, attrs: s, children: [] };
-        i(u), !pM.has(n) && o[4] !== "/" && r.push(u);
+        i(u), !fM.has(n) && o[4] !== "/" && r.push(u);
       } else if (o[5]) {
         const n = o[5];
         n.trim() && i({ tag: "#text", attrs: {}, children: [], text: n });
@@ -28433,24 +28465,24 @@ function vM(t) {
     }
   return e;
 }
-function QP(t) {
-  const e = typeof t == "string" ? t : "", i = (bM(e) ?? vM(e)).map(cb).filter((a) => a != null);
+function t4(t) {
+  const e = typeof t == "string" ? t : "", i = (wM(e) ?? xM(e)).map(cb).filter((a) => a != null);
   return i.length === 0 ? '$app(Text(""))' : i.length === 1 ? `$app(${i[0]})` : `$app(Column([
   ${i.join(`,
   `)}
 ]))`;
 }
-const yM = (t) => !!(t && typeof t == "object" && t.kind === "Theme");
-function wM(t, e) {
+const kM = (t) => !!(t && typeof t == "object" && t.kind === "Theme");
+function SM(t, e) {
   return e.length === 0 ? t : `${t}.${e.join(".")}`;
 }
-function xM(t, e) {
+function CM(t, e) {
   return !!(t === e || e.startsWith(t + ".") || t.startsWith(e + "."));
 }
 function ub(t, e) {
   if (t.has(e)) return !0;
   for (const r of t)
-    if (xM(r, e)) return !0;
+    if (CM(r, e)) return !0;
   return !1;
 }
 function nn(t, e) {
@@ -28558,8 +28590,8 @@ class Dc {
       this.set(e, i);
       return;
     }
-    const a = this.values.get(e), o = ha(a, r, 0, i);
-    this.values.set(e, o), this.enqueueChange(wM(e, r));
+    const a = this.values.get(e), o = pa(a, r, 0, i);
+    this.values.set(e, o), this.enqueueChange(SM(e, r));
   }
   /** Iterate over every (name, value) pair. Order is insertion order. */
   entries() {
@@ -28640,19 +28672,19 @@ class Dc {
       r(e);
   }
 }
-const kM = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]), SM = 1e6;
-function ha(t, e, r, i) {
+const AM = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]), $M = 1e6;
+function pa(t, e, r, i) {
   if (r >= e.length) return i;
   const a = e[r];
-  if (kM.has(a)) return t;
+  if (AM.has(a)) return t;
   const o = a !== "" && !Number.isNaN(Number(a)) ? Number(a) : null;
   if (Array.isArray(t) && o !== null) {
     const s = t.slice();
-    return s[o] = ha(t[o], e, r + 1, i), s;
+    return s[o] = pa(t[o], e, r + 1, i), s;
   }
   if (t && typeof t == "object" && !Array.isArray(t)) {
     const s = { ...t };
-    return s[a] = ha(
+    return s[a] = pa(
       t[a],
       e,
       r + 1,
@@ -28660,31 +28692,31 @@ function ha(t, e, r, i) {
     ), s;
   }
   if (o !== null) {
-    if (o > SM) return t;
+    if (o > $M) return t;
     const s = [];
-    return s[o] = ha(void 0, e, r + 1, i), s;
+    return s[o] = pa(void 0, e, r + 1, i), s;
   }
   const n = {};
-  return n[a] = ha(void 0, e, r + 1, i), n;
+  return n[a] = pa(void 0, e, r + 1, i), n;
 }
-const CM = "<inline>", xh = "__AKTION_COVERAGE_V1__";
+const TM = "<inline>", xh = "__AKTION_COVERAGE_V1__";
 function Oc() {
   const t = globalThis;
   let e = t[xh];
   return e || (e = { enabled: !1, accumulators: /* @__PURE__ */ new Map(), registered: /* @__PURE__ */ new WeakSet() }, t[xh] = e), e;
 }
-function AM(t) {
+function IM(t) {
   const { accumulators: e } = Oc();
   let r = e.get(t);
   return r || (r = { path: t, lines: /* @__PURE__ */ new Map(), functions: /* @__PURE__ */ new Map(), branches: /* @__PURE__ */ new Map() }, e.set(t, r)), r;
 }
 const sn = (t, e) => `${t}:${e}`;
-function $M(t) {
+function zM(t) {
   switch (t.kind) {
     case "ComponentDeclaration":
     case "ActionDeclaration":
     case "HookDeclaration":
-      return ey(t.name) ?? (t.name || "(anonymous)");
+      return iy(t.name) ?? (t.name || "(anonymous)");
     case "EffectDeclaration":
       return "effect";
     case "Lambda":
@@ -28693,7 +28725,7 @@ function $M(t) {
       return null;
   }
 }
-function TM(t) {
+function MM(t) {
   switch (t.kind) {
     case "IfStatement":
       return { kind: "if", arms: 2 };
@@ -28707,19 +28739,19 @@ function TM(t) {
       return null;
   }
 }
-function IM(t, e) {
-  const i = (t.sources ?? [e ?? CM]).map((o) => AM(o)), { registered: a } = Oc();
+function EM(t, e) {
+  const i = (t.sources ?? [e ?? TM]).map((o) => IM(o)), { registered: a } = Oc();
   return a.has(t.statements) ? { files: i } : (a.add(t.statements), dm(t, ({ node: o }) => {
     const n = o.loc;
     if (!n) return;
     const s = i[n.source ?? 0] ?? i[0];
     o.kind !== "Block" && !s.lines.has(n.line) && s.lines.set(n.line, 0);
-    const l = $M(o);
+    const l = zM(o);
     if (l !== null) {
       const u = sn(n.line, n.column);
       s.functions.has(u) || s.functions.set(u, { name: l, line: n.line, column: n.column, hits: 0 });
     }
-    const c = TM(o);
+    const c = MM(o);
     if (c) {
       const u = sn(n.line, n.column);
       s.branches.has(u) || s.branches.set(u, {
@@ -28749,11 +28781,11 @@ function rr(t, e, r) {
   const a = i.branches.get(sn(e.line, e.column));
   a && r >= 0 && r < a.arms.length && (a.arms[r] = a.arms[r] + 1);
 }
-function zM() {
+function NM() {
   return Oc().enabled;
 }
 const Rn = Symbol("aktion.httpResource");
-function MM(t) {
+function LM(t) {
   return typeof t == "object" && t !== null && t[Rn] === !0;
 }
 class Bc {
@@ -28827,7 +28859,7 @@ class Bc {
         headers: r.headers,
         signal: r.signal ?? u.signal
       };
-      r.body !== void 0 && r.method !== "GET" && r.method !== "HEAD" && (p.body = EM(r.body, r.headers));
+      r.body !== void 0 && r.method !== "GET" && r.method !== "HEAD" && (p.body = RM(r.body, r.headers));
       const b = await h(r.url, p), m = {};
       b.headers.forEach((x, y) => {
         m[y] = x;
@@ -28883,7 +28915,7 @@ class Bc {
     }
   }
 }
-function EM(t, e) {
+function RM(t, e) {
   if (t == null) return "";
   if (typeof t == "string" || t instanceof Blob || t instanceof ArrayBuffer || typeof FormData < "u" && t instanceof FormData || typeof URLSearchParams < "u" && t instanceof URLSearchParams) return t;
   !e["content-type"] && !e["Content-Type"] && (e["Content-Type"] = "application/json");
@@ -28893,7 +28925,7 @@ function EM(t, e) {
     return String(t);
   }
 }
-const NM = /* @__PURE__ */ new Set([
+const PM = /* @__PURE__ */ new Set([
   "url",
   "method",
   "headers",
@@ -28911,7 +28943,7 @@ function Fc(t, e) {
     for (const [a, o] of t.queryCache)
       i.some((n) => a.includes(n)) && (o.loading || o.refetch());
 }
-function jc(t) {
+function _c(t) {
   const e = t && typeof t == "object" && !Array.isArray(t) ? t : {}, r = typeof e.url == "string" ? e.url : "", i = typeof e.gql == "string" && e.gql.trim().length > 0, a = i ? "POST" : typeof e.method == "string" ? e.method.toUpperCase() : "GET", o = {};
   if (e.headers && typeof e.headers == "object" && !Array.isArray(e.headers))
     for (const [c, u] of Object.entries(e.headers))
@@ -28926,7 +28958,7 @@ function jc(t) {
   }
   const s = {};
   for (const [c, u] of Object.entries(e))
-    NM.has(c) || (s[c] = u);
+    PM.has(c) || (s[c] = u);
   const l = {
     url: n,
     method: a,
@@ -28963,7 +28995,7 @@ function db(t, e) {
       return;
     }
     try {
-      const c = jc(t);
+      const c = _c(t);
       c.url = e.http.resolveUrl(c.url), c.signal = l.signal;
       const u = await e.http.request(c);
       if (s !== a) return;
@@ -29011,12 +29043,12 @@ function Sh(t) {
   }
   return `${e} ${r} ${i} ${a} ${o}`;
 }
-function LM(t, e) {
+function DM(t, e) {
   const r = yr(t);
   if (r.infinite && typeof r.infinite == "object") {
     const u = r.key != null ? String(r.key) : Sh(r), h = e.queryCache.get(u);
     if (h) return h;
-    const p = RM(r, e);
+    const p = OM(r, e);
     return e.queryCache.set(u, p), p;
   }
   const i = typeof r.ttl == "number" ? r.ttl : 0, a = r.key != null ? String(r.key) : Sh(r), o = e.queryCache, n = o.get(a);
@@ -29048,7 +29080,7 @@ function LM(t, e) {
   }
   return l;
 }
-function RM(t, e) {
+function OM(t, e) {
   const r = yr(t.infinite), i = typeof r.param == "string" ? r.param : "page", a = typeof r.limit == "number" && r.limit > 0 ? r.limit : 20, o = typeof r.start == "number" ? r.start : r.mode === "offset" ? 0 : 1, n = r.mode === "offset" ? "offset" : "page", s = typeof r.select == "function" ? r.select : null, l = () => e.notify?.(), c = [];
   let u = o, h = !1;
   const p = {};
@@ -29090,7 +29122,7 @@ function RM(t, e) {
       const y = u, w = {
         ...p,
         query: { ...yr(p.query), [i]: y, limit: a }
-      }, S = jc(w);
+      }, S = _c(w);
       S.url = e.http.resolveUrl(S.url);
       const k = await e.http.request(S);
       if (!(k.status >= 200 && k.status < 300)) {
@@ -29108,7 +29140,7 @@ function RM(t, e) {
   };
   return v(!0), f;
 }
-function PM(t, e) {
+function BM(t, e) {
   const r = yr(t);
   let i = 0, a = null;
   const o = () => e.notify?.(), n = {
@@ -29144,7 +29176,7 @@ function PM(t, e) {
         return;
       }
       try {
-        const p = { method: "POST", ...r, ...yr(s) }, b = jc(p);
+        const p = { method: "POST", ...r, ...yr(s) }, b = _c(p);
         b.url = e.http.resolveUrl(b.url), b.signal = c.signal;
         const m = await e.http.request(b);
         if (l !== i) return;
@@ -29181,8 +29213,8 @@ function hb(t) {
     return t;
   }
 }
-const DM = 100, OM = 500, BM = 15e3;
-function FM(t, e) {
+const FM = 100, _M = 500, jM = 15e3;
+function qM(t, e) {
   const r = pb(t), i = typeof r.url == "string" ? r.url : "", a = typeof r.bufferSize == "number" && r.bufferSize > 0 ? Math.floor(r.bufferSize) : 50, o = typeof r.onMessage == "function" ? r.onMessage : null, n = r.reconnect === !0 ? 1 / 0 : typeof r.reconnect == "number" && r.reconnect > 0 ? Math.floor(r.reconnect) : 0, s = () => e.notify?.(), l = {
     connected: !1,
     status: "closed",
@@ -29209,7 +29241,7 @@ function FM(t, e) {
       return;
     }
     l.attempts += 1;
-    const x = Math.min(BM, OM * 2 ** (l.attempts - 1));
+    const x = Math.min(jM, _M * 2 ** (l.attempts - 1));
     c("connecting"), p = setTimeout(() => {
       p = null, v();
     }, x);
@@ -29244,7 +29276,7 @@ function FM(t, e) {
       u.send(y);
       return;
     }
-    l.status === "connecting" && b.length < DM && b.push(y);
+    l.status === "connecting" && b.length < FM && b.push(y);
   }, l.close = () => {
     h = !0, p != null && (clearTimeout(p), p = null), b.length = 0;
     try {
@@ -29260,7 +29292,7 @@ function FM(t, e) {
     }
   }), l;
 }
-function jM(t, e) {
+function UM(t, e) {
   const r = pb(t), i = typeof r.url == "string" ? r.url : "", a = typeof r.bufferSize == "number" && r.bufferSize > 0 ? Math.floor(r.bufferSize) : 50, o = typeof r.event == "string" && r.event ? r.event : "message", n = typeof r.onMessage == "function" ? r.onMessage : null, s = () => e.notify?.(), l = {
     connected: !1,
     status: "closed",
@@ -29308,10 +29340,10 @@ function ln(t) {
   return t && typeof t == "object" && !Array.isArray(t) ? t : {};
 }
 const Ch = /* @__PURE__ */ new Map();
-function _M(t, e) {
+function HM(t, e) {
   return e === "style" || e === "stylesheet" || e === "css" ? !0 : /\.css(\?|#|$)/i.test(t);
 }
-function qM(t, e) {
+function WM(t, e) {
   return new Promise((r, i) => {
     const a = document.createElement("link");
     a.rel = "stylesheet", a.href = t;
@@ -29320,7 +29352,7 @@ function qM(t, e) {
     a.addEventListener("load", () => r(!0)), a.addEventListener("error", () => i(new Error(`[aktion] $script failed to load stylesheet: ${t}`))), document.head.appendChild(a);
   });
 }
-function UM(t) {
+function GM(t) {
   const e = typeof t == "string" ? t.trim() : "";
   if (!e) return "";
   const r = e.replace(/[\u0000-\u001F\u007F]/g, "");
@@ -29331,7 +29363,7 @@ function UM(t) {
   const a = i[1].toLowerCase();
   return a === "http" || a === "https" ? r : "";
 }
-function HM(t, e) {
+function VM(t, e) {
   return new Promise((r, i) => {
     const a = () => e.global ? globalThis[e.global] ?? !0 : !0, o = document.createElement("script");
     o.src = t, o.async = !0, e.type && (o.type = e.type);
@@ -29340,13 +29372,13 @@ function HM(t, e) {
     o.addEventListener("load", () => r(a())), o.addEventListener("error", () => i(new Error(`[aktion] $script failed to load: ${t}`))), document.head.appendChild(o);
   });
 }
-function WM(t, e) {
-  const r = ln(t), i = UM(r.src), a = typeof r.global == "string" ? r.global : void 0, o = typeof r.type == "string" ? r.type : void 0, n = typeof r.as == "string" ? r.as.toLowerCase() : "", s = ln(r.attributes), l = () => e.notify?.(), c = { ready: !1, loading: !1, error: null, value: null };
+function KM(t, e) {
+  const r = ln(t), i = GM(r.src), a = typeof r.global == "string" ? r.global : void 0, o = typeof r.type == "string" ? r.type : void 0, n = typeof r.as == "string" ? r.as.toLowerCase() : "", s = ln(r.attributes), l = () => e.notify?.(), c = { ready: !1, loading: !1, error: null, value: null };
   if (!i)
     return c.error = new Error(
       "[aktion] $script requires a `src` that is an http(s) or same-origin URL."
     ), c;
-  if (IN() !== "all")
+  if (EN() !== "all")
     return c.error = new Error(
       "[aktion] $script is disabled because a restricted global access policy is active (see setGlobalAccessPolicy). It loads and executes remote code."
     ), c;
@@ -29354,7 +29386,7 @@ function WM(t, e) {
     return c;
   let u = Ch.get(i);
   if (!u) {
-    const p = _M(i, n) ? qM(i, s) : HM(i, { global: a, type: o, attributes: s });
+    const p = HM(i, n) ? WM(i, s) : VM(i, { global: a, type: o, attributes: s });
     u = { promise: p, settled: !1, value: null, error: null }, p.then(
       (b) => {
         u.settled = !0, u.value = b;
@@ -29387,7 +29419,7 @@ function vo(t) {
 function bs(t) {
   return typeof t == "function" ? t : null;
 }
-function GM(t) {
+function YM(t) {
   const e = () => t.notify?.(), r = (i) => {
     let a = !1;
     const o = () => {
@@ -29473,14 +29505,14 @@ function yi(t) {
 function fr(t) {
   return String(t ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-function VM(t) {
+function XM(t) {
   return String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-const KM = /^[a-zA-Z][a-zA-Z0-9_.:-]*$/;
+const ZM = /^[a-zA-Z][a-zA-Z0-9_.:-]*$/;
 function oi(t) {
-  return KM.test(t) ? !/^on/i.test(t) : !1;
+  return ZM.test(t) ? !/^on/i.test(t) : !1;
 }
-const YM = /* @__PURE__ */ new Set([
+const QM = /* @__PURE__ */ new Set([
   "canonical",
   "alternate",
   "prev",
@@ -29498,14 +29530,14 @@ const YM = /* @__PURE__ */ new Set([
   "dns-prefetch",
   "preconnect",
   "me"
-]), XM = /* @__PURE__ */ new Set(["lang", "dir", "class", "translate", "id"]);
+]), JM = /* @__PURE__ */ new Set(["lang", "dir", "class", "translate", "id"]);
 function Ah(t) {
   const e = String(t ?? "").trim();
   if (!e) return "";
   const r = e.replace(/[\u0000-\u001f\u007f]/g, "");
   return !r || r.startsWith("//") || /^[a-zA-Z][a-zA-Z0-9+.\-]*:/.test(r) || /[\\<>"']/.test(r) ? "" : r;
 }
-function ZM(t) {
+function eE(t) {
   const e = String(t ?? "").trim();
   if (!e) return "";
   const r = e.replace(/[\u0000-\u001f\u007f]/g, "");
@@ -29517,15 +29549,15 @@ function ZM(t) {
   const a = i[1].toLowerCase();
   return a === "http" || a === "https" ? r : "";
 }
-function QM(t) {
+function tE(t) {
   const e = (t.rel ?? "").trim().toLowerCase();
-  if (!YM.has(e)) return null;
+  if (!QM.has(e)) return null;
   const r = { rel: e };
   for (const [i, a] of Object.entries(t)) {
     const o = i.toLowerCase();
     if (o !== "rel" && oi(i)) {
       if (o === "href") {
-        const n = ZM(a);
+        const n = eE(a);
         if (!n) return null;
         r.href = n;
         continue;
@@ -29535,7 +29567,7 @@ function QM(t) {
   }
   return r.href ? r : null;
 }
-function JM(t) {
+function rE(t) {
   const e = yi(t), r = { meta: {}, og: {}, twitter: {}, link: [], jsonLd: [], htmlAttrs: {} };
   if (typeof e.title == "string") {
     const l = typeof e.titleTemplate == "string" ? e.titleTemplate : "";
@@ -29556,7 +29588,7 @@ function JM(t) {
     for (const [p, b] of Object.entries(c))
       b != null && (u[p] = String(b));
     if (Object.keys(u).length === 0) continue;
-    const h = QM(u);
+    const h = tE(u);
     h && r.link.push(h);
   }
   if (e.jsonLd != null) {
@@ -29578,11 +29610,11 @@ function JM(t) {
   for (const [l, c] of Object.entries(s)) {
     if (c == null) continue;
     const u = l.toLowerCase();
-    oi(l) && (!XM.has(u) && !u.startsWith("data-") || (r.htmlAttrs[u] = String(c)));
+    oi(l) && (!JM.has(u) && !u.startsWith("data-") || (r.htmlAttrs[u] = String(c)));
   }
   return r;
 }
-function eE(t) {
+function iE(t) {
   const e = { meta: {}, og: {}, twitter: {}, link: [], jsonLd: [], htmlAttrs: {} }, r = /* @__PURE__ */ new Set();
   for (const i of t) {
     i.title != null && (e.title = i.title), Object.assign(e.meta, i.meta), Object.assign(e.og, i.og), Object.assign(e.twitter, i.twitter), Object.assign(e.htmlAttrs, i.htmlAttrs), i.base != null && (e.base = i.base);
@@ -29594,9 +29626,9 @@ function eE(t) {
   }
   return e;
 }
-function tE(t) {
+function aE(t) {
   const e = [];
-  t.title != null && e.push(`<title>${VM(t.title)}</title>`);
+  t.title != null && e.push(`<title>${XM(t.title)}</title>`);
   for (const [r, i] of Object.entries(t.meta))
     oi(r) && (r.toLowerCase() === "charset" ? e.push(`<meta charset="${fr(i)}">`) : e.push(`<meta name="${fr(r)}" content="${fr(i)}">`));
   for (const [r, i] of Object.entries(t.og)) {
@@ -29625,7 +29657,7 @@ function tE(t) {
 `);
 }
 const Sl = "data-rui-head";
-function rE(t) {
+function oE(t) {
   if (typeof document > "u") return;
   t.title != null && (document.title = t.title);
   const e = document.documentElement;
@@ -29680,36 +29712,36 @@ function rE(t) {
     i(o);
   }
 }
-function iE(t) {
+function nE(t) {
   let e = [], r = !1, i = { meta: {}, og: {}, twitter: {}, link: [], jsonLd: [], htmlAttrs: {} };
   const a = () => {
-    r = !1, e.length !== 0 && (i = eE(e), e = [], rE(i));
+    r = !1, e.length !== 0 && (i = iE(e), e = [], oE(i));
   };
   return t.disposers.push(() => {
     typeof document > "u" || !document.head || document.head.querySelectorAll(`[${Sl}]`).forEach((o) => o.remove());
   }), {
     apply(o) {
-      e.push(JM(o)), !r && (r = !0, typeof queueMicrotask == "function" ? queueMicrotask(a) : Promise.resolve().then(a));
+      e.push(rE(o)), !r && (r = !0, typeof queueMicrotask == "function" ? queueMicrotask(a) : Promise.resolve().then(a));
     },
     flush() {
       a();
     },
     serialize() {
-      return e.length > 0 && a(), tE(i);
+      return e.length > 0 && a(), aE(i);
     },
     htmlAttrs() {
       return e.length > 0 && a(), i.htmlAttrs;
     }
   };
 }
-function aE(t = {}) {
-  const e = oE(t.translations), r = typeof t.defaultLanguage == "string" ? t.defaultLanguage : "";
+function sE(t = {}) {
+  const e = lE(t.translations), r = typeof t.defaultLanguage == "string" ? t.defaultLanguage : "";
   let i = typeof t.currentLanguage == "string" && t.currentLanguage ? t.currentLanguage : r;
   function a(s, l) {
     if (typeof s != "string" || !s) return "";
     const c = e[s];
     let u;
-    return c && (i && typeof c[i] == "string" ? u = c[i] : r && typeof c[r] == "string" && (u = c[r])), u === void 0 ? s : nE(u, l, i || r || "en");
+    return c && (i && typeof c[i] == "string" ? u = c[i] : r && typeof c[r] == "string" && (u = c[r])), u === void 0 ? s : cE(u, l, i || r || "en");
   }
   function o(s) {
     typeof s != "string" || !s || (i = s);
@@ -29719,7 +29751,7 @@ function aE(t = {}) {
   }
   return { t: a, setCurrentLanguage: o, getCurrentLanguage: n };
 }
-function oE(t) {
+function lE(t) {
   if (!t || typeof t != "object" || Array.isArray(t)) return {};
   const e = {};
   for (const [r, i] of Object.entries(t)) {
@@ -29733,8 +29765,8 @@ function oE(t) {
   }
   return e;
 }
-function nE(t, e, r = "en") {
-  const i = sE(t, e ?? {}, r), a = e ?? {};
+function cE(t, e, r = "en") {
+  const i = uE(t, e ?? {}, r), a = e ?? {};
   return i.replace(/\{([^{}]+)\}/g, (o, n) => {
     const s = n.trim();
     if (!Object.prototype.hasOwnProperty.call(a, s)) return o;
@@ -29742,7 +29774,7 @@ function nE(t, e, r = "en") {
     return l == null ? "" : String(l);
   });
 }
-function sE(t, e, r) {
+function uE(t, e, r) {
   let i = "", a = 0;
   for (; a < t.length; ) {
     const o = t.indexOf("{", a);
@@ -29755,7 +29787,7 @@ function sE(t, e, r) {
       i += t.slice(a);
       break;
     }
-    const s = t.slice(o + 1, n), l = lE(s, e, r);
+    const s = t.slice(o + 1, n), l = dE(s, e, r);
     l !== null ? i += t.slice(a, o) + l : i += t.slice(a, n + 1), a = n + 1;
   }
   return i;
@@ -29768,14 +29800,14 @@ function mb(t, e) {
       return i;
   return -1;
 }
-function lE(t, e, r) {
+function dE(t, e, r) {
   const i = t.indexOf(",");
   if (i === -1) return null;
   const a = t.slice(0, i).trim(), o = t.indexOf(",", i + 1);
   if (o === -1) return null;
   const n = t.slice(i + 1, o).trim(), s = t.slice(o + 1);
   if (n !== "plural" && n !== "select") return null;
-  const l = cE(s);
+  const l = pE(s);
   if (!l) return null;
   const c = e[a];
   if (n === "select")
@@ -29791,12 +29823,12 @@ function lE(t, e, r) {
       }
       p = l[m] ?? l.other;
     }
-    const b = uE(u, r);
+    const b = hE(u, r);
     return (p ?? "").replace(/#/g, b);
   }
   return l.other ?? "";
 }
-function cE(t) {
+function pE(t) {
   const e = {};
   let r = 0, i = !1;
   for (; r < t.length; ) {
@@ -29810,14 +29842,14 @@ function cE(t) {
   }
   return i ? e : null;
 }
-function uE(t, e) {
+function hE(t, e) {
   try {
     return new Intl.NumberFormat(e).format(t);
   } catch {
     return String(t);
   }
 }
-const ye = (t) => typeof t == "number" ? t : typeof t == "string" && t.trim() !== "" && !Number.isNaN(Number(t)) ? Number(t) : 0, Ve = (t) => Array.isArray(t) ? t : [], vs = (t) => !!t && typeof t == "object" && (typeof t.text == "function" || typeof t.arrayBuffer == "function"), dE = (t) => {
+const ye = (t) => typeof t == "number" ? t : typeof t == "string" && t.trim() !== "" && !Number.isNaN(Number(t)) ? Number(t) : 0, Ve = (t) => Array.isArray(t) ? t : [], vs = (t) => !!t && typeof t == "object" && (typeof t.text == "function" || typeof t.arrayBuffer == "function"), mE = (t) => {
   if (vs(t)) return t;
   if (Array.isArray(t)) {
     const e = t.find((r) => vs(r));
@@ -29829,7 +29861,7 @@ const ye = (t) => typeof t == "number" ? t : typeof t == "string" && t.trim() !=
       if (vs(e[r])) return e[r];
   }
   return null;
-}, pE = (t) => typeof t.text == "function" ? t.text().then((e) => String(e ?? "")) : typeof t.arrayBuffer == "function" && typeof TextDecoder < "u" ? t.arrayBuffer().then((e) => new TextDecoder().decode(new Uint8Array(e))) : new Promise((e, r) => {
+}, fE = (t) => typeof t.text == "function" ? t.text().then((e) => String(e ?? "")) : typeof t.arrayBuffer == "function" && typeof TextDecoder < "u" ? t.arrayBuffer().then((e) => new TextDecoder().decode(new Uint8Array(e))) : new Promise((e, r) => {
   if (typeof FileReader > "u") {
     r(new Error("no FileReader"));
     return;
@@ -29840,23 +29872,23 @@ const ye = (t) => typeof t == "number" ? t : typeof t == "string" && t.trim() !=
   }, i.onerror = () => {
     r(i.error ?? new Error("read failed"));
   }, i.readAsText(t);
-}), hE = (t) => typeof t.arrayBuffer != "function" || typeof btoa > "u" ? Promise.reject(new Error("no arrayBuffer")) : t.arrayBuffer().then((e) => {
+}), gE = (t) => typeof t.arrayBuffer != "function" || typeof btoa > "u" ? Promise.reject(new Error("no arrayBuffer")) : t.arrayBuffer().then((e) => {
   const r = new Uint8Array(e);
   let i = "";
   const a = 8192;
   for (let o = 0; o < r.length; o += a)
     i += String.fromCharCode(...r.subarray(o, o + a));
   return `data:${t.type || "application/octet-stream"};base64,${btoa(i)}`;
-}), It = (t) => !!t && typeof t == "object" && !Array.isArray(t), mE = /* @__PURE__ */ new Set(["http:", "https:", "mailto:", "tel:"]), $h = (t) => {
+}), It = (t) => !!t && typeof t == "object" && !Array.isArray(t), bE = /* @__PURE__ */ new Set(["http:", "https:", "mailto:", "tel:"]), $h = (t) => {
   const e = typeof t == "string" ? t.trim() : "";
   if (!e) return "";
   try {
     const r = typeof document < "u" && document.baseURI || (typeof location < "u" ? location.href : ""), i = r ? new URL(e, r) : new URL(e);
-    return mE.has(i.protocol) ? i.href : "";
+    return bE.has(i.protocol) ? i.href : "";
   } catch {
     return "";
   }
-}, Cl = (t) => t === !0 || t === 1 || t === "1" || t === "yes" || t === "true", fE = /* @__PURE__ */ new Set(["width", "height", "left", "top", "screenX", "screenY", "innerWidth", "innerHeight"]), gE = /* @__PURE__ */ new Set(["popup", "menubar", "toolbar", "location", "status", "resizable", "scrollbars", "noopener", "noreferrer"]), Th = (t, e) => {
+}, Cl = (t) => t === !0 || t === 1 || t === "1" || t === "yes" || t === "true", vE = /* @__PURE__ */ new Set(["width", "height", "left", "top", "screenX", "screenY", "innerWidth", "innerHeight"]), yE = /* @__PURE__ */ new Set(["popup", "menubar", "toolbar", "location", "status", "resizable", "scrollbars", "noopener", "noreferrer"]), Th = (t, e) => {
   const r = {};
   if (typeof t == "string")
     for (const a of t.split(",")) {
@@ -29869,15 +29901,15 @@ const ye = (t) => typeof t == "number" ? t : typeof t == "string" && t.trim() !=
       !(a in r) && o && (r[a] = !0);
   const i = [];
   for (const [a, o] of Object.entries(r)) {
-    if (fE.has(a)) {
+    if (vE.has(a)) {
       const n = Math.round(ye(o));
       Number.isFinite(n) && i.push(`${a}=${n}`);
       continue;
     }
-    gE.has(a) && i.push(`${a}=${Cl(o) ? "yes" : "no"}`);
+    yE.has(a) && i.push(`${a}=${Cl(o) ? "yes" : "no"}`);
   }
   return i.join(",");
-}, bE = /* @__PURE__ */ new Set(["_blank", "_self", "_parent", "_top"]), ys = {
+}, wE = /* @__PURE__ */ new Set(["_blank", "_self", "_parent", "_top"]), ys = {
   ok: !1,
   navigate: () => !1,
   close: () => {
@@ -29910,13 +29942,13 @@ const ye = (t) => typeof t == "number" ? t : typeof t == "string" && t.trim() !=
     default:
       return !1;
   }
-}, Aa = (t) => {
-  if (Array.isArray(t)) return t.map((e) => Aa(e));
+}, Ca = (t) => {
+  if (Array.isArray(t)) return t.map((e) => Ca(e));
   if (t instanceof Date) return new Date(t.getTime());
   if (t && typeof t == "object") {
     const e = {};
     for (const r of Object.keys(t))
-      e[r] = Aa(t[r]);
+      e[r] = Ca(t[r]);
     return e;
   }
   return t;
@@ -29950,20 +29982,20 @@ const ye = (t) => typeof t == "number" ? t : typeof t == "string" && t.trim() !=
   ["m", 60],
   ["h", 3600],
   ["d", 86400]
-], vE = /^([+-]?\d+(?:\.\d+)?)(ns|us|ms|s|m|h|d)$/, yE = /^([+-])?P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i, Do = (t) => {
+], xE = /^([+-]?\d+(?:\.\d+)?)(ns|us|ms|s|m|h|d)$/, kE = /^([+-])?P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i, Do = (t) => {
   if (typeof t == "number") return Number.isFinite(t) ? t : null;
   const e = String(t ?? "").trim();
   if (e === "") return null;
-  const r = vE.exec(e);
+  const r = xE.exec(e);
   if (r) {
     const c = Al.find(([u]) => u === r[2]);
     return c ? Number(r[1]) * c[1] : null;
   }
-  const i = yE.exec(e);
+  const i = kE.exec(e);
   if (!i || !/\d/.test(e)) return null;
   const a = Number(i[2] ?? 0), o = Number(i[3] ?? 0), n = Number(i[4] ?? 0), s = Number(i[5] ?? 0), l = a * 86400 + o * 3600 + n * 60 + s;
   return i[1] === "-" ? -l : l;
-}, wE = (t) => {
+}, SE = (t) => {
   if (t === 0) return "0s";
   const e = t < 0 ? "-" : "", r = Math.abs(t);
   for (let i = Al.length - 1; i >= 0; i -= 1) {
@@ -29973,7 +30005,7 @@ const ye = (t) => typeof t == "number" ? t : typeof t == "string" && t.trim() !=
     if (s >= 1 && Number.isInteger(s)) return `${e}${s}${o}`;
   }
   return `${e}${r}s`;
-}, xE = (t) => {
+}, CE = (t) => {
   if (t === 0) return "PT0S";
   const e = t < 0 ? "-" : "";
   let r = Math.abs(t);
@@ -29989,15 +30021,15 @@ const ye = (t) => typeof t == "number" ? t : typeof t == "string" && t.trim() !=
     n > 0 ? `${n}S` : ""
   ].join("");
   return `${e}P${s}${l ? `T${l}` : ""}`;
-}, kE = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], SE = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], CE = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], AE = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], $E = (t, e) => {
+}, AE = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], $E = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], TE = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], IE = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], zE = (t, e) => {
   const r = (s, l = 2) => String(s).padStart(l, "0"), i = t.getHours(), a = (i + 11) % 12 + 1, o = [
     [/YYYY/g, String(t.getFullYear())],
     [/YY/g, String(t.getFullYear()).slice(-2)],
-    [/MMMM/g, SE[t.getMonth()]],
-    [/MMM/g, kE[t.getMonth()]],
+    [/MMMM/g, $E[t.getMonth()]],
+    [/MMM/g, AE[t.getMonth()]],
     [/MM/g, r(t.getMonth() + 1)],
-    [/dddd/g, AE[t.getDay()]],
-    [/ddd/g, CE[t.getDay()]],
+    [/dddd/g, IE[t.getDay()]],
+    [/ddd/g, TE[t.getDay()]],
     [/DD/g, r(t.getDate())],
     [/HH/g, r(i)],
     [/hh/g, r(a)],
@@ -30015,27 +30047,27 @@ const ye = (t) => typeof t == "number" ? t : typeof t == "string" && t.trim() !=
   let n = e;
   for (const [s, l] of o) n = n.replace(s, l);
   return n;
-}, TE = (t, e = Date.now()) => {
+}, ME = (t, e = Date.now()) => {
   const r = e - t.getTime(), i = Math.abs(r), a = r < 0, o = 6e4, n = 60 * o, s = 24 * n, l = 7 * s, c = 30 * s, u = 365 * s;
   let h, p;
   return i < o ? a ? "in a moment" : "just now" : (i < n ? (h = Math.round(i / o), p = "m") : i < s ? (h = Math.round(i / n), p = "h") : i < l ? (h = Math.round(i / s), p = "d") : i < c ? (h = Math.round(i / l), p = "w") : i < u ? (h = Math.round(i / c), p = "mo") : (h = Math.round(i / u), p = "y"), a ? `in ${h}${p}` : `${h}${p} ago`);
-}, IE = (t, e, r) => {
+}, EE = (t, e, r) => {
   if (It(e)) {
     const a = {};
     return typeof e.currency == "string" && (a.currency = e.currency), typeof e.locale == "string" && (a.locale = e.locale), typeof e.decimals == "number" && (a.decimals = e.decimals), a;
   }
   const i = {};
   return t === "currency" ? (typeof e == "string" && e.length > 0 && (i.currency = e), typeof r == "string" && r.length > 0 && (i.locale = r)) : typeof e == "string" && e.length > 0 && (i.locale = e), i;
-}, zE = (t, e) => {
+}, NE = (t, e) => {
   const i = String(t ?? "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").split(/[^A-Za-z0-9]+/).filter(Boolean).map((o) => o.toLowerCase());
   if (i.length === 0) return "";
   if (e === "snake") return i.join("_");
   if (e === "kebab") return i.join("-");
   const a = (o) => o.charAt(0).toUpperCase() + o.slice(1);
   return e === "pascal" ? i.map(a).join("") : i[0] + i.slice(1).map(a).join("");
-}, ME = 1024, Ih = 8 * 1024;
+}, LE = 1024, Ih = 8 * 1024;
 function fb(t, e) {
-  if (t.length > ME) return !1;
+  if (t.length > LE) return !1;
   const r = e.length > Ih ? e.slice(0, Ih) : e;
   try {
     return new RegExp(t).test(r);
@@ -30159,14 +30191,14 @@ const cn = {
       r[String(Ir(i, String(e)) ?? "")] = i;
     return r;
   },
-  cloneDeep: (t) => Aa(t),
+  cloneDeep: (t) => Ca(t),
   merge: (t, ...e) => {
-    const r = It(t) ? Aa(t) : {};
+    const r = It(t) ? Ca(t) : {};
     for (const i of e)
       if (It(i))
         for (const a of Object.keys(i)) {
           const o = i[a], n = r[a];
-          r[a] = It(n) && It(o) ? cn.merge(n, o) : It(o) || Array.isArray(o) ? Aa(o) : o;
+          r[a] = It(n) && It(o) ? cn.merge(n, o) : It(o) || Array.isArray(o) ? Ca(o) : o;
         }
     return r;
   },
@@ -30178,7 +30210,7 @@ const cn = {
    * `Util.format(v, "currency", "USD", "en-US")` is also accepted.
    */
   format: (t, e = "number", r, i) => {
-    const a = ye(t), o = String(e), n = IE(o, r, i), s = {};
+    const a = ye(t), o = String(e), n = EE(o, r, i), s = {};
     o === "currency" ? (s.style = "currency", s.currency = n.currency || "USD") : o === "percent" ? (s.style = "percent", n.decimals === void 0 && (s.maximumFractionDigits = 2)) : o === "compact" ? s.notation = "compact" : s.style = "decimal", n.decimals !== void 0 && (s.minimumFractionDigits = n.decimals, s.maximumFractionDigits = n.decimals);
     try {
       return new Intl.NumberFormat(n.locale || void 0, s).format(a);
@@ -30195,7 +30227,7 @@ const cn = {
     const r = zr(t), i = String(e);
     switch (i) {
       case "relative":
-        return TE(r);
+        return ME(r);
       case "date":
         return r.toLocaleDateString();
       case "time":
@@ -30205,7 +30237,7 @@ const cn = {
       case "iso":
         return r.toISOString();
       default:
-        return $E(r, i);
+        return zE(r, i);
     }
   },
   plural: (t, e, r) => {
@@ -30221,7 +30253,7 @@ const cn = {
   titlecase: (t) => String(t ?? "").split(/\s+/).filter(Boolean).map((e) => e.charAt(0).toUpperCase() + e.slice(1).toLowerCase()).join(" "),
   case: (t, e = "camel") => {
     const r = String(e).toLowerCase();
-    return zE(t, r === "snake" || r === "kebab" || r === "pascal" || r === "camel" ? r : "camel");
+    return NE(t, r === "snake" || r === "kebab" || r === "pascal" || r === "camel" ? r : "camel");
   },
   // ── Date / time ───────────────────────────────────────────
   now: () => Date.now(),
@@ -30281,7 +30313,7 @@ const cn = {
       const r = Do(t);
       if (r === null) return "";
       const i = It(e) ? e : {};
-      return String(i.style ?? "simple").toLowerCase() === "iso" ? xE(r) : wE(r);
+      return String(i.style ?? "simple").toLowerCase() === "iso" ? CE(r) : SE(r);
     },
     /** Whether the value parses as a duration at all. */
     isValid: (t) => Do(t) !== null
@@ -30491,15 +30523,15 @@ const cn = {
    */
   readFile: (t, e) => {
     try {
-      const r = dE(t);
+      const r = mE(t);
       if (!r) return Promise.resolve("");
       const i = It(e) ? e : {}, a = Math.max(0, ye(i.maxSize));
       if (a > 0 && typeof r.size == "number" && r.size > a) return Promise.resolve("");
       const o = typeof i.as == "string" ? i.as : "text";
-      return o === "dataUrl" || o === "base64" ? hE(r).then(
+      return o === "dataUrl" || o === "base64" ? gE(r).then(
         (n) => o === "base64" ? n.slice(n.indexOf(",") + 1) : n,
         () => ""
-      ) : pE(r).then((n) => n, () => "");
+      ) : fE(r).then((n) => n, () => "");
     } catch {
       return Promise.resolve("");
     }
@@ -30549,7 +30581,7 @@ const cn = {
     try {
       const r = $h(t);
       if (!r || typeof window > "u" || typeof window.open != "function") return !1;
-      const i = It(e) ? e : {}, a = typeof i.target == "string" && i.target.trim() ? i.target.trim() : "_blank", o = !bE.has(a), n = Th(i.features, {
+      const i = It(e) ? e : {}, a = typeof i.target == "string" && i.target.trim() ? i.target.trim() : "_blank", o = !wE.has(a), n = Th(i.features, {
         noopener: i.noopener === void 0 ? !o : Cl(i.noopener),
         noreferrer: Cl(i.noreferrer)
       });
@@ -30739,7 +30771,7 @@ const cn = {
   },
   /** True when running inside any native shell (not a plain browser). */
   isNativeApp: () => cn.nativeShell() !== "web"
-}, yo = 1e5, EE = /^[a-zA-Z0-9#%.,()\s+-]+$/, zh = {
+}, yo = 1e5, RE = /^[a-zA-Z0-9#%.,()\s+-]+$/, zh = {
   primary: "var(--rui-color-primary)",
   accent: "var(--rui-color-accent)",
   success: "var(--rui-color-success)",
@@ -30754,13 +30786,13 @@ const cn = {
 };
 function Mh(t) {
   const e = String(t ?? "").trim();
-  return e in zh ? zh[e] : !e || e.length > 64 || !EE.test(e) || /url\s*\(|expression\s*\(|javascript\s*:|@import/i.test(e) ? "" : e;
+  return e in zh ? zh[e] : !e || e.length > 64 || !RE.test(e) || /url\s*\(|expression\s*\(|javascript\s*:|@import/i.test(e) ? "" : e;
 }
 function xs(t) {
   const e = String(t ?? "").trim();
   return !e || e.length > 64 || !/^[a-zA-Z0-9.%+\-*/\s(),]+$/.test(e) ? "0" : e;
 }
-const NE = {
+const PE = {
   /**
    * Classname helper (clsx-style). Accepts strings, arrays, and objects
    * `{ "is-active": cond }`; returns a space-joined, de-duped class string.
@@ -30822,7 +30854,7 @@ const NE = {
     }
     return e.join(";");
   }
-}, wo = (t) => !!t && typeof t.then == "function", nt = (t) => t == null || t === "" || Array.isArray(t) && t.length === 0, LE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/, RE = /^(https?:\/\/)[^\s/$.?#].[^\s]*$/i, un = (t, e) => !/^\d+$/.test(t) || t.length > 1 && t.startsWith("0") ? !1 : Number(t) <= e, dn = (t) => {
+}, wo = (t) => !!t && typeof t.then == "function", nt = (t) => t == null || t === "" || Array.isArray(t) && t.length === 0, DE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/, OE = /^(https?:\/\/)[^\s/$.?#].[^\s]*$/i, un = (t, e) => !/^\d+$/.test(t) || t.length > 1 && t.startsWith("0") ? !1 : Number(t) <= e, dn = (t) => {
   const e = t.split(".");
   return e.length === 4 && e.every((r) => un(r, 255));
 }, $l = (t) => {
@@ -30844,15 +30876,15 @@ const NE = {
   if (n === null || s === null) return !1;
   const l = n.length + s.length;
   return a ? l < 8 : l === 8;
-}, PE = (t) => {
+}, BE = (t) => {
   const e = t.indexOf("/");
   if (e === -1) return !1;
   const r = t.slice(0, e), i = t.slice(e + 1);
   return dn(r) ? un(i, 32) : $l(r) && un(i, 128);
 }, pn = {
   required: (t = "This field is required") => (e) => nt(e) ? t : null,
-  email: (t = "Enter a valid email") => (e) => nt(e) || LE.test(String(e)) ? null : t,
-  url: (t = "Enter a valid URL") => (e) => nt(e) || RE.test(String(e)) ? null : t,
+  email: (t = "Enter a valid email") => (e) => nt(e) || DE.test(String(e)) ? null : t,
+  url: (t = "Enter a valid URL") => (e) => nt(e) || OE.test(String(e)) ? null : t,
   min: (t, e) => (r) => nt(r) || Number(r) >= t ? null : e ?? `Must be at least ${t}`,
   max: (t, e) => (r) => nt(r) || Number(r) <= t ? null : e ?? `Must be at most ${t}`,
   minLength: (t, e) => (r) => nt(r) || String(r).length >= t ? null : e ?? `Must be at least ${t} characters`,
@@ -30916,7 +30948,7 @@ const NE = {
    * and silently accepting the first is how a subnet field ends up meaning a
    * single host.
    */
-  cidr: (t = "Enter a valid CIDR block, e.g. 10.0.0.0/24") => (e) => nt(e) || PE(String(e).trim()) ? null : t,
+  cidr: (t = "Enter a valid CIDR block, e.g. 10.0.0.0/24") => (e) => nt(e) || BE(String(e).trim()) ? null : t,
   /**
    * A duration — `5m`, `250ms`, `2h`, `PT30S`, `P1DT12H` — optionally inside an
    * inclusive range given in SECONDS.
@@ -31012,11 +31044,11 @@ const NE = {
     }
     return i.length > 0 ? Promise.all(i).then(() => r) : r;
   }
-}, DE = {
+}, FE = {
   fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
   fontFamilyHeading: "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
   fontFamilyMono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
-}, OE = {
+}, _E = {
   fontSizeBase: "14px",
   fontSizeSm: "12px",
   fontSizeLg: "16px",
@@ -31028,7 +31060,7 @@ const NE = {
   lineHeightHeading: "1.2",
   letterSpacingHeading: "0",
   headingTextTransform: "none"
-}, BE = {
+}, jE = {
   spacingXs: "4px",
   spacingS: "8px",
   spacingM: "12px",
@@ -31036,14 +31068,14 @@ const NE = {
   spacingXl: "32px",
   spacing2xl: "48px",
   spacing3xl: "80px"
-}, FE = {
+}, qE = {
   gradientBrand: "linear-gradient(120deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)",
   gradientAccent: "linear-gradient(120deg, #22d3ee 0%, #6366f1 100%)",
   gradientWarm: "linear-gradient(120deg, #f59e0b 0%, #ec4899 100%)",
   gradientCool: "linear-gradient(120deg, #3b82f6 0%, #06b6d4 100%)",
   gradientSuccess: "linear-gradient(120deg, #10b981 0%, #22d3ee 100%)",
   gradientDanger: "linear-gradient(120deg, #f43f5e 0%, #ec4899 100%)"
-}, jE = {
+}, UE = {
   radiusXs: "4px",
   radiusSm: "6px",
   radiusMd: "10px",
@@ -31051,15 +31083,15 @@ const NE = {
   radiusPill: "999px",
   radiusButton: "6px",
   radiusInput: "6px"
-}, _E = {
+}, HE = {
   buttonFontWeight: "600",
   buttonTextTransform: "none",
   buttonLetterSpacing: "0",
   buttonPaddingY: "8px",
   buttonPaddingX: "14px"
-}, qE = {
+}, WE = {
   transitionDuration: "120ms"
-}, jt = {
+}, _t = {
   colorBg: "#ffffff",
   colorBgSubtle: "#f8fafc",
   colorSurface: "#ffffff",
@@ -31122,15 +31154,15 @@ const NE = {
   chart4: "#ef4444",
   chart5: "#06b6d4",
   chart6: "#8b5cf6",
-  ...DE,
-  ...OE,
-  ...BE,
   ...FE,
-  ...jE,
   ..._E,
-  ...qE
-}, UE = {
-  ...jt,
+  ...jE,
+  ...qE,
+  ...UE,
+  ...HE,
+  ...WE
+}, GE = {
+  ..._t,
   colorBg: "#0b1220",
   colorBgSubtle: "#0f172a",
   colorSurface: "#111827",
@@ -31175,8 +31207,8 @@ const NE = {
   hlTag: "#e06c75",
   hlAttr: "#d19a66",
   hlPunct: "#abb2bf"
-}, HE = {
-  ...jt,
+}, VE = {
+  ..._t,
   colorBg: "#fdf6ff",
   colorBgSubtle: "#fbf2ff",
   colorSurface: "#ffffff",
@@ -31272,8 +31304,8 @@ const NE = {
   chart4: "#fda4af",
   chart5: "#93c5fd",
   chart6: "#f9a8d4"
-}, WE = {
-  ...jt,
+}, KE = {
+  ..._t,
   /* Surface & semantic — palette */
   colorBg: "#f4f7fa",
   // neutral-1 · --default-background-color
@@ -31425,7 +31457,7 @@ const NE = {
   chart6: "#0b2a63"
   // corporate-7 (navy)
 }, Tl = {
-  ...jt,
+  ..._t,
   /* ----- Surface & semantic ----- */
   colorBg: "#ffffff",
   colorBgSubtle: "#fafafa",
@@ -31529,7 +31561,7 @@ const NE = {
   chart4: "#e8c468",
   chart5: "#f4a462",
   chart6: "#9c6644"
-}, GE = {
+}, YE = {
   ...Tl,
   colorBg: "#0a0a0a",
   colorBgSubtle: "#0f0f0f",
@@ -31589,7 +31621,7 @@ const NE = {
   chart5: "#e23670",
   chart6: "#3ec9d6"
 }, Il = {
-  ...jt,
+  ..._t,
   /* ----- Surface & semantic ----- */
   colorBg: "#ffffff",
   colorBgSubtle: "#f5f5f5",
@@ -31692,7 +31724,7 @@ const NE = {
   chart4: "#60009b",
   chart5: "#2731c8",
   chart6: "#03008d"
-}, VE = {
+}, XE = {
   ...Il,
   colorBg: "#121212",
   colorBgSubtle: "#181818",
@@ -31749,7 +31781,7 @@ const NE = {
   chart5: "#2e96ff",
   chart6: "#b800d8"
 }, zl = {
-  ...jt,
+  ..._t,
   /* ----- Surface & semantic ----- */
   colorBg: "#ffffff",
   colorBgSubtle: "#fafafa",
@@ -31855,7 +31887,7 @@ const NE = {
   chart4: "#f5a524",
   chart5: "#f31260",
   chart6: "#ff705b"
-}, KE = {
+}, ZE = {
   ...zl,
   colorBg: "#000000",
   colorBgSubtle: "#09090b",
@@ -31908,7 +31940,7 @@ const NE = {
   chart5: "#f54180",
   chart6: "#ff8f7c"
 }, Ml = {
-  ...jt,
+  ..._t,
   /* ----- Surface & semantic — graphite end to end ----- */
   colorBg: "#f6f7f8",
   colorBgSubtle: "#eceef0",
@@ -32013,7 +32045,7 @@ const NE = {
   chart4: "#cf2f26",
   chart5: "#7c5cd6",
   chart6: "#b0468a"
-}, YE = {
+}, QE = {
   ...Ml,
   colorBg: "#0b0e11",
   colorBgSubtle: "#0f1317",
@@ -32073,7 +32105,7 @@ const NE = {
   chart4: "#f2544b",
   chart5: "#a78bfa",
   chart6: "#e879b8"
-}, ks = ["Geist:400,500,600,700", "Geist Mono:400,500"], Ss = ["Roboto:300,400,500,700", "Roboto Mono:400,500"], Cs = ["Inter:400,500,600,700"], As = ["IBM Plex Sans:400,500,600,700", "IBM Plex Mono:400,500"], XE = {
+}, ks = ["Geist:400,500,600,700", "Geist Mono:400,500"], Ss = ["Roboto:300,400,500,700", "Roboto Mono:400,500"], Cs = ["Inter:400,500,600,700"], As = ["IBM Plex Sans:400,500,600,700", "IBM Plex Mono:400,500"], JE = {
   shadcn: { import: ks },
   "shadcn-light": { import: ks },
   "shadcn-dark": { import: ks },
@@ -32087,41 +32119,41 @@ const NE = {
   "signal-light": { import: As },
   "signal-dark": { import: As },
   vision: { import: ["Open Sans:400,600", "Overpass:400,600"] }
-}, _c = {
-  light: jt,
-  dark: UE,
+}, jc = {
+  light: _t,
+  dark: GE,
   shadcn: Tl,
   "shadcn-light": Tl,
-  "shadcn-dark": GE,
+  "shadcn-dark": YE,
   mui: Il,
   "mui-light": Il,
-  "mui-dark": VE,
+  "mui-dark": XE,
   heroui: zl,
   "heroui-light": zl,
-  "heroui-dark": KE,
+  "heroui-dark": ZE,
   signal: Ml,
   "signal-light": Ml,
-  "signal-dark": YE,
-  soft: HE
-}, ZE = {
+  "signal-dark": QE,
+  soft: VE
+}, eN = {
   modern: "shadcn-light",
   glass: "mui-light",
   corporate: "heroui-light"
 };
 function qc(t) {
-  return ZE[t] ?? t;
+  return eN[t] ?? t;
 }
-const QE = {
-  vision: WE
+const tN = {
+  vision: KE
 };
 function Uc(t) {
   if (typeof t != "string") return null;
   const e = t.trim().toLowerCase();
   if (!e) return null;
   const r = qc(e);
-  return _c[r] ?? QE[r] ?? null;
+  return jc[r] ?? tN[r] ?? null;
 }
-const Gi = {
+const Wi = {
   colorBg: "--rui-color-bg",
   colorBgSubtle: "--rui-color-bg-subtle",
   colorSurface: "--rui-color-surface",
@@ -32237,29 +32269,29 @@ const Gi = {
   chart6: "--rui-chart-6"
 };
 function $s(t) {
-  if (!t) return { name: "light", tokens: jt };
+  if (!t) return { name: "light", tokens: _t };
   if (typeof t == "string") {
     const e = t.trim().toLowerCase();
     if (e.startsWith("{"))
       try {
         return { name: "custom", tokens: Ph(JSON.parse(t)) };
       } catch {
-        return { name: "light", tokens: jt };
+        return { name: "light", tokens: _t };
       }
     const r = qc(e), i = Uc(r);
-    return i ? { name: r, tokens: i } : { name: "light", tokens: jt };
+    return i ? { name: r, tokens: i } : { name: "light", tokens: _t };
   }
   return { name: "custom", tokens: Ph(t) };
 }
-function JE(t) {
-  return Gi[t] ?? null;
+function rN(t) {
+  return Wi[t] ?? null;
 }
-function JP() {
-  return Object.keys(Gi);
+function r4() {
+  return Object.keys(Wi);
 }
 function Eh(t, e) {
   const r = "tokens" in e ? e : { name: "custom", tokens: e };
-  for (const [i, a] of Object.entries(Gi)) {
+  for (const [i, a] of Object.entries(Wi)) {
     const o = r.tokens[i];
     o == null ? t.style.removeProperty(a) : t.style.setProperty(a, o);
   }
@@ -32268,7 +32300,7 @@ function Eh(t, e) {
 function Nh(t, e) {
   const r = [];
   for (const i of Object.keys(e)) {
-    const a = Gi[i];
+    const a = Wi[i];
     if (!a) continue;
     const o = e[i];
     typeof o != "string" || o === "" || (t.style.setProperty(a, o), r.push(i));
@@ -32277,7 +32309,7 @@ function Nh(t, e) {
 }
 function Lh(t, e) {
   for (const r of e) {
-    const i = Gi[r];
+    const i = Wi[r];
     i && t.style.removeProperty(i);
   }
 }
@@ -32285,7 +32317,7 @@ function Rh(t) {
   if (!t || typeof t != "object" || Array.isArray(t)) return {};
   const e = {};
   for (const [r, i] of Object.entries(t))
-    if (r in Gi && i != null)
+    if (r in Wi && i != null)
       if (typeof i == "string") {
         if (i.trim() === "") continue;
         e[r] = i;
@@ -32293,14 +32325,14 @@ function Rh(t) {
   return e;
 }
 function Ph(t) {
-  return { ...jt, ...t };
+  return { ..._t, ...t };
 }
-const eN = /^[A-Za-z0-9 ]{1,48}$/, Ts = /* @__PURE__ */ new Set();
-function tN(t) {
+const iN = /^[A-Za-z0-9 ]{1,48}$/, Ts = /* @__PURE__ */ new Set();
+function aN(t) {
   const e = typeof t == "string" ? t.trim() : "";
   if (!e) return null;
   const [r, i] = e.split(":"), a = (r ?? "").trim();
-  if (!eN.test(a)) return null;
+  if (!iN.test(a)) return null;
   const o = [], n = [];
   if (i)
     for (const s of i.split(",")) {
@@ -32309,21 +32341,21 @@ function tN(t) {
     }
   return { family: a, weights: o, italics: n };
 }
-function rN(t) {
+function oN(t) {
   const e = t.family.replace(/\s+/g, "+"), r = [];
   for (const i of t.weights.sort((a, o) => a - o)) r.push(`0,${i}`);
   for (const i of t.italics.sort((a, o) => a - o)) r.push(`1,${i}`);
   return r.length === 0 ? `family=${e}` : t.italics.length > 0 ? `family=${e}:ital,wght@${r.join(";")}` : `family=${e}:wght@${t.weights.sort((i, a) => i - a).join(";")}`;
 }
-function iN(t) {
-  const e = (Array.isArray(t) ? t : [t]).map(tN).filter((i) => i !== null);
-  return e.length === 0 ? "" : `https://fonts.googleapis.com/css2?${e.map(rN).join("&")}&display=swap`;
+function nN(t) {
+  const e = (Array.isArray(t) ? t : [t]).map(aN).filter((i) => i !== null);
+  return e.length === 0 ? "" : `https://fonts.googleapis.com/css2?${e.map(oN).join("&")}&display=swap`;
 }
 function El(t) {
   if (!t || typeof t != "object" || Array.isArray(t)) return "";
   const e = t.import;
   if (e == null) return "";
-  const r = iN(e);
+  const r = nN(e);
   if (!r || Ts.has(r) || typeof document > "u") return r;
   if (typeof globalThis.happyDOM < "u")
     return Ts.add(r), r;
@@ -32337,7 +32369,7 @@ function El(t) {
 function gb(t) {
   const e = typeof t == "string" ? t.trim().toLowerCase() : "";
   if (!e) return;
-  const r = XE[qc(e)];
+  const r = JE[qc(e)];
   r && El(r);
 }
 const Nr = (t, e) => {
@@ -32379,7 +32411,7 @@ const Nr = (t, e) => {
     const e = t();
     return e ? (e.clear(), !0) : !1;
   }, !1)
-}), aN = () => typeof globalThis > "u" ? null : globalThis.localStorage ?? null, oN = () => typeof globalThis > "u" ? null : globalThis.sessionStorage ?? null, Oo = () => typeof globalThis > "u" ? null : globalThis.document ?? null, nN = (t) => {
+}), sN = () => typeof globalThis > "u" ? null : globalThis.localStorage ?? null, lN = () => typeof globalThis > "u" ? null : globalThis.sessionStorage ?? null, Oo = () => typeof globalThis > "u" ? null : globalThis.document ?? null, cN = (t) => {
   if (t == null) return null;
   if (t instanceof Date) return t.toUTCString();
   if (typeof t == "string") {
@@ -32391,11 +32423,11 @@ const Nr = (t, e) => {
     return e.setTime(e.getTime() + t * 864e5), e.toUTCString();
   }
   return null;
-}, sN = /^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%/]*$/, lN = /^\.?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/, Is = (t = {}) => {
-  const e = [], r = nN(t.expires);
+}, uN = /^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%/]*$/, dN = /^\.?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/, Is = (t = {}) => {
+  const e = [], r = cN(t.expires);
   r && e.push(`expires=${r}`), typeof t.maxAge == "number" && Number.isFinite(t.maxAge) && e.push(`max-age=${Math.floor(t.maxAge)}`);
   const i = t.path ?? "/";
-  e.push(`path=${sN.test(i) ? i : "/"}`), t.domain && lN.test(t.domain) && t.domain.length <= 253 && e.push(`domain=${t.domain}`), t.secure && e.push("secure");
+  e.push(`path=${uN.test(i) ? i : "/"}`), t.domain && dN.test(t.domain) && t.domain.length <= 253 && e.push(`domain=${t.domain}`), t.secure && e.push("secure");
   const a = t.sameSite ? t.sameSite.charAt(0).toUpperCase() + t.sameSite.slice(1).toLowerCase() : "Lax";
   return e.push(`samesite=${["Strict", "Lax", "None"].includes(a) ? a : "Lax"}`), e.length === 0 ? "" : `; ${e.join("; ")}`;
 }, Dh = () => {
@@ -32422,7 +32454,7 @@ const Nr = (t, e) => {
     s === "__proto__" || s === "constructor" || s === "prototype" || (e[s] = i(o.slice(n + 1)));
   }
   return e;
-}, cN = {
+}, pN = {
   set: (t, e, r) => Nr(() => {
     const i = Oo();
     if (!i) return !1;
@@ -32453,16 +32485,16 @@ const Nr = (t, e) => {
     }
     return !0;
   }, !1)
-}, na = yb(aN), uN = yb(oN), wb = {
-  set: na.set,
-  get: na.get,
-  remove: na.remove,
-  clear: na.clear,
-  local: na,
-  session: uN,
-  cookies: cN
-}, dN = ["log", "error", "warn", "info", "debug"], pN = () => typeof globalThis > "u" ? null : globalThis.console ?? null, hN = (t) => (...e) => {
-  const r = pN();
+}, oa = yb(sN), hN = yb(lN), wb = {
+  set: oa.set,
+  get: oa.get,
+  remove: oa.remove,
+  clear: oa.clear,
+  local: oa,
+  session: hN,
+  cookies: pN
+}, mN = ["log", "error", "warn", "info", "debug"], fN = () => typeof globalThis > "u" ? null : globalThis.console ?? null, gN = (t) => (...e) => {
+  const r = fN();
   if (!r) return;
   const i = r[t] ?? r.log;
   if (typeof i == "function")
@@ -32470,21 +32502,21 @@ const Nr = (t, e) => {
       i(...e);
     } catch {
     }
-}, mN = dN.reduce(
-  (t, e) => (t[e] = hN(e), t),
+}, bN = mN.reduce(
+  (t, e) => (t[e] = gN(e), t),
   {}
-), fN = [
+), vN = [
   "top-right",
   "top-left",
   "top-center",
   "bottom-right",
   "bottom-left",
   "bottom-center"
-], gN = 4e3;
+], yN = 4e3;
 function xo(t) {
   return t == null ? "" : typeof t == "string" ? t : String(t);
 }
-function bN(t) {
+function wN(t) {
   let e = [];
   const r = /* @__PURE__ */ new Map();
   let i = 0;
@@ -32501,7 +32533,7 @@ function bN(t) {
       e = [], a();
     }
   }, l = (p, b = {}) => {
-    const m = `toast-${i += 1}`, f = typeof b.duration == "number" ? b.duration : gN, v = {
+    const m = `toast-${i += 1}`, f = typeof b.duration == "number" ? b.duration : yN, v = {
       id: m,
       message: xo(p),
       title: b.title != null ? xo(b.title) : void 0,
@@ -32517,7 +32549,7 @@ function bN(t) {
     ), a(), m;
   }, c = (p) => (b, m = {}) => l(b, { ...m, tone: p }), u = (p) => {
     const b = xo(p?.position);
-    b && fN.includes(b) && (t.toastPosition = b, a());
+    b && vN.includes(b) && (t.toastPosition = b, a());
   }, h = {
     // Reading `$toast.items` means the author is rendering the toasts by hand
     // (the classic `Toasts($toast.items.map(...))` pattern). Flag that on the
@@ -32541,17 +32573,17 @@ function bN(t) {
     r.clear(), e = [];
   }), h;
 }
-const vN = [
+const xN = [
   ["xl", 1280],
   ["lg", 1024],
   ["md", 768],
   ["sm", 640]
 ];
-function yN(t) {
-  for (const [e, r] of vN) if (t >= r) return e;
+function kN(t) {
+  for (const [e, r] of xN) if (t >= r) return e;
   return "base";
 }
-function wN(t) {
+function SN(t) {
   const e = typeof window < "u";
   let r = !1;
   const i = () => {
@@ -32633,7 +32665,7 @@ function wN(t) {
     },
     get breakpoint() {
       v();
-      const C = yN(a);
+      const C = kN(a);
       return { width: a, active: C, sm: a >= 640, md: a >= 768, lg: a >= 1024, xl: a >= 1280 };
     },
     get scroll() {
@@ -32653,7 +32685,7 @@ function wN(t) {
     }
   };
 }
-const $a = {
+const Aa = {
   // Curated fast-path for the most-used JS standard library globals, so
   // `Math.max(...)`, `JSON.stringify(x)`, `Object.keys(o)`, `new Date()`,
   // `new Map()`, `Number("5")`, etc. resolve without an import and without
@@ -32698,11 +32730,11 @@ const $a = {
   structuredClone: typeof structuredClone == "function" ? structuredClone : void 0
 }, Nl = {
   util: cn,
-  console: mN,
+  console: bN,
   storage: wb
 }, xb = /* @__PURE__ */ new Set(["toast", "dom"]);
-function xN(t) {
-  return t.toastManager || (t.toastManager = bN(t)), t.toastManager;
+function CN(t) {
+  return t.toastManager || (t.toastManager = wN(t)), t.toastManager;
 }
 function Oh(t, e, r, i) {
   const a = t.library ? Ft(t.library, e) : void 0;
@@ -32723,7 +32755,7 @@ function Oh(t, e, r, i) {
   for (; n.length > 0 && n[n.length - 1] === void 0; ) n.pop();
   return { __kind: "Component", name: e, args: n, argMeta: n.map(() => ({})), explicitKey: i };
 }
-function kN(t) {
+function AN(t) {
   const e = t.toastManager;
   if (!e) return null;
   const r = e.items;
@@ -32753,32 +32785,32 @@ function Bh(t, e) {
     t.toastItemsRead = !1;
     const r = e();
     if (t.toastManager && !t.toastItemsRead) {
-      const i = kN(t);
+      const i = AN(t);
       if (i) return Array.isArray(r) ? [...r, i] : [r, i];
     }
     return r;
   });
 }
-function SN(t) {
-  return t.domManager || (t.domManager = GM(t)), t.domManager;
+function $N(t) {
+  return t.domManager || (t.domManager = YM(t)), t.domManager;
 }
 function kb(t) {
-  return t.headManager || (t.headManager = iE(t)), t.headManager;
+  return t.headManager || (t.headManager = nE(t)), t.headManager;
 }
-function CN(t) {
-  return t.envManager || (t.envManager = wN(t)), t.envManager;
+function TN(t) {
+  return t.envManager || (t.envManager = SN(t)), t.envManager;
 }
-function AN(t) {
+function IN(t) {
   if (t.utilFacade) return t.utilFacade;
-  const e = Object.create(cn), r = () => CN(t);
+  const e = Object.create(cn), r = () => TN(t);
   return Object.defineProperties(e, {
     scroll: { get: () => r().scroll, enumerable: !0 },
     viewport: { get: () => r().viewport, enumerable: !0 },
     breakpoint: { get: () => r().breakpoint, enumerable: !0 },
     media: { get: () => r().media, enumerable: !0 },
     mouse: { get: () => r().mouse, enumerable: !0 },
-    url: { get: () => $N(t), enumerable: !0 },
-    style: { value: NE, enumerable: !0 },
+    url: { get: () => zN(t), enumerable: !0 },
+    style: { value: PE, enumerable: !0 },
     rules: { value: pn, enumerable: !0 },
     derived: {
       value: (i) => typeof i == "function" ? i() : i,
@@ -32836,7 +32868,7 @@ function AN(t) {
     }
   }), t.utilFacade = e, e;
 }
-function $N(t) {
+function zN(t) {
   t.trackedState.add("route");
   const e = t.router, r = Yc(t), i = e ? { ...e.getParams() } : {}, a = {};
   let o = "";
@@ -32890,7 +32922,7 @@ function Fh(t, e) {
   }
   t.notify?.();
 }
-const TN = /* @__PURE__ */ new Set([
+const MN = /* @__PURE__ */ new Set([
   // Values and collections
   "BigInt",
   "Symbol",
@@ -32945,20 +32977,20 @@ const TN = /* @__PURE__ */ new Set([
   "console"
 ]);
 let Hc = "all";
-function e4(t) {
+function i4(t) {
   Hc = t;
 }
-function IN() {
+function EN() {
   return Hc;
 }
-function zN(t) {
+function NN(t) {
   const e = Hc;
-  return e === "all" ? !0 : e === "safe" ? TN.has(t) : e.includes(t);
+  return e === "all" ? !0 : e === "safe" ? MN.has(t) : e.includes(t);
 }
 function Sb(t) {
   if (typeof globalThis > "u") return { found: !1, value: void 0 };
   if (t in Object.prototype) return { found: !1, value: void 0 };
-  if (!zN(t)) return { found: !1, value: void 0 };
+  if (!NN(t)) return { found: !1, value: void 0 };
   const e = globalThis;
   return t in e ? { found: !0, value: e[t] } : { found: !1, value: void 0 };
 }
@@ -32969,14 +33001,14 @@ const zs = {
 };
 class Rr extends Error {
   constructor(r, i, a) {
-    super(MN(r, i, a));
+    super(LN(r, i, a));
     Q(this, "kind");
     Q(this, "limit");
     Q(this, "source");
     this.name = "RuntimeBudgetError", this.kind = r, this.limit = i, this.source = a;
   }
 }
-function MN(t, e, r) {
+function LN(t, e, r) {
   switch (t) {
     case "component-depth":
       return `[aktion] runtime aborted at ${r}: component recursion exceeded ${e} levels — check for a component that calls itself directly or transitively.`;
@@ -32986,7 +33018,7 @@ function MN(t, e, r) {
       return `[aktion] runtime aborted at ${r}: array length would exceed ${e} elements.`;
   }
 }
-function EN(t = {}) {
+function RN(t = {}) {
   return {
     componentDepthLimit: t.componentDepthLimit ?? zs.componentDepthLimit,
     iterationLimit: t.iterationLimit ?? zs.iterationLimit,
@@ -32995,7 +33027,7 @@ function EN(t = {}) {
     iterations: 0
   };
 }
-function jh(t) {
+function _h(t) {
   t.iterations = 0, t.componentDepth = 0;
 }
 function Ha(t, e, r) {
@@ -33052,7 +33084,7 @@ function hn(t, e = {}) {
     coverageSourcePath: e.coverageSourcePath,
     disposers: [],
     timers: { timeouts: /* @__PURE__ */ new Set(), intervals: /* @__PURE__ */ new Set() },
-    budget: e.budget === null ? void 0 : e.budget ?? EN()
+    budget: e.budget === null ? void 0 : e.budget ?? RN()
   };
   return r.disposers.push(() => {
     for (const i of r.timers.timeouts) clearTimeout(i);
@@ -33060,7 +33092,7 @@ function hn(t, e = {}) {
     r.timers.timeouts.clear(), r.timers.intervals.clear();
   }), e.http?.clearProgramInterceptors(), r.disposers.push(() => e.http?.clearProgramInterceptors()), r;
 }
-function _h(t) {
+function jh(t) {
   const e = t.disposers;
   t.disposers = [];
   for (const r of e)
@@ -33070,7 +33102,7 @@ function _h(t) {
       console.error("[aktion] context disposer threw", i);
     }
 }
-function NN(t) {
+function PN(t) {
   t.mutableBindings.clear();
 }
 function Cr(t, e) {
@@ -33110,7 +33142,7 @@ function ko(t, e) {
   return null;
 }
 function Vc(t, e) {
-  if (zM() && (e.coverage = IM(t, e.coverageSourcePath)), e.coverage)
+  if (NM() && (e.coverage = EM(t, e.coverageSourcePath)), e.coverage)
     for (const r of t.statements) {
       const i = r.loc;
       i && qa(e.coverage, i);
@@ -33127,10 +33159,10 @@ function Vc(t, e) {
     const i = G(r.expression, e);
     e.state.set(r.identifier, i);
   }
-  PN(t, e), RN(t, e);
+  BN(t, e), ON(t, e);
 }
-const LN = 8;
-function RN(t, e) {
+const DN = 8;
+function ON(t, e) {
   const r = [], i = (n) => {
     const s = /* @__PURE__ */ new Set(), l = e.trackedState;
     e.trackedState = s;
@@ -33158,7 +33190,7 @@ function RN(t, e) {
       a = !0;
       try {
         const s = new Set(n);
-        for (let l = 0; l < LN; l += 1) {
+        for (let l = 0; l < DN; l += 1) {
           let c = !1;
           for (const u of r) {
             if (!nn(s, u.deps)) continue;
@@ -33260,7 +33292,7 @@ function qh(t) {
       return !1;
   }
 }
-function PN(t, e) {
+function BN(t, e) {
   let r = !1;
   for (const i of t.statements)
     if (qh(i)) {
@@ -33278,14 +33310,14 @@ function PN(t, e) {
         try {
           Bl(i, e);
         } catch (a) {
-          if (a instanceof Xt || a instanceof ur || a instanceof Vi)
+          if (a instanceof Xt || a instanceof ur || a instanceof Gi)
             continue;
           if (a instanceof Rr) throw a;
           console.error("[aktion] top-level statement threw", a);
         }
   }
 }
-function DN(t, e, r) {
+function FN(t, e, r) {
   const i = t[0];
   if (!i || i.kind !== "Object")
     return console.error(
@@ -33399,7 +33431,7 @@ function G(t, e) {
       if (e.loopVars.has(t.name)) return e.loopVars.get(t.name);
       if (e.mutableBindings.has(t.name)) return e.mutableBindings.get(t.name);
       if (t.name === "route")
-        return e.trackedState.add("route"), e.router ? TL(e.router) : { path: "/", params: {}, pattern: null, query: {}, navigate() {
+        return e.trackedState.add("route"), e.router ? ML(e.router) : { path: "/", params: {}, pattern: null, query: {}, navigate() {
         }, toString() {
           return "/";
         } };
@@ -33409,13 +33441,13 @@ function G(t, e) {
         return e.mutableBindings.set(t.name, s), s;
       }
       const i = Cb(t.name, e), a = i ? void 0 : e.actionDecls.get(t.name);
-      if (a) return yL(a, e);
+      if (a) return kL(a, e);
       const o = i ? void 0 : e.componentDecls.get(t.name);
-      if (o) return wL(o);
-      if (Object.prototype.hasOwnProperty.call($a, t.name))
-        return $a[t.name];
+      if (o) return SL(o);
+      if (Object.prototype.hasOwnProperty.call(Aa, t.name))
+        return Aa[t.name];
       if (e.library && Ft(e.library, t.name))
-        return xL(t.name);
+        return CL(t.name);
       if (t.name === "cleanup" && e.cleanupSink) {
         const s = e.cleanupSink;
         return (l) => {
@@ -33435,10 +33467,10 @@ function G(t, e) {
     }
     case "StateRef": {
       if (Object.prototype.hasOwnProperty.call(Nl, t.name))
-        return t.name === "util" ? AN(e) : Nl[t.name];
+        return t.name === "util" ? IN(e) : Nl[t.name];
       if (xb.has(t.name)) {
-        if (t.name === "toast") return xN(e);
-        if (t.name === "dom") return SN(e);
+        if (t.name === "toast") return CN(e);
+        if (t.name === "dom") return $N(e);
       }
       if (t.name === "emit" && e.onEmit) {
         const i = e.onEmit;
@@ -33480,11 +33512,11 @@ function G(t, e) {
       return r;
     }
     case "Member": {
-      if (WN(t))
-        return GN(t, e);
-      const r = VN(t, e);
+      if (KN(t))
+        return YN(t, e);
+      const r = XN(t, e);
       if (r)
-        return KN(t, e, r);
+        return ZN(t, e, r);
       const i = G(t.object, e);
       if (t.optional && i == null) return;
       if (t.computed) {
@@ -33529,23 +33561,23 @@ function G(t, e) {
       }
     }
     case "Binary":
-      return oL(t.operator, t.left, t.right, e, t.loc);
+      return lL(t.operator, t.left, t.right, e, t.loc);
     case "Ternary": {
       const r = G(t.test, e);
       return e.coverage && rr(e.coverage, t.loc, r ? 0 : 1), G(r ? t.consequent : t.alternate, e);
     }
     case "Call":
-      return lL(t.callee, t.arguments, e, t.loc);
+      return dL(t.callee, t.arguments, e, t.loc);
     case "MethodCall":
-      return sL(t, e);
+      return uL(t, e);
     case "Invoke":
-      return eL(t, e);
+      return iL(t, e);
     case "New":
-      return tL(t, e);
+      return aL(t, e);
     case "BuiltinCall":
-      return kL(t.name, t.arguments, e);
+      return AL(t.name, t.arguments, e);
     case "Template":
-      return aL(t.quasis, t.expressions, e);
+      return sL(t.quasis, t.expressions, e);
     case "Spread":
       return G(t.argument, e);
     case "Block":
@@ -33608,7 +33640,7 @@ class ur {
     Q(this, "kind", "continue");
   }
 }
-class Vi {
+class Gi {
   constructor(e) {
     Q(this, "kind", "return");
     this.value = e;
@@ -33627,7 +33659,7 @@ function Mb(t, e) {
     t.alternate.kind === "Block" && Vt(t.alternate.body, e);
   }
 }
-function ON(t, e) {
+function _N(t, e) {
   const r = G(t.discriminant, e);
   let i = !1;
   try {
@@ -33640,7 +33672,7 @@ function ON(t, e) {
     throw a;
   }
 }
-function BN(t, e) {
+function jN(t, e) {
   const r = G(t.iterable, e);
   if (!Array.isArray(r) && (r == null || typeof r != "object" || !(Symbol.iterator in r)))
     return;
@@ -33671,7 +33703,7 @@ function BN(t, e) {
       o.had ? e.loopVars.set(o.name, o.value) : e.loopVars.delete(o.name);
   }
 }
-function FN(t, e) {
+function qN(t, e) {
   for (t.init && Pn(t.init, e); !(t.test && !G(t.test, e)); ) {
     Ha(e.budget, 1, "`for` loop");
     try {
@@ -33685,7 +33717,7 @@ function FN(t, e) {
     t.update && G(t.update, e);
   }
 }
-function jN(t, e) {
+function UN(t, e) {
   for (; G(t.test, e); ) {
     Ha(e.budget, 1, "`while` loop");
     try {
@@ -33697,7 +33729,7 @@ function jN(t, e) {
     }
   }
 }
-function _N(t, e) {
+function HN(t, e) {
   for (; ; ) {
     Ha(e.budget, 1, "`do…while` loop");
     try {
@@ -33711,7 +33743,7 @@ function _N(t, e) {
     if (!G(t.test, e)) break;
   }
 }
-function qN(t, e) {
+function WN(t, e) {
   const r = G(t.expression, e), i = li(
     { kind: t.patternKind, bindings: t.bindings },
     r,
@@ -33757,7 +33789,7 @@ function li(t, e, r) {
   }
   return i;
 }
-function UN(t, e) {
+function GN(t, e) {
   const r = G(t.iterable, e);
   if (r == null || typeof r != "object") return;
   const i = e.loopVars.has(t.item), a = e.loopVars.get(t.item);
@@ -33776,11 +33808,11 @@ function UN(t, e) {
     i ? e.loopVars.set(t.item, a) : e.loopVars.delete(t.item);
   }
 }
-function HN(t, e) {
+function VN(t, e) {
   try {
     Vt(t.block.body, e);
   } catch (r) {
-    if (r instanceof Xt || r instanceof ur || r instanceof Vi)
+    if (r instanceof Xt || r instanceof ur || r instanceof Gi)
       throw r;
     if (t.catchBlock) {
       const i = t.catchParam, a = i ? e.loopVars.has(i) : !1, o = i ? e.loopVars.get(i) : void 0;
@@ -33824,28 +33856,28 @@ function Pn(t, e) {
       Mb(t, e);
       return;
     case "SwitchStatement":
-      ON(t, e);
-      return;
-    case "ForOfStatement":
-      BN(t, e);
-      return;
-    case "ForClassicStatement":
-      FN(t, e);
-      return;
-    case "ForInStatement":
-      UN(t, e);
-      return;
-    case "WhileStatement":
-      jN(t, e);
-      return;
-    case "DoWhileStatement":
       _N(t, e);
       return;
-    case "DestructureStatement":
+    case "ForOfStatement":
+      jN(t, e);
+      return;
+    case "ForClassicStatement":
       qN(t, e);
       return;
-    case "TryStatement":
+    case "ForInStatement":
+      GN(t, e);
+      return;
+    case "WhileStatement":
+      UN(t, e);
+      return;
+    case "DoWhileStatement":
       HN(t, e);
+      return;
+    case "DestructureStatement":
+      WN(t, e);
+      return;
+    case "TryStatement":
+      VN(t, e);
       return;
     case "BreakStatement":
       throw new Xt();
@@ -33855,7 +33887,7 @@ function Pn(t, e) {
       throw G(t.argument, e);
     case "Return": {
       const r = t.argument ? G(t.argument, e) : void 0;
-      throw new Vi(r);
+      throw new Gi(r);
     }
     case "Await":
       G(t.argument, e);
@@ -33864,12 +33896,12 @@ function Pn(t, e) {
       return;
   }
 }
-function WN(t) {
+function KN(t) {
   let e = t;
   for (; e.kind === "Member"; ) e = e.object;
   return e.kind === "StateRef" && (Object.prototype.hasOwnProperty.call(Nl, e.name) || xb.has(e.name)) ? !1 : e.kind === "StateRef";
 }
-function GN(t, e) {
+function YN(t, e) {
   const r = Eb(t);
   let i = t;
   for (; i.kind === "Member"; ) i = i.object;
@@ -33895,14 +33927,14 @@ function Nb(t, e, r) {
   }
   return r.trackedState.add(a.join(".")), i;
 }
-function VN(t, e) {
+function XN(t, e) {
   let r = t;
   for (; r.kind === "Member"; ) r = r.object;
   if (r.kind !== "Identifier") return null;
   const i = G(r, e);
   return Wc(i) ? i : null;
 }
-function KN(t, e, r) {
+function ZN(t, e, r) {
   const i = Eb(t), a = i[0];
   if (a && a.computed === void 0 && a.property !== void 0 && Object.prototype.hasOwnProperty.call(r.__methods, a.property)) {
     let o = r.__methods[a.property];
@@ -33922,7 +33954,7 @@ function Rb(t, e) {
   const r = e.source ? `a${e.source}_` : "";
   return `__${t}_${r}${e.line}_${e.column}`;
 }
-function YN(t, e, r) {
+function QN(t, e, r) {
   const i = Lb(r) ?? `anon:${e.stores.size}`, a = e.stores.get(i);
   if (a) return a;
   const o = t[0] ? G(t[0], e) : {}, n = {}, s = {};
@@ -33945,7 +33977,7 @@ function YN(t, e, r) {
     }
   const p = Object.keys(n), b = Rb("store", r) ?? `__store_anon_${e.stores.size}`;
   if (l) {
-    const v = QN(l, c);
+    const v = tL(l, c);
     if (v)
       for (const x of p)
         Object.prototype.hasOwnProperty.call(v, x) && (n[x] = v[x]);
@@ -33962,13 +33994,13 @@ function YN(t, e, r) {
           w = !0;
           break;
         }
-      w && JN(l, c, e.state.get(b));
+      w && rL(l, c, e.state.get(b));
     });
     e.disposers.push(x);
   }
-  return u && XN(e, b, p, h, m), e.stores.set(i, f), f;
+  return u && JN(e, b, p, h, m), e.stores.set(i, f), f;
 }
-function XN(t, e, r, i, a) {
+function JN(t, e, r, i, a) {
   const o = `${e}.`, n = [], s = [];
   let l = !1;
   const c = () => {
@@ -34013,7 +34045,7 @@ function XN(t, e, r, i, a) {
     n.length = 0, s.length = 0, p();
   };
 }
-function ZN(t, e, r) {
+function eL(t, e, r) {
   const i = Lb(r) ?? `form:${e.stores.size}`, a = e.stores.get(i);
   if (a) return a;
   const o = t[0] ? G(t[0], e) : {}, n = o && typeof o == "object" && !Array.isArray(o) ? o : {}, s = n.values && typeof n.values == "object" && !Array.isArray(n.values) ? { ...n.values } : {}, l = n.rules && typeof n.rules == "object" && !Array.isArray(n.rules) ? n.rules : {}, c = typeof n.onSubmit == "function" ? n.onSubmit : null, u = Rb("form", r) ?? `__form_anon_${e.stores.size}`, h = () => ({ values: { ...s }, errors: {}, touched: {}, dirty: !1, valid: !0, submitting: !1, validating: !1 });
@@ -34109,7 +34141,7 @@ function Pb(t) {
     return null;
   }
 }
-function QN(t, e) {
+function tL(t, e) {
   const r = Pb(e);
   if (!r) return null;
   try {
@@ -34121,7 +34153,7 @@ function QN(t, e) {
     return null;
   }
 }
-function JN(t, e, r) {
+function rL(t, e, r) {
   const i = Pb(e);
   if (i)
     try {
@@ -34148,44 +34180,44 @@ function Db(t, e) {
   const a = G(i, e);
   return Wc(a) ? { atom: a.__atom, path: r } : null;
 }
-function eL(t, e) {
+function iL(t, e) {
   if (t.callee.kind === "StateRef") {
     const a = t.callee.name;
-    if (a === "state") return hL(t.arguments, e, t.loc);
-    if (a === "memo") return mL(t.arguments, e, t.loc);
-    if (a === "ref") return fL(t.arguments, e, t.loc);
-    if (a === "reducer") return gL(t.arguments, e, t.loc);
-    if (a === "id") return bL(t.arguments, e, t.loc);
+    if (a === "state") return gL(t.arguments, e, t.loc);
+    if (a === "memo") return bL(t.arguments, e, t.loc);
+    if (a === "ref") return vL(t.arguments, e, t.loc);
+    if (a === "reducer") return yL(t.arguments, e, t.loc);
+    if (a === "id") return wL(t.arguments, e, t.loc);
     switch (a) {
       case "store":
-        return YN(t.arguments, e, t.loc);
+        return QN(t.arguments, e, t.loc);
       case "form":
-        return ZN(t.arguments, e, t.loc);
+        return eL(t.arguments, e, t.loc);
       case "router":
-        return DN(t.arguments, e, t.loc);
+        return FN(t.arguments, e, t.loc);
       case "http": {
         const n = t.arguments[0];
         return db(n ? G(n, e) : {}, e);
       }
       case "query": {
         const n = t.arguments[0];
-        return LM(n ? G(n, e) : {}, e);
+        return DM(n ? G(n, e) : {}, e);
       }
       case "mutation": {
         const n = t.arguments[0];
-        return PM(n ? G(n, e) : {}, e);
+        return BM(n ? G(n, e) : {}, e);
       }
       case "socket": {
         const n = t.arguments[0];
-        return FM(n ? G(n, e) : {}, e);
+        return qM(n ? G(n, e) : {}, e);
       }
       case "sse": {
         const n = t.arguments[0];
-        return jM(n ? G(n, e) : {}, e);
+        return UM(n ? G(n, e) : {}, e);
       }
       case "script": {
         const n = t.arguments[0];
-        return WM(n ? G(n, e) : {}, e);
+        return KM(n ? G(n, e) : {}, e);
       }
       case "head": {
         const n = t.arguments[0];
@@ -34197,7 +34229,7 @@ function eL(t, e) {
           const p = s;
           p.icons && $m(p.icons), p.fonts && El(p.fonts), p.font && El(p.font);
         }
-        const l = LL(s), c = NL(s);
+        const l = DL(s), c = PL(s);
         c && gb(c);
         const u = c ? Uc(c) : null;
         return { kind: "Theme", tokens: u ? { ...u, ...l } : l };
@@ -34208,7 +34240,7 @@ function eL(t, e) {
       }
       case "i18n": {
         const n = t.arguments[0], s = n ? G(n, e) : null, l = s && typeof s == "object" && !Array.isArray(s) ? s : {};
-        return aE(l);
+        return sE(l);
       }
       case "emit": {
         const n = t.arguments[0] ? String(G(t.arguments[0], e)) : "", s = t.arguments[1] ? G(t.arguments[1], e) : void 0;
@@ -34218,10 +34250,10 @@ function eL(t, e) {
       case "storage":
         return t.arguments[0] && G(t.arguments[0], e), wb;
       case "optimistic":
-        return dL(t.arguments[0], e);
+        return mL(t.arguments[0], e);
     }
     const o = e.hookDecls.get(a);
-    if (o) return vL(o, t.arguments, e);
+    if (o) return xL(o, t.arguments, e);
   }
   const r = G(t.callee, e);
   if (r == null)
@@ -34243,7 +34275,7 @@ function eL(t, e) {
     return console.error("[aktion] call expression threw", a), null;
   }
 }
-function tL(t, e) {
+function aL(t, e) {
   const r = G(t.callee, e);
   if (typeof r != "function") return null;
   const i = [];
@@ -34262,10 +34294,10 @@ function tL(t, e) {
     return console.error("[aktion] `new` threw", a), null;
   }
 }
-function rL(t, e, r) {
+function oL(t, e, r) {
   t.kind === "ComponentDeclaration" ? r.push({ kind: "component", name: t.name, had: e.componentDecls.has(t.name), prev: e.componentDecls.get(t.name) }) : t.kind === "ActionDeclaration" ? r.push({ kind: "action", name: t.name, had: e.actionDecls.has(t.name), prev: e.actionDecls.get(t.name) }) : r.push({ kind: "hook", name: t.name, had: e.hookDecls.has(t.name), prev: e.hookDecls.get(t.name) });
 }
-function iL(t, e) {
+function nL(t, e) {
   for (let r = e.length - 1; r >= 0; r -= 1) {
     const i = e[r], a = i.kind === "component" ? t.componentDecls : i.kind === "action" ? t.actionDecls : t.hookDecls;
     i.had ? a.set(i.name, i.prev) : a.delete(i.name);
@@ -34325,7 +34357,7 @@ function Kc(t, e, r) {
         case "ComponentDeclaration":
         case "ActionDeclaration":
         case "HookDeclaration":
-          rL(n, e, o), Ol(n, e);
+          oL(n, e, o), Ol(n, e);
           continue;
         case "Await":
           continue;
@@ -34345,22 +34377,22 @@ function Kc(t, e, r) {
       }
     }
   } catch (n) {
-    if (n instanceof Vi)
+    if (n instanceof Gi)
       return n.value;
     throw n;
   } finally {
     for (const n of a) e.loopVars.delete(n);
-    iL(e, o);
+    nL(e, o);
   }
   return i;
 }
-function aL(t, e, r) {
+function sL(t, e, r) {
   let i = t[0] ?? "";
   for (let a = 0; a < e.length; a += 1)
-    i += _l(G(e[a], r)), i += t[a + 1] ?? "";
+    i += jl(G(e[a], r)), i += t[a + 1] ?? "";
   return i;
 }
-function oL(t, e, r, i, a) {
+function lL(t, e, r, i, a) {
   if (t === "&&") {
     const s = G(e, i);
     return s ? (i.coverage && rr(i.coverage, a, 1), G(r, i)) : (i.coverage && rr(i.coverage, a, 0), s);
@@ -34376,7 +34408,7 @@ function oL(t, e, r, i, a) {
   const o = G(e, i), n = G(r, i);
   switch (t) {
     case "+":
-      return typeof o == "string" || typeof n == "string" ? _l(o) + _l(n) : Ne(o) + Ne(n);
+      return typeof o == "string" || typeof n == "string" ? jl(o) + jl(n) : Ne(o) + Ne(n);
     case "-":
       return Ne(o) - Ne(n);
     case "*":
@@ -34403,7 +34435,7 @@ function oL(t, e, r, i, a) {
     case "<":
     case ">=":
     case "<=":
-      return nL(t, o, n);
+      return cL(t, o, n);
     case "&":
       return ct(o) & ct(n);
     case "|":
@@ -34440,7 +34472,7 @@ function oL(t, e, r, i, a) {
 function Hh(t, e) {
   return t == e;
 }
-function nL(t, e, r) {
+function cL(t, e, r) {
   const i = Vh(e), a = Vh(r);
   return typeof i == "string" && typeof a == "string" && !(Wh(i) && Wh(a)) ? Gh(t, i, a) : Gh(t, Ne(i), Ne(a));
 }
@@ -34494,7 +34526,7 @@ function ct(t) {
 function Lr(t) {
   return Ne(t) >>> 0;
 }
-function sL(t, e) {
+function uL(t, e) {
   const r = G(t.object, e);
   if (r == null)
     return t.optional ? void 0 : null;
@@ -34534,10 +34566,10 @@ function Es(t, e) {
   }
   return r;
 }
-function lL(t, e, r, i) {
+function dL(t, e, r, i) {
   const a = r.componentDecls.get(t), o = a !== void 0 && Cb(t, r);
   if (a && !o)
-    return uL(a, e, r, i);
+    return hL(a, e, r, i);
   const n = o ? void 0 : r.actionDecls.get(t);
   if (n) {
     const f = Es(e, r);
@@ -34549,7 +34581,7 @@ function lL(t, e, r, i) {
     return;
   }
   if (t === "setTimeout" || t === "setInterval")
-    return SL(t, e, r);
+    return $L(t, e, r);
   if (t === "clearTimeout" || t === "clearInterval") {
     const f = e[0] ? G(e[0], r) : void 0;
     f != null && (t === "clearTimeout" ? (clearTimeout(f), r.timers.timeouts.delete(f)) : (clearInterval(f), r.timers.intervals.delete(f)));
@@ -34568,8 +34600,8 @@ function lL(t, e, r, i) {
       return f(...v);
     }
   }
-  if (Object.prototype.hasOwnProperty.call($a, t) && typeof $a[t] == "function" && !r.componentDecls.has(t) && !(r.library && Ft(r.library, t))) {
-    const f = $a[t], v = [];
+  if (Object.prototype.hasOwnProperty.call(Aa, t) && typeof Aa[t] == "function" && !r.componentDecls.has(t) && !(r.library && Ft(r.library, t))) {
+    const f = Aa[t], v = [];
     for (const x of e) {
       if (x.kind === "Spread") {
         const y = G(x.argument, r);
@@ -34623,7 +34655,7 @@ function lL(t, e, r, i) {
       }
     }
   }
-  const { args: h, argMeta: p, universal: b } = cL(r, t, u);
+  const { args: h, argMeta: p, universal: b } = pL(r, t, u);
   return {
     __kind: "Component",
     name: t,
@@ -34634,7 +34666,7 @@ function lL(t, e, r, i) {
     source: i
   };
 }
-function cL(t, e, r) {
+function pL(t, e, r) {
   const i = t.library ? Ft(t.library, e) : void 0;
   if (!i) {
     const b = r.map((f) => G(f, t)), m = r.map((f) => {
@@ -34696,7 +34728,7 @@ function cL(t, e, r) {
     h.pop(), p.pop();
   return { args: h, argMeta: p, universal: s };
 }
-function uL(t, e, r, i) {
+function hL(t, e, r, i) {
   r.coverage && Ua(r.coverage, t.loc);
   const a = [], o = {};
   let n, s = -1;
@@ -34807,7 +34839,7 @@ function Bb(t, e, r) {
     try {
       return Fl(t.params, t.body, e, r);
     } catch (a) {
-      if (a instanceof Vi || a instanceof Xt || a instanceof ur) throw a;
+      if (a instanceof Gi || a instanceof Xt || a instanceof ur) throw a;
       try {
         r.errorHook({ error: a, source: t.name ?? "action" });
       } catch {
@@ -34818,7 +34850,7 @@ function Bb(t, e, r) {
     i && r.activeComponentDecls.pop();
   }
 }
-function dL(t, e) {
+function mL(t, e) {
   const r = t ? G(t, e) : void 0;
   if (typeof r != "function") return;
   const i = /* @__PURE__ */ new Map();
@@ -34835,7 +34867,7 @@ function dL(t, e) {
       throw a(), n;
     }) : o;
   } catch (o) {
-    throw o instanceof Vi || o instanceof Xt || o instanceof ur || a(), o;
+    throw o instanceof Gi || o instanceof Xt || o instanceof ur || a(), o;
   }
 }
 function Fl(t, e, r, i) {
@@ -34867,13 +34899,13 @@ function Wa(t) {
   let r = t.hookStore.get(e.instanceKey);
   return r || (r = [], t.hookStore.set(e.instanceKey, r)), r;
 }
-function pL(t, e) {
+function fL(t, e) {
   if (t.length !== e.length) return !1;
   for (let r = 0; r < t.length; r += 1)
     if (!Object.is(t[r], e[r])) return !1;
   return !0;
 }
-function hL(t, e, r) {
+function gL(t, e, r) {
   const i = Wa(e);
   if (!i)
     return Ga("state", r), [t[0] ? G(t[0], e) : void 0, () => {
@@ -34887,7 +34919,7 @@ function hL(t, e, r) {
   };
   return [n.value, s];
 }
-function mL(t, e, r) {
+function bL(t, e, r) {
   const i = t[0], a = t[1], o = () => {
     const p = i ? G(i, e) : void 0;
     return typeof p == "function" ? p() : p;
@@ -34895,12 +34927,12 @@ function mL(t, e, r) {
   if (!n)
     return Ga("memo", r), o();
   const s = e.hookScope.cursor++, l = a ? G(a, e) : void 0, c = Array.isArray(l) ? l : void 0, u = n[s];
-  if (u && u.kind === "memo" && c && u.deps && pL(u.deps, c))
+  if (u && u.kind === "memo" && c && u.deps && fL(u.deps, c))
     return u.value;
   const h = o();
   return n[s] = { kind: "memo", deps: c, value: h }, h;
 }
-function fL(t, e, r) {
+function vL(t, e, r) {
   const i = Wa(e);
   if (!i)
     return Ga("ref", r), { current: t[0] ? G(t[0], e) : void 0 };
@@ -34908,7 +34940,7 @@ function fL(t, e, r) {
   let o = i[a];
   return (!o || o.kind !== "ref") && (o = { kind: "ref", box: { current: t[0] ? G(t[0], e) : void 0 } }, i[a] = o), o.box;
 }
-function gL(t, e, r) {
+function yL(t, e, r) {
   const i = t[0] ? G(t[0], e) : void 0, a = Wa(e), o = t[1] ? G(t[1], e) : void 0;
   if (!a)
     return Ga("reducer", r), [o, () => {
@@ -34924,7 +34956,7 @@ function gL(t, e, r) {
   return [l.value, c];
 }
 let Kh = 0;
-function bL(t, e, r) {
+function wL(t, e, r) {
   const i = t[0] ? String(G(t[0], e)) : "rui", a = Wa(e);
   if (!a)
     return Ga("id", r), `${i}-${Kh += 1}`;
@@ -34932,7 +34964,7 @@ function bL(t, e, r) {
   let n = a[o];
   return (!n || n.kind !== "id") && (n = { kind: "id", value: `${i}-${Kh += 1}` }, a[o] = n), n.value;
 }
-function vL(t, e, r) {
+function xL(t, e, r) {
   r.coverage && Ua(r.coverage, t.loc);
   const i = [];
   for (const a of e) {
@@ -34955,7 +34987,7 @@ function Ga(t, e) {
 function Xh(t, e) {
   t.hookStore.delete(e);
 }
-function yL(t, e) {
+function kL(t, e) {
   const r = e.stateAliases.map(
     (a) => new Map(a)
   ), i = new Map(e.loopVars);
@@ -34975,7 +35007,7 @@ function yL(t, e) {
     }
   };
 }
-function wL(t, e) {
+function SL(t, e) {
   return (...r) => ({
     __kind: "UserComponent",
     decl: t,
@@ -34985,7 +35017,7 @@ function wL(t, e) {
     source: t.loc
   });
 }
-function xL(t, e) {
+function CL(t, e) {
   return (...r) => ({
     __kind: "Component",
     name: t,
@@ -34994,8 +35026,8 @@ function xL(t, e) {
     source: void 0
   });
 }
-function kL(t, e, r) {
-  return t === "__rui_assign__" ? CL(e, r) : t === "__rui_postfix__" ? AL(e, r) : t === "__rui_prefix__" ? $L(e, r) : t === "__rui_await__" ? e[0] ? G(e[0], r) : void 0 : null;
+function AL(t, e, r) {
+  return t === "__rui_assign__" ? TL(e, r) : t === "__rui_postfix__" ? IL(e, r) : t === "__rui_prefix__" ? zL(e, r) : t === "__rui_await__" ? e[0] ? G(e[0], r) : void 0 : null;
 }
 function Mr(t, e, r) {
   switch (t) {
@@ -35039,7 +35071,7 @@ function Mr(t, e, r) {
       return r;
   }
 }
-function SL(t, e, r) {
+function $L(t, e, r) {
   const i = e[0] ? G(e[0], r) : null;
   if (typeof i != "function") return null;
   const a = i, o = e[1] ? Ne(G(e[1], r)) : 0, n = [];
@@ -35063,7 +35095,7 @@ function SL(t, e, r) {
   const l = setInterval(s, o);
   return r.timers.intervals.add(l), l;
 }
-function CL(t, e) {
+function TL(t, e) {
   const [r, i, a] = t;
   if (!r || !i) return null;
   const o = a && a.kind === "Literal" ? String(a.value ?? "=") : "=", n = G(i, e);
@@ -35075,7 +35107,7 @@ function CL(t, e) {
     const s = Gc(r, e);
     if (s) {
       const h = e.state.get(s.name);
-      if (s.path.length >= 1 && MM(h)) {
+      if (s.path.length >= 1 && LM(h)) {
         let m = h;
         for (let f = 0; f < s.path.length - 1; f += 1)
           m = m?.[s.path[f]];
@@ -35086,12 +35118,12 @@ function CL(t, e) {
           return m[f] = x, e.notify?.(), x;
         }
       }
-      const p = jl(h, s.path), b = Mr(o, p, n);
+      const p = _l(h, s.path), b = Mr(o, p, n);
       return e.state.setPath(s.name, s.path, b), b;
     }
     const l = Db(r, e);
     if (l) {
-      const h = jl(e.state.get(l.atom), l.path), p = Mr(o, h, n);
+      const h = _l(e.state.get(l.atom), l.path), p = Mr(o, h, n);
       return e.state.setPath(l.atom, l.path, p), p;
     }
     const c = G(r.object, e), u = r.computed ? G(r.computed, e) : r.property;
@@ -35117,7 +35149,7 @@ function CL(t, e) {
   }
   return n;
 }
-function jl(t, e) {
+function _l(t, e) {
   let r = t;
   for (const i of e) {
     if (r == null) return;
@@ -35145,7 +35177,7 @@ function Fb(t, e, r) {
   if (i.kind === "Member") {
     const s = Gc(i, e);
     if (s) {
-      const l = Ne(jl(e.state.get(s.name), s.path)), c = l + n;
+      const l = Ne(_l(e.state.get(s.name), s.path)), c = l + n;
       return e.state.setPath(s.name, s.path, c), r === "prefix" ? c : l;
     }
   }
@@ -35166,10 +35198,10 @@ function Fb(t, e, r) {
   }
   return null;
 }
-function AL(t, e) {
+function IL(t, e) {
   return Fb(t, e, "postfix");
 }
-function $L(t, e) {
+function zL(t, e) {
   return Fb(t, e, "prefix");
 }
 function Yc(t) {
@@ -35185,7 +35217,7 @@ function Yc(t) {
   }
   return "/";
 }
-function TL(t) {
+function ML(t) {
   const e = t.getPath(), r = { ...t.getParams() }, i = t.getActivePattern(), a = {};
   if (typeof globalThis < "u" && globalThis.location) {
     const o = globalThis.location?.search ?? "";
@@ -35267,7 +35299,7 @@ function Ne(t) {
   }
   return typeof t == "boolean" && t ? 1 : 0;
 }
-const IL = /* @__PURE__ */ new Set([
+const EL = /* @__PURE__ */ new Set([
   "colors",
   "radius",
   "font",
@@ -35277,11 +35309,11 @@ const IL = /* @__PURE__ */ new Set([
   "gradients",
   "zIndex",
   "motion"
-]), zL = /* @__PURE__ */ new Set(["name", "direction"]), ML = {
+]), NL = /* @__PURE__ */ new Set(["name", "direction"]), LL = {
   sm: "s",
   md: "m",
   lg: "l"
-}, EL = {
+}, RL = {
   colors: "color",
   radius: "radius",
   font: "font",
@@ -35291,29 +35323,29 @@ const IL = /* @__PURE__ */ new Set([
   zIndex: "z",
   motion: "motion"
 };
-function NL(t) {
+function PL(t) {
   if (!t || typeof t != "object" || Array.isArray(t)) return null;
   const e = t.name;
   if (typeof e != "string") return null;
   const r = e.trim().toLowerCase();
   return Uc(r) ? r : null;
 }
-function LL(t) {
+function DL(t) {
   const e = {};
   if (!t || typeof t != "object" || Array.isArray(t)) return e;
   const r = t;
   for (const [i, a] of Object.entries(r))
-    if (a != null && !zL.has(i) && IL.has(i) && a && typeof a == "object" && !Array.isArray(a)) {
-      const o = EL[i] ?? i, n = i === "gradients";
+    if (a != null && !NL.has(i) && EL.has(i) && a && typeof a == "object" && !Array.isArray(a)) {
+      const o = RL[i] ?? i, n = i === "gradients";
       for (const [s, l] of Object.entries(a)) {
         if (l == null) continue;
-        const c = i === "spacing" ? ML[s] ?? s : s, u = o + PL(c), h = n ? RL(l) : DL(l);
+        const c = i === "spacing" ? LL[s] ?? s : s, u = o + BL(c), h = n ? OL(l) : FL(l);
         h && (e[u] = h);
       }
     }
   return e;
 }
-function RL(t) {
+function OL(t) {
   const e = (r) => {
     const i = typeof r == "string" ? r.trim() : "";
     return !i || i.length > 64 || !/^[a-zA-Z0-9#%.,()\s+-]+$/.test(i) || /url\s*\(|expression\s*\(|javascript\s*:|@import/i.test(i) ? "" : i;
@@ -35333,13 +35365,13 @@ function RL(t) {
   }
   return "";
 }
-function PL(t) {
+function BL(t) {
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : "";
 }
-function DL(t) {
+function FL(t) {
   return typeof t == "string" ? t : typeof t == "number" ? String(t) : "";
 }
-function _l(t) {
+function jl(t) {
   if (t == null) return "";
   if (typeof t == "string") return t;
   if (typeof t == "number" || typeof t == "boolean") return String(t);
@@ -35356,31 +35388,31 @@ function _l(t) {
     return String(t);
   }
 }
-const OL = "__AKTION_DEVTOOLS_HOOK__";
-function BL() {
+const _L = "__AKTION_DEVTOOLS_HOOK__";
+function jL() {
   return globalThis;
 }
-function Oi() {
-  return BL()[OL];
+function Di() {
+  return jL()[_L];
 }
 function Ci() {
-  const t = Oi();
+  const t = Di();
   return t !== void 0 && t.active;
 }
 function wi(t) {
-  const e = Oi();
+  const e = Di();
   return e === void 0 || !e.active ? !1 : e.options[t];
 }
 function gr(t) {
-  Oi()?.emit(t);
+  Di()?.emit(t);
 }
-function FL(t) {
-  Oi()?.unregisterApp(t);
+function qL(t) {
+  Di()?.unregisterApp(t);
 }
 function Ye() {
   return typeof performance < "u" && typeof performance.now == "function" ? performance.now() : Date.now();
 }
-const jL = 120, _L = 2e4, So = 6, Jt = 200;
+const UL = 120, HL = 2e4, So = 6, Jt = 200;
 function Va(t) {
   if (t === null) return "null";
   if (t === void 0) return "undefined";
@@ -35390,10 +35422,10 @@ function Va(t) {
   const r = t;
   return r.__kind === "Store" ? "store" : typeof r.refetch == "function" && "state" in r && "loading" in r ? "resource" : typeof r.send == "function" && "connected" in r ? "socket" : typeof Node < "u" && t instanceof Node ? "node" : t instanceof Date ? "date" : t instanceof Map ? "map" : t instanceof Set ? "set" : t instanceof RegExp ? "regexp" : t instanceof Error ? "error" : "object";
 }
-function Pr(t, e = jL) {
+function Pr(t, e = UL) {
   return t.length <= e ? t : `${t.slice(0, e)}…`;
 }
-function Ta(t) {
+function $a(t) {
   const e = Va(t);
   try {
     switch (e) {
@@ -35429,7 +35461,7 @@ function Ta(t) {
       case "array": {
         const r = t;
         if (r.length === 0) return "[]";
-        const i = r.slice(0, 3).map((a) => qL(a)).join(", ");
+        const i = r.slice(0, 3).map((a) => WL(a)).join(", ");
         return Pr(`[${i}${r.length > 3 ? `, …${r.length - 3} more` : ""}]`);
       }
       case "store": {
@@ -35453,7 +35485,7 @@ function Ta(t) {
     return "<unreadable>";
   }
 }
-function qL(t) {
+function WL(t) {
   switch (Va(t)) {
     case "string":
       return Pr(JSON.stringify(t) ?? '""', 24);
@@ -35474,7 +35506,7 @@ function Qc(t) {
     return [];
   }
 }
-function ma(t, e, r) {
+function ha(t, e, r) {
   switch (Va(t)) {
     case "string":
     case "number":
@@ -35513,7 +35545,7 @@ function ma(t, e, r) {
           a["…"] = `${t.size - Jt} more`;
           break;
         }
-        a[String(n)] = e >= So ? Ta(s) : ma(s, e + 1, r);
+        a[String(n)] = e >= So ? $a(s) : ha(s, e + 1, r);
       }
       return a;
     }
@@ -35525,7 +35557,7 @@ function ma(t, e, r) {
           a.push(`…${t.size - Jt} more`);
           break;
         }
-        a.push(e >= So ? Ta(n) : ma(n, e + 1, r));
+        a.push(e >= So ? $a(n) : ha(n, e + 1, r));
       }
       return a;
     }
@@ -35535,7 +35567,7 @@ function ma(t, e, r) {
       if (e >= So) return `[Array(${a.length})]`;
       r.add(a);
       try {
-        const o = a.slice(0, Jt).map((n) => ma(n, e + 1, r));
+        const o = a.slice(0, Jt).map((n) => ha(n, e + 1, r));
         return a.length > Jt && o.push(`…${a.length - Jt} more`), o;
       } finally {
         r.delete(a);
@@ -35544,7 +35576,7 @@ function ma(t, e, r) {
     default: {
       const a = t;
       if (r.has(a)) return "[Circular]";
-      if (e >= So) return Ta(a);
+      if (e >= So) return $a(a);
       r.add(a);
       try {
         const o = {}, n = Qc(a);
@@ -35555,7 +35587,7 @@ function ma(t, e, r) {
           } catch {
             l = "[getter threw]";
           }
-          o[s] = ma(l, e + 1, r);
+          o[s] = ha(l, e + 1, r);
         }
         return n.length > Jt && (o["…"] = `${n.length - Jt} more`), o;
       } finally {
@@ -35564,22 +35596,22 @@ function ma(t, e, r) {
     }
   }
 }
-function jb(t, e = 2) {
+function _b(t, e = 2) {
   const r = Va(t);
   if (r === "function" || r === "node" || r === "resource" || r === "socket" || r === "symbol")
     return null;
   try {
-    const i = ma(t, 0, /* @__PURE__ */ new WeakSet()), a = JSON.stringify(i, null, e);
-    return a === void 0 || a.length > _L ? null : a;
+    const i = ha(t, 0, /* @__PURE__ */ new WeakSet()), a = JSON.stringify(i, null, e);
+    return a === void 0 || a.length > HL ? null : a;
   } catch {
     return null;
   }
 }
 function ar(t) {
-  const e = Va(t), r = { type: e, preview: Ta(t) }, i = jb(t, 0);
+  const e = Va(t), r = { type: e, preview: $a(t) }, i = _b(t, 0);
   return i !== null && (r.json = i), e === "array" ? r.size = t.length : e === "object" ? r.size = Qc(t).length : e === "string" && (r.size = t.length), r;
 }
-function UL(t) {
+function GL(t) {
   if (t == null) return 0;
   if (typeof t == "string") return t.length;
   try {
@@ -35591,10 +35623,10 @@ function UL(t) {
 function Qh(t, e = 4e3) {
   if (t == null) return "";
   if (typeof t == "string") return Pr(t, e);
-  const r = jb(t);
-  return r === null ? Ta(t) : Pr(r, e);
+  const r = _b(t);
+  return r === null ? $a(t) : Pr(r, e);
 }
-const fa = "data-aktion-instance", ti = "data-aktion-owner", HL = 40, WL = "$";
+const ma = "data-aktion-instance", ti = "data-aktion-owner", VL = 40, KL = "$";
 function Jh(t, e) {
   if (t.length !== e.length) return !1;
   for (let r = 0; r < t.length; r += 1)
@@ -35608,20 +35640,20 @@ function em(t, e) {
     if (!Object.prototype.hasOwnProperty.call(e, a) || !Object.is(t[a], e[a])) return !1;
   return !0;
 }
-function GL(t) {
+function YL(t) {
   typeof queueMicrotask == "function" ? queueMicrotask(t) : Promise.resolve().then(t);
 }
-function VL(t) {
+function XL(t) {
   return t.nodeType === Node.DOCUMENT_FRAGMENT_NODE ? t.childNodes.length === 0 : t.nodeType === Node.TEXT_NODE && (t.textContent ?? "") === "";
 }
-function KL(t, e) {
+function ZL(t, e) {
   if (t instanceof Element)
     return Us(t, e), t;
-  if (!Object.values(e).some((a) => a != null) || VL(t)) return t;
+  if (!Object.values(e).some((a) => a != null) || XL(t)) return t;
   const i = document.createElement("span");
   return i.className = "rui-universal-host", i.append(t), Us(i, e), i;
 }
-function YL(t, e, r) {
+function QL(t, e, r) {
   const i = [...t.args];
   let a = t.universal, o = !1;
   for (const [n, s] of r) {
@@ -35634,7 +35666,7 @@ function YL(t, e, r) {
   }
   return { ...t, args: i, universal: a };
 }
-function XL(t, e) {
+function JL(t, e) {
   const r = [...t.positional], i = { ...t.named };
   for (const [a, o] of e) {
     const n = t.decl.params.findIndex((s) => s.name === a);
@@ -35646,7 +35678,7 @@ function XL(t, e) {
   }
   return { ...t, positional: r, named: i };
 }
-class _b {
+class jb {
   constructor(e) {
     /**
      * Persistent state cells, keyed by `instancePath::userKey`. Lives as long
@@ -35971,7 +36003,7 @@ class _b {
    */
   buildPropRecords(e, r, i, a, o, n) {
     const s = [], l = (c, u, h) => {
-      if (s.length >= HL) return;
+      if (s.length >= VL) return;
       const p = { name: c, value: ar(u) };
       h && (p.stateRef = h), n?.has(c) && (p.overridden = !0), s.push(p);
     };
@@ -36046,7 +36078,7 @@ class _b {
   render(e) {
     this.passDepth += 1;
     try {
-      return this.renderAt(Array.isArray(e) ? e : [e], WL);
+      return this.renderAt(Array.isArray(e) ? e : [e], KL);
     } finally {
       this.passDepth -= 1;
     }
@@ -36103,7 +36135,7 @@ class _b {
     const a = i(), o = e.explicitKey != null ? `=${String(e.explicitKey)}` : `@${e.source?.line ?? 0}:${e.source?.column ?? 0}`, n = `${r}#${e.decl.name}${o}`;
     this.markAlive(n);
     const s = this.propOverrides.get(n);
-    s && s.size > 0 && (e = XL(e, s));
+    s && s.size > 0 && (e = JL(e, s));
     const l = this.memoCache.get(n);
     if (this.memoEnabled && l && Jh(e.positional, l.positional) && em(e.named, l.named) && !nn(this.changedPaths, l.deps)) {
       const p = a.trackedState;
@@ -36173,11 +36205,11 @@ class _b {
     const a = e.explicitKey != null ? `=${String(e.explicitKey)}` : `@${e.source?.line ?? 0}:${e.source?.column ?? 0}`, o = `${r}#${e.name}${a}`;
     this.markAlive(o);
     const n = this.propOverrides.get(o);
-    n && n.size > 0 && (e = YL(e, i, n));
+    n && n.size > 0 && (e = QL(e, i, n));
     const s = vn(i, e.args);
     let l = 0, c = !1, u = 0;
     const h = {
-      renderNode: (m) => this.passDepth > 0 ? this.renderAt(m, `${o}>${l++}`) : (c || (c = !0, l = 0, GL(() => {
+      renderNode: (m) => this.passDepth > 0 ? this.renderAt(m, `${o}>${l++}`) : (c || (c = !0, l = 0, YL(() => {
         c = !1;
       })), this.renderExternal(m, `${o}>${l++}`, o)),
       invoke: (m, ...f) => {
@@ -36229,8 +36261,8 @@ class _b {
       router: this.options.router
     }, p = this.profiledInstances.has(o) ? "update" : "mount", b = this.profiling ? Ye() : 0;
     try {
-      const m = i.render(e, s, h), f = e.universal ? KL(m, e.universal) : m;
-      return e.explicitKey != null && f instanceof Element && !f.hasAttribute("data-rui-key") && f.setAttribute("data-rui-key", String(e.explicitKey)), this.tagDom && this.tagInstance(f, o, fa), this.profiling && this.profile(
+      const m = i.render(e, s, h), f = e.universal ? ZL(m, e.universal) : m;
+      return e.explicitKey != null && f instanceof Element && !f.hasAttribute("data-rui-key") && f.setAttribute("data-rui-key", String(e.explicitKey)), this.tagDom && this.tagInstance(f, o, ma), this.profiling && this.profile(
         o,
         e.name,
         "library",
@@ -36273,15 +36305,15 @@ class _b {
     } : e instanceof HTMLInputElement && e.type === "range" ? (r) => Number(r.value) : (r) => r.value;
   }
 }
-function ZL() {
+function eR() {
   return typeof document < "u" && typeof document.createElement == "function";
 }
-function QL(t, e = {}) {
-  if (!ZL())
+function tR(t, e = {}) {
+  if (!eR())
     throw new Error(
       "[aktion] renderToString requires a DOM. In Node, register happy-dom or jsdom globals before calling it."
     );
-  const r = e.library ?? Wi, i = new Dc();
+  const r = e.library ?? Hi, i = new Dc();
   e.initialState && typeof e.initialState == "object" && i.hydrate(e.initialState);
   const a = new Mc({ defaultPath: e.path ?? "/" }), o = new Bc(), n = hn(i, { library: r, router: a, http: o, notify: () => {
   } });
@@ -36297,7 +36329,7 @@ function QL(t, e = {}) {
     };
   }
   Vc(s, n);
-  const l = new _b({
+  const l = new jb({
     library: r,
     state: i,
     router: a,
@@ -36322,11 +36354,11 @@ function QL(t, e = {}) {
   const b = p.innerHTML, m = e.container === !1 ? b : p.outerHTML, f = kb(n), v = f.serialize(), x = f.htmlAttrs();
   return { html: m, state: i.snapshot(), head: v, headAttrs: x };
 }
-function t4(t, e = {}) {
-  return QL(t, e).html;
+function a4(t, e = {}) {
+  return tR(t, e).html;
 }
-function r4(t, e = {}) {
-  const r = e.library ?? Wi, i = [], a = mt(t);
+function o4(t, e = {}) {
+  const r = e.library ?? Hi, i = [], a = mt(t);
   for (const p of a.errors) i.push(`parse ${p.line}:${p.column}: ${p.message}`);
   for (const p of Xo(a, r)) i.push(`schema ${p.line}:${p.column}: ${p.message}`);
   const o = new Dc();
@@ -36397,11 +36429,11 @@ function Fo(t, e, r, i, a, o, n) {
     return;
   }
 }
-function JL(t) {
+function rR(t) {
   return t.kind === "Invoke" && t.callee.kind === "StateRef" && t.callee.name === "emit";
 }
-const sa = "::", eR = /* @__PURE__ */ new Map();
-class tR {
+const na = "::", iR = /* @__PURE__ */ new Map();
+class aR {
   constructor(e) {
     Q(this, "mounted", /* @__PURE__ */ new Map());
     Q(this, "errors", []);
@@ -36424,9 +36456,9 @@ class tR {
     this.errors = [];
     const i = new Set(e.map((a) => a.name));
     for (const a of [...this.mounted.keys()])
-      a.includes(sa) || i.has(a) || this.unmount(a);
+      a.includes(na) || i.has(a) || this.unmount(a);
     for (const a of e)
-      this.mounted.has(a.name) || this.mount(a.name, a, r, [], eR);
+      this.mounted.has(a.name) || this.mount(a.name, a, r, [], iR);
   }
   /**
    * Mount per-instance effects discovered inside a function body.
@@ -36435,7 +36467,7 @@ class tR {
    * torn down. Effects belonging to other instances are untouched.
    */
   syncInstanceEffects(e, r, i) {
-    const a = `${e}${sa}`, o = new Set(r.map((n) => `${a}${n.decl.name}`));
+    const a = `${e}${na}`, o = new Set(r.map((n) => `${a}${n.decl.name}`));
     for (const n of [...this.mounted.keys()])
       n.startsWith(a) && (o.has(n) || this.unmount(n));
     for (const n of r) {
@@ -36461,7 +36493,7 @@ class tR {
    * component the user can see.
    */
   unmountInstance(e) {
-    const r = `${e}${sa}`;
+    const r = `${e}${na}`;
     for (const i of [...this.mounted.keys()])
       i.startsWith(r) && this.unmount(i);
   }
@@ -36482,7 +36514,7 @@ class tR {
   listMounted() {
     const e = [];
     for (const [r, i] of this.mounted) {
-      const a = r.lastIndexOf(sa), o = [], n = [];
+      const a = r.lastIndexOf(na), o = [], n = [];
       for (const s of i.decl.triggers)
         s.kind === "state" ? o.push(s.name) : s.kind === "every" && n.push(s.intervalMs);
       e.push({
@@ -36518,7 +36550,7 @@ class tR {
       capturedLoopVars: o
     };
     this.mounted.set(e, n), this.emitEffect(e, r, "mount", "mount");
-    const l = rR((p) => {
+    const l = oR((p) => {
       const b = n.cleanups.splice(0);
       if (b.length > 0) {
         for (const f of b)
@@ -36555,7 +36587,7 @@ class tR {
           break;
         }
         case "state": {
-          const b = aR(p.name, a), m = `state:${p.name}`, f = this.options.state.subscribe((v) => {
+          const b = sR(p.name, a), m = `state:${p.name}`, f = this.options.state.subscribe((v) => {
             ub(v, b) && l(m);
           });
           n.unsubscribers.push(f);
@@ -36572,7 +36604,7 @@ class tR {
   emitEffect(e, r, i, a, o = {}) {
     const n = this.options.onEffectEvent;
     if (!n || !Ci()) return;
-    const s = e.lastIndexOf(sa);
+    const s = e.lastIndexOf(na);
     n({
       effectKey: e,
       label: im(r.name),
@@ -36618,7 +36650,7 @@ class tR {
     this.emitEffect(e, r.decl, "unmount", "unmount");
   }
 }
-function rR(t, e, r) {
+function oR(t, e, r) {
   if (!e || e.ms <= 0) return t;
   if (e.kind === "debounce") {
     let n = null;
@@ -36660,7 +36692,7 @@ function tm(t, e, r, i) {
   };
   try {
     for (const s of t.body.body)
-      iR(s, e, r, i);
+      nR(s, e, r, i);
   } finally {
     if (e.cleanupSink = n, a) {
       e.stateAliases.length = 0;
@@ -36672,7 +36704,7 @@ function tm(t, e, r, i) {
     }
   }
 }
-function iR(t, e, r, i) {
+function nR(t, e, r, i) {
   if (e.coverage) {
     const a = t.loc;
     a && qa(e.coverage, a);
@@ -36685,7 +36717,7 @@ function iR(t, e, r, i) {
         typeof o == "function" && r.cleanups.push(o);
         return;
       }
-      if (JL(a)) {
+      if (rR(a)) {
         const o = a.arguments, n = o[0] ? String(G(o[0], e)) : "", s = o[1] ? G(o[1], e) : void 0;
         i.onEmit?.(n, s);
         return;
@@ -36733,7 +36765,7 @@ function am(t) {
   const e = t.triggers.map((r) => r.kind === "lifecycle" ? `"${r.name}"` : r.kind === "every" ? `every(${r.intervalMs})` : `$${r.name}`);
   return t.rateLimit && e.push(`${t.rateLimit.kind}(${t.rateLimit.ms})`), e.length > 0 ? `[${e.join(", ")}]` : "[mount]";
 }
-function aR(t, e) {
+function sR(t, e) {
   const r = t.indexOf("."), i = r < 0 ? t : t.slice(0, r), a = r < 0 ? "" : t.slice(r);
   for (let o = e.length - 1; o >= 0; o -= 1) {
     const n = e[o].get(i);
@@ -36742,38 +36774,38 @@ function aR(t, e) {
   return t;
 }
 function Ub(t, e = {}) {
-  return e.mode === "chat" ? nR(t, e) : oR(t, e);
+  return e.mode === "chat" ? cR(t, e) : lR(t, e);
 }
-function i4(t) {
+function n4(t) {
   return fn(t);
 }
-function oR(t, e) {
+function lR(t, e) {
   const r = e.bindings ?? !0, i = e.toolCalls ?? !0, a = [];
-  a.push(sR(e.preamble)), a.push(lR()), a.push(cR()), a.push(uR()), a.push(pR()), a.push(hR()), r && a.push(mR()), a.push(fR()), a.push(gR()), i && a.push(bR()), a.push(vR()), a.push(yR()), a.push(wR()), a.push(dR()), a.push(xR()), a.push(kR()), a.push(CR()), a.push(SR()), a.push(AR()), a.push($R()), e.tools && e.tools.length > 0 && a.push(WR(e.tools)), e.toolExamples && e.toolExamples.length > 0 && a.push(ql("Endpoint examples", e.toolExamples));
-  const o = e.examples ?? ER();
-  return o.length > 0 && a.push(ql("Examples", o)), a.push(TR(t)), e.inlineMode && a.push(IR()), e.editMode && a.push(zR()), e.additionalRules && e.additionalRules.length > 0 && a.push(Hb(e.additionalRules)), a.push(MR()), a.join(`
+  a.push(uR(e.preamble)), a.push(dR()), a.push(pR()), a.push(hR()), a.push(fR()), a.push(gR()), r && a.push(bR()), a.push(vR()), a.push(yR()), i && a.push(wR()), a.push(xR()), a.push(kR()), a.push(SR()), a.push(mR()), a.push(CR()), a.push(AR()), a.push(TR()), a.push($R()), a.push(IR()), a.push(zR()), e.tools && e.tools.length > 0 && a.push(KR(e.tools)), e.toolExamples && e.toolExamples.length > 0 && a.push(ql("Endpoint examples", e.toolExamples));
+  const o = e.examples ?? RR();
+  return o.length > 0 && a.push(ql("Examples", o)), a.push(MR(t)), e.inlineMode && a.push(ER()), e.editMode && a.push(NR()), e.additionalRules && e.additionalRules.length > 0 && a.push(Hb(e.additionalRules)), a.push(LR()), a.join(`
 
 `).trim() + `
 `;
 }
-function nR(t, e) {
+function cR(t, e) {
   const r = [];
-  r.push(RR(e.preamble)), r.push(DR()), r.push(PR()), r.push(OR(t)), r.push(BR()), e.tools && e.tools.length > 0 && r.push(jR(e.tools));
-  const i = e.examples ?? _R();
-  return i.length > 0 && r.push(ql("Examples", i)), e.additionalRules && e.additionalRules.length > 0 && r.push(Hb(e.additionalRules)), r.push(FR()), r.push(qR()), r.push(UR()), r.join(`
+  r.push(OR(e.preamble)), r.push(FR()), r.push(BR()), r.push(_R(t)), r.push(jR()), e.tools && e.tools.length > 0 && r.push(UR(e.tools));
+  const i = e.examples ?? HR();
+  return i.length > 0 && r.push(ql("Examples", i)), e.additionalRules && e.additionalRules.length > 0 && r.push(Hb(e.additionalRules)), r.push(qR()), r.push(WR()), r.push(GR()), r.join(`
 
 `).trim() + `
 `;
 }
-function sR(t) {
+function uR(t) {
   return `${t?.trim() || "You are a UI engineer building complete, working apps in Aktion — a declarative language that is a strict subset of JavaScript: every program is valid JS, and the runtime adds reactivity on top. Respond ONLY in Aktion — no prose, JSON, markdown, or HTML."}
 
 Register the UI root with \`$app(...)\` on the first line. Pass it one node (\`$app(Component())\`), an array (\`$app([Component1(), Component2()])\`), or variadic nodes (\`$app(Component1(), Component2())\`). Wrap a dashboard/app in \`AppShell\` (left sidebar + topbar); build a website or marketing page from a top \`Navbar\` + stacked sections — never an \`AppShell\`. References resolve across the whole program, so call \`$app(...)\` first and let the rest stream in below it. There should be only one \`$app(...)\` in the program, as the runtime treats it as the UI root.`;
 }
-function lR() {
+function dR() {
   return "## The host element — `<aktion-app>`\n\nSet by the HOST PAGE, never from Aktion code. Listed so you know what is configurable and never try to set it yourself.\n\n| Attribute | Values | Effect |\n| --- | --- | --- |\n| `theme` | `light` `dark` `shadcn` `shadcn-dark` `mui` `mui-dark` `heroui` `heroui-dark` `signal` `signal-dark` `soft` | Base palette. `shadcn`, `mui` and `heroui` re-create shadcn/ui, Material UI and HeroUI; `signal` is a dense instrument-console theme for dashboards and ops. Each also answers to an explicit `-light` spelling. `$theme({...})` layers on top. A theme selected by name also loads its web fonts. |\n| `dir` | `ltr` `rtl` `auto` | Flips the whole tree. Programs need no change. |\n| `margin` | `0` `12` `1rem` | Outer gutter (default 20px). |\n| `scroll-restoration` | `auto` `top` | Scroll behaviour on navigation. |\n| `router-mode` | `hash` (default) `history` | Whether `route.navigate()` uses clean paths or hashes. |\n| `router-base` | e.g. `/app` | Path prefix in history mode. |\n| `streaming` `response` `src` | — | How the program text is delivered. |\n| `showerrors` | — | Renders the error banner instead of hiding failures. |\n| `strict` | — | Dev mode: surfaces silent failures (unknown identifiers, unmatched props) as console warnings. |";
 }
-function cR() {
+function pR() {
   return `## Cheat sheet — every construct, one line each
 
 \`\`\`
@@ -36799,58 +36831,58 @@ $util.* $storage.* $console.* $toast.* $dom.*     // the five reserved namespace
 route.path route.params route.query route.pattern route.navigate(to)     // always in scope, reactive
 \`\`\``;
 }
-function uR() {
+function hR() {
   return '## Common mistakes — read before writing\n\n```\n✗ Alert("Failed", { tone: "danger" })          ✓ Callout("Failed", { tone: "danger" })\n   Alert / Tag / Chip / Panel / Textbox DO NOT EXIST. Every component name must appear\n   verbatim in the Component library section below. An unknown name renders NOTHING,\n   silently — no error. When unsure, pick the nearest listed name.\n\n✗ Column([Header, Body])                        ✓ Column([Header(), Body()])\n   A bare identifier is a value, not a call. Components need ().\n\n✗ Button("Save", "primary")                     ✓ Button("Save", { variant: "primary" })\n   Slot 2 of Button is onClick, not variant. Non-adjacent props go in the trailing object.\n\n✗ Card([x], { p: "md" }, { gap: "sm" })         ✓ Card([x], { p: "md", gap: "sm" })\n   One trailing object per call. Never split named props across two objects.\n\n✗ Column([$count += 1, Text($count)])           ✓ Button("Add", { action: () => { $count += 1 } })\n   State writes belong in handlers and effects, never in render position.\n\n✗ $theme({ colorPrimary: "#09f" })              ✓ $theme({ colors: { primary: "#09f" } })\n   Flat token keys were removed in 0.5 and raise a schema error.\n\n✗ Table([{ name: "Ada", age: 36 }])             ✓ Table([Col("Name", rows.name), Col("Age", rows.age)])\n   Tables are COLUMN-oriented — pluck an array per column.\n\n✗ util.format(n)  /  toast.success("Hi")        ✓ $util.format(n)  /  $toast.success("Hi")\n   $util, $toast and $dom exist ONLY with the sigil. Without it they resolve to nothing.\n\n✗ $toasts = [...$toasts, { msg }]               ✓ $toast.success("Saved")\n   $toast renders its own stacked layer. Never hand-manage a toast array.\n\n✗ Icon("fa-house")  /  Text("🎉 Done")          ✓ Icon("house")  /  Text("Done", { icon: "party-horn" })\n   Font Awesome names carry no fa- prefix, and raw emoji are never acceptable.\n\n✗ $effect(() => { … }, [route.path])            ✓ $effect(() => { … }, [$util.url.path])\n   Effect deps accept $atoms and the string tokens only — route is a parse error.\n\n✗ Stack([...], { direction: "row" })            ✓ Row([...], { gap: "md" })\n   Reserve Stack for a direction that CHANGES across breakpoints.\n```\n\n### Confusable names — all of these are real, distinct components\n\n- `Navbar` top nav bar for a site · `NavBar` marketing-page variant · `TopBar` compact strip above scrolling content · `AppShell` full sidebar+content product shell.\n- `Toast` one transient notice · `Toasts` a stack container (usually unnecessary — `$toast.*` auto-renders).\n- `Button` one control · `Buttons` a gapped row · `ButtonGroup` buttons joined edge-to-edge · `SegmentedControl`/`ToggleGroup` a padded track with a selected chip.\n- `Split` a two-pane layout primitive · `SplitView` master/detail with scrollable panes · `ResizablePanels` user-draggable divider.\n- `Calendar` scheduling grid · `CalendarView` month/week event grid · `DatePicker` an input.\n- `Table` static columns · `DataGrid` sortable/filterable/paged/selectable · `ComparisonTable` feature-matrix rows.\n- `Text` one string with a type variant · `TextContent` a block of prose nodes · `Prose` long-form article styling · `Markdown` parses markdown source.\n- `Badge` solid attention chip ("Recommended") · `Pill` soft tinted state label ("SSL active") · `StatusDot` inline pip · `Chip` does not exist.\n- `Spinner` rotating ring · `LoadingDots` three-dot pulse · `Skeleton` content placeholder · `LoadingState` full-card state.';
 }
-function dR() {
+function mR() {
   return '## Overlays & floating layers\n\n`Modal`, `Drawer`, `Sheet`, `BottomSheet`, `ConfirmDialog`, `Tooltip`, `HoverCard`, `Popover`, `DropdownMenu`, `ContextMenu`, `CommandPalette` and `Lightbox` all render through one shared positioning engine:\n\n- **Never clipped.** They render in the browser\'s top layer, so no `overflow: hidden` and no transformed ancestor can cut them off. You do not need to hoist them out of a Card or use `Portal`.\n- **Shared placement vocabulary.** `side: "top"|"bottom"|"left"|"right"` × `align: "start"|"center"|"end"` gives 12 placements, and they flip automatically when there is not enough room.\n- **Shared dismissal contract.** Escape, an outside click, and the × control all close them; focus moves in on open and is restored on close.\n- **Controlled or uncontrolled.** Bind `open` to a `$variable` and handle `onOpenChange` to drive one yourself. A `Modal` given a literal `open: true` MUST also get `onRequestClose`, or the user cannot dismiss it.\n- **Stacking** is token-driven — `sx: { zIndex: "dropdown" | "sticky" | "modal" | "toast" }` — so a custom overlay layers correctly against the built-ins.';
 }
-function pR() {
+function fR() {
   return '## Core syntax\n\nA program is a flat list of `name = expression` statements, one per line (newlines end statements; semicolons optional).\n\n```\n$app(Column([header, kpis, table]))      // UI root — always first\nheader  = PageHeader("Sales", { subtitle: "Q4 2026" })\n$count  = 0                              // reactive atom — the \'$\' prefix is the contract\nfunction Counter(label) { return Text(`${label}: ${$count}`) }   // component (returns a tree)\nfunction inc() { $count += 1 }           // action (no return — runs for side effects)\n$effect(() => $console.log($count), [$count])                     // declarative side effect\n```\n\n### Three kinds of name\n- `name = value` — plain binding, captured once (not reactive).\n- `$name = value` — reactive atom: reading subscribes, writing notifies.\n- `function name(...)` — declares a component AND an action of that name. First-letter case is NOT significant (`Card`/`card`, `SaveOrder`/`saveOrder`); same for arrow bindings (`row = item => Row(...)`).\n\n### Two rules, broken constantly — always check\n1. **Invoke components with parentheses.** A component is a function; the bare name is just its value. Render it by calling it, even with no args: `$app(MyApp())` not `$app(MyApp)`; `Column([Header(), Body()])` not `Column([Header, Body])`. (Exception: passing a component as a callback, e.g. `render: UserCard`.)\n2. **Argument forms** (per call, pick ONE): the canonical form is one bare positional — the prop tagged `(positional)` in the signature — plus a trailing `{ }` object for every other prop. Also supported: ALL-positional (arguments bind to the signature\'s props in listed order, so only use it for adjacent leading props), and ALL-named (a single `{ }` object naming every prop). Never split one object between roles.\n\n```\nButton("Save", { variant: "primary", loading: $isSaving })   // canonical: positional + trailing object\nStatCard("Revenue", { value: "$48k", trend: "up", delta: "+12%" })\nStatCard("Revenue", "$48k", "up")                            // all-positional, signature order\nButton({ label: "Save", variant: "primary" })                // all-named single object\nRow([Card1(), Card2()], { gap: "md" })\n```\n\nMind the signature order with all-positional calls: `Button("Save", "primary")` puts `"primary"` in the second slot (`onClick`), NOT `variant` — prefer the trailing object for non-adjacent props. A lone object argument to a component whose positional prop is itself object-typed is that prop\'s payload, not named props. Any call also accepts `{ key: ... }` to pin per-instance state across reorders.\n\n### Reserved top-level names\nNever declare or shadow any of these.\n- `$app(...)` — registers the UI root (REQUIRED, and exactly ONE per program).\n- `$theme({...})` — optional brand override (written as a bare statement, before `$app`).\n- `route` — the reactive router handle (`route.path`, `route.params`, `route.query`, `route.pattern`, `route.navigate("/x")`).\n- `$util`, `$storage`, `$console`, `$toast`, `$dom` — the five runtime namespaces.\n- `params` — the captured path segments, in scope inside a `$router` arm.\n- `outlet` — the matched child, in scope inside a nested route\'s `layout`.\n- `slots` — the named-props bag, in scope inside a component body.\n- `cleanup(fn)` — registers an effect teardown, in scope inside `$effect`.';
 }
-function hR() {
+function gR() {
   return '## JavaScript is fully supported\n\nAktion *is* JavaScript — every standard feature works inside expressions, action bodies, effect callbacks, and lambdas. Use whatever is clearest.\n\n### Ways to produce the UI\nThere is no single required shape — compose however the content suggests, and mix these freely:\n- **Inline in `$app(...)`** — `$app(Column([Hero(), Features(), Footer()]))` for a self-contained tree.\n- **Named statements** — pull pieces into `name = ...` bindings and reference them; they hoist and stream in independently.\n- **`.map` / `.filter` over data** — turn arrays into nodes: `rows = $items.map(i => Row(i))`.\n- **`function` components** — factor reusable or parameterised UI into components; invoke them with `()`.\n- **`$router({...})` pages** — split a multi-page app into route arms.\n\n### In expressions (right of `=`) — value-producing JS only\n```\nbanner = $error ? Banner($error, { tone: "danger" }) : null     // ternary\nrows   = $todos.filter(t => !t.done).map(t => TodoRow(t))        // map / filter / reduce\ntotal  = $cart.reduce((sum, i) => sum + i.price, 0)\nmerged = { ...$base, status: "done" }                           // spread / destructuring\nname   = $user?.profile?.name ?? "Guest"                        // optional chain / nullish\ntitle  = `${rows.length} ${$util.plural(rows.length, "result", "results")}`   // template literal\n```\n`if` / `switch` / `for` / `while` / `try` are statements — they can\'t sit on the right of `=`. Use a ternary, an array method, or wrap them in a function and call it.\n\n### In action / effect / lambda bodies — full statement surface\n`if`/`else`, `switch`, every `for` and `while`, `try`/`catch`/`finally`, `throw`, `return`, plus all assignment operators (`= += -= *= /= ??= ++ --`) against `$atoms` and member chains (`$user.name = "Alex"`).\n\n```\nfunction submit(payload) {\n  if (!payload.email) return\n  for (let tag of payload.tags) $tags = [...$tags, tag]\n  $emit("submitted", { id: payload.id })\n}\n```\n\n### Lambdas, continuations, comments, timers\n- Arrow functions in every form: `() => expr`, `x => expr`, `(a, b = 0) => { ...; return ... }`, `(...args) => ...`.\n- A leading operator (`.`, `?.`, `&&`, `??`, `?`/`:`, arithmetic) continues an expression onto the next line.\n- Comments: `// line` and `/* block */` only.\n- `setTimeout` / `setInterval` / `clearTimeout` / `clearInterval` work and are torn down on re-plan — create them in an `$effect` and clear them in its `cleanup`, or prefer `$effect(..., ["every(1000)"])` for simple repeats.\n- Every JavaScript global resolves by name (see *Built-in globals*).';
 }
-function mR() {
+function bR() {
   return '## Reactive State\n\nThe `$` sigil is the only thing that makes a binding reactive; `let`/`const`/`var` are optional and don\'t affect reactivity.\n\n```\n$count = 0\n$user  = { name: "Ada", role: "Engineer" }\n```\n\n- **Read** `$name` anywhere — it auto-subscribes whoever reads it (component, derived value, effect).\n- **Write** `$name = ...` (and `+= -= ??= ++ --`) only from event handlers, effects, and lambdas — never while building the UI. Member writes (`$user.name = "Alex"`) update immutably so subscribers see a fresh reference.\n- **Never write reactive state in render position.** A write that runs while the UI is built loops; the runtime applies it but skips the re-render and warns. Hold component-local state by declaring it at the top of a component body (set-once per instance) or with the `$state` hook.\n\n### Fine-grained reactivity (path-level)\nSubscriptions track the exact **path** you read. Reading `$user.name` subscribes to `user.name` alone — writing `$user.role` won\'t recompute it, but replacing `$user` will; effect deps work the same (`$effect(..., [$user.name])`). Prefer reading the precise field for the tightest updates. A component re-executes only when its own inputs change — its args or a `$` path its body read — like `React.memo`, but automatic. Args compare shallowly, so hoist inline-lambda props to a stable binding to avoid needless child re-renders.\n\n### Per-instance state\n`$name = value` inside a function body is per-instance when the function renders as a component — two `Counter()`s each own their `$count`. Add `{ key: id }` to keep state attached when siblings reorder.\n\n### Hooks\nFor composable local state, use hooks — a function whose name starts with `$`, called only at the top level of a component (or another hook) in a stable order:\n- `$state(initial)` → `[value, setValue]` (like `useState`; `setValue(prev => next)` supported, `initial` runs once).\n- `$memo(() => value, [deps])` → a cached value (like `useMemo`).\n- `$ref(initial)` → a stable `{ current }` box (like `useRef`; writing `.current` does NOT re-render — for DOM nodes, timer ids, previous values).\n- `$reducer((state, action) => next, initial)` → `[state, dispatch]` (like `useReducer`; the clean way to manage many related transitions).\n- `$id(prefix?)` → a stable unique id per instance (like `useId`; for `for`/`aria-*` wiring).\n- `function $name(...)` declares a custom hook composing the built-ins.\n\n```\nfunction Counter() {\n  const [count, setCount] = $state(0)\n  const label = $memo(() => `Count: ${count}`, [count])\n  return Stack([Text(label), Button("+1", { onClick: () => setCount(c => c + 1) })])\n}\n```\n\n### Two-way binding\nPass a `$variable` (or member chain — `value: $form.email`) as the value prop of any input/select/checkbox/switch/slider and the runtime wires the change handler automatically; add `onChange: v => ...` for an extra side effect.\n\n```\n$draft = ""\nfield  = Input("draft", { value: $draft })\n```\n\n### Computed values\nNo separate "computed" tier — just compute. Every `$` reference in an expression auto-tracks: `$open = $todos.filter(t => !t.done)`.\n\n### Global stores — `$store({...})`\nFor app-wide state without prop-drilling, declare a store. Non-function entries are reactive state; function entries are methods that receive the store handle `s` first. Read `store.field` (fine-grained) and call `store.method(args)`.\n\n```\ncart = $store({\n  items: [],\n  total: (s) => $util.sum(s.items.map(i => i.price)),   // → cart.total()\n  add:   (s, item) => { s.items = [...s.items, item] }, // → cart.add(item)\n})\nfunction CartBadge() { return Badge(`${cart.items.length} items`) }\n```\n\nUse a store for shared state; use a component\'s local `$state` / `$name` for state one component owns.\n\nAdd `persist: "key"` to mirror the store\'s data to `localStorage` (or `persistIn: "session"` for `sessionStorage`): declared fields hydrate from the saved snapshot on first render and every change writes back. `persist` / `persistIn` are config, not state fields.\n\n```\nprefs = $store({\n  persist: "user-prefs",          // restored on reload, saved on every change\n  theme: "system",\n  setTheme: (s, t) => { s.theme = t },\n})\n```\n\nAdd `history: true` (or `history: 50` for a depth cap) for **undo/redo**: the store gains `store.undo()` / `store.redo()` / `store.clearHistory()` methods and reactive `store.canUndo` / `store.canRedo` flags (wire them to button `disabled`). Each user mutation records a snapshot; a fresh edit after undo clears the redo branch.\n\n```\ndoc = $store({\n  history: true,\n  title: "", body: "",\n  setTitle: (s, t) => { s.title = t },\n})\nundoBtn = Button("Undo", { onClick: () => doc.undo(), disabled: !doc.canUndo })\n```';
 }
-function fR() {
+function vR() {
   return '## Components & Actions\n\nA `function` declaration is both a **component** (call it in render position → its return value renders) and an **action** (call it from an event handler → its body runs). Name case is not significant, and a function with no `return` renders nothing.\n\n### Components\n```\nfunction UserCard(user, { tone = "default" } = {}) {\n  return Card([\n    Avatar(user.name, { size: "md" }),\n    Text(user.name, { variant: "large-heavy" }),\n    Badge(tone, { tone })\n  ])\n}\n$app(Column([UserCard($currentUser), UserCard($other, { tone: "primary" })]))\n```\n\n- The positional argument lands in the component\'s first parameter (the `children` slot for container-style components).\n- User components shadow built-ins of the same name — wrap a library component to add telemetry or styling.\n- Use a lambda (`row = item => Row(item)`) for one-off helpers that don\'t need a named component.\n- **Named slots** (XIII.1): once positional args fill the params, extra named props become both a `slots` object and direct bindings — `function Panel(children) { return Column([slots.header, children, footer]) }` called as `Panel(body, { header: H, footer: F })`.\n- **Component-local helpers** (XIII.4): a `function Row() {…}` declared inside another component\'s body is scoped to it (callable by siblings, not leaked globally).\n\n### Actions\nA `function` whose body runs for side effects is an action — use it as a handler (`onClick: save`) or call it for its result. `return` is optional; the full JS statement surface applies. Wrap optimistic writes in `$optimistic(() => { … })` to snapshot state and auto-roll-back if the callback throws (or its promise rejects).\n\n```\nfunction save(item) {\n  $items = [...$items, item]\n  $save  = $http({ url: "https://api.example.com/save", method: "POST", body: { item } })\n  $emit("saved", { id: item.id })\n}\nfunction addTodo(text) {\n  $optimistic(() => {\n    $todos = [...$todos, { id: $todos.length + 1, text }]   // optimistic write\n    if (text == "") throw new Error("empty")                // → rolls $todos back\n  })\n}\nsaveBtn  = Button("Save",  { onClick: save })\nresetBtn = Button("Reset", { onClick: () => { $count = 0; $message = "" } })\n```\n\n### `$emit("name", { detail })`\nFrom any action / effect / lambda, `$emit` dispatches a `CustomEvent` on the host `<aktion-app>` (listen with `el.addEventListener`). Reserved names: `assistant-message`, `error`, `route-change`.\n\n### Reactive environment globals (under `$util`)\nRead-only reactive namespaces the UI branches on without manual listeners (listeners attach lazily on first read, re-render on change). They live under `$util` so the top-level `$`-name space stays free for your own atoms:\n- `$util.viewport.width` / `.height`\n- `$util.breakpoint.active` (`base|sm|md|lg|xl`) + `.sm` / `.md` / `.lg` / `.xl` booleans\n- `$util.scroll.y` / `.x` / `.progress` (0–1) / `.direction` (`up|down`)\n- `$util.media.prefersDark` / `.prefersReducedMotion` / `.online` / `.pointer` (`coarse|fine`) / `.portrait`\n- `$util.mouse.x` / `.y`\n- `$util.url.path` / `.params` (route params) / `.query` (parsed object) / `.hash` + `.navigate(to)` / `.setQuery(name, value)` / `.setQuery({…})` / `.removeQuery(name)` — a reactive snapshot of the current URL plus query-param writers (IV.6).\n\n```\nShow($util.breakpoint.md, { children: Sidebar(), fallback: Drawer() })\nNavBar({ blur: $util.scroll.y > 12 })\n```\n\n### `$util.onError(fn)`\nRegister a program-level error sink: `fn({ error, source })` fires when a user action body throws (before the default logging) — report to a telemetry sink or surface a toast so a bad row never blanks the page.\n\n### `$util.onNavigate(fn)`\nRegister a navigation guard: `fn({ to, from })` runs before every route change (in-app `navigate(...)` and browser back/forward). Return `false` to block, a path string to redirect, or nothing to allow. `$util.onNavigate(null)` clears it.\n\n### `$util.onRequest(fn)` / `$util.onResponse(fn)`\nCross-cutting HTTP interceptors for every `$http` / `$query` / `$mutation` request (VI.5). `$util.onRequest(req => ({ headers: { Authorization: "Bearer " + $token } }))` returns a partial that is merged over the request (headers shallow-merged) — ideal for auth tokens. `$util.onResponse((res, retry) => …)` can inspect/replace the response or `return retry()` to re-issue once (e.g. after refreshing a token on a 401) — the client awaits what the interceptor RETURNS, while `await` inside an Aktion body never suspends. They reset on each new program.';
 }
-function gR() {
+function yR() {
   return '## Effects — Declarative side effects\n\n`$effect(() => { ... }, [...deps])` runs side effects. Dep entries: `$atom` (re-run on change), `"mount"` / `"unmount"` (once), `"every(N)"` (every N ms), `"debounce(N)"` / `"throttle(N)"` (trailing-edge rate limit). No second argument ≡ `["mount"]`.\n\nTop-level effects mount on parse and tear down on the next response; effects inside a component mount per-instance and tear down — running their `cleanup(fn)` — when the instance leaves the tree.\n\n```\n$effect(() => {\n  $results = $http({ url: "https://api.example.com/search", query: { q: $term } })\n}, [$term, "debounce(250)"])\n\n$effect(() => {\n  const onKey = e => { if (e.key == "/") $palette = true }\n  document.addEventListener("keydown", onKey)\n  cleanup(() => document.removeEventListener("keydown", onKey))\n}, ["mount"])\n```';
 }
-function bR() {
+function wR() {
   return '## Data — `$http({...})`\n\n`$http({ ... })` is the only HTTP primitive. Each call is self-contained: pass an absolute `url`, optional `method` (default `GET`), `query` (serialised into the URL), `headers`, `body` (JSON-encoded automatically), and any `fetch` option. No host-wide defaults.\n\n```\n$orders = $http({ url: `https://api.example.com/users/${$userId}/orders`, query: { limit: 5 } })\n```\n\nIt fires once when the binding mounts and exposes a reactive bag:\n```\n$orders.data    $orders.error    $orders.status    $orders.loading\n$orders.headers $orders.lastUpdated\n$orders.refetch()   $orders.cancel()   $orders.onDone = fn\n```\n\nRe-run with `.refetch()`, or wrap the call in `$effect(..., [$dep])` to re-issue when a dep changes. After a write, refresh a list from the write\'s `onDone` (fires on every settle — the initial load and each refetch):\n\n```\nfunction saveOrder(payload) {\n  $save = $http({ url: "https://api.example.com/orders", method: "POST", body: payload })\n  $save.onDone = () => $orders.refetch()\n}\n```\n\nBranch on resource state with `Async`:\n```\nview = Async($orders, {\n  loading: LoadingState("Loading orders…"),\n  error:   ErrorState("Couldn\'t fetch orders"),\n  empty:   EmptyState("No orders yet"),\n  data:    Table([Col("Item", $orders.data.title), Col("Total", $orders.data.total, { format: "currency" })])\n})\n```\n\n### `$query({...})` and `$mutation({...})`\nSame config shape as `$http`, for two common needs:\n- `$query({ url, key?, ttl?, refetchInterval?, refetchOnFocus?, refetchOnReconnect? })` — a **cached, deduplicated** read. Identical queries (same `key`, or same method+url+query+body) share one in-flight request and one cached bag, so calling it from several components fetches once. Pass `ttl` (ms) to auto-refetch stale data, `refetchInterval` (ms) to poll a live dashboard, and `refetchOnFocus` / `refetchOnReconnect` to refresh on tab focus / network reconnect. Same bag as `$http` (`.data`/`.loading`/`.error`/`.refetch()`).\n- `$mutation({ url, method? })` — a **deferred** write that fires only when you call `.mutate(overrides?)`, not on render (method defaults to `POST`). Assign it to an atom, then trigger it from a handler:\n```\n$save = $mutation({ url: "https://api.example.com/orders" })\n$save.onDone = () => $orders.refetch()\n...\nButton("Save", { onClick: () => $save.mutate({ body: { item: $item } }) })\n```\n`.mutate()` resolves with the response body; the bag exposes `.loading`/`.error`/`.data` plus `.reset()`.\n\n**Optimistic + invalidation (VI.2):** `$mutation({ url, optimistic: () => { … }, invalidates: ["key"] })` — `optimistic` runs synchronously before the request so the UI updates instantly (auto-rolled-back if it fails); `invalidates` refetches every cached `$query` whose key contains a listed substring once the write succeeds. `$util.invalidate("key")` does the same on demand.\n\n**Infinite / paginated reads (VI.1):** `$feed = $query({ url, infinite: { param?: "page", start?: 1, limit?: 20, mode?: "page"|"offset", select?: body => body.items } })` — `.data` is the flattened item list across loaded pages; call `.loadMore()` (often from `OnIntersect`) while `.hasMore` is true; `.loadingMore` flags the in-flight next page.\n\n**GraphQL (VI.6):** add `gql` (+ optional `variables`) to any `$http`/`$query`/`$mutation`: it POSTs `{ query, variables }` and `.data` is the unwrapped GraphQL `data` (a GraphQL `errors` array surfaces through `.error`).\n\n```\n$repos = $query({ url: "/graphql", gql: "query($n:Int){ repos(first:$n){ name } }", variables: { n: 10 } })\n```\n\n### Realtime — `$socket({...})` and `$sse({...})` (VI.3)\n- `$socket({ url, protocols?, bufferSize?, onMessage?, reconnect? })` — a reactive WebSocket. Read `.status` (`"connecting"|"open"|"closed"`), `.connected`, `.last`, `.messages` (re-render on change); `.send(data)` (objects auto-JSON; messages sent while connecting queue and flush on open); `.close()` (stops for good). `reconnect: true` (or a max-attempt number) retries dropped connections with exponential backoff — `.attempts` counts the current streak.\n- `$sse({ url, event?, withCredentials?, bufferSize? })` — a reactive Server-Sent Events stream with the same `.status`/`.connected`/`.last`/`.messages`/`.close()` surface (EventSource reconnects natively). Both tear down automatically on the next program.\n```\n$chat = $socket({ url: "wss://example.com/room/42" })\nsend = () => { $chat.send({ text: $draft }); $draft = "" }\nfeed = Column(map($chat.messages, m => Bubble(m.text)))\n```';
 }
-function vR() {
+function xR() {
   return '## Routing\n\n`$router({ ... })` is a plain function call — assign it and drop the result into your page shell.\n\n```\npages = $router({\n  "/":           Dashboard(),\n  "/orders/:id": OrderDetail({ id: params.id }),\n  "/docs/*":     Docs({ rest: params._ }),\n  default:       NotFound()\n})\nnav = Sidebar([SidebarSection("Main", [SidebarItem("Dashboard", { to: "/", icon: "gauge" }), SidebarItem("Orders", { to: "/orders", icon: "receipt", badge: "12" })])], { brand: "Acme", tagline: "Ops console" })\n$app(AppShell(nav, pages))             // app/dashboard shell — Sidebar is a real component, build it\n```\n\n- **Pick the shell for the surface.** `AppShell(Sidebar(...), pages)` for an app/dashboard (left sidebar + optional topbar); a top `Navbar(...)` above the pages inside a `Column` for a website / marketing / docs layout (no sidebar) — never wrap a website in `AppShell`. The router result is just a node, so it drops into either.\n- Patterns: literal, `:param` (read `params.id`), trailing `*` (read `params._`), and `default:` for the catch-all (unknown paths render `null` without it).\n- The read-only `route` handle: `route.path`, `route.params.x`, `route.query.tab`; navigate with `route.navigate("/path")` from an action/effect. `$util.url` mirrors this (`$util.url.path` / `.params` / `.query` / `.hash`).\n- **Query-param ↔ state** (IV.6): write the URL query without leaving the page — `$util.url.setQuery("tab", "billing")`, `$util.url.setQuery({ sort: "name", page: 2 })` (a `null`/`""` value drops the key), or `$util.url.removeQuery("tab")`. Read it back reactively via `$util.url.query.tab` (or `route.query.tab`), so a tab/sort/filter survives reload and is shareable.\n- **Navigation guards** (IV.2): `$util.onNavigate(fn)` registers a guard. `fn({ to, from })` returns `false` to block, a path string to redirect, or nothing to allow — covers in-app `navigate(...)` and browser back/forward. Call `$util.onNavigate(null)` to clear.\n- **Scroll restoration** (IV.5): set `scroll-restoration="auto"` on `<aktion-app>` to restore scroll on back/forward and jump to top on a fresh navigation (`"top"` always jumps to top).\n- **Nested / layout routes** (IV.1): an arm whose value is `{ layout, routes }` matches as a path PREFIX and slots the matched child into the `outlet` identifier — so a shell (sidebar/topbar) stays mounted while only the inner page swaps. Child route keys are matched against the remaining path; `params` merges parent + child captures.\n```\npages = $router({\n  "/app": {\n    layout: AppShell(nav, outlet),               // `outlet` = the matched child; `nav` from above\n    routes: {\n      "/":            Dashboard(),\n      "/orders/:id":  OrderDetail({ id: params.id }),\n      default:        AppHome()\n    }\n  },\n  default: Landing()\n})\n```\n- `NavLink(label, { to, exact?, icon? })` and `SidebarItem(label, { to, icon?, badge? })` derive active state from `route.path`. Never declare `route` yourself.\n\n```\n$util.onNavigate(({ to }) => $isLoggedIn || to === "/login" ? true : "/login")   // auth gate\nfunction selectTab(name) { $util.url.setQuery("tab", name) }                       // shareable tab\nactiveTab = $util.url.query.tab ?? "overview"\n```';
 }
-function yR() {
+function kR() {
   return '## Runtime namespaces — `$util`, `$storage`, `$console`, `$toast`, `$dom`\n\nFive reserved namespaces, always in scope, no imports. **All five carry the `$` sigil.** The sigil is REQUIRED for `$util`, `$toast` and `$dom` — bare `util.format(...)` / `toast.success(...)` / `dom.measure(...)` resolve to nothing and fail silently. `$storage` and `$console` additionally accept the bare spelling for backwards compatibility, but use the sigil everywhere for consistency. These names are reserved: you cannot shadow them.\n\n`$storage.set/get/remove/clear` target localStorage; the same four methods also exist on `$storage.local`, `$storage.session` and `$storage.cookies`.\n\n```\n$storage.set("name", "John");  $name = $storage.get("name");  $storage.remove("name")\n$storage.session.set("draft", $draft)\n$storage.cookies.set("user", "John", { expires: 7, path: "/" })\n$console.log("Hello", $user)\n```\n\nNon-string values JSON-roundtrip; missing keys return `null`. Beyond these, every JavaScript global resolves by name — `Math`, `JSON`, `Date`, `crypto`, `fetch`, `URL`, `navigator`, `window`, `document`, dialogs like `confirm`, … — and your declarations and components shadow same-named globals. Prefer reactive `$http({...})` over raw `fetch` for UI data, and keep timers/listeners inside `$effect` so they\'re cleaned up.\n\n```\nfunction copyLink() { navigator.clipboard.writeText(window.location.href); $toast.show("Copied", { tone: "success" }) }\nid = crypto.randomUUID()\n```\n\n### `$toast` — imperative notifications\nInstead of hand-managing a `$toasts = [...]` array, use the reserved `$toast` namespace. `$toast.show(message, { tone?, title?, duration? })` shows a toast (auto-dismisses after `duration` ms, default 4000; pass `0` to keep it). Shortcuts: `$toast.success/.error/.info/.warning`. Remove with `$toast.dismiss(id)` / `$toast.clear()`. **Toasts render themselves** (stacked top-right) — just call `$toast.*`; you do NOT add a `Toasts(...)` to `$app`:\n\n```\nfunction save() { $save = $http({ url, method: "POST", body }); $save.onDone = () => $toast.success("Saved") }\n$app(Button("Save", { onClick: save }))   // the "Saved" toast appears on its own\n```\n\nOnly if you want custom placement, render the reactive `$toast.items` list yourself — the auto-layer steps aside when you do: `Toasts($toast.items.map(t => Toast({ title: t.title, message: t.message, tone: t.tone, onClose: () => $toast.dismiss(t.id) })))`.';
 }
-function wR() {
+function SR() {
   return '## Behaviour wrappers\n\nThese attach behaviour or styling to ANY node via `display: contents` (the visual tree is unchanged):\n- `OnClick(child, { onClick, disabled?, stopPropagation? })` — pointer + keyboard activatable. (Don\'t wrap `Button` — it already has `onClick`; use this for clickable cards / list rows.)\n- `OnMouse(child, { enter?, leave?, move?, down?, up?, drag?, drop?, dragOver?, ... })` — pass only the events you need.\n- `OnKeyboard(child, { onKeyDown?, onKeyUp?, focusable? })` and `OnFocus(child, { onFocus?, onBlur? })`.\n- `OnIntersect(child, { onEnter?, onLeave?, threshold?, once? })` — IntersectionObserver (lazy-load, infinite scroll).\n- `OnMount(child, { onMount?, onUnmount? })` — DOM-ref / lifecycle. `onMount(node)` fires once after attach (grab a node, focus it, hand it to a chart/map/editor); `onUnmount(node)` on teardown. Stash the node in a `$ref(...)`.\n- `Css(child, { class?, style? })` — last-resort class/style merge.\n- `Link(childOrLabel, { to?, href?, external?, variant? })` — anchor; `to` for router nav, `href`+`external: true` for outbound links.\n\n```\nOnClick(Card([Text("View order")]), { onClick: () => route.navigate("/orders/4821") })\nOnIntersect(Skeleton({ variant: "card" }), { onEnter: $items.refetch, once: true })\n```';
 }
-function xR() {
+function CR() {
   return '## Escape hatches — `HTMLTag` & `Styles`\n\nOnly when the catalogue can\'t express the markup/styling you need:\n- `HTMLTag(tag, { attributes?, children? })` — an allow-listed HTML tag (`on*` attributes, `javascript:` URLs, and unsafe `style` are stripped; unknown tags become `div`).\n- `Styles(css)` — inject a `<style>` block (`</style>`, `<script>`, `@import`, `javascript:` are dropped).\n\n```\n$app(Column([\n  Styles(`.hero { background: linear-gradient(135deg, #6366f1, #10b981); padding: 24px; border-radius: 12px; }`),\n  HTMLTag("div", { attributes: { class: "hero" }, children: [Text("Custom block")] })\n]))\n```';
 }
-function kR() {
+function AR() {
   return '## Third-party widgets & document head\n\n### Imperative / third-party widget interop\nFor a library that owns its own DOM (chart, map, editor, payment element, captcha) — NOT for normal markup (use components). The host carries `data-rui-preserve`, so the reconciler never touches the widget\'s DOM.\n- `Mount({ setup, update?, cleanup?, props?, tag?, sx? })` — managed imperative host. `setup(node, props)` runs once after attach and **returns the instance handle**; `update(instance, props)` runs when the (shallow-compared) `props` bag changes; `cleanup(instance)` runs on unmount. `props` is the reactive boundary; `tag` sets the host (default `"div"`).\n- `WebComponent(tag, { attributes?, properties?, on?, children? })` — render + hydrate a native custom element (tag must contain a hyphen). `attributes` is reactive, `properties` assigns rich JS props, `on` binds listeners that stay current.\n- `$script({ src, global?, type?, as?, attributes? })` — load an external script/stylesheet once (de-duplicated per `src`) → reactive `{ ready, loading, error, value }`. Gate a widget on `.ready`; `value` = `window[global]`. Stays un-ready under SSR.\n- `$dom` — managed observers, auto-disposed on replan: `$dom.onResize(node, cb)`, `$dom.onIntersect(node, cb, opts?)`, `$dom.onMutation(node, cb, opts?)`, and one-shot `$dom.measure(node)` → `{ rect, scroll, viewport }`. Pair with an `OnMount` / `Mount` node ref.\n\n```\n$chartjs = $script({ src: "https://cdn.jsdelivr.net/npm/chart.js", global: "Chart" })\nfunction SalesChart() {\n  if (!$chartjs.ready) return Skeleton({ sx: { h: "320px" } })\n  return Mount({\n    sx: { h: "320px" },\n    setup: (node, p) => new $chartjs.value(node, { type: "bar", data: { datasets: [{ data: p.series }] } }),\n    update: (chart, p) => { chart.data.datasets[0].data = p.series; chart.update() },\n    cleanup: (chart) => chart.destroy(),\n    props: { series: $series }\n  })\n}\n```\n\n### Document head — `$head({...})`\nReactive head manager: call it from a page component body. Sets the title, meta, canonical/alternate links, Open Graph + Twitter cards, JSON-LD, and `<html>` attrs. Reads `$state`, so it re-applies on change; per-route calls compose (later wins). `renderToString` returns the resolved `head` + `headAttrs` for crawlable SSR.\n\n```\nfunction ProductPage() {\n  $head({\n    title: `${$product.name} — Acme`,\n    meta:  { description: $product.summary },\n    og:    { title: $product.name, image: $product.image, type: "product" },\n    link:  [{ rel: "canonical", href: $canonicalUrl }],\n    jsonLd: { "@type": "Product", name: $product.name }\n  })\n  return Column([ /* … */ ])\n}\n```';
 }
-function SR() {
+function $R() {
   return '## Theming, i18n & icons\n\n### `$theme({ ... })`\nA bare `$theme({...})` statement (before `$app`) brands the response. Omit it entirely to inherit the host theme.\n\n**Shape rules.** Only the structured form is accepted: every top-level key must be one of the ten token groups below, or a metadata key (`name`, `direction`). Flat keys like `$theme({ colorPrimary: … })` raise a schema error — the flat shape was removed in 0.5. Unknown keys INSIDE a group are silently ignored, so typos there fail quietly: check names before you ship.\n\n| Group | Value type | Notes |\n| --- | --- | --- |\n| `colors` | CSS colour string | `{ primary, primaryHover, accent, bg, surface, text, textMuted, border, success, warning, danger, info, … }` |\n| `radius` | CSS length string | `{ xs, sm, md, lg, pill, button, input }` |\n| `spacing` | CSS length string | `{ xs, s, m, l, xl }` |\n| `shadows` | CSS box-shadow string | `{ sm, md, lg }` |\n| `font` | CSS string | `{ family, familyHeading, familyMono, sizeBase, weightHeading, … }` |\n| `fonts` | `{ import: string[] }` | Google-Fonts shorthand: `fonts: { import: ["Inter:400,700", "JetBrains Mono"] }` |\n| `gradients` | string **or** string[] of stops | `gradients: { brand: ["#6366f1", "#ec4899"] }`; use as `gradient.brand` in `sx` / `GradientText` |\n| `zIndex` | **number** | Layer tokens `{ dropdown, sticky, modal, toast }` — these feed `sx.zIndex` |\n| `motion` | CSS duration / easing string | `{ fast, base, slow, ease }` → `--rui-motion-*` |\n| `icons` | inline SVG markup string | `icons: { logo: "<path …/>" }`, then usable anywhere a Font Awesome name is: `Icon("logo")` |\n\nNote that `zIndex` values are numbers and `gradients` accepts an array — do not quote them.\n\nCore group keys (all optional):\n- `name?: string` — selects a built-in theme as the base palette (`"light"`, `"dark"`, `"shadcn"`/`"shadcn-light"`/`"shadcn-dark"`, `"mui"`/`"mui-light"`/`"mui-dark"`, `"heroui"`/`"heroui-light"`/`"heroui-dark"`, `"signal"`/`"signal-light"`/`"signal-dark"`, `"soft"`; unknown names are ignored).\n- `direction?: "ltr" | "rtl"` — reading direction (metadata; not applied as a token).\n- `colors?: { ... }` — CSS color strings. Keys: `bg`, `bgSubtle`, `surface`, `surfaceMuted`, `border`, `borderSubtle`, `text`, `textMuted`, `primary`, `primaryHover`, `primaryText`, `accent`, `accentHover`, `accentText`, `focusRing`, `success`, `warning`, `danger`, `info`.\n- `radius?: { ... }` — CSS length strings. Keys: `xs`, `sm`, `md`, `lg`, `pill`, `button`, `input`.\n- `font?: { ... }` — CSS strings. Keys: `family`, `familyHeading`, `familyMono`, `sizeBase`, `sizeSm`, `sizeLg`, `sizeHeading`, `sizeTitle`, `weightBody`, `weightHeading`.\n\n```\n$theme({\n  colors: { primary: "#635bff", primaryHover: "#4f46e5", accent: "#1f6feb", bg: "#0a0a23", surface: "#10103a", text: "#fff", textMuted: "#a5b4fc", focusRing: "#635bff" },\n  radius: { md: "0.5rem", button: "999px", input: "8px" },\n  font:   { family: "Inter, sans-serif", familyHeading: "Inter, sans-serif", weightHeading: "600" }\n})\n```\n\nThe host picks one of fifteen base theme names (`light`, `dark`, `soft`, and a light + dark variant each of `shadcn`, `mui`, `heroui` and `signal`) — author theme-neutral UI (use `tone:` / `variant:`, not hard-coded colours), and never assume a light background or a roomy one: `signal` is 13px on a 3/6/10/14 spacing ramp.\n\n### i18n\n```\nconst { t, setCurrentLanguage } = $i18n({\n  defaultLanguage: "en", currentLanguage: $lang,\n  translations: { greeting: { en: "Hello, {name}!", fr: "Bonjour, {name}!" } }\n})\nwelcome = Text(t("greeting", { name: $user.name }))\n```\n`t(key, vars?)` resolves `translations[key][currentLanguage]`, falling back to the default language then the bare key; `{name}` placeholders interpolate. Drive `currentLanguage` from a reactive atom for live switching. ICU plural and select forms are supported: `{ n, plural, =0{No items} one{1 item} other{# items} }`.\n\n### RTL / bidirectional text\nSet `dir="rtl"` / `"ltr"` / `"auto"` on the host `<aktion-app>` element (not in code). The runtime reflects it onto the render root so the whole tree — text direction, flex order, logical spacing — flips automatically. Programs do not need any code change; use logical CSS properties (no hard-coded `left`/`right`) in raw CSS.\n\n### Accessibility primitives\n- `VisuallyHidden(child)` — hides content visually, keeps it in the a11y tree.\n- `SkipLink({ to: "#main", label: "Skip to content" })` — first tab stop for keyboard users.\n- `LiveRegion($status, { politeness: "polite" })` — announces dynamic changes (`"polite"` queues; `"assertive"` interrupts). The first argument is a plain string, not a component.\n- `FocusTrap(child, { active: $isOpen })` — Tab cycles within the subtree; required for dialogs.\n- Pass `aria: { label, labelledBy, describedBy, ... }` to any component via the universal props channel.\n\n### Icons\nIcon props take a Font Awesome name (no `fa-` prefix, never an emoji): `"house"`, `"chart-line"`, `"regular:star"`, `"brands:github"`. `Icon(name, { variant?, size? })` renders a standalone glyph.';
 }
-function CR() {
+function TR() {
   return '## Universal style props (`sx` / `animate`) — every component\n\nEVERY component accepts a universal style/behaviour channel as named props, in addition to its own props. These are **bounded** (tokens & enums, never raw CSS) so they stay theme-safe — prefer them over the `Css`/`Styles`/`HTMLTag` escape hatches.\n\n- **`sx: { … }`** — token-aware inline styling. Keys (all optional):\n  - Spacing (`none|3xs|2xs|xs|sm|md|lg|xl|2xl|3xl|auto` (`none` = 0), the `safe`/`safe-top`/`safe-right`/`safe-bottom`/`safe-left` notch insets, or a CSS length): `p px py pt pr pb pl`, `m mx my mt mr mb ml`, `gap`. `px`/`mx` are logical (`padding-inline`) and `ps pe ms me` set the inline start/end sides, so RTL apps mirror automatically.\n  - Sizing (`full|half|screen|dvh|min|max|fit|auto` or length): `w h minW maxW minH maxH`.\n  - Color (token `surface|surface-muted|bg|bg-subtle|text|text-muted|muted|primary|primary-hover|primary-text|accent|success|warning|danger|border|border-subtle`, a gradient ref `gradient.brand|accent|warm|cool|success|danger`, or a raw color): `bg color borderColor`.\n  - Surface: `border: none|subtle|strong|<color>`, `radius: xs|sm|md|lg|pill|full`, `shadow: sm|md|lg|none`, `opacity`, `backdrop: "blur"`, `bgImage` (http(s)/relative/data:image only) + `bgOverlay` (color or `gradient.*` wash over the image), `bgSize: cover|contain`.\n  - Typography: `fontSize: xs|sm|base|lg|xl|2xl|3xl|4xl` (or a length), `weight: 100…900|bold|normal`, `textDecoration: underline|line-through|none`, `textAlign`.\n  - Flex/grid: `display direction align justify wrap grow shrink basis columns`.\n  - Position: `position top right bottom left inset zIndex(base|dropdown|sticky|modal|toast|…)`, `overflow cursor`. Layer tokens resolve through `--rui-z-*` so `$theme({ zIndex: {...} })` rebrands them.\n  - Interaction: `hover: { lift|grow|glow|bright|border|scale }`, `focus: { glow|border }` (mapped to bounded utility classes). For arbitrary state CSS use `states: { hover|focus|active|disabled|focus-visible|checked|group-hover: { bg, color, borderColor, shadow, radius, opacity, scale, translateX, translateY, rotate, cursor } }` — compiled to scoped `:state` rules in the adopted stylesheet. Example: `sx: { states: { hover: { scale: 1.04, shadow: "lg" }, focus: { borderColor: "primary" } } }` (I.4).\n  - Responsive: any value may be `{ base, sm, md, lg, xl }` (resolves to `base`).\n- **`animate: "fade-up"`** (or `{ preset, delay?, duration?, repeat? }`) — entrance/loop motion. Presets: `fade fade-up/down/left/right zoom slide-up/down/left/right pulse float shimmer bounce spin ping wiggle`. Auto-respects `prefers-reduced-motion`.\n- **`id` / `anchor`** — set the element id (smooth-scroll targets).\n- **`className` / `class` / `style`** — extra classes (either spelling) / a sanitised inline style string.\n- **`aria: {…}` / `data: {…}` / `dataAttrs: {…}` / `role` / `tooltip` / `hidden`** — accessibility & metadata passthrough. `role` overrides the component\'s own ARIA role. Use `dataAttrs` instead of `data` on the components that declare a `data` prop of their own (`LineChart`, `JsonTree`, `Async`, `Draggable`, `Lottie`, `QRCode`) — there, `data:` is the component\'s prop and the universal channel is otherwise unreachable.\n- **`testId: "users-table"`** (alias `testid`) — renders `data-testid` on the component\'s ROOT element, for end-to-end tests. Works on every component, the six `data`-shadowing ones included. Prefer role/label queries; add a `testId` only where they are genuinely ambiguous.\n\n```\nCard([Text("Lift on hover")], { sx: { p: "lg", radius: "lg", bg: "surface", shadow: "md", hover: { lift: true } } })\nBadge("Live", { tone: "success", animate: "pulse" })\nDisplay(["Build in ", GradientText("record time")], { size: "hero", align: "center", animate: "fade-up" })\n```';
 }
-function AR() {
+function IR() {
   return '## `$util` — runtime helper namespace\n\nPure helpers (no side effects), available in every expression, action, effect, and lambda. Reach for `$util` when plain JS would be verbose (formatting, dates, grouping); use plain JS when it\'s just as clear (`arr.length`, `arr.slice(0, 5)`).\n\n- **Collections**: `$util.sort(arr, field, dir?)`, `$util.groupBy(arr, field)`, `$util.unique(arr, field?)`, `$util.sum / .avg / .min / .max / .count`, `.first / .last`, `.filter(arr, field, op, value)`, `.find`, `.partition(arr, field, op, value)`, `.keyBy(arr, field)`, `.chunk(arr, size)`, `.flatten(arr, depth?)`, `.zip(...arrays)`, `.range(start, end, step?)`.\n- **Objects**: `$util.pick(obj, keys)`, `.omit(obj, keys)`, `.merge(target, ...sources)` (deep), `.cloneDeep(value)`.\n- **Strings**: `$util.capitalize / .titlecase / .uppercase / .lowercase`, `.plural(n, singular, plural)`, `.trim / .replace / .split / .match`.\n- **Formatting**: `$util.format(value, mode, opts?)` (number, currency, percent, compact) and `$util.formatDate(value, mode)` (`"short" | "long" | "time" | "relative"` or a token string).\n- **Dates / math**: `.now / .today / .addDays / .diffDays / .startOfWeek`; `.round / .floor / .ceil / .abs / .clamp(v, min, max) / .random`.\n- **Formatting / misc**: `.slugify / .truncate(text, len) / .initials / .currency(v, code?) / .percent(v) / .bytes(v) / .relativeTime(date) / .copy(text)` (async — resolves `true` once the clipboard write succeeds) `/ .sleep(ms) / .uuid() / .debounceFn(fn, ms) / .throttleFn(fn, ms)` (leading + trailing edge).\n- **Device / platform**: `.vibrate(pattern) / .share({ title, text, url }) / .readClipboard() / .geolocate() / .isOnline() / .deviceType()` (XII.3); `.worker(pureFn, ...args)` runs a closure-free function off the main thread, resolving its result (XI.5); `.registerServiceWorker(url) / .webManifest({ name, icons, … })` for PWA setup (XII.2).\n- **Opening a URL**: `.openUrl(url, { target?, features?, noopener? })` opens a new tab/window from an ACTION (`Link(…, {external: true})` is still the answer when the destination is known at render time). Only `http/https/mailto/tel` are opened. For a URL you have to FETCH first — SSO, a signed download — a call in the response callback is popup-blocked; use `.openWindow({ name?, features? })` inside the click instead, keep the `{ ok, navigate(url), close(), closed }` handle, and `navigate` it when the response lands (`ok: false` means the popup was blocked — put the URL on screen as a link instead).\n- **Files**: `.readFile(fileOrPick, { as?, maxSize? })` resolves the contents of a file the user picked with `FileUpload` — pass the whole pick (a `FileList`/array) or one `File`; `as` is `"text"` (default), `"dataUrl"` or `"base64"`. It NEVER rejects: every failure resolves `""`, so branch on an empty result rather than writing a `.catch`. This is the only vetted way to read a picked file — `FileReader` is not a permitted host global under the `"safe"` policy.\n- **Reactive env getters**: `$util.scroll`, `$util.viewport`, `$util.breakpoint`, `$util.media`, `$util.mouse`, `$util.url` (listeners attach lazily on first read, re-render on change).\n\n```\nsorted  = $util.sort($users.filter(u => u.team === $team), "joinedAt", "desc")\nsummary = `${rows.length} ${$util.plural(rows.length, "order", "orders")} · ${$util.format($util.sum(rows.amount), "currency")}`\n```\n\n## `$util.style`, `$util.rules` and `$util.derived` — styling, validation & computed helpers\n\n- **`$util.style`** — bounded, sanitised CSS helpers (return safe strings for the `sx.style` / inline use): `$util.style.cx("a", { active: cond })` (classnames), `$util.style.gradient(["#6366f1", "#ec4899"], 120)`, `$util.style.alpha("primary", 0.12)` (color-mix), `$util.style.clamp("16px", "2vw", "24px")`, `$util.style.token("spacing.l")` → `var(--rui-spacing-l)`, `$util.style.toStyle({ padding: "8px" })`.\n- **`$util.rules`** — composable validators that return `(value) => message | null`: `$util.rules.required() / .email() / .url() / .min(n) / .max(n) / .minLength(n) / .maxLength(n) / .pattern(re) / .oneOf([...]) / .matches(other) / .custom(fn) / .asyncCustom(fn)` (`fn` may return a Promise — server-side checks like username uniqueness; `$form` awaits it before submitting). Run them with `$util.rules.validate(value, [..])` (first error or null; a Promise when an async rule is hit) or `$util.rules.validateAll(values, schema)` (→ `{ field: message }`).\n- **`$util.derived(fn)`** — a computed value: `total = $util.derived(() => $util.sum($cart.map(i => i.price)))` recomputes reactively from the atoms `fn` reads.\n\n```\n$email = ""\nerror = $util.rules.validate($email, [$util.rules.required(), $util.rules.email()])\nInput("email", { value: $email, error: error })\n```\n\n### `$form({...})` — the form engine (managed forms)\nFor anything beyond one or two fields, reach for `$form` instead of wiring atoms by hand. `$form({ values: {...initial}, rules: { field: [validators] }, onSubmit: (values) => {...} })` returns a managed bag:\n- `form.values.x` — two-way binds straight onto an input (`Input("email", { value: form.values.email })`).\n- `form.errors.x` / `form.touched.x` / `form.dirty` / `form.valid` / `form.submitting` / `form.validating` — reactive reads (`dirty` flips on the first edit and clears on `reset()`; `validating` is true while async rules are in flight).\n- `form.field("email")` — returns `{ value, error, name, onChange, onBlur }` to spread for a controlled, validated field.\n- `form.validate()` (all) / `form.validateField(name)` / `form.touch(name)` / `form.setField(name, v)` / `form.setValues({...})` / `form.reset()`.\n- `form.submit()` (alias `form.handleSubmit()`) — marks fields touched, validates (awaiting async rules), then calls `onSubmit(values)` only when valid. `form.submitting` stays true until an async `onSubmit` settles.\n\n```\nform = $form({\n  values: { email: "", age: "" },\n  rules: { email: [$util.rules.required(), $util.rules.email()], age: [$util.rules.min(18)] },\n  onSubmit: (v) => { $saved = $mutation({ url: "/signup", body: v }); $saved.mutate() }\n})\n$app(Column([\n  Input("email", { value: form.values.email, error: form.errors.email, onBlur: () => form.touch("email") }),\n  Button("Submit", { onClick: () => form.handleSubmit(), disabled: form.submitting })\n]))\n```';
 }
-function $R() {
+function zR() {
   return '## Standard helper components\n\n| Component | Purpose |\n|---|---|\n| `Async(resource, { loading, error, empty, data })` | Branch on an `$http({...})` resource state. |\n| `Show(when, { fallback?, children })` | Sugar for `when ? children : fallback`. |\n| `Portal(children, { target? })` | Render outside the parent subtree. |\n| `Redirect(path)` | Navigate and unmount the rest of the subtree. |\n| `Lazy(loader, { fallback?, children })` | Defer rendering until the async `loader` resolves; show `fallback` while pending. |\n| `ErrorBoundary(children, { fallback?, onError? })` | Catch render errors thrown by descendants. |\n| `VirtualList(items, { itemHeight?, renderItem? })` | Virtualised 1-D list — preferred for >100 rows. |\n| `VirtualGrid(items, { columns?, itemHeight?, gap?, height? })` | Virtualised 2-D grid — only visible rows mount; essential for tables/grids >100 rows. |\n| `VisuallyHidden(child)` | Hides content visually but keeps it in the accessibility tree (extra context for screen readers). |\n| `SkipLink({ to, label })` | "Skip to main content" link that appears on focus — the first tab stop for keyboard users. |\n| `LiveRegion(text, { politeness?, visible? })` | `aria-live` region (`politeness: "polite"` default or `"assertive"`). Announces dynamic changes to screen readers. Takes a plain STRING, not a node. |\n| `FocusTrap(child, { active })` | Cycles Tab within its subtree and autofocuses the first control — required for accessible dialogs. |\n| `Fragment(children)` | Groups siblings without a layout box (`display:contents`) so a component can return several nodes into a parent Grid/Stack. |\n| `Transition(child, { show, preset, duration? })` | Enter/exit transition — keeps child mounted through exit animation; reduced-motion safe. |\n| `FlipList(children, { duration? })` | FLIP reorder animation — keyed children physically move to their new positions. |';
 }
-function TR(t) {
+function MR(t) {
   const e = t.componentGroups ?? [{ name: "Components", components: t.components.map((n) => n.name) }], r = new Map(t.components.map((n) => [n.name, n])), i = [];
   i.push("## Component library"), i.push("Use ONLY these components. A PascalCase call that does not appear verbatim below renders NOTHING, silently — if you are unsure, pick the nearest listed name rather than inventing one."), i.push(""), i.push("Each signature lists props in declaration order; optional props end with `?`. The prop tagged `(positional)` is the canonical positional slot. Canonical call: pass it bare and put every other prop in a trailing `{ prop: value }` object. Also valid: all-positional in the listed order (the first positional fills the `(positional)` slot, the rest fill the remaining slots top-to-bottom), or a single `{ prop: value }` object naming every prop. `(positional, object payload)` means the positional prop is itself object-typed, so a lone object argument is that prop's value — not a named-props bag."), i.push("Props marked `[also: …]` accept those spellings as synonyms for the same slot (`tone`/`variant`/`status`, `children`/`child`, `onClick`/`action`); the signature shows the canonical name."), i.push("");
   for (const n of e) {
@@ -36872,16 +36904,16 @@ function TR(t) {
   return i.join(`
 `).trim();
 }
-function IR() {
+function ER() {
   return "## Inline mode\n\nYou may answer questions in plain text. When you do, wrap any UI you produce in a fenced ```aktion``` block. Otherwise output Aktion directly with no surrounding prose.";
 }
-function zR() {
+function NR() {
   return "## Edit mode\n\nWhen the user asks for an incremental change to a prior response, output ONLY the statements that need to change (additions, replacements, removals). Do NOT re-emit the whole UI. To remove a statement, write `name = null`.";
 }
-function MR() {
+function LR() {
   return '## Streaming & verification\n\n### Hoisting & streaming (CRITICAL)\nReferences resolve across the whole top-level scope, not source order — undefined refs render empty until they arrive, giving a smooth top-down reveal. Emit in this order: (1) `$app(...)` first; (2) `function` declarations and `$effect(...)`; (3) leaf data (arrays, objects, strings) last. Give each `Col` / `TabItem` / `Series` its own named binding so it streams independently. Never split a statement across lines unless it sits inside an unmatched `[`, `(`, or `{`.\n\n### Before finishing, check\n1. `$app(...)` is first; every name it reaches is defined below, and every defined name is reachable from it.\n2. Every component reference is invoked with `()` — scan the root, array elements, and prop values for bare identifiers (callback props like `render: UserCard` are the one exception).\n3. State uses `$name = ...`; writes happen only in handlers/effects, never in render position.\n4. `$http({...})` uses an absolute URL and exposes `.data` / `.error` / `.loading` / `.refetch()`; `$router({...})` arms use `:` and `default`; effects are `$effect(() => {...}, [deps])`.\n5. Build a complete surface — `PageHeader`, multi-section layout, wired buttons, 5–20 rows of realistic seed data — not a lone Card. Lay out with `Column` / `Row` / `Grid`; use responsive maps (`{ base: 1, md: 2 }`) where they help.\n6. Tables are column-oriented (`Table([Col("Label", arr)])`, cells may be components via `rows.map(r => Badge(r.status))`); charts take numeric arrays (`PieChart(rows.label, rows.value)`); icons are Font Awesome names; the five runtime namespaces carry the `$` sigil (`$util`, `$storage`, `$console`, `$toast`, `$dom`); `route` is reserved.';
 }
-function ER() {
+function RR() {
   return [
     `// Tasks dashboard — $http, Async, an action, multi-section layout
 $tasks = $http({ url: "https://api.example.com/tasks" })
@@ -37061,7 +37093,7 @@ $app(Column([
 ], { gap: "lg" }))`
   ];
 }
-const NR = /* @__PURE__ */ new Set([
+const PR = /* @__PURE__ */ new Set([
   // Structure — the containers a reply is built from.
   "Column",
   "Row",
@@ -37122,29 +37154,29 @@ const NR = /* @__PURE__ */ new Set([
   "EmptyState",
   "ErrorState"
 ]);
-function LR(t, e) {
-  return NR.has(e);
+function DR(t, e) {
+  return PR.has(e);
 }
-function RR(t) {
+function OR(t) {
   return `${t?.trim() || "You respond in Aktion — a declarative language that is a strict subset of JavaScript. The host renders your reply as a rich, read-only UI. Output ONLY Aktion: no markdown, prose, or JSON."}
 
 Register the UI root with \`$app(...)\` on the first line (typically \`$app(Column([...]))\`). Answer the question exactly as you otherwise would — same substance, same length, same care — but emit that answer as components instead of Markdown prose.
 
 This is read-only display mode. Do NOT emit state writes, actions, effects, HTTP, routing, form controls, or clickable buttons. The single exception is \`FollowUpBlock\`, which the host renders as suggested follow-up prompts.`;
 }
-function PR() {
+function BR() {
   return '## Markdown → Aktion\n\nCompose the answer you would have written, then emit each piece as its component. Never put Markdown syntax inside a string — `Text("## Results")` renders the literal hashes.\n\n| You would have written | Emit instead |\n| --- | --- |\n| `# Title` / `## Section` | `Heading("Title", { level: 2 })`, or `SectionBlock("Section", { children: [...] })` for a titled block with body |\n| A paragraph | `Text("…")` for a sentence or two; `Markdown("…")` when the prose itself carries **bold**, inline code, links, or nested lists |\n| `- bullet` / `1. step` | `ListBlock(["…", "…"])` (`ordered: true` for numbers); `List([ListItem(…)])` when each row needs an icon, badge, or description |\n| A numbered procedure | `Steps([{ title, details }])` — clearer than a numbered list for anything the reader follows in order |\n| `> quote` | `Quote("…", { cite: "…" })` |\n| A fenced code block | `CodeBlock(source, { language: "ts", filename: "…" })`; `Terminal(lines)` for shell sessions, `DiffViewer(before, after)` for before/after |\n| A Markdown table | `Table([Col("Header", values)])` — column-oriented; `ComparisonTable` for a feature-by-option matrix |\n| **Note:** / **Warning:** | `Callout("Heads up", { tone: "warning", description: "…" })` — the positional slot is the TITLE, not the body |\n| `key: value` lines | `DescriptionList([DescriptionItem("Key", "Value")])` |\n| A bolded figure inside a sentence | `StatCard` / `Stats` — lift the number out of the prose |\n| `---` | `Separator()` |\n| `![alt](url)` | `Image(url, { alt: "…" })` |\n| Describing a trend, split, or ranking in words | A chart — `LineChart` over time, `BarChart` to rank, `PieChart` for a breakdown |\n| Recounting dates or a history in words | `Timeline([TimelineItem(…)])` |\n| "I couldn\'t find anything" | `EmptyState` |\n| "That failed because…" | `ErrorState` |\n\nGroup related pieces in a `Card` with a `CardHeader`. Put long supporting detail behind `Accordion` and parallel alternatives behind `Tabs`, so a long answer stays scannable instead of becoming a wall.';
 }
-function DR() {
+function FR() {
   return '## Syntax (read-only subset)\n\nA program is a flat list of `name = expression` statements in standard JavaScript. `$app(...)` registers the entry point (always first); every other binding hoists, so order is free — emit `$app(...)`, then containers, then leaf data last for a smooth streaming reveal.\n\n- Strings, numbers, booleans, `null`, arrays, objects; template literals `Found ${rows.length}` over `+` concatenation.\n- Operators `+ - * / %`, comparisons, `&& || !`, ternary `cond ? a : b`, nullish `a ?? b`, spread, member `obj.field`, optional chaining `obj?.field`.\n\n### Component calls\n- **Case doesn\'t matter** — `Card` and `card` are equivalent.\n- **Always invoke with parentheses** — `Column([Header(), Body()])`, never `Column([Header, Body])`; write `Separator()` even with no args.\n- **Canonical call: the prop tagged `(positional)` goes bare, everything else in a trailing object** — `Callout("Heads up", { tone: "info", icon: "circle-info" })`, `Badge("Live", { tone: "success" })`. The tagged prop is not always the first one listed: `Callout`\'s is `title`, `CodeBlock`\'s is `codeString`. All-positional (signature order) and all-named (single `{ }` object) calls also work.\n\n### Build UI from data — JS is fully supported\n`.map` / `.filter` arrays into nodes (`rows.map(r => ListItem(r.title))`), ternaries for branching, and the array-pluck shortcut `rows.title` → `[each row.title]` to feed columns (`Col("Title", rows.title)`) and chart series (`PieChart(rows.label, rows.value)`). `if` / `for` are statements — not usable on the right of `=`.\n\n```\n$app(Column([title, table, follow]))\ntitle  = Text("Q4 results", { variant: "large-heavy" })\ntable  = Table([Col("Region", rows.region), Col("Revenue", rows.revenue, { format: "currency" })])\nfollow = FollowUpBlock(["Break down by region", "Compare to Q3"])\nrows   = [{ region: "NA", revenue: 184000 }, { region: "EU", revenue: 122000 }]\n```';
 }
-function OR(t) {
+function _R(t) {
   const e = t.componentGroups ?? [{ name: "Components", components: t.components.map((a) => a.name) }], r = new Map(t.components.map((a) => [a.name, a])), i = [
     "## Component library (read-only)",
     "This is the complete vocabulary for a chat reply — a name that does not appear here does not exist in this mode and renders nothing at all. Each signature lists props in declaration order; optional props end with `?`. Pass the positional prop bare, then all other props in a trailing `{ prop: value }` object."
   ];
   for (const a of e) {
-    const o = a.components.filter((n) => LR(a.name, n));
+    const o = a.components.filter((n) => DR(a.name, n));
     if (o.length !== 0) {
       i.push(`
 ### ${a.name}`);
@@ -37157,13 +37189,13 @@ function OR(t) {
   return i.join(`
 `);
 }
-function BR() {
+function jR() {
   return '## `$util` — runtime helper namespace\n\nPure helpers — no side effects. Use `$util` anywhere in expressions for data shaping, formatting, math, and strings. Prefer plain JavaScript where it is just as clear (`arr.length`, `arr.slice(0, 5)`, `s.toUpperCase()`).\n\n### Most useful helpers\n- Collections: `$util.sum / .avg / .min / .max / .sort(arr, field, dir?) / .groupBy(arr, field) / .unique(arr, field?) / .chunk / .partition / .keyBy`.\n- Objects: `$util.pick / .omit / .merge / .cloneDeep`.\n- Strings: `$util.capitalize / .titlecase / .plural(n, singular, plural)`.\n- Formatting: `$util.format(value, mode, opts?)` (numbers, currency, percent, compact) and `$util.formatDate(value, mode)` (`"short"` | `"long"` | `"time"` | `"relative"`).\n\nIcons are Font Awesome names — `"house"`, `"chart-line"`, `"regular:star"`, `"brands:github"`. Never use `fa-` prefixes or emoji characters.';
 }
-function FR() {
+function qR() {
   return "## Hoisting & streaming (CRITICAL)\n\nReferences resolve from the whole scope, not source order — undefined refs render empty until they arrive, producing a smooth top-down reveal. Order: (1) `$app(...)` first; (2) container statements; (3) leaf data (arrays, objects, strings) last. Give each `Col` / `TabItem` / `Series` / `FollowUpItem` its own binding so it streams independently. Never split a statement across lines unless it sits inside an unmatched `[`, `(`, or `{`.";
 }
-function jR(t) {
+function UR(t) {
   const e = [
     "## Available data sources (context only)",
     "These endpoints are available to the host. You cannot call them from read-only mode, but you may incorporate the data they describe when composing the UI:"
@@ -37173,7 +37205,7 @@ function jR(t) {
   return e.join(`
 `);
 }
-function _R() {
+function HR() {
   return [
     `// Comparison table with a template-literal summary and follow-ups
 $app(Column([title, tbl, totals, follow]))
@@ -37211,20 +37243,20 @@ answer = Text("Mount Everest is 8,849 m (29,032 ft) above sea level — remeasur
 follow = FollowUpBlock(["How does that compare to K2?", "How long does the climb take?"])`
   ];
 }
-function qR() {
+function WR() {
   return "## Important rules\n\n- **The answer comes first, the layout second.** Say everything you would have said. A prettier reply that dropped half the explanation is a worse reply.\n- **Match the component to the content** — see the Markdown → Aktion table above. `Table` for comparisons, a chart for trends, `Callout` for warnings and asides, `Markdown` for real paragraphs, `Text` for short labels, `Heading`/`SectionBlock` for titles, `Stats` for KPI strips.\n- **Scale the structure to the question.** A one-line factual answer is `Text` plus `FollowUpBlock` — do not wrap it in a Card, a header and three sections. Reach for `Card`/`SectionBlock` only once the reply has genuinely separate parts.\n- **Never invent data to fill a component.** Only chart or tabulate numbers you actually have; if the answer is prose, `Markdown` is the right answer.\n- **Template literals** for any string mixing copy with values.\n- **End conversational replies with `FollowUpBlock([...])`** — 2–4 short next-prompt suggestions.\n- **Compose freely** — vary the structure and component mix to fit each request rather than reaching for the same template every time.";
 }
-function UR() {
+function GR() {
   return '## Final verification\n\n1. `$app(...)` is first; every referenced name is defined below and reachable from the root.\n2. Every component is invoked with `()` — `Separator()`, never bare `Separator`. Every name appears verbatim in the catalogue above; an unlisted name renders NOTHING, silently.\n3. Only the read-only display components above — no forms, clickable buttons, state writes, actions, effects, HTTP, or routing.\n4. Tables are column-oriented (`Table([Col("Label", arr)])`, cells may be components via `rows.map(r => Badge(r.status))`); charts take numeric arrays (array-pluck `rows.value`).\n5. Prefer one positional arg per call with everything else in a trailing `{ }` object; no statement split across lines outside an unmatched bracket.';
 }
 function fn(t) {
-  const e = _m(t), r = t.props.map((i) => {
-    const a = i.enum ? i.enum.map((l) => `"${l}"`).join("|") : i.type, o = i === e ? ba(i) ? " (positional, object payload)" : " (positional)" : "", n = i.aliases?.length ? ` [also: ${i.aliases.join(", ")}]` : "", s = i.description && HR.has(i.type) ? ` (${i.description})` : "";
+  const e = jm(t), r = t.props.map((i) => {
+    const a = i.enum ? i.enum.map((l) => `"${l}"`).join("|") : i.type, o = i === e ? ga(i) ? " (positional, object payload)" : " (positional)" : "", n = i.aliases?.length ? ` [also: ${i.aliases.join(", ")}]` : "", s = i.description && VR.has(i.type) ? ` (${i.description})` : "";
     return `${i.name}${i.optional ? "?" : ""}: ${a}${o}${n}${s}`;
   }).join(", ");
   return `- ${t.name}(${r}) — ${t.description}`;
 }
-const HR = /* @__PURE__ */ new Set([
+const VR = /* @__PURE__ */ new Set([
   "object",
   "object[]",
   "any",
@@ -37243,7 +37275,7 @@ function Hb(t) {
   return e.join(`
 `);
 }
-function WR(t) {
+function KR(t) {
   const e = [
     "## Available endpoints",
     "These endpoints are provided by the host. Fire requests with `$http({ url, method, body, headers, ... })` and observe the reactive bag (`.data`, `.error`, `.loading`, `.status`, `.refetch()`)."
@@ -37256,7 +37288,7 @@ ${a}`);
   return e.join(`
 `);
 }
-const GR = [
+const YR = [
   ["none", "0"],
   ["3xs", "var(--rui-spacing-3xs)"],
   ["2xs", "var(--rui-spacing-2xs)"],
@@ -37272,10 +37304,10 @@ const GR = [
   ["l", "var(--rui-spacing-l)"]
 ];
 function kt(t, e, r) {
-  return GR.map(([i, a]) => `${t}[${e}="${i}"] { ${r(a)} }`).join(`
+  return YR.map(([i, a]) => `${t}[${e}="${i}"] { ${r(a)} }`).join(`
 `);
 }
-const VR = [
+const XR = [
   ".rui-tag",
   ".rui-badge",
   ".rui-status-dot",
@@ -37283,12 +37315,12 @@ const VR = [
   ".rui-icon",
   ".rui-rating"
 ];
-function la(t) {
+function sa(t) {
   const e = `.rui-stack[data-row-at~="${t}"]`;
   return [
     `${e}[data-uniform="true"] > *:not(.rui-stack-item) { flex: 1 1 auto; min-width: 0; }`,
     `${e} > * { min-width: 0; }`,
-    `${VR.map((r) => `${e} > ${r}`).join(`,
+    `${XR.map((r) => `${e} > ${r}`).join(`,
 `)} { flex: 0 0 auto; }`
   ].join(`
 `);
@@ -37309,13 +37341,13 @@ function Ul(t) {
 function Ke(t) {
   return `@media ${Ul(t)}`;
 }
-const jo = ["sm", "md", "lg", "xl"].map((t) => [t, `${Jc[t]}px`]);
-function KR(t, e, r) {
-  return jo.slice(0, e).reduce((i, [a]) => `var(${t}-${a}, ${i})`, `var(${t}-base, ${r})`);
+const _o = ["sm", "md", "lg", "xl"].map((t) => [t, `${Jc[t]}px`]);
+function ZR(t, e, r) {
+  return _o.slice(0, e).reduce((i, [a]) => `var(${t}-${a}, ${i})`, `var(${t}-base, ${r})`);
 }
-function ca(t) {
+function la(t) {
   return [["row", "row-gap"], ["column", "column-gap"]].map(([e, r]) => {
-    const i = KR(`--rui-grid-${e}-gap`, t, "var(--rui-spacing-m)");
+    const i = ZR(`--rui-grid-${e}-gap`, t, "var(--rui-spacing-m)");
     return `.rui-grid[data-responsive-${e}-gap] { ${r}: ${i}; }`;
   }).join(`
 `);
@@ -37325,20 +37357,20 @@ function om(t) {
 }
 function Ns(t, e, r, i) {
   const a = `${t}[data-columns]`, o = [`${a} { grid-template-columns: var(${e}-base, 1fr); }`];
-  jo.forEach(([, n], s) => {
-    const l = jo.slice(0, s + 1).reduce((c, [u]) => `var(${e}-${u}, ${c})`, `var(${e}-base, 1fr)`);
+  _o.forEach(([, n], s) => {
+    const l = _o.slice(0, s + 1).reduce((c, [u]) => `var(${e}-${u}, ${c})`, `var(${e}-base, 1fr)`);
     o.push(`@media (min-width: ${n}) { ${a} { grid-template-columns: ${l}; } }`);
   });
   for (let n = 1; n <= r; n += 1) {
     const s = [`${e}-base: ${om(Math.min(n, i[0]))};`];
-    jo.forEach(([l], c) => {
+    _o.forEach(([l], c) => {
       s.push(`${e}-${l}: ${om(Math.min(n, i[c + 1] ?? r))};`);
     }), o.push(`${t}[data-columns="${n}"] { ${s.join(" ")} }`);
   }
   return o.join(`
 `);
 }
-const YR = [
+const QR = [
   ".rui-hero",
   ".rui-timeline-item",
   ".rui-feature-item",
@@ -37347,21 +37379,21 @@ const YR = [
   ".rui-kanban-column",
   ".rui-tile",
   ".rui-notification"
-], XR = [
+], JR = [
   ["primary", "var(--rui-color-primary)", "18%", "28%"],
   ["success", "var(--rui-color-success)", "18%", "28%"],
   ["warning", "var(--rui-color-warning)", "22%", "32%"],
   ["danger", "var(--rui-color-danger)", "18%", "32%"],
   ["info", "var(--rui-color-info)", "18%", "30%"]
 ];
-function ZR() {
-  const t = (r) => YR.map((i) => `${i}${r}`).join(`,
+function eP() {
+  const t = (r) => QR.map((i) => `${i}${r}`).join(`,
 `), e = [`${t("[data-tone]")} {
   --rui-tone-color: var(--rui-color-border);
   --rui-tone-surface-mix: 0%;
   --rui-tone-border-mix: 0%;
 }`];
-  for (const [r, i, a, o] of XR)
+  for (const [r, i, a, o] of JR)
     e.push(`${t(`[data-tone="${r}"]`)} {
   --rui-tone-color: ${i};
   --rui-tone-surface-mix: ${a};
@@ -39259,7 +39291,7 @@ ${kt(".rui-grid", "data-gap", (t) => `gap: ${t};`)}
 .rui-grid[data-responsive-gap] {
   gap: var(--rui-grid-gap-base, var(--rui-spacing-m));
 }
-${ca(0)}
+${la(0)}
 .rui-stack[data-responsive-dir] {
   flex-direction: var(--rui-stack-dir-base, column);
 }
@@ -39282,7 +39314,7 @@ ${ca(0)}
 .rui-bento[data-responsive-row] {
   grid-auto-rows: var(--rui-bento-row-base, minmax(110px, auto));
 }
-${la("base")}
+${sa("base")}
 ${st("sm")} {
   .rui-grid[data-responsive-cols] {
     grid-template-columns: repeat(var(--rui-grid-cols-sm, var(--rui-grid-cols-base, 1)), minmax(var(--rui-grid-min-child, 0), 1fr));
@@ -39290,7 +39322,7 @@ ${st("sm")} {
   .rui-grid[data-responsive-gap] {
     gap: var(--rui-grid-gap-sm, var(--rui-grid-gap-base, var(--rui-spacing-m)));
   }
-${ca(1)}
+${la(1)}
   .rui-stack[data-responsive-dir] {
     flex-direction: var(--rui-stack-dir-sm, var(--rui-stack-dir-base, column));
   }
@@ -39309,7 +39341,7 @@ ${ca(1)}
   .rui-bento[data-responsive-row] {
     grid-auto-rows: var(--rui-bento-row-sm, var(--rui-bento-row-base, minmax(110px, auto)));
   }
-${la("sm")}
+${sa("sm")}
 }
 ${st("md")} {
   .rui-grid[data-responsive-cols] {
@@ -39318,7 +39350,7 @@ ${st("md")} {
   .rui-grid[data-responsive-gap] {
     gap: var(--rui-grid-gap-md, var(--rui-grid-gap-sm, var(--rui-grid-gap-base, var(--rui-spacing-m))));
   }
-${ca(2)}
+${la(2)}
   .rui-stack[data-responsive-dir] {
     flex-direction: var(--rui-stack-dir-md, var(--rui-stack-dir-sm, var(--rui-stack-dir-base, column)));
   }
@@ -39337,7 +39369,7 @@ ${ca(2)}
   .rui-bento[data-responsive-row] {
     grid-auto-rows: var(--rui-bento-row-md, var(--rui-bento-row-sm, var(--rui-bento-row-base, minmax(110px, auto))));
   }
-${la("md")}
+${sa("md")}
 }
 ${st("lg")} {
   .rui-grid[data-responsive-cols] {
@@ -39346,7 +39378,7 @@ ${st("lg")} {
   .rui-grid[data-responsive-gap] {
     gap: var(--rui-grid-gap-lg, var(--rui-grid-gap-md, var(--rui-grid-gap-sm, var(--rui-grid-gap-base, var(--rui-spacing-m)))));
   }
-${ca(3)}
+${la(3)}
   .rui-stack[data-responsive-dir] {
     flex-direction: var(--rui-stack-dir-lg, var(--rui-stack-dir-md, var(--rui-stack-dir-sm, var(--rui-stack-dir-base, column))));
   }
@@ -39365,7 +39397,7 @@ ${ca(3)}
   .rui-bento[data-responsive-row] {
     grid-auto-rows: var(--rui-bento-row-lg, var(--rui-bento-row-md, var(--rui-bento-row-sm, var(--rui-bento-row-base, minmax(110px, auto)))));
   }
-${la("lg")}
+${sa("lg")}
 }
 ${st("xl")} {
   .rui-grid[data-responsive-cols] {
@@ -39374,7 +39406,7 @@ ${st("xl")} {
   .rui-grid[data-responsive-gap] {
     gap: var(--rui-grid-gap-xl, var(--rui-grid-gap-lg, var(--rui-grid-gap-md, var(--rui-grid-gap-sm, var(--rui-grid-gap-base, var(--rui-spacing-m))))));
   }
-${ca(4)}
+${la(4)}
   .rui-stack[data-responsive-dir] {
     flex-direction: var(--rui-stack-dir-xl, var(--rui-stack-dir-lg, var(--rui-stack-dir-md, var(--rui-stack-dir-sm, var(--rui-stack-dir-base, column)))));
   }
@@ -39393,7 +39425,7 @@ ${ca(4)}
   .rui-bento[data-responsive-row] {
     grid-auto-rows: var(--rui-bento-row-xl, var(--rui-bento-row-lg, var(--rui-bento-row-md, var(--rui-bento-row-sm, var(--rui-bento-row-base, minmax(110px, auto))))));
   }
-${la("xl")}
+${sa("xl")}
 }
 
 /* Grid — 12-column mode + GridItem spans */
@@ -40156,7 +40188,7 @@ ${st("xl")} {
    so the enum and the stylesheet can no longer disagree about which tones exist.
    Both the reset and the per-tone blocks are keyed on the same [data-tone]
    attribute the specs already emit, so nothing has to change in the renders. */
-${ZR()}
+${eP()}
 
 /* Hero */
 .rui-hero {
@@ -53077,28 +53109,28 @@ ${Ke("sm")} {
   .rui-parallax { transform: none !important; }
 }
 `;
-function QR(t) {
+function tP(t) {
   const e = t.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
   return new RegExp(`^${e}$`);
 }
-function JR(t, e, r) {
+function rP(t, e, r) {
   if (!t.enabled || t.method && t.method.toUpperCase() !== e.toUpperCase()) return !1;
   const i = t.pattern.trim();
   if (i === "" || i === "*") return !0;
   if (i.includes("*"))
     try {
-      return QR(i).test(r);
+      return tP(i).test(r);
     } catch {
       return !1;
     }
   return r.includes(i);
 }
-function eP(t, e, r) {
+function iP(t, e, r) {
   for (const i of t)
-    if (JR(i, e, r)) return i;
+    if (rP(i, e, r)) return i;
   return null;
 }
-function tP(t) {
+function aP(t) {
   const e = t.label || t.pattern || t.action;
   switch (t.action) {
     case "delay":
@@ -53126,23 +53158,23 @@ function tP(t) {
       return { rule: e };
   }
 }
-const rP = /* @__PURE__ */ new Set(["/", ">", "#"]);
+const oP = /* @__PURE__ */ new Set(["/", ">", "#"]);
 function Na(t, e) {
   for (let r = t.length - 1; r > 0; r -= 1) {
-    if (!rP.has(t[r])) continue;
+    if (!oP.has(t[r])) continue;
     const i = t.slice(0, r);
     if (i !== t && e.has(i)) return i;
   }
   return null;
 }
-function iP(t, e) {
+function nP(t, e) {
   const r = [];
   let i = Na(t, e), a = 0;
   for (; i !== null && a++ < 200; )
     r.push(i), i = Na(i, e);
   return r.reverse();
 }
-function aP(t) {
+function sP(t) {
   const e = /* @__PURE__ */ new Map(), r = /* @__PURE__ */ new Map();
   for (const s of t)
     e.set(s.instanceKey, s), r.set(s.instanceKey, (r.get(s.instanceKey) ?? 0) + 1);
@@ -53166,9 +53198,9 @@ function aP(t) {
       propCount: l.props?.length ?? 0,
       renders: r.get(s) ?? 1
     });
-  return oP(n);
+  return lP(n);
 }
-function oP(t) {
+function lP(t) {
   const e = /* @__PURE__ */ new Map();
   for (const a of t) {
     const o = e.get(a.parentKey);
@@ -53185,7 +53217,7 @@ function oP(t) {
   }
   return r;
 }
-function nP(t) {
+function cP(t) {
   return t ? t.map((e, r) => {
     const i = e.kind === "ref" ? e.box.current : e.value, a = ar(i);
     return {
@@ -53200,25 +53232,25 @@ function nP(t) {
     };
   }) : [];
 }
-function sP(t) {
+function uP(t) {
   return t.map(({ key: e, value: r }) => {
     const i = ar(r);
     return { key: e, value: i, editable: i.json !== void 0 };
   });
 }
-const lP = ["__store_", "__form_", "__query_", "__effect_"];
-function cP(t) {
-  return t === "route" ? !0 : lP.some((e) => t.startsWith(e));
+const dP = ["__store_", "__form_", "__query_", "__effect_"];
+function pP(t) {
+  return t === "route" ? !0 : dP.some((e) => t.startsWith(e));
 }
-function uP(t) {
+function hP(t) {
   const e = /^__a(\d+)_(.+)$/.exec(t);
   return e ? { authored: e[2], moduleIndex: Number(e[1]) } : null;
 }
-function dP(t, e, r) {
+function mP(t, e, r) {
   return t.map((i) => {
-    const a = uP(i), o = {
+    const a = hP(i), o = {
       name: i,
-      reserved: cP(i),
+      reserved: pP(i),
       computed: e.has(i)
     };
     if (a) {
@@ -53229,7 +53261,7 @@ function dP(t, e, r) {
     return o;
   }).sort((i, a) => i.name.localeCompare(a.name));
 }
-function pP(t) {
+function fP(t) {
   const e = [];
   for (const [r, i] of t) {
     const a = {
@@ -53242,7 +53274,7 @@ function pP(t) {
   }
   return e;
 }
-function hP(t, e) {
+function gP(t, e) {
   const r = [];
   for (const [i, a] of t) {
     const o = a.__atom, n = o.startsWith("__form_") ? "form" : "store", s = /^(\d+):(\d+)$/.exec(i);
@@ -53256,7 +53288,7 @@ function hP(t, e) {
   }
   return r.sort((i, a) => i.atom.localeCompare(a.atom));
 }
-function mP(t) {
+function bP(t) {
   const e = /* @__PURE__ */ new Set(), r = (i, a) => {
     const o = i;
     if (!(o?.kind !== "Object" || !Array.isArray(o.properties)))
@@ -53288,7 +53320,7 @@ function nm(t) {
     e.push({ line: 0, column: 0, message: r, kind: "src", severity: "error" });
   return e;
 }
-function fP(t) {
+function vP(t) {
   const e = [];
   for (const r of t) {
     const i = r.loc, a = i?.line ?? 0, o = i?.column ?? 0;
@@ -53321,8 +53353,8 @@ function fP(t) {
   }
   return e;
 }
-const Co = "theme", ua = "streaming", Ls = "response", Ai = "showerrors", xi = "src", gP = "scroll-restoration", Rs = "dir", Ps = "margin", sm = "route";
-function bP(t) {
+const Co = "theme", ca = "streaming", Ls = "response", Ai = "showerrors", xi = "src", yP = "scroll-restoration", Rs = "dir", Ps = "margin", sm = "route";
+function wP(t) {
   const e = t.getPath(), r = { ...t.getParams() }, i = t.getActivePattern(), a = {};
   if (typeof window < "u" && window.location) {
     const o = window.location.search || "";
@@ -53344,7 +53376,7 @@ function bP(t) {
     }
   };
 }
-function vP(t, e) {
+function xP(t, e) {
   if (!t || !e || typeof t != "object" || typeof e != "object") return !1;
   const r = t, i = e;
   return r.path !== i.path || r.pattern !== i.pattern ? !1 : lm(r.params ?? {}, i.params ?? {}) && lm(r.query ?? {}, i.query ?? {});
@@ -53356,8 +53388,8 @@ function lm(t, e) {
     if (t[a] !== e[a]) return !1;
   return !0;
 }
-let Ds = null, Ao = null, yP = 0, Os = !1;
-const wP = [
+let Ds = null, Ao = null, kP = 0, Os = !1;
+const SP = [
   ".rui-modal-overlay",
   ".rui-sheet-overlay",
   ".rui-lightbox-overlay",
@@ -53376,7 +53408,7 @@ function Bs(t) {
   const e = t.tagName.toLowerCase(), r = t.id ? `#${t.id}` : "", i = t.classList.length > 0 ? `.${t.classList[0]}` : "";
   return `${e}${i}${r}`;
 }
-function xP(t) {
+function CP(t) {
   const e = (a) => (t.getPropertyValue(a) || "").trim().toLowerCase();
   for (const a of ["transform", "filter", "backdrop-filter", "-webkit-backdrop-filter", "perspective"]) {
     const o = e(a);
@@ -53387,7 +53419,7 @@ function xP(t) {
   const i = e("will-change");
   return /\b(?:transform|perspective|filter|backdrop-filter|contain)\b/.test(i) ? `will-change: ${i}` : null;
 }
-function kP() {
+function AP() {
   if (Ao === !1) return null;
   if (Ds) return Ds;
   try {
@@ -53402,12 +53434,12 @@ function kP() {
     return Ao = !1, null;
   }
 }
-class _o extends HTMLElement {
+class jo extends HTMLElement {
   constructor() {
     super();
     Q(this, "state", new Dc());
     Q(this, "router", new Mc());
-    Q(this, "library", Wi);
+    Q(this, "library", Hi);
     Q(this, "currentUIProvider");
     Q(this, "http", new Bc());
     Q(this, "effectRunner");
@@ -53508,7 +53540,7 @@ class _o extends HTMLElement {
      */
     Q(this, "containingBlockTrap", null);
     /** Stable DevTools id for this element (`aktion-app-N`). */
-    Q(this, "devtoolsId", `aktion-app-${yP += 1}`);
+    Q(this, "devtoolsId", `aktion-app-${kP += 1}`);
     /** Monotonic commit sequence for the render profiler (0 = initial mount). */
     Q(this, "devtoolsCommitId", 0);
     /** True once this element has been registered with the DevTools hook. */
@@ -53542,7 +53574,7 @@ class _o extends HTMLElement {
     /** Whether the "state write during render" warning has already fired. */
     Q(this, "warnedStateWriteDuringRender", !1);
     this.root = this.attachShadow({ mode: "open" }), this.errorEl = document.createElement("div"), this.errorEl.className = "rui-error-banner", this.errorEl.hidden = !0, this.rootEl = document.createElement("div"), this.rootEl.className = "rui-root";
-    const r = kP();
+    const r = AP();
     if (r)
       try {
         const a = Xl(), o = a ? [r, a] : [r];
@@ -53559,7 +53591,7 @@ class _o extends HTMLElement {
         composed: !0
       }));
     };
-    this.effectRunner = new tR({
+    this.effectRunner = new aR({
       state: this.state,
       notify: () => this.requestFullRender(),
       onEmit: (a, o) => this.emitCustomEvent(a, o),
@@ -53575,7 +53607,7 @@ class _o extends HTMLElement {
       coverageSourcePath: this.compiledSourceId ?? void 0,
       notify: () => this.requestFullRender(),
       onEmit: (a, o) => this.emitCustomEvent(a, o)
-    }), this.renderer = new _b({
+    }), this.renderer = new jb({
       library: this.library,
       state: this.state,
       router: this.router,
@@ -53611,7 +53643,7 @@ class _o extends HTMLElement {
   static get observedAttributes() {
     return [
       Co,
-      ua,
+      ca,
       Ls,
       Ai,
       xi,
@@ -53620,7 +53652,7 @@ class _o extends HTMLElement {
     ];
   }
   connectedCallback() {
-    this.hasConnected = !0, Ty(this.root), this.containingBlockTrap = this.detectContainingBlockTrap(), this.registerWithDevtools(), this.applyThemeFromAttribute(), this.applyDir(), this.applyMargin(), this.startRouter();
+    this.hasConnected = !0, My(this.root), this.containingBlockTrap = this.detectContainingBlockTrap(), this.registerWithDevtools(), this.applyThemeFromAttribute(), this.applyDir(), this.applyMargin(), this.startRouter();
     const r = this.getAttribute(Ls);
     if (r !== null && r !== "" && r !== this.currentResponse) {
       this.setResponse(r);
@@ -53667,7 +53699,7 @@ class _o extends HTMLElement {
     for (let a = 0; i && a < 64; a += 1, i = i.parentElement) {
       let o = null;
       try {
-        o = xP(r.getComputedStyle(i));
+        o = CP(r.getComputedStyle(i));
       } catch {
         return null;
       }
@@ -53683,7 +53715,7 @@ class _o extends HTMLElement {
       this.containingBlockTrap = null;
       return;
     }
-    const i = this.rootEl.querySelector(wP);
+    const i = this.rootEl.querySelector(SP);
     i && (Os = !0, this.containingBlockTrap = null, console.warn(
       `[aktion] <aktion-app> is inside ${r}. That element becomes the containing block for \`position: fixed\`, so <${Bs(i)}> (and any other Modal / Sheet / BottomSheet / Toasts / FAB) is positioned against it instead of the viewport — the overlay covers only the embed box. Move \`<aktion-app>\` out of that wrapper, or drop the property while an overlay is open. Anchored popups (menus, tooltips, selects) are unaffected: they use the browser top layer.`
     ));
@@ -53743,10 +53775,10 @@ class _o extends HTMLElement {
     }
   }
   disconnectedCallback() {
-    this.effectRunner.reset(), this.context && _h(this.context), this.morphGuard?.disconnect(), this.morphGuard = null, this.imperativeAttrWrites = null, this.router.stop(), this.devtoolsRegistered && (FL(this.devtoolsId), this.devtoolsRegistered = !1), this.devtoolsTapInstalled && (this.http.setDevtoolsTap(null), this.devtoolsTapInstalled = !1, this.devtoolsRequests.clear());
+    this.effectRunner.reset(), this.context && jh(this.context), this.morphGuard?.disconnect(), this.morphGuard = null, this.imperativeAttrWrites = null, this.router.stop(), this.devtoolsRegistered && (qL(this.devtoolsId), this.devtoolsRegistered = !1), this.devtoolsTapInstalled && (this.http.setDevtoolsTap(null), this.devtoolsTapInstalled = !1, this.devtoolsRequests.clear());
   }
   attributeChangedCallback(r, i, a) {
-    if (r === Co && this.applyThemeFromAttribute(), r === Rs && this.applyDir(), r === Ps && this.applyMargin(), r === ua && (this.updateErrorBanner(), this.scheduleRender()), r === Ai && this.updateErrorBanner(), r === Ls) {
+    if (r === Co && this.applyThemeFromAttribute(), r === Rs && this.applyDir(), r === Ps && this.applyMargin(), r === ca && (this.updateErrorBanner(), this.scheduleRender()), r === Ai && this.updateErrorBanner(), r === Ls) {
       const o = a ?? "";
       o !== this.currentResponse && this.setResponse(o);
     }
@@ -53822,7 +53854,7 @@ class _o extends HTMLElement {
    * remaining patched program.
    */
   applyDelta(r) {
-    const i = this.state.snapshot(), a = cy(this.currentResponse, r);
+    const i = this.state.snapshot(), a = py(this.currentResponse, r);
     return Object.assign(i, a.stateUpdates), this.loadSnapshot({ programText: a.programText, state: i }), a.warnings;
   }
   /**
@@ -53907,7 +53939,7 @@ class _o extends HTMLElement {
     if (this.isStaleSrcLoad(i)) return;
     let n;
     try {
-      n = await ly({ entry: a, files: { [a]: o } });
+      n = await dy({ entry: a, files: { [a]: o } });
     } catch (s) {
       if (this.isStaleSrcLoad(i)) return;
       this.reportSrcError(`Failed to link "${r}": ${$o(s)}`);
@@ -53955,7 +53987,7 @@ class _o extends HTMLElement {
     this.currentUIProvider?.teardown && this.currentUIProvider.teardown(), this.currentUIProvider = r, this.library = r.library, this.renderer.setLibrary(this.library), r.setup && r.setup(this.root), this.scheduleRender();
   }
   registerComponents(r, i) {
-    this.library = hy(this.library, { components: r, root: i }), this.renderer.setLibrary(this.library), this.scheduleRender();
+    this.library = gy(this.library, { components: r, root: i }), this.renderer.setLibrary(this.library), this.scheduleRender();
   }
   /**
    * Register custom icons (inline SVG markup keyed by name) so authored code
@@ -53993,10 +54025,10 @@ class _o extends HTMLElement {
     this.setResponse(r);
   }
   get streaming() {
-    return cm(this.getAttribute(ua));
+    return cm(this.getAttribute(ca));
   }
   set streaming(r) {
-    r ? this.setAttribute(ua, "true") : this.removeAttribute(ua);
+    r ? this.setAttribute(ca, "true") : this.removeAttribute(ca);
   }
   get showErrors() {
     return cm(this.getAttribute(Ai));
@@ -54030,7 +54062,7 @@ class _o extends HTMLElement {
    */
   registerWithDevtools() {
     if (this.devtoolsRegistered) return;
-    const r = Oi();
+    const r = Di();
     r && (r.registerApp(this.buildDevtoolsRecord()), this.devtoolsRegistered = !0, this.installDevtoolsHttpTap());
   }
   /**
@@ -54158,7 +54190,7 @@ class _o extends HTMLElement {
       });
       return {
         diagnostics: n,
-        outline: fP(a.statements),
+        outline: vP(a.statements),
         ok: n.every((s) => s.severity !== "error")
       };
     } catch (a) {
@@ -54179,10 +54211,10 @@ class _o extends HTMLElement {
    * debugger becomes the thing it is measuring.
    */
   devtoolsTree() {
-    const r = aP(this.devtoolsComponents), i = /* @__PURE__ */ new Set();
+    const r = sP(this.devtoolsComponents), i = /* @__PURE__ */ new Set();
     try {
-      for (const a of this.rootEl.querySelectorAll(`[${fa}], [${ti}]`)) {
-        const o = a.getAttribute(fa);
+      for (const a of this.rootEl.querySelectorAll(`[${ma}], [${ti}]`)) {
+        const o = a.getAttribute(ma);
         o && i.add(o);
         const n = a.getAttribute(ti);
         n && i.add(n);
@@ -54213,11 +54245,11 @@ class _o extends HTMLElement {
       source: i?.source,
       explicitKey: i?.explicitKey,
       props: i?.props ? [...i.props] : [],
-      hooks: nP(this.context.hookStore.get(r)),
-      uiState: sP(this.renderer.listInstanceUiState(r)),
+      hooks: cP(this.context.hookStore.get(r)),
+      uiState: uP(this.renderer.listInstanceUiState(r)),
       deps: i?.deps ? [...i.deps] : [],
       effects: s,
-      ancestors: iP(r, a),
+      ancestors: nP(r, a),
       mounted: o !== null
     };
     return o && (l.html = Pr(o.outerHTML ?? "", 4e3), l.domNodes = Fs(o)), n && n.size > 0 && (l.overrides = [...n].map(([c, u]) => ({ prop: c, value: ar(u) }))), l;
@@ -54232,7 +54264,7 @@ class _o extends HTMLElement {
     let i = r;
     for (; i; ) {
       if (i instanceof Element) {
-        const o = i.getAttribute(fa) ?? i.getAttribute(ti);
+        const o = i.getAttribute(ma) ?? i.getAttribute(ti);
         if (o) return o;
       }
       i = i.parentNode ?? i.host ?? null;
@@ -54241,7 +54273,7 @@ class _o extends HTMLElement {
   }
   /** The element an instance rendered, or `null` when it is not in the DOM. */
   devtoolsNodeForInstance(r) {
-    const i = SP(r), a = `[${fa}="${i}"], [${ti}="${i}"]`;
+    const i = $P(r), a = `[${ma}="${i}"], [${ti}="${i}"]`;
     try {
       return this.rootEl.querySelector(a);
     } catch {
@@ -54277,7 +54309,7 @@ class _o extends HTMLElement {
     const r = Object.keys(this.state.snapshot()), i = /* @__PURE__ */ new Set(), a = /* @__PURE__ */ new Map();
     for (const n of this.devtoolsProgram?.statements ?? [])
       n.kind !== "Assignment" || !n.isState || (n.loc && a.set(n.identifier, { line: n.loc.line, column: n.loc.column }), Ma(n.expression) || i.add(n.identifier));
-    const o = dP(r, i, this.devtoolsProgram?.sources);
+    const o = mP(r, i, this.devtoolsProgram?.sources);
     for (const n of o) {
       const s = a.get(n.name) ?? (n.authored ? a.get(n.authored) : void 0);
       s && (n.source = s);
@@ -54321,10 +54353,10 @@ class _o extends HTMLElement {
   }
   /* ---- DevTools: data layer -------------------------------------------- */
   devtoolsQueries() {
-    return pP(this.context.queryCache);
+    return fP(this.context.queryCache);
   }
   devtoolsStores() {
-    return hP(this.context.stores, (r) => this.state.get(r));
+    return gP(this.context.stores, (r) => this.state.get(r));
   }
   /** Invoke a method on a live `Store` / `$form` handle from the Data tab. */
   devtoolsCallStoreMethod(r, i, a) {
@@ -54350,7 +54382,7 @@ class _o extends HTMLElement {
       mode: this.router.getMode(),
       basePath: this.getAttribute("router-base") ?? void 0,
       guarded: this.router.hasGuard(),
-      declared: this.devtoolsProgram ? mP(this.devtoolsProgram) : []
+      declared: this.devtoolsProgram ? bP(this.devtoolsProgram) : []
     };
   }
   /* ---- DevTools: theme ------------------------------------------------- */
@@ -54359,7 +54391,7 @@ class _o extends HTMLElement {
     for (const [a, o] of Object.entries(r.tokens))
       typeof o == "string" && (i[a] = o);
     for (const a of [...this.scriptThemeKeys, ...this.devtoolsThemeKeys]) {
-      const o = JE(String(a)), n = o ? this.style.getPropertyValue(o) : "";
+      const o = rN(String(a)), n = o ? this.style.getPropertyValue(o) : "";
       n && (i[a] = n.trim());
     }
     return {
@@ -54367,7 +54399,7 @@ class _o extends HTMLElement {
       tokens: i,
       scriptOverrides: this.scriptThemeKeys.map(String),
       devtoolsOverrides: this.devtoolsThemeKeys.map(String),
-      available: Object.keys(_c).sort()
+      available: Object.keys(jc).sort()
     };
   }
   devtoolsSetThemeTokens(r) {
@@ -54445,15 +54477,15 @@ class _o extends HTMLElement {
           status: l?.status,
           responseHeaders: l ? { ...l.headers } : void 0,
           responseBody: Qh(l?.body),
-          responseSize: UL(l?.body),
+          responseSize: GL(l?.body),
           rule: a.rule,
           injectedDelay: a.injectedDelay
         });
       },
       gate: (i) => {
         if (this.devtoolsNetworkRules.length === 0) return;
-        const a = eP(this.devtoolsNetworkRules, i.method, i.url);
-        return a ? tP(a) : void 0;
+        const a = iP(this.devtoolsNetworkRules, i.method, i.url);
+        return a ? aP(a) : void 0;
       }
     };
     this.http.setDevtoolsTap(r), this.devtoolsTapInstalled = !0;
@@ -54493,7 +54525,7 @@ class _o extends HTMLElement {
    * already-running apps. Idempotent; safe to call repeatedly.
    */
   connectDevtools() {
-    this.registerWithDevtools(), this.devtoolsRegistered && (Oi()?.registerApp(this.buildDevtoolsRecord()), this.installDevtoolsHttpTap(), this.requestFullRender());
+    this.registerWithDevtools(), this.devtoolsRegistered && (Di()?.registerApp(this.buildDevtoolsRecord()), this.installDevtoolsHttpTap(), this.requestFullRender());
   }
   /**
    * Apply a DevTools-originated edit to a reactive atom. Dotted paths
@@ -54546,8 +54578,8 @@ class _o extends HTMLElement {
    * `routesEqual` for the structural comparison.
    */
   writeRouteState() {
-    const r = bP(this.router);
-    vP(this.state.get(sm), r) || this.state.set(sm, r);
+    const r = wP(this.router);
+    xP(this.state.get(sm), r) || this.state.set(sm, r);
   }
   /**
    * React to any path change: write the new value into the route slot (so
@@ -54574,7 +54606,7 @@ class _o extends HTMLElement {
    */
   handleScrollRestoration(r) {
     if (typeof window > "u") return;
-    const i = (this.getAttribute(gP) || "").toLowerCase();
+    const i = (this.getAttribute(yP) || "").toLowerCase();
     if (i !== "auto" && i !== "top" || r.source === "init") return;
     i === "auto" && r.previousPath != null && this.routeScrollPositions.set(r.previousPath, {
       x: window.scrollX || 0,
@@ -54638,7 +54670,7 @@ class _o extends HTMLElement {
     } catch {
       return;
     }
-    if (!yM(i)) return;
+    if (!kM(i)) return;
     const a = Rh(i.tokens);
     Object.keys(a).length !== 0 && (this.scriptThemeKeys = Nh(this, a));
   }
@@ -54655,7 +54687,7 @@ class _o extends HTMLElement {
   }
   renderNow() {
     if (this.renderScheduled = !1, !this.isConnected) return;
-    this.programDirty && (this.replan(), this.programDirty = !1), this.context.budget && jh(this.context.budget), this.devtoolsRegistered || this.registerWithDevtools();
+    this.programDirty && (this.replan(), this.programDirty = !1), this.context.budget && _h(this.context.budget), this.devtoolsRegistered || this.registerWithDevtools();
     const r = Ci();
     this.renderer.setProfiling(r, {
       captureProps: wi("captureProps"),
@@ -54668,7 +54700,7 @@ class _o extends HTMLElement {
     let s = !1;
     this.state.beginRenderPass();
     try {
-      this.applyScriptThemeOverrides(), NN(this.context);
+      this.applyScriptThemeOverrides(), PN(this.context);
       const l = this.context.bindings.get("aktion");
       let c = null;
       if (l)
@@ -54763,8 +54795,8 @@ class _o extends HTMLElement {
   }
   restoreFocus(r) {
     if (!r) return;
-    const i = this.rootEl.querySelector(`#${CP(r.id)}`);
-    !i || i.tagName !== r.tagName || this.root.activeElement === i || (i.focus(), (i instanceof HTMLInputElement || i instanceof HTMLTextAreaElement) && r.selectionStart != null && r.selectionEnd != null && $P(
+    const i = this.rootEl.querySelector(`#${TP(r.id)}`);
+    !i || i.tagName !== r.tagName || this.root.activeElement === i || (i.focus(), (i instanceof HTMLInputElement || i instanceof HTMLTextAreaElement) && r.selectionStart != null && r.selectionEnd != null && zP(
       i,
       r.selectionStart,
       r.selectionEnd,
@@ -54772,7 +54804,7 @@ class _o extends HTMLElement {
     ));
   }
   replan() {
-    this.effectRunner.reset(), this.renderer.clearAllPropOverrides(), this.lastRenderDeps = null, this.warnedStateWriteDuringRender = !1, this.context && _h(this.context), this.context = hn(this.state, {
+    this.effectRunner.reset(), this.renderer.clearAllPropOverrides(), this.lastRenderDeps = null, this.warnedStateWriteDuringRender = !1, this.context && jh(this.context), this.context = hn(this.state, {
       router: this.router,
       library: this.library,
       http: this.http,
@@ -54787,7 +54819,7 @@ class _o extends HTMLElement {
     const r = this.pendingCompiled ?? mt(this.currentResponse);
     this.pendingCompiled = null;
     const i = Xo(r, this.library);
-    i.length > 0 && (r.errors = [...r.errors, ...i]), this.context.budget && jh(this.context.budget);
+    i.length > 0 && (r.errors = [...r.errors, ...i]), this.context.budget && _h(this.context.budget);
     try {
       Vc(r, this.context);
     } catch (o) {
@@ -54834,8 +54866,8 @@ class _o extends HTMLElement {
     this.errorEl.replaceChildren(i, a);
   }
 }
-Q(_o, "tagName", "aktion-app");
-function SP(t) {
+Q(jo, "tagName", "aktion-app");
+function $P(t) {
   return t.replace(/(["\\])/g, "\\$1");
 }
 function Fs(t, e = 2e5) {
@@ -54849,10 +54881,10 @@ function Fs(t, e = 2e5) {
   }
   return r;
 }
-function CP(t) {
+function TP(t) {
   return typeof CSS < "u" && typeof CSS.escape == "function" ? CSS.escape(t) : t.replace(/([^A-Za-z0-9_-])/g, "\\$1");
 }
-const AP = /* @__PURE__ */ new Set([
+const IP = /* @__PURE__ */ new Set([
   "email",
   "number",
   "tel",
@@ -54864,8 +54896,8 @@ const AP = /* @__PURE__ */ new Set([
   "time",
   "color"
 ]);
-function $P(t, e, r, i) {
-  if (t instanceof HTMLInputElement && AP.has(t.type)) {
+function zP(t, e, r, i) {
+  if (t instanceof HTMLInputElement && IP.has(t.type)) {
     const a = t.type;
     try {
       t.type = "text", t.setSelectionRange(e, r, i);
@@ -54888,10 +54920,10 @@ function cm(t) {
 function $o(t) {
   return t instanceof Error && t.message ? t.message : String(t);
 }
-function TP() {
-  customElements.get(_o.tagName) || customElements.define(_o.tagName, _o);
+function MP() {
+  customElements.get(jo.tagName) || customElements.define(jo.tagName, jo);
 }
-const IP = [
+const EP = [
   {
     name: "App",
     description: "Top-level `$app(...)` root — every program needs one.",
@@ -55232,26 +55264,26 @@ Column([
 ])`
   }
 ];
-function zP() {
-  return IP;
+function NP() {
+  return EP;
 }
-function a4(t = Wi) {
-  const e = cM(t);
+function s4(t = Hi) {
+  const e = pM(t);
   return {
     grammar: Vs,
-    tokenizer: ix(Vs),
-    tagMap: ax,
+    tokenizer: nx(Vs),
+    tagMap: sx,
     components: e,
-    componentsByName: dM(e),
+    componentsByName: mM(e),
     builtins: ec,
-    snippets: zP(),
-    keywordDocs: rx,
-    themeNames: Object.keys(_c),
+    snippets: NP(),
+    keywordDocs: ox,
+    themeNames: Object.keys(jc),
     severityTokenMap: { "parse-error": "error" },
-    iconAliases: MP
+    iconAliases: LP
   };
 }
-const MP = [
+const LP = [
   "house",
   "user",
   "users",
@@ -55353,157 +55385,157 @@ const MP = [
   "thumbs-down",
   "thumbtack"
 ];
-TP();
-const o4 = Ub(Wi);
+MP();
+const l4 = Ub(Hi);
 export {
-  _o as AktionElement,
+  jo as AktionElement,
   Xt as BreakSignal,
   Wl as COMPILED_PROGRAM_VERSION,
   ur as ContinueSignal,
   zs as DEFAULT_RUNTIME_BUDGET,
-  tR as EffectRunner,
+  aR as EffectRunner,
   Bc as HttpRuntime,
-  fa as INSTANCE_ATTR,
+  ma as INSTANCE_ATTR,
   ti as OWNER_ATTR,
-  _b as Renderer,
-  Vi as ReturnSignal,
+  jb as Renderer,
+  Gi as ReturnSignal,
   Mc as Router,
   Rr as RuntimeBudgetError,
-  TN as SAFE_HOST_GLOBALS,
-  o4 as SYSTEM_PROMPT_TEXT,
+  MN as SAFE_HOST_GLOBALS,
+  l4 as SYSTEM_PROMPT_TEXT,
   Dc as StateStore,
   ub as anyPathAffects,
   Nh as applyPartialTheme,
   Eh as applyTheme,
-  gw as assertOnePositionalMax,
+  yw as assertOnePositionalMax,
   qv as buildFrontier,
-  jP as buildGallery,
-  XE as builtInThemeFonts,
-  _c as builtInThemes,
+  UP as buildGallery,
+  JE as builtInThemeFonts,
+  jc as builtInThemes,
   ec as builtinCatalog,
-  ox as builtinNames,
-  nx as builtinsByName,
+  lx as builtinNames,
+  cx as builtinsByName,
   Hm as callArgShapes,
   qc as canonicalThemeName,
   Um as chooseNamedBagIndex,
   Xh as clearInstanceHooks,
   Lh as clearTokenOverrides,
-  ga as collectPatternNames,
-  DP as compileLite,
-  Ew as componentSchema,
-  LP as computeFrontier,
-  mN as consoleNs,
+  fa as collectPatternNames,
+  FP as compileLite,
+  Rw as componentSchema,
+  DP as computeFrontier,
+  bN as consoleNs,
   hn as createContext,
   db as createHttpResource,
-  aE as createI18n,
-  ny as createMemoryResolver,
-  PM as createMutationResource,
-  LM as createQueryResource,
-  EN as createRuntimeBudget,
-  ix as createStreamTokenizer,
-  bN as createToastManager,
-  tx as cssToSx,
-  UE as darkTheme,
-  Wi as defaultLibrary,
-  ax as defaultTagMap,
-  PP as defineCompiledProgram,
-  TP as defineElement,
-  ZE as deprecatedThemeAliases,
-  i4 as describeComponentSpec,
-  _h as disposeContext,
+  sE as createI18n,
+  cy as createMemoryResolver,
+  BM as createMutationResource,
+  DM as createQueryResource,
+  RN as createRuntimeBudget,
+  nx as createStreamTokenizer,
+  wN as createToastManager,
+  ax as cssToSx,
+  GE as darkTheme,
+  Hi as defaultLibrary,
+  sx as defaultTagMap,
+  BP as defineCompiledProgram,
+  MP as defineElement,
+  eN as deprecatedThemeAliases,
+  n4 as describeComponentSpec,
+  jh as disposeContext,
   Ll as enterUserComponent,
   G as evaluate,
   Ob as evaluateUserComponent,
   Gc as extractStatePath,
   Km as factoryResourceCatalog,
   Ym as factoryResourceNames,
-  _P as findBuiltin,
-  XP as findBuiltinConfig,
+  HP as findBuiltin,
+  JP as findBuiltinConfig,
   Ft as findComponent,
-  VP as findFactoryResource,
-  WP as findNamespace,
-  YP as findNamespaceMember,
+  XP as findFactoryResource,
+  KP as findNamespace,
+  QP as findNamespaceMember,
   Jl as findPositionalIndex,
-  _m as findPositionalProp,
+  jm as findPositionalProp,
   Uc as findThemeByName,
   Ub as generatePrompt,
-  cM as getComponentCatalog,
-  IN as getGlobalAccessPolicy,
+  pM as getComponentCatalog,
+  EN as getGlobalAccessPolicy,
   kb as getHeadManager,
-  a4 as getLanguageSpec,
-  zP as getSnippets,
+  s4 as getLanguageSpec,
+  NP as getSnippets,
   Vs as grammarSpec,
-  KE as herouiDarkTheme,
+  ZE as herouiDarkTheme,
   zl as herouiLightTheme,
-  QP as htmlToAktion,
-  HP as i18nResultMembers,
-  dM as indexCatalog,
+  t4 as htmlToAktion,
+  VP as i18nResultMembers,
+  mM as indexCatalog,
   Fc as invalidateQueries,
-  qP as isBuiltinName,
+  WP as isBuiltinName,
   Hv as isCompiledProgram,
   Pl as isComponentNode,
-  MM as isEndpointResource,
-  GP as isNamespaceName,
+  LM as isEndpointResource,
+  YP as isNamespaceName,
   Ma as isPureLiteralExpression,
-  RP as isQuiescent,
+  OP as isQuiescent,
   Wc as isStoreHandle,
-  yM as isThemeNode,
+  kM as isThemeNode,
   Dl as isUserComponentNode,
-  wM as joinStatePath,
-  rx as keywordDocs,
-  bw as knownPropNames,
+  SM as joinStatePath,
+  ox as keywordDocs,
+  ww as knownPropNames,
   Rl as leaveUserComponent,
-  jt as lightTheme,
-  ty as linkProgram,
-  ly as linkProject,
+  _t as lightTheme,
+  ay as linkProgram,
+  dy as linkProject,
   vn as mapPositionalArgs,
   kg as matchRoute,
   Sg as matchRoutePrefix,
-  hy as mergeLibraries,
-  ey as moduleLocalBaseName,
+  gy as mergeLibraries,
+  iy as moduleLocalBaseName,
   eo as moduleLocalSymbol,
-  VE as muiDarkTheme,
+  XE as muiDarkTheme,
   Il as muiLightTheme,
-  px as namespaceCatalog,
-  KP as namespaceMembersAt,
+  fx as namespaceCatalog,
+  ZP as namespaceMembersAt,
   bt as normalisePath,
   mt as parse,
-  xM as pathAffects,
+  CM as pathAffects,
   nn as pathsOverlap,
   Vc as planProgram,
-  QE as privateThemes,
-  ba as propExpectsObject,
-  t4 as renderToStaticMarkup,
-  QL as renderToString,
-  r4 as renderToTextTree,
-  NN as resetMutableBindings,
-  jh as resetRuntimeBudget,
+  tN as privateThemes,
+  ga as propExpectsObject,
+  a4 as renderToStaticMarkup,
+  tR as renderToString,
+  o4 as renderToTextTree,
+  PN as resetMutableBindings,
+  _h as resetRuntimeBudget,
   li as resolvePatternBindings,
   Cm as resolveSpecifier,
   Cr as resolveStateAlias,
   $s as resolveTheme,
-  UP as routeMembers,
+  GP as routeMembers,
   Bl as runControlFlowStatement,
   Rh as sanitiseThemeTokens,
-  e4 as setGlobalAccessPolicy,
-  GE as shadcnDarkTheme,
+  i4 as setGlobalAccessPolicy,
+  YE as shadcnDarkTheme,
   Tl as shadcnLightTheme,
-  YE as signalDarkTheme,
+  QE as signalDarkTheme,
   Ml as signalLightTheme,
   qm as slotForNthPositional,
-  HE as softTheme,
+  VE as softTheme,
   hv as stampSourceIndex,
   wb as storage,
-  FP as styledToSx,
-  BP as suggestComponent,
-  Ww as tailwindToSx,
-  JE as themeTokenCssVar,
-  JP as themeTokenNames,
+  qP as styledToSx,
+  jP as suggestComponent,
+  Kw as tailwindToSx,
+  rN as themeTokenCssVar,
+  r4 as themeTokenNames,
   pv as tokenize,
-  ZP as universalPropCatalog,
-  OP as validateProgram,
+  e4 as universalPropCatalog,
+  _P as validateProgram,
   Xo as validateProgramSchema,
-  WE as visionTheme,
+  KE as visionTheme,
   dm as walk,
   pm as walkNode
 };

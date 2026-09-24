@@ -23,7 +23,7 @@ export { getDefinition, getDefinitionTarget, findDeclaration, getReferences, get
 export { getSemanticTokens, semanticTokenTypes, semanticTokenModifiers, type SemanticToken, type SemanticTokenType, type SemanticTokenModifier, } from './tooling/semantic-tokens.js';
 export { getSignatureHelp, type SignatureHelp, type SignatureInfo, type ParameterInfo, } from './tooling/signature-help.js';
 export { getLanguageSpec, grammarSpec, keywordDocs, getComponentCatalog, universalPropCatalog, getSnippets, builtinCatalog, findBuiltin, isBuiltinName, namespaceCatalog, factoryResourceCatalog, factoryResourceNames, routeMembers, i18nResultMembers, findNamespace, isNamespaceName, findFactoryResource, namespaceMembersAt, findNamespaceMember, findBuiltinConfig, type LanguageSpec, type GrammarSpec, type ComponentEntry, type ComponentParam, type SnippetEntry, type KeywordDoc, type BuiltinEntry, type BuiltinCategory, type NamespaceEntry, type NamespaceMember, type NamespaceMemberKind, type FactoryResourceEntry, type ConfigKey, } from './language/index.js';
-export { formatProgram, type FormatResult } from './tooling/formatter.js';
+export { formatProgram, type FormatOptions, type FormatResult } from './tooling/formatter.js';
 /**
  * Re-emit a `Program` as source.
  *

@@ -17,7 +17,7 @@
  *   - `getHoverInfo(source, position, library)` — hover docs.
  */
 export { formatProgram } from './formatter.js';
-export type { FormatResult } from './formatter.js';
+export type { FormatOptions, FormatResult } from './formatter.js';
 export { applyDelta } from './delta.js';
 export type { DeltaOp, DeltaResult } from './delta.js';
 export { inspectAST, inspectProgram } from './inspector.js';
