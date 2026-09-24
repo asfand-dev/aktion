@@ -5,6 +5,50 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-09-19
+
+### Configurable Formatter Indentation
+
+- `formatProgram`/`printProgram` (the `aktion-runtime/language` pretty-printer)
+  now accept an optional second `FormatOptions` argument: `indentStyle`
+  (`"space"`, the default, or `"tab"`) and `indentWidth` (spaces per level,
+  default `2`, ignored for `"tab"`). Calling either function with no options
+  produces byte-identical output to before — every existing consumer is
+  unaffected.
+
+### Three Round-Trip Bugs In The Pretty-Printer
+
+- Fixed a formatter idempotency bug: a plain assignment whose target is a
+  computed member expression (`next[field] = value`) isn't a top-level
+  `Assignment` node — the parser desugars it into an internal `__rui_assign__`
+  call, and the same happens for `++`/`--` and a bare-expression arrow-function
+  body assignment. The printer used to re-emit these as a literal
+  `@__rui_assign__(next[field], value, "=")` call, which isn't valid Aktion
+  syntax (the lexer silently drops unrecognised characters, including `@`), so
+  re-parsing that text silently turned it into a plain function call and lost
+  the assignment. The printer now re-emits the original operator syntax
+  instead, which round-trips correctly.
+- Fixed two further round-trip bugs found while sweeping every example program
+  in the repo for the same class of issue: a string literal containing a raw
+  newline, tab, or carriage-return character (e.g. from a source `"\n"`
+  escape) printed the raw control character back into the double-quoted
+  output instead of re-escaping it, corrupting everything the parser read
+  afterwards; and a `switch` `case`/`default` arm whose body already ended
+  with `break` (because a previous format pass added one) had a second
+  `break` appended on top, growing by one on every subsequent format.
+
+### Two More Formatter Fixes
+
+- `FormatOptions.indentWidth` now rejects a negative, infinite, `NaN`, or
+  fractional value with a clear error instead of letting it reach
+  `String.repeat` (which throws an opaque error for some of those and
+  silently produces wrong indentation for others).
+- `await` printed its argument without parentheses, so `await (ready ? value
+  : fallback)` reprinted as `await ready ? value : fallback` — a different
+  program, since that reparses as `(await ready) ? value : fallback` — and
+  `await (x => x)` reprinted as unparseable syntax entirely. `await`'s
+  argument is now always parenthesized when reprinted.
+
 ## 2026-09-10
 
 ### Destructive Inline Links, Flippable Dialog Footers, And Headerless Actions Columns
