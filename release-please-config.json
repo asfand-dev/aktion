@@ -4,6 +4,18 @@
   "include-component-in-tag": false,
   "include-v-in-tag": true,
   "include-v-in-release-name": true,
+  "extra-files": [
+    {
+      "type": "json",
+      "path": "editors/vscode/package.json",
+      "jsonpath": "$.version"
+    },
+    {
+      "type": "json",
+      "path": "editors/vscode/package.json",
+      "jsonpath": "$.devDependencies.aktion-runtime"
+    }
+  ],
   "packages": {
     ".": {
       "changelog-sections": [

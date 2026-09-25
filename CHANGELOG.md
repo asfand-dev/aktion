@@ -7,6 +7,19 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-09-25
 
+### VS Code Extension Version Now Stays In Lockstep Automatically
+
+- `release-please-config.json` gained two `extra-files` entries so every
+  future release automatically updates `editors/vscode/package.json`'s own
+  `version` and its `aktion-runtime` devDependency to match — previously only
+  the root package was release-please-managed, so every release silently
+  left the extension's version stale until someone noticed the "extension
+  version tracks the runtime version exactly" test fail and fixed it by hand.
+  The devDependency is now an exact pin (`"0.7.0"`, not `"^0.7.0"`) rather
+  than a caret range, since the whole point is "built against precisely this
+  version" — a caret range would let `npm install` silently resolve a newer
+  runtime than what the extension's `dist/extension.js` actually bundles.
+
 ### Comments Now Survive `formatProgram`
 
 - The formatter used to silently drop every comment: `formatProgram`/
