@@ -16,12 +16,13 @@
  * use `arr.map(x => …)` (every Aktion program is valid JavaScript).
  */
 
-import { tokenize, type Token } from "./lexer.js";
+import { tokenize, type RawComment, type Token } from "./lexer.js";
 import { walkNode } from "./walk.js";
 import type {
   Program,
   Statement,
   AssignmentStatement,
+  AttachedComment,
   ExpressionStatement,
   Expression,
   ParseError,
@@ -38,8 +39,9 @@ import type {
 } from "./types.js";
 
 export function parse(source: string): Program {
-  const tokens = tokenize(source);
-  const ctx = new ParserContext(tokens);
+  const comments: RawComment[] = [];
+  const tokens = tokenize(source, comments);
+  const ctx = new ParserContext(tokens, comments);
   const statements: Statement[] = [];
   const errors: ParseError[] = [];
 
@@ -56,8 +58,39 @@ export function parse(source: string): Program {
     }
   }
 
+  // The program has no enclosing braces — comments before the first
+  // statement (start boundary 0) through end-of-file (the `EOF` token's own
+  // line, +1 so a comment ON that line is still "inside") are this
+  // container's to attach.
+  attachComments(ctx, statements, 0, ctx.peek().line + 1);
+
   return { statements, errors };
 }
+
+/**
+ * Records, for a `Statement` this module itself constructed, the source line
+ * its OWN grammar ends on — used only by `attachComments` to decide whether a
+ * comment sits on the same line as a statement (trailing) or strictly after
+ * it (leading for whatever comes next).
+ *
+ * A `WeakMap` keyed by the node object itself (rather than a new `endLoc`
+ * field on all ~20 `Statement` interfaces) keeps this bookkeeping private to
+ * the parser — every OTHER consumer of the AST (evaluator, linker, tooling)
+ * never sees it and needs no changes.
+ *
+ * Populated two ways:
+ *   - Generically, by the `parseStatement` wrapper below, from "the last
+ *     token this statement's own parse function consumed" — correct for
+ *     every statement kind EXCEPT `if`/`try`, whose parse functions do a
+ *     speculative `skipWhitespace` lookahead for an optional `else`/`catch`/
+ *     `finally` that may not be there, which would otherwise over-count
+ *     trailing blank lines as part of the statement's own span.
+ *   - Precisely, by `parseIfStatement`/`parseTryStatement` themselves (using
+ *     the same map, populated for their constituent `BlockExpr`s by
+ *     `parseBlock`), which the generic wrapper only fills in as a fallback
+ *     (`if (!nodeEndLine.has(stmt))`) — so the precise value always wins.
+ */
+const nodeEndLine = new WeakMap<object, number>();
 
 /**
  * Top-level statement dispatcher. Mirrors the JS statement grammar —
@@ -67,7 +100,15 @@ export function parse(source: string): Program {
  * (`name = expr` / `$name = expr`) and fall through to a bare
  * expression statement.
  */
-function parseStatement(ctx: ParserContext, _topLevel: boolean): Statement | null {
+function parseStatement(ctx: ParserContext, topLevel: boolean): Statement | null {
+  const stmt = parseStatementImpl(ctx, topLevel);
+  if (stmt && !nodeEndLine.has(stmt)) {
+    nodeEndLine.set(stmt, ctx.previousConsumedLine());
+  }
+  return stmt;
+}
+
+function parseStatementImpl(ctx: ParserContext, _topLevel: boolean): Statement | null {
   const head = ctx.peek();
   // `$effect(() => { … }, [deps])` — the side-effect builtin. Its name is
   // `$`-prefixed (lexes as a StateIdentifier), but it is parsed specially so
@@ -632,12 +673,23 @@ function parseBlock(ctx: ParserContext): BlockExpr {
     if (stmt) body.push(stmt);
     skipWhitespace(ctx);
   }
-  ctx.expect("Punctuation", "}");
-  return {
+  const close = ctx.expect("Punctuation", "}");
+  const block: BlockExpr = {
     kind: "Block",
     body,
     loc: { line: start.line, column: start.column },
   };
+  nodeEndLine.set(block, close.line);
+  if (body.length === 0) {
+    // No statement in this block to attach a leading comment to — the only
+    // case a fully empty `{ … }` can still carry text, e.g. a function stub
+    // whose whole body is `// TODO: implement`.
+    const inner = collectDanglingComments(ctx, start.line, close.line);
+    if (inner.length > 0) block.innerComments = inner;
+  } else {
+    attachComments(ctx, body, start.line, close.line);
+  }
+  return block;
 }
 
 /**
@@ -645,6 +697,17 @@ function parseBlock(ctx: ParserContext): BlockExpr {
  * either a brace-delimited block (`{ … }`) or a single statement
  * (`if (cond) return`, `while (i--) i += 1`, etc.) and always returns
  * a `BlockExpr` so downstream evaluation is uniform.
+ *
+ * Comment attachment is intentionally NOT wired up for the brace-less
+ * single-statement form: unlike `parseBlock`, there is no closing token here
+ * to bound "this container's own comments", so a comment sitting between the
+ * `if (cond)`/`while (cond)` header and a brace-less body would have no safe
+ * boundary to test against and risks being misattributed to a later,
+ * unrelated statement by whichever enclosing container's `attachComments`
+ * call processes that line range next. Documented, measured gap — see
+ * `KNOWN_COMMENT_GAPS` in `tests/formatter-comments.test.ts`; the house style
+ * (confirmed against the real `.aktion` corpus) always braces multi-line
+ * bodies, so this form is rare in practice.
  */
 function parseBlockOrSingleStatement(ctx: ParserContext): BlockExpr {
   skipWhitespace(ctx);
@@ -653,11 +716,13 @@ function parseBlockOrSingleStatement(ctx: ParserContext): BlockExpr {
   }
   const head = ctx.peek();
   const stmt = parseStatement(ctx, false);
-  return {
+  const block: BlockExpr = {
     kind: "Block",
     body: stmt ? [stmt] : [],
     loc: { line: head.line, column: head.column },
   };
+  nodeEndLine.set(block, stmt ? (nodeEndLine.get(stmt) ?? head.line) : head.line);
+  return block;
 }
 
 function parseAwait(ctx: ParserContext): Statement {
@@ -691,7 +756,13 @@ function parseReturn(ctx: ParserContext): Statement {
 
 class ParserContext {
   private index = 0;
-  constructor(private readonly tokens: Token[]) {}
+  /** Monotonic cursor into `comments` — see `attachComments`'s doc comment. */
+  private commentIndex = 0;
+  constructor(
+    private readonly tokens: Token[],
+    /** Out-of-band `//` / `/* *\/` comments in source order (see `lexer.ts`'s `RawComment`). */
+    private readonly comments: RawComment[] = [],
+  ) {}
 
   isEnd(): boolean {
     return this.peek().type === "EOF";
@@ -705,6 +776,25 @@ class ParserContext {
     const tok = this.tokens[this.index] ?? { type: "EOF", value: "", line: 0, column: 0 };
     this.index += 1;
     return tok;
+  }
+
+  /** Line of the last token actually consumed — used to stamp a statement's own end line. */
+  previousConsumedLine(): number {
+    const tok = this.tokens[this.index - 1];
+    return tok ? tok.line : this.peek().line;
+  }
+
+  /** Next not-yet-attached comment, without consuming it. */
+  peekComment(): RawComment | undefined {
+    return this.comments[this.commentIndex];
+  }
+
+  /** Consume and return the next not-yet-attached comment. */
+  takeComment(): RawComment {
+    const c = this.comments[this.commentIndex];
+    this.commentIndex += 1;
+    // Non-null: callers only call this after `peekComment()` confirmed one exists.
+    return c!;
   }
 
   match(type: Token["type"], value?: string): boolean {
@@ -1785,13 +1875,27 @@ function parseIfStatement(ctx: ParserContext): Statement {
     }
   }
   skipTerminator(ctx);
-  return {
+  const ifStmt: Statement = {
     kind: "IfStatement",
     test,
     consequent,
     alternate: alternate as never,
     loc: { line: start.line, column: start.column },
   };
+  // Precise end line: whichever of consequent/alternate was parsed LAST.
+  // Must NOT fall back to "last token consumed before returning" (the
+  // generic `parseStatement` wrapper's default) — the `skipWhitespace(ctx)`
+  // lookahead above, used to check for an `else` that may not be there,
+  // greedily consumes any blank lines between this if-statement's own
+  // content and whatever follows, which would otherwise inflate this
+  // statement's recorded end line past its real closing `}` and break both
+  // trailing-comment matching and the next statement's blank-line-before
+  // computation. An `else if` alternate was already stamped precisely by its
+  // OWN recursive `parseIfStatement` return, so `nodeEndLine.get(alternate)`
+  // resolves it either way.
+  const last: BlockExpr | Statement = alternate ?? consequent;
+  nodeEndLine.set(ifStmt, nodeEndLine.get(last) ?? last.loc?.line ?? start.line);
+  return ifStmt;
 }
 
 /**
@@ -1804,15 +1908,27 @@ function parseSwitchStatement(ctx: ParserContext): Statement {
   ctx.expect("Punctuation", "(");
   const discriminant = parseExpression(ctx);
   ctx.expect("Punctuation", ")");
-  ctx.expect("Punctuation", "{");
+  const openBrace = ctx.expect("Punctuation", "{");
   const cases: SwitchCase[] = [];
   skipWhitespace(ctx);
+  // Tracks the last line touched by real content (or an already-attached
+  // comment) across case boundaries, for each case HEADER's own
+  // `blankLineBefore` — mirrors `attachComments`'s `lastTouchedLine`, kept
+  // separately here because a switch's cases are a list of `SwitchCase`
+  // records, not `Statement`s, so the generic helper doesn't cover them.
+  let lastLine = openBrace.line;
+  // Lower bound for "does this comment belong to the NEXT case header" — see
+  // `attachComments`'s `inWindow` doc comment for why a lower bound (not just
+  // an upper one) is required: without it, the FIRST case would wrongly
+  // claim a comment sitting above the `switch` statement itself.
+  let caseWindowStart = openBrace.line;
   while (!(ctx.peek().type === "Punctuation" && ctx.peek().value === "}")) {
+    const caseHead = ctx.peek();
     let test: Expression | null = null;
-    if (ctx.peek().type === "Keyword" && ctx.peek().value === "case") {
+    if (caseHead.type === "Keyword" && caseHead.value === "case") {
       ctx.consume();
       test = parseExpression(ctx);
-    } else if (ctx.peek().type === "Keyword" && ctx.peek().value === "default") {
+    } else if (caseHead.type === "Keyword" && caseHead.value === "default") {
       ctx.consume();
       test = null;
     } else {
@@ -1834,7 +1950,29 @@ function parseSwitchStatement(ctx: ParserContext): Statement {
       if (stmt) body.push(stmt);
       skipWhitespace(ctx);
     }
-    cases.push({ test, body });
+    const caseEndLineExclusive = ctx.peek().line; // line of whichever token stopped the loop above
+
+    // Comment(s) on the `case`/`default` keyword's OWN line or above it,
+    // before any of this case's body statements — attach to the SwitchCase
+    // record itself (a note on the branch), not to the first body statement.
+    const caseLeading: AttachedComment[] = [];
+    while (true) {
+      const c = ctx.peekComment();
+      if (!c || c.line < caseWindowStart || c.line >= caseHead.line) break;
+      ctx.takeComment();
+      caseLeading.push({ ...c, blankLineBefore: c.line > lastLine + 1 });
+      lastLine = c.endLine;
+    }
+    const caseObj: SwitchCase = { test, body };
+    if (caseLeading.length > 0) caseObj.leadingComments = caseLeading;
+
+    attachComments(ctx, body, caseHead.line, caseEndLineExclusive);
+    lastLine = body.length > 0
+      ? (nodeEndLine.get(body[body.length - 1]!) ?? caseHead.line)
+      : caseHead.line;
+    caseWindowStart = caseEndLineExclusive;
+
+    cases.push(caseObj);
     skipWhitespace(ctx);
   }
   ctx.expect("Punctuation", "}");
@@ -2077,7 +2215,7 @@ function parseTryStatement(ctx: ParserContext): Statement {
     finallyBlock = parseBlock(ctx);
   }
   skipTerminator(ctx);
-  return {
+  const tryStmt: Statement = {
     kind: "TryStatement",
     block,
     catchParam,
@@ -2085,6 +2223,13 @@ function parseTryStatement(ctx: ParserContext): Statement {
     finallyBlock,
     loc: { line: start.line, column: start.column },
   };
+  // Precise end line, for the same reason as `parseIfStatement`: the
+  // `skipWhitespace(ctx)` lookaheads above (checking for an optional
+  // `catch`/`finally` that may not be there) can greedily consume blank
+  // lines past this statement's real closing `}`.
+  const last = finallyBlock ?? catchBlock ?? block;
+  nodeEndLine.set(tryStmt, nodeEndLine.get(last) ?? last.loc?.line ?? start.line);
+  return tryStmt;
 }
 
 function tryParseLambdaFromParenList(ctx: ParserContext): Expression | null {
@@ -2288,6 +2433,144 @@ function parseObjectProps(ctx: ParserContext): ObjectProperty[] {
 /** Skip newlines and semicolons. */
 function skipWhitespace(ctx: ParserContext): void {
   while (ctx.match("Newline") || ctx.match("Semicolon")) {/* skip */}
+}
+
+/**
+ * Distribute not-yet-attached comments across `statements` — a COMPLETE
+ * statement list belonging to one lexical container (the top-level program,
+ * one `{ … }` block, or one `switch` case's body). Each not-yet-consumed
+ * comment whose line falls before `containerEndLineExclusive` becomes either:
+ *
+ *   - a `trailingComments` entry on the PRECEDING statement, when its line
+ *     equals that statement's own end line (`nodeEndLine`) — `foo() // note`;
+ *   - a `leadingComments` entry on the FOLLOWING statement otherwise, with
+ *     `blankLineBefore` recording whether a full blank source line separated
+ *     it from whatever came directly before it (the previous statement's end
+ *     line, or the previous comment in the same leading group) — so a
+ *     deliberately blank-line-separated header comment doesn't collapse
+ *     against the code above it.
+ *
+ * Comments are consumed from `ctx`'s single shared, monotonically-advancing
+ * cursor (`peekComment`/`takeComment`). That is safe ONLY because parsing is
+ * strictly left-to-right and every container calls this exactly once,
+ * immediately after its own statement list is fully built — a nested
+ * container (e.g. an `if`'s consequent block) always finishes consuming "its"
+ * comments before the enclosing container resumes and makes its own call.
+ *
+ * A comment with no following statement to attach to — the last thing in a
+ * non-empty container, on its own line, not sharing the previous statement's
+ * end line — is a documented, measured gap (see `KNOWN_COMMENT_GAPS` in
+ * `tests/formatter-comments.test.ts`). It is still consumed here (never left
+ * for an unrelated LATER container to misattribute it to one of ITS
+ * statements) but its text is dropped.
+ */
+function attachComments(
+  ctx: ParserContext,
+  statements: ReadonlyArray<Statement>,
+  containerStartLine: number,
+  containerEndLineExclusive: number,
+): void {
+  // Running "last line touched by real content or a comment already
+  // attached", used purely to decide each leading comment's own
+  // `blankLineBefore` — distinct from `prevStmtEndLine`, which stays pinned
+  // to the previous statement's OWN end line for the trailing-comment test
+  // below (so a leading comment on the line right after a trailing comment
+  // is correctly judged against the trailing comment's line, not the
+  // statement's).
+  let lastTouchedLine = containerStartLine;
+  let prevStmtEndLine: number | null = null;
+
+  // A comment strictly BEFORE `containerStartLine` does not belong to this
+  // container at all — it belongs to an ANCESTOR container that has not run
+  // its own `attachComments` call yet. That happens for the outermost
+  // (`Program`-level) container specifically: `parse()` only calls it once,
+  // after every nested block has already been fully parsed — and every
+  // nested block already ran ITS OWN `attachComments` call inline,
+  // chronologically EARLIER. Without this lower-bound guard, an inner block
+  // would greedily claim a header comment that sits many lines above it —
+  // before the block, its enclosing statement, and possibly several
+  // unrelated SIBLING statements — simply because nothing had consumed it
+  // yet. Every loop below stops (without consuming) the moment the next
+  // comment falls outside THIS container's own window, on either side,
+  // leaving it for whichever container's window actually contains it.
+  const inWindow = (c: RawComment): boolean =>
+    c.line >= containerStartLine && c.line < containerEndLineExclusive;
+
+  for (let i = 0; i < statements.length; i += 1) {
+    const stmt = statements[i]!;
+    const stmtStartLine = stmt.loc?.line ?? containerEndLineExclusive;
+
+    if (prevStmtEndLine !== null) {
+      const trailing: AttachedComment[] = [];
+      while (true) {
+        const c = ctx.peekComment();
+        if (!c || !inWindow(c) || c.line !== prevStmtEndLine) break;
+        ctx.takeComment();
+        trailing.push({ ...c });
+        lastTouchedLine = c.endLine;
+      }
+      if (trailing.length > 0) statements[i - 1]!.trailingComments = trailing;
+    }
+
+    const leading: AttachedComment[] = [];
+    while (true) {
+      const c = ctx.peekComment();
+      if (!c || !inWindow(c) || c.line >= stmtStartLine) break;
+      ctx.takeComment();
+      leading.push({ ...c, blankLineBefore: c.line > lastTouchedLine + 1 });
+      lastTouchedLine = c.endLine;
+    }
+    if (leading.length > 0) stmt.leadingComments = leading;
+
+    prevStmtEndLine = nodeEndLine.get(stmt) ?? stmtStartLine;
+    if (prevStmtEndLine > lastTouchedLine) lastTouchedLine = prevStmtEndLine;
+  }
+
+  if (prevStmtEndLine !== null) {
+    const trailing: AttachedComment[] = [];
+    while (true) {
+      const c = ctx.peekComment();
+      if (!c || !inWindow(c) || c.line !== prevStmtEndLine) break;
+      ctx.takeComment();
+      trailing.push({ ...c });
+    }
+    if (trailing.length > 0) statements[statements.length - 1]!.trailingComments = trailing;
+  }
+
+  // Anything left inside this container's own window has no statement to
+  // attach to — drop it (documented gap above), but still consume it so an
+  // unrelated later container never claims it.
+  while (true) {
+    const c = ctx.peekComment();
+    if (!c || !inWindow(c)) break;
+    ctx.takeComment();
+  }
+}
+
+/**
+ * Collect comments inside a fully empty `{ … }` block — the only case a
+ * block can carry comment text with zero statements to attach it to (e.g. a
+ * function stub whose body is only `// TODO: implement`). Stored on the
+ * `BlockExpr` itself as `innerComments`.
+ */
+function collectDanglingComments(
+  ctx: ParserContext,
+  containerStartLine: number,
+  containerEndLineExclusive: number,
+): AttachedComment[] {
+  let lastLine = containerStartLine;
+  const out: AttachedComment[] = [];
+  while (true) {
+    const c = ctx.peekComment();
+    // Lower-bound guard: see `attachComments`'s `inWindow` doc comment — a
+    // comment before this container's own start line belongs to an
+    // ancestor that has not run its own attachment pass yet.
+    if (!c || c.line < containerStartLine || c.line >= containerEndLineExclusive) break;
+    ctx.takeComment();
+    out.push({ ...c, blankLineBefore: c.line > lastLine + 1 });
+    lastLine = c.endLine;
+  }
+  return out;
 }
 
 /** Skip an optional statement terminator (newline, semicolon, or nothing before `}`/EOF). */

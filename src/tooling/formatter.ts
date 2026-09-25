@@ -42,6 +42,8 @@
 
 import { parse } from "../parser/index.js";
 import type {
+  AttachedComment,
+  BlockExpr,
   BuiltinCallExpr,
   DestructuringPattern,
   Expression,
@@ -167,8 +169,8 @@ export function printProgram(program: Program, options?: FormatOptions): string 
   const lines: string[] = [];
   let prev: Statement | null = null;
   for (const stmt of program.statements) {
-    if (prev && needsBlankLineBetween(prev, stmt)) lines.push("");
-    lines.push(printStatement(stmt, 0, opts));
+    const forceBlankLine = prev !== null && needsBlankLineBetween(prev, stmt);
+    lines.push(printStatementWithComments(stmt, 0, opts, forceBlankLine));
     prev = stmt;
   }
   return lines.join("\n") + "\n";
@@ -184,6 +186,74 @@ function needsBlankLineBetween(prev: Statement, next: Statement): boolean {
   ]);
   if (heavy.has(prev.kind) || heavy.has(next.kind)) return true;
   return false;
+}
+
+/**
+ * Render a `BlockExpr`'s `innerComments` — the ONLY case a fully empty
+ * `{ … }` block (zero statements) can still carry comment text, e.g. a
+ * function stub whose whole body is `// TODO: implement`. One comment per
+ * line at `indent`, with a blank line emitted first wherever the parser
+ * recorded `blankLineBefore` (a real blank source line separated it from
+ * whatever came before).
+ *
+ * Each comment's raw `text` (delimiters included, e.g. `// note`,
+ * `/* block *\/`) is re-emitted VERBATIM — never reformatted — so a
+ * multi-line `/* … *\/` comment's own internal indentation is preserved
+ * exactly as written. Only the comment's OWN first line is placed at the
+ * target indent; this is a known, minor cosmetic limitation for a
+ * multi-line block comment that changes indent depth between formatting
+ * passes (rare in the real corpus — see `tests/formatter-comments.test.ts`).
+ */
+function printCommentGroup(comments: ReadonlyArray<AttachedComment>, indent: number, opts: ResolvedFormatOptions): string[] {
+  const padStr = pad(indent, opts);
+  const lines: string[] = [];
+  for (const c of comments) {
+    if (c.blankLineBefore) lines.push("");
+    lines.push(`${padStr}${c.text}`);
+  }
+  return lines;
+}
+
+/**
+ * Print one statement together with its attached comments: leading
+ * comment(s) each on their own line before it (with a forced blank line
+ * when `forceBlankLineBefore` is set — the pre-existing `needsBlankLineBetween`
+ * spacing around "heavy" declarations — OR when the FIRST leading comment's
+ * own `blankLineBefore` says so; never both, to avoid a doubled blank line),
+ * and any trailing same-line comment(s) appended after the statement's own
+ * printed text.
+ */
+function printStatementWithComments(
+  stmt: Statement,
+  indent: number,
+  opts: ResolvedFormatOptions,
+  forceBlankLineBefore: boolean,
+): string {
+  const lines: string[] = [];
+  const leading = stmt.leadingComments;
+  if (leading && leading.length > 0) {
+    // A blank line goes before the GROUP when either the pre-existing
+    // heavy-declaration spacing calls for one, or the first comment's own
+    // `blankLineBefore` does — never both (would double the blank line).
+    if (forceBlankLineBefore || leading[0]!.blankLineBefore) lines.push("");
+    const padStr = pad(indent, opts);
+    for (let i = 0; i < leading.length; i += 1) {
+      const c = leading[i]!;
+      if (i > 0 && c.blankLineBefore) lines.push("");
+      lines.push(`${padStr}${c.text}`);
+    }
+  } else if (forceBlankLineBefore) {
+    lines.push("");
+  }
+
+  const stmtText = printStatement(stmt, indent, opts);
+  const trailing = stmt.trailingComments;
+  if (trailing && trailing.length > 0) {
+    lines.push(`${stmtText} ${trailing.map((c) => c.text).join(" ")}`);
+  } else {
+    lines.push(stmtText);
+  }
+  return lines.join("\n");
 }
 
 function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOptions): string {
@@ -211,7 +281,7 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
     case "ComponentDeclaration": {
       const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
       const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
-      const body = printBlock(stmt.body.body, indent + 1, opts);
+      const body = printBlockBody(stmt.body, indent + 1, opts);
       return body.length > 0
         ? `${head}\n${body}\n${padStr}}`
         : `${head}\n${padStr}}`;
@@ -221,21 +291,21 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
       if (stmt.rateLimit) {
         deps.push(`"${stmt.rateLimit.kind}(${stmt.rateLimit.ms})"`);
       }
-      const body = printBlock(stmt.body.body, indent + 1, opts);
+      const body = printBlockBody(stmt.body, indent + 1, opts);
       const depsArray = `[${deps.join(", ")}]`;
       return `${padStr}$effect(() => {\n${body}\n${padStr}}, ${depsArray})`;
     }
     case "ActionDeclaration": {
       const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
       const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
-      const body = printBlock(stmt.body.body, indent + 1, opts);
+      const body = printBlockBody(stmt.body, indent + 1, opts);
       return `${head}\n${body}\n${padStr}}`;
     }
     case "HookDeclaration": {
       // Re-emit the `$` sigil that marks the function as a hook.
       const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
       const head = `${padStr}${exp}function $${stmt.name}(${params}) {`;
-      const body = printBlock(stmt.body.body, indent + 1, opts);
+      const body = printBlockBody(stmt.body, indent + 1, opts);
       return `${head}\n${body}\n${padStr}}`;
     }
     case "Await": {
@@ -251,11 +321,11 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
     }
     case "IfStatement": {
       const test = printExpression(stmt.test, indent, opts);
-      const cons = `{\n${printBlock(stmt.consequent.body, indent + 1, opts)}\n${padStr}}`;
+      const cons = `{\n${printBlockBody(stmt.consequent, indent + 1, opts)}\n${padStr}}`;
       if (!stmt.alternate) return `${padStr}if (${test}) ${cons}`;
       const alt = stmt.alternate.kind === "IfStatement"
         ? printStatement(stmt.alternate, indent, opts).trimStart()
-        : `{\n${printBlock(stmt.alternate.body, indent + 1, opts)}\n${padStr}}`;
+        : `{\n${printBlockBody(stmt.alternate, indent + 1, opts)}\n${padStr}}`;
       return `${padStr}if (${test}) ${cons} else ${alt}`;
     }
     case "SwitchStatement": {
@@ -265,7 +335,7 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
     }
     case "ForOfStatement": {
       const iter = printExpression(stmt.iterable, indent, opts);
-      const body = `{\n${printBlock(stmt.body.body, indent + 1, opts)}\n${padStr}}`;
+      const body = `{\n${printBlockBody(stmt.body, indent + 1, opts)}\n${padStr}}`;
       const binding = stmt.pattern ? printPattern(stmt.pattern, indent, opts) : stmt.item;
       return `${padStr}for (let ${binding} of ${iter}) ${body}`;
     }
@@ -273,22 +343,22 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
       const init = stmt.init ? printStatement(stmt.init, 0, opts).trimStart() : "";
       const test = stmt.test ? printExpression(stmt.test, indent, opts) : "";
       const update = stmt.update ? printExpression(stmt.update, indent, opts) : "";
-      const body = `{\n${printBlock(stmt.body.body, indent + 1, opts)}\n${padStr}}`;
+      const body = `{\n${printBlockBody(stmt.body, indent + 1, opts)}\n${padStr}}`;
       return `${padStr}for (${init}; ${test}; ${update}) ${body}`;
     }
     case "WhileStatement": {
       const test = printExpression(stmt.test, indent, opts);
-      const body = `{\n${printBlock(stmt.body.body, indent + 1, opts)}\n${padStr}}`;
+      const body = `{\n${printBlockBody(stmt.body, indent + 1, opts)}\n${padStr}}`;
       return `${padStr}while (${test}) ${body}`;
     }
     case "DoWhileStatement": {
       const test = printExpression(stmt.test, indent, opts);
-      const body = `{\n${printBlock(stmt.body.body, indent + 1, opts)}\n${padStr}}`;
+      const body = `{\n${printBlockBody(stmt.body, indent + 1, opts)}\n${padStr}}`;
       return `${padStr}do ${body} while (${test})`;
     }
     case "ForInStatement": {
       const iter = printExpression(stmt.iterable, indent, opts);
-      const body = `{\n${printBlock(stmt.body.body, indent + 1, opts)}\n${padStr}}`;
+      const body = `{\n${printBlockBody(stmt.body, indent + 1, opts)}\n${padStr}}`;
       return `${padStr}for (let ${stmt.item} in ${iter}) ${body}`;
     }
     case "DestructureStatement": {
@@ -303,15 +373,15 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
     case "ThrowStatement":
       return `${padStr}throw ${printExpression(stmt.argument, indent, opts)}`;
     case "TryStatement": {
-      const block = `{\n${printBlock(stmt.block.body, indent + 1, opts)}\n${padStr}}`;
+      const block = `{\n${printBlockBody(stmt.block, indent + 1, opts)}\n${padStr}}`;
       let out = `${padStr}try ${block}`;
       if (stmt.catchBlock) {
         const catchHead = stmt.catchParam ? ` (${stmt.catchParam})` : "";
-        const catchBody = `{\n${printBlock(stmt.catchBlock.body, indent + 1, opts)}\n${padStr}}`;
+        const catchBody = `{\n${printBlockBody(stmt.catchBlock, indent + 1, opts)}\n${padStr}}`;
         out += ` catch${catchHead} ${catchBody}`;
       }
       if (stmt.finallyBlock) {
-        const finBody = `{\n${printBlock(stmt.finallyBlock.body, indent + 1, opts)}\n${padStr}}`;
+        const finBody = `{\n${printBlockBody(stmt.finallyBlock, indent + 1, opts)}\n${padStr}}`;
         out += ` finally ${finBody}`;
       }
       return out;
@@ -334,7 +404,26 @@ function printTrigger(t: { kind: string } & Record<string, unknown>): string {
 }
 
 function printBlock(stmts: ReadonlyArray<Statement>, indent: number, opts: ResolvedFormatOptions): string {
-  return stmts.map((s) => printStatement(s, indent, opts)).join("\n");
+  return stmts.map((s) => printStatementWithComments(s, indent, opts, false)).join("\n");
+}
+
+/**
+ * Print a `BlockExpr`'s body, INCLUDING its comments — `printBlock` above
+ * handles the common case (one or more statements, each comment-aware via
+ * `printStatementWithComments`); this additionally covers the one case
+ * `printBlock` cannot, because there is no statement to attach to: a fully
+ * empty block whose only content is a comment (`block.innerComments`, set
+ * only when `block.body.length === 0` — see `parseBlock`).
+ *
+ * Every `printStatement` call site that used to read `X.body.body` /
+ * `X.consequent.body` / `X.block.body` directly (discarding the `BlockExpr`
+ * wrapper the comment lives on) now goes through this instead.
+ */
+function printBlockBody(block: BlockExpr, indent: number, opts: ResolvedFormatOptions): string {
+  if (block.body.length === 0 && block.innerComments && block.innerComments.length > 0) {
+    return printCommentGroup(block.innerComments, indent, opts).join("\n");
+  }
+  return printBlock(block.body, indent, opts);
 }
 
 /**
@@ -479,7 +568,7 @@ function printExpression(expr: Expression, indent: number, opts: ResolvedFormatO
       return `${head} => ${printExpression(expr.body, indent, opts)}`;
     }
     case "Block":
-      return `{\n${printBlock(expr.body, indent + 1, opts)}\n${pad(indent, opts)}}`;
+      return `{\n${printBlockBody(expr, indent + 1, opts)}\n${pad(indent, opts)}}`;
   }
 }
 
@@ -494,7 +583,9 @@ function printCall(callee: string, args: Expression[], indent: number, opts: Res
 
 function printSwitchCase(c: SwitchCase, indent: number, opts: ResolvedFormatOptions): string {
   const padStr = pad(indent, opts);
-  const body = c.body.map((s) => printStatement(s, indent + 1, opts)).join("\n");
+  // `printBlock` (not a bare `.map`) so statements inside the case body get
+  // their own leading/trailing comments — see `printStatementWithComments`.
+  const body = printBlock(c.body, indent + 1, opts);
   const head = c.test === null
     ? `${padStr}default:`
     : `${padStr}case ${printExpression(c.test, indent, opts)}:`;
@@ -508,7 +599,13 @@ function printSwitchCase(c: SwitchCase, indent: number, opts: ResolvedFormatOpti
   // docs/demos/blocks/profile-header.aktion's `switch` arms).
   const lastStmt = c.body[c.body.length - 1];
   const trailingBreak = lastStmt?.kind === "BreakStatement" ? "" : `\n${pad(indent + 1, opts)}break`;
-  return `${head}\n${body}${trailingBreak}`;
+  const caseText = `${head}\n${body}${trailingBreak}`;
+  // Comment(s) preceding the `case`/`default` keyword itself (a note on the
+  // branch as a whole) — distinct from `body`'s own leading comments on its
+  // first statement, which document that statement instead.
+  if (!c.leadingComments || c.leadingComments.length === 0) return caseText;
+  const header = printCommentGroup(c.leadingComments, indent, opts);
+  return `${header.join("\n")}\n${caseText}`;
 }
 
 function printObjectProp(prop: ObjectProperty, indent: number, opts: ResolvedFormatOptions): string {
