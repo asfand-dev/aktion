@@ -5,6 +5,28 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## [0.7.0](https://github.com/asfand-dev/aktion/compare/v0.6.8...v0.7.0) (2026-09-25)
+
+
+### Features
+
+* **ci:** automated releases via release-please + npm publish ([#11](https://github.com/asfand-dev/aktion/issues/11)) ([c042b05](https://github.com/asfand-dev/aktion/commit/c042b05cc8f42bc22030d3ffe54c60912fc9604f))
+* **ci:** deploy PR previews for fork PRs too, via a trusted workflow_run split ([b506b87](https://github.com/asfand-dev/aktion/commit/b506b874b58a62660c8ade7a1f0f71b3dab82130))
+* **eslint:** add aktion-runtime/eslint processor for real ESLint linting of .aktion files ([#15](https://github.com/asfand-dev/aktion/issues/15)) ([e5c775f](https://github.com/asfand-dev/aktion/commit/e5c775f4ba3d145fea3790af2f2aa783fe519c90))
+* **formatter:** configurable indentation + fix 3 idempotency bugs ([1493654](https://github.com/asfand-dev/aktion/commit/14936541dd9426f393849c2685eaa90a1b960c9c))
+* **formatter:** make pretty-printer indentation configurable ([ce42903](https://github.com/asfand-dev/aktion/commit/ce429036456eaae76b2d6c514a5ae88a3208056d))
+* **formatter:** make quote style, trailing commas and object curly spacing configurable ([#12](https://github.com/asfand-dev/aktion/issues/12)) ([743b68c](https://github.com/asfand-dev/aktion/commit/743b68cba1af6491e0b4492e14c3f423d1b3930a))
+* **formatter:** preserve comments through formatProgram ([#13](https://github.com/asfand-dev/aktion/issues/13)) ([0cc1de4](https://github.com/asfand-dev/aktion/commit/0cc1de41c4bf331d8c0d9fcaff6863babf205c2c))
+
+
+### Bug Fixes
+
+* await grouping, exactly-one-PR guard, stale-run guard; remove the temporary same-repo fallback ([b13183e](https://github.com/asfand-dev/aktion/commit/b13183eeea53eddd03b0f9f2933088cb6c1cd69f))
+* **ci:** derive deploy identity from the GitHub API, not an untrusted artifact; restore a temporary same-repo fallback ([02b0d3e](https://github.com/asfand-dev/aktion/commit/02b0d3eb4bc21e3ca3f3221202920dcf7228879e))
+* **formatter:** repair three round-trip/idempotency bugs ([c866681](https://github.com/asfand-dev/aktion/commit/c8666813718df3bb99f0888e14961265d14ff1c0))
+* **formatter:** validate indentWidth, fix changelog date, narrow idempotency doc claim ([c280f87](https://github.com/asfand-dev/aktion/commit/c280f8741365f5f4837024cea317bae6bc92a414))
+* **release:** keep the VS Code extension version in lockstep automatically ([#16](https://github.com/asfand-dev/aktion/issues/16)) ([d5087b6](https://github.com/asfand-dev/aktion/commit/d5087b673ac957d4f54b6d77518d8c71c6d2cfd9))
+
 ## 2026-09-25
 
 ### VS Code Extension Version Now Stays In Lockstep Automatically
