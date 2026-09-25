@@ -60,7 +60,7 @@ export interface BlockExpr {
      * function stub whose whole body is `// TODO: implement`). A dangling
      * comment before `}` in a NON-empty block (after the last statement, on
      * its own line) is a documented, out-of-scope gap — see
-     * `KNOWN_COMMENT_GAPS` in `tests/formatter-comments.test.ts`.
+     * `KNOWN_COMMENT_GAPS` in `tests/formatter-idempotency-sweep.test.ts`.
      */
     innerComments?: ReadonlyArray<AttachedComment>;
 }
