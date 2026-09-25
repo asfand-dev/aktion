@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Playground · Aktion</title>
+  <meta name="description" content="A polished in-browser playground for Aktion with syntax highlighting, autocomplete, inspection mode, and live rendering." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* =========================================================================
+       Playground — page-scoped layout.
+
+       The page hijacks the docs main column for a desktop-class IDE-style
+       layout: app bar at the top, editor + viewer panes with a draggable
+       splitter, and a slim status bar at the bottom of the editor. All
+       styles are scoped to body[data-page="playground"] so they don't leak
+       into other docs pages.
+       ========================================================================= */
+
+    body[data-page="playground"] .layout > main {
+      padding: 0;
+      max-width: none;
+    }
+
+    .pg-app {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 0px);
+      min-height: 560px;
+      background: var(--doc-bg);
+      color: var(--doc-text);
+      font-family: var(--doc-font);
+      isolation: isolate;
+    }
+
+    /* ------- App bar ------- */
+    .pg-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--doc-border);
+      background: var(--doc-surface);
+      flex-wrap: wrap;
+    }
+    .pg-bar-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      margin-right: 6px;
+    }
+    .pg-bar-title i { color: var(--doc-primary); }
+    .pg-spacer { flex: 1; }
+
+    .pg-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      background: var(--doc-bg-soft);
+    }
+    .pg-group select {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      padding: 6px 22px 6px 10px;
+      border-radius: calc(var(--doc-radius-md) - 2px);
+      cursor: pointer;
+      background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                        linear-gradient(135deg, currentColor 50%, transparent 50%);
+      background-position: calc(100% - 12px) 14px, calc(100% - 7px) 14px;
+      background-size: 5px 5px;
+      background-repeat: no-repeat;
+    }
+
+    .pg-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--doc-border);
+      background: var(--doc-surface);
+      color: var(--doc-text);
+      font: inherit;
+      font-size: 13px;
+      padding: 6px 10px;
+      border-radius: var(--doc-radius-sm);
+      cursor: pointer;
+      transition: background var(--doc-transition), border-color var(--doc-transition), color var(--doc-transition);
+    }
+    .pg-btn:hover { background: var(--doc-bg-soft); border-color: var(--doc-border-strong); }
+    .pg-btn:focus-visible { outline: 0; box-shadow: var(--doc-focus-ring); }
+    .pg-btn[aria-pressed="true"], .pg-btn.is-active {
+      background: var(--doc-primary-soft);
+      color: var(--doc-primary);
+      border-color: transparent;
+    }
+    .pg-btn[disabled] { opacity: .5; cursor: not-allowed; }
+    .pg-btn i { width: 14px; text-align: center; }
+    .pg-btn .pg-btn-text { font-weight: 500; }
+    @media (max-width: 720px) {
+      .pg-btn .pg-btn-text { display: none; }
+    }
+
+    .pg-iconbtn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--doc-text-muted);
+      width: 32px;
+      height: 32px;
+      border-radius: var(--doc-radius-sm);
+      cursor: pointer;
+    }
+    .pg-iconbtn:hover { background: var(--doc-bg-soft); color: var(--doc-text); }
+    .pg-iconbtn[aria-pressed="true"] { background: var(--doc-primary-soft); color: var(--doc-primary); }
+    .pg-iconbtn:focus-visible { outline: 0; box-shadow: var(--doc-focus-ring); }
+
+    /* --- Segmented groups ---------------------------------------------------
+       Buttons placed inside a `.pg-group` form a connected segmented control:
+       they shed their individual border/background and share the group's
+       container, lighting up only on hover or when active/pressed. This keeps
+       the toolbar's many actions visually organised into a few tidy clusters
+       (Run · View · Debug · Share) instead of a loose row of buttons. */
+    .pg-group .pg-btn:not(.pg-btn--primary):not([aria-pressed="true"]),
+    .pg-group .pg-iconbtn:not([aria-pressed="true"]) {
+      border-color: transparent;
+      background: transparent;
+    }
+    .pg-group .pg-btn:not(.pg-btn--primary):not([aria-pressed="true"]):hover,
+    .pg-group .pg-iconbtn:not([aria-pressed="true"]):hover {
+      background: var(--doc-surface);
+      color: var(--doc-text);
+    }
+    /* A subtle hairline divider between a group's segments. */
+    .pg-group > * + * {
+      position: relative;
+    }
+    .pg-group--divided > * + *::before {
+      content: '';
+      position: absolute;
+      left: -3px;
+      top: 4px;
+      bottom: 4px;
+      width: 1px;
+      background: var(--doc-border);
+    }
+
+    /* The one primary action in the bar (Run) stays filled and prominent,
+       even inside its group, so it reads as the main call to action. */
+    .pg-btn--primary {
+      background: var(--doc-primary);
+      color: #fff;
+      border-color: transparent;
+    }
+    .pg-btn--primary:hover { background: var(--doc-primary); filter: brightness(1.07); border-color: transparent; }
+    .pg-btn--primary[disabled] { opacity: .45; filter: none; }
+
+    .pg-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: var(--doc-bg-soft);
+      color: var(--doc-text-muted);
+    }
+    .pg-pill[data-tone="danger"] { background: rgba(239, 68, 68, .12); color: #b91c1c; }
+    .pg-pill[data-tone="success"] { background: rgba(16, 185, 129, .12); color: #047857; }
+    :root[data-doc-theme="dark"] .pg-pill[data-tone="danger"] { color: #fca5a5; }
+    :root[data-doc-theme="dark"] .pg-pill[data-tone="success"] { color: #6ee7b7; }
+
+    /* ------- Workspace ------- */
+    .pg-workspace {
+      flex: 1;
+      display: grid;
+      min-height: 0;
+      position: relative;
+      background: var(--doc-bg);
+    }
+    .pg-workspace[data-mode="split-h"] { grid-template-columns: var(--pg-split, 1fr 6px 1fr); grid-template-rows: 1fr; }
+    .pg-workspace[data-mode="split-v"] { grid-template-rows: var(--pg-split-v, 1fr 6px 1fr); grid-template-columns: 1fr; }
+    .pg-workspace[data-mode="editor-only"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+    .pg-workspace[data-mode="editor-only"] .pg-pane--viewer { display: none; }
+    .pg-workspace[data-mode="editor-only"] .pg-splitter { display: none; }
+    .pg-workspace[data-mode="viewer-only"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+    .pg-workspace[data-mode="viewer-only"] .pg-pane--editor { display: none; }
+    .pg-workspace[data-mode="viewer-only"] .pg-splitter { display: none; }
+
+    .pg-pane {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      background: var(--doc-surface);
+    }
+    .pg-pane--editor { border-right: 1px solid var(--doc-border); }
+    .pg-workspace[data-mode="split-v"] .pg-pane--editor { border-right: 0; border-bottom: 1px solid var(--doc-border); }
+
+    .pg-pane-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--doc-bg-soft);
+      border-bottom: 1px solid var(--doc-border);
+      font-size: 12px;
+      color: var(--doc-text-muted);
+    }
+    .pg-pane-toolbar h3 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin: 0;
+      color: var(--doc-text-muted);
+    }
+
+    /* ------- Editor ------- */
+    .pg-editor-host {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      position: relative;
+      font-family: var(--doc-mono);
+      font-size: 13px;
+    }
+    .pg-editor-host .cm-editor { height: 100%; }
+    .pg-editor-host .cm-scroller { font-family: var(--doc-mono); }
+    .pg-editor-host .cm-content { padding: 12px 0; }
+    .pg-editor-host .cm-gutters {
+      background: var(--doc-bg-soft);
+      color: var(--doc-text-subtle);
+      border-right: 1px solid var(--doc-border-subtle);
+    }
+    .pg-editor-host .cm-activeLine { background-color: var(--doc-primary-softer); }
+    .pg-editor-host .cm-activeLineGutter { background-color: var(--doc-primary-softer); color: var(--doc-primary); }
+    .pg-editor-host .pg-source-highlight { background: rgba(99, 102, 241, .18); transition: background-color 1.2s ease-out; }
+
+    .pg-status {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 6px 12px;
+      border-top: 1px solid var(--doc-border);
+      background: var(--doc-bg-soft);
+      font-size: 12px;
+      color: var(--doc-text-muted);
+    }
+    .pg-status button {
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      border: 0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .pg-status button:hover { color: var(--doc-primary); }
+    .pg-status [data-tone="danger"] { color: var(--doc-danger); }
+    /* Lint warnings (unknown component, shadowed $i18n `t`) are silent
+       footguns, not broken programs — amber, not red. */
+    .pg-status [data-tone="warning"] { color: #d97706; }
+    :root[data-doc-theme="dark"] .pg-status [data-tone="warning"] { color: #fbbf24; }
+
+    /* ------- Viewer ------- */
+    .pg-pane--viewer { background: var(--doc-bg-soft); position: relative; }
+    .pg-viewer-frame {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      background: var(--doc-bg);
+    }
+    .pg-viewer-frame iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+
+    /* ------- Splitter ------- */
+    .pg-splitter {
+      background: var(--doc-border);
+      cursor: col-resize;
+      position: relative;
+      transition: background var(--doc-transition);
+    }
+    .pg-splitter:hover, .pg-splitter[data-dragging="true"] {
+      background: var(--doc-primary);
+    }
+    .pg-workspace[data-mode="split-v"] .pg-splitter { cursor: row-resize; }
+    .pg-splitter::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      background: rgba(0, 0, 0, .15);
+      border-radius: 999px;
+    }
+    .pg-workspace[data-mode="split-h"] .pg-splitter::after { width: 2px; height: 28px; }
+    .pg-workspace[data-mode="split-v"] .pg-splitter::after { height: 2px; width: 28px; }
+
+    /* ------- Inspect tooltip ------- */
+    .pg-inspect-overlay {
+      position: fixed;
+      z-index: 100;
+      pointer-events: none;
+      border: 2px solid var(--doc-primary);
+      border-radius: 4px;
+      background: rgba(99, 102, 241, .08);
+      transition: all 80ms ease-out;
+    }
+    .pg-inspect-tooltip {
+      position: fixed;
+      z-index: 101;
+      max-width: 360px;
+      max-height: min(520px, 60vh);
+      overflow-y: auto;
+      pointer-events: none;
+      background: var(--doc-surface-elev);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      box-shadow: var(--doc-shadow-lg);
+      padding: 12px 14px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--doc-text);
+    }
+    .pg-inspect-tooltip h4 {
+      margin: 0 0 4px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--doc-primary);
+    }
+    .pg-inspect-tooltip .pg-inspect-sig {
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      background: var(--doc-bg-soft);
+      padding: 4px 6px;
+      border-radius: var(--doc-radius-xs);
+      margin: 4px 0 8px;
+      display: block;
+      color: var(--doc-text);
+    }
+    .pg-inspect-tooltip .pg-inspect-desc { color: var(--doc-text-muted); margin: 0 0 8px; }
+    .pg-inspect-tooltip .pg-inspect-params { margin: 0; padding-left: 14px; }
+    .pg-inspect-tooltip .pg-inspect-params li { margin-bottom: 2px; }
+    .pg-inspect-tooltip .pg-inspect-params code { font-size: 11px; }
+    .pg-inspect-tooltip .pg-inspect-meta {
+      color: var(--doc-text-subtle);
+      font-size: 11px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--doc-border-subtle);
+    }
+
+    /* ------- Loading skeleton ------- */
+    .pg-loader {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--doc-text-muted);
+      font-size: 13px;
+      background: var(--doc-surface);
+    }
+    .pg-loader[hidden] { display: none; }
+    .pg-loader i { animation: pg-spin 1s linear infinite; }
+    @keyframes pg-spin { to { transform: rotate(360deg); } }
+
+    /* ------- Help modal ------- */
+    .pg-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, .55);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .pg-modal-backdrop[hidden] { display: none; }
+    .pg-inspect-overlay[hidden], .pg-inspect-tooltip[hidden] { display: none; }
+    .pg-loader[hidden] { display: none; }
+    .pg-modal {
+      background: var(--doc-surface-elev);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-lg);
+      box-shadow: var(--doc-shadow-lg);
+      width: min(520px, 100%);
+      max-height: 80vh;
+      overflow: auto;
+      padding: 20px 22px;
+    }
+    .pg-modal h2 { margin: 0 0 12px; font-size: 18px; }
+    .pg-modal table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .pg-modal td { padding: 6px 0; }
+    .pg-modal td:first-child { white-space: nowrap; padding-right: 16px; }
+    .pg-modal kbd {
+      display: inline-block;
+      padding: 2px 6px;
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      background: var(--doc-bg-soft);
+      border: 1px solid var(--doc-border);
+      border-radius: 4px;
+    }
+
+    /* Modal header with close-button */
+    .pg-modal-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .pg-modal-head h2 {
+      margin: 0;
+      font-size: 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .pg-modal-head h2 i { color: var(--doc-danger); }
+    .pg-modal-head .pg-spacer,
+    .pg-modal-head .pg-iconbtn { margin-left: auto; }
+    .pg-modal-lede {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: var(--doc-text-muted);
+    }
+
+    /* Errors modal list */
+    .pg-modal--errors { width: min(640px, 100%); }
+    .pg-errors-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .pg-error-item {
+      width: 100%;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: start;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--doc-bg-soft);
+      border: 1px solid var(--doc-border);
+      border-left: 3px solid var(--doc-danger);
+      border-radius: var(--doc-radius-sm);
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      color: inherit;
+      transition: background var(--doc-transition), border-color var(--doc-transition);
+    }
+    .pg-error-item[data-severity="warning"] {
+      border-left-color: #d97706;
+    }
+    .pg-error-item[data-severity="info"] {
+      border-left-color: var(--doc-primary);
+    }
+    .pg-error-item:hover,
+    .pg-error-item:focus-visible {
+      background: var(--doc-surface);
+      border-color: var(--doc-primary);
+      outline: 0;
+    }
+    .pg-error-loc {
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      padding: 2px 6px;
+      background: var(--doc-surface);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-xs);
+      color: var(--doc-text-muted);
+      white-space: nowrap;
+    }
+    .pg-error-loc[data-global="true"] {
+      color: var(--doc-text-subtle);
+      font-style: italic;
+    }
+    .pg-error-message {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--doc-text);
+      word-break: break-word;
+    }
+    .pg-error-jump {
+      font-size: 11px;
+      color: var(--doc-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+      align-self: center;
+    }
+    .pg-error-item[data-global="true"] .pg-error-jump {
+      visibility: hidden;
+    }
+    .pg-errors-empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--doc-text-muted);
+      font-size: 13px;
+      background: var(--doc-bg-soft);
+      border-radius: var(--doc-radius-sm);
+    }
+
+    /* Status-bar named-arg indicator */
+    #pg-status-arg {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--doc-primary-softer);
+      color: var(--doc-primary);
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #pg-status-arg[hidden] { display: none; }
+
+    /* ------- Toast ------- */
+    .pg-toast {
+      position: fixed;
+      bottom: 18px;
+      right: 18px;
+      z-index: 250;
+      background: var(--doc-text);
+      color: var(--doc-text-inverse);
+      padding: 10px 14px;
+      border-radius: var(--doc-radius-md);
+      box-shadow: var(--doc-shadow-lg);
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transform: translateY(8px);
+      opacity: 0;
+      transition: opacity 200ms ease, transform 200ms ease;
+    }
+    .pg-toast[data-visible="true"] {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* ------- Collapsible sidebar (playground-scoped) -------
+       The playground toggles `data-sidebar-collapsed` on `.layout` to
+       collapse the docs nav and reclaim horizontal space for the editor.
+       We collapse to a single-column grid (instead of giving column 1 a 0
+       width) because `display:none` removes the sidebar from the grid flow,
+       which would otherwise leave `main` stuck in a 0-width track. Also
+       lift the docs `max-width` so the playground spans the full viewport
+       — the IDE-style layout feels cramped inside the 1500px shell. */
+    body[data-page="playground"] .layout[data-sidebar-collapsed="true"] {
+      grid-template-columns: minmax(0, 1fr);
+      max-width: none;
+    }
+    body[data-page="playground"] .layout[data-sidebar-collapsed="true"] > .sidebar {
+      display: none;
+    }
+    .pg-sidebar-toggle i {
+      transition: transform var(--doc-transition);
+    }
+    .pg-sidebar-toggle[aria-pressed="true"] i {
+      transform: rotate(180deg);
+    }
+
+    /* ------- File explorer — VSCode-like tree (replaces the docs nav) ------- */
+    .pg-files {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 0;
+      padding-right: 2px;
+    }
+    .pg-files-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .pg-files-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--doc-text-muted);
+    }
+    .pg-files-actions { display: inline-flex; gap: 1px; }
+    .pg-files-actions .pg-iconbtn {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      font-size: 14px;
+      border-radius: var(--doc-radius-sm);
+      color: var(--doc-text-muted);
+    }
+    .pg-files-actions .pg-iconbtn:hover { background: var(--doc-bg-soft); color: var(--doc-text); }
+
+    .pg-file-tree {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+      outline: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .pg-file-tree[data-root-drop="true"] {
+      box-shadow: inset 0 0 0 1px var(--doc-primary);
+      border-radius: var(--doc-radius-sm);
+    }
+    .pg-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 24px;
+      padding: 0 6px 0 0;
+      border-radius: var(--doc-radius-xs);
+      cursor: pointer;
+      white-space: nowrap;
+      color: var(--doc-text);
+      font-size: 13px;
+      position: relative;
+    }
+    .pg-row:hover { background: var(--doc-bg-soft); }
+    .pg-row[data-selected="true"] { background: var(--doc-primary-softer); }
+    .pg-row[data-active="true"] { background: color-mix(in srgb, var(--doc-primary) 18%, transparent); }
+    .pg-row[data-active="true"]::before {
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+      background: var(--doc-primary);
+    }
+    .pg-row[data-drop="true"] { box-shadow: inset 0 0 0 1px var(--doc-primary); }
+    /* A cut file/folder is dimmed until it's pasted (VSCode behaviour). */
+    .pg-row[data-cut="true"] { opacity: 0.45; }
+    .pg-row-twisty {
+      width: 14px; flex: none; text-align: center;
+      color: var(--doc-text-subtle); font-size: 10px;
+      transition: transform var(--doc-transition);
+    }
+    .pg-row[data-kind="file"] .pg-row-twisty { visibility: hidden; }
+    .pg-row-icon { width: 16px; flex: none; text-align: center; font-size: 13px; }
+    .pg-row-name { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+    .pg-row-badge {
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--doc-text-subtle); border: 1px solid var(--doc-border);
+      border-radius: 999px; padding: 0 6px; flex: none;
+    }
+    .pg-row-badge[data-entry="true"] {
+      color: var(--doc-primary);
+      border-color: var(--doc-primary);
+    }
+    /* File-type icon colors (VSCode-ish palette). */
+    .pg-ic-aktion { color: #a78bfa; }
+    .pg-ic-html   { color: #e44d26; }
+    .pg-ic-css    { color: #42a5f5; }
+    .pg-ic-js     { color: #f7df1e; }
+    .pg-ic-ts     { color: #3178c6; }
+    .pg-ic-json   { color: #cbcb41; }
+    .pg-ic-md     { color: #90a4ae; }
+    .pg-ic-img    { color: #26a69a; }
+    .pg-ic-file   { color: var(--doc-text-subtle); }
+    .pg-ic-folder { color: #e0b65b; }
+
+    .pg-files-hint {
+      margin: auto 0 0;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--doc-text-subtle);
+    }
+    .pg-files-hint code {
+      font-family: var(--doc-mono);
+      font-size: 10px;
+      background: var(--doc-bg-soft);
+      padding: 1px 4px;
+      border-radius: var(--doc-radius-xs);
+    }
+    .pg-files-hint a { color: var(--doc-primary); text-decoration: none; }
+    .pg-files-hint a:hover { text-decoration: underline; }
+
+    /* ------- Editor tabs ------- */
+    .pg-pane-toolbar--tabs { padding: 0; gap: 0; overflow: hidden; }
+    .pg-tabs {
+      display: flex;
+      align-items: stretch;
+      overflow-x: auto;
+      flex: 1;
+      width: 100%;
+      min-width: 0;
+      scrollbar-width: thin;
+    }
+    .pg-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 8px 0 12px;
+      height: 34px;
+      font-size: 12px;
+      color: var(--doc-text-muted);
+      border-right: 1px solid var(--doc-border);
+      cursor: pointer;
+      white-space: nowrap;
+      background: var(--doc-bg-soft);
+      max-width: 220px;
+    }
+    .pg-tab[data-active="true"] {
+      background: var(--doc-bg);
+      color: var(--doc-text);
+      box-shadow: inset 0 -2px 0 var(--doc-primary);
+    }
+    .pg-tab-name { overflow: hidden; text-overflow: ellipsis; }
+    .pg-tab-icon { font-size: 12px; flex: none; }
+    .pg-tab-close {
+      border: 0; background: none; cursor: pointer; color: var(--doc-text-subtle);
+      width: 18px; height: 18px; border-radius: var(--doc-radius-xs); flex: none;
+      display: inline-flex; align-items: center; justify-content: center; font-size: 11px;
+      opacity: 0; transition: opacity var(--doc-transition), background var(--doc-transition);
+    }
+    .pg-tab:hover .pg-tab-close, .pg-tab[data-active="true"] .pg-tab-close { opacity: 1; }
+    .pg-tab-close:hover { background: var(--doc-border); color: var(--doc-text); }
+    .pg-tab-dirty { width: 8px; height: 8px; border-radius: 50%; background: var(--doc-text-muted); flex: none; }
+
+    /* ------- Context menu + popover menus ------- */
+    .pg-ctxmenu {
+      position: fixed;
+      z-index: 1000;
+      min-width: 200px;
+      background: var(--doc-surface-elev);
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, .28);
+      padding: 4px;
+      font-size: 13px;
+    }
+    .pg-ctxmenu[hidden] { display: none; }
+    .pg-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px;
+      border-radius: var(--doc-radius-xs);
+      cursor: pointer;
+      color: var(--doc-text);
+      white-space: nowrap;
+    }
+    .pg-menu-item:hover { background: var(--doc-primary-soft); color: var(--doc-primary); }
+    .pg-menu-item[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+    .pg-menu-item i { width: 16px; text-align: center; color: var(--doc-text-subtle); font-size: 12px; }
+    .pg-menu-item:hover i { color: var(--doc-primary); }
+    .pg-menu-item .pg-menu-key { margin-left: auto; padding-left: 18px; color: var(--doc-text-subtle); font-size: 11px; }
+    .pg-menu-sep { height: 1px; background: var(--doc-border); margin: 4px 6px; }
+    /* Inline rename field rendered inside a tree row. */
+    .pg-rename-input {
+      flex: 1; min-width: 0; font: inherit; font-size: 13px;
+      background: var(--doc-bg); color: var(--doc-text);
+      border: 1px solid var(--doc-primary); border-radius: var(--doc-radius-xs);
+      padding: 1px 4px; outline: none;
+    }
+
+    /* ------- Editor hover / signature tooltip ------- */
+    .pg-cm-tooltip {
+      max-width: 360px;
+      /* Cap the popup height — long component docs scroll instead of
+         covering the whole editor. */
+      max-height: min(520px, 45vh);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 10px 12px;
+    }
+    .pg-cm-tooltip h4 {
+      margin: 0 0 4px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--doc-primary);
+    }
+    .pg-cm-tooltip h4 .pg-cm-group {
+      font-weight: 400;
+      color: var(--doc-text-muted);
+      margin-left: auto;
+      font-size: 11px;
+    }
+    .pg-cm-tooltip code.pg-cm-sig {
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      background: var(--doc-bg-soft);
+      padding: 4px 6px;
+      border-radius: var(--doc-radius-xs);
+      margin: 4px 0 8px;
+      display: block;
+      color: var(--doc-text);
+      white-space: pre-wrap;
+    }
+    .pg-cm-tooltip code.pg-cm-sig .pg-cm-active {
+      color: var(--doc-primary);
+      font-weight: 700;
+      text-decoration: underline;
+      text-decoration-thickness: 2px;
+      text-underline-offset: 3px;
+    }
+    .pg-cm-tooltip p.pg-cm-desc {
+      color: var(--doc-text-muted);
+      margin: 0 0 8px;
+    }
+    .pg-cm-tooltip .pg-cm-section {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--doc-text-muted);
+      margin: 8px 0 2px;
+    }
+    .pg-cm-tooltip pre.pg-cm-example {
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      background: var(--doc-bg-soft);
+      padding: 6px 8px;
+      border-radius: var(--doc-radius-xs);
+      margin: 2px 0 4px;
+      color: var(--doc-text);
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
+    .pg-cm-tooltip .pg-cm-param {
+      background: var(--doc-bg-soft);
+      border-left: 2px solid var(--doc-primary);
+      padding: 6px 8px;
+      border-radius: var(--doc-radius-xs);
+      margin: 0 0 8px;
+    }
+    .pg-cm-tooltip .pg-cm-param-name {
+      font-family: var(--doc-mono);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .pg-cm-tooltip .pg-cm-param-type {
+      color: var(--doc-text-muted);
+      font-size: 11px;
+      font-family: var(--doc-mono);
+    }
+    .pg-cm-tooltip .pg-cm-param-desc {
+      color: var(--doc-text-muted);
+      margin: 4px 0 0;
+      font-size: 12px;
+    }
+    .pg-cm-tooltip .pg-cm-enum-label {
+      display: block;
+      margin-top: 6px;
+      color: var(--doc-text-subtle);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .pg-cm-tooltip .pg-cm-enum-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .pg-cm-tooltip .pg-cm-enum {
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      background: var(--doc-primary-softer);
+      color: var(--doc-primary);
+      padding: 2px 6px;
+      border-radius: 999px;
+    }
+    .pg-cm-tooltip .pg-cm-enum-pick {
+      border: 1px solid color-mix(in srgb, var(--doc-primary) 35%, transparent);
+      cursor: pointer;
+      transition: transform 60ms ease, background 80ms ease, color 80ms ease;
+      pointer-events: auto;
+    }
+    .pg-cm-tooltip .pg-cm-enum-pick:hover {
+      background: var(--doc-primary);
+      color: var(--doc-on-primary, #fff);
+      transform: translateY(-1px);
+    }
+    .pg-cm-tooltip .pg-cm-enum-pick:active {
+      transform: translateY(0);
+    }
+    .pg-cm-tooltip ul.pg-cm-params {
+      margin: 0;
+      padding-left: 16px;
+    }
+    .pg-cm-tooltip ul.pg-cm-params li {
+      margin-bottom: 2px;
+    }
+    .pg-cm-tooltip ul.pg-cm-params li code {
+      font-family: var(--doc-mono);
+      font-size: 11px;
+    }
+
+    /* ------- Layout (mobile defaults) ------- */
+    @media (max-width: 880px) {
+      body[data-page="playground"] .sidebar { display: none; }
+      body[data-page="playground"] .layout { grid-template-columns: 1fr; }
+      body[data-page="playground"] .pg-sidebar-toggle { display: none; }
+      .pg-app { height: 100vh; }
+    }
+  </style>
+</head>
+<body data-page="playground">
+  <div class="layout" data-wide="true">
+    <aside class="sidebar pg-files" id="pg-files" aria-label="Project files">
+      <div class="pg-files-head">
+        <span class="pg-files-title">Explorer</span>
+        <div class="pg-files-actions">
+          <button class="pg-iconbtn" id="pg-file-new" title="New file" aria-label="New file">
+            <i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i>
+          </button>
+          <button class="pg-iconbtn" id="pg-folder-new" title="New folder" aria-label="New folder">
+            <i class="fa-solid fa-folder-plus" aria-hidden="true"></i>
+          </button>
+          <button class="pg-iconbtn" id="pg-import" title="Import files, a .zip, or a URL" aria-label="Import" aria-haspopup="true">
+            <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i>
+          </button>
+          <button class="pg-iconbtn" id="pg-export" title="Export project" aria-label="Export" aria-haspopup="true">
+            <i class="fa-solid fa-cloud-arrow-down" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      <div class="pg-file-tree" id="pg-file-list" role="tree" aria-label="Project files" tabindex="0"></div>
+      <p class="pg-files-hint">
+        <code>app.aktion</code> is the default entry. Right-click any file →
+        <strong>Set as entry point</strong> to run and link from it instead.
+        Drag to move; import folders with <code>import { X } from "./components/X.aktion"</code>.
+        <a href="modules.html">Learn more →</a>
+      </p>
+    </aside>
+
+    <!-- File-explorer context menu (positioned on right-click) -->
+    <div class="pg-ctxmenu" id="pg-ctxmenu" role="menu" hidden></div>
+    <!-- Hidden inputs used by the Import menu -->
+    <input type="file" id="pg-import-files" multiple hidden
+           accept=".aktion,.html,.css,.js,.ts,.json,.md,.txt,.svg" />
+    <input type="file" id="pg-import-folder" webkitdirectory directory multiple hidden />
+    <input type="file" id="pg-import-zip" accept=".zip,application/zip" hidden />
+
+    <main>
+      <div class="pg-app" id="pg-app">
+        <!-- App bar -->
+        <header class="pg-bar" role="banner">
+          <button class="pg-iconbtn pg-sidebar-toggle" id="pg-sidebar-toggle"
+                  aria-pressed="false"
+                  aria-controls="pg-files"
+                  title="Hide file explorer"
+                  aria-label="Toggle file explorer">
+            <i class="fa-solid fa-angles-left" aria-hidden="true"></i>
+          </button>
+          <div class="pg-bar-title">
+            <i class="fa-solid fa-flask" aria-hidden="true"></i>
+            <span>Playground</span>
+          </div>
+
+          <!-- Both selects below are POPULATED BY playground.js and deliberately
+               hold only a pre-hydration placeholder: the examples come from the
+               `EXAMPLES` map and the themes from `getLanguageSpec().themeNames`,
+               so neither list can drift from the code the way the hand-written
+               copies did (`storageConsole` shipped unreachable for exactly that
+               reason). Do not re-add options here. -->
+          <div class="pg-group" role="group" aria-label="Example presets">
+            <label class="sr-only" for="pg-example">Example</label>
+            <select id="pg-example" aria-label="Example preset">
+              <option value="chat">Chat reply</option>
+            </select>
+          </div>
+
+          <div class="pg-group" role="group" aria-label="Theme">
+            <label class="sr-only" for="pg-theme">Theme</label>
+            <select id="pg-theme" aria-label="Renderer theme">
+              <option value="light">Light</option>
+            </select>
+          </div>
+
+          <!-- Runtime: <aktion-app> attributes the preview can be driven with.
+               Everything here maps 1:1 onto an element attribute rather than a
+               playground-only concept — see `applyRuntimeAttributes()`. -->
+          <div class="pg-group" role="group" aria-label="Runtime options">
+            <button class="pg-btn" id="pg-strict" aria-pressed="false"
+                    title="strict — dev-mode morph guard + unresolved-identifier warnings">
+              <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+              <span class="pg-btn-text">Strict</span>
+            </button>
+            <button class="pg-btn" id="pg-rtl" aria-pressed="false"
+                    title='dir="rtl" — preview the right-to-left mirror of the layout'>
+              <i class="fa-solid fa-right-left" aria-hidden="true"></i>
+              <span class="pg-btn-text">RTL</span>
+            </button>
+            <button class="pg-btn" id="pg-showerrors" aria-pressed="false"
+                    title="showerrors — render the runtime's own error banner inside the preview">
+              <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+              <span class="pg-btn-text">Errors</span>
+            </button>
+            <button class="pg-btn" id="pg-access" aria-pressed="false"
+                    title="Global access policy — Trusted exposes the full JS surface; Sandboxed limits the program to the runtime's vetted data/format/encode globals (no eval, DOM, network, or storage). Shared links start Sandboxed.">
+              <i class="fa-solid fa-lock" aria-hidden="true"></i>
+              <span class="pg-btn-text" id="pg-access-label">Trusted</span>
+            </button>
+          </div>
+
+          <div class="pg-spacer"></div>
+
+          <!-- Run: live/manual toggle + the primary Run action -->
+          <div class="pg-group" role="group" aria-label="Run">
+            <button class="pg-btn" id="pg-run-mode" aria-pressed="false" title="Toggle live / manual run (Cmd/Ctrl+K)">
+              <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+              <span class="pg-btn-text" id="pg-run-label">Live</span>
+            </button>
+            <button class="pg-btn pg-btn--primary" id="pg-run" title="Run (Cmd/Ctrl+Enter)" aria-label="Run program">
+              <i class="fa-solid fa-play" aria-hidden="true"></i>
+              <span class="pg-btn-text">Run</span>
+            </button>
+          </div>
+
+          <!-- View: layout segmented control -->
+          <div class="pg-group" role="group" aria-label="View layout">
+            <button class="pg-iconbtn" data-mode="split-h" title="Side-by-side" aria-label="Side-by-side layout">
+              <i class="fa-solid fa-table-columns" aria-hidden="true"></i>
+            </button>
+            <button class="pg-iconbtn" data-mode="split-v" title="Stacked" aria-label="Stacked layout">
+              <i class="fa-solid fa-grip-lines" aria-hidden="true"></i>
+            </button>
+            <button class="pg-iconbtn" data-mode="editor-only" title="Editor only (Zen)" aria-label="Editor only">
+              <i class="fa-solid fa-code" aria-hidden="true"></i>
+            </button>
+            <button class="pg-iconbtn" data-mode="viewer-only" title="Viewer only" aria-label="Viewer only">
+              <i class="fa-solid fa-display" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <!-- Debug: inspect mode + the DevTools panel -->
+          <div class="pg-group" role="group" aria-label="Debug tools">
+            <button class="pg-btn" id="pg-inspect" aria-pressed="false" title="Inspect mode (Cmd/Ctrl+Shift+I)">
+              <i class="fa-solid fa-arrow-pointer" aria-hidden="true"></i>
+              <span class="pg-btn-text">Inspect</span>
+            </button>
+            <button class="pg-btn" id="pg-devtools" aria-pressed="false" title="Aktion DevTools — state, profiler, effects (Cmd/Ctrl+Shift+D)">
+              <i class="fa-solid fa-bug" aria-hidden="true"></i>
+              <span class="pg-btn-text">DevTools</span>
+            </button>
+          </div>
+
+          <!-- Share & export -->
+          <div class="pg-group" role="group" aria-label="Share & export">
+            <button class="pg-iconbtn" id="pg-share" title="Copy share link" aria-label="Copy share link">
+              <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
+            </button>
+            <button class="pg-iconbtn" id="pg-copy" title="Copy code" aria-label="Copy code">
+              <i class="fa-solid fa-copy" aria-hidden="true"></i>
+            </button>
+            <button class="pg-iconbtn" id="pg-download" title="Download as standalone HTML" aria-label="Download as standalone HTML">
+              <i class="fa-solid fa-download" aria-hidden="true"></i>
+            </button>
+            <button class="pg-iconbtn" id="pg-reset" title="Reset to example" aria-label="Reset to current example">
+              <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <button class="pg-iconbtn" id="pg-help" title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts">
+            <i class="fa-solid fa-keyboard" aria-hidden="true"></i>
+          </button>
+        </header>
+
+        <!-- Editor + viewer workspace -->
+        <div class="pg-workspace" id="pg-workspace" data-mode="split-h">
+          <section class="pg-pane pg-pane--editor" aria-label="Editor pane">
+            <div class="pg-pane-toolbar pg-pane-toolbar--tabs">
+              <div class="pg-tabs" id="pg-tabs" role="tablist" aria-label="Open files"></div>
+            </div>
+            <div class="pg-editor-host" id="pg-editor">
+              <div class="pg-loader" id="pg-editor-loader">
+                <i class="fa-solid fa-circle-notch" aria-hidden="true"></i>
+                <span>Loading editor…</span>
+              </div>
+            </div>
+            <div class="pg-status" id="pg-status">
+              <span id="pg-status-cursor"><i class="fa-solid fa-arrow-pointer" aria-hidden="true"></i> Ln 1, Col 1</span>
+              <button id="pg-status-errors" type="button" data-tone="success" title="Show all errors">
+                <i class="fa-solid fa-check" aria-hidden="true"></i>
+                <span id="pg-status-errors-text">No errors</span>
+              </button>
+              <span id="pg-status-chars"><i class="fa-solid fa-text-width" aria-hidden="true"></i> 0 chars</span>
+              <span id="pg-status-arg" hidden title="Current named argument under cursor"></span>
+              <span class="pg-spacer"></span>
+              <span id="pg-status-keys" title="Cmd/Ctrl + Enter to run when not in live mode">
+                <kbd>⌘</kbd>+<kbd>↵</kbd>
+              </span>
+            </div>
+          </section>
+
+          <div class="pg-splitter" id="pg-splitter" role="separator" aria-orientation="vertical" aria-label="Resize panes" tabindex="0"></div>
+
+          <section class="pg-pane pg-pane--viewer" id="pg-viewer-pane" aria-label="Renderer pane" data-inspect="false">
+            <div class="pg-pane-toolbar">
+              <h3>Preview</h3>
+              <div class="pg-spacer"></div>
+              <span class="pg-pill" id="pg-pill-theme">light</span>
+              <button class="pg-iconbtn" id="pg-fullscreen" title="Toggle full-screen viewer" aria-label="Toggle full-screen viewer">
+                <i class="fa-solid fa-expand" aria-hidden="true"></i>
+              </button>
+            </div>
+            <div class="pg-viewer-frame" id="pg-viewer-frame">
+              <!-- The preview renders inside a same-origin iframe so the
+                   renderer's responsive @media breakpoints resolve against the
+                   pane width, not the whole browser window. playground.js
+                   writes an <aktion-app id="pg-target"> into it on boot.
+
+                   `sandbox` withholds allow-top-navigation, so a program from a
+                   shared `?code=` link cannot redirect the docs site out from
+                   under the reader. `allow-same-origin` IS granted and cannot be
+                   withheld: the parent drives the inner <aktion-app>, reads its
+                   shadow root for Inspect, and the frame bridges the DevTools
+                   global hook through `window.parent` — all of which need a
+                   same-origin document. So this is defence in depth, not an
+                   origin boundary; the load-bearing mitigation for untrusted
+                   program text is `setGlobalAccessPolicy("safe")`, which
+                   playground.js applies to the shared-link path (see
+                   `initPreviewFrame`). The remaining grants keep real programs
+                   working: allow-modals for `confirm()`/`alert()`, allow-forms
+                   for form submission, allow-popups for `target="_blank"`
+                   links, allow-downloads for CSV/file exports. -->
+              <iframe id="pg-frame" title="Live preview"
+                      sandbox="allow-scripts allow-same-origin allow-modals allow-forms allow-popups allow-downloads"></iframe>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- Inspect overlays (sit at body level, outside shadow DOM) -->
+      <div class="pg-inspect-overlay" id="pg-inspect-overlay" hidden></div>
+      <div class="pg-inspect-tooltip" id="pg-inspect-tooltip" hidden role="tooltip"></div>
+
+      <!-- Errors modal -->
+      <div class="pg-modal-backdrop" id="pg-errors-backdrop" hidden>
+        <div class="pg-modal pg-modal--errors" role="dialog" aria-labelledby="pg-errors-title" aria-modal="true">
+          <header class="pg-modal-head">
+            <h2 id="pg-errors-title">
+              <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+              <span id="pg-errors-title-text">Errors</span>
+            </h2>
+            <button class="pg-iconbtn" id="pg-errors-close" type="button" title="Close" aria-label="Close errors">
+              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+          </header>
+          <p class="pg-modal-lede" id="pg-errors-lede">
+            Click any entry to jump to it. Entries without a line number are
+            global parse errors and aren't pinned to a specific spot in the
+            editor.
+          </p>
+          <ul class="pg-errors-list" id="pg-errors-list" role="list"></ul>
+        </div>
+      </div>
+
+      <!-- Help modal -->
+      <div class="pg-modal-backdrop" id="pg-modal-backdrop" hidden>
+        <div class="pg-modal" role="dialog" aria-labelledby="pg-modal-title" aria-modal="true">
+          <h2 id="pg-modal-title">Keyboard shortcuts &amp; autocomplete</h2>
+          <table>
+            <tbody>
+              <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd></td><td>Run program (in manual mode)</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>K</kbd></td><td>Toggle live / manual run</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>S</kbd></td><td>Save to localStorage (auto on type)</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd></td><td>Toggle inspect mode</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>D</kbd></td><td>Toggle Aktion DevTools (state · profiler · effects)</td></tr>
+              <tr><td><kbd>Ctrl</kbd> + <kbd>Space</kbd></td><td>Trigger autocomplete</td></tr>
+              <tr><td><kbd>Tab</kbd> / <kbd>Enter</kbd></td><td>Accept the highlighted autocomplete suggestion (Tab otherwise indents / advances snippet fields)</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>F</kbd></td><td>Find / replace panel (<kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>G</kbd> next, <kbd>Shift</kbd> + that for previous)</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>D</kbd></td><td>Select the next occurrence of the selection</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>G</kbd></td><td>Go to line</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd></td><td>Open the diagnostics panel (errors and lint warnings)</td></tr>
+              <tr><td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>[</kbd> / <kbd>]</kbd></td><td>Fold / unfold the block at the cursor</td></tr>
+              <tr><td><kbd>Esc</kbd></td><td>Close popups / exit inspect mode / exit full-screen</td></tr>
+            </tbody>
+          </table>
+          <p style="margin-top:14px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>File explorer.</strong> With the tree focused:
+            <kbd>Enter</kbd> opens the selected file (or expands a folder),
+            <kbd>F2</kbd> renames, <kbd>Delete</kbd> / <kbd>Backspace</kbd>
+            deletes, and <kbd>↑</kbd> / <kbd>↓</kbd> move the selection
+            (<kbd>Shift</kbd> extends it). With the pane splitter focused, the
+            arrow keys resize the editor / preview split.
+          </p>
+          <p style="margin-top:14px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>Smart autocomplete.</strong> At the top level, tab through
+            components, builtins, language keywords
+            (<code>if</code>, <code>for</code>, <code>function</code>,
+            <code>import</code>, <code>export</code>, <code>try</code>…), the
+            runtime globals
+            (<code>$http</code>, <code>$query</code>, <code>$mutation</code>,
+            <code>$socket</code>, <code>$sse</code>, <code>$form</code>,
+            <code>$store</code>, <code>$router</code>, <code>$effect</code>,
+            <code>$state</code>, <code>$memo</code>, <code>$i18n</code>,
+            <code>$head</code>, <code>$script</code>, <code>$toast</code>,
+            <code>$dom</code>, <code>setTimeout</code>, <code>$storage</code>,
+            <code>$console</code>, <code>Math</code>, <code>JSON</code>,
+            <code>Object</code>, <code>Array</code>, <code>Date</code>…), and
+            snippets (<code>Router…</code>, <code>Effect…</code>,
+            <code>function…</code>, <code>Http…</code>, <code>Form…</code>,
+            <code>Socket…</code>, <code>Hook…</code>). Inside a call like
+            <code>Button("Save", { <em>cursor</em> })</code> the editor surfaces
+            <strong>named-arg names</strong> with their types
+            (<code>variant:</code>, <code>tone:</code>, <code>icon:</code>) plus
+            the <strong>universal</strong> channels every component accepts
+            (<code>sx:</code>, <code>animate:</code>, <code>aria:</code>,
+            <code>data:</code>…), ranked below the component's own props. After
+            the colon, enum-typed args show their allowed values inline so you
+            can pick one with a single tab.
+          </p>
+          <!-- Generated by playground.js from the reconciled namespace / factory-bag
+               catalogs. A hand-written version of this paragraph went stale every
+               time the runtime gained a bag member, so it is no longer written by
+               hand — see `renderMemberHelp()`. -->
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)" id="pg-help-members"></p>
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>Cursor-aware param docs.</strong> Hover any identifier,
+            <em>or just place your cursor</em> inside a
+            <code>name: value</code> slot, to see the matching parameter's
+            type, description, and allowed values. The status bar also pins
+            the active named arg so you always know what you're editing.
+          </p>
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>Sharing.</strong> Use <i class="fa-solid fa-share-nodes"
+            aria-hidden="true"></i> to copy a share link, or
+            <i class="fa-solid fa-download" aria-hidden="true"></i> to
+            download a standalone HTML file you can host or open offline.
+          </p>
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>Errors and warnings.</strong> Click the pill in the editor's
+            status bar to open the diagnostics inspector — every parse error,
+            schema error and lint <em>warning</em>, with line numbers and
+            click-to-jump. Warnings are amber and don't block rendering: they
+            flag silent footguns the schema validator can't see, such as calling
+            a component that doesn't exist (which renders nothing at all) or
+            shadowing the <code>t</code> destructured from <code>$i18n</code>.
+          </p>
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>Runtime options.</strong> The toolbar's Runtime group drives
+            <code>&lt;aktion-app&gt;</code> attributes directly:
+            <strong>Strict</strong> turns on the dev-mode morph guard and
+            unresolved-identifier warnings, <strong>RTL</strong> previews the
+            mirrored layout (<code>dir="rtl"</code>), <strong>Errors</strong>
+            renders the runtime's own error banner inside the preview, and
+            <strong>Trusted / Sandboxed</strong> switches the program's access to
+            host JavaScript globals. A program opened from a share link starts
+            <em>Sandboxed</em> — no <code>eval</code>, DOM, network or storage —
+            because it came from whoever wrote the URL.
+          </p>
+          <p style="margin-top:10px; font-size:13px; color:var(--doc-text-muted)">
+            <strong>DevTools.</strong> Click <i class="fa-solid fa-bug"
+            aria-hidden="true"></i> <strong>DevTools</strong> (or
+            <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>D</kbd>) to
+            open the Aktion inspector docked to the page: a live, editable
+            <code>$state</code> tree, a render profiler with a per-commit
+            flamegraph, and a timeline of every effect. See the
+            <a href="devtools.html">DevTools guide</a> for details.
+          </p>
+        </div>
+      </div>
+
+      <div class="pg-toast" id="pg-toast" role="status" aria-live="polite"></div>
+    </main>
+  </div>
+
+  <!-- Cache-buster. The old `-iframe-preview2` suffix named a feature that had
+       already shipped, and the date was bumped by a blanket sed while the asset
+       itself was untouched — so the string asserted a currency it did not have.
+       Bump this whenever playground.js changes; better still, have
+       scripts/build-docs.mjs stamp a content hash so it cannot lie. -->
+  <script type="module" src="assets/playground.js?v=2026.08.02-flat-examples"></script>
+</body>
+</html>

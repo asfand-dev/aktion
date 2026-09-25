@@ -1,0 +1,107 @@
+// Weather Dashboard — live forecast from the open-meteo API (no key needed).
+// Uses: $query (cached, polled every 10 min, refetch on tab focus), sx typography, animate.
+$app(Column([header, searchRow, view], { gap: "lg", padding: "md" }))
+
+$city = "Berlin"
+$coords = { lat: 52.52, lng: 13.405, name: "Berlin", country: "Germany" }
+
+geoUrl = name => `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`
+wxUrl = (lat, lng) => `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=7`
+
+// Cached + deduplicated, auto-refreshes in the background:
+$wx = $query({
+  url: wxUrl($coords.lat, $coords.lng),
+  key: `wx-${$coords.lat}-${$coords.lng}`,
+  ttl: 600000,
+  refetchInterval: 600000,
+  refetchOnFocus: true,
+  refetchOnReconnect: true
+})
+
+function wxInfo(code) {
+  if (code == 0) return { label: "Clear sky", icon: "sun", tone: "warning" }
+  if (code <= 2) return { label: "Partly cloudy", icon: "cloud-sun", tone: "info" }
+  if (code == 3) return { label: "Overcast", icon: "cloud", tone: "neutral" }
+  if (code <= 48) return { label: "Fog", icon: "smog", tone: "neutral" }
+  if (code <= 57) return { label: "Drizzle", icon: "cloud-rain", tone: "info" }
+  if (code <= 67) return { label: "Rain", icon: "cloud-showers-heavy", tone: "primary" }
+  if (code <= 77) return { label: "Snow", icon: "snowflake", tone: "info" }
+  if (code <= 82) return { label: "Rain showers", icon: "cloud-showers-water", tone: "primary" }
+  if (code <= 86) return { label: "Snow showers", icon: "snowflake", tone: "info" }
+  return { label: "Thunderstorm", icon: "cloud-bolt", tone: "danger" }
+}
+
+function dayName(iso, i) {
+  if (i == 0) return "Today"
+  const d = new Date(iso + "T00:00:00")
+  return d.toLocaleDateString("en-US", { weekday: "short" })
+}
+
+function searchCity() {
+  if (!$city) return
+  $geo = $http({ url: geoUrl($city) })
+  $geo.onDone = () => {
+    const r = $geo.data && $geo.data.results && $geo.data.results[0]
+    if (r) {
+      $coords = { lat: r.latitude, lng: r.longitude, name: r.name, country: r.country || "" }
+    }
+  }
+}
+
+header = PageHeader("Weather", {
+  subtitle: `${$coords.name}${$coords.country ? ", " + $coords.country : ""}`,
+  badge: Badge("Live · auto-refreshes", { tone: "success", icon: "satellite-dish" })
+})
+
+searchRow = Row([
+  StackItem(SearchBar("city", { placeholder: "Search a city…", value: $city, onSubmit: searchCity }), { grow: 1 }),
+  Button("Search", { onClick: searchCity, variant: "primary", icon: "magnifying-glass" })
+], { gap: "sm", align: "end" })
+
+function dataView() {
+  const c = $wx.data.current
+  const info = wxInfo(c.weather_code)
+  const daily = $wx.data.daily
+  const hours = $wx.data.hourly.time.slice(0, 24).map(t => t.slice(11, 16))
+  const temps = $wx.data.hourly.temperature_2m.slice(0, 24)
+
+  const current = Card([
+    Row([
+      StackItem(Column([
+        Text(`${Math.round(c.temperature_2m)}°C`, { variant: "title", sx: { fontSize: "3.5rem" } }),
+        Row([Icon(info.icon, { size: "lg", color: "var(--rui-color-primary)" }), Text(info.label, { variant: "large-heavy" })], { gap: "sm", align: "center" }),
+        Text(`Feels like ${Math.round(c.apparent_temperature)}°C`, { variant: "body", tone: "muted" })
+      ], { gap: "sm" }), { grow: 1 }),
+      Column([
+        StatCard("Humidity", { value: `${c.relative_humidity_2m}%`, icon: "droplet", tone: "info" }),
+        StatCard("Wind", { value: `${Math.round(c.wind_speed_10m)} km/h`, icon: "wind" })
+      ], { gap: "sm" })
+    ], { gap: "lg", align: "center" })
+  ], { animate: "fade-up" })
+
+  const chart = Card([
+    SectionHeader("Next 24 hours", { eyebrow: "HOURLY" }),
+    LineChart(hours, { series: [Series("°C", { values: temps })], filled: true })
+  ], { animate: { preset: "fade-up", delay: 80 } })
+
+  const week = Card([
+    SectionHeader("7-day forecast", { eyebrow: "DAILY" }),
+    Grid(daily.time.map((d, i) => Box([Column([
+      Text(dayName(d, i), { variant: "body-heavy" }),
+      Icon(wxInfo(daily.weather_code[i]).icon, { size: "lg" }),
+      Text(`${Math.round(daily.temperature_2m_max[i])}°`, { variant: "body-heavy" }),
+      Text(`${Math.round(daily.temperature_2m_min[i])}°`, { variant: "small", tone: "muted" })
+    ], { gap: "xs", align: "center" })], {
+      padding: "sm", border: "subtle", background: "surface",
+      sx: { states: { hover: { translateY: "-2px", shadow: "sm" } } }
+    })), { columns: { base: 2, sm: 4, lg: 7 }, gap: "sm" })
+  ], { animate: { preset: "fade-up", delay: 160 } })
+
+  return Column([current, chart, week], { gap: "lg" })
+}
+
+view = Async($wx, {
+  loading: LoadingState("Fetching forecast…", { description: `Loading weather for ${$coords.name}` }),
+  error: ErrorState("Couldn't load weather", { description: "Try another city name.", actions: [Button("Retry", { onClick: () => $wx.refetch(), variant: "primary", icon: "rotate-right" })] }),
+  data: dataView()
+})
