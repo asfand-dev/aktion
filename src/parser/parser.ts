@@ -756,8 +756,16 @@ function parseReturn(ctx: ParserContext): Statement {
 
 class ParserContext {
   private index = 0;
-  /** Monotonic cursor into `comments` — see `attachComments`'s doc comment. */
-  private commentIndex = 0;
+  /**
+   * Indices into `comments` already claimed by SOME container's
+   * `attachComments`/`collectDanglingComments`/switch-case-header pass.
+   * Comments are no longer consumed strictly in source order (see
+   * `peekComment`/`takeComment` below) — an ancestor container's comment can
+   * remain unconsumed while a nested container reaches past it to claim a
+   * LATER comment that is actually its own, so "already attached" has to be
+   * tracked per-index rather than via a single monotonic cursor.
+   */
+  private readonly consumedComments = new Set<number>();
   constructor(
     private readonly tokens: Token[],
     /** Out-of-band `//` / `/* *\/` comments in source order (see `lexer.ts`'s `RawComment`). */
@@ -784,17 +792,37 @@ class ParserContext {
     return tok ? tok.line : this.peek().line;
   }
 
-  /** Next not-yet-attached comment, without consuming it. */
-  peekComment(): RawComment | undefined {
-    return this.comments[this.commentIndex];
+  /**
+   * Next not-yet-attached comment whose line is `>= minLine`, without
+   * consuming it. A comment strictly before `minLine` belongs to an
+   * ANCESTOR container (or a not-yet-reached sibling) that has not run its
+   * own attachment pass yet — it is SKIPPED OVER (not consumed) rather than
+   * blocking the search, so it can never permanently hide a container's own,
+   * later comment behind it. See `attachComments`'s doc comment for the full
+   * ancestor/nested-container reasoning that makes this necessary.
+   */
+  peekComment(minLine: number): RawComment | undefined {
+    for (let i = 0; i < this.comments.length; i += 1) {
+      if (this.consumedComments.has(i)) continue;
+      const c = this.comments[i]!;
+      if (c.line < minLine) continue;
+      return c;
+    }
+    return undefined;
   }
 
-  /** Consume and return the next not-yet-attached comment. */
-  takeComment(): RawComment {
-    const c = this.comments[this.commentIndex];
-    this.commentIndex += 1;
-    // Non-null: callers only call this after `peekComment()` confirmed one exists.
-    return c!;
+  /** Consume and return the next not-yet-attached comment whose line is `>= minLine`. */
+  takeComment(minLine: number): RawComment {
+    for (let i = 0; i < this.comments.length; i += 1) {
+      if (this.consumedComments.has(i)) continue;
+      const c = this.comments[i]!;
+      if (c.line < minLine) continue;
+      this.consumedComments.add(i);
+      return c;
+    }
+    // Unreachable: callers only call this after `peekComment(minLine)` with
+    // the SAME `minLine` confirmed one exists.
+    throw new Error("takeComment: no unconsumed comment at or after the given line");
   }
 
   match(type: Token["type"], value?: string): boolean {
@@ -1955,11 +1983,15 @@ function parseSwitchStatement(ctx: ParserContext): Statement {
     // Comment(s) on the `case`/`default` keyword's OWN line or above it,
     // before any of this case's body statements — attach to the SwitchCase
     // record itself (a note on the branch), not to the first body statement.
+    // `ctx.peekComment(caseWindowStart)` skips over (without consuming) any
+    // earlier, not-yet-reached comment — see `ParserContext.peekComment`'s
+    // doc comment — so only the upper bound (`caseHead.line`) needs an
+    // explicit check here.
     const caseLeading: AttachedComment[] = [];
     while (true) {
-      const c = ctx.peekComment();
-      if (!c || c.line < caseWindowStart || c.line >= caseHead.line) break;
-      ctx.takeComment();
+      const c = ctx.peekComment(caseWindowStart);
+      if (!c || c.line >= caseHead.line) break;
+      ctx.takeComment(caseWindowStart);
       caseLeading.push({ ...c, blankLineBefore: c.line > lastLine + 1 });
       lastLine = c.endLine;
     }
@@ -2450,19 +2482,25 @@ function skipWhitespace(ctx: ParserContext): void {
  *     deliberately blank-line-separated header comment doesn't collapse
  *     against the code above it.
  *
- * Comments are consumed from `ctx`'s single shared, monotonically-advancing
- * cursor (`peekComment`/`takeComment`). That is safe ONLY because parsing is
- * strictly left-to-right and every container calls this exactly once,
- * immediately after its own statement list is fully built — a nested
- * container (e.g. an `if`'s consequent block) always finishes consuming "its"
- * comments before the enclosing container resumes and makes its own call.
+ * Comments are consumed from `ctx`'s shared comment list via
+ * `peekComment(minLine)`/`takeComment(minLine)`, which SKIP OVER (without
+ * consuming) any not-yet-attached comment whose line is `< minLine` — such a
+ * comment belongs to an ANCESTOR container (or a not-yet-reached sibling)
+ * that has not run its own attachment pass yet. This is load-bearing: a
+ * nested container's own comments are always LATER in source order than an
+ * unconsumed ancestor comment sitting above it, and the ancestor's call
+ * (`Program`-level `attachComments`, in particular) only runs at the very
+ * end of `parse()` — after every nested block already ran its own call
+ * inline. A single monotonically-advancing cursor (no skipping) would let
+ * that earlier, still-unconsumed ancestor comment permanently block every
+ * nested container from ever reaching its own, later comments.
  *
  * A comment with no following statement to attach to — the last thing in a
  * non-empty container, on its own line, not sharing the previous statement's
  * end line — is a documented, measured gap (see `KNOWN_COMMENT_GAPS` in
- * `tests/formatter-comments.test.ts`). It is still consumed here (never left
- * for an unrelated LATER container to misattribute it to one of ITS
- * statements) but its text is dropped.
+ * `tests/formatter-idempotency-sweep.test.ts`). It is still consumed here
+ * (never left for an unrelated LATER container to misattribute it to one of
+ * ITS statements) but its text is dropped.
  */
 function attachComments(
   ctx: ParserContext,
@@ -2486,15 +2524,14 @@ function attachComments(
   // (`Program`-level) container specifically: `parse()` only calls it once,
   // after every nested block has already been fully parsed — and every
   // nested block already ran ITS OWN `attachComments` call inline,
-  // chronologically EARLIER. Without this lower-bound guard, an inner block
-  // would greedily claim a header comment that sits many lines above it —
-  // before the block, its enclosing statement, and possibly several
-  // unrelated SIBLING statements — simply because nothing had consumed it
-  // yet. Every loop below stops (without consuming) the moment the next
-  // comment falls outside THIS container's own window, on either side,
-  // leaving it for whichever container's window actually contains it.
-  const inWindow = (c: RawComment): boolean =>
-    c.line >= containerStartLine && c.line < containerEndLineExclusive;
+  // chronologically EARLIER. `ctx.peekComment(containerStartLine)` /
+  // `ctx.takeComment(containerStartLine)` already SKIP OVER (without
+  // consuming) any such ancestor comment sitting ahead of the queue, so the
+  // loops below only need to additionally test the UPPER bound and whichever
+  // per-loop line condition applies; `inWindow` here means "at or past
+  // `containerStartLine`" is already true by construction — this checks the
+  // remaining "and still before `containerEndLineExclusive`" half.
+  const inWindow = (c: RawComment): boolean => c.line < containerEndLineExclusive;
 
   for (let i = 0; i < statements.length; i += 1) {
     const stmt = statements[i]!;
@@ -2503,9 +2540,9 @@ function attachComments(
     if (prevStmtEndLine !== null) {
       const trailing: AttachedComment[] = [];
       while (true) {
-        const c = ctx.peekComment();
+        const c = ctx.peekComment(containerStartLine);
         if (!c || !inWindow(c) || c.line !== prevStmtEndLine) break;
-        ctx.takeComment();
+        ctx.takeComment(containerStartLine);
         trailing.push({ ...c });
         lastTouchedLine = c.endLine;
       }
@@ -2514,9 +2551,9 @@ function attachComments(
 
     const leading: AttachedComment[] = [];
     while (true) {
-      const c = ctx.peekComment();
+      const c = ctx.peekComment(containerStartLine);
       if (!c || !inWindow(c) || c.line >= stmtStartLine) break;
-      ctx.takeComment();
+      ctx.takeComment(containerStartLine);
       leading.push({ ...c, blankLineBefore: c.line > lastTouchedLine + 1 });
       lastTouchedLine = c.endLine;
     }
@@ -2529,9 +2566,9 @@ function attachComments(
   if (prevStmtEndLine !== null) {
     const trailing: AttachedComment[] = [];
     while (true) {
-      const c = ctx.peekComment();
+      const c = ctx.peekComment(containerStartLine);
       if (!c || !inWindow(c) || c.line !== prevStmtEndLine) break;
-      ctx.takeComment();
+      ctx.takeComment(containerStartLine);
       trailing.push({ ...c });
     }
     if (trailing.length > 0) statements[statements.length - 1]!.trailingComments = trailing;
@@ -2541,9 +2578,9 @@ function attachComments(
   // attach to — drop it (documented gap above), but still consume it so an
   // unrelated later container never claims it.
   while (true) {
-    const c = ctx.peekComment();
+    const c = ctx.peekComment(containerStartLine);
     if (!c || !inWindow(c)) break;
-    ctx.takeComment();
+    ctx.takeComment(containerStartLine);
   }
 }
 
@@ -2561,12 +2598,13 @@ function collectDanglingComments(
   let lastLine = containerStartLine;
   const out: AttachedComment[] = [];
   while (true) {
-    const c = ctx.peekComment();
-    // Lower-bound guard: see `attachComments`'s `inWindow` doc comment — a
-    // comment before this container's own start line belongs to an
-    // ancestor that has not run its own attachment pass yet.
-    if (!c || c.line < containerStartLine || c.line >= containerEndLineExclusive) break;
-    ctx.takeComment();
+    // `ctx.peekComment(containerStartLine)` already skips over (without
+    // consuming) any ancestor comment sitting ahead of the queue — see
+    // `attachComments`'s `inWindow` doc comment — so only the upper bound
+    // needs checking here.
+    const c = ctx.peekComment(containerStartLine);
+    if (!c || c.line >= containerEndLineExclusive) break;
+    ctx.takeComment(containerStartLine);
     out.push({ ...c, blankLineBefore: c.line > lastLine + 1 });
     lastLine = c.endLine;
   }
