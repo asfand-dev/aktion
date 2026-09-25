@@ -67,6 +67,14 @@ describe("formatProgram — leading comment before a declaration", () => {
   });
 
   it("re-formats idempotently when the input carries comments", () => {
+    // A content assertion, not just an idempotency check: this exact shape —
+    // a comment ABOVE a container (the file-level `// header`) plus a
+    // SEPARATE comment INSIDE that same container's body (`// body note`) —
+    // is the nested-scope repro that let an ancestor comment's un-consumed
+    // position in the shared comment queue permanently block a nested
+    // container from ever reaching its own, later comment. Idempotency alone
+    // couldn't catch that: the bug dropped `// body note` on the FIRST pass
+    // already, so both passes agreed on the (wrong) output.
     const source = [
       "// header",
       "function inc(count) {",
@@ -77,11 +85,130 @@ describe("formatProgram — leading comment before a declaration", () => {
       '$app(Text("x"))',
       "",
     ].join("\n");
-    const first = formatProgram(source);
-    expect(first.errors).toEqual([]);
-    const second = formatProgram(first.formatted);
+    const { formatted, errors } = formatProgram(source);
+    expect(errors).toEqual([]);
+    expect(formatted).toBe(
+      [
+        "// header",
+        "function inc(count) {",
+        "  // body note",
+        "  return count + 1 // trailing",
+        "}",
+        "",
+        '$app(Text("x"))',
+        "",
+      ].join("\n"),
+    );
+    const second = formatProgram(formatted);
     expect(second.errors).toEqual([]);
-    expect(second.formatted).toBe(first.formatted);
+    expect(second.formatted).toBe(formatted);
+  });
+});
+
+describe("formatProgram — an ancestor's comment must not block a nested container's own comment", () => {
+  // Root cause this whole block guards against: `ParserContext` used to
+  // expose a single monotonic comment cursor. Every consumption loop
+  // `break`s as soon as the head of that queue is out of its own window —
+  // so a comment belonging to an ANCESTOR container (sitting earlier in the
+  // shared queue, not yet consumed because `Program`'s own attachment pass
+  // runs LAST) permanently blocked every nested container from ever
+  // reaching its own, later comments. Fixed by making the cursor skip
+  // forward past an out-of-window comment instead of stopping there — see
+  // `ParserContext.peekComment`'s doc comment in `src/parser/parser.ts`.
+
+  it("keeps a nested comment inside a function body when the function itself has a header comment", () => {
+    const source = [
+      "// file header",
+      "function foo() {",
+      "  // inner note",
+      "  bar()",
+      "}",
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const { formatted, errors } = formatProgram(source);
+    expect(errors).toEqual([]);
+    expect(formatted).toBe(
+      [
+        "// file header",
+        "function foo() {",
+        "  // inner note",
+        "  bar()",
+        "}",
+        "",
+        '$app(Text("x"))',
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps a nested comment in a second function, separated from the first by a top-level divider comment", () => {
+    const source = [
+      "function a() {",
+      "  // note A",
+      "  x()",
+      "}",
+      "",
+      "// section divider",
+      "function b() {",
+      "  // note B",
+      "  y()",
+      "}",
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const { formatted, errors } = formatProgram(source);
+    expect(errors).toEqual([]);
+    expect(formatted).toBe(
+      [
+        "function a() {",
+        "  // note A",
+        "  x()",
+        "}",
+        "",
+        "// section divider",
+        "function b() {",
+        "  // note B",
+        "  y()",
+        "}",
+        "",
+        '$app(Text("x"))',
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps a doubly-nested comment (comment on the outer block AND the if-block nested inside it)", () => {
+    const source = [
+      "function outer() {",
+      "  // outer note",
+      "  if (flag) {",
+      "    // inner note",
+      "    y()",
+      "  }",
+      "}",
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const { formatted, errors } = formatProgram(source);
+    expect(errors).toEqual([]);
+    expect(formatted).toBe(
+      [
+        "function outer() {",
+        "  // outer note",
+        "  if (flag) {",
+        "    // inner note",
+        "    y()",
+        "  }",
+        "}",
+        "",
+        '$app(Text("x"))',
+        "",
+      ].join("\n"),
+    );
   });
 });
 
@@ -227,7 +354,73 @@ describe("formatProgram — comment before an if / for / switch case", () => {
     expect(formatted).toContain("      // fallback note\n      return \"other\"");
   });
 
+  it("keeps a header comment on EVERY switch case, not just the first", () => {
+    // Root cause this test guards against: `caseEndLineExclusive` (the next
+    // case/default keyword's own line) used to be passed straight through as
+    // the CURRENT case body's `attachComments` upper bound. That call's
+    // "drop anything left in this window" cleanup then swallowed the NEXT
+    // case's own header-comment run before that case's `caseLeading` loop
+    // ever got a chance to claim it — so only `cases[0]` could ever carry a
+    // header comment. Fixed by stopping the body's own window just past its
+    // last real statement instead, letting an unclaimed trailing comment
+    // fall through to become the next case's leading comment.
+    const source = [
+      "function classify(n) {",
+      "  switch (n) {",
+      "    // first branch",
+      "    case 1:",
+      "      a()",
+      "      break",
+      "    // second branch",
+      "    case 2:",
+      "      b()",
+      "      break",
+      "    // fallback branch",
+      "    default:",
+      "      c()",
+      "      break",
+      "  }",
+      "}",
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const { formatted, errors } = formatProgram(source);
+    expect(errors).toEqual([]);
+    expect(formatted).toBe(
+      [
+        "function classify(n) {",
+        "  switch (n) {",
+        "    // first branch",
+        "    case 1:",
+        "      a()",
+        "      break",
+        "    // second branch",
+        "    case 2:",
+        "      b()",
+        "      break",
+        "    // fallback branch",
+        "    default:",
+        "      c()",
+        "      break",
+        "  }",
+        "}",
+        "",
+        '$app(Text("x"))',
+        "",
+      ].join("\n"),
+    );
+  });
+
   it("is idempotent for comments attached around if/for/switch", () => {
+    // A content assertion, not just an idempotency check: `// guard` and
+    // `// loop` each sit directly above a NESTED container (`if`, `for`)
+    // while an ANCESTOR container's own comment attachment pass hadn't run
+    // yet — the same nested-scope bug class as the test above, just with
+    // `if`/`for`/`switch` nesting instead of a plain function body. Before
+    // the fix, `// loop` was silently relocated to just above the `switch`
+    // statement instead of staying on the `for`, while idempotency still
+    // held (both passes agreed on the wrong placement).
     const source = [
       "function f(n, items) {",
       "  // guard",
@@ -247,11 +440,33 @@ describe("formatProgram — comment before an if / for / switch case", () => {
       '$app(Text("x"))',
       "",
     ].join("\n");
-    const first = formatProgram(source);
-    expect(first.errors).toEqual([]);
-    const second = formatProgram(first.formatted);
+    const { formatted, errors } = formatProgram(source);
+    expect(errors).toEqual([]);
+    expect(formatted).toBe(
+      [
+        "function f(n, items) {",
+        "  // guard",
+        "  if (n > 0) {",
+        "    // loop",
+        "    for (let item of items) {",
+        "      $util.log(item)",
+        "    }",
+        "  }",
+        "  switch (n) {",
+        "    // one",
+        "    case 1:",
+        "      return \"one\"",
+        "      break",
+        "  }",
+        "}",
+        "",
+        '$app(Text("x"))',
+        "",
+      ].join("\n"),
+    );
+    const second = formatProgram(formatted);
     expect(second.errors).toEqual([]);
-    expect(second.formatted).toBe(first.formatted);
+    expect(second.formatted).toBe(formatted);
   });
 });
 
