@@ -1,6 +1,7 @@
 /**
- * `formatProgram` / `printProgram` — configurable indentation (`FormatOptions`)
- * and the idempotency guarantee for desugared operator syntax.
+ * `formatProgram` / `printProgram` — configurable indentation, quote style,
+ * trailing commas and object curly spacing (`FormatOptions`), and the
+ * idempotency guarantee for desugared operator syntax.
  *
  * Backward compatibility is load-bearing here: `formatProgram(source)` with
  * no options is a real, published, already-depended-on API, so its output
@@ -100,6 +101,179 @@ describe("formatProgram — FormatOptions.indentWidth validation", () => {
     expect(errors).toEqual([]);
     expect(formatted).toContain("let [count, setCount] = $state(initial)");
     expect(formatted).not.toMatch(/\n +\S/);
+  });
+});
+
+describe("formatProgram — FormatOptions.quoteStyle: 'single'", () => {
+  const QUOTE_SAMPLE = [
+    "function Greeting(name) {",
+    '  const message = "hello world"',
+    "  return Text(message)",
+    "}",
+    "",
+    '$app(Greeting("friend"))',
+    "",
+  ].join("\n");
+
+  it("emits single-quoted strings instead of double", () => {
+    const { formatted, errors } = formatProgram(QUOTE_SAMPLE, { quoteStyle: "single" });
+    expect(errors).toEqual([]);
+    expect(formatted).toContain("'hello world'");
+    expect(formatted).toContain("Greeting('friend')");
+    // No double-quoted string literals should remain (import/effect/literal
+    // paths all route through the same quote choice).
+    expect(formatted).not.toMatch(/"[^`]*"/);
+  });
+
+  it("falls back to double quotes for a string containing a single quote but no double quote (avoidEscape)", () => {
+    const source = [
+      "function f() {",
+      `  return Text("it's ready")`,
+      "}",
+      "",
+      "$app(f())",
+      "",
+    ].join("\n");
+    const { formatted, errors } = formatProgram(source, { quoteStyle: "single" });
+    expect(errors).toEqual([]);
+    // Falling back to double quotes here avoids an ugly `'it\'s ready'`.
+    expect(formatted).toContain(`"it's ready"`);
+  });
+
+  it("escapes the single quote when the string contains both quote characters", () => {
+    const source = [
+      "function f() {",
+      `  return Text("she said \\"hi\\", it's great")`,
+      "}",
+      "",
+      "$app(f())",
+      "",
+    ].join("\n");
+    const { formatted, errors } = formatProgram(source, { quoteStyle: "single" });
+    expect(errors).toEqual([]);
+    // Both quote chars are present in the decoded value, so the avoidEscape
+    // fallback doesn't apply — single quotes win and the apostrophe is
+    // escaped, while the (now unnecessary) `"` escape is dropped.
+    expect(formatted).toContain(`'she said "hi", it\\'s great'`);
+  });
+
+  it("defaults to double quotes when quoteStyle is omitted", () => {
+    const { formatted } = formatProgram(QUOTE_SAMPLE);
+    expect(formatted).toContain('"hello world"');
+  });
+});
+
+describe("formatProgram — FormatOptions.trailingComma", () => {
+  const WRAPPED_ARRAY_SAMPLE = [
+    "function Menu() {",
+    '  const items = ["breakfast special with scrambled eggs and toasted sourdough bread", "lunch combo with crispy fries and a chilled beverage"]',
+    "  return Column(items)",
+    "}",
+    "",
+    "$app(Menu())",
+    "",
+  ].join("\n");
+
+  const WRAPPED_OBJECT_SAMPLE = [
+    "function Profile() {",
+    '  const config = { firstName: "Alexandria", lastName: "Constantinopoulos-Whitfield", roleTitle: "Senior Administrator" }',
+    "  return Text(config.firstName)",
+    "}",
+    "",
+    "$app(Profile())",
+    "",
+  ].join("\n");
+
+  it("adds no trailing comma by default on a wrapped array/object (unchanged behaviour)", () => {
+    const array = formatProgram(WRAPPED_ARRAY_SAMPLE);
+    expect(array.errors).toEqual([]);
+    expect(array.formatted).toMatch(/beverage"\n\s*\]/);
+    const object = formatProgram(WRAPPED_OBJECT_SAMPLE);
+    expect(object.errors).toEqual([]);
+    expect(object.formatted).toMatch(/Senior Administrator"\n\s*\}/);
+  });
+
+  it("adds a trailing comma after the last element of a wrapped array", () => {
+    const { formatted, errors } = formatProgram(WRAPPED_ARRAY_SAMPLE, { trailingComma: true });
+    expect(errors).toEqual([]);
+    expect(formatted).toMatch(/beverage",\n\s*\]/);
+  });
+
+  it("adds a trailing comma after the last property of a wrapped object", () => {
+    const { formatted, errors } = formatProgram(WRAPPED_OBJECT_SAMPLE, { trailingComma: true });
+    expect(errors).toEqual([]);
+    expect(formatted).toMatch(/Senior Administrator",\n\s*\}/);
+  });
+
+  it("never adds a trailing comma to an array/object that fits on one line", () => {
+    const { formatted, errors } = formatProgram(SAMPLE, { trailingComma: true });
+    expect(errors).toEqual([]);
+    expect(formatted).toContain('Button("Increment", { onClick: inc })])');
+  });
+});
+
+describe("formatProgram — FormatOptions.objectCurlySpacing: false", () => {
+  it("removes the space just inside a single-line object literal's braces", () => {
+    const { formatted, errors } = formatProgram(SAMPLE, { objectCurlySpacing: false });
+    expect(errors).toEqual([]);
+    expect(formatted).toContain("{onClick: inc}");
+    expect(formatted).not.toContain("{ onClick: inc }");
+  });
+
+  it("does not affect array literals, which never had inner-bracket spacing", () => {
+    const { formatted, errors } = formatProgram(SAMPLE, { objectCurlySpacing: false });
+    expect(errors).toEqual([]);
+    expect(formatted).toContain("Column([Text(");
+  });
+
+  it("defaults to spaced braces when omitted", () => {
+    const { formatted } = formatProgram(SAMPLE);
+    expect(formatted).toContain("{ onClick: inc }");
+  });
+});
+
+describe("formatProgram — all new FormatOptions compose together with indentStyle: 'tab'", () => {
+  it("applies tabs, single quotes, trailing commas and no object curly spacing without interference", () => {
+    const source = [
+      "function Profile() {",
+      '  const config = { firstName: "Alexandria", lastName: "Constantinopoulos-Whitfield", roleTitle: "Senior Administrator" }',
+      "  return Text(config.firstName)",
+      "}",
+      "",
+      "$app(Profile())",
+      "",
+    ].join("\n");
+    const { formatted, errors } = formatProgram(source, {
+      indentStyle: "tab",
+      quoteStyle: "single",
+      trailingComma: true,
+      objectCurlySpacing: false,
+    });
+    expect(errors).toEqual([]);
+    // Tabs, not spaces, for indentation. (A plain `Assignment` node prints
+    // as bare `x = value` with no `const`/`let` keyword — only destructuring
+    // gets `let`, per the printer's existing `Assignment`/`DestructureStatement`
+    // cases.)
+    expect(formatted).toContain("\tconfig = {");
+    expect(formatted).not.toMatch(/\n {2,}\S/);
+    // Single-quoted strings.
+    expect(formatted).toContain("'Alexandria'");
+    expect(formatted).not.toMatch(/"[^`]*"/);
+    // Trailing comma on the wrapped object.
+    expect(formatted).toMatch(/'Senior Administrator',\n\t\}/);
+    // No inner brace spacing (multi-line object braces don't carry spacing
+    // regardless of this option, but the option must still not add any).
+    expect(formatted).not.toContain("{ firstName");
+
+    // And the composed output must still be idempotent.
+    const second = formatProgram(formatted, {
+      indentStyle: "tab",
+      quoteStyle: "single",
+      trailingComma: true,
+      objectCurlySpacing: false,
+    });
+    expect(second.errors).toEqual([]);
+    expect(second.formatted).toBe(formatted);
   });
 });
 
