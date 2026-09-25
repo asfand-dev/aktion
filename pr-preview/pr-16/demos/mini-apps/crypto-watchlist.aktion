@@ -1,0 +1,70 @@
+// Crypto Watchlist — live market prices that refresh themselves in the background.
+// Starting point for: any polled live-data dashboard (stocks, server metrics, sports scores).
+// Uses: $query({ refetchInterval, refetchOnFocus }), Sparkline, $util.currency, sx hover, animate.
+$app(Column([header, view], { gap: "lg", padding: "md" }))
+
+coinIds = "bitcoin,ethereum,solana,cardano,dogecoin,polkadot"
+
+// Polls CoinGecko every 60s, refetches when you return to the tab or come back online.
+$market = $query({
+  url: `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${coinIds}&sparkline=true&price_change_percentage=24h`,
+  key: "crypto-market",
+  refetchInterval: 60000,
+  refetchOnFocus: true,
+  refetchOnReconnect: true
+})
+
+money = n => n >= 1 ? $util.currency(n, "USD") : `$${n}`
+trendTone = chg => chg >= 0 ? "success" : "danger"
+
+header = PageHeader("Crypto Watchlist", {
+  subtitle: "CoinGecko market data · auto-refreshes every minute",
+  badge: Badge($market.loading ? "Refreshing…" : "Live", { tone: $market.loading ? "warning" : "success", icon: "satellite-dish" }),
+  actions: [Button("Refresh now", { variant: "secondary", size: "sm", icon: "rotate-right", onClick: () => $market.refetch() })]
+})
+
+coinRow = (c, i) => Card([
+  Row([
+    Image(c.image, { alt: c.name, sx: { w: "36px", h: "36px" } }),
+    StackItem(Column([
+      Text(c.name, { variant: "body-heavy" }),
+      Text(c.symbol.toUpperCase(), { variant: "small", tone: "muted" })
+    ], { gap: "none" }), { grow: 1 }),
+    Column([
+      Text(money(c.current_price), { variant: "large-heavy" }),
+      Badge(`${c.price_change_percentage_24h >= 0 ? "+" : ""}${Math.round(c.price_change_percentage_24h * 100) / 100}%`, {
+        tone: trendTone(c.price_change_percentage_24h), size: "sm",
+        icon: c.price_change_percentage_24h >= 0 ? "arrow-trend-up" : "arrow-trend-down"
+      })
+    ], { gap: "xs", align: "end" })
+  ], { gap: "md", align: "center" }),
+  Sparkline({ values: c.sparkline_in_7d.price.filter((p, j) => j % 6 == 0), tone: trendTone(c.price_change_percentage_24h) }),
+  Row([
+    Text(`Market cap ${$util.format(c.market_cap, "compact")}`, { variant: "small", tone: "muted" }),
+    Spacer(),
+    Text(`Vol ${$util.format(c.total_volume, "compact")}`, { variant: "small", tone: "muted" })
+  ])
+], {
+  key: c.id,
+  animate: { preset: "fade-up", delay: i * 60 },
+  sx: { states: { hover: { translateY: "-2px", shadow: "lg" } } }
+})
+
+board = Grid(($market.data ?? []).map((c, i) => coinRow(c, i)), { columns: { base: 1, md: 2, lg: 3 }, gap: "lg" })
+
+summary = Show(!!$market.data, {
+  children: Card([
+    SectionHeader("Market snapshot", { eyebrow: "TOTALS" }),
+    MetricStrip([
+      Metric($util.format($util.sum(($market.data ?? []).map(c => c.market_cap)), "compact"), { label: "Combined cap" }),
+      Metric(String(($market.data ?? []).filter(c => c.price_change_percentage_24h >= 0).length), { label: "Up today", countUp: true }),
+      Metric(String(($market.data ?? []).filter(c => c.price_change_percentage_24h < 0).length), { label: "Down today", gradient: false, countUp: true })
+    ])
+  ])
+})
+
+view = Async($market, {
+  loading: LoadingState("Fetching prices…", { description: "Talking to CoinGecko" }),
+  error: ErrorState("Couldn't load market data", { description: "CoinGecko may be rate-limiting — try again shortly.", actions: [Button("Retry", { onClick: () => $market.refetch(), variant: "primary", icon: "rotate-right" })] }),
+  data: Column([summary, board], { gap: "lg" })
+})

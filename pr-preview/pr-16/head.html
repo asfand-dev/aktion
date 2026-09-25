@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Document head &amp; SEO · Aktion</title>
+  <meta name="description" content="$head() — a reactive document-head manager. Set the title, meta description, canonical link, Open Graph / Twitter cards, JSON-LD, and <html> attributes per route. Per-route heads compose with the router, renderToString emits the resolved head so SSR pages are crawlable, and every field is allow-listed because $head writes into the host page." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body data-page="head">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Advanced</span>
+        <h1>Document head &amp; SEO.</h1>
+        <p class="lead">
+          <code>$head({ &hellip; })</code> is a reactive document-head manager.
+          It sets <code>document.title</code>, meta tags, the canonical link,
+          Open Graph / Twitter cards, JSON-LD, and <code>&lt;html&gt;</code>
+          attributes &mdash; and the <strong>same resolved head feeds
+          <code>renderToString</code></strong>, so server-rendered pages are
+          crawlable and show rich social previews. Anything that has to rank in
+          search or render a link preview &mdash; a marketing page, a blog post,
+          a docs site, an e-commerce PDP &mdash; needs this.
+        </p>
+      </header>
+
+      <h2 id="quick">Quick start</h2>
+      <p>
+        Call <code>$head({ &hellip; })</code> from anywhere that runs during a
+        render &mdash; usually the top of a page component. Values can be
+        reactive: read <code>$state</code> and the head re-applies when it
+        changes.
+      </p>
+<pre><code>$product = { name: "Aeron chair", summary: "Ergonomic seating, built to last.", image: "/og/aeron.png", price: 1395 }
+$canonical = "/products/aeron-chair"
+
+function ProductPage() {
+  $head({
+    title: $product.name,
+    titleTemplate: "%s — Acme",              // wraps the title in THIS call only
+    meta: { description: $product.summary, "theme-color": "#111" },
+    og: { title: $product.name, image: $product.image, type: "product" },
+    twitter: { card: "summary_large_image" },
+    link: [{ rel: "canonical", href: $canonical }],
+    jsonLd: { "@type": "Product", name: $product.name, offers: { price: $product.price } }
+  })
+  return Column([Heading($product.name), Text($product.summary)])
+}
+
+$app(ProductPage())</code></pre>
+      <p>
+        That one call emits nine tags &mdash; a templated
+        <code>&lt;title&gt;</code>, two <code>&lt;meta name&gt;</code>, three
+        <code>og:*</code> properties, one <code>twitter:card</code>, the
+        canonical <code>&lt;link&gt;</code>, and a JSON-LD
+        <code>&lt;script&gt;</code>:
+      </p>
+<pre><code>&lt;title&gt;Aeron chair — Acme&lt;/title&gt;
+&lt;meta name="description" content="Ergonomic seating, built to last."&gt;
+&lt;meta name="theme-color" content="#111"&gt;
+&lt;meta property="og:title" content="Aeron chair"&gt;
+&lt;meta property="og:image" content="/og/aeron.png"&gt;
+&lt;meta property="og:type" content="product"&gt;
+&lt;meta name="twitter:card" content="summary_large_image"&gt;
+&lt;link rel="canonical" href="/products/aeron-chair"&gt;
+&lt;script type="application/ld+json"&gt;{"@context":"https://schema.org","@type":"Product","name":"Aeron chair","offers":{"price":1395}}&lt;/script&gt;</code></pre>
+      <div class="callout">
+        <p>
+          <strong>Call <code>$head</code> where it renders.</strong> Put it
+          inside a component body (or the page tree) so it runs on every render
+          pass. A bare top-level <code>$head(&hellip;)</code> that nothing
+          evaluates won&rsquo;t fire &mdash; like any expression, it has to be
+          reached during rendering.
+        </p>
+      </div>
+
+      <h2 id="config">Configuration</h2>
+      <p>
+        Every field is optional and unknown keys are ignored. The
+        <code>og</code> and <code>twitter</code> groups exist so you don&rsquo;t
+        repeat the <code>og:</code> / <code>twitter:</code> prefix &mdash; write
+        it yourself and it isn&rsquo;t doubled.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Key</th><th>Type</th><th>Renders</th></tr></thead>
+        <tbody>
+          <tr><td><code>title</code></td><td><code>string</code></td><td>Sets <code>document.title</code> and <code>&lt;title&gt;</code>. Ignored when the value is not a string.</td></tr>
+          <tr><td><code>titleTemplate</code></td><td><code>string</code></td><td>Wraps <code>title</code>, e.g. <code>"%s — Acme"</code>. The <strong>first</strong> <code>%s</code> is replaced; later ones are left as literal text. Only applies to a <code>title</code> passed in the <strong>same call</strong> &mdash; see <a href="#title-template">Why the template didn&rsquo;t apply</a>.</td></tr>
+          <tr><td><code>meta</code></td><td><code>object</code></td><td>Named meta tags: <code>{ description, "theme-color", robots }</code> → <code>&lt;meta name content&gt;</code>. A <code>charset</code> key emits <code>&lt;meta charset&gt;</code> instead. Keys never become <code>http-equiv</code> &mdash; see <a href="#meta-names">meta keys</a>.</td></tr>
+          <tr><td><code>og</code></td><td><code>object</code></td><td>Open Graph: <code>{ title, image, type, url }</code> → <code>&lt;meta property="og:KEY"&gt;</code>. A key that already starts with <code>og:</code> is used as&#8209;is.</td></tr>
+          <tr><td><code>twitter</code></td><td><code>object</code></td><td>Twitter cards: <code>{ card, site, creator }</code> → <code>&lt;meta name="twitter:KEY"&gt;</code>. A key that already starts with <code>twitter:</code> is used as&#8209;is.</td></tr>
+          <tr><td><code>link</code></td><td><code>object | object[]</code></td><td>One <code>&lt;link&gt;</code> descriptor or an array of them, e.g. <code>[{ rel: "canonical", href }, { rel: "alternate", hreflang: "fr", href }]</code>. <code>rel</code> and <code>href</code> are both allow-listed &mdash; see <a href="#link-rels">link entries</a>.</td></tr>
+          <tr><td><code>jsonLd</code></td><td><code>object | object[]</code></td><td>JSON-LD structured data → <code>&lt;script type="application/ld+json"&gt;</code>. <code>@context</code> defaults to <code>https://schema.org</code>. Non-objects are skipped.</td></tr>
+          <tr><td><code>base</code></td><td><code>string | object</code></td><td><code>&lt;base href&gt;</code> for the document, as a string or <code>{ href }</code>. Same-origin relative paths only &mdash; see <a href="#base">base</a>.</td></tr>
+          <tr><td><code>htmlAttrs</code></td><td><code>object</code></td><td>Attributes for <code>&lt;html&gt;</code>, e.g. <code>{ lang: "en", dir: "ltr" }</code>. Five names plus <code>data-*</code> &mdash; see <a href="#html-attrs">htmlAttrs</a>. In SSR these come back as <code>headAttrs</code> for the page shell.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="reactive">Reactive heads</h2>
+      <p>
+        Because <code>$head</code> runs during render and reads your state, the
+        head is just another reactive output. Change the state and the title /
+        meta update live &mdash; no manual DOM writes.
+      </p>
+<pre><code>$unread = 3
+
+function Inbox() {
+  $head({ title: $unread &gt; 0 ? `(${$unread}) Inbox` : "Inbox" })
+  return Column([ /* … */ ])
+}</code></pre>
+      <p>
+        Increment <code>$unread</code> and the browser tab re-titles itself on
+        the next commit. Nothing else changes: <code>$head</code> replaces its
+        whole managed tag set on every commit rather than diffing tag by tag.
+      </p>
+
+      <h2 id="composition">Per-route composition</h2>
+      <p>
+        Multiple <code>$head(&hellip;)</code> calls in one render pass
+        <strong>merge in call order</strong> &mdash; later calls win on
+        conflicts. A component&rsquo;s call runs when that component renders, so
+        a page nested inside a layout contributes <em>after</em> the layout: the
+        page wins. This is the layout-plus-page pattern.
+      </p>
+<pre><code>function Layout(page) {
+  $head({                                  // site-wide defaults
+    meta: { "theme-color": "#111", description: "Acme builds tools for teams." },
+    og:   { type: "website", image: "/og-default.png" }
+  })
+  return Column([ Navbar(), page, Footer() ])
+}
+
+function AboutPage() {
+  $head({
+    title: "About",
+    titleTemplate: "%s — Acme",            // keep the template WITH the title
+    meta: { description: "Who we are and why." }
+  })
+  return Column([ Text("About Acme") ])
+}
+
+$app(Layout(AboutPage()))
+// → &lt;title&gt;About — Acme&lt;/title&gt;, description "Who we are and why.",
+//   and the layout's theme-color + default OG image survive the merge.</code></pre>
+      <p>
+        Merging is per field, not per call &mdash; the layout&rsquo;s
+        <code>theme-color</code> survives because the page never mentions it:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Field</th><th>Merge rule</th></tr></thead>
+        <tbody>
+          <tr><td><code>title</code>, <code>base</code></td><td>Last call that set it wins.</td></tr>
+          <tr><td><code>meta</code>, <code>og</code>, <code>twitter</code>, <code>htmlAttrs</code></td><td>Shallow per-key merge &mdash; last writer of each key wins, unmentioned keys survive.</td></tr>
+          <tr><td><code>link</code></td><td>Appended, then de-duplicated on <code>rel</code> + <code>href</code> + <code>hreflang</code>. The <strong>first</strong> occurrence is kept, so a layout and a page declaring the same canonical emit it once.</td></tr>
+          <tr><td><code>jsonLd</code></td><td>Appended &mdash; every entry is kept, none overwrite. Two calls give two <code>&lt;script&gt;</code> blocks.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        When the route changes, the new page&rsquo;s render contributes a fresh
+        head and the previous route&rsquo;s tags are replaced &mdash; titles
+        don&rsquo;t pile up, and a route that did not render this pass
+        contributes nothing at all. See <a href="routing.html">Routing</a> for
+        the router surface.
+      </p>
+
+      <h3 id="title-template">Why the template didn&rsquo;t apply</h3>
+      <p>
+        <code>titleTemplate</code> is resolved <strong>inside the call that
+        supplies it</strong>, not across the merge. A layout that owns the
+        template and a page that owns the title therefore never meet, and the
+        title ships bare:
+      </p>
+<pre><code>function Layout(page) {
+  $head({
+    titleTemplate: "%s — Acme",             // ⚠ no `title` here, so nothing to wrap
+    meta: { description: "Acme builds tools for teams." }
+  })
+  return Column([page])
+}
+
+function AboutPage() {
+  $head({ title: "About", meta: { description: "Who we are and why." } })
+  return Column([Text("About Acme")])
+}
+
+$app(Layout(AboutPage()))
+// → &lt;title&gt;About&lt;/title&gt;              ← the "— Acme" suffix is gone
+//   &lt;meta name="description" content="Who we are and why."&gt;</code></pre>
+      <p>
+        The fix is the version in the section above: pass
+        <code>titleTemplate</code> in the same call as <code>title</code>. If
+        every page needs the same suffix, put the pair in one shared helper the
+        pages call, rather than splitting it across a layout boundary.
+      </p>
+
+      <h2 id="limits">What <code>$head</code> will and will not emit</h2>
+      <p>
+        <code>$head</code> is the one runtime API that writes
+        <strong>outside</strong> the app&rsquo;s shadow root, into the host
+        page&rsquo;s <code>&lt;head&gt;</code> and <code>&lt;html&gt;</code>.
+        Its blast radius is the whole embedding page, so every field is
+        allow-listed rather than filtered: a value either matches a known-inert
+        shape or it is dropped.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Field</th><th>What survives</th><th>What is dropped</th></tr></thead>
+        <tbody>
+          <tr><td><code>title</code> / <code>titleTemplate</code></td><td>Strings.</td><td>Any non-string value &mdash; the field is ignored.</td></tr>
+          <tr><td><code>meta</code></td><td>Keys matching <code>/^[a-zA-Z][a-zA-Z0-9_.:-]*$/</code>.</td><td>Keys starting with <code>on</code>, and keys with spaces, quotes or <code>=</code>.</td></tr>
+          <tr><td><code>link</code></td><td>Entries whose <code>rel</code> is one of 17 values <em>and</em> whose <code>href</code> survives sanitising.</td><td>Every other <code>rel</code>; entries with no usable <code>href</code>; attributes outside the nine allowed.</td></tr>
+          <tr><td><code>base</code></td><td>A same-origin relative path.</td><td>Anything carrying a scheme, <code>//host/&hellip;</code>, or one of <code>\ &lt; &gt; " '</code>.</td></tr>
+          <tr><td><code>htmlAttrs</code></td><td><code>lang</code>, <code>dir</code>, <code>class</code>, <code>translate</code>, <code>id</code>, and any <code>data-*</code>.</td><td><code>style</code>, <code>on*</code>, and every other name.</td></tr>
+          <tr><td><code>jsonLd</code></td><td>Objects, and arrays of objects.</td><td>Non-objects. <code>&lt;</code> is escaped in the serialised JSON either way.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The reasoning behind each list lives on
+        <a href="security.html">Security &amp; the trust model</a>; the rules
+        themselves are below.
+      </p>
+
+      <h3 id="link-rels">link &mdash; 17 allowed <code>rel</code> values</h3>
+      <p>
+        A <code>link</code> entry is kept only when its trimmed, lower-cased
+        <code>rel</code> is one of these:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Group</th><th>Allowed <code>rel</code></th></tr></thead>
+        <tbody>
+          <tr><td>Document relationships</td><td><code>canonical</code>, <code>alternate</code>, <code>prev</code>, <code>next</code>, <code>author</code>, <code>license</code>, <code>help</code>, <code>search</code>, <code>me</code></td></tr>
+          <tr><td>Icons &amp; app metadata</td><td><code>icon</code>, <code>shortcut icon</code>, <code>apple-touch-icon</code>, <code>apple-touch-icon-precomposed</code>, <code>mask-icon</code>, <code>manifest</code></td></tr>
+          <tr><td>Connection hints</td><td><code>dns-prefetch</code>, <code>preconnect</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        <strong><code>stylesheet</code>, <code>preload</code>,
+        <code>modulepreload</code>, <code>prefetch</code>,
+        <code>prerender</code> and <code>import</code> are dropped.</strong>
+        They are not metadata &mdash; a stylesheet is attacker CSS over the
+        entire host page, and the preload family fetches arbitrary origins with
+        <code>as=script</code> priming a real script load. If you used
+        <code>$head</code> to inject a stylesheet, that no longer works.
+      </p>
+      <p>Each surviving entry is then vetted attribute by attribute:</p>
+      <ul>
+        <li><strong><code>href</code> is required.</strong> Fragments
+          (<code>#&hellip;</code>), root-relative (<code>/&hellip;</code>),
+          query-only (<code>?&hellip;</code>) and dot-relative
+          (<code>./&hellip;</code>) values pass through verbatim; otherwise only
+          an <code>http:</code> or <code>https:</code> URL survives. Control
+          characters are stripped first, and protocol-relative
+          <code>//host/&hellip;</code> is rejected. An entry whose
+          <code>href</code> does not survive is dropped whole &mdash; you get no
+          <code>&lt;link&gt;</code>, not a broken one.</li>
+        <li><strong>Nine other attributes are allowed:</strong>
+          <code>as</code>, <code>type</code>, <code>sizes</code>,
+          <code>media</code>, <code>hreflang</code>, <code>color</code>,
+          <code>title</code>, <code>crossorigin</code>,
+          <code>referrerpolicy</code>. Anything else &mdash; including
+          <code>integrity</code> &mdash; is dropped rather than guessed at.</li>
+        <li><strong>Attribute names are validated too</strong>, and a name
+          starting with <code>on</code> is refused. This is what stops a name
+          from smuggling a second attribute into the SSR output, where names are
+          serialised outside quotes.</li>
+      </ul>
+      <div class="callout">
+        <h4>Loading a web font</h4>
+        <p>
+          <strong>Fonts have their own vetted path.</strong> Since
+          <code>rel: "stylesheet"</code> is not available, load web fonts with
+          <code>$theme({ fonts: { import: [&hellip;] } })</code>: it parses the
+          shorthand, accepts only letter/digit/space family names and integer
+          weights 100&ndash;900, and <em>constructs</em> a
+          <code>fonts.googleapis.com</code> URL rather than taking one from your
+          program.
+        </p>
+      </div>
+<pre><code>$app(Column([
+  $theme({ fonts: { import: ["Inter:400,700", "JetBrains Mono"] } }),
+  Text("Rendered in Inter, loaded without a $head link.")
+]))</code></pre>
+      <p>
+        That injects a single <code>&lt;link rel="stylesheet"&gt;</code> into
+        <code>document.head</code>, once per unique URL, and font faces loaded
+        into the document are visible inside the shadow root. See
+        <a href="themes.html">Themes &amp; tokens</a> for the rest of the
+        <code>$theme</code> surface.
+      </p>
+      <p>
+        For a third-party stylesheet that is <em>not</em> a font &mdash; a
+        widget&rsquo;s own CSS shipped next to its SDK &mdash; use
+        <a href="interop.html#script"><code>$script({ src })</code></a> instead.
+        It loads a <code>.css</code> URL as a stylesheet, de-duplicates per
+        <code>src</code>, and gives you a <code>ready</code> flag to gate on.
+      </p>
+
+      <h3 id="html-attrs">htmlAttrs &mdash; five names plus <code>data-*</code></h3>
+      <p>
+        <code>htmlAttrs</code> sets attributes on the host page&rsquo;s
+        <code>&lt;html&gt;</code> element. Localisation and styling hooks only:
+        <code>lang</code>, <code>dir</code>, <code>class</code>,
+        <code>translate</code>, <code>id</code>, and any <code>data-*</code> key.
+        Names are lower-cased before they are stored.
+      </p>
+<pre><code>$app(Column([
+  $head({ htmlAttrs: { lang: "en", dir: "rtl", class: "dark", "data-theme": "midnight" } }),
+  Text("All four survive.")
+]))</code></pre>
+      <p>
+        <strong><code>style</code> is deliberately excluded</strong>, and so is
+        anything starting with <code>on</code>. A program that could set
+        <code>&lt;html style&gt;</code> could paint a full-viewport overlay over
+        the host page &mdash; a clickjacking surface &mdash; and beacon data out
+        through a <code>background-image</code> URL. Style the app itself with
+        <a href="themes.html"><code>$theme</code></a> or
+        <a href="sx.html"><code>sx</code></a> instead.
+      </p>
+
+      <h3 id="base">base &mdash; same-origin paths only</h3>
+      <p>
+        <code>base</code> accepts a relative path and nothing else. Any scheme
+        at all &mdash; including <code>https:</code> &mdash; plus
+        protocol-relative <code>//host/&hellip;</code> and the characters
+        <code>\ &lt; &gt; " '</code> are rejected.
+      </p>
+<pre><code>$app(Column([
+  $head({ base: "/app/" }),                 // ✅ → &lt;base href="/app/"&gt;
+  Text("Relative URLs now resolve against /app/.")
+]))
+// $head({ base: "https://cdn.example.com/" })   ❌ dropped — carries a scheme</code></pre>
+      <p>
+        The reason is scope: <code>&lt;base&gt;</code> rewrites how the
+        <em>host page</em> resolves every relative URL it has &mdash; script
+        <code>src</code>, form <code>action</code>,
+        <code>fetch("/api/&hellip;")</code>. A cross-origin base would hand the
+        whole embedding application to another origin, which is not something a
+        head manager should be able to do.
+      </p>
+
+      <h3 id="meta-names">meta keys always become <code>name</code></h3>
+      <p>
+        Every <code>meta</code> key is emitted as the <em>value</em> of a
+        <code>name</code> attribute. There is no way to reach
+        <code>http-equiv</code>, so a program cannot inject a
+        <code>refresh</code> redirect or a relaxed
+        <code>Content-Security-Policy</code> into the host document. The single
+        exception is <code>charset</code>, which emits
+        <code>&lt;meta charset&gt;</code>.
+      </p>
+<pre><code>$app(Column([
+  $head({ meta: { description: "Every invoice, one page.", "http-equiv": "refresh" } }),
+  Text("Invoices")
+]))</code></pre>
+      <p>The <code>http-equiv</code> key survives, but only as inert data:</p>
+<pre><code>&lt;meta name="description" content="Every invoice, one page."&gt;
+&lt;meta name="http-equiv" content="refresh"&gt;   &lt;!-- a name, not a directive --&gt;</code></pre>
+
+      <h3 id="silent">Rejections are silent</h3>
+      <p>
+        This is the part worth remembering:
+        <strong>a rejected field is dropped at runtime with no console warning,
+        and the validator does not flag it either.</strong> The program parses,
+        validates, renders, and simply emits fewer tags than you wrote.
+      </p>
+<pre><code>$app(Column([
+  $head({
+    title: "Invoices",
+    meta: { description: "Every invoice, one page." },
+    link: [
+      { rel: "canonical", href: "/invoices" },
+      { rel: "stylesheet", href: "/print.css" },      // dropped — rel not allowed
+      { rel: "preload", href: "/hero.woff2", as: "font" }  // dropped — rel not allowed
+    ],
+    base: "https://cdn.example.com/",                // dropped — has a scheme
+    htmlAttrs: { lang: "en", style: "filter: invert(1)" }  // style dropped
+  }),
+  Text("Invoices")
+]))</code></pre>
+      <p>What actually reaches the page:</p>
+<pre><code>&lt;title&gt;Invoices&lt;/title&gt;
+&lt;meta name="description" content="Every invoice, one page."&gt;
+&lt;link rel="canonical" href="/invoices"&gt;
+&lt;!-- headAttrs → { "lang": "en" } --&gt;</code></pre>
+      <p>
+        So when a tag you asked for never appears, check it against the lists
+        above before looking anywhere else &mdash; nothing in the toolchain will
+        tell you it was refused.
+      </p>
+
+      <h2 id="ssr">Server-side rendering</h2>
+      <p>
+        <code>renderToString</code> evaluates your program and returns the
+        resolved head alongside the HTML, so you can inject a crawlable
+        <code>&lt;head&gt;</code> into your page shell:
+      </p>
+<pre><code>import { renderToString } from "aktion-runtime";
+
+const { html, state, head, headAttrs } = renderToString(source);
+
+const page = `&lt;!doctype html&gt;
+&lt;html ${Object.entries(headAttrs).map(([k, v]) =&gt; `${k}="${v}"`).join(" ")}&gt;
+  &lt;head&gt;
+    &lt;meta charset="utf-8"&gt;
+    ${head}                          &lt;!-- resolved &lt;title&gt;, meta, OG, JSON-LD --&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    ${html}
+    &lt;script&gt;window.__AKTION_STATE__ = ${JSON.stringify(state).replace(/&lt;/g, "\\u003c")}&lt;/script&gt;
+  &lt;/body&gt;
+&lt;/html&gt;`;</code></pre>
+      <p>Those four fields are the whole result:</p>
+      <table class="signature-table">
+        <thead><tr><th><code>renderToString</code> result</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>html</code></td><td>The rendered application markup, wrapped in a single container element unless you pass <code>{ container: false }</code>.</td></tr>
+          <tr><td><code>state</code></td><td>State snapshot to ship for hydration.</td></tr>
+          <tr><td><code>head</code></td><td>The resolved <code>&lt;head&gt;</code> markup (title, meta, OG, Twitter, links, JSON-LD) emitted by every <code>$head(&hellip;)</code> that ran. <strong>Empty string when none ran.</strong></td></tr>
+          <tr><td><code>headAttrs</code></td><td><code>&lt;html&gt;</code> attributes contributed via <code>$head({ htmlAttrs })</code>, already allow-listed. <code>{}</code> when none ran.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Pending contributions are flushed synchronously when <code>head</code>
+        or <code>headAttrs</code> is read, so SSR never races the microtask
+        commit. <code>renderToStaticMarkup(source)</code> returns only the
+        <code>html</code> string &mdash; reach for it when the page is fully
+        static and you do not need to hydrate. Both require a DOM: register
+        <code>happy-dom</code> or <code>jsdom</code> on <code>globalThis</code>
+        in your Node entry, or <code>renderToString</code> throws. A program
+        that fails to parse yields an empty container with
+        <code>head: ""</code> and <code>headAttrs: {}</code> rather than
+        throwing.
+      </p>
+      <div class="callout">
+        <h4>Escape the state snapshot yourself</h4>
+        <p>
+          <strong><code>state</code> is your data, not markup.</strong> The
+          runtime escapes everything it emits into <code>head</code>, but the
+          hydration snapshot is serialised by <em>you</em> &mdash; a
+          <code>&lt;/script&gt;</code> inside a string value would close the tag
+          early. Escape <code>&lt;</code> to <code>\u003c</code> as shown
+          above, and see <a href="security.html">Security &amp; the trust
+          model</a> for why state that came from an HTTP response counts as
+          untrusted.
+        </p>
+      </div>
+      <p>
+        The client re-applies the same head on hydration, so the title /
+        meta you served and the title / meta the app manages stay in sync. See
+        <a href="deployment.html">Production &amp; deployment</a> for the full
+        SSR + hydration flow.
+      </p>
+
+      <h2 id="recipes">Recipes</h2>
+
+      <h3 id="canonical">Canonical + alternates for i18n</h3>
+      <p>
+        One canonical plus one <code>alternate</code> per locale. The
+        de-duplication key includes <code>hreflang</code>, so alternates for
+        different locales never collapse into each other.
+      </p>
+<pre><code>$head({
+  link: [
+    { rel: "canonical", href: $url },
+    { rel: "alternate", hreflang: "en", href: $urlEn },
+    { rel: "alternate", hreflang: "fr", href: $urlFr }
+  ]
+})</code></pre>
+
+      <h3 id="jsonld">Article JSON-LD for rich results</h3>
+      <p>
+        <code>jsonLd</code> takes a plain object; <code>@context</code> is
+        filled in for you unless the object already has one.
+      </p>
+<pre><code>$head({
+  title: $post.title,
+  meta:  { description: $post.excerpt },
+  og:    { title: $post.title, type: "article", image: $post.cover },
+  jsonLd: {
+    "@type": "Article",
+    headline: $post.title,
+    author:   { "@type": "Person", name: $post.author },
+    datePublished: $post.date
+  }
+})</code></pre>
+
+      <h3 id="noindex">Blocking indexing on a staging build</h3>
+      <p>
+        <code>robots</code> is an ordinary <code>meta</code> key, so it is a
+        one-liner driven by whatever flag your build sets.
+      </p>
+<pre><code>$head({ meta: { robots: $isProd ? "index,follow" : "noindex,nofollow" } })</code></pre>
+      <p>
+        Because the value is reactive, flipping <code>$isProd</code> updates the
+        tag in place &mdash; useful when the same bundle serves preview and
+        production from one environment variable.
+      </p>
+
+      <h2 id="notes">Notes &amp; gotchas</h2>
+      <ul>
+        <li><strong>Rejected fields never warn.</strong> Nothing logs, nothing
+          validates &mdash; see <a href="#silent">Rejections are silent</a>.
+          This is the first thing to check when a tag does not appear.</li>
+        <li><strong>Managed tags are owned by Aktion.</strong> Every tag
+          <code>$head</code> injects carries <code>data-rui-head</code>. On each
+          commit the manager removes every <code>[data-rui-head]</code> node in
+          <code>document.head</code> and appends the new set &mdash; a whole
+          replacement, not a diff &mdash; and the same sweep runs on re-plan and
+          disconnect, so a torn-down program never leaves a stale title behind.
+          Don&rsquo;t hand-write tags Aktion also manages, and don&rsquo;t add
+          <code>data-rui-head</code> to your own.</li>
+        <li><strong>Commits are batched.</strong> Contributions in a render pass
+          accumulate synchronously and commit on a microtask, so several
+          <code>$head</code> calls resolve to one merged head with no flicker. In
+          SSR the merge happens synchronously when the head is serialized.</li>
+        <li><strong><code>titleTemplate</code> does not cross calls.</strong>
+          It only wraps a <code>title</code> passed in the same
+          <code>$head({ &hellip; })</code> &mdash; see
+          <a href="#title-template">Why the template didn&rsquo;t apply</a>.</li>
+        <li><strong>Escape HTML in values? No need.</strong> Titles, meta
+          content, and link attributes are escaped for you, and JSON-LD is
+          serialized with <code>&lt;</code> escaped so a string value cannot
+          close the <code>&lt;script&gt;</code>. The one thing you escape
+          yourself is the SSR <code>state</code> snapshot.</li>
+        <li><strong><code>link</code> de-dupes</strong> by <code>rel</code> +
+          <code>href</code> + <code>hreflang</code>, keeping the first
+          occurrence, so a layout and a page declaring the same canonical
+          won&rsquo;t emit it twice.</li>
+        <li><strong>Shadow DOM is not the boundary here.</strong> The app
+          renders into a shadow root for <em>style</em> encapsulation, but
+          <code>$head</code> writes into the host document on purpose. That is
+          exactly why its fields are allow-listed &mdash; read
+          <a href="security.html">Security &amp; the trust model</a> before
+          rendering head values that came from an API or a URL parameter.</li>
+      </ul>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="routing.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>Routing</h3>
+          <p>Per-route pages and navigation &mdash; where per-route <code>$head</code> composition lives.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="deployment.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Production &amp; deployment</h3>
+          <p>SSR with <code>renderToString</code>, hydration, CSP, and shipping a crawlable shell.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="security.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Security &amp; the trust model</h3>
+          <p>Why every <code>$head</code> field is allow-listed, and what the sanitisers do and do not defend.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+</body>
+</html>
