@@ -20,8 +20,8 @@
  *   - **Canonical.** Statements one per line; two-space indentation by
  *     default inside `{ … }` blocks (configurable via `FormatOptions`);
  *     named args always use `prop: value` (the legacy `prop=value` form is
- *     gone); double-quoted strings unless interpolation is required
- *     (templates).
+ *     gone); double-quoted strings by default unless interpolation is
+ *     required (templates), also configurable via `FormatOptions`.
  *   - **Round-trips through the parser.** Re-parsing the formatter's
  *     output yields a structurally-equivalent AST.
  *
@@ -34,10 +34,12 @@
  * the original `errors` list passed through so the host can surface
  * them.
  *
- * Indentation is configurable via the optional `FormatOptions` parameter on
- * both `formatProgram` and `printProgram` (`indentStyle`/`indentWidth`).
- * Omitting it reproduces today's exact 2-space output, unchanged — this is
- * a published surface with real consumers depending on that default shape.
+ * Indentation, quote style, trailing commas and object curly spacing are
+ * all configurable via the optional `FormatOptions` parameter on both
+ * `formatProgram` and `printProgram` (`indentStyle`/`indentWidth`/
+ * `quoteStyle`/`trailingComma`/`objectCurlySpacing`). Omitting any of them
+ * reproduces today's exact output, unchanged — this is a published surface
+ * with real consumers depending on that default shape.
  */
 
 import { parse } from "../parser/index.js";
@@ -63,14 +65,20 @@ const SAFE_IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 // everything the parser reads after it — a real round-trip failure the
 // idempotency sweep in tests/formatter-idempotency-sweep.test.ts caught
 // (`docs/demos/mini-apps/palette-studio.aktion`'s `.join("\n")` call).
-const NEEDS_ESCAPE = /[\\"\n\r\t]/;
+// Characters that force escaping inside a double- or single-quoted literal,
+// respectively. `\`, the quote char itself, and the raw control characters
+// noted above are shared; the quote char differs by mode.
+const NEEDS_ESCAPE_DOUBLE = /[\\"\n\r\t]/;
+const NEEDS_ESCAPE_SINGLE = /[\\'\n\r\t]/;
 
 /**
- * Configures the printer's indentation. Every default matches today's
- * hard-coded behaviour (2-space indents), so calling `formatProgram`/
- * `printProgram` with no options is BIT-FOR-BIT IDENTICAL to the pre-existing
- * output — this is load-bearing: the printer is a published surface with
- * real consumers depending on that exact shape.
+ * Configures the printer's indentation, quote style, trailing commas and
+ * object curly spacing. Every default matches today's hard-coded behaviour
+ * (2-space indents, double-quoted strings, no trailing comma, spaced object
+ * braces), so calling `formatProgram`/`printProgram` with no options is
+ * BIT-FOR-BIT IDENTICAL to the pre-existing output — this is load-bearing:
+ * the printer is a published surface with real consumers depending on that
+ * exact shape.
  */
 export interface FormatOptions {
   /** `"space"` (default) or `"tab"`. */
@@ -81,32 +89,76 @@ export interface FormatOptions {
    * regardless of width, matching how every other tab-indented tool works.
    */
   indentWidth?: number;
+  /**
+   * `"single"` or `"double"` (default) quotes for string literals — applies
+   * everywhere the printer emits a quoted string (literals, object keys,
+   * import sources, `$effect` dependency strings), not just `printLiteral`.
+   * A string containing the chosen quote char but not the other one falls
+   * back to the other quote for THAT string only, to avoid an ugly escape —
+   * mirrors ESLint's `quotes` rule with `avoidEscape: true`.
+   */
+  quoteStyle?: "single" | "double";
+  /**
+   * Trailing comma after the last item once an `Array`/`Object` literal
+   * wraps across multiple lines (default `false`, matching today's
+   * behaviour — never add one). Mirrors ESLint's
+   * `comma-dangle: "always-multiline"`. Destructuring patterns never wrap
+   * multi-line in this printer, so there is nothing for this option to
+   * affect there.
+   */
+  trailingComma?: boolean;
+  /**
+   * Whether a single-line object literal gets a space just inside the
+   * braces — `{ a, b }` (default `true`, today's behaviour) vs `{a, b}`.
+   * Multi-line object literals are unaffected (the brace is already
+   * followed/preceded by a newline). Array literals never had inner-bracket
+   * spacing and are unaffected by this option. Destructuring patterns
+   * already print their object form with no inner spacing today — that
+   * pre-existing behaviour is intentionally left untouched here rather than
+   * wired to this option, since doing so would change patterns' default
+   * output the moment this option's own default (`true`) took effect.
+   */
+  objectCurlySpacing?: boolean;
 }
 
 interface ResolvedFormatOptions {
   /** The literal string repeated `depth` times to indent one level. */
   unit: string;
+  /** Quote character to use for every emitted string literal. */
+  quote: '"' | "'";
+  /** Whether a wrapped multi-line `Array`/`Object` gets a trailing comma. */
+  trailingComma: boolean;
+  /** Whether a single-line `Object` literal gets inner brace spacing. */
+  objectCurlySpacing: boolean;
 }
 
 const DEFAULT_INDENT_WIDTH = 2;
 
 function resolveFormatOptions(options?: FormatOptions): ResolvedFormatOptions {
-  if (options?.indentStyle === "tab") {
-    return { unit: "\t" };
-  }
-  const width = options?.indentWidth ?? DEFAULT_INDENT_WIDTH;
-  // `String.prototype.repeat` throws a RangeError for a negative or
-  // infinite count and silently misbehaves for NaN/fractional ones
-  // (`" ".repeat(1.5)` truncates to 1 with no indication anything was
-  // wrong) — reject all of those explicitly rather than let a bad public
-  // input surface as either an opaque low-level exception or quietly
-  // wrong indentation.
-  if (!Number.isInteger(width) || width < 0) {
-    throw new RangeError(
-      `FormatOptions.indentWidth must be a non-negative integer, got ${width}`,
-    );
-  }
-  return { unit: " ".repeat(width) };
+  const unit = (() => {
+    if (options?.indentStyle === "tab") {
+      return "\t";
+    }
+    const width = options?.indentWidth ?? DEFAULT_INDENT_WIDTH;
+    // `String.prototype.repeat` throws a RangeError for a negative or
+    // infinite count and silently misbehaves for NaN/fractional ones
+    // (`" ".repeat(1.5)` truncates to 1 with no indication anything was
+    // wrong) — reject all of those explicitly rather than let a bad public
+    // input surface as either an opaque low-level exception or quietly
+    // wrong indentation.
+    if (!Number.isInteger(width) || width < 0) {
+      throw new RangeError(
+        `FormatOptions.indentWidth must be a non-negative integer, got ${width}`,
+      );
+    }
+    return " ".repeat(width);
+  })();
+  return {
+    unit,
+    quote: options?.quoteStyle === "single" ? "'" : '"',
+    trailingComma: options?.trailingComma ?? false,
+    objectCurlySpacing: options?.objectCurlySpacing ?? true,
+  };
 }
 
 /** The single `indent(depth)`-shaped helper every print function goes through. */
@@ -201,7 +253,7 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
           return `${imported} as ${local}`;
         })
         .join(", ");
-      return `${padStr}import { ${specs} } from "${stmt.source}"`;
+      return `${padStr}import { ${specs} } from ${printStringLiteral(stmt.source, opts)}`;
     }
     case "Assignment": {
       const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
@@ -217,9 +269,11 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
         : `${head}\n${padStr}}`;
     }
     case "EffectDeclaration": {
-      const deps: string[] = stmt.triggers.map(printTrigger).filter((s) => s.length > 0);
+      const deps: string[] = stmt.triggers
+        .map((t) => printTrigger(t, opts))
+        .filter((s) => s.length > 0);
       if (stmt.rateLimit) {
-        deps.push(`"${stmt.rateLimit.kind}(${stmt.rateLimit.ms})"`);
+        deps.push(printStringLiteral(`${stmt.rateLimit.kind}(${stmt.rateLimit.ms})`, opts));
       }
       const body = printBlock(stmt.body.body, indent + 1, opts);
       const depsArray = `[${deps.join(", ")}]`;
@@ -326,9 +380,9 @@ function printDeclParam(p: { name: string; defaultValue?: Expression; optional?:
   return p.name;
 }
 
-function printTrigger(t: { kind: string } & Record<string, unknown>): string {
-  if (t.kind === "lifecycle") return `"${t.name as string}"`;
-  if (t.kind === "every") return `"every(${t.intervalMs as number})"`;
+function printTrigger(t: { kind: string } & Record<string, unknown>, opts: ResolvedFormatOptions): string {
+  if (t.kind === "lifecycle") return printStringLiteral(t.name as string, opts);
+  if (t.kind === "every") return printStringLiteral(`every(${t.intervalMs as number})`, opts);
   if (t.kind === "state") return `$${t.name as string}`;
   return "";
 }
@@ -405,7 +459,7 @@ function printDesugaredOperator(expr: BuiltinCallExpr, indent: number, opts: Res
 function printExpression(expr: Expression, indent: number, opts: ResolvedFormatOptions): string {
   switch (expr.kind) {
     case "Literal":
-      return printLiteral(expr.value);
+      return printLiteral(expr.value, opts);
     case "Identifier":
       return expr.name;
     case "StateRef":
@@ -416,15 +470,21 @@ function printExpression(expr: Expression, indent: number, opts: ResolvedFormatO
       const inline = `[${items.join(", ")}]`;
       if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
       const innerPad = pad(indent + 1, opts);
-      return `[\n${items.map((s) => `${innerPad}${s}`).join(",\n")}\n${pad(indent, opts)}]`;
+      const body = items.map((s) => `${innerPad}${s}`).join(",\n");
+      const trailingComma = opts.trailingComma ? "," : "";
+      return `[\n${body}${trailingComma}\n${pad(indent, opts)}]`;
     }
     case "Object": {
       if (expr.properties.length === 0) return "{}";
       const items = expr.properties.map((p) => printObjectProp(p, indent, opts));
-      const inline = `{ ${items.join(", ")} }`;
+      const inline = opts.objectCurlySpacing
+        ? `{ ${items.join(", ")} }`
+        : `{${items.join(", ")}}`;
       if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
       const innerPad = pad(indent + 1, opts);
-      return `{\n${items.map((s) => `${innerPad}${s}`).join(",\n")}\n${pad(indent, opts)}}`;
+      const body = items.map((s) => `${innerPad}${s}`).join(",\n");
+      const trailingComma = opts.trailingComma ? "," : "";
+      return `{\n${body}${trailingComma}\n${pad(indent, opts)}}`;
     }
     case "Member": {
       const obj = printExpression(expr.object, indent, opts);
@@ -522,35 +582,56 @@ function printObjectProp(prop: ObjectProperty, indent: number, opts: ResolvedFor
   ) {
     return prop.key;
   }
-  const key = SAFE_IDENT.test(prop.key) ? prop.key : printStringLiteral(prop.key);
+  const key = SAFE_IDENT.test(prop.key) ? prop.key : printStringLiteral(prop.key, opts);
   return `${key}: ${value}`;
 }
 
-function printLiteral(value: string | number | boolean | null): string {
+function printLiteral(value: string | number | boolean | null, opts: ResolvedFormatOptions): string {
   if (value === null) return "null";
-  if (typeof value === "string") return printStringLiteral(value);
+  if (typeof value === "string") return printStringLiteral(value, opts);
   if (typeof value === "boolean") return value ? "true" : "false";
   return String(value);
 }
 
-function printStringLiteral(value: string): string {
-  // Double quotes by default. Single-quote and template forms are only
-  // emitted when the AST distinguishes them, which it does not — string
-  // literals carry no quote-style metadata, so canonical double-quoting is
-  // fine. When the body contains `\`, `"`, or a raw control character that
-  // can't survive inside a single-line double-quoted literal, escape it —
+/**
+ * Choose the quote character for one specific string value. Double quotes
+ * (or single, if `quoteStyle: "single"`) by default — single-quote and
+ * template forms are only emitted when the AST distinguishes them, which it
+ * does not, so canonical quoting is a pure print-time choice. When
+ * `opts.quote` would require escaping the quote char itself (e.g. `'` in
+ * single-quote mode) but the OTHER quote char never appears in the value,
+ * fall back to that other quote for this string only, to avoid an ugly
+ * escape — mirrors ESLint's `quotes` rule with `avoidEscape: true`. This
+ * refinement is worth the extra branch here: without it, every apostrophe
+ * in ordinary text (`"it's"`) would print as `'it\'s'` under
+ * `quoteStyle: "single"`, which is uglier than just keeping that one string
+ * double-quoted.
+ */
+function chooseQuote(value: string, opts: ResolvedFormatOptions): '"' | "'" {
+  const other = opts.quote === '"' ? "'" : '"';
+  if (value.includes(opts.quote) && !value.includes(other)) return other;
+  return opts.quote;
+}
+
+function printStringLiteral(value: string, opts: ResolvedFormatOptions): string {
+  const quote = chooseQuote(value, opts);
+  const needsEscape = quote === '"' ? NEEDS_ESCAPE_DOUBLE.test(value) : NEEDS_ESCAPE_SINGLE.test(value);
+  // When the body contains `\`, the chosen quote char, or a raw control
+  // character that can't survive inside a single-line literal, escape it —
   // order matters: backslash must be escaped first, or the backslashes
   // introduced by the later replacements would themselves get doubled.
-  if (NEEDS_ESCAPE.test(value)) {
+  if (needsEscape) {
+    const quoteEscape = quote === '"' ? /"/g : /'/g;
+    const quoteReplacement = quote === '"' ? '\\"' : "\\'";
     const escaped = value
       .replace(/\\/g, "\\\\")
-      .replace(/"/g, '\\"')
+      .replace(quoteEscape, quoteReplacement)
       .replace(/\n/g, "\\n")
       .replace(/\r/g, "\\r")
       .replace(/\t/g, "\\t");
-    return `"${escaped}"`;
+    return `${quote}${escaped}${quote}`;
   }
-  return `"${value}"`;
+  return `${quote}${value}${quote}`;
 }
 
 function printTemplate(quasis: string[], expressions: Expression[], indent: number, opts: ResolvedFormatOptions): string {
