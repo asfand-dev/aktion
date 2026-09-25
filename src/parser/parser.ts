@@ -705,9 +705,14 @@ function parseBlock(ctx: ParserContext): BlockExpr {
  * boundary to test against and risks being misattributed to a later,
  * unrelated statement by whichever enclosing container's `attachComments`
  * call processes that line range next. Documented, measured gap — see
- * `KNOWN_COMMENT_GAPS` in `tests/formatter-comments.test.ts`; the house style
- * (confirmed against the real `.aktion` corpus) always braces multi-line
- * bodies, so this form is rare in practice.
+ * `KNOWN_COMMENT_GAPS` in `tests/formatter-idempotency-sweep.test.ts`. That
+ * map currently has NO entry for this category: every brace-less body in
+ * this repo's own `.aktion` corpus (223, swept across all 165 files) sits on
+ * the SAME source line as its `if (cond)`/`while (cond)` header, so there is
+ * no physical line for a comment to occupy between header and body in any of
+ * them — the gap is real (a comment there would still be misattributed) but
+ * currently has zero real corpus occurrences to regress against. The house
+ * style always braces multi-line bodies, which is why.
  */
 function parseBlockOrSingleStatement(ctx: ParserContext): BlockExpr {
   skipWhitespace(ctx);
