@@ -1,0 +1,190 @@
+// Storefront — a multi-page mini shop: catalog, product detail, cart and a guarded checkout.
+// Starting point for: any e-commerce or multi-page routed app.
+// Uses: $router + RouteView transitions, navigation guard, $store({ persist }) cart,
+//        ProductCard, VariantSelector, PriceTag, QuantityStepper, Cart, OrderSummary, $form.
+$app(Column([nav, RouteView(pages, { routeKey: route.path, animation: "fade-up", duration: 250 }), pageFooter], { gap: "lg" }))
+
+catalog = [
+  { id: "p1", name: "Trail Runner 2",   price: 129, compareAt: 159, category: "Shoes",   colors: ["#1f2937", "#6366f1", "#ef4444"], rating: 4.6, blurb: "Lightweight grip for any terrain — rain or shine." },
+  { id: "p2", name: "Everyday Hoodie",  price: 64,  compareAt: 0,   category: "Apparel", colors: ["#6b7280", "#0ea5e9", "#22c55e"], rating: 4.8, blurb: "Heavyweight organic cotton with a brushed inside." },
+  { id: "p3", name: "Commuter Bottle",  price: 32,  compareAt: 40,  category: "Gear",    colors: ["#111827", "#f59e0b"],            rating: 4.4, blurb: "Keeps drinks cold 24h — fits every bike cage." },
+  { id: "p4", name: "Packable Shell",   price: 149, compareAt: 0,   category: "Apparel", colors: ["#facc15", "#0ea5e9"],            rating: 4.7, blurb: "Stuffs into its own pocket. Waterproof to 10k mm." },
+  { id: "p5", name: "Wool Crew Socks",  price: 18,  compareAt: 24,  category: "Apparel", colors: ["#9ca3af", "#92400e"],            rating: 4.9, blurb: "Merino blend — no itch, no smell, no blisters." },
+  { id: "p6", name: "Camp Mug",         price: 24,  compareAt: 0,   category: "Gear",    colors: ["#16a34a", "#dc2626"],            rating: 4.5, blurb: "Enamel classic. Survives drops, fires and dishwashers." }
+]
+
+cart = $store({
+  persist: "shop.cart",
+  items: [],
+  count: (s) => $util.sum(s.items.map(i => i.qty)),
+  subtotal: (s) => $util.sum(s.items.map(i => i.price * i.qty)),
+  add: (s, p, color) => {
+    const key = `${p.id}-${color}`
+    const existing = s.items.find(i => i.id == key)
+    if (existing) s.items = s.items.map(i => i.id == key ? { ...i, qty: i.qty + 1 } : i)
+    else s.items = [...s.items, { id: key, name: `${p.name} (${color})`, price: p.price, qty: 1 }]
+  },
+  setQty: (s, id, qty) => {
+    if (qty <= 0) s.items = s.items.filter(i => i.id != id)
+    else s.items = s.items.map(i => i.id == id ? { ...i, qty } : i)
+  },
+  remove: (s, id) => { s.items = s.items.filter(i => i.id != id) },
+  clear: (s) => { s.items = [] }
+})
+
+// Guard: checkout requires a non-empty cart.
+$util.onNavigate(({ to }) => {
+  if (to == "/checkout" && cart.items.length == 0) return "/cart"
+})
+
+money = n => $util.currency(n, "USD")
+shipping = cart.subtotal() >= 75 || cart.items.length == 0 ? 0 : 6
+tax = Math.round(cart.subtotal() * 0.08 * 100) / 100
+
+$orderPlaced = false
+
+checkoutForm = $form({
+  values: { name: "", email: "", address: "" },
+  rules: {
+    name:    [$util.rules.required("We need a name for the parcel")],
+    email:   [$util.rules.required(), $util.rules.email("That email looks off")],
+    address: [$util.rules.required("Where should we ship it?"), $util.rules.minLength(10, "Add a full street address")]
+  },
+  onSubmit: (v) => {
+    $orderPlaced = true
+    cart.clear()
+  }
+})
+
+nav = NavBar({
+  brand: Brand("North & Pine", { href: "#/" }),
+  links: [
+    NavLink("Shop", { to: "/", exact: true }),
+    NavLink("Cart", { to: "/cart" })
+  ],
+  actions: [
+    Button(`Cart (${cart.count()})`, { variant: "secondary", size: "sm", icon: "cart-shopping", onClick: () => route.navigate("/cart") }),
+    ThemeToggle()
+  ],
+  sticky: true,
+  blur: true
+})
+
+// ---------- Catalog ----------
+function CatalogPage() {
+  productTile = (p, i) => ProductCard(p.name, {
+    price: p.price,
+    compareAt: p.compareAt > 0 ? p.compareAt : null,
+    rating: p.rating,
+    badge: p.compareAt > 0 ? "Sale" : null,
+    action: Button("View", { variant: "secondary", size: "sm", fullWidth: true, onClick: () => route.navigate(`/product/${p.id}`) }),
+    onAdd: () => { cart.add(p, "default"); $toast.success(`${p.name} added to cart`) },
+    key: p.id,
+    animate: { preset: "fade-up", delay: i * 50 },
+    sx: { states: { hover: { translateY: "-3px", shadow: "lg" } } }
+  })
+  return Column([
+    Section([
+      Grid(catalog.map((p, i) => productTile(p, i)), { columns: { base: 1, sm: 2, lg: 3 }, gap: "lg" })
+    ], { eyebrow: "SUMMER DROP", title: "Gear that goes the distance", subtitle: "Free shipping over $75 — everything ships carbon-neutral.", align: "center", width: "lg" })
+  ], { gap: "lg" })
+}
+
+// ---------- Product detail ----------
+function ProductPage(id) {
+  const p = catalog.find(x => x.id == id)
+  $color = $state(p ? p.colors[0] : "")
+  if (!p) return Center([ErrorState("Product not found", { actions: [Button("Back to shop", { onClick: () => route.navigate("/"), variant: "primary" })] })], { minHeight: "40vh" })
+  return Container([Card([
+    Split(
+      Center([Icon("bag-shopping", { size: "xl" })], { minHeight: "260px" }),
+      { right: Column([
+          Badge(p.category, { tone: "info", size: "sm" }),
+          Heading(p.name, { size: "lg" }),
+          Rating({ value: p.rating, readonly: true, label: `${p.rating} / 5` }),
+          Text(p.blurb, { variant: "body", tone: "muted" }),
+          PriceTag(p.price, { compareAt: p.compareAt > 0 ? p.compareAt : null, size: "lg" }),
+          VariantSelector(p.colors, { kind: "swatch", label: "Colour", value: $color, onChange: (c) => { $color = c } }),
+          Row([
+            Button("Add to cart", { variant: "primary", icon: "cart-plus", size: "lg", onClick: () => { cart.add(p, $color); $toast.success("Added to cart") } }),
+            Button("Back", { variant: "ghost", onClick: () => route.navigate("/") })
+          ], { gap: "sm" }),
+          Callout("info", { title: shipping == 0 ? "Free shipping unlocked" : `${money(75 - cart.subtotal())} away from free shipping`, icon: "truck-fast", compact: true })
+        ], { gap: "md" }),
+        ratio: "1/1", gap: "xl", stackAt: "md" }
+    )
+  ])], { size: "lg" })
+}
+
+// ---------- Cart ----------
+function CartPage() {
+  return Container([Column([
+    PageHeader("Your cart", { subtitle: `${cart.count()} item${cart.count() == 1 ? "" : "s"}` }),
+    Show(cart.items.length > 0, {
+      fallback: EmptyState("Your cart is empty", { description: "The checkout guard will bounce you back here until you add something.", icon: "cart-shopping", action: Button("Browse the shop", { variant: "primary", onClick: () => route.navigate("/") }) }),
+      children: Grid([
+        Cart(cart.items, {
+          onQty: (id, qty) => cart.setQty(id, qty),
+          onRemove: (id) => cart.remove(id),
+          currency: "USD"
+        }),
+        Column([
+          OrderSummary(cart.items.map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.price * i.qty) })), {
+            subtotal: money(cart.subtotal()),
+            shipping: shipping == 0 ? "Free" : money(shipping),
+            tax: money(tax),
+            total: money(cart.subtotal() + shipping + tax)
+          }),
+          Button("Checkout", { variant: "primary", icon: "credit-card", size: "lg", fullWidth: true, onClick: () => route.navigate("/checkout") })
+        ], { gap: "md" })
+      ], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+    })
+  ], { gap: "lg" })], { size: "lg" })
+}
+
+// ---------- Checkout (guarded) ----------
+function CheckoutPage() {
+  if ($orderPlaced) {
+    return Center([Card([
+      Confetti({ fire: true, count: 90 }),
+      SuccessState("Order placed!", {
+        description: "A confirmation is on its way to your inbox.",
+        icon: "box-open",
+        actions: [Button("Keep shopping", { variant: "primary", onClick: () => { $orderPlaced = false; route.navigate("/") } })]
+      })
+    ])], { minHeight: "50vh" })
+  }
+  return Container([Grid([
+    Card([
+      SectionHeader("Shipping details", { eyebrow: "CHECKOUT" }),
+      Input("coName", { label: "Full name", value: checkoutForm.values.name, error: checkoutForm.errors.name, onBlur: () => checkoutForm.touch("name") }),
+      Input("coEmail", { label: "Email", value: checkoutForm.values.email, error: checkoutForm.errors.email, onBlur: () => checkoutForm.touch("email") }),
+      TextArea("coAddr", { label: "Address", rows: 3, value: checkoutForm.values.address, error: checkoutForm.errors.address, onBlur: () => checkoutForm.touch("address") }),
+      Button("Place order", { variant: "primary", icon: "check", size: "lg", fullWidth: true, onClick: () => checkoutForm.submit(), loading: checkoutForm.submitting })
+    ]),
+    OrderSummary(cart.items.map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.price * i.qty) })), {
+      subtotal: money(cart.subtotal()),
+      shipping: shipping == 0 ? "Free" : money(shipping),
+      tax: money(tax),
+      total: money(cart.subtotal() + shipping + tax)
+    })
+  ], { columns: { base: 1, md: 2 }, gap: "lg", alignItems: "start" })], { size: "lg" })
+}
+
+pages = $router({
+  "/":            CatalogPage(),
+  "/product/:id": ProductPage(params.id),
+  "/cart":        CartPage(),
+  "/checkout":    CheckoutPage(),
+  default:        CatalogPage()
+})
+
+pageFooter = Footer({
+  brand: Brand("North & Pine"),
+  tagline: "Outdoor goods built to outlast trends.",
+  columns: [
+    FooterColumn("Shop", { links: [Link("All products", { to: "/" }), Link("Cart", { to: "/cart" })] }),
+    FooterColumn("Help", { links: [Link("Shipping", { href: "#" }), Link("Returns", { href: "#" })] })
+  ],
+  legal: "© 2026 North & Pine — demo storefront"
+})

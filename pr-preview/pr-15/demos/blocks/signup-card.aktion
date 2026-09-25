@@ -1,0 +1,67 @@
+// Signup Card — account creation with a live password-strength meter,
+// matching-password check, terms gate and a success confirmation state.
+$app(Center([Container([card], { size: "sm" })], { minHeight: "80vh" }))
+
+$name = ""
+$email = ""
+$password = ""
+$confirm = ""
+$agree = false
+$done = false
+
+emailValid = $email.includes("@") && $email.includes(".")
+
+scorePassword = pw => {
+  let s = 0
+  if (pw.length >= 8) s += 1
+  if (pw.length >= 12) s += 1
+  if (pw !== pw.toLowerCase()) s += 1
+  if ($util.match(pw, "[0-9]")) s += 1
+  if ($util.match(pw, "[^A-Za-z0-9]")) s += 1
+  return Math.min(s, 4)
+}
+
+strength = scorePassword($password)
+strengthLabel = ["Too weak", "Weak", "Fair", "Good", "Strong"][strength]
+strengthTone = strength <= 1 ? "danger" : strength == 2 ? "warning" : strength == 3 ? "info" : "success"
+matches = $confirm.length > 0 && $password === $confirm
+canSubmit = $name.length > 1 && emailValid && strength >= 2 && matches && $agree
+
+function createAccount() {
+  if (!canSubmit) return
+  $done = true
+}
+
+successView = Card([Center([Column([
+  Icon("circle-check", { size: "lg", color: "var(--rui-color-success)" }),
+  SectionHeader("Account created", { subtitle: `Welcome aboard, ${$name}!` }),
+  Text(`A confirmation link was sent to ${$email}.`, { variant: "small", tone: "muted" }),
+  Button("Go to dashboard", { variant: "primary", icon: "gauge" })
+], { gap: "md", align: "center" })], { minHeight: "220px" })])
+
+form = Card([Column([
+  Center([Column([
+    Text("Create your account", { variant: "title" }),
+    Text("Start your 14-day free trial — no card required.", { variant: "small", tone: "muted" })
+  ], { gap: "xs", align: "center" })]),
+  Separator("horizontal"),
+  FormControl("Full name", { field: Input("name", { value: $name, placeholder: "Ada Lovelace" }) }),
+  FormControl("Work email", {
+    field: Input("email", { type: "email", value: $email, placeholder: "you@company.com" }),
+    hint: $email.length > 0 && !emailValid ? "Enter a valid email." : null
+  }),
+  Column([
+    FormControl("Password", { field: Input("password", { type: "password", value: $password, placeholder: "Create a password" }) }),
+    Progress(strength, { max: 4, tone: strengthTone }),
+    Text(`Strength: ${strengthLabel}`, { variant: "small", tone: strengthTone })
+  ], { gap: "xs" }),
+  FormControl("Confirm password", {
+    field: Input("confirm", { type: "password", value: $confirm, placeholder: "Re-enter password" }),
+    hint: $confirm.length > 0 && !matches ? "Passwords do not match." : null
+  }),
+  Checkbox("agree", { label: "I agree to the Terms of Service and Privacy Policy", value: $agree }),
+  Button("Create account", { variant: "primary", icon: "user-plus", fullWidth: true, disabled: !canSubmit, onClick: createAccount }),
+  Center([Row([Text("Already have an account?", { variant: "small", tone: "muted" }), Link("Sign in", { href: "#" })], { gap: "xs", align: "center" })])
+], { gap: "md" })])
+
+card = Show($done, { fallback: form, children: successView })
