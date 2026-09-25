@@ -70,9 +70,14 @@ describe("VS Code extension metadata", () => {
   it("the extension version tracks the runtime version exactly", () => {
     // The language surface is INLINED into dist/extension.js, so a published
     // extension serves the runtime it was built against — see
-    // editors/vscode/docs/README.md on version lockstep.
+    // editors/vscode/docs/README.md on version lockstep. Both fields are kept
+    // in sync automatically by release-please-config.json's `extra-files`
+    // entries (jsonpath-type, see that file) — an EXACT pin, not a caret
+    // range, since the whole point is "built against precisely this version",
+    // and a caret range would let `npm install` silently drift the extension
+    // onto a newer runtime than what dist/extension.js actually bundles.
     expect(extensionPkg.version).toBe(rootPkg.version);
-    expect(extensionPkg.devDependencies["aktion-runtime"]).toBe(`^${rootPkg.version}`);
+    expect(extensionPkg.devDependencies["aktion-runtime"]).toBe(rootPkg.version);
   });
 
   it("the generated grammar's builtin alternation covers every builtin", () => {
