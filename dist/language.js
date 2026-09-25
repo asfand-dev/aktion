@@ -38902,19 +38902,28 @@ const COMMON_ICON_ALIASES = [
   "thumbtack"
 ];
 const SAFE_IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const NEEDS_ESCAPE = /[\\"\n\r\t]/;
+const NEEDS_ESCAPE_DOUBLE = /[\\"\n\r\t]/;
+const NEEDS_ESCAPE_SINGLE = /[\\'\n\r\t]/;
 const DEFAULT_INDENT_WIDTH = 2;
 function resolveFormatOptions(options) {
-  if (options?.indentStyle === "tab") {
-    return { unit: "	" };
-  }
-  const width = options?.indentWidth ?? DEFAULT_INDENT_WIDTH;
-  if (!Number.isInteger(width) || width < 0) {
-    throw new RangeError(
-      `FormatOptions.indentWidth must be a non-negative integer, got ${width}`
-    );
-  }
-  return { unit: " ".repeat(width) };
+  const unit = (() => {
+    if (options?.indentStyle === "tab") {
+      return "	";
+    }
+    const width = options?.indentWidth ?? DEFAULT_INDENT_WIDTH;
+    if (!Number.isInteger(width) || width < 0) {
+      throw new RangeError(
+        `FormatOptions.indentWidth must be a non-negative integer, got ${width}`
+      );
+    }
+    return " ".repeat(width);
+  })();
+  return {
+    unit,
+    quote: options?.quoteStyle === "single" ? "'" : '"',
+    trailingComma: options?.trailingComma ?? false,
+    objectCurlySpacing: options?.objectCurlySpacing ?? true
+  };
 }
 function pad(indent, opts) {
   return opts.unit.repeat(indent);
@@ -38974,7 +38983,7 @@ function printStatement(stmt, indent, opts) {
         const local = s.isState ? `$${s.local}` : s.local;
         return `${imported} as ${local}`;
       }).join(", ");
-      return `${padStr}import { ${specs} } from "${stmt.source}"`;
+      return `${padStr}import { ${specs} } from ${printStringLiteral(stmt.source, opts)}`;
     }
     case "Assignment": {
       const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
@@ -38991,9 +39000,9 @@ ${padStr}}` : `${head}
 ${padStr}}`;
     }
     case "EffectDeclaration": {
-      const deps = stmt.triggers.map(printTrigger).filter((s) => s.length > 0);
+      const deps = stmt.triggers.map((t) => printTrigger(t, opts)).filter((s) => s.length > 0);
       if (stmt.rateLimit) {
-        deps.push(`"${stmt.rateLimit.kind}(${stmt.rateLimit.ms})"`);
+        deps.push(printStringLiteral(`${stmt.rateLimit.kind}(${stmt.rateLimit.ms})`, opts));
       }
       const body = printBlock(stmt.body.body, indent + 1, opts);
       const depsArray = `[${deps.join(", ")}]`;
@@ -39121,9 +39130,9 @@ function printDeclParam(p, opts) {
   }
   return p.name;
 }
-function printTrigger(t) {
-  if (t.kind === "lifecycle") return `"${t.name}"`;
-  if (t.kind === "every") return `"every(${t.intervalMs})"`;
+function printTrigger(t, opts) {
+  if (t.kind === "lifecycle") return printStringLiteral(t.name, opts);
+  if (t.kind === "every") return printStringLiteral(`every(${t.intervalMs})`, opts);
   if (t.kind === "state") return `$${t.name}`;
   return "";
 }
@@ -39163,7 +39172,7 @@ function printDesugaredOperator(expr, indent, opts) {
 function printExpression(expr, indent, opts) {
   switch (expr.kind) {
     case "Literal":
-      return printLiteral(expr.value);
+      return printLiteral(expr.value, opts);
     case "Identifier":
       return expr.name;
     case "StateRef":
@@ -39174,18 +39183,22 @@ function printExpression(expr, indent, opts) {
       const inline = `[${items.join(", ")}]`;
       if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
       const innerPad = pad(indent + 1, opts);
+      const body = items.map((s) => `${innerPad}${s}`).join(",\n");
+      const trailingComma = opts.trailingComma ? "," : "";
       return `[
-${items.map((s) => `${innerPad}${s}`).join(",\n")}
+${body}${trailingComma}
 ${pad(indent, opts)}]`;
     }
     case "Object": {
       if (expr.properties.length === 0) return "{}";
       const items = expr.properties.map((p) => printObjectProp(p, indent, opts));
-      const inline = `{ ${items.join(", ")} }`;
+      const inline = opts.objectCurlySpacing ? `{ ${items.join(", ")} }` : `{${items.join(", ")}}`;
       if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
       const innerPad = pad(indent + 1, opts);
+      const body = items.map((s) => `${innerPad}${s}`).join(",\n");
+      const trailingComma = opts.trailingComma ? "," : "";
       return `{
-${items.map((s) => `${innerPad}${s}`).join(",\n")}
+${body}${trailingComma}
 ${pad(indent, opts)}}`;
     }
     case "Member": {
@@ -39266,21 +39279,30 @@ function printObjectProp(prop2, indent, opts) {
   if (prop2.value.kind === "Identifier" && prop2.value.name === prop2.key && SAFE_IDENT.test(prop2.key)) {
     return prop2.key;
   }
-  const key = SAFE_IDENT.test(prop2.key) ? prop2.key : printStringLiteral(prop2.key);
+  const key = SAFE_IDENT.test(prop2.key) ? prop2.key : printStringLiteral(prop2.key, opts);
   return `${key}: ${value}`;
 }
-function printLiteral(value) {
+function printLiteral(value, opts) {
   if (value === null) return "null";
-  if (typeof value === "string") return printStringLiteral(value);
+  if (typeof value === "string") return printStringLiteral(value, opts);
   if (typeof value === "boolean") return value ? "true" : "false";
   return String(value);
 }
-function printStringLiteral(value) {
-  if (NEEDS_ESCAPE.test(value)) {
-    const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
-    return `"${escaped}"`;
+function chooseQuote(value, opts) {
+  const other = opts.quote === '"' ? "'" : '"';
+  if (value.includes(opts.quote) && !value.includes(other)) return other;
+  return opts.quote;
+}
+function printStringLiteral(value, opts) {
+  const quote = chooseQuote(value, opts);
+  const needsEscape = quote === '"' ? NEEDS_ESCAPE_DOUBLE.test(value) : NEEDS_ESCAPE_SINGLE.test(value);
+  if (needsEscape) {
+    const quoteEscape = quote === '"' ? /"/g : /'/g;
+    const quoteReplacement = quote === '"' ? '\\"' : "\\'";
+    const escaped = value.replace(/\\/g, "\\\\").replace(quoteEscape, quoteReplacement).replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
+    return `${quote}${escaped}${quote}`;
   }
-  return `"${value}"`;
+  return `${quote}${value}${quote}`;
 }
 function printTemplate(quasis, expressions, indent, opts) {
   const parts = [];
