@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Components · Aktion</title>
+  <meta name="description" content="Browse every built-in Aktion component with a live preview, then open one for its signature, props and source." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        window.theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', window.theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="assets/components-page.css?v=2026.08.07c" />
+</head>
+<body data-page="components">
+  <div class="layout" data-wide="true">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Reference</span>
+        <h1>Components.</h1>
+        <p class="lead">
+          Every component the runtime ships with, as a live tile you can scan.
+          Filter by category or search by what you want to build &mdash;
+          &ldquo;table&rdquo;, &ldquo;chart&rdquo;, &ldquo;upload&rdquo;,
+          &ldquo;alert&rdquo; &mdash; then open a tile for its signature, its
+          props, and the source behind the preview.
+        </p>
+        <div class="cx-hero-stats" id="cx-hero-stats"></div>
+      </header>
+
+      <div class="cx-toolbar">
+        <div class="cx-search" id="cx-search" data-filled="false">
+          <svg class="cx-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+          </svg>
+          <input id="cx-search-input" type="search" autocomplete="off" spellcheck="false"
+                 placeholder="Search components — name, purpose, or a prop…"
+                 aria-label="Search components" />
+          <span class="cx-search-hint">
+            <button type="button" class="cx-search-clear" id="cx-search-clear" aria-label="Clear search">&times;</button>
+            <kbd>/</kbd>
+          </span>
+        </div>
+        <div class="cx-chips" id="cx-chips" role="group" aria-label="Filter by category"></div>
+      </div>
+
+      <p class="cx-meta" id="cx-meta"></p>
+
+      <div class="cx-grid" id="cx-grid">
+        <div class="cx-loading">Loading the component gallery&hellip;</div>
+      </div>
+
+      <div class="callout" style="margin-top: 40px;">
+        <h4>How a call is written</h4>
+        <p>
+          Every component takes one of three call shapes: the canonical
+          <code>Comp(positional, { props })</code>, all&#8209;positional in the
+          order the props are listed, or a single all&#8209;named
+          <code>{ }</code> object. Props marked <em>optional</em> can be omitted
+          or passed as <code>null</code>, enum values are case&#8209;sensitive
+          quoted strings, and the spacing props
+          (<code>gap</code>/<code>padding</code>/<code>margin</code>) share one
+          scale: <code>none&nbsp;| 3xs&nbsp;| 2xs&nbsp;| xs&nbsp;| sm&nbsp;| md&nbsp;| lg&nbsp;| xl&nbsp;| 2xl&nbsp;| 3xl</code>.
+        </p>
+      </div>
+
+      <h2 id="adding-your-own">Adding your own</h2>
+      <p>
+        Pass <code>ComponentSpec</code> objects to
+        <code>el.registerComponents([...])</code>. Each spec declares the source
+        signature and a renderer that returns a DOM node, and the new component
+        shows up in the next <code>getSystemPrompt()</code> call automatically.
+      </p>
+<pre><code>const ProductTile = {
+  name: "ProductTile",
+  description: "Product tile with title, price, and CTA.",
+  props: [
+    { name: "title", type: "string" },
+    { name: "price", type: "number" },
+    { name: "variant", type: "string", optional: true, enum: ["default", "featured"] },
+    { name: "cta", type: "Action", optional: true },
+  ],
+  render: (_node, props) => {
+    const card = document.createElement("div");
+    card.className = "product";
+    card.textContent = `${props.title} — $${props.price}`;
+    return card;
+  },
+};
+
+el.registerComponents([ProductTile]);</code></pre>
+      <p>
+        In&#8209;program <code>function MyCard(...) { return ... }</code>
+        declarations may not reuse a built&#8209;in name &mdash; the validator
+        flags the collision &mdash; unless the body calls that same name. That
+        is the wrapper pattern: inside its own body the name still refers to the
+        built&#8209;in, so
+        <code>function Badge(l) { return Badge(l, { tone: "success" }) }</code>
+        extends the library <code>Badge</code> instead of recursing.
+        <a href="custom-components.html">Full guide &rarr;</a>
+      </p>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="layout.html">
+          <span class="demo-tag">Core concepts</span>
+          <h3>Layout</h3>
+          <p>Compose these containers into dashboards, sidebars, and app shells.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="sx.html">
+          <span class="demo-tag">Core concepts</span>
+          <h3>Styling (sx)</h3>
+          <p>The universal <code>sx</code> prop that every component here accepts.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="playground.html">
+          <span class="demo-tag">Try it</span>
+          <h3>Playground</h3>
+          <p>Paste any example from a tile and edit it live in the browser.</p>
+          <span class="demo-arrow">Open the playground &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <!-- lottie-web so the Lottie sample actually animates; the component falls
+       back to its poster when window.lottie is absent. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
+  <script type="module" src="assets/components-page.js?v=2026.08.07c"></script>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+</body>
+</html>

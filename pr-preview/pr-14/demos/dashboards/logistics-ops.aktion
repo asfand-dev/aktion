@@ -1,0 +1,304 @@
+// Logistics Ops — a shipment & fleet control tower for the carrier Meridian
+// Freight: live fleet tiles, a filterable shipments grid, hub dock capacity and
+// an exceptions desk whose reroute / notify actions rewrite the KPIs.
+// Starting point for: any transport, delivery, field-service or dispatch console.
+// Uses: $store-backed data + actions, $effect polling, DataGrid (sort/select/page),
+//       FilterPill + Toolbar search, Heatmap / BarChart / Gauge, Drawer + Steps, ActivityLog.
+$app(Column([header, exceptionBanner, kpis, fleetCard, opsGrid, shipmentsCard, exceptionsCard, vehicleDrawer], { gap: "lg", padding: "md" }))
+
+$region = "all"
+$autoRefresh = true
+$statusFilter = "all"
+$search = ""
+$vehicleFilter = ""
+$detailId = "MF-118"
+$drawerOpen = false
+$selectedIds = []
+$sort = { key: "ETA", direction: "asc" }
+$page = 1
+$tick = 1
+$chartMode = "Stacked"
+
+// The control tower polls telematics while auto-refresh is armed.
+$effect(() => {
+  if ($autoRefresh) {
+    $tick += 1
+  }
+}, ["every(5000)"])
+
+regionLabels = { all: "All regions", nordics: "Nordics", central: "Central EU", iberia: "Iberia" }
+regionItems = [{ value: "all", label: "All regions" }, { value: "nordics", label: "Nordics" }, { value: "central", label: "Central EU" }, { value: "iberia", label: "Iberia" }]
+
+statusMeta = { "in-transit": { label: "In transit", tone: "info", icon: "truck-fast" }, "at-hub": { label: "At hub", tone: "neutral", icon: "warehouse" }, "delayed": { label: "Delayed", tone: "danger", icon: "clock" }, "delivered": { label: "Delivered", tone: "success", icon: "circle-check" } }
+stateMeta = { moving: { label: "Moving", tone: "success", icon: "truck-fast" }, idle: { label: "Idle at hub", tone: "warning", icon: "pause" }, maintenance: { label: "In workshop", tone: "danger", icon: "screwdriver-wrench" } }
+statusFilters = [{ value: "all", label: "All", icon: "layer-group" }, { value: "in-transit", label: "In transit", icon: "truck-fast" }, { value: "delayed", label: "Delayed", icon: "clock" }, { value: "at-hub", label: "At hub", icon: "warehouse" }, { value: "delivered", label: "Delivered", icon: "circle-check" }]
+
+ops = $store({
+  vehicles: [
+    { id: "MF-118", model: "Volvo FH 500", driver: "Ingrid Halvorsen", driverRole: "Nordics long-haul", region: "nordics", state: "moving", load: 82, temp: -18.4, setpoint: -18, speed: 84, fuel: 61, odometer: 418320, doorSeal: "Sealed", lastPing: "2026-08-07 09:36", legIndex: 2, legs: ["Oslo DC", "Göteborg cross-dock", "Malmö DC", "Copenhagen hub"], legTimes: ["05:10", "08:45", "12:20", "15:05"] },
+    { id: "MF-204", model: "Scania R450", driver: "Tomas Neumann", driverRole: "Central corridor", region: "central", state: "moving", load: 64, temp: 4.2, setpoint: 4, speed: 79, fuel: 48, odometer: 291740, doorSeal: "Sealed", lastPing: "2026-08-07 09:34", legIndex: 1, legs: ["Hamburg DC", "Bremen relay", "Rotterdam port"], legTimes: ["06:40", "10:15", "14:30"] },
+    { id: "MF-231", model: "MAN TGX 18.510", driver: "Petra Nowak", driverRole: "Alpine routes", region: "central", state: "idle", load: 12, temp: 6.1, setpoint: 6, speed: 0, fuel: 22, odometer: 512905, doorSeal: "Open", lastPing: "2026-08-07 09:31", legIndex: 0, legs: ["Lyon DC", "Chambéry relay", "Milan hub"], legTimes: ["11:00", "15:40", "20:05"] },
+    { id: "MF-307", model: "DAF XF 480", driver: "Luís Ferreira", driverRole: "Iberia reefer", region: "iberia", state: "moving", load: 91, temp: -20.1, setpoint: -20, speed: 88, fuel: 73, odometer: 187460, doorSeal: "Sealed", lastPing: "2026-08-07 09:37", legIndex: 2, legs: ["Porto DC", "Salamanca relay", "Madrid DC"], legTimes: ["04:25", "10:50", "18:25"] },
+    { id: "MF-312", model: "Mercedes Actros", driver: "Sofia Marchetti", driverRole: "Regional shuttle", region: "iberia", state: "maintenance", load: 0, temp: 18.0, setpoint: 18, speed: 0, fuel: 95, odometer: 604118, doorSeal: "Open", lastPing: "2026-08-07 06:02", legIndex: 0, legs: ["Valencia workshop", "Valencia DC"], legTimes: ["07:00", "16:00"] },
+    { id: "MF-419", model: "Renault T High", driver: "Anders Lindqvist", driverRole: "Nordics shuttle", region: "nordics", state: "moving", load: 57, temp: 2.8, setpoint: 3, speed: 71, fuel: 54, odometer: 344870, doorSeal: "Sealed", lastPing: "2026-08-07 09:35", legIndex: 1, legs: ["Stockholm DC", "Jönköping relay", "Malmö DC"], legTimes: ["07:20", "12:55", "17:40"] },
+    { id: "MF-425", model: "Iveco S-Way", driver: "Katarina Vogel", driverRole: "Benelux distribution", region: "central", state: "idle", load: 38, temp: 5.4, setpoint: 5, speed: 0, fuel: 67, odometer: 128330, doorSeal: "Sealed", lastPing: "2026-08-07 09:29", legIndex: 1, legs: ["Munich DC", "Vienna hub"], legTimes: ["06:15", "10:45"] },
+    { id: "MF-508", model: "Volvo FM 460", driver: "Miguel Santos", driverRole: "Iberia long-haul", region: "iberia", state: "moving", load: 73, temp: -19.2, setpoint: -20, speed: 66, fuel: 41, odometer: 233995, doorSeal: "Sealed", lastPing: "2026-08-07 09:33", legIndex: 2, legs: ["Lisbon DC", "Évora relay", "Seville hub"], legTimes: ["03:50", "09:10", "02:40"] }
+  ],
+  shipments: [
+    { id: "MF-48201", origin: "Oslo", destination: "Copenhagen", carrier: "Meridian Line", vehicleId: "MF-118", region: "nordics", status: "in-transit", eta: "2026-08-07", etaTime: "15:05", delayHours: 0, pallets: 26, notified: false },
+    { id: "MF-48202", origin: "Stockholm", destination: "Malmö", carrier: "Nordkap Logistik", vehicleId: "MF-419", region: "nordics", status: "in-transit", eta: "2026-08-07", etaTime: "17:40", delayHours: 0, pallets: 18, notified: false },
+    { id: "MF-48203", origin: "Bergen", destination: "Oslo", carrier: "Nordkap Logistik", vehicleId: "MF-419", region: "nordics", status: "delayed", eta: "2026-08-07", etaTime: "21:15", delayHours: 4, pallets: 12, notified: false },
+    { id: "MF-48204", origin: "Trondheim", destination: "Stockholm", carrier: "Meridian Line", vehicleId: "MF-118", region: "nordics", status: "delivered", eta: "2026-08-07", etaTime: "08:20", delayHours: 0, pallets: 22, notified: false },
+    { id: "MF-48205", origin: "Gothenburg", destination: "Aarhus", carrier: "Baltic Rail Link", vehicleId: "MF-419", region: "nordics", status: "at-hub", eta: "2026-08-08", etaTime: "06:30", delayHours: 0, pallets: 31, notified: false },
+    { id: "MF-48206", origin: "Helsinki", destination: "Tallinn", carrier: "Baltic Rail Link", vehicleId: "MF-118", region: "nordics", status: "delivered", eta: "2026-08-07", etaTime: "07:05", delayHours: 0, pallets: 14, notified: false },
+    { id: "MF-48207", origin: "Hamburg", destination: "Rotterdam", carrier: "Aegis Cargo", vehicleId: "MF-204", region: "central", status: "delayed", eta: "2026-08-07", etaTime: "19:50", delayHours: 3, pallets: 28, notified: false },
+    { id: "MF-48208", origin: "Berlin", destination: "Prague", carrier: "Meridian Line", vehicleId: "MF-204", region: "central", status: "in-transit", eta: "2026-08-07", etaTime: "16:35", delayHours: 0, pallets: 20, notified: false },
+    { id: "MF-48209", origin: "Lyon", destination: "Milan", carrier: "Aegis Cargo", vehicleId: "MF-231", region: "central", status: "at-hub", eta: "2026-08-08", etaTime: "09:15", delayHours: 0, pallets: 24, notified: false },
+    { id: "MF-48210", origin: "Munich", destination: "Vienna", carrier: "Meridian Line", vehicleId: "MF-425", region: "central", status: "delivered", eta: "2026-08-07", etaTime: "10:45", delayHours: 0, pallets: 16, notified: false },
+    { id: "MF-48211", origin: "Rotterdam", destination: "Antwerp", carrier: "Aegis Cargo", vehicleId: "MF-425", region: "central", status: "in-transit", eta: "2026-08-07", etaTime: "14:10", delayHours: 0, pallets: 9, notified: false },
+    { id: "MF-48212", origin: "Paris", destination: "Frankfurt", carrier: "Meridian Line", vehicleId: "MF-231", region: "central", status: "delayed", eta: "2026-08-07", etaTime: "23:30", delayHours: 6, pallets: 33, notified: false },
+    { id: "MF-48213", origin: "Prague", destination: "Warsaw", carrier: "Baltic Rail Link", vehicleId: "MF-204", region: "central", status: "in-transit", eta: "2026-08-08", etaTime: "04:55", delayHours: 0, pallets: 21, notified: false },
+    { id: "MF-48214", origin: "Porto", destination: "Madrid", carrier: "Cordillera Trans", vehicleId: "MF-307", region: "iberia", status: "in-transit", eta: "2026-08-07", etaTime: "18:25", delayHours: 0, pallets: 27, notified: false },
+    { id: "MF-48215", origin: "Lisbon", destination: "Seville", carrier: "Cordillera Trans", vehicleId: "MF-508", region: "iberia", status: "delayed", eta: "2026-08-08", etaTime: "02:40", delayHours: 5, pallets: 19, notified: false },
+    { id: "MF-48216", origin: "Madrid", destination: "Barcelona", carrier: "Aegis Cargo", vehicleId: "MF-508", region: "iberia", status: "in-transit", eta: "2026-08-07", etaTime: "20:10", delayHours: 0, pallets: 30, notified: false },
+    { id: "MF-48217", origin: "Valencia", destination: "Zaragoza", carrier: "Cordillera Trans", vehicleId: "MF-312", region: "iberia", status: "at-hub", eta: "2026-08-08", etaTime: "07:50", delayHours: 0, pallets: 11, notified: false },
+    { id: "MF-48218", origin: "Bilbao", destination: "Porto", carrier: "Meridian Line", vehicleId: "MF-307", region: "iberia", status: "delivered", eta: "2026-08-07", etaTime: "09:30", delayHours: 0, pallets: 25, notified: false }
+  ],
+  log: [
+    { actor: "Dispatch · Nora Beck", title: "Corridor E45 flagged congested", description: "Traffic control reported a 40 minute queue at the Öresund crossing.", time: "09:18", icon: "triangle-exclamation", tone: "warning", meta: "MF-48203 · corridor E45" },
+    { actor: "Telematics", title: "Reefer setpoint restored on MF-508", description: "Trailer temperature back inside the −20 °C tolerance band.", time: "08:52", icon: "temperature-half", tone: "success", meta: "MF-508 · sensor T2" },
+    { actor: "Customer care · Milo Fenn", title: "Consignee confirmed the Vienna window", description: "Delivery slot moved to 10:45 and accepted by the receiving hub.", time: "08:04", icon: "envelope", tone: "info", meta: "MF-48210 · slot 10:45" },
+    { actor: "Hub · Hamburg DC", title: "Dock 7 released", description: "Cross-dock finished 25 minutes ahead of the booked slot.", time: "07:26", icon: "warehouse", tone: "success", meta: "Hamburg DC · dock 7" }
+  ],
+  reroute: (s, id) => {
+    const sh = s.shipments.find(x => x.id == id)
+    if (sh && sh.status != "delivered") {
+      s.shipments = s.shipments.map(x => x.id == id ? { ...x, status: "in-transit", delayHours: 0 } : x)
+      s.log = [{ actor: "Dispatch · Nora Beck", title: `Rerouted ${id}`, description: `${sh.origin} → ${sh.destination} switched to the coastal corridor and the delay was cleared.`, time: "just now", icon: "route", tone: "info", meta: `${id} · vehicle ${sh.vehicleId}` }, ...s.log]
+    }
+  },
+  notify: (s, id) => {
+    const sh = s.shipments.find(x => x.id == id)
+    if (sh) {
+      s.shipments = s.shipments.map(x => x.id == id ? { ...x, notified: true } : x)
+      s.log = [{ actor: "Customer care · Milo Fenn", title: `Revised ETA sent for ${id}`, description: `Consignee in ${sh.destination} informed of a ${sh.delayHours} hour delay.`, time: "just now", icon: "envelope", tone: "warning", meta: `${id} · email + SMS` }, ...s.log]
+    }
+  }
+})
+
+hubs = [
+  { name: "Oslo DC", city: "Oslo, NO", region: "nordics", used: 1840, capacity: 2200, docks: [3, 6, 9, 11, 8, 5, 2] },
+  { name: "Stockholm DC", city: "Stockholm, SE", region: "nordics", used: 1290, capacity: 2000, docks: [2, 4, 7, 9, 10, 6, 3] },
+  { name: "Hamburg DC", city: "Hamburg, DE", region: "central", used: 3120, capacity: 3400, docks: [5, 9, 14, 16, 13, 9, 6] },
+  { name: "Lyon DC", city: "Lyon, FR", region: "central", used: 1980, capacity: 2800, docks: [4, 7, 10, 12, 11, 7, 4] },
+  { name: "Porto DC", city: "Porto, PT", region: "iberia", used: 1460, capacity: 1800, docks: [3, 5, 8, 10, 9, 6, 3] },
+  { name: "Madrid DC", city: "Madrid, ES", region: "iberia", used: 2240, capacity: 2400, docks: [6, 8, 12, 15, 12, 8, 5] }
+]
+dockHours = ["06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00"]
+days = ["Aug 1", "Aug 2", "Aug 3", "Aug 4", "Aug 5", "Aug 6", "Aug 7"]
+perfByRegion = {
+  nordics: { onTime: [41, 44, 39, 47, 52, 46, 49], delayed: [4, 3, 7, 2, 5, 3, 4] },
+  central: { onTime: [63, 58, 66, 71, 69, 74, 72], delayed: [6, 9, 5, 4, 8, 5, 6] },
+  iberia: { onTime: [28, 31, 27, 34, 36, 33, 38], delayed: [5, 4, 8, 6, 3, 7, 5] }
+}
+
+// ---- Derived state -----------------------------------------------------------
+inRegion = row => $region == "all" || row.region == $region
+scoped = ops.shipments.filter(inRegion)
+visibleHubs = hubs.filter(inRegion)
+visibleVehicles = ops.vehicles.filter(inRegion)
+exceptions = scoped.filter(s => s.status == "delayed")
+delayedCount = exceptions.length
+delayHours = $util.sum(exceptions.map(s => s.delayHours))
+movingCount = visibleVehicles.filter(v => v.state == "moving").length
+inTransitCount = scoped.filter(s => s.status == "in-transit").length
+deliveredCount = scoped.filter(s => s.status == "delivered").length
+tracked = scoped.filter(s => s.status != "at-hub")
+onTimePct = tracked.length == 0 ? 100 : Math.round(tracked.filter(s => s.delayHours == 0).length / tracked.length * 100)
+palletsMoving = $util.sum(scoped.filter(s => s.status == "in-transit").map(s => s.pallets))
+
+perfKeys = $region == "all" ? ["nordics", "central", "iberia"] : [$region]
+onTimeSeries = $util.range(0, 6).map(i => $util.sum(perfKeys.map(k => perfByRegion[k].onTime[i])))
+delayedSeries = $util.range(0, 6).map(i => $util.sum(perfKeys.map(k => perfByRegion[k].delayed[i])))
+
+function matches(s) {
+  const q = $search.trim().toLowerCase()
+  const byStatus = $statusFilter == "all" || s.status == $statusFilter
+  const byVehicle = $vehicleFilter == "" || s.vehicleId == $vehicleFilter
+  const haystack = `${s.id} ${s.origin} ${s.destination} ${s.carrier} ${s.vehicleId}`.toLowerCase()
+  return byStatus && byVehicle && (q == "" || haystack.includes(q))
+}
+visible = scoped.filter(matches)
+selectedVehicle = ops.vehicles.find(v => v.id == $detailId)
+
+// ---- Actions -----------------------------------------------------------------
+function openVehicle(id) {
+  $vehicleFilter = $vehicleFilter == id ? "" : id
+  $detailId = id
+  $drawerOpen = true
+  $page = 1
+}
+
+// The grid hands back (rowIndex, row, rowId) — open that load's vehicle.
+function openShipment(rowIndex, row, rowId) {
+  const sh = ops.shipments.find(s => s.id == rowId)
+  $detailId = sh ? sh.vehicleId : $detailId
+  $drawerOpen = true
+}
+
+function onRegionChange() {
+  $vehicleFilter = ""
+  $page = 1
+}
+
+function refreshNow() {
+  $tick += 1
+  $toast.info("Telematics refreshed")
+}
+
+function showDelayed() {
+  $statusFilter = "delayed"
+  $vehicleFilter = ""
+  $page = 1
+}
+
+// Only reachable with a non-empty target set (the buttons gate themselves).
+function rerouteAll() {
+  const ids = exceptions.map(s => s.id)
+  ids.forEach(id => ops.reroute(id))
+  $toast.success(`${ids.length} delayed load${ids.length == 1 ? "" : "s"} rerouted onto clear corridors`)
+}
+
+function rerouteSelected() {
+  $selectedIds.forEach(id => ops.reroute(id))
+  $toast.success(`${$selectedIds.length} shipment${$selectedIds.length == 1 ? "" : "s"} rerouted`)
+  $selectedIds = []
+}
+
+function notifySelected() {
+  $selectedIds.forEach(id => ops.notify(id))
+  $toast.info(`Revised ETAs sent for ${$selectedIds.length} shipment${$selectedIds.length == 1 ? "" : "s"}`)
+  $selectedIds = []
+}
+
+// ---- Reusable blocks ---------------------------------------------------------
+function VehicleTile(v) {
+  const meta = stateMeta[v.state]
+  const picked = $vehicleFilter == v.id
+  return Card([Column([
+    Row([StatusDot(meta.label, { tone: meta.tone, pulse: v.state == "moving" }), Spacer(), Badge(regionLabels[v.region], { tone: "neutral", size: "xs" })], { gap: "sm" }),
+    Text(`${v.id} · ${v.model}`, { variant: "body-heavy" }),
+    PersonChip(v.driver, { role: v.driverRole, size: "sm", status: v.state == "moving" ? "online" : "away" }),
+    Progress(v.load, { max: 100, label: "Trailer load", tone: v.load > 85 ? "warning" : "primary", showValue: true }),
+    Row([Icon("temperature-half", { size: "sm" }), Text(`${v.temp} °C`, { variant: "small", tone: "muted" }), Spacer(), Text(`${v.speed} km/h`, { variant: "small", tone: "muted" })], { gap: "2xs" })
+  ], { gap: "sm" })], { variant: picked ? "elevated" : "default", onClick: () => openVehicle(v.id), key: v.id })
+}
+
+function HubBar(h) {
+  const pct = Math.round(h.used / h.capacity * 100)
+  return Column([
+    Row([StackItem(Text(h.name, { variant: "body-heavy" }), { grow: 1 }), Badge(`${$util.format(h.used, "number")} / ${$util.format(h.capacity, "number")} pallets`, { tone: "neutral", size: "xs" })], { gap: "sm" }),
+    Progress(pct, { max: 100, label: h.city, tone: pct >= 90 ? "danger" : pct >= 80 ? "warning" : "success", showValue: true })
+  ], { gap: "2xs", key: h.name })
+}
+
+function ExceptionRow(s) {
+  const notifyAction = s.notified ? Pill("Customer notified", { tone: "success", icon: "check" }) : Button("Notify customer", { variant: "secondary", size: "sm", icon: "envelope", onClick: () => ops.notify(s.id) })
+  const reroute = Button("Reroute", { variant: "primary", size: "sm", icon: "route", onClick: () => ops.reroute(s.id) })
+  const detail = `${s.carrier} · vehicle ${s.vehicleId} · ETA ${s.eta} ${s.etaTime} · ${s.delayHours} h behind plan`
+  return ListItem(`${s.id} · ${s.origin} → ${s.destination}`, { description: detail, icon: "triangle-exclamation", tone: "danger", trailing: [notifyAction, reroute], key: s.id })
+}
+
+function StatusPill(f) {
+  const n = f.value == "all" ? scoped.length : scoped.filter(s => s.status == f.value).length
+  return FilterPill(f.label, { active: $statusFilter == f.value, count: n, icon: f.icon, onToggle: () => { $statusFilter = f.value }, key: f.value })
+}
+
+function VehicleDetail(v) {
+  const meta = stateMeta[v.state]
+  const legs = v.legs.map((name, i) => ({ title: name, details: `${i < v.legIndex ? "Cleared" : i == v.legIndex ? "Current leg" : "Scheduled"} · ${v.legTimes[i]}`, status: i < v.legIndex ? "complete" : i == v.legIndex ? "active" : "pending" }))
+  const onSpec = Math.abs(v.temp - v.setpoint) <= 1.5
+  const identity = Column([Text(`${v.id} · ${v.model}`, { variant: "body-heavy" }), Text(`${v.driver} · ${regionLabels[v.region]}`, { variant: "small", tone: "muted" })], { gap: "none" })
+  return Column([
+    Row([Avatar(v.driver, { size: "md", status: v.state == "moving" ? "online" : "away" }), StackItem(identity, { grow: 1 }), Badge(meta.label, { tone: meta.tone, icon: meta.icon, size: "sm" })], { gap: "sm" }),
+    SectionHeader("Route", { eyebrow: "LEG PROGRESS", subtitle: `${v.legIndex} of ${v.legs.length} legs cleared` }),
+    Steps(legs),
+    SectionHeader("Trailer temperature", { eyebrow: "REEFER", subtitle: `Setpoint ${v.setpoint} °C · tolerance ±1.5 °C` }),
+    Gauge(v.temp, { min: -30, max: 30, unit: " °C", size: "md", showRange: true, tone: onSpec ? "success" : "danger", caption: onSpec ? "Within tolerance" : "Outside tolerance — escalate", ariaLabel: `Trailer temperature for ${v.id}` }),
+    SectionHeader("Last telematics", { eyebrow: "LIVE FEED", subtitle: `Ping ${v.lastPing}` }),
+    DescriptionList([
+      DescriptionItem("Ground speed", `${v.speed} km/h`, { icon: "gauge-high" }),
+      DescriptionItem("Fuel", `${v.fuel}%`, { icon: "gas-pump" }),
+      DescriptionItem("Odometer", `${$util.format(v.odometer, "number")} km`, { icon: "road" }),
+      DescriptionItem("Door seal", Pill(v.doorSeal, { tone: v.doorSeal == "Sealed" ? "success" : "warning" }), { icon: "lock" }),
+      DescriptionItem("Trailer load", `${v.load}%`, { icon: "boxes-stacked" }),
+      DescriptionItem("Assigned loads", String(ops.shipments.filter(s => s.vehicleId == v.id).length), { icon: "list-check" })
+    ])
+  ], { gap: "md" })
+}
+
+// ---- Sections ----------------------------------------------------------------
+headerActions = [
+  Select("region", { items: regionItems, value: $region, label: "Region", labelHidden: true, onChange: onRegionChange }),
+  Switch("auto-refresh", { label: "Auto-refresh", value: $autoRefresh }),
+  Button("Night-shift note", { variant: "secondary", size: "sm", icon: "note-sticky", onClick: () => $toast.info("Handover note drafted for the night shift") })
+]
+liveBadge = Badge($autoRefresh ? `Live · sync #${$tick}` : "Feed paused", { tone: $autoRefresh ? "success" : "warning", icon: $autoRefresh ? "satellite-dish" : "pause" })
+header = PageHeader("Control tower", { subtitle: `Meridian Freight · ${regionLabels[$region]} · day shift 2026-08-07, 06:00–18:00 CET`, breadcrumbs: ["Operations", "Logistics", "Control tower"], status: liveBadge, actions: headerActions })
+
+bannerMessage = `${delayHours} cumulative delay hours across ${regionLabels[$region].toLowerCase()}. Reroute or notify the consignees before the delivery windows close.`
+exceptionBanner = Show(delayedCount > 0, { children: Banner(`${delayedCount} shipment${delayedCount == 1 ? " is" : "s are"} running behind schedule`, { message: bannerMessage, tone: "warning", icon: "triangle-exclamation", action: Button("View delayed", { variant: "primary", size: "sm", icon: "filter", onClick: showDelayed }) }) })
+
+kpis = Stats([
+  StatCard("In transit", { value: String(inTransitCount), icon: "truck-fast", tone: "info", hint: `${palletsMoving} pallets on the road` }),
+  StatCard("Delivered today", { value: String(deliveredCount), icon: "circle-check", tone: "success", trend: "up", delta: "+3 vs yesterday" }),
+  StatCard("Delayed", { value: String(delayedCount), icon: "clock", tone: delayedCount > 0 ? "danger" : "success", trend: delayedCount > 0 ? "up" : "flat", delta: `${delayHours} h total` }),
+  StatCard("On-time rate", { value: `${onTimePct}%`, icon: "gauge-high", tone: onTimePct >= 95 ? "success" : onTimePct >= 85 ? "warning" : "danger", spark: [88, 91, 86, 90, 84, 79, onTimePct], hint: "Tracked loads, excl. hub stock" })
+], { layout: "grid", columns: 4 })
+
+fleetSubtitle = `${visibleVehicles.length} vehicles · ${movingCount} moving · pick one to filter the shipments below`
+fleetHeader = SectionHeader("Fleet", { eyebrow: "TELEMATICS", subtitle: fleetSubtitle, status: Pill($vehicleFilter == "" ? "No vehicle filter" : `Filtered to ${$vehicleFilter}`, { tone: $vehicleFilter == "" ? "neutral" : "activating" }), actions: [Button("Clear vehicle filter", { variant: "ghost", size: "sm", icon: "xmark", disabled: $vehicleFilter == "", onClick: () => { $vehicleFilter = "" } })] })
+fleetCard = Card([fleetHeader, Grid(visibleVehicles.map(v => VehicleTile(v)), { columns: { base: 1, sm: 2, lg: 4 }, gap: "md" })])
+
+perfSubtitle = `${$util.sum(onTimeSeries)} on time · ${$util.sum(delayedSeries)} delayed in ${regionLabels[$region].toLowerCase()}`
+perfHeader = SectionHeader("Delivery performance", { eyebrow: "LAST 7 DAYS", subtitle: perfSubtitle, actions: [SegmentedControl(["Stacked", "Grouped"], { value: $chartMode, size: "sm", label: "Chart layout" })] })
+perfChart = BarChart(days, { series: [Series("On time", { values: onTimeSeries }), Series("Delayed", { values: delayedSeries })], stacked: $chartMode == "Stacked", height: 260, yAxisLabel: "Shipments", ariaLabel: `Daily on-time and delayed shipments for ${regionLabels[$region]}` })
+perfCard = Card([perfHeader, perfChart])
+
+dockGrid = Heatmap(dockHours, visibleHubs.map(h => h.name), { values: visibleHubs.map(h => h.docks), tone: "primary", ariaLabel: "Dock slots booked per hub and hour", emptyText: "No hubs in this region" })
+hubHeader = SectionHeader("Hub capacity", { eyebrow: "CROSS-DOCK", subtitle: `${visibleHubs.length} distribution centres · dock bookings by hour` })
+hubCard = Card([hubHeader, Column(visibleHubs.map(h => HubBar(h)), { gap: "sm" }), Separator({ label: "Dock slots booked" }), dockGrid])
+
+opsGrid = Grid([perfCard, hubCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+bulkActions = [
+  Button("Notify customers", { variant: "secondary", size: "sm", icon: "envelope", onClick: notifySelected }),
+  Button("Reroute selected", { variant: "primary", size: "sm", icon: "route", onClick: rerouteSelected })
+]
+bulkToolbar = Show($selectedIds.length > 0, { children: Toolbar({ left: [Text(`Bulk action on ${$selectedIds.length} shipment${$selectedIds.length == 1 ? "" : "s"}`, { variant: "small-heavy" })], right: bulkActions }) })
+
+shipmentsHeader = SectionHeader("Shipments", { eyebrow: "BOOK OF WORK", subtitle: `${visible.length} of ${scoped.length} loads shown`, status: StatusDot($autoRefresh ? "Streaming" : "Paused", { tone: $autoRefresh ? "success" : "warning", pulse: $autoRefresh }) })
+shipmentsToolbar = Toolbar({ left: [Row(statusFilters.map(f => StatusPill(f)), { gap: "2xs", wrap: true })], right: [Button("Refresh now", { variant: "secondary", size: "sm", icon: "rotate", onClick: refreshNow })], searchable: true, searchPlaceholder: "Search shipment, city, carrier or vehicle…", searchValue: $search })
+shipmentColumns = [
+  Col("Shipment", { values: visible.map(s => s.id), sortable: true, width: "130px" }),
+  Col("Route", { values: visible.map(s => `${s.origin} → ${s.destination}`), sortable: true, width: "240px" }),
+  Col("Carrier", { values: visible.map(s => s.carrier), sortable: true, filterable: true }),
+  Col("Vehicle", { values: visible.map(s => s.vehicleId), sortable: true, filterable: true }),
+  Col("Status", { values: visible.map(s => Badge(statusMeta[s.status].label, { tone: statusMeta[s.status].tone, icon: statusMeta[s.status].icon, size: "sm" })) }),
+  Col("ETA", { values: visible.map(s => `${s.eta} · ${s.etaTime}`), sortable: true }),
+  Col("Delay (h)", { values: visible.map(s => s.delayHours), format: "number", align: "right", sortable: true })
+]
+shipmentsGrid = DataGrid({ columns: shipmentColumns, rowIds: visible.map(s => s.id), sort: $sort, selectable: true, selectedIds: $selectedIds, page: $page, perPage: 8, density: "compact", striped: true, maxHeight: "480px", emptyLabel: "No shipments match these filters", onRowClick: openShipment, toolbar: bulkToolbar })
+shipmentsCard = Card([shipmentsHeader, shipmentsToolbar, shipmentsGrid])
+
+exceptionsSubtitle = `${delayedCount} load${delayedCount == 1 ? "" : "s"} behind plan in ${regionLabels[$region].toLowerCase()}`
+exceptionsHeader = SectionHeader("Exception desk", { eyebrow: "NEEDS A DECISION", subtitle: exceptionsSubtitle, status: Pill(delayedCount > 0 ? "Action required" : "All clear", { tone: delayedCount > 0 ? "critical" : "success" }), actions: [Button("Reroute all", { variant: "secondary", size: "sm", icon: "route", disabled: delayedCount == 0, onClick: rerouteAll })] })
+exceptionsList = Show(delayedCount > 0, { children: List(exceptions.map(s => ExceptionRow(s)), { divided: true }), fallback: EmptyState("No exceptions here", { description: "Every tracked load in this region is running to plan.", icon: "circle-check" }) })
+exceptionsCard = Card([exceptionsHeader, exceptionsList, Separator({ label: "Dispatch audit trail" }), ActivityLog(ops.log, { variant: "audit", emptyLabel: "Nothing logged in this shift yet" })])
+
+drawerBody = selectedVehicle ? VehicleDetail(selectedVehicle) : EmptyState("No vehicle selected", { description: "Pick a vehicle from the fleet grid to see its route and telematics.", icon: "truck" })
+drawerFooter = [
+  Button("Message driver", { variant: "secondary", icon: "comment", onClick: () => $toast.success("Message queued for the in-cab terminal") }),
+  Button("Close", { variant: "ghost", onClick: () => { $drawerOpen = false } })
+]
+vehicleDrawer = Drawer("Vehicle detail", $drawerOpen, [drawerBody], { width: "520px", footer: drawerFooter })

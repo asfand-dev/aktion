@@ -1,0 +1,91 @@
+// Profile Header — a social profile block: cover area, avatar, follow/following
+// toggle with live follower count, key stats, a bio with tags, and tabbed
+// content (Posts / About / Activity) that swaps the body live.
+$app(Container([Column([card, tabsCard], { gap: "lg" })], { size: "md" }))
+
+user = {
+  name: "Ada Lovelace", handle: "@ada", role: "Engineering Lead at Acme",
+  bio: "Mathematician & first programmer. Writing about reactive UIs, compilers and the analytical engine.",
+  location: "London, UK", website: "ada.dev", joined: "Joined March 2021",
+  tags: ["Compilers", "Reactivity", "Open source", "Mentoring"]
+}
+
+$following = false
+$followers = 1284
+$tab = "posts"
+
+function toggleFollow() {
+  $following = !$following
+  $followers = $following ? $followers + 1 : $followers - 1
+}
+
+posts = [
+  { title: "Why streaming UIs feel instant", time: "2d ago", likes: 142, comments: 18 },
+  { title: "One reactive atom to rule them all", time: "1w ago", likes: 308, comments: 47 },
+  { title: "Theming at runtime without rebuilds", time: "3w ago", likes: 96, comments: 9 }
+]
+activity = [
+  { text: "Starred aktion/runtime", time: "1h ago", icon: "star" },
+  { text: "Commented on \"CSP support\"", time: "4h ago", icon: "comment" },
+  { text: "Opened PR #482", time: "Yesterday", icon: "code-pull-request" }
+]
+
+card = Card([Column([
+  Box([Center([Icon("bolt", { size: "lg" })], { minHeight: "120px" })], { background: "primary", padding: "lg" }),
+  Row([
+    Avatar(user.name, { size: "xl" }),
+    StackItem(Column([
+      Text(user.name, { variant: "title" }),
+      Text(`${user.handle} · ${user.role}`, { variant: "small", tone: "muted" })
+    ], { gap: "xs" }), { grow: 1 }),
+    Row([
+      Button($following ? "Following" : "Follow", { variant: $following ? "secondary" : "primary", icon: $following ? "check" : "user-plus", onClick: toggleFollow }),
+      IconButton("ellipsis", { label: "More", variant: "ghost" })
+    ], { gap: "sm" })
+  ], { align: "center", gap: "md" }),
+  Text(user.bio),
+  Row([
+    Row([Icon("location-dot", { size: "sm" }), Text(user.location, { variant: "small", tone: "muted" })], { gap: "xs", align: "center" }),
+    Row([Icon("link", { size: "sm" }), Link(user.website, { href: "#" })], { gap: "xs", align: "center" }),
+    Row([Icon("calendar", { size: "sm" }), Text(user.joined, { variant: "small", tone: "muted" })], { gap: "xs", align: "center" })
+  ], { gap: "lg", wrap: true }),
+  BadgeList(user.tags, { tone: "info", size: "sm" }),
+  Separator("horizontal"),
+  Stats([
+    { label: "Followers", value: $util.format($followers, "compact") },
+    { label: "Following", value: "312" },
+    { label: "Posts", value: String(posts.length) }
+  ], { layout: "strip" })
+], { gap: "md" })])
+
+function postsView() {
+  return Column(posts.map(p => Box([Column([
+    Text(p.title, { variant: "body-heavy" }),
+    Row([Text(p.time, { variant: "small", tone: "muted" }), Spacer(), Badge(String(p.likes), { tone: "neutral", size: "sm", icon: "heart" }), Badge(String(p.comments), { tone: "neutral", size: "sm", icon: "comment" })], { align: "center", gap: "xs" })
+  ], { gap: "xs" })], { padding: "sm", border: "subtle", background: "surface" })), { gap: "sm" })
+}
+function aboutView() {
+  return DescriptionList([
+    DescriptionItem("Role", { value: user.role, icon: "briefcase" }),
+    DescriptionItem("Location", { value: user.location, icon: "location-dot" }),
+    DescriptionItem("Website", { value: user.website, icon: "link" }),
+    DescriptionItem("Member since", { value: user.joined, icon: "calendar" })
+  ])
+}
+function activityView() {
+  return Timeline(activity.map(a => TimelineItem(a.text, { time: a.time, icon: a.icon, tone: "primary" })))
+}
+
+function tabBody(tab) {
+  switch (tab) {
+    case "about": return aboutView()
+    case "activity": return activityView()
+    default: return postsView()
+  }
+}
+
+tabsCard = Card([Column([
+  ToggleGroup("tab", { items: [{ value: "posts", label: "Posts" }, { value: "about", label: "About" }, { value: "activity", label: "Activity" }], value: $tab }),
+  Separator("horizontal"),
+  tabBody($tab)
+], { gap: "md" })])
