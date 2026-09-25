@@ -28,12 +28,14 @@
  * `remap.ts`).
  *
  * Design deliberately mirrors `src/tooling/formatter.ts`'s own tokenizer
- * discipline — quotes, template literals, and comments are all skipped the
- * same way a real lexer would, so `export` (or a lookalike sequence)
- * appearing inside a string, a template literal's inert text, or a
- * `//`/`/* *\/` comment is never mistaken for the keyword. Unlike a full
- * tokenizer, this one is targeted: it looks specifically for the `export`
- * keyword and, only when found, classifies what immediately follows it.
+ * discipline — quotes, template literals, comments, and (as of this pass)
+ * regex literals are all skipped the same way `src/parser/lexer.ts`'s real
+ * `tokenize()` would, so `export` (or a lookalike sequence) appearing inside
+ * a string, a template literal's inert text, a `//`/`/* *\/` comment, or a
+ * `/pattern/flags` regex is never mistaken for the keyword or for a phantom
+ * string start. Unlike a full tokenizer, this one is targeted: it looks
+ * specifically for the `export` keyword and, only when found, classifies
+ * what immediately follows it.
  *
  * Known, deliberate scope limit: this scan does not track brace depth to
  * confirm a match is at true top level (module scope) — the task's own

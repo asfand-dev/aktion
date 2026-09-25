@@ -1,6 +1,164 @@
 const IDENTIFIER_START = /[$A-Z_a-z]/u;
 const IDENTIFIER_CHAR = /[\w$]/u;
 const WHITESPACE_CHAR = /\s/u;
+const DIGIT_CHAR = /\d/u;
+const HEX_DIGIT_CHAR = /[\da-f]/iu;
+const RESERVED_KEYWORD_WORDS = /* @__PURE__ */ new Set([
+  "function",
+  "import",
+  "export",
+  "if",
+  "else",
+  "switch",
+  "case",
+  "break",
+  "continue",
+  "for",
+  "while",
+  "do",
+  "of",
+  "in",
+  "let",
+  "var",
+  "const",
+  "await",
+  "async",
+  "return",
+  "default",
+  "try",
+  "catch",
+  "finally",
+  "throw",
+  "new",
+  "typeof",
+  "instanceof",
+  "delete",
+  "void"
+]);
+function skipRadixNumberLiteral(source, index) {
+  let cursor = index + 2;
+  while (cursor < source.length) {
+    const next = source[cursor] ?? "";
+    if (HEX_DIGIT_CHAR.test(next)) {
+      cursor += 1;
+      continue;
+    }
+    if (next === "_" && HEX_DIGIT_CHAR.test(source[cursor + 1] ?? "")) {
+      cursor += 1;
+      continue;
+    }
+    break;
+  }
+  return cursor;
+}
+function tryConsumeExponentMarker(source, index) {
+  const next = source[index] ?? "";
+  if (next !== "e" && next !== "E") {
+    return void 0;
+  }
+  const afterE = source[index + 1] ?? "";
+  const afterSign = afterE === "+" || afterE === "-" ? source[index + 2] ?? "" : afterE;
+  if (!DIGIT_CHAR.test(afterSign)) {
+    return void 0;
+  }
+  let cursor = index + 1;
+  if (source[cursor] === "+" || source[cursor] === "-") {
+    cursor += 1;
+  }
+  return cursor;
+}
+function skipDecimalNumberLiteral(source, index) {
+  let cursor = index;
+  let sawDot = false;
+  let sawExponent = false;
+  while (cursor < source.length) {
+    const next = source[cursor] ?? "";
+    if (DIGIT_CHAR.test(next)) {
+      cursor += 1;
+      continue;
+    }
+    if (next === "_" && DIGIT_CHAR.test(source[cursor + 1] ?? "")) {
+      cursor += 1;
+      continue;
+    }
+    if (next === "." && !sawDot && !sawExponent && DIGIT_CHAR.test(source[cursor + 1] ?? "")) {
+      sawDot = true;
+      cursor += 1;
+      continue;
+    }
+    const afterExponent = sawExponent ? void 0 : tryConsumeExponentMarker(source, cursor);
+    if (afterExponent !== void 0) {
+      sawExponent = true;
+      cursor = afterExponent;
+      continue;
+    }
+    break;
+  }
+  return cursor;
+}
+function skipNumberLiteral(source, index) {
+  const radixMark = source[index + 1];
+  if (source[index] === "0" && ["x", "X", "b", "B", "o", "O"].includes(radixMark ?? "")) {
+    return skipRadixNumberLiteral(source, index);
+  }
+  return skipDecimalNumberLiteral(source, index);
+}
+function trySkipRegexLiteral(source, index) {
+  let cursor = index + 1;
+  let inClass = false;
+  while (cursor < source.length) {
+    const char = source[cursor];
+    if (char === "\n") {
+      return void 0;
+    }
+    if (char === "\\") {
+      cursor += 1;
+      const escaped = source[cursor];
+      if (escaped !== void 0 && escaped !== "\n") {
+        cursor += 1;
+      }
+      continue;
+    }
+    if (char === "[") {
+      inClass = true;
+      cursor += 1;
+      continue;
+    }
+    if (char === "]") {
+      inClass = false;
+      cursor += 1;
+      continue;
+    }
+    if (char === "/" && !inClass) {
+      cursor += 1;
+      while (cursor < source.length && /[a-z]/iu.test(source[cursor] ?? "")) {
+        cursor += 1;
+      }
+      return cursor;
+    }
+    cursor += 1;
+  }
+  return void 0;
+}
+function tryHandleBracketOrBrace(char, braceDepth) {
+  if (char === "{" || char === "}") {
+    return { braceDepth: braceDepth + (char === "{" ? 1 : -1), regexAllowed: char === "{" };
+  }
+  if (char === "(" || char === "[") {
+    return { braceDepth, regexAllowed: true };
+  }
+  if (char === ")" || char === "]") {
+    return { braceDepth, regexAllowed: false };
+  }
+  return void 0;
+}
+function handleSlash(source, index, regexAllowed) {
+  const skippedRegex = regexAllowed ? trySkipRegexLiteral(source, index) : void 0;
+  if (skippedRegex !== void 0) {
+    return { index: skippedRegex, regexAllowed: false };
+  }
+  return { index: index + 1, regexAllowed: true };
+}
 function readIdentifierWord(source, index) {
   let end = index;
   while (end < source.length && IDENTIFIER_CHAR.test(source[end] ?? "")) {
@@ -82,24 +240,48 @@ function findBareExportInsertions(source) {
   const scanCode = (start, stopAtBrace) => {
     let index = start;
     let braceDepth = 0;
+    let regexAllowed = true;
     while (index < source.length) {
       const char = source[index];
       if (stopAtBrace && char === "}" && braceDepth === 0) {
         return index + 1;
       }
-      if (char === "{" || char === "}") {
-        braceDepth += char === "{" ? 1 : -1;
+      const bracketOutcome = tryHandleBracketOrBrace(char ?? "", braceDepth);
+      if (bracketOutcome !== void 0) {
+        braceDepth = bracketOutcome.braceDepth;
+        regexAllowed = bracketOutcome.regexAllowed;
         index += 1;
         continue;
       }
       const skippedStringLike = trySkipStringLike(index);
       if (skippedStringLike !== void 0) {
         index = skippedStringLike;
+        regexAllowed = false;
         continue;
       }
       const skippedComment = trySkipComment(index);
       if (skippedComment !== void 0) {
         index = skippedComment;
+        continue;
+      }
+      if (char === "/") {
+        const slashOutcome = handleSlash(source, index, regexAllowed);
+        index = slashOutcome.index;
+        regexAllowed = slashOutcome.regexAllowed;
+        continue;
+      }
+      if (char === "\n") {
+        regexAllowed = true;
+        index += 1;
+        continue;
+      }
+      if (WHITESPACE_CHAR.test(char ?? "")) {
+        index += 1;
+        continue;
+      }
+      if (DIGIT_CHAR.test(char ?? "")) {
+        index = skipNumberLiteral(source, index);
+        regexAllowed = false;
         continue;
       }
       if (char === "e" && isExportKeywordAt(index)) {
@@ -108,8 +290,16 @@ function findBareExportInsertions(source) {
           insertions.push({ originalOffset: insertionOffset });
         }
         index += 6;
+        regexAllowed = true;
         continue;
       }
+      if (IDENTIFIER_START.test(char ?? "")) {
+        const { word, end } = readIdentifierWord(source, index);
+        index = end;
+        regexAllowed = RESERVED_KEYWORD_WORDS.has(word);
+        continue;
+      }
+      regexAllowed = true;
       index += 1;
     }
     return index;
