@@ -1998,11 +1998,29 @@ function parseSwitchStatement(ctx: ParserContext): Statement {
     const caseObj: SwitchCase = { test, body };
     if (caseLeading.length > 0) caseObj.leadingComments = caseLeading;
 
-    attachComments(ctx, body, caseHead.line, caseEndLineExclusive);
-    lastLine = body.length > 0
+    const lastBodyLine = body.length > 0
       ? (nodeEndLine.get(body[body.length - 1]!) ?? caseHead.line)
       : caseHead.line;
-    caseWindowStart = caseEndLineExclusive;
+    // The body's own `attachComments` window must stop just past
+    // `lastBodyLine` (allowing only a genuine SAME-LINE trailing comment on
+    // the last body statement) — NOT at `caseEndLineExclusive` (the next
+    // case/default keyword's own line). Passing `caseEndLineExclusive` here
+    // let this call's "drop anything left in this window" cleanup swallow
+    // the NEXT case's own header-comment run before that case's `caseLeading`
+    // loop above ever got a chance to claim it — the bug that meant only the
+    // FIRST case could ever carry a header comment. `Math.min` guards the
+    // rare case where the last statement's own end line coincides with the
+    // next case token's line (e.g. a one-line `if (x) { y() }` body sharing
+    // a line with `case 2:`), so the window never extends past what the old
+    // bound allowed. Any comment between `lastBodyLine` and the next case
+    // token is left unconsumed here and falls through to become that next
+    // case's own leading comment — the same "leading for whatever follows,
+    // unless it shares the previous statement's end line" rule
+    // `attachComments` already applies between two ordinary statements.
+    const bodyEndLineExclusive = Math.min(caseEndLineExclusive, lastBodyLine + 1);
+    attachComments(ctx, body, caseHead.line, bodyEndLineExclusive);
+    lastLine = lastBodyLine;
+    caseWindowStart = bodyEndLineExclusive;
 
     cases.push(caseObj);
     skipWhitespace(ctx);
