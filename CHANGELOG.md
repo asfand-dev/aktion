@@ -5,6 +5,38 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-09-25
+
+### Comments Now Survive `formatProgram`
+
+- The formatter used to silently drop every comment: `formatProgram`/
+  `printProgram` re-serialize the AST from scratch, and comments were never
+  part of the AST, so running a program through the formatter (or any tool
+  built on it) erased every comment in the file. `.aktion` files carry
+  comments in the overwhelming common case — measured at 162 of 165 real
+  example programs in this repo — so this was not an edge case.
+- The lexer now optionally collects raw comment text and position alongside
+  its tokens, the parser attaches each comment to the nearest enclosing
+  statement (or `switch` case) as a `leadingComments`/`trailingComments`/
+  `innerComments` array, and the printer re-emits them verbatim in their
+  original position, including blank-line-before spacing. This is purely
+  additive to the AST — the existing single-point `line`/`column` location
+  tracking is unchanged, and every prior consumer that doesn't ask for
+  comments sees no difference.
+- Verified against the whole real-world corpus, not just the new unit tests:
+  a repo-wide sweep round-trips every comment-bearing `.aktion` file through
+  `formatProgram` and asserts each comment's raw text survives somewhere in
+  the output. 920 of the corpus's 922 real comments across 161 of 162
+  comment-bearing files are fully preserved; the one known gap (two
+  mid-object-literal comments in `create-aktion/template/dashboard/src/
+  store.aktion`) is documented and tracked in that sweep so a future
+  regression can't hide behind it.
+- Known limitation, unchanged from before this work: a comment placed
+  *between* an object literal's properties (rather than before/after the
+  whole statement) has no AST slot to attach to yet — this requires
+  representing comments at the expression level, not just the statement
+  level, and is left for a future pass.
+
 ## 2026-09-19
 
 ### Configurable Formatter Indentation

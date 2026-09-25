@@ -89,6 +89,26 @@ export interface Token {
   flags?: string;
 }
 
+export type CommentKind = "Line" | "Block";
+
+/**
+ * A `//` or `/* *\/` comment collected as out-of-band trivia rather than a
+ * token — the parser never has to explicitly skip a "Comment" token at every
+ * call site (mirrors how most JS-family tokenizers keep comments off the main
+ * token stream). `text` is the RAW comment text INCLUDING its delimiters
+ * (`// note`, `/* block *\/`), exactly as written; the comment-attachment
+ * pass in `parser.ts` re-emits it verbatim rather than reformatting the
+ * contents.
+ */
+export interface RawComment {
+  kind: CommentKind;
+  text: string;
+  line: number;
+  column: number;
+  /** Line the comment's last character sits on — equals `line` for a `Line` comment, may exceed it for a multi-line `Block` comment. */
+  endLine: number;
+}
+
 const SINGLE_CHAR_PUNCT = new Set(["(", ")", "[", "]", "{", "}", ",", ":", "?", "."]);
 const KEYWORDS: Record<string, TokenType> = {
   true: "Boolean",
@@ -96,7 +116,15 @@ const KEYWORDS: Record<string, TokenType> = {
   null: "Null",
 };
 
-export function tokenize(source: string): Token[] {
+/**
+ * Tokenize `source`. When `comments` is passed, every `//` line comment and
+ * `/* *\/` block comment encountered is pushed onto it (in source order,
+ * mirroring the token stream) instead of being silently discarded — this is
+ * an optional out-param rather than a return-shape change so every existing
+ * caller (`navigation.ts`, `semantic-tokens.ts`, …) that only wants tokens
+ * keeps working unmodified.
+ */
+export function tokenize(source: string, comments?: RawComment[]): Token[] {
   const tokens: Token[] = [];
   let i = 0;
   let line = 1;
@@ -261,21 +289,29 @@ export function tokenize(source: string): Token[] {
 
     // Line comments: //...
     if (ch === "/" && peek(1) === "/") {
-      while (i < source.length && peek() !== "\n") advance();
+      const startLine = line;
+      const startCol = column;
+      let text = "";
+      while (i < source.length && peek() !== "\n") text += advance();
+      comments?.push({ kind: "Line", text, line: startLine, column: startCol, endLine: startLine });
       continue;
     }
 
     // Block comments: /* ... */
     if (ch === "/" && peek(1) === "*") {
-      advance();
-      advance();
+      const startLine = line;
+      const startCol = column;
+      let text = "";
+      text += advance();
+      text += advance();
       while (i < source.length && !(peek() === "*" && peek(1) === "/")) {
-        advance();
+        text += advance();
       }
       if (i < source.length) {
-        advance();
-        advance();
+        text += advance();
+        text += advance();
       }
+      comments?.push({ kind: "Block", text, line: startLine, column: startCol, endLine: line });
       continue;
     }
 
