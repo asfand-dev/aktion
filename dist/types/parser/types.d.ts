@@ -1,19 +1,30 @@
+import { RawComment } from './lexer.js';
 /**
- * AST types for Aktion.
+ * A `//` / `/* *\/` comment attached to the statement it documents.
  *
- * The surface syntax is a strict subset of JavaScript. Identifiers prefixed
- * with `$` denote reactive state; everything else is standard JS:
- *
- *   $count = 0
- *   let name = "Ada"
- *   function Counter(initial) { return ... }
- *   effect(() => { ... }, [$count, "mount"])
+ * Extends the lexer's `RawComment` (kind, raw text incl. delimiters,
+ * position) with `blankLineBefore`, computed by the comment-attachment pass
+ * in `parser.ts`: true when at least one full blank source line separated
+ * this comment from whatever preceded it (the previous statement's last
+ * line, or the previous comment in the same leading-comment group) — the
+ * printer reinserts that gap so a deliberately-separated header comment
+ * doesn't collapse against the code above it.
  */
+export interface AttachedComment extends RawComment {
+    blankLineBefore?: boolean;
+}
 export type Expression = LiteralExpr | IdentifierExpr | StateRefExpr | ArrayExpr | ObjectExpr | MemberExpr | UnaryExpr | BinaryExpr | TernaryExpr | CallExpr | MethodCallExpr | InvokeExpr | BuiltinCallExpr | NewExpr | TemplateLiteralExpr | SpreadExpr | LambdaExpr | BlockExpr;
 export interface SwitchCase {
     /** `null` for the `default` case. */
     test: Expression | null;
     body: ReadonlyArray<Statement>;
+    /**
+     * Comment(s) immediately preceding the `case`/`default` keyword itself
+     * (e.g. a one-line note on what the branch does) — distinct from a
+     * `leadingComments` group on the FIRST statement inside `body`, which
+     * documents that statement rather than the branch as a whole.
+     */
+    leadingComments?: ReadonlyArray<AttachedComment>;
 }
 /** `(args) => body` lambda / arrow function. */
 export interface LambdaExpr {
@@ -43,6 +54,15 @@ export interface BlockExpr {
     kind: "Block";
     body: ReadonlyArray<Statement>;
     loc?: SourceLocation;
+    /**
+     * Comment(s) that sit inside this block with NO following statement to
+     * attach to as `leadingComments` — set only when `body` is empty (e.g. a
+     * function stub whose whole body is `// TODO: implement`). A dangling
+     * comment before `}` in a NON-empty block (after the last statement, on
+     * its own line) is a documented, out-of-scope gap — see
+     * `KNOWN_COMMENT_GAPS` in `tests/formatter-idempotency-sweep.test.ts`.
+     */
+    innerComments?: ReadonlyArray<AttachedComment>;
 }
 export interface SourceLocation {
     line: number;
@@ -220,6 +240,10 @@ export interface AssignmentStatement {
      */
     exported?: boolean;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /**
  * Single specifier in an `import { … } from "./mod.aktion"`. Names are stored
@@ -246,6 +270,10 @@ export interface ImportStatement {
     /** Raw module specifier, e.g. "./components/counter.aktion". */
     source: string;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /**
  * `function Name(p, q) { ... }` declaration. PascalCase names are treated
@@ -262,6 +290,10 @@ export interface ComponentDeclaration {
     /** True when prefixed with `export` (multi-file modules). */
     exported?: boolean;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /**
  * Parameter on a `function` declaration. Distinct from `library/components`
@@ -311,6 +343,10 @@ export interface EffectDeclaration {
     rateLimit?: EffectRateLimit;
     body: BlockExpr;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /** Trigger literal (`$state`, `"mount"`, `"unmount"`, `"every(N)"`). */
 export type EffectTrigger = {
@@ -342,6 +378,10 @@ export interface ActionDeclaration {
     /** True when prefixed with `export` (multi-file modules). */
     exported?: boolean;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /**
  * `function $name(args) { body }` — a **hook** declaration (the `$` sigil
@@ -369,24 +409,40 @@ export interface HookDeclaration {
     /** True when prefixed with `export` (multi-file modules). */
     exported?: boolean;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /** `await expr` statement / expression — only valid inside `function`/`effect`. */
 export interface AwaitStatement {
     kind: "Await";
     argument: Expression;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /** `return [expr]` statement — only valid inside `function`/`effect`. */
 export interface ReturnStatement {
     kind: "Return";
     argument?: Expression;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /** Bare expression statement at the top of a block / body. */
 export interface ExpressionStatement {
     kind: "ExpressionStatement";
     expression: Expression;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /** `if (cond) { … } else { … }` — JS if/else statement (body grammar). */
 export interface IfStatement {
@@ -395,6 +451,10 @@ export interface IfStatement {
     consequent: BlockExpr;
     alternate?: IfStatement | BlockExpr;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /** `switch (value) { case X: …; break; default: … }` statement. */
 export interface SwitchStatement {
@@ -402,6 +462,10 @@ export interface SwitchStatement {
     discriminant: Expression;
     cases: ReadonlyArray<SwitchCase>;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /**
  * `for (let x of arr) { body }` statement — iterates without producing a
@@ -422,6 +486,10 @@ export interface ForOfStatement {
     iterable: Expression;
     body: BlockExpr;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /**
  * `for (init; test; update) { body }` — classic C-style for loop.
@@ -435,6 +503,10 @@ export interface ForClassicStatement {
     update?: Expression;
     body: BlockExpr;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /**
  * `for (let key in obj) { body }` — iterates over the enumerable string
@@ -447,6 +519,10 @@ export interface ForInStatement {
     iterable: Expression;
     body: BlockExpr;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /** `while (cond) { body }` statement. */
 export interface WhileStatement {
@@ -454,6 +530,10 @@ export interface WhileStatement {
     test: Expression;
     body: BlockExpr;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /** `do { body } while (cond)` — body always runs at least once. */
 export interface DoWhileStatement {
@@ -461,22 +541,38 @@ export interface DoWhileStatement {
     test: Expression;
     body: BlockExpr;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /** `break` — exits the nearest enclosing loop or switch case. */
 export interface BreakStatement {
     kind: "BreakStatement";
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /** `continue` — skips to the next loop iteration. */
 export interface ContinueStatement {
     kind: "ContinueStatement";
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /** `throw expr` — throws the given value. */
 export interface ThrowStatement {
     kind: "ThrowStatement";
     argument: Expression;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /**
  * Single binding produced by an `Array` / `Object` destructuring pattern.
@@ -507,6 +603,10 @@ export interface DestructureStatement {
     bindings: DestructuringBinding[];
     expression: Expression;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 /** `try { … } catch (e) { … } finally { … }` statement. */
 export interface TryStatement {
@@ -516,6 +616,10 @@ export interface TryStatement {
     catchBlock?: BlockExpr;
     finallyBlock?: BlockExpr;
     loc?: SourceLocation;
+    /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+    leadingComments?: ReadonlyArray<AttachedComment>;
+    /** Comment(s) on the same source line as this statement's end. */
+    trailingComments?: ReadonlyArray<AttachedComment>;
 }
 export type Statement = AssignmentStatement | ImportStatement | ComponentDeclaration | EffectDeclaration | ActionDeclaration | HookDeclaration | AwaitStatement | ReturnStatement | ExpressionStatement | IfStatement | SwitchStatement | ForOfStatement | ForClassicStatement | ForInStatement | WhileStatement | DoWhileStatement | DestructureStatement | BreakStatement | ContinueStatement | ThrowStatement | TryStatement;
 export interface Program {

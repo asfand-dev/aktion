@@ -44,7 +44,7 @@ const KEYWORDS = {
   false: "Boolean",
   null: "Null"
 };
-function tokenize(source) {
+function tokenize(source, comments) {
   const tokens = [];
   let i = 0;
   let line = 1;
@@ -200,19 +200,27 @@ function tokenize(source) {
       continue;
     }
     if (ch === "/" && peek(1) === "/") {
-      while (i < source.length && peek() !== "\n") advance();
+      const startLine = line;
+      const startCol = column;
+      let text = "";
+      while (i < source.length && peek() !== "\n") text += advance();
+      comments?.push({ kind: "Line", text, line: startLine, column: startCol, endLine: startLine });
       continue;
     }
     if (ch === "/" && peek(1) === "*") {
-      advance();
-      advance();
+      const startLine = line;
+      const startCol = column;
+      let text = "";
+      text += advance();
+      text += advance();
       while (i < source.length && !(peek() === "*" && peek(1) === "/")) {
-        advance();
+        text += advance();
       }
       if (i < source.length) {
-        advance();
-        advance();
+        text += advance();
+        text += advance();
       }
+      comments?.push({ kind: "Block", text, line: startLine, column: startCol, endLine: line });
       continue;
     }
     if (ch === "/" && regexAllowedHere(tokens)) {
@@ -560,8 +568,9 @@ function stampSourceIndex(root, index) {
   });
 }
 function parse(source) {
-  const tokens = tokenize(source);
-  const ctx = new ParserContext(tokens);
+  const comments = [];
+  const tokens = tokenize(source, comments);
+  const ctx = new ParserContext(tokens, comments);
   const statements = [];
   const errors = [];
   while (!ctx.isEnd()) {
@@ -575,9 +584,18 @@ function parse(source) {
       ctx.recoverToNextLine();
     }
   }
+  attachComments(ctx, statements, 0, ctx.peek().line + 1);
   return { statements, errors };
 }
-function parseStatement(ctx, _topLevel) {
+const nodeEndLine = /* @__PURE__ */ new WeakMap();
+function parseStatement(ctx, topLevel) {
+  const stmt = parseStatementImpl(ctx);
+  if (stmt && !nodeEndLine.has(stmt)) {
+    nodeEndLine.set(stmt, ctx.previousConsumedLine());
+  }
+  return stmt;
+}
+function parseStatementImpl(ctx, _topLevel) {
   const head = ctx.peek();
   if (head.type === "StateIdentifier" && head.value === "effect" && ctx.peek(1).type === "Punctuation" && ctx.peek(1).value === "(") {
     return parseEffectStatement(ctx);
@@ -1050,12 +1068,20 @@ function parseBlock(ctx) {
     if (stmt) body.push(stmt);
     skipWhitespace(ctx);
   }
-  ctx.expect("Punctuation", "}");
-  return {
+  const close = ctx.expect("Punctuation", "}");
+  const block = {
     kind: "Block",
     body,
     loc: { line: start.line, column: start.column }
   };
+  nodeEndLine.set(block, close.line);
+  if (body.length === 0) {
+    const inner = collectDanglingComments(ctx, start.line, close.line);
+    if (inner.length > 0) block.innerComments = inner;
+  } else {
+    attachComments(ctx, body, start.line, close.line);
+  }
+  return block;
 }
 function parseBlockOrSingleStatement(ctx) {
   skipWhitespace(ctx);
@@ -1064,11 +1090,13 @@ function parseBlockOrSingleStatement(ctx) {
   }
   const head = ctx.peek();
   const stmt = parseStatement(ctx);
-  return {
+  const block = {
     kind: "Block",
     body: stmt ? [stmt] : [],
     loc: { line: head.line, column: head.column }
   };
+  nodeEndLine.set(block, stmt ? nodeEndLine.get(stmt) ?? head.line : head.line);
+  return block;
 }
 function parseAwait(ctx) {
   const start = ctx.expect("Keyword", "await");
@@ -1095,10 +1123,21 @@ function parseReturn(ctx) {
   };
 }
 class ParserContext {
-  constructor(tokens) {
+  constructor(tokens, comments = []) {
     this.tokens = tokens;
+    this.comments = comments;
   }
   index = 0;
+  /**
+   * Indices into `comments` already claimed by SOME container's
+   * `attachComments`/`collectDanglingComments`/switch-case-header pass.
+   * Comments are no longer consumed strictly in source order (see
+   * `peekComment`/`takeComment` below) — an ancestor container's comment can
+   * remain unconsumed while a nested container reaches past it to claim a
+   * LATER comment that is actually its own, so "already attached" has to be
+   * tracked per-index rather than via a single monotonic cursor.
+   */
+  consumedComments = /* @__PURE__ */ new Set();
   isEnd() {
     return this.peek().type === "EOF";
   }
@@ -1109,6 +1148,40 @@ class ParserContext {
     const tok = this.tokens[this.index] ?? { type: "EOF", value: "", line: 0, column: 0 };
     this.index += 1;
     return tok;
+  }
+  /** Line of the last token actually consumed — used to stamp a statement's own end line. */
+  previousConsumedLine() {
+    const tok = this.tokens[this.index - 1];
+    return tok ? tok.line : this.peek().line;
+  }
+  /**
+   * Next not-yet-attached comment whose line is `>= minLine`, without
+   * consuming it. A comment strictly before `minLine` belongs to an
+   * ANCESTOR container (or a not-yet-reached sibling) that has not run its
+   * own attachment pass yet — it is SKIPPED OVER (not consumed) rather than
+   * blocking the search, so it can never permanently hide a container's own,
+   * later comment behind it. See `attachComments`'s doc comment for the full
+   * ancestor/nested-container reasoning that makes this necessary.
+   */
+  peekComment(minLine) {
+    for (let i = 0; i < this.comments.length; i += 1) {
+      if (this.consumedComments.has(i)) continue;
+      const c = this.comments[i];
+      if (c.line < minLine) continue;
+      return c;
+    }
+    return void 0;
+  }
+  /** Consume and return the next not-yet-attached comment whose line is `>= minLine`. */
+  takeComment(minLine) {
+    for (let i = 0; i < this.comments.length; i += 1) {
+      if (this.consumedComments.has(i)) continue;
+      const c = this.comments[i];
+      if (c.line < minLine) continue;
+      this.consumedComments.add(i);
+      return c;
+    }
+    throw new Error("takeComment: no unconsumed comment at or after the given line");
   }
   match(type, value) {
     const tok = this.peek();
@@ -1949,28 +2022,34 @@ function parseIfStatement(ctx) {
     }
   }
   skipTerminator(ctx);
-  return {
+  const ifStmt = {
     kind: "IfStatement",
     test,
     consequent,
     alternate,
     loc: { line: start.line, column: start.column }
   };
+  const last = alternate ?? consequent;
+  nodeEndLine.set(ifStmt, nodeEndLine.get(last) ?? last.loc?.line ?? start.line);
+  return ifStmt;
 }
 function parseSwitchStatement(ctx) {
   const start = ctx.expect("Keyword", "switch");
   ctx.expect("Punctuation", "(");
   const discriminant = parseExpression(ctx);
   ctx.expect("Punctuation", ")");
-  ctx.expect("Punctuation", "{");
+  const openBrace = ctx.expect("Punctuation", "{");
   const cases = [];
   skipWhitespace(ctx);
+  let lastLine = openBrace.line;
+  let caseWindowStart = openBrace.line;
   while (!(ctx.peek().type === "Punctuation" && ctx.peek().value === "}")) {
+    const caseHead = ctx.peek();
     let test = null;
-    if (ctx.peek().type === "Keyword" && ctx.peek().value === "case") {
+    if (caseHead.type === "Keyword" && caseHead.value === "case") {
       ctx.consume();
       test = parseExpression(ctx);
-    } else if (ctx.peek().type === "Keyword" && ctx.peek().value === "default") {
+    } else if (caseHead.type === "Keyword" && caseHead.value === "default") {
       ctx.consume();
       test = null;
     } else {
@@ -1988,7 +2067,23 @@ function parseSwitchStatement(ctx) {
       if (stmt) body.push(stmt);
       skipWhitespace(ctx);
     }
-    cases.push({ test, body });
+    const caseEndLineExclusive = ctx.peek().line;
+    const caseLeading = [];
+    while (true) {
+      const c = ctx.peekComment(caseWindowStart);
+      if (!c || c.line >= caseHead.line) break;
+      ctx.takeComment(caseWindowStart);
+      caseLeading.push({ ...c, blankLineBefore: c.line > lastLine + 1 });
+      lastLine = c.endLine;
+    }
+    const caseObj = { test, body };
+    if (caseLeading.length > 0) caseObj.leadingComments = caseLeading;
+    const lastBodyLine = body.length > 0 ? nodeEndLine.get(body[body.length - 1]) ?? caseHead.line : caseHead.line;
+    const bodyEndLineExclusive = Math.min(caseEndLineExclusive, lastBodyLine + 1);
+    attachComments(ctx, body, caseHead.line, bodyEndLineExclusive);
+    lastLine = lastBodyLine;
+    caseWindowStart = bodyEndLineExclusive;
+    cases.push(caseObj);
     skipWhitespace(ctx);
   }
   ctx.expect("Punctuation", "}");
@@ -2187,7 +2282,7 @@ function parseTryStatement(ctx) {
     finallyBlock = parseBlock(ctx);
   }
   skipTerminator(ctx);
-  return {
+  const tryStmt = {
     kind: "TryStatement",
     block,
     catchParam,
@@ -2195,6 +2290,9 @@ function parseTryStatement(ctx) {
     finallyBlock,
     loc: { line: start.line, column: start.column }
   };
+  const last = finallyBlock ?? catchBlock ?? block;
+  nodeEndLine.set(tryStmt, nodeEndLine.get(last) ?? last.loc?.line ?? start.line);
+  return tryStmt;
 }
 function tryParseLambdaFromParenList(ctx) {
   const start = ctx.peek();
@@ -2380,6 +2478,64 @@ function parseObjectProps(ctx) {
 function skipWhitespace(ctx) {
   while (ctx.match("Newline") || ctx.match("Semicolon")) {
   }
+}
+function attachComments(ctx, statements, containerStartLine, containerEndLineExclusive) {
+  let lastTouchedLine = containerStartLine;
+  let prevStmtEndLine = null;
+  const inWindow = (c) => c.line < containerEndLineExclusive;
+  for (let i = 0; i < statements.length; i += 1) {
+    const stmt = statements[i];
+    const stmtStartLine = stmt.loc?.line ?? containerEndLineExclusive;
+    if (prevStmtEndLine !== null) {
+      const trailing = [];
+      while (true) {
+        const c = ctx.peekComment(containerStartLine);
+        if (!c || !inWindow(c) || c.line !== prevStmtEndLine) break;
+        ctx.takeComment(containerStartLine);
+        trailing.push({ ...c });
+        lastTouchedLine = c.endLine;
+      }
+      if (trailing.length > 0) statements[i - 1].trailingComments = trailing;
+    }
+    const leading = [];
+    while (true) {
+      const c = ctx.peekComment(containerStartLine);
+      if (!c || !inWindow(c) || c.line >= stmtStartLine) break;
+      ctx.takeComment(containerStartLine);
+      leading.push({ ...c, blankLineBefore: c.line > lastTouchedLine + 1 });
+      lastTouchedLine = c.endLine;
+    }
+    if (leading.length > 0) stmt.leadingComments = leading;
+    prevStmtEndLine = nodeEndLine.get(stmt) ?? stmtStartLine;
+    if (prevStmtEndLine > lastTouchedLine) lastTouchedLine = prevStmtEndLine;
+  }
+  if (prevStmtEndLine !== null) {
+    const trailing = [];
+    while (true) {
+      const c = ctx.peekComment(containerStartLine);
+      if (!c || !inWindow(c) || c.line !== prevStmtEndLine) break;
+      ctx.takeComment(containerStartLine);
+      trailing.push({ ...c });
+    }
+    if (trailing.length > 0) statements[statements.length - 1].trailingComments = trailing;
+  }
+  while (true) {
+    const c = ctx.peekComment(containerStartLine);
+    if (!c || !inWindow(c)) break;
+    ctx.takeComment(containerStartLine);
+  }
+}
+function collectDanglingComments(ctx, containerStartLine, containerEndLineExclusive) {
+  let lastLine = containerStartLine;
+  const out = [];
+  while (true) {
+    const c = ctx.peekComment(containerStartLine);
+    if (!c || c.line >= containerEndLineExclusive) break;
+    ctx.takeComment(containerStartLine);
+    out.push({ ...c, blankLineBefore: c.line > lastLine + 1 });
+    lastLine = c.endLine;
+  }
+  return out;
 }
 function skipTerminator(ctx) {
   if (!ctx.isEnd()) {
