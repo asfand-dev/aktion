@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { findBareExportInsertions } from "../src/eslint/scan.js";
 import { applyInsertions } from "../src/eslint/remap.js";
 
@@ -127,5 +129,93 @@ describe("findBareExportInsertions", () => {
   it("returns an empty list for a file with no bare exports", () => {
     const source = "export function Foo() { return 1 }\nconst x = 1\n";
     expect(findBareExportInsertions(source)).toEqual([]);
+  });
+
+  describe("regex literals (as opposed to a division `/`)", () => {
+    it("does not let text inside a real regex literal corrupt into a bare export (the Copilot-reported bug)", () => {
+      // `export NAME = 1` sitting INSIDE the regex pattern must never be
+      // treated as a second bare export — only the outer `export PATTERN =`
+      // is a real insertion point.
+      const source = "export PATTERN = /export NAME = 1/";
+      expect(findBareExportInsertions(source)).toEqual([{ originalOffset: 7 }]);
+      expect(rewrite(source)).toBe("export const PATTERN = /export NAME = 1/");
+    });
+
+    it("does not let a quote character inside a regex character class start a phantom string literal (the older KNOWN LIMITATION)", () => {
+      const source = "export QUOTE_RE = /['\"]/\nexport REAL = 2\n";
+      expect(rewrite(source)).toBe("export const QUOTE_RE = /['\"]/\nexport const REAL = 2\n");
+    });
+
+    it("resumes scanning correctly after a regex literal and still finds a real bare export on the next line", () => {
+      const source = "export RE = /abc/gi\nexport NEXT = 3\n";
+      expect(rewrite(source)).toBe("export const RE = /abc/gi\nexport const NEXT = 3\n");
+    });
+
+    it("treats `/` as division (not a regex) right after a value, so it does not swallow a following bare export", () => {
+      // If the first `/` (right after identifier `a`, a value — division
+      // context) were wrongly treated as a regex-open, it would scan forward
+      // to the SECOND `/` on the line as the "closing" delimiter, swallowing
+      // `export NAME = 1` inside a phantom regex span and missing its
+      // insertion entirely.
+      const source = "export RATIO = a / export NAME = 1 / b\nexport NEXT = 3\n";
+      const rewritten = rewrite(source);
+      expect(rewritten).toContain("export const RATIO =");
+      expect(rewritten).toContain("export const NAME = 1");
+      expect(rewritten).toContain("export const NEXT = 3");
+    });
+
+    it("does not misdetect a plain division expression as a regex start", () => {
+      const source = "export RATIO = a / b\nexport NEXT = 3\n";
+      expect(rewrite(source)).toBe("export const RATIO = a / b\nexport const NEXT = 3\n");
+    });
+
+    it("treats `/` as division after a hex number literal", () => {
+      const source = "export A = 0xFF / 2\nexport NEXT = 4\n";
+      expect(rewrite(source)).toBe("export const A = 0xFF / 2\nexport const NEXT = 4\n");
+    });
+
+    it("treats `/` as division after a number literal with a decimal exponent", () => {
+      const source = "export A = 1.5e10 / 2\nexport NEXT = 4\n";
+      expect(rewrite(source)).toBe("export const A = 1.5e10 / 2\nexport const NEXT = 4\n");
+    });
+
+    it("matches this repo's own corpus: the real `.replace(/^www\\./, \"\")` regex used in docs/demos/mini-apps/news-reader.aktion", () => {
+      // `news-reader.aktion` doesn't happen to use a bare top-level `export`
+      // for this constant (it's a plain assignment, `domainOf = url => …`),
+      // so this reproduces the SAME real regex pattern from that file in the
+      // bare-export shape this scanner exists to fix, rather than reusing a
+      // path that doesn't carry the construct under test.
+      const source = 'export DOMAIN_STRIP = url => url.replace(/^www\\./, "")\n';
+      expect(rewrite(source)).toBe('export const DOMAIN_STRIP = url => url.replace(/^www\\./, "")\n');
+    });
+
+    it("confirms the real regex-bearing corpus files parse cleanly through the full scan (not just a copied pattern)", () => {
+      // `news-reader.aktion` and `pokedex.aktion` are two real, in-tree
+      // `docs/demos/mini-apps/*.aktion` files containing genuine regex
+      // literals (`.replace(/^www\./, "")`, `.replace(/-/g, " ")`) — see
+      // `tests/eslint-corpus-sweep.test.ts` for the full-pipeline sweep over
+      // every corpus file, including these two. This assertion just confirms
+      // the scan itself doesn't produce any insertion inside either file's
+      // regex text (both files have no top-level bare `export` at all, so
+      // the correct result is zero insertions, not a corrupted one hiding
+      // inside the regex).
+      const root = join(__dirname, "..");
+      for (const relPath of ["docs/demos/mini-apps/news-reader.aktion", "docs/demos/mini-apps/pokedex.aktion"]) {
+        const source = readFileSync(join(root, relPath), "utf8");
+        expect(source).toMatch(/\/[^/\n]*\//);
+        expect(findBareExportInsertions(source)).toEqual([]);
+      }
+    });
+
+    it("matches the real in-repo corpus: two real regex-shaped bare exports mirrored from the pattern style used in docs/demos/mini-apps/pokedex.aktion", () => {
+      // `pokedex.aktion` itself uses `.replace(/-/g, " ")` inline (not as a
+      // bare export), so this constructs the bare-export shape this module
+      // targets using the SAME pattern text and flags, exercising both a
+      // simple pattern and a following real bare export on the next line.
+      const source = ["export SLUG_SEPARATOR = /-/g;", "export MAX_NAME_LENGTH = 255;"].join("\n");
+      const rewritten = rewrite(source);
+      expect(rewritten).toContain("export const SLUG_SEPARATOR = /-/g;");
+      expect(rewritten).toContain("export const MAX_NAME_LENGTH = 255;");
+    });
   });
 });

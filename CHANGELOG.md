@@ -66,6 +66,30 @@ Each entry is dated and summarises what was added, changed, or fixed.
   same pipeline *without* the overrides reproduces real corruption —
   including one grammar incompatibility (`unicorn/switch-case-braces`) found
   directly by this corpus sweep, not carried over from any other source.
+- **Fixed**, same day: `src/eslint/scan.ts`'s bare-export scanner had no
+  concept of a `/pattern/flags` regex literal as its own kind of span — it
+  only ever recognised strings, templates, and comments, so a regex's raw
+  text was walked as ordinary code. Concretely, `export PATTERN = /export
+  NAME = 1/` corrupted into `export const PATTERN = /export const NAME = 1/`:
+  the literal text `export NAME = ` sitting *inside* the regex pattern was
+  matched and rewritten as if it were a second, real bare export. The scan
+  now tracks a `regexAllowed` state through its main loop — mirroring
+  `src/parser/lexer.ts`'s own `regexAllowedHere` regex-vs-division
+  disambiguation token-for-token (identifier/number/string/template/
+  boolean/null/regex/closing-bracket all mean "division"; everything else,
+  including a reserved keyword, an opening bracket, or a newline, means "a
+  regex literal is possible") — and gives a regex its own skip routine
+  (`trySkipRegexLiteral`, character-class- and escape-aware, matching
+  `scanRegexLiteral` exactly) so a quote character inside a regex character
+  class (e.g. `/['"]/ `) can no longer be misread as the start of a phantom
+  string literal either. Verified against every real regex-bearing file in
+  this repo's own corpus (`docs/demos/mini-apps/news-reader.aktion`,
+  `docs/demos/mini-apps/pokedex.aktion`) via `tests/eslint-corpus-sweep.test.ts`,
+  plus ten new targeted regression tests in `tests/eslint-scan.test.ts`
+  covering the exact reported corruption, the character-class case,
+  resuming correctly after a regex on the next line, and division not being
+  misdetected as a regex-open (plain, after a hex literal, after a
+  decimal-exponent literal, and right after a value on the same line).
 
 ## 2026-09-19
 
