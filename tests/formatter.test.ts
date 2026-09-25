@@ -442,3 +442,121 @@ describe("formatProgram — `await` preserves grouping around its argument", () 
   });
 });
 
+describe("formatProgram — a wrapped multi-line Object/Array argument nests one level deeper than the call/collection that holds it", () => {
+  // Regression coverage for a printer bug where `printCall`/`Array`/`Object`
+  // pre-rendered their contained items at the SAME `indent` as themselves,
+  // then only patched the FIRST line of each rendered item when wrapping —
+  // so a nested multi-line Object/Array's own internal lines (already
+  // absolutely indented at print time) stayed one level shallower than its
+  // own opening brace/bracket, and its closing brace/bracket landed flush
+  // with the outer call's closing paren instead of matching its own opener.
+
+  it("indents a lone Object argument's properties one level deeper than the call's opening paren, e.g. $router({...})", () => {
+    const source = [
+      'pages = $router({"/": ClustersList(), "/clusters": ClustersList(), "/clusters/:id": ClusterDetail(), default: ClustersList()})',
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const { formatted, errors } = formatProgram(source);
+    expect(errors).toEqual([]);
+    expect(formatted).toBe(
+      [
+        "pages = $router(",
+        "  {",
+        '    "/": ClustersList(),',
+        '    "/clusters": ClustersList(),',
+        '    "/clusters/:id": ClusterDetail(),',
+        "    default: ClustersList()",
+        "  }",
+        ")",
+        '$app(Text("x"))',
+        "",
+      ].join("\n"),
+    );
+    // Idempotent: re-formatting the (now correctly-nested) output must not
+    // drift further.
+    const second = formatProgram(formatted);
+    expect(second.errors).toEqual([]);
+    expect(second.formatted).toBe(formatted);
+  });
+
+  it("cascades correct indentation two levels deep through a wrapped call whose argument is itself a wrapped call, e.g. $app(Container([...], {...}))", () => {
+    const source = [
+      'x = $app(Container([Foo(), Bar(), Baz(), Qux()], {theme: "dark", size: "lg", extra: "value-to-force-wrap-this-object-nicely"}))',
+      "",
+    ].join("\n");
+    const { formatted, errors } = formatProgram(source);
+    expect(errors).toEqual([]);
+    expect(formatted).toBe(
+      [
+        "x = $app(",
+        "  Container(",
+        "    [Foo(), Bar(), Baz(), Qux()],",
+        '    { theme: "dark", size: "lg", extra: "value-to-force-wrap-this-object-nicely" }',
+        "  )",
+        ")",
+        "",
+      ].join("\n"),
+    );
+    const second = formatProgram(formatted);
+    expect(second.errors).toEqual([]);
+    expect(second.formatted).toBe(formatted);
+  });
+
+  it("indents a lone Array argument's elements one level deeper than the call's opening paren", () => {
+    const source = [
+      "items = $list([ComponentOne(), ComponentTwo(), ComponentThree(), ComponentFour(), ComponentFive()])",
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const { formatted, errors } = formatProgram(source);
+    expect(errors).toEqual([]);
+    expect(formatted).toBe(
+      [
+        "items = $list(",
+        "  [",
+        "    ComponentOne(),",
+        "    ComponentTwo(),",
+        "    ComponentThree(),",
+        "    ComponentFour(),",
+        "    ComponentFive()",
+        "  ]",
+        ")",
+        '$app(Text("x"))',
+        "",
+      ].join("\n"),
+    );
+    const second = formatProgram(formatted);
+    expect(second.errors).toEqual([]);
+    expect(second.formatted).toBe(formatted);
+  });
+
+  it("indents a wrapped Object property whose value is itself a wrapped call one level deeper than the property", () => {
+    const source = [
+      'x = { first: "value", second: doSomething({ inner: "one", another: "two", third: "value-to-force-wrap-this-nicely" }) }',
+      "",
+      '$app(Text("x"))',
+      "",
+    ].join("\n");
+    const { formatted, errors } = formatProgram(source);
+    expect(errors).toEqual([]);
+    expect(formatted).toBe(
+      [
+        "x = {",
+        '  first: "value",',
+        "  second: doSomething(",
+        '    { inner: "one", another: "two", third: "value-to-force-wrap-this-nicely" }',
+        "  )",
+        "}",
+        '$app(Text("x"))',
+        "",
+      ].join("\n"),
+    );
+    const second = formatProgram(formatted);
+    expect(second.errors).toEqual([]);
+    expect(second.formatted).toBe(formatted);
+  });
+});
+
