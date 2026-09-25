@@ -46,6 +46,7 @@ HTML, or no framework at all.
 - [Internationalization (`$i18n`)](#internationalization)
 - [System prompt generator](#system-prompt-generator)
 - [Tooling](#tooling)
+- [ESLint integration](#eslint-integration)
 - [Build-time compiler & multi-file modules](#build-time-compiler--multi-file-modules)
 - [Editor support](#editor-support)
 - [Agent skill](#agent-skill)
@@ -486,10 +487,13 @@ import {
 
 import { getDiagnostics, getCompletions, formatProgram } from "aktion-runtime/language";
 // DOM-free language service for editor integrations — see Tooling below
+
+import aktionEslint, { aktionProcessor, aktionRecommendedRules } from "aktion-runtime/eslint";
+// ESLint processor + recommended rule overrides — see ESLint integration below
 ```
 
-The three subpath entries (`/test`, `/devtools`, `/language`) and the Node-only
-`/vite` plugin never enter the browser bundle. `componentSchema`,
+The four subpath entries (`/test`, `/devtools`, `/language`, `/eslint`) and the
+Node-only `/vite` plugin never enter the browser bundle. `componentSchema`,
 `buildGallery`, and `suggestComponent` all take the library explicitly — pass
 `defaultLibrary`, or your own extended library, so a schema dump always matches
 the components the element actually renders.
@@ -1821,6 +1825,98 @@ fail the run.
 
 ---
 
+## ESLint integration
+
+`.aktion` files are JS/TS-syntax compatible except for exactly ONE construct: a
+bare top-level `export IDENTIFIER = …` (or `export $identifier = …`) with no
+declaration keyword — see
+[`src/eslint/scan.ts`](./src/eslint/scan.ts)'s header for the full grammar
+cross-check against [`src/parser/parser.ts`](./src/parser/parser.ts). The
+`aktion-runtime/eslint` entry ([`src/eslint-api.ts`](./src/eslint-api.ts)) is
+an ESLint **processor** that rewrites every such occurrence into
+`export const IDENTIFIER = …` (genuinely valid JS/TS), hands the result to
+whatever parser and rule set YOU already have installed, and remaps every
+reported position — and any autofix — back to the original file's
+coordinates. This means a real ESLint (your own installation, your own
+`@typescript-eslint/parser`, your own rule set — XO, `eslint-config-airbnb`,
+anything) lints and `--fix`es `.aktion` source with no bespoke reimplementation
+of any rule.
+
+`aktion-runtime` does **not** depend on `eslint`, a TS/JS parser, or any
+ESLint plugin — `eslint` is an optional peer dependency (see `package.json`),
+and the parser/rule set for the processor's virtual `.ts` block is entirely
+your choice.
+
+```js
+// eslint.config.js
+import aktionEslint from "aktion-runtime/eslint";
+import tsParser from "@typescript-eslint/parser";
+
+export default [
+  // The two portable blocks this package documents — processor wiring plus
+  // eight DSL-general rule overrides (grammar incompatibilities and DSL-idiom
+  // false positives — see `aktionRecommendedRules` for the full citations).
+  ...aktionEslint.configs.recommended,
+  {
+    // Matches the SAME virtual per-block path the processor produces
+    // (`<file>.aktion/0_eslint-aktion.ts`) — bring your own parser here.
+    files: ["**/*.aktion/*.ts"],
+    languageOptions: {
+      parser: tsParser,
+      ecmaVersion: 2022,
+      sourceType: "module",
+      // REQUIRED: the virtual path doesn't exist on disk and isn't named in
+      // any tsconfig `include`, so a type-aware parser's project service
+      // fails outright if this isn't disabled.
+      parserOptions: { project: false, projectService: false },
+    },
+  },
+];
+```
+
+Prefer to assemble the pieces yourself instead of spreading
+`configs.recommended`? Every piece is exported individually: `aktionProcessor`
+(the `Linter.Processor` object, for `processors: {aktion: aktionProcessor}` +
+`processor: "aktion/aktion"`), `aktionRecommendedRules` (the plain rules
+record to spread into your own `**/*.aktion/*.ts` block), plus the pure
+`findBareExportInsertions` / `applyInsertions` / `toOriginalOffset` /
+`rangeOverlapsInsertion` position-remap primitives for anyone building their
+own tooling on the same technique.
+
+### The eight rule overrides — why each one is needed
+
+Every consumer routing `.aktion` files through `aktionProcessor` hits the same
+eight false positives / grammar incompatibilities, because they all stem from
+this repo's own grammar or its own component/reactivity idiom — not from
+anything any one app wrote. Each is cited as either a **GENUINE GRAMMAR
+INCOMPATIBILITY** (the rule's autofix produces a construct this grammar
+cannot parse — even the un-fixed diagnostic is a false positive, since the
+flagged pattern is the *only* way to express the same thing in Aktion) or a
+**DSL-IDIOM FALSE POSITIVE** (the rule is correct in general, but the pattern
+it flags is this DSL's normal, unavoidable idiom):
+
+| Rule | Why |
+| ---- | --- |
+| `object-shorthand` | GRAMMAR: no ES6 method-shorthand production — `onClick: () => {…}` → `onClick() {…}` doesn't parse. |
+| `unicorn/prefer-export-from` | GRAMMAR: `export { … } from …` lists have no production at all — an explicit parse error. |
+| `unicorn/prefer-string-raw` | GRAMMAR: no tagged-template-literal production — `` String.raw`…` `` doesn't parse (and silently truncates the value with *no* reported error — see the citation in [`src/eslint/rules.ts`](./src/eslint/rules.ts)). |
+| `unicorn/switch-case-braces` | GRAMMAR: no generic block-statement production — a bare `{` in statement position parses as an object literal, so wrapping a `case N: return X` body in `{ }` breaks parsing. Found by this package's own corpus sweep, not carried over from any downstream pilot. |
+| `new-cap` | IDIOM: component instantiation (`Container(...)`, `Text(...)`, …) is a capitalized function call — the DSL's normal syntax, not a constructor mistake. |
+| `unicorn/max-nested-calls` | IDIOM: the component tree *is* deeply nested calls — that's the normal shape of a UI declaration. |
+| `unicorn/no-optional-chaining-on-undeclared-variable` | IDIOM: `route` is a runtime-injected screen-scope global (`src/runtime/evaluator.ts`), never declared via `let`/`const`/`import`, so `route.params?.id` reads as "undeclared" to a JS/TS linter. |
+| `unicorn/no-top-level-side-effects` | IDIOM: registering `$effect(...)`/`$store(...)` via a bare call at module top level is how this DSL wires up its reactive system — there is no other call site for it. |
+
+`tests/eslint-corpus-sweep.test.ts` re-verifies all eight against this repo's
+own real `.aktion` corpus (every example under `docs/demos/` and
+`create-aktion/template/`) on every test run — walking the full
+preprocess → lint → `--fix` → postprocess pipeline and re-parsing every fixed
+output through this repo's own `parse()`, plus targeted synthetic
+reproductions of the four genuine grammar incompatibilities. Re-run it before
+trusting any specific trigger count — it drifts as example programs are
+added.
+
+---
+
 ## Build-time compiler & multi-file modules
 
 > **Optional.** The CDN bundle and the streamed-string path
@@ -2167,9 +2263,11 @@ The full catalog with zoomed-out live preview cards lives at
 │   ├── prompt/                #   System prompt generator
 │   ├── tooling/               #   Host-side helpers (formatter, inspector, language service)
 │   ├── language/              #   Reusable language-support module
+│   ├── eslint/                #   ESLint processor (scan/remap/processor/rules) — aktion-runtime/eslint
 │   ├── icons/                 #   Font Awesome CDN loader
 │   ├── element.ts             #   The custom element
 │   ├── language-api.ts        #   aktion-runtime/language entry (DOM-free)
+│   ├── eslint-api.ts          #   aktion-runtime/eslint entry (DOM-free, Node-only)
 │   └── index.ts               #   Public entry point
 ├── docs/                      # Static documentation site (HTML + CSS + JS)
 │   └── demos/                 #   Bundled .aktion demo programs (mini-apps / blocks / components / websites / dashboards / commerce / ai-apps)

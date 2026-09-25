@@ -37,6 +37,36 @@ Each entry is dated and summarises what was added, changed, or fixed.
   representing comments at the expression level, not just the statement
   level, and is left for a future pass.
 
+### New `aktion-runtime/eslint` Entry — Lint and Autofix `.aktion` Files With Your Own ESLint
+
+- Added a new subpath, `aktion-runtime/eslint`, that lets any real ESLint
+  installation (your own parser, your own rule set) lint and `--fix`
+  `.aktion` files directly — no bespoke reimplementation of any rule.
+  `.aktion` source is JS/TS-syntax compatible except for one construct (a
+  bare top-level `export IDENTIFIER = …` with no declaration keyword); the
+  new processor rewrites that one construct into valid JS/TS before handing
+  the file to your parser, then maps every reported position — and any
+  autofix — back to the original file's coordinates.
+- Ships a documented, reusable `aktionRecommendedRules` object (and a
+  ready-to-spread `aktionEslint.configs.recommended` flat-config array)
+  disabling eight rules that are properties of the Aktion language itself,
+  not of any one app: four are genuine grammar incompatibilities where the
+  rule's own autofix produces text this grammar cannot parse
+  (`object-shorthand`, `unicorn/prefer-export-from`,
+  `unicorn/prefer-string-raw`, `unicorn/switch-case-braces`), and four are
+  false positives against the DSL's normal, unavoidable idiom (`new-cap`,
+  `unicorn/max-nested-calls`,
+  `unicorn/no-optional-chaining-on-undeclared-variable`,
+  `unicorn/no-top-level-side-effects`). See the README's "ESLint integration"
+  section for the full citation of each.
+- Verified against this repo's own real `.aktion` corpus (every example under
+  `docs/demos/` and `create-aktion/template/`, currently 165 files): the full
+  preprocess → lint → `--fix` → postprocess pipeline, run with the shipped
+  rule overrides, leaves every file parsing with zero errors. Running the
+  same pipeline *without* the overrides reproduces real corruption —
+  including one grammar incompatibility (`unicorn/switch-case-braces`) found
+  directly by this corpus sweep, not carried over from any other source.
+
 ## 2026-09-19
 
 ### Configurable Formatter Indentation
