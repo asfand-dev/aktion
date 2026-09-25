@@ -1,0 +1,118 @@
+// Flashcards — a study deck with flip-to-reveal, got-it/again buckets and a session recap.
+// Starting point for: study tools, vocabulary trainers, onboarding quizzes.
+// Uses: Transition flip, $store({ persist }) deck progress, Metric countUp recap, Confetti.
+$app(Column([header, stage], { gap: "lg", padding: "md" }))
+
+defaultCards = [
+  { id: "c1", front: "HTTP 404", back: "Not Found — the server can't locate the requested resource." },
+  { id: "c2", front: "HTTP 301", back: "Moved Permanently — the resource has a new canonical URL." },
+  { id: "c3", front: "HTTP 429", back: "Too Many Requests — the client is being rate-limited." },
+  { id: "c4", front: "HTTP 502", back: "Bad Gateway — an upstream server returned an invalid response." },
+  { id: "c5", front: "HTTP 204", back: "No Content — success, but there is nothing to send back." },
+  { id: "c6", front: "HTTP 418", back: "I'm a teapot — an April Fools' classic from RFC 2324." }
+]
+
+deck = $store({
+  persist: "flashcards.deck",
+  mastered: [],
+  master: (s, id) => { if (!s.mastered.includes(id)) s.mastered = [...s.mastered, id] },
+  forget: (s, id) => { s.mastered = s.mastered.filter(m => m != id) },
+  resetAll: (s) => { s.mastered = [] }
+})
+
+$queue = defaultCards.map(c => c.id)
+$idx = 0
+$flipped = false
+$again = 0
+$got = 0
+$done = false
+
+current = defaultCards.find(c => c.id == $queue[$idx])
+progressPct = $queue.length > 0 ? Math.round(($idx / $queue.length) * 100) : 0
+
+function flip() { $flipped = !$flipped }
+
+function answer(gotIt) {
+  if (!current) return
+  if (gotIt) { $got = $got + 1; deck.master(current.id) }
+  else { $again = $again + 1; deck.forget(current.id) }
+  if ($idx + 1 >= $queue.length) { $done = true }
+  else { $idx = $idx + 1; $flipped = false }
+}
+
+function restart(onlyMissed) {
+  const missed = defaultCards.filter(c => !deck.mastered.includes(c.id)).map(c => c.id)
+  $queue = onlyMissed && missed.length > 0 ? missed : defaultCards.map(c => c.id)
+  $idx = 0
+  $flipped = false
+  $again = 0
+  $got = 0
+  $done = false
+}
+
+header = PageHeader("Flashcards", {
+  subtitle: "Tap the card to flip it, then grade yourself",
+  badge: Badge(`${deck.mastered.length}/${defaultCards.length} mastered`, { tone: deck.mastered.length == defaultCards.length ? "success" : "primary", icon: "graduation-cap" }),
+  actions: [Button("Reset mastery", { variant: "ghost", size: "sm", icon: "rotate-left", onClick: () => deck.resetAll() })]
+})
+
+face = (label, body, hint) => Column([
+  Eyebrow(label),
+  Text(body, { variant: "title", align: "center" }),
+  Text(hint, { variant: "small", tone: "muted" })
+], { gap: "md", align: "center" })
+
+cardFace = OnClick(
+  Card([
+    Center([
+      Show(!$flipped, {
+        fallback: face("ANSWER", current ? current.back : "", "Did you know it?"),
+        children: face("PROMPT", current ? current.front : "", "Tap to reveal the answer")
+      })
+    ], { minHeight: "220px" })
+  ], {
+    key: `${$queue[$idx]}-${$flipped}`,
+    animate: "zoom",
+    sx: { states: { hover: { shadow: "lg", scale: 1.01 } }, cursor: "pointer" }
+  }),
+  { onClick: flip }
+)
+
+grading = Show($flipped, {
+  fallback: Center([Button("Flip card", { variant: "secondary", icon: "rotate", size: "lg", onClick: flip })]),
+  children: Row([
+    Button("Again", { variant: "danger", icon: "rotate-left", size: "lg", onClick: () => answer(false) }),
+    Button("Got it", { variant: "primary", icon: "check", size: "lg", onClick: () => answer(true) })
+  ], { gap: "md", justify: "center" })
+})
+
+quiz = Column([
+  Row([
+    StackItem(Progress(progressPct, { max: 100, tone: "primary" }), { grow: 1 }),
+    Badge(`${$idx + 1}/${$queue.length}`, { tone: "neutral" })
+  ], { gap: "md", align: "center" }),
+  cardFace,
+  grading
+], { gap: "lg" })
+
+accuracy = ($got + $again) > 0 ? Math.round(($got / ($got + $again)) * 100) : 0
+
+recap = Card([
+  Show(accuracy == 100, { children: Confetti({ fire: true, count: 90 }) }),
+  SuccessState(accuracy == 100 ? "Perfect round!" : "Session complete", {
+    description: `You knew ${$got} of ${$got + $again} cards.`,
+    icon: accuracy == 100 ? "trophy" : "book-open",
+    actions: [
+      Button("Study again", { variant: "primary", icon: "rotate-right", onClick: () => restart(false) }),
+      Button("Only missed cards", { variant: "secondary", icon: "filter", onClick: () => restart(true), disabled: deck.mastered.length == defaultCards.length })
+    ]
+  }),
+  Separator("horizontal", { label: "recap" }),
+  MetricStrip([
+    Metric(String($got), { label: "Got it", countUp: true }),
+    Metric(String($again), { label: "Again", gradient: false, countUp: true }),
+    Metric(`${accuracy}%`, { label: "Accuracy", countUp: true })
+  ])
+], { animate: "zoom" })
+
+stage = $done ? recap : quiz
