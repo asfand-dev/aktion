@@ -28,6 +28,11 @@
       "types": "./dist/types/language-api.d.ts",
       "import": "./dist/language.js"
     },
+    "./eslint": {
+      "types": "./dist/types/eslint-api.d.ts",
+      "import": "./dist/eslint.js",
+      "require": "./dist/eslint.cjs"
+    },
     "./vite": {
       "types": "./dist/types/plugin/index.d.ts",
       "import": "./dist/plugin.js",
@@ -48,11 +53,12 @@
     "access": "public"
   },
   "scripts": {
-    "build": "npm run sync:docs-version && tsc -p tsconfig.build.json && vite build && vite build --config vite.testing.config.ts && vite build --config vite.coverage.config.ts && vite build --config vite.devtools.config.ts && vite build --config vite.language.config.ts && vite build --config vite.plugin.config.ts && node scripts/emit-prompt.mjs && node scripts/emit-skill.mjs && node scripts/emit-entry.mjs",
+    "build": "npm run sync:docs-version && tsc -p tsconfig.build.json && vite build && vite build --config vite.testing.config.ts && vite build --config vite.coverage.config.ts && vite build --config vite.devtools.config.ts && vite build --config vite.language.config.ts && vite build --config vite.eslint.config.ts && vite build --config vite.plugin.config.ts && node scripts/emit-prompt.mjs && node scripts/emit-skill.mjs && node scripts/emit-entry.mjs",
     "build:coverage": "vite build --config vite.coverage.config.ts",
     "build:devtools": "vite build --config vite.devtools.config.ts",
     "build:docs": "npm run sync:docs-version && node scripts/build-docs.mjs",
     "build:entry": "node scripts/emit-entry.mjs",
+    "build:eslint": "vite build --config vite.eslint.config.ts",
     "build:language": "vite build --config vite.language.config.ts",
     "build:lib": "vite build",
     "build:lsp": "node editors/lsp/esbuild.mjs",
@@ -69,15 +75,22 @@
     "test:watch": "vitest"
   },
   "peerDependencies": {
-    "vite": "^5.0.0 || ^6.0.0"
+    "vite": "^5.0.0 || ^6.0.0",
+    "eslint": "^8.57.0 || ^9.0.0 || ^10.0.0"
   },
   "peerDependenciesMeta": {
     "vite": {
+      "optional": true
+    },
+    "eslint": {
       "optional": true
     }
   },
   "devDependencies": {
     "@types/node": "^20.19.41",
+    "@typescript-eslint/parser": "^8.70.0",
+    "eslint": "^10.0.0",
+    "eslint-plugin-unicorn": "^76.0.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "vite-plugin-dts": "^4.3.0",
