@@ -5890,6 +5890,8 @@ ${below("xs")} {
   padding: 6px 12px;
 }
 
+:host([data-rui-theme="vision"]) .rui-form-actions { justify-content: flex-start; }
+
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="success"] .rui-callout-title { color: var(--rui-color-success-text); }
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-title,
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="error"] .rui-callout-title { color: var(--rui-color-danger-text); }
