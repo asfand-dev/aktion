@@ -1,0 +1,73 @@
+// Login Card — email/password sign in with live validation, show-password,
+// remember-me, social providers and a fake submit that toggles a loading state.
+$app(Center([Container([card], { size: "sm" })], { minHeight: "80vh" }))
+
+$email = ""
+$password = ""
+$remember = true
+$show = false
+$submitting = false
+$signedIn = false
+
+emailValid = $email.includes("@") && $email.includes(".")
+pwValid = $password.length >= 8
+formValid = emailValid && pwValid
+
+function signIn() {
+  if (!formValid) return
+  $submitting = true
+  setTimeout(() => { $submitting = false; $signedIn = true }, 900)
+}
+
+function signOut() {
+  $signedIn = false
+  $password = ""
+}
+
+function providerSignIn(name) {
+  $toast.show(`Continuing with ${name}…`, { tone: "info" })
+}
+
+signedInView = Card([
+  Center([Column([
+    Avatar($email, { size: "lg" }),
+    SectionHeader("You're signed in", { subtitle: $email }),
+    Button("Sign out", { variant: "secondary", icon: "right-from-bracket", onClick: signOut })
+  ], { gap: "md", align: "center" })], { minHeight: "200px" })
+])
+
+form = Card([
+  Column([
+    Center([Column([
+      Icon("bolt", { size: "lg" }),
+      Text("Welcome back", { variant: "title" }),
+      Text("Sign in to your Aktion workspace", { variant: "small", tone: "muted" })
+    ], { gap: "xs", align: "center" })]),
+    Separator("horizontal"),
+    FormControl("Email", {
+      field: Input("email", { type: "email", value: $email, placeholder: "you@example.com" }),
+      hint: $email.length > 0 && !emailValid ? "Enter a valid email address." : null
+    }),
+    FormControl("Password", {
+      field: Input("password", { type: $show ? "text" : "password", value: $password, placeholder: "At least 8 characters" }),
+      hint: $password.length > 0 && !pwValid ? "Use 8 or more characters." : null
+    }),
+    Row([
+      Checkbox("show", { label: "Show password", value: $show }),
+      Spacer(),
+      Checkbox("remember", { label: "Remember me", value: $remember })
+    ], { align: "center" }),
+    Button($submitting ? "Signing in…" : "Sign in", {
+      variant: "primary", icon: "right-to-bracket", fullWidth: true,
+      loading: $submitting, disabled: !formValid || $submitting, onClick: signIn
+    }),
+    Row([Separator("horizontal"), Text("or", { variant: "small", tone: "muted" }), Separator("horizontal")], { align: "center", gap: "sm" }),
+    Grid([
+      Button("Google", { variant: "secondary", icon: "brands:google", onClick: () => providerSignIn("Google") }),
+      Button("GitHub", { variant: "secondary", icon: "brands:github", onClick: () => providerSignIn("GitHub") })
+    ], { columns: 2, gap: "sm" }),
+    Center([Row([Text("New here?", { variant: "small", tone: "muted" }), Link("Create an account", { href: "#" })], { gap: "xs", align: "center" })])
+  ], { gap: "md" })
+])
+
+card = Show($signedIn, { fallback: form, children: signedInView })
