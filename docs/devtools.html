@@ -511,7 +511,7 @@ $app(Column([
       </p>
       <ul>
         <li><strong>Program</strong>: the global access policy in force, the host globals the program names, dynamic code (<code>eval</code>, string timers), escape hatches (<code>HTMLTag</code>, <code>Styles</code>, <code>Svg</code>, <code>Markdown</code>), endpoints, windows it opens, events it emits, and storage it touches &mdash; each with a line you can jump to.</li>
-        <li><strong>Rendered output</strong>: whether the sanitiser guarantees hold in the live DOM &mdash; no <code>javascript:</code> URLs, inline handlers or stray scripts, sandboxed frames, safe <code>target="_blank"</code>, forms that post securely, precise password autocomplete.</li>
+        <li><strong>Rendered output</strong>: whether the sanitiser guarantees hold in the live DOM &mdash; no <code>javascript:</code>, <code>vbscript:</code> or non-media <code>data:</code> URLs, inline handlers or stray scripts, sandboxed frames, safe <code>target="_blank"</code>, forms that post securely, precise password autocomplete.</li>
         <li><strong>Transport</strong>: every origin the app contacted, first- or third-party, whether it carried credentials; mixed content; secrets in query strings.</li>
         <li><strong>Storage</strong>: tokens in <code>localStorage</code>, <code>sessionStorage</code> and script-readable cookies, with JWTs decoded.</li>
         <li><strong>Headers</strong>: on request, one same&#8209;origin <code>HEAD</code> for the page, graded &mdash; CSP (against what an Aktion app actually needs), HSTS, <code>nosniff</code>, framing, Referrer&#8209;Policy, Permissions&#8209;Policy, COOP &mdash; plus the CSP violations the browser reported while the panel was open.</li>

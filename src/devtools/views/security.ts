@@ -13,6 +13,7 @@ import {
   readPageStorage, scanSecurity, type SecurityCategory, type SecurityFinding, type SecurityReport, type Severity,
 } from "../analysis/security.js";
 import { cssPath } from "../overlay.js";
+import { inlineCode } from "../analysis/markdown.js";
 import { icon, type IconName } from "../ui/icons.js";
 import {
   button, card, chip, downloadText, emptyState, filterChip, fmtAgo, fmtBytes, iconButton, note, plural, richText, scoreRing, segmented,
@@ -126,7 +127,7 @@ function reportMarkdown(ctx: ViewContext, report: SecurityReport): string {
     lines.push(`## ${CATEGORY[category].label}`, "");
     for (const finding of items) {
       lines.push(`### [${finding.severity}] ${finding.title}`, "", finding.detail, "", `**Fix:** ${finding.fix}`);
-      if (finding.evidence) lines.push("", `Evidence: \`${finding.evidence}\``);
+      if (finding.evidence) lines.push("", `Evidence: ${inlineCode(finding.evidence)}`);
       if (finding.line) lines.push(`Line ${finding.line}`);
       lines.push("");
     }

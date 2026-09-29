@@ -8,6 +8,7 @@
  */
 
 import type { NetworkRequest } from "../model.js";
+import { jsLiteral, jsString } from "../codegen.js";
 
 /** Quote for a POSIX shell: single quotes, with embedded ones escaped. */
 export function shellQuote(value: string): string {
@@ -33,7 +34,7 @@ export function toFetch(request: Pick<NetworkRequest, "method" | "url" | "reques
   const headers = request.requestHeaders ?? {};
   if (Object.keys(headers).length > 0) init.headers = headers;
   if (request.requestBody) init.body = request.requestBody;
-  return `await fetch(${JSON.stringify(request.url)}, ${JSON.stringify(init, null, 2)});`;
+  return `await fetch(${jsString(request.url)}, ${jsLiteral(init, 2)});`;
 }
 
 interface HarNameValue {

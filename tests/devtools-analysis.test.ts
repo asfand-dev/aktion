@@ -14,8 +14,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { VERSION } from "../src/index.js";
 import {
-  checkHeaders, checkUrlSecrets, classifySecret, decodeJwt, isLocalHost, scanSecurity,
+  checkHeaders, checkUrlSecrets, classifySecret, decodeJwt, isInertDataUrl, isLocalHost, scanSecurity,
 } from "../src/devtools/analysis/security.js";
+import { jsLiteral, jsString } from "../src/devtools/codegen.js";
+import { codeBlock, inlineCode, singleLine } from "../src/devtools/analysis/markdown.js";
 import { computeCls, computeInp, emptyVitals, isDevtoolsNode, rate, type InteractionRecord } from "../src/devtools/analysis/vitals.js";
 import { effectEventLabel } from "../src/devtools/views/timeline.js";
 import { shellQuote, toCurl, toFetch, toHar } from "../src/devtools/analysis/har.js";
@@ -24,7 +26,7 @@ import { commitRate, healthIssues, performanceInsights } from "../src/devtools/a
 import { bugReportMarkdown, exportSessionJson, importSessionJson, SESSION_FORMAT } from "../src/devtools/session.js";
 import { emptyModel, type NetworkRequest } from "../src/devtools/model.js";
 import {
-  InteractionRecorder, generatePlaywrightTest, generateTest, playwrightLocator, replayStep, resolveQuery, type RecordedStep,
+  InteractionRecorder, generatePlaywrightTest, generateSnapshotTest, generateTest, playwrightLocator, replayStep, resolveQuery, type RecordedStep,
 } from "../src/devtools/recorder.js";
 import { a11yScore, accessibilityTree, announce, auditAccessibility, headingOutline, landmarks, tabOrder } from "../src/devtools/a11y.js";
 import { findMatchingRule, newRule } from "../src/devtools/rules.js";
@@ -44,6 +46,12 @@ import type { CommitRecord, ComponentRenderRecord, RouteEvent } from "../src/dev
 afterEach(() => {
   document.body.innerHTML = "";
 });
+
+// U+2028 and U+2029, and a lone backslash for expected escapes, built rather
+// than typed so no editor can turn them into line breaks or escape sequences.
+const LS = String.fromCharCode(0x2028);
+const PS = String.fromCharCode(0x2029);
+const BS = "\\";
 
 /* ========================================================================== */
 /*  Version                                                                    */
@@ -147,6 +155,47 @@ describe("security — scanSecurity", () => {
     }
     expect(report.findings.find((f) => f.rule === "script-url")?.element?.tagName).toBe("A");
     expect(report.examined).toBeGreaterThan(0);
+  });
+
+  it("flags every data: URL outside media, and the scriptable ones as executable", () => {
+    const report = scanSecurity({
+      root: root(`
+        <a id="html" href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">x</a>
+        <a id="svg" href=" DATA:image/svg+xml,%3Csvg%20onload%3Dalert(1)%3E">x</a>
+        <form id="xhtml" action="data:application/xhtml+xml,x"></form>
+        <a id="vbs" href="vbscript:msgbox(1)">x</a>
+        <a id="js" href="  Java&#9;Script:alert(1)">x</a>
+        <a id="plain" href="data:text/plain,hello">x</a>
+        <img id="png" src="data:image/png;base64,iVBORw0KGgo=" alt="">
+        <audio id="wav" src="data:audio/wav;base64,UklGRg=="></audio>
+        <form id="mail" action="mailto:ops@example.com"></form>
+      `),
+      requests: [], profile: null, location: HTTPS_PAGE,
+    });
+    const found = (id: string): string[] => report.findings.filter((f) => f.element?.id === id).map((f) => `${f.rule}:${f.severity}`);
+    // Case, padding, and embedded tabs do not hide the scheme.
+    for (const id of ["html", "svg", "xhtml", "vbs", "js"]) expect(found(id), id).toEqual(["script-url:high"]);
+    // Not scriptable, but still content that no sanitiser would have emitted.
+    expect(found("plain")).toEqual(["data-url:medium"]);
+    // Media is how Image renders an inline picture: inert.
+    expect(found("png")).toEqual([]);
+    expect(found("wav")).toEqual([]);
+    // A mail action is still off-site, named by its scheme rather than "null".
+    expect(found("mail")).toEqual(["form-third-party:low"]);
+    expect(report.findings.find((f) => f.element?.id === "mail")?.detail).toBe("<form#mail> posts to a mailto: URL.");
+  });
+
+  it("treats a data: URL as inert only where a media element loads it", () => {
+    expect(isInertDataUrl("img", "src", "data:image/svg+xml,x")).toBe(true);
+    expect(isInertDataUrl("track", "src", "data:text/vtt,WEBVTT")).toBe(true);
+    expect(isInertDataUrl("image", "href", "data:image/png;base64,x")).toBe(true);
+    expect(isInertDataUrl("image", "xlink:href", "data:image/png;base64,x")).toBe(true);
+    // The same picture is a navigation from a link, and a document in a frame.
+    expect(isInertDataUrl("a", "href", "data:image/png;base64,x")).toBe(false);
+    expect(isInertDataUrl("iframe", "src", "data:image/svg+xml,x")).toBe(false);
+    expect(isInertDataUrl("embed", "src", "data:image/svg+xml,x")).toBe(false);
+    expect(isInertDataUrl("img", "src", "data:text/html,x")).toBe(false);
+    expect(isInertDataUrl("script", "src", "data:text/vtt,x")).toBe(false);
   });
 
   it("reads transport, storage, and program reach", () => {
@@ -296,6 +345,20 @@ describe("request export", () => {
     expect(code).toContain(`await fetch("https://api.example.com/users?page=2"`);
     expect(code).toContain(`"method": "POST"`);
     expect(code).toContain(`"body": "{\\"name\\":\\"Ada\\"}"`);
+  });
+
+  it("writes a fetch call that is inert markup and replays the exact request", async () => {
+    const hostile = { method: "post", url: "https://x.dev/a?q=</script><!--", requestHeaders: { "X-Note": `a${LS}b` }, requestBody: "<b>bold</b>" };
+    const code = toFetch(hostile);
+    // Nothing in it can end a <script> it is pasted into, or a pre-ES2019 string.
+    expect(code).not.toContain("<");
+    expect(code).not.toContain(LS);
+    // Running the snippet sends the request byte for byte.
+    const calls: unknown[][] = [];
+    await (new Function("fetch", `return (async () => { ${code} })();`) as (fetch: (...args: unknown[]) => void) => Promise<void>)((...args) => {
+      calls.push(args);
+    });
+    expect(calls).toEqual([[hostile.url, { method: "POST", headers: hostile.requestHeaders, body: hostile.requestBody }]]);
   });
 
   it("builds a HAR 1.2 document with wall-clock times", () => {
@@ -473,10 +536,55 @@ describe("session export and import", () => {
     const report = bugReportMarkdown(ctx, { steps: [{ type: "click", query: { kind: "text", value: "Add" }, label: "click text \"Add\"", time: 1 }], vitals: ["INP 40ms"] });
     expect(report).toContain("Boom");
     // Only the failing request is listed: a report is about what went wrong.
-    expect(report).toContain("| POST | `/api/orders` | 500 | 12ms |");
+    expect(report).toContain("POST  500  12ms  /api/orders");
     expect(report).not.toContain("/api/users");
     expect(report).toContain("click text");
     expect(report).toContain("INP 40ms");
+  });
+
+  it("keeps app text in a bug report from turning into Markdown", () => {
+    const ctx = source();
+    const url = "/api/search?q=a|b\\|c```d";
+    ctx.model.network.push({ requestId: "2", method: "get", url, phase: "error", startTime: 9, error: "net::ERR_FAILED\n| forged | row |" });
+    ctx.model.network.push({ requestId: "3", method: "DELETE", url: "/api/cart", phase: "blocked", startTime: 10, duration: 1.4 });
+    ctx.model.logs.push({ level: "warn", text: "```\n## not a heading", args: [], origin: "program", time: 11, count: 1 });
+    const lines = bugReportMarkdown(ctx).split("\n");
+    // The URL holds a run of three backticks, so its block needs a fence of four;
+    // the columns line up, and the error's newline cannot start a row of its own.
+    const failed = lines.indexOf("**Failed requests**");
+    expect(lines.slice(failed + 2, failed + 6)).toEqual([
+      "````",
+      `GET     failed     —  ${url}  — net::ERR_FAILED | forged | row |`,
+      "DELETE  blocked  1ms  /api/cart",
+      "````",
+    ]);
+    const warnings = lines.indexOf("**Warnings**");
+    expect(lines.slice(warnings + 2, warnings + 6)).toEqual(["````", "```", "## not a heading", "````"]);
+  });
+});
+
+describe("markdown — app text in reports", () => {
+  it("fences an inline code span past any backtick run inside it", () => {
+    expect(inlineCode("a|b\\|c")).toBe("`a|b\\|c`");
+    expect(inlineCode("a`b")).toBe("``a`b``");
+    expect(inlineCode("x``y`")).toBe("``` x``y` ```");
+    expect(inlineCode("`")).toBe("`` ` ``");
+    // CommonMark strips one space from each end of a span that has both.
+    expect(inlineCode(" padded ")).toBe("`  padded  `");
+    expect(inlineCode("   ")).toBe("`   `");
+    expect(inlineCode("")).toBe("` `");
+    expect(inlineCode("two\nlines\r\n")).toBe("`two lines `");
+  });
+
+  it("fences a code block past any backtick run inside it", () => {
+    expect(codeBlock(["plain"])).toEqual(["```", "plain", "```"]);
+    expect(codeBlock(["a\nb\r\nc"], "json")).toEqual(["```json", "a", "b", "c", "```"]);
+    expect(codeBlock(["```", "x````y"])).toEqual(["`````", "```", "x````y", "`````"]);
+  });
+
+  it("flattens control characters to single spaces", () => {
+    expect(singleLine(`a\r\n\tb${String.fromCharCode(0)}c${String.fromCharCode(0x7f)}d`)).toBe("a b c d");
+    expect(singleLine("unchanged | text")).toBe("unchanged | text");
   });
 });
 
@@ -497,6 +605,30 @@ describe("network rule probability", () => {
 /* ========================================================================== */
 /*  Recorder: Playwright, resolution, replay, route assertions                 */
 /* ========================================================================== */
+
+describe("codegen — literals for generated code", () => {
+  it("escapes what could end a <script>, a comment, or a pre-ES2019 string, and evaluates back exactly", () => {
+    const hostile = `</script><!--${LS}${PS}"'${BS} --> --!> ]]]> ul > li`;
+    const literal = jsString(hostile);
+    // `<` always; `>` only where it closes a comment or CDATA section.
+    expect(literal).toBe(`"${BS}u003c/script>${BS}u003c!--${BS}u2028${BS}u2029${BS}"'${BS}${BS} --${BS}u003e --!${BS}u003e ]]]${BS}u003e ul > li"`);
+    expect(JSON.parse(literal)).toBe(hostile);
+    expect(new Function(`return ${literal};`)()).toBe(hostile);
+    expect(jsString("plain")).toBe(`"plain"`);
+  });
+
+  it("writes any JSON value, and undefined for one with no JSON form", () => {
+    const value = { html: "<b>x</b>", list: [1, "a-->b", null], nested: { ok: true } };
+    const literal = jsLiteral(value, 2);
+    expect(literal).not.toMatch(/<|-->/);
+    expect(JSON.parse(literal)).toEqual(value);
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(jsLiteral(cyclic)).toBe("undefined");
+    expect(jsLiteral(() => 1)).toBe("undefined");
+    expect(jsLiteral(undefined)).toBe("undefined");
+  });
+});
 
 describe("recorder — Playwright codegen", () => {
   const steps: RecordedStep[] = [
@@ -533,6 +665,40 @@ describe("recorder — Playwright codegen", () => {
   it("asserts the route in the Aktion test too", () => {
     const code = generateTest(steps.slice(0, 2), { program: `$app(Text("x"))` });
     expect(code).toContain(`expect(screen.route).toBe("/todos");`);
+  });
+
+  it("writes recorded values as literals that are inert markup and evaluate back exactly", async () => {
+    const typed = `</script><script>alert(1)</script>${LS}${PS}`;
+    const path = "/search/</script>";
+    const spec = generatePlaywrightTest([
+      { type: "type", query: { kind: "label", value: "Bio" }, value: typed, label: "type", time: 1 },
+      { type: "navigate", value: path, label: "navigate", time: 2 },
+      { type: "assert", assertion: "route", value: path, label: "route", time: 3 },
+    ], { title: "<!-- flow -->", url: "http://localhost/", routerMode: "hash" });
+    expect(spec).not.toContain("<");
+    expect(spec).not.toContain(LS);
+    expect(spec).not.toContain(PS);
+    expect(spec).toContain(`.fill("${BS}u003c/script>${BS}u003cscript>alert(1)${BS}u003c/script>${BS}u2028${BS}u2029");`);
+    // Replaying the navigate line hands the page the recorded path, unchanged.
+    const line = spec.split("\n").find((l) => l.includes("page.evaluate("))!;
+    let hash: unknown;
+    await (new Function("page", `return (async () => { ${line} })();`) as (page: unknown) => Promise<void>)({
+      evaluate: (_fn: unknown, arg: unknown) => {
+        hash = arg;
+      },
+    });
+    expect(hash).toBe(path);
+    // The route assertion's pattern still matches the URL it describes.
+    const pattern = /new RegExp\((".*")\)/.exec(spec.split("\n").find((l) => l.includes("toHaveURL("))!)![1]!;
+    expect(new RegExp(JSON.parse(pattern) as string).test("http://localhost/#/search/</script>")).toBe(true);
+  });
+
+  it("writes snapshot state as an inert literal", () => {
+    const state = { note: "</script>", nested: { list: ["<!--"] } };
+    const code = generateSnapshotTest(`$app(Text("x"))`, state);
+    expect(code).not.toContain("<");
+    const start = code.indexOf("toEqual(") + "toEqual(".length;
+    expect(JSON.parse(code.slice(start, code.indexOf(");\n", start)))).toEqual(state);
   });
 });
 

@@ -5,6 +5,28 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-09-29
+
+### DevTools: Safer Generated Code, Reports, and URL Checks
+
+- The Security section now flags every `data:` URL in the live DOM, not just
+  `data:text/html`. Only media loaded by a media element, such as an inline
+  image, counts as safe; script-capable types such as HTML, SVG, and XML are
+  rated high severity, and the rest medium.
+- Generated tests, Playwright specs, and "Copy as fetch" snippets now write
+  recorded values as literals that cannot break out of a `<script>` or HTML
+  comment they are pasted into, with the U+2028 and U+2029 line separators
+  escaped. The values themselves are unchanged, and CSS selectors such as
+  `ul > li` stay readable.
+- Bug reports and the Accessibility and Security Markdown exports put app text
+  (URLs, log lines, selectors, state) in code spans and blocks it cannot close,
+  so a stray backtick, pipe, or newline no longer breaks the report. Failed
+  requests in a bug report are listed as aligned columns in a code block
+  instead of a table.
+- A form whose `action` is a `data:` or `javascript:` URL is no longer also
+  reported as submitting "to another origin" named `null`, and a `mailto:` or
+  `ftp:` action is now named by its scheme.
+
 ## 2026-09-28
 
 ### DevTools 3.0: A Rebuilt Panel, and a QA Workbench

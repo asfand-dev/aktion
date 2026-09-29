@@ -209,6 +209,24 @@ function safeUrl(raw: string, base: string): URL | null {
   }
 }
 
+/** data: payloads a browser parses as a document or a script, so they can run code when navigated to or framed. */
+const SCRIPTABLE_DATA = /^data:(text\/html|application\/xhtml\+xml|image\/svg\+xml|text\/xml|application\/xml|(text|application)\/(x-)?(java|ecma)script)[;,]/;
+
+/** Elements whose `src` is only ever decoded as media, never parsed as a document. */
+const MEDIA_SRC_TAGS = new Set(["img", "source", "video", "audio", "track", "input"]);
+
+/**
+ * A data: URL that cannot run code where it is: an image, audio, video, font,
+ * or caption payload loaded by a media element (an SVG drawn by `<img>` or an
+ * SVG `<image>` runs no script). `url` is already trimmed and lower-cased.
+ */
+export function isInertDataUrl(tag: string, attr: string, url: string): boolean {
+  const media = /^data:(image|audio|video|font)\//.test(url) || (tag === "track" && /^data:text\/vtt[;,]/.test(url));
+  if (!media) return false;
+  if (attr === "src") return MEDIA_SRC_TAGS.has(tag);
+  return tag === "image" && (attr === "href" || attr === "xlink:href");
+}
+
 function describe(element: Element): string {
   const tag = element.tagName.toLowerCase();
   const id = element.id ? `#${element.id}` : "";
@@ -342,11 +360,20 @@ export function scanSecurity(input: SecurityInput): SecurityReport {
         const value = element.getAttribute(attr);
         if (!value) continue;
         const normalised = value.replace(/[\u0000- ]/g, "").toLowerCase();
-        if (normalised.startsWith("javascript:") || normalised.startsWith("vbscript:") || normalised.startsWith("data:text/html")) {
+        // Every scheme that can carry code is checked. javascript: and vbscript:
+        // always run script; a data: URL is only harmless as media loaded by a
+        // media element (the sanitisers emit data: for images and nothing else).
+        const scriptScheme = normalised.startsWith("javascript:") || normalised.startsWith("vbscript:");
+        const dataScheme = normalised.startsWith("data:");
+        if (scriptScheme || (dataScheme && !isInertDataUrl(tag, attr, normalised))) {
+          const runsScript = scriptScheme || SCRIPTABLE_DATA.test(normalised);
           push({
-            id: `script-url:${describe(element)}:${attr}`, rule: "script-url", severity: "high", category: "dom", element,
-            title: `Executable URL in ${attr}`,
-            detail: `${describe(element)} has ${attr}="${value.slice(0, 60)}". The component library's sanitisers refuse this scheme, so it came from an escape hatch or from outside the runtime.`,
+            id: `${runsScript ? "script-url" : "data-url"}:${describe(element)}:${attr}`,
+            rule: runsScript ? "script-url" : "data-url", severity: runsScript ? "high" : "medium", category: "dom", element,
+            title: runsScript ? `Executable URL in ${attr}` : `data: URL in ${attr}`,
+            detail: runsScript
+              ? `${describe(element)} has ${attr}="${value.slice(0, 60)}". The component library's sanitisers refuse this scheme, so it came from an escape hatch or from outside the runtime.`
+              : `${describe(element)} has ${attr}="${value.slice(0, 60)}". The sanitisers only ever emit data: URLs for images, so this one came from an escape hatch or from outside the runtime — and it loads content the page never vetted.`,
             fix: "Remove the URL, or route it through Link/Image so sanitiseHref/sanitiseImageSrc applies.",
             evidence: value.slice(0, 120),
           });
@@ -437,11 +464,15 @@ export function scanSecurity(input: SecurityInput): SecurityReport {
             detail: `${describe(element)} posts to ${action}. Anything typed into it travels unencrypted.`,
             fix: "Submit to an https:// endpoint.",
           });
-        } else if (url && pageOrigin && url.origin !== pageOrigin) {
+        } else if (url && pageOrigin && url.origin !== pageOrigin && !/^(javascript|vbscript|data):$/.test(url.protocol)) {
+          // The URL checks above already report javascript:, vbscript: and data:
+          // actions. Any other non-web scheme (mailto:, ftp:) has the opaque
+          // origin "null", so it is named by its scheme instead.
+          const destination = url.origin === "null" ? `a ${url.protocol} URL` : url.origin;
           push({
-            id: `form-offsite:${url.origin}`, rule: "form-third-party", severity: "low", category: "transport", element,
+            id: `form-offsite:${destination}`, rule: "form-third-party", severity: "low", category: "transport", element,
             title: "Form submits to another origin",
-            detail: `${describe(element)} posts to ${url.origin}.`,
+            detail: `${describe(element)} posts to ${destination}.`,
             fix: "Confirm the destination is intended; prefer $mutation so the request is visible and interceptable.",
           });
         }

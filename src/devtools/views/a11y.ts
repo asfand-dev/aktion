@@ -15,6 +15,7 @@ import {
   parseColor, RULE_INFO, tabOrder, type A11yFinding, type A11yImpact, type AxNode,
 } from "../a11y.js";
 import { cssPath, describeElement } from "../overlay.js";
+import { inlineCode, singleLine } from "../analysis/markdown.js";
 import { visibleFindings } from "../shell/effects.js";
 import { icon } from "../ui/icons.js";
 import {
@@ -156,7 +157,7 @@ function reportMarkdown(ctx: ViewContext, findings: ReadonlyArray<A11yFinding>):
     lines.push(`## ${info?.title ?? rule} (\`${rule}\`) — ${items[0]!.impact}, ×${items.length}`);
     if (items[0]!.wcag?.length) lines.push(`WCAG ${items[0]!.wcag.map((c) => `${c} ${WCAG[c]?.name ?? ""}`.trim()).join(", ")}`);
     lines.push("", `**Fix:** ${items[0]!.help}`, "");
-    for (const item of items.slice(0, 20)) lines.push(`- ${item.message}${item.detail ? ` (${item.detail})` : ""} — \`${cssPath(item.element)}\``);
+    for (const item of items.slice(0, 20)) lines.push(`- ${singleLine(item.message)}${item.detail ? ` (${singleLine(item.detail)})` : ""} — ${inlineCode(cssPath(item.element))}`);
     if (items.length > 20) lines.push(`- …and ${items.length - 20} more`);
     lines.push("");
   }

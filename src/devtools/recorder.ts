@@ -17,6 +17,7 @@
  */
 
 import { accessibleName, cssPath, implicitRole } from "./overlay.js";
+import { jsLiteral, jsString } from "./codegen.js";
 
 /** How a recorded step locates its element. */
 export interface QueryStrategy {
@@ -128,8 +129,9 @@ export function queryLabel(query: QueryStrategy): string {
   }
 }
 
+/** A string literal for generated code — see `codegen.ts` for why plain JSON is not enough. */
 function str(value: string): string {
-  return JSON.stringify(value);
+  return jsString(value);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -484,11 +486,7 @@ function escapeTemplate(text: string): string {
 
 /** JS literal for an asserted value. */
 function literal(value: unknown): string {
-  try {
-    return JSON.stringify(value) ?? "undefined";
-  } catch {
-    return "undefined";
-  }
+  return jsLiteral(value);
 }
 
 /**
@@ -514,7 +512,7 @@ export function generateSnapshotTest(
     `it(${str(options.title ?? "renders the recorded snapshot")}, async () => {`,
     "  const screen = render(program);",
     "  await screen.flush();",
-    `  expect(screen.state.snapshot()).toEqual(${JSON.stringify(state, null, 2).split("\n").join("\n  ")});`,
+    `  expect(screen.state.snapshot()).toEqual(${jsLiteral(state, 2).split("\n").join("\n  ")});`,
     "  expect(screen.html()).toMatchSnapshot();",
     "});",
   ].join("\n");
