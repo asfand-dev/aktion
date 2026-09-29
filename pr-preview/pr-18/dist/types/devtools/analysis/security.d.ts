@@ -99,6 +99,12 @@ export declare function classifySecret(key: string, value: string): {
 };
 /** Local hosts where plain http is normal. */
 export declare function isLocalHost(hostname: string): boolean;
+/**
+ * A data: URL that cannot run code where it is: an image, audio, video, font,
+ * or caption payload loaded by a media element (an SVG drawn by `<img>` or an
+ * SVG `<image>` runs no script). `url` is already trimmed and lower-cased.
+ */
+export declare function isInertDataUrl(tag: string, attr: string, url: string): boolean;
 export declare function scanSecurity(input: SecurityInput): SecurityReport;
 /** The first query parameter (or JWT-shaped value) in `raw` that looks like a credential. */
 export declare function checkUrlSecrets(raw: string): string | null;

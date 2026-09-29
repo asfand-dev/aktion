@@ -3210,6 +3210,22 @@ function announce(element) {
   }
   return parts.join(", ");
 }
+const UNSAFE_IN_CODE = /[<\u2028\u2029]|--!?>|]]>/g;
+function escapeForCode(json) {
+  return json.replace(UNSAFE_IN_CODE, (match) => `${match.slice(0, -1)}\\u${match.charCodeAt(match.length - 1).toString(16).padStart(4, "0")}`);
+}
+function jsString(value) {
+  return escapeForCode(JSON.stringify(value));
+}
+function jsLiteral(value, space) {
+  let json;
+  try {
+    json = JSON.stringify(value, null, space);
+  } catch {
+    json = void 0;
+  }
+  return json === void 0 ? "undefined" : escapeForCode(json);
+}
 function chooseQuery(element, root) {
   const testId = element.getAttribute("data-testid") ?? element.getAttribute("data-test-id");
   if (testId) return { kind: "testid", value: testId };
@@ -3264,7 +3280,7 @@ function queryLabel(query) {
   }
 }
 function str(value) {
-  return JSON.stringify(value);
+  return jsString(value);
 }
 const INTERACTIONS = /* @__PURE__ */ new Set(["click", "type", "select", "check", "uncheck", "key"]);
 const NAVIGATION_WINDOW_MS = 1500;
@@ -3556,11 +3572,7 @@ function escapeTemplate(text2) {
   return text2.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
 }
 function literal(value) {
-  try {
-    return JSON.stringify(value) ?? "undefined";
-  } catch {
-    return "undefined";
-  }
+  return jsLiteral(value);
 }
 function generateSnapshotTest(program, state, options = {}) {
   const pkg = options.packageName ?? "aktion-runtime/test";
@@ -3575,7 +3587,7 @@ function generateSnapshotTest(program, state, options = {}) {
     `it(${str(options.title ?? "renders the recorded snapshot")}, async () => {`,
     "  const screen = render(program);",
     "  await screen.flush();",
-    `  expect(screen.state.snapshot()).toEqual(${JSON.stringify(state, null, 2).split("\n").join("\n  ")});`,
+    `  expect(screen.state.snapshot()).toEqual(${jsLiteral(state, 2).split("\n").join("\n  ")});`,
     "  expect(screen.html()).toMatchSnapshot();",
     "});"
   ].join("\n");
@@ -4912,6 +4924,26 @@ function paletteView(options) {
     )
   );
 }
+function longestBacktickRun(text2) {
+  let longest = 0;
+  for (const run of text2.match(/`+/g) ?? []) longest = Math.max(longest, run.length);
+  return longest;
+}
+function singleLine(text2) {
+  return text2.replace(/[\u0000-\u001f\u007f]+/g, " ");
+}
+function inlineCode(text2) {
+  const body = singleLine(text2);
+  if (body === "") return "` `";
+  const fence = "`".repeat(longestBacktickRun(body) + 1);
+  const pad = body.startsWith("`") || body.endsWith("`") || body.startsWith(" ") && body.endsWith(" ") && body.trim() !== "" ? " " : "";
+  return `${fence}${pad}${body}${pad}${fence}`;
+}
+function codeBlock(lines2, info = "") {
+  const body = lines2.flatMap((line) => line.split(/\r\n|\r|\n/));
+  const fence = "`".repeat(Math.max(3, longestBacktickRun(body.join("\n")) + 1));
+  return [`${fence}${info}`, ...body, fence];
+}
 const SESSION_FORMAT = "aktion-devtools-session";
 function exportSessionJson(ctx, extras = {}) {
   const { model } = ctx;
@@ -5019,7 +5051,7 @@ function bugReportMarkdown(ctx, extras = {}) {
   lines2.push(`- Viewport: ${String(env.viewport ?? "")} @${String(env.devicePixelRatio ?? 1)}x`);
   lines2.push(`- Aktion runtime: ${ctx.hook.libraryVersion} (DevTools protocol ${ctx.hook.protocolVersion})`);
   const route = safe(() => typeof ctx.app?.getRoute === "function" ? ctx.app.getRoute().path : null, null);
-  if (route) lines2.push(`- Route: \`${route}\``);
+  if (route) lines2.push(`- Route: ${inlineCode(route)}`);
   lines2.push(`- Captured: ${(/* @__PURE__ */ new Date()).toISOString()}`);
   if (extras.steps && extras.steps.length > 0) {
     lines2.push("", "**Steps to reproduce**", "");
@@ -5028,38 +5060,42 @@ function bugReportMarkdown(ctx, extras = {}) {
   const errors = model.errors.slice(-10);
   const errorLogs = model.logs.filter((l) => l.level === "error").slice(-10);
   if (errors.length > 0 || errorLogs.length > 0) {
-    lines2.push("", "**Errors**", "", "```");
-    for (const error of errors) lines2.push(`[${error.phase}] ${error.subject ? `${error.subject}: ` : ""}${error.message}`);
-    for (const log of errorLogs) lines2.push(`[console.error] ${log.text}${log.count > 1 ? ` (×${log.count})` : ""}`);
-    lines2.push("```");
+    lines2.push("", "**Errors**", "", ...codeBlock([
+      ...errors.map((error) => `[${error.phase}] ${error.subject ? `${error.subject}: ` : ""}${error.message}`),
+      ...errorLogs.map((log) => `[console.error] ${log.text}${log.count > 1 ? ` (×${log.count})` : ""}`)
+    ]));
   }
   const warnings = model.logs.filter((l) => l.level === "warn").slice(-6);
   if (warnings.length > 0) {
-    lines2.push("", "**Warnings**", "", "```");
-    for (const log of warnings) lines2.push(log.text.length > 300 ? `${log.text.slice(0, 300)}…` : log.text);
-    lines2.push("```");
+    lines2.push("", "**Warnings**", "", ...codeBlock(warnings.map((log) => log.text.length > 300 ? `${log.text.slice(0, 300)}…` : log.text)));
   }
   const failed = model.network.filter((r) => r.phase === "error" || r.phase === "blocked" || (r.status ?? 0) >= 400).slice(-10);
   if (failed.length > 0) {
-    lines2.push("", "**Failed requests**", "", "| Method | URL | Status | Time |", "| --- | --- | --- | --- |");
-    for (const request of failed) {
-      lines2.push(`| ${request.method} | \`${request.url.replace(/\|/g, "\\|")}\` | ${request.status ?? request.error ?? request.phase} | ${request.duration !== void 0 ? `${Math.round(request.duration)}ms` : "—"} |`);
-    }
+    const rows = failed.map((request) => ({
+      method: request.method.toUpperCase(),
+      status: request.status !== void 0 ? String(request.status) : request.phase === "blocked" ? "blocked" : "failed",
+      time: request.duration !== void 0 ? `${Math.round(request.duration)}ms` : "—",
+      url: singleLine(request.url),
+      error: request.error ? singleLine(request.error) : ""
+    }));
+    const width = (pick) => Math.max(...rows.map((row2) => pick(row2).length));
+    const [method, status, time] = [width((r) => r.method), width((r) => r.status), width((r) => r.time)];
+    lines2.push("", "**Failed requests**", "", ...codeBlock(rows.map((row2) => `${row2.method.padEnd(method)}  ${row2.status.padEnd(status)}  ${row2.time.padStart(time)}  ${row2.url}${row2.error ? `  — ${row2.error}` : ""}`)));
   }
   if (extras.vitals && extras.vitals.length > 0) {
     lines2.push("", "**Performance**", "");
     for (const line of extras.vitals) lines2.push(`- ${line}`);
   }
-  lines2.push("", "**State at capture**", "", "```json");
   let state;
   try {
     state = JSON.stringify(model.state, null, 2);
   } catch {
     state = "<unserialisable>";
   }
-  lines2.push(state.length > 4e3 ? `${state.slice(0, 4e3)}
-… (truncated — attach the session file for the full state)` : state);
-  lines2.push("```", "", "_Generated by Aktion DevTools. Attach the exported session (.json) to replay this in the panel._");
+  if (state.length > 4e3) state = `${state.slice(0, 4e3)}
+… (truncated — attach the session file for the full state)`;
+  lines2.push("", "**State at capture**", "", ...codeBlock([state], "json"));
+  lines2.push("", "_Generated by Aktion DevTools. Attach the exported session (.json) to replay this in the panel._");
   return lines2.join("\n");
 }
 function environment() {
@@ -5167,6 +5203,14 @@ function safeUrl(raw, base2) {
   } catch {
     return null;
   }
+}
+const SCRIPTABLE_DATA = /^data:(text\/html|application\/xhtml\+xml|image\/svg\+xml|text\/xml|application\/xml|(text|application)\/(x-)?(java|ecma)script)[;,]/;
+const MEDIA_SRC_TAGS = /* @__PURE__ */ new Set(["img", "source", "video", "audio", "track", "input"]);
+function isInertDataUrl(tag, attr, url) {
+  const media = /^data:(image|audio|video|font)\//.test(url) || tag === "track" && /^data:text\/vtt[;,]/.test(url);
+  if (!media) return false;
+  if (attr === "src") return MEDIA_SRC_TAGS.has(tag);
+  return tag === "image" && (attr === "href" || attr === "xlink:href");
 }
 function describe(element) {
   const tag = element.tagName.toLowerCase();
@@ -5314,15 +5358,18 @@ function scanSecurity(input) {
         const value = element.getAttribute(attr);
         if (!value) continue;
         const normalised = value.replace(/[\u0000- ]/g, "").toLowerCase();
-        if (normalised.startsWith("javascript:") || normalised.startsWith("vbscript:") || normalised.startsWith("data:text/html")) {
+        const scriptScheme = normalised.startsWith("javascript:") || normalised.startsWith("vbscript:");
+        const dataScheme = normalised.startsWith("data:");
+        if (scriptScheme || dataScheme && !isInertDataUrl(tag, attr, normalised)) {
+          const runsScript = scriptScheme || SCRIPTABLE_DATA.test(normalised);
           push({
-            id: `script-url:${describe(element)}:${attr}`,
-            rule: "script-url",
-            severity: "high",
+            id: `${runsScript ? "script-url" : "data-url"}:${describe(element)}:${attr}`,
+            rule: runsScript ? "script-url" : "data-url",
+            severity: runsScript ? "high" : "medium",
             category: "dom",
             element,
-            title: `Executable URL in ${attr}`,
-            detail: `${describe(element)} has ${attr}="${value.slice(0, 60)}". The component library's sanitisers refuse this scheme, so it came from an escape hatch or from outside the runtime.`,
+            title: runsScript ? `Executable URL in ${attr}` : `data: URL in ${attr}`,
+            detail: runsScript ? `${describe(element)} has ${attr}="${value.slice(0, 60)}". The component library's sanitisers refuse this scheme, so it came from an escape hatch or from outside the runtime.` : `${describe(element)} has ${attr}="${value.slice(0, 60)}". The sanitisers only ever emit data: URLs for images, so this one came from an escape hatch or from outside the runtime — and it loads content the page never vetted.`,
             fix: "Remove the URL, or route it through Link/Image so sanitiseHref/sanitiseImageSrc applies.",
             evidence: value.slice(0, 120)
           });
@@ -5449,15 +5496,16 @@ function scanSecurity(input) {
             detail: `${describe(element)} posts to ${action}. Anything typed into it travels unencrypted.`,
             fix: "Submit to an https:// endpoint."
           });
-        } else if (url && pageOrigin && url.origin !== pageOrigin) {
+        } else if (url && pageOrigin && url.origin !== pageOrigin && !/^(javascript|vbscript|data):$/.test(url.protocol)) {
+          const destination = url.origin === "null" ? `a ${url.protocol} URL` : url.origin;
           push({
-            id: `form-offsite:${url.origin}`,
+            id: `form-offsite:${destination}`,
             rule: "form-third-party",
             severity: "low",
             category: "transport",
             element,
             title: "Form submits to another origin",
-            detail: `${describe(element)} posts to ${url.origin}.`,
+            detail: `${describe(element)} posts to ${destination}.`,
             fix: "Confirm the destination is intended; prefer $mutation so the request is visible and interceptable."
           });
         }
@@ -6417,7 +6465,7 @@ function toFetch(request) {
   const headers = request.requestHeaders ?? {};
   if (Object.keys(headers).length > 0) init.headers = headers;
   if (request.requestBody) init.body = request.requestBody;
-  return `await fetch(${JSON.stringify(request.url)}, ${JSON.stringify(init, null, 2)});`;
+  return `await fetch(${jsString(request.url)}, ${jsLiteral(init, 2)});`;
 }
 function pairs(record) {
   return Object.entries(record ?? {}).map(([name, value]) => ({ name, value }));
@@ -15877,7 +15925,7 @@ function reportMarkdown$1(ctx, findings) {
     lines2.push(`## ${info?.title ?? rule} (\`${rule}\`) — ${items[0].impact}, ×${items.length}`);
     if (items[0].wcag?.length) lines2.push(`WCAG ${items[0].wcag.map((c) => `${c} ${WCAG[c]?.name ?? ""}`.trim()).join(", ")}`);
     lines2.push("", `**Fix:** ${items[0].help}`, "");
-    for (const item of items.slice(0, 20)) lines2.push(`- ${item.message}${item.detail ? ` (${item.detail})` : ""} — \`${cssPath(item.element)}\``);
+    for (const item of items.slice(0, 20)) lines2.push(`- ${singleLine(item.message)}${item.detail ? ` (${singleLine(item.detail)})` : ""} — ${inlineCode(cssPath(item.element))}`);
     if (items.length > 20) lines2.push(`- …and ${items.length - 20} more`);
     lines2.push("");
   }
@@ -16892,7 +16940,7 @@ function reportMarkdown(ctx, report2) {
     lines2.push(`## ${CATEGORY[category].label}`, "");
     for (const finding of items) {
       lines2.push(`### [${finding.severity}] ${finding.title}`, "", finding.detail, "", `**Fix:** ${finding.fix}`);
-      if (finding.evidence) lines2.push("", `Evidence: \`${finding.evidence}\``);
+      if (finding.evidence) lines2.push("", `Evidence: ${inlineCode(finding.evidence)}`);
       if (finding.line) lines2.push(`Line ${finding.line}`);
       lines2.push("");
     }
