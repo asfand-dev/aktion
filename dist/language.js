@@ -39373,7 +39373,7 @@ function printExpression(expr, indent, opts) {
       return `$${expr.name}`;
     case "Array": {
       if (expr.elements.length === 0) return "[]";
-      const items = expr.elements.map((e) => printExpression(e, indent, opts));
+      const items = expr.elements.map((e) => printExpression(e, indent + 1, opts));
       const inline = `[${items.join(", ")}]`;
       if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
       const innerPad = pad(indent + 1, opts);
@@ -39385,7 +39385,7 @@ ${pad(indent, opts)}]`;
     }
     case "Object": {
       if (expr.properties.length === 0) return "{}";
-      const items = expr.properties.map((p) => printObjectProp(p, indent, opts));
+      const items = expr.properties.map((p) => printObjectProp(p, indent + 1, opts));
       const inline = opts.objectCurlySpacing ? `{ ${items.join(", ")} }` : `{${items.join(", ")}}`;
       if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
       const innerPad = pad(indent + 1, opts);
@@ -39449,7 +39449,7 @@ ${pad(indent, opts)}}`;
 }
 function printCall(callee, args, indent, opts) {
   if (args.length === 0) return `${callee}()`;
-  const parts = args.map((a) => printExpression(a, indent, opts));
+  const parts = args.map((a) => printExpression(a, indent + 1, opts));
   const inline = `${callee}(${parts.join(", ")})`;
   if (inline.length <= 80 && !parts.some((s) => s.includes("\n"))) return inline;
   const innerPad = pad(indent + 1, opts);

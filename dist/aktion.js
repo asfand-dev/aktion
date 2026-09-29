@@ -2322,7 +2322,7 @@ function Ae(t, e, r) {
       return `$${t.name}`;
     case "Array": {
       if (t.elements.length === 0) return "[]";
-      const i = t.elements.map((l) => Ae(l, e, r)), a = `[${i.join(", ")}]`;
+      const i = t.elements.map((l) => Ae(l, e + 1, r)), a = `[${i.join(", ")}]`;
       if (a.length <= 80 && !i.some((l) => l.includes(`
 `))) return a;
       const o = Ft(e + 1, r), n = i.map((l) => `${o}${l}`).join(`,
@@ -2333,7 +2333,7 @@ ${Ft(e, r)}]`;
     }
     case "Object": {
       if (t.properties.length === 0) return "{}";
-      const i = t.properties.map((l) => sy(l, e, r)), a = r.objectCurlySpacing ? `{ ${i.join(", ")} }` : `{${i.join(", ")}}`;
+      const i = t.properties.map((l) => sy(l, e + 1, r)), a = r.objectCurlySpacing ? `{ ${i.join(", ")} }` : `{${i.join(", ")}}`;
       if (a.length <= 80 && !i.some((l) => l.includes(`
 `))) return a;
       const o = Ft(e + 1, r), n = i.map((l) => `${o}${l}`).join(`,
@@ -2392,7 +2392,7 @@ ${Ft(e, r)}}`;
 }
 function Qi(t, e, r, i) {
   if (e.length === 0) return `${t}()`;
-  const a = e.map((s) => Ae(s, r, i)), o = `${t}(${a.join(", ")})`;
+  const a = e.map((s) => Ae(s, r + 1, i)), o = `${t}(${a.join(", ")})`;
   if (o.length <= 80 && !a.some((s) => s.includes(`
 `))) return o;
   const n = Ft(r + 1, i);
