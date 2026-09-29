@@ -5,6 +5,20 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## [0.8.0](https://github.com/asfand-dev/aktion/compare/v0.7.0...v0.8.0) (2026-09-29)
+
+
+### Features
+
+* Overhaul DevTools ([#18](https://github.com/asfand-dev/aktion/issues/18)) ([1263b3f](https://github.com/asfand-dev/aktion/commit/1263b3fcd383d5565829986466a590f8aaa4f085))
+
+
+### Bug Fixes
+
+* **ci:** revert [#20](https://github.com/asfand-dev/aktion/issues/20), fix release-please previews via a single workflow ([#22](https://github.com/asfand-dev/aktion/issues/22)) ([25d4a76](https://github.com/asfand-dev/aktion/commit/25d4a76f4738dda64badf0c2f15e84e287f7a93f))
+* **ci:** unblock release-please preview deploys, restrict them to same-repo PRs ([#20](https://github.com/asfand-dev/aktion/issues/20)) ([96734d1](https://github.com/asfand-dev/aktion/commit/96734d1ef87448f90224b7044ff95dc17f7557a5))
+* **formatter:** indent nested multi-line call/array/object args one level deeper ([#17](https://github.com/asfand-dev/aktion/issues/17)) ([20290bb](https://github.com/asfand-dev/aktion/commit/20290bbff836f0571228b4e2e7d1aacedc0c4e93))
+
 ## 2026-09-29
 
 ### DevTools: Safer Generated Code, Reports, and URL Checks
