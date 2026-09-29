@@ -53693,7 +53693,7 @@ function DP(t, e) {
     return c[s.risk] - c[l.risk] || s.name.localeCompare(l.name);
   }), a;
 }
-const OP = "0.7.0", To = "theme", ha = "streaming", Bs = "response", Ii = "showerrors", Ci = "src", BP = "scroll-restoration", Fs = "dir", _s = "margin", mm = "route";
+const OP = "0.8.0", To = "theme", ha = "streaming", Bs = "response", Ii = "showerrors", Ci = "src", BP = "scroll-restoration", Fs = "dir", _s = "margin", mm = "route";
 function FP(t) {
   const e = t.getPath(), r = { ...t.getParams() }, i = t.getActivePattern(), a = {};
   if (typeof window < "u" && window.location) {
