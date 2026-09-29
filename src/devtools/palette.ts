@@ -1,29 +1,30 @@
 /**
  * Aktion DevTools — the command palette.
  *
- * Fourteen tabs, each with its own sub-views and buttons, is a lot of surface to
- * find things in. A palette fixes discoverability the way editors do: one
- * keystroke (<kbd>Ctrl/⌘ K</kbd>), type a few letters, hit Enter. It is also the
- * fastest path for the things you do constantly — pick an element, clear the
- * session, run the audit — without hunting for the button that does it.
+ * Sixteen sections, each with sub-views and actions, is a lot of surface. The
+ * palette makes all of it one keystroke away: every section, every action a
+ * view offers, every component on screen ("Inspect CartRow"), every atom
+ * ("$user"), every declared route ("Navigate to /orders"), and every cached
+ * query ("Refetch /api/todos").
  *
- * Two design rules keep it useful rather than decorative:
+ * Two rules keep it useful rather than decorative:
  *
- *   - **Every command says where it lives** (`Inspect · Pick element`), so using
+ *   - **Every command says where it lives** (`Inspector · Pick element`), so
  *     the palette teaches the panel instead of replacing it.
- *   - **Matching is subsequence-based, not substring.** `pel` finds
- *     "Inspect · **P**ick **el**ement"; requiring a contiguous match would mean
- *     remembering the exact wording, which is the problem the palette solves.
+ *   - **Matching is subsequence-based.** `pel` finds "**P**ick **el**ement";
+ *     requiring a contiguous match would mean remembering exact wording, which
+ *     is the problem a palette exists to solve.
  */
 
-import { h } from "./ui.js";
-import type { TabContext, TabId } from "./context.js";
+import { autofocus, h, type Child, type VNode } from "./core/vdom.js";
+import { virtualList } from "./core/virtual-list.js";
+import { icon, type IconName } from "./ui/icons.js";
 
 /** One palette entry. */
 export interface Command {
   /** Stable id, also used as the list key. */
   id: string;
-  /** Group the command belongs to (usually a tab name). */
+  /** Group the command belongs to (usually a section name). */
   group: string;
   /** What it does, in the imperative. */
   label: string;
@@ -31,6 +32,7 @@ export interface Command {
   keywords?: string;
   /** Shortcut hint shown on the right. */
   hint?: string;
+  icon?: IconName;
   run(): void;
 }
 
@@ -39,11 +41,9 @@ export interface Command {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Subsequence score for `query` against `text`, or `null` for no match.
- *
- * Lower is better. Consecutive matches and matches at word starts score better,
- * so `insp` ranks "Inspect" above "Install", and typing a full word ranks it
- * first even when a shorter entry also matches.
+ * Subsequence score for `query` against `text`, or `null` for no match. Lower
+ * is better: consecutive matches and word starts score better, so `insp` ranks
+ * "Inspect" above "Install".
  */
 export function fuzzyScore(query: string, text: string): number | null {
   if (query === "") return 0;
@@ -55,7 +55,6 @@ export function fuzzyScore(query: string, text: string): number | null {
   for (const char of q) {
     const found = t.indexOf(char, ti);
     if (found < 0) return null;
-    // Penalise gaps, reward adjacency and word starts.
     const atWordStart = found === 0 || /[\s·:/(-]/.test(t[found - 1] ?? "");
     score += found - ti;
     if (found === lastHit + 1) score -= 1;
@@ -63,23 +62,41 @@ export function fuzzyScore(query: string, text: string): number | null {
     lastHit = found;
     ti = found + 1;
   }
-  // Prefer shorter entries when scores tie: a match in a short label is usually
-  // the one meant.
   return score + text.length / 100;
 }
 
 /**
- * Rank commands against a query, best first.
- *
- * Raw subsequence scoring is not enough on its own. Typing a word that names a
- * tab — "theme", "network" — almost always means "take me there", but the tab
- * command competes with every action in that tab's group, several of which
- * repeat the word ("Reset theme token overrides"). Three biases fix that
- * without special-casing individual commands:
- *
- *   - an exact label match wins outright,
- *   - a label that STARTS with the query beats one that merely contains it,
- *   - navigation beats action on an otherwise equal score.
+ * Indices in `text` that a query's characters matched, preferring word starts —
+ * for highlighting. Empty when there is no match.
+ */
+export function fuzzyPositions(query: string, text: string): number[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const t = text.toLowerCase();
+  // A contiguous hit is what the user most likely meant; show it whole.
+  const contiguous = t.indexOf(q);
+  if (contiguous >= 0) return Array.from({ length: q.length }, (_, i) => contiguous + i);
+  const out: number[] = [];
+  let ti = 0;
+  for (const char of q) {
+    if (char === " ") continue;
+    let found = -1;
+    // Prefer the next word start carrying this character.
+    for (let i = ti; i < t.length; i += 1) {
+      if (t[i] === char && (i === 0 || /[\s·:/(-]/.test(t[i - 1]!))) { found = i; break; }
+    }
+    if (found < 0) found = t.indexOf(char, ti);
+    if (found < 0) return [];
+    out.push(found);
+    ti = found + 1;
+  }
+  return out;
+}
+
+/**
+ * Rank commands against a query, best first. On top of the raw score: an exact
+ * label match wins outright, a label that STARTS with the query beats one that
+ * merely contains it, and navigation beats action on an otherwise equal score.
  */
 export function rankCommands(commands: ReadonlyArray<Command>, query: string): Command[] {
   const trimmed = query.trim();
@@ -102,376 +119,195 @@ export function rankCommands(commands: ReadonlyArray<Command>, query: string): C
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Command list                                                              */
+/*  Shortcuts                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/** Tab labels + icons, for the "go to tab" commands. */
-const TAB_COMMANDS: ReadonlyArray<{ id: TabId; label: string; keywords: string }> = [
-  { id: "overview", label: "Overview", keywords: "health summary home start" },
-  { id: "inspect", label: "Inspect", keywords: "component tree element picker props hooks dom styles box model" },
-  { id: "state", label: "State", keywords: "atoms reactive edit time travel snapshot diff watch" },
-  { id: "profiler", label: "Profiler", keywords: "commits renders flamegraph memo performance slow" },
-  { id: "effects", label: "Effects", keywords: "side effects timeline triggers intervals cleanup mounted" },
-  { id: "network", label: "Network", keywords: "http requests fetch query mutation mock offline delay rules" },
-  { id: "console", label: "Console", keywords: "logs warnings errors repl evaluate expression watch" },
-  { id: "routes", label: "Routes", keywords: "router navigation path params patterns" },
-  { id: "data", label: "Data", keywords: "queries cache stores forms localstorage session cookies" },
-  { id: "theme", label: "Theme", keywords: "tokens colours colors contrast design dark light" },
-  { id: "source", label: "Source", keywords: "program code diagnostics outline edit reload history" },
-  { id: "test", label: "Test", keywords: "record test accessibility a11y coverage queries chaos fuzz" },
-  { id: "timeline", label: "Timeline", keywords: "events ordered stream export session" },
-  { id: "settings", label: "Settings", keywords: "instrumentation dock theme density shortcuts about" },
+export interface ShortcutGroup {
+  title: string;
+  items: ReadonlyArray<[string, string]>;
+}
+
+/** Every shortcut, grouped the way the help dialog shows them. */
+export const SHORTCUT_GROUPS: ReadonlyArray<ShortcutGroup> = [
+  {
+    title: "Anywhere on the page",
+    items: [
+      ["Shift Alt D", "Show or hide DevTools"],
+      ["Shift Alt C", "Pick an element to inspect"],
+      ["Shift Alt K", "Open the command palette"],
+    ],
+  },
+  {
+    title: "In the panel",
+    items: [
+      ["⌘/Ctrl K", "Command palette"],
+      ["Alt 1…9", "Jump to a section"],
+      ["Alt [  Alt ]", "Previous / next section"],
+      ["/", "Focus the view's search"],
+      ["?", "This list"],
+      ["Esc", "Close a menu or dialog, cancel the picker or an edit"],
+    ],
+  },
+  {
+    title: "Lists and trees",
+    items: [
+      ["↑ ↓", "Move the selection"],
+      ["← →", "Collapse / expand"],
+      ["Enter", "Edit the value · open the detail"],
+      ["Home End", "First / last row"],
+    ],
+  },
+  {
+    title: "Element picker",
+    items: [
+      ["↑ ↓", "Walk to the parent / back to the child"],
+      ["Alt wheel", "Same, with the mouse"],
+      ["Enter", "Select the highlighted element"],
+    ],
+  },
+  {
+    title: "Charts",
+    items: [
+      ["Wheel", "Zoom around the pointer"],
+      ["Shift wheel  Drag", "Pan"],
+      ["Shift drag", "Select a time range (Timeline)"],
+      ["Double-click", "Zoom to a span / reset"],
+      ["← →", "Previous / next commit"],
+    ],
+  },
+  {
+    title: "Editors",
+    items: [
+      ["Enter", "Commit an inline edit"],
+      ["⌘/Ctrl Enter", "Apply a program edit"],
+      ["Tab  Shift Tab", "Indent / outdent"],
+      ["↑ ↓", "REPL history"],
+    ],
+  },
 ];
 
-/**
- * Build the command list for the current context.
- *
- * Commands are recomputed per open rather than registered up front, so they can
- * depend on what is actually available — there is no "Refetch query" entry when
- * the app exposes no query cache, and no "Clear overrides" when none are active.
- */
-export function buildPalette(ctx: TabContext, actions: PaletteActions): Command[] {
-  const commands: Command[] = [];
-  const { app, ui } = ctx;
-
-  for (const tab of TAB_COMMANDS) {
-    commands.push({
-      id: `tab:${tab.id}`,
-      group: "Go to",
-      label: tab.label,
-      keywords: tab.keywords,
-      run: () => ctx.selectTab(tab.id),
-    });
-  }
-
-  commands.push(
-    {
-      id: "pick",
-      group: "Inspect",
-      label: ctx.overlay.isPicking ? "Cancel element picker" : "Pick element on the page",
-      keywords: "select click crosshair find component",
-      hint: "Ctrl+Shift+P",
-      run: () => actions.togglePicker(),
-    },
-    {
-      id: "highlight",
-      group: "Inspect",
-      label: `${ui.highlightUpdates ? "Stop" : "Start"} highlighting re-renders`,
-      keywords: "flash outline updates paint which components render",
-      run: () => {
-        ui.highlightUpdates = !ui.highlightUpdates;
-        ctx.toast(ui.highlightUpdates ? "Highlighting re-renders" : "Highlighting off");
-        ctx.refresh();
-      },
-    },
-    {
-      id: "force-render",
-      group: "App",
-      label: "Force a full re-render",
-      keywords: "repaint refresh redraw",
-      run: () => {
-        app?.forceRender();
-        ctx.toast("Full re-render requested");
-      },
-    },
-  );
-
-  if (typeof app?.reload === "function") {
-    commands.push({
-      id: "reload",
-      group: "App",
-      label: "Re-plan the program",
-      keywords: "reload hot restart",
-      run: () => {
-        app.reload!();
-        ctx.toast("Program re-planned");
-        ctx.refresh();
-      },
-    });
-  }
-
-  if (typeof app?.resetState === "function") {
-    commands.push({
-      id: "reset-state",
-      group: "State",
-      label: "Reset all state to declared defaults",
-      keywords: "clear wipe initial",
-      run: () => {
-        app.resetState!();
-        ctx.toast("State reset");
-        ctx.refresh();
-      },
-    });
-  }
-
-  if (ui.timeTravel !== null) {
-    commands.push({
-      id: "live",
-      group: "State",
-      label: "Return to live state",
-      keywords: "time travel stop scrub",
-      run: () => {
-        ui.timeTravel = null;
-        ctx.selectTab("state");
-      },
-    });
-  }
-
-  if (typeof app?.listPropOverrides === "function" && app.listPropOverrides().length > 0) {
-    commands.push({
-      id: "clear-overrides",
-      group: "Inspect",
-      label: `Clear ${app.listPropOverrides().length} prop override(s)`,
-      keywords: "revert restore props",
-      run: () => actions.clearOverrides(),
-    });
-  }
-
-  if (typeof app?.clearThemeTokens === "function") {
-    commands.push({
-      id: "clear-theme",
-      group: "Theme",
-      label: "Reset theme token overrides",
-      keywords: "colours colors revert",
-      run: () => {
-        app.clearThemeTokens!();
-        ctx.toast("Theme overrides cleared");
-        ctx.refresh();
-      },
-    });
-  }
-
-  commands.push(
-    {
-      id: "audit",
-      group: "Test",
-      label: "Run the accessibility audit",
-      keywords: "a11y contrast labels roles",
-      run: () => actions.runAudit(),
-    },
-    {
-      id: "record",
-      group: "Test",
-      label: ctx.recorder.isRecording ? "Stop recording interactions" : "Record interactions as a test",
-      keywords: "capture generate vitest steps",
-      run: () => actions.toggleRecording(),
-    },
-    {
-      id: "export",
-      group: "Session",
-      label: "Export the session as JSON",
-      keywords: "download bug report share",
-      run: () => actions.exportSession(),
-    },
-    {
-      id: "clear-session",
-      group: "Session",
-      label: "Clear captured data",
-      keywords: "reset empty commits events logs",
-      run: () => actions.clearSession(),
-    },
-    {
-      id: "pause",
-      group: "Session",
-      label: ui.paused ? "Resume recording events" : "Pause recording events",
-      keywords: "freeze stop capture",
-      run: () => {
-        ui.paused = !ui.paused;
-        ctx.toast(ui.paused ? "Paused" : "Recording");
-        ctx.refresh();
-      },
-    },
-    {
-      id: "dock",
-      group: "Panel",
-      label: "Cycle dock position",
-      keywords: "float right bottom left move layout",
-      run: () => actions.cycleDock(),
-    },
-    {
-      id: "theme-toggle",
-      group: "Panel",
-      label: `Switch to the ${ui.light ? "dark" : "light"} panel theme`,
-      keywords: "appearance contrast",
-      run: () => {
-        ui.light = !ui.light;
-        ctx.refresh();
-      },
-    },
-    {
-      id: "compact",
-      group: "Panel",
-      label: ui.compact ? "Use comfortable row height" : "Use compact row height",
-      keywords: "density small rows",
-      run: () => {
-        ui.compact = !ui.compact;
-        ctx.refresh();
-      },
-    },
-    {
-      id: "shortcuts",
-      group: "Help",
-      label: "Show keyboard shortcuts",
-      keywords: "keys help bindings",
-      hint: "?",
-      run: () => actions.showShortcuts(),
-    },
-  );
-
-  return commands;
-}
-
-/** The panel-level operations the palette needs to be able to trigger. */
-export interface PaletteActions {
-  togglePicker(): void;
-  clearOverrides(): void;
-  runAudit(): void;
-  toggleRecording(): void;
-  exportSession(): void;
-  clearSession(): void;
-  cycleDock(): void;
-  showShortcuts(): void;
-}
+/** Flat list of `[keys, what]`, for callers of the protocol-2 export. */
+export const SHORTCUTS: ReadonlyArray<[string, string]> = SHORTCUT_GROUPS.flatMap((group) => group.items);
 
 /* -------------------------------------------------------------------------- */
 /*  Rendering                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/** What the palette needs from its owner on each update. */
-export interface PaletteState {
-  query: string;
-  selected: number;
-  commands: ReadonlyArray<Command>;
+function highlighted(text: string, query: string): Child {
+  const positions = new Set(fuzzyPositions(query, text));
+  if (positions.size === 0) return text;
+  const out: Child[] = [];
+  let run = "";
+  let marked = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const hit = positions.has(i);
+    if (hit !== marked && run) {
+      out.push(marked ? h("mark", {}, run) : run);
+      run = "";
+    }
+    marked = hit;
+    run += text[i];
+  }
+  if (run) out.push(marked ? h("mark", {}, run) : run);
+  return out;
 }
 
-/** Callbacks the palette fires; the owner holds the state they mutate. */
-export interface PaletteHandlers {
-  onQuery(value: string): void;
-  onMove(delta: number): void;
+export interface PaletteViewOptions {
+  query: string;
+  index: number;
+  commands: ReadonlyArray<Command>;
+  onQuery(query: string): void;
+  onIndex(index: number): void;
   onRun(command: Command): void;
   onClose(): void;
 }
 
-/**
- * A palette whose input element persists across renders.
- *
- * This is deliberately a small controller rather than a render function. A
- * palette re-created on every keystroke — which is what a plain
- * `(state) => Node` would do, since typing changes the query and the query
- * drives a re-render — replaces the very element you are typing into: it drops
- * IME composition, can lose a fast keystroke, and makes an <kbd>Enter</kbd> that
- * arrives mid-render run whatever the *previous* render had selected. Binding
- * the listeners once and re-rendering only the result list fixes all three.
- */
-export class PaletteController {
-  private readonly input: HTMLInputElement;
-  private readonly list: HTMLElement;
-  private readonly footCount: HTMLElement;
-  private readonly root: HTMLElement;
-  /** Results of the latest update, so Enter always runs what is on screen. */
-  private results: Command[] = [];
-  private selected = 0;
+const ROW_HEIGHT = 36;
 
-  constructor(private readonly handlers: PaletteHandlers) {
-    this.input = h("input", {
-      class: "pal-input",
-      placeholder: "Type a command… (tabs, actions, settings)",
-      spellcheck: "false",
-    }) as HTMLInputElement;
-    this.list = h("div", { class: "pal-list" });
-    this.footCount = h("span", {});
-
-    this.input.addEventListener("input", () => this.handlers.onQuery(this.input.value));
-    this.input.addEventListener("keydown", (event: KeyboardEvent) => {
-      if (event.key === "ArrowDown") { event.preventDefault(); this.handlers.onMove(1); }
-      else if (event.key === "ArrowUp") { event.preventDefault(); this.handlers.onMove(-1); }
-      else if (event.key === "Enter") {
-        event.preventDefault();
-        const command = this.results[this.selected];
-        if (command) this.handlers.onRun(command);
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        this.handlers.onClose();
-      }
-    });
-
-    this.root = h(
+/** The palette dialog. The caller ranks nothing — this does. */
+export function paletteView(options: PaletteViewOptions): VNode {
+  const ranked = rankCommands(options.commands, options.query).slice(0, 300);
+  const index = Math.max(0, Math.min(options.index, ranked.length - 1));
+  const run = (command: Command | undefined): void => {
+    if (command) options.onRun(command);
+  };
+  return h(
+    "div",
+    {
+      class: "scrim",
+      "data-dt": "palette",
+      onPointerDown: (event: PointerEvent) => {
+        if (event.target === event.currentTarget) options.onClose();
+      },
+    },
+    h(
       "div",
-      { class: "pal-scrim", onclick: () => this.handlers.onClose() },
+      { class: "palette", role: "dialog", "aria-modal": "true", "aria-label": "Command palette" },
       h(
         "div",
-        { class: "pal-box", onclick: (event: Event) => event.stopPropagation() },
-        this.input,
-        this.list,
-        h("div", { class: "pal-foot" },
-          h("span", {}, "↑↓ to move · Enter to run · Esc to close"),
-          this.footCount),
+        { class: "palette-input" },
+        icon("search", { size: 16 }),
+        h("input", {
+          "data-dt": "palette-input",
+          value: options.query,
+          placeholder: "Search sections, actions, components, state, routes…",
+          "aria-label": "Command",
+          "aria-controls": "dt-palette-list",
+          "aria-activedescendant": ranked[index] ? `pal-${ranked[index]!.id}` : undefined,
+          role: "combobox",
+          "aria-expanded": true,
+          spellcheck: "false",
+          autocomplete: "off",
+          ref: autofocus({ select: true }),
+          onInput: (event: Event) => options.onQuery((event.target as HTMLInputElement).value),
+          onKeyDown: (event: KeyboardEvent) => {
+            if (event.key === "ArrowDown") { event.preventDefault(); options.onIndex(Math.min(ranked.length - 1, index + 1)); }
+            else if (event.key === "ArrowUp") { event.preventDefault(); options.onIndex(Math.max(0, index - 1)); }
+            else if (event.key === "PageDown") { event.preventDefault(); options.onIndex(Math.min(ranked.length - 1, index + 8)); }
+            else if (event.key === "PageUp") { event.preventDefault(); options.onIndex(Math.max(0, index - 8)); }
+            else if (event.key === "Enter") { event.preventDefault(); run(ranked[index]); }
+            else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); options.onClose(); }
+          },
+        }),
+        h("span", { class: "kbd" }, "esc"),
       ),
-    );
-  }
-
-  /** Mount into `host` (idempotent) and refresh the list. Returns the count. */
-  update(host: HTMLElement, state: PaletteState): number {
-    if (this.root.parentElement !== host) host.replaceChildren(this.root);
-    // Only assign when it differs: writing `value` unconditionally would reset
-    // the caret to the end on every render.
-    if (this.input.value !== state.query) this.input.value = state.query;
-
-    this.results = rankCommands(state.commands, state.query).slice(0, 40);
-    this.selected = Math.max(0, Math.min(state.selected, this.results.length - 1));
-
-    this.list.replaceChildren();
-    if (this.results.length === 0) {
-      this.list.appendChild(h("div", { class: "pal-empty" }, `No command matches “${state.query}”.`));
-    }
-    this.results.forEach((command, index) => {
-      this.list.appendChild(h(
-        "button",
-        {
-          class: `pal-row ${index === this.selected ? "is-active" : ""}`,
-          onmouseenter: () => this.handlers.onMove(index - this.selected),
-          onclick: () => this.handlers.onRun(command),
-        },
-        h("span", { class: "pal-group" }, command.group),
-        h("span", { class: "pal-label" }, command.label),
-        command.hint ? h("span", { class: "pal-hint" }, command.hint) : null,
-      ));
-    });
-    this.footCount.textContent = `${this.results.length} command${this.results.length === 1 ? "" : "s"}`;
-    return this.results.length;
-  }
-
-  /**
-   * Focus the input. The palette is the one place where taking focus is
-   * unambiguously what the user asked for.
-   */
-  focus(): void {
-    this.input.focus();
-    try {
-      this.input.setSelectionRange(this.input.value.length, this.input.value.length);
-    } catch {
-      /* not supported for this input type */
-    }
-    this.list.querySelector(".pal-row.is-active")?.scrollIntoView({ block: "nearest" });
-  }
-
-  /** Reset the query so the next open starts clean. */
-  reset(): void {
-    this.input.value = "";
-    this.results = [];
-    this.selected = 0;
-  }
+      ranked.length === 0
+        ? h("div", { class: "palette-empty" }, `Nothing matches “${options.query}”.`)
+        : h("div", { class: "palette-list", id: "dt-palette-list", role: "listbox", style: { height: `${Math.min(ranked.length, 11) * ROW_HEIGHT + 12}px` } },
+            virtualList({
+              items: ranked,
+              rowHeight: ROW_HEIGHT,
+              rowKey: (command) => command.id,
+              version: [options.query, index],
+              scrollTo: index,
+              renderRow: (command, i) => h(
+                "button",
+                {
+                  type: "button",
+                  id: `pal-${command.id}`,
+                  role: "option",
+                  "aria-selected": i === index,
+                  class: ["palette-item", i === index ? "is-active" : ""],
+                  "data-dt": `palette-item`,
+                  "data-command": command.id,
+                  onMouseMove: () => { if (i !== index) options.onIndex(i); },
+                  onClick: () => run(command),
+                },
+                h("span", { class: "pi-icon" }, icon(command.icon ?? "arrowRight", { size: 13 })),
+                h("span", { class: "pi-label" }, highlighted(command.label, options.query)),
+                h("span", { class: "pi-group" }, command.group),
+                command.hint ? h("span", { class: "kbd" }, command.hint) : null,
+              ),
+            })),
+      h(
+        "div",
+        { class: "palette-foot" },
+        h("span", {}, h("span", { class: "kbd" }, "↑"), h("span", { class: "kbd" }, "↓"), " navigate"),
+        h("span", {}, h("span", { class: "kbd" }, "↵"), " run"),
+        h("span", {}, h("span", { class: "kbd" }, "esc"), " close"),
+        h("span", { class: "grow" }),
+        h("span", {}, `${ranked.length} result${ranked.length === 1 ? "" : "s"}`),
+      ),
+    ),
+  );
 }
-
-/** The keyboard-shortcut reference, shown by `?` and from the palette. */
-export const SHORTCUTS: ReadonlyArray<[string, string]> = [
-  ["Ctrl / ⌘ K", "Open the command palette — from anywhere on the page"],
-  ["Ctrl+Shift+P", "Toggle the element picker — from anywhere on the page"],
-  ["Alt+1 … Alt+9", "Jump to a tab by position — from anywhere on the page"],
-  ["Alt+[  /  Alt+]", "Previous / next tab — from anywhere on the page"],
-  ["?", "Show this list (panel focused)"],
-  ["Ctrl / ⌘ F  or  /", "Focus the current tab's filter (panel focused)"],
-  ["Esc", "Cancel the picker, close the palette, or cancel an edit"],
-  ["Enter", "Commit an inline edit · run a REPL expression"],
-  ["↑ / ↓", "Walk REPL history · move in the palette"],
-];

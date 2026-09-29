@@ -17,6 +17,7 @@ import type { EndpointResource } from "../runtime/http.js";
 import type { HookCell, StoreHandle } from "../runtime/evaluator.js";
 import type {
   Diagnostic,
+  ProgramSecurityProfile,
   InstanceHookRecord,
   InstanceUiStateRecord,
   OutlineEntry,
@@ -312,4 +313,255 @@ export function outlineProgram(statements: ReadonlyArray<Statement>): OutlineEnt
  */
 export function snapshotToJson(snapshot: Record<string, unknown>): string | null {
   return toJsonText(snapshot);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Security profile                                                           */
+/* -------------------------------------------------------------------------- */
+
+/** Host globals a program can reach under the default `"all"` policy, by risk. */
+const HOST_GLOBAL_RISK: Record<string, "high" | "medium" | "low"> = {
+  eval: "high",
+  Function: "high",
+  importScripts: "high",
+  document: "medium",
+  window: "medium",
+  globalThis: "medium",
+  self: "medium",
+  top: "medium",
+  parent: "medium",
+  opener: "medium",
+  frames: "medium",
+  localStorage: "medium",
+  sessionStorage: "medium",
+  indexedDB: "medium",
+  cookieStore: "medium",
+  caches: "medium",
+  fetch: "medium",
+  XMLHttpRequest: "medium",
+  WebSocket: "medium",
+  EventSource: "medium",
+  Worker: "medium",
+  SharedWorker: "medium",
+  navigator: "low",
+  location: "medium",
+  history: "low",
+  open: "medium",
+  postMessage: "medium",
+  alert: "low",
+  confirm: "low",
+  prompt: "low",
+};
+
+/** Builtins whose first argument (or its `url`) is a request target. */
+const ENDPOINT_BUILTINS = new Set(["query", "mutation", "http", "socket", "sse", "subscription", "stream"]);
+const ENDPOINT_COMPONENTS = new Set(["Http", "Query", "Mutation"]);
+const ESCAPE_HATCHES = new Set(["HTMLTag", "Styles", "Svg", "Markdown"]);
+
+export type { ProgramSecurityProfile };
+
+type Node = { kind: string; loc?: { line: number; column: number }; [key: string]: unknown };
+
+function pos(node: { loc?: { line: number; column: number } } | undefined): { line: number; column: number } {
+  return { line: node?.loc?.line ?? 0, column: node?.loc?.column ?? 0 };
+}
+
+/** Render an expression used as a URL or key: literal text, or a template with `${…}` holes. */
+function staticText(expr: unknown): { text: string; dynamic: boolean } | null {
+  const node = expr as Node | undefined;
+  if (!node) return null;
+  if (node.kind === "Literal" && typeof node.value === "string") return { text: node.value, dynamic: false };
+  if (node.kind === "Template") {
+    const quasis = node.quasis as string[];
+    return { text: quasis.join("${…}"), dynamic: (node.expressions as unknown[]).length > 0 };
+  }
+  if (node.kind === "Binary" && node.operator === "+") {
+    const left = staticText(node.left);
+    const right = staticText(node.right);
+    return { text: `${left?.text ?? "${…}"}${right?.text ?? "${…}"}`, dynamic: true };
+  }
+  return null;
+}
+
+function objectProp(expr: unknown, key: string): unknown {
+  const node = expr as Node | undefined;
+  if (node?.kind !== "Object") return undefined;
+  return (node.properties as Array<{ key: string; value: unknown; spread?: boolean }>).find((p) => !p.spread && p.key === key)?.value;
+}
+
+/** Every name a program binds itself — a local `document` is not the host's. */
+function declaredNames(program: Program): Set<string> {
+  const names = new Set<string>();
+  const addPattern = (pattern: unknown): void => {
+    const p = pattern as { bindings?: Array<{ name?: string; pattern?: unknown }> } | undefined;
+    for (const binding of p?.bindings ?? []) {
+      if (binding.name) names.add(binding.name);
+      if (binding.pattern) addPattern(binding.pattern);
+    }
+  };
+  const addParams = (params: unknown): void => {
+    for (const param of (params as Array<{ name?: string; pattern?: unknown }> | undefined) ?? []) {
+      if (param.name) names.add(param.name);
+      if (param.pattern) addPattern(param.pattern);
+    }
+  };
+  walk(program, ({ node }) => {
+    const n = node as unknown as Node;
+    switch (n.kind) {
+      case "Assignment":
+        if (!n.isState && typeof n.identifier === "string") names.add(n.identifier);
+        break;
+      case "ComponentDeclaration":
+      case "ActionDeclaration":
+        names.add(n.name as string);
+        addParams(n.params);
+        break;
+      case "HookDeclaration":
+      case "Lambda":
+        addParams(n.params);
+        break;
+      case "ForOfStatement":
+      case "ForInStatement":
+        if (typeof n.item === "string" && n.item) names.add(n.item);
+        if (n.pattern) addPattern(n.pattern);
+        break;
+      case "DestructureStatement":
+        addPattern(n);
+        break;
+      case "TryStatement":
+        if (typeof n.catchParam === "string") names.add(n.catchParam);
+        break;
+      case "Import":
+        for (const spec of (n.specifiers as Array<{ local?: string; imported?: string }> | undefined) ?? []) {
+          if (spec.local) names.add(spec.local);
+          else if (spec.imported) names.add(spec.imported);
+        }
+        break;
+      default:
+        break;
+    }
+  });
+  return names;
+}
+
+/**
+ * What a program can reach and where its data can go — the static half of the
+ * Security view.
+ *
+ * Under the default `"all"` policy program text is as privileged as a script
+ * tag (see SECURITY.md), so the useful question is not "is this allowed" but
+ * "what does this program actually touch": which host globals it names, which
+ * endpoints it calls, where it opens windows, which events leave the app, and
+ * which escape hatches bypass the component library's sanitisers. Every entry
+ * carries its source position so the panel can jump to it.
+ */
+export function analyzeProgramSecurity(program: Program, policy: string | readonly string[]): ProgramSecurityProfile {
+  const declared = declaredNames(program);
+  const globals = new Map<string, { name: string; risk: "high" | "medium" | "low"; line: number; column: number; count: number }>();
+  const profile: ProgramSecurityProfile = {
+    policy: typeof policy === "string" ? policy : "custom",
+    policyNames: typeof policy === "string" ? undefined : [...policy],
+    hostGlobals: [],
+    dynamicCode: [],
+    escapeHatches: [],
+    endpoints: [],
+    openUrls: [],
+    emits: [],
+    storage: [],
+  };
+
+  const noteGlobal = (name: string, node: Node): void => {
+    const risk = HOST_GLOBAL_RISK[name];
+    if (!risk || declared.has(name)) return;
+    const existing = globals.get(name);
+    if (existing) existing.count += 1;
+    else globals.set(name, { name, risk, ...pos(node), count: 1 });
+  };
+
+  const noteEndpoint = (arg: unknown, via: string, node: Node): void => {
+    const direct = staticText(arg);
+    const url = direct ?? staticText(objectProp(arg, "url")) ?? staticText(objectProp(arg, "endpoint"));
+    const method = staticText(objectProp(arg, "method"))?.text;
+    if (url) profile.endpoints.push({ url: url.text, via, method: method?.toUpperCase(), dynamic: url.dynamic, ...pos(node) });
+    else profile.endpoints.push({ url: "${…}", via, dynamic: true, ...pos(node) });
+  };
+
+  walk(program, ({ node }) => {
+    const n = node as unknown as Node;
+    switch (n.kind) {
+      case "Identifier":
+        noteGlobal(n.name as string, n);
+        break;
+      case "Call": {
+        const callee = n.callee as string;
+        const args = n.arguments as unknown[];
+        noteGlobal(callee, n);
+        if (callee === "eval" || callee === "Function") profile.dynamicCode.push({ what: `${callee}(…)`, ...pos(n) });
+        if ((callee === "setTimeout" || callee === "setInterval") && staticText(args[0]) !== null) {
+          profile.dynamicCode.push({ what: `${callee}("…") with a string body`, ...pos(n) });
+        }
+        if (callee === "fetch") noteEndpoint(args[0], "fetch", n);
+        if (ENDPOINT_COMPONENTS.has(callee)) noteEndpoint(args[0], callee, n);
+        if (ESCAPE_HATCHES.has(callee)) {
+          const dynamic = args.some((arg) => {
+            const text = staticText(arg);
+            return text === null ? (arg as Node | undefined)?.kind !== "Object" : text.dynamic;
+          });
+          profile.escapeHatches.push({ component: callee, dynamic, ...pos(n) });
+        }
+        if (callee === "emit") {
+          const name = staticText(args[0]);
+          profile.emits.push({ name: name?.text ?? "${…}", ...pos(n) });
+        }
+        break;
+      }
+      case "New": {
+        const callee = n.callee as Node;
+        if (callee?.kind === "Identifier" && callee.name === "Function") profile.dynamicCode.push({ what: "new Function(…)", ...pos(n) });
+        break;
+      }
+      case "Invoke": {
+        const callee = n.callee as Node;
+        const args = n.arguments as unknown[];
+        if (callee?.kind === "StateRef" && ENDPOINT_BUILTINS.has(callee.name as string)) noteEndpoint(args[0], `$${callee.name as string}`, n);
+        if (callee?.kind === "StateRef" && callee.name === "emit") {
+          const name = staticText(args[0]);
+          profile.emits.push({ name: name?.text ?? "${…}", ...pos(n) });
+        }
+        break;
+      }
+      case "MethodCall": {
+        const object = n.object as Node;
+        const method = n.method as string;
+        const args = n.arguments as unknown[];
+        const owner = object?.kind === "StateRef" || object?.kind === "Identifier" ? (object.name as string) : "";
+        if ((owner === "util" || owner === "helpers") && (method === "openUrl" || method === "openWindow")) {
+          const target = staticText(args[0]);
+          profile.openUrls.push({ via: `$${owner}.${method}`, dynamic: target === null || target.dynamic, target: target?.text, ...pos(n) });
+        }
+        if (owner === "window" && method === "open") {
+          const target = staticText(args[0]);
+          profile.openUrls.push({ via: "window.open", dynamic: target === null || target.dynamic, target: target?.text, ...pos(n) });
+        }
+        if (owner === "storage" || owner === "localStorage" || owner === "sessionStorage") {
+          const key = staticText(args[0]);
+          if (["get", "set", "remove", "getItem", "setItem", "removeItem"].includes(method)) {
+            profile.storage.push({ op: `${owner}.${method}`, key: key?.text ?? "${…}", ...pos(n) });
+          }
+        }
+        if (owner === "http" && ["get", "post", "put", "patch", "delete", "request"].includes(method)) {
+          noteEndpoint(args[0], `$http.${method}`, n);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  });
+
+  profile.hostGlobals = [...globals.values()].sort((a, b) => {
+    const order = { high: 0, medium: 1, low: 2 } as const;
+    return order[a.risk] - order[b.risk] || a.name.localeCompare(b.name);
+  });
+  return profile;
 }

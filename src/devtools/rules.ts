@@ -40,14 +40,24 @@ export function ruleMatches(rule: NetworkRule, method: string, url: string): boo
   return url.includes(pattern);
 }
 
-/** First enabled rule that applies, or `null`. */
+/**
+ * First enabled rule that applies, or `null`.
+ *
+ * A rule with a `probability` below 1 applies to that fraction of matching
+ * requests; the ones it lets through fall through to the next rule, exactly as
+ * if it had not matched. `random` is injectable so tests are deterministic.
+ */
 export function findMatchingRule(
   rules: ReadonlyArray<NetworkRule>,
   method: string,
   url: string,
+  random: () => number = Math.random,
 ): NetworkRule | null {
   for (const rule of rules) {
-    if (ruleMatches(rule, method, url)) return rule;
+    if (!ruleMatches(rule, method, url)) continue;
+    const p = rule.probability;
+    if (typeof p === "number" && Number.isFinite(p) && p < 1 && random() >= Math.max(0, p)) continue;
+    return rule;
   }
   return null;
 }

@@ -1,17 +1,18 @@
 /**
- * Aktion DevTools — the tab contract.
+ * Aktion DevTools — the view contract and the panel's view state.
  *
- * Every tab is a pure function from `(context) → Node[]`. The context carries
- * the live app record, the derived model, and one mutable bag of view state; a
- * tab mutates that bag and calls `refresh()`. There is no component framework
- * and no local state inside a tab, which is what makes a panel with fourteen
- * tabs stay predictable: a re-render is always a full re-read of the same data,
- * so a tab can never disagree with the model about what is true.
+ * Every section of the panel is a pure function `(context) → vnodes`. The
+ * context carries the live app record, the derived model, and one mutable bag
+ * of view state; a view mutates that bag and calls `refresh()`. The reconciler
+ * (`core/vdom.ts`) turns the full re-render into minimal DOM work, so a view
+ * can stay a plain function of the truth without paying for it in lost focus,
+ * scroll position, or selection.
  *
- * View state lives here (rather than inside each tab) for one concrete reason:
- * a tab is torn down and rebuilt on every event, so anything it held privately
- * — a filter string, an expanded row, a pinned commit — would reset several
- * times a second in a busy app.
+ * View state lives here (not inside views) so that it is serialisable — which
+ * is how the persisted subset and the session export work — and so that views
+ * can share selections: picking a component in the Performance flame chart
+ * selects it in the Inspector because both read `selectedInstance`, not
+ * because the two views know about each other.
  */
 
 import type { AktionDevtoolsHook, DevtoolsAppRecord } from "./hook.js";
@@ -20,9 +21,14 @@ import type { AppModel } from "./model.js";
 import type { A11yFinding } from "./a11y.js";
 import type { InspectOverlay } from "./overlay.js";
 import type { InteractionRecorder, RecordedStep } from "./recorder.js";
-import type { SortState } from "./ui.js";
+import type { Child } from "./core/vdom.js";
+import type { EditState } from "./ui/value.js";
+import type { IconName } from "./ui/icons.js";
+import type { SortState } from "./ui/layout.js";
+import type { CspViolation, SecurityReport } from "./analysis/security.js";
+import type { VitalsSnapshot } from "./analysis/vitals.js";
 
-/** Every tab in the panel. */
+/** Every section of the panel. The first fourteen ids are the protocol-2 tab ids, kept for compatibility. */
 export type TabId =
   | "overview"
   | "inspect"
@@ -37,259 +43,497 @@ export type TabId =
   | "source"
   | "test"
   | "timeline"
-  | "settings";
+  | "settings"
+  | "a11y"
+  | "security";
 
 /** Where the panel is anchored. */
 export type DockMode = "float" | "right" | "bottom" | "left";
 
-/** Result of one accessibility audit run. */
+export type PanelTheme = "system" | "dark" | "light";
+
+/* -------------------------------------------------------------------------- */
+/*  Transient results                                                          */
+/* -------------------------------------------------------------------------- */
+
 export interface A11yRun {
   findings: A11yFinding[];
   examined: number;
   truncated: boolean;
   at: number;
+  /** 0–100, weighted by impact. */
+  score: number;
 }
 
-/** Result of one chaos / fuzz run. */
 export interface FuzzRun {
   clicks: number;
   errors: string[];
   atoms: string[];
   durationMs: number;
   at: number;
+  /** The clicks performed, in order, so a failure is reproducible. */
+  trail: string[];
+  /** The same actions as replayable recorder steps. */
+  steps?: RecordedStep[];
+  /** PRNG seed: re-running with it repeats the exact sequence (same UI, same data). */
+  seed?: number;
+  /** Side effects the run neutralised (links leaving the page, popups, dialogs). */
+  blocked?: string[];
 }
 
-/** One evaluated console expression. */
 export interface ReplEntry {
   input: string;
   ok: boolean;
   output: string;
+  /** Parsed result for the value explorer, when it round-trips. */
+  value?: unknown;
+  hasValue?: boolean;
   time: number;
 }
 
-/**
- * The panel's whole view state.
- *
- * One flat object rather than per-tab classes: it is serialisable (which is how
- * the persisted subset and the session export work), and every tab can read
- * another tab's selection — clicking a component in the profiler selects it in
- * the inspector because they share `selectedInstance`, not because they talk.
- */
+export interface ToastEntry {
+  id: number;
+  message: string;
+  tone: "info" | "good" | "bad" | "warn";
+  action?: { label: string; run: () => void };
+  at: number;
+}
+
+export interface MenuItem {
+  label: string;
+  icon?: IconName;
+  run?: () => void;
+  kbd?: string;
+  danger?: boolean;
+  checked?: boolean;
+  disabled?: boolean;
+  /** `separator` draws a rule; `label` draws a group heading. */
+  kind?: "item" | "separator" | "label";
+}
+
+export interface MenuState {
+  x: number;
+  y: number;
+  items: MenuItem[];
+  index: number;
+}
+
+export interface DialogState {
+  title: string;
+  icon?: IconName;
+  width?: number;
+  body: () => Child;
+  actions?: () => Child[];
+  onClose?: () => void;
+}
+
+/** A named, restorable fixture: state + network rules + route. */
+export interface Scenario {
+  id: string;
+  name: string;
+  createdAt: number;
+  state?: Record<string, unknown>;
+  rules?: NetworkRule[];
+  route?: string;
+}
+
+/** A named state snapshot the user saved. */
+export interface Bookmark {
+  id: string;
+  name: string;
+  at: number;
+  state: Record<string, unknown>;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  The view state                                                             */
+/* -------------------------------------------------------------------------- */
+
 export interface UiState {
-  /* chrome */
+  /* ---- chrome ---- */
   tab: TabId;
   paused: boolean;
   dock: DockMode;
-  /** Light panel chrome, for a light-themed host page. */
+  theme: PanelTheme;
+  /** Kept for protocol-2 callers: `true` means the light theme. */
   light: boolean;
-  /** Denser rows, for a small dock. */
   compact: boolean;
+  motion: "system" | "reduced" | "full";
+  /** Collapsed to the launcher pill. */
+  minimized: boolean;
+  /** Kept for protocol-2 callers; the same as `minimized`. */
   collapsed: boolean;
+  railWide: boolean;
+  showLauncher: boolean;
+  /** Docked panels shrink the page instead of covering it. */
+  pushPage: boolean;
+  toasts: ToastEntry[];
+  /** Kept for protocol-2 callers: the most recent toast. */
   toast: { message: string; tone: string; at: number } | null;
-
-  /* command palette + help */
   paletteOpen: boolean;
   paletteQuery: string;
   paletteIndex: number;
   shortcutsOpen: boolean;
-  /** Dismissed the first-run tips on Overview (persisted). */
+  menu: MenuState | null;
+  dialog: DialogState | null;
   tipsDismissed: boolean;
-
-  /**
-   * Outline components on the page as they re-render.
-   *
-   * The single most direct answer to "why is this slow?" — you see which parts
-   * of the screen repaint on an interaction that should have touched one row.
-   */
+  /** Outline components as they re-render, with render counts (render scan). */
   highlightUpdates: boolean;
-  /** Mirror commits into `performance.measure` for the browser's own profiler. */
   perfMarks: boolean;
+  flashOnCommit: boolean;
+  /** The one inline value edit in progress. */
+  edit: EditState | null;
+  /** Split-pane sizes by id, persisted. */
+  sizes: Record<string, number>;
 
-  /* state tab */
+  /* ---- inspector ---- */
+  inspectFilter: string;
+  inspectCollapsed: Set<string>;
+  selectedInstance: string | null;
+  selectedElement: Element | null;
+  inspectPane: "props" | "hooks" | "effects" | "dom" | "styles" | "a11y" | "source";
+  inspectShowLibrary: boolean;
+  inspectReveal: string | null;
+  propsExpanded: Set<string>;
+  computedFilter: string;
+  overrideDraft: { name: string; value: string };
+
+  /* ---- state ---- */
   stateFilter: string;
   stateExpanded: Set<string>;
   stateSort: "name" | "activity";
   stateShowReserved: boolean;
-  /** Index into `model.history` while scrubbing, or `null` when live. */
+  /**
+   * The commit being viewed while time travelling, or `null` when live.
+   *
+   * An id, not a ring index: the history ring shifts under an index as new
+   * commits arrive, so an index pointed at a different snapshot a moment later.
+   */
   timeTravel: number | null;
-  /** `tree` edits live state; `diff` compares two recorded snapshots. */
-  stateView: "tree" | "diff";
-  /** Snapshot indices being compared in the diff view. */
+  stateView: "tree" | "diff" | "log" | "graph";
   diffFrom: number | null;
   diffTo: number | null;
-  /**
-   * Atom paths that break into the debugger when they change.
-   *
-   * The panel cannot pause the runtime, but it can execute `debugger` at the
-   * moment of the change — which, with the browser's own DevTools open, stops
-   * the world exactly where the write happened and gives you the stack.
-   */
   breakOnChange: Set<string>;
-  /** Paste-JSON buffer for state import, or `null` when the form is closed. */
   importDraft: string | null;
+  stateSelected: string | null;
+  statePages: Map<string, number>;
+  bookmarks: Bookmark[];
+  /** Node hovered in the reactivity graph. */
+  graphHover: string | null;
 
-  /* inspect tab */
-  inspectFilter: string;
-  /** Collapsed subtrees (expanded is the default — a tree you must open is a tree you do not read). */
-  inspectCollapsed: Set<string>;
-  selectedInstance: string | null;
-  /** A picked DOM node that may not map to any instance. */
-  selectedElement: Element | null;
-  inspectPane: "props" | "hooks" | "dom" | "styles" | "a11y" | "source";
-  inspectShowLibrary: boolean;
-  /**
-   * An instance the Inspect tree should scroll to on the next render, set when
-   * the selection came from ANOTHER tab (so the row may be off-screen).
-   */
-  inspectReveal: string | null;
-  propsExpanded: Set<string>;
-  computedFilter: string;
+  /* ---- data ---- */
+  dataPane: "queries" | "stores" | "storage";
+  storageKind: "local" | "session" | "cookies";
+  dataExpanded: Set<string>;
+  selectedQuery: string | null;
+  selectedStore: string | null;
+  storageFilter: string;
+  storageSelected: string | null;
+  invalidateDraft: string;
+  storageDraft: { key: string; value: string };
+  /** Draft arguments per `store.method`, typed in the Stores pane. */
+  storeArgs: Record<string, string>;
+  /** Unsaved edit of one storage value. */
+  storageEdit: { key: string; value: string } | null;
 
-  /* profiler tab */
-  selectedCommitId: number | null;
-  flashOnCommit: boolean;
-  rankedSort: SortState;
-  profilerView: "commit" | "ranked" | "insights";
+  /* ---- routes ---- */
+  routeDraft: string;
+  /** Param values typed into a declared route's form, keyed by pattern. */
+  routeParams: Record<string, Record<string, string>>;
+  routeFilter: string;
 
-  /* effects tab */
-  phaseFilter: Set<EffectPhase>;
-  effectView: "timeline" | "log" | "mounted";
-  selectedEffect: string | null;
+  /* ---- timeline ---- */
+  timelineKinds: Set<string>;
+  timelineView: { start: number; end: number } | null;
+  timelineBrush: { start: number; end: number } | null;
+  timelineSelected: string | null;
+  timelineFilter: string;
 
-  /* network tab */
+  /* ---- network ---- */
   networkFilter: string;
   networkOnlyProblems: boolean;
+  networkStatus: "all" | "ok" | "redirect" | "client" | "server" | "failed" | "mocked" | "pending";
   selectedRequest: string | null;
-  networkPane: "response" | "request" | "headers" | "timing";
+  networkPane: "headers" | "payload" | "response" | "timing";
+  networkResponseView: "tree" | "raw";
+  networkSort: SortState | null;
   showRules: boolean;
   rules: NetworkRule[];
+  throttle: "none" | "fast3g" | "slow3g" | "offline" | "flaky";
+  networkExpanded: Set<string>;
 
-  /* console tab */
+  /* ---- console ---- */
   logFilter: string;
   logLevels: Set<LogLevel>;
+  logOrigin: "all" | "program" | "runtime";
   captureConsole: boolean;
   repl: ReplEntry[];
   replDraft: string;
   replHistory: string[];
   replCursor: number;
-  /**
-   * Pinned expressions, re-evaluated on every render.
-   *
-   * A REPL answers "what is it now?"; a watch answers "what is it doing?" —
-   * which is the question you actually have while clicking through a bug.
-   */
   watches: string[];
+  consoleSelected: string | null;
+  replExpanded: Set<string>;
 
-  /* routes tab */
-  routeDraft: string;
+  /* ---- effects ---- */
+  phaseFilter: Set<EffectPhase>;
+  effectView: "mounted" | "timeline" | "log";
+  selectedEffect: string | null;
+  effectFilter: string;
 
-  /* data tab */
-  dataPane: "queries" | "stores" | "storage";
-  storageKind: "local" | "session" | "cookies";
-  dataExpanded: Set<string>;
+  /* ---- performance ---- */
+  selectedCommitId: number | null;
+  profilerView: "flame" | "ranked" | "components" | "why" | "insights" | "vitals";
+  rankedSort: SortState;
+  componentSort: SortState;
+  perfFilter: string;
+  flameSelected: string | null;
 
-  /* theme tab */
-  themeFilter: string;
-
-  /* source tab */
-  sourceIndex: number;
-  sourceFocusLine: number | null;
-  /** Unsaved edit buffer, or `null` when showing the live program. */
-  sourceDraft: string | null;
-  sourceOutline: boolean;
-  /** Filter applied to the source view + outline. */
-  sourceFilter: string;
-  /** Show the program-version history instead of the source. */
-  sourceHistoryOpen: boolean;
-
-  /* test tab */
-  testPane: "record" | "a11y" | "coverage" | "queries" | "chaos";
+  /* ---- accessibility ---- */
   a11yRun: A11yRun | null;
-  /** Set by the palette to make the Test tab run an audit as it opens. */
   a11yRequested: boolean;
   a11ySelected: number | null;
+  a11yPane: "issues" | "tree" | "structure" | "vision";
+  a11yImpacts: Set<string>;
+  a11yShowOnPage: boolean;
+  a11yTabOrder: boolean;
+  a11yLandmarks: boolean;
+  a11yVision: "none" | "protanopia" | "deuteranopia" | "tritanopia" | "achromatopsia" | "blur" | "low-contrast";
+  a11yAuto: boolean;
+  /** Collapsed accessibility-tree paths (everything starts expanded). */
+  a11yTreeCollapsed: Set<string>;
+  a11yTreeSelected: string | null;
+  a11yTreeFilter: string;
+  a11yCategory: "all" | "names" | "structure" | "aria" | "keyboard" | "contrast" | "forms" | "media";
+  a11yFilter: string;
+  /** Rule groups folded in the issues list. */
+  a11yCollapsed: Set<string>;
+  /** Score of the run before the current one, for the trend arrow. */
+  a11yPrevScore: number | null;
+  /** Position in the keyboard walkthrough (-1 = not started). */
+  a11yWalk: number;
+  contrastFg: string;
+  contrastBg: string;
+
+  /* ---- security ---- */
+  securityRun: SecurityReport | null;
+  securityRequested: boolean;
+  securityPane: "findings" | "network" | "storage" | "program" | "headers";
+  securitySelected: string | null;
+  securitySeverities: Set<string>;
+  securityCategory: "all" | "program" | "dom" | "transport" | "storage" | "headers" | "csp";
+  /** Response headers of the page, fetched on request (HEAD, same origin). */
+  securityHeaders: Record<string, string> | null;
+  securityHeadersState: "idle" | "loading" | "error";
+  securityHeadersError: string | null;
+
+  /* ---- testing ---- */
+  testPane: "record" | "scenarios" | "coverage" | "queries" | "chaos" | "emulate";
+  testFormat: "aktion" | "playwright";
   queryProbe: string;
   queryProbeKind: "role" | "text" | "label" | "testid" | "css";
+  queryProbeName: string;
   fuzzRun: FuzzRun | null;
   fuzzRunning: boolean;
   generatedTest: string | null;
+  replaying: number | null;
+  scenarios: Scenario[];
+  showTestIds: boolean;
+  emulateDir: "auto" | "ltr" | "rtl";
+  emulateTextScale: number;
+  /** Per-step outcome of the last replay (index-aligned with the recorder). */
+  replayResults: Array<{ ok: boolean; message: string } | null>;
+  /** App label the scenarios were loaded for (they persist per app). */
+  scenariosFor: string | null;
+  scenarioDraft: string;
+  testIncludeState: boolean;
+  chaosClicks: number;
+  chaosTyping: boolean;
+  chaosSeed: string;
 
-  /* timeline tab */
-  timelineKinds: Set<string>;
+  /* ---- source ---- */
+  sourceIndex: number;
+  sourceFocusLine: number | null;
+  sourceDraft: string | null;
+  sourceOutline: boolean;
+  sourceFilter: string;
+  sourceHistoryOpen: boolean;
+  sourceDiff: number | null;
+  /** Sidebar tab; `null` picks Problems when there are any, else Outline. */
+  sourceSidebar: "outline" | "problems" | "history" | null;
+  /** While editing: show the draft as a diff instead of the editor. */
+  sourceShowDraftDiff: boolean;
+
+  /* ---- theme ---- */
+  themeFilter: string;
+  themeEditedOnly: boolean;
 }
 
-/** Fresh view state — the defaults a first-time panel opens with. */
+/** Fresh view state — what a first-time panel opens with. */
 export function defaultUiState(): UiState {
   return {
     tab: "overview",
     paused: false,
     dock: "float",
+    theme: "system",
     light: false,
     compact: false,
+    motion: "system",
+    minimized: false,
     collapsed: false,
+    railWide: false,
+    showLauncher: true,
+    pushPage: true,
+    toasts: [],
     toast: null,
-
     paletteOpen: false,
     paletteQuery: "",
     paletteIndex: 0,
     shortcutsOpen: false,
+    menu: null,
+    dialog: null,
     tipsDismissed: false,
     highlightUpdates: false,
     perfMarks: false,
+    flashOnCommit: false,
+    edit: null,
+    sizes: {},
+
+    inspectFilter: "",
+    inspectCollapsed: new Set(),
+    selectedInstance: null,
+    selectedElement: null,
+    inspectPane: "props",
+    inspectShowLibrary: true,
+    inspectReveal: null,
+    propsExpanded: new Set(),
+    computedFilter: "",
+    overrideDraft: { name: "", value: "" },
 
     stateFilter: "",
-    stateExpanded: new Set<string>(),
+    stateExpanded: new Set(),
     stateSort: "name",
     stateShowReserved: false,
     timeTravel: null,
     stateView: "tree",
     diffFrom: null,
     diffTo: null,
-    breakOnChange: new Set<string>(),
+    breakOnChange: new Set(),
     importDraft: null,
+    stateSelected: null,
+    statePages: new Map(),
+    bookmarks: [],
+    graphHover: null,
 
-    inspectFilter: "",
-    inspectCollapsed: new Set<string>(),
-    selectedInstance: null,
-    selectedElement: null,
-    inspectPane: "props",
-    inspectShowLibrary: true,
-    inspectReveal: null,
-    propsExpanded: new Set<string>(),
-    computedFilter: "",
+    dataPane: "queries",
+    storageKind: "local",
+    dataExpanded: new Set(),
+    selectedQuery: null,
+    selectedStore: null,
+    storageFilter: "",
+    storageSelected: null,
+    invalidateDraft: "",
+    storageDraft: { key: "", value: "" },
+    storeArgs: {},
+    storageEdit: null,
 
-    selectedCommitId: null,
-    flashOnCommit: false,
-    rankedSort: { key: "total", dir: -1 },
-    profilerView: "commit",
+    routeDraft: "",
+    routeParams: {},
+    routeFilter: "",
 
-    phaseFilter: new Set<EffectPhase>(["mount", "run", "cleanup", "unmount", "error"]),
-    effectView: "timeline",
-    selectedEffect: null,
+    timelineKinds: new Set(["commit", "state", "effect", "network", "route", "emit", "error", "interaction", "longtask"]),
+    timelineView: null,
+    timelineBrush: null,
+    timelineSelected: null,
+    timelineFilter: "",
 
     networkFilter: "",
     networkOnlyProblems: false,
+    networkStatus: "all",
     selectedRequest: null,
     networkPane: "response",
+    networkResponseView: "tree",
+    networkSort: null,
     showRules: false,
     rules: [],
+    throttle: "none",
+    networkExpanded: new Set(),
 
     logFilter: "",
     logLevels: new Set<LogLevel>(["log", "info", "warn", "error", "debug"]),
+    logOrigin: "all",
     captureConsole: true,
     repl: [],
     replDraft: "",
     replHistory: [],
     replCursor: -1,
     watches: [],
+    consoleSelected: null,
+    replExpanded: new Set(),
 
-    routeDraft: "",
+    phaseFilter: new Set<EffectPhase>(["mount", "run", "cleanup", "unmount", "error"]),
+    effectView: "mounted",
+    selectedEffect: null,
+    effectFilter: "",
 
-    dataPane: "queries",
-    storageKind: "local",
-    dataExpanded: new Set<string>(),
+    selectedCommitId: null,
+    profilerView: "flame",
+    rankedSort: { key: "self", dir: -1 },
+    componentSort: { key: "total", dir: -1 },
+    perfFilter: "",
+    flameSelected: null,
 
-    themeFilter: "",
+    a11yRun: null,
+    a11yRequested: false,
+    a11ySelected: null,
+    a11yPane: "issues",
+    a11yImpacts: new Set(["critical", "serious", "moderate", "minor"]),
+    a11yShowOnPage: false,
+    a11yTabOrder: false,
+    a11yLandmarks: false,
+    a11yVision: "none",
+    a11yAuto: false,
+    a11yTreeCollapsed: new Set(),
+    a11yTreeSelected: null,
+    a11yTreeFilter: "",
+    a11yCategory: "all",
+    a11yFilter: "",
+    a11yCollapsed: new Set(),
+    a11yPrevScore: null,
+    a11yWalk: -1,
+    contrastFg: "#6b7280",
+    contrastBg: "#ffffff",
+
+    securityRun: null,
+    securityRequested: false,
+    securityPane: "findings",
+    securitySelected: null,
+    securitySeverities: new Set(["high", "medium", "low", "info"]),
+    securityCategory: "all",
+    securityHeaders: null,
+    securityHeadersState: "idle",
+    securityHeadersError: null,
+
+    testPane: "record",
+    testFormat: "aktion",
+    queryProbe: "",
+    queryProbeKind: "role",
+    queryProbeName: "",
+    fuzzRun: null,
+    fuzzRunning: false,
+    generatedTest: null,
+    replaying: null,
+    scenarios: [],
+    showTestIds: false,
+    emulateDir: "auto",
+    emulateTextScale: 1,
+    replayResults: [],
+    scenariosFor: null,
+    scenarioDraft: "",
+    testIncludeState: true,
+    chaosClicks: 100,
+    chaosTyping: true,
+    chaosSeed: "",
 
     sourceIndex: 0,
     sourceFocusLine: null,
@@ -297,46 +541,51 @@ export function defaultUiState(): UiState {
     sourceOutline: true,
     sourceFilter: "",
     sourceHistoryOpen: false,
+    sourceDiff: null,
+    sourceSidebar: null,
+    sourceShowDraftDiff: false,
 
-    testPane: "record",
-    a11yRun: null,
-    a11yRequested: false,
-    a11ySelected: null,
-    queryProbe: "",
-    queryProbeKind: "role",
-    fuzzRun: null,
-    fuzzRunning: false,
-    generatedTest: null,
-
-    timelineKinds: new Set<string>(["commit", "effect", "network", "route", "emit", "error"]),
+    themeFilter: "",
+    themeEditedOnly: false,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Persistence                                                                */
+/* -------------------------------------------------------------------------- */
 
 /** The subset of view state worth remembering between sessions. */
 export interface PersistedUiState {
   tab?: TabId;
   dock?: DockMode;
+  theme?: PanelTheme;
   light?: boolean;
   compact?: boolean;
+  motion?: UiState["motion"];
   captureConsole?: boolean;
   width?: number;
   height?: number;
   left?: number;
   top?: number;
-  /** Tips are dismissed once, not once per session. */
+  dockSize?: Partial<Record<Exclude<DockMode, "float">, number>>;
+  launcher?: { right: number; bottom: number };
   tipsDismissed?: boolean;
-  /** Watch expressions are worth keeping across a reload — they are the setup. */
   watches?: string[];
+  railWide?: boolean;
+  showLauncher?: boolean;
+  pushPage?: boolean;
+  minimized?: boolean;
+  sizes?: Record<string, number>;
+  testFormat?: UiState["testFormat"];
+  highlightUpdates?: boolean;
 }
 
 const STORAGE_KEY = "aktion-devtools-ui";
 
 /**
- * Read the persisted chrome preferences.
- *
- * Storage can throw (private mode, a host page with a blocked origin), and a
- * debugger that fails to open because it could not read a preference is a bad
- * trade — every failure path here returns defaults.
+ * Read the persisted preferences. Storage can throw (private mode, a blocked
+ * origin), and a debugger that fails to open over a preference is a bad trade —
+ * every failure path returns defaults.
  */
 export function loadPersisted(): PersistedUiState {
   try {
@@ -349,99 +598,151 @@ export function loadPersisted(): PersistedUiState {
   }
 }
 
-/** Persist the chrome preferences, ignoring any storage failure. */
 export function savePersisted(state: PersistedUiState): void {
   try {
     globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
-    /* preference persistence is a nicety, never a requirement */
+    /* persistence is a nicety, never a requirement */
+  }
+}
+
+/** Per-app data (scenarios, bookmarks) keyed by the app's label, which survives reloads. */
+export function loadAppData<T>(appLabel: string, kind: string, fallback: T): T {
+  try {
+    const raw = globalThis.localStorage?.getItem(`aktion-devtools:${kind}:${appLabel}`);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveAppData(appLabel: string, kind: string, value: unknown): boolean {
+  try {
+    globalThis.localStorage?.setItem(`aktion-devtools:${kind}:${appLabel}`, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Tab contract                                                               */
+/*  View contract                                                              */
 /* -------------------------------------------------------------------------- */
 
-/** What a tab renderer gets. */
-export interface TabContext {
+export interface ToastOptions {
+  action?: { label: string; run: () => void };
+  duration?: number;
+}
+
+/** Panel-level actions a view may trigger (Settings, Overview). */
+export interface PanelActions {
+  setDock(dock: DockMode): void;
+  setHighlightUpdates(on: boolean): void;
+  /** Drop captured commits, events, logs, and requests. */
+  clearSession(): void;
+  /** Download the session as a JSON file. */
+  exportSession(): void;
+  /** Ask for a session file and open it. */
+  importSession(): void;
+  copyBugReport(): void;
+  showShortcuts(): void;
+  /** Forget every stored panel preference and return to defaults. */
+  resetPreferences(): void;
+}
+
+/** What a view renderer gets. */
+export interface ViewContext {
   /** The inspected app, or `null` when nothing is mounted. */
   app: DevtoolsAppRecord | null;
   /** Derived model for the inspected app (always present, possibly empty). */
   model: AppModel;
   hook: AktionDevtoolsHook;
   ui: UiState;
-  /** Shared highlight + element picker. */
   overlay: InspectOverlay;
-  /** Shared interaction recorder (Test tab, but the panel owns its lifetime). */
   recorder: InteractionRecorder;
+  /** Web vitals, FPS, interactions, and long tasks observed while open. */
+  vitals: VitalsSnapshot;
+  /** Content-Security-Policy violations reported while the panel was open. */
+  cspViolations: ReadonlyArray<CspViolation>;
+  /** `performance.now()` + this = epoch ms (for wall-clock times and HAR). */
+  epochOffset: number;
+  /** True when the selected "app" is an imported session file (no live runtime). */
+  imported: boolean;
 
-  /**
-   * Memoise an expensive derivation for the duration of one render pass.
-   *
-   * Several tabs — and the badge of every tab — ask the runtime the same
-   * questions: the component tree, the program analysis, the per-instance
-   * aggregates. Those are the calls that cost milliseconds, and the panel
-   * re-renders on every runtime event, so computing each at most once per pass
-   * is the difference between a debugger that is free and one that is the
-   * bottleneck it is meant to be measuring.
-   */
+  /** Memoise for the duration of one render pass. */
   cache<T>(key: string, compute: () => T): T;
-  /** Panel width in pixels, for layouts that adapt (the Inspect split view). */
+  /** Memoise across renders until `deps` change (shallow, `Object.is`). */
+  memo<T>(key: string, deps: ReadonlyArray<unknown>, compute: () => T): T;
+  /** Panel content width / height in px. */
   width(): number;
+  height(): number;
+  /** Row height for the current density. */
+  rowHeight: number;
+  /** Monotonic clock matching the model's timestamps. */
+  now(): number;
 
-  /** Queue a full re-render of the panel body. */
   refresh(): void;
-  /** Switch tabs. */
   selectTab(tab: TabId): void;
-  /** Select a component instance and switch to the Inspect tab. */
   selectInstance(instanceKey: string | null, options?: { reveal?: boolean }): void;
-  /** Flash a transient message in the panel header. */
-  toast(message: string, tone?: string): void;
-  /** Highlight an instance's DOM node (hover feedback from any tab). */
+  toast(message: string, tone?: string, options?: ToastOptions): void;
   highlightInstance(instanceKey: string | null, pin?: boolean): void;
-  /**
-   * Arm or disarm the element picker.
-   *
-   * Owned by the shell rather than the Inspect tab because three places offer it
-   * (the tab's button, the command palette, and a keyboard shortcut) and they
-   * must all mean the same thing.
-   */
+  /** Highlight an element; `pin` makes it the selection. `null` clears the hover — and, with `pin`, the selection. */
+  highlightElement(element: Element | null, label?: { component?: string; kind?: string }, pin?: boolean): void;
   togglePicker(): void;
-  /** Open the command palette — every action in the panel, searchable. */
-  openPalette(): void;
-  /**
-   * Write the persisted preferences now.
-   *
-   * Anything in {@link PersistedUiState} that a tab can change — dismissing the
-   * tips, adding a watch, switching dock or theme — has to say so, because the
-   * panel cannot rely on a teardown hook running before a page unload.
-   */
+  openPalette(query?: string): void;
+  openMenu(at: { x: number; y: number } | MouseEvent | Element, items: MenuItem[]): void;
+  openDialog(dialog: DialogState): void;
+  closeDialog(): void;
+  /** Edit any value as JSON in a validated dialog. */
+  editJson(options: { title: string; value: unknown; onSave: (value: unknown) => void; hint?: Child }): void;
+  copy(text: string, what?: string): void;
   persist(): void;
-  /** Steps recorded so far (the recorder's list, for codegen). */
   recordedSteps(): ReadonlyArray<RecordedStep>;
+  /** Push the current network rules (plus throttling) to the app. */
+  pushRules(): void;
+  panel: PanelActions;
 }
 
-/** One tab's definition. */
-export interface TabDefinition {
+/** @deprecated Protocol-2 name for {@link ViewContext}. */
+export type TabContext = ViewContext;
+
+export type ViewGroup = "home" | "inspect" | "activity" | "perf" | "quality" | "app" | "system";
+
+/** One section's definition. */
+export interface ViewDefinition {
   id: TabId;
-  /** Label in the tab strip. */
   label: string;
-  /** Single-glyph icon. */
-  icon: string;
-  /** Tooltip / help line. */
+  icon: IconName;
+  group: ViewGroup;
+  /** One line: what this section answers. */
   hint: string;
-  /** Badge number, or `null` for no badge. */
-  badge?(ctx: TabContext): number | null;
-  /** Render the tab body. */
-  render(ctx: TabContext): Node[];
+  /** Extra palette search words. */
+  keywords: string;
+  badge?(ctx: ViewContext): { value: number | string; tone?: "red" | "amber" | "accent" | "grey" } | null;
+  render(ctx: ViewContext): Child;
+  /** View-specific CSS, appended to the shared sheet. */
+  css?: string;
+  /** Palette commands this view contributes. */
+  commands?(ctx: ViewContext): ReadonlyArray<ViewCommand>;
+}
+
+/** @deprecated Protocol-2 name for {@link ViewDefinition}. */
+export type TabDefinition = ViewDefinition;
+
+export interface ViewCommand {
+  id: string;
+  label: string;
+  keywords?: string;
+  icon?: IconName;
+  hint?: string;
+  run(): void;
 }
 
 /**
- * True when the app record implements an optional capability.
- *
- * The record is versioned by *presence*, not by a version number (see
- * `DevtoolsAppRecord`), so every tab that reaches past the v1 core asks this
- * first and degrades to an explanatory message rather than throwing.
+ * True when the app record implements an optional capability. The record is
+ * versioned by presence, so every view that reaches past the v1 core asks this
+ * first and degrades to an explanation rather than throwing.
  */
 export function can<K extends keyof DevtoolsAppRecord>(
   app: DevtoolsAppRecord | null,
@@ -451,13 +752,8 @@ export function can<K extends keyof DevtoolsAppRecord>(
 }
 
 /**
- * The app's render root as an `Element`.
- *
- * `getRenderRoot` may hand back a `ShadowRoot` (a host is free to paint
- * straight into one), but every DOM tool here — the audit, the recorder, the
- * query probe — needs an element to walk from. Falling back to the shadow
- * root's first element keeps those tools working instead of silently disabling
- * them for such a host.
+ * The app's render root as an `Element`. `getRenderRoot` may hand back a
+ * `ShadowRoot`; every DOM tool here needs an element to walk from.
  */
 export function renderRootElement(app: DevtoolsAppRecord | null): Element | null {
   if (!can(app, "getRenderRoot")) return null;
