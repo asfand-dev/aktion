@@ -1,0 +1,99 @@
+// Social Feed — a Twitter-style timeline: compose a post, like / repost,
+// expand comments and add your own reply, with a trending sidebar and who-to-
+// follow suggestions. Starting point for: any social network, community feed
+// or activity stream.
+// Uses: $store({ persist }) timeline, Comment threads, AvatarGroup, Tile trends, $util.relativeTime.
+$app(Column([header, Grid([feedColumn, sideColumn], { columns: { base: 1, lg: 3 }, gap: "lg", alignItems: "start" })], { gap: "lg", padding: "md" }))
+
+me = { name: "You", handle: "@you" }
+
+feed = $store({
+  persist: "feed.posts",
+  posts: [
+    { id: "p1", author: "Grace Hopper", handle: "@amazinggrace", time: "2026-06-13T08:30:00", body: "Just shipped a compiler that turns plain English into machine code. The future is readable. 🚀", likes: 248, liked: false, reposts: 41, comments: [{ author: "Alan Turing", body: "Incredible work as always.", time: "2026-06-13T08:45:00" }] },
+    { id: "p2", author: "Katherine Johnson", handle: "@kjohnson", time: "2026-06-12T19:10:00", body: "Recomputed the launch window by hand to double-check the machine. Numbers match. Trust, but verify.", likes: 512, liked: true, reposts: 88, comments: [] },
+    { id: "p3", author: "Margaret Hamilton", handle: "@mham", time: "2026-06-12T13:05:00", body: "Reminder: error handling isn't an afterthought, it IS the software. The code that runs when things go wrong matters most.", likes: 197, liked: false, reposts: 33, comments: [{ author: "Grace Hopper", body: "Preach. 🙌", time: "2026-06-12T13:20:00" }] }
+  ],
+  post: (s, body) => { s.posts = [{ id: $util.uuid(), author: me.name, handle: me.handle, time: new Date().toISOString(), body, likes: 0, liked: false, reposts: 0, comments: [] }, ...s.posts] },
+  like: (s, id) => { s.posts = s.posts.map(p => p.id == id ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) } : p) },
+  repost: (s, id) => { s.posts = s.posts.map(p => p.id == id ? { ...p, reposts: p.reposts + 1 } : p) },
+  comment: (s, id, body) => { s.posts = s.posts.map(p => p.id == id ? { ...p, comments: [...p.comments, { author: me.name, body, time: new Date().toISOString() }] } : p) }
+})
+
+$draft = ""
+$openId = null
+$replyDraft = ""
+
+function publish() { const b = $draft.trim(); if (!b) return; feed.post(b); $draft = "" }
+function reply(id) { const b = $replyDraft.trim(); if (!b) return; feed.comment(id, b); $replyDraft = "" }
+
+header = PageHeader("Home", {
+  subtitle: "Your timeline",
+  badge: Badge(`${feed.posts.length} posts`, { tone: "primary", icon: "feed" })
+})
+
+composer = Card([Row([
+  Avatar(me.name, { size: "md" }),
+  StackItem(Column([
+    TextArea("draft", { value: $draft, rows: 2, placeholder: "What's happening?" }),
+    Row([Spacer(), Text(`${280 - $draft.length}`, { variant: "small", tone: $draft.length > 280 ? "danger" : "muted" }), Button("Post", { variant: "primary", icon: "paper-plane", onClick: publish, disabled: !$draft.trim() || $draft.length > 280 })], { align: "center", gap: "sm" })
+  ], { gap: "sm" }), { grow: 1 })
+], { gap: "sm", align: "start" })])
+
+function postCard(p) {
+  const isOpen = $openId == p.id
+  return Card([Column([
+    Row([
+      Avatar(p.author, { size: "sm" }),
+      StackItem(Row([Text(p.author, { variant: "body-heavy" }), Text(p.handle, { variant: "small", tone: "muted" }), Text("·", { tone: "muted" }), Text($util.relativeTime(p.time), { variant: "small", tone: "muted" })], { gap: "xs", align: "center", wrap: true }), { grow: 1 }),
+      IconButton("ellipsis", { label: "More", variant: "ghost", size: "sm" })
+    ], { gap: "sm", align: "center" }),
+    Text(p.body),
+    Row([
+      Button(`${p.comments.length}`, { variant: "ghost", size: "sm", icon: "regular:comment", onClick: () => { $openId = isOpen ? null : p.id } }),
+      Button(`${p.reposts}`, { variant: "ghost", size: "sm", icon: "retweet", onClick: () => feed.repost(p.id) }),
+      Button(`${p.likes}`, { variant: p.liked ? "secondary" : "ghost", size: "sm", icon: p.liked ? "heart" : "regular:heart", onClick: () => feed.like(p.id) }),
+      Spacer(),
+      IconButton("share-nodes", { label: "Share", variant: "ghost", size: "sm" })
+    ], { gap: "xs", align: "center" }),
+    Show(isOpen, { children: Column([
+      Separator("horizontal"),
+      Show(p.comments.length > 0, {
+        fallback: Text("No replies yet — be the first.", { variant: "small", tone: "muted" }),
+        children: Column(p.comments.map((c, i) => Comment(c.author, { body: c.body, time: $util.relativeTime(c.time), key: String(i) })), { gap: "sm" })
+      }),
+      Row([
+        StackItem(OnKeyboard(Input("reply", { value: $replyDraft, placeholder: "Post your reply" }), { onKeyDown: (e) => { if (e.key == "Enter") reply(p.id) } }), { grow: 1 }),
+        Button("Reply", { variant: "primary", size: "sm", onClick: () => reply(p.id), disabled: !$replyDraft.trim() })
+      ], { gap: "sm", align: "end" })
+    ], { gap: "sm" }) })
+  ], { gap: "sm" })], { key: p.id, animate: "fade-up" })
+}
+
+feedColumn = GridItem(Column([composer, ...feed.posts.map(p => postCard(p))], { gap: "lg" }), { span: "2/3" })
+
+trends = [
+  { tag: "#AktionLang", posts: "4,210" },
+  { tag: "#NoBuildStep", posts: "1,880" },
+  { tag: "#ReactiveUI", posts: "920" },
+  { tag: "#ShipIt", posts: "12.4k" }
+]
+suggestions = ["Linus Torvalds", "Ada Lovelace", "Tim Berners-Lee"]
+
+sideColumn = GridItem(Column([
+  Card([
+    SectionHeader("Trending", { eyebrow: "FOR YOU" }),
+    Column(trends.map(t => OnClick(Row([
+      StackItem(Column([Text(t.tag, { variant: "body-heavy" }), Text(`${t.posts} posts`, { variant: "small", tone: "muted" })], { gap: "none" }), { grow: 1 }),
+      Icon("arrow-trend-up", { color: "var(--rui-color-success)" })
+    ], { align: "center" }), { onClick: () => $toast.show(`Opening ${t.tag}`, { tone: "info" }) })), { gap: "sm" })
+  ]),
+  Card([
+    SectionHeader("Who to follow"),
+    Column(suggestions.map(s => Row([
+      Avatar(s, { size: "sm" }),
+      StackItem(Text(s, { variant: "small-heavy" }), { grow: 1 }),
+      Button("Follow", { variant: "secondary", size: "xs", onClick: () => $toast.success(`Following ${s}`) })
+    ], { gap: "sm", align: "center" })), { gap: "sm" })
+  ])
+], { gap: "lg" }), { span: "1/3" })

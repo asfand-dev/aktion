@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Modules · Aktion</title>
+  <meta name="description" content="Split an Aktion app across multiple .aktion files. Import and export components, variables, functions, and reactive $state with JavaScript-like syntax, true per-file scope, and relative, absolute, or URL specifiers — all linked in the browser, no build step." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Multi-file demo: stack each file with a small filename header. */
+    .mf-files { display: flex; flex-direction: column; min-width: 0; }
+    .mf-file { display: flex; flex-direction: column; min-width: 0; }
+    .mf-file + .mf-file { border-top: 1px solid var(--doc-border); }
+    .mf-file-name {
+      font-family: var(--doc-mono);
+      font-size: 11px;
+      color: var(--doc-text-muted);
+      padding: 6px 12px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mf-file-name .mf-entry {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      border: 1px solid var(--doc-border);
+      border-radius: 999px;
+      padding: 0 6px;
+    }
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
+  </style>
+</head>
+<body data-page="modules">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Core concepts</span>
+        <h1>Modules &amp; multi-file apps.</h1>
+        <p class="lead">
+          A single program is one flat list of statements &mdash; great for a
+          streamed reply, cramped for a real app. <strong>Modules</strong> let you
+          split an app across many <code>.aktion</code> files that
+          <code>import</code> and <code>export</code> components, variables,
+          functions, and reactive <code>$state</code>, with
+          <strong>JavaScript-like syntax</strong> and <strong>true per-file
+          scope</strong>. The files are <strong>linked in the browser</strong> &mdash;
+          no build step &mdash; or
+          <a href="#vite">ahead of time by the Vite plugin</a>, from the same linker.
+        </p>
+      </header>
+
+      <h2 id="first-split">A first split</h2>
+      <p>
+        Here is a two-file app. <code>app.aktion</code> is the <strong>entry</strong> &mdash;
+        it holds the <code>$app(&hellip;)</code> root and pulls in a component
+        declared in <code>Greeting.aktion</code>. Editing either file re-links the
+        whole program; the preview shows the linked result.
+      </p>
+      <div class="lay-demo lay-demo--multi" data-entry="app.aktion">
+        <span class="lay-demo-label">Live · multi-file</span>
+        <div class="mf-files">
+          <div class="mf-file">
+            <span class="mf-file-name"><i class="fa-solid fa-file-code"></i> app.aktion <span class="mf-entry">entry</span></span>
+<pre data-file="app.aktion"><code>import { Greeting } from "./Greeting.aktion"
+
+$app(Greeting("Aktion"))</code></pre>
+          </div>
+          <div class="mf-file">
+            <span class="mf-file-name"><i class="fa-solid fa-file-code"></i> Greeting.aktion</span>
+<pre data-file="Greeting.aktion"><code>export function Greeting(name) {
+  return Card([
+    CardHeader(`Hello, ${name}!`, { subtitle: "Rendered from an imported file" })
+  ])
+}</code></pre>
+          </div>
+        </div>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="exporting">Exporting</h2>
+      <p>
+        Prefix any top-level declaration with <code>export</code> to make it
+        importable from another file. Anything <em>not</em> exported is private to
+        its file. Every binding kind can be exported &mdash; components, actions,
+        hooks, reactive <code>$state</code>, and plain bindings:
+      </p>
+<pre><code>// components.aktion
+export function Card2({ title }) {        // a component
+  return Card([CardHeader(title)])
+}
+
+export function track(name) {             // an action (lowercase)
+  console.log(name)
+}
+
+export function $useToggle() {            // a hook ($-prefixed)
+  $on = $state(false)
+  return { on: $on, toggle: () =&gt; { $on = !$on } }
+}
+
+export $count = 0                         // a reactive atom
+export accent = "var(--rui-primary)"      // a plain binding</code></pre>
+      <p>
+        <code>export { a, b }</code> lists, re-exports, and
+        <code>export</code> of a destructuring declaration are not supported &mdash;
+        export each binding inline, where it is declared.
+      </p>
+
+      <h2 id="importing">Importing</h2>
+      <p>
+        Import named bindings with <code>import { &hellip; } from "&hellip;"</code>.
+        Rename with <code>as</code>, and import reactive state by keeping its
+        <code>$</code> sigil on both sides:
+      </p>
+<pre><code>import { Card2 } from "./components.aktion"
+import { Card2 as PanelCard } from "./components.aktion"   // aliased
+import { $count, increment } from "./store.aktion"          // a shared atom + an action
+import { $count as $total } from "./store.aktion"           // $ stays across `as`</code></pre>
+      <p>
+        Names are matched by their bare name, so <code>export $count</code> lines up
+        with <code>import { $count }</code>. A <code>$state</code> import must keep
+        its <code>$</code> across <code>as</code> (<code>{ $a as $b }</code>) &mdash;
+        mixing <code>{ $a as b }</code> is a syntax error. <code>from</code> and
+        <code>as</code> are ordinary identifiers everywhere else, so existing code
+        that uses them as variable names keeps working.
+      </p>
+      <p>
+        A specifier list may span several lines and may end with a trailing
+        comma, so a long import formats the way you would format it in
+        JavaScript:
+      </p>
+<pre><code>import {
+  Button,
+  Card,
+  PrimaryButton,
+} from "./ui.aktion"</code></pre>
+      <p>
+        All three names bind exactly as they would on a single line &mdash; the layout
+        carries no meaning.
+      </p>
+      <div class="callout warn">
+        <h4>If a multi-line import used to vanish, this is why</h4>
+        <p>
+          <strong>Multi-line specifier lists used to fail to parse.</strong>
+          Because <code>parse()</code> records the error and recovers to the next
+          statement, the <em>entire</em> <code>import</code> disappeared while the
+          program still &ldquo;parsed&rdquo; &mdash; leaving every imported name
+          undefined and every reference to it silently <code>null</code>. Both the
+          line breaks and the trailing comma parse correctly now, so a program
+          that was quietly missing bindings starts working without any edit.
+        </p>
+      </div>
+
+      <h2 id="scope">True per-file scope</h2>
+      <p>
+        Each file is its own scope. A file's non-exported top-level names are
+        <strong>private</strong>, so two files can reuse the same name without
+        clashing &mdash; the linker renames each file's private symbols behind the
+        scenes. Only the names you <code>import</code> cross the boundary.
+      </p>
+<pre><code>// Button.aktion
+icon = "bolt"                              // private to this file
+export function PrimaryButton({ label, onClick }) {
+  return Button(label, { variant: "primary", icon: icon, onClick: onClick })
+}
+
+// Link.aktion
+icon = "arrow-up-right-from-square"        // a DIFFERENT, private `icon`
+export function LinkButton({ label, onClick }) {
+  return Button(label, { variant: "ghost", icon: icon, onClick: onClick })
+}</code></pre>
+      <p>
+        Built-in library components (<code>Button</code>, <code>Card</code>,
+        <code>Column</code>, &hellip;) and runtime globals (<code>$util</code>,
+        <code>route</code>, <code>console</code>) are resolved by the runtime, not by
+        a module, so they are always available without importing &mdash; and never
+        renamed.
+      </p>
+
+      <h2 id="shared-state">Sharing reactive state</h2>
+      <p>
+        Export a <code>$state</code> atom and the files that import it read and write
+        the <strong>same</strong> reactive cell. This is the simplest way to share
+        state across an app &mdash; a tiny store in its own file:
+      </p>
+      <div class="lay-demo lay-demo--multi" data-entry="app.aktion">
+        <span class="lay-demo-label">Live · shared store</span>
+        <div class="mf-files">
+          <div class="mf-file">
+            <span class="mf-file-name"><i class="fa-solid fa-file-code"></i> app.aktion <span class="mf-entry">entry</span></span>
+<pre data-file="app.aktion"><code>import { $count, increment } from "./store.aktion"
+
+$app(Column([
+  Card([
+    CardHeader("Shared store"),
+    Text(`Count: ${$count}`),
+    Button("Increment", { variant: "primary", onClick: increment })
+  ])
+], { gap: "lg", align: "center", padding: "xl" }))</code></pre>
+          </div>
+          <div class="mf-file">
+            <span class="mf-file-name"><i class="fa-solid fa-file-code"></i> store.aktion</span>
+<pre data-file="store.aktion"><code>export $count = 0
+
+export function increment() {
+  $count = $count + 1
+}</code></pre>
+          </div>
+        </div>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        The <strong>entry file keeps its own names canonical</strong>: the
+        <code>$state</code> atoms you declare or import into <code>app.aktion</code>
+        are exactly the names that <code>serializeState()</code>,
+        <code>hydrateState()</code>, and <code>applyDelta()</code> target.
+      </p>
+
+      <h2 id="specifiers">Where modules resolve from</h2>
+      <p>
+        A specifier can be relative, absolute (from the project root), or a full
+        URL. URL modules are <strong>fetched over the network</strong> when the
+        project is linked, so you can pull a shared component straight from a CDN or
+        gist:
+      </p>
+<pre><code>import { Button } from "./Button.aktion"                     // same folder
+import { Card2 } from "../components/Card2.aktion"           // parent folder
+import { Nav } from "/layout/Nav.aktion"                     // from the project root
+import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched on link</code></pre>
+      <p>
+        A relative import inside a URL module resolves against that URL, so a remote
+        file can pull in its own neighbours. Bare specifiers
+        (<code>import { x } from "lodash"</code>) have no meaning and are reported as
+        unresolved. These are the exact rules
+        <code>resolveSpecifier(spec, importerPath)</code> applies:
+      </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Specifier</th><th>Importer</th><th>Module key</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>./Button.aktion</code></td><td><code>app.aktion</code></td><td><code>Button.aktion</code></td></tr>
+          <tr><td><code>../Button.aktion</code></td><td><code>components/App.aktion</code></td><td><code>Button.aktion</code></td></tr>
+          <tr><td><code>/layout/Nav.aktion</code></td><td>any project file</td><td><code>layout/Nav.aktion</code> &mdash; from the project root, leading slash dropped</td></tr>
+          <tr><td><code>https://x.test/H.aktion</code></td><td>any</td><td>the URL itself, normalised</td></tr>
+          <tr><td><code>./n.aktion</code></td><td><code>https://x.test/ui/H.aktion</code></td><td><code>https://x.test/ui/n.aktion</code></td></tr>
+          <tr><td><code>lodash</code></td><td>any</td><td><code>null</code> &mdash; reported as <code>Cannot resolve import</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Keys are normalised, so <code>.</code> and <code>..</code> segments collapse
+        before lookup (<code>/a/../b.aktion</code>&nbsp;&rarr;&nbsp;<code>b.aktion</code>)
+        and two specifiers that name the same file share one module instance.
+      </p>
+      <div class="callout warn">
+        <h4>Root&#8209;absolute and URL specifiers are browser&#8209;only</h4>
+        <p>
+          <strong>The table above describes the in&#8209;browser linker.</strong> The
+          <a href="#vite">Vite plugin</a> resolves against the Node filesystem
+          instead, where a leading <code>/</code> means <em>filesystem</em> root, not
+          project root &mdash; so <code>"/layout/Nav.aktion"</code> lands outside the
+          project and is refused. URL specifiers are refused there too: that resolver
+          only handles filesystem paths, and anything that is neither <code>./</code>,
+          <code>../</code>, nor <code>/</code> is treated as a non&#8209;project module.
+          In a bundled project, use relative specifiers only.
+        </p>
+      </div>
+
+      <h2 id="entry">The entry file</h2>
+      <p>
+        Linking starts from one <strong>entry</strong> file &mdash;
+        <code>app.aktion</code> in the playground. The entry is what defines the
+        rendered root (a <code>$app(&hellip;)</code> statement, or the legacy
+        <code>aktion = &hellip;</code> binding); imported files normally only
+        <em>declare and export</em>. The linker walks every <code>import</code> from
+        the entry, merges the whole graph into one program, and the runtime renders
+        it &mdash; import cycles are fine (each file is merged once).
+      </p>
+
+      <h2 id="diagnostics">When a link fails</h2>
+      <p>
+        Linking produces its own diagnostics, separate from parse errors. A problem
+        found in an imported file is prefixed with that file&rsquo;s path, so a broken
+        import in a five&#8209;file app points at the file that has the problem instead
+        of at the entry; the entry&rsquo;s own diagnostics carry no prefix.
+      </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Message</th><th>What happened</th><th>Fix</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Cannot resolve import "&hellip;"</code></td>
+            <td>The specifier maps to no module key &mdash; a bare specifier, or one the active resolver refuses (see the <a href="#specifiers">resolution rules</a>).</td>
+            <td>Use a relative <code>./</code>&nbsp;/&nbsp;<code>../</code> path, or check the spelling.</td>
+          </tr>
+          <tr>
+            <td><code>Failed to load imported module "&hellip;"</code></td>
+            <td>The key resolved but there is no source behind it &mdash; the file does not exist in the project.</td>
+            <td>Create the file, or fix the path.</td>
+          </tr>
+          <tr>
+            <td><code>Failed to fetch module "&hellip;": &hellip;</code></td>
+            <td>A URL import could not be fetched (network, CORS, non&#8209;200). The rest of the graph still links.</td>
+            <td>Check the URL and its CORS headers.</td>
+          </tr>
+          <tr>
+            <td><code>"./store.aktion" does not export `increment`</code></td>
+            <td>The name exists in that file but is not prefixed with <code>export</code>. State imports report the sigil: <code>does not export `$count`</code>.</td>
+            <td>Add <code>export</code> to the declaration.</td>
+          </tr>
+          <tr>
+            <td><code>Greeting.aktion: Unexpected token &hellip;</code></td>
+            <td>A <strong>dependency&rsquo;s own parse error</strong>, prefixed with its path.</td>
+            <td>Fix the syntax in that file.</td>
+          </tr>
+          <tr>
+            <td><code>Entry module "app.aktion" was not found</code></td>
+            <td>The entry key is not present in the file map handed to the linker.</td>
+            <td>Check the entry name against the keys you passed.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Where they show up depends on the host: <code>&lt;aktion-app src="&hellip;"&gt;</code>
+        surfaces them in the error banner and through the <code>error</code> event
+        alongside parse errors, the <a href="playground.html">playground</a> lists them in
+        its error inspector, and the <a href="#vite">Vite plugin</a> turns them into
+        build failures.
+      </p>
+      <div class="callout">
+        <h4>A dependency&rsquo;s syntax error used to be invisible</h4>
+        <p>
+          <strong>Only the entry&rsquo;s parse errors used to travel out.</strong>
+          <code>parse()</code> drops a malformed statement and recovers, so an
+          imported file with a syntax error linked &ldquo;successfully&rdquo; minus
+          whatever the parser threw away &mdash; you saw a missing component, not an
+          error. Every module&rsquo;s parse errors are now reported as link
+          diagnostics, which means an app that used to link clean may start reporting
+          errors it always had.
+        </p>
+      </div>
+
+      <h2 id="vite">Building with the Vite plugin</h2>
+      <p>
+        For a bundled app, run the linker at build time instead of in the browser.
+        <code>aktion-runtime/vite</code> compiles every <code>.aktion</code> file it
+        sees into a module that default&#8209;exports a pre&#8209;linked program, so the
+        browser never parses that source. Projects created with
+        <a href="get-started.html#scaffold"><code>create-aktion</code></a> ship this
+        wired up already:
+      </p>
+<pre><code>// vite.config.ts
+import { defineConfig } from "vite";
+import aktion from "aktion-runtime/vite";   // default export = aktionPlugin
+
+export default defineConfig({
+  plugins: [aktion()],
+});</code></pre>
+      <p>
+        With the plugin installed, a <code>.aktion</code> file is an importable
+        module. Its default export is a <code>CompiledProgram</code>, which the
+        element mounts with <code>mountCompiled()</code>:
+      </p>
+<pre><code>// src/main.ts
+import "aktion-runtime";                       // registers &lt;aktion-app&gt;
+import type { AktionElement } from "aktion-runtime";
+import app from "./app.aktion";                // linked at build time
+
+document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code></pre>
+      <p>
+        The plugin follows every <code>import</code> from the entry, registers each
+        dependency as a watched file, and inlines the whole graph into that one
+        module &mdash; so editing an imported file re-transforms the entry.
+      </p>
+      <p>
+        In <code>vite dev</code> it also appends a self&#8209;accepting HMR hook that
+        re&#8209;mounts each matching <code>&lt;aktion-app&gt;</code> with its
+        <code>serializeState()</code> snapshot. That is why a hot edit keeps live
+        <code>$state</code>.
+      </p>
+      <h3 id="vite-options">Plugin options</h3>
+      <p>
+        <code>aktionPlugin(options?)</code> accepts three options, all optional:
+      </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Option</th><th>Type</th><th>Default</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>allowOutsideRoot</code></td>
+            <td><code>boolean</code></td>
+            <td><code>false</code></td>
+            <td>Let <code>.aktion</code> imports resolve outside the Vite project root. See the warning below.</td>
+          </tr>
+          <tr>
+            <td><code>runtimeModuleId</code></td>
+            <td><code>string</code></td>
+            <td><code>"aktion-runtime"</code></td>
+            <td>Specifier the generated module imports <code>defineCompiledProgram</code> from. Change it only when the runtime is aliased.</td>
+          </tr>
+          <tr>
+            <td><code>strict</code></td>
+            <td><code>boolean</code></td>
+            <td><code>false</code></td>
+            <td>Promote linker <em>warnings</em> to build errors. Errors already fail the build either way.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <h4>Breaking: <code>.aktion</code> imports are confined to the project root</h4>
+        <p>
+          <strong>An import that resolves outside the Vite <code>root</code> is now
+          refused</strong> &mdash; resolution returns nothing and the build fails with
+          <code>Cannot resolve import "&hellip;"</code>; a second check in the loader
+          refuses the read outright
+          (<code>[aktion] refusing to read "&hellip;" &mdash; outside the project root</code>).
+          The comparison is separator&#8209;aware, so <code>/srv/app</code> does not
+          admit a sibling named <code>/srv/app-secrets</code>.
+        </p>
+        <p>
+          A <code>.aktion</code> file is source, but it is also data that may have
+          arrived with an untrusted repository. Without the check,
+          <code>"../../../../etc/passwd"</code> is read by the build and &mdash; under
+          <code>vite dev</code> &mdash; served to the browser inside the compiled
+          module.
+        </p>
+        <p>
+          <strong>This breaks a monorepo</strong> that imports <code>.aktion</code>
+          files from a sibling package. The opt&#8209;out is
+          <code>aktion({ allowOutsideRoot: true })</code>, and it is only appropriate
+          for a layout you control and trust. Prefer raising the Vite
+          <code>root</code>, or re-exporting the shared files from inside the project.
+          See <a href="security.html">Security</a> for the reasoning.
+        </p>
+      </div>
+      <div class="callout warn">
+        <h4><code>strict: true</code> currently rejects <code>$app(&hellip;)</code> programs</h4>
+        <p>
+          <strong>The plugin warns when a linked program has no top-level
+          <code>aktion = &hellip;</code> binding</strong>, and that check does not
+          recognise the modern <code>$app(&hellip;)</code> root. So every
+          <code>$app</code>&#8209;based entry emits
+          <code>No top-level `aktion = &hellip;` entry binding found</code>.
+        </p>
+        <p>
+          It is harmless noise with the default options, but <code>strict: true</code>
+          turns it into a fatal build error. Leave <code>strict</code> off until the
+          check understands <code>$app</code>.
+        </p>
+      </div>
+
+      <h2 id="api">Linking from JavaScript</h2>
+      <p>
+        Three public entry points turn source text into something
+        <code>mountCompiled()</code> accepts. Pick by how the sources reach you:
+        a resolver you own, an in-memory map that may contain URLs, or a single
+        string.
+      </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Function</th><th>Shape</th><th>Reach for it when</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>linkProgram</code></td>
+            <td>Synchronous. <code>(entrySource, entryPath, resolver)</code> &rarr; <code>{ program, diagnostics, dependencies }</code>.</td>
+            <td>You can load every module synchronously &mdash; a filesystem, a bundler, an in-memory map. This is what the Vite plugin uses.</td>
+          </tr>
+          <tr>
+            <td><code>linkProject</code></td>
+            <td>Async. <code>({ entry, files, fetch? })</code> &rarr; <code>Promise&lt;{ program, source, diagnostics, dependencies }&gt;</code>.</td>
+            <td>The graph may reach the network. It walks the imports, <strong>fetches every URL specifier</strong>, then links. This is what the playground and <code>&lt;aktion-app src&gt;</code> use.</td>
+          </tr>
+          <tr>
+            <td><code>compileLite</code></td>
+            <td>Synchronous. <code>(source, { path?, library? })</code> &rarr; <code>CompiledProgram</code>.</td>
+            <td>One file, no imports. It parses and wraps &mdash; <strong>no linking and no schema validation</strong> &mdash; so it is the cheapest way to mount a string through <code>mountCompiled()</code> instead of <code>setResponse()</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        <code>linkProject</code> is async <em>only</em> because of URL fetches: a
+        project with no remote imports settles on one microtask. It also returns
+        <code>source</code> &mdash; the merged program re&#8209;emitted as text &mdash;
+        which is what keeps <code>applyDelta()</code> and
+        <code>serializeState()</code> round&#8209;trips working after a link.
+      </p>
+<pre><code>import { linkProject, defineCompiledProgram, COMPILED_PROGRAM_VERSION } from "aktion-runtime";
+
+const files = {
+  "app.aktion": `
+    import { $count, increment } from "./store.aktion"
+    $app(Button("+1", { onClick: increment }))
+  `,
+  "store.aktion": `
+    export $count = 0
+    export function increment() { $count = $count + 1 }
+  `,
+};
+
+const res = await linkProject({ entry: "app.aktion", files });
+if (res.diagnostics.length) console.error(res.diagnostics);   // [] when the link is clean
+
+document.querySelector("aktion-app").mountCompiled(
+  defineCompiledProgram({
+    __aktionCompiled: COMPILED_PROGRAM_VERSION,
+    program: res.program,
+    source: res.source,
+    path: "app.aktion",
+  }),
+);</code></pre>
+      <p>
+        That is exactly what the multi&#8209;file demos on this page do. Diagnostics
+        are returned, never thrown &mdash; a URL that fails to fetch becomes one
+        diagnostic and the rest of the graph still links, so you decide whether to
+        mount a partial program or stop.
+      </p>
+      <h3 id="api-resolver">Supplying your own resolver</h3>
+      <p>
+        <code>linkProgram</code> does no I/O itself. You hand it a
+        <code>ModuleResolver</code> with two methods, and it calls them as it walks
+        the graph:
+      </p>
+<pre><code>import { linkProgram, createMemoryResolver, resolveSpecifier } from "aktion-runtime";
+
+// The ready-made one: a complete { path: source } map.
+const res = linkProgram(files["app.aktion"], "app.aktion", createMemoryResolver(files));
+
+// Or your own — `resolve` returns a module key or null, `load` returns text or throws.
+const resolver = {
+  resolve: (spec, importerPath) =&gt; resolveSpecifier(spec, importerPath),
+  load: (path) =&gt; readMySource(path),          // throws → "Failed to load imported module"
+};</code></pre>
+      <div class="callout warn">
+        <h4>A custom resolver gets no path confinement for free</h4>
+        <p>
+          <strong>Confinement lives in the resolver, not in the linker.</strong> The
+          Vite plugin&rsquo;s resolver is the one that refuses paths outside the
+          project root; <code>linkProgram</code> itself will load whatever your
+          <code>resolve</code> returns. If your specifiers can come from a source you
+          do not control, check the resolved path against your own root before
+          returning it &mdash; and read <a href="security.html">Security</a> first.
+        </p>
+      </div>
+      <h3 id="api-compiled">The compiled&#8209;program contract</h3>
+      <p>
+        A <code>CompiledProgram</code> is the artefact
+        <code>mountCompiled()</code> accepts. It carries the parsed AST so the
+        runtime skips <code>parse()</code>, plus the original source so the
+        text&#8209;based features keep working. The reactive runtime &mdash; state,
+        <code>$http</code>, effects, routing &mdash; still runs in the browser
+        exactly as it does for a streamed string; only the parse is gone.
+      </p>
+      <table class="signature-table">
+        <thead>
+          <tr><th>Member</th><th>Type</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>__aktionCompiled</code></td><td><code>1</code></td><td>Version marker. Must equal <code>COMPILED_PROGRAM_VERSION</code>.</td></tr>
+          <tr><td><code>program</code></td><td><code>Program</code></td><td>The merged, scope-renamed AST.</td></tr>
+          <tr><td><code>source</code></td><td><code>string</code></td><td>The original (or re&#8209;emitted) text. Powers <code>applyDelta</code>, <code>serializeState</code> round&#8209;trips, and debugging.</td></tr>
+          <tr><td><code>path</code></td><td><code>string</code></td><td>Module id. Used for diagnostics and to target HMR &mdash; it is what <code>el.sourceId</code> reports.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Two helpers guard that shape. <code>defineCompiledProgram(obj)</code> is an
+        identity function whose only job is to give you one typed construction point,
+        so a malformed payload is a compile error rather than a runtime surprise.
+        <code>isCompiledProgram(value)</code> is the runtime narrowing guard
+        <code>mountCompiled()</code> itself applies &mdash; fail it and the call is
+        ignored with
+        <code>[aktion] mountCompiled() expected a CompiledProgram &hellip;</code> on the
+        console.
+      </p>
+      <p>
+        <code>COMPILED_PROGRAM_VERSION</code> is <strong>1</strong> today and is bumped
+        only on a breaking change to the shape, so a stale build artefact is rejected
+        instead of mounted as garbage.
+      </p>
+
+      <h2 id="playground">In the playground</h2>
+      <p>
+        The <a href="playground.html">playground</a> is multi-file. Use the
+        <strong>file explorer</strong> on the left to create, rename, switch, and
+        delete files; <code>app.aktion</code> is always the entry. Press
+        <i class="fa-solid fa-file-zipper"></i> to <strong>download the whole project
+        as a <code>.zip</code></strong>, or the share / download buttons to get a
+        single linked program (every file inlined). Examples and shared links load
+        into <code>app.aktion</code>. Try the
+        <strong>&ldquo;Multi-file modules&rdquo;</strong> preset to start from a
+        ready-made split.
+      </p>
+
+      <h2 id="lazy">Lazy loading &amp; code-splitting</h2>
+      <p>
+        Modules organise your <em>source</em>; the <code>Lazy(&hellip;)</code> helper
+        defers <em>rendering</em>. Reach for <code>Lazy(&hellip;)</code> when a part
+        of the UI should mount only when it is needed (showing a fallback until a
+        promise resolves), and reach for modules to keep that part &mdash; and the
+        rest of the app &mdash; in readable, reusable files.
+      </p>
+<pre><code>// app.aktion
+import { Header } from "./Header.aktion"
+import { Dashboard } from "./Dashboard.aktion"
+
+$app(Column([
+  Header(),
+  // Render the heavy view behind a fallback until it's ready.
+  Lazy(() =&gt; Dashboard(), { fallback: Skeleton({ lines: 6 }) })
+]))</code></pre>
+      <p>
+        The two are orthogonal: the <code>import</code> still links
+        <code>Dashboard.aktion</code> into the program, so <code>Lazy</code> defers
+        when the subtree <em>renders</em>, not when its source arrives. For code that
+        should not be in the bundle at all, split at the bundler level &mdash; a
+        dynamic <code>import()</code> of a module that itself imports the
+        <code>.aktion</code> entry.
+      </p>
+
+      <h2 id="best-practices">Best practices</h2>
+      <ul>
+        <li><strong>One component per file</strong> (named to match), so imports read like a manifest.</li>
+        <li><strong>Keep shared <code>$state</code> in its own store file</strong> and export the atoms plus the actions that mutate them &mdash; importers get a consistent surface.</li>
+        <li><strong>Keep the entry thin.</strong> Let <code>app.aktion</code> wire pieces together and own the <code>$app(&hellip;)</code> root; push real UI into imported files.</li>
+        <li><strong>Export only what other files need.</strong> Everything else stays private &mdash; that is what makes a name safe to reuse.</li>
+        <li><strong>Prefer relative imports</strong> within a project; reserve URL imports for genuinely shared, versioned components &mdash; and remember they only resolve in the <a href="#specifiers">browser linker</a>, not under the Vite plugin.</li>
+        <li><strong>Check <code>diagnostics</code> before you mount.</strong> A link returns its problems instead of throwing, so an unchecked result mounts a partial program with no complaint.</li>
+      </ul>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="playground.html">
+          <span class="demo-tag">Try it</span>
+          <h3>Open the playground</h3>
+          <p>Create files, import between them, and download the project as a zip.</p>
+          <span class="demo-arrow">Launch playground &rarr;</span>
+        </a>
+        <a class="demo-card" href="language.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Language</h3>
+          <p>Program structure, <code>$state</code>, expressions, and control flow.</p>
+          <span class="demo-arrow">Read the reference &rarr;</span>
+        </a>
+        <a class="demo-card" href="stores.html">
+          <span class="demo-tag">Pattern</span>
+          <h3>Global state</h3>
+          <p>Patterns for sharing reactive state across an app.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+  <script type="module">
+    // Registers <aktion-app> and exposes the in-browser linker.
+    import { linkProject, defineCompiledProgram, COMPILED_PROGRAM_VERSION } from "./dist/aktion.js";
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+
+    // Single-file demos: setResponse the one code block. (Excludes multi-file demos.)
+    for (const demo of document.querySelectorAll(".lay-demo:not(.lay-demo--multi)")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(code.textContent || "");
+        else app.setAttribute("response", code.textContent || "");
+      } catch (err) {
+        console.error("[modules demo] render failed", err);
+      }
+    }
+
+    // Multi-file demos: collect every [data-file] block, link the project, and
+    // mount the compiled result — exactly what the playground does.
+    for (const demo of document.querySelectorAll(".lay-demo--multi")) {
+      const entry = demo.dataset.entry || "app.aktion";
+      const files = {};
+      for (const pre of demo.querySelectorAll("[data-file]")) {
+        const code = pre.querySelector("code") || pre;
+        files[pre.dataset.file] = code.textContent || "";
+      }
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!host) continue;
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      linkProject({ entry, files })
+        .then((res) => {
+          app.mountCompiled(
+            defineCompiledProgram({
+              __aktionCompiled: COMPILED_PROGRAM_VERSION,
+              program: res.program,
+              source: res.source,
+              path: entry,
+            }),
+          );
+        })
+        .catch((err) => console.error("[modules demo] link failed", err));
+    }
+
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>
