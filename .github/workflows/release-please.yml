@@ -20,31 +20,10 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      # WHY A PAT, NOT THE DEFAULT GITHUB_TOKEN
-      # -----------------------------------------------------------------
-      # release-please-action pushes/updates its release PR using this
-      # token, which makes the pusher's actor `github-actions[bot]`.
-      # GitHub's loop-prevention rule for GITHUB_TOKEN-originated events
-      # doesn't just block that push from re-triggering `push`/
-      # `pull_request` workflows directly — it also breaks the
-      # `workflow_run` chain ONE HOP further downstream: the resulting
-      # `pull_request`-triggered `preview.yml` build still runs fine, but
-      # its completion never fires `deploy-preview.yml`'s `workflow_run`
-      # trigger. The preview is silently never deployed, and the
-      # "Get console logs"/"Take a screenshot" checks poll a 404 for 10
-      # minutes and fail — every single time release-please opens or
-      # updates its release PR (e.g. PR #19).
-      #
-      # A PAT (or GitHub App installation token) makes the push's actor a
-      # real account instead, which isn't subject to that restriction and
-      # lets `workflow_run` fire normally — exactly like it does for every
-      # human-authored PR. `RELEASE_PLEASE_TOKEN` needs `contents:write`
-      # and `pull-requests:write` on this repo (a fine-grained PAT scoped
-      # to just this repo, or a GitHub App installation token, both work).
       - uses: googleapis/release-please-action@v5
         id: release
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   publish-npm:
     needs: [release-please]
