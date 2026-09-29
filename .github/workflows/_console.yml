@@ -1,45 +1,30 @@
-name: "Console"
+name: "CI · Console"
 
 on:
-  pull_request:
-    types: [ opened, synchronize, reopened ]
-
-permissions:
-  checks: read
-  contents: read
-  pull-requests: write
+  workflow_call:
 
 jobs:
   console:
     runs-on: ubuntu-latest
     name: Get console logs
+    permissions:
+      checks: read
+      contents: read
+      pull-requests: write
     env:
       PREVIEW_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-preview/pr-${{ github.event.number }}/
     steps:
-      - name: Wait for build to succeed
-        uses: fountainhead/action-wait-for-check@v1.2.0
-        id: wait-for-build
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          checkName: Make sure it builds. Then show a preview.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Exit if build did not succeed
-        if: steps.wait-for-build.outputs.conclusion == 'failure'
-        run: exit 1
-        shell: bash
-      # The preview is no longer deployed within this same check — a separate
-      # "Deploy PR preview (trusted)" workflow does that, triggered only
-      # after this build's own check (which this job already waited for,
-      # above) completes, then itself waits out the GitHub Pages build.
-      # 600s comfortably covers that whole chain (workflow_run dispatch +
-      # its own two jobs + Pages propagation) without matching its full
-      # 15-minute internal budget for a merely-informational retry loop.
+      # No "wait for build" step here: the caller's `needs: deploy-preview`
+      # already guarantees the preview job (including its own "wait for
+      # Pages deployment" step) fully completed before this job starts.
+      # GitHub's job graph is doing that ordering now, not a second,
+      # independently-fired event — see ci.yml's header comment for why
+      # that matters.
       - name: Wait for preview URL to be available
-        if: steps.wait-for-build.outputs.conclusion == 'success'
         shell: bash
         run: |
           echo "Polling ${PREVIEW_URL} ..."
-          timeout=600
+          timeout=180
           elapsed=0
           until [ "$elapsed" -ge "$timeout" ]; do
             status=$(curl --silent --output /dev/null --write-out "%{http_code}" "${PREVIEW_URL}" || true)

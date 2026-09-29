@@ -1,85 +1,70 @@
-name: Deploy PR previews
+name: "PR Preview"
 
-# Builds every PR (including from forks) with a READ-ONLY token and no
-# secrets, then hands the built site off to the trusted `Deploy PR preview`
-# workflow (deploy-preview.yml) via an artifact — that workflow does the
-# actual deploy, using its OWN independently-derived idea of which PR this
-# is and whether to deploy or remove, never anything this job claims (see
-# its header comment for the full story: an earlier version of this job
-# also wrote a `pr-metadata` artifact naming its own PR number/lifecycle
-# action, which the trusted job then trusted outright — since THIS workflow
-# file is itself read from the PR's own branch, a malicious PR could edit
-# that step to claim to BE any other PR and had the trusted job deploying
-# or deleting arbitrary previews on nothing but the attacker's say-so).
+# WHY THIS IS ONE WORKFLOW, NOT A "BUILD HERE / DEPLOY THERE" SPLIT
+# ---------------------------------------------------------------------------
+# The previous design split this across four independent, top-level
+# `pull_request`-triggered workflows: this one built the site; a
+# `deploy-preview.yml`, triggered by `workflow_run` when this one completed,
+# pushed it to gh-pages; and `console.yml`/`screenshots.yml` polled the
+# resulting URL, using `fountainhead/action-wait-for-check` to wait on this
+# workflow's own check first. That split existed to keep a write-capable
+# token away from a fork PR's build step — GitHub forces a fork's
+# `pull_request` token read-only regardless of declared `permissions:`, so
+# the deploy had to live somewhere with its own, independently-granted token.
 #
-# This job stays `contents: read` — no more, ever — even for a same-repo
-# PR. An earlier revision granted `contents: write`/`pull-requests: write`
-# here for a temporary same-repo fallback deploy step, reasoning that forks
-# are the only untrusted case since GitHub forces their token read-only
-# regardless. That reasoning doesn't hold: a same-repo PR still runs THIS
-# JOB'S OWN `npm ci`/`npm run build:preview` from the PR branch, and
-# `actions/checkout` persists whatever token this job has into
-# `.git/config` on disk — readable, and exfiltratable, by any of that
-# untrusted build/install code (a malicious dependency, a compromised
-# contributor account, a hostile `postinstall` script), independent of
-# which specific step declared the need for write access. A same-repo PR
-# not being from a fork does not make its build step's code trustworthy.
-# The fallback was removed rather than patched.
+# The `workflow_run` hop turned out to be unreliable for release-please's
+# PRs specifically: `deploy-preview.yml` never once fired for any commit
+# PR #19 (a release-please PR) ever had, across its whole history, while
+# firing normally for every human-authored PR. The cause was never
+# conclusively pinned down at the GitHub-platform level — and isn't token
+# identity: `Primajin/Gyros`'s `release-please.yml` uses the exact same
+# `secrets.GITHUB_TOKEN` and its release-please PRs deploy previews fine,
+# across 15+ releases, using the architecture below.
 #
-# KNOWN, ACCEPTED, SELF-RESOLVING LIMITATION: `workflow_run` (which
-# deploy-preview.yml listens on) only fires for a listener workflow that
-# already exists on the repository's DEFAULT BRANCH — see that workflow's
-# header comment. Until deploy-preview.yml is merged to `main`, NO PR gets
-# a real preview deploy, including same-repo ones that deployed fine,
-# same-job, before this split existed — their console-log/screenshot
-# checks will fail waiting on a preview that was never deployed, exactly
-# like a fork PR's always have. That is a real, known regression for the
-# bootstrap window, and deliberately not patched around here: every way to
-# avoid it either reintroduces the write-access-to-untrusted-code problem
-# above, or requires standing up a second temporary trusted workflow just
-# to retire immediately after the first one lands — more moving parts than
-# a short-lived, well-understood, self-resolving gap justifies. It ends
-# permanently the moment deploy-preview.yml reaches `main`.
-
+# That architecture avoids the question entirely rather than answering it:
+# `deploy-preview`, `console`, and `screenshots` are jobs of THIS SAME
+# workflow run, connected by `needs:` below. GitHub's own job-dependency
+# graph provides the ordering — there is no second, independently-fired
+# event for anything to fail to deliver. The fork-safety property is kept
+# via an explicit `head.repo.full_name` check (both at the job level here,
+# skipping console/screenshots entirely for a fork PR, and inside
+# `_preview.yml` itself, guarding the actual `gh-pages` push) instead of
+# relying on a separate trusted workflow.
 on:
   pull_request:
-    types:
-      - opened
-      - reopened
-      - synchronize
-      - closed
+    types: [ opened, reopened, synchronize, closed ]
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
-  build-preview:
-    runs-on: ubuntu-latest
-    name: Make sure it builds. Then show a preview.
-    steps:
-      - name: Checkout
-        if: github.event.action != 'closed'
-        uses: actions/checkout@v7
+  deploy-preview:
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/_preview.yml
+    secrets: inherit
 
-      - name: Setup Node.js
-        if: github.event.action != 'closed'
-        uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: 'npm'
+  # Skipped (not run-and-failed) for a fork PR: its preview is never
+  # deployed by `_preview.yml` above, so polling for it would only ever
+  # time out. Same reasoning as the `if:` inside `_preview.yml`'s own
+  # "Deploy preview" step.
+  console:
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: deploy-preview
+    permissions:
+      checks: read
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/_console.yml
+    secrets: inherit
 
-      - name: Install and Build
-        if: github.event.action != 'closed'
-        run: |
-          npm ci
-          npm run build:preview
-        env:
-          VITE_BASE_PATH: /aktion/pr-preview/pr-${{ github.event.number }}/
-
-      - name: Upload built site
-        if: github.event.action != 'closed'
-        uses: actions/upload-artifact@v7
-        with:
-          name: preview-site
-          path: ./site/
-          retention-days: 1
+  screenshots:
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: deploy-preview
+    permissions:
+      checks: read
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/_screenshots.yml
+    secrets: inherit
