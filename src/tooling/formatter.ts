@@ -555,7 +555,10 @@ function printExpression(expr: Expression, indent: number, opts: ResolvedFormatO
       return `$${expr.name}`;
     case "Array": {
       if (expr.elements.length === 0) return "[]";
-      const items = expr.elements.map((e) => printExpression(e, indent, opts));
+      // Render elements assuming they'll land one level deeper than this
+      // array itself — see `printCall`'s doc comment for why this must
+      // happen before the inline-vs-wrap decision, not after.
+      const items = expr.elements.map((e) => printExpression(e, indent + 1, opts));
       const inline = `[${items.join(", ")}]`;
       if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
       const innerPad = pad(indent + 1, opts);
@@ -565,7 +568,8 @@ function printExpression(expr: Expression, indent: number, opts: ResolvedFormatO
     }
     case "Object": {
       if (expr.properties.length === 0) return "{}";
-      const items = expr.properties.map((p) => printObjectProp(p, indent, opts));
+      // Same one-level-deeper rendering as `Array` above.
+      const items = expr.properties.map((p) => printObjectProp(p, indent + 1, opts));
       const inline = opts.objectCurlySpacing
         ? `{ ${items.join(", ")} }`
         : `{${items.join(", ")}}`;
@@ -634,7 +638,19 @@ function printExpression(expr: Expression, indent: number, opts: ResolvedFormatO
 
 function printCall(callee: string, args: Expression[], indent: number, opts: ResolvedFormatOptions): string {
   if (args.length === 0) return `${callee}()`;
-  const parts = args.map((a) => printExpression(a, indent, opts));
+  // Every argument is printed as if it will land one level deeper than the
+  // call itself — the same "first line unindented, inner lines already
+  // absolutely padded to `indent`" convention every other multi-line printer
+  // in this file follows (Array/Object/Block). This must happen BEFORE the
+  // inline-vs-wrap decision below, not after: a multi-line argument (e.g. a
+  // wrapped `Object`/`Array` literal) bakes its OWN inner lines' indentation
+  // in at print time, so rendering at `indent` and only prepending the wrap
+  // branch's `innerPad` to each part's first line — as this used to do —
+  // left every line after the first one shallow by exactly one level. The
+  // indent value is irrelevant to a part that stays single-line (it never
+  // calls `pad`), so re-using this same rendering for the inline check below
+  // is always safe.
+  const parts = args.map((a) => printExpression(a, indent + 1, opts));
   const inline = `${callee}(${parts.join(", ")})`;
   if (inline.length <= 80 && !parts.some((s) => s.includes("\n"))) return inline;
   const innerPad = pad(indent + 1, opts);
