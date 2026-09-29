@@ -47,11 +47,18 @@ name: Deploy PR preview (trusted)
 # event's own action/head, since either can be stale by the time this runs
 # (a slower run for an older push can finish after a newer one; the shared
 # `gh-pages` concurrency group below only serialises the two deploys, it
-# doesn't reorder them by recency). The built `site/` artifact is still
-# fine to trust once the PR number itself is verified — that's just static
-# content landing under the SAME PR a fork controls its own preview's
-# content for anyway — but it is never DEPLOYED once `resolve-pr` notices
-# its SHA no longer matches the PR's current head.
+# doesn't reorder them by recency). The built `site/` artifact is never
+# DEPLOYED once `resolve-pr` notices its SHA no longer matches the PR's
+# current head.
+#
+# `resolve-pr` also checks that PR's `head.repo.full_name` against this
+# repo before choosing "deploy" — see the inline comment at that check.
+# A fork's build is real, untrusted, attacker-authored HTML/JS (built with
+# a read-only token, but static content, not code executed by us), and
+# publishing it live under this org's own github.io domain is a risk in
+# its own right, independent of whether any secret leaked. Only same-repo
+# PRs (collaborators, Dependabot, release-please — nothing else can push a
+# branch to this repo directly) ever reach "deploy".
 
 on:
   workflow_run:
@@ -128,7 +135,31 @@ jobs:
           state=$(echo "$pr" | jq -r '.state')
           action="deploy"
           if [ "$state" != "open" ]; then
+            # Always allow removal regardless of the PR's origin — deleting
+            # an already-published preview is cleanup, not new deployed
+            # content, so it carries none of the risk the fork check below
+            # exists for.
             action="remove"
+          else
+            # NEVER publish a fork's build to gh-pages, even though it was
+            # built with a read-only token and no secrets. The built site/
+            # is arbitrary HTML/JS the fork author wrote, and `deploy`
+            # below would serve it live at
+            # https://${GITHUB_REPOSITORY_OWNER}.github.io/.../pr-preview/pr-<n>/
+            # — under this org's own domain — which is a real vector
+            # (phishing, cookie/session abuse against anything else on that
+            # origin) independent of whether any token or secret leaked.
+            # A same-repo PR (`head.repo.full_name == base repo`) can only
+            # come from someone with push access to this repo (a
+            # collaborator), Dependabot, or release-please — all of which
+            # push branches directly here rather than forking — so this one
+            # check is equivalent to allow-listing exactly those origins
+            # without having to hardcode usernames.
+            head_repo=$(echo "$pr" | jq -r '.head.repo.full_name // ""')
+            if [ "$head_repo" != "${GITHUB_REPOSITORY}" ]; then
+              echo "PR #$number's head repo is '${head_repo:-<deleted fork>}', not ${GITHUB_REPOSITORY} — refusing to deploy a fork's build to gh-pages."
+              action="skip"
+            fi
           fi
 
           echo "pr-number=$number" >> "$GITHUB_OUTPUT"
