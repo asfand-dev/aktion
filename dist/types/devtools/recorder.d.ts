@@ -25,12 +25,18 @@ export interface QueryStrategy {
 }
 /** One recorded interaction. */
 export interface RecordedStep {
-    type: "click" | "type" | "select" | "check" | "uncheck" | "key" | "navigate" | "wait";
+    type: "click" | "type" | "select" | "check" | "uncheck" | "key" | "navigate" | "wait" | "assert";
     query?: QueryStrategy;
-    /** Typed text, selected option, or navigation path. */
+    /** Typed text, selected option, navigation path, or an assertion's expected value. */
     value?: string;
     /** Key name for a `key` step. */
     key?: string;
+    /**
+     * What an `assert` step checks. `route` is recorded automatically when an
+     * interaction navigates: the test then asserts the click LED somewhere,
+     * instead of replaying the navigation and hiding a broken link.
+     */
+    assertion?: "visible" | "text" | "value" | "checked" | "route";
     time: number;
     /** Human-readable one-liner shown in the recorder list. */
     label: string;
@@ -103,6 +109,16 @@ export declare class InteractionRecorder {
      * depending on it.
      */
     addStep(step: Omit<RecordedStep, "time">): void;
+    /**
+     * Record an assertion about `element` — "this is visible", "this says X",
+     * "this field holds Y", "this box is checked". Allowed while stopped too:
+     * assertions are usually added after the interactions they check.
+     */
+    addAssertion(element: Element, assertion: NonNullable<RecordedStep["assertion"]>, root?: Node | null): RecordedStep;
+    /** Move a step (for reordering in the recorder list). */
+    move(from: number, to: number): void;
+    /** Replace the whole list (loading a saved flow). */
+    load(steps: ReadonlyArray<RecordedStep>): void;
     private push;
     private onClick;
     private onInput;
@@ -128,3 +144,49 @@ export declare function generateSnapshotTest(program: string, state: Record<stri
     title?: string;
     packageName?: string;
 }): string;
+export interface PlaywrightOptions {
+    title?: string;
+    /** Page URL the test opens (defaults to the current page). */
+    url?: string;
+    /** `hash` routers navigate by fragment, `history` routers by path. */
+    routerMode?: string;
+}
+/**
+ * The Playwright locator for a strategy.
+ *
+ * Playwright's role, text, label, and CSS engines pierce open shadow roots, so
+ * the same query that works in the in-process test finds the element inside
+ * `<aktion-app>` without any shadow-DOM plumbing.
+ */
+export declare function playwrightLocator(query: QueryStrategy): string;
+/** Emit a runnable `@playwright/test` spec from recorded steps. */
+export declare function generatePlaywrightTest(steps: ReadonlyArray<RecordedStep>, options?: PlaywrightOptions): string;
+/**
+ * Resolve a strategy against a rendered tree with Testing Library semantics:
+ * roles match explicit or implicit roles and (optionally) the exact accessible
+ * name; text matches the deepest element whose normalised text is exactly the
+ * string.
+ */
+export declare function resolveQuery(root: Element | ShadowRoot | null, query: QueryStrategy): Element[];
+export interface ReplayResult {
+    index: number;
+    ok: boolean;
+    message: string;
+    element?: Element;
+}
+/**
+ * Perform one recorded step against the live app. Events are dispatched the
+ * way a user's input produces them (`input` then `change`, composed, bubbling),
+ * so the app cannot tell a replay from a person.
+ */
+export declare function replayStep(step: RecordedStep, root: Element | ShadowRoot | null, navigate?: (path: string) => void, currentRoute?: () => string): Promise<{
+    ok: boolean;
+    message: string;
+    element?: Element;
+}>;
+/**
+ * Visible the way a user means it: connected, not `display: none` /
+ * `visibility: hidden` / `[hidden]` anywhere up the composed tree, and — when
+ * the environment does layout at all — occupying some area.
+ */
+export declare function isVisible(element: Element): boolean;

@@ -14,6 +14,8 @@ export declare const CAPS: {
     readonly errors: 200;
     /** State snapshots retained for time travel. */
     readonly history: 60;
+    /** Changes remembered per atom for the change log. */
+    readonly atomLog: 60;
 };
 /**
  * One HTTP request, merged from its `start` event and its terminal event.
@@ -76,6 +78,28 @@ export interface LongTask {
     start: number;
     duration: number;
 }
+/** One recorded change to a root atom. */
+export interface AtomChange {
+    time: number;
+    /** Dotted paths the flush reported under this root. */
+    paths: string[];
+    before: string;
+    after: string;
+    /** Raw values, kept only while they are small enough to diff. */
+    beforeValue?: unknown;
+    afterValue?: unknown;
+}
+/** Per-kind revision counters, so views can memoise on exactly what they read. */
+export interface ModelRevisions {
+    commit: number;
+    state: number;
+    effect: number;
+    network: number;
+    route: number;
+    emit: number;
+    log: number;
+    error: number;
+}
 /** Per-app derived model the panel maintains from the event stream. */
 export interface AppModel {
     commits: CommitRecord[];
@@ -101,6 +125,19 @@ export interface AppModel {
     firstTime: number | null;
     /** Timestamp of the most recent observed event. */
     lastTime: number;
+    /** Bumped on every ingested event. */
+    rev: number;
+    revs: ModelRevisions;
+    /** Root atom → its recent changes, oldest first. */
+    atomLog: Map<string, AtomChange[]>;
+    /** Instance key → renders (non-memoised) observed this session. */
+    renderCounts: Map<string, number>;
+    /**
+     * While true, commit snapshots are not added to `history`. Set during a live
+     * time-travel preview: hydrating the app to an old snapshot produces commits
+     * of its own, and recording them would shift the very history being scrubbed.
+     */
+    suspendHistory?: boolean;
     /** Totals since the session began, including events already trimmed away. */
     totals: {
         commits: number;

@@ -514,6 +514,16 @@ export interface EvaluationContext {
      */
     disposers: Array<() => void>;
     /**
+     * The computed `$name = expr` derivations installed by the last plan, with
+     * the dependency paths each one read on its most recent evaluation. Owned
+     * by `installComputedStateDerivations`; exposed only so DevTools can draw
+     * the reactivity graph (atom → derived atom) without re-deriving it.
+     */
+    computedDerivations: ReadonlyArray<{
+        readonly name: string;
+        readonly deps: ReadonlySet<string>;
+    }>;
+    /**
      * Pending timer handles created by the language-level `setTimeout` /
      * `setInterval` builtins. Tracked per context so every timer is cleared
      * when the context is disposed (`disposeContext`), which the host runs

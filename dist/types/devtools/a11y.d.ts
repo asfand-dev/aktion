@@ -32,7 +32,18 @@ export interface A11yFinding {
     element: Element;
     /** Extra measured detail (`2.61:1`, `h2 → h4`). */
     detail?: string;
+    /** WCAG 2.2 success criteria this finding fails (`1.1.1`). */
+    wcag?: string[];
+    /** Grouping for the audit view. */
+    category?: A11yCategory;
 }
+export type A11yCategory = "names" | "structure" | "aria" | "keyboard" | "contrast" | "forms" | "media";
+/** Rule metadata the audit view shows next to every finding. */
+export declare const RULE_INFO: Record<string, {
+    wcag: string[];
+    category: A11yCategory;
+    title: string;
+}>;
 /** Parse a CSS colour into RGBA, or `null` for one we cannot read. */
 export declare function parseColor(css: string): {
     r: number;
@@ -80,6 +91,12 @@ export declare function auditAccessibility(root: Element | null, options?: {
     examined: number;
     truncated: boolean;
 };
+/**
+ * A 0–100 score, Lighthouse-style: each failing RULE costs by impact (a second
+ * instance of the same failure costs far less than a new kind of failure,
+ * because one fix usually clears every instance).
+ */
+export declare function a11yScore(findings: ReadonlyArray<A11yFinding>): number;
 /** Group findings by rule, for the summary table. */
 export declare function groupFindings(findings: ReadonlyArray<A11yFinding>): Array<{
     rule: string;
@@ -87,3 +104,41 @@ export declare function groupFindings(findings: ReadonlyArray<A11yFinding>): Arr
     count: number;
     first: A11yFinding;
 }>;
+/**
+ * Sequential keyboard focus order, the way Tab walks it: positive tabindex
+ * first (ascending, then document order), then everything else focusable in
+ * document order. Disabled, hidden, inert, and tabindex=-1 elements are
+ * skipped.
+ */
+export declare function tabOrder(root: Element | null, limit?: number): Element[];
+export interface Landmark {
+    element: Element;
+    role: string;
+    label: string;
+}
+export declare function landmarks(root: Element | null): Landmark[];
+export interface HeadingEntry {
+    element: Element;
+    level: number;
+    text: string;
+    /** Skipped a level relative to the previous heading. */
+    skipped: boolean;
+}
+export declare function headingOutline(root: Element | null): HeadingEntry[];
+export interface AxNode {
+    id: string;
+    role: string;
+    name: string;
+    element: Element;
+    states: string[];
+    focusable: boolean;
+    children: AxNode[];
+}
+/**
+ * The accessibility tree as assistive tech sees it: elements with a role or a
+ * name become nodes; generic wrappers are flattened away; aria-hidden and
+ * display:none subtrees are removed.
+ */
+export declare function accessibilityTree(root: Element | null, limit?: number): AxNode[];
+/** What a screen reader would announce on focusing `element`: `"Save", button, disabled`. */
+export declare function announce(element: Element): string;

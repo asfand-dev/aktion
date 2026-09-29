@@ -1,7 +1,7 @@
 import { Program, Statement } from '../parser/types.js';
 import { EndpointResource } from '../runtime/http.js';
 import { HookCell, StoreHandle } from '../runtime/evaluator.js';
-import { Diagnostic, InstanceHookRecord, InstanceUiStateRecord, OutlineEntry, QueryInfo, StateAtomMeta, StoreInfo } from './protocol.js';
+import { Diagnostic, ProgramSecurityProfile, InstanceHookRecord, InstanceUiStateRecord, OutlineEntry, QueryInfo, StateAtomMeta, StoreInfo } from './protocol.js';
 /**
  * Describe one component instance's hook cells.
  *
@@ -85,3 +85,16 @@ export declare function outlineProgram(statements: ReadonlyArray<Statement>): Ou
  * so a caller never writes a half-valid file.
  */
 export declare function snapshotToJson(snapshot: Record<string, unknown>): string | null;
+export type { ProgramSecurityProfile };
+/**
+ * What a program can reach and where its data can go — the static half of the
+ * Security view.
+ *
+ * Under the default `"all"` policy program text is as privileged as a script
+ * tag (see SECURITY.md), so the useful question is not "is this allowed" but
+ * "what does this program actually touch": which host globals it names, which
+ * endpoints it calls, where it opens windows, which events leave the app, and
+ * which escape hatches bypass the component library's sanitisers. Every entry
+ * carries its source position so the panel can jump to it.
+ */
+export declare function analyzeProgramSecurity(program: Program, policy: string | readonly string[]): ProgramSecurityProfile;

@@ -1,4 +1,4 @@
-import { AppStats, Diagnostic, DevtoolsEvent, EffectEventPayload, EffectInfo, EvalResult, InstanceDetail, InstanceNode, NetworkRule, ProgramAnalysis, QueryInfo, RouteInfo, StateAtomMeta, StoreInfo, ThemeInfo } from './protocol.js';
+import { AppStats, Diagnostic, DevtoolsEvent, EffectEventPayload, EffectInfo, EvalResult, InstanceDetail, InstanceNode, NetworkRule, ProgramAnalysis, ProgramSecurityProfile, QueryInfo, ReactivityGraph, RouteInfo, StateAtomMeta, StoreInfo, ThemeInfo } from './protocol.js';
 export type { DevtoolsEvent, EffectEventPayload };
 /** Property name the hook lives under on `globalThis`. */
 export declare const HOOK_KEY = "__AKTION_DEVTOOLS_HOOK__";
@@ -9,8 +9,13 @@ export declare const HOOK_KEY = "__AKTION_DEVTOOLS_HOOK__";
  * props + source on component records, and the inspector half of
  * {@link DevtoolsAppRecord}. Every addition is optional or additive, so a v1
  * frontend still works against a v2 backend (it just sees less).
+ *
+ * `3` added the reactivity graph and the program security profile to
+ * {@link DevtoolsAppRecord}, and `probability` on {@link NetworkRule}. Again
+ * purely additive: a v2 frontend ignores them, and a v3 frontend feature-detects
+ * them on a v2 backend.
  */
-export declare const DEVTOOLS_PROTOCOL_VERSION = 2;
+export declare const DEVTOOLS_PROTOCOL_VERSION = 3;
 /**
  * Frontend-controlled instrumentation levels. The runtime reads these on the
  * render path, so each one is a plain boolean — no allocation, no lookup
@@ -150,6 +155,10 @@ export interface DevtoolsAppRecord {
     getNetworkRules?(): NetworkRule[];
     /** Cheap runtime counters for the overview + perf tabs. */
     getStats?(): AppStats;
+    /** Who reads what: atoms, derived atoms, component instances, effects. */
+    getReactivityGraph?(): ReactivityGraph;
+    /** What the program text can reach, from its AST, plus the access policy. */
+    getSecurityProfile?(): ProgramSecurityProfile | null;
 }
 export type DevtoolsEventListener = (event: DevtoolsEvent) => void;
 export type DevtoolsAppListener = (action: "register" | "unregister", app: DevtoolsAppRecord) => void;

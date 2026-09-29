@@ -1,180 +1,180 @@
 import { AktionDevtoolsHook } from './hook.js';
 import { DockMode, TabId, UiState } from './context.js';
 import { clearModel, AppModel } from './model.js';
+import { CspViolation } from './analysis/security.js';
+import { DEVTOOLS_UI_VERSION } from './meta.js';
+export { DEVTOOLS_UI_VERSION };
 export declare class AktionDevtoolsElement extends HTMLElement {
     static readonly tagName = "aktion-devtools";
     private hook;
     private unsubEvents;
     private unsubApps;
     private readonly models;
+    private readonly imported;
     private selectedAppId;
     private ui;
     private readonly overlay;
     private readonly recorder;
     private readonly consoleCapture;
-    private renderScheduled;
-    private flashTimer;
-    private toastTimer;
-    /** Memo for one render pass — see the comment in `render()`. */
-    private renderCache;
-    /** Events ignored since the user paused — surfaced on the Rec button. */
-    private droppedWhilePaused;
-    private recordLabel;
-    private windowKeyHandler;
-    private longTaskObserver;
-    /** Floating-mode geometry, persisted so the panel reopens where you left it. */
-    private geometry;
+    private readonly vitals;
+    private readonly pagePush;
+    private tooltips;
     private root;
-    private panelEl;
-    private headerEl;
-    private controlsEl;
-    private tabsEl;
-    private bodyEl;
-    private toastEl;
-    private paletteEl;
+    private frameHost;
+    private layerHost;
+    private snapEl;
+    private renderScheduled;
+    private renderTimer;
+    private readonly renderTimes;
+    private passCache;
+    private readonly memoCache;
+    private geometry;
+    private readonly dockSizes;
+    private launcherPos;
+    private restoreGeometry;
+    private droppedWhilePaused;
+    private readonly cspViolations;
+    private readonly recentCommands;
+    private toastSeq;
+    private readonly toastTimers;
+    private windowKeyHandler;
+    private cspHandler;
+    private schemeQuery;
+    private schemeHandler;
+    private resizeHandler;
+    private outsidePointer;
+    private layersTimer;
+    private a11yTimer;
+    private suppressLauncherClick;
+    /** `performance.now()` → epoch offset, for converting model times to clock times. */
+    readonly epochOffset: number;
     constructor();
     connectedCallback(): void;
     disconnectedCallback(): void;
+    /** Show the panel (restoring it from the launcher). */
     open(): void;
+    /** Collapse to the launcher (or hide entirely when the launcher is off). */
     close(): void;
     toggle(): void;
     selectApp(id: string): void;
-    /** Switch tabs programmatically (used by the controller and by tab links). */
     selectTab(tab: TabId): void;
-    /** Test/inspection hook: the derived model for an app (or the selected one). */
+    /** Change the dock position. */
+    setDock(dock: DockMode): void;
+    /** The derived model for an app (or the selected one). */
     getModel(appId?: string): AppModel | null;
-    /** Test/inspection hook: the panel's current view state. */
+    /** The panel's view state (tests and embedders). */
     getUiState(): UiState;
+    /** Render synchronously now — for tests and embedders that must observe the result immediately. */
+    flush(): void;
+    /** Load an exported session file into the panel for offline inspection. */
+    importSession(text: string, fileName?: string): string;
     private ensureModel;
-    /** Adopt an app: ensure a model and seed its current state snapshot. */
     private adopt;
-    /** Ask every `<aktion-app>` on the page to register with the hook. */
+    /** Ask every `<aktion-app>` on the page to register (late attach). */
     private discoverApps;
     private onApp;
     private onEvent;
+    private afterCommit;
     /**
-     * Outline every component that actually rendered in this commit.
-     *
-     * The most direct answer to "why did that feel slow?" is seeing the whole
-     * screen flash when you typed one character. Memoized instances are skipped —
-     * outlining them would report the opposite of the truth.
+     * Render scan: outline what actually re-rendered, with a running count, and
+     * mark the renders a forced full render caused although nothing the
+     * component reads changed — the "unnecessary render" React Scan made famous.
      */
-    private highlightRenderedComponents;
+    private scanCommit;
+    private markCommit;
     /**
-     * Mirror a commit into `performance.measure` so it appears in the browser's
-     * own performance timeline next to layout, paint, and long tasks.
-     *
-     * The panel's profiler can tell you a commit took 12ms; only the browser's
-     * timeline can tell you what happened around it.
-     */
-    private markCommitForBrowserProfiler;
-    /**
-     * Break into the debugger when a watched atom changes.
-     *
-     * The panel cannot pause the runtime, but the browser can: a `debugger`
-     * statement executed here stops the world inside the state flush, one frame
-     * below the write, with the stack that caused it. That is the one thing a
-     * state inspector cannot otherwise give you.
+     * Break into the debugger when a watched atom changes. The panel cannot pause
+     * the runtime, but a `debugger` statement here stops the world inside the
+     * state flush, one frame below the write, with the stack that caused it.
      */
     private checkBreakOnChange;
-    /**
-     * Keep a short history of program versions.
-     *
-     * A hot-swapped program that fails to parse leaves you with a blank app and no
-     * way back — the Source tab can only re-plan what is already broken. Recording
-     * each distinct version as it commits makes "undo that edit" possible.
-     */
+    /** Remember each distinct program version, so an edit that breaks the app can be undone. */
     private recordProgramVersion;
-    private ingestEvent;
-    /** Route a captured console line into the selected app's model. */
     private syncConsoleCapture;
+    private onVitals;
+    /**
+     * Coalesce renders. The first render after a quiet period happens on the next
+     * microtask (so a test that flushes microtasks sees it, and a click feels
+     * instant); a burst — an effect ticking at 60Hz, a stream of log lines — is
+     * throttled to about 20 renders a second so the panel never becomes the
+     * bottleneck it is there to find.
+     */
     private scheduleRender;
-    private currentApp;
-    private render;
-    /**
-     * Remember where the caret is before a re-render.
-     *
-     * The panel re-renders on every runtime event, so a field the user is typing
-     * in is rebuilt several times a second. Restoring by POSITION is not enough:
-     * running a REPL expression grows the history above the input, so the input is
-     * no longer the same child index and focus is lost on exactly the keystroke
-     * that mattered. Fields therefore declare a stable key (see `FOCUS_KEY_ATTR`)
-     * and the shell restores by key, falling back to the position for anything
-     * that has not declared one.
-     */
-    private captureFocus;
-    private restoreFocus;
-    private findFocusTarget;
-    /**
-     * Scroll offsets of every keyed scroll container, so a scrolled component
-     * tree does not jump to the top each time an event arrives.
-     */
-    private captureScroll;
-    private restoreScroll;
+    private renderNow;
+    private readonly effectState;
+    private renderFallback;
     private buildSkeleton;
-    /** Reflect dock mode, theme, and density onto the host + panel. */
-    private applyChrome;
-    private applyDock;
-    /** Rec / Paused, with a count of what pausing has cost you. */
-    private recordText;
-    private recordTitle;
-    /** Update the button text without a render — see `droppedWhilePaused`. */
-    private updateRecordLabel;
+    /** Reflect dock, theme, density, and geometry onto the host element. */
+    private applyHost;
+    private setAttr;
+    private applyPagePush;
+    private currentApp;
+    private currentView;
+    private renderFrame;
+    private renderTitlebar;
+    private renderRail;
+    private railItem;
+    /** Overall health for the status dot and launcher: errors → red, warnings → amber. */
+    private health;
+    private renderStatusBar;
+    private renderEdges;
+    private renderToasts;
+    private renderLayer;
+    private renderLauncher;
+    private renderShortcuts;
+    private renderDialog;
+    private renderMenu;
+    private context;
+    /** Forget stored preferences; keep what the session is looking at. */
+    private resetPreferences;
+    /** Push user rules + the throttling preset to the app. */
+    private pushRules;
+    private highlightInstance;
     /**
-     * Open Inspect on an instance and make sure the row is actually visible.
-     *
-     * A jump from another tab can land on a row hidden three different ways —
-     * inside a collapsed branch, excluded by the tree filter, or a library
-     * component while the Library toggle is off. Silently showing the detail of
-     * a row you cannot see is the worst of the three outcomes, so clear all of
-     * them and say which ones were cleared.
+     * Open the Inspector on an instance and make sure its row is visible — it may
+     * be inside a collapsed branch, excluded by the filter, or a library component
+     * while the Library toggle is off. Clear all three and say which were cleared.
      */
     private revealInInspect;
-    /** Show a transient message. Shared by the tabs (via `ctx.toast`) and the shell. */
-    private toastMessage;
-    private renderControls;
-    private renderTabs;
-    /** Panel-level operations the palette can trigger. */
-    private paletteActions;
-    /** Render (or tear down) the palette / shortcut overlay. */
-    private renderPalette;
-    /** The palette controller, created once so its input survives re-renders. */
-    private readonly palette;
+    private toast;
+    private dismissToast;
     private openPalette;
     private closePalette;
-    private cycleDock;
-    /** Arm / disarm the element picker from anywhere (palette, shortcut, button). */
+    private runCommand;
+    /** Every command the palette offers right now. */
+    private paletteCommands;
+    private openMenu;
+    private closeMenu;
+    private closeDialog;
+    private editJson;
+    private openAppMenu;
+    private openDockMenu;
+    private setMinimized;
+    private togglePause;
+    setHighlightUpdates(on: boolean): void;
+    private clearSession;
+    private exportSession;
+    private copyBugReport;
+    private promptImport;
     private togglePicker;
-    /**
-     * Panel-wide keyboard handling.
-     *
-     * Bound on the panel's own root, not the window: a debugger that swallows the
-     * page's keystrokes is worse than one with no shortcuts. The two exceptions
-     * are the palette and the picker toggle, which are bound on the window because
-     * you reach for them while your hands are in the app.
-     */
-    private bindKeyboard;
-    /** Alt+1..9 selects a tab; Alt+[ / Alt+] cycle. Returns true if handled. */
-    private tabShortcut;
-    private onKeyDown;
-    /**
-     * Watch for long tasks while the panel is open.
-     *
-     * A commit that measures 4ms in the profiler but janks the page is usually a
-     * long task the runtime did not cause (an image decode, a third-party script)
-     * — and being able to say so is the difference between fixing the right thing
-     * and rewriting a component that was never the problem.
-     */
-    private observeLongTasks;
-    private renderBody;
-    private renderToast;
-    private context;
-    /** Highlight the DOM node an instance rendered, labelled with its name. */
-    private highlightInstance;
     private flashApp;
-    private makeDraggable;
-    private makeResizable;
+    private bindWindow;
+    private unbindWindow;
+    private onRootKeyDown;
+    /** Alt+1…9 → the nth section; Alt+[ / Alt+] → previous / next. True when handled. */
+    private handleViewShortcut;
+    private beginMove;
+    private showSnap;
+    private beginResize;
+    private toggleMaximize;
+    private beginLauncherDrag;
     private persist;
+    /** @internal — lets the Security view read the live CSP violation log. */
+    get cspLog(): ReadonlyArray<CspViolation>;
+    /** @internal — whether an event target belongs to the panel (for the recorder). */
+    static isChrome(element: Element | null): boolean;
+    /** @internal */
+    get renderRoot(): Element | null;
 }
 /** Register the custom element (idempotent). */
 export declare function defineDevtoolsElement(): void;
@@ -183,12 +183,16 @@ export interface MountDevtoolsOptions {
     container?: HTMLElement;
     /** Pre-select an app by id. */
     appId?: string;
-    /** Start open (default `true`). */
+    /** Start open (default `true`); `false` starts as the launcher pill. */
     open?: boolean;
-    /** Open on a specific tab. */
+    /** Open on a specific section. */
     tab?: TabId;
     /** Dock position (default: whatever was last used, else floating). */
     dock?: DockMode;
+    /** Panel theme (default: last used, else follow the system). */
+    theme?: "system" | "dark" | "light";
+    /** Show the launcher pill while minimised (default `true`). */
+    launcher?: boolean;
 }
 export interface DevtoolsController {
     /** The live panel element. */
@@ -199,14 +203,20 @@ export interface DevtoolsController {
     close(): void;
     toggle(): void;
     selectApp(id: string): void;
-    /** Switch to a tab by id. */
+    /** Switch to a section by id. */
     selectTab(tab: TabId): void;
+    /** Change the dock position. */
+    dock(position: DockMode): void;
+    /** Load an exported session for offline inspection; returns its app id. */
+    importSession(json: string, fileName?: string): string;
+    /** Render synchronously (tests). */
+    flush(): void;
     /** Remove the panel from the DOM (the hook + event stream stay installed). */
     destroy(): void;
 }
 /**
  * Install the DevTools hook and mount an in-page panel. Idempotent at the hook
- * level — multiple panels share one event stream — but each call mounts a fresh
+ * level — multiple panels share one event stream — but each call mounts a new
  * panel element.
  *
  *   import { mountDevtools } from "aktion-runtime/devtools";

@@ -1,5 +1,6 @@
 import { AktionElement, defineElement } from './element.js';
 export { AktionElement, defineElement };
+export { VERSION } from './version.js';
 export * from './parser/index.js';
 export * from './runtime/index.js';
 export * from './library/index.js';

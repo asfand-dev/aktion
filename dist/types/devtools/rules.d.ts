@@ -1,8 +1,14 @@
 import { NetworkRule } from './protocol.js';
 /** Does one rule apply to this request? */
 export declare function ruleMatches(rule: NetworkRule, method: string, url: string): boolean;
-/** First enabled rule that applies, or `null`. */
-export declare function findMatchingRule(rules: ReadonlyArray<NetworkRule>, method: string, url: string): NetworkRule | null;
+/**
+ * First enabled rule that applies, or `null`.
+ *
+ * A rule with a `probability` below 1 applies to that fraction of matching
+ * requests; the ones it lets through fall through to the next rule, exactly as
+ * if it had not matched. `random` is injectable so tests are deterministic.
+ */
+export declare function findMatchingRule(rules: ReadonlyArray<NetworkRule>, method: string, url: string, random?: () => number): NetworkRule | null;
 /** A rule's effect on one request, in the shape the HTTP tap's gate returns. */
 export interface RuleVerdict {
     response?: {

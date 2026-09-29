@@ -357,6 +357,17 @@ export declare class AktionElement extends HTMLElement {
      */
     private buildDevtoolsRecord;
     /**
+     * Every read-set the runtime tracks, as one graph: derived atoms and the
+     * paths their last evaluation read, user component instances and the paths
+     * their bodies read (their memo deps), and effects with their subscriptions.
+     * Nothing here is recomputed — these are the sets that already drive
+     * fine-grained rendering.
+     */
+    private devtoolsReactivityGraph;
+    /** Static security profile of the planned program, cached until it changes. */
+    private devtoolsSecurityCache;
+    private devtoolsSecurityProfile;
+    /**
      * Per-module sources of a linked program, or the single inline source.
      *
      * A multi-file program is planned from a pre-linked AST, so the element only

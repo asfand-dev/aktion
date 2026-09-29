@@ -4948,8 +4948,8 @@ function serializeSx(sxRaw) {
   if (flexBasis) decls.push(["flex-basis", flexBasis]);
   const cols = num(get("columns"));
   if (cols) decls.push(["grid-template-columns", `repeat(${cols}, minmax(0, 1fr))`]);
-  const pos = asString$1(get("position")).trim();
-  if (POSITION.has(pos)) decls.push(["position", pos]);
+  const pos2 = asString$1(get("position")).trim();
+  if (POSITION.has(pos2)) decls.push(["position", pos2]);
   decls.push(["top", size(get("top"))]);
   decls.push(["right", size(get("right"))]);
   decls.push(["bottom", size(get("bottom"))]);
@@ -10050,8 +10050,8 @@ const ButtonGroup = {
     items.forEach((child, i) => {
       const node = helpers.renderNode(child);
       if (node instanceof HTMLElement) {
-        const pos = items.length === 1 ? "only" : i === 0 ? "start" : i === items.length - 1 ? "end" : "middle";
-        node.setAttribute("data-pos", pos);
+        const pos2 = items.length === 1 ? "only" : i === 0 ? "start" : i === items.length - 1 ? "end" : "middle";
+        node.setAttribute("data-pos", pos2);
         node.classList.add("rui-button-group-item");
         if (size2) node.setAttribute("data-size", size2);
       }
@@ -25069,10 +25069,10 @@ const MaskedInput = {
       if (masked === before) return masked;
       const caret = target.selectionStart ?? before.length;
       target.value = masked;
-      let pos = Math.min(masked.length, applyMask$1(before.slice(0, caret), mask).length);
-      while (pos < masked.length && pos < mask.length && !isMaskToken(mask[pos])) pos += 1;
+      let pos2 = Math.min(masked.length, applyMask$1(before.slice(0, caret), mask).length);
+      while (pos2 < masked.length && pos2 < mask.length && !isMaskToken(mask[pos2])) pos2 += 1;
       try {
-        target.setSelectionRange(pos, pos);
+        target.setSelectionRange(pos2, pos2);
       } catch {
       }
       return masked;
@@ -31013,16 +31013,16 @@ const Backdrop = {
     const blobs = asArray(props.blobs).slice(0, 3);
     blobs.forEach((c, i) => {
       const color2 = asString$1(c);
-      const pos = BACKDROP_BLOB_POS[i];
+      const pos2 = BACKDROP_BLOB_POS[i];
       const size2 = 460 - i * 40;
       const style = [
         `width:${size2}px`,
         `height:${size2}px`,
-        pos.t ? `top:${pos.t}` : "",
-        pos.l ? `left:${pos.l}` : "",
-        pos.r ? `right:${pos.r}` : "",
+        pos2.t ? `top:${pos2.t}` : "",
+        pos2.l ? `left:${pos2.l}` : "",
+        pos2.r ? `right:${pos2.r}` : "",
         `background:radial-gradient(circle, ${safeCssColor(color2, "#6366f1")}, transparent 70%)`,
-        `animation-delay:${pos.d}`
+        `animation-delay:${pos2.d}`
       ].filter(Boolean).join(";");
       root.append(el("div", { class: "rui-backdrop-blob", style }));
     });
@@ -33223,7 +33223,7 @@ const ALIGN_POSITIONS = (() => {
     const numAlign = Math.floor(v / 7) + 2;
     const step = v === 32 ? 26 : Math.ceil((v * 4 + 4) / (numAlign * 2 - 2)) * 2;
     const result = [6];
-    for (let pos = v * 4 + 10; result.length < numAlign; pos -= step) result.splice(1, 0, pos);
+    for (let pos2 = v * 4 + 10; result.length < numAlign; pos2 -= step) result.splice(1, 0, pos2);
     out.push(result);
   }
   return out;
@@ -39871,7 +39871,7 @@ const Util = {
           return;
         }
         nav.geolocation.getCurrentPosition(
-          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+          (pos2) => resolve({ lat: pos2.coords.latitude, lng: pos2.coords.longitude, accuracy: pos2.coords.accuracy }),
           () => resolve(null),
           options && typeof options === "object" ? options : void 0
         );
@@ -42431,6 +42431,10 @@ function writeUrlQuery(ctx, params) {
   }
   ctx.notify?.();
 }
+let globalAccessPolicy = "all";
+function getGlobalAccessPolicy() {
+  return globalAccessPolicy;
+}
 function isGlobalAllowed(name) {
   return true;
 }
@@ -42557,6 +42561,7 @@ function createContext(state, options = {}) {
     coverage: void 0,
     coverageSourcePath: options.coverageSourcePath,
     disposers: [],
+    computedDerivations: [],
     timers: { timeouts: /* @__PURE__ */ new Set(), intervals: /* @__PURE__ */ new Set() },
     budget: options.budget === null ? void 0 : options.budget ?? createRuntimeBudget()
   };
@@ -42680,6 +42685,7 @@ function installComputedStateDerivations(program, ctx) {
     computed.push(entry);
     recompute(entry);
   }
+  ctx.computedDerivations = computed;
   if (computed.length === 0) return;
   let recomputing = false;
   const unsubscribe = ctx.state.subscribe((changed) => {
@@ -54111,6 +54117,8 @@ ${below("xs")} {
   padding: 6px 12px;
 }
 
+:host([data-rui-theme="vision"]) .rui-form-actions { justify-content: flex-start; }
+
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="success"] .rui-callout-title { color: var(--rui-color-success-text); }
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="danger"] .rui-callout-title,
 :host([data-rui-theme="vision"]) .rui-callout[data-variant="error"] .rui-callout-title { color: var(--rui-color-danger-text); }
@@ -64221,9 +64229,12 @@ function ruleMatches(rule, method2, url) {
   }
   return url.includes(pattern);
 }
-function findMatchingRule(rules, method2, url) {
+function findMatchingRule(rules, method2, url, random = Math.random) {
   for (const rule of rules) {
-    if (ruleMatches(rule, method2, url)) return rule;
+    if (!ruleMatches(rule, method2, url)) continue;
+    const p = rule.probability;
+    if (typeof p === "number" && Number.isFinite(p) && p < 1 && random() >= Math.max(0, p)) continue;
+    return rule;
   }
   return null;
 }
@@ -64496,6 +64507,220 @@ function outlineProgram(statements) {
   }
   return out;
 }
+const HOST_GLOBAL_RISK = {
+  eval: "high",
+  Function: "high",
+  importScripts: "high",
+  document: "medium",
+  window: "medium",
+  globalThis: "medium",
+  self: "medium",
+  top: "medium",
+  parent: "medium",
+  opener: "medium",
+  frames: "medium",
+  localStorage: "medium",
+  sessionStorage: "medium",
+  indexedDB: "medium",
+  cookieStore: "medium",
+  caches: "medium",
+  fetch: "medium",
+  XMLHttpRequest: "medium",
+  WebSocket: "medium",
+  EventSource: "medium",
+  Worker: "medium",
+  SharedWorker: "medium",
+  navigator: "low",
+  location: "medium",
+  history: "low",
+  open: "medium",
+  postMessage: "medium",
+  alert: "low",
+  confirm: "low",
+  prompt: "low"
+};
+const ENDPOINT_BUILTINS = /* @__PURE__ */ new Set(["query", "mutation", "http", "socket", "sse", "subscription", "stream"]);
+const ENDPOINT_COMPONENTS = /* @__PURE__ */ new Set(["Http", "Query", "Mutation"]);
+const ESCAPE_HATCHES = /* @__PURE__ */ new Set(["HTMLTag", "Styles", "Svg", "Markdown"]);
+function pos(node) {
+  return { line: node?.loc?.line ?? 0, column: node?.loc?.column ?? 0 };
+}
+function staticText(expr) {
+  const node = expr;
+  if (!node) return null;
+  if (node.kind === "Literal" && typeof node.value === "string") return { text: node.value, dynamic: false };
+  if (node.kind === "Template") {
+    const quasis = node.quasis;
+    return { text: quasis.join("${…}"), dynamic: node.expressions.length > 0 };
+  }
+  if (node.kind === "Binary" && node.operator === "+") {
+    const left = staticText(node.left);
+    const right = staticText(node.right);
+    return { text: `${left?.text ?? "${…}"}${right?.text ?? "${…}"}`, dynamic: true };
+  }
+  return null;
+}
+function objectProp(expr, key2) {
+  const node = expr;
+  if (node?.kind !== "Object") return void 0;
+  return node.properties.find((p) => !p.spread && p.key === key2)?.value;
+}
+function declaredNames(program) {
+  const names = /* @__PURE__ */ new Set();
+  const addPattern = (pattern) => {
+    const p = pattern;
+    for (const binding of p?.bindings ?? []) {
+      if (binding.name) names.add(binding.name);
+      if (binding.pattern) addPattern(binding.pattern);
+    }
+  };
+  const addParams = (params) => {
+    for (const param of params ?? []) {
+      if (param.name) names.add(param.name);
+      if (param.pattern) addPattern(param.pattern);
+    }
+  };
+  walk(program, ({ node }) => {
+    const n = node;
+    switch (n.kind) {
+      case "Assignment":
+        if (!n.isState && typeof n.identifier === "string") names.add(n.identifier);
+        break;
+      case "ComponentDeclaration":
+      case "ActionDeclaration":
+        names.add(n.name);
+        addParams(n.params);
+        break;
+      case "HookDeclaration":
+      case "Lambda":
+        addParams(n.params);
+        break;
+      case "ForOfStatement":
+      case "ForInStatement":
+        if (typeof n.item === "string" && n.item) names.add(n.item);
+        if (n.pattern) addPattern(n.pattern);
+        break;
+      case "DestructureStatement":
+        addPattern(n);
+        break;
+      case "TryStatement":
+        if (typeof n.catchParam === "string") names.add(n.catchParam);
+        break;
+      case "Import":
+        for (const spec of n.specifiers ?? []) {
+          if (spec.local) names.add(spec.local);
+          else if (spec.imported) names.add(spec.imported);
+        }
+        break;
+    }
+  });
+  return names;
+}
+function analyzeProgramSecurity(program, policy) {
+  const declared = declaredNames(program);
+  const globals = /* @__PURE__ */ new Map();
+  const profile = {
+    policy: typeof policy === "string" ? policy : "custom",
+    policyNames: typeof policy === "string" ? void 0 : [...policy],
+    hostGlobals: [],
+    dynamicCode: [],
+    escapeHatches: [],
+    endpoints: [],
+    openUrls: [],
+    emits: [],
+    storage: []
+  };
+  const noteGlobal = (name, node) => {
+    const risk = HOST_GLOBAL_RISK[name];
+    if (!risk || declared.has(name)) return;
+    const existing = globals.get(name);
+    if (existing) existing.count += 1;
+    else globals.set(name, { name, risk, ...pos(node), count: 1 });
+  };
+  const noteEndpoint = (arg, via, node) => {
+    const direct = staticText(arg);
+    const url = direct ?? staticText(objectProp(arg, "url")) ?? staticText(objectProp(arg, "endpoint"));
+    const method2 = staticText(objectProp(arg, "method"))?.text;
+    if (url) profile.endpoints.push({ url: url.text, via, method: method2?.toUpperCase(), dynamic: url.dynamic, ...pos(node) });
+    else profile.endpoints.push({ url: "${…}", via, dynamic: true, ...pos(node) });
+  };
+  walk(program, ({ node }) => {
+    const n = node;
+    switch (n.kind) {
+      case "Identifier":
+        noteGlobal(n.name, n);
+        break;
+      case "Call": {
+        const callee = n.callee;
+        const args = n.arguments;
+        noteGlobal(callee, n);
+        if (callee === "eval" || callee === "Function") profile.dynamicCode.push({ what: `${callee}(…)`, ...pos(n) });
+        if ((callee === "setTimeout" || callee === "setInterval") && staticText(args[0]) !== null) {
+          profile.dynamicCode.push({ what: `${callee}("…") with a string body`, ...pos(n) });
+        }
+        if (callee === "fetch") noteEndpoint(args[0], "fetch", n);
+        if (ENDPOINT_COMPONENTS.has(callee)) noteEndpoint(args[0], callee, n);
+        if (ESCAPE_HATCHES.has(callee)) {
+          const dynamic = args.some((arg) => {
+            const text = staticText(arg);
+            return text === null ? arg?.kind !== "Object" : text.dynamic;
+          });
+          profile.escapeHatches.push({ component: callee, dynamic, ...pos(n) });
+        }
+        if (callee === "emit") {
+          const name = staticText(args[0]);
+          profile.emits.push({ name: name?.text ?? "${…}", ...pos(n) });
+        }
+        break;
+      }
+      case "New": {
+        const callee = n.callee;
+        if (callee?.kind === "Identifier" && callee.name === "Function") profile.dynamicCode.push({ what: "new Function(…)", ...pos(n) });
+        break;
+      }
+      case "Invoke": {
+        const callee = n.callee;
+        const args = n.arguments;
+        if (callee?.kind === "StateRef" && ENDPOINT_BUILTINS.has(callee.name)) noteEndpoint(args[0], `$${callee.name}`, n);
+        if (callee?.kind === "StateRef" && callee.name === "emit") {
+          const name = staticText(args[0]);
+          profile.emits.push({ name: name?.text ?? "${…}", ...pos(n) });
+        }
+        break;
+      }
+      case "MethodCall": {
+        const object = n.object;
+        const method2 = n.method;
+        const args = n.arguments;
+        const owner = object?.kind === "StateRef" || object?.kind === "Identifier" ? object.name : "";
+        if ((owner === "util" || owner === "helpers") && (method2 === "openUrl" || method2 === "openWindow")) {
+          const target = staticText(args[0]);
+          profile.openUrls.push({ via: `$${owner}.${method2}`, dynamic: target === null || target.dynamic, target: target?.text, ...pos(n) });
+        }
+        if (owner === "window" && method2 === "open") {
+          const target = staticText(args[0]);
+          profile.openUrls.push({ via: "window.open", dynamic: target === null || target.dynamic, target: target?.text, ...pos(n) });
+        }
+        if (owner === "storage" || owner === "localStorage" || owner === "sessionStorage") {
+          const key2 = staticText(args[0]);
+          if (["get", "set", "remove", "getItem", "setItem", "removeItem"].includes(method2)) {
+            profile.storage.push({ op: `${owner}.${method2}`, key: key2?.text ?? "${…}", ...pos(n) });
+          }
+        }
+        if (owner === "http" && ["get", "post", "put", "patch", "delete", "request"].includes(method2)) {
+          noteEndpoint(args[0], `$http.${method2}`, n);
+        }
+        break;
+      }
+    }
+  });
+  profile.hostGlobals = [...globals.values()].sort((a, b) => {
+    const order = { high: 0, medium: 1, low: 2 };
+    return order[a.risk] - order[b.risk] || a.name.localeCompare(b.name);
+  });
+  return profile;
+}
+const VERSION = "0.7.0";
 const ATTRIBUTE_THEME = "theme";
 const ATTRIBUTE_STREAMING = "streaming";
 const ATTRIBUTE_RESPONSE = "response";
@@ -64745,6 +64970,8 @@ class AktionElement extends HTMLElement {
      * See {@link handleRouteChange}.
      */
     __publicField(this, "devtoolsPendingRoute", null);
+    /** Static security profile of the planned program, cached until it changes. */
+    __publicField(this, "devtoolsSecurityCache", null);
     /** Whether the "state write during render" warning has already fired. */
     __publicField(this, "warnedStateWriteDuringRender", false);
     this.root = this.attachShadow({ mode: "open" });
@@ -65385,6 +65612,7 @@ class AktionElement extends HTMLElement {
     if (this.devtoolsRegistered) return;
     const hook = getDevtoolsHook();
     if (!hook) return;
+    hook.libraryVersion = VERSION;
     hook.registerApp(this.buildDevtoolsRecord());
     this.devtoolsRegistered = true;
     this.installDevtoolsHttpTap();
@@ -65490,8 +65718,54 @@ class AktionElement extends HTMLElement {
       },
       getNetworkRules: () => this.devtoolsNetworkRules.map((rule) => ({ ...rule })),
       /* ---- stats ---- */
-      getStats: () => this.devtoolsStats()
+      getStats: () => this.devtoolsStats(),
+      /* ---- reactivity + security (protocol 3) ---- */
+      getReactivityGraph: () => this.devtoolsReactivityGraph(),
+      getSecurityProfile: () => this.devtoolsSecurityProfile()
     };
+  }
+  /* ---- DevTools: reactivity graph -------------------------------------- */
+  /**
+   * Every read-set the runtime tracks, as one graph: derived atoms and the
+   * paths their last evaluation read, user component instances and the paths
+   * their bodies read (their memo deps), and effects with their subscriptions.
+   * Nothing here is recomputed — these are the sets that already drive
+   * fine-grained rendering.
+   */
+  devtoolsReactivityGraph() {
+    const derivations = /* @__PURE__ */ new Map();
+    for (const entry of this.context?.computedDerivations ?? []) derivations.set(entry.name, [...entry.deps]);
+    const components2 = /* @__PURE__ */ new Map();
+    for (const record of this.devtoolsComponents) {
+      if (record.kind !== "user" || !record.deps || record.deps.length === 0) continue;
+      components2.set(record.instanceKey, { instanceKey: record.instanceKey, name: record.name, deps: [...record.deps] });
+    }
+    return {
+      atoms: this.devtoolsStateMeta().map((meta) => ({
+        name: meta.name,
+        reserved: meta.reserved,
+        computed: meta.computed,
+        deps: derivations.get(meta.name) ?? []
+      })),
+      components: [...components2.values()],
+      effects: this.effectRunner.listMounted().map((effect) => ({
+        effectKey: effect.effectKey,
+        label: effect.label,
+        instanceKey: effect.instanceKey,
+        deps: [...effect.stateDeps],
+        triggers: effect.triggers
+      }))
+    };
+  }
+  devtoolsSecurityProfile() {
+    const program = this.devtoolsProgram;
+    if (!program) return null;
+    const policy = getGlobalAccessPolicy();
+    const cached = this.devtoolsSecurityCache;
+    if (cached && cached.program === program && cached.policy === policy) return cached.profile;
+    const profile = analyzeProgramSecurity(program, policy);
+    this.devtoolsSecurityCache = { program, policy, profile };
+    return profile;
   }
   /* ---- DevTools: program ------------------------------------------------ */
   /**
