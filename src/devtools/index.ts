@@ -2,60 +2,45 @@
  * Aktion DevTools (`aktion-runtime/devtools`)
  * ===========================================
  *
- * A real, in-page debugger for any `<aktion-app>` on the page — the Aktion
- * equivalent of the React / Vue DevTools, built around Aktion's own runtime
- * signals. Fourteen tabs:
+ * An in-page debugger for every `<aktion-app>` on the page, built around
+ * Aktion's own runtime signals. Sixteen sections:
  *
- *   - **Overview** — health, cost, and shape of the app, with a link to the tab
- *     that explains each number.
- *   - **Inspect** — the component-instance tree, an element picker that reaches
- *     inside the shadow root, live editing of a component's props, hooks, and
- *     internal UI state, plus its box model, computed styles, `--rui-*`
- *     variables, and accessibility properties.
- *   - **State** — a live, editable tree of every reactive `$state` atom, with
- *     per-atom change counts and snapshot-based time travel.
- *   - **Profiler** — every commit with its trigger, duration, DOM-diff time, and
- *     a flamegraph of which instances mounted / updated / were memoized (and
- *     *why*), a ranked component table, and detected hot-spots.
- *   - **Effects** — the lifecycle timeline (mount → run → cleanup → unmount)
- *     attributed to the trigger that fired it, plus every mounted effect with
- *     its subscriptions and a "run now" button.
- *   - **Network** — requests from the Aktion HTTP layer with headers, bodies,
- *     and a waterfall, plus rules that delay, mock, fail, or blackhole matching
- *     requests.
- *   - **Console** — the program's output and the runtime's own diagnostics, plus
- *     a REPL that evaluates Aktion expressions against the live program scope.
- *   - **Routes** — current route, the patterns the program declares, params, and
- *     navigation history.
- *   - **Data** — cached `$query` resources, `Store` / `$form` handles, and
- *     browser storage.
- *   - **Theme** — a live design-token editor with contrast checks.
- *   - **Source** — the running program with diagnostics on their lines, an
- *     outline, and edit-and-remount.
- *   - **Test** — record interactions into a runnable test, audit accessibility,
- *     measure DSL coverage, try Testing Library queries, and fuzz the UI.
- *   - **Timeline** — every event in one ordered stream, and a session export.
- *   - **Settings** — instrumentation switches, docking, and density.
- *
- * Everything is reachable two ways: the tab strip, and a command palette
- * (Ctrl/Cmd + K) that fuzzy-matches every tab and every action — press ? for
- * the full shortcut list.
+ *   - **Overview** — health, cost, and shape of the app; every number links on.
+ *   - **Inspector** — the component tree, an element picker that reaches inside
+ *     the shadow root, live-editable props / hooks / UI state, owned effects,
+ *     the DOM with its box model, computed styles, and what a screen reader says.
+ *   - **State** — every `$state` atom, editable; time travel (read-only, or live
+ *     in the app); snapshot diffs; each atom's change log; the reactivity graph.
+ *   - **Data** — `$query` resources with refetch / invalidate / simulate, stores
+ *     and forms, and browser storage.
+ *   - **Routes** — the current route, declared patterns, params, and history.
+ *   - **Timeline** — every event kind on its own track, zoomable, brushable.
+ *   - **Network** — requests with headers, bodies, and a waterfall; mock, delay,
+ *     fail, or flake any request; throttling presets; cURL / fetch / HAR export.
+ *   - **Console** — program and runtime output, watches, and a REPL.
+ *   - **Effects** — mounted effects, their triggers, and their lifecycle.
+ *   - **Performance** — commit chart, flame chart, ranked components, "why did
+ *     this render", insights, and Core Web Vitals (INP with its phases).
+ *   - **Accessibility** — a WCAG-mapped audit with on-page markers, the
+ *     accessibility tree, landmarks, headings, tab order, and vision simulation.
+ *   - **Security** — what the program can reach (from its AST), the rendered
+ *     output's sanitiser guarantees, transport, storage secrets, headers, CSP.
+ *   - **Testing** — record, assert, replay, and export tests (Aktion or
+ *     Playwright); scenarios; coverage; query playground; chaos; emulation.
+ *   - **Source**, **Theme**, **Settings**.
  *
  * Architecture mirrors the browser-DevTools split: the runtime ("backend")
- * always emits to a global hook (`__AKTION_DEVTOOLS_HOOK__`) but the calls are
- * cheap no-ops until a frontend subscribes. This module is the in-page
- * frontend; a browser-extension frontend could speak the identical protocol.
- *
- * Usage — drop one line into any page that loads Aktion:
+ * always emits to a global hook (`__AKTION_DEVTOOLS_HOOK__`), cheap no-ops until
+ * a frontend subscribes. This module is the in-page frontend.
  *
  *   import { mountDevtools } from "aktion-runtime/devtools";
  *   mountDevtools();
  *
- * It is a separate, opt-in entry so production bundles that never import it
- * pay nothing for the panel UI.
+ * It is a separate, opt-in entry, so production bundles that never import it
+ * pay nothing for the panel.
  */
 
-// Hook + protocol (the wire contract — also usable by an extension frontend).
+// Hook + protocol (the wire contract).
 export {
   installDevtoolsHook,
   getDevtoolsHook,
@@ -106,16 +91,12 @@ export type {
   ThemeInfo,
   AppStats,
   EvalResult,
+  ReactivityGraph,
+  ProgramSecurityProfile,
 } from "./protocol.js";
 
 // Value serialisation — shared by the runtime and any frontend.
-export {
-  toDevtoolsValue,
-  parseEditedValue,
-  previewOf,
-  toJsonText,
-  valueKind,
-} from "./serialize.js";
+export { toDevtoolsValue, parseEditedValue, previewOf, toJsonText, valueKind } from "./serialize.js";
 
 // Request rules (pure matching + verdict logic).
 export { findMatchingRule, ruleMatches, verdictFor, newRule } from "./rules.js";
@@ -144,6 +125,8 @@ export {
   buildTimeline,
   CAPS,
   type AppModel,
+  type AtomChange,
+  type ModelRevisions,
   type NetworkRequest,
   type LogEntry,
   type HistoryEntry,
@@ -154,34 +137,53 @@ export {
   type LongTask,
 } from "./model.js";
 
-// Accessibility audit (usable on its own, e.g. from a test).
+// Accessibility (usable on its own, e.g. from a test).
 export {
   auditAccessibility,
   groupFindings,
+  a11yScore,
+  RULE_INFO,
+  tabOrder,
+  landmarks,
+  headingOutline,
+  accessibilityTree,
+  announce,
   contrastRatio,
   relativeLuminance,
   parseColor,
   effectiveBackground,
   type A11yFinding,
   type A11yImpact,
+  type A11yCategory,
+  type Landmark,
+  type HeadingEntry,
+  type AxNode,
 } from "./a11y.js";
 
-// Interaction recorder + test code generation.
+// Interaction recorder, test generation (Aktion + Playwright), and replay.
 export {
   InteractionRecorder,
   generateTest,
   generateSnapshotTest,
+  generatePlaywrightTest,
+  playwrightLocator,
   chooseQuery,
   queryExpression,
   queryLabel,
+  resolveQuery,
+  replayStep,
+  isVisible,
   type RecordedStep,
   type QueryStrategy,
   type CodegenOptions,
+  type PlaywrightOptions,
+  type ReplayResult,
 } from "./recorder.js";
 
 // Highlight overlay + element picker, and the DOM readers behind them.
 export {
   InspectOverlay,
+  isPanelChrome,
   measureBox,
   describeElement,
   cssPath,
@@ -193,32 +195,71 @@ export {
   deepElementFromPoint,
   COMPUTED_GROUPS,
   type BoxModel,
+  type HighlightLabel,
+  type ScanEntry,
+  type OverlayMarker,
 } from "./overlay.js";
 
 // Console tap.
 export { ConsoleCapture, type CapturedLog } from "./console-capture.js";
 
-// Command palette — the fuzzy matcher, the command list, and the controller.
+// Command palette matching + the shortcut table.
 export {
-  PaletteController,
-  buildPalette,
   fuzzyScore,
+  fuzzyPositions,
   rankCommands,
   SHORTCUTS,
+  SHORTCUT_GROUPS,
   type Command,
-  type PaletteActions,
-  type PaletteHandlers,
-  type PaletteState,
+  type ShortcutGroup,
 } from "./palette.js";
 
-// Session export — everything the panel knows, as one JSON document.
-export { exportSessionJson } from "./session.js";
+// Session export / import and bug reports.
+export {
+  exportSessionJson,
+  importSessionJson,
+  bugReportMarkdown,
+  SESSION_FORMAT,
+  type ImportedSession,
+  type SessionSource,
+} from "./session.js";
 
-// Derivations the tabs expose because they are useful on their own: the
-// leaf-level diff between two state snapshots, and the visible-tree
-// projection that keeps the hierarchy when library components are hidden.
-export { diffSnapshots, type Change } from "./tabs/state.js";
-export { visibleNodes } from "./tabs/inspect.js";
+// Analysis: security, vitals, insights, chart layout, request export.
+export {
+  scanSecurity,
+  checkHeaders,
+  checkUrlSecrets,
+  classifySecret,
+  decodeJwt,
+  isLocalHost,
+  readPageStorage,
+  type SecurityReport,
+  type SecurityFinding,
+  type SecurityInput,
+  type Severity,
+  type CspViolation,
+  type HeaderCheck,
+  type OriginSummary,
+  type StorageItem,
+} from "./analysis/security.js";
+export {
+  VitalsMonitor,
+  computeInp,
+  computeCls,
+  rate as rateVital,
+  THRESHOLDS as VITAL_THRESHOLDS,
+  emptyVitals,
+  type VitalsSnapshot,
+  type InteractionRecord,
+  type LongTaskRecord,
+} from "./analysis/vitals.js";
+export { performanceInsights, healthIssues, commitRate, type Insight } from "./analysis/insights.js";
+export { layoutFlame, inclusiveTimes, packLanes, niceTicks, type FlameNode, type FlameLayout } from "./analysis/layout.js";
+export { toCurl, toFetch, toHar, shellQuote } from "./analysis/har.js";
+
+// Derivations the views expose because they are useful on their own.
+export { diffSnapshots, type Change } from "./views/state.js";
+export { visibleNodes } from "./views/inspect.js";
 
 // The in-page panel + its programmatic mount API.
 export {
@@ -229,8 +270,18 @@ export {
   type MountDevtoolsOptions,
   type DevtoolsController,
 } from "./panel.js";
+export { DEVTOOLS_UI_VERSION } from "./meta.js";
 
-export type { TabId, DockMode, UiState, TabContext, TabDefinition } from "./context.js";
+export type {
+  TabId,
+  DockMode,
+  UiState,
+  TabContext,
+  TabDefinition,
+  ViewContext,
+  ViewDefinition,
+  PanelTheme,
+} from "./context.js";
 
 import { defineDevtoolsElement } from "./panel.js";
 

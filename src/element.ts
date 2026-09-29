@@ -61,7 +61,7 @@ import {
 } from "./runtime/index.js";
 import { HttpRuntime, invalidateQueries, type HttpDevtoolsTap } from "./runtime/http.js";
 import { EffectRunner } from "./runtime/effects.js";
-import { evaluate, isPureLiteralExpression, type EvaluationContext } from "./runtime/evaluator.js";
+import { evaluate, getGlobalAccessPolicy, isPureLiteralExpression, type EvaluationContext } from "./runtime/evaluator.js";
 import type { ComponentLibrary, ComponentSpec, UIProvider } from "./library/types.js";
 import { defaultLibrary, validateProgramSchema } from "./library/index.js";
 import { mergeLibraries } from "./library/registry.js";
@@ -106,7 +106,9 @@ import type {
   InstanceNode,
   NetworkRule,
   ProgramAnalysis,
+  ProgramSecurityProfile,
   QueryInfo,
+  ReactivityGraph,
   RouteInfo,
   StateAtomMeta,
   StoreInfo,
@@ -116,6 +118,7 @@ import { bodyPreview, bodySize, toDevtoolsValue, truncate } from "./devtools/ser
 import { findMatchingRule, verdictFor } from "./devtools/rules.js";
 import { ancestorsOf, buildInstanceTree, parentKeyOf } from "./devtools/tree.js";
 import {
+  analyzeProgramSecurity,
   collectRoutePatterns,
   describeDiagnostics,
   describeHookCells,
@@ -126,6 +129,7 @@ import {
   outlineProgram,
 } from "./devtools/introspect.js";
 import { INSTANCE_ATTR, OWNER_ATTR } from "./renderer/renderer.js";
+import { VERSION } from "./version.js";
 
 const ATTRIBUTE_THEME = "theme";
 const ATTRIBUTE_STREAMING = "streaming";
@@ -1280,6 +1284,7 @@ export class AktionElement extends HTMLElement {
     // late-attach path: the page opened DevTools *after* the app mounted.
     const hook = getDevtoolsHook();
     if (!hook) return;
+    hook.libraryVersion = VERSION;
     hook.registerApp(this.buildDevtoolsRecord());
     this.devtoolsRegistered = true;
     this.installDevtoolsHttpTap();
@@ -1398,7 +1403,60 @@ export class AktionElement extends HTMLElement {
 
       /* ---- stats ---- */
       getStats: () => this.devtoolsStats(),
+
+      /* ---- reactivity + security (protocol 3) ---- */
+      getReactivityGraph: () => this.devtoolsReactivityGraph(),
+      getSecurityProfile: () => this.devtoolsSecurityProfile(),
     };
+  }
+
+  /* ---- DevTools: reactivity graph -------------------------------------- */
+
+  /**
+   * Every read-set the runtime tracks, as one graph: derived atoms and the
+   * paths their last evaluation read, user component instances and the paths
+   * their bodies read (their memo deps), and effects with their subscriptions.
+   * Nothing here is recomputed — these are the sets that already drive
+   * fine-grained rendering.
+   */
+  private devtoolsReactivityGraph(): ReactivityGraph {
+    const derivations = new Map<string, string[]>();
+    for (const entry of this.context?.computedDerivations ?? []) derivations.set(entry.name, [...entry.deps]);
+    const components = new Map<string, { instanceKey: string; name: string; deps: string[] }>();
+    for (const record of this.devtoolsComponents) {
+      if (record.kind !== "user" || !record.deps || record.deps.length === 0) continue;
+      components.set(record.instanceKey, { instanceKey: record.instanceKey, name: record.name, deps: [...record.deps] });
+    }
+    return {
+      atoms: this.devtoolsStateMeta().map((meta) => ({
+        name: meta.name,
+        reserved: meta.reserved,
+        computed: meta.computed,
+        deps: derivations.get(meta.name) ?? [],
+      })),
+      components: [...components.values()],
+      effects: this.effectRunner.listMounted().map((effect) => ({
+        effectKey: effect.effectKey,
+        label: effect.label,
+        instanceKey: effect.instanceKey,
+        deps: [...effect.stateDeps],
+        triggers: effect.triggers,
+      })),
+    };
+  }
+
+  /** Static security profile of the planned program, cached until it changes. */
+  private devtoolsSecurityCache: { program: Program; policy: unknown; profile: ProgramSecurityProfile } | null = null;
+
+  private devtoolsSecurityProfile(): ProgramSecurityProfile | null {
+    const program = this.devtoolsProgram;
+    if (!program) return null;
+    const policy = getGlobalAccessPolicy();
+    const cached = this.devtoolsSecurityCache;
+    if (cached && cached.program === program && cached.policy === policy) return cached.profile;
+    const profile = analyzeProgramSecurity(program, policy);
+    this.devtoolsSecurityCache = { program, policy, profile };
+    return profile;
   }
 
   /* ---- DevTools: program ------------------------------------------------ */

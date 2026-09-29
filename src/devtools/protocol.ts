@@ -323,6 +323,12 @@ export interface NetworkRule {
   headers?: Record<string, string>;
   /** Error message for `fail` / `offline`. */
   message?: string;
+  /**
+   * Chance (0–1) that the rule applies to a matching request; omitted means
+   * always. Protocol 3. This is what turns a `fail` rule into a flaky network —
+   * the failure mode a QA pass most needs and a hand-written mock never has.
+   */
+  probability?: number;
 }
 
 /** Live snapshot of one `$query` / `Http({...})` resource. */
@@ -598,6 +604,41 @@ export interface EvalResult {
   /** Full text of the result, un-truncated, for large values. */
   text?: string;
   error?: string;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Protocol 3: reactivity graph + security profile                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Who reads what. Nodes are atoms (plain and derived), component instances,
+ * and effects; an edge `a → b` means "b re-evaluates when a changes". The
+ * runtime already tracks every one of these read-sets to drive fine-grained
+ * rendering — this is the same data, exposed.
+ */
+export interface ReactivityGraph {
+  atoms: Array<{ name: string; reserved: boolean; computed: boolean; deps: string[] }>;
+  components: Array<{ instanceKey: string; name: string; deps: string[] }>;
+  effects: Array<{ effectKey: string; label: string; instanceKey: string | null; deps: string[]; triggers?: string }>;
+}
+
+/**
+ * What a program's (trusted) text can reach and where its data can go —
+ * computed from the real AST by the runtime. See SECURITY.md for why this is
+ * the right question under Aktion's trust model.
+ */
+export interface ProgramSecurityProfile {
+  /** `all`, `safe`, or `custom` (a named allow-list). */
+  policy: string;
+  /** The allow-list, for a custom policy. */
+  policyNames?: string[];
+  hostGlobals: Array<{ name: string; risk: "high" | "medium" | "low"; line: number; column: number; count: number }>;
+  dynamicCode: Array<{ what: string; line: number; column: number }>;
+  escapeHatches: Array<{ component: string; line: number; column: number; dynamic: boolean }>;
+  endpoints: Array<{ url: string; via: string; method?: string; dynamic: boolean; line: number; column: number }>;
+  openUrls: Array<{ via: string; dynamic: boolean; target?: string; line: number; column: number }>;
+  emits: Array<{ name: string; line: number; column: number }>;
+  storage: Array<{ op: string; key: string; line: number; column: number }>;
 }
 
 /* -------------------------------------------------------------------------- */

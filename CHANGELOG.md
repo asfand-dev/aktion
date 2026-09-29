@@ -5,6 +5,66 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-09-28
+
+### DevTools 3.0: A Rebuilt Panel, and a QA Workbench
+
+The in-page debugger (`aktion-runtime/devtools`) was rebuilt from the ground up
+— a new shell, a new rendering engine, and sixteen sections — so it is as
+useful for testing and reviewing an app as it is for debugging one.
+
+- **A new shell.** The panel floats, snaps into a dock when dragged to an edge
+  (pushing the page aside so the app stays visible), tears off again, and
+  minimises to a draggable launcher that shows the error count. Dark and light
+  themes, compact density, and reduced motion are all respected.
+- **A live status bar** shows commits, frame rate, INP, requests, JS heap,
+  errors and warnings, each one a shortcut to the section that explains it.
+- **Sidebar badges now only mean trouble** — failing queries, unmatched routes,
+  serious accessibility issues, high-severity security findings, program errors.
+- **Accessibility section.** A WCAG 2.2-mapped audit with a Lighthouse-style
+  score, findings numbered on the page, a fix and the failing success criteria
+  for each, and the nearest passing colour for contrast failures. It adds the
+  accessibility tree, landmarks and the heading outline, a keyboard focus walk
+  that moves real focus and announces each stop, colour-blindness and
+  low-vision simulation, 200% text scaling, and a contrast checker.
+- **Security section.** Follows Aktion's trust model: what the program text can
+  reach (policy, host globals, dynamic code, escape hatches, endpoints),
+  sanitiser escapes in the live DOM, every origin contacted, credentials in
+  storage (JWTs decoded), an on-request response-header and CSP check, and
+  live CSP violation reports.
+- **Testing section.** Record a flow, add assertions by pointing at the page,
+  replay it step by step, and export an Aktion test or a Playwright spec.
+  Save named scenarios (state, request rules, route) and re-apply them in one
+  click; measure DSL coverage; try Testing Library queries; run a seeded chaos
+  monkey that fuzzes inputs; emulate slow or flaky networks, RTL, and larger text.
+- **Data and Routes sections.** Simulate a query's loading or error state in one
+  click, call store methods, and edit browser storage; see every declared route
+  with a form for its params, a match tester, and session route coverage.
+- **Performance.** A canvas flame chart with zoom and pan, ranked and
+  per-component costs, a "why did this render" breakdown per commit, insights,
+  and Core Web Vitals (INP with its phases, LCP, CLS, frame rate, long tasks).
+  Clicks on the panel itself no longer count toward the app's INP.
+- **Timeline, Network, Console, Effects, State, Inspect, Source, and Theme** were
+  redesigned: one zoomable timeline for every event; cURL, fetch and HAR export
+  plus throttling presets and flaky-network rules; a reactivity graph and a
+  preview-in-app mode for time travel; a live-validated source editor with a
+  diff and undo; colour pickers and one-click contrast fixes for theme tokens.
+- **Sessions.** An exported session can now be imported back into the panel and
+  inspected offline, and "Copy a bug report" produces a ready-to-paste Markdown
+  report with steps, errors, failed requests, and vitals.
+- **The runtime now exports `VERSION`**, and the DevTools protocol is at version 3
+  with two additive capabilities: `getReactivityGraph()` and
+  `getSecurityProfile()`.
+- **Breaking:** the palette's page-wide shortcut is now Shift+Alt+K (Ctrl/Cmd+K
+  still works inside the panel), so it no longer collides with apps that bind
+  Ctrl/Cmd+K themselves; Shift+Alt+D shows or hides the panel and Shift+Alt+C
+  picks an element.
+- **Breaking:** the palette is now a view function, so the `PaletteController`,
+  `buildPalette`, `PaletteState`, `PaletteActions` and `PaletteHandlers` exports
+  were removed; `fuzzyScore` and `rankCommands` remain.
+- Fixed object keys never being highlighted in the Source view, and "Copy as
+  cURL" putting every flag and its value on separate lines.
+
 ## [0.7.0](https://github.com/asfand-dev/aktion/compare/v0.6.8...v0.7.0) (2026-09-25)
 
 

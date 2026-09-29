@@ -255,69 +255,15 @@ describe("effect timeline", () => {
   });
 });
 
-describe("panel", () => {
-  it("mounts, lists the app, and derives a live model", async () => {
-    const controller = mountDevtools();
-    expect(controller.element).toBeInstanceOf(AktionDevtoolsElement);
-    await flush();
-
-    const screen = render(`
-      $count = 7
-      function Label() { return Text(\`n=\${$count}\`) }
-      $app(Label())
-    `);
-    await flush();
-
-    // The app was adopted and a model derived.
-    const model = controller.element.getModel();
-    expect(model).toBeTruthy();
-    expect(model!.state.count).toBe(7);
-    expect(model!.commits.length).toBeGreaterThan(0);
-
-    // The panel opens on Overview; the State tab shows the atom by name.
-    const chrome = controller.element.shadowRoot!.textContent ?? "";
-    expect(chrome).toContain("Aktion DevTools");
-    expect(chrome).toContain("Overview");
-
-    clickTab(controller.element, "State");
-    await flush();
-    expect(controller.element.shadowRoot!.textContent ?? "").toContain("count");
-
-    // A pushed edit flows through and updates the model on the next flush.
-    const app = [...controller.hook.apps.values()].pop()!;
-    app.setState("count", 99);
-    await flush();
-    expect(controller.element.getModel()!.state.count).toBe(99);
-    expect(screen.state.get("count")).toBe(99);
-
-    controller.destroy();
-  });
-});
-
-/* -------------------------------------------------------------------------- */
-
-/**
- * Click a panel tab by its label. Each tab renders an icon glyph before its
- * label, so the match is on containment rather than a prefix.
+/*
+ * The panel UI itself — every section, the shell, keyboard, focus and scroll
+ * survival — is covered in `devtools-panel.test.ts`, which drives the 3.0
+ * panel through its own controls. This file keeps the hook and protocol
+ * contract, plus the model the panel derives from it.
  */
-function clickTab(el: AktionDevtoolsElement, label: string): void {
-  const tabs = [...el.shadowRoot!.querySelectorAll(".tab")] as HTMLElement[];
-  const btn = tabs.find((t) => (t.textContent ?? "").includes(label));
-  if (!btn) throw new Error(`devtools tab not found: ${label}`);
-  btn.click();
-}
 
-/** Click a filter chip / sub-view toggle by its exact label. */
-function clickChip(el: AktionDevtoolsElement, label: string): void {
-  const chips = [...el.shadowRoot!.querySelectorAll(".filter-chip")] as HTMLElement[];
-  const btn = chips.find((c) => (c.textContent ?? "").trim() === label);
-  if (!btn) throw new Error(`devtools chip not found: ${label}`);
-  btn.click();
-}
-
-
-describe("panel — insights & visualizations", () => {
-  it("tracks per-atom reactivity heat (change counts) in the model", async () => {
+describe("derived model", () => {
+  it("tracks per-atom reactivity heat (change counts)", async () => {
     const controller = mountDevtools();
     const screen = render(`
       $count = 0
@@ -333,84 +279,7 @@ describe("panel — insights & visualizations", () => {
 
     const model = controller.element.getModel()!;
     expect(model.changeCounts.get("count")).toBeGreaterThanOrEqual(2);
-    controller.destroy();
-  });
-
-  it("renders the State tab with a reactivity-heat badge and activity sort", async () => {
-    const controller = mountDevtools();
-    const screen = render(`
-      $count = 0
-      $app(Column([
-        Text(\`\${$count}\`),
-        Button("inc", { onClick: () => $count = $count + 1 })
-      ]))
-    `);
-    await flush();
-    await screen.click("inc");
-    await flush();
-    clickTab(controller.element, "State");
-    await flush();
-
-    const text = controller.element.shadowRoot!.textContent ?? "";
-    expect(text).toContain("changes");
-    expect(text).toContain("Activity");
-    controller.destroy();
-  });
-
-  it("renders the profiler summary, reactivity hot-atoms, and ranked table", async () => {
-    const controller = mountDevtools();
-    const screen = render(`
-      $count = 0
-      function Row(label) { return Text(\`\${label}:\${$count}\`) }
-      $app(Column([
-        Row("A"),
-        Button("inc", { onClick: () => $count = $count + 1 })
-      ]))
-    `);
-    await flush();
-    await screen.click("inc");
-    await flush();
-
-    clickTab(controller.element, "Profiler");
-    await flush();
-
-    // The default Commit view: summary, the commit strip, and the flamegraph.
-    const commitView = controller.element.shadowRoot!.textContent ?? "";
-    expect(commitView).toContain("Performance summary");
-    expect(commitView).toContain("Commit #");
-    expect(commitView).toContain("Row");
-
-    // The Ranked view adds the per-component table and the hot-atom breakdown.
-    clickChip(controller.element, "Ranked");
-    await flush();
-    const rankedView = controller.element.shadowRoot!.textContent ?? "";
-    expect(rankedView).toContain("Components");
-    expect(rankedView).toContain("Reactivity");
-    // The hot-atoms panel attributes a commit to the `count` path.
-    expect(rankedView).toContain("count");
-    controller.destroy();
-  });
-
-  it("renders the effect summary and visual timeline", async () => {
-    const controller = mountDevtools();
-    const screen = render(`
-      $count = 0
-      $effect(() => { cleanup(() => {}) }, [$count])
-      $app(Column([
-        Text(\`\${$count}\`),
-        Button("inc", { onClick: () => $count = $count + 1 })
-      ]))
-    `);
-    await flush();
-    await screen.click("inc");
-    await flush();
-
-    clickTab(controller.element, "Effects");
-    await flush();
-
-    const text = controller.element.shadowRoot!.textContent ?? "";
-    expect(text).toContain("Effect summary");
-    expect(text).toContain("Timeline");
+    expect(controller.element).toBeInstanceOf(AktionDevtoolsElement);
     controller.destroy();
   });
 });

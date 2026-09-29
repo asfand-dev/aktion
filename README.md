@@ -170,7 +170,7 @@ Everything you need at runtime ships in a single bundle:
 - **SSR / SSG.** `renderToString(program, { path, initialState })` → `{ html, state }` for server-side rendering. `renderToStaticMarkup` for static pages.
 - **DX tooling.** `tailwindToSx(classString)` maps Tailwind classes to `sx`; `cssToSx(cssText)` and `styledToSx(template)` do the same for plain CSS and styled-components templates; `htmlToAktion(html)` imports common HTML/JSX; `componentSchema(library)` emits a stable JSON schema for editor autocomplete; `buildGallery(library)` generates a self-contained component explorer; `suggestComponent("Buttn", library)` returns typo candidates.
 - **Testing utilities.** `render(program)` / `renderComponent(expression)` return a `Screen` with Testing-Library-style queries and a `screen.user` interaction driver; plus `waitFor` / `act` / `flush` for async assertions, `json(data, status?)` for mocked fetches, `within(node)` for scoped queries, and `axe(node)` for a dependency-free a11y audit — all from the `aktion-runtime/test` entry.
-- **DevTools.** `aktion-runtime/devtools` ships a fourteen-tab in-page debugger: a component-instance tree with an element picker that reaches inside the shadow root, live editing of any component's props / hooks / internal UI state, a writable `$state` tree with snapshot time travel, a render profiler with flamegraph and memoization analysis, an effect timeline plus a run-now button, a network inspector with request mocking and latency injection, a console that captures the runtime's own diagnostics plus a REPL for Aktion expressions, route / query / store / storage explorers, a live theme-token editor with contrast checks, the program source with diagnostics on their lines and edit-and-remount, and a Test tab that records interactions into a runnable test, audits accessibility, measures DSL coverage, and fuzzes the UI. Everything is reachable from a command palette (`Ctrl`/`Cmd`+`K`) or the keyboard, and four aids run continuously while you use the app: watch expressions, a flash over every component that re-rendered, `debugger` on write to a chosen atom, and `performance.measure` marks so Aktion commits line up in the browser's own profiler. Import it once on the page and call `el.connectDevtools()` (or label an instance with `data-devtools-label`) — see [`docs/devtools.html`](./docs/devtools.html).
+- **DevTools.** `aktion-runtime/devtools` ships an in-page debugger and QA workbench with sixteen sections: an element picker and component inspector with live prop / hook / UI-state editing, an editable `$state` tree with a leaf-level diff, a reactivity graph and time travel (with preview-in-app), the query cache (simulate loading or failure in one click), stores, forms and browser storage, routes with param forms and route coverage, one zoomable timeline for every event, a network inspector with mocks, flaky-network rules, throttling and cURL / fetch / HAR export, a console with an expression REPL and watches, effects, a canvas flame-chart profiler with a per-commit "why did this render" and Core Web Vitals (INP phases, LCP, CLS, FPS, long tasks), a WCAG 2.2 accessibility audit numbered on the page with a keyboard focus walk and colour-blindness / low-vision simulation, a security scanner that follows Aktion's trust model, a test recorder with assertions, replay and Aktion or Playwright export, scenarios, DSL coverage, a query playground and a seeded chaos monkey, a live-validated source editor with history and diff, and a theme-token editor with contrast fixes. It docks (pushing the page aside) or floats, minimises to a launcher, and everything is reachable from a command palette (`Ctrl`/`Cmd`+`K` in the panel, `Shift`+`Alt`+`K` anywhere). Sessions export to one JSON file that the panel can import and inspect offline. Mount it with `mountDevtools()` (label instances with `data-devtools-label`) — see [`docs/devtools.html`](./docs/devtools.html).
 - **A React-like DOM reconciler.** Diffs each re-render against the live
   DOM. Text-input value, selection, IME state, scroll positions,
   `<details>.open`, and stateful primitives like `Tabs` are all preserved
@@ -1802,7 +1802,8 @@ The migration / DX / test helpers, and where each one lives:
 | `suggestComponent(name, library)` | "Did you mean?" typo candidates by edit distance. |
 | `renderToString(program, opts)` / `renderToStaticMarkup` | SSR/SSG — render a program to `{ html, state }` under any DOM (browser or Node + happy-dom/jsdom); pair with `StateStore.hydrate`. From the main entry. |
 | `within(node)` / `axe(node)` | Testing helpers from `aktion-runtime/test` — scoped queries and a dependency-free a11y audit (`img-alt`, `svg-name`, `button-name`, `link-name`, `label` — with `aria-labelledby` resolution —, `duplicate-id`, `tabindex`). |
-| `el.connectDevtools()` | Attach a live instance to the DevTools panel from `aktion-runtime/devtools` — component inspector, writable `$state`, profiler, effects, network, console + REPL, routes, data, theme, source, and test tools. See [`docs/devtools.html`](./docs/devtools.html). |
+| `el.connectDevtools()` | Attach a live instance to the DevTools panel from `aktion-runtime/devtools` — inspector, writable `$state`, data, routes, timeline, network, console + REPL, effects, profiler, accessibility, security, testing, source, and theme tools. See [`docs/devtools.html`](./docs/devtools.html). |
+| `VERSION` | The runtime's version string (kept in lockstep with `package.json` by the release tooling). DevTools reports it as `hook.libraryVersion`. From the main entry. |
 
 ### Validating `.aktion` files from the CLI
 
@@ -2171,7 +2172,7 @@ consumes from the CDN.
 | `performance.html`                  | Performance & optimization — re-render avoidance, memoization rules, the safety budget, bundle size, and `setResponse` vs `appendChunk`. |
 | `troubleshooting.html`              | Troubleshooting / FAQ — focus loss, effects not firing, memoized-away components, the `Map` component vs JS `Map`, dropped styles, missing i18n keys. |
 | `errors.html`                       | Error handling & debugging — reading parse/runtime errors, the render-loop and budget guards, the `error` event, and strict mode. |
-| `devtools.html`                     | The `aktion-runtime/devtools` panel — mount it with one line, then inspect the component tree, edit props / state / theme tokens live, profile commits, mock requests, and record interactions into a test. |
+| `devtools.html`                     | The `aktion-runtime/devtools` panel — mount it with one line, then inspect and edit components, state and theme tokens live, profile commits, mock and throttle requests, audit accessibility and security, and record interactions into Aktion or Playwright tests. |
 | `testing.html`                      | The Aktion Testing Library (`aktion-runtime/test`) — render a program, query the shadow DOM the way a user sees it, drive real interactions, assert on output, `$state`, emitted events, and mocked `$http`. |
 | `typescript.html`                   | TypeScript guide — public types, subpath entry points, typing custom components/helpers/interceptors, host event payloads, a typed host-wrapper recipe. |
 | `accessibility.html`                | Accessibility guide — conformance target, keyboard map, screen-reader/streaming behaviour, built-in ARIA, and theme contrast. |
@@ -2256,9 +2257,11 @@ The full catalog with zoomed-out live preview cards lives at
 │   ├── compiler/              #   .aktion linker (linkProgram / linkProject / resolveSpecifier)
 │   ├── plugin/                #   The Vite plugin (aktion-runtime/vite)
 │   ├── testing/               #   The testing library (aktion-runtime/test)
-│   ├── devtools/              #   DevTools: hook + protocol, the 14-tab panel (tabs/), overlay,
-│   │                          #   command palette, a11y audit, interaction recorder,
-│   │                          #   session export (aktion-runtime/devtools)
+│   ├── devtools/              #   DevTools (aktion-runtime/devtools): hook + protocol, the panel
+│   │                          #   shell (panel.ts, shell/), a keyed vdom + virtual list +
+│   │                          #   canvas widgets (core/), UI kit and charts (ui/), the 16
+│   │                          #   sections (views/), analysis (security, vitals, insights,
+│   │                          #   HAR), overlay, a11y audit, recorder, sessions
 │   ├── theme/                 #   Token system + injected stylesheet
 │   ├── prompt/                #   System prompt generator
 │   ├── tooling/               #   Host-side helpers (formatter, inspector, language service)
@@ -2392,10 +2395,11 @@ mode, the morph value/event contracts, `sx` conversion, third-party
 interop, the sanitiser + DoS security suite, registry-wide spec
 invariants over all 282 components, the testing library, DevTools (the
 event protocol, the inspector's capability surface, prop overrides,
-request rules, the accessibility audit, the interaction recorder, and the
-panel's own reliability — focus and caret survival, per-render caching,
-tree hierarchy under a filter, the command palette, state diffing, and
-cross-tab reveal), the
+request rules, the accessibility audit, the interaction recorder with
+Playwright codegen and replay, the security scanner, web vitals, request
+export, sessions, the panel's reconciler, and every section driven end to
+end — focus and caret survival, memoised derivations, the command palette
+and shortcuts, time travel, storage editing, and cross-section reveal), the
 standalone LSP server, and the editor-tooling surfaces (navigation,
 semantic tokens, signature help, namespace members).
 

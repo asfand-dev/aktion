@@ -24,6 +24,7 @@ import type {
   RouteEvent,
   StateEvent,
 } from "./protocol.js";
+import { previewOf } from "./serialize.js";
 
 /* -------------------------------------------------------------------------- */
 /*  Caps                                                                       */
@@ -44,6 +45,8 @@ export const CAPS = {
   errors: 200,
   /** State snapshots retained for time travel. */
   history: 60,
+  /** Changes remembered per atom for the change log. */
+  atomLog: 60,
 } as const;
 
 /* -------------------------------------------------------------------------- */
@@ -116,6 +119,30 @@ export interface LongTask {
   duration: number;
 }
 
+/** One recorded change to a root atom. */
+export interface AtomChange {
+  time: number;
+  /** Dotted paths the flush reported under this root. */
+  paths: string[];
+  before: string;
+  after: string;
+  /** Raw values, kept only while they are small enough to diff. */
+  beforeValue?: unknown;
+  afterValue?: unknown;
+}
+
+/** Per-kind revision counters, so views can memoise on exactly what they read. */
+export interface ModelRevisions {
+  commit: number;
+  state: number;
+  effect: number;
+  network: number;
+  route: number;
+  emit: number;
+  log: number;
+  error: number;
+}
+
 /** Per-app derived model the panel maintains from the event stream. */
 export interface AppModel {
   commits: CommitRecord[];
@@ -141,6 +168,19 @@ export interface AppModel {
   firstTime: number | null;
   /** Timestamp of the most recent observed event. */
   lastTime: number;
+  /** Bumped on every ingested event. */
+  rev: number;
+  revs: ModelRevisions;
+  /** Root atom → its recent changes, oldest first. */
+  atomLog: Map<string, AtomChange[]>;
+  /** Instance key → renders (non-memoised) observed this session. */
+  renderCounts: Map<string, number>;
+  /**
+   * While true, commit snapshots are not added to `history`. Set during a live
+   * time-travel preview: hydrating the app to an old snapshot produces commits
+   * of its own, and recording them would shift the very history being scrubbed.
+   */
+  suspendHistory?: boolean;
   /** Totals since the session began, including events already trimmed away. */
   totals: {
     commits: number;
@@ -171,6 +211,10 @@ export function emptyModel(): AppModel {
     longTasks: [],
     firstTime: null,
     lastTime: 0,
+    rev: 0,
+    revs: { commit: 0, state: 0, effect: 0, network: 0, route: 0, emit: 0, log: 0, error: 0 },
+    atomLog: new Map(),
+    renderCounts: new Map(),
     totals: {
       commits: 0, effects: 0, network: 0, routes: 0,
       emits: 0, logs: 0, errors: 0, stateFlushes: 0,
@@ -212,6 +256,8 @@ export function ingest(model: AppModel, event: DevtoolsEvent, fromBuffer = false
   const time = eventTime(event);
   if (model.firstTime === null || time < model.firstTime) model.firstTime = time;
   if (time > model.lastTime) model.lastTime = time;
+  model.rev += 1;
+  model.revs[event.kind] += 1;
 
   switch (event.kind) {
     case "commit":
@@ -260,7 +306,11 @@ function ingestCommit(model: AppModel, event: CommitRecord): void {
   model.commits.push(event);
   model.totals.commits += 1;
   cap(model.commits, CAPS.commits);
-  if (event.snapshot) {
+  for (const record of event.components) {
+    if (record.phase === "memo") continue;
+    model.renderCounts.set(record.instanceKey, (model.renderCounts.get(record.instanceKey) ?? 0) + 1);
+  }
+  if (event.snapshot && !model.suspendHistory) {
     model.history.push({
       commitId: event.commitId,
       time: event.startTime,
@@ -271,9 +321,45 @@ function ingestCommit(model: AppModel, event: CommitRecord): void {
   }
 }
 
+/** Values larger than this (in preview characters) are logged by preview only. */
+const LOG_VALUE_LIMIT = 4000;
+
+function smallEnough(value: unknown): boolean {
+  if (value === null || typeof value !== "object") return true;
+  try {
+    return (JSON.stringify(value)?.length ?? 0) <= LOG_VALUE_LIMIT;
+  } catch {
+    return false;
+  }
+}
+
 function ingestState(model: AppModel, event: StateEvent, fromBuffer: boolean): void {
+  const previous = model.state;
   model.state = event.snapshot;
   model.totals.stateFlushes += 1;
+  const byRoot = new Map<string, string[]>();
+  for (const path of event.changedPaths) {
+    const root = rootOf(path);
+    const bucket = byRoot.get(root);
+    if (bucket) bucket.push(path);
+    else byRoot.set(root, [path]);
+  }
+  for (const [root, paths] of byRoot) {
+    const before = previous[root];
+    const after = event.snapshot[root];
+    const change: AtomChange = { time: event.time, paths, before: previewOf(before), after: previewOf(after) };
+    if (smallEnough(before) && smallEnough(after)) {
+      change.beforeValue = before;
+      change.afterValue = after;
+    }
+    let log = model.atomLog.get(root);
+    if (!log) {
+      log = [];
+      model.atomLog.set(root, log);
+    }
+    log.push(change);
+    cap(log, CAPS.atomLog);
+  }
   for (const path of event.changedPaths) {
     const root = rootOf(path);
     // A replayed event's timestamp is in the past, so recording it as "changed
@@ -336,6 +422,8 @@ function ingestNetwork(model: AppModel, event: NetworkEvent): void {
 export function ingestLog(model: AppModel, entry: LogEntry): void {
   const last = model.logs[model.logs.length - 1];
   model.totals.logs += 1;
+  model.rev += 1;
+  model.revs.log += 1;
   if (last && last.level === entry.level && last.text === entry.text && last.origin === entry.origin) {
     last.count += entry.count;
     last.time = entry.time;
@@ -358,8 +446,12 @@ export function clearModel(model: AppModel): void {
   model.longTasks.length = 0;
   model.changed.clear();
   model.changeCounts.clear();
+  model.atomLog.clear();
+  model.renderCounts.clear();
   model.firstTime = null;
   model.lastTime = 0;
+  model.rev += 1;
+  for (const key of Object.keys(model.revs) as Array<keyof ModelRevisions>) model.revs[key] += 1;
 }
 
 /* -------------------------------------------------------------------------- */

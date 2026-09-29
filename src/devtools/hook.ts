@@ -36,7 +36,9 @@ import type {
   InstanceNode,
   NetworkRule,
   ProgramAnalysis,
+  ProgramSecurityProfile,
   QueryInfo,
+  ReactivityGraph,
   RouteInfo,
   StateAtomMeta,
   StoreInfo,
@@ -55,8 +57,13 @@ export const HOOK_KEY = "__AKTION_DEVTOOLS_HOOK__";
  * props + source on component records, and the inspector half of
  * {@link DevtoolsAppRecord}. Every addition is optional or additive, so a v1
  * frontend still works against a v2 backend (it just sees less).
+ *
+ * `3` added the reactivity graph and the program security profile to
+ * {@link DevtoolsAppRecord}, and `probability` on {@link NetworkRule}. Again
+ * purely additive: a v2 frontend ignores them, and a v3 frontend feature-detects
+ * them on a v2 backend.
  */
-export const DEVTOOLS_PROTOCOL_VERSION = 2;
+export const DEVTOOLS_PROTOCOL_VERSION = 3;
 
 /* -------------------------------------------------------------------------- */
 /*  Instrumentation switches                                                   */
@@ -234,6 +241,13 @@ export interface DevtoolsAppRecord {
 
   /** Cheap runtime counters for the overview + perf tabs. */
   getStats?(): AppStats;
+
+  /* ---- Reactivity + security (protocol 3) ---------------------------- */
+
+  /** Who reads what: atoms, derived atoms, component instances, effects. */
+  getReactivityGraph?(): ReactivityGraph;
+  /** What the program text can reach, from its AST, plus the access policy. */
+  getSecurityProfile?(): ProgramSecurityProfile | null;
 }
 
 export type DevtoolsEventListener = (event: DevtoolsEvent) => void;
@@ -351,12 +365,13 @@ export function unregisterDevtoolsApp(id: string): void {
  * conforming object instead. Calling it twice returns the same instance, so
  * multiple `mountDevtools()` panels share one event stream.
  */
-export function installDevtoolsHook(libraryVersion = "0.6.x"): AktionDevtoolsHook {
+export function installDevtoolsHook(libraryVersion?: string): AktionDevtoolsHook {
   const existing = getDevtoolsHook();
   if (existing) {
-    // Refresh the recorded library version but keep the live registry +
-    // subscribers intact so a second panel attaches to the same hub.
-    existing.libraryVersion = libraryVersion;
+    // Keep the live registry + subscribers intact so a second panel attaches to
+    // the same hub. The version is only overwritten when a caller supplies one:
+    // a panel must not clobber the version the RUNTIME reported.
+    if (libraryVersion) existing.libraryVersion = libraryVersion;
     return existing;
   }
 
@@ -369,7 +384,7 @@ export function installDevtoolsHook(libraryVersion = "0.6.x"): AktionDevtoolsHoo
   const hook: AktionDevtoolsHook = {
     aktion: true,
     protocolVersion: DEVTOOLS_PROTOCOL_VERSION,
-    libraryVersion,
+    libraryVersion: libraryVersion ?? "unknown",
     apps,
     buffer,
     bufferLimit: 2000,
