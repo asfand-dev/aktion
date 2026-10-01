@@ -387,6 +387,19 @@ export class AktionElement extends HTMLElement {
   /** True when the program text changed and the runtime needs a re-plan. */
   private programDirty = true;
   /**
+   * Text has arrived through `appendChunk` since the program was last replaced,
+   * so it is probably unfinished and parsed leniently (see `ParseOptions.streaming`)
+   * until `setResponse`, `loadSnapshot`, `mountCompiled`, `clear` or the end of a
+   * `streaming` run settles it.
+   */
+  private chunked = false;
+  /**
+   * The last parse of `currentResponse` accepted a string or template literal
+   * left open at the end of the text. Only then can the finished text report
+   * something a lenient parse did not.
+   */
+  private lenientTail = false;
+  /**
    * Set of state paths the most recent render actually read (e.g. `"user.name"`,
    * `"cart"`). The state subscription uses it to gate re-renders: a reactive
    * write only re-renders when its changed path overlaps something the UI
@@ -816,7 +829,10 @@ export class AktionElement extends HTMLElement {
       // The last parse ran in streaming mode, which lets a string left open at
       // the end of the text pass. Parse the finished text again so a literal
       // that never closed is reported.
-      if (!parseBooleanAttribute(value)) this.programDirty = true;
+      if (!parseBooleanAttribute(value)) {
+        this.chunked = false;
+        if (this.lenientTail) this.programDirty = true;
+      }
       // Refresh the error banner: it is suppressed while streaming so partial
       // mid-line content does not flash transient parse errors to the user.
       this.updateErrorBanner();
@@ -849,8 +865,17 @@ export class AktionElement extends HTMLElement {
 
   /** Replace the current program with `text` and re-render from scratch. */
   setResponse(text: string): void {
-    if (text === this.currentResponse) return;
+    if (text === this.currentResponse) {
+      // Handing back the text that `appendChunk` already built declares it final.
+      this.chunked = false;
+      if (this.lenientTail && !this.streaming) {
+        this.programDirty = true;
+        this.scheduleRender();
+      }
+      return;
+    }
     this.currentResponse = text;
+    this.chunked = false;
     // Switching to the string path: drop any compiled artefact + its id so a
     // not-yet-rendered `mountCompiled` can't win.
     this.pendingCompiled = null;
@@ -946,6 +971,7 @@ export class AktionElement extends HTMLElement {
    */
   loadSnapshot(payload: { programText: string; state: Record<string, unknown> }): void {
     this.currentResponse = payload.programText;
+    this.chunked = false;
     this.pendingCompiled = null;
     this.compiledSourceId = null;
     this.programDirty = true;
@@ -988,6 +1014,7 @@ export class AktionElement extends HTMLElement {
     // Keep the source so `applyDelta`, `serializeState` round-trips, and a
     // reconnect (which re-parses `currentResponse`) all keep working.
     this.currentResponse = compiled.source;
+    this.chunked = false;
     this.compiledSourceId = compiled.path;
     // Shallow-clone with a fresh errors array: `replan()` reassigns
     // `program.errors`, and re-mounting the same artefact (e.g. replaying a
@@ -1112,7 +1139,12 @@ export class AktionElement extends HTMLElement {
     }));
   }
 
-  /** Append a streaming chunk and re-render. */
+  /**
+   * Append a streaming chunk and re-render. Text added this way is parsed
+   * leniently, so a string still open at the end of it renders as far as it has
+   * arrived; `setResponse(...)` or clearing the `streaming` attribute makes the
+   * next parse strict again.
+   */
   appendChunk(chunk: string): void {
     // Coerce defensively so callers can forward e.g. `decoder.decode(...)`
     // results without checking emptiness, and so a stray non-string never
@@ -1121,6 +1153,7 @@ export class AktionElement extends HTMLElement {
     const text = typeof chunk === "string" ? chunk : String(chunk);
     if (text === "") return;
     this.currentResponse += text;
+    this.chunked = true;
     this.programDirty = true;
     this.scheduleRender();
   }
@@ -1195,6 +1228,7 @@ export class AktionElement extends HTMLElement {
 
   clear(): void {
     this.currentResponse = "";
+    this.chunked = false;
     this.pendingCompiled = null;
     this.compiledSourceId = null;
     this.state.rebind([]);
@@ -2500,7 +2534,9 @@ export class AktionElement extends HTMLElement {
     // parser entirely. The streamed-string path falls back to parse(). Consumed
     // once — `mountCompiled` keeps `currentResponse` in sync so a reconnect /
     // later string update re-parses the same program correctly.
-    const program = this.pendingCompiled ?? parse(this.currentResponse, { streaming: this.streaming });
+    const compiled = this.pendingCompiled;
+    const program = compiled ?? parse(this.currentResponse, { streaming: this.streaming || this.chunked });
+    this.lenientTail = compiled === null && program.openLiteral === true;
     this.pendingCompiled = null;
     // Schema validator runs alongside the parser so positional arity
     // overflows, unknown props, enum mismatches, built-in-name collisions,

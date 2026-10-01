@@ -404,7 +404,7 @@ All members live on the `<aktion-app>` element.
 | Attribute       | Values                                          | Description                                                                         |
 | --------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `theme`         | Theme name or JSON token map                    | Switches the theme. JSON objects are merged on top of the default `light` tokens.   |
-| `streaming`     | `true` / unset                                  | Hint that text is still being appended. The error banner is suppressed while set, and a string left open at the end of the text is accepted as-is. |
+| `streaming`     | `true` / unset                                  | Hint that text is still being appended. The error banner is suppressed while set, and a string left open at the end of the text is accepted as-is (so is anything fed through `appendChunk`, until `setResponse` or clearing `streaming`). |
 | `response`      | Aktion text                        | Sets the program declaratively. Re-renders whenever the attribute changes.          |
 | `src`           | URL to an `.aktion` file                        | Loads the program from an external file resolved relative to the document. The file is linked through the in-browser project linker, so an entry that `import`s other modules resolves and fetches its whole graph. `response` (and any inner text) takes precedence; changing `src` reloads. |
 | `showerrors`    | `true` / unset                                  | If present and `true`, displays parse errors in the rendered UI. Defaults to off.   |

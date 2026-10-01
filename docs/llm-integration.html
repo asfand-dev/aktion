@@ -308,7 +308,7 @@ function promptFor(mode) {
         <tbody>
           <tr><td>The error banner is suppressed.</td><td>The banner renders, if <code>showerrors</code> is on.</td></tr>
           <tr><td>The <code>error</code> event is not dispatched for parse failures or runtime-budget aborts.</td><td>Genuinely broken syntax surfaces through the <code>error</code> event.</td></tr>
-          <tr><td>A string or template literal still open at the end of the text is accepted as it is so far, so a long template literal grows as it arrives.</td><td>The final text is parsed again, so a literal that never closed is reported as <em>Unterminated string literal</em>.</td></tr>
+          <tr><td>A string or template literal still open at the end of the text is accepted as it is so far, so a long template literal grows as it arrives.</td><td>If a literal was left open, the final text is parsed again and it is reported as <em>Unterminated string literal</em>. Otherwise nothing is re-planned, so no effect or request runs a second time.</td></tr>
         </tbody>
       </table>
       <p>

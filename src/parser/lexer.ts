@@ -103,6 +103,11 @@ export interface Token {
    * unsupported) from a plain string.
    */
   template?: true;
+  /**
+   * Set on the `String` / `TemplateString` token that was still open at the end
+   * of the input and was accepted only because of {@link TokenizeOptions.streaming}.
+   */
+  open?: true;
 }
 
 export type CommentKind = "Line" | "Block";
@@ -310,6 +315,16 @@ export function tokenize(source: string, comments?: RawComment[], options: Token
       continue;
     }
 
+    // U+2028 / U+2029 are line terminators in JS, so they end a statement like
+    // a newline. They do not advance the line counter, which counts `\n` only.
+    if (ch === "\u2028" || ch === "\u2029") {
+      const startLine = line;
+      const startCol = column;
+      advance();
+      push("Newline", ch, startLine, startCol);
+      continue;
+    }
+
     // Whitespace (excluding newline), including the Unicode spaces JS also
     // treats as whitespace (NBSP, BOM, …) so they are not reported as stray
     // characters.
@@ -402,7 +417,7 @@ export function tokenize(source: string, comments?: RawComment[], options: Token
         advance();
         push("String", value, startLine, startCol);
       } else if (options.streaming === true && i >= source.length) {
-        push("String", value, startLine, startCol);
+        tokens.push({ type: "String", value, line: startLine, column: startCol, open: true });
       } else {
         tokens.push({
           type: "Error",
@@ -491,7 +506,8 @@ export function tokenize(source: string, comments?: RawComment[], options: Token
         }
         chunk += advance();
       }
-      if (peek() === "`") {
+      const open = peek() !== "`";
+      if (!open) {
         advance();
       } else if (options.streaming !== true) {
         tokens.push({
@@ -505,7 +521,14 @@ export function tokenize(source: string, comments?: RawComment[], options: Token
       }
       parts.push({ kind: "str", text: chunk });
       if (!sawExpr) {
-        tokens.push({ type: "String", value: chunk, line: startLine, column: startCol, template: true });
+        tokens.push({
+          type: "String",
+          value: chunk,
+          line: startLine,
+          column: startCol,
+          template: true,
+          ...(open ? { open: true as const } : {}),
+        });
         continue;
       }
       tokens.push({
@@ -514,6 +537,7 @@ export function tokenize(source: string, comments?: RawComment[], options: Token
         line: startLine,
         column: startCol,
         parts,
+        ...(open ? { open: true as const } : {}),
       });
       continue;
     }
@@ -727,11 +751,21 @@ function unexpectedCharacterMessage(ch: string): string {
     case "@": return `${base} — decorators are not supported in Aktion.`;
     case "#": return `${base} — private fields (\`#name\`) are not supported in Aktion; use a plain property.`;
     case "\\": return `${base} — a backslash is only valid inside a string or template literal.`;
-    default:
-      return ch > "\x7f"
-        ? `${base} — names may only use a-z, A-Z, 0-9 and _ (non-ASCII text belongs inside a string).`
-        : `${base}.`;
+    case "\u201C":
+    case "\u201D":
+    case "\u201E":
+    case "\u2018":
+    case "\u2019":
+    case "\u201A":
+      return `${base} — this is a typographic (curly) quote; use a straight quote (" or ') instead.`;
   }
+  if (/^[\p{Cc}\p{Cf}]$/u.test(ch)) {
+    const hex = ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0");
+    return `Unexpected invisible character U+${hex} — delete it (it is usually pasted in with the text).`;
+  }
+  return ch > "\x7f"
+    ? `${base} — names may only use a-z, A-Z, 0-9 and _ (non-ASCII text belongs inside a string).`
+    : `${base}.`;
 }
 
 function isDigit(ch: string): boolean {

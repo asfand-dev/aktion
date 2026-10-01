@@ -86,6 +86,41 @@ describe("statements need a boundary — previously silent constructs now error"
   });
 });
 
+describe("Error tokens are reported with their own message wherever the grammar meets them", () => {
+  it.each([
+    ["an object key", "x = { #: 1 }\n"],
+    ["a parameter", "function f(#) {}\n"],
+    ["a declared name", "let # = 1\n"],
+    ["an import name", 'import { # } from "./a.aktion"\n'],
+    ["an import alias", 'import { a as # } from "./a.aktion"\n'],
+    ["after import specifiers", "import { a } #\n"],
+    ["a switch body", "function f(x) { switch (x) { # } }\n"],
+    ["an effect dependency", "$effect(() => {}, [#])\n"],
+    ["a property name", "x = o.#\n"],
+    ["an operand", "x = (#)\n"],
+  ])("%s", (_where, source) => {
+    const { errors } = parse(source);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.message).toContain("Unexpected character '#'");
+    expect(errors[0]!.message).not.toContain('got Error');
+  });
+
+  it("suggests straight quotes for curly ones", () => {
+    const { errors } = parse("x = \u201Cabc\u201D\n");
+    expect(errors[0]).toMatchObject({ line: 1, column: 5 });
+    expect(errors[0]!.message).toContain("typographic (curly) quote; use a straight quote");
+    expect(parse("x = \u2018a\u2019\n").errors[0]!.message).toContain("curly");
+  });
+
+  it("prints the code point of an invisible character", () => {
+    const { errors } = parse("x = 1\u200B\n");
+    expect(errors[0]).toMatchObject({ line: 1, column: 6 });
+    expect(errors[0]!.message).toContain("Unexpected invisible character U+200B");
+    expect(parse("x = \u00AD1\n").errors[0]!.message).toContain("U+00AD");
+    expect(parse("x = 1\u0000\n").errors[0]!.message).toContain("U+0000");
+  });
+});
+
 describe("statements need a boundary — recovery", () => {
   it("drops only the offending statement and parses the lines around it", () => {
     const program = parse("a = 1\nb = c as T\nd = 2\n");
@@ -183,9 +218,25 @@ describe("statements need a boundary — valid programs are unaffected", () => {
     expect(program.statements).toHaveLength(4);
   });
 
-  it("`do … while` still needs a boundary after its condition", () => {
-    expect(errorsOf("function f() { do { a() } while (b()) c() }\n")).toHaveLength(1);
+  it("`do … while (c)` may be followed by a statement on the same line, as in JS", () => {
+    expect(errorsOf("function f() { do { a() } while (b()) c() }\n")).toEqual([]);
     expect(errorsOf("function f() { do { a() } while (b())\n c() }\n")).toEqual([]);
+  });
+
+  it("a block comment that spans lines counts as a line break", () => {
+    const program = parse("a = 1 /* x\n y */ b = 2\n");
+    expect(program.errors).toEqual([]);
+    expect(program.statements).toHaveLength(2);
+    expect(errorsOf("a = 1 /* x */ b = 2\n")).toHaveLength(1);
+    expect(errorsOf("a = 1 // x\n b = 2\n")).toEqual([]);
+  });
+
+  it("U+2028 and U+2029 end a statement like a newline", () => {
+    for (const separator of ["\u2028", "\u2029"]) {
+      const program = parse(`a = 1${separator}b = 2${separator}`);
+      expect(program.errors).toEqual([]);
+      expect(program.statements).toHaveLength(2);
+    }
   });
 
   it("switch cases and brace-less bodies keep working", () => {
@@ -243,6 +294,12 @@ describe("lexer — Error tokens", () => {
     const tokens = tokenize('x = "abc');
     expect(tokens.map((t) => t.type)).toEqual(["Identifier", "Operator", "Error", "EOF"]);
     expect(tokens[2]).toMatchObject({ value: "abc", line: 1, column: 5 });
+  });
+
+  it("marks the token that was accepted while still open", () => {
+    expect(tokenize('x = "abc', undefined, { streaming: true })[2]).toMatchObject({ type: "String", open: true });
+    expect(tokenize("x = `a${b}", undefined, { streaming: true })[2]).toMatchObject({ type: "TemplateString", open: true });
+    expect(tokenize('x = "abc"', undefined, { streaming: true })[2]!.open).toBeUndefined();
   });
 
   it("marks an interpolation-free backtick string so a tagged template can be told apart", () => {
@@ -310,6 +367,14 @@ describe("streaming — partial programs still parse progressively", () => {
     const program = parse("$body = `line one\nline ${$n} two", { streaming: true });
     expect(program.errors).toEqual([]);
     expect(program.statements).toHaveLength(1);
+  });
+
+  it("flags a program whose open literal was accepted, and only then", () => {
+    expect(parse('x = "abc', { streaming: true }).openLiteral).toBe(true);
+    expect(parse("x = `a\nb", { streaming: true }).openLiteral).toBe(true);
+    expect(parse('x = "abc"', { streaming: true }).openLiteral).toBeUndefined();
+    expect(parse('x = "abc').openLiteral).toBeUndefined();
+    expect(parse('x = "abc\ny = 1', { streaming: true }).openLiteral).toBeUndefined();
   });
 
   it("a string cut off by a newline is an error even in streaming mode", () => {

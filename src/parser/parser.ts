@@ -52,6 +52,7 @@ export interface ParseOptions {
 export function parse(source: string, options: ParseOptions = {}): Program {
   const comments: RawComment[] = [];
   const tokens = tokenize(source, comments, { streaming: options.streaming });
+  const openLiteral = tokens[tokens.length - 2]?.open === true;
   const ctx = new ParserContext(tokens, comments);
   const statements: Statement[] = [];
   const errors: ParseError[] = [];
@@ -75,7 +76,7 @@ export function parse(source: string, options: ParseOptions = {}): Program {
   // container's to attach.
   attachComments(ctx, statements, 0, ctx.peek().line + 1);
 
-  return { statements, errors };
+  return openLiteral ? { statements, errors, openLiteral } : { statements, errors };
 }
 
 /**
@@ -104,8 +105,9 @@ export function parse(source: string, options: ParseOptions = {}): Program {
 const nodeEndLine = new WeakMap<object, number>();
 
 /**
- * Statements whose grammar ends in a `}`. Like JS, Aktion lets the next
- * statement start right after the brace on the same line
+ * Statements whose grammar ends in a `}` block, plus `do … while (c)`, which
+ * JS's automatic semicolon insertion also lets the next statement follow. Like
+ * JS, Aktion lets the next statement start right after them on the same line
  * (`function a() {} function b() {}`); every other statement must be followed
  * by a newline, a `;`, a closing `}` or the end of the input.
  */
@@ -118,6 +120,7 @@ const BLOCK_TERMINATED_STATEMENTS: ReadonlySet<Statement["kind"]> = new Set<Stat
   "ForInStatement",
   "ForClassicStatement",
   "WhileStatement",
+  "DoWhileStatement",
   "SwitchStatement",
   "TryStatement",
 ]);
@@ -143,7 +146,8 @@ const TYPESCRIPT_DECLARATION_WORDS: ReadonlySet<string> = new Set([
  * (`class A {}`, `` tag`x` ``, `x as T`, `1n`, `a$b`) parses as several
  * unrelated statements and no error is reported. The boundary is the newline
  * or `;` the statement consumed, or the newline / `;` / `}` / end of input
- * that follows it.
+ * that follows it. As in JS, a block comment that spans lines counts as a
+ * newline.
  */
 function requireStatementBoundary(ctx: ParserContext, startIndex: number): void {
   const prev = ctx.tokenAt(ctx.snapshot() - 1);
@@ -151,12 +155,13 @@ function requireStatementBoundary(ctx: ParserContext, startIndex: number): void 
   const next = ctx.peek();
   if (next.type === "EOF" || next.type === "Newline" || next.type === "Semicolon") return;
   if (next.type === "Punctuation" && next.value === "}") return;
+  if (prev && ctx.hasLineBreakCommentBetween(prev, next)) return;
   throw statementBoundaryError(ctx.tokenAt(startIndex), prev, next);
 }
 
 function statementBoundaryError(head: Token | undefined, prev: Token | undefined, next: Token): ParseError {
   const at = (tok: Token, message: string): ParseError => ({ message, line: tok.line, column: tok.column });
-  if (next.type === "Error") return at(next, next.message ?? `Unexpected character '${next.value}'.`);
+  if (next.type === "Error") return at(next, unexpected(next, ""));
   if (!prev) return at(next, `Expected end of statement but found ${describeToken(next)}.`);
 
   if (prev.type === "Identifier" && prev.value === "class") {
@@ -204,6 +209,14 @@ function statementBoundaryError(head: Token | undefined, prev: Token | undefined
 /** True when `b` starts exactly where the single-line token `a` ends (no whitespace between). */
 function adjacent(a: Token, b: Token): boolean {
   return a.line === b.line && b.column === a.column + a.value.length;
+}
+
+/**
+ * Message for a token the grammar did not expect: the lexer's own diagnostic
+ * for an `Error` token (`Unexpected character '#' …`), `fallback` otherwise.
+ */
+function unexpected(tok: Token, fallback: string): string {
+  return tok.type === "Error" ? (tok.message ?? `Unexpected character '${tok.value}'.`) : fallback;
 }
 
 /** Human-readable token description for diagnostics. */
@@ -452,7 +465,7 @@ function parseFunctionParams(ctx: ParserContext): DeclParam[] {
         params.push(param);
       } else {
         throw {
-          message: `Expected parameter name, got ${tok.type} "${tok.value}"`,
+          message: unexpected(tok, `Expected parameter name, got ${tok.type} "${tok.value}"`),
           line: tok.line,
           column: tok.column,
         } satisfies ParseError;
@@ -596,9 +609,10 @@ function parseEffectDep(
   }
 
   throw {
-    message:
-      `Unexpected ${head.type} "${head.value}" inside effect dependency array. ` +
-      `Expected $state or a string token ("mount", "unmount", "every(N)", etc.).`,
+    message: head.type === "Error"
+      ? unexpected(head, "")
+      : `Unexpected ${head.type} "${head.value}" inside effect dependency array. ` +
+        `Expected $state or a string token ("mount", "unmount", "every(N)", etc.).`,
     line: head.line,
     column: head.column,
   } satisfies ParseError;
@@ -626,7 +640,7 @@ function parseVarDecl(ctx: ParserContext): Statement {
     identifier = ctx.consume().value;
   } else {
     throw {
-      message: `Expected identifier after "${start.value}", got ${head.type} "${head.value}"`,
+      message: unexpected(head, `Expected identifier after "${start.value}", got ${head.type} "${head.value}"`),
       line: head.line,
       column: head.column,
     } satisfies ParseError;
@@ -919,6 +933,18 @@ class ParserContext {
     return this.tokens[this.index + offset] ?? { type: "EOF", value: "", line: 0, column: 0 };
   }
 
+  /**
+   * True when a `/* … *\/` comment that spans lines sits between `a` and `b`.
+   * Comments are not tokens, so this is the only trace of the line break they
+   * hide.
+   */
+  hasLineBreakCommentBetween(a: Token, b: Token): boolean {
+    return this.comments.some((c) =>
+      c.kind === "Block" && c.endLine > c.line &&
+      (c.line > a.line || (c.line === a.line && c.column > a.column)) &&
+      (c.line < b.line || (c.line === b.line && c.column < b.column)));
+  }
+
   /** Token at absolute index `i`, or `undefined` outside the stream. */
   tokenAt(i: number): Token | undefined {
     return this.tokens[i];
@@ -981,9 +1007,7 @@ class ParserContext {
     const tok = this.peek();
     if (tok.type !== type || (value !== undefined && tok.value !== value)) {
       throw {
-        message: tok.type === "Error"
-          ? tok.message!
-          : `Expected ${type}${value !== undefined ? ` "${value}"` : ""} but got ${tok.type} "${tok.value}"`,
+        message: unexpected(tok, `Expected ${type}${value !== undefined ? ` "${value}"` : ""} but got ${tok.type} "${tok.value}"`),
         line: tok.line,
         column: tok.column,
       } satisfies ParseError;
@@ -1016,7 +1040,7 @@ function parseAssignment(ctx: ParserContext): Statement | null {
     isState = true;
   } else {
     throw {
-      message: `Expected identifier at start of statement, got ${head.type} "${head.value}"`,
+      message: unexpected(head, `Expected identifier at start of statement, got ${head.type} "${head.value}"`),
       line: head.line,
       column: head.column,
     } satisfies ParseError;
@@ -1062,7 +1086,7 @@ function parseImportStatement(ctx: ParserContext): Statement {
       imported = ctx.consume().value;
     } else {
       throw {
-        message: `Expected an import name, got ${importedTok.type} "${importedTok.value}"`,
+        message: unexpected(importedTok, `Expected an import name, got ${importedTok.type} "${importedTok.value}"`),
         line: importedTok.line,
         column: importedTok.column,
       } satisfies ParseError;
@@ -1081,7 +1105,7 @@ function parseImportStatement(ctx: ParserContext): Statement {
         local = ctx.consume().value;
       } else {
         throw {
-          message: `Expected an alias after \`as\`, got ${aliasTok.type} "${aliasTok.value}"`,
+          message: unexpected(aliasTok, `Expected an alias after \`as\`, got ${aliasTok.type} "${aliasTok.value}"`),
           line: aliasTok.line,
           column: aliasTok.column,
         } satisfies ParseError;
@@ -1112,7 +1136,7 @@ function parseImportStatement(ctx: ParserContext): Statement {
   const fromTok = ctx.peek();
   if (!(fromTok.type === "Identifier" && fromTok.value === "from")) {
     throw {
-      message: `Expected \`from\` after import specifiers, got ${fromTok.type} "${fromTok.value}"`,
+      message: unexpected(fromTok, `Expected \`from\` after import specifiers, got ${fromTok.type} "${fromTok.value}"`),
       line: fromTok.line,
       column: fromTok.column,
     } satisfies ParseError;
@@ -1561,7 +1585,7 @@ function parseUnary(ctx: ParserContext): Expression {
           const propTok = ctx.consume();
           if (propTok.type !== "Identifier" && propTok.type !== "Keyword") {
             throw {
-              message: propTok.type === "Error" ? propTok.message! : `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
+              message: unexpected(propTok, `Expected Identifier but got ${propTok.type} "${propTok.value}"`),
               line: propTok.line,
               column: propTok.column,
             } satisfies ParseError;
@@ -1653,7 +1677,7 @@ function parsePostfixFrom(ctx: ParserContext, base: Expression): Expression {
       const propTok = ctx.consume();
       if (propTok.type !== "Identifier" && propTok.type !== "Keyword" && propTok.type !== "StateIdentifier") {
         throw {
-          message: propTok.type === "Error" ? propTok.message! : `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
+          message: unexpected(propTok, `Expected Identifier but got ${propTok.type} "${propTok.value}"`),
           line: propTok.line,
           column: propTok.column,
         } satisfies ParseError;
@@ -1698,7 +1722,7 @@ function parsePostfixFrom(ctx: ParserContext, base: Expression): Expression {
         const propTok = ctx.consume();
         if (propTok.type !== "Identifier" && propTok.type !== "Keyword" && propTok.type !== "StateIdentifier") {
           throw {
-            message: propTok.type === "Error" ? propTok.message! : `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
+            message: unexpected(propTok, `Expected Identifier but got ${propTok.type} "${propTok.value}"`),
             line: propTok.line,
             column: propTok.column,
           } satisfies ParseError;
@@ -1971,7 +1995,7 @@ function parsePrimary(ctx: ParserContext): Expression {
   }
 
   throw {
-    message: tok.type === "Error" ? tok.message! : `Unexpected token ${tok.type} "${tok.value}"`,
+    message: unexpected(tok, `Unexpected token ${tok.type} "${tok.value}"`),
     line: tok.line,
     column: tok.column,
   } satisfies ParseError;
@@ -2107,7 +2131,7 @@ function parseSwitchStatement(ctx: ParserContext): Statement {
       test = null;
     } else {
       throw {
-        message: `Expected "case" or "default" in switch body, got ${ctx.peek().type} "${ctx.peek().value}"`,
+        message: unexpected(ctx.peek(), `Expected "case" or "default" in switch body, got ${ctx.peek().type} "${ctx.peek().value}"`),
         line: ctx.peek().line,
         column: ctx.peek().column,
       } satisfies ParseError;
@@ -2592,7 +2616,7 @@ function parseObjectProps(ctx: ParserContext): ObjectProperty[] {
       key = ctx.consume().value;
     } else {
       throw {
-        message: `Expected object key, got ${keyTok.type} "${keyTok.value}"`,
+        message: unexpected(keyTok, `Expected object key, got ${keyTok.type} "${keyTok.value}"`),
         line: keyTok.line,
         column: keyTok.column,
       } satisfies ParseError;
