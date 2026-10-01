@@ -248,10 +248,8 @@ describe("formatProgram — all new FormatOptions compose together with indentSt
       objectCurlySpacing: false,
     });
     expect(errors).toEqual([]);
-    // Tabs, not spaces, for indentation. (A plain `Assignment` node prints
-    // as bare `x = value` with no `const`/`let` keyword — only destructuring
-    // gets `let`, per the printer's existing `Assignment`/`DestructureStatement`
-    // cases.)
+    // Tabs, not spaces, for indentation. (The `const` is the source's own
+    // keyword, kept verbatim.)
     expect(formatted).toContain("\tconst config = {");
     expect(formatted).not.toMatch(/\n {2,}\S/);
     // Single-quoted strings.

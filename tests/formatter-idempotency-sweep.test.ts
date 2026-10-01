@@ -13,7 +13,8 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { formatProgram } from "../src/tooling/formatter.js";
+import { formatProgram, printProgram } from "../src/tooling/formatter.js";
+import { parse } from "../src/parser/index.js";
 import { tokenize, type RawComment } from "../src/parser/lexer.js";
 
 const root = join(__dirname, "..");
@@ -48,7 +49,17 @@ const KNOWN_COMMENT_GAPS: Record<string, number> = {
  * failure mode from a dropped comment: `formatted.includes(c.text)` alone is
  * blind to it, since the text is still present somewhere in the output.
  *
- * Empty as of this writing: the parser bug that caused this (an unconsumed
+ * Measured through the UNGUARDED printer (`printProgram`) — `formatProgram`
+ * returns many files untouched. The one entry is
+ * `docs/demos/websites/agency-studio.aktion`: two comments sitting between
+ * the array elements of a call argument (mid-expression, so outside
+ * statement-level attachment) are printed after the enclosing statement, one
+ * brace level up. `formatProgram` skips that file today because its printed
+ * output does not re-parse, but the AST guard ignores comments, so a file
+ * with the same shape whose output DID re-parse would be rewritten with the
+ * comments moved.
+ *
+ * Otherwise empty: the parser bug that once caused this (an unconsumed
  * ANCESTOR comment permanently blocking every nested container's own, later
  * comments — see `attachComments`'s doc comment in `src/parser/parser.ts`)
  * is fixed. Measured before the fix: exactly one real-corpus instance,
@@ -60,7 +71,9 @@ const KNOWN_COMMENT_GAPS: Record<string, number> = {
  * relocation shows up here as a nonzero count for some file not listed
  * below, exactly like `KNOWN_COMMENT_GAPS` above.
  */
-const KNOWN_COMMENT_SCOPE_GAPS: Record<string, number> = {};
+const KNOWN_COMMENT_SCOPE_GAPS: Record<string, number> = {
+  "docs/demos/websites/agency-studio.aktion": 2,
+};
 
 /**
  * Comment-depth pairing for the placement-aware check below: for every
@@ -106,6 +119,18 @@ function collect(dir: string, out: string[]): void {
   }
 }
 
+/**
+ * The printer's output WITHOUT the AST-equality guard. The comment sweeps below
+ * ask whether the printer keeps comments; through `formatProgram` they would
+ * test only the files the guard lets through, and e.g. `typing-test.aktion` —
+ * the regression case for comment depth — is returned untouched.
+ */
+function printedUnguarded(source: string): { formatted: string; errors: unknown[] } {
+  const program = parse(source);
+  if (program.errors.length > 0) return { formatted: source, errors: program.errors };
+  return { formatted: printProgram(program), errors: [] };
+}
+
 const files: string[] = [];
 collect(root, files);
 
@@ -130,6 +155,61 @@ describe("repo .aktion programs format to a fixed point", () => {
   }
 });
 
+/**
+ * How `formatProgram` treats the real corpus, pinned as exact counts.
+ *
+ * The idempotency check above is trivially true for a file `formatProgram`
+ * returns untouched, and the AST-equality guard returns many files untouched
+ * — so on its own it would stay green if the printer got worse. Pinning the
+ * split makes any change in how many files are formatted, skipped because the
+ * printed program differs, or skipped because the printed text does not
+ * re-parse a visible, reviewed edit. A printer fix moves files from the two
+ * skipped buckets into `formatted`; a regression moves them the other way.
+ *
+ * To update after adding or editing a demo: run this file, copy the counts
+ * from the failing assertion, and say in the PR why they moved.
+ */
+const EXPECTED_CORPUS_SPLIT = {
+  total: 165,
+  formatted: 70,
+  skippedDifferentProgram: 46,
+  skippedDidNotReparse: 49,
+};
+
+describe("repo .aktion programs: how formatProgram treats the corpus", () => {
+  it("formats, or skips with a reason, exactly the pinned number of files", () => {
+    const split = { total: 0, formatted: 0, skippedDifferentProgram: 0, skippedDidNotReparse: 0 };
+    for (const file of files) {
+      const result = formatProgram(readFileSync(file, "utf8"));
+      split.total += 1;
+      if (result.errors.length > 0) continue;
+      const message = result.warnings?.[0]?.message;
+      if (message === undefined) split.formatted += 1;
+      else if (/did not re-parse/.test(message)) split.skippedDidNotReparse += 1;
+      else if (/same program/.test(message)) split.skippedDifferentProgram += 1;
+      else throw new Error(`unexpected warning: ${message}`);
+    }
+    expect(split).toEqual(EXPECTED_CORPUS_SPLIT);
+  });
+
+  it("every formatted file really parses to the program it started as", () => {
+    const strip = (source: string) => JSON.stringify(parse(source).statements, (key, value: unknown) =>
+      ["loc", "leadingComments", "trailingComments", "innerComments"].includes(key) ? undefined
+        : typeof value === "string" ? value.replace(/_L\d+_C\d+$/, "") : value);
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      const { formatted, warnings } = formatProgram(source);
+      if (warnings) {
+        expect(formatted).toBe(source);
+        continue;
+      }
+      // Keyword-less for-of / for-in heads are printed with `let`, so compare after normalising them.
+      const normalise = (text: string) => strip(text).replace(/,?"declaration":"let"/g, "");
+      expect(normalise(formatted), relative(root, file)).toBe(normalise(source));
+    }
+  });
+});
+
 describe("repo .aktion programs keep their comments through formatProgram", () => {
   const filesWithComments: Array<{ relPath: string; comments: RawComment[] }> = [];
   for (const file of files) {
@@ -149,7 +229,7 @@ describe("repo .aktion programs keep their comments through formatProgram", () =
   for (const { relPath, comments } of filesWithComments.sort((a, b) => a.relPath.localeCompare(b.relPath))) {
     it(`${relPath} preserves ${comments.length} comment(s), verbatim text`, () => {
       const source = readFileSync(join(root, relPath), "utf8");
-      const { formatted, errors } = formatProgram(source);
+      const { formatted, errors } = printedUnguarded(source);
       if (errors.length > 0) return; // pre-existing parse errors — not this sweep's concern
 
       // A comment "survives" when its RAW text (delimiters included) appears
@@ -187,7 +267,7 @@ describe("repo .aktion programs keep their comments at the correct nesting depth
 
   for (const { relPath, source } of filesWithComments.sort((a, b) => a.relPath.localeCompare(b.relPath))) {
     it(`${relPath} keeps every surviving comment at its original scope depth`, () => {
-      const { formatted, errors } = formatProgram(source);
+      const { formatted, errors } = printedUnguarded(source);
       if (errors.length > 0) return; // pre-existing parse errors — not this sweep's concern
 
       const inPairs = commentDepthPairs(source);

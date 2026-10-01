@@ -194,38 +194,61 @@ export interface FormatResult {
   /** Parse errors raised while reading the input — formatting is a no-op when non-empty. */
   errors: ParseError[];
   /**
-   * Set when formatting was skipped without a parse error: the printed output
-   * did not re-parse, or re-parsed to a different tree than the input.
-   * `formatted` is then the untouched input.
+   * Non-fatal notes, shaped like `Program.warnings`. Set when formatting was
+   * skipped without a parse error: the printed output did not re-parse, or
+   * re-parsed to a different tree than the input. `formatted` is then the
+   * untouched input. Each entry applies to the whole document (line 1, column 1).
    */
-  warnings?: string[];
+  warnings?: ParseError[];
 }
 
-/** Metadata that legitimately differs between a source and its reformatted output. */
-const POSITION_ONLY_KEYS = new Set(["loc", "leadingComments", "trailingComments", "innerComments"]);
+/** AST keys that carry source positions or comments, which a reformat legitimately changes. */
+const LAYOUT_ONLY_KEYS = new Set(["loc", "leadingComments", "trailingComments", "innerComments"]);
 
 /**
- * Canonical JSON of a parsed program with positions and comment metadata
- * removed, so two programs compare equal exactly when they mean the same thing.
- * `__effect_L{line}_C{column}` names are derived from positions and are
- * normalised. The for-of / for-in `declaration` is skipped because a head
- * written without a keyword is printed with `let`.
+ * Canonical JSON of a parsed program, used to decide whether two parses are
+ * the same program. Layout-only keys (positions, comments) are dropped and
+ * object keys are sorted; the position-derived name of an `$effect`
+ * (`__effect_L{line}_C{column}`) is normalised. Numbers `JSON.stringify`
+ * would conflate (`-0`, `NaN`, `±Infinity`) get their own markers, and a
+ * for-of / for-in head without a keyword counts as `let`, which is what the
+ * printer writes for it.
+ *
+ * It is a best-effort check for what the printer is known to get wrong, not a
+ * proof of equivalence. Exported for tests only; not part of the package API.
  */
-function structuralFingerprint(program: Program): string {
+export function structuralFingerprint(program: Program): string {
   const canonical = (value: unknown): unknown => {
-    if (typeof value === "string") return value.replace(/_L\d+_C\d+/g, "_L_C");
+    if (typeof value === "number") {
+      if (Object.is(value, -0)) return "__negative_zero__";
+      if (!Number.isFinite(value)) return `__number_${String(value)}__`;
+      return value;
+    }
     if (Array.isArray(value)) return value.map((item) => canonical(item));
     if (value === null || typeof value !== "object") return value;
     const node = value as Record<string, unknown>;
     const out: Record<string, unknown> = {};
-    for (const key of Object.keys(node).sort()) {
-      if (POSITION_ONLY_KEYS.has(key) || node[key] === undefined) continue;
-      if (key === "declaration" && (node.kind === "ForOfStatement" || node.kind === "ForInStatement")) continue;
+    const isForHead = node.kind === "ForOfStatement" || node.kind === "ForInStatement";
+    const keys = isForHead ? [...new Set([...Object.keys(node), "declaration"])] : Object.keys(node);
+    for (const key of keys.sort()) {
+      if (key === "declaration" && isForHead) {
+        out[key] = node[key] ?? "let";
+        continue;
+      }
+      if (LAYOUT_ONLY_KEYS.has(key) || node[key] === undefined) continue;
+      if (key === "name" && node.kind === "EffectDeclaration" && typeof node[key] === "string") {
+        out[key] = (node[key] as string).replace(/_L\d+_C\d+$/, "_L_C");
+        continue;
+      }
       out[key] = canonical(node[key]);
     }
     return out;
   };
   return JSON.stringify(canonical(program.statements));
+}
+
+function skippedFormatting(source: string, reason: string): FormatResult {
+  return { formatted: source, errors: [], warnings: [{ message: `Formatting skipped: ${reason}`, line: 1, column: 1 }] };
 }
 
 export function formatProgram(source: string, options?: FormatOptions): FormatResult {
@@ -240,18 +263,10 @@ export function formatProgram(source: string, options?: FormatOptions): FormatRe
   // silently different program.
   const second = parse(out);
   if (second.errors.length > 0) {
-    return {
-      formatted: source,
-      errors: [],
-      warnings: ["Formatting skipped: the printed output did not re-parse."],
-    };
+    return skippedFormatting(source, "the printed output did not re-parse.");
   }
   if (structuralFingerprint(second) !== structuralFingerprint(program)) {
-    return {
-      formatted: source,
-      errors: [],
-      warnings: ["Formatting skipped: the printed output would not parse to the same program as the input."],
-    };
+    return skippedFormatting(source, "the printed output would not parse to the same program as the input.");
   }
   return { formatted: out, errors: [] };
 }
@@ -711,17 +726,7 @@ function printSwitchCase(c: SwitchCase, indent: number, opts: ResolvedFormatOpti
   const head = c.test === null
     ? `${padStr}default:`
     : `${padStr}case ${printExpression(c.test, indent, opts)}:`;
-  // Canonicalise every case/default arm to end with an explicit `break` —
-  // UNLESS the body already ends with one. Appending unconditionally used
-  // to double the break on a second `formatProgram` pass: the appended
-  // break re-parses back into a real trailing `BreakStatement` in `c.body`,
-  // so printing it again on the next pass appended yet another one,
-  // breaking idempotency (caught by the whole-repo sweep in
-  // tests/formatter-idempotency-sweep.test.ts —
-  // docs/demos/blocks/profile-header.aktion's `switch` arms).
-  const lastStmt = c.body[c.body.length - 1];
-  const trailingBreak = lastStmt?.kind === "BreakStatement" ? "" : `\n${pad(indent + 1, opts)}break`;
-  const caseText = `${head}\n${body}${trailingBreak}`;
+  const caseText = body.length > 0 ? `${head}\n${body}` : head;
   // Comment(s) preceding the `case`/`default` keyword itself (a note on the
   // branch as a whole) — distinct from `body`'s own leading comments on its
   // first statement, which document that statement instead.

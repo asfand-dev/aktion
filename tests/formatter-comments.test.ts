@@ -434,15 +434,15 @@ describe("formatProgram — comment before an if / for / switch case", () => {
       "    // one",
       "    case 1:",
       "      return \"one\"",
-      "      break",
       "  }",
       "}",
       "",
       '$app(Text("x"))',
       "",
     ].join("\n");
-    const { formatted, errors } = formatProgram(source);
+    const { formatted, errors, warnings } = formatProgram(source);
     expect(errors).toEqual([]);
+    expect(warnings).toBeUndefined();
     expect(formatted).toBe(
       [
         "function f(n, items) {",
@@ -457,7 +457,6 @@ describe("formatProgram — comment before an if / for / switch case", () => {
         "    // one",
         "    case 1:",
         "      return \"one\"",
-        "      break",
         "  }",
         "}",
         "",

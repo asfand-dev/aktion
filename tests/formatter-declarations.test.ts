@@ -7,7 +7,7 @@
  * silently fell back to the original source for any file with a classic `for`.
  */
 import { describe, expect, it } from "vitest";
-import { formatProgram, printProgram } from "../src/tooling/formatter.js";
+import { formatProgram, printProgram, structuralFingerprint } from "../src/tooling/formatter.js";
 import { parse } from "../src/parser/index.js";
 import { linkProject } from "../src/compiler/index.js";
 import type { Statement } from "../src/parser/types.js";
@@ -27,9 +27,15 @@ function shape(source: string): string {
     ["loc", "leadingComments", "trailingComments"].includes(key) ? undefined : value);
 }
 
+/**
+ * Format `source` and return the result. Asserts `warnings` is unset: when the
+ * guard falls back, `formatted` is the untouched input, so a printer that drops
+ * a keyword would otherwise pass every test whose input equals its expected output.
+ */
 function roundTrip(source: string): string {
-  const { formatted, errors } = formatProgram(source);
+  const { formatted, errors, warnings } = formatProgram(source);
   expect(errors).toEqual([]);
+  expect(warnings).toBeUndefined();
   return formatted;
 }
 
@@ -73,6 +79,15 @@ describe("formatProgram — keeps declaration keywords", () => {
     expect(roundTrip("export let $a = 0\nexport const B = 1\nlet pages = 3\n")).toBe(
       "export let $a = 0\nexport const B = 1\nlet pages = 3\n",
     );
+  });
+
+  it("prints the keywords itself, without relying on the guard (printProgram is unguarded)", () => {
+    const source = "export let $a = 0\nexport const B = 1\nvar c = 2\nlet pages = 3\nbare = 4\n";
+    expect(printProgram(parse(source))).toBe(source);
+    const loop = "for (const x of [1]) {\n  x\n}\nfor (var k in {}) {\n  k\n}\nfor (let i = 0; i < 2; i++) {\n  i\n}\n";
+    expect(printProgram(parse(loop))).toBe(loop);
+    const destructured = "const [a, b] = [1, 2]\nvar {c, d} = { c: 1, d: 2 }\n";
+    expect(printProgram(parse(destructured))).toBe(destructured);
   });
 
   it.each([
@@ -135,7 +150,7 @@ describe("formatProgram — classic for loops", () => {
   const classic = "function count() {\n  for (let i = 0; i < 3; i++) {\n    i\n  }\n}\n";
 
   it("prints the init keyword, so the output re-parses", () => {
-    const { formatted } = formatProgram(classic);
+    const formatted = roundTrip(classic);
     expect(formatted).toBe(classic);
     expect(parse(formatted).errors).toEqual([]);
   });
@@ -147,7 +162,7 @@ describe("formatProgram — classic for loops", () => {
 
   it("really formats the file instead of falling back to the original source", () => {
     const messy = "function count(){for(let i=0;i<3;i++){i}}";
-    const { formatted } = formatProgram(messy);
+    const formatted = roundTrip(messy);
     expect(formatted).not.toBe(messy);
     expect(formatted).toBe(classic);
   });
