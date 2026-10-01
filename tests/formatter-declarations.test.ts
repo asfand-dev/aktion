@@ -7,7 +7,7 @@
  * silently fell back to the original source for any file with a classic `for`.
  */
 import { describe, expect, it } from "vitest";
-import { formatProgram, printProgram, structuralFingerprint } from "../src/tooling/formatter.js";
+import { formatProgram, printProgram } from "../src/tooling/formatter.js";
 import { parse } from "../src/parser/index.js";
 import { linkProject } from "../src/compiler/index.js";
 import type { Statement } from "../src/parser/types.js";

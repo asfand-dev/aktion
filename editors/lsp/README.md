@@ -42,7 +42,7 @@ Everything the language service can do is exposed:
 | `textDocument/documentHighlight` | `getDocumentHighlights` |
 | `textDocument/documentSymbol` | `getDocumentSymbols` |
 | `textDocument/prepareRename`, `rename` | `getRenameEdits` (the `$` sigil is preserved) |
-| `textDocument/formatting` | `formatProgram` — idempotent; leaves files with parse errors untouched, and files whose printed text would not be the same program (sends a `window/showMessage` warning) |
+| `textDocument/formatting` | `formatProgram` — idempotent; leaves files with parse errors untouched, and files whose printed text would not be the same program (sends a `window/showMessage` warning once per document version, then `window/logMessage`) |
 | `textDocument/semanticTokens/full` | `getSemanticTokens` |
 
 Snippet completions are only sent to clients that advertise

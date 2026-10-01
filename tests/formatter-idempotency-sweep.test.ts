@@ -193,9 +193,26 @@ describe("repo .aktion programs: how formatProgram treats the corpus", () => {
   });
 
   it("every formatted file really parses to the program it started as", () => {
-    const strip = (source: string) => JSON.stringify(parse(source).statements, (key, value: unknown) =>
-      ["loc", "leadingComments", "trailingComments", "innerComments"].includes(key) ? undefined
-        : typeof value === "string" ? value.replace(/_L\d+_C\d+$/, "") : value);
+    // Deliberately a separate implementation from `structuralFingerprint`: sort keys, drop
+    // layout-only keys, normalise only an `$effect` name, and count a missing keyword as
+    // `let` only on a for-of / for-in head.
+    const canonical = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(canonical);
+      if (value === null || typeof value !== "object") return value;
+      const node = value as Record<string, unknown>;
+      const isForHead = node.kind === "ForOfStatement" || node.kind === "ForInStatement";
+      const out: Record<string, unknown> = {};
+      for (const key of [...new Set([...Object.keys(node), ...(isForHead ? ["declaration"] : [])])].sort()) {
+        if (["loc", "leadingComments", "trailingComments", "innerComments"].includes(key)) continue;
+        const item = key === "declaration" && isForHead ? node[key] ?? "let" : node[key];
+        if (item === undefined) continue;
+        out[key] = key === "name" && node.kind === "EffectDeclaration" && typeof item === "string"
+          ? item.replace(/_L\d+_C\d+$/, "")
+          : canonical(item);
+      }
+      return out;
+    };
+    const normalise = (source: string) => JSON.stringify(canonical(parse(source).statements));
     for (const file of files) {
       const source = readFileSync(file, "utf8");
       const { formatted, warnings } = formatProgram(source);
@@ -203,8 +220,6 @@ describe("repo .aktion programs: how formatProgram treats the corpus", () => {
         expect(formatted).toBe(source);
         continue;
       }
-      // Keyword-less for-of / for-in heads are printed with `let`, so compare after normalising them.
-      const normalise = (text: string) => strip(text).replace(/,?"declaration":"let"/g, "");
       expect(normalise(formatted), relative(root, file)).toBe(normalise(source));
     }
   });

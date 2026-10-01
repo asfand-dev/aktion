@@ -495,6 +495,31 @@ describe("aktion-language-server — language features", () => {
     client.notify("textDocument/didClose", { textDocument: { uri: riskyUri } });
   });
 
+  it("shows the skipped-format warning once per document version, then logs it", async () => {
+    const uri = "file:///repeat.aktion";
+    client.notify("textDocument/didOpen", {
+      textDocument: { uri, languageId: "aktion", version: 1, text: "y = (a + b) * c\n" },
+    });
+    const before = client.notifications.length;
+    const format = () => client.request("textDocument/formatting", {
+      textDocument: { uri },
+      options: { tabSize: 2, insertSpaces: true },
+    });
+    await format();
+    await format();
+    const methods = () => client.notifications.slice(before).map((n) => n.method)
+      .filter((m) => m === "window/showMessage" || m === "window/logMessage");
+    expect(methods()).toEqual(["window/showMessage", "window/logMessage"]);
+
+    client.notify("textDocument/didChange", {
+      textDocument: { uri, version: 2 },
+      contentChanges: [{ text: "y = (a + b) * c\n// edited\n" }],
+    });
+    await format();
+    expect(methods()).toEqual(["window/showMessage", "window/logMessage", "window/showMessage"]);
+    client.notify("textDocument/didClose", { textDocument: { uri } });
+  });
+
   it("returns an edit and no warning for a document that formats safely", async () => {
     const messyUri = "file:///messy.aktion";
     client.notify("textDocument/didOpen", {
