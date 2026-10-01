@@ -232,27 +232,21 @@ describe("synthetic reproductions: grammar-incompatible rules corrupt output whe
     expect(parse(shipped.output).errors).toEqual([]);
   });
 
-  it("unicorn/prefer-string-raw rewrites a backslash string into a tagged template, which silently truncates the value with NO reported parse error", () => {
-    // This is the sharpest case of the three: this grammar has no
-    // tagged-template production, so `String.raw\`...\`` doesn't fail loudly
-    // — the parser reads `String.raw` as a plain member-expression value for
-    // the assignment, then treats the orphaned backtick string as a second,
-    // unrelated top-level statement. `errors` stays EMPTY; the corruption is
-    // silent, not a diagnosable parse failure — worse than the other two.
+  it("unicorn/prefer-string-raw rewrites a backslash string into a tagged template, which the parser now rejects", () => {
+    // This grammar has no tagged-template production. Until the statement
+    // boundary was enforced, `String.raw\`...\`` did not fail: the parser read
+    // `String.raw` as a plain member-expression value for the assignment and
+    // the orphaned backtick string as a second, unrelated top-level statement,
+    // so the value was silently truncated with an EMPTY `errors`. The missing
+    // boundary between the two is now a reported error.
     const source = 'export NAME_PATTERN = "^[^\\\\s]+$"\n';
 
     const broken = new Linter().verifyAndFix(source, withoutOverrides, verifyOptions);
     expect(broken.fixed).toBe(true);
     expect(broken.output).toContain("String.raw`");
     const brokenProgram = parse(broken.output);
-    // No parse error is reported...
-    expect(brokenProgram.errors).toEqual([]);
-    // ...but the assignment's expression is no longer the original string
-    // literal — it silently became a bare `String.raw` member reference,
-    // with the real pattern demoted to a disconnected, dead statement.
-    const assignment = brokenProgram.statements[0] as { expression?: { kind?: string } };
-    expect(assignment.expression?.kind).not.toBe("Literal");
-    expect(brokenProgram.statements.length).toBeGreaterThan(1);
+    expect(brokenProgram.errors).toHaveLength(1);
+    expect(brokenProgram.errors[0]!.message).toContain("Tagged template literals are not supported");
 
     const shipped = new Linter().verifyAndFix(source, withOverridesOff, verifyOptions);
     expect(shipped.output).toBe(source);

@@ -64,7 +64,9 @@ export interface FrontierResult {
 
 /**
  * Compute the streaming frontier for `source`. Cheap — runs a single
- * `parse(source)` pass and walks the resulting statements once.
+ * `parse(source)` pass and walks the resulting statements once. `source` is
+ * treated as a prefix of a response still arriving, so a string or template
+ * literal left open at its end does not count as an error.
  *
  * Example:
  *
@@ -78,7 +80,7 @@ export interface FrontierResult {
  *   // f.committedSource ends just before "function Counter() {…"
  */
 export function computeFrontier(source: string): FrontierResult {
-  const program = parse(source);
+  const program = parse(source, { streaming: true });
   return buildFrontier(source, program);
 }
 

@@ -813,6 +813,10 @@ export class AktionElement extends HTMLElement {
     if (name === ATTRIBUTE_DIR) this.applyDir();
     if (name === ATTRIBUTE_MARGIN) this.applyMargin();
     if (name === ATTRIBUTE_STREAMING) {
+      // The last parse ran in streaming mode, which lets a string left open at
+      // the end of the text pass. Parse the finished text again so a literal
+      // that never closed is reported.
+      if (!parseBooleanAttribute(value)) this.programDirty = true;
       // Refresh the error banner: it is suppressed while streaming so partial
       // mid-line content does not flash transient parse errors to the user.
       this.updateErrorBanner();
@@ -2496,7 +2500,7 @@ export class AktionElement extends HTMLElement {
     // parser entirely. The streamed-string path falls back to parse(). Consumed
     // once — `mountCompiled` keeps `currentResponse` in sync so a reconnect /
     // later string update re-parses the same program correctly.
-    const program = this.pendingCompiled ?? parse(this.currentResponse);
+    const program = this.pendingCompiled ?? parse(this.currentResponse, { streaming: this.streaming });
     this.pendingCompiled = null;
     // Schema validator runs alongside the parser so positional arity
     // overflows, unknown props, enum mismatches, built-in-name collisions,

@@ -29,6 +29,14 @@ export type TokenType =
   | "Operator"
   | "Newline"
   | "Semicolon"
+  /**
+   * Source the lexer cannot make a token of: a character Aktion has no use
+   * for (`@`, `#`, `\`, a non-ASCII letter) or an unterminated string or
+   * template literal. `value` is the offending text and `message` the
+   * diagnostic. The parser reports it wherever it meets the token, so the
+   * input is rejected instead of silently losing the character.
+   */
+  | "Error"
   | "EOF";
 
 /**
@@ -87,6 +95,14 @@ export interface Token {
   parts?: TemplatePart[];
   /** Set on `Regex` tokens to carry the trailing flag letters. */
   flags?: string;
+  /** Set on `Error` tokens: the diagnostic the parser reports for them. */
+  message?: string;
+  /**
+   * Set on a `String` token written as a backtick template literal without
+   * interpolation, so the parser can tell `` tag`x` `` (a tagged template,
+   * unsupported) from a plain string.
+   */
+  template?: true;
 }
 
 export type CommentKind = "Line" | "Block";
@@ -116,6 +132,19 @@ const KEYWORDS: Record<string, TokenType> = {
   null: "Null",
 };
 
+/** Options for {@link tokenize}. */
+export interface TokenizeOptions {
+  /**
+   * The source is a prefix of a response that is still being generated. A
+   * string or template literal that is still open at the very end of the input
+   * is then lexed as the string it has so far, because the chunk that closes it
+   * has not arrived yet. Left off, such a literal is an `Error` token. (A plain
+   * string cut off by a newline is an error either way: more input cannot
+   * close it.)
+   */
+  streaming?: boolean;
+}
+
 /**
  * Tokenize `source`. When `comments` is passed, every `//` line comment and
  * `/* *\/` block comment encountered is pushed onto it (in source order,
@@ -124,7 +153,7 @@ const KEYWORDS: Record<string, TokenType> = {
  * caller (`navigation.ts`, `semantic-tokens.ts`, …) that only wants tokens
  * keeps working unmodified.
  */
-export function tokenize(source: string, comments?: RawComment[]): Token[] {
+export function tokenize(source: string, comments?: RawComment[], options: TokenizeOptions = {}): Token[] {
   const tokens: Token[] = [];
   let i = 0;
   let line = 1;
@@ -281,8 +310,10 @@ export function tokenize(source: string, comments?: RawComment[]): Token[] {
       continue;
     }
 
-    // Whitespace (excluding newline).
-    if (ch === " " || ch === "\t" || ch === "\r") {
+    // Whitespace (excluding newline), including the Unicode spaces JS also
+    // treats as whitespace (NBSP, BOM, …) so they are not reported as stray
+    // characters.
+    if (ch === " " || ch === "\t" || ch === "\r" || ch === "\f" || ch === "\v" || (ch > "\x7f" && /\s/.test(ch))) {
       advance();
       continue;
     }
@@ -367,8 +398,22 @@ export function tokenize(source: string, comments?: RawComment[]): Token[] {
         }
         value += advance();
       }
-      if (peek() === quote) advance();
-      push("String", value, startLine, startCol);
+      if (peek() === quote) {
+        advance();
+        push("String", value, startLine, startCol);
+      } else if (options.streaming === true && i >= source.length) {
+        push("String", value, startLine, startCol);
+      } else {
+        tokens.push({
+          type: "Error",
+          value,
+          line: startLine,
+          column: startCol,
+          message:
+            "Unterminated string literal — add the closing quote " +
+            "(a string cannot span lines; use a backtick template literal for that).",
+        });
+      }
       continue;
     }
     if (ch === "`") {
@@ -446,10 +491,21 @@ export function tokenize(source: string, comments?: RawComment[]): Token[] {
         }
         chunk += advance();
       }
-      if (peek() === "`") advance();
+      if (peek() === "`") {
+        advance();
+      } else if (options.streaming !== true) {
+        tokens.push({
+          type: "Error",
+          value: chunk,
+          line: startLine,
+          column: startCol,
+          message: "Unterminated template literal — add the closing backtick.",
+        });
+        continue;
+      }
       parts.push({ kind: "str", text: chunk });
       if (!sawExpr) {
-        push("String", chunk, startLine, startCol);
+        tokens.push({ type: "String", value: chunk, line: startLine, column: startCol, template: true });
         continue;
       }
       tokens.push({
@@ -644,12 +700,38 @@ export function tokenize(source: string, comments?: RawComment[]): Token[] {
       continue;
     }
 
-    // Unknown char: skip with no token (parser surfaces errors per line).
-    advance();
+    // Unknown character: emit an `Error` token so the parser rejects it.
+    // Skipping it silently would turn `@dec`, `o.#p` or `café` into a
+    // different, valid program. A whole code point is consumed, so an emoji
+    // is one error, not two.
+    const errLine = line;
+    const errCol = column;
+    const codePoint = String.fromCodePoint(source.codePointAt(i)!);
+    for (let k = 0; k < codePoint.length; k += 1) advance();
+    tokens.push({
+      type: "Error",
+      value: codePoint,
+      line: errLine,
+      column: errCol,
+      message: unexpectedCharacterMessage(codePoint),
+    });
   }
 
   tokens.push({ type: "EOF", value: "", line, column });
   return tokens;
+}
+
+function unexpectedCharacterMessage(ch: string): string {
+  const base = `Unexpected character '${ch}'`;
+  switch (ch) {
+    case "@": return `${base} — decorators are not supported in Aktion.`;
+    case "#": return `${base} — private fields (\`#name\`) are not supported in Aktion; use a plain property.`;
+    case "\\": return `${base} — a backslash is only valid inside a string or template literal.`;
+    default:
+      return ch > "\x7f"
+        ? `${base} — names may only use a-z, A-Z, 0-9 and _ (non-ASCII text belongs inside a string).`
+        : `${base}.`;
+  }
 }
 
 function isDigit(ch: string): boolean {

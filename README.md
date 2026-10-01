@@ -404,7 +404,7 @@ All members live on the `<aktion-app>` element.
 | Attribute       | Values                                          | Description                                                                         |
 | --------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `theme`         | Theme name or JSON token map                    | Switches the theme. JSON objects are merged on top of the default `light` tokens.   |
-| `streaming`     | `true` / unset                                  | Hint that text is still being appended. The error banner is suppressed while set.   |
+| `streaming`     | `true` / unset                                  | Hint that text is still being appended. The error banner is suppressed while set, and a string left open at the end of the text is accepted as-is. |
 | `response`      | Aktion text                        | Sets the program declaratively. Re-renders whenever the attribute changes.          |
 | `src`           | URL to an `.aktion` file                        | Loads the program from an external file resolved relative to the document. The file is linked through the in-browser project linker, so an entry that `import`s other modules resolves and fetches its whole graph. `response` (and any inner text) takes precedence; changing `src` reloads. |
 | `showerrors`    | `true` / unset                                  | If present and `true`, displays parse errors in the rendered UI. Defaults to off.   |
@@ -1900,7 +1900,7 @@ it flags is this DSL's normal, unavoidable idiom):
 | ---- | --- |
 | `object-shorthand` | GRAMMAR: no ES6 method-shorthand production — `onClick: () => {…}` → `onClick() {…}` doesn't parse. |
 | `unicorn/prefer-export-from` | GRAMMAR: `export { … } from …` lists have no production at all — an explicit parse error. |
-| `unicorn/prefer-string-raw` | GRAMMAR: no tagged-template-literal production — `` String.raw`…` `` doesn't parse (and silently truncates the value with *no* reported error — see the citation in [`src/eslint/rules.ts`](./src/eslint/rules.ts)). |
+| `unicorn/prefer-string-raw` | GRAMMAR: no tagged-template-literal production — `` String.raw`…` `` is a parse error ("Tagged template literals are not supported"; it used to silently truncate the value with *no* reported error — see the citation in [`src/eslint/rules.ts`](./src/eslint/rules.ts)). |
 | `unicorn/switch-case-braces` | GRAMMAR: no generic block-statement production — a bare `{` in statement position parses as an object literal, so wrapping a `case N: return X` body in `{ }` breaks parsing. Found by this package's own corpus sweep, not carried over from any downstream pilot. |
 | `new-cap` | IDIOM: component instantiation (`Container(...)`, `Text(...)`, …) is a capitalized function call — the DSL's normal syntax, not a constructor mistake. |
 | `unicorn/max-nested-calls` | IDIOM: the component tree *is* deeply nested calls — that's the normal shape of a UI declaration. |

@@ -3,7 +3,8 @@
  *
  * The grammar mirrors the JS spec:
  *
- *   program     := (statement (NEWLINE | ";"))*
+ *   program     := (statement (NEWLINE | ";"))*   (a statement that ends in a
+ *                                                  `}` block needs no separator)
  *   statement   := functionDecl | varDecl | ifStmt | forStmt | whileStmt
  *                | switchStmt | tryStmt | breakStmt | continueStmt
  *                | returnStmt | throwStmt | assignment | expressionStmt
@@ -38,9 +39,19 @@ import type {
   SourceLocation,
 } from "./types.js";
 
-export function parse(source: string): Program {
+/** Options for {@link parse}. */
+export interface ParseOptions {
+  /**
+   * `source` is a prefix of a response that is still being generated, so a
+   * string or template literal left open at the very end is not yet an error.
+   * See {@link TokenizeOptions.streaming}.
+   */
+  streaming?: boolean;
+}
+
+export function parse(source: string, options: ParseOptions = {}): Program {
   const comments: RawComment[] = [];
-  const tokens = tokenize(source, comments);
+  const tokens = tokenize(source, comments, { streaming: options.streaming });
   const ctx = new ParserContext(tokens, comments);
   const statements: Statement[] = [];
   const errors: ParseError[] = [];
@@ -93,6 +104,125 @@ export function parse(source: string): Program {
 const nodeEndLine = new WeakMap<object, number>();
 
 /**
+ * Statements whose grammar ends in a `}`. Like JS, Aktion lets the next
+ * statement start right after the brace on the same line
+ * (`function a() {} function b() {}`); every other statement must be followed
+ * by a newline, a `;`, a closing `}` or the end of the input.
+ */
+const BLOCK_TERMINATED_STATEMENTS: ReadonlySet<Statement["kind"]> = new Set<Statement["kind"]>([
+  "ComponentDeclaration",
+  "ActionDeclaration",
+  "HookDeclaration",
+  "IfStatement",
+  "ForOfStatement",
+  "ForInStatement",
+  "ForClassicStatement",
+  "WhileStatement",
+  "SwitchStatement",
+  "TryStatement",
+]);
+
+/**
+ * TypeScript-only declaration keywords. They are ordinary identifiers to the
+ * lexer, so `interface A {}` reads as the expression `interface` followed by
+ * the unrelated statement `A {}`.
+ */
+const TYPESCRIPT_DECLARATION_WORDS: ReadonlySet<string> = new Set([
+  "type",
+  "interface",
+  "enum",
+  "namespace",
+  "declare",
+  "abstract",
+]);
+
+/**
+ * Require a statement boundary after a statement that did not end in a block.
+ *
+ * Terminators are optional, so without this check input that is not Aktion
+ * (`class A {}`, `` tag`x` ``, `x as T`, `1n`, `a$b`) parses as several
+ * unrelated statements and no error is reported. The boundary is the newline
+ * or `;` the statement consumed, or the newline / `;` / `}` / end of input
+ * that follows it.
+ */
+function requireStatementBoundary(ctx: ParserContext, startIndex: number): void {
+  const prev = ctx.tokenAt(ctx.snapshot() - 1);
+  if (prev && (prev.type === "Newline" || prev.type === "Semicolon")) return;
+  const next = ctx.peek();
+  if (next.type === "EOF" || next.type === "Newline" || next.type === "Semicolon") return;
+  if (next.type === "Punctuation" && next.value === "}") return;
+  throw statementBoundaryError(ctx.tokenAt(startIndex), prev, next);
+}
+
+function statementBoundaryError(head: Token | undefined, prev: Token | undefined, next: Token): ParseError {
+  const at = (tok: Token, message: string): ParseError => ({ message, line: tok.line, column: tok.column });
+  if (next.type === "Error") return at(next, next.message ?? `Unexpected character '${next.value}'.`);
+  if (!prev) return at(next, `Expected end of statement but found ${describeToken(next)}.`);
+
+  if (prev.type === "Identifier" && prev.value === "class") {
+    return at(prev,
+      "`class` is not supported in Aktion — there are no classes. " +
+      "Use plain objects for data and functions for behaviour.");
+  }
+  if (prev.type === "Identifier" && prev.value === "yield") {
+    return at(prev, "`yield` is not supported in Aktion — there are no generators.");
+  }
+  if (
+    head === prev && prev.type === "Identifier" && next.type === "Identifier" &&
+    TYPESCRIPT_DECLARATION_WORDS.has(prev.value)
+  ) {
+    return at(prev,
+      `TypeScript \`${prev.value}\` declarations are not supported in Aktion — it has no static types, so remove it.`);
+  }
+  if (next.type === "Identifier" && (next.value === "as" || next.value === "satisfies")) {
+    return at(next,
+      `\`${next.value}\` type assertions are not supported in Aktion — it has no static types, so remove the cast.`);
+  }
+  const isTemplate = next.type === "TemplateString" || (next.type === "String" && next.template === true);
+  if (
+    isTemplate &&
+    (prev.type === "Identifier" || prev.type === "StateIdentifier" ||
+      (prev.type === "Punctuation" && (prev.value === ")" || prev.value === "]")))
+  ) {
+    return at(next,
+      "Tagged template literals are not supported in Aktion — " +
+      "call the function with the string instead: `tag(`…`)`.");
+  }
+  if (prev.type === "Number" && next.type === "Identifier" && next.value === "n" && adjacent(prev, next)) {
+    return at(prev, `BigInt literals (\`${prev.value}n\`) are not supported in Aktion — use a regular number.`);
+  }
+  if (prev.type === "Identifier" && next.type === "StateIdentifier" && adjacent(prev, next)) {
+    return at(next,
+      `\`$\` can only start a name (a state atom such as \`$count\`), so \`${prev.value}$${next.value}\` ` +
+      "is not a valid name.");
+  }
+  return at(next,
+    `Expected end of statement after ${describeToken(prev)}, but found ${describeToken(next)}. ` +
+    "Put each statement on its own line or separate them with `;`.");
+}
+
+/** True when `b` starts exactly where the single-line token `a` ends (no whitespace between). */
+function adjacent(a: Token, b: Token): boolean {
+  return a.line === b.line && b.column === a.column + a.value.length;
+}
+
+/** Human-readable token description for diagnostics. */
+function describeToken(tok: Token): string {
+  switch (tok.type) {
+    case "Identifier": return `identifier '${tok.value}'`;
+    case "Keyword": return `keyword '${tok.value}'`;
+    case "StateIdentifier": return `'$${tok.value}'`;
+    case "Number": return `number '${tok.value}'`;
+    case "String": return "a string";
+    case "TemplateString": return "a template literal";
+    case "Regex": return "a regular expression";
+    case "Newline": return "the end of the line";
+    case "EOF": return "the end of the input";
+    default: return `'${tok.value}'`;
+  }
+}
+
+/**
  * Top-level statement dispatcher. Mirrors the JS statement grammar —
  * keyword-led statements (`function`, `if`, `for`, `while`, `switch`,
  * `try`, `throw`, `break`, `continue`, `return`, `await`, `let` /
@@ -101,7 +231,11 @@ const nodeEndLine = new WeakMap<object, number>();
  * expression statement.
  */
 function parseStatement(ctx: ParserContext, topLevel: boolean): Statement | null {
+  const startIndex = ctx.snapshot();
   const stmt = parseStatementImpl(ctx, topLevel);
+  if (!stmt || !BLOCK_TERMINATED_STATEMENTS.has(stmt.kind)) {
+    requireStatementBoundary(ctx, startIndex);
+  }
   if (stmt && !nodeEndLine.has(stmt)) {
     nodeEndLine.set(stmt, ctx.previousConsumedLine());
   }
@@ -785,6 +919,11 @@ class ParserContext {
     return this.tokens[this.index + offset] ?? { type: "EOF", value: "", line: 0, column: 0 };
   }
 
+  /** Token at absolute index `i`, or `undefined` outside the stream. */
+  tokenAt(i: number): Token | undefined {
+    return this.tokens[i];
+  }
+
   consume(): Token {
     const tok = this.tokens[this.index] ?? { type: "EOF", value: "", line: 0, column: 0 };
     this.index += 1;
@@ -842,7 +981,9 @@ class ParserContext {
     const tok = this.peek();
     if (tok.type !== type || (value !== undefined && tok.value !== value)) {
       throw {
-        message: `Expected ${type}${value !== undefined ? ` "${value}"` : ""} but got ${tok.type} "${tok.value}"`,
+        message: tok.type === "Error"
+          ? tok.message!
+          : `Expected ${type}${value !== undefined ? ` "${value}"` : ""} but got ${tok.type} "${tok.value}"`,
         line: tok.line,
         column: tok.column,
       } satisfies ParseError;
@@ -1420,7 +1561,7 @@ function parseUnary(ctx: ParserContext): Expression {
           const propTok = ctx.consume();
           if (propTok.type !== "Identifier" && propTok.type !== "Keyword") {
             throw {
-              message: `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
+              message: propTok.type === "Error" ? propTok.message! : `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
               line: propTok.line,
               column: propTok.column,
             } satisfies ParseError;
@@ -1512,7 +1653,7 @@ function parsePostfixFrom(ctx: ParserContext, base: Expression): Expression {
       const propTok = ctx.consume();
       if (propTok.type !== "Identifier" && propTok.type !== "Keyword" && propTok.type !== "StateIdentifier") {
         throw {
-          message: `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
+          message: propTok.type === "Error" ? propTok.message! : `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
           line: propTok.line,
           column: propTok.column,
         } satisfies ParseError;
@@ -1557,7 +1698,7 @@ function parsePostfixFrom(ctx: ParserContext, base: Expression): Expression {
         const propTok = ctx.consume();
         if (propTok.type !== "Identifier" && propTok.type !== "Keyword" && propTok.type !== "StateIdentifier") {
           throw {
-            message: `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
+            message: propTok.type === "Error" ? propTok.message! : `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
             line: propTok.line,
             column: propTok.column,
           } satisfies ParseError;
@@ -1830,7 +1971,7 @@ function parsePrimary(ctx: ParserContext): Expression {
   }
 
   throw {
-    message: `Unexpected token ${tok.type} "${tok.value}"`,
+    message: tok.type === "Error" ? tok.message! : `Unexpected token ${tok.type} "${tok.value}"`,
     line: tok.line,
     column: tok.column,
   } satisfies ParseError;
@@ -2634,7 +2775,10 @@ function collectDanglingComments(
   return out;
 }
 
-/** Skip an optional statement terminator (newline, semicolon, or nothing before `}`/EOF). */
+/**
+ * Skip an optional statement terminator (newline, semicolon, or nothing before `}`/EOF).
+ * Whether a missing one is an error is decided by `requireStatementBoundary`.
+ */
 function skipTerminator(ctx: ParserContext): void {
   if (!ctx.isEnd()) {
     ctx.match("Newline") || ctx.match("Semicolon");

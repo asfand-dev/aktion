@@ -5,6 +5,39 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-10-01
+
+### Parser: Statements Must Be Separated, Unknown Characters Are Errors
+
+- **Breaking:** two statements on one line now need a `;` between them. Input
+  that used to be accepted as two unrelated statements is now a parse error
+  that points at the exact spot: `a = 1 b = 2`, `class Foo {}`, `` tag`x` ``,
+  `x as T`, `x satisfies T`, `interface A {}`, `type A = …`, `yield 1`, `1n`
+  and `a$b`. Statements that end in a `}` block (`function`, `if`, `for`,
+  `while`, `switch`, `try`) can still be followed by another statement on the
+  same line, and newlines still end statements as before.
+- **Breaking:** a character Aktion has no use for (`@`, `#`, a backslash outside
+  a string, a non-ASCII letter in a name, an emoji) is now reported as
+  `Unexpected character '…'` instead of being silently dropped, so
+  `o.#secret` no longer quietly becomes `o.secret`. Non-breaking spaces and
+  byte-order marks count as whitespace.
+- **Breaking:** an unterminated string or template literal is now an error. A
+  quoted string cut off by the end of its line is always an error; a string or
+  template literal still open at the very end of the text is an error unless
+  the `<aktion-app>` has the `streaming` attribute (or you pass
+  `parse(source, { streaming: true })`), so partial responses keep rendering
+  while they arrive. Clearing `streaming` parses the finished text again.
+- JavaScript-only constructs get a message that says what to do instead:
+  `class` (use plain objects and functions), tagged templates (call the
+  function with the string), TypeScript `as` / `satisfies` / `interface` /
+  `type` / `enum` (Aktion has no static types), `yield`, BigInt literals,
+  decorators and private fields.
+- Why it matters: an ESLint autofix that produced one of these used to pass
+  both the build and the tests while changing what the program did, for
+  example `unicorn/prefer-string-raw` turning a string into `` String.raw`…` ``.
+  It now fails loudly. Every `.aktion` file in this repository still parses
+  with no errors.
+
 ## [0.8.0](https://github.com/asfand-dev/aktion/compare/v0.7.0...v0.8.0) (2026-09-29)
 
 

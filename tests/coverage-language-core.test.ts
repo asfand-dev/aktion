@@ -917,10 +917,12 @@ describe("Comments", () => {
     expect(ev("`// not a comment`")).toBe("// not a comment");
   });
 
-  it("`#` is not a comment marker in 0.5 — it does not silently delete a line", () => {
-    // The lexer skips unknown characters, so the assignment on the line still
-    // parses; what must NOT happen is the whole statement disappearing.
-    expect(ids(`a = 1 # trailing\naktion = Text("x")`)).toContain("a");
+  it("`#` is not a comment marker — it is reported, and only its own line is lost", () => {
+    const program = parse(`a = 1 # trailing\naktion = Text("x")`);
+    expect(program.errors).toHaveLength(1);
+    expect(program.errors[0]).toMatchObject({ line: 1, column: 7 });
+    expect(program.errors[0]!.message).toContain("Unexpected character '#'");
+    expect(ids(`a = 1 # trailing\naktion = Text("x")`)).toEqual(["aktion"]);
   });
 
   it("semicolons separate statements on one line, alongside comments", () => {

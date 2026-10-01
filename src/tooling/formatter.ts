@@ -500,6 +500,10 @@ function printBlockBody(block: BlockExpr, indent: number, opts: ResolvedFormatOp
  * dropping the assignment. Returns `null` for any other/future builtin
  * name, which still falls back to the (equally unparseable) `@name(args)`
  * form below — there are no other `__rui_*` names in the grammar today.
+ *
+ * Since the lexer reports `@` as an `Error` token instead of dropping it, such
+ * a fallback now fails the post-format re-parse in `formatProgram`, which
+ * returns the source unchanged rather than emitting drifted code.
  */
 function printDesugaredOperator(expr: BuiltinCallExpr, indent: number, opts: ResolvedFormatOptions): string | null {
   const literalOperator = (arg: Expression | undefined): string | null =>
