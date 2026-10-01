@@ -1757,6 +1757,9 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   same options.
   `let` / `const` / `var` on declarations are kept as written (the parser
   records them in an optional `declaration` field; it is ignored at runtime).
+  `formatProgram` re-parses its output and, if that is not the same program as
+  the input (the printer does not yet add back parentheses that precedence
+  needs), returns the input untouched with a `warnings` entry on the result.
 - `inspectAST(source)` returns a JSON-friendly view of the Committed +
   Drafting ASTs at the current byte position — bindings (with
   kind / line / column / summary), in-flight names, and any parse errors.

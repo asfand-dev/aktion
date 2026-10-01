@@ -434,6 +434,7 @@ describe("formatProgram — comment before an if / for / switch case", () => {
       "    // one",
       "    case 1:",
       "      return \"one\"",
+      "      break",
       "  }",
       "}",
       "",

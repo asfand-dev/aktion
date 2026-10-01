@@ -20,34 +20,6 @@ const root = join(__dirname, "..");
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git", "site"]);
 
 /**
- * Known pre-existing idempotency gap, NOT fixed by this change set: the
- * printer has no concept of operator precedence at all — there is no
- * `Paren`/grouping AST node in this grammar (parens are pure grouping
- * syntax the parser discards), and `printExpression`'s `Binary`/`Ternary`
- * cases never re-add parentheses when the printed sub-expression would
- * parse with different precedence than the original. Concretely,
- * `(html || "").replaceAll(...)` prints its `Binary(Or, html, "")` target
- * as bare `html || ""` with no wrapping parens, producing
- * `html || "".replaceAll(...)` — since `.` binds tighter than `||`, that
- * reparses as `html || ("".replaceAll(...))`, a structurally different
- * tree, so the SECOND `formatProgram` pass (on the now-differently-shaped
- * AST) prints differently from the first. Confirmed the two passes
- * converge to a stable fixed point from pass 2 onward — this is a
- * one-off shift, not runaway growth — but fixing it properly needs a
- * real precedence table and parenthesization pass across `Binary`,
- * `Ternary`, `Lambda`, and `Unary`, which is out of scope for the
- * `__rui_assign__` BuiltinCall round-trip fix this sweep was added
- * alongside. Tracked separately rather than silently patched here.
- */
-const KNOWN_PRE_EXISTING_LIMITATIONS = new Set([
-  "docs/demos/mini-apps/show-finder.aktion", // missing-parens/precedence gap above
-  // Same gap, newly reachable: this file's classic `for (let i = …)` made the
-  // printer emit unparseable output, so `formatProgram` used to fall back to
-  // the untouched source and never exercised the precedence gap.
-  "docs/demos/mini-apps/cocktail-explorer.aktion",
-]);
-
-/**
  * Known, MEASURED comment-preservation gaps, NOT fixed by the comment-
  * attachment work in `parser.ts`/`formatter.ts` (see `tests/formatter-
  * comments.test.ts`). Attachment is scoped to STATEMENT-level comments
@@ -144,8 +116,7 @@ describe("repo .aktion programs format to a fixed point", () => {
 
   for (const file of files.sort()) {
     const relPath = relative(root, file);
-    const runner = KNOWN_PRE_EXISTING_LIMITATIONS.has(relPath) ? it.skip : it;
-    runner(relPath, () => {
+    it(relPath, () => {
       const source = readFileSync(file, "utf8");
       const first = formatProgram(source);
       // A program with pre-existing parse errors formats to a no-op — not

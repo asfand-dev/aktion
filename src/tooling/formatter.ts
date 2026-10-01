@@ -4,26 +4,26 @@
  * `formatProgram(source, options?)` re-emits a syntactically clean version
  * of the input. The output is:
  *
- *   - **Idempotent, with one known exception.** `format(format(x)) ===
- *     format(x)` for every input that parses cleanly, EXCEPT where a
- *     parenthesized sub-expression's grouping affects precedence against a
- *     tighter-binding operator applied to it (e.g. `(a || b).c()`) — the
- *     grammar has no `Paren`/grouping AST node at all, so the printer
- *     cannot always preserve that grouping on the first pass. See
- *     `tests/formatter-idempotency-sweep.test.ts`'s
- *     `KNOWN_PRE_EXISTING_LIMITATIONS` for the one known real-world
- *     instance and the full explanation; fixing it needs a real precedence
- *     table across `Binary`/`Ternary`/`Lambda`/`Unary`, tracked separately.
- *     Every `BuiltinCall` node printed by this module must also re-parse
- *     back to the same node kind, or this guarantee silently breaks in a
- *     second, unrelated way — see `printDesugaredOperator`'s doc comment.
+ *   - **Idempotent.** `format(format(x)) === format(x)` for every input that
+ *     parses cleanly. The printer is not yet precedence-aware — the grammar
+ *     has no `Paren`/grouping AST node, so `(a || b).c()` can print as
+ *     `a || b.c()` — so `formatProgram` verifies its output against the
+ *     input's AST and returns the input untouched when they differ (see
+ *     the round-trip bullet below). Fixing the cause needs a real precedence
+ *     table across `Binary`/`Ternary`/`Lambda`/`Unary`. Every `BuiltinCall`
+ *     node printed by this module must also re-parse back to the same node
+ *     kind, or this guarantee silently breaks in a second, unrelated way —
+ *     see `printDesugaredOperator`'s doc comment.
  *   - **Canonical.** Statements one per line; two-space indentation by
  *     default inside `{ … }` blocks (configurable via `FormatOptions`);
  *     named args always use `prop: value` (the legacy `prop=value` form is
  *     gone); double-quoted strings by default unless interpolation is
  *     required (templates), also configurable via `FormatOptions`.
- *   - **Round-trips through the parser.** Re-parsing the formatter's
- *     output yields a structurally-equivalent AST.
+ *   - **Round-trips through the parser.** `formatProgram` returns its output
+ *     only when re-parsing it yields a structurally-equivalent AST
+ *     (positions and comment metadata aside); otherwise it returns the
+ *     input untouched with a `warnings` entry. `printProgram` has no such
+ *     guard.
  *
  * The formatter is *not* a linter — it does not rewrite §19.1
  * violations to named args, and it does not fix unknown components.
@@ -189,10 +189,43 @@ function printPattern(pattern: DestructuringPattern, indent: number, opts: Resol
 }
 
 export interface FormatResult {
-  /** Canonical source. Equal to the input when parse errors occur. */
+  /** Canonical source. Equal to the input when parse errors occur or the output would change the program. */
   formatted: string;
   /** Parse errors raised while reading the input — formatting is a no-op when non-empty. */
   errors: ParseError[];
+  /**
+   * Set when formatting was skipped without a parse error: the printed output
+   * did not re-parse, or re-parsed to a different tree than the input.
+   * `formatted` is then the untouched input.
+   */
+  warnings?: string[];
+}
+
+/** Metadata that legitimately differs between a source and its reformatted output. */
+const POSITION_ONLY_KEYS = new Set(["loc", "leadingComments", "trailingComments", "innerComments"]);
+
+/**
+ * Canonical JSON of a parsed program with positions and comment metadata
+ * removed, so two programs compare equal exactly when they mean the same thing.
+ * `__effect_L{line}_C{column}` names are derived from positions and are
+ * normalised. The for-of / for-in `declaration` is skipped because a head
+ * written without a keyword is printed with `let`.
+ */
+function structuralFingerprint(program: Program): string {
+  const canonical = (value: unknown): unknown => {
+    if (typeof value === "string") return value.replace(/_L\d+_C\d+/g, "_L_C");
+    if (Array.isArray(value)) return value.map((item) => canonical(item));
+    if (value === null || typeof value !== "object") return value;
+    const node = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(node).sort()) {
+      if (POSITION_ONLY_KEYS.has(key) || node[key] === undefined) continue;
+      if (key === "declaration" && (node.kind === "ForOfStatement" || node.kind === "ForInStatement")) continue;
+      out[key] = canonical(node[key]);
+    }
+    return out;
+  };
+  return JSON.stringify(canonical(program.statements));
 }
 
 export function formatProgram(source: string, options?: FormatOptions): FormatResult {
@@ -201,12 +234,24 @@ export function formatProgram(source: string, options?: FormatOptions): FormatRe
     return { formatted: source, errors: [...program.errors] };
   }
   const out = printProgram(program, options);
-  // Guarantee idempotency: re-formatting the output must yield the
-  // same string. If not, the printer disagrees with the parser and we
-  // fall back to the un-touched source so the caller never sees drift.
+  // The printer is not yet precedence-aware (it can drop parentheses), so the
+  // output is accepted only if it re-parses to the same tree as the input.
+  // Otherwise the caller gets the untouched source plus a warning, never a
+  // silently different program.
   const second = parse(out);
   if (second.errors.length > 0) {
-    return { formatted: source, errors: [] };
+    return {
+      formatted: source,
+      errors: [],
+      warnings: ["Formatting skipped: the printed output did not re-parse."],
+    };
+  }
+  if (structuralFingerprint(second) !== structuralFingerprint(program)) {
+    return {
+      formatted: source,
+      errors: [],
+      warnings: ["Formatting skipped: the printed output would not parse to the same program as the input."],
+    };
   }
   return { formatted: out, errors: [] };
 }

@@ -7,7 +7,7 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-10-01
 
-### Formatter Keeps `let`, `const` and `var`
+### Formatter Keeps `let`, `const` and `var`, and Refuses to Change Meaning
 
 - `formatProgram` and `printProgram` no longer drop the `let` / `const` / `var`
   keyword from declarations. `export let $count = 0` used to come back as
@@ -16,6 +16,13 @@ Each entry is dated and summarises what was added, changed, or fixed.
 - Files with a classic `for (let i = 0; i < n; i++)` loop are now formatted.
   The formatter used to print the loop without its `let`, which Aktion cannot
   read, so it quietly returned the original text untouched.
+- `formatProgram` now checks its own work: if the printed text would parse to a
+  different program than the input (for example because the printer dropped
+  parentheses, as in `($a * $r) / (1 - x)`), it returns the original source
+  unchanged and adds a `warnings` entry to the result, instead of silently
+  changing what the program does. Comment and position differences do not
+  count. On this repository's 165 `.aktion` files, 47 files that used to be
+  rewritten into a different program are now left alone.
 - Parsed statements carry an optional `declaration` field recording the keyword.
   It has no effect when a program runs, and programs without keywords produce
   exactly the same tree as before.
