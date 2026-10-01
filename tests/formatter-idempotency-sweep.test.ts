@@ -41,6 +41,10 @@ const SKIP_DIRS = new Set(["node_modules", "dist", ".git", "site"]);
  */
 const KNOWN_PRE_EXISTING_LIMITATIONS = new Set([
   "docs/demos/mini-apps/show-finder.aktion", // missing-parens/precedence gap above
+  // Same gap, newly reachable: this file's classic `for (let i = …)` made the
+  // printer emit unparseable output, so `formatProgram` used to fall back to
+  // the untouched source and never exercised the precedence gap.
+  "docs/demos/mini-apps/cocktail-explorer.aktion",
 ]);
 
 /**

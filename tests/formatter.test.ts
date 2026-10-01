@@ -31,17 +31,15 @@ describe("formatProgram — default indentation is unchanged", () => {
   it("formats with no options exactly like today's 2-space output (regression snapshot)", () => {
     const { formatted, errors } = formatProgram(SAMPLE);
     expect(errors).toEqual([]);
-    // Pinned literal snapshot of current (pre-existing, unchanged-by-this-PR)
-    // behaviour — any accidental drift in the default output (not just a
-    // missing feature) fails this test. Note `let` (not `const`): the
-    // printer's `DestructureStatement` case always re-emits `let` regardless
-    // of the original declaration keyword — pre-existing, out of scope here.
+    // Pinned literal snapshot of the default output — any accidental drift
+    // (not just a missing feature) fails this test. The `const` on the
+    // destructuring declaration is the source's own keyword, kept verbatim.
     // The `Column([...])` array collapses inline because its printed form
     // is <= 80 chars — also pre-existing `printExpression`/`Array` behaviour.
     expect(formatted).toBe(
       [
         "function Counter(initial) {",
-        "  let [count, setCount] = $state(initial)",
+        "  const [count, setCount] = $state(initial)",
         "  function inc() {",
         "    setCount(count + 1)",
         "  }",
@@ -72,7 +70,7 @@ describe("formatProgram — FormatOptions.indentStyle: 'tab'", () => {
       expect(leading).toMatch(/^\t+$/);
       expect(leading).not.toContain(" ");
     }
-    expect(formatted).toContain("\tlet [count, setCount] = $state(initial)");
+    expect(formatted).toContain("\tconst [count, setCount] = $state(initial)");
     expect(formatted).toContain("\t\tsetCount(count + 1)");
   });
 });
@@ -81,7 +79,7 @@ describe("formatProgram — FormatOptions.indentWidth: 4", () => {
   it("indents each level with 4 spaces", () => {
     const { formatted, errors } = formatProgram(SAMPLE, { indentStyle: "space", indentWidth: 4 });
     expect(errors).toEqual([]);
-    expect(formatted).toContain("    let [count, setCount] = $state(initial)");
+    expect(formatted).toContain("    const [count, setCount] = $state(initial)");
     expect(formatted).toContain("        setCount(count + 1)");
     // No 2-space-only indentation should remain at the top of a nested line.
     expect(formatted).not.toMatch(/\n {2}[^ ]/);
@@ -99,7 +97,7 @@ describe("formatProgram — FormatOptions.indentWidth validation", () => {
   it("accepts 0 (no indentation at all)", () => {
     const { formatted, errors } = formatProgram(SAMPLE, { indentWidth: 0 });
     expect(errors).toEqual([]);
-    expect(formatted).toContain("let [count, setCount] = $state(initial)");
+    expect(formatted).toContain("const [count, setCount] = $state(initial)");
     expect(formatted).not.toMatch(/\n +\S/);
   });
 });
@@ -254,7 +252,7 @@ describe("formatProgram — all new FormatOptions compose together with indentSt
     // as bare `x = value` with no `const`/`let` keyword — only destructuring
     // gets `let`, per the printer's existing `Assignment`/`DestructureStatement`
     // cases.)
-    expect(formatted).toContain("\tconfig = {");
+    expect(formatted).toContain("\tconst config = {");
     expect(formatted).not.toMatch(/\n {2,}\S/);
     // Single-quoted strings.
     expect(formatted).toContain("'Alexandria'");

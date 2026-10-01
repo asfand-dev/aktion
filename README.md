@@ -1755,6 +1755,8 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   overrides the block indentation; omit it and the output is unchanged from
   before. `printProgram` (re-emit a parsed `Program`, no re-parse) takes the
   same options.
+  `let` / `const` / `var` on declarations are kept as written (the parser
+  records them in an optional `declaration` field; it is ignored at runtime).
 - `inspectAST(source)` returns a JSON-friendly view of the Committed +
   Drafting ASTs at the current byte position — bindings (with
   kind / line / column / summary), in-flight names, and any parse errors.

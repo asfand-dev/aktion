@@ -328,7 +328,8 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
     case "Assignment": {
       const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
       const expr = printExpression(stmt.expression, indent, opts);
-      return `${padStr}${exp}${lhs} = ${expr}`;
+      const kw = stmt.declaration ? `${stmt.declaration} ` : "";
+      return `${padStr}${exp}${kw}${lhs} = ${expr}`;
     }
     case "ComponentDeclaration": {
       const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
@@ -391,7 +392,7 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
       const iter = printExpression(stmt.iterable, indent, opts);
       const body = `{\n${printBlockBody(stmt.body, indent + 1, opts)}\n${padStr}}`;
       const binding = stmt.pattern ? printPattern(stmt.pattern, indent, opts) : stmt.item;
-      return `${padStr}for (let ${binding} of ${iter}) ${body}`;
+      return `${padStr}for (${stmt.declaration ?? "let"} ${binding} of ${iter}) ${body}`;
     }
     case "ForClassicStatement": {
       const init = stmt.init ? printStatement(stmt.init, 0, opts).trimStart() : "";
@@ -413,12 +414,12 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
     case "ForInStatement": {
       const iter = printExpression(stmt.iterable, indent, opts);
       const body = `{\n${printBlockBody(stmt.body, indent + 1, opts)}\n${padStr}}`;
-      return `${padStr}for (let ${stmt.item} in ${iter}) ${body}`;
+      return `${padStr}for (${stmt.declaration ?? "let"} ${stmt.item} in ${iter}) ${body}`;
     }
     case "DestructureStatement": {
       const pattern = printPattern({ kind: stmt.patternKind, bindings: stmt.bindings }, indent, opts);
       const expr = printExpression(stmt.expression, indent, opts);
-      return `${padStr}let ${pattern} = ${expr}`;
+      return `${padStr}${stmt.declaration ?? "let"} ${pattern} = ${expr}`;
     }
     case "BreakStatement":
       return `${padStr}break`;

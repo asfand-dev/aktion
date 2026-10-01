@@ -5,6 +5,21 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-10-01
+
+### Formatter Keeps `let`, `const` and `var`
+
+- `formatProgram` and `printProgram` no longer drop the `let` / `const` / `var`
+  keyword from declarations. `export let $count = 0` used to come back as
+  `export $count = 0`; it now stays as written. Declarations written without a
+  keyword are still printed without one.
+- Files with a classic `for (let i = 0; i < n; i++)` loop are now formatted.
+  The formatter used to print the loop without its `let`, which Aktion cannot
+  read, so it quietly returned the original text untouched.
+- Parsed statements carry an optional `declaration` field recording the keyword.
+  It has no effect when a program runs, and programs without keywords produce
+  exactly the same tree as before.
+
 ## [0.8.0](https://github.com/asfand-dev/aktion/compare/v0.7.0...v0.8.0) (2026-09-29)
 
 
