@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reactivity &amp; rendering · Aktion</title>
+  <meta name="description" content="A deep dive into Aktion's reactivity model: path-granular tracking, the two render gates, exactly what forces a full re-render, and how to keep updates fine-grained." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    .callout {
+      border: 1px solid var(--doc-border);
+      border-left: 4px solid var(--doc-accent, #6366f1);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 18px 0;
+      background: var(--doc-surface-elev);
+    }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout.ok { border-left-color: #10b981; }
+    .callout h4 { margin: 0 0 6px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
+    /* Side-by-side "do / don't" cards. */
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 18px 0; }
+    @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+    .pair pre { margin: 0; }
+    .pair-card { border: 1px solid var(--doc-border); border-radius: 10px; overflow: hidden; background: var(--doc-surface-elev); }
+    .pair-card > .pair-head { font-size: 12px; font-weight: 600; padding: 8px 12px; }
+    .pair-card.bad .pair-head { color: #b91c1c; background: rgba(239, 68, 68, .08); }
+    .pair-card.good .pair-head { color: #047857; background: rgba(16, 185, 129, .1); }
+    .pair-card pre { border: none; border-radius: 0; }
+  </style>
+</head>
+<body data-page="reactivity">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Core concept</span>
+        <h1>Reactivity &amp; rendering.</h1>
+        <p class="lead">
+          Aktion tracks state at <strong>path granularity</strong> and re-renders
+          through <strong>two gates</strong>. Knowing which gate an update takes is
+          the difference between a surgical patch and a full-tree re-render. This
+          page explains exactly what triggers each path and how to keep your app
+          fine-grained.
+        </p>
+      </header>
+
+      <div class="callout warn">
+        <p><strong>The one thing to remember.</strong> Only top-level
+          <code>$name = value</code> atoms and <code>$store</code> fields take the
+          fine-grained path. The <code>$state</code>/<code>$memo</code> hooks,
+          every <code>$http</code> lifecycle transition, timers, effect-driven
+          writes, and <code>$emit</code> all force a <strong>full-tree
+          re-render</strong> (with memoization disabled). If you build a
+          hook-heavy app you get correct output, but not the headline
+          fine-grained perf profile.</p>
+      </div>
+
+      <div class="callout">
+        <h4>On this page</h4>
+        <p>
+          <a href="#model">The reactive model</a> &middot;
+          <a href="#gates">The two render gates</a> &middot;
+          <a href="#full">What forces a full re-render</a> &middot;
+          <a href="#keep-fine">Keeping renders fine-grained</a> &middot;
+          <a href="#declare-vs-assign">Declare vs. assign</a> &middot;
+          <a href="#derived">Derived values</a> &middot;
+          <a href="#env">Reactive environment globals</a> &middot;
+          <a href="#choose">Which state primitive?</a>
+        </p>
+      </div>
+
+      <h2 id="model">The reactive model</h2>
+      <p>
+        A reactive value in Aktion is an <em>atom</em>: a named cell in a single
+        global store. Reading an atom while rendering subscribes the surrounding
+        element to that atom&rsquo;s <strong>path</strong> &mdash; not just the
+        atom name, but the exact property you touched
+        (<code>$user.profile.name</code> subscribes to that path, not all of
+        <code>$user</code>). When you later write the same path, only the
+        subscribers of that path are invalidated.
+      </p>
+      <p>
+        This is the auto-tracking of MobX with the path-granularity of Solid, and
+        it needs no selectors or dependency arrays. The catch: it only applies to
+        the atom/store style of state.
+      </p>
+      <p>Three lines capture the whole loop &mdash; declare, read, write:</p>
+<pre><code>$count = 0                                  // 1. declare an atom (top level)
+
+function Counter() {
+  return Button(`Clicked ${$count} times`, {  // 2. reading subscribes this Button to "count"
+    onClick: () =&gt; { $count = $count + 1 }     // 3. writing invalidates only "count" readers
+  })
+}
+$app(Counter())</code></pre>
+      <p>
+        No <code>useState</code>, no setter, no dependency array. The
+        <code>$count</code> read inside <code>Counter</code> is what wires the
+        subscription; the <code>$count = &hellip;</code> write in the handler is
+        what fires it. Everything else on the page is left alone.
+      </p>
+
+      <h2 id="gates">The two render gates</h2>
+      <table class="signature-table">
+        <thead><tr><th>Gate</th><th>How it&rsquo;s triggered</th><th>What re-runs</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Fine-grained</strong></td>
+            <td>Writing a top-level <code>$name = value</code> atom or a <code>$store</code> field.</td>
+            <td>Only the elements/components that read the affected <em>path</em>. Memoized siblings are untouched.</td>
+          </tr>
+          <tr>
+            <td><strong>Full re-render</strong></td>
+            <td>Anything that routes through <code>notify()</code> (see the list below).</td>
+            <td>The entire program tree re-executes with memoization disabled, then the morph reconciler patches the DOM.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 id="full">What forces a full re-render</h2>
+      <p>
+        Every one of these calls <code>notify()</code>, which requests a full-tree
+        re-render:
+      </p>
+      <ul>
+        <li>Every <code>$state</code> setter (<code>setCount(&hellip;)</code>).</li>
+        <li>Every <code>$memo</code> recomputation that changes its value.</li>
+        <li>Every <code>$http</code> lifecycle transition (<code>loading &rarr; data</code>, error, refetch).</li>
+        <li><code>setTimeout</code> / <code>setInterval</code> callbacks that touch state.</li>
+        <li>Effect bodies that mutate state.</li>
+        <li><code>$emit</code> dispatches.</li>
+      </ul>
+      <p>
+        None of these is <em>wrong</em> &mdash; the morph reconciler preserves
+        focus, selection, scroll, and input values across the patch, so a full
+        re-render is visually seamless. It is simply more work than a path-scoped
+        update.
+      </p>
+
+      <h2 id="keep-fine">How to keep renders fine-grained</h2>
+      <ul>
+        <li>Prefer <strong>top-level atoms</strong> (<code>$count = 0</code>) and
+          <code>$store</code> for state that many components read. Reads
+          subscribe by path; writes invalidate only that path.</li>
+        <li>Reach for <strong>component-local <code>$state</code></strong> when the
+          state is genuinely local and the component subtree is small &mdash; the
+          full re-render is then cheap because the tree under it is small.</li>
+        <li>Write <strong>narrow paths</strong>: <code>$user.name = "Ada"</code>
+          invalidates only readers of <code>user.name</code>, whereas reassigning
+          the whole object (<code>$user = {&hellip;}</code>) invalidates everyone
+          who read any part of <code>$user</code>.</li>
+        <li>Let components <strong>memoize</strong>: a PascalCase component whose
+          props are unchanged is skipped on a fine-grained update. Full
+          re-renders bypass this, so the fewer full re-renders you trigger, the
+          more memoization pays off.</li>
+      </ul>
+
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; path-scoped atom update</span>
+<pre><code>$user = { name: "Ada", role: "admin" }
+function Profile() {
+  return Column([
+    // Reads only $user.name — a write to $user.role won't re-render this.
+    Text(`Name: ${$user.name}`, { variant: "large-heavy" }),
+    Button("Rename", { variant: "primary", onClick: () =&gt; { $user.name = "Grace" } }),
+  ], { gap: "md" })
+}
+$app(Profile())</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <p>
+        The single most common performance mistake is reassigning a whole object
+        when you meant to change one field. Write the <em>narrowest</em> path:
+      </p>
+      <div class="pair">
+        <div class="pair-card bad">
+          <div class="pair-head">Avoid &mdash; invalidates every reader of $user</div>
+<pre><code>// Re-creates the object, so any
+// component that read ANY part of
+// $user must re-render.
+$user = { ...$user, name: "Grace" }</code></pre>
+        </div>
+        <div class="pair-card good">
+          <div class="pair-head">Prefer &mdash; invalidates only "user.name"</div>
+<pre><code>// Touches one path. Only the
+// components that read $user.name
+// re-render.
+$user.name = "Grace"</code></pre>
+        </div>
+      </div>
+
+      <h2 id="declare-vs-assign"><code>$x = expr</code>: declare vs. assign</h2>
+      <p>
+        The same syntax means different things depending on where it appears. This
+        is the highest-stakes semantic in the language, so internalise it:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Where</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Top level</strong></td>
+            <td>Declares a reactive atom. A non-literal right-hand side becomes a <em>computed derivation</em> that recomputes when its inputs change.</td>
+          </tr>
+          <tr>
+            <td>Inside a <strong>PascalCase</strong> component</td>
+            <td>A <em>per-instance state declaration</em>: the initializer runs once and the value persists across renders.</td>
+          </tr>
+          <tr>
+            <td>Inside an <strong>action</strong> / effect / lambda</td>
+            <td>A plain reactive <em>write</em> to an existing atom.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <p>The runtime has a <strong>render guard</strong>: a <code>$name = &hellip;</code>
+          write that runs in render position is applied without scheduling a
+          re-render (to prevent infinite loops) and logs a warning. If you see
+          that warning, you are assigning state during render &mdash; move the
+          write into an event handler or an effect, or seed it with a PascalCase
+          component / the <code>$state</code> hook instead.</p>
+      </div>
+
+      <h2 id="derived">Derived values with <code>$util.derived</code></h2>
+      <p>
+        A top&#8209;level <code>$x = expr</code> with a non&#8209;literal right&#8209;hand
+        side is already a computed derivation. When you want that same
+        recompute&#8209;from&#8209;inputs behaviour <em>inside a component body</em> &mdash;
+        without an explicit dependency list &mdash; reach for
+        <code>$util.derived(fn)</code>. It re&#8209;evaluates whenever the atoms its
+        function reads change, and memoizes within the component.
+      </p>
+<pre><code>function CartSummary() {
+  subtotal = $util.derived(() =&gt; $util.sum($cart.map(i =&gt; i.price * i.qty)))
+  shipping = $util.derived(() =&gt; subtotal &gt; 50 ? 0 : 6)
+  return Column([
+    Text(`Subtotal: ${$util.currency(subtotal)}`),
+    Text(`Shipping: ${$util.currency(shipping)}`),
+  ])
+}</code></pre>
+      <p>
+        Use <a href="hooks.html#memo"><code>$memo</code></a> when you need an explicit
+        dependency array or want to cache an expensive pure computation;
+        <code>$util.derived</code> is the lighter choice for plain read&#8209;through
+        values.
+      </p>
+
+      <h2 id="env">Reactive environment globals</h2>
+      <p>
+        <code>$util</code> exposes a set of <strong>reactive getters</strong> that let
+        the UI respond to the browser environment without manual listeners or host
+        glue. Reading one re&#8209;renders the component when it changes; listeners
+        attach lazily on first read (a program that never touches them pays nothing)
+        and updates are <code>requestAnimationFrame</code>&#8209;coalesced.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Getter</th><th>Shape</th><th>Use it for</th></tr></thead>
+        <tbody>
+          <tr><td><code>$util.scroll</code></td><td><code>{ x, y, progress, direction }</code></td><td>Scroll progress bars, show/hide on scroll. <code>progress</code> is 0&ndash;1.</td></tr>
+          <tr><td><code>$util.viewport</code></td><td><code>{ width, height }</code></td><td>Pixel&#8209;exact responsive decisions.</td></tr>
+          <tr><td><code>$util.breakpoint</code></td><td><code>{ active, width, sm, md, lg, xl }</code></td><td>Named breakpoints (640/768/1024/1280). Flags are cumulative.</td></tr>
+          <tr><td><code>$util.media</code></td><td><code>{ prefersDark, prefersReducedMotion, online, pointer, portrait }</code></td><td>Honour user preferences and connection state.</td></tr>
+          <tr><td><code>$util.mouse</code></td><td><code>{ x, y }</code></td><td>Spotlight / cursor&#8209;follow effects.</td></tr>
+          <tr><td><code>$util.url</code></td><td><code>{ path, params, query, hash, … }</code></td><td>Reactive URL (see <a href="routing.html#query">Routing</a>).</td></tr>
+        </tbody>
+      </table>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live &mdash; resize the window</span>
+<pre><code>function Responsive() {
+  bp = $util.breakpoint
+  return Column([
+    Text(`Active breakpoint: ${bp.active}`, { variant: "large-heavy" }),
+    Text(`Viewport: ${$util.viewport.width} × ${$util.viewport.height}`),
+    Grid($util.range(1, bp.lg ? 4 : (bp.md ? 2 : 1)).map(n =&gt;
+      Card([Text(`Cell ${n}`)])
+    ), { columns: bp.lg ? 4 : (bp.md ? 2 : 1) }),
+  ], { gap: "md" })
+}
+$app(Responsive())</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+      <p>
+        Branch animations on <code>$util.media.prefersReducedMotion</code> and layout
+        on <code>$util.breakpoint.active</code> to keep a single program adaptive
+        across devices.
+      </p>
+
+      <h2 id="choose">Which state primitive should I reach for?</h2>
+      <p>
+        Aktion gives you four ways to hold state. They all work, but they sit on
+        different render gates. Use this table to pick the one that keeps your app
+        on the fine-grained path:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Use&hellip;</th><th>When the state is&hellip;</th><th>Render gate</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Top-level atom</strong> <code>$count = 0</code></td>
+            <td>Read by more than one component, or read deep in the tree.</td>
+            <td>Fine-grained &mdash; the default, fastest choice.</td>
+          </tr>
+          <tr>
+            <td><strong><code>$store</code></strong></td>
+            <td>Shared, structured app state (cart, user, settings) with many fields.</td>
+            <td>Fine-grained, per-field. See <a href="stores.html">Global state</a>.</td>
+          </tr>
+          <tr>
+            <td><strong><code>$state</code> hook</strong></td>
+            <td>Genuinely component-local <em>and</em> the subtree under it is small.</td>
+            <td>Full re-render of that component. See <a href="hooks.html#state">Hooks</a>.</td>
+          </tr>
+          <tr>
+            <td><strong><code>$memo</code></strong></td>
+            <td>An expensive pure computation you want cached against explicit deps.</td>
+            <td>Recompute forces a full re-render. See <a href="hooks.html#memo">Hooks</a>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout ok">
+        <p><strong>Rule of thumb.</strong> Reach for a top-level atom or
+          <code>$store</code> first. Drop to <code>$state</code> only when the
+          state truly belongs to one small component and never needs to be read
+          elsewhere &mdash; then the full re-render is cheap because the subtree
+          is tiny.</p>
+      </div>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="hooks.html">
+          <span class="demo-tag">Core</span>
+          <h3>Hooks</h3>
+          <p><code>$state</code> and <code>$memo</code> &mdash; the React-compat tier and its caveats.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="stores.html">
+          <span class="demo-tag">Core</span>
+          <h3>Global state</h3>
+          <p><code>$store</code> for shared, path-tracked application state.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="performance.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Performance</h3>
+          <p>Turn the fine-grained model into real-world speed.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+  <script type="module">
+    import "./dist/aktion.js";
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[reactivity demo] render failed", err);
+      }
+    }
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>
