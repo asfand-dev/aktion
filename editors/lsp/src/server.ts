@@ -543,10 +543,17 @@ const handlers: Record<string, Handler> = {
 
   "textDocument/formatting"(params) {
     const doc = requireDoc(params);
-    const { formatted, errors } = formatProgram(doc.text);
+    const { formatted, errors, warnings } = formatProgram(doc.text);
     // A document with parse errors is returned unchanged by the formatter, so a
     // mid-edit file is never mangled. Emit no edit at all in that case.
-    if (errors.length > 0 || formatted === doc.text) return [];
+    if (errors.length > 0) return [];
+    // A warning means the printer refused to rewrite the file (its output would
+    // not be the same program). Tell the user instead of silently doing nothing.
+    if (warnings && warnings.length > 0) {
+      notify("window/showMessage", { type: 2, message: `Aktion: ${warnings[0]!.message}` });
+      return [];
+    }
+    if (formatted === doc.text) return [];
     return [{ range: fullRange(doc), newText: formatted }];
   },
 

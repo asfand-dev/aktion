@@ -476,6 +476,40 @@ describe("aktion-language-server — language features", () => {
     expect(res.result).toEqual([]);
     client.notify("textDocument/didClose", { textDocument: { uri: brokenUri } });
   });
+
+  it("returns no edit and warns when formatting would change the program", async () => {
+    const riskyUri = "file:///risky.aktion";
+    client.notify("textDocument/didOpen", {
+      textDocument: { uri: riskyUri, languageId: "aktion", version: 1, text: "y = (a + b) * c\n" },
+    });
+    const before = client.notifications.length;
+    const res = await client.request("textDocument/formatting", {
+      textDocument: { uri: riskyUri },
+      options: { tabSize: 2, insertSpaces: true },
+    });
+    expect(res.result).toEqual([]);
+    const shown = client.notifications.slice(before).filter((n) => n.method === "window/showMessage");
+    expect(shown).toHaveLength(1);
+    expect(shown[0]!.params.type).toBe(2);
+    expect(shown[0]!.params.message).toMatch(/Formatting skipped/);
+    client.notify("textDocument/didClose", { textDocument: { uri: riskyUri } });
+  });
+
+  it("returns an edit and no warning for a document that formats safely", async () => {
+    const messyUri = "file:///messy.aktion";
+    client.notify("textDocument/didOpen", {
+      textDocument: { uri: messyUri, languageId: "aktion", version: 1, text: "x=1+2\n" },
+    });
+    const before = client.notifications.length;
+    const res = await client.request("textDocument/formatting", {
+      textDocument: { uri: messyUri },
+      options: { tabSize: 2, insertSpaces: true },
+    });
+    expect(res.result).toHaveLength(1);
+    expect(res.result[0].newText).toBe("x = 1 + 2\n");
+    expect(client.notifications.slice(before).filter((n) => n.method === "window/showMessage")).toEqual([]);
+    client.notify("textDocument/didClose", { textDocument: { uri: messyUri } });
+  });
 });
 
 describe("aktion-language-server — semantic tokens", () => {
