@@ -49,6 +49,26 @@ Each entry is dated and summarises what was added, changed, or fixed.
   It now fails loudly. Every `.aktion` file in this repository still parses
   with no errors.
 
+### Formatter Keeps `let`, `const` and `var`, and Refuses to Change Meaning
+
+- `formatProgram` and `printProgram` no longer drop the `let` / `const` / `var`
+  keyword from declarations. `export let $count = 0` used to come back as
+  `export $count = 0`; it now stays as written. Declarations written without a
+  keyword are still printed without one.
+- A classic `for (let i = 0; i < n; i++)` loop no longer stops the whole file
+  from being formatted. The formatter used to print it without its `let`, which
+  Aktion cannot read, so it quietly returned the original text untouched.
+- `formatProgram` now returns your source unchanged, with a `warnings` entry,
+  when its output would not parse or would not be the same program (the printer
+  can still drop parentheses). Of this repository's 165 `.aktion` files, 44 that
+  used to be rewritten into a different program are now left alone or printed
+  correctly.
+- The printer no longer adds a `break` to every `switch` case, which turned
+  fall-through cases into separate ones.
+- Parsed statements carry an optional `declaration` field recording the keyword.
+  It has no effect when a program runs and is left out of compiled `.aktion`
+  modules, which are byte-for-byte what they were.
+
 ## [0.8.0](https://github.com/asfand-dev/aktion/compare/v0.7.0...v0.8.0) (2026-09-29)
 
 

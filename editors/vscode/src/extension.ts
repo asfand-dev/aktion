@@ -282,8 +282,16 @@ function formatWholeDocument(doc: vscode.TextDocument): vscode.TextEdit[] {
   const original = doc.getText();
   const result = safely("formatProgram", () => formatProgram(original), null);
   if (!result) return [];
-  const { formatted, errors } = result;
-  if (errors.length > 0 || formatted === original) return [];
+  const { formatted, errors, warnings } = result;
+  if (errors.length > 0) return [];
+  // A warning means the printer refused to rewrite the file (its output would
+  // not be the same program). Say so briefly in the status bar rather than
+  // leaving Format Document looking like it silently did nothing.
+  if (warnings && warnings.length > 0) {
+    vscode.window.setStatusBarMessage(`$(warning) Aktion: ${warnings[0]!.message}`, 6000);
+    return [];
+  }
+  if (formatted === original) return [];
   const fullRange = new vscode.Range(doc.positionAt(0), doc.positionAt(original.length));
   return [vscode.TextEdit.replace(fullRange, formatted)];
 }

@@ -4,26 +4,26 @@
  * `formatProgram(source, options?)` re-emits a syntactically clean version
  * of the input. The output is:
  *
- *   - **Idempotent, with one known exception.** `format(format(x)) ===
- *     format(x)` for every input that parses cleanly, EXCEPT where a
- *     parenthesized sub-expression's grouping affects precedence against a
- *     tighter-binding operator applied to it (e.g. `(a || b).c()`) — the
- *     grammar has no `Paren`/grouping AST node at all, so the printer
- *     cannot always preserve that grouping on the first pass. See
- *     `tests/formatter-idempotency-sweep.test.ts`'s
- *     `KNOWN_PRE_EXISTING_LIMITATIONS` for the one known real-world
- *     instance and the full explanation; fixing it needs a real precedence
- *     table across `Binary`/`Ternary`/`Lambda`/`Unary`, tracked separately.
- *     Every `BuiltinCall` node printed by this module must also re-parse
- *     back to the same node kind, or this guarantee silently breaks in a
- *     second, unrelated way — see `printDesugaredOperator`'s doc comment.
+ *   - **Idempotent.** `format(format(x)) === format(x)` for every input that
+ *     parses cleanly. The printer is not yet precedence-aware — the grammar
+ *     has no `Paren`/grouping AST node, so `(a || b).c()` can print as
+ *     `a || b.c()` — so `formatProgram` verifies its output against the
+ *     input's AST and returns the input untouched when they differ (see
+ *     the round-trip bullet below). Fixing the cause needs a real precedence
+ *     table across `Binary`/`Ternary`/`Lambda`/`Unary`. Every `BuiltinCall`
+ *     node printed by this module must also re-parse back to the same node
+ *     kind, or this guarantee silently breaks in a second, unrelated way —
+ *     see `printDesugaredOperator`'s doc comment.
  *   - **Canonical.** Statements one per line; two-space indentation by
  *     default inside `{ … }` blocks (configurable via `FormatOptions`);
  *     named args always use `prop: value` (the legacy `prop=value` form is
  *     gone); double-quoted strings by default unless interpolation is
  *     required (templates), also configurable via `FormatOptions`.
- *   - **Round-trips through the parser.** Re-parsing the formatter's
- *     output yields a structurally-equivalent AST.
+ *   - **Round-trips through the parser.** `formatProgram` returns its output
+ *     only when re-parsing it yields a structurally-equivalent AST
+ *     (positions and comment metadata aside); otherwise it returns the
+ *     input untouched with a `warnings` entry. `printProgram` has no such
+ *     guard.
  *
  * The formatter is *not* a linter — it does not rewrite §19.1
  * violations to named args, and it does not fix unknown components.
@@ -189,10 +189,66 @@ function printPattern(pattern: DestructuringPattern, indent: number, opts: Resol
 }
 
 export interface FormatResult {
-  /** Canonical source. Equal to the input when parse errors occur. */
+  /** Canonical source. Equal to the input when parse errors occur or the output would change the program. */
   formatted: string;
   /** Parse errors raised while reading the input — formatting is a no-op when non-empty. */
   errors: ParseError[];
+  /**
+   * Non-fatal notes, shaped like `Program.warnings`. Set when formatting was
+   * skipped without a parse error: the printed output did not re-parse, or
+   * re-parsed to a different tree than the input. `formatted` is then the
+   * untouched input. Each entry applies to the whole document (line 1, column 1).
+   */
+  warnings?: ParseError[];
+}
+
+/** AST keys that carry source positions or comments, which a reformat legitimately changes. */
+const LAYOUT_ONLY_KEYS = new Set(["loc", "leadingComments", "trailingComments", "innerComments"]);
+
+/**
+ * Canonical JSON of a parsed program, used to decide whether two parses are
+ * the same program. Layout-only keys (positions, comments) are dropped and
+ * object keys are sorted; the position-derived name of an `$effect`
+ * (`__effect_L{line}_C{column}`) is normalised. Numbers `JSON.stringify`
+ * would conflate (`-0`, `NaN`, `±Infinity`) get their own markers, and a
+ * for-of / for-in head without a keyword counts as `let`, which is what the
+ * printer writes for it.
+ *
+ * It is a best-effort check for what the printer is known to get wrong, not a
+ * proof of equivalence. Exported for tests only; not part of the package API.
+ */
+export function structuralFingerprint(program: Program): string {
+  const canonical = (value: unknown): unknown => {
+    if (typeof value === "number") {
+      if (Object.is(value, -0)) return "__negative_zero__";
+      if (!Number.isFinite(value)) return `__number_${String(value)}__`;
+      return value;
+    }
+    if (Array.isArray(value)) return value.map((item) => canonical(item));
+    if (value === null || typeof value !== "object") return value;
+    const node = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    const isForHead = node.kind === "ForOfStatement" || node.kind === "ForInStatement";
+    const keys = isForHead ? [...new Set([...Object.keys(node), "declaration"])] : Object.keys(node);
+    for (const key of keys.sort()) {
+      if (key === "declaration" && isForHead) {
+        out[key] = node[key] ?? "let";
+        continue;
+      }
+      if (LAYOUT_ONLY_KEYS.has(key) || node[key] === undefined) continue;
+      if (key === "name" && node.kind === "EffectDeclaration" && typeof node[key] === "string") {
+        out[key] = (node[key] as string).replace(/_L\d+_C\d+$/, "_L_C");
+        continue;
+      }
+      out[key] = canonical(node[key]);
+    }
+    return out;
+  };
+  return JSON.stringify(canonical(program.statements));
+}
+
+function skippedFormatting(source: string, reason: string): FormatResult {
+  return { formatted: source, errors: [], warnings: [{ message: `Formatting skipped: ${reason}`, line: 1, column: 1 }] };
 }
 
 export function formatProgram(source: string, options?: FormatOptions): FormatResult {
@@ -201,12 +257,16 @@ export function formatProgram(source: string, options?: FormatOptions): FormatRe
     return { formatted: source, errors: [...program.errors] };
   }
   const out = printProgram(program, options);
-  // Guarantee idempotency: re-formatting the output must yield the
-  // same string. If not, the printer disagrees with the parser and we
-  // fall back to the un-touched source so the caller never sees drift.
+  // The printer is not yet precedence-aware (it can drop parentheses), so the
+  // output is accepted only if it re-parses to the same tree as the input.
+  // Otherwise the caller gets the untouched source plus a warning, never a
+  // silently different program.
   const second = parse(out);
   if (second.errors.length > 0) {
-    return { formatted: source, errors: [] };
+    return skippedFormatting(source, "the printed output did not re-parse.");
+  }
+  if (structuralFingerprint(second) !== structuralFingerprint(program)) {
+    return skippedFormatting(source, "the printed output would not parse to the same program as the input.");
   }
   return { formatted: out, errors: [] };
 }
@@ -328,7 +388,8 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
     case "Assignment": {
       const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
       const expr = printExpression(stmt.expression, indent, opts);
-      return `${padStr}${exp}${lhs} = ${expr}`;
+      const kw = stmt.declaration ? `${stmt.declaration} ` : "";
+      return `${padStr}${exp}${kw}${lhs} = ${expr}`;
     }
     case "ComponentDeclaration": {
       const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
@@ -391,7 +452,7 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
       const iter = printExpression(stmt.iterable, indent, opts);
       const body = `{\n${printBlockBody(stmt.body, indent + 1, opts)}\n${padStr}}`;
       const binding = stmt.pattern ? printPattern(stmt.pattern, indent, opts) : stmt.item;
-      return `${padStr}for (let ${binding} of ${iter}) ${body}`;
+      return `${padStr}for (${stmt.declaration ?? "let"} ${binding} of ${iter}) ${body}`;
     }
     case "ForClassicStatement": {
       const init = stmt.init ? printStatement(stmt.init, 0, opts).trimStart() : "";
@@ -413,12 +474,12 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
     case "ForInStatement": {
       const iter = printExpression(stmt.iterable, indent, opts);
       const body = `{\n${printBlockBody(stmt.body, indent + 1, opts)}\n${padStr}}`;
-      return `${padStr}for (let ${stmt.item} in ${iter}) ${body}`;
+      return `${padStr}for (${stmt.declaration ?? "let"} ${stmt.item} in ${iter}) ${body}`;
     }
     case "DestructureStatement": {
       const pattern = printPattern({ kind: stmt.patternKind, bindings: stmt.bindings }, indent, opts);
       const expr = printExpression(stmt.expression, indent, opts);
-      return `${padStr}let ${pattern} = ${expr}`;
+      return `${padStr}${stmt.declaration ?? "let"} ${pattern} = ${expr}`;
     }
     case "BreakStatement":
       return `${padStr}break`;
@@ -669,17 +730,7 @@ function printSwitchCase(c: SwitchCase, indent: number, opts: ResolvedFormatOpti
   const head = c.test === null
     ? `${padStr}default:`
     : `${padStr}case ${printExpression(c.test, indent, opts)}:`;
-  // Canonicalise every case/default arm to end with an explicit `break` —
-  // UNLESS the body already ends with one. Appending unconditionally used
-  // to double the break on a second `formatProgram` pass: the appended
-  // break re-parses back into a real trailing `BreakStatement` in `c.body`,
-  // so printing it again on the next pass appended yet another one,
-  // breaking idempotency (caught by the whole-repo sweep in
-  // tests/formatter-idempotency-sweep.test.ts —
-  // docs/demos/blocks/profile-header.aktion's `switch` arms).
-  const lastStmt = c.body[c.body.length - 1];
-  const trailingBreak = lastStmt?.kind === "BreakStatement" ? "" : `\n${pad(indent + 1, opts)}break`;
-  const caseText = `${head}\n${body}${trailingBreak}`;
+  const caseText = body.length > 0 ? `${head}\n${body}` : head;
   // Comment(s) preceding the `case`/`default` keyword itself (a note on the
   // branch as a whole) — distinct from `body`'s own leading comments on its
   // first statement, which document that statement instead.

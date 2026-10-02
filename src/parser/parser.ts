@@ -23,6 +23,7 @@ import type {
   Program,
   Statement,
   AssignmentStatement,
+  DeclarationKeyword,
   AttachedComment,
   ExpressionStatement,
   Expression,
@@ -618,6 +619,13 @@ function parseEffectDep(
   } satisfies ParseError;
 }
 
+/** `{ declaration }` for a `let` / `const` / `var` token, spread so keyword-less nodes stay field-free. */
+function declarationOf(token: Token): { declaration: DeclarationKeyword } | Record<string, never> {
+  return token.value === "let" || token.value === "const" || token.value === "var"
+    ? { declaration: token.value }
+    : {};
+}
+
 /** Parse `let/const/var identifier = expression`. */
 function parseVarDecl(ctx: ParserContext): Statement {
   const start = ctx.consume(); // let/const/var
@@ -653,6 +661,7 @@ function parseVarDecl(ctx: ParserContext): Statement {
     identifier,
     isState,
     expression,
+    ...declarationOf(start),
     loc: { line: start.line, column: start.column },
   };
 }
@@ -672,6 +681,7 @@ function parseDestructureDecl(ctx: ParserContext, start: Token): Statement {
     patternKind: pattern.kind,
     bindings: pattern.bindings,
     expression,
+    ...declarationOf(start),
     loc: { line: start.line, column: start.column },
   };
 }
@@ -2250,11 +2260,12 @@ function parseForStatement(ctx: ParserContext): Statement {
 
   // for-of / for-in: optional let/const/var, then binding,
   // then `of` / `in`, then iterable.
+  let declaration: Record<string, never> | { declaration: DeclarationKeyword } = {};
   if (
     ctx.peek().type === "Keyword" &&
     (ctx.peek().value === "let" || ctx.peek().value === "const" || ctx.peek().value === "var")
   ) {
-    ctx.consume();
+    declaration = declarationOf(ctx.consume());
   }
   skipWhitespace(ctx);
 
@@ -2287,6 +2298,7 @@ function parseForStatement(ctx: ParserContext): Statement {
     return {
       kind: "ForInStatement",
       item,
+      ...declaration,
       iterable,
       body,
       loc: { line: start.line, column: start.column },
@@ -2296,6 +2308,7 @@ function parseForStatement(ctx: ParserContext): Statement {
     kind: "ForOfStatement",
     item,
     pattern,
+    ...declaration,
     iterable,
     body,
     loc: { line: start.line, column: start.column },
