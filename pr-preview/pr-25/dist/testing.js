@@ -1090,6 +1090,9 @@ function parseEffectDep(ctx, triggers, setRateLimit) {
     column: head.column
   };
 }
+function declarationOf(token) {
+  return token.value === "let" || token.value === "const" || token.value === "var" ? { declaration: token.value } : {};
+}
 function parseVarDecl(ctx) {
   const start2 = ctx.consume();
   const head = ctx.peek();
@@ -1118,6 +1121,7 @@ function parseVarDecl(ctx) {
     identifier,
     isState,
     expression,
+    ...declarationOf(start2),
     loc: { line: start2.line, column: start2.column }
   };
 }
@@ -1131,6 +1135,7 @@ function parseDestructureDecl(ctx, start2) {
     patternKind: pattern.kind,
     bindings: pattern.bindings,
     expression,
+    ...declarationOf(start2),
     loc: { line: start2.line, column: start2.column }
   };
 }
@@ -2325,8 +2330,9 @@ function parseForStatement(ctx) {
   }
   ctx.restore(headSnapshot);
   if (kind === "classic") return parseForClassic(ctx, start2);
+  let declaration = {};
   if (ctx.peek().type === "Keyword" && (ctx.peek().value === "let" || ctx.peek().value === "const" || ctx.peek().value === "var")) {
-    ctx.consume();
+    declaration = declarationOf(ctx.consume());
   }
   skipWhitespace(ctx);
   let item = "__row";
@@ -2349,6 +2355,7 @@ function parseForStatement(ctx) {
     return {
       kind: "ForInStatement",
       item,
+      ...declaration,
       iterable,
       body,
       loc: { line: start2.line, column: start2.column }
@@ -2358,6 +2365,7 @@ function parseForStatement(ctx) {
     kind: "ForOfStatement",
     item,
     pattern,
+    ...declaration,
     iterable,
     body,
     loc: { line: start2.line, column: start2.column }
@@ -2865,7 +2873,8 @@ function printStatement(stmt, indent, opts) {
     case "Assignment": {
       const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
       const expr = printExpression(stmt.expression, indent, opts);
-      return `${padStr}${exp}${lhs} = ${expr}`;
+      const kw = stmt.declaration ? `${stmt.declaration} ` : "";
+      return `${padStr}${exp}${kw}${lhs} = ${expr}`;
     }
     case "ComponentDeclaration": {
       const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
@@ -2936,7 +2945,7 @@ ${padStr}}`;
 ${printBlockBody(stmt.body, indent + 1, opts)}
 ${padStr}}`;
       const binding = stmt.pattern ? printPattern(stmt.pattern, indent, opts) : stmt.item;
-      return `${padStr}for (let ${binding} of ${iter}) ${body}`;
+      return `${padStr}for (${stmt.declaration ?? "let"} ${binding} of ${iter}) ${body}`;
     }
     case "ForClassicStatement": {
       const init = stmt.init ? printStatement(stmt.init, 0, opts).trimStart() : "";
@@ -2966,12 +2975,12 @@ ${padStr}}`;
       const body = `{
 ${printBlockBody(stmt.body, indent + 1, opts)}
 ${padStr}}`;
-      return `${padStr}for (let ${stmt.item} in ${iter}) ${body}`;
+      return `${padStr}for (${stmt.declaration ?? "let"} ${stmt.item} in ${iter}) ${body}`;
     }
     case "DestructureStatement": {
       const pattern = printPattern({ kind: stmt.patternKind, bindings: stmt.bindings }, indent, opts);
       const expr = printExpression(stmt.expression, indent, opts);
-      return `${padStr}let ${pattern} = ${expr}`;
+      return `${padStr}${stmt.declaration ?? "let"} ${pattern} = ${expr}`;
     }
     case "BreakStatement":
       return `${padStr}break`;
@@ -3150,11 +3159,8 @@ function printSwitchCase(c, indent, opts) {
   const padStr = pad(indent, opts);
   const body = printBlock(c.body, indent + 1, opts);
   const head = c.test === null ? `${padStr}default:` : `${padStr}case ${printExpression(c.test, indent, opts)}:`;
-  const lastStmt = c.body[c.body.length - 1];
-  const trailingBreak = lastStmt?.kind === "BreakStatement" ? "" : `
-${pad(indent + 1, opts)}break`;
-  const caseText = `${head}
-${body}${trailingBreak}`;
+  const caseText = body.length > 0 ? `${head}
+${body}` : head;
   if (!c.leadingComments || c.leadingComments.length === 0) return caseText;
   const header = printCommentGroup(c.leadingComments, indent, opts);
   return `${header.join("\n")}

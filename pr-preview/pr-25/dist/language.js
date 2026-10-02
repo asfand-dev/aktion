@@ -1087,6 +1087,9 @@ function parseEffectDep(ctx, triggers, setRateLimit) {
     column: head.column
   };
 }
+function declarationOf(token) {
+  return token.value === "let" || token.value === "const" || token.value === "var" ? { declaration: token.value } : {};
+}
 function parseVarDecl(ctx) {
   const start = ctx.consume();
   const head = ctx.peek();
@@ -1115,6 +1118,7 @@ function parseVarDecl(ctx) {
     identifier,
     isState,
     expression,
+    ...declarationOf(start),
     loc: { line: start.line, column: start.column }
   };
 }
@@ -1128,6 +1132,7 @@ function parseDestructureDecl(ctx, start) {
     patternKind: pattern.kind,
     bindings: pattern.bindings,
     expression,
+    ...declarationOf(start),
     loc: { line: start.line, column: start.column }
   };
 }
@@ -2322,8 +2327,9 @@ function parseForStatement(ctx) {
   }
   ctx.restore(headSnapshot);
   if (kind === "classic") return parseForClassic(ctx, start);
+  let declaration = {};
   if (ctx.peek().type === "Keyword" && (ctx.peek().value === "let" || ctx.peek().value === "const" || ctx.peek().value === "var")) {
-    ctx.consume();
+    declaration = declarationOf(ctx.consume());
   }
   skipWhitespace(ctx);
   let item = "__row";
@@ -2346,6 +2352,7 @@ function parseForStatement(ctx) {
     return {
       kind: "ForInStatement",
       item,
+      ...declaration,
       iterable,
       body,
       loc: { line: start.line, column: start.column }
@@ -2355,6 +2362,7 @@ function parseForStatement(ctx) {
     kind: "ForOfStatement",
     item,
     pattern,
+    ...declaration,
     iterable,
     body,
     loc: { line: start.line, column: start.column }
@@ -39290,6 +39298,39 @@ function printPattern(pattern, indent, opts) {
   });
   return `${open}${parts.join(", ")}${close}`;
 }
+const LAYOUT_ONLY_KEYS = /* @__PURE__ */ new Set(["loc", "leadingComments", "trailingComments", "innerComments"]);
+function structuralFingerprint(program) {
+  const canonical = (value) => {
+    if (typeof value === "number") {
+      if (Object.is(value, -0)) return "__negative_zero__";
+      if (!Number.isFinite(value)) return `__number_${String(value)}__`;
+      return value;
+    }
+    if (Array.isArray(value)) return value.map((item) => canonical(item));
+    if (value === null || typeof value !== "object") return value;
+    const node = value;
+    const out = {};
+    const isForHead = node.kind === "ForOfStatement" || node.kind === "ForInStatement";
+    const keys = isForHead ? [.../* @__PURE__ */ new Set([...Object.keys(node), "declaration"])] : Object.keys(node);
+    for (const key of keys.sort()) {
+      if (key === "declaration" && isForHead) {
+        out[key] = node[key] ?? "let";
+        continue;
+      }
+      if (LAYOUT_ONLY_KEYS.has(key) || node[key] === void 0) continue;
+      if (key === "name" && node.kind === "EffectDeclaration" && typeof node[key] === "string") {
+        out[key] = node[key].replace(/_L\d+_C\d+$/, "_L_C");
+        continue;
+      }
+      out[key] = canonical(node[key]);
+    }
+    return out;
+  };
+  return JSON.stringify(canonical(program.statements));
+}
+function skippedFormatting(source, reason) {
+  return { formatted: source, errors: [], warnings: [{ message: `Formatting skipped: ${reason}`, line: 1, column: 1 }] };
+}
 function formatProgram(source, options) {
   const program = parse(source);
   if (program.errors.length > 0) {
@@ -39298,7 +39339,10 @@ function formatProgram(source, options) {
   const out = printProgram(program, options);
   const second = parse(out);
   if (second.errors.length > 0) {
-    return { formatted: source, errors: [] };
+    return skippedFormatting(source, "the printed output did not re-parse.");
+  }
+  if (structuralFingerprint(second) !== structuralFingerprint(program)) {
+    return skippedFormatting(source, "the printed output would not parse to the same program as the input.");
   }
   return { formatted: out, errors: [] };
 }
@@ -39371,7 +39415,8 @@ function printStatement(stmt, indent, opts) {
     case "Assignment": {
       const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
       const expr = printExpression(stmt.expression, indent, opts);
-      return `${padStr}${exp}${lhs} = ${expr}`;
+      const kw = stmt.declaration ? `${stmt.declaration} ` : "";
+      return `${padStr}${exp}${kw}${lhs} = ${expr}`;
     }
     case "ComponentDeclaration": {
       const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
@@ -39442,7 +39487,7 @@ ${padStr}}`;
 ${printBlockBody(stmt.body, indent + 1, opts)}
 ${padStr}}`;
       const binding = stmt.pattern ? printPattern(stmt.pattern, indent, opts) : stmt.item;
-      return `${padStr}for (let ${binding} of ${iter}) ${body}`;
+      return `${padStr}for (${stmt.declaration ?? "let"} ${binding} of ${iter}) ${body}`;
     }
     case "ForClassicStatement": {
       const init = stmt.init ? printStatement(stmt.init, 0, opts).trimStart() : "";
@@ -39472,12 +39517,12 @@ ${padStr}}`;
       const body = `{
 ${printBlockBody(stmt.body, indent + 1, opts)}
 ${padStr}}`;
-      return `${padStr}for (let ${stmt.item} in ${iter}) ${body}`;
+      return `${padStr}for (${stmt.declaration ?? "let"} ${stmt.item} in ${iter}) ${body}`;
     }
     case "DestructureStatement": {
       const pattern = printPattern({ kind: stmt.patternKind, bindings: stmt.bindings }, indent, opts);
       const expr = printExpression(stmt.expression, indent, opts);
-      return `${padStr}let ${pattern} = ${expr}`;
+      return `${padStr}${stmt.declaration ?? "let"} ${pattern} = ${expr}`;
     }
     case "BreakStatement":
       return `${padStr}break`;
@@ -39656,11 +39701,8 @@ function printSwitchCase(c, indent, opts) {
   const padStr = pad(indent, opts);
   const body = printBlock(c.body, indent + 1, opts);
   const head = c.test === null ? `${padStr}default:` : `${padStr}case ${printExpression(c.test, indent, opts)}:`;
-  const lastStmt = c.body[c.body.length - 1];
-  const trailingBreak = lastStmt?.kind === "BreakStatement" ? "" : `
-${pad(indent + 1, opts)}break`;
-  const caseText = `${head}
-${body}${trailingBreak}`;
+  const caseText = body.length > 0 ? `${head}
+${body}` : head;
   if (!c.leadingComments || c.leadingComments.length === 0) return caseText;
   const header = printCommentGroup(c.leadingComments, indent, opts);
   return `${header.join("\n")}
