@@ -123,6 +123,8 @@ interface Doc {
 
 const documents = new Map<string, Doc>();
 const diagnosticTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** Document version for which a "formatting skipped" popup was already shown, per URI. */
+const skippedFormatNotified = new Map<string, number>();
 
 /**
  * Client capabilities we care about, captured at `initialize`. A client that
@@ -343,6 +345,7 @@ const handlers: Record<string, Handler> = {
     for (const timer of diagnosticTimers.values()) clearTimeout(timer);
     diagnosticTimers.clear();
     documents.clear();
+    skippedFormatNotified.clear();
     return null;
   },
 
@@ -383,6 +386,7 @@ const handlers: Record<string, Handler> = {
   "textDocument/didClose"(params) {
     const { uri } = params.textDocument;
     documents.delete(uri);
+    skippedFormatNotified.delete(uri);
     clearDiagnostics(uri);
     return undefined;
   },
@@ -543,10 +547,22 @@ const handlers: Record<string, Handler> = {
 
   "textDocument/formatting"(params) {
     const doc = requireDoc(params);
-    const { formatted, errors } = formatProgram(doc.text);
+    const { formatted, errors, warnings } = formatProgram(doc.text);
     // A document with parse errors is returned unchanged by the formatter, so a
     // mid-edit file is never mangled. Emit no edit at all in that case.
-    if (errors.length > 0 || formatted === doc.text) return [];
+    if (errors.length > 0) return [];
+    // A warning means the printer refused to rewrite the file (its output would
+    // not be the same program). Tell the user instead of silently doing nothing.
+    if (warnings && warnings.length > 0) {
+      // Format-on-save would raise the same popup on every save, so show it once
+      // per document version and log repeats.
+      const message = `Aktion: ${warnings[0]!.message}`;
+      const repeat = skippedFormatNotified.get(doc.uri) === doc.version;
+      skippedFormatNotified.set(doc.uri, doc.version);
+      notify(repeat ? "window/logMessage" : "window/showMessage", { type: 2, message });
+      return [];
+    }
+    if (formatted === doc.text) return [];
     return [{ range: fullRange(doc), newText: formatted }];
   },
 

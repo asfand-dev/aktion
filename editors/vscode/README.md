@@ -56,7 +56,9 @@ numbers is read from the runtime the extension bundles, not maintained by hand.
   `.aktion` file in the project.
 - **Formatting** — "Format Document" / format-on-save runs the canonical,
   idempotent pretty-printer. Files with parse errors are left untouched, so a
-  mid-edit document is never mangled. (Aktion's printer is whole-program, so
+  mid-edit document is never mangled. A file is also left untouched, with a
+  warning in the status bar, when the printed text would not be the same
+  program as the source. (Aktion's printer is whole-program, so
   "Format Selection" formats the document.)
 - **Snippets** — generated from the component library (type `Card`, `App`,
   `Hero`, … and accept).
