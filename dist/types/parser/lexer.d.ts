@@ -16,7 +16,15 @@ export type TokenType = "Identifier" | "Keyword" | "StateIdentifier" | "Number" 
  * `flags` the trailing flag letters; the parser desugars it to
  * `new RegExp(value, flags)`.
  */
- | "Regex" | "Punctuation" | "Operator" | "Newline" | "Semicolon" | "EOF";
+ | "Regex" | "Punctuation" | "Operator" | "Newline" | "Semicolon"
+/**
+ * Source the lexer cannot make a token of: a character Aktion has no use
+ * for (`@`, `#`, `\`, a non-ASCII letter) or an unterminated string or
+ * template literal. `value` is the offending text and `message` the
+ * diagnostic. The parser reports it wherever it meets the token, so the
+ * input is rejected instead of silently losing the character.
+ */
+ | "Error" | "EOF";
 /**
  * Keywords reserved by Aktion. The lexer recognises them so the parser can
  * dispatch on `Keyword` tokens directly.
@@ -40,6 +48,19 @@ export interface Token {
     parts?: TemplatePart[];
     /** Set on `Regex` tokens to carry the trailing flag letters. */
     flags?: string;
+    /** Set on `Error` tokens: the diagnostic the parser reports for them. */
+    message?: string;
+    /**
+     * Set on a `String` token written as a backtick template literal without
+     * interpolation, so the parser can tell `` tag`x` `` (a tagged template,
+     * unsupported) from a plain string.
+     */
+    template?: true;
+    /**
+     * Set on the `String` / `TemplateString` token that was still open at the end
+     * of the input and was accepted only because of {@link TokenizeOptions.streaming}.
+     */
+    open?: true;
 }
 export type CommentKind = "Line" | "Block";
 /**
@@ -59,6 +80,18 @@ export interface RawComment {
     /** Line the comment's last character sits on — equals `line` for a `Line` comment, may exceed it for a multi-line `Block` comment. */
     endLine: number;
 }
+/** Options for {@link tokenize}. */
+export interface TokenizeOptions {
+    /**
+     * The source is a prefix of a response that is still being generated. A
+     * string or template literal that is still open at the very end of the input
+     * is then lexed as the string it has so far, because the chunk that closes it
+     * has not arrived yet. Left off, such a literal is an `Error` token. (A plain
+     * string cut off by a newline is an error either way: more input cannot
+     * close it.)
+     */
+    streaming?: boolean;
+}
 /**
  * Tokenize `source`. When `comments` is passed, every `//` line comment and
  * `/* *\/` block comment encountered is pushed onto it (in source order,
@@ -67,4 +100,4 @@ export interface RawComment {
  * caller (`navigation.ts`, `semantic-tokens.ts`, …) that only wants tokens
  * keeps working unmodified.
  */
-export declare function tokenize(source: string, comments?: RawComment[]): Token[];
+export declare function tokenize(source: string, comments?: RawComment[], options?: TokenizeOptions): Token[];

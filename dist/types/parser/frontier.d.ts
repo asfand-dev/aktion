@@ -38,7 +38,9 @@ export interface FrontierResult {
 }
 /**
  * Compute the streaming frontier for `source`. Cheap — runs a single
- * `parse(source)` pass and walks the resulting statements once.
+ * `parse(source)` pass and walks the resulting statements once. `source` is
+ * treated as a prefix of a response still arriving, so a string or template
+ * literal left open at its end does not count as an error.
  *
  * Example:
  *

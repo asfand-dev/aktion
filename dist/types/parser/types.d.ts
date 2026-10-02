@@ -666,6 +666,13 @@ export interface Program {
      * `program.sources?.[node.loc?.source ?? 0]`.
      */
     sources?: string[];
+    /**
+     * Set by `parse(source, { streaming: true })` when the source ended inside a
+     * string or template literal that was accepted as-is. A host that parsed
+     * unfinished text can check it to know whether parsing the final text again
+     * could report something new.
+     */
+    openLiteral?: boolean;
 }
 export interface ParseError {
     message: string;

@@ -480,7 +480,8 @@ const aktionRecommendedRules = {
   // template call form. `unicorn/prefer-string-raw`'s autofix rewrites a
   // backslash-bearing string literal into a tagged template
   // (`` String.raw`…` ``), which a real JS/TS parser accepts but this
-  // grammar cannot.
+  // grammar rejects with a "Tagged template literals are not supported"
+  // parse error.
   "unicorn/prefer-string-raw": "off",
   // DSL-IDIOM FALSE POSITIVE: Aktion's component-instantiation idiom
   // (`Container(...)`, `Text(...)`, `Row(...)`, any entry in

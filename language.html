@@ -88,7 +88,9 @@
         referenced from the <code>$app(&hellip;)</code> root directly or through other bindings.
       </p>
       <p>
-        Newlines terminate statements; semicolons are optional. Forward
+        Newlines terminate statements; semicolons are optional, but two
+        statements on one line need a <code>;</code> between them &mdash;
+        <code>a = 1 b = 2</code> is a parse error. Forward
         references resolve from the whole scope, so you can call
         <code>$app(&hellip;)</code> first and let the pieces it depends on stream in
         below it &mdash; the renderer re-parses each chunk and fills in names as

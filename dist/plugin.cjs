@@ -46,7 +46,7 @@ const KEYWORDS = {
   false: "Boolean",
   null: "Null"
 };
-function tokenize(source, comments) {
+function tokenize(source, comments, options = {}) {
   const tokens = [];
   let i = 0;
   let line = 1;
@@ -197,7 +197,14 @@ function tokenize(source, comments) {
       push("Newline", "\n", startLine, startCol);
       continue;
     }
-    if (ch === " " || ch === "	" || ch === "\r") {
+    if (ch === "\u2028" || ch === "\u2029") {
+      const startLine = line;
+      const startCol = column;
+      advance();
+      push("Newline", ch, startLine, startCol);
+      continue;
+    }
+    if (ch === " " || ch === "	" || ch === "\r" || ch === "\f" || ch === "\v" || ch > "" && /\s/.test(ch)) {
       advance();
       continue;
     }
@@ -264,8 +271,20 @@ function tokenize(source, comments) {
         }
         value += advance();
       }
-      if (peek() === quote) advance();
-      push("String", value, startLine, startCol);
+      if (peek() === quote) {
+        advance();
+        push("String", value, startLine, startCol);
+      } else if (options.streaming === true && i >= source.length) {
+        tokens.push({ type: "String", value, line: startLine, column: startCol, open: true });
+      } else {
+        tokens.push({
+          type: "Error",
+          value,
+          line: startLine,
+          column: startCol,
+          message: "Unterminated string literal — add the closing quote (a string cannot span lines; use a backtick template literal for that)."
+        });
+      }
       continue;
     }
     if (ch === "`") {
@@ -343,10 +362,29 @@ function tokenize(source, comments) {
         }
         chunk += advance();
       }
-      if (peek() === "`") advance();
+      const open = peek() !== "`";
+      if (!open) {
+        advance();
+      } else if (options.streaming !== true) {
+        tokens.push({
+          type: "Error",
+          value: chunk,
+          line: startLine,
+          column: startCol,
+          message: "Unterminated template literal — add the closing backtick."
+        });
+        continue;
+      }
       parts.push({ kind: "str", text: chunk });
       if (!sawExpr) {
-        push("String", chunk, startLine, startCol);
+        tokens.push({
+          type: "String",
+          value: chunk,
+          line: startLine,
+          column: startCol,
+          template: true,
+          ...open ? { open: true } : {}
+        });
         continue;
       }
       tokens.push({
@@ -354,7 +392,8 @@ function tokenize(source, comments) {
         value: "",
         line: startLine,
         column: startCol,
-        parts
+        parts,
+        ...open ? { open: true } : {}
       });
       continue;
     }
@@ -499,10 +538,43 @@ function tokenize(source, comments) {
       push("Punctuation", ch, startLine, startCol);
       continue;
     }
-    advance();
+    const errLine = line;
+    const errCol = column;
+    const codePoint = String.fromCodePoint(source.codePointAt(i));
+    for (let k = 0; k < codePoint.length; k += 1) advance();
+    tokens.push({
+      type: "Error",
+      value: codePoint,
+      line: errLine,
+      column: errCol,
+      message: unexpectedCharacterMessage(codePoint)
+    });
   }
   tokens.push({ type: "EOF", value: "", line, column });
   return tokens;
+}
+function unexpectedCharacterMessage(ch) {
+  const base = `Unexpected character '${ch}'`;
+  switch (ch) {
+    case "@":
+      return `${base} — decorators are not supported in Aktion.`;
+    case "#":
+      return `${base} — private fields (\`#name\`) are not supported in Aktion; use a plain property.`;
+    case "\\":
+      return `${base} — a backslash is only valid inside a string or template literal.`;
+    case "“":
+    case "”":
+    case "„":
+    case "‘":
+    case "’":
+    case "‚":
+      return `${base} — this is a typographic (curly) quote; use a straight quote (" or ') instead.`;
+  }
+  if (/^[\p{Cc}\p{Cf}]$/u.test(ch)) {
+    const hex = ch.codePointAt(0).toString(16).toUpperCase().padStart(4, "0");
+    return `Unexpected invisible character U+${hex} — delete it (it is usually pasted in with the text).`;
+  }
+  return ch > "" ? `${base} — names may only use a-z, A-Z, 0-9 and _ (non-ASCII text belongs inside a string).` : `${base}.`;
 }
 function isDigit(ch) {
   return ch >= "0" && ch <= "9";
@@ -569,9 +641,10 @@ function stampSourceIndex(root, index) {
     if (loc && loc.source === void 0) loc.source = index;
   });
 }
-function parse(source) {
+function parse(source, options = {}) {
   const comments = [];
-  const tokens = tokenize(source, comments);
+  const tokens = tokenize(source, comments, { streaming: options.streaming });
+  const openLiteral = tokens[tokens.length - 2]?.open === true;
   const ctx = new ParserContext(tokens, comments);
   const statements = [];
   const errors = [];
@@ -587,11 +660,121 @@ function parse(source) {
     }
   }
   attachComments(ctx, statements, 0, ctx.peek().line + 1);
-  return { statements, errors };
+  return openLiteral ? { statements, errors, openLiteral } : { statements, errors };
 }
 const nodeEndLine = /* @__PURE__ */ new WeakMap();
+const BLOCK_TERMINATED_STATEMENTS = /* @__PURE__ */ new Set([
+  "ComponentDeclaration",
+  "ActionDeclaration",
+  "HookDeclaration",
+  "IfStatement",
+  "ForOfStatement",
+  "ForInStatement",
+  "ForClassicStatement",
+  "WhileStatement",
+  "DoWhileStatement",
+  "SwitchStatement",
+  "TryStatement"
+]);
+const TYPESCRIPT_DECLARATION_WORDS = /* @__PURE__ */ new Set([
+  "type",
+  "interface",
+  "enum",
+  "namespace",
+  "declare",
+  "abstract"
+]);
+function requireStatementBoundary(ctx, startIndex) {
+  const prev = ctx.tokenAt(ctx.snapshot() - 1);
+  if (prev && (prev.type === "Newline" || prev.type === "Semicolon")) return;
+  const next = ctx.peek();
+  if (next.type === "EOF" || next.type === "Newline" || next.type === "Semicolon") return;
+  if (next.type === "Punctuation" && next.value === "}") return;
+  if (prev && ctx.hasLineBreakCommentBetween(prev, next)) return;
+  throw statementBoundaryError(ctx.tokenAt(startIndex), prev, next);
+}
+function statementBoundaryError(head, prev, next) {
+  const at = (tok, message) => ({ message, line: tok.line, column: tok.column });
+  if (next.type === "Error") return at(next, unexpected(next, ""));
+  if (!prev) return at(next, `Expected end of statement but found ${describeToken(next)}.`);
+  if (prev.type === "Identifier" && prev.value === "class") {
+    return at(
+      prev,
+      "`class` is not supported in Aktion — there are no classes. Use plain objects for data and functions for behaviour."
+    );
+  }
+  if (prev.type === "Identifier" && prev.value === "yield") {
+    return at(prev, "`yield` is not supported in Aktion — there are no generators.");
+  }
+  if (head === prev && prev.type === "Identifier" && next.type === "Identifier" && TYPESCRIPT_DECLARATION_WORDS.has(prev.value)) {
+    return at(
+      prev,
+      `TypeScript \`${prev.value}\` declarations are not supported in Aktion — it has no static types, so remove it.`
+    );
+  }
+  if (next.type === "Identifier" && (next.value === "as" || next.value === "satisfies")) {
+    return at(
+      next,
+      `\`${next.value}\` type assertions are not supported in Aktion — it has no static types, so remove the cast.`
+    );
+  }
+  const isTemplate = next.type === "TemplateString" || next.type === "String" && next.template === true;
+  if (isTemplate && (prev.type === "Identifier" || prev.type === "StateIdentifier" || prev.type === "Punctuation" && (prev.value === ")" || prev.value === "]"))) {
+    return at(
+      next,
+      "Tagged template literals are not supported in Aktion — call the function with the string instead: `tag(`…`)`."
+    );
+  }
+  if (prev.type === "Number" && next.type === "Identifier" && next.value === "n" && adjacent(prev, next)) {
+    return at(prev, `BigInt literals (\`${prev.value}n\`) are not supported in Aktion — use a regular number.`);
+  }
+  if (prev.type === "Identifier" && next.type === "StateIdentifier" && adjacent(prev, next)) {
+    return at(
+      next,
+      `\`$\` can only start a name (a state atom such as \`$count\`), so \`${prev.value}$${next.value}\` is not a valid name.`
+    );
+  }
+  return at(
+    next,
+    `Expected end of statement after ${describeToken(prev)}, but found ${describeToken(next)}. Put each statement on its own line or separate them with \`;\`.`
+  );
+}
+function adjacent(a, b) {
+  return a.line === b.line && b.column === a.column + a.value.length;
+}
+function unexpected(tok, fallback) {
+  return tok.type === "Error" ? tok.message ?? `Unexpected character '${tok.value}'.` : fallback;
+}
+function describeToken(tok) {
+  switch (tok.type) {
+    case "Identifier":
+      return `identifier '${tok.value}'`;
+    case "Keyword":
+      return `keyword '${tok.value}'`;
+    case "StateIdentifier":
+      return `'$${tok.value}'`;
+    case "Number":
+      return `number '${tok.value}'`;
+    case "String":
+      return "a string";
+    case "TemplateString":
+      return "a template literal";
+    case "Regex":
+      return "a regular expression";
+    case "Newline":
+      return "the end of the line";
+    case "EOF":
+      return "the end of the input";
+    default:
+      return `'${tok.value}'`;
+  }
+}
 function parseStatement(ctx, topLevel) {
+  const startIndex = ctx.snapshot();
   const stmt = parseStatementImpl(ctx);
+  if (!stmt || !BLOCK_TERMINATED_STATEMENTS.has(stmt.kind)) {
+    requireStatementBoundary(ctx, startIndex);
+  }
   if (stmt && !nodeEndLine.has(stmt)) {
     nodeEndLine.set(stmt, ctx.previousConsumedLine());
   }
@@ -783,7 +966,7 @@ function parseFunctionParams(ctx) {
         params.push(param);
       } else {
         throw {
-          message: `Expected parameter name, got ${tok.type} "${tok.value}"`,
+          message: unexpected(tok, `Expected parameter name, got ${tok.type} "${tok.value}"`),
           line: tok.line,
           column: tok.column
         };
@@ -900,7 +1083,7 @@ function parseEffectDep(ctx, triggers, setRateLimit) {
     };
   }
   throw {
-    message: `Unexpected ${head.type} "${head.value}" inside effect dependency array. Expected $state or a string token ("mount", "unmount", "every(N)", etc.).`,
+    message: head.type === "Error" ? unexpected(head, "") : `Unexpected ${head.type} "${head.value}" inside effect dependency array. Expected $state or a string token ("mount", "unmount", "every(N)", etc.).`,
     line: head.line,
     column: head.column
   };
@@ -923,7 +1106,7 @@ function parseVarDecl(ctx) {
     identifier = ctx.consume().value;
   } else {
     throw {
-      message: `Expected identifier after "${start.value}", got ${head.type} "${head.value}"`,
+      message: unexpected(head, `Expected identifier after "${start.value}", got ${head.type} "${head.value}"`),
       line: head.line,
       column: head.column
     };
@@ -1151,6 +1334,18 @@ class ParserContext {
   peek(offset = 0) {
     return this.tokens[this.index + offset] ?? { type: "EOF", value: "", line: 0, column: 0 };
   }
+  /**
+   * True when a `/* … *\/` comment that spans lines sits between `a` and `b`.
+   * Comments are not tokens, so this is the only trace of the line break they
+   * hide.
+   */
+  hasLineBreakCommentBetween(a, b) {
+    return this.comments.some((c) => c.kind === "Block" && c.endLine > c.line && (c.line > a.line || c.line === a.line && c.column > a.column) && (c.line < b.line || c.line === b.line && c.column < b.column));
+  }
+  /** Token at absolute index `i`, or `undefined` outside the stream. */
+  tokenAt(i) {
+    return this.tokens[i];
+  }
   consume() {
     const tok = this.tokens[this.index] ?? { type: "EOF", value: "", line: 0, column: 0 };
     this.index += 1;
@@ -1201,7 +1396,7 @@ class ParserContext {
     const tok = this.peek();
     if (tok.type !== type || value !== void 0 && tok.value !== value) {
       throw {
-        message: `Expected ${type}${value !== void 0 ? ` "${value}"` : ""} but got ${tok.type} "${tok.value}"`,
+        message: unexpected(tok, `Expected ${type}${value !== void 0 ? ` "${value}"` : ""} but got ${tok.type} "${tok.value}"`),
         line: tok.line,
         column: tok.column
       };
@@ -1230,7 +1425,7 @@ function parseAssignment(ctx) {
     isState = true;
   } else {
     throw {
-      message: `Expected identifier at start of statement, got ${head.type} "${head.value}"`,
+      message: unexpected(head, `Expected identifier at start of statement, got ${head.type} "${head.value}"`),
       line: head.line,
       column: head.column
     };
@@ -1262,7 +1457,7 @@ function parseImportStatement(ctx) {
       imported = ctx.consume().value;
     } else {
       throw {
-        message: `Expected an import name, got ${importedTok.type} "${importedTok.value}"`,
+        message: unexpected(importedTok, `Expected an import name, got ${importedTok.type} "${importedTok.value}"`),
         line: importedTok.line,
         column: importedTok.column
       };
@@ -1279,7 +1474,7 @@ function parseImportStatement(ctx) {
         local = ctx.consume().value;
       } else {
         throw {
-          message: `Expected an alias after \`as\`, got ${aliasTok.type} "${aliasTok.value}"`,
+          message: unexpected(aliasTok, `Expected an alias after \`as\`, got ${aliasTok.type} "${aliasTok.value}"`),
           line: aliasTok.line,
           column: aliasTok.column
         };
@@ -1305,7 +1500,7 @@ function parseImportStatement(ctx) {
   const fromTok = ctx.peek();
   if (!(fromTok.type === "Identifier" && fromTok.value === "from")) {
     throw {
-      message: `Expected \`from\` after import specifiers, got ${fromTok.type} "${fromTok.value}"`,
+      message: unexpected(fromTok, `Expected \`from\` after import specifiers, got ${fromTok.type} "${fromTok.value}"`),
       line: fromTok.line,
       column: fromTok.column
     };
@@ -1633,7 +1828,7 @@ function parseUnary(ctx) {
           const propTok = ctx.consume();
           if (propTok.type !== "Identifier" && propTok.type !== "Keyword") {
             throw {
-              message: `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
+              message: unexpected(propTok, `Expected Identifier but got ${propTok.type} "${propTok.value}"`),
               line: propTok.line,
               column: propTok.column
             };
@@ -1699,7 +1894,7 @@ function parsePostfixFrom(ctx, base) {
       const propTok = ctx.consume();
       if (propTok.type !== "Identifier" && propTok.type !== "Keyword" && propTok.type !== "StateIdentifier") {
         throw {
-          message: `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
+          message: unexpected(propTok, `Expected Identifier but got ${propTok.type} "${propTok.value}"`),
           line: propTok.line,
           column: propTok.column
         };
@@ -1743,7 +1938,7 @@ function parsePostfixFrom(ctx, base) {
         const propTok = ctx.consume();
         if (propTok.type !== "Identifier" && propTok.type !== "Keyword" && propTok.type !== "StateIdentifier") {
           throw {
-            message: `Expected Identifier but got ${propTok.type} "${propTok.value}"`,
+            message: unexpected(propTok, `Expected Identifier but got ${propTok.type} "${propTok.value}"`),
             line: propTok.line,
             column: propTok.column
           };
@@ -1967,7 +2162,7 @@ function parsePrimary(ctx) {
     return expr;
   }
   throw {
-    message: `Unexpected token ${tok.type} "${tok.value}"`,
+    message: unexpected(tok, `Unexpected token ${tok.type} "${tok.value}"`),
     line: tok.line,
     column: tok.column
   };
@@ -2061,7 +2256,7 @@ function parseSwitchStatement(ctx) {
       test = null;
     } else {
       throw {
-        message: `Expected "case" or "default" in switch body, got ${ctx.peek().type} "${ctx.peek().value}"`,
+        message: unexpected(ctx.peek(), `Expected "case" or "default" in switch body, got ${ctx.peek().type} "${ctx.peek().value}"`),
         line: ctx.peek().line,
         column: ctx.peek().column
       };
@@ -2457,7 +2652,7 @@ function parseObjectProps(ctx) {
       key = ctx.consume().value;
     } else {
       throw {
-        message: `Expected object key, got ${keyTok.type} "${keyTok.value}"`,
+        message: unexpected(keyTok, `Expected object key, got ${keyTok.type} "${keyTok.value}"`),
         line: keyTok.line,
         column: keyTok.column
       };

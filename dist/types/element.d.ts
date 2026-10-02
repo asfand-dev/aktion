@@ -38,6 +38,19 @@ export declare class AktionElement extends HTMLElement {
     /** True when the program text changed and the runtime needs a re-plan. */
     private programDirty;
     /**
+     * Text has arrived through `appendChunk` since the program was last replaced,
+     * so it is probably unfinished and parsed leniently (see `ParseOptions.streaming`)
+     * until `setResponse`, `loadSnapshot`, `mountCompiled`, `clear` or the end of a
+     * `streaming` run settles it.
+     */
+    private chunked;
+    /**
+     * The last parse of `currentResponse` accepted a string or template literal
+     * left open at the end of the text. Only then can the finished text report
+     * something a lenient parse did not.
+     */
+    private lenientTail;
+    /**
      * Set of state paths the most recent render actually read (e.g. `"user.name"`,
      * `"cart"`). The state subscription uses it to gate re-renders: a reactive
      * write only re-renders when its changed path overlaps something the UI
@@ -304,7 +317,12 @@ export declare class AktionElement extends HTMLElement {
      * errors are reported).
      */
     private reportSrcError;
-    /** Append a streaming chunk and re-render. */
+    /**
+     * Append a streaming chunk and re-render. Text added this way is parsed
+     * leniently, so a string still open at the end of it renders as far as it has
+     * arrived; `setResponse(...)` or clearing the `streaming` attribute makes the
+     * next parse strict again.
+     */
     appendChunk(chunk: string): void;
     setTheme(theme: ThemeInput): void;
     /**
