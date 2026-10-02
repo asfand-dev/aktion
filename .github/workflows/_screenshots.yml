@@ -1,61 +1,101 @@
 name: "CI · Screenshots"
 
+# Full-page screenshots of the component showcase (docs/showcase.html, every
+# built-in component on one page) from this PR's preview, posted as ONE pull
+# request comment that is edited on every push rather than a new comment per
+# push. The images live as assets on the `image-holder` release, which is what
+# the comment links to.
+#
+# The capture is scripts/capture-showcase.mjs, not a stock screenshot action:
+# the showcase is ~31,000 px tall, and Chromium wraps any single capture taller
+# than 16,384 device pixels back to the top of the page. The script captures at
+# 1x in segments, with a page-tall viewport so iframes, lazy images and
+# scroll-triggered components are all rendered (see its header for details).
 on:
   workflow_call:
 
 jobs:
   screenshots:
     runs-on: ubuntu-latest
-    name: Take a screenshot after page was built
+    name: Screenshot the component showcase
     permissions:
       checks: read
-      contents: write
-      pull-requests: write
+      contents: write # upload the images to the image-holder release
+      pull-requests: write # create or update the screenshot comment
     env:
-      PREVIEW_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-preview/pr-${{ github.event.number }}/
+      SHOWCASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-preview/pr-${{ github.event.number }}/showcase.html
+      PR_NUMBER: ${{ github.event.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      RELEASE_TAG: image-holder
     steps:
       # No "wait for build" step here: the caller's `needs: deploy-preview`
       # already guarantees the preview job (including its own "wait for
       # Pages deployment" step) fully completed before this job starts.
       # GitHub's job graph is doing that ordering now, not a second,
-      # independently-fired event — see ci.yml's header comment for why
-      # that matters.
-      - name: Wait for preview URL to be available
+      # independently-fired event — see preview.yml's header comment for why
+      # that matters. This only waits for the CDN to serve the new page.
+      - name: Wait for the showcase page to be available
         shell: bash
         run: |
-          echo "Polling ${PREVIEW_URL} ..."
+          echo "Polling ${SHOWCASE_URL} ..."
           timeout=180
           elapsed=0
           until [ "$elapsed" -ge "$timeout" ]; do
-            status=$(curl --silent --output /dev/null --write-out "%{http_code}" "${PREVIEW_URL}" || true)
+            status=$(curl --silent --output /dev/null --write-out "%{http_code}" "${SHOWCASE_URL}" || true)
             if [[ "$status" =~ ^2 ]]; then
-              echo "Preview is live (HTTP ${status})"
+              echo "Showcase is live (HTTP ${status})"
               exit 0
             fi
             echo "HTTP ${status} – retrying in 5 s (${elapsed}/${timeout}s elapsed)"
             sleep 5
             elapsed=$((elapsed + 5))
           done
-          echo "Timed out waiting for preview after ${timeout}s"
+          echo "Timed out waiting for the showcase after ${timeout}s"
           exit 1
+
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: install puppeteer-headful
-        uses: mujo-code/puppeteer-headful@master
-        env:
-          CI: 'true'
-      - name: screenshots-ci-action
-        uses: Primajin/screenshots-ci-action@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
         with:
-          devices: iPhone 13,iPad Pro,iPad Pro landscape
-          fullPage: false
-          noDesktop: true
-          releaseId: 372205992
-          type: png
-          url: ${{ env.PREVIEW_URL }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          node-version: '24'
+          cache: 'npm'
+
+      # Brings in playwright-core, which drives the Google Chrome preinstalled
+      # on GitHub's Ubuntu runners, so there is no browser download.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Capture the showcase
+        run: node scripts/capture-showcase.mjs "$SHOWCASE_URL" screenshots --prefix "showcase-pr${PR_NUMBER}-${HEAD_SHA::7}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
       - uses: actions/upload-artifact@v7
         with:
           path: screenshots
-          name: Download-screenshots
+          name: showcase-screenshots
+
+      - name: Upload the images to the ${{ env.RELEASE_TAG }} release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" screenshots/*.jpg --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Post or update the screenshot comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/showcase-comment.mjs screenshots/manifest.json \
+            --assets "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}" \
+            --page "$SHOWCASE_URL" \
+            --commit "$HEAD_SHA" \
+            --run "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" > comment.md
+          # The marker is MARKER in scripts/showcase-comment.mjs.
+          id=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- showcase-screenshots -->"))) | .id' | tail -n 1)
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" -F body=@comment.md > /dev/null
+            echo "Updated comment ${id}"
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -F body=@comment.md > /dev/null
+            echo "Created the screenshot comment"
+          fi

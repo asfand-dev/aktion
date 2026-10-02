@@ -170,10 +170,10 @@ describe("repo .aktion programs format to a fixed point", () => {
  * from the failing assertion, and say in the PR why they moved.
  */
 const EXPECTED_CORPUS_SPLIT = {
-  total: 165,
+  total: 166,
   formatted: 70,
   skippedDifferentProgram: 46,
-  skippedDidNotReparse: 49,
+  skippedDidNotReparse: 50,
 };
 
 describe("repo .aktion programs: how formatProgram treats the corpus", () => {
