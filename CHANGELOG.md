@@ -5,6 +5,14 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## [0.9.0](https://github.com/asfand-dev/aktion/compare/v0.8.0...v0.9.0) (2026-10-02)
+
+
+### Features
+
+* **formatter:** keep let/const/var and refuse to change the program ([#24](https://github.com/asfand-dev/aktion/issues/24)) ([6f0b49e](https://github.com/asfand-dev/aktion/commit/6f0b49e3c3fb9992210407412c8480b9dcfa5712))
+* **parser:** require a statement boundary and report unknown characters ([#25](https://github.com/asfand-dev/aktion/issues/25)) ([f37bfad](https://github.com/asfand-dev/aktion/commit/f37bfad09f323622cec3bcb763a694268af99f39))
+
 ## 2026-10-01
 
 ### Parser: Statements Must Be Separated, Unknown Characters Are Errors
