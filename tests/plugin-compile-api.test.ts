@@ -3,16 +3,19 @@
  * outside a Vite build (tests, SSR, CLIs).
  */
 import { describe, it, expect, afterAll } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, symlinkSync, unlinkSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   compileAktionFile,
+  compileAktionFileAsync,
   compileAktionSource,
+  compileAktionSourceAsync,
   createNodeResolver,
   loadAktionConfig,
   mergeResolveOptions,
 } from "../src/plugin/index.js";
+import { renderToString } from "../src/runtime/ssr.js";
 import { isCompiledProgram } from "../src/compiler/index.js";
 import { renderCompiled, cleanup } from "../src/testing/index.js";
 
@@ -58,6 +61,29 @@ describe("compileAktionFile", () => {
     write("bad.aktion", "export function oops( {\n");
     const host = write("host.aktion", 'import { oops } from "./bad.aktion"\n$app(Text("hi"))');
     expect(() => compileAktionFile(host)).toThrow(/\[aktion\] failed to compile/);
+  });
+
+  it("accepts imports under a root reached through a symlink (macOS `/var` → `/private/var`)", () => {
+    const real = mkdtempSync(join(tmpdir(), "aktion-real-root-"));
+    const link = `${real}-link`;
+    symlinkSync(real, link, "dir");
+    try {
+      writeFileSync(join(real, "dep.aktion"), 'export function d() { return "dep" }', "utf8");
+      // Vite hands the plugin REAL paths for module ids, but `config.root` as configured.
+      const compiled = compileAktionSource(
+        'import { d } from "./dep.aktion"\n$app(Text(d()))',
+        join(realpathSync(real), "app.aktion"),
+        { root: link },
+      );
+      expect(compiled.program.sources).toHaveLength(2);
+      // …and the other way round.
+      expect(() =>
+        compileAktionSource('import { d } from "./dep.aktion"\n$app(Text(d()))', join(link, "app.aktion"), { root: real }),
+      ).not.toThrow();
+    } finally {
+      unlinkSync(link);
+      rmSync(real, { recursive: true, force: true });
+    }
   });
 
   it("confines imports to `root`", () => {
@@ -230,5 +256,98 @@ describe("module resolution", () => {
         join(nested, "field.aktion"),
       );
     });
+  });
+});
+
+/**
+ * `.aktion.ts` / `.aktion.js` modules through the compile helpers (guide §7.6
+ * item 9, Phase 2): entries, inline probes (how DCD unit-tests helper modules),
+ * the async variants for Node 18, `source`, `sourcesContent`, extension
+ * completion and the side-by-side refusal.
+ */
+describe("TypeScript and JavaScript modules", () => {
+  const ts = mkdtempSync(join(tmpdir(), "aktion-compile-ts-"));
+  const put = (name: string, source: string): string => {
+    const path = join(ts, name);
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(path, source, "utf8");
+    return path;
+  };
+  put("lib/format.aktion.ts", ["export function money(cents: number): string {", '  return "$" + (cents / 100).toFixed(2)', "}"].join("\n"));
+  put("lib/index.aktion.ts", 'export const brand: string = "Acme"');
+  put("lib/count.aktion.js", ["export let $n = 1", "export function bump() {", "  $n = $n + 1", "}"].join("\n"));
+  const entry = put(
+    "app.aktion.ts",
+    [
+      'import { money } from "./lib/format"',
+      'import { brand } from "./lib"',
+      'import { $n, bump } from "./lib/count.aktion.js"',
+      'export default $app(Button(brand + " " + money(1999) + " x" + $n, { onClick: bump }))',
+    ].join("\n"),
+  );
+  afterAll(() => rmSync(ts, { recursive: true, force: true }));
+
+  it("compiles a `.aktion.ts` entry, completing `./lib/format` and `./lib` to TypeScript modules", async () => {
+    const compiled = compileAktionFile(entry);
+    expect(compiled.program.sources).toEqual([
+      entry,
+      join(ts, "lib/format.aktion.ts"),
+      join(ts, "lib/index.aktion.ts"),
+      join(ts, "lib/count.aktion.js"),
+    ]);
+    const screen = renderCompiled(compiled);
+    await screen.flush();
+    expect(screen.getByText("Acme $19.99 x1")).toBeDefined();
+    await screen.click("Acme $19.99 x1");
+    await screen.flush();
+    expect(screen.getByText("Acme $19.99 x2")).toBeDefined();
+  });
+
+  it("an inline `.aktion.ts` probe can unit-test a TypeScript helper", async () => {
+    const probe = compileAktionSource(
+      'import { money } from "./lib/format.aktion.ts"\n$app(Text(money(5)))',
+      join(ts, "probe.aktion.ts"),
+    );
+    const screen = renderCompiled(probe);
+    await screen.flush();
+    expect(screen.getByText("$0.05")).toBeDefined();
+  });
+
+  it("emits the printed linked program as `source`, and each module's own text as `sourcesContent`", () => {
+    const compiled = compileAktionFile(entry);
+    expect(compiled.source).toContain("__a1_money");
+    expect(compiled.source).not.toContain("cents: number");
+    expect(compiled.sourcesContent).toHaveLength(4);
+    expect(compiled.sourcesContent![1]).toContain("cents: number");
+    expect(compileAktionFile(entry, { sourcesContent: false }).sourcesContent).toBeUndefined();
+  });
+
+  it("the async helpers load the TypeScript frontend first", async () => {
+    const fromFile = await compileAktionFileAsync(entry);
+    expect(fromFile.program).toEqual(compileAktionFile(entry).program);
+    const fromSource = await compileAktionSourceAsync('import { brand } from "./lib"\n$app(Text(brand))', join(ts, "p2.aktion"));
+    expect(fromSource.program.sources).toHaveLength(2);
+  });
+
+  it("reports a TypeScript error at the module's own position", () => {
+    put("bad.aktion.ts", "export const a = 1\nexport const f = async () => a");
+    expect(() => compileAktionSource('import { a } from "./bad.aktion.ts"\n$app(Text(String(a)))', join(ts, "p3.aktion"))).toThrow(
+      /2:18 .*`async` functions are not supported/,
+    );
+  });
+
+  it("refuses `store.aktion` next to `store.aktion.ts`, whatever the specifier", () => {
+    put("twin/store.aktion", "export x = 1");
+    put("twin/store.aktion.ts", "export const x = 1");
+    for (const spec of ["./twin/store", "./twin/store.aktion", "./twin/store.aktion.ts"]) {
+      expect(() => compileAktionSource(`import { x } from "${spec}"\n$app(Text(String(x)))`, join(ts, "p4.aktion"))).toThrow(
+        /"store\.aktion(?:\.ts)?" and "store\.aktion(?:\.ts)?" both exist — keep one/,
+      );
+    }
+  });
+
+  it("an `.aktion` program rendered on the server includes its imported modules (§7.8)", () => {
+    const compiled = compileAktionSource('import { brand } from "./lib"\n$app(Text("SSR " + brand))', join(ts, "ssr.aktion"));
+    expect(renderToString(compiled.source).html).toContain("SSR Acme");
   });
 });

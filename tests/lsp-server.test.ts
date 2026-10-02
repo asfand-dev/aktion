@@ -161,6 +161,18 @@ const APP_SRC = [
 let client: TestClient;
 let appUri: string;
 let counterUri: string;
+let tsUserUri: string;
+let tsStoreUri: string;
+
+// A `.aktion` file importing a `.aktion.ts` module through an extensionless specifier.
+const TS_STORE_SRC = [
+  "export interface Todo { id: number }",
+  "export let $total: number = 0",
+  "export function add(todo: Todo, by: number = 1): void {",
+  "  $total = $total + by",
+  "}",
+].join("\n");
+const TS_USER_SRC = 'import { $total, add } from "./store"\n$app(Button(String($total), { onClick: () => add({ id: 1 }) }))';
 
 const lineOf = (needle: string): number => APP_SRC.split("\n").findIndex((l) => l.includes(needle));
 
@@ -176,6 +188,10 @@ beforeAll(async () => {
   writeFileSync(resolve(dir, "app.aktion"), APP_SRC);
   appUri = pathToFileURL(resolve(dir, "app.aktion")).href;
   counterUri = pathToFileURL(resolve(dir, "counter.aktion")).href;
+  writeFileSync(resolve(dir, "store.aktion.ts"), TS_STORE_SRC);
+  writeFileSync(resolve(dir, "uses-ts.aktion"), TS_USER_SRC);
+  tsStoreUri = pathToFileURL(resolve(dir, "store.aktion.ts")).href;
+  tsUserUri = pathToFileURL(resolve(dir, "uses-ts.aktion")).href;
 
   client = new TestClient();
   await client.request("initialize", {
@@ -380,6 +396,25 @@ describe("aktion-language-server — language features", () => {
     expect(res.result.uri).toBe(counterUri);
     // Lands on the declaration, not line 0.
     expect(res.result.range.start.line).toBe(1);
+  });
+
+  it("resolves go-to-definition into a `.aktion.ts` module, through an extensionless specifier", async () => {
+    client.notify("textDocument/didOpen", {
+      textDocument: { uri: tsUserUri, languageId: "aktion", version: 1, text: TS_USER_SRC },
+    });
+    const fn = await client.request("textDocument/definition", {
+      textDocument: { uri: tsUserUri },
+      position: { line: 0, character: TS_USER_SRC.indexOf("add") + 1 },
+    });
+    expect(fn.result.uri).toBe(tsStoreUri);
+    expect(fn.result.range.start).toEqual({ line: 2, character: 16 });
+    // An annotated `let $total: number` is found too — the lookup is token-based.
+    const atom = await client.request("textDocument/definition", {
+      textDocument: { uri: tsUserUri },
+      position: { line: 0, character: TS_USER_SRC.indexOf("$total") + 2 },
+    });
+    expect(atom.result.uri).toBe(tsStoreUri);
+    expect(atom.result.range.start).toEqual({ line: 1, character: 11 });
   });
 
   it("resolves a module specifier to the file's start", async () => {

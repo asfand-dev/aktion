@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    // Aktion modules import each other by file name: `./store.aktion.ts`.
+    "allowImportingTsExtensions": true,
+    // Forces `import type` for types, so nothing the linker cannot see survives erasure.
+    "verbatimModuleSyntax": true,
+    // Flags enums, namespaces and parameter properties (not erasable) in the editor.
+    "erasableSyntaxOnly": true,
+    // `x.d.aktion.ts` declarations type imports of `.aktion` modules.
+    "allowArbitraryExtensions": true,
+    // `.aktion.js` modules contribute their types.
+    "allowJs": true,
+    // The Vite plugin's `dts` option writes those declarations to `.aktion-types/`.
+    "rootDirs": ["src", ".aktion-types/src"],
+    "types": ["vite/client"]
+  },
+  "include": ["src", "tests", ".aktion-types"]
+}

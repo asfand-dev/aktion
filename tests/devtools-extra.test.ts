@@ -15,7 +15,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, flush, cleanup } from "../src/testing/index.js";
+import { render, renderCompiled, flush, cleanup } from "../src/testing/index.js";
+import { defineCompiledProgram, linkProject } from "../src/compiler/index.js";
 import { getDevtoolsHook, installDevtoolsHook } from "../src/devtools/hook.js";
 import type {
   DevtoolsEvent,
@@ -1189,3 +1190,28 @@ describe("interaction recorder", () => {
 });
 
 /* The panel's sections are exercised end to end in `devtools-panel.test.ts`. */
+
+describe("JavaScript-shaped modules — parameter names", () => {
+  it("reports and overrides a `.aktion.js` component's props by the names the author wrote", async () => {
+    const events = listen();
+    const res = await linkProject({
+      entry: "app.aktion.js",
+      files: { "app.aktion.js": 'function Row(label) {\n  return Text("row:" + label)\n}\n$app(Column([Row("A")]))' },
+    });
+    expect(res.diagnostics).toEqual([]);
+    // W1 renamed the parameter locally; R6 keeps the calling-convention name.
+    expect(JSON.stringify(res.program)).toMatch(/"name":"__l\d+_label","publicName":"label"/);
+    const screen = renderCompiled(
+      defineCompiledProgram({ __aktionCompiled: 1, program: res.program, source: res.source, path: "app.aktion.js" }),
+    );
+    await flush();
+    const commit = events.find((e): e is Extract<DevtoolsEvent, { kind: "commit" }> => e.kind === "commit")!;
+    const row = commit.components.find((c) => c.name === "Row")!;
+    expect(row.props?.map((p) => p.name)).toEqual(["label"]);
+
+    const app = currentApp();
+    app.setPropOverride!(instanceKeyFor(app, "Row"), "label", "B");
+    await flush();
+    expect(screen.html()).toContain("row:B");
+  });
+});

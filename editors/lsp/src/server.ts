@@ -178,15 +178,23 @@ function pathToUri(path: string): string {
 }
 
 /**
+ * Aktion module suffixes, in the Vite plugin's order. A `.aktion.ts` target's
+ * declarations are found on its raw text: `findDeclaration` is token-based, so
+ * type annotations do not get in the way, and no TypeScript parser has to ship
+ * in the editor bundle.
+ */
+const MODULE_SUFFIXES = [".aktion", ".aktion.ts", ".aktion.js"];
+
+/**
  * Resolve a relative module specifier against the importing document's
- * directory. Tries the literal path, then `.aktion`, then `/index.aktion` —
- * the resolution order the in-browser linker and the Vite plugin both use.
- * Bare (non-relative) specifiers are not resolved.
+ * directory. Tries the literal path, then each Aktion suffix (`.aktion`,
+ * `.aktion.ts`, `.aktion.js`), then the same as `/index.*` — the resolution
+ * order the Vite plugin uses. Bare (non-relative) specifiers are not resolved.
  */
 function resolveModuleUri(fromUri: string, spec: string): string | null {
   if (!spec.startsWith("./") && !spec.startsWith("../")) return null;
   const baseDir = dirname(uriToPath(fromUri));
-  const candidates = [spec, `${spec}.aktion`, join(spec, "index.aktion")];
+  const candidates = [spec, ...MODULE_SUFFIXES.map((s) => `${spec}${s}`), ...MODULE_SUFFIXES.map((s) => join(spec, `index${s}`))];
   for (const candidate of candidates) {
     const abs = isAbsolute(candidate) ? candidate : resolvePath(baseDir, candidate);
     try {

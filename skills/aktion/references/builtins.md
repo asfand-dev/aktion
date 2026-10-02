@@ -252,6 +252,7 @@ Reactive Server-Sent Events stream — { status, connected, last, messages, clos
 | `event` | `string` | Named event to listen for (defaults to message). |
 | `withCredentials` | `boolean` | Send credentials with the EventSource request. |
 | `bufferSize` | `number` | Max buffered events kept in `.messages`. |
+| `onMessage` | `(msg) => void` | Callback fired for each received event payload (JSON auto-parsed). |
 
 ### `$script`
 

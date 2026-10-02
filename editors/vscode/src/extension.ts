@@ -336,9 +336,18 @@ const definitionProvider: vscode.DefinitionProvider = {
 };
 
 /**
+ * Aktion module suffixes, in the Vite plugin's order. A `.aktion.ts` target's
+ * declarations are found on its raw text: `findDeclaration` is token-based, so
+ * type annotations do not get in the way, and no TypeScript parser has to ship
+ * in the editor bundle.
+ */
+const MODULE_SUFFIXES = [".aktion", ".aktion.ts", ".aktion.js"];
+
+/**
  * Resolve a relative module specifier against the importing document's
- * directory. Tries the literal path, then `.aktion`, then `/index.aktion`.
- * Bare (non-relative) specifiers are not resolved.
+ * directory. Tries the literal path, then each Aktion suffix (`.aktion`,
+ * `.aktion.ts`, `.aktion.js`), then the same as `/index.*` — the Vite plugin's
+ * default `extensions`. Bare (non-relative) specifiers are not resolved.
  *
  * Twin: `resolveModule` in `editors/lsp/src/server.ts` (same candidate order).
  */
@@ -348,7 +357,7 @@ function resolveModule(fromUri: vscode.Uri, spec: string): vscode.Uri | null {
   if (fromUri.scheme !== "file") return null;
   if (!spec.startsWith("./") && !spec.startsWith("../")) return null;
   const baseDir = path.dirname(fromUri.fsPath);
-  const candidates = [spec, `${spec}.aktion`, path.join(spec, "index.aktion")];
+  const candidates = [spec, ...MODULE_SUFFIXES.map((s) => `${spec}${s}`), ...MODULE_SUFFIXES.map((s) => path.join(spec, `index${s}`))];
   for (const candidate of candidates) {
     const resolved = path.resolve(baseDir, candidate);
     try {

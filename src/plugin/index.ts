@@ -1,29 +1,82 @@
 /**
- * `aktion-runtime/vite` — the Vite/Rollup plugin for `.aktion` files.
+ * `aktion-runtime/vite` — the Vite/Rollup plugin for Aktion modules: `.aktion`,
+ * `.aktion.js` and `.aktion.ts`.
  *
- * It compiles each `.aktion` module at build time by running the browser-safe
+ * It compiles each entry module at build time by running the browser-safe
  * {@link linkProgram} (the same linker the in-page `linkProject` uses) over a
  * Node-filesystem resolver, then emits a tiny ES module that default-exports a
- * `CompiledProgram`. So `import app from "./app.aktion"` gives you the
- * pre-parsed, schema-aware, cross-file-linked program — `el.mountCompiled(app)`
- * renders it without the parser ever running in the browser.
+ * `CompiledProgram`. So `import app from "./app.aktion"` (or `"./app.aktion.ts"`)
+ * gives you the pre-parsed, schema-aware, cross-file-linked program —
+ * `el.mountCompiled(app)` renders it without the parser ever running in the
+ * browser.
+ *
+ * `.aktion.ts` modules are compiled by the TypeScript frontend
+ * (`./typescript.ts`), which erases types without moving a character and hands
+ * the result to the same pipeline as `.aktion.js`.
  *
  * This is the ONLY module that imports `vite`/`node:*`; it ships as a separate
  * Node entry (`dist/plugin.{js,cjs}`) and never enters the browser bundle.
  */
 
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, resolve as resolvePath, sep } from "node:path";
-import type { Plugin } from "vite";
+import type { Plugin, UserConfig } from "vite";
 import {
   linkProgram,
   defineCompiledProgram,
+  defaultFrontends,
+  isAktionModulePath,
+  stripQuery,
+  AKTION_MODULE_SUFFIXES,
   COMPILED_PROGRAM_VERSION,
+  DSL_MODULE_ID,
   type CompiledProgram,
   type ModuleResolver,
   type LinkDiagnostic,
+  type LinkResult,
+  type ModuleFrontend,
+  type ModuleFrontends,
 } from "../compiler/index.js";
 import type { Program } from "../parser/types.js";
+import { printProgram } from "../tooling/formatter.js";
+import {
+  tryCreateTypeScriptFrontend,
+  tryLoadTypeScriptFrontend,
+  unavailableTypeScriptFrontend,
+  type TypeScriptFrontendOptions,
+} from "./typescript.js";
+import {
+  emitAktionDeclarations,
+  updateAktionDeclaration,
+  type AktionDeclarationsOptions,
+} from "./declarations.js";
+
+export {
+  loadTypeScriptFrontend,
+  createTypeScriptFrontend,
+  tryLoadTypeScriptFrontend,
+  tryCreateTypeScriptFrontend,
+  unavailableTypeScriptFrontend,
+  typeScriptFrontendFromEraser,
+  computeSoftNewlines,
+  checkErasureInvariant,
+  MISSING_ERASER_MESSAGE,
+  type TypeEraser,
+  type TypeEraseResult,
+  type TypeEraseDiagnostic,
+  type TypeScriptFrontendOptions,
+} from "./typescript.js";
+
+export {
+  aktionDeclarationText,
+  declarationFileName,
+  emitAktionDeclarations,
+  updateAktionDeclaration,
+  DECLARATION_HEADER,
+  DEFAULT_DECLARATIONS_DIR,
+  type AktionDeclarationsOptions,
+  type AktionDeclarationsResult,
+} from "./declarations.js";
 
 /**
  * How a `.aktion` import specifier becomes a file on disk.
@@ -62,8 +115,12 @@ export interface AktionResolveOptions {
   roots?: string[];
   /**
    * Suffixes tried when a specifier names no file directly.
-   * Default: `[".aktion", "/index.aktion"]`, so `"./lib/format"` finds
-   * `lib/format.aktion` and `"./lib"` finds `lib/index.aktion`.
+   * Default: `[".aktion", ".aktion.ts", ".aktion.js", "/index.aktion",
+   * "/index.aktion.ts", "/index.aktion.js"]`, so `"./lib/format"` finds
+   * `lib/format.aktion` (or `.aktion.ts` / `.aktion.js`) and `"./lib"` finds
+   * `lib/index.aktion`. Setting it REPLACES the list (an `aktion.config.json`
+   * value too), so include the TypeScript / JavaScript suffixes if you want
+   * them.
    */
   extensions?: string[];
 }
@@ -90,6 +147,73 @@ export interface AktionPluginOptions extends AktionResolveOptions {
    * to this config object alone.
    */
   config?: boolean;
+  /**
+   * Compile `.aktion.ts` modules. On by default whenever the optional peer
+   * `ts-blank-space` is installed (without it, each `.aktion.ts` module reports
+   * "needs the `ts-blank-space` package"). Pass `{ eraser }` to plug in another
+   * position-preserving type eraser, or `false` to refuse `.aktion.ts`.
+   */
+  typescript?: TypeScriptFrontendOptions | false;
+  /**
+   * Ship each module's original text with the compiled program
+   * (`CompiledProgram.sourcesContent`) so DevTools can show the files — and
+   * line numbers — the author wrote. Default: true. Turn off to trim
+   * production bundles.
+   */
+  devtools?: boolean;
+  /**
+   * Write a `name.d.aktion.ts` declaration for every `.aktion` module — on
+   * `buildStart`, and again whenever one changes under the dev server — so
+   * `.aktion.ts` code that imports from `.aktion` files is type-checked
+   * (see {@link emitAktionDeclarations}). `true` uses the defaults
+   * (`src/**\/*.aktion` into `.aktion-types`, which needs
+   * `"rootDirs": ["src", ".aktion-types/src"]` and `"allowArbitraryExtensions": true`
+   * in the tsconfig). Default: off.
+   */
+  dts?: boolean | Omit<AktionDeclarationsOptions, "root" | "write">;
+}
+
+/** Message for `.aktion.ts` modules when the plugin was configured with `typescript: false`. */
+const TYPESCRIPT_DISABLED_MESSAGE =
+  "`.aktion.ts` modules are disabled by the plugin option `typescript: false`.";
+
+/** Id filter matching every Aktion module (query/hash allowed). */
+const AKTION_ID_FILTER = /\.aktion(?:\.[jt]s)?(?:[?#]|$)/;
+
+/** `.aktion.ts` ids, for Vite's own TypeScript transform to skip. */
+const AKTION_TS_ID = /\.aktion\.ts(?:[?#]|$)/;
+
+/** The Vite major version, from `this.meta.viteVersion` (Vite 7+) — `undefined` means 5 or 6. */
+function viteMajorOf(ctx: unknown): number | undefined {
+  const version = (ctx as { meta?: { viteVersion?: unknown } } | undefined)?.meta?.viteVersion;
+  if (typeof version !== "string") return undefined;
+  const major = Number.parseInt(version, 10);
+  return Number.isFinite(major) ? major : undefined;
+}
+
+/**
+ * Config the plugin contributes:
+ *
+ *   - `optimizeDeps.exclude` for `aktion-runtime/dsl`: Vite's dependency scanner
+ *     reads `.aktion.ts` files as plain TypeScript and tries to pre-bundle their
+ *     imports, and the types-only `./dsl` subpath has nothing to bundle
+ *     ("No known conditions for "./dsl" specifier");
+ *   - an exclusion of `.aktion.ts` ids from Vite's own TypeScript transform
+ *     (`esbuild` in Vite 5–7, `oxc` in Vite 8), which otherwise re-processes the
+ *     plugin's output — re-parsing a large JSON blob and dropping unused
+ *     imports. Setting `exclude` replaces the default (`/\.js$/`), so the
+ *     default is restated unless the user already chose one.
+ */
+export function aktionViteConfig(user: UserConfig, viteMajor: number | undefined): UserConfig {
+  const out: Record<string, unknown> = { optimizeDeps: { exclude: [DSL_MODULE_ID, `${DSL_MODULE_ID}-globals`] } };
+  const key = viteMajor !== undefined && viteMajor >= 8 ? "oxc" : "esbuild";
+  const current = (user as Record<string, unknown>)[key];
+  if (current !== false) {
+    const userExclude =
+      current && typeof current === "object" ? (current as { exclude?: unknown }).exclude : undefined;
+    out[key] = { exclude: userExclude === undefined ? [/\.js$/, AKTION_TS_ID] : [AKTION_TS_ID] };
+  }
+  return out as UserConfig;
 }
 
 /**
@@ -103,11 +227,73 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
   let isServe = false;
   let projectRoot = process.cwd();
   let resolution: AktionResolveOptions = options;
+  let typescriptFrontend: Promise<ModuleFrontend> | null = null;
 
-  return {
+  const declarationOptions = (): Omit<AktionDeclarationsOptions, "root" | "write"> =>
+    typeof options.dts === "object" ? options.dts : {};
+
+  // Loaded once per plugin instance: eagerly in `buildStart`, and on demand in
+  // `transform` for hosts that never call `buildStart` before transforming.
+  const loadTypeScript = (): Promise<ModuleFrontend> => {
+    if (options.typescript === false) return Promise.resolve(unavailableTypeScriptFrontend(TYPESCRIPT_DISABLED_MESSAGE));
+    typescriptFrontend ??= tryLoadTypeScriptFrontend(options.typescript ?? {});
+    return typescriptFrontend;
+  };
+
+  const transform = {
+    // Vite ≥ 6.3 / Rollup ≥ 4.38 skip non-matching ids before calling the
+    // handler; Vite 5's dev server ignores `filter`, so the handler re-checks.
+    filter: { id: AKTION_ID_FILTER },
+    async handler(this: TransformContext, code: string, id: string) {
+      if (!isAktionId(id)) return null;
+      const cleanId = stripQuery(id);
+      const frontends: ModuleFrontends = { ...defaultFrontends, typescript: await loadTypeScript() };
+
+      const result = linkProgram(
+        code,
+        cleanId,
+        createNodeResolver({
+          ...resolution,
+          root: options.allowOutsideRoot === true ? null : projectRoot,
+        }),
+        { frontends },
+      );
+
+      // Editing an imported module must re-trigger the entry's transform.
+      for (const dep of result.dependencies) this.addWatchFile(dep);
+
+      const diagnostics = collectDiagnostics(result.program, result.diagnostics);
+      const fatal = diagnostics.filter((d) => d.severity === "error" || (options.strict && d.severity === "warning"));
+      if (fatal.length > 0) {
+        const first = fatal[0]!;
+        const file = first.path ?? cleanId;
+        return this.error({
+          message: fatal.length === 1 ? first.message : fatal.map(formatDiagnostic).join("\n"),
+          id: file,
+          loc: { file, line: first.line, column: first.column },
+        });
+      }
+      for (const w of diagnostics) {
+        if (w.severity === "warning") this.warn(w.message);
+      }
+
+      const moduleCode =
+        emitModule(result, code, cleanId, runtimeModuleId, { sourcesContent: options.devtools !== false }) +
+        (isServe ? HMR_FOOTER : "");
+      // `moduleType: "js"`: Vite 8 (Rolldown) otherwise treats an `.aktion.ts`
+      // id as TypeScript by its extension even after the oxc transform is
+      // excluded. Rollup-based Vite ignores the field.
+      return { code: moduleCode, map: buildSourceMap(moduleCode, cleanId, code), moduleType: "js" };
+    },
+  };
+
+  const plugin = {
     name: "aktion",
-    enforce: "pre",
-    configResolved(config) {
+    enforce: "pre" as const,
+    config(this: unknown, user: UserConfig): UserConfig {
+      return aktionViteConfig(user, viteMajorOf(this));
+    },
+    configResolved(config: { command: string; root?: string }) {
       isServe = config.command === "serve";
       // Confine `.aktion` imports to the project. Without a root, a crafted
       // import in a `.aktion` file reads any file the dev-server process can —
@@ -119,41 +305,48 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
       resolution =
         options.config === false ? options : mergeResolveOptions(loadAktionConfig(projectRoot), options);
     },
-    transform(code, id) {
-      if (!isAktionId(id)) return null;
-      const cleanId = stripQuery(id);
-
-      const { program, diagnostics, dependencies } = linkProgram(
-        code,
-        cleanId,
-        createNodeResolver({
-          ...resolution,
-          root: options.allowOutsideRoot === true ? null : projectRoot,
-        }),
-      );
-
-      // Editing an imported module must re-trigger the entry's transform.
-      for (const dep of dependencies) this.addWatchFile(dep);
-
-      const warnings = collectDiagnostics(program, diagnostics);
-
-      const fatal = warnings.find((d) => d.severity === "error" || (options.strict && d.severity === "warning"));
-      if (fatal) {
-        return this.error({ message: fatal.message, id: cleanId, loc: { file: cleanId, line: fatal.line, column: fatal.column } });
+    async buildStart(this: { warn?: (message: string) => void }) {
+      await loadTypeScript();
+      if (options.dts) {
+        const result = emitAktionDeclarations({ ...declarationOptions(), root: projectRoot });
+        for (const d of result.diagnostics) this.warn?.(`${d.path}:${d.line}:${d.column} ${d.message}`);
       }
-      for (const w of warnings) {
-        if (w.severity === "warning") this.warn(w.message);
-      }
-
-      const moduleCode = emitModule(program, code, cleanId, runtimeModuleId) + (isServe ? HMR_FOOTER : "");
-      return { code: moduleCode, map: buildSourceMap(moduleCode, cleanId, code) };
     },
+    configureServer(server: { watcher?: { on(event: string, listener: (file: string) => void): unknown } }) {
+      if (!options.dts || !server.watcher) return;
+      const refresh = (file: string): void => {
+        if (/\.aktion$/i.test(file)) updateAktionDeclaration(file, { ...declarationOptions(), root: projectRoot });
+      };
+      server.watcher.on("add", refresh);
+      server.watcher.on("change", refresh);
+      server.watcher.on("unlink", refresh);
+    },
+    transform,
   };
+  return plugin as unknown as Plugin;
 }
 
-/** True for `*.aktion` ids (query/hash stripped). Exported for tests. */
+/** The slice of Rollup's plugin context `transform` uses. */
+interface TransformContext {
+  addWatchFile(id: string): void;
+  warn(message: string): void;
+  error(error: { message: string; id?: string; loc?: { file?: string; line: number; column: number } }): never;
+}
+
+/** `path:line:column message` for multi-error build failures. */
+function formatDiagnostic(d: LinkDiagnostic): string {
+  const where = d.path ? `${d.path}:${d.line}:${d.column}` : `${d.line}:${d.column}`;
+  const message = d.path && d.message.startsWith(`${d.path}: `) ? d.message.slice(d.path.length + 2) : d.message;
+  return `${where} ${message}`;
+}
+
+/**
+ * True for the ids of Aktion modules — `*.aktion`, `*.aktion.ts`, `*.aktion.js`
+ * (query/hash stripped). Plain `*.ts` / `*.js` ids are native code and are left
+ * to Vite. Exported for tests.
+ */
 export function isAktionId(id: string): boolean {
-  return stripQuery(id).endsWith(".aktion");
+  return isAktionModulePath(id);
 }
 
 export { aktionPlugin as default };
@@ -177,10 +370,28 @@ export interface CompileOptions extends AktionResolveOptions {
    * the build does without restating them.
    */
   config?: boolean;
+  /**
+   * Frontends per module language, merged over the defaults. The default
+   * `typescript` frontend is created synchronously from `ts-blank-space`, which
+   * needs Node ≥ 20.19 / 22.12 (`require` of an ES module); on older Node, or
+   * to control the eraser, pass `typescript: await loadTypeScriptFrontend()` —
+   * or use {@link compileAktionFileAsync} / {@link compileAktionSourceAsync}.
+   */
+  frontends?: ModuleFrontends;
+  /** Include each module's original text (`CompiledProgram.sourcesContent`). Default: true. */
+  sourcesContent?: boolean;
+}
+
+/** The default `typescript` frontend for the synchronous compile helpers, created once. */
+let defaultSyncTypeScriptFrontend: ModuleFrontend | undefined;
+
+function compileFrontends(options: CompileOptions): ModuleFrontends {
+  const typescript = options.frontends?.typescript ?? (defaultSyncTypeScriptFrontend ??= tryCreateTypeScriptFrontend());
+  return { ...defaultFrontends, ...options.frontends, typescript };
 }
 
 /**
- * Link a `.aktion` file from disk into a {@link CompiledProgram}, without a
+ * Link an Aktion module from disk (`.aktion`, `.aktion.js` or `.aktion.ts`) into a {@link CompiledProgram}, without a
  * bundler.
  *
  * The Vite plugin is normally what produces this artefact, which leaves anything
@@ -205,6 +416,16 @@ export interface CompileOptions extends AktionResolveOptions {
 export function compileAktionFile(entryPath: string, options: CompileOptions = {}): CompiledProgram {
   const absolute = resolvePath(entryPath);
   return compileAktionSource(readFileSync(absolute, "utf8"), absolute, options);
+}
+
+/**
+ * {@link compileAktionFile}, loading the TypeScript frontend asynchronously —
+ * works on every Node version the plugin supports, including Node 18 where
+ * `ts-blank-space` (an ES module) cannot be `require`d.
+ */
+export async function compileAktionFileAsync(entryPath: string, options: CompileOptions = {}): Promise<CompiledProgram> {
+  const absolute = resolvePath(entryPath);
+  return compileAktionSourceAsync(readFileSync(absolute, "utf8"), absolute, options);
 }
 
 /**
@@ -240,9 +461,11 @@ export function compileAktionSource(
   const root = options.root === null ? null : resolvePath(options.root ?? dirname(absolute));
   const resolution =
     options.config === false ? options : mergeResolveOptions(loadAktionConfig(root ?? absolute), options);
-  const { program, diagnostics } = linkProgram(source, absolute, createNodeResolver({ ...resolution, root }));
+  const result = linkProgram(source, absolute, createNodeResolver({ ...resolution, root }), {
+    frontends: compileFrontends(options),
+  });
 
-  const fatal = collectDiagnostics(program, diagnostics).filter(
+  const fatal = collectDiagnostics(result.program, result.diagnostics).filter(
     (d) => d.severity === "error" || (options.strict === true && d.severity === "warning"),
   );
   if (fatal.length > 0) {
@@ -252,19 +475,41 @@ export function compileAktionSource(
 
   return defineCompiledProgram({
     __aktionCompiled: COMPILED_PROGRAM_VERSION,
-    program,
-    source,
+    program: result.program,
+    source: runnableSource(result, source),
     path: absolute,
+    ...(options.sourcesContent === false ? {} : { sourcesContent: result.modules.map((m) => m.originalSource) }),
   });
+}
+
+/**
+ * {@link compileAktionSource}, loading the TypeScript frontend asynchronously
+ * (see {@link compileAktionFileAsync}).
+ */
+export async function compileAktionSourceAsync(
+  source: string,
+  virtualPath: string,
+  options: CompileOptions = {},
+): Promise<CompiledProgram> {
+  const typescript = options.frontends?.typescript ?? (await tryLoadTypeScriptFrontend());
+  return compileAktionSource(source, virtualPath, { ...options, frontends: { ...options.frontends, typescript } });
 }
 
 // ---- internals ----
 
-function stripQuery(id: string): string {
-  const q = id.indexOf("?");
-  const base = q === -1 ? id : id.slice(0, q);
-  const h = base.indexOf("#");
-  return h === -1 ? base : base.slice(0, h);
+/**
+ * The runnable text of a linked program: the merged program re-printed as one
+ * `.aktion` program, as `linkProject` does. Re-parsing the ENTRY text alone
+ * (what this used to be) loses every imported module, and for a `.aktion.ts`
+ * entry it is not Aktion at all. Falls back to the entry's parsed text if the
+ * printer cannot print some node.
+ */
+function runnableSource(result: LinkResult, entrySource: string): string {
+  try {
+    return printProgram(result.program);
+  } catch {
+    return result.modules[0]?.aktionSource ?? entrySource;
+  }
 }
 
 /**
@@ -281,7 +526,50 @@ export function isInsideRoot(candidate: string, root: string): boolean {
 }
 
 /** Default suffixes tried when a specifier names no file directly. */
-const DEFAULT_EXTENSIONS = [".aktion", "/index.aktion"];
+const DEFAULT_EXTENSIONS = [
+  ".aktion",
+  ".aktion.ts",
+  ".aktion.js",
+  "/index.aktion",
+  "/index.aktion.ts",
+  "/index.aktion.js",
+];
+
+/**
+ * Another Aktion module with the same base name as `path` (`store.aktion` next
+ * to `store.aktion.ts`), or `null`. Such pairs are refused whatever the
+ * specifier: TypeScript resolves `./store.aktion` to `store.aktion.ts` while
+ * Vite picks `store.aktion`, so the type-checker and the bundler would silently
+ * disagree about which file an import means.
+ */
+function siblingVariant(path: string): string | null {
+  const lower = path.toLowerCase();
+  const suffix = AKTION_MODULE_SUFFIXES.find((s) => lower.endsWith(s));
+  if (!suffix) return null;
+  const stem = path.slice(0, path.length - suffix.length);
+  for (const other of AKTION_MODULE_SUFFIXES) {
+    if (other !== suffix && isFile(stem + other)) return stem + other;
+  }
+  return null;
+}
+
+const baseNameOf = (p: string): string => p.slice(Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\")) + 1);
+
+/** `path` with symlinks resolved, or `path` itself when it does not exist. */
+function realPath(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return path;
+  }
+}
+
+/** `paths` plus the symlink-resolved spelling of each one that differs. */
+function withRealPaths(paths: string[]): string[] {
+  const out = new Set(paths);
+  for (const p of paths) out.add(realPath(p));
+  return [...out];
+}
 
 /** True when `path` names an existing regular file. */
 function isFile(path: string): boolean {
@@ -335,9 +623,14 @@ export function createNodeResolver(
   const allowed =
     root === null
       ? null
-      : [resolvePath(root), ...(options.roots ?? []).map((r) => resolvePath(r)), ...aliases.map(([, t]) => t)];
+      : withRealPaths([resolvePath(root), ...(options.roots ?? []).map((r) => resolvePath(r)), ...aliases.map(([, t]) => t)]);
 
-  const contained = (path: string): boolean => allowed === null || allowed.some((r) => isInsideRoot(path, r));
+  // Compared both as written and with symlinks resolved: Vite hands the plugin
+  // REAL paths for module ids but keeps `config.root` as configured, so on macOS
+  // (`/var` → `/private/var`) or in a symlinked workspace every import of a
+  // project under such a path used to read as "outside the project root".
+  const contained = (path: string): boolean =>
+    allowed === null || allowed.some((r) => isInsideRoot(path, r) || isInsideRoot(realPath(path), r));
 
   /** Extension-complete a base path; `null` when nothing on disk matches. */
   const complete = (base: string): string | null => {
@@ -348,29 +641,71 @@ export function createNodeResolver(
     return null;
   };
 
+  /**
+   * Resolve `spec` and say why when it does not resolve. One function backs
+   * both `resolve` and `explain`, so the explanation can never describe a
+   * different decision than the one taken.
+   */
+  const resolveDetailed = (spec: string, importerPath: string): { path: string | null; why?: string } => {
+    try {
+      for (const [prefix, target] of aliases) {
+        if (spec !== prefix && !spec.startsWith(`${prefix}/`)) continue;
+        const rest = spec === prefix ? "" : spec.slice(prefix.length + 1);
+        const base = rest === "" ? target : resolvePath(target, rest);
+        // `rest` may contain `..`; an alias must not become a way out of the
+        // directory it names.
+        if (!isInsideRoot(base, target)) {
+          return { path: null, why: `It climbs out of the directory the "${prefix}" alias names.` };
+        }
+        return checked(spec, base, complete(base));
+      }
+
+      // Bare specifiers with no alias aren't project modules.
+      if (!spec.startsWith(".") && !spec.startsWith("/")) {
+        return {
+          path: null,
+          why: "Bare specifiers name packages, not Aktion modules; map a prefix with `alias` (plugin option or aktion.config.json) or use a relative path.",
+        };
+      }
+
+      const base = resolvePath(dirname(importerPath), spec);
+      const resolved = complete(base);
+      if (resolved !== null && !contained(resolved)) {
+        return { path: null, why: "It resolves outside the project root (see the `roots` / `alias` options)." };
+      }
+      return checked(spec, base, resolved);
+    } catch {
+      return { path: null };
+    }
+  };
+
+  /** Apply the sibling-variant refusal and the "did you mean" hint to a completed path. */
+  const checked = (spec: string, base: string, resolved: string | null): { path: string | null; why?: string } => {
+    if (resolved === null) {
+      // `./store.aktion` when only `store.aktion.ts` exists: name the file.
+      for (const ext of [".ts", ".js"]) {
+        if (spec.endsWith(".aktion") && isFile(base + ext)) return { path: null, why: `Did you mean "${spec}${ext}"?` };
+      }
+      return { path: null };
+    }
+    const sibling = siblingVariant(resolved);
+    if (sibling !== null) {
+      return {
+        path: null,
+        why:
+          `"${baseNameOf(resolved)}" and "${baseNameOf(sibling)}" both exist — keep one ` +
+          `(TypeScript and Vite resolve "./${baseNameOf(resolved).replace(/\.(?:ts|js)$/, "")}" to different files).`,
+      };
+    }
+    return { path: resolved };
+  };
+
   return {
     resolve(spec, importerPath) {
-      try {
-        for (const [prefix, target] of aliases) {
-          if (spec !== prefix && !spec.startsWith(`${prefix}/`)) continue;
-          const rest = spec === prefix ? "" : spec.slice(prefix.length + 1);
-          const base = rest === "" ? target : resolvePath(target, rest);
-          // `rest` may contain `..`; an alias must not become a way out of the
-          // directory it names.
-          if (!isInsideRoot(base, target)) return null;
-          return complete(base);
-        }
-
-        // Bare specifiers with no alias aren't project modules.
-        if (!spec.startsWith(".") && !spec.startsWith("/")) return null;
-
-        const base = resolvePath(dirname(importerPath), spec);
-        const resolved = complete(base);
-        if (resolved === null || !contained(resolved)) return null;
-        return resolved;
-      } catch {
-        return null;
-      }
+      return resolveDetailed(spec, importerPath).path;
+    },
+    explain(spec, importerPath) {
+      return resolveDetailed(spec, importerPath).why;
     },
     load(path) {
       if (!contained(path)) {
@@ -533,17 +868,30 @@ function omitDeclarationKeyword(this: unknown, key: string, value: unknown): unk
     : value;
 }
 
-/** ES module exporting the linked `CompiledProgram`. The AST embeds as an inert
- *  `JSON.parse("…")` (faster + smaller than an object literal for large trees). */
-function emitModule(program: Program, source: string, path: string, runtimeModuleId: string): string {
-  const programLiteral = JSON.stringify(JSON.stringify(program, omitDeclarationKeyword));
+/**
+ * ES module exporting the linked `CompiledProgram`. The AST embeds as an inert
+ * `JSON.parse("…")` (faster + smaller than an object literal for large trees);
+ * `source` is the runnable re-print of the linked program, and
+ * `sourcesContent` (unless disabled) each module's original text for DevTools.
+ */
+function emitModule(
+  result: LinkResult,
+  entrySource: string,
+  path: string,
+  runtimeModuleId: string,
+  options: { sourcesContent: boolean },
+): string {
+  const programLiteral = JSON.stringify(JSON.stringify(result.program, omitDeclarationKeyword));
+  const contents = options.sourcesContent
+    ? `, sourcesContent: ${JSON.stringify(result.modules.map((m) => m.originalSource))}`
+    : "";
   return (
     `// Generated by the Aktion Vite plugin — do not edit by hand.\n` +
     `import { defineCompiledProgram } from ${JSON.stringify(runtimeModuleId)};\n` +
     `const program = /*#__PURE__*/ JSON.parse(${programLiteral});\n` +
-    `const source = ${JSON.stringify(source)};\n` +
+    `const source = ${JSON.stringify(runnableSource(result, entrySource))};\n` +
     `export default /*#__PURE__*/ defineCompiledProgram({ ` +
-    `__aktionCompiled: ${COMPILED_PROGRAM_VERSION}, program, source, path: ${JSON.stringify(path)} });\n`
+    `__aktionCompiled: ${COMPILED_PROGRAM_VERSION}, program, source, path: ${JSON.stringify(path)}${contents} });\n`
   );
 }
 

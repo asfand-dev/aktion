@@ -243,8 +243,9 @@ Reactive HTTP resource bag.
 
 | member | kind | signature | notes |
 | --- | --- | --- | --- |
-| `data` | property | `data` | Parsed response body — `null` until the request resolves. |
-| `error` | property | `error` | `null` on success; `{ status, body }` on a non-2xx; the thrown error on network failure. |
+| `state` | property | `state` | Request lifecycle: "idle" \| "loading" \| "data" \| "error" \| "stale" ("stale" = refetching while the previous data is still shown). |
+| `data` | property | `data` | Parsed response body — `undefined` until the first successful response. |
+| `error` | property | `error` | `undefined` on success; `{ status, body }` on a non-2xx; `{ graphqlErrors }` for a GraphQL error; the thrown error on network failure. |
 | `status` | property | `status` | HTTP status code of the last response, e.g. `200`. |
 | `loading` | property | `loading` | `true` while a request is in flight. |
 | `headers` | property | `headers` | Response headers as a plain object. |
@@ -259,8 +260,9 @@ Cached query bag (HTTP + pagination).
 
 | member | kind | signature | notes |
 | --- | --- | --- | --- |
-| `data` | property | `data` | Parsed response body — `null` until the request resolves. |
-| `error` | property | `error` | `null` on success; `{ status, body }` on a non-2xx; the thrown error on network failure. |
+| `state` | property | `state` | Request lifecycle: "idle" \| "loading" \| "data" \| "error" \| "stale" ("stale" = refetching while the previous data is still shown). |
+| `data` | property | `data` | Parsed response body — `undefined` until the first successful response. |
+| `error` | property | `error` | `undefined` on success; `{ status, body }` on a non-2xx; `{ graphqlErrors }` for a GraphQL error; the thrown error on network failure. |
 | `status` | property | `status` | HTTP status code of the last response, e.g. `200`. |
 | `loading` | property | `loading` | `true` while a request is in flight. |
 | `headers` | property | `headers` | Response headers as a plain object. |
@@ -271,6 +273,7 @@ Cached query bag (HTTP + pagination).
 | `loadMore` | method | `loadMore()` | Fetch the next page (infinite mode). |
 | `hasMore` | property | `hasMore` | `true` while more pages are available (infinite mode). |
 | `loadingMore` | property | `loadingMore` | `true` while a `loadMore()` page is in flight. |
+| `page` | property | `page` | The last loaded page number — in `offset` mode, the number of pages loaded (infinite mode). |
 | `pages` | property | `pages` | Raw page bodies loaded so far (infinite mode); `.data` is the flattened items. |
 
 ### `$mutation({ … })` →
@@ -281,9 +284,10 @@ Deferred mutation bag (fires on .mutate()).
 | --- | --- | --- | --- |
 | `mutate` | method | `mutate(overrides?)` | Fire the request; overrides shallow-merge over the config. `optimistic` applies instantly and rolls back on failure. |
 | `data` | property | `data` | Response body of the last successful mutation. |
-| `error` | property | `error` | `null` on success; error details on failure. |
+| `error` | property | `error` | `undefined` on success; error details on failure. |
 | `loading` | property | `loading` | `true` while the mutation request is in flight. |
 | `status` | property | `status` | HTTP status code of the last response. |
+| `reset` | method | `reset()` | Clear data / error / status back to the resting state (aborts an in-flight mutation). |
 | `onDone` | property | `onDone` | Settable callback fired when the mutation settles. |
 
 ### `$socket({ … })` →
@@ -338,7 +342,7 @@ Managed form engine bag.
 | `valid` | property | `valid` | `true` when the last validation pass found no errors. |
 | `submitting` | property | `submitting` | `true` from submit() until an async onSubmit settles. |
 | `validating` | property | `validating` | `true` while async rules ($util.rules.asyncCustom) are in flight. |
-| `field` | method | `field(name)` | Controlled prop bag: { value, error, name, onChange, onBlur } — spread onto an input. |
+| `field` | method | `field(name)` | Controlled prop bag: { value, error, name, onChange, onBlur } — pass its members to an input (`{ value: b.value, onChange: b.onChange }`); a `...spread` inside component props is dropped. |
 | `touch` | method | `touch(name)` | Mark a field touched + validate it (wire to `onBlur`). |
 | `setField` | method | `setField(name, value)` | Set one field value (clears its error). |
 | `setValues` | method | `setValues(values)` | Merge several field values at once. |

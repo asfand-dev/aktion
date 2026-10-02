@@ -44,24 +44,32 @@ import { join, relative } from "node:path";
 import { Linter, type Linter as LinterTypes } from "eslint";
 import tsParser from "@typescript-eslint/parser";
 import unicornPlugin from "eslint-plugin-unicorn";
-import aktionEslintPlugin, { aktionRecommendedRules } from "../src/eslint-api.js";
+import aktionEslintPlugin, { aktionRecommendedRules, aktionTypeScriptRules } from "../src/eslint-api.js";
 import { parse } from "../src/parser/index.js";
+import { javascriptFrontend } from "../src/compiler/frontend.js";
+import { createTypeScriptFrontend } from "../src/plugin/typescript.js";
 
 const root = join(__dirname, "..");
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git", "site"]);
+// The ESLint / DSL-type fixtures contain deliberate mistakes.
+const FIXTURES = join(root, "tests", "fixtures");
 
-function collect(dir: string, out: string[]): void {
+function collect(dir: string, out: string[], modules: string[] = []): void {
   for (const entry of readdirSync(dir)) {
     if (SKIP_DIRS.has(entry)) continue;
     const full = join(dir, entry);
     const stat = statSync(full);
-    if (stat.isDirectory()) collect(full, out);
+    if (stat.isDirectory()) collect(full, out, modules);
     else if (entry.endsWith(".aktion")) out.push(full);
+    else if (/\.aktion\.[jt]s$/.test(entry) && !full.startsWith(FIXTURES)) modules.push(full);
   }
 }
 
 const files: string[] = [];
-collect(root, files);
+// `.aktion.ts` / `.aktion.js` modules are ordinary TS / JS to ESLint (no
+// processor): they get the `aktionTypeScriptRules` overrides instead, swept below.
+const jsModules: string[] = [];
+collect(root, files, jsModules);
 
 const verifyOptions = { filename: "app.aktion", filterCodeBlock: () => true };
 
@@ -181,6 +189,49 @@ describe("aktion-runtime/eslint corpus sweep", () => {
 });
 
 /**
+ * The same integrity check for `.aktion.ts` / `.aktion.js` modules: lint with
+ * unicorn's `recommended` set plus core `object-shorthand`/`new-cap` — with the
+ * shipped `aktionTypeScriptRules` overrides — apply every fix, then compile the
+ * result with the Aktion frontend for its language. A fix that produced
+ * something Aktion rejects (a parse error or a JS-semantics error) fails here.
+ */
+describe("aktionTypeScriptRules never corrupt a real .aktion.ts / .aktion.js module", () => {
+  const typescript = createTypeScriptFrontend();
+  const config: LinterTypes.Config[] = [
+    {
+      ...(unicornPlugin.configs.recommended as unknown as LinterTypes.Config),
+      files: ["**/*.aktion.ts", "**/*.aktion.js"],
+      languageOptions: {
+        parser: tsParser,
+        ecmaVersion: 2022,
+        sourceType: "module",
+        parserOptions: { project: false, projectService: false },
+      },
+      rules: {
+        ...(unicornPlugin.configs.recommended.rules as LinterTypes.RulesRecord),
+        "object-shorthand": "error",
+        "new-cap": "error",
+        ...aktionTypeScriptRules,
+      },
+    },
+  ];
+
+  it("found the TypeScript and JavaScript templates", () => {
+    expect(jsModules.length).toBeGreaterThanOrEqual(4);
+  });
+
+  for (const file of jsModules.sort()) {
+    it(`${relative(root, file)} still compiles after lint → --fix`, () => {
+      const frontend = file.endsWith(".ts") ? typescript : javascriptFrontend;
+      const fixed = new Linter().verifyAndFix(readFileSync(file, "utf8"), config, { filename: file }).output;
+      const out = frontend.compile(fixed, file);
+      expect(out.program.errors).toEqual([]);
+      expect(out.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+    });
+  }
+});
+
+/**
  * Targeted, minimal synthetic reproductions of the three GENUINE GRAMMAR
  * INCOMPATIBILITY overrides — the ones where leaving the rule on doesn't
  * just produce a worse lint experience, it produces text this repo's own
@@ -194,13 +245,24 @@ describe("synthetic reproductions: grammar-incompatible rules corrupt output whe
   const withOverridesOff = buildConfig(aktionRecommendedRules);
   const withoutOverrides = buildConfig({});
 
-  it("object-shorthand rewrites an anonymous function-expression handler into method shorthand, which fails to parse", () => {
+  it("object-shorthand rewrites an anonymous function-expression handler into method shorthand, which now parses to the same handler", () => {
+    // Method shorthand was a parse error until the parser widening (design
+    // §8.0.5); this test used to assert that the rewrite fails to parse.
+    // `{ onClick() { … } }` now parses to the same `Lambda` as
+    // `onClick: function () { … }`, flagged `method` so the formatter writes
+    // the shorthand back. The `object-shorthand` entry in `src/eslint/rules.ts`
+    // is therefore no longer a grammar incompatibility — whether to re-enable
+    // the rule is that file's decision; the shipped config still leaves the
+    // source alone.
     const source = 'export Comp = Button("Click", { onClick: function() { return 1 } })\n';
 
-    const broken = new Linter().verifyAndFix(source, withoutOverrides, verifyOptions);
-    expect(broken.fixed).toBe(true);
-    expect(broken.output).toContain("onClick() {");
-    expect(parse(broken.output).errors.length).toBeGreaterThan(0);
+    const rewritten = new Linter().verifyAndFix(source, withoutOverrides, verifyOptions);
+    expect(rewritten.fixed).toBe(true);
+    expect(rewritten.output).toContain("onClick() {");
+    expect(parse(rewritten.output).errors).toEqual([]);
+    const shape = (text: string) =>
+      JSON.stringify(parse(text).statements, (key, value) => (key === "loc" || key === "method" ? undefined : value));
+    expect(shape(rewritten.output)).toBe(shape(source));
 
     const shipped = new Linter().verifyAndFix(source, withOverridesOff, verifyOptions);
     expect(shipped.output).toBe(source);
