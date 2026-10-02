@@ -49,11 +49,31 @@ export interface FormatOptions {
     objectCurlySpacing?: boolean;
 }
 export interface FormatResult {
-    /** Canonical source. Equal to the input when parse errors occur. */
+    /** Canonical source. Equal to the input when parse errors occur or the output would change the program. */
     formatted: string;
     /** Parse errors raised while reading the input — formatting is a no-op when non-empty. */
     errors: ParseError[];
+    /**
+     * Non-fatal notes, shaped like `Program.warnings`. Set when formatting was
+     * skipped without a parse error: the printed output did not re-parse, or
+     * re-parsed to a different tree than the input. `formatted` is then the
+     * untouched input. Each entry applies to the whole document (line 1, column 1).
+     */
+    warnings?: ParseError[];
 }
+/**
+ * Canonical JSON of a parsed program, used to decide whether two parses are
+ * the same program. Layout-only keys (positions, comments) are dropped and
+ * object keys are sorted; the position-derived name of an `$effect`
+ * (`__effect_L{line}_C{column}`) is normalised. Numbers `JSON.stringify`
+ * would conflate (`-0`, `NaN`, `±Infinity`) get their own markers, and a
+ * for-of / for-in head without a keyword counts as `let`, which is what the
+ * printer writes for it.
+ *
+ * It is a best-effort check for what the printer is known to get wrong, not a
+ * proof of equivalence. Exported for tests only; not part of the package API.
+ */
+export declare function structuralFingerprint(program: Program): string;
 export declare function formatProgram(source: string, options?: FormatOptions): FormatResult;
 /**
  * Re-emit a parsed `Program` as canonical Aktion source. Exported so the

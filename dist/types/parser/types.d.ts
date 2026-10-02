@@ -229,11 +229,19 @@ export interface NewExpr {
     arguments: Expression[];
     loc?: SourceLocation;
 }
+/** Declaration keyword that can introduce a binding. See `declaration` fields. */
+export type DeclarationKeyword = "let" | "const" | "var";
 export interface AssignmentStatement {
     kind: "Assignment";
     identifier: string;
     isState: boolean;
     expression: Expression;
+    /**
+     * Declaration keyword the source used (`let` / `const` / `var`), or absent
+     * when the statement had none. Purely informational — all three behave the
+     * same at runtime — so the formatter can print the source back faithfully.
+     */
+    declaration?: DeclarationKeyword;
     /**
      * True when prefixed with `export` (multi-file modules). Used by the linker
      * to decide importability; the streaming runtime ignores it.
@@ -483,6 +491,12 @@ export interface ForOfStatement {
      * matching JavaScript semantics. When present, `item` is ignored.
      */
     pattern?: DestructuringPattern;
+    /**
+     * Declaration keyword the source used (`let` / `const` / `var`), or absent
+     * when the statement had none. Purely informational — all three behave the
+     * same at runtime — so the formatter can print the source back faithfully.
+     */
+    declaration?: DeclarationKeyword;
     iterable: Expression;
     body: BlockExpr;
     loc?: SourceLocation;
@@ -516,6 +530,12 @@ export interface ForClassicStatement {
 export interface ForInStatement {
     kind: "ForInStatement";
     item: string;
+    /**
+     * Declaration keyword the source used (`let` / `const` / `var`), or absent
+     * when the statement had none. Purely informational — all three behave the
+     * same at runtime — so the formatter can print the source back faithfully.
+     */
+    declaration?: DeclarationKeyword;
     iterable: Expression;
     body: BlockExpr;
     loc?: SourceLocation;
@@ -602,6 +622,12 @@ export interface DestructureStatement {
     patternKind: "array" | "object";
     bindings: DestructuringBinding[];
     expression: Expression;
+    /**
+     * Declaration keyword the source used (`let` / `const` / `var`), or absent
+     * when the statement had none. Purely informational — all three behave the
+     * same at runtime — so the formatter can print the source back faithfully.
+     */
+    declaration?: DeclarationKeyword;
     loc?: SourceLocation;
     /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
     leadingComments?: ReadonlyArray<AttachedComment>;
