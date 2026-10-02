@@ -719,6 +719,55 @@ $todos = [
       expect(banner.hidden).toBe(false);
     });
 
+    it("loads a `.aktion.js` entry, with the JavaScript-semantics rules applied", async () => {
+      mockFetch({
+        "app.aktion.js": [
+          'import { Card, CardHeader } from "aktion-runtime/dsl"',
+          "function title() {",
+          '  const label = "From a JS module"',
+          "  return label",
+          "}",
+          "export default $app(Card([CardHeader(title())]))",
+        ].join("\n"),
+      });
+      document.body.innerHTML = `<aktion-app src="./app.aktion.js"></aktion-app>`;
+      await settle();
+      const el = document.querySelector("aktion-app")!;
+      expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe("From a JS module");
+    });
+
+    it("links a `.aktion` entry that imports a `.aktion.js` module", async () => {
+      mockFetch({
+        "app.aktion": `import { Hello } from "./hello.aktion.js"\n$app(Hello())`,
+        "hello.aktion.js": `export function Hello() {\n  return Card([CardHeader("Linked JS module")])\n}`,
+      });
+      document.body.innerHTML = `<aktion-app src="./app.aktion"></aktion-app>`;
+      await settle();
+      const el = document.querySelector("aktion-app")!;
+      expect(el.shadowRoot!.querySelector(".rui-card-title")?.textContent).toBe("Linked JS module");
+    });
+
+    it("reports a `.aktion.js` rule violation, and a `.aktion.ts` module it cannot compile", async () => {
+      for (const [files, expected] of [
+        [{ "bad.aktion.js": "var x = 1\n$app(Text(String(x)))" }, "`var` is not supported in Aktion modules"],
+        [
+          { "uses-ts.aktion": 'import { n } from "./n.aktion.ts"\n$app(Text(String(n)))', "n.aktion.ts": "export const n: number = 1" },
+          "no typescript frontend is configured",
+        ],
+      ] as const) {
+        mockFetch(files);
+        const el = create() as HTMLElement & { loadFromSrc(src: string): Promise<void> };
+        const messages: string[] = [];
+        el.addEventListener("error", (e) => {
+          messages.push(JSON.stringify((e as CustomEvent).detail));
+        });
+        await el.loadFromSrc(`./${Object.keys(files)[0]}`);
+        await settle();
+        expect(messages.join("\n")).toContain(expected);
+        vi.unstubAllGlobals();
+      }
+    });
+
     it("the response attribute takes precedence over src", async () => {
       mockFetch({ "app.aktion": `$app(Card([CardHeader("From src")]))` });
       document.body.innerHTML =

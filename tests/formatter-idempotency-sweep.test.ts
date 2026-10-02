@@ -109,6 +109,12 @@ function commentDepthPairs(source: string): Array<{ text: string; depth: number 
   return comments.map((c) => ({ text: c.text, depth: depthBefore(c.line, c.column) }));
 }
 
+/**
+ * `.aktion` files only, deliberately: the formatter prints the Aktion DSL. A
+ * `.aktion.ts` / `.aktion.js` module is TypeScript / JavaScript to every tool
+ * but the Aktion compiler — Prettier or the editor formats it, and printing
+ * its AST would drop the types.
+ */
 function collect(dir: string, out: string[]): void {
   for (const entry of readdirSync(dir)) {
     if (SKIP_DIRS.has(entry)) continue;
@@ -168,12 +174,24 @@ describe("repo .aktion programs format to a fixed point", () => {
  *
  * To update after adding or editing a demo: run this file, copy the counts
  * from the failing assertion, and say in the PR why they moved.
+ *
+ * Moved by the parser widening (design §8.0.5) from 70 / 46 / 49: no corpus
+ * file parses differently (every AST is unchanged), but 11 files' printed
+ * output now re-parses, because the printer now writes destructuring
+ * parameters — it printed `function Card(label, { icon } = {})` as
+ * `function Card(label,  = {})`. `docs/demos/components/charts.aktion` also
+ * needed the parser change itself: its printed output wraps an object literal
+ * whose last entry is a shorthand property on its own line, which now parses
+ * (newlines inside `{ … }` literals are whitespace). Nine of the 11 format;
+ * `data-display.aktion` and `forms.aktion` now reach the AST guard and are
+ * skipped there instead, because the printer still drops grouping
+ * parentheses (`a || (b ? c : d)`, `!(a && b)`).
  */
 const EXPECTED_CORPUS_SPLIT = {
-  total: 166,
-  formatted: 70,
-  skippedDifferentProgram: 46,
-  skippedDidNotReparse: 50,
+  total: 165,
+  formatted: 79,
+  skippedDifferentProgram: 48,
+  skippedDidNotReparse: 38,
 };
 
 describe("repo .aktion programs: how formatProgram treats the corpus", () => {

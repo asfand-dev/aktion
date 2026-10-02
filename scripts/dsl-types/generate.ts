@@ -1,0 +1,319 @@
+/**
+ * Build the three committed `aktion-runtime/dsl` artefacts from the runtime's
+ * own data — never from a hand-maintained copy of it:
+ *
+ *   src/dsl/index.d.ts     module flavour: `import { Button, $state } from "aktion-runtime/dsl"`
+ *   src/dsl/globals.d.ts   ambient flavour: every export re-declared as a global
+ *   src/dsl/manifest.json  component slot orders + `$`-name classes, for the
+ *                          compiler's JS-semantics checks (DOM-free JSON)
+ *
+ * Inputs: `defaultLibrary` (+ `findPositionalIndex` / `propExpectsObject`),
+ * `UNIVERSAL_PROP_NAMES`, `LEGACY_SIZE_TOKEN_ALIASES`, `RESPONSIVE_BREAKPOINTS`,
+ * `SPACING_TOKENS`, the language catalogues (`src/language/*`), the built-in
+ * theme names, `SAFE_HOST_GLOBALS`, the runtime's TS types and the TypeScript
+ * libs. Output is deterministic: no timestamps, no version stamp (a release
+ * bump must not make the committed files stale), sorted where order is free.
+ *
+ * `ts` is passed in (not imported) so this module bundles without TypeScript
+ * and runs from a `data:` URL — see `scripts/emit-dsl-types.mjs`.
+ */
+import type * as TS from "typescript";
+import { defaultLibrary } from "../../src/library/index.js";
+import { findPositionalIndex, propExpectsObject } from "../../src/library/types.js";
+import { UNIVERSAL_PROP_NAMES } from "../../src/library/sx.js";
+import { LEGACY_SIZE_TOKEN_ALIASES, RESPONSIVE_BREAKPOINTS, SPACING_TOKENS } from "../../src/library/utils.js";
+import { universalPropCatalog } from "../../src/language/components.js";
+import { builtinCatalog } from "../../src/language/builtins.js";
+import {
+  factoryResourceCatalog,
+  findBuiltinConfig,
+  i18nResultMembers,
+  namespaceCatalog,
+  routeMembers,
+} from "../../src/language/namespaces.js";
+import { builtInThemes } from "../../src/theme/index.js";
+import { SAFE_HOST_GLOBALS } from "../../src/runtime/evaluator.js";
+import { INJECTED_NAMES, classifyBuiltins, emitBuiltins } from "./builtins.js";
+import { byCodePoint, emitComponents, type ComponentManifestEntry } from "./components.js";
+import { readLibGlobals, readRuntimeTypes } from "./runtime-types.js";
+
+export const OUTPUT_FILES = ["index.d.ts", "globals.d.ts", "manifest.json"] as const;
+export type OutputFile = (typeof OUTPUT_FILES)[number];
+
+export interface DslManifest {
+  version: 1;
+  components: ComponentManifestEntry[];
+  hooks: string[];
+  factories: string[];
+  namespaces: string[];
+  builtins: string[];
+  injected: string[];
+}
+
+export interface GenerateResult {
+  files: Record<OutputFile, string>;
+  summary: {
+    components: number;
+    props: number;
+    overloads: number;
+    enumAliases: number;
+    builtins: number;
+    unresolvedTypeNames: Record<string, string[]>;
+    overridesApplied: string[];
+    hybridConstructors: string[];
+    domCollisions: string[];
+    ambientUnavailable: string[];
+  };
+}
+
+/**
+ * Per-prop types where the library's coarse `type` hint under-describes what the
+ * renderer accepts (each is a candidate for a first-class `PropSpec.tsType`).
+ * A key naming a prop the library no longer declares fails generation.
+ */
+const TYPE_OVERRIDES: Readonly<Record<string, string>> = {
+  // "SelectItem(value, label) nodes, {value, label} objects or bare strings".
+  "Select.items": `readonly (AktionNode<"SelectItem"> | SelectItemData | string)[]`,
+  "Radio.items": `readonly (AktionNode<"SelectItem"> | SelectItemData | string)[]`,
+  // "SelectItem(value, label) or {value, label}" — no bare strings.
+  "Combobox.items": `readonly (AktionNode<"SelectItem"> | SelectItemData)[]`,
+  "MultiSelect.items": `readonly (AktionNode<"SelectItem"> | SelectItemData)[]`,
+  // "FollowUpItem(label, message?), {label, message, disabled?} objects, or plain strings".
+  "FollowUpBlock.items": `readonly (AktionNode<"FollowUpItem"> | FollowUpItemData | string)[]`,
+  // "Avatar(...) nodes or {name, src, status?, fallback?} objects".
+  "AvatarGroup.items": `readonly (AktionNode<"Avatar"> | AvatarItemData)[]`,
+  // The hint `BreadcrumbItem[] | string[] | {label, to}[]` would forbid mixing
+  // the three forms in one trail, and `{label, to}` names no member types.
+  "Breadcrumb.items": `readonly (AktionNode<"BreadcrumbItem"> | string | { readonly label: string; readonly to?: string; readonly href?: string })[]`,
+  "PageHeader.breadcrumbs": `readonly (string | { readonly label: string; readonly to?: string; readonly href?: string })[] | AktionNode<"Breadcrumb"> | false`,
+  "PricingCard.features": `readonly (string | { readonly label: string; readonly included?: boolean })[]`,
+};
+
+/**
+ * `SAFE_HOST_GLOBALS` that `lib.es2022` does not declare, with the minimal
+ * ambient declaration the globals flavour adds for them. The rest (`URL`,
+ * `Blob`, …) need the DOM lib, which the ambient flavour cannot load.
+ */
+const AMBIENT_HOST_GLOBALS: Readonly<Record<string, string>> = {
+  atob: "declare function atob(data: string): string;",
+  btoa: "declare function btoa(data: string): string;",
+  structuredClone: "declare function structuredClone<T>(value: T): T;",
+  console: `declare const console: import("./index.js").ConsoleNamespace;`,
+};
+
+/** Positional runs are emitted up to this many slots (`Col` binds up to 7 in practice). */
+const MAX_POSITIONALS = 8;
+
+const GENERATED_BY =
+  "GENERATED by scripts/emit-dsl-types.mjs — do not edit. Regenerate with `npm run build:dsl-types`;\n" +
+  "// tests/dsl-types.test.ts fails while this file is stale.";
+
+export function generateDslTypes(input: { ts: typeof TS; repoRoot: string }): GenerateResult {
+  const { ts, repoRoot } = input;
+  const libGlobals = readLibGlobals(ts);
+  const runtimeTypes = readRuntimeTypes(ts, repoRoot);
+
+  const builtins = emitBuiltins({
+    ts,
+    builtinCatalog,
+    namespaceCatalog,
+    factoryResourceCatalog,
+    routeMembers,
+    i18nResultMembers,
+    findBuiltinConfig,
+    universalProps: universalPropCatalog,
+    universalPropNames: UNIVERSAL_PROP_NAMES,
+    responsiveBreakpoints: RESPONSIVE_BREAKPOINTS,
+    themeNames: Object.keys(builtInThemes),
+    runtimeTypes,
+    libGlobals,
+  });
+
+  const components = emitComponents({
+    ts,
+    components: defaultLibrary.components,
+    findPositionalIndex,
+    propExpectsObject,
+    universalPropNames: UNIVERSAL_PROP_NAMES,
+    legacySizeAliases: LEGACY_SIZE_TOKEN_ALIASES,
+    spacingTokens: SPACING_TOKENS,
+    overrides: TYPE_OVERRIDES,
+    constructorInterface: libGlobals.constructorInterface,
+    esGlobalValues: libGlobals.esValues,
+    reservedNames: new Set([...builtins.declaredNames, "CompiledProgram"]),
+    maxPositionals: MAX_POSITIONALS,
+  });
+
+  // One declaration per name: a duplicate interface would MERGE silently.
+  const seen = new Set<string>();
+  for (const name of [...builtins.declaredNames, ...components.declaredNames, "CompiledProgram"]) {
+    if (seen.has(name)) throw new Error(`emit-dsl-types: "${name}" is declared twice`);
+    seen.add(name);
+  }
+  for (const name of builtins.valueExports) {
+    if (libGlobals.esValues.has(name)) {
+      throw new Error(`emit-dsl-types: the DSL name "${name}" collides with a JavaScript global`);
+    }
+  }
+
+  /* ------------------------------------------------------------ index.d.ts */
+  const index = [
+    `// ${GENERATED_BY}`,
+    "//",
+    "// aktion-runtime/dsl — TypeScript declarations for the Aktion DSL surface: every",
+    "// library component and `$`-builtin, plus the names the runtime injects.",
+    "//",
+    `//   import { Column, Button, $state, type AktionNode } from "aktion-runtime/dsl";`,
+    "//",
+    "// The import is a compile-time reference only: in an Aktion module the linker",
+    "// drops it and the names resolve to the runtime's globals. Works with or",
+    "// without the DOM lib (`aktion-runtime/dsl-globals` is the ambient flavour);",
+    "// without it, keep `skipLibCheck: true` — `CompiledProgram` comes from the",
+    "// runtime's own declarations, which mention DOM types.",
+    "// Calls bind the way the evaluator binds them: positional #0 lands in the",
+    "// component's positional slot, further positionals fill the remaining slots",
+    "// in declaration order, and the named props must be the trailing object",
+    "// LITERAL — a props object held in a variable is bound positionally, and",
+    "// spreads inside it are dropped.",
+    "",
+    builtins.prelude,
+    "",
+    // After the first declarations on purpose: vite-plugin-dts hoists import
+    // declarations together with their leading comments when it copies this
+    // file into dist/types, which would otherwise take the header with it.
+    `import type { CompiledProgram } from "../compiler/runtime.js";`,
+    "export type { CompiledProgram };",
+    "",
+    "/* ================================================================ enum tokens */",
+    "",
+    ...components.enumAliases,
+    "",
+    `/* ================================================================ components (${components.stats.components}) */`,
+    "",
+    components.blocks.join("\n\n"),
+    "",
+    builtins.builtins,
+    "",
+    builtins.injected,
+    "",
+  ].join("\n");
+
+  /* ----------------------------------------------------------- globals.d.ts */
+  const componentNames = defaultLibrary.components.map((c) => c.name).sort(byCodePoint);
+  const valueNames = [...componentNames, ...builtins.valueExports];
+  const hostExtras = [...SAFE_HOST_GLOBALS].filter((g) => !libGlobals.esValues.has(g));
+  const declaredExtras = hostExtras.filter((g) => AMBIENT_HOST_GLOBALS[g]).sort(byCodePoint);
+  const ambientUnavailable = hostExtras.filter((g) => !AMBIENT_HOST_GLOBALS[g]).sort(byCodePoint);
+  const domCollisions = [...valueNames, ...declaredExtras].filter((n) => libGlobals.domOnlyValues.has(n)).sort(byCodePoint);
+  const wrap = (items: readonly string[], prefix: string): string[] => {
+    const lines: string[] = [];
+    let line = prefix;
+    for (const item of items) {
+      const next = line === prefix ? `${line}${item}` : `${line}, ${item}`;
+      if (next.length > 92 && line !== prefix) {
+        lines.push(`${line},`);
+        line = `${prefix}${item}`;
+      } else {
+        line = next;
+      }
+    }
+    lines.push(line);
+    return lines;
+  };
+  const globalDecls = valueNames.map((name) => {
+    if (components.stats.hybridConstructors.includes(name)) {
+      // `Map` is also lib.es2022's `declare var Map: MapConstructor`: merge the
+      // component's call signatures into that interface, so `Map(…)` builds the
+      // component and `new Map()` / `Map<K, V>` keep their JavaScript meaning.
+      const ctor = libGlobals.constructorInterface(name)!;
+      return [
+        `type __Aktion${name}Component = import("./index.js").${name}Component;`,
+        `interface ${ctor} extends __Aktion${name}Component {}`,
+      ].join("\n");
+    }
+    return `declare const ${name}: __AktionDsl["${name}"];`;
+  });
+  const globals = [
+    `// ${GENERATED_BY}`,
+    "//",
+    "// aktion-runtime/dsl-globals — the AMBIENT flavour of aktion-runtime/dsl: every",
+    "// library component, `$`-builtin and injected name declared as a global, so",
+    "// `*.aktion.ts` modules need no imports.",
+    "//",
+    "// ONLY VALID WITHOUT THE DOM LIB. These DSL names are also DOM globals and",
+    "// collide with lib.dom:",
+    ...wrap(domCollisions, "//   "),
+    "// Use it from a tsconfig that covers only the Aktion modules:",
+    "//",
+    "//   {",
+    `//     "compilerOptions": { "lib": ["ES2022"], "types": ["aktion-runtime/dsl-globals"], "skipLibCheck": true },`,
+    `//     "include": ["src/**/*.aktion.ts"]`,
+    "//   }",
+    "//",
+    "// (`types` must name this file — TypeScript 6 defaults `types` to [].) Host code",
+    "// and mixed projects use the module flavour, which works with the DOM lib.",
+    "// Not declared here, because they need the DOM lib (the \"safe\" global policy",
+    "// allows them at runtime):",
+    ...wrap(ambientUnavailable, "//   "),
+    "",
+    `type __AktionDsl = typeof import("./index.js");`,
+    `type AktionNode<N extends string = string> = import("./index.js").AktionNode<N>;`,
+    `type AktionChild = import("./index.js").AktionChild;`,
+    `type Children = import("./index.js").Children;`,
+    `type CompiledProgram = import("./index.js").CompiledProgram;`,
+    "",
+    ...globalDecls,
+    "",
+    "// SAFE_HOST_GLOBALS that lib.es2022 lacks.",
+    ...declaredExtras.map((g) => AMBIENT_HOST_GLOBALS[g]!),
+    "",
+  ].join("\n");
+
+  /* ---------------------------------------------------------- manifest.json */
+  const classes = classifyBuiltins(builtinCatalog, factoryResourceCatalog);
+  const manifest: DslManifest = {
+    version: 1,
+    components: components.manifest,
+    hooks: classes.hooks,
+    factories: classes.factories,
+    namespaces: classes.namespaces,
+    builtins: classes.builtins,
+    injected: Object.keys(INJECTED_NAMES).sort(byCodePoint),
+  };
+  // One component per line keeps the diff of a library change readable.
+  const list = (values: readonly string[]): string => JSON.stringify(values);
+  const manifestText = [
+    "{",
+    `  "version": ${manifest.version},`,
+    `  "components": [`,
+    manifest.components.map((c) => `    ${JSON.stringify(c)}`).join(",\n"),
+    "  ],",
+    `  "hooks": ${list(manifest.hooks)},`,
+    `  "factories": ${list(manifest.factories)},`,
+    `  "namespaces": ${list(manifest.namespaces)},`,
+    `  "builtins": ${list(manifest.builtins)},`,
+    `  "injected": ${list(manifest.injected)}`,
+    "}",
+    "",
+  ].join("\n");
+  // Belt and braces: the hand-formatted text must parse back to the object.
+  if (JSON.stringify(JSON.parse(manifestText)) !== JSON.stringify(manifest)) {
+    throw new Error("emit-dsl-types: manifest.json does not round-trip");
+  }
+
+  return {
+    files: { "index.d.ts": index, "globals.d.ts": globals, "manifest.json": manifestText },
+    summary: {
+      components: components.stats.components,
+      props: components.stats.props,
+      overloads: components.stats.overloads,
+      enumAliases: components.stats.enumAliases,
+      builtins: builtinCatalog.length,
+      unresolvedTypeNames: components.stats.unresolvedTypeNames,
+      overridesApplied: components.stats.overridesApplied,
+      hybridConstructors: components.stats.hybridConstructors,
+      domCollisions,
+      ambientUnavailable,
+    },
+  };
+}

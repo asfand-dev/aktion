@@ -302,8 +302,9 @@ const namespacesByName: Readonly<Record<string, NamespaceEntry>> = Object.freeze
 // ---------------------------------------------------------------------------
 
 const httpResourceMembers: readonly NamespaceMember[] = [
-  prop("data", "Parsed response body — `null` until the request resolves."),
-  prop("error", "`null` on success; `{ status, body }` on a non-2xx; the thrown error on network failure."),
+  prop("state", 'Request lifecycle: "idle" | "loading" | "data" | "error" | "stale" ("stale" = refetching while the previous data is still shown).'),
+  prop("data", "Parsed response body — `undefined` until the first successful response."),
+  prop("error", "`undefined` on success; `{ status, body }` on a non-2xx; `{ graphqlErrors }` for a GraphQL error; the thrown error on network failure."),
   prop("status", "HTTP status code of the last response, e.g. `200`."),
   prop("loading", "`true` while a request is in flight."),
   prop("headers", "Response headers as a plain object."),
@@ -318,15 +319,17 @@ const queryResourceMembers: readonly NamespaceMember[] = [
   method("loadMore", "loadMore()", "Fetch the next page (infinite mode)."),
   prop("hasMore", "`true` while more pages are available (infinite mode)."),
   prop("loadingMore", "`true` while a `loadMore()` page is in flight."),
+  prop("page", "The last loaded page number — in `offset` mode, the number of pages loaded (infinite mode)."),
   prop("pages", "Raw page bodies loaded so far (infinite mode); `.data` is the flattened items."),
 ];
 
 const mutationResourceMembers: readonly NamespaceMember[] = [
   method("mutate", "mutate(overrides?)", "Fire the request; overrides shallow-merge over the config. `optimistic` applies instantly and rolls back on failure."),
   prop("data", "Response body of the last successful mutation."),
-  prop("error", "`null` on success; error details on failure."),
+  prop("error", "`undefined` on success; error details on failure."),
   prop("loading", "`true` while the mutation request is in flight."),
   prop("status", "HTTP status code of the last response."),
+  method("reset", "reset()", "Clear data / error / status back to the resting state (aborts an in-flight mutation)."),
   prop("onDone", "Settable callback fired when the mutation settles."),
 ];
 
@@ -358,7 +361,7 @@ const formResourceMembers: readonly NamespaceMember[] = [
   prop("valid", "`true` when the last validation pass found no errors."),
   prop("submitting", "`true` from submit() until an async onSubmit settles."),
   prop("validating", "`true` while async rules ($util.rules.asyncCustom) are in flight."),
-  method("field", "field(name)", "Controlled prop bag: { value, error, name, onChange, onBlur } — spread onto an input."),
+  method("field", "field(name)", "Controlled prop bag: { value, error, name, onChange, onBlur } — pass its members to an input (`{ value: b.value, onChange: b.onChange }`); a `...spread` inside component props is dropped."),
   method("touch", "touch(name)", "Mark a field touched + validate it (wire to `onBlur`)."),
   method("setField", "setField(name, value)", "Set one field value (clears its error)."),
   method("setValues", "setValues(values)", "Merge several field values at once."),
@@ -552,6 +555,7 @@ const sseConfigKeys: readonly ConfigKey[] = [
   cfg("event", "string", "Named event to listen for (defaults to message)."),
   cfg("withCredentials", "boolean", "Send credentials with the EventSource request."),
   cfg("bufferSize", "number", "Max buffered events kept in `.messages`."),
+  cfg("onMessage", "(msg) => void", "Callback fired for each received event payload (JSON auto-parsed)."),
 ];
 
 const scriptConfigKeys: readonly ConfigKey[] = [

@@ -111,13 +111,17 @@ describe("context-aware completions inside brackets", () => {
 });
 
 describe("Vite plugin source map", () => {
-  function runTransform(code: string, id: string) {
-    const plugin = aktionPlugin();
-    const transform = plugin.transform as (
-      this: { addWatchFile: () => void; warn: () => void; error: (e: unknown) => never },
-      code: string,
-      id: string,
-    ) => { code: string; map: { version: number; sources: string[]; sourcesContent: string[]; mappings: string } } | null;
+  async function runTransform(code: string, id: string) {
+    const plugin = aktionPlugin() as unknown as {
+      buildStart: (this: unknown) => Promise<void>;
+      transform: {
+        handler: (
+          this: { addWatchFile: () => void; warn: () => void; error: (e: unknown) => never },
+          code: string,
+          id: string,
+        ) => Promise<{ code: string; map: { version: number; sources: string[]; sourcesContent: string[]; mappings: string } } | null>;
+      };
+    };
     const mockCtx = {
       addWatchFile: vi.fn(),
       warn: vi.fn(),
@@ -125,12 +129,13 @@ describe("Vite plugin source map", () => {
         throw e;
       },
     };
-    return transform.call(mockCtx as never, code, id);
+    await plugin.buildStart.call(mockCtx);
+    return plugin.transform.handler.call(mockCtx as never, code, id);
   }
 
-  it("emits a v3 map with sourcesContent and non-empty mappings", () => {
+  it("emits a v3 map with sourcesContent and non-empty mappings", async () => {
     const code = `aktion = Stack([])\n`;
-    const result = runTransform(code, "/proj/app.aktion");
+    const result = await runTransform(code, "/proj/app.aktion");
     expect(result).not.toBeNull();
     const map = result!.map;
     expect(map.version).toBe(3);
@@ -142,7 +147,7 @@ describe("Vite plugin source map", () => {
     expect(map.mappings.split(";").length).toBe(generatedLines);
   });
 
-  it("returns null for non-aktion ids", () => {
-    expect(runTransform("x = 1", "/proj/main.ts")).toBeNull();
+  it("returns null for non-aktion ids", async () => {
+    expect(await runTransform("x = 1", "/proj/main.ts")).toBeNull();
   });
 });

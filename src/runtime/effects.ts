@@ -25,6 +25,7 @@ import type {
 } from "../parser/types.js";
 import type { EvaluationContext, ScopedEffectDecl } from "./evaluator.js";
 import {
+  ReturnSignal,
   evaluate,
   resolveStateAlias,
   runControlFlowStatement,
@@ -504,6 +505,7 @@ function runEffectBody(
   //   - expression statements — evaluated for side effects.
   //   - `cleanup(fn)` calls — register a teardown handler.
   //   - `emit("name", detail)` — dispatch an outbound event.
+  //   - `return` — ends the body, at any depth (see the `catch` below).
   //
   // For per-instance effects (declared inside a function body)
   // both the alias stack AND the loop-var map are restored around the
@@ -545,6 +547,16 @@ function runEffectBody(
     for (const stmt of decl.body.body) {
       runStatement(stmt, ctx, mounted, options);
     }
+  } catch (err) {
+    // `return` ends the body at any depth, the way it leaves any JavaScript
+    // function early: a top-level one (`runStatement` below) or one thrown up
+    // out of a nested `if` / loop / `switch` / `try` by the shared block
+    // runners. Either way it arrives here as a `ReturnSignal`. It is not a
+    // failure, so swallow it — the run is reported as a normal `run`, not an
+    // `error`, and every `cleanup(fn)` registered before the `return` stays
+    // registered. (A top-level `return` used to be skipped, so the statements
+    // after it still ran; a nested one aborted the effect as a logged failure.)
+    if (!(err instanceof ReturnSignal)) throw err;
   } finally {
     ctx.cleanupSink = priorCleanupSink;
     if (restoreAliases) {
@@ -637,6 +649,11 @@ function runStatement(
       // effect run with the same break/continue/return handling.
       runControlFlowStatement(stmt, ctx);
       return undefined;
+    case "Return":
+      // A top-level `return` ends the body. Its argument is evaluated, as in
+      // JavaScript, and the value discarded; `runEffectBody` catches the
+      // signal — the same one a `return` nested in an `if` or a loop throws.
+      throw new ReturnSignal(stmt.argument ? evaluate(stmt.argument, ctx) : undefined);
     default:
       return undefined;
   }

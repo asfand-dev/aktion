@@ -32,6 +32,171 @@ Each entry is dated and summarises what was added, changed, or fixed.
   only a placement hint, so nothing changes there. Any other press outside the
   panel still closes it.
 
+### Write Aktion Modules in TypeScript and JavaScript
+
+- Aktion modules can now be written in TypeScript (`store.aktion.ts`) or
+  JavaScript (`store.aktion.js`) as well as in the DSL. The three kinds import
+  each other freely and share `$state`, so a typed store can feed `.aktion`
+  components. The `.aktion` in the name is what makes a file an Aktion module.
+- TypeScript types are erased without moving a character (by `ts-blank-space`,
+  a new optional peer dependency — `npm i -D ts-blank-space`), so every error,
+  coverage hit and DevTools position points at the line and column you wrote.
+  Enums, namespaces, parameter properties, `<T>x` casts and decorators are
+  reported at their position because they cannot be erased.
+- New types-only entry `aktion-runtime/dsl` declares every built-in — the 282
+  components (one overload per way a call binds its arguments), the hooks, the
+  factories and the namespaces — so `tsc` checks component calls, props and
+  enum values. `aktion-runtime/dsl-globals` declares the same names ambiently
+  for a tsconfig without the DOM lib. Import built-ins by their own name; the
+  linker drops the import.
+- An entry can now end with `export default $app(App())`, which gives host code
+  a typed `import app from "./app.aktion.ts"`.
+- The Vite plugin compiles `.aktion.ts` and `.aktion.js` ids, keeps Vite's own
+  TypeScript transform and dependency scanner away from them, and watches every
+  dependency for HMR. New options: `typescript` (plug in another type eraser,
+  or `false` to refuse `.aktion.ts`), `devtools` (ship each module's original
+  text — on by default) and `dts`.
+- `compileAktionFile` / `compileAktionSource` accept `.aktion.ts` entries and
+  probes; `compileAktionFileAsync` / `compileAktionSourceAsync` load the
+  TypeScript frontend first for Node versions that cannot `require` an ES
+  module. The in-browser linker (`linkProject`, `<aktion-app src>`) compiles
+  `.aktion` and `.aktion.js`; `.aktion.ts` needs a TypeScript frontend and says
+  so instead of reporting garbage parse errors.
+- Typed `.aktion` imports: `aktion({ dts: true })`, the new `aktion-dts` bin
+  (with `--check` for CI) and `emitAktionDeclarations` write a
+  `name.d.aktion.ts` declaration per `.aktion` module, so a `.aktion.ts` module
+  can import from a `.aktion` one with types and arity checks.
+- `create-aktion --lang ts|js` scaffolds the `empty` and `todos-app` templates
+  with TypeScript or JavaScript modules, the recommended tsconfig, and (for
+  TypeScript) `ts-blank-space`, a `typecheck` script and the `dts` option.
+- `aktion-runtime/eslint` gains `aktionTypeScriptConfig` for `*.aktion.ts` /
+  `*.aktion.js` files: it turns off the rules whose autofixes break Aktion code
+  and adds the type-aware `aktion/props-literal` rule, which flags a props bag
+  passed in a variable (`Button("Go", opts)` binds `opts` to `onClick`).
+- DevTools shows the files you wrote, with their own line numbers, for programs
+  built by the Vite plugin, and prop records name a component's parameters as
+  you wrote them. Coverage reports land on the `.aktion.ts` file and its lines.
+- The validators (`tools/validate-aktion.mjs`, `tools/validate-aktion-app.mjs`),
+  the VS Code extension and the language server understand `.aktion.ts` and
+  `.aktion.js` modules, including go-to-definition into them.
+- The plugin now supports Vite 5, 6, 7 and 8, and CI runs its build, dev,
+  dependency-scan and HMR checks on every major.
+
+### JavaScript Semantics, Checked
+
+Aktion runs TypeScript and JavaScript under its own rules, so `.aktion.ts` and
+`.aktion.js` modules (never `.aktion` files) go through a new checking layer:
+
+- Rewritten so they mean what JavaScript means: every local variable gets its
+  own name (a block's `let` stays in its block, a local no longer overwrites a
+  module binding, a helper reads the module's variable rather than its caller's,
+  a parameter wins over a top-level function of the same name); a function
+  declared inside another becomes a `const` function at the same place, so a
+  later `onClick` can still call it; a function body without `return` returns
+  `undefined`; a module-level `const Card = (…) => …` is a component.
+- Rejected with a stable code and a message that says what to write instead,
+  at the exact line: `await` and `async` (E101, E102), `this`/`arguments`
+  (E103), `var` (E104), a local reassigned after a closure captured it (E105),
+  a closure using a local declared after it (E106), changing a module-level
+  binding after it was built (E107), in-place changes of a `$` data atom such
+  as `$todos.push(t)` — also across modules (E108), per-instance state or hooks
+  outside the top of a component body (E109, E110), a capitalised function used
+  as a value (E111), names the runtime owns (E112, E115), block statements
+  (E113), a derived atom that is also assigned (E114), spreads in a built-in's
+  props (E117), a misplaced `$app` (E118), `$effect` arguments Aktion ignores
+  (E119–E121), aliased or shadowed `aktion-runtime/dsl` imports (E122, E123 —
+  also in `.aktion`), destructuring a `$store`/`$form` handle (E124),
+  assignment to an undeclared name (E125) and components or hooks declared
+  inside functions (E126).
+- Warned about: a module-level value from `Date.now()`, `Math.random()`,
+  `crypto` or `fetch`, recomputed on every render (W201), and a state-writing
+  function called while rendering (W202). `strict: true` makes them errors.
+
+### Breaking: Module Resolution and the Vite Plugin
+
+- **Breaking:** an Aktion module can no longer import native code
+  (`./utils.ts`, `./helpers.js`, `.json`, `.css`, `.wasm`). The import is
+  refused with a message naming the file to rename; it used to be parsed as
+  Aktion, which reported garbage errors for TypeScript and silently linked a
+  JavaScript file that happened to fit. An entry with a JavaScript extension
+  still links, with a warning.
+- **Breaking:** the resolver's default `extensions` now also try `.aktion.ts`,
+  `.aktion.js`, `/index.aktion.ts` and `/index.aktion.js`. A project that pins
+  `extensions` (plugin option or `aktion.config.json`) replaces the whole list
+  and must add them itself.
+- **Breaking:** a module that has a sibling with the same name in another
+  language (`store.aktion` next to `store.aktion.ts`) is refused, because
+  TypeScript and Vite resolve `./store.aktion` to different files. The names
+  `.aktion.tsx` / `.aktion.jsx` are reserved for a future JSX frontend.
+- **Breaking for tools that call plugin hooks directly:** `transform` is now an
+  object hook (`{ filter, handler }`) whose handler is async, and `buildStart`
+  loads the TypeScript frontend. Vite and Rollup already call hooks this way.
+- A compiled program's `source` is now the whole linked program (it used to be
+  only the entry's text), and compiled programs carry each module's original
+  text as `sourcesContent`. `renderToString(compiled.source)` therefore renders
+  every imported module. Linker diagnostics carry the module `path` and a
+  stable `code`, and the plugin points build errors at the file that has the
+  problem.
+
+### Evaluator: Closer to JavaScript
+
+- `return` inside an `$effect` body now ends the body at any depth, without
+  being logged as a failure; a `return` at the top of the body used to be
+  ignored and the rest still ran.
+- `o.p++`, `++o.p`, `a[i]++` and `--` on plain objects and arrays now update the
+  value (they were silent no-ops that evaluated to `null`), and increments of
+  `$store` fields and `$http` resources are reactive writes.
+- `||=`, `&&=` and `??=` short-circuit like JavaScript: when the target decides,
+  the right-hand side is not evaluated and nothing is written.
+- Spread accepts any iterable in array literals, calls and `new`:
+  `[...new Set([1, 2])]` is `[1, 2]` (it was `[]`), and a string spreads into
+  its characters in call arguments.
+- `$arr.length = n` on an array atom truncates or extends the array like
+  JavaScript, instead of replacing the atom with `{ length: n }`.
+
+### Parser: More JavaScript Parses
+
+- Now accepted: `let x` without an initializer, several declarators
+  (`let a = 1, b = 2`), method shorthand (`{ save(item) { … } }`), quoted,
+  reserved and numeric keys in destructuring (`const { "a-b": x } = o`),
+  `export default $app(…)`, a line break after `=` or a compound operator, line
+  breaks anywhere inside parentheses (including `if (` and `for (` heads),
+  brackets and object literals, a trailing comma in arrow parameters, empty
+  `for (;;)` parts, and an interpolation spanning lines in a template literal
+  (which used to render as an empty string).
+- Constructs that stay unsupported — default and namespace imports, `async`
+  arrows, generators, labels, the comma operator, chained assignment,
+  destructuring assignment, getters and setters, a destructured `catch`
+  parameter — get a message that says what to write instead.
+- **Breaking:** the declaration in a classic `for (let i = 0; …)` head must be
+  followed by `;` (a newline or nothing was accepted before), and `(a,)` is an
+  error.
+- The formatter prints the new forms, and parameters written as patterns
+  (`function Card(label, { icon } = {})`), which it used to mangle.
+
+### Fixes
+
+- A compiled program now survives being moved in the DOM: re-attaching an
+  `<aktion-app>` used to re-parse only the entry's text, so imported components
+  turned into "Loading" placeholders and per-instance state was shared between
+  instances.
+- Importing from the entry module (a cycle back to it) now shares the entry's
+  bindings; an imported `$atom` used to silently split into a second, unbound
+  copy.
+- A top-level shorthand destructuring in an imported module
+  (`const { title } = data`) reads its property again.
+- A function the linker renamed keeps its kind when the linked program is
+  printed and parsed again, so imported components stay components.
+- The Vite plugin and compile helpers no longer refuse imports under a project
+  root reached through a symlink (macOS `/var` → `/private/var`, symlinked
+  workspaces).
+- The `$http` / `$query` / `$mutation` / `$sse` reference catalogues list the
+  members the runtime actually has (`state`, `page`, `reset`, `onMessage`), and
+  say that `data` and `error` start as `undefined`.
+- `<aktion-app src="…">` now fires its `error` event for a program's link
+  diagnostics too (an unresolved import, a rule of an `.aktion.js` module), not
+  only for parse errors; the error banner already showed them.
+
 ## 2026-10-01
 
 ### Parser: Statements Must Be Separated, Unknown Characters Are Errors

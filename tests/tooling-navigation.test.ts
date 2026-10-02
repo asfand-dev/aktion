@@ -132,6 +132,26 @@ describe("findDeclaration", () => {
   it("returns null for a name that is not declared", () => {
     expect(findDeclaration(MODULE, "Missing", false)).toBeNull();
   });
+
+  it("finds top-level `let` / `const` declarations — with TypeScript annotations too", () => {
+    const ts = [
+      "export interface Props { title: string }",
+      "export let $count: number = 0",
+      "export const LIMIT: number = 5",
+      "export const Badge = (t: string) => Text(t)",
+      "function f() {",
+      "  const inner = 1",
+      "}",
+    ].join("\n");
+    expect(findDeclaration(ts, "count", true)?.start).toEqual({ line: 2, column: 12 });
+    expect(findDeclaration(ts, "LIMIT", false)?.start).toEqual({ line: 3, column: 14 });
+    expect(findDeclaration(ts, "Badge", false)?.start).toEqual({ line: 4, column: 14 });
+    // Not top level, and a type: neither is a declaration another module can import.
+    expect(findDeclaration(ts, "inner", false)).toBeNull();
+    expect(findDeclaration(ts, "Props", false)).toBeNull();
+    // The `$` namespace is distinct.
+    expect(findDeclaration(ts, "count", false)).toBeNull();
+  });
 });
 
 describe("getReferences", () => {

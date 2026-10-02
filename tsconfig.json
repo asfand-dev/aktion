@@ -25,5 +25,8 @@
     "rootDir": "src"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "docs", "scripts", "tests"]
+  // `src/dsl/globals.d.ts` declares the DSL built-ins as ambient globals for
+  // consumers' `.aktion.ts` code; inside this repo it would make `route`,
+  // `params` and friends type-check as globals in runtime source.
+  "exclude": ["node_modules", "dist", "docs", "scripts", "tests", "src/dsl/globals.d.ts"]
 }

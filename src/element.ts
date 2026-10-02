@@ -383,6 +383,23 @@ export class AktionElement extends HTMLElement {
    * `sourceId` getter so HMR / host tooling can target the right instances.
    */
   private compiledSourceId: string | null = null;
+  /**
+   * The AST of the compiled program currently mounted, kept after
+   * `pendingCompiled` is consumed. A re-plan that does not replace the program
+   * — a reconnect, a DevTools reload — plans from (a shallow copy of) this
+   * instead of re-parsing `currentResponse`: for a linked program that text is
+   * only a re-print of the AST (or, from older plugins, the entry module
+   * alone), and re-parsing it lost the imported modules or demoted imported
+   * components to actions. Cleared by every path that replaces the program.
+   */
+  private compiledProgram: Program | null = null;
+  /**
+   * Original text of each module of the mounted compiled program, by
+   * `program.sources` index (`CompiledProgram.sourcesContent`). DevTools shows
+   * these — with the line numbers every `loc` refers to — instead of the
+   * runnable `currentResponse`.
+   */
+  private compiledSourcesContent: readonly string[] | null = null;
   private renderScheduled = false;
   /** True when the program text changed and the runtime needs a re-plan. */
   private programDirty = true;
@@ -435,6 +452,8 @@ export class AktionElement extends HTMLElement {
    * program triggers, and are merged into the error banner + `error` event.
    */
   private srcDiagnostics: string[] = [];
+  /** The same `src` diagnostics with their positions, for the `error` event. */
+  private srcErrors: Array<{ line: number; column: number; message: string }> = [];
   /**
    * Monotonic token guarding overlapping `src` loads. A rapid `src` change
    * (or a reconnect mid-fetch) bumps the token so a stale in-flight load
@@ -878,8 +897,7 @@ export class AktionElement extends HTMLElement {
     this.chunked = false;
     // Switching to the string path: drop any compiled artefact + its id so a
     // not-yet-rendered `mountCompiled` can't win.
-    this.pendingCompiled = null;
-    this.compiledSourceId = null;
+    this.forgetCompiled();
     this.programDirty = true;
     this.state.rebind([]);
     // Drop persisted component-local UI state — stale slots from the
@@ -888,6 +906,7 @@ export class AktionElement extends HTMLElement {
     this.renderer.reset();
     this.parseErrors = [];
     this.srcDiagnostics = [];
+    this.srcErrors = [];
     this.scheduleRender();
   }
 
@@ -972,8 +991,7 @@ export class AktionElement extends HTMLElement {
   loadSnapshot(payload: { programText: string; state: Record<string, unknown> }): void {
     this.currentResponse = payload.programText;
     this.chunked = false;
-    this.pendingCompiled = null;
-    this.compiledSourceId = null;
+    this.forgetCompiled();
     this.programDirty = true;
     // Clear *defaults* and any leftover values from the previous program
     // before seeding from the snapshot — without this, atoms declared
@@ -983,6 +1001,7 @@ export class AktionElement extends HTMLElement {
     this.renderer.reset();
     this.parseErrors = [];
     this.srcDiagnostics = [];
+    this.srcErrors = [];
     // Seed values BEFORE the next render plans the new program. Declare
     // only writes defaults when `has(name) === false`, so the planner
     // will leave our hydrated values intact.
@@ -1020,6 +1039,8 @@ export class AktionElement extends HTMLElement {
     // `program.errors`, and re-mounting the same artefact (e.g. replaying a
     // cached payload) must not accumulate diagnostics on the shared object.
     this.pendingCompiled = { ...compiled.program, errors: [...compiled.program.errors] };
+    this.compiledProgram = compiled.program;
+    this.compiledSourcesContent = compiled.sourcesContent ?? null;
     this.programDirty = true;
     this.state.rebind([]);
     this.renderer.reset();
@@ -1028,6 +1049,7 @@ export class AktionElement extends HTMLElement {
     // call returns (mountCompiled only schedules a render), so they still
     // reach the replan microtask for the `src` path.
     this.srcDiagnostics = [];
+    this.srcErrors = [];
     // Seed values BEFORE the next render plans the program. `state.declare`
     // only writes defaults for names that don't already exist, so hydrated
     // values survive the replan (same mechanism as `loadSnapshot`).
@@ -1041,6 +1063,19 @@ export class AktionElement extends HTMLElement {
    */
   get sourceId(): string | null {
     return this.compiledSourceId;
+  }
+
+  /**
+   * Drop every trace of a mounted compiled program — the pending AST, the
+   * retained one, its module texts and its id — because the program is being
+   * replaced through the string path. Without this a not-yet-rendered
+   * `mountCompiled` (or the retained AST) could win over the new text.
+   */
+  private forgetCompiled(): void {
+    this.pendingCompiled = null;
+    this.compiledSourceId = null;
+    this.compiledProgram = null;
+    this.compiledSourcesContent = null;
   }
 
   /** Current `src` attribute value, or `null` when none is set. */
@@ -1068,6 +1103,7 @@ export class AktionElement extends HTMLElement {
   async loadFromSrc(src: string): Promise<void> {
     const token = (this.srcLoadToken += 1);
     this.srcDiagnostics = [];
+    this.srcErrors = [];
 
     let entryUrl: string;
     try {
@@ -1112,9 +1148,9 @@ export class AktionElement extends HTMLElement {
     // `mountCompiled` only *schedules* a render, so seeding the link/fetch
     // diagnostics right after it still lands before the replan microtask
     // runs — the banner + `error` event surface them with any parse errors.
-    this.srcDiagnostics = result.diagnostics
-      .filter((d) => d.severity !== "warning")
-      .map((d) => (d.line > 0 ? `Line ${d.line}: ${d.message}` : d.message));
+    const linkErrors = result.diagnostics.filter((d) => d.severity !== "warning");
+    this.srcDiagnostics = linkErrors.map((d) => (d.line > 0 ? `Line ${d.line}: ${d.message}` : d.message));
+    this.srcErrors = linkErrors.map((d) => ({ line: d.line, column: d.column, message: d.message }));
   }
 
   /** A `src` load is stale if a newer one started or the element detached. */
@@ -1154,6 +1190,10 @@ export class AktionElement extends HTMLElement {
     if (text === "") return;
     this.currentResponse += text;
     this.chunked = true;
+    // The program is now whatever text has arrived; a compiled AST mounted
+    // earlier must not be re-planned in its place.
+    this.compiledProgram = null;
+    this.compiledSourcesContent = null;
     this.programDirty = true;
     this.scheduleRender();
   }
@@ -1229,8 +1269,7 @@ export class AktionElement extends HTMLElement {
   clear(): void {
     this.currentResponse = "";
     this.chunked = false;
-    this.pendingCompiled = null;
-    this.compiledSourceId = null;
+    this.forgetCompiled();
     this.state.rebind([]);
     this.effectRunner.reset();
     // Drop component-local UI state (Tabs active pane, Popover open flag,
@@ -1241,6 +1280,7 @@ export class AktionElement extends HTMLElement {
     this.programDirty = true;
     this.parseErrors = [];
     this.srcDiagnostics = [];
+    this.srcErrors = [];
     this.errorEl.hidden = true;
     this.errorEl.replaceChildren();
     this.rootEl.replaceChildren();
@@ -1510,12 +1550,17 @@ export class AktionElement extends HTMLElement {
   private devtoolsSources(): Array<{ path: string; text: string }> {
     const paths = this.devtoolsProgram?.sources;
     const entry = this.compiledSourceId ?? "<inline>";
+    // A compiled program ships each module's ORIGINAL text — the text every
+    // `loc` (and so every diagnostic, coverage hit and instance position)
+    // refers to. `currentResponse` is the runnable text, which for a linked
+    // program is a re-print with different line numbers.
+    const contents = this.compiledSourcesContent;
     if (!paths || paths.length === 0) {
-      return [{ path: entry, text: this.currentResponse }];
+      return [{ path: entry, text: contents?.[0] ?? this.currentResponse }];
     }
     return paths.map((path, index) => ({
       path,
-      text: index === 0 ? this.currentResponse : "",
+      text: contents?.[index] ?? (index === 0 ? this.currentResponse : ""),
     }));
   }
 
@@ -1531,7 +1576,14 @@ export class AktionElement extends HTMLElement {
   private devtoolsAnalyze(text?: string): ProgramAnalysis {
     const source = text ?? this.currentResponse;
     try {
-      const program = parse(source);
+      // The live program of a compiled mount is its AST: analysing it keeps the
+      // outline and diagnostics on the line numbers of the original modules
+      // (the text the Source view shows), where re-parsing the runnable text
+      // would report the line numbers of a re-print.
+      const program =
+        text === undefined && this.compiledProgram !== null
+          ? { ...this.compiledProgram, errors: [...this.compiledProgram.errors] }
+          : parse(source);
       const schemaErrors = validateProgramSchema(program, this.library);
       const diagnostics = describeDiagnostics({
         parse: [...program.errors, ...schemaErrors],
@@ -2535,8 +2587,16 @@ export class AktionElement extends HTMLElement {
     // once — `mountCompiled` keeps `currentResponse` in sync so a reconnect /
     // later string update re-parses the same program correctly.
     const compiled = this.pendingCompiled;
-    const program = compiled ?? parse(this.currentResponse, { streaming: this.streaming || this.chunked });
-    this.lenientTail = compiled === null && program.openLiteral === true;
+    // A reconnect or a DevTools reload re-plans the program that is already
+    // mounted: reuse its AST (the same shallow copy `mountCompiled` makes — the
+    // planner reassigns `errors` but never mutates the tree) rather than
+    // re-parsing text that cannot reproduce a linked program.
+    const retained =
+      compiled === null && this.compiledProgram !== null
+        ? { ...this.compiledProgram, errors: [...this.compiledProgram.errors] }
+        : null;
+    const program = compiled ?? retained ?? parse(this.currentResponse, { streaming: this.streaming || this.chunked });
+    this.lenientTail = compiled === null && retained === null && program.openLiteral === true;
     this.pendingCompiled = null;
     // Schema validator runs alongside the parser so positional arity
     // overflows, unknown props, enum mismatches, built-in-name collisions,
@@ -2604,9 +2664,13 @@ export class AktionElement extends HTMLElement {
 
     // While streaming, the in-flight chunk is almost always mid-token, so
     // errors are expected and transient. Defer dispatch until streaming ends.
-    if (program.errors.length > 0 && !this.streaming) {
+    // A `src` program's link diagnostics (an unresolved import, a JavaScript-
+    // semantics rule of an `.aktion.js` module) travel with the parse errors,
+    // as the banner already shows them.
+    const errors = [...program.errors, ...this.srcErrors];
+    if (errors.length > 0 && !this.streaming) {
       this.dispatchEvent(new CustomEvent("error", {
-        detail: { errors: program.errors },
+        detail: { errors },
         bubbles: true,
         composed: true,
       }));

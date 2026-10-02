@@ -107,9 +107,16 @@ describe("template interpolations report their real position", () => {
   });
 });
 
+/** The hooks Rollup calls, in the order it calls them. */
+type PluginHooks = {
+  configResolved: (c: unknown) => void;
+  buildStart: (this: unknown) => Promise<void>;
+  transform: { handler: (this: unknown, c: string, id: string) => Promise<{ code: string } | null> };
+};
+
 describe("plugin entry detection", () => {
-  const transform = (code: string): { warnings: string[]; errored: boolean } => {
-    const plugin = aktionPlugin();
+  const transform = async (code: string): Promise<{ warnings: string[]; errored: boolean }> => {
+    const plugin = aktionPlugin() as unknown as PluginHooks;
     const warnings: string[] = [];
     let errored = false;
     const ctx = {
@@ -117,53 +124,40 @@ describe("plugin entry detection", () => {
       warn(message: string) { warnings.push(message); },
       error(): never { errored = true; throw new Error("plugin error"); },
     };
-    (plugin as { configResolved: (c: unknown) => void }).configResolved({
-      command: "build",
-      root: "/p",
-    });
+    plugin.configResolved({ command: "build", root: "/p" });
+    await plugin.buildStart.call(ctx);
     try {
-      (plugin as { transform: (this: unknown, c: string, id: string) => unknown }).transform.call(
-        ctx,
-        code,
-        "/p/app.aktion",
-      );
+      await plugin.transform.handler.call(ctx, code, "/p/app.aktion");
     } catch {
       // `error()` throws by contract in Rollup; the flag records that it fired.
     }
     return { warnings, errored };
   };
 
-  it("accepts `$app(...)` as an entry — no `renders nothing` warning", () => {
-    const { warnings, errored } = transform('$app(Text("hi"))');
+  it("accepts `$app(...)` as an entry — no `renders nothing` warning", async () => {
+    const { warnings, errored } = await transform('$app(Text("hi"))');
     expect(errored).toBe(false);
     expect(warnings.filter((w) => w.includes("renders nothing"))).toEqual([]);
   });
 
-  it("still accepts the legacy `aktion = ...` form", () => {
-    const { warnings } = transform('aktion = Text("hi")');
+  it("still accepts the legacy `aktion = ...` form", async () => {
+    const { warnings } = await transform('aktion = Text("hi")');
     expect(warnings.filter((w) => w.includes("renders nothing"))).toEqual([]);
   });
 
-  it("still warns for a program with no entry at all", () => {
-    const { warnings } = transform('greeting = "hi"');
+  it("still warns for a program with no entry at all", async () => {
+    const { warnings } = await transform('greeting = "hi"');
     expect(warnings.some((w) => w.includes("renders nothing"))).toBe(true);
   });
 });
 
 describe("loc survives the plugin's JSON round-trip", () => {
-  it("keeps line, column and source on every located node", () => {
-    const plugin = aktionPlugin();
-    (plugin as { configResolved: (c: unknown) => void }).configResolved({
-      command: "build",
-      root: "/p",
-    });
-    const out = (
-      plugin as { transform: (this: unknown, c: string, id: string) => { code: string } | null }
-    ).transform.call(
-      { addWatchFile() {}, warn() {}, error() { throw new Error("unexpected"); } },
-      '$app(Text($on ? "y" : "n"))',
-      "/p/app.aktion",
-    );
+  it("keeps line, column and source on every located node", async () => {
+    const plugin = aktionPlugin() as unknown as PluginHooks;
+    const ctx = { addWatchFile() {}, warn() {}, error() { throw new Error("unexpected"); } };
+    plugin.configResolved({ command: "build", root: "/p" });
+    await plugin.buildStart.call(ctx);
+    const out = await plugin.transform.handler.call(ctx, '$app(Text($on ? "y" : "n"))', "/p/app.aktion");
     const literal = /JSON\.parse\((".*")\);/s.exec(out!.code)![1]!;
     const program = JSON.parse(JSON.parse(literal) as string) as { statements: unknown[] };
     const stmt = program.statements[0] as { loc?: { line: number; column: number } };

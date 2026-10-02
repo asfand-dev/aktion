@@ -47,8 +47,10 @@ import type {
   AttachedComment,
   BlockExpr,
   BuiltinCallExpr,
+  DeclParam,
   DestructuringPattern,
   Expression,
+  LambdaParam,
   ObjectProperty,
   ParseError,
   Program,
@@ -57,6 +59,13 @@ import type {
 } from "../parser/types.js";
 
 const SAFE_IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+/**
+ * A key the lexer reads back as one plain name token. Stricter than
+ * `SAFE_IDENT`: a `$` would start a state atom. Used for the keys this printer
+ * learned to print with the parser widening — destructuring keys and method
+ * names — where anything else (`"a-b"`, `"0"`, `"$x"`) is printed quoted.
+ */
+const PLAIN_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // Characters that cannot appear literally inside a canonical double-quoted
 // string and must be escaped: `\` and `"` themselves, plus the raw control
 // characters a real Aktion string literal can carry once the lexer's
@@ -175,13 +184,16 @@ function pad(indent: number, opts: ResolvedFormatOptions): string {
 function printPattern(pattern: DestructuringPattern, indent: number, opts: ResolvedFormatOptions): string {
   const open = pattern.kind === "array" ? "[" : "{";
   const close = pattern.kind === "array" ? "]" : "}";
+  // A key that is not a plain name (`"a-b"`, a number) is quoted; reserved
+  // words (`default`) are plain names to the lexer and stay bare.
+  const key = (k: string): string => (PLAIN_KEY.test(k) ? k : printStringLiteral(k, opts));
   const parts = pattern.bindings.map((b) => {
     const lead = b.rest ? "..." : "";
     const target = b.pattern
       ? (pattern.kind === "object" && b.sourceKey
-          ? `${b.sourceKey}: ${printPattern(b.pattern, indent, opts)}`
+          ? `${key(b.sourceKey)}: ${printPattern(b.pattern, indent, opts)}`
           : printPattern(b.pattern, indent, opts))
-      : (b.sourceKey ? `${b.sourceKey}: ${b.name}` : (b.name || ""));
+      : (b.sourceKey ? `${key(b.sourceKey)}: ${b.name}` : (b.name || ""));
     const def = b.defaultValue ? ` = ${printExpression(b.defaultValue, indent, opts)}` : "";
     return `${lead}${target}${def}`;
   });
@@ -387,12 +399,14 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
     }
     case "Assignment": {
       const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
+      // `let x` — declared without a value (its expression is the `void 0` the parser filled in).
+      if (stmt.uninitialized) return `${padStr}${exp}${stmt.declaration ?? "let"} ${lhs}`;
       const expr = printExpression(stmt.expression, indent, opts);
       const kw = stmt.declaration ? `${stmt.declaration} ` : "";
       return `${padStr}${exp}${kw}${lhs} = ${expr}`;
     }
     case "ComponentDeclaration": {
-      const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
+      const params = printDeclParams(stmt.params, opts);
       const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
       const body = printBlockBody(stmt.body, indent + 1, opts);
       return body.length > 0
@@ -411,14 +425,14 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
       return `${padStr}$effect(() => {\n${body}\n${padStr}}, ${depsArray})`;
     }
     case "ActionDeclaration": {
-      const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
+      const params = printDeclParams(stmt.params, opts);
       const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
       const body = printBlockBody(stmt.body, indent + 1, opts);
       return `${head}\n${body}\n${padStr}}`;
     }
     case "HookDeclaration": {
       // Re-emit the `$` sigil that marks the function as a hook.
-      const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
+      const params = printDeclParams(stmt.params, opts);
       const head = `${padStr}${exp}function $${stmt.name}(${params}) {`;
       const body = printBlockBody(stmt.body, indent + 1, opts);
       return `${head}\n${body}\n${padStr}}`;
@@ -432,7 +446,8 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
         : `${padStr}return`;
     }
     case "ExpressionStatement": {
-      return `${padStr}${printExpression(stmt.expression, indent, opts)}`;
+      const prefix = stmt.exportDefault ? "export default " : "";
+      return `${padStr}${prefix}${printExpression(stmt.expression, indent, opts)}`;
     }
     case "IfStatement": {
       const test = printExpression(stmt.test, indent, opts);
@@ -504,11 +519,22 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
   }
 }
 
-function printDeclParam(p: { name: string; defaultValue?: Expression; optional?: boolean }, opts: ResolvedFormatOptions): string {
-  if (p.defaultValue) {
-    return `${p.name} = ${printExpression(p.defaultValue, 0, opts)}`;
-  }
-  return p.name;
+/** A `function` declaration's parameter list (without the parentheses). */
+function printDeclParams(params: ReadonlyArray<DeclParam>, opts: ResolvedFormatOptions): string {
+  return params.map((p) => printParam(p, 0, opts)).join(", ");
+}
+
+/**
+ * One parameter: `name`, `name = default`, `...rest`, or a destructuring
+ * pattern (`{ a, "b-c": c } = {}`). Shared by declarations, arrow functions and
+ * method shorthand, so a pattern or rest parameter is never printed as a bare
+ * (empty) name.
+ */
+function printParam(p: DeclParam | LambdaParam, indent: number, opts: ResolvedFormatOptions): string {
+  const rest = p.rest ? "..." : "";
+  const target = p.pattern ? printPattern(p.pattern, indent, opts) : p.name;
+  const def = p.defaultValue ? ` = ${printExpression(p.defaultValue, indent, opts)}` : "";
+  return `${rest}${target}${def}`;
 }
 
 function printTrigger(t: { kind: string } & Record<string, unknown>, opts: ResolvedFormatOptions): string {
@@ -683,17 +709,9 @@ function printExpression(expr: Expression, indent: number, opts: ResolvedFormatO
     case "Spread":
       return `...${printExpression(expr.argument, indent, opts)}`;
     case "Lambda": {
-      const params = expr.params
-        .map((p) => {
-          const prefix = p.rest ? "..." : "";
-          return p.defaultValue
-            ? `${prefix}${p.name} = ${printExpression(p.defaultValue, indent, opts)}`
-            : `${prefix}${p.name}`;
-        })
-        .join(", ");
-      const head = expr.params.length === 1 && !expr.params[0]!.defaultValue && !expr.params[0]!.rest
-        ? expr.params[0]!.name
-        : `(${params})`;
+      const params = expr.params.map((p) => printParam(p, indent, opts)).join(", ");
+      const only = expr.params.length === 1 ? expr.params[0]! : undefined;
+      const head = only && !only.defaultValue && !only.rest && !only.pattern ? only.name : `(${params})`;
       return `${head} => ${printExpression(expr.body, indent, opts)}`;
     }
     case "Block":
@@ -741,6 +759,14 @@ function printSwitchCase(c: SwitchCase, indent: number, opts: ResolvedFormatOpti
 
 function printObjectProp(prop: ObjectProperty, indent: number, opts: ResolvedFormatOptions): string {
   if (prop.spread) return `...${printExpression(prop.value, indent, opts)}`;
+  // Method shorthand — `save(item) { … }` — exactly as it was written.
+  if (prop.method && prop.value.kind === "Lambda" && prop.value.body.kind === "Block") {
+    const name = prop.computedKey
+      ? `[${printExpression(prop.computedKey, indent, opts)}]`
+      : (PLAIN_KEY.test(prop.key) ? prop.key : printStringLiteral(prop.key, opts));
+    const params = prop.value.params.map((p) => printParam(p, indent, opts)).join(", ");
+    return `${name}(${params}) ${printExpression(prop.value.body, indent, opts)}`;
+  }
   const value = printExpression(prop.value, indent, opts);
   // Shorthand: `{ name }` when key and value identifier match.
   if (

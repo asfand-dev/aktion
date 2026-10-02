@@ -17,6 +17,12 @@
  * Gating on warnings as well as errors is deliberate — the unknown-component
  * lint is a warning, and an example naming a non-existent component is the single
  * worst thing documentation can do here.
+ *
+ * A block tagged ```ts aktion / ```js aktion is an `.aktion.ts` / `.aktion.js`
+ * MODULE, not DSL text: it is compiled by that language's frontend first (type
+ * erasure, the JavaScript-semantics rules), then schema-checked and linted on
+ * the erased text — exactly what the Vite plugin and `validate-aktion` do.
+ * GitHub highlights it by the first word of the info string.
  */
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
@@ -24,8 +30,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { getDiagnostics } from "../src/tooling/language-service.js";
-import { defaultLibrary } from "../src/library/index.js";
+import { getDiagnostics, getLintWarnings } from "../src/tooling/language-service.js";
+import { defaultLibrary, validateProgramSchema } from "../src/library/index.js";
+import { javascriptFrontend } from "../src/compiler/frontend.js";
+import { createTypeScriptFrontend } from "../src/plugin/typescript.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -50,6 +58,8 @@ interface Block {
   code: string;
   line: number;
   fence: string;
+  /** The second word of the info string — `aktion` in ```ts aktion. */
+  meta: string;
 }
 
 function fencedBlocks(text: string): Block[] {
@@ -57,18 +67,20 @@ function fencedBlocks(text: string): Block[] {
   const lines = text.split("\n");
   let start = -1;
   let fence = "";
+  let meta = "";
   for (let i = 0; i < lines.length; i += 1) {
     const trimmed = lines[i]!.trim();
     if (start < 0) {
-      const open = /^```([\w-]*)\s*$/.exec(trimmed);
+      const open = /^```([\w-]*)(?:\s+([\w-]+))?\s*$/.exec(trimmed);
       if (open) {
         fence = open[1] ?? "";
+        meta = open[2] ?? "";
         start = i;
       }
       continue;
     }
     if (trimmed !== "```") continue;
-    out.push({ code: lines.slice(start + 1, i).join("\n"), line: start + 1, fence });
+    out.push({ code: lines.slice(start + 1, i).join("\n"), line: start + 1, fence, meta });
     start = -1;
   }
   return out;
@@ -87,6 +99,24 @@ function isCompleteProgram(block: Block): boolean {
   return block.code.includes("$app(");
 }
 
+const typescriptFrontend = createTypeScriptFrontend();
+
+/** Every problem in a block: DSL text through `getDiagnostics`, a ```ts aktion / ```js aktion module through its frontend. */
+function blockDiagnostics(block: Block): Array<{ line: number; severity: string; message: string }> {
+  if (block.meta !== "aktion" || block.fence === "aktion" || block.fence === "") {
+    return getDiagnostics(block.code, defaultLibrary);
+  }
+  const typescript = block.fence === "ts" || block.fence === "typescript";
+  const frontend = typescript ? typescriptFrontend : javascriptFrontend;
+  const out = frontend.compile(block.code, typescript ? "/docs/example.aktion.ts" : "/docs/example.aktion.js");
+  return [
+    ...out.program.errors.map((e) => ({ line: e.line, severity: "error", message: e.message })),
+    ...out.diagnostics.map((d) => ({ line: d.line, severity: d.severity, message: `${d.code ?? ""} ${d.message}` })),
+    ...validateProgramSchema(out.program, defaultLibrary).map((e) => ({ line: e.line, severity: "error", message: e.message })),
+    ...getLintWarnings(out.aktionSource, defaultLibrary).map((w) => ({ line: w.line, severity: "warning", message: w.message })),
+  ];
+}
+
 describe("documentation examples are valid Aktion", () => {
   it("finds programs to check in the README", () => {
     // Guard the guard: if the extraction ever stops matching, this test would
@@ -101,7 +131,7 @@ describe("documentation examples are valid Aktion", () => {
       const failures: string[] = [];
       for (const block of blocks) {
         if (!isCompleteProgram(block)) continue;
-        for (const d of getDiagnostics(block.code, defaultLibrary)) {
+        for (const d of blockDiagnostics(block)) {
           failures.push(`${file}:${block.line + d.line} ${d.severity}: ${d.message}`);
         }
       }
