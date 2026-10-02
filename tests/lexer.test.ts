@@ -384,10 +384,11 @@ describe("lexer — tokenize()", () => {
       expect(t.filter((tok) => tok.type === "Identifier")).toHaveLength(1);
     });
 
-    it("unknown characters are skipped", () => {
+    it("unknown characters become Error tokens instead of being dropped", () => {
       const t = tokenize("a @ b");
-      const ids = t.filter((tok) => tok.type === "Identifier");
-      expect(ids.map((tok) => tok.value)).toEqual(["a", "b"]);
+      expect(t.map((tok) => tok.type)).toEqual(["Identifier", "Error", "Identifier", "EOF"]);
+      expect(t[1]).toMatchObject({ value: "@", line: 1, column: 3 });
+      expect(t[1]!.message).toContain("Unexpected character '@'");
     });
   });
 

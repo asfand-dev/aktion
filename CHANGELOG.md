@@ -7,6 +7,48 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-10-01
 
+### Parser: Statements Must Be Separated, Unknown Characters Are Errors
+
+- **Breaking:** two statements on one line now need a `;` between them. Input
+  that used to be accepted as two unrelated statements is now a parse error
+  that points at the exact spot: `a = 1 b = 2`, `class Foo {}`, `` tag`x` ``,
+  `x as T`, `x satisfies T`, `interface A {}`, `type A = …`, `yield 1`, `1n`
+  and `a$b`. Statements that end in a `}` block (`function`, `if`, `for`,
+  `while`, `switch`, `try`) can still be followed by another statement on the
+  same line, and newlines still end statements as before.
+- **Breaking:** a character Aktion has no use for (`@`, `#`, a backslash outside
+  a string, a non-ASCII letter in a name, an emoji) is now reported as
+  `Unexpected character '…'` instead of being silently dropped, so
+  `o.#secret` no longer quietly becomes `o.secret`. Non-breaking spaces and
+  byte-order marks count as whitespace.
+- **Breaking:** an unterminated string or template literal is now an error. A
+  quoted string cut off by the end of its line is always an error. A string or
+  template literal still open at the very end of the text is an error too,
+  except while the text is still arriving: `<aktion-app>` accepts it when the
+  `streaming` attribute is set and for anything fed through `appendChunk` (until
+  `setResponse(...)` or clearing `streaming`), and
+  `parse(source, { streaming: true })` does the same, so partial responses keep
+  rendering as they arrive. The finished text is parsed again only if a literal
+  was left open, so ending a stream does not re-run effects or refire requests.
+- **Breaking for tooling:** `tokenize()` can now return tokens of the new type
+  `"Error"` (an unknown character or an unterminated literal), so an exhaustive
+  `switch` over `Token["type"]` needs a case for it. `Program` gains an optional
+  `openLiteral` flag, and `Token` an optional `open` flag, for the lenient case.
+- Closer to JavaScript: a `do … while (c)` may be followed by a statement on the
+  same line, a block comment that spans lines counts as a line break, and U+2028
+  / U+2029 end a statement.
+- JavaScript-only constructs get a message that says what to do instead:
+  `class` (use plain objects and functions), tagged templates (call the
+  function with the string), TypeScript `as` / `satisfies` / `interface` /
+  `type` / `enum` (Aktion has no static types), `yield`, BigInt literals,
+  decorators and private fields. Curly quotes suggest straight ones, and an
+  invisible character is reported by its code point (for example `U+200B`).
+- Why it matters: an ESLint autofix that produced one of these used to pass
+  both the build and the tests while changing what the program did, for
+  example `unicorn/prefer-string-raw` turning a string into `` String.raw`…` ``.
+  It now fails loudly. Every `.aktion` file in this repository still parses
+  with no errors.
+
 ### Formatter Keeps `let`, `const` and `var`, and Refuses to Change Meaning
 
 - `formatProgram` and `printProgram` no longer drop the `let` / `const` / `var`
