@@ -62,10 +62,50 @@
  * (the plain rules record), plus the pure `scan`/`remap` primitives for
  * anyone building their own tooling on top of the same position-remap
  * machinery.
+ *
+ * ## `.aktion.ts` / `.aktion.js` modules
+ *
+ * Modules authored in TypeScript or JavaScript need no processor: they are
+ * real `.ts`/`.js` files, so the parser and (type-aware) rules a consumer
+ * already applies to that extension lint them as they are. What they need is
+ * a different set of overrides — Aktion still parses and evaluates the
+ * erased code with its own grammar and semantics (see
+ * `aktionTypeScriptRules`) — plus `aktion/props-literal`, a type-aware rule
+ * that catches a props bag TypeScript accepts but Aktion never reads.
+ * `aktionTypeScriptConfig` (also `configs.typescript`) applies both to
+ * `**\/*.aktion.ts` and `**\/*.aktion.js`:
+ *
+ * ```js
+ * import aktionEslint from "aktion-runtime/eslint";
+ * import tseslint from "typescript-eslint";
+ * import unicorn from "eslint-plugin-unicorn";
+ *
+ * export default [
+ *   ...tseslint.configs.recommendedTypeChecked,
+ *   unicorn.configs.recommended,
+ *   {
+ *     // `aktion/props-literal` reads the type checker; without type
+ *     // information it reports nothing.
+ *     languageOptions: {
+ *       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+ *     },
+ *   },
+ *   // Last, so its overrides win over the rule sets above.
+ *   ...aktionEslint.configs.typescript,
+ * ];
+ * ```
+ *
+ * Unlike `configs.recommended`, this preset enables one plugin rule
+ * (`unicorn/switch-case-braces`, reconfigured to `avoid`), so it needs
+ * `eslint-plugin-unicorn` registered as `unicorn`; without it, follow it with
+ * `{ files: ["**\/*.aktion.ts", "**\/*.aktion.js"], rules: {
+ * "unicorn/switch-case-braces": "off" } }`. The rule is also exported as
+ * `aktionPropsLiteralRule`.
  */
 
 export { aktionProcessor } from "./eslint/processor.js";
-export { aktionRecommendedRules } from "./eslint/rules.js";
+export { aktionRecommendedRules, aktionTypeScriptRules } from "./eslint/rules.js";
+export { aktionPropsLiteralRule } from "./eslint/props-literal.js";
 export { findBareExportInsertions, type ExportInsertion } from "./eslint/scan.js";
 export {
   applyInsertions,
@@ -79,7 +119,8 @@ export {
 
 import type { ESLint, Linter } from "eslint";
 import { aktionProcessor } from "./eslint/processor.js";
-import { aktionRecommendedRules } from "./eslint/rules.js";
+import { aktionPropsLiteralRule } from "./eslint/props-literal.js";
+import { aktionRecommendedRules, aktionTypeScriptRules } from "./eslint/rules.js";
 
 /**
  * ESLint flat-config-compatible plugin object, mirroring the public shape of
@@ -95,6 +136,10 @@ import { aktionRecommendedRules } from "./eslint/rules.js";
  * config object matching the same `files` glob, so your own
  * `**\/*.aktion/*.ts` block combines with the one `configs.recommended`
  * already provides.
+ *
+ * `configs.typescript` (`aktionTypeScriptConfig`) is the counterpart for
+ * `.aktion.ts`/`.aktion.js` modules, and `rules["props-literal"]` is the
+ * plugin's one rule, addressed as `aktion/props-literal`.
  */
 const aktionEslintPlugin: ESLint.Plugin = {
   meta: {
@@ -103,6 +148,9 @@ const aktionEslintPlugin: ESLint.Plugin = {
   },
   processors: {
     aktion: aktionProcessor,
+  },
+  rules: {
+    "props-literal": aktionPropsLiteralRule,
   },
 };
 
@@ -132,8 +180,40 @@ const recommendedConfig: Linter.Config[] = [
   },
 ];
 
+/**
+ * The flat-config preset for `.aktion.ts` / `.aktion.js` modules: registers
+ * the plugin (by reference, like `configs.recommended`) and applies
+ * `aktionTypeScriptRules` plus `aktion/props-literal` to exactly those two
+ * extensions — not to the processor's virtual `**\/*.aktion/*.ts` blocks
+ * (whose basename is `0_eslint-aktion.ts`) and not to host `.ts`/`.js` code.
+ *
+ * It sets no parser and no `parserOptions`: these are real `.ts`/`.js` files
+ * the consumer's own TypeScript/JavaScript blocks already cover, and
+ * `aktion/props-literal` simply does nothing where those blocks provide no
+ * type information. Spread it AFTER the consumer's rule sets so its overrides
+ * win, and see `aktionTypeScriptRules` for the one entry that needs
+ * `eslint-plugin-unicorn`.
+ */
+export const aktionTypeScriptConfig: Linter.Config[] = [
+  {
+    name: "aktion/typescript/plugin",
+    plugins: {
+      aktion: aktionEslintPlugin,
+    },
+  },
+  {
+    name: "aktion/typescript/rules",
+    files: ["**/*.aktion.ts", "**/*.aktion.js"],
+    rules: {
+      ...aktionTypeScriptRules,
+      "aktion/props-literal": "error",
+    },
+  },
+];
+
 aktionEslintPlugin.configs = {
   recommended: recommendedConfig,
+  typescript: aktionTypeScriptConfig,
 };
 
 export default aktionEslintPlugin;

@@ -41,11 +41,21 @@
     "./aktion-modules": {
       "types": "./dist/types/aktion-modules.d.ts"
     },
+    "./dsl": {
+      "types": "./dist/types/dsl/index.d.ts"
+    },
+    "./dsl-globals": {
+      "types": "./dist/types/dsl/globals.d.ts"
+    },
     "./system_prompt.txt": "./dist/system_prompt.txt",
     "./system_prompt_chat.txt": "./dist/system_prompt_chat.txt",
     "./skill": "./skills/aktion/SKILL.md"
   },
+  "bin": {
+    "aktion-dts": "./bin/aktion-dts.mjs"
+  },
   "files": [
+    "bin",
     "dist",
     "skills"
   ],
@@ -53,10 +63,11 @@
     "access": "public"
   },
   "scripts": {
-    "build": "npm run sync:docs-version && tsc -p tsconfig.build.json && vite build && vite build --config vite.testing.config.ts && vite build --config vite.coverage.config.ts && vite build --config vite.devtools.config.ts && vite build --config vite.language.config.ts && vite build --config vite.eslint.config.ts && vite build --config vite.plugin.config.ts && node scripts/emit-prompt.mjs && node scripts/emit-skill.mjs && node scripts/emit-entry.mjs",
+    "build": "npm run sync:docs-version && npm run build:dsl-types && tsc -p tsconfig.build.json && vite build && vite build --config vite.testing.config.ts && vite build --config vite.coverage.config.ts && vite build --config vite.devtools.config.ts && vite build --config vite.language.config.ts && vite build --config vite.eslint.config.ts && vite build --config vite.plugin.config.ts && node scripts/emit-prompt.mjs && node scripts/emit-skill.mjs && node scripts/emit-entry.mjs",
     "build:coverage": "vite build --config vite.coverage.config.ts",
     "build:devtools": "vite build --config vite.devtools.config.ts",
     "build:docs": "npm run sync:docs-version && node scripts/build-docs.mjs",
+    "build:dsl-types": "node scripts/emit-dsl-types.mjs",
     "build:entry": "node scripts/emit-entry.mjs",
     "build:eslint": "vite build --config vite.eslint.config.ts",
     "build:language": "vite build --config vite.language.config.ts",
@@ -67,6 +78,7 @@
     "build:prompt": "node scripts/emit-prompt.mjs",
     "build:skill": "node scripts/emit-skill.mjs",
     "build:test": "vite build --config vite.testing.config.ts",
+    "test:vite-matrix": "npm run build:plugin && node scripts/vite-matrix.mjs",
     "dev": "npm run build && vite",
     "prepublishOnly": "npm run build",
     "preview": "vite preview",
@@ -75,14 +87,18 @@
     "test:watch": "vitest"
   },
   "peerDependencies": {
-    "vite": "^5.0.0 || ^6.0.0",
-    "eslint": "^8.57.0 || ^9.0.0 || ^10.0.0"
+    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0",
+    "eslint": "^8.57.0 || ^9.0.0 || ^10.0.0",
+    "ts-blank-space": "~0.9.0"
   },
   "peerDependenciesMeta": {
     "vite": {
       "optional": true
     },
     "eslint": {
+      "optional": true
+    },
+    "ts-blank-space": {
       "optional": true
     }
   },
@@ -96,7 +112,8 @@
     "vite-plugin-dts": "^4.3.0",
     "vitest": "^2.1.4",
     "@vitest/web-worker": "^2.1.4",
-    "happy-dom": "^15.7.4"
+    "happy-dom": "^15.7.4",
+    "ts-blank-space": "~0.9.0"
   },
   "keywords": [
     "llm",

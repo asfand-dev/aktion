@@ -8,12 +8,18 @@ import { describe, expect, it } from "vitest";
 import { aktionPlugin } from "../src/plugin/index.js";
 import { parse } from "../src/parser/index.js";
 
-function transform(code: string): string {
-  const plugin = aktionPlugin();
-  (plugin as { configResolved: (c: unknown) => void }).configResolved({ command: "build", root: "/p" });
-  const out = (
-    plugin as { transform: (this: unknown, c: string, id: string) => { code: string } | null }
-  ).transform.call({ addWatchFile() {}, warn() {}, error() { throw new Error("unexpected"); } }, code, "/p/app.aktion");
+type Hooks = {
+  configResolved: (c: unknown) => void;
+  buildStart: (this: unknown) => Promise<void>;
+  transform: { handler: (this: unknown, c: string, id: string) => Promise<{ code: string } | null> };
+};
+
+async function transform(code: string): Promise<string> {
+  const plugin = aktionPlugin() as unknown as Hooks;
+  const ctx = { addWatchFile() {}, warn() {}, error() { throw new Error("unexpected"); } };
+  plugin.configResolved({ command: "build", root: "/p" });
+  await plugin.buildStart.call(ctx);
+  const out = await plugin.transform.handler.call(ctx, code, "/p/app.aktion");
   return out!.code;
 }
 
@@ -49,7 +55,7 @@ describe("plugin — declaration keyword is not shipped", () => {
     expect(JSON.stringify(parse(WITH_KEYWORDS).statements)).toContain('"declaration"');
   });
 
-  it("emits no `declaration` key anywhere in the compiled program", () => {
-    expect(JSON.stringify(embeddedProgram(transform(WITH_KEYWORDS)))).not.toContain("declaration");
+  it("emits no `declaration` key anywhere in the compiled program", async () => {
+    expect(JSON.stringify(embeddedProgram(await transform(WITH_KEYWORDS)))).not.toContain("declaration");
   });
 });

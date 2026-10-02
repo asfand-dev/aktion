@@ -418,3 +418,74 @@ describe("tools/validate-aktion-app.mjs — every module in the graph is linted"
     expect(status).toBe(0);
   });
 });
+
+/**
+ * `.aktion.ts` / `.aktion.js` modules (guide §7.7): both CLIs compile them with
+ * the frontends the Vite plugin uses, so erasure errors and the JS-semantics
+ * rules are reported at the module's own lines — and the lint pass runs on the
+ * erased text, never on raw TypeScript.
+ */
+describe("tools/validate-aktion*.mjs — TypeScript and JavaScript modules", () => {
+  let dir: string;
+  const file = (name: string): string => join(dir, name);
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "aktion-validate-ts-"));
+    const put = (name: string, source: string): void => writeFileSync(file(name), source, "utf8");
+    put("store.aktion.ts", ["export let $count: number = 0", "export function bump(step: number = 1): void {", "  $count = $count + step", "}"].join("\n"));
+    put("format.aktion.js", ['export function label(n) {', '  return "n=" + n', "}"].join("\n"));
+    put(
+      "app.aktion",
+      [
+        'import { $count, bump } from "./store.aktion.ts"',
+        'import { label } from "./format.aktion.js"',
+        '$app(Button(label($count), { onClick: () => bump(2) }))',
+      ].join("\n"),
+    );
+    put("enum.aktion.ts", ["export const ok = 1", "export enum Mode { A, B }"].join("\n"));
+    put("uses-enum.aktion", 'import { ok } from "./enum.aktion.ts"\n$app(Text(String(ok)))');
+    put("var.aktion.js", ["export const a = 1", "export function f() {", "  var b = a", "  return b", "}"].join("\n"));
+    put("uses-var.aktion", 'import { a } from "./var.aktion.js"\n$app(Text(String(a)))');
+    put("unknown.aktion.ts", 'export function View(): unknown {\n  return Nope("x")\n}');
+  });
+
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("validate-aktion-app links a `.aktion` → `.aktion.ts` / `.aktion.js` graph", () => {
+    const { status, output } = run(appTool, [file("app.aktion")]);
+    expect(output).toMatch(/app\.aktion: OK/);
+    expect(status).toBe(0);
+  });
+
+  it("reports a TypeScript erasure error in a dependency at its own line", () => {
+    const { status, output } = run(appTool, [file("uses-enum.aktion")]);
+    expect(output).toMatch(/L2: error: .*enum\.aktion\.ts: TypeScript enums are not erasable/);
+    expect(status).toBe(1);
+  });
+
+  it("reports a JS-semantics rule in a `.aktion.js` dependency", () => {
+    const { status, output } = run(appTool, [file("uses-var.aktion")]);
+    expect(output).toMatch(/L3: error: .*var\.aktion\.js: `var` is not supported in Aktion modules/);
+    expect(status).toBe(1);
+  });
+
+  it("validate-aktion compiles a single `.aktion.ts` / `.aktion.js` file first", () => {
+    const store = run(fileTool, [file("store.aktion.ts")]);
+    expect(store.output).toMatch(/store\.aktion\.ts: OK/);
+    expect(store.status).toBe(0);
+
+    const bad = run(fileTool, [file("var.aktion.js")]);
+    expect(bad.output).toMatch(/var\.aktion\.js: L3: error: E104 `var` is not supported/);
+    expect(bad.status).toBe(1);
+
+    const erased = run(fileTool, [file("enum.aktion.ts")]);
+    expect(erased.output).toMatch(/enum\.aktion\.ts: L2: error: AKT-TS-ERASE TypeScript enums are not erasable/);
+    expect(erased.status).toBe(1);
+  });
+
+  it("runs the schema and lint passes on the erased text", () => {
+    const { output } = run(fileTool, [file("unknown.aktion.ts")]);
+    expect(output).toMatch(/unknown\.aktion\.ts: L2: warning: Unknown component <Nope>/);
+    expect(output).not.toMatch(/Type annotations/);
+  });
+});

@@ -84,7 +84,19 @@ export const KEYWORDS_AKTION = new Set([
 
 export type TemplatePart =
   | { kind: "str"; text: string }
-  | { kind: "expr"; source: string; line: number; column: number };
+  | {
+      kind: "expr";
+      source: string;
+      line: number;
+      column: number;
+      /**
+       * Index in the tokenized text of `source`'s first character (just past
+       * the `${`). `source` is a verbatim slice of the input, so this is what
+       * lets the parser carry {@link TokenizeOptions.softNewlines} into the
+       * interpolation's own sub-parse.
+       */
+      offset?: number;
+    };
 
 export interface Token {
   type: TokenType;
@@ -148,6 +160,20 @@ export interface TokenizeOptions {
    * close it.)
    */
   streaming?: boolean;
+  /**
+   * Offsets (indices into `source`) of `\n` characters that are NOT line
+   * terminators for the grammar: the lexer emits no `Newline` token for them,
+   * but still advances the line counter, so every position after them stays
+   * exact.
+   *
+   * Used by the TypeScript frontend. It blanks type annotations with spaces
+   * and keeps their line breaks, so a newline that sat inside a multi-line type
+   * (`foo<⏎ Bar⏎>(1)`, `const o: {⏎ a: number⏎} = …`) would otherwise end the
+   * statement it is part of. Any other offset in the set is ignored. Only
+   * `\n` offsets are expected; an offset of a U+2028 / U+2029 line separator
+   * is honoured the same way.
+   */
+  softNewlines?: ReadonlySet<number>;
 }
 
 /**
@@ -160,6 +186,9 @@ export interface TokenizeOptions {
  */
 export function tokenize(source: string, comments?: RawComment[], options: TokenizeOptions = {}): Token[] {
   const tokens: Token[] = [];
+  const softNewlines = options.softNewlines !== undefined && options.softNewlines.size > 0
+    ? options.softNewlines
+    : undefined;
   let i = 0;
   let line = 1;
   let column = 1;
@@ -306,12 +335,14 @@ export function tokenize(source: string, comments?: RawComment[], options: Token
 
     if (ch === undefined) break;
 
-    // Newline.
+    // Newline. A soft one (see `TokenizeOptions.softNewlines`) is whitespace to
+    // the grammar; `advance()` still moves to the next line.
     if (ch === "\n") {
       const startLine = line;
       const startCol = column;
+      const soft = softNewlines?.has(i) === true;
       advance();
-      push("Newline", "\n", startLine, startCol);
+      if (!soft) push("Newline", "\n", startLine, startCol);
       continue;
     }
 
@@ -320,8 +351,9 @@ export function tokenize(source: string, comments?: RawComment[], options: Token
     if (ch === "\u2028" || ch === "\u2029") {
       const startLine = line;
       const startCol = column;
+      const soft = softNewlines?.has(i) === true;
       advance();
-      push("Newline", ch, startLine, startCol);
+      if (!soft) push("Newline", ch, startLine, startCol);
       continue;
     }
 
@@ -451,6 +483,7 @@ export function tokenize(source: string, comments?: RawComment[], options: Token
           const exprCol = column;
           advance();
           advance();
+          const exprOffset = i;
           let depth = 1;
           let source2 = "";
           while (i < source.length && depth > 0) {
@@ -500,7 +533,7 @@ export function tokenize(source: string, comments?: RawComment[], options: Token
             }
             source2 += advance();
           }
-          parts.push({ kind: "expr", source: source2, line: exprLine, column: exprCol });
+          parts.push({ kind: "expr", source: source2, line: exprLine, column: exprCol, offset: exprOffset });
           sawExpr = true;
           continue;
         }

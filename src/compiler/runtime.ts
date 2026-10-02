@@ -35,10 +35,24 @@ export interface CompiledProgram {
   readonly __aktionCompiled: typeof COMPILED_PROGRAM_VERSION;
   /** Already-parsed component-tree AST. Mounted without re-parsing. */
   readonly program: Program;
-  /** Original (or re-emitted, for a linked project) DSL source. */
+  /**
+   * Runnable Aktion text of the program. For a linked project this is the
+   * merged program re-emitted by `printProgram` (one self-contained `.aktion`
+   * program); for a single file, the file itself. Text-based features read it —
+   * `applyDelta`, DevTools Edit/Apply, generated tests, `renderToString` —
+   * while re-plans (reconnect, reload) reuse `program` directly.
+   */
   readonly source: string;
   /** Module id / file path — used for diagnostics and HMR targeting. */
   readonly path: string;
+  /**
+   * Original text of every module, indexed like `program.sources` (index 0 is
+   * the entry; a single-file program has one entry). These are the texts every
+   * `loc` refers to — for a `.aktion.ts` module, the TypeScript the author
+   * wrote — so DevTools shows them instead of `source`. Optional: artefacts
+   * from older compilers omit it and DevTools falls back to `source`.
+   */
+  readonly sourcesContent?: readonly string[];
 }
 
 /**

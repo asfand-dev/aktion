@@ -13,6 +13,7 @@ import type {
   Program,
   Statement,
   ComponentDeclaration,
+  DeclParam,
   EffectDeclaration,
   ActionDeclaration,
   HookDeclaration,
@@ -2070,15 +2071,10 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       const out: unknown[] = [];
       for (const element of expr.elements) {
         if (element.kind === "Spread") {
-          const value = evaluate(element.argument, ctx);
-          if (Array.isArray(value)) {
-            for (const item of value) out.push(item);
-          } else if (value != null) {
-            // Mirror JS spread on iterables — strings spread into their
-            // characters. Objects without an iterator are ignored to keep
-            // LLM mistakes from blowing up the render.
-            if (typeof value === "string") for (const ch of value) out.push(ch);
-          }
+          // Any iterable spreads, as in JS (`[...new Set(xs)]`, `[...m.keys()]`,
+          // `[..."abc"]`). Objects without an iterator are ignored to keep
+          // LLM mistakes from blowing up the render.
+          spreadIterable(out, evaluate(element.argument, ctx), ctx);
           continue;
         }
         out.push(evaluate(element, ctx));
@@ -3487,17 +3483,7 @@ function evaluateInvoke(
     return expr.optional ? undefined : null;
   }
   if (typeof callee !== "function") return null;
-  const positional: unknown[] = [];
-  for (const arg of expr.arguments) {
-    if (arg.kind === "Spread") {
-      const value = evaluate(arg.argument, ctx);
-      if (Array.isArray(value)) {
-        for (const item of value) positional.push(item);
-      }
-      continue;
-    }
-    positional.push(evaluate(arg, ctx));
-  }
+  const positional = evaluateCallArgs(expr.arguments, ctx);
   try {
     return (callee as (...a: unknown[]) => unknown).apply(undefined, positional);
   } catch (err) {
@@ -3514,17 +3500,7 @@ function evaluateNew(
 ): unknown {
   const callee = evaluate(expr.callee, ctx);
   if (typeof callee !== "function") return null;
-  const positional: unknown[] = [];
-  for (const arg of expr.arguments) {
-    if (arg.kind === "Spread") {
-      const value = evaluate(arg.argument, ctx);
-      if (Array.isArray(value)) {
-        for (const item of value) positional.push(item);
-      }
-      continue;
-    }
-    positional.push(evaluate(arg, ctx));
-  }
+  const positional = evaluateCallArgs(expr.arguments, ctx);
   try {
     return Reflect.construct(callee as new (...a: unknown[]) => unknown, positional);
   } catch (err) {
@@ -3998,18 +3974,7 @@ function evaluateMethodCall(
     : (target as Record<string, unknown>)[expr.method];
   if (typeof fn !== "function") return null;
 
-  const positional: unknown[] = [];
-  for (const arg of expr.arguments) {
-    if (arg.kind === "Spread") {
-      const value = evaluate(arg.argument, ctx);
-      if (Array.isArray(value)) {
-        for (const item of value) positional.push(item);
-      }
-      continue;
-    }
-    positional.push(evaluate(arg, ctx));
-  }
-  const callArgs = positional;
+  const callArgs = evaluateCallArgs(expr.arguments, ctx);
   try {
     return (fn as (...a: unknown[]) => unknown).apply(target, callArgs);
   } catch (err) {
@@ -4026,21 +3991,59 @@ function evaluateMethodCall(
 }
 
 /**
+ * Append the elements of a `...spread` operand to `out` the way JavaScript
+ * spreads any iterable: arrays, strings (by code point), `Set`s, `Map`s (as
+ * `[key, value]` pairs), their `entries()` / `keys()` / `values()` iterators,
+ * typed arrays, generators handed over by host code, and so on. Every
+ * positional spread — array literals and the argument lists of every call
+ * form — goes through here, so they all agree. (Array literals used to spread
+ * only arrays and strings, and method / `new` / invoke arguments only arrays:
+ * `[...new Set([1, 1, 2])]` was `[]` and `Math.max(...set)` was `-Infinity`.)
+ *
+ * Returns `false`, appending nothing, for an operand that is not iterable
+ * (`null`, a number, a plain object). JavaScript throws a `TypeError` there;
+ * Aktion keeps the render alive and lets the caller decide (most drop it).
+ *
+ * A lazy iterator can be unbounded (a host generator that never finishes), so
+ * each element drawn from one is charged to the loop budget like a `for…of`
+ * iteration. Arrays and strings are already materialised and are not charged.
+ */
+function spreadIterable(out: unknown[], value: unknown, ctx: EvaluationContext): boolean {
+  if (Array.isArray(value)) {
+    for (const item of value) out.push(item);
+    return true;
+  }
+  if (typeof value === "string") {
+    for (const ch of value) out.push(ch);
+    return true;
+  }
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    typeof (value as { [Symbol.iterator]?: unknown })[Symbol.iterator] === "function"
+  ) {
+    for (const item of value as Iterable<unknown>) {
+      tickIterations(ctx.budget, 1, "a `...` spread");
+      out.push(item);
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
  * Evaluate a call's argument list into positional values, expanding any
- * `...spread` argument inline (arrays and other iterables) exactly like
- * JavaScript — so `f(...[1, 2, 3])`, `f(a, ...rest)`, and `f(...new Set(s))`
- * all forward the right positional args to a user function / lambda / action.
+ * `...spread` argument inline (any iterable, see `spreadIterable`) exactly
+ * like JavaScript — so `f(...[1, 2, 3])`, `f(a, ...rest)`, `f(...new Set(s))`
+ * and `f(..."abc")` all forward the right positional args to a user function /
+ * lambda / action, a method, a constructor, or an invoked expression. A
+ * non-iterable spread operand contributes no arguments.
  */
 function evaluateCallArgs(args: Expression[], ctx: EvaluationContext): unknown[] {
   const out: unknown[] = [];
   for (const arg of args) {
     if (arg.kind === "Spread") {
-      const value = evaluate(arg.argument, ctx);
-      if (Array.isArray(value)) {
-        for (const item of value) out.push(item);
-      } else if (value != null && typeof value === "object" && Symbol.iterator in (value as object)) {
-        for (const item of value as Iterable<unknown>) out.push(item);
-      }
+      spreadIterable(out, evaluate(arg.argument, ctx), ctx);
       continue;
     }
     out.push(evaluate(arg, ctx));
@@ -4149,15 +4152,7 @@ function evaluateComponentCall(
     !(ctx.library && findComponent(ctx.library, callee))
   ) {
     const fn = GLOBAL_NAMESPACES[callee] as (...a: unknown[]) => unknown;
-    const evaluated: unknown[] = [];
-    for (const arg of args) {
-      if (arg.kind === "Spread") {
-        const value = evaluate(arg.argument, ctx);
-        if (Array.isArray(value)) for (const item of value) evaluated.push(item);
-        continue;
-      }
-      evaluated.push(evaluate(arg, ctx));
-    }
+    const evaluated = evaluateCallArgs(args, ctx);
     try {
       return fn(...evaluated);
     } catch (err) {
@@ -4184,15 +4179,7 @@ function evaluateComponentCall(
     const hostGlobal = lookupHostGlobal(callee);
     if (hostGlobal.found && typeof hostGlobal.value === "function") {
       const fn = hostGlobal.value as (...a: unknown[]) => unknown;
-      const evaluated: unknown[] = [];
-      for (const arg of args) {
-        if (arg.kind === "Spread") {
-          const value = evaluate(arg.argument, ctx);
-          if (Array.isArray(value)) for (const item of value) evaluated.push(item);
-          continue;
-        }
-        evaluated.push(evaluate(arg, ctx));
-      }
+      const evaluated = evaluateCallArgs(args, ctx);
       try {
         return fn(...evaluated);
       } catch (err) {
@@ -4264,9 +4251,11 @@ function evaluateComponentCall(
  *     `argMeta.stateRef` carries the dotted path so renderers can wire
  *     a deep two-way binding.
  *   - Extra positional args (§19 all-positional / mixed calls) — fall
- *     through to the next unfilled slot in declaration order, so
- *     `Button("Save", "primary")` binds `children` then `variant` and
- *     mixed calls fill whatever the named object left open.
+ *     through to the next unfilled slot in declaration order, and mixed
+ *     calls fill whatever the named object left open. Declaration order is
+ *     the spec's `props` order, not "the prop you probably meant":
+ *     `Button("Save", "primary")` binds `label`, then `onClick` (Button's
+ *     second prop) — NOT `variant`, which needs `{ variant: "primary" }`.
  *
  * For user-declared components (no library spec) we fall back to the
  * simple "evaluate each argument as-is" path so per-instance state lookup
@@ -4384,6 +4373,18 @@ function resolveLibraryCallArgs(
 }
 
 /**
+ * The name a caller uses for a component parameter: its `publicName` when a
+ * compiler pass renamed the local binding (the TS/JS frontend's hygienic
+ * renaming), else the declared `name`. Everything that is part of the
+ * calling convention BY NAME — matching named props, binding them, and
+ * telling a named slot apart from a parameter — goes through this; the value
+ * itself is always bound to the local `name`.
+ */
+function componentParamPublicName(param: DeclParam): string {
+  return param.publicName ?? param.name;
+}
+
+/**
  * Invoke a `function Name(p) { return ... }` declaration. Parameters are
  * bound to the supplied positional / named arguments and the block body
  * is evaluated; the last expression's value is returned as the rendered
@@ -4422,16 +4423,18 @@ function invokeComponentDecl(
   // one of the component's param names, it expands to named-args. If none
   // of its keys match any param name, it's passed positionally — this lets
   // callers pass an opaque data/slots object to a user component without
-  // surprising key-routing.
+  // surprising key-routing. Keys are matched against the names CALLERS use
+  // (`componentParamPublicName`), which differ from the local names when a
+  // compiler pass renamed the parameters.
   let expandAsNamed = false;
   if (trailingObjArg && trailingObjArg.kind === "Object") {
-    const paramNames = new Set(decl.params.map((p) => p.name));
+    const publicNames = new Set(decl.params.map(componentParamPublicName));
     const objKeys: string[] = [];
     let allIdentifierKeys = true;
     for (const prop of trailingObjArg.properties) {
       if (prop.spread) continue;
       objKeys.push(prop.key);
-      if (prop.key === "key" || paramNames.has(prop.key)) {
+      if (prop.key === "key" || publicNames.has(prop.key)) {
         expandAsNamed = true;
       }
       if (!/^[A-Za-z_$][\w$]*$/.test(prop.key)) allIdentifierKeys = false;
@@ -4458,7 +4461,7 @@ function invokeComponentDecl(
         console.warn(
           `[aktion] strict: object { ${objKeys.join(", ")} } passed to <${decl.name}>${where} ` +
             `is being forwarded as a positional argument because none of its keys match a ` +
-            `parameter (${decl.params.map((p) => p.name).join(", ") || "none"}). ` +
+            `parameter (${decl.params.map(componentParamPublicName).join(", ") || "none"}). ` +
             `If you meant named props, check for a renamed/misspelled parameter.`,
         );
       }
@@ -4491,16 +4494,18 @@ function invokeComponentDecl(
   const positional = positionalExprs.map((expr) =>
     expr.kind === "Spread" ? evaluate(expr.argument, ctx) : evaluate(expr, ctx),
   );
-  // Flatten Spread results inline so `Counter(...defaults, { key: "a" })` works.
+  // Flatten Spread results inline so `Counter(...defaults, { key: "a" })` works
+  // — for any iterable, like every other call form. A spread operand that is
+  // NOT iterable keeps its historical meaning here and is passed through as
+  // one positional value: `Card(...props)` (the React `{...props}` habit)
+  // hands `props` to the first parameter, which a destructured
+  // `function Card({ title })` then unpacks.
   const flatPositional: unknown[] = [];
   for (let i = 0; i < positionalExprs.length; i += 1) {
     const expr = positionalExprs[i]!;
     const value = positional[i];
-    if (expr.kind === "Spread" && Array.isArray(value)) {
-      for (const item of value) flatPositional.push(item);
-    } else {
-      flatPositional.push(value);
-    }
+    if (expr.kind === "Spread" && spreadIterable(flatPositional, value, ctx)) continue;
+    flatPositional.push(value);
   }
   const evaluatedNamed: Record<string, unknown> = {};
   for (const [name, expr] of Object.entries(named)) {
@@ -4589,8 +4594,11 @@ export function evaluateUserComponent(
       continue;
     }
     let value: unknown;
-    if (named[param.name] !== undefined) {
-      value = named[param.name];
+    // Named props are keyed by the name callers use; the value is bound to
+    // the local name below.
+    const publicName = componentParamPublicName(param);
+    if (named[publicName] !== undefined) {
+      value = named[publicName];
     } else if (positional[i] !== undefined) {
       value = positional[i];
     } else if (param.defaultValue) {
@@ -4618,19 +4626,30 @@ export function evaluateUserComponent(
   // This makes `Panel(body, { header: H, footer: F })` →
   // `function Panel(children) { return Column([slots.header, children, slots.footer]) }`
   // work, alongside the pre-existing `decl.slots` convention.
-  const paramNames = new Set<string>();
+  //
+  // "Bound to a declared param" is decided by the names callers use
+  // (`publicNames`). The direct binding must also stay clear of the LOCAL
+  // names (`localNames`), which differ once a compiler pass renamed the
+  // parameters: a slot must never overwrite a parameter's binding.
+  const publicNames = new Set<string>();
+  const localNames = new Set<string>();
   for (const p of decl.params) {
-    if (p.name) paramNames.add(p.name);
+    if (!p.name) continue;
+    localNames.add(p.name);
+    publicNames.add(componentParamPublicName(p));
   }
   const slotsValue: Record<string, unknown> = {};
   for (const slotName of decl.slots) {
     if (named[slotName] !== undefined) slotsValue[slotName] = named[slotName];
   }
   for (const [key, value] of Object.entries(named)) {
-    if (paramNames.has(key) || value === undefined) continue;
+    if (publicNames.has(key) || value === undefined) continue;
     slotsValue[key] = value;
     // Also bind as a direct loop var when it's a safe, non-colliding name.
-    if (/^[A-Za-z_$][\w$]*$/.test(key) && key !== "children" && key !== "slots" && !ctx.componentDecls.has(key)) {
+    if (
+      /^[A-Za-z_$][\w$]*$/.test(key) && key !== "children" && key !== "slots" &&
+      !localNames.has(key) && !ctx.componentDecls.has(key)
+    ) {
       bindComponentLocal(key, value);
     }
   }
@@ -5057,15 +5076,7 @@ function invokeHookDecl(
   ctx: EvaluationContext,
 ): unknown {
   if (ctx.coverage) recordCoverageFunction(ctx.coverage, decl.loc);
-  const args: unknown[] = [];
-  for (const arg of argExprs) {
-    if (arg.kind === "Spread") {
-      const value = evaluate(arg.argument, ctx);
-      if (Array.isArray(value)) for (const item of value) args.push(item);
-      continue;
-    }
-    args.push(evaluate(arg, ctx));
-  }
+  const args = evaluateCallArgs(argExprs, ctx);
   return runDeclBodySync(decl.params, decl.body, args, ctx);
 }
 
@@ -5205,6 +5216,10 @@ function evaluateBuiltinCall(
  * `__rui_assign__` builtin so single-statement lambdas like
  * `() => $count += 1` update state through the same code path the
  * action runner uses.
+ *
+ * The logical operators (`&&=`, `||=`, `??=`) never reach this function:
+ * they short-circuit in `evaluateSyntheticAssign` BEFORE their right-hand
+ * side is evaluated (see `logicalAssignKeepsTarget`).
  */
 function applyAssignOp(op: string, current: unknown, next: unknown): unknown {
   switch (op) {
@@ -5226,11 +5241,6 @@ function applyAssignOp(op: string, current: unknown, next: unknown): unknown {
       return divisor === 0 ? 0 : toNumber(current) % divisor;
     }
     case "**=": return toNumber(current) ** toNumber(next);
-    // Logical-assignment — short-circuit on the CURRENT value, matching
-    // JS semantics (`a ||= b` only assigns when `a` is falsy, etc.).
-    case "&&=": return current ? next : current;
-    case "||=": return current ? current : next;
-    case "??=": return current == null ? next : current;
     // Bitwise / shift compound assignment.
     case "&=": return toInt32(current) & toInt32(next);
     case "|=": return toInt32(current) | toInt32(next);
@@ -5292,32 +5302,57 @@ function evaluateTimerCall(
 }
 
 /**
- * Evaluate a `__rui_assign__(target, value, op)` synthetic call. The
- * target may be:
- *   - a `StateRef` (write to the state store, alias-aware)
- *   - a `Member` chain rooted at a `StateRef` (immutable nested update
- *     via `state.setPath`, so subscribers see a fresh top-level ref)
- *   - a plain `Identifier` (write to `loopVars` so block-local helpers
- *     still observe the new value).
- *
- * Member writes onto non-reactive targets (loop variables, locals)
- * fall back to a direct in-place mutation so block-local helpers behave
- * predictably.
+ * How an assignment operator turns a target's current value into its next
+ * one. `write: false` leaves the target untouched — no store write, no change
+ * notification, no property created — which is what a logical assignment does
+ * when the target's current value already decides the result.
  */
-function evaluateSyntheticAssign(
-  args: Expression[],
+type AssignmentUpdate = (current: unknown) => { next: unknown; write: boolean };
+
+/**
+ * What {@link updateAssignmentTarget} did:
+ *   - `updated` — the target was read (`current`) and, unless the update
+ *     declined to write, `next` was stored;
+ *   - `refused` — the key reaches the prototype chain (`__proto__`, …), so
+ *     nothing was read or written;
+ *   - `unresolved` — the expression names no writable place (a member of a
+ *     primitive or of `null`, or an expression that is not assignable).
+ */
+type AssignmentOutcome =
+  | { kind: "updated"; current: unknown; next: unknown }
+  | { kind: "refused" }
+  | { kind: "unresolved" };
+
+/**
+ * Read an assignment target, let `update` decide its next value, and store
+ * that value wherever the target lives. Shared by `=` and the compound
+ * operators (`__rui_assign__`) and by `++`/`--` (`__rui_prefix__` /
+ * `__rui_postfix__`), so every operator reaches exactly the same storage. The
+ * target may be:
+ *   - a `StateRef` (write to the state store, alias-aware);
+ *   - a `Member` chain rooted at a `StateRef` (immutable nested update via
+ *     `state.setPath`, so subscribers see a fresh top-level ref — except a
+ *     live `$http` resource bag, which is written in place, see below);
+ *   - a `Member` chain rooted at a `$store` handle (through the store's
+ *     backing atom, so the write is reactive);
+ *   - any other `Member` — a local object, a loop item, an array element —
+ *     mutated in place, as JavaScript does;
+ *   - a plain `Identifier` (write to `loopVars` so block-local helpers still
+ *     observe the new value, or to the per-render slot of a top-level binding).
+ */
+function updateAssignmentTarget(
+  targetExpr: Expression,
   ctx: EvaluationContext,
-): unknown {
-  const [targetExpr, valueExpr, opExpr] = args;
-  if (!targetExpr || !valueExpr) return null;
-  const op = opExpr && opExpr.kind === "Literal" ? String(opExpr.value ?? "=") : "=";
-  const rhs = evaluate(valueExpr, ctx);
+  update: AssignmentUpdate,
+): AssignmentOutcome {
+  const commit = (current: unknown, store: (next: unknown) => void): AssignmentOutcome => {
+    const { next, write } = update(current);
+    if (write) store(next);
+    return { kind: "updated", current, next };
+  };
   if (targetExpr.kind === "StateRef") {
     const target = resolveStateAlias(ctx, targetExpr.name);
-    const current = ctx.state.get(target);
-    const next = applyAssignOp(op, current, rhs);
-    ctx.state.set(target, next);
-    return next;
+    return commit(ctx.state.get(target), (next) => ctx.state.set(target, next));
   }
   if (targetExpr.kind === "Member") {
     const extracted = extractStatePath(targetExpr, ctx);
@@ -5335,30 +5370,30 @@ function evaluateSyntheticAssign(
           parent = (parent as Record<string, unknown> | null | undefined)?.[extracted.path[i]!];
         }
         if (parent && typeof parent === "object") {
+          const bag = parent as Record<string, unknown>;
           const key = extracted.path[extracted.path.length - 1]!;
           // This branch writes IN PLACE (see the comment above), so unlike the
           // immutable `setPath` route it needs its own prototype guard.
-          if (FORBIDDEN_PROPERTY_NAMES.has(key)) return null;
-          const current = (parent as Record<string, unknown>)[key];
-          const next = applyAssignOp(op, current, rhs);
-          (parent as Record<string, unknown>)[key] = next;
-          ctx.notify?.();
-          return next;
+          if (FORBIDDEN_PROPERTY_NAMES.has(key)) return { kind: "refused" };
+          return commit(bag[key], (next) => {
+            bag[key] = next;
+            ctx.notify?.();
+          });
         }
       }
-      const current = readAtPath(rootValue, extracted.path);
-      const next = applyAssignOp(op, current, rhs);
-      ctx.state.setPath(extracted.name, extracted.path, next);
-      return next;
+      return commit(
+        readAtPath(rootValue, extracted.path),
+        (next) => ctx.state.setPath(extracted.name, extracted.path, next),
+      );
     }
     // `s.field = value` inside a store method (or `cart.field = …` directly):
     // route through the store's backing atom so the write is reactive.
     const storePath = extractStorePath(targetExpr, ctx);
     if (storePath) {
-      const current = readAtPath(ctx.state.get(storePath.atom), storePath.path);
-      const next = applyAssignOp(op, current, rhs);
-      ctx.state.setPath(storePath.atom, storePath.path, next);
-      return next;
+      return commit(
+        readAtPath(ctx.state.get(storePath.atom), storePath.path),
+        (next) => ctx.state.setPath(storePath.atom, storePath.path, next),
+      );
     }
     // Member on a non-reactive root (loop var, local helper, …). Best
     // effort: mutate in place so the assignment is at least observable
@@ -5377,44 +5412,91 @@ function evaluateSyntheticAssign(
       // `$o[someUntrustedKey] = …` lands here. A prototype-reaching key would
       // invoke the `__proto__` setter and re-parent the object, which is how a
       // poisoned `toString`/`valueOf`/`then` gets smuggled into host logic.
-      if (FORBIDDEN_PROPERTY_NAMES.has(String(key))) return null;
-      const current = (root as Record<string, unknown>)[String(key)];
-      const next = applyAssignOp(op, current, rhs);
-      (root as Record<string, unknown>)[String(key)] = next;
-      return next;
+      const prop = String(key);
+      if (FORBIDDEN_PROPERTY_NAMES.has(prop)) return { kind: "refused" };
+      const object = root as Record<string, unknown>;
+      return commit(object[prop], (next) => { object[prop] = next; });
     }
-    return rhs;
+    return { kind: "unresolved" };
   }
   if (targetExpr.kind === "Identifier") {
     const name = targetExpr.name;
     // A real local / param / loop variable always wins — keep block-local
     // assignments (`for (let j = …) j--`) in `loopVars`.
     if (ctx.loopVars.has(name)) {
-      const current = ctx.loopVars.get(name);
-      const next = applyAssignOp(op, current, rhs);
-      ctx.loopVars.set(name, next);
-      return next;
+      return commit(ctx.loopVars.get(name), (next) => ctx.loopVars.set(name, next));
     }
     // Otherwise route to the per-render mutable-binding slot so writes to
     // top-level `let`/`var`/plain variables (`badges = [...badges, …]`,
-    // `i = i - 1`) persist for the rest of the render instead of leaking
-    // into `loopVars` (where they accumulated across renders).
+    // `i = i - 1`, `count++`) persist for the rest of the render instead of
+    // leaking into `loopVars` (where they accumulated across renders).
     if (ctx.bindings.has(name) || ctx.mutableBindings.has(name)) {
       const current = ctx.mutableBindings.has(name)
         ? ctx.mutableBindings.get(name)
         : (ctx.bindings.get(name)!)();
-      const next = applyAssignOp(op, current, rhs);
-      ctx.mutableBindings.set(name, next);
-      return next;
+      return commit(current, (next) => ctx.mutableBindings.set(name, next));
     }
     // Truly undeclared identifier — fall back to a loop-var slot so the
     // value is at least observable to later reads in this scope.
-    const current = ctx.loopVars.get(name);
-    const next = applyAssignOp(op, current, rhs);
-    ctx.loopVars.set(name, next);
-    return next;
+    return commit(ctx.loopVars.get(name), (next) => ctx.loopVars.set(name, next));
   }
-  return rhs;
+  return { kind: "unresolved" };
+}
+
+/**
+ * Whether a logical assignment's target already decides its result, exactly
+ * as in JavaScript: `a ||= b` keeps a truthy `a`, `a &&= b` keeps a falsy
+ * one, and `a ??= b` keeps anything but `null`/`undefined`. When it does, the
+ * right-hand side is NOT evaluated and nothing is written.
+ */
+function logicalAssignKeepsTarget(op: "&&=" | "||=" | "??=", current: unknown): boolean {
+  switch (op) {
+    case "&&=": return !current;
+    case "||=": return Boolean(current);
+    case "??=": return current != null;
+  }
+}
+
+function isLogicalAssignOp(op: string): op is "&&=" | "||=" | "??=" {
+  return op === "&&=" || op === "||=" || op === "??=";
+}
+
+/**
+ * Evaluate a `__rui_assign__(target, value, op)` synthetic call — `=`, the
+ * compound operators, and the logical assignments. Where the value is stored
+ * is decided by {@link updateAssignmentTarget}.
+ */
+function evaluateSyntheticAssign(
+  args: Expression[],
+  ctx: EvaluationContext,
+): unknown {
+  const [targetExpr, valueExpr, opExpr] = args;
+  if (!targetExpr || !valueExpr) return null;
+  const op = opExpr && opExpr.kind === "Literal" ? String(opExpr.value ?? "=") : "=";
+  if (isLogicalAssignOp(op)) {
+    // `||=` / `&&=` / `??=` short-circuit like JavaScript: the target is
+    // read FIRST, and when its current value decides the result the
+    // right-hand side never runs and nothing is written — no store write and
+    // no re-render. (The right-hand side used to be evaluated up front, so a
+    // side-effecting `a ||= f()` called `f` even when `a` was truthy.)
+    const outcome = updateAssignmentTarget(targetExpr, ctx, (current) =>
+      logicalAssignKeepsTarget(op, current)
+        ? { next: current, write: false }
+        : { next: evaluate(valueExpr, ctx), write: true },
+    );
+    if (outcome.kind === "updated") return outcome.next;
+    if (outcome.kind === "refused") return null;
+    // Not a writable place: there is no current value to test, so the
+    // right-hand side is the result — the same answer `=` gives.
+    return evaluate(valueExpr, ctx);
+  }
+  const rhs = evaluate(valueExpr, ctx);
+  const outcome = updateAssignmentTarget(targetExpr, ctx, (current) => ({
+    next: applyAssignOp(op, current, rhs),
+    write: true,
+  }));
+  if (outcome.kind === "updated") return outcome.next;
+  return outcome.kind === "refused" ? null : rhs;
 }
 
 /**
@@ -5427,6 +5509,13 @@ function readAtPath(target: unknown, path: ReadonlyArray<string>): unknown {
   for (const segment of path) {
     if (cursor == null) return undefined;
     if (Array.isArray(cursor)) {
+      // `length` is the one named property an array path reads — a compound
+      // `$arr.length -= 1` needs the current length; every other segment is
+      // an index.
+      if (segment === "length") {
+        cursor = cursor.length;
+        continue;
+      }
       const idx = Number(segment);
       cursor = Number.isNaN(idx) ? undefined : cursor[idx];
       continue;
@@ -5443,7 +5532,14 @@ function readAtPath(target: unknown, path: ReadonlyArray<string>): unknown {
 /**
  * Evaluate a `__rui_postfix__(target, op)` or `__rui_prefix__(target, op)`
  * synthetic call. Postfix (`x++`, `x--`) returns the OLD value to match
- * JavaScript semantics; prefix (`++x`, `--x`) returns the NEW value.
+ * JavaScript semantics; prefix (`++x`, `--x`) returns the NEW value. As in
+ * JavaScript, the old value is converted to a number first, so both results
+ * are numbers.
+ *
+ * The target resolves exactly like `+=` does (`updateAssignmentTarget`), so
+ * `o.n++`, `a[i]++` and `store.n++` reach the same storage `o.n += 1` does.
+ * (Only `$` atoms, `$`-rooted member paths and identifiers used to be handled;
+ * every other member target was a silent no-op that evaluated to `null`.)
  */
 function applyIncrement(
   args: Expression[],
@@ -5454,47 +5550,13 @@ function applyIncrement(
   if (!targetExpr) return null;
   const op = opExpr && opExpr.kind === "Literal" ? String(opExpr.value ?? "++") : "++";
   const delta = op === "--" ? -1 : 1;
-  if (targetExpr.kind === "StateRef") {
-    const target = resolveStateAlias(ctx, targetExpr.name);
-    const current = toNumber(ctx.state.get(target));
-    const next = current + delta;
-    ctx.state.set(target, next);
-    return mode === "prefix" ? next : current;
-  }
-  if (targetExpr.kind === "Member") {
-    const extracted = extractStatePath(targetExpr, ctx);
-    if (extracted) {
-      const current = toNumber(readAtPath(ctx.state.get(extracted.name), extracted.path));
-      const next = current + delta;
-      ctx.state.setPath(extracted.name, extracted.path, next);
-      return mode === "prefix" ? next : current;
-    }
-  }
-  if (targetExpr.kind === "Identifier") {
-    const name = targetExpr.name;
-    if (ctx.loopVars.has(name)) {
-      const current = toNumber(ctx.loopVars.get(name));
-      const next = current + delta;
-      ctx.loopVars.set(name, next);
-      return mode === "prefix" ? next : current;
-    }
-    // Top-level mutable variable (`count++` against `count = 0`).
-    if (ctx.bindings.has(name) || ctx.mutableBindings.has(name)) {
-      const current = toNumber(
-        ctx.mutableBindings.has(name)
-          ? ctx.mutableBindings.get(name)
-          : (ctx.bindings.get(name)!)(),
-      );
-      const next = current + delta;
-      ctx.mutableBindings.set(name, next);
-      return mode === "prefix" ? next : current;
-    }
-    const current = toNumber(ctx.loopVars.get(name));
-    const next = current + delta;
-    ctx.loopVars.set(name, next);
-    return mode === "prefix" ? next : current;
-  }
-  return null;
+  let old = 0;
+  const outcome = updateAssignmentTarget(targetExpr, ctx, (current) => {
+    old = toNumber(current);
+    return { next: old + delta, write: true };
+  });
+  if (outcome.kind !== "updated") return null;
+  return mode === "prefix" ? outcome.next : old;
 }
 
 function evaluateSyntheticPostfix(

@@ -6,15 +6,19 @@
  *   pnpm create aktion my-app
  *   yarn create aktion my-app
  *   npx  create-aktion my-app --template dashboard
+ *   npx  create-aktion my-app --template todos-app --lang ts
  *
  * Zero runtime dependencies (uses only Node built-ins), interactive when run
  * with no project name / template in a TTY, fully flag-driven otherwise
  * (CI-friendly).
  *
- * Each scaffold is assembled from two layers under `template/`:
- *   _base/        shared config (package.json, vite/tsconfig, index.html, main.ts, .vscode)
- *   <template>/   the content overlay (.aktion sources, tests, README, extra deps)
- * The overlay's `package.json` is deep-merged onto the base one.
+ * Each scaffold is assembled from layers under `template/`:
+ *   _base/                 shared config (package.json, vite/tsconfig, index.html, main.ts, .vscode)
+ *   _base-ts/, _base-js/   for `--lang ts` / `--lang js`: the tsconfig, the entry
+ *                          `main.ts` imports, and the extra dev dependencies
+ *   <template>/            the content overlay (.aktion sources, tests, README, extra deps);
+ *                          `<template>-ts/` / `<template>-js/` for the other languages
+ * Every layer's `package.json` is deep-merged onto the one before it.
  */
 
 import { cp, readFile, writeFile, rename, readdir, mkdir } from "node:fs/promises";
@@ -37,6 +41,16 @@ const TEMPLATES = {
 };
 const TEMPLATE_NAMES = Object.keys(TEMPLATES);
 const DEFAULT_TEMPLATE = "empty";
+
+// The language the Aktion modules are written in. Host code (`src/main.ts`)
+// and tests are TypeScript in every variant.
+const LANGS = {
+  aktion: { label: "Aktion DSL (.aktion)", suffix: "", entry: "src/app.aktion" },
+  ts: { label: "TypeScript (.aktion.ts)", suffix: "-ts", entry: "src/app.aktion.ts" },
+  js: { label: "JavaScript (.aktion.js)", suffix: "-js", entry: "src/app.aktion.js" },
+};
+const LANG_ALIASES = { typescript: "ts", javascript: "js", dsl: "aktion" };
+const DEFAULT_LANG = "aktion";
 // Backwards-compat: the old single template name maps to `empty`.
 const ALIASES = { "vite-ts": "empty" };
 
@@ -49,18 +63,34 @@ const c = {
 };
 
 function parseArgs(argv) {
-  const opts = { name: undefined, template: undefined, pm: undefined, yes: false, help: false };
+  const opts = { name: undefined, template: undefined, lang: undefined, pm: undefined, yes: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "-h" || a === "--help") opts.help = true;
     else if (a === "-y" || a === "--yes") opts.yes = true;
     else if (a === "--template" || a === "-t") opts.template = argv[++i];
     else if (a.startsWith("--template=")) opts.template = a.slice("--template=".length);
+    else if (a === "--lang" || a === "-l") opts.lang = argv[++i];
+    else if (a.startsWith("--lang=")) opts.lang = a.slice("--lang=".length);
     else if (a === "--pm") opts.pm = argv[++i];
     else if (a.startsWith("--pm=")) opts.pm = a.slice("--pm=".length);
     else if (!a.startsWith("-") && opts.name === undefined) opts.name = a;
   }
   return opts;
+}
+
+/** Resolve `--lang` input to a canonical language key, or null. */
+function resolveLang(input) {
+  if (!input) return null;
+  const key = String(input).trim().toLowerCase();
+  if (LANGS[key]) return key;
+  return LANG_ALIASES[key] ?? null;
+}
+
+/** The templates that exist in `lang` (every template exists as `.aktion`). */
+function templatesFor(lang) {
+  const suffix = LANGS[lang].suffix;
+  return TEMPLATE_NAMES.filter((n) => suffix === "" || existsSync(join(here, "template", `${n}${suffix}`)));
 }
 
 /** Resolve user input (name / alias) to a canonical template, or null. */
@@ -84,6 +114,8 @@ ${c.bold("Usage")}
 ${c.bold("Options")}
   -t, --template <name>   Template to use. Default: ${DEFAULT_TEMPLATE}
 ${list}
+  -l, --lang <language>   Language of the Aktion modules: aktion | ts | js. Default: ${DEFAULT_LANG}
+                          ${c.dim(`(ts / js: ${templatesFor("ts").join(", ")})`)}
       --pm <manager>      Package manager for the printed next-steps (npm | pnpm | yarn | bun)
   -y, --yes               Skip prompts (use defaults; required in CI / non-TTY)
   -h, --help              Show this help
@@ -92,6 +124,7 @@ ${c.bold("Examples")}
   npm create aktion@latest my-app
   npm create aktion@latest my-app -- --template dashboard
   npx create-aktion my-app -y --template todos-app
+  npx create-aktion my-app -y --template todos-app --lang ts
 `);
 }
 
@@ -198,6 +231,34 @@ async function main() {
       template = DEFAULT_TEMPLATE;
     }
 
+    // The language: explicit flag → validate; otherwise prompt (TTY) or default.
+    let lang;
+    if (opts.lang !== undefined) {
+      lang = resolveLang(opts.lang);
+      if (!lang) {
+        console.error(c.red(`Unknown language "${opts.lang}". Available: ${Object.keys(LANGS).join(", ")}`));
+        process.exit(1);
+      }
+    } else if (interactive && templatesFor("ts").includes(template)) {
+      const keys = Object.keys(LANGS);
+      console.log(`\n${c.bold("Write the Aktion modules in:")}`);
+      keys.forEach((k, i) => console.log(`  ${c.cyan(String(i + 1))}. ${c.bold(k)} ${c.dim("— " + LANGS[k].label)}`));
+      const answer = await ask("\nLanguage (number or name):", DEFAULT_LANG);
+      lang = resolveLang(keys[Number(answer) - 1] ?? answer);
+      if (!lang) {
+        console.error(c.red(`Unknown language "${answer}". Available: ${keys.join(", ")}`));
+        process.exit(1);
+      }
+    } else {
+      lang = DEFAULT_LANG;
+    }
+    if (!templatesFor(lang).includes(template)) {
+      console.error(
+        c.red(`The "${template}" template has no ${LANGS[lang].label} variant yet. Available: ${templatesFor(lang).join(", ")}`),
+      );
+      process.exit(1);
+    }
+
     let name = opts.name ?? (await ask("Project name:", "aktion-app"));
     name = name.trim().replace(/\/+$/, "");
     if (!name) {
@@ -226,8 +287,14 @@ async function main() {
       process.exit(1);
     }
 
-    // Assemble the scaffold: shared base, then the template overlay on top.
-    const layers = [join(here, "template", "_base"), join(here, "template", template)];
+    // Assemble the scaffold: shared base, the language layer, then the
+    // template overlay on top.
+    const suffix = LANGS[lang].suffix;
+    const layers = [
+      join(here, "template", "_base"),
+      ...(suffix ? [join(here, "template", `_base${suffix}`)] : []),
+      join(here, "template", `${template}${suffix}`),
+    ];
     await mkdir(target, { recursive: true });
     for (const layer of layers) {
       await cp(layer, target, { recursive: true, force: true });
@@ -264,14 +331,14 @@ async function main() {
     const cmds = runCmds(pm);
     const hasTests = !!(pkg.scripts && pkg.scripts.test);
     console.log(`
-${c.green("✔")} Created ${c.bold(name)} ${c.dim(`(${template})`)}
+${c.green("✔")} Created ${c.bold(name)} ${c.dim(`(${template}${lang === DEFAULT_LANG ? "" : `, ${LANGS[lang].label}`})`)}
 
 ${c.bold("Next steps:")}
   ${c.cyan(`cd ${name}`)}
   ${c.cyan(cmds.install)}
   ${c.cyan(cmds.dev)}${hasTests ? `\n  ${c.cyan(cmds.test)} ${c.dim("# run the unit tests")}` : ""}
 
-Then open ${c.cyan("http://localhost:5173")}. Edit ${c.cyan("src/app.aktion")} and your UI hot-reloads.
+Then open ${c.cyan("http://localhost:5173")}. Edit ${c.cyan(LANGS[lang].entry)} and your UI hot-reloads.
 ${c.dim("Docs: https://asfand-dev.github.io/aktion/")}
 `);
   } finally {

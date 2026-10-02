@@ -15,9 +15,21 @@
  * `if` / `for` / `switch` / `while` / `try` are **statements only** —
  * they do not produce a value. To collect iterable bodies into an array
  * use `arr.map(x => …)` (every Aktion program is valid JavaScript).
+ *
+ * Newlines: a statement ends at a newline (or `;`), except where JavaScript
+ * could never end one — inside `( … )`, `[ … ]`, an object literal or a
+ * destructuring pattern, a newline is whitespace (`ParserContext.withNewlines`),
+ * and a `{ … }` statement block nested in them is statement level again. A line
+ * break right after `=` or a compound assignment operator continues the
+ * statement (`skipNewlinesBeforeOperand`), and a binary operator, `.`, `?.` or
+ * `?` at the start of the next line continues the expression
+ * (`consumeNewlinesIfNext`). `ParseOptions.softNewlines` marks further newlines
+ * as whitespace (line breaks left inside erased TypeScript types).
  */
 
 import { tokenize, type RawComment, type Token } from "./lexer.js";
+import { moduleLocalBaseName } from "./module-symbols.js";
+import { recordEffectCallShape, type EffectCallShape } from "./effect-shape.js";
 import { walkNode } from "./walk.js";
 import type {
   Program,
@@ -48,13 +60,25 @@ export interface ParseOptions {
    * See {@link TokenizeOptions.streaming}.
    */
   streaming?: boolean;
+  /**
+   * Offsets of `\n` characters in `source` that do not end a line for the
+   * grammar: no statement ends there, but positions after them stay exact.
+   * See {@link TokenizeOptions.softNewlines}. The TypeScript frontend passes
+   * the line breaks left inside erased multi-line type annotations, so
+   * `const x = foo<⏎ Bar⏎>(1)` (erased to `foo` + blank lines + `(1)`) stays
+   * one call instead of becoming two statements.
+   */
+  softNewlines?: ReadonlySet<number>;
 }
 
 export function parse(source: string, options: ParseOptions = {}): Program {
   const comments: RawComment[] = [];
-  const tokens = tokenize(source, comments, { streaming: options.streaming });
+  const tokens = tokenize(source, comments, {
+    streaming: options.streaming,
+    softNewlines: options.softNewlines,
+  });
   const openLiteral = tokens[tokens.length - 2]?.open === true;
-  const ctx = new ParserContext(tokens, comments);
+  const ctx = new ParserContext(tokens, comments, options.softNewlines);
   const statements: Statement[] = [];
   const errors: ParseError[] = [];
 
@@ -64,7 +88,10 @@ export function parse(source: string, options: ParseOptions = {}): Program {
     try {
       const stmt = parseStatement(ctx, true);
       if (stmt) statements.push(stmt);
+      // `let a = 1, b = 2` is one statement in the source and two in the AST.
+      statements.push(...ctx.takePending());
     } catch (err) {
+      ctx.takePending();
       const error = err as ParseError;
       errors.push(error);
       ctx.recoverToNextLine();
@@ -172,6 +199,22 @@ function statementBoundaryError(head: Token | undefined, prev: Token | undefined
   }
   if (prev.type === "Identifier" && prev.value === "yield") {
     return at(prev, "`yield` is not supported in Aktion — there are no generators.");
+  }
+  if (head === prev && prev.type === "Identifier" && next.type === "Punctuation" && next.value === ":") {
+    return at(prev,
+      `Labels (\`${prev.value}:\`) are not supported in Aktion — use a flag variable, ` +
+      "or move the loop into a function and `return` from it.");
+  }
+  if (
+    head === prev && prev.type === "Keyword" && (prev.value === "break" || prev.value === "continue") &&
+    next.type === "Identifier"
+  ) {
+    return at(next,
+      `\`${prev.value} ${next.value}\` is not supported in Aktion — there are no labels, so \`${prev.value}\` ` +
+      "always applies to the innermost loop. Use a flag variable, or move the loop into a function and `return` from it.");
+  }
+  if (next.type === "Operator" && isAssignmentOperator(next.value)) {
+    return at(next, "Chained assignment (`a = b = 1`) is not supported in Aktion — assign each name in its own statement.");
   }
   if (
     head === prev && prev.type === "Identifier" && next.type === "Identifier" &&
@@ -326,20 +369,20 @@ function parseExpressionStatement(ctx: ParserContext): Statement {
   let expression = parseExpression(ctx);
   const next = ctx.peek();
   if (next.type === "Operator" && isAssignmentOperator(next.value)) {
-    if (isAssignableTarget(expression)) {
-      ctx.consume();
-      const value = parseExpression(ctx);
-      expression = {
-        kind: "BuiltinCall",
-        name: "__rui_assign__",
-        arguments: [
-          expression,
-          value,
-          { kind: "Literal", value: next.value },
-        ],
-        loc: { line: next.line, column: next.column },
-      };
-    }
+    if (!isAssignableTarget(expression)) throw invalidAssignmentTarget(expression, start, next);
+    ctx.consume();
+    skipNewlinesBeforeOperand(ctx);
+    const value = parseExpression(ctx);
+    expression = {
+      kind: "BuiltinCall",
+      name: "__rui_assign__",
+      arguments: [
+        expression,
+        value,
+        { kind: "Literal", value: next.value },
+      ],
+      loc: { line: next.line, column: next.column },
+    };
   } else if (next.type === "Operator" && (next.value === "++" || next.value === "--")) {
     if (isAssignableTarget(expression)) {
       ctx.consume();
@@ -374,6 +417,74 @@ function isAssignableTarget(expr: Expression): boolean {
   return false;
 }
 
+const DESTRUCTURING_ASSIGNMENT_MESSAGE =
+  "Destructuring assignment (`[a, b] = …`, `({ a } = …)`) is not supported in Aktion — declare new names " +
+  "instead (`const [a, b] = …`), or assign each one separately.";
+
+/** The error for `target = value` whose target cannot be assigned. `head` is the target's first token. */
+function invalidAssignmentTarget(target: Expression, head: Token, operator: Token): ParseError {
+  if (target.kind === "Array" || target.kind === "Object") {
+    return { message: DESTRUCTURING_ASSIGNMENT_MESSAGE, line: head.line, column: head.column };
+  }
+  return {
+    message: `Cannot assign to this expression with \`${operator.value}\` — only a name, a \`$state\` atom or a ` +
+      "property (`a.b`, `a[i]`) can be assigned.",
+    line: operator.line,
+    column: operator.column,
+  };
+}
+
+/**
+ * Skip the line break(s) after `=` or a compound assignment operator when the
+ * value starts on the next line — `const x =⏎  value`, the layout Prettier and
+ * XO (`operator-linebreak: ['=', 'after']`) produce for a long right-hand side.
+ * JavaScript never ends a statement right after `=`, so neither does Aktion.
+ *
+ * The line breaks are kept (and the statement fails where it stopped) when the
+ * next line cannot be this statement's value: the end of the input, a `;`, a
+ * keyword that only starts a statement, a closing bracket, or another
+ * assignment (`a =⏎ b = 1` would be a chained assignment, which Aktion does not
+ * support). An unfinished `x =` therefore still reports its error on its own
+ * line — what the streaming frontier and the line-based error recovery rely
+ * on — instead of swallowing the next statement.
+ */
+function skipNewlinesBeforeOperand(ctx: ParserContext): void {
+  const { token, skipped } = peekNonNewline(ctx);
+  if (skipped === 0 || !canStartOperand(ctx, token, skipped)) return;
+  for (let i = 0; i < skipped; i += 1) ctx.consume();
+}
+
+/** Keywords that can begin an expression (everything else in `KEYWORDS_AKTION` only begins a statement). */
+const OPERAND_KEYWORDS: ReadonlySet<string> = new Set(["function", "new", "typeof", "void", "delete", "await", "async"]);
+
+/** True when `token` (at `offset` from the cursor) can begin the value of an assignment. */
+function canStartOperand(ctx: ParserContext, token: Token, offset: number): boolean {
+  switch (token.type) {
+    case "Identifier":
+    case "StateIdentifier": {
+      const after = ctx.peek(offset + 1);
+      return !(after.type === "Operator" && isAssignmentOperator(after.value));
+    }
+    case "Number":
+    case "String":
+    case "TemplateString":
+    case "Boolean":
+    case "Null":
+    case "Regex":
+    case "Error":
+      return true;
+    case "Keyword":
+      return OPERAND_KEYWORDS.has(token.value);
+    case "Punctuation":
+      return token.value === "(" || token.value === "[" || token.value === "{";
+    case "Operator":
+      return token.value === "!" || token.value === "-" || token.value === "+" || token.value === "~" ||
+        token.value === "++" || token.value === "--";
+    default:
+      return false;
+  }
+}
+
 /**
  * Parse `function name(params) { body }`.
  *
@@ -383,6 +494,12 @@ function isAssignableTarget(expr: Expression): boolean {
  * event-handler position), and every action remains usable as a value-
  * returning helper. The "component must `return`" requirement has been
  * dropped: a component with no `return` simply renders nothing.
+ *
+ * The case is read from the name the author wrote: a linker-renamed symbol
+ * (`__a1_Counter`, see `module-symbols.ts`) is classified by its base name
+ * (`Counter`). Otherwise printing a linked program and parsing it again — the
+ * reconnect, DevTools and `linkProject` paths — would turn every imported
+ * component into an action.
  */
 function parseFunctionDecl(ctx: ParserContext): Statement {
   const start = ctx.expect("Keyword", "function");
@@ -406,8 +523,9 @@ function parseFunctionDecl(ctx: ParserContext): Statement {
     };
   }
 
+  const authoredName = moduleLocalBaseName(nameTok.value) ?? nameTok.value;
   const isPascalCase =
-    nameTok.value.length > 0 && nameTok.value[0]! >= "A" && nameTok.value[0]! <= "Z";
+    authoredName.length > 0 && authoredName[0]! >= "A" && authoredName[0]! <= "Z";
 
   if (isPascalCase) {
     return {
@@ -431,6 +549,11 @@ function parseFunctionDecl(ctx: ParserContext): Statement {
 
 function parseFunctionParams(ctx: ParserContext): DeclParam[] {
   ctx.expect("Punctuation", "(");
+  return ctx.withNewlines(true, () => parseFunctionParamList(ctx));
+}
+
+/** The parameters after `(`, through the closing `)`. */
+function parseFunctionParamList(ctx: ParserContext): DeclParam[] {
   const params: DeclParam[] = [];
   skipWhitespace(ctx);
   if (!(ctx.peek().type === "Punctuation" && ctx.peek().value === ")")) {
@@ -499,8 +622,21 @@ function parseFunctionParams(ctx: ParserContext): DeclParam[] {
 function parseEffectStatement(ctx: ParserContext): Statement {
   const start = ctx.consume(); // consume the `$effect` StateIdentifier
   ctx.expect("Punctuation", "(");
+  const decl = ctx.withNewlines(true, () => parseEffectArguments(ctx, start));
+  skipTerminator(ctx);
+  return decl;
+}
+
+/** `$effect(` arguments through the closing `)`. */
+function parseEffectArguments(ctx: ParserContext, start: Token): Statement {
   skipWhitespace(ctx);
 
+  // Only an inline function and an array literal mean anything here; anything
+  // else is dropped. `.aktion` keeps that behaviour, but the JS-semantics layer
+  // rejects it (E119 / E120), so the position goes into a side table — the
+  // AST itself does not change.
+  const shape: EffectCallShape = {};
+  const callbackTok = ctx.peek();
   const callbackExpr = parseExpression(ctx);
   let body: BlockExpr;
   if (callbackExpr.kind === "Lambda") {
@@ -509,6 +645,7 @@ function parseEffectStatement(ctx: ParserContext): Statement {
       : { kind: "Block", body: [{ kind: "ExpressionStatement", expression: callbackExpr.body }] };
   } else {
     body = { kind: "Block", body: [] };
+    shape.callback = { line: callbackTok.line, column: callbackTok.column };
   }
 
   const triggers: EffectTrigger[] = [];
@@ -531,13 +668,14 @@ function parseEffectStatement(ctx: ParserContext): Statement {
       }
       ctx.expect("Punctuation", "]");
     } else {
+      const depsTok = ctx.peek();
       parseExpression(ctx);
+      shape.deps = { line: depsTok.line, column: depsTok.column };
     }
   }
 
   skipWhitespace(ctx);
   ctx.expect("Punctuation", ")");
-  skipTerminator(ctx);
 
   const decl: Statement = {
     kind: "EffectDeclaration",
@@ -547,6 +685,7 @@ function parseEffectStatement(ctx: ParserContext): Statement {
     loc: { line: start.line, column: start.column },
   };
   if (rateLimit) (decl as { rateLimit?: EffectRateLimit }).rateLimit = rateLimit;
+  recordEffectCallShape(decl, shape);
   return decl;
 }
 
@@ -626,17 +765,93 @@ function declarationOf(token: Token): { declaration: DeclarationKeyword } | Reco
     : {};
 }
 
-/** Parse `let/const/var identifier = expression`. */
-function parseVarDecl(ctx: ParserContext): Statement {
-  const start = ctx.consume(); // let/const/var
-  const head = ctx.peek();
+/**
+ * Parse `let` / `const` / `var` with one or more declarators:
+ * `let x = 1`, `let x` (no value yet), `let a = 1, b = 2`, `const { a } = o`.
+ *
+ * The first declarator is returned; each further one becomes its own
+ * statement, located where that declarator starts, and is queued on the context
+ * (`ctx.takePending()`) for the statement list being parsed to append right
+ * after it. Aktion has no block scoping (every declaration keyword behaves the
+ * same), so `let a = 1, b = 2` and `let a = 1⏎let b = 2` mean the same thing.
+ *
+ * `inForHead` is the init of `for (…; …; …)`: one declarator only, and the
+ * caller consumes the `;` that follows.
+ */
+function parseVarDecl(ctx: ParserContext, inForHead = false): Statement {
+  const keyword = ctx.consume(); // let/const/var
+  const declarators: Statement[] = [];
+  let start: Token = keyword;
+  while (true) {
+    const declarator = parseDeclarator(ctx, keyword, start);
+    nodeEndLine.set(declarator, ctx.previousConsumedLine());
+    declarators.push(declarator);
+    const comma = ctx.peek();
+    if (!(comma.type === "Punctuation" && comma.value === ",")) break;
+    if (inForHead) {
+      throw {
+        message:
+          "Declaring several variables in a `for (…)` head is not supported in Aktion — " +
+          "declare the others before the loop.",
+        line: comma.line,
+        column: comma.column,
+      } satisfies ParseError;
+    }
+    ctx.consume();
+    skipNewlines(ctx); // `let a = 1,⏎  b = 2`
+    start = ctx.peek();
+  }
+  if (!inForHead) skipTerminator(ctx);
+  const [first, ...rest] = declarators;
+  ctx.queuePending(rest);
+  return first!;
+}
 
-  // Destructuring forms: `let [a, b, ...rest] = arr` and
-  // `let {a, b: alias, c = 1, ...rest} = obj`. Both expand into a single
-  // `DestructureStatement` so the evaluator can fan out the bindings
-  // when the right-hand side is evaluated once.
+/** `Unary(void, 0)` — the value of a declaration written without one (`let x`). */
+function undefinedValue(): Expression {
+  return { kind: "Unary", operator: "void", argument: { kind: "Literal", value: 0 } };
+}
+
+/**
+ * One declarator of a `let` / `const` / `var` declaration, starting at `start`
+ * (the keyword for the first declarator, the name for later ones).
+ *
+ * Destructuring forms — `let [a, b, ...rest] = arr` and
+ * `let {a, b: alias, c = 1, ...rest} = obj` — expand into a single
+ * `DestructureStatement` so the evaluator can fan out the bindings when the
+ * right-hand side is evaluated once. A plain name without a value
+ * (`let x`) is an `Assignment` of `void 0` flagged `uninitialized`, so the
+ * printer can write it back as written.
+ */
+function parseDeclarator(ctx: ParserContext, keyword: Token, start: Token): Statement {
+  const head = ctx.peek();
+  const loc = { line: start.line, column: start.column };
+
   if (head.type === "Punctuation" && (head.value === "[" || head.value === "{")) {
-    return parseDestructureDecl(ctx, start);
+    const pattern = parseDestructuringPattern(ctx);
+    consumeNewlinesIfNext(ctx, isAssignToken);
+    const eq = ctx.peek();
+    if (eq.type === "Punctuation" && eq.value === ":") throw typeAnnotationError(eq, pattern.kind === "array" ? "[…]" : "{ … }");
+    if (!isAssignToken(eq)) {
+      throw {
+        message: unexpected(eq,
+          "Missing initializer in a destructuring declaration — destructure a value: " +
+          `\`${keyword.value} ${pattern.kind === "array" ? "[a, b]" : "{ a, b }"} = value\`.`),
+        line: eq.line,
+        column: eq.column,
+      } satisfies ParseError;
+    }
+    ctx.consume();
+    skipNewlinesBeforeOperand(ctx);
+    const expression = parseExpression(ctx);
+    return {
+      kind: "DestructureStatement",
+      patternKind: pattern.kind,
+      bindings: pattern.bindings,
+      expression,
+      ...declarationOf(keyword),
+      loc,
+    };
   }
 
   let identifier = "";
@@ -648,41 +863,56 @@ function parseVarDecl(ctx: ParserContext): Statement {
     identifier = ctx.consume().value;
   } else {
     throw {
-      message: unexpected(head, `Expected identifier after "${start.value}", got ${head.type} "${head.value}"`),
+      message: unexpected(head, `Expected identifier after "${keyword.value}", got ${head.type} "${head.value}"`),
       line: head.line,
       column: head.column,
     } satisfies ParseError;
   }
-  ctx.expect("Operator", "=");
-  const expression = parseExpression(ctx);
-  skipTerminator(ctx);
+  const name = isState ? `$${identifier}` : identifier;
+
+  // `let x⏎  = 1`: a statement cannot start with `=`, so the declarator goes on.
+  consumeNewlinesIfNext(ctx, isAssignToken);
+  const eq = ctx.peek();
+  if (isAssignToken(eq)) {
+    ctx.consume();
+    skipNewlinesBeforeOperand(ctx);
+    const expression = parseExpression(ctx);
+    return { kind: "Assignment", identifier, isState, expression, ...declarationOf(keyword), loc };
+  }
+  // A character the lexer could not read (`const café = 1`) is the real problem.
+  if (eq.type === "Error") throw { message: unexpected(eq, ""), line: eq.line, column: eq.column } satisfies ParseError;
+  if (eq.type === "Punctuation" && eq.value === ":") throw typeAnnotationError(eq, name);
+  if (keyword.value === "const") {
+    throw {
+      message:
+        `Missing initializer in \`const ${name}\` — a \`const\` needs a value (\`const ${name} = …\`); ` +
+        `use \`let ${name}\` to declare it without one.`,
+      line: head.line,
+      column: head.column,
+    } satisfies ParseError;
+  }
+  // `let x` / `var x`: declared, value `undefined`. Whatever follows is checked
+  // by the caller (`,` for another declarator) or the statement boundary.
   return {
     kind: "Assignment",
     identifier,
     isState,
-    expression,
-    ...declarationOf(start),
-    loc: { line: start.line, column: start.column },
+    expression: undefinedValue(),
+    uninitialized: true,
+    ...declarationOf(keyword),
+    loc,
   };
 }
 
-/**
- * Parse a destructuring declaration: `let [a, b, ...rest] = arr` or
- * `let {x, y: alias, z = 0, ...rest} = obj`. Nested patterns are
- * intentionally not supported — destructure in two steps for those.
- */
-function parseDestructureDecl(ctx: ParserContext, start: Token): Statement {
-  const pattern = parseDestructuringPattern(ctx);
-  ctx.expect("Operator", "=");
-  const expression = parseExpression(ctx);
-  skipTerminator(ctx);
+function isAssignToken(t: Token): boolean {
+  return t.type === "Operator" && t.value === "=";
+}
+
+function typeAnnotationError(colon: Token, target: string): ParseError {
   return {
-    kind: "DestructureStatement",
-    patternKind: pattern.kind,
-    bindings: pattern.bindings,
-    expression,
-    ...declarationOf(start),
-    loc: { line: start.line, column: start.column },
+    message: `Type annotations (\`${target}: …\`) are not supported in Aktion — it has no static types, so remove the annotation.`,
+    line: colon.line,
+    column: colon.column,
   };
 }
 
@@ -696,6 +926,12 @@ function parseDestructureDecl(ctx: ParserContext, start: Token): Statement {
 function parseDestructuringPattern(ctx: ParserContext): DestructuringPattern {
   const head = ctx.consume(); // `[` or `{`
   const patternKind: "array" | "object" = head.value === "[" ? "array" : "object";
+  // Newlines inside the brackets are whitespace, as in JS (`{⏎  a,⏎  b =⏎  1⏎}`).
+  return ctx.withNewlines(true, () => parsePatternBody(ctx, patternKind));
+}
+
+/** The bindings after a pattern's opening `[` / `{`, through its closing bracket. */
+function parsePatternBody(ctx: ParserContext, patternKind: "array" | "object"): DestructuringPattern {
   const bindings: import("./types.js").DestructuringBinding[] = [];
 
   if (patternKind === "array") {
@@ -761,8 +997,9 @@ function parseDestructuringPattern(ctx: ParserContext): DestructuringPattern {
         ctx.consume();
         isRest = true;
       }
-      const keyTok = ctx.expect("Identifier");
-      let alias = keyTok.value;
+      const keyTok = isRest ? ctx.expect("Identifier") : parsePatternKey(ctx);
+      const key = keyTok.type === "Number" ? String(numericLiteralValue(keyTok.value)) : keyTok.value;
+      let alias = key;
       let sourceKey: string | undefined;
       let nestedPattern: DestructuringPattern | undefined;
       // `{a: b}` — rename: source key `a`, local binding `b`.
@@ -771,13 +1008,15 @@ function parseDestructuringPattern(ctx: ParserContext): DestructuringPattern {
         ctx.consume();
         skipWhitespace(ctx);
         if (ctx.peek().type === "Punctuation" && (ctx.peek().value === "{" || ctx.peek().value === "[")) {
-          sourceKey = keyTok.value;
+          sourceKey = key;
           nestedPattern = parseDestructuringPattern(ctx);
         } else {
           const aliasTok = ctx.expect("Identifier");
-          sourceKey = keyTok.value;
+          sourceKey = key;
           alias = aliasTok.value;
         }
+      } else if (keyTok.type !== "Identifier") {
+        throw patternKeyNeedsName(keyTok);
       }
       let defaultValue: Expression | undefined;
       if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
@@ -806,6 +1045,45 @@ function parseDestructuringPattern(ctx: ParserContext): DestructuringPattern {
 }
 
 /**
+ * The key of one object-pattern entry. Besides a plain name, JavaScript allows
+ * a quoted string, a number or a reserved word as the key of an entry that
+ * renames (`{ "a-b": x, default: d, 0: first }`); the caller rejects those
+ * without a `: name`.
+ */
+function parsePatternKey(ctx: ParserContext): Token {
+  const tok = ctx.peek();
+  if (
+    tok.type === "Identifier" || tok.type === "Keyword" || tok.type === "Number" ||
+    (tok.type === "String" && tok.template !== true)
+  ) {
+    return ctx.consume();
+  }
+  return ctx.expect("Identifier"); // throws the usual "Expected Identifier" error
+}
+
+/**
+ * `{ default }`, `{ "a-b" }`, `{ 0 }`: a key that is not a name cannot be a
+ * binding, so it needs `: name`. Definitive: `tryParseLambdaFromParenList`
+ * rethrows it rather than retrying the parameter list as an object literal,
+ * which is invalid there too.
+ */
+function patternKeyNeedsName(tok: Token): ParseError {
+  const shown = tok.type === "String" ? JSON.stringify(tok.value) : tok.value;
+  const what = tok.type === "Keyword"
+    ? `\`${tok.value}\` is a reserved word, so it cannot be a binding name`
+    : tok.type === "Number"
+    ? `The key \`${shown}\` is a number, so it cannot be a binding name`
+    : `The key \`${shown}\` is quoted, so it cannot be a binding name`;
+  const err: ParseError & { __definitive?: boolean } = {
+    message: `${what} — rename it: \`{ ${shown}: name }\`.`,
+    line: tok.line,
+    column: tok.column,
+  };
+  err.__definitive = true;
+  return err;
+}
+
+/**
  * Flatten every variable name a destructuring pattern introduces, descending
  * into nested patterns. Shared by the linker (scope collection) and the
  * language service (shadowing checks) so both see the same set of names.
@@ -822,13 +1100,23 @@ export function collectPatternNames(pattern: DestructuringPattern): string[] {
   return names;
 }
 
+/**
+ * A `{ … }` statement block. Its statements end at newlines again even when the
+ * block sits inside parentheses, where newlines are otherwise whitespace
+ * (`f(() => {⏎  a()⏎  b()⏎})`).
+ */
 function parseBlock(ctx: ParserContext): BlockExpr {
   const start = ctx.expect("Punctuation", "{");
+  return ctx.withNewlines(false, () => parseBlockBody(ctx, start));
+}
+
+function parseBlockBody(ctx: ParserContext, start: Token): BlockExpr {
   const body: Statement[] = [];
   skipWhitespace(ctx);
   while (!(ctx.peek().type === "Punctuation" && ctx.peek().value === "}")) {
     const stmt = parseStatement(ctx, false);
     if (stmt) body.push(stmt);
+    body.push(...ctx.takePending());
     skipWhitespace(ctx);
   }
   const close = ctx.expect("Punctuation", "}");
@@ -879,12 +1167,15 @@ function parseBlockOrSingleStatement(ctx: ParserContext): BlockExpr {
   }
   const head = ctx.peek();
   const stmt = parseStatement(ctx, false);
+  // `if (c) let a = 1, b = 2` is still one body statement in the source.
+  const body = [...(stmt ? [stmt] : []), ...ctx.takePending()];
+  const last = body[body.length - 1];
   const block: BlockExpr = {
     kind: "Block",
-    body: stmt ? [stmt] : [],
+    body,
     loc: { line: head.line, column: head.column },
   };
-  nodeEndLine.set(block, stmt ? (nodeEndLine.get(stmt) ?? head.line) : head.line);
+  nodeEndLine.set(block, last ? (nodeEndLine.get(last) ?? head.line) : head.line);
   return block;
 }
 
@@ -917,8 +1208,33 @@ function parseReturn(ctx: ParserContext): Statement {
   };
 }
 
+const EOF_TOKEN: Token = { type: "EOF", value: "", line: 0, column: 0 };
+
 class ParserContext {
   private index = 0;
+  /**
+   * Whether newlines are significant, innermost region last: `true` while
+   * inside `( … )`, `[ … ]`, an object literal or a destructuring pattern —
+   * where JavaScript never ends a statement, so a line break is whitespace —
+   * and `false` inside a `{ … }` statement block, where statements end at
+   * newlines again even if the block itself sits inside parentheses
+   * (`f(() => {⏎ a()⏎ b()⏎})`). Empty means statement level: significant.
+   *
+   * While the innermost entry is `true`, `peek` / `consume` (and so `match` /
+   * `expect`) step over `Newline` tokens as if they were not there. Regions are
+   * entered only through `withNewlines`, whose `finally` unwinds the stack when
+   * a parse error is thrown inside one.
+   */
+  private readonly newlineModes: boolean[] = [];
+  /** The innermost `newlineModes` entry (`false` when empty), cached for `peek` / `consume`. */
+  private skipNewlines = false;
+  /**
+   * Statements a single source statement produced beyond the one returned —
+   * the second and later declarators of `let a = 1, b = 2`. Every statement
+   * list (`parse`, `parseBlock`, switch cases, brace-less bodies) appends them
+   * right after the `parseStatement` call that returned their first sibling.
+   */
+  private pending: Statement[] = [];
   /**
    * Indices into `comments` already claimed by SOME container's
    * `attachComments`/`collectDanglingComments`/switch-case-header pass.
@@ -933,14 +1249,67 @@ class ParserContext {
     private readonly tokens: Token[],
     /** Out-of-band `//` / `/* *\/` comments in source order (see `lexer.ts`'s `RawComment`). */
     private readonly comments: RawComment[] = [],
+    /** `ParseOptions.softNewlines`, kept for the sub-parse of template interpolations. */
+    private readonly softNewlines?: ReadonlySet<number>,
   ) {}
 
   isEnd(): boolean {
     return this.peek().type === "EOF";
   }
 
+  /**
+   * Run `parse` with newlines ignored (`true`) or significant (`false`), then
+   * restore the enclosing mode — also when `parse` throws.
+   */
+  withNewlines<T>(ignore: boolean, parse: () => T): T {
+    this.newlineModes.push(ignore);
+    this.skipNewlines = ignore;
+    try {
+      return parse();
+    } finally {
+      this.newlineModes.pop();
+      this.skipNewlines = this.newlineModes.length > 0 && this.newlineModes[this.newlineModes.length - 1] === true;
+    }
+  }
+
   peek(offset = 0): Token {
-    return this.tokens[this.index + offset] ?? { type: "EOF", value: "", line: 0, column: 0 };
+    if (!this.skipNewlines) return this.tokens[this.index + offset] ?? EOF_TOKEN;
+    let remaining = offset;
+    for (let i = this.index; i < this.tokens.length; i += 1) {
+      const tok = this.tokens[i]!;
+      if (tok.type === "Newline") continue;
+      if (remaining === 0) return tok;
+      remaining -= 1;
+    }
+    return EOF_TOKEN;
+  }
+
+  /** Queue statements for the statement list being parsed (see `pending`). */
+  queuePending(statements: ReadonlyArray<Statement>): void {
+    this.pending.push(...statements);
+  }
+
+  /** Take (and clear) the queued statements. */
+  takePending(): Statement[] {
+    if (this.pending.length === 0) return [];
+    const out = this.pending;
+    this.pending = [];
+    return out;
+  }
+
+  /**
+   * The soft newlines inside `length` characters of source starting at
+   * `offset`, shifted to start at `base` — what the sub-parse of a template
+   * interpolation (`base` = its synthetic prefix) needs. `undefined` when there
+   * are none.
+   */
+  softNewlinesWithin(offset: number, length: number, base: number): ReadonlySet<number> | undefined {
+    if (!this.softNewlines || this.softNewlines.size === 0) return undefined;
+    const out = new Set<number>();
+    for (const at of this.softNewlines) {
+      if (at >= offset && at < offset + length) out.add(base + (at - offset));
+    }
+    return out.size > 0 ? out : undefined;
   }
 
   /**
@@ -961,7 +1330,10 @@ class ParserContext {
   }
 
   consume(): Token {
-    const tok = this.tokens[this.index] ?? { type: "EOF", value: "", line: 0, column: 0 };
+    if (this.skipNewlines) {
+      while (this.tokens[this.index]?.type === "Newline") this.index += 1;
+    }
+    const tok = this.tokens[this.index] ?? EOF_TOKEN;
     this.index += 1;
     return tok;
   }
@@ -1057,6 +1429,7 @@ function parseAssignment(ctx: ParserContext): Statement | null {
   }
 
   const eq = ctx.expect("Operator", "=");
+  skipNewlinesBeforeOperand(ctx);
   const expression = parseExpression(ctx);
   skipTerminator(ctx);
 
@@ -1077,6 +1450,8 @@ function parseAssignment(ctx: ParserContext): Statement | null {
  */
 function parseImportStatement(ctx: ParserContext): Statement {
   const start = ctx.expect("Keyword", "import");
+  const unsupported = unsupportedImportForm(ctx, start);
+  if (unsupported) throw unsupported;
   ctx.expect("Punctuation", "{");
   const specifiers: ImportSpecifier[] = [];
   // Newlines inside the specifier list are insignificant, exactly as they are
@@ -1089,6 +1464,17 @@ function parseImportStatement(ctx: ParserContext): Statement {
     const importedTok = ctx.peek();
     let imported: string;
     let isState = false;
+    if (importedTok.type === "Identifier" && importedTok.value === "type" && ctx.peek(1).type === "Identifier") {
+      throw { message: IMPORT_TYPE_MESSAGE, line: importedTok.line, column: importedTok.column } satisfies ParseError;
+    }
+    if (importedTok.type === "Keyword" && importedTok.value === "default") {
+      throw {
+        message: "Default imports are not supported in Aktion — modules only have named exports; import the name " +
+          "the module exports (`import { Name } from \"…\"`).",
+        line: importedTok.line,
+        column: importedTok.column,
+      } satisfies ParseError;
+    }
     if (importedTok.type === "StateIdentifier") {
       imported = ctx.consume().value;
       isState = true;
@@ -1163,6 +1549,57 @@ function parseImportStatement(ctx: ParserContext): Statement {
   };
 }
 
+const DYNAMIC_IMPORT_MESSAGE =
+  "Dynamic `import()` is not supported in Aktion — use a static `import { … } from \"…\"` " +
+  "at the top of the module.";
+const IMPORT_META_MESSAGE =
+  "`import.meta` is not supported in Aktion — pass the value in from the host page instead.";
+
+/** Why `async` arrows, function expressions and methods are rejected (statement-level `async function` is a no-op). */
+const ASYNC_REASON =
+  "it runs functions synchronously and returns their value, not a Promise. " +
+  "Remove `async` and chain Promises with `.then(…)`.";
+
+const IMPORT_TYPE_MESSAGE =
+  "`import type` is not supported in a `.aktion` file — Aktion has no static types, so remove it " +
+  "(a `.aktion.ts` module may use it: types are erased before parsing).";
+
+/**
+ * The import forms Aktion has no production for, with what to write instead:
+ * dynamic `import()`, `import.meta`, `import type`, side-effect, namespace and
+ * default imports. `null` when the statement continues with `{`.
+ */
+function unsupportedImportForm(ctx: ParserContext, start: Token): ParseError | null {
+  const next = ctx.peek();
+  const at = (tok: Token, message: string): ParseError => ({ message, line: tok.line, column: tok.column });
+  if (next.type === "Punctuation" && next.value === "(") return at(start, DYNAMIC_IMPORT_MESSAGE);
+  if (next.type === "Punctuation" && next.value === ".") return at(start, IMPORT_META_MESSAGE);
+  if (next.type === "Identifier" && next.value === "type") {
+    const after = ctx.peek(1);
+    const isTypeImport = (after.type === "Punctuation" && after.value === "{") ||
+      (after.type === "Operator" && after.value === "*") ||
+      (after.type === "Identifier" && after.value !== "from");
+    if (isTypeImport) return at(next, IMPORT_TYPE_MESSAGE);
+  }
+  if (next.type === "String") {
+    return at(start,
+      `Side-effect imports (\`import ${JSON.stringify(next.value)}\`) are not supported in Aktion — ` +
+      "import the names you use: `import { name } from \"…\"`.");
+  }
+  if (next.type === "Operator" && next.value === "*") {
+    return at(next,
+      "Namespace imports (`import * as name`) are not supported in Aktion — import each binding by name: " +
+      "`import { a, b } from \"…\"`.");
+  }
+  if (next.type === "Identifier" || next.type === "StateIdentifier") {
+    const name = next.type === "StateIdentifier" ? `$${next.value}` : next.value;
+    return at(next,
+      "Default imports are not supported in Aktion — modules only have named exports; " +
+      `write \`import { ${name} } from "…"\`.`);
+  }
+  return null;
+}
+
 /**
  * `export <declaration | assignment>` — marks the following top-level binding
  * importable from another module. `export { … }` lists / re-exports and
@@ -1172,6 +1609,16 @@ function parseExportStatement(ctx: ParserContext): Statement {
   const start = ctx.expect("Keyword", "export");
   const next = ctx.peek();
 
+  if (next.type === "Keyword" && next.value === "default") return parseExportDefault(ctx, next);
+  if (next.type === "Operator" && next.value === "*") {
+    throw {
+      message:
+        "`export * from …` is not supported — Aktion modules cannot re-export; import what you need " +
+        "from that module directly.",
+      line: next.line,
+      column: next.column,
+    } satisfies ParseError;
+  }
   if (next.type === "Punctuation" && next.value === "{") {
     throw {
       message:
@@ -1193,13 +1640,19 @@ function parseExportStatement(ctx: ParserContext): Statement {
     stmt = parseFunctionDecl(ctx);
   } else if (next.type === "Keyword" && (next.value === "let" || next.value === "const" || next.value === "var")) {
     stmt = parseVarDecl(ctx);
-    if (stmt && stmt.kind === "DestructureStatement") {
-      throw {
-        message: "`export` of a destructuring declaration is not supported — export named bindings individually.",
-        line: next.line,
-        column: next.column,
-      } satisfies ParseError;
+    // `export let a = 1, b = 2` exports every declarator.
+    const more = ctx.takePending();
+    for (const declarator of [stmt, ...more]) {
+      if (declarator.kind === "DestructureStatement") {
+        throw {
+          message: "`export` of a destructuring declaration is not supported — export named bindings individually.",
+          line: declarator.loc?.line ?? next.line,
+          column: declarator.loc?.column ?? next.column,
+        } satisfies ParseError;
+      }
+      if (declarator.kind === "Assignment") declarator.exported = true;
     }
+    ctx.queuePending(more);
   } else if (couldStartAssignment(ctx)) {
     stmt = parseAssignment(ctx);
   } else {
@@ -1227,6 +1680,38 @@ function parseExportStatement(ctx: ParserContext): Statement {
     line: start.line,
     column: start.column,
   } satisfies ParseError;
+}
+
+/**
+ * `export default $app(…)` — the entry's UI root, written so that TypeScript
+ * sees the module's default export (`import app from "./app.aktion.ts"`). It
+ * parses to exactly the `ExpressionStatement` that `$app(…)` produces, flagged
+ * `exportDefault` so the printer writes it back. Aktion modules have no other
+ * default export.
+ */
+function parseExportDefault(ctx: ParserContext, defaultTok: Token): Statement {
+  ctx.consume(); // default
+  const head = ctx.peek();
+  if (head.type === "Error") throw { message: unexpected(head, ""), line: head.line, column: head.column } satisfies ParseError;
+  if (head.type === "StateIdentifier" && head.value === "app") {
+    const stmt = parseExpressionStatement(ctx);
+    if (stmt.kind === "ExpressionStatement" && isAppCall(stmt.expression)) {
+      stmt.exportDefault = true;
+      return stmt;
+    }
+  }
+  throw {
+    message:
+      "`export default` is only supported for the entry's `$app(…)` call — export anything else by name " +
+      "(`export function App() {…}`, `export const value = …`).",
+    line: defaultTok.line,
+    column: defaultTok.column,
+  } satisfies ParseError;
+}
+
+function isAppCall(expr: Expression): boolean {
+  return expr.kind === "Invoke" && expr.optional !== true &&
+    expr.callee.kind === "StateRef" && expr.callee.name === "app";
 }
 
 /** `let foo = expr` ALSO accepts compound assignment operators? No — JS only
@@ -1604,18 +2089,13 @@ function parseUnary(ctx: ParserContext): Expression {
           continue;
         }
         if (t.type === "Punctuation" && t.value === "[") {
-          ctx.consume();
-          const computed = parseExpression(ctx);
-          ctx.expect("Punctuation", "]");
-          callee = { kind: "Member", object: callee, computed };
+          callee = { kind: "Member", object: callee, computed: parseBracketedKey(ctx) };
           continue;
         }
         break;
       }
       if (ctx.peek().type === "Punctuation" && ctx.peek().value === "(") {
-        ctx.consume();
-        args = parseCallArgs(ctx);
-        ctx.expect("Punctuation", ")");
+        args = parseParenArgs(ctx);
       }
     }
     const newNode: Expression = {
@@ -1694,9 +2174,7 @@ function parsePostfixFrom(ctx: ParserContext, base: Expression): Expression {
       }
       const after = ctx.peek();
       if (after.type === "Punctuation" && after.value === "(") {
-        ctx.consume();
-        const args = parseCallArgs(ctx);
-        ctx.expect("Punctuation", ")");
+        const args = parseParenArgs(ctx);
         expr = {
           kind: "MethodCall",
           object: expr,
@@ -1712,15 +2190,10 @@ function parsePostfixFrom(ctx: ParserContext, base: Expression): Expression {
     if (tok.type === "Operator" && tok.value === "?.") {
       ctx.consume();
       if (ctx.peek().type === "Punctuation" && ctx.peek().value === "[") {
-        ctx.consume();
-        const computed = parseExpression(ctx);
-        ctx.expect("Punctuation", "]");
-        expr = { kind: "Member", object: expr, computed, optional: true };
+        expr = { kind: "Member", object: expr, computed: parseBracketedKey(ctx), optional: true };
       } else if (ctx.peek().type === "Punctuation" && ctx.peek().value === "(") {
         // `expr?.()` — optional call on an arbitrary expression.
-        ctx.consume();
-        const args = parseCallArgs(ctx);
-        ctx.expect("Punctuation", ")");
+        const args = parseParenArgs(ctx);
         expr = {
           kind: "Invoke",
           callee: expr,
@@ -1739,9 +2212,7 @@ function parsePostfixFrom(ctx: ParserContext, base: Expression): Expression {
         }
         const after = ctx.peek();
         if (after.type === "Punctuation" && after.value === "(") {
-          ctx.consume();
-          const args = parseCallArgs(ctx);
-          ctx.expect("Punctuation", ")");
+          const args = parseParenArgs(ctx);
           expr = {
             kind: "MethodCall",
             object: expr,
@@ -1757,10 +2228,7 @@ function parsePostfixFrom(ctx: ParserContext, base: Expression): Expression {
       continue;
     }
     if (tok.type === "Punctuation" && tok.value === "[") {
-      ctx.consume();
-      const computed = parseExpression(ctx);
-      ctx.expect("Punctuation", "]");
-      expr = { kind: "Member", object: expr, computed };
+      expr = { kind: "Member", object: expr, computed: parseBracketedKey(ctx) };
       continue;
     }
     // Call postfix on an arbitrary expression — `(fn)(args)`, IIFE
@@ -1768,9 +2236,7 @@ function parsePostfixFrom(ctx: ParserContext, base: Expression): Expression {
     // as `Call` nodes (handled in `parsePrimary`) so component / action
     // / library lookups still resolve by name.
     if (tok.type === "Punctuation" && tok.value === "(") {
-      ctx.consume();
-      const args = parseCallArgs(ctx);
-      ctx.expect("Punctuation", ")");
+      const args = parseParenArgs(ctx);
       expr = {
         kind: "Invoke",
         callee: expr,
@@ -1813,6 +2279,26 @@ function parsePrimary(ctx: ParserContext): Expression {
     throw err;
   }
 
+  if (tok.type === "Keyword" && tok.value === "async") {
+    const next = ctx.peek(1);
+    const what = next.type === "Keyword" && next.value === "function" ? "function expressions" : "arrow functions";
+    throw {
+      message: `\`async\` ${what} are not supported in Aktion — ${ASYNC_REASON}`,
+      line: tok.line,
+      column: tok.column,
+    } satisfies ParseError;
+  }
+  if (tok.type === "Keyword" && tok.value === "import") {
+    const next = ctx.peek(1);
+    if (next.type === "Punctuation" && (next.value === "(" || next.value === ".")) {
+      throw {
+        message: next.value === "(" ? DYNAMIC_IMPORT_MESSAGE : IMPORT_META_MESSAGE,
+        line: tok.line,
+        column: tok.column,
+      } satisfies ParseError;
+    }
+  }
+
   if (tok.type === "Keyword") {
     // Anonymous function expression: `function (params) { body }` or
     // `function name(params) { body }`. JS allows these as values
@@ -1850,9 +2336,7 @@ function parsePrimary(ctx: ParserContext): Expression {
     ) {
       ctx.consume();
       if (ctx.peek().type === "Punctuation" && ctx.peek().value === "(") {
-        ctx.consume();
-        const args = parseCallArgs(ctx);
-        ctx.expect("Punctuation", ")");
+        const args = parseParenArgs(ctx);
         return {
           kind: "Call",
           callee: tok.value,
@@ -1908,7 +2392,12 @@ function parsePrimary(ctx: ParserContext): Expression {
       } else {
         flushChunk();
       }
-      const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`);
+      // A soft newline (erased type) inside the interpolation must stay soft in
+      // its own sub-parse, or `${foo<⏎T⏎>(x)}` would lose its call.
+      const softNewlines = part.offset === undefined
+        ? undefined
+        : ctx.softNewlinesWithin(part.offset, part.source.length, TEMPLATE_SUB_PREFIX.length);
+      const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`, softNewlines ? { softNewlines } : {});
       const firstStmt = sub.statements[0];
       if (firstStmt && firstStmt.kind === "Assignment") {
         // The interpolation was parsed as its own one-line program, so every
@@ -1965,9 +2454,7 @@ function parsePrimary(ctx: ParserContext): Expression {
       };
     }
     if (ctx.peek().type === "Punctuation" && ctx.peek().value === "(") {
-      ctx.consume();
-      const args = parseCallArgs(ctx);
-      ctx.expect("Punctuation", ")");
+      const args = parseParenArgs(ctx);
       return {
         kind: "Call",
         callee: tok.value,
@@ -1983,14 +2470,22 @@ function parsePrimary(ctx: ParserContext): Expression {
   }
   if (tok.type === "Punctuation" && tok.value === "[") {
     ctx.consume();
-    const elements = parseCallArgs(ctx);
-    ctx.expect("Punctuation", "]");
+    const elements = ctx.withNewlines(true, () => {
+      const items = parseCallArgs(ctx);
+      ctx.expect("Punctuation", "]");
+      return items;
+    });
     return { kind: "Array", elements };
   }
   if (tok.type === "Punctuation" && tok.value === "{") {
     ctx.consume();
-    const properties = parseObjectProps(ctx);
-    ctx.expect("Punctuation", "}");
+    // Newlines inside an object literal are whitespace (`{ key:⏎  value }`);
+    // a method or arrow body inside it is a block, where they end statements.
+    const properties = ctx.withNewlines(true, () => {
+      const props = parseObjectProps(ctx);
+      ctx.expect("Punctuation", "}");
+      return props;
+    });
     return { kind: "Object", properties };
   }
   if (tok.type === "Punctuation" && tok.value === "(") {
@@ -1999,9 +2494,34 @@ function parsePrimary(ctx: ParserContext): Expression {
     if (lambda) return lambda;
     ctx.restore(saved);
     ctx.consume();
-    const expr = parseExpression(ctx);
-    ctx.expect("Punctuation", ")");
-    return expr;
+    // A parenthesised expression: newlines inside are whitespace, as in JS
+    // (`return (⏎  Text("x")⏎)`, `if ((⏎  a &&⏎  b⏎))`).
+    return ctx.withNewlines(true, () => {
+      const expr = parseExpression(ctx);
+      const next = ctx.peek();
+      if (next.type === "Punctuation" && next.value === ",") {
+        throw {
+          message:
+            "The comma operator is not supported in Aktion — write each expression as its own statement " +
+            "(inside an arrow function, use a `{ … }` body).",
+          line: next.line,
+          column: next.column,
+        } satisfies ParseError;
+      }
+      if (next.type === "Operator" && isAssignmentOperator(next.value)) {
+        if (expr.kind === "Array" || expr.kind === "Object") {
+          throw { message: DESTRUCTURING_ASSIGNMENT_MESSAGE, line: tok.line, column: tok.column } satisfies ParseError;
+        }
+        throw {
+          message: "Assignment inside an expression is not supported in Aktion — assign in its own statement first, " +
+            "then use the name.",
+          line: next.line,
+          column: next.column,
+        } satisfies ParseError;
+      }
+      ctx.expect("Punctuation", ")");
+      return expr;
+    });
   }
 
   throw {
@@ -2017,15 +2537,50 @@ function parsePrimary(ctx: ParserContext): Expression {
  * Falls back to a regular Call node for the evaluator to handle.
  */
 function parseEffectCallAsExpr(ctx: ParserContext, nameTok: Token): Expression {
-  ctx.consume(); // (
-  const args = parseCallArgs(ctx);
-  ctx.expect("Punctuation", ")");
+  const args = parseParenArgs(ctx);
   return {
     kind: "Call",
     callee: nameTok.value,
     arguments: args,
     loc: { line: nameTok.line, column: nameTok.column },
   };
+}
+
+/**
+ * `( args )` of a call or `new`, both parentheses included. Newlines inside are
+ * whitespace, as in JS.
+ */
+function parseParenArgs(ctx: ParserContext): Expression[] {
+  ctx.expect("Punctuation", "(");
+  return ctx.withNewlines(true, () => {
+    const args = parseCallArgs(ctx);
+    ctx.expect("Punctuation", ")");
+    return args;
+  });
+}
+
+/** `[ key ]` of a computed member access, both brackets included. */
+function parseBracketedKey(ctx: ParserContext): Expression {
+  ctx.expect("Punctuation", "[");
+  return ctx.withNewlines(true, () => {
+    const key = parseExpression(ctx);
+    ctx.expect("Punctuation", "]");
+    return key;
+  });
+}
+
+/**
+ * `( expr )` after `if` / `while` / `switch` / `do … while`, both parentheses
+ * included. Newlines inside are whitespace, as in JS
+ * (`if (⏎  a &&⏎  b⏎) { … }`).
+ */
+function parseConditionHead(ctx: ParserContext): Expression {
+  ctx.expect("Punctuation", "(");
+  return ctx.withNewlines(true, () => {
+    const test = parseExpression(ctx);
+    ctx.expect("Punctuation", ")");
+    return test;
+  });
 }
 
 function parseCallArgs(ctx: ParserContext): Expression[] {
@@ -2066,9 +2621,7 @@ function parseArgItem(ctx: ParserContext): Expression {
  */
 function parseIfStatement(ctx: ParserContext): Statement {
   const start = ctx.expect("Keyword", "if");
-  ctx.expect("Punctuation", "(");
-  const test = parseExpression(ctx);
-  ctx.expect("Punctuation", ")");
+  const test = parseConditionHead(ctx);
   // Either a block `{ … }` or a single statement — `if (!$email) return`.
   const consequent = parseBlockOrSingleStatement(ctx);
   let alternate: Statement | BlockExpr | undefined;
@@ -2113,10 +2666,21 @@ function parseIfStatement(ctx: ParserContext): Statement {
  */
 function parseSwitchStatement(ctx: ParserContext): Statement {
   const start = ctx.expect("Keyword", "switch");
-  ctx.expect("Punctuation", "(");
-  const discriminant = parseExpression(ctx);
-  ctx.expect("Punctuation", ")");
+  const discriminant = parseConditionHead(ctx);
   const openBrace = ctx.expect("Punctuation", "{");
+  // The `{ case … }` body is statement level: newlines end statements again.
+  const cases = ctx.withNewlines(false, () => parseSwitchCases(ctx, openBrace));
+  skipTerminator(ctx);
+  return {
+    kind: "SwitchStatement",
+    discriminant,
+    cases,
+    loc: { line: start.line, column: start.column },
+  };
+}
+
+/** The cases of a `switch` after its `{`, through the closing `}`. */
+function parseSwitchCases(ctx: ParserContext, openBrace: Token): SwitchCase[] {
   const cases: SwitchCase[] = [];
   skipWhitespace(ctx);
   // Tracks the last line touched by real content (or an already-attached
@@ -2156,6 +2720,7 @@ function parseSwitchStatement(ctx: ParserContext): Statement {
     ) {
       const stmt = parseStatement(ctx, false);
       if (stmt) body.push(stmt);
+      body.push(...ctx.takePending());
       skipWhitespace(ctx);
     }
     const caseEndLineExclusive = ctx.peek().line; // line of whichever token stopped the loop above
@@ -2206,13 +2771,7 @@ function parseSwitchStatement(ctx: ParserContext): Statement {
     skipWhitespace(ctx);
   }
   ctx.expect("Punctuation", "}");
-  skipTerminator(ctx);
-  return {
-    kind: "SwitchStatement",
-    discriminant,
-    cases,
-    loc: { line: start.line, column: start.column },
-  };
+  return cases;
 }
 
 /**
@@ -2224,19 +2783,60 @@ function parseSwitchStatement(ctx: ParserContext): Statement {
 function parseForStatement(ctx: ParserContext): Statement {
   const start = ctx.expect("Keyword", "for");
   ctx.expect("Punctuation", "(");
-  skipWhitespace(ctx);
+  // Everything up to the matching `)` is the head: newlines there are
+  // whitespace, as in JS (`for (⏎  const x of xs⏎) …`).
+  const head = ctx.withNewlines(true, () => parseForHead(ctx));
+  const body = parseBlockOrSingleStatement(ctx);
+  skipTerminator(ctx);
+  const loc = { line: start.line, column: start.column };
+  if (head.kind === "classic") {
+    return { kind: "ForClassicStatement", init: head.init, test: head.test, update: head.update, body, loc };
+  }
+  if (head.kind === "for-in") {
+    return { kind: "ForInStatement", item: head.item, ...head.declaration, iterable: head.iterable, body, loc };
+  }
+  return {
+    kind: "ForOfStatement",
+    item: head.item,
+    pattern: head.pattern,
+    ...head.declaration,
+    iterable: head.iterable,
+    body,
+    loc,
+  };
+}
 
-  // Decide between for-of, for-in, and classic-for. We peek ahead: a `;`
+type ForHead =
+  | {
+      kind: "classic";
+      init: AssignmentStatement | ExpressionStatement | undefined;
+      test: Expression | undefined;
+      update: Expression | undefined;
+    }
+  | {
+      kind: "for-of" | "for-in";
+      item: string;
+      pattern: DestructuringPattern | undefined;
+      declaration: Record<string, never> | { declaration: DeclarationKeyword };
+      iterable: Expression;
+    };
+
+/**
+ * A `for` head after its `(`, through the matching `)`. Newlines are already
+ * whitespace here (the caller ignores them), so nothing may skip `;` — that is
+ * what separates an empty part (`for (;;)`, `for (let i = 0;; i++)`).
+ */
+function parseForHead(ctx: ParserContext): ForHead {
+  // Decide between for-of, for-in, and classic-for. We look ahead: a `;`
   // before the matching `)` means classic; an `of`/`in` keyword
-  // determines for-of vs. for-in.
-  const headSnapshot = ctx.snapshot();
+  // determines for-of vs. for-in. (Scans the raw tokens, skipping newlines,
+  // so the lookahead stays linear.)
   let kind: "for-of" | "for-in" | "classic" = "for-of";
   {
     let depth = 1;
-    let i = 0;
-    while (true) {
-      const tok = ctx.peek(i);
-      if (tok.type === "EOF") break;
+    for (let i = ctx.snapshot(); ; i += 1) {
+      const tok = ctx.tokenAt(i);
+      if (!tok || tok.type === "EOF") break;
       if (tok.type === "Punctuation" && tok.value === "(") depth += 1;
       else if (tok.type === "Punctuation" && tok.value === ")") {
         depth -= 1;
@@ -2251,12 +2851,10 @@ function parseForStatement(ctx: ParserContext): Statement {
         kind = "for-in";
         break;
       }
-      i += 1;
     }
   }
-  ctx.restore(headSnapshot);
 
-  if (kind === "classic") return parseForClassic(ctx, start);
+  if (kind === "classic") return parseForClassicHead(ctx);
 
   // for-of / for-in: optional let/const/var, then binding,
   // then `of` / `in`, then iterable.
@@ -2292,30 +2890,11 @@ function parseForStatement(ctx: ParserContext): Statement {
   }
   const iterable = parseExpression(ctx);
   ctx.expect("Punctuation", ")");
-  const body = parseBlockOrSingleStatement(ctx);
-  skipTerminator(ctx);
-  if (kind === "for-in") {
-    return {
-      kind: "ForInStatement",
-      item,
-      ...declaration,
-      iterable,
-      body,
-      loc: { line: start.line, column: start.column },
-    };
-  }
-  return {
-    kind: "ForOfStatement",
-    item,
-    pattern,
-    ...declaration,
-    iterable,
-    body,
-    loc: { line: start.line, column: start.column },
-  };
+  return { kind, item, pattern, declaration, iterable };
 }
 
-function parseForClassic(ctx: ParserContext, start: Token): Statement {
+/** `init; test; update)` of a classic `for` head. */
+function parseForClassicHead(ctx: ParserContext): ForHead {
   // init — may be a `let/const/var` decl, an expression, or empty.
   let init: AssignmentStatement | ExpressionStatement | undefined;
   if (!(ctx.peek().type === "Semicolon")) {
@@ -2323,11 +2902,11 @@ function parseForClassic(ctx: ParserContext, start: Token): Statement {
       ctx.peek().type === "Keyword" &&
       (ctx.peek().value === "let" || ctx.peek().value === "const" || ctx.peek().value === "var")
     ) {
-      // `parseVarDecl` itself consumes the trailing `;` / newline, so we
-      // do not need to expect another semicolon afterwards.
-      const decl = parseVarDecl(ctx);
+      // One declarator only (several are rejected inside `parseVarDecl`);
+      // the `;` after it is this head's separator.
+      const decl = parseVarDecl(ctx, true);
       if (decl.kind === "Assignment") init = decl;
-      skipWhitespace(ctx);
+      ctx.expect("Semicolon");
     } else {
       const exprStart = ctx.peek();
       const expression = parseExpression(ctx);
@@ -2337,11 +2916,9 @@ function parseForClassic(ctx: ParserContext, start: Token): Statement {
         loc: { line: exprStart.line, column: exprStart.column },
       };
       ctx.expect("Semicolon");
-      skipWhitespace(ctx);
     }
   } else {
     ctx.expect("Semicolon");
-    skipWhitespace(ctx);
   }
 
   let test: Expression | undefined;
@@ -2349,31 +2926,29 @@ function parseForClassic(ctx: ParserContext, start: Token): Statement {
     test = parseExpression(ctx);
   }
   ctx.expect("Semicolon");
-  skipWhitespace(ctx);
 
   let update: Expression | undefined;
   if (!(ctx.peek().type === "Punctuation" && ctx.peek().value === ")")) {
     update = parseAssignmentLikeExpression(ctx);
   }
+  const comma = ctx.peek();
+  if (comma.type === "Punctuation" && comma.value === ",") {
+    throw {
+      message:
+        "The comma operator is not supported in Aktion — a `for (…)` update must be a single expression; " +
+        "update the other variable inside the loop body.",
+      line: comma.line,
+      column: comma.column,
+    } satisfies ParseError;
+  }
   ctx.expect("Punctuation", ")");
-  const body = parseBlockOrSingleStatement(ctx);
-  skipTerminator(ctx);
-  return {
-    kind: "ForClassicStatement",
-    init,
-    test,
-    update,
-    body,
-    loc: { line: start.line, column: start.column },
-  };
+  return { kind: "classic", init, test, update };
 }
 
 /** Parse `while (cond) { body }`. */
 function parseWhileStatement(ctx: ParserContext): Statement {
   const start = ctx.expect("Keyword", "while");
-  ctx.expect("Punctuation", "(");
-  const test = parseExpression(ctx);
-  ctx.expect("Punctuation", ")");
+  const test = parseConditionHead(ctx);
   const body = parseBlockOrSingleStatement(ctx);
   skipTerminator(ctx);
   return {
@@ -2389,9 +2964,7 @@ function parseDoWhileStatement(ctx: ParserContext): Statement {
   const body = parseBlockOrSingleStatement(ctx);
   skipWhitespace(ctx);
   ctx.expect("Keyword", "while");
-  ctx.expect("Punctuation", "(");
-  const test = parseExpression(ctx);
-  ctx.expect("Punctuation", ")");
+  const test = parseConditionHead(ctx);
   skipTerminator(ctx);
   return {
     kind: "DoWhileStatement",
@@ -2435,10 +3008,21 @@ function parseTryStatement(ctx: ParserContext): Statement {
     ctx.consume();
     if (ctx.peek().type === "Punctuation" && ctx.peek().value === "(") {
       ctx.consume();
-      if (ctx.peek().type === "Identifier") {
-        catchParam = ctx.consume().value;
-      }
-      ctx.expect("Punctuation", ")");
+      catchParam = ctx.withNewlines(true, () => {
+        const tok = ctx.peek();
+        if (tok.type === "Punctuation" && (tok.value === "{" || tok.value === "[")) {
+          throw {
+            message:
+              "Destructuring the `catch` parameter is not supported in Aktion — catch the error by name " +
+              "(`catch (error)`) and read its fields (`error.message`).",
+            line: tok.line,
+            column: tok.column,
+          } satisfies ParseError;
+        }
+        const name = tok.type === "Identifier" ? ctx.consume().value : undefined;
+        ctx.expect("Punctuation", ")");
+        return name;
+      });
     }
     catchBlock = parseBlock(ctx);
     skipWhitespace(ctx);
@@ -2469,6 +3053,28 @@ function tryParseLambdaFromParenList(ctx: ParserContext): Expression | null {
   const start = ctx.peek();
   if (start.type !== "Punctuation" || start.value !== "(") return null;
   ctx.consume();
+  // Newlines inside the parameter list are whitespace, as in JS.
+  const params = ctx.withNewlines(true, () => parseLambdaParamList(ctx));
+  if (params === null) return null;
+  if (!(ctx.peek().type === "Operator" && ctx.peek().value === "=>")) {
+    return null;
+  }
+  ctx.consume();
+  const body = parseLambdaBody(ctx);
+  return {
+    kind: "Lambda",
+    params,
+    body: body as never,
+    loc: { line: start.line, column: start.column },
+  };
+}
+
+/**
+ * An arrow function's parameters after `(`, through the closing `)`, or `null`
+ * when the parenthesised text is not a parameter list (the caller then parses
+ * it as a grouped expression).
+ */
+function parseLambdaParamList(ctx: ParserContext): LambdaParam[] | null {
   const params: LambdaParam[] = [];
   skipWhitespace(ctx);
   if (!(ctx.peek().type === "Punctuation" && ctx.peek().value === ")")) {
@@ -2487,7 +3093,8 @@ function tryParseLambdaFromParenList(ctx: ParserContext): Expression | null {
         let pattern: DestructuringPattern;
         try {
           pattern = parseDestructuringPattern(ctx);
-        } catch {
+        } catch (err) {
+          if (err && typeof err === "object" && (err as { __definitive?: boolean }).__definitive) throw err;
           return null;
         }
         const param: LambdaParam = { name: "", pattern };
@@ -2503,6 +3110,7 @@ function tryParseLambdaFromParenList(ctx: ParserContext): Expression | null {
         skipWhitespace(ctx);
         if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
           ctx.consume();
+          if (isCloseParen(ctx.peek())) break; // trailing comma (Prettier's multi-line layout)
           continue;
         }
         break;
@@ -2525,27 +3133,22 @@ function tryParseLambdaFromParenList(ctx: ParserContext): Expression | null {
       if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
         if (isRest) return null;
         ctx.consume();
+        if (isCloseParen(ctx.peek())) break; // trailing comma (Prettier's multi-line layout)
         continue;
       }
       break;
     }
   }
   skipWhitespace(ctx);
-  if (!(ctx.peek().type === "Punctuation" && ctx.peek().value === ")")) {
+  if (!isCloseParen(ctx.peek())) {
     return null;
   }
   ctx.consume();
-  if (!(ctx.peek().type === "Operator" && ctx.peek().value === "=>")) {
-    return null;
-  }
-  ctx.consume();
-  const body = parseLambdaBody(ctx);
-  return {
-    kind: "Lambda",
-    params,
-    body: body as never,
-    loc: { line: start.line, column: start.column },
-  };
+  return params;
+}
+
+function isCloseParen(tok: Token): boolean {
+  return tok.type === "Punctuation" && tok.value === ")";
 }
 
 /** Parse the body of an arrow function — either `{ stmts }` or a bare
@@ -2565,6 +3168,7 @@ function parseAssignmentLikeExpression(ctx: ParserContext): Expression {
   if (next.type === "Operator") {
     if (isAssignmentOperator(next.value)) {
       ctx.consume();
+      skipNewlinesBeforeOperand(ctx);
       const value = parseExpression(ctx);
       return {
         kind: "BuiltinCall",
@@ -2614,6 +3218,8 @@ function parseObjectProps(ctx: ParserContext): ObjectProperty[] {
       }
       break;
     }
+    const unsupported = unsupportedMemberForm(ctx, keyTok);
+    if (unsupported) throw unsupported;
     let key: string;
     let computedKey: Expression | undefined;
     if (keyTok.type === "Punctuation" && keyTok.value === "[") {
@@ -2636,6 +3242,7 @@ function parseObjectProps(ctx: ParserContext): ObjectProperty[] {
     }
     const after = ctx.peek();
     let value: Expression;
+    let method = false;
     if (
       !computedKey &&
       keyTok.type === "Identifier" &&
@@ -2643,12 +3250,19 @@ function parseObjectProps(ctx: ParserContext): ObjectProperty[] {
       (after.value === "," || after.value === "}")
     ) {
       value = { kind: "Identifier", name: key, loc: { line: keyTok.line, column: keyTok.column } };
+    } else if (after.type === "Punctuation" && after.value === "(") {
+      // Method shorthand: `{ save(item) { … } }` is `{ save: function (item) { … } }`.
+      const params = parseFunctionParams(ctx);
+      const body = parseBlock(ctx);
+      value = { kind: "Lambda", params, body: body as never, loc: { line: keyTok.line, column: keyTok.column } };
+      method = true;
     } else {
       ctx.expect("Punctuation", ":");
       value = parseExpression(ctx);
     }
     const prop: ObjectProperty = { key, value };
     if (computedKey) prop.computedKey = computedKey;
+    if (method) prop.method = true;
     props.push(prop);
     skipWhitespace(ctx);
     if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
@@ -2661,6 +3275,35 @@ function parseObjectProps(ctx: ParserContext): ObjectProperty[] {
   }
   skipWhitespace(ctx);
   return props;
+}
+
+/**
+ * Object-literal members Aktion has no production for, recognised at their
+ * first token: getters / setters (`get x() {}`), `async` methods and generator
+ * methods (`*m() {}`). `null` for anything else — including properties that
+ * are merely named `get`, `set` or `async` (`{ get: 1 }`, `{ get() {} }`).
+ */
+function unsupportedMemberForm(ctx: ParserContext, keyTok: Token): ParseError | null {
+  const at = (message: string): ParseError => ({ message, line: keyTok.line, column: keyTok.column });
+  if (keyTok.type === "Operator" && keyTok.value === "*") {
+    return at("Generator methods (`*name() {}`) are not supported in Aktion — there are no generators.");
+  }
+  const next = ctx.peek(1);
+  const startsKey = next.type === "Identifier" || next.type === "Keyword" || next.type === "String" ||
+    next.type === "Number" || next.type === "StateIdentifier" ||
+    (next.type === "Punctuation" && next.value === "[");
+  if (keyTok.type === "Identifier" && (keyTok.value === "get" || keyTok.value === "set") && startsKey) {
+    return at("getters and setters are not supported — use a plain property or a function");
+  }
+  if (keyTok.type === "Keyword" && keyTok.value === "async" && (startsKey || (next.type === "Operator" && next.value === "*"))) {
+    return at(`\`async\` methods are not supported in Aktion — ${ASYNC_REASON}`);
+  }
+  return null;
+}
+
+/** Consume line breaks only — unlike `skipWhitespace`, a `;` is left for the statement to end at. */
+function skipNewlines(ctx: ParserContext): void {
+  while (ctx.match("Newline")) {/* skip */}
 }
 
 /** Skip newlines and semicolons. */
@@ -2737,12 +3380,18 @@ function attachComments(
   for (let i = 0; i < statements.length; i += 1) {
     const stmt = statements[i]!;
     const stmtStartLine = stmt.loc?.line ?? containerEndLineExclusive;
+    // A statement that starts and ends on the line the previous one ended on
+    // (`let a = 1, b = 2 // note`, `a(); b() // note`) owns the comments after
+    // its own start: they are its trailing comments, not the previous one's.
+    const sharesLine = stmt.loc !== undefined && stmtStartLine === prevStmtEndLine &&
+      (nodeEndLine.get(stmt) ?? stmtStartLine) === stmtStartLine;
 
     if (prevStmtEndLine !== null) {
       const trailing: AttachedComment[] = [];
       while (true) {
         const c = ctx.peekComment(containerStartLine);
         if (!c || !inWindow(c) || c.line !== prevStmtEndLine) break;
+        if (sharesLine && c.column > stmt.loc!.column) break;
         ctx.takeComment(containerStartLine);
         trailing.push({ ...c });
         lastTouchedLine = c.endLine;

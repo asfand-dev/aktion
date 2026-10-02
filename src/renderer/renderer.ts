@@ -264,7 +264,9 @@ function applyUserOverrides(
   const positional = [...node.positional];
   const named = { ...node.named };
   for (const [name, value] of overrides) {
-    const index = node.decl.params.findIndex((p) => p.name === name);
+    // Keyed by the name callers use (R6): a `.aktion.ts` component's
+    // parameters are renamed locally, `publicName` keeps the original.
+    const index = node.decl.params.findIndex((p) => (p.publicName ?? p.name) === name);
     if (index >= 0) {
       while (positional.length <= index) positional.push(undefined);
       positional[index] = value;
@@ -1022,7 +1024,7 @@ export class Renderer {
     overrides: ReadonlyMap<string, unknown> | undefined,
   ): ComponentPropRecord[] | undefined {
     if (!this.captureProps) return undefined;
-    const names = node.decl.params.map((p, i) => p.name || (p.pattern ? `{pattern ${i}}` : `#${i}`));
+    const names = node.decl.params.map((p, i) => p.publicName ?? (p.name || (p.pattern ? `{pattern ${i}}` : `#${i}`)));
     return this.buildPropRecords(names, node.positional, [], node.named, undefined, overrides);
   }
 

@@ -317,7 +317,10 @@ function render(ctx: ViewContext): Child {
           button({ label: errors > 0 ? "Apply anyway" : "Apply", size: "sm", variant: errors > 0 ? "danger" : "primary", icon: "play", kbd: "⌘ S", testid: "source-apply", disabled: !can(app, "setProgram"), onClick: () => applyDraft(ctx, ui.sourceDraft ?? text) }),
         ]
       : [
-          canEdit ? button({ label: "Edit", size: "sm", icon: "edit", testid: "source-edit", onClick: () => { ui.sourceDraft = active.text; ui.sourceDiff = null; ctx.refresh(); } }) : null,
+          // Edit the RUNNABLE program (`getProgram()`): for a compiled mount
+          // the module text shown here may be TypeScript, or only the entry
+          // of a linked graph, and applying either would not run.
+          canEdit ? button({ label: "Edit", size: "sm", icon: "edit", testid: "source-edit", onClick: () => { ui.sourceDraft = app.getProgram(); ui.sourceDiff = null; ctx.refresh(); } }) : null,
           iconButton({ icon: "copy", label: "Copy source", size: "sm", onClick: () => ctx.copy(text, "the source") }),
           iconButton({ icon: "download", label: "Download", size: "sm", onClick: () => downloadText(active.path === "<inline>" ? "app.aktion" : active.path.split("/").pop() ?? "app.aktion", text, "text/plain") }),
           can(app, "reload") ? iconButton({ icon: "refresh", label: "Reload (re-plan and re-render)", size: "sm", onClick: () => { app.reload(); ctx.toast("Program re-planned"); } }) : null,

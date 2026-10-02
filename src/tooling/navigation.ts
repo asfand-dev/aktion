@@ -160,10 +160,33 @@ export function getDefinitionTarget(source: string, position: Position): Definit
  * disambiguates the `$`-namespace from the identifier namespace.
  */
 export function findDeclaration(source: string, name: string, isState: boolean): Range | null {
-  const table = collectSymbols(tokenize(source));
+  const tokens = tokenize(source);
+  const table = collectSymbols(tokens);
   const decl = isState ? table.state.get(name) : table.ident.get(name);
-  if (!decl || decl.kind === "import") return null;
-  return decl.range;
+  if (decl) return decl.kind === "import" ? null : decl.range;
+  return findTopLevelLetDeclaration(tokens, name, isState);
+}
+
+/**
+ * A top-level `let` / `const` / `var` declaration of `name` — the only form a
+ * `.aktion.js` / `.aktion.ts` module declares data and atoms with
+ * (`export let $count: number = 0`, `export const LIMIT = 5`), and valid in
+ * `.aktion` too. Token-based like the rest of this module, so a type
+ * annotation between the name and `=` is no obstacle.
+ */
+function findTopLevelLetDeclaration(tokens: Token[], name: string, isState: boolean): Range | null {
+  let depth = 0;
+  for (let i = 0; i < tokens.length; i += 1) {
+    const t = tokens[i]!;
+    if (t.type === "Punctuation" && t.value === "{") depth += 1;
+    else if (t.type === "Punctuation" && t.value === "}") depth = Math.max(0, depth - 1);
+    else if (depth === 0 && t.type === "Keyword" && (t.value === "let" || t.value === "const" || t.value === "var")) {
+      const nameTok = nextMeaningful(tokens, i + 1);
+      if (!nameTok || nameTok.value !== name) continue;
+      if (isState ? nameTok.type === "StateIdentifier" : nameTok.type === "Identifier") return tokenRange(nameTok);
+    }
+  }
+  return null;
 }
 
 /**

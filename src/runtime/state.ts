@@ -328,11 +328,26 @@ const FORBIDDEN_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"
 const MAX_MATERIALISED_INDEX = 1_000_000;
 
 /**
+ * `value` as an array length, or `null` when JavaScript's `arr.length = value`
+ * would throw a `RangeError` (`ToUint32(v) !== ToNumber(v)`: negative,
+ * fractional, `NaN`, …) or when the length exceeds what a state write may
+ * materialise.
+ */
+function toArrayLength(value: unknown): number | null {
+  if (typeof value === "symbol" || typeof value === "bigint") return null;
+  const length = Number(value);
+  return Number.isInteger(length) && length >= 0 && length <= MAX_MATERIALISED_INDEX ? length : null;
+}
+
+/**
  * Immutably write `value` at `path[index..]` inside `target`. Each level
  * is reconstructed (`{...prev, key: …}` for objects, `[…prev]` for
  * arrays) so the returned root has a fresh identity at every visited
  * level. Missing intermediate slots are materialised as plain objects
  * (or arrays when the segment is numeric).
+ *
+ * Writing `length` on an array truncates or extends a copy of it, as
+ * `arr.length = n` does in JavaScript (`$todos.length = 0` empties the list).
  *
  * A path containing a prototype-reaching segment is refused outright: the
  * original `target` is returned unchanged, so the write is a no-op.
@@ -346,6 +361,19 @@ function updateAtPath(
   if (index >= path.length) return value;
   const key = path[index]!;
   if (FORBIDDEN_PATH_SEGMENTS.has(key)) return target;
+  if (Array.isArray(target) && key === "length") {
+    // Without this branch the array fell through to the object case below
+    // and the atom silently became the plain object `{ length: n }`.
+    // `$arr.length.x = …` writes into a number, which changes nothing; an
+    // invalid length (JS would throw a `RangeError`) or an oversized one is
+    // refused like the other guards here — the array is returned unchanged.
+    if (index !== path.length - 1) return target;
+    const length = toArrayLength(value);
+    if (length === null) return target;
+    const next = target.slice();
+    next.length = length; // truncates, or extends with holes as JS does
+    return next;
+  }
   const asIndex = key !== "" && !Number.isNaN(Number(key)) ? Number(key) : null;
   if (Array.isArray(target) && asIndex !== null) {
     const next = target.slice();
