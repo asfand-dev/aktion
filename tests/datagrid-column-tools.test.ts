@@ -1090,6 +1090,110 @@ describe("DataGrid column menu can be driven from outside", () => {
     expect(panel(screen).getAttribute("data-open")).toBe("false");
   });
 
+  it("lets the anchor element close its own panel with a real press", async () => {
+    // A real click is mousedown, mouseup, click. `screen.click` dispatches only the
+    // last, which is why the outside-close listener never fired in earlier tests.
+    // That listener closed the panel on the anchor's own mousedown, so the
+    // anchor's click then flipped the toggle straight back open.
+    const screen = render([
+      ROWS,
+      "$menuOpen = false",
+      "$app(Stack([",
+      '  Button("Settings", {id: "ext-trigger", onClick: () => { $menuOpen = !$menuOpen }}),',
+      '  Button("Elsewhere", {id: "elsewhere"}),',
+      "  DataGrid([",
+      COLS,
+      "  ], {columnMenu: true, columnMenuButton: false, columnMenuOpen: $menuOpen,",
+      '   columnMenuAnchor: "#ext-trigger"})',
+      "]))",
+    ].join("\n"));
+    await settle();
+
+    const press = async (id: string): Promise<void> => {
+      const target = screen.shadowRoot.querySelector<HTMLElement>(id)!;
+      for (const type of ["mousedown", "mouseup", "click"]) {
+        target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, composed: true }));
+      }
+      await settle();
+    };
+
+    await press("#ext-trigger");
+    expect(panel(screen).getAttribute("data-open")).toBe("true");
+    expect(screen.state.get("menuOpen")).toBe(true);
+
+    await press("#ext-trigger");
+    expect(panel(screen).getAttribute("data-open")).toBe("false");
+    expect(screen.state.get("menuOpen")).toBe(false);
+
+    // The exemption is the anchor only: any other outside press still dismisses.
+    await press("#ext-trigger");
+    expect(panel(screen).getAttribute("data-open")).toBe("true");
+    await press("#elsewhere");
+    expect(panel(screen).getAttribute("data-open")).toBe("false");
+    expect(screen.state.get("menuOpen")).toBe(false);
+  });
+
+  it("keeps the panel open on a press inside it", async () => {
+    const screen = render([
+      ROWS,
+      "$menuOpen = true",
+      "$app(DataGrid([",
+      COLS,
+      "], {columnMenu: true, columnMenuButton: false, columnMenuOpen: $menuOpen}))",
+    ].join("\n"));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("true");
+
+    const row = screen.shadowRoot.querySelector<HTMLElement>(".rui-data-grid-col-panel-row")!;
+    row.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, composed: true }));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("true");
+  });
+
+  it("treats a press inside a wide anchor as outside while the built-in trigger is shown", async () => {
+    // With the built-in button visible the anchor is only a placement hint and may
+    // be a whole toolbar, so a press on a sibling control inside it must still
+    // dismiss the panel rather than being swallowed by the exemption.
+    const screen = render([
+      ROWS,
+      "$menuOpen = true",
+      "$app(Stack([",
+      '  Row([Button("Refresh", {id: "refresh"})], {id: "tb"}),',
+      "  DataGrid([",
+      COLS,
+      '  ], {columnMenu: true, columnMenuOpen: $menuOpen, columnMenuAnchor: "#tb"})',
+      "]))",
+    ].join("\n"));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("true");
+    expect(screen.shadowRoot.querySelector("#tb #refresh")).not.toBeNull();
+
+    const refresh = screen.shadowRoot.querySelector<HTMLElement>("#refresh")!;
+    refresh.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, composed: true }));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("false");
+  });
+
+  it("does not exempt the grid itself when the built-in trigger is hidden and no anchor is set", async () => {
+    // With `columnMenuButton: false` the panel hangs off the grid viewport as a
+    // layout fallback. That fallback is not an opener, so pressing the table must
+    // still count as an outside press.
+    const screen = render([
+      ROWS,
+      "$menuOpen = true",
+      "$app(DataGrid([",
+      COLS,
+      "], {columnMenu: true, columnMenuButton: false, columnMenuOpen: $menuOpen}))",
+    ].join("\n"));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("true");
+
+    const cell = screen.shadowRoot.querySelector<HTMLElement>(".rui-data-grid tbody td")!;
+    cell.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, composed: true }));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("false");
+  });
+
   it("leaves the state alone when nothing is bound", async () => {
     // The uncontrolled path is the old behaviour and must stay exactly that:
     // the trigger owns the state and nothing is written anywhere.
