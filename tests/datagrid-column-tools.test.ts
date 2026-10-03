@@ -1133,6 +1133,47 @@ describe("DataGrid column menu can be driven from outside", () => {
     expect(screen.state.get("menuOpen")).toBe(false);
   });
 
+  it("keeps the panel open on a press inside it", async () => {
+    const screen = render([
+      ROWS,
+      "$menuOpen = true",
+      "$app(DataGrid([",
+      COLS,
+      "], {columnMenu: true, columnMenuButton: false, columnMenuOpen: $menuOpen}))",
+    ].join("\n"));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("true");
+
+    const row = screen.shadowRoot.querySelector<HTMLElement>(".rui-data-grid-col-panel-row")!;
+    row.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, composed: true }));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("true");
+  });
+
+  it("treats a press inside a wide anchor as outside while the built-in trigger is shown", async () => {
+    // With the built-in button visible the anchor is only a placement hint and may
+    // be a whole toolbar, so a press on a sibling control inside it must still
+    // dismiss the panel rather than being swallowed by the exemption.
+    const screen = render([
+      ROWS,
+      "$menuOpen = true",
+      "$app(Stack([",
+      '  Row([Button("Refresh", {id: "refresh"})], {id: "tb"}),',
+      "  DataGrid([",
+      COLS,
+      '  ], {columnMenu: true, columnMenuOpen: $menuOpen, columnMenuAnchor: "#tb"})',
+      "]))",
+    ].join("\n"));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("true");
+    expect(screen.shadowRoot.querySelector("#tb #refresh")).not.toBeNull();
+
+    const refresh = screen.shadowRoot.querySelector<HTMLElement>("#refresh")!;
+    refresh.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, composed: true }));
+    await settle();
+    expect(panel(screen).getAttribute("data-open")).toBe("false");
+  });
+
   it("does not exempt the grid itself when the built-in trigger is hidden and no anchor is set", async () => {
     // With `columnMenuButton: false` the panel hangs off the grid viewport as a
     // layout fallback. That fallback is not an opener, so pressing the table must
