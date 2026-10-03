@@ -1,0 +1,110 @@
+// Memory Match — flip cards two at a time to find matching pairs, racing a
+// move counter and a live timer. Win triggers confetti and records a best
+// score. Starting point for: any turn-based grid game with reveal mechanics.
+// Uses: $store({ persist }) for best score, $effect timer, Grid board, Confetti.
+$app(Column([header, stats, board, footer], { gap: "lg", padding: "md" }))
+
+icons = ["rocket", "heart", "star", "bolt", "ghost", "crown", "anchor", "bell"]
+
+best = $store({
+  persist: "memory.best",
+  moves: 0,
+  setBest: (s, m) => { if (s.moves == 0 || m < s.moves) s.moves = m }
+})
+
+$cards = []     // [{ id, icon, flipped, matched }]
+$picked = []    // ids currently face-up
+$moves = 0
+$elapsed = 0
+$running = false
+$won = false
+
+function shuffle(arr) {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor($util.random() * (i + 1))
+    const t = a[i]; a[i] = a[j]; a[j] = t
+  }
+  return a
+}
+
+function newGame() {
+  const deck = shuffle([...icons, ...icons]).map((icon, i) => ({ id: i, icon, flipped: false, matched: false }))
+  $cards = deck
+  $picked = []
+  $moves = 0
+  $elapsed = 0
+  $running = false
+  $won = false
+}
+
+function flip(card) {
+  if (card.matched || card.flipped || $picked.length == 2) return
+  if (!$running) $running = true
+  $cards = $cards.map(c => c.id == card.id ? { ...c, flipped: true } : c)
+  const picked = [...$picked, card.id]
+  $picked = picked
+  if (picked.length == 2) {
+    $moves = $moves + 1
+    const a = $cards.find(c => c.id == picked[0])
+    const b = $cards.find(c => c.id == picked[1])
+    if (a.icon == b.icon) {
+      $cards = $cards.map(c => c.id == a.id || c.id == b.id ? { ...c, matched: true } : c)
+      $picked = []
+      if ($cards.every(c => c.matched)) { $running = false; $won = true; best.setBest($moves) }
+    } else {
+      setTimeout(() => {
+        $cards = $cards.map(c => c.id == a.id || c.id == b.id ? { ...c, flipped: false } : c)
+        $picked = []
+      }, 700)
+    }
+  }
+}
+
+$effect(() => { if ($running) $elapsed = $elapsed + 1 }, ["every(1000)"])
+
+// seed the first board on mount
+$effect(() => { if ($cards.length == 0) newGame() }, ["mount"])
+
+matched = $cards.filter(c => c.matched).length / 2
+fmtTime = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`
+
+header = PageHeader("Memory Match", {
+  subtitle: "Find all eight pairs in as few moves as you can",
+  badge: best.moves > 0 ? Badge(`Best: ${best.moves} moves`, { tone: "success", icon: "trophy" }) : Badge("No record yet", { tone: "neutral" }),
+  actions: [Button("New game", { variant: "primary", icon: "rotate-right", size: "sm", onClick: newGame })]
+})
+
+stats = Stats([
+  StatCard("Moves", { value: String($moves), icon: "hand-pointer", tone: "primary" }),
+  StatCard("Pairs found", { value: `${matched} / 8`, icon: "clone", tone: "info" }),
+  StatCard("Time", { value: fmtTime($elapsed), icon: "stopwatch", tone: "warning" })
+])
+
+function tile(card) {
+  return OnClick(Center([
+    card.flipped || card.matched
+      ? Icon(card.icon, { size: "xl", color: card.matched ? "var(--rui-color-success)" : "var(--rui-color-primary)" })
+      : Icon("question", { size: "lg", color: "var(--rui-color-text-muted)" })
+  ], { minHeight: "84px" }), {
+    onClick: () => flip(card)
+  })
+}
+
+function tileCard(card) {
+  return Box([tile(card)], {
+    key: String(card.id),
+    padding: "sm",
+    border: card.matched ? "strong" : "subtle",
+    background: card.flipped || card.matched ? "surface" : "muted",
+    sx: { borderRadius: "var(--rui-radius-md)", states: { hover: { shadow: "md" } } }
+  })
+}
+
+board = Card([
+  Show($won, { children: Banner("You won!", { message: `Solved in ${$moves} moves and ${fmtTime($elapsed)}.`, tone: "success", icon: "party-horn" }) }),
+  Grid($cards.map(c => tileCard(c)), { columns: 4, gap: "sm" }),
+  Show($won, { children: Confetti({ fire: true, count: 90, key: $moves }) })
+])
+
+footer = Center([Text("Tip: pairs you've matched stay face-up in green.", { variant: "small", tone: "muted" })])
