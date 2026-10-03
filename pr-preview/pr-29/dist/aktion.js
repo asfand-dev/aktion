@@ -15542,7 +15542,7 @@ const z2 = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, vg = {
     { name: "columnMenuOpen", type: "boolean", optional: !0, description: "Open state of the column-settings panel — bind a `$variable` for two-way control, so an external button can open it. Leave unset to let the built-in trigger own the state." },
     { name: "onColumnMenuOpenChange", type: "callable", optional: !0, aliases: ["oncolumnmenuopenchange"], description: "Called with the new boolean whenever the column-settings panel opens or closes — including via Escape, the × button, or an outside click." },
     { name: "columnMenuButton", type: "boolean", optional: !0, description: "Render the built-in column-settings trigger in the header (default true). Set `false` when an external control opens the panel, which keeps the panel and its configuration without the in-header icon." },
-    { name: "columnMenuAnchor", type: "string", optional: !0, description: 'CSS selector for the element the panel should hang off, e.g. `"#table-settings"`. Defaults to the built-in trigger; required when `columnMenuButton` is `false`, or the panel has nothing to anchor to. A press on this element never counts as an outside click, so a toolbar button bound to `columnMenuOpen` can close the panel it opened.' },
+    { name: "columnMenuAnchor", type: "string", optional: !0, description: 'CSS selector for the element the panel should hang off, e.g. `"#table-settings"`. Defaults to the built-in trigger; required when `columnMenuButton` is `false`, or the panel has nothing to anchor to. When `columnMenuButton` is `false`, a press on this element or anything inside it never counts as an outside click, so a toolbar button bound to `columnMenuOpen` can close the panel it opened.' },
     { name: "columnMenuTitle", type: "string", optional: !0, description: 'Heading of the column-settings panel (default "Table settings"). Pass a translated string in a localised app.' },
     { name: "columnMenuDescription", type: "string", optional: !0, description: 'Sub-heading under the panel title (default "Manage column visibility and order"). Pass `""` to drop the line.' },
     { name: "columnMenuResetLabel", type: "string", optional: !0, description: `Label of the panel's reset action (default "Reset to default").` },
@@ -16395,7 +16395,7 @@ const z2 = { overflows: !1, atStart: !0, atEnd: !0, headHeight: 0 }, vg = {
       };
       const Gt = (ne) => {
         if (!K.get()) return;
-        const Ee = ne.composedPath?.() ?? [], ir = St(null, Ee.find((gt) => gt instanceof Element));
+        const Ee = ne.composedPath?.() ?? [], ir = ge ? null : St(null, Ee.find((gt) => gt instanceof Element));
         for (const gt of Ee)
           if (gt instanceof Element && (gt.classList?.contains("rui-data-grid-col-menu") || gt.classList?.contains("rui-data-grid-col-panel") || gt === ir))
             return;
