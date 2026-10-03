@@ -480,7 +480,7 @@ export const DataGrid: ComponentSpec = {
     { name: "columnMenuOpen", type: "boolean", optional: true, description: "Open state of the column-settings panel — bind a `$variable` for two-way control, so an external button can open it. Leave unset to let the built-in trigger own the state." },
     { name: "onColumnMenuOpenChange", type: "callable", optional: true, aliases: ["oncolumnmenuopenchange"], description: "Called with the new boolean whenever the column-settings panel opens or closes — including via Escape, the × button, or an outside click." },
     { name: "columnMenuButton", type: "boolean", optional: true, description: "Render the built-in column-settings trigger in the header (default true). Set `false` when an external control opens the panel, which keeps the panel and its configuration without the in-header icon." },
-    { name: "columnMenuAnchor", type: "string", optional: true, description: "CSS selector for the element the panel should hang off, e.g. `\"#table-settings\"`. Defaults to the built-in trigger; required when `columnMenuButton` is `false`, or the panel has nothing to anchor to." },
+    { name: "columnMenuAnchor", type: "string", optional: true, description: "CSS selector for the element the panel should hang off, e.g. `\"#table-settings\"`. Defaults to the built-in trigger; required when `columnMenuButton` is `false`, or the panel has nothing to anchor to. A press on this element never counts as an outside click, so a toolbar button bound to `columnMenuOpen` can close the panel it opened." },
     { name: "columnMenuTitle", type: "string", optional: true, description: "Heading of the column-settings panel (default \"Table settings\"). Pass a translated string in a localised app." },
     { name: "columnMenuDescription", type: "string", optional: true, description: "Sub-heading under the panel title (default \"Manage column visibility and order\"). Pass `\"\"` to drop the line." },
     { name: "columnMenuResetLabel", type: "string", optional: true, description: "Label of the panel's reset action (default \"Reset to default\")." },
@@ -2209,22 +2209,31 @@ export const DataGrid: ComponentSpec = {
        * built-in button whenever the selector matches nothing, so a typo degrades
        * to the old placement instead of dropping the panel in the corner.
        */
-      const resolveMenuAnchor = (fallback: HTMLElement): HTMLElement => {
-        // A hidden trigger measures 0x0, which would drop the panel in the page's
-        // top-left corner. The grid's own viewport is the honest fallback: the
-        // panel still lands on the table it configures.
-        const base = showMenuButton ? fallback : ((viewport as HTMLElement) ?? fallback);
-        if (!columnMenuAnchor) return base;
-        const scope = liveScope(fallback);
+      const findNamedAnchor = (origin: Element | null, pressed?: Element): HTMLElement | null => {
+        if (!columnMenuAnchor) return null;
+        const scope = liveScope(origin);
         const root = scope.getRootNode?.() as ParentNode | null;
-        for (const where of [root, scope, typeof document === "undefined" ? null : document]) {
+        // `pressed` is the node an event actually landed on. `liveScope` can only
+        // see a grid it has already recorded, and a stale render-time `scope` sits
+        // in a detached tree that cannot see the toolbar, so the live tree the
+        // press happened in is searched first.
+        const pressedRoot = pressed?.getRootNode?.() as ParentNode | undefined;
+        for (const where of [pressedRoot, root, scope, typeof document === "undefined" ? null : document]) {
           if (!where) continue;
           try {
             const found = where.querySelector?.(columnMenuAnchor);
             if (found instanceof HTMLElement) return found;
           } catch { /* an invalid selector is the author's typo, not a crash */ }
         }
-        return base;
+        return null;
+      };
+
+      const resolveMenuAnchor = (fallback: HTMLElement): HTMLElement => {
+        // A hidden trigger measures 0x0, which would drop the panel in the page's
+        // top-left corner. The grid's own viewport is the honest fallback: the
+        // panel still lands on the table it configures.
+        const base = showMenuButton ? fallback : ((viewport as HTMLElement) ?? fallback);
+        return findNamedAnchor(fallback) ?? base;
       };
 
       const openPanel = (origin: Element | null): void => {
@@ -2297,12 +2306,21 @@ export const DataGrid: ComponentSpec = {
       const closeOnOutside = (event: MouseEvent): void => {
         if (!colConfigPanelOpen.get()) return;
         const path = event.composedPath?.() ?? [];
+        // The element named by `columnMenuAnchor` is the author's own opener, so a
+        // press on it is not an outside press: it owns the toggle in its `click`.
+        // Closing here, on `mousedown`, ran BEFORE that click, so the click then
+        // re-opened what had just been closed and the trigger could only ever open
+        // the panel. Only an explicitly named anchor counts: the grid-viewport
+        // fallback used for layout when the built-in button is hidden is not an
+        // opener.
+        const namedAnchor = findNamedAnchor(null, path.find((n): n is Element => n instanceof Element));
         for (const node of path) {
           if (!(node instanceof Element)) continue;
           // Both classes, because a promoted panel is no longer a descendant of
           // the menu on the reparenting fallback path.
           if (node.classList?.contains("rui-data-grid-col-menu")
-            || node.classList?.contains("rui-data-grid-col-panel")) return;
+            || node.classList?.contains("rui-data-grid-col-panel")
+            || node === namedAnchor) return;
         }
         closePanel();
       };
