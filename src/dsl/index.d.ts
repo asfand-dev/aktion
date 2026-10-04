@@ -2341,7 +2341,7 @@ export interface DataGridOptions extends BaseProps {
   oncolumnmenuopenchange?: Callable;
   /** Render the built-in column-settings trigger in the header (default true). Set `false` when an external control opens the panel, which keeps the panel and its configuration without the in-header icon. */
   columnMenuButton?: boolean;
-  /** CSS selector for the element the panel should hang off, e.g. `"#table-settings"`. Defaults to the built-in trigger; required when `columnMenuButton` is `false`, or the panel has nothing to anchor to. */
+  /** CSS selector for the element the panel should hang off, e.g. `"#table-settings"`. Defaults to the built-in trigger; required when `columnMenuButton` is `false`, or the panel has nothing to anchor to. When `columnMenuButton` is `false`, a press on this element or anything inside it never counts as an outside click, so a toolbar button bound to `columnMenuOpen` can close the panel it opened. */
   columnMenuAnchor?: string | number;
   /** Heading of the column-settings panel (default "Table settings"). Pass a translated string in a localised app. */
   columnMenuTitle?: string | number;

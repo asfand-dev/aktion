@@ -188,10 +188,10 @@ describe("repo .aktion programs format to a fixed point", () => {
  * parentheses (`a || (b ? c : d)`, `!(a && b)`).
  */
 const EXPECTED_CORPUS_SPLIT = {
-  total: 165,
+  total: 166,
   formatted: 79,
   skippedDifferentProgram: 48,
-  skippedDidNotReparse: 38,
+  skippedDidNotReparse: 39,
 };
 
 describe("repo .aktion programs: how formatProgram treats the corpus", () => {
