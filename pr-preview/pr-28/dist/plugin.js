@@ -9686,7 +9686,8 @@ const LANGUAGE_LABEL = {
   typescript: "TypeScript"
 };
 function baseName(path) {
-  const clean = path.replace(/[?#].*$/, "");
+  const suffixStart = path.search(/[?#]/);
+  const clean = suffixStart < 0 ? path : path.slice(0, suffixStart);
   const slash = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"));
   return slash < 0 ? clean : clean.slice(slash + 1);
 }

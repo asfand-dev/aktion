@@ -9172,8 +9172,8 @@ const $x = {
   typescript: "TypeScript"
 };
 function Hn(t) {
-  const e = t.replace(/[?#].*$/, ""), r = Math.max(e.lastIndexOf("/"), e.lastIndexOf("\\"));
-  return r < 0 ? e : e.slice(r + 1);
+  const e = t.search(/[?#]/), r = e < 0 ? t : t.slice(0, e), i = Math.max(r.lastIndexOf("/"), r.lastIndexOf("\\"));
+  return i < 0 ? r : r.slice(i + 1);
 }
 function Ix(t, e) {
   const r = Hn(e), i = r.replace(/\.(?:[cm]?[jt]sx?|json|css|wasm)$/i, ""), a = /\.(?:[cm]?ts|tsx)$/i.test(r) ? `${i}.aktion.ts` : `${i}.aktion.js`;
