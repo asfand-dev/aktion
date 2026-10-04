@@ -5,6 +5,18 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-10-02
+
+### Component Showcase Page
+
+- Added a component showcase (`showcase.html` on the docs site) that renders
+  all 282 built-in components on one page, grouped like the component
+  catalogue and filled with realistic sample content instead of placeholder
+  text. A theme picker in its header switches between all eleven themes, and
+  the page is listed in the docs sidebar under Resources.
+- Pull requests now get full-page screenshots of the showcase (desktop light,
+  desktop dark and mobile) in a single comment that updates on every push, so
+  a change to any component shows up in review.
 ## 2026-10-03
 
 ### DataGrid: A Toolbar Button Can Close the Column Panel It Opened
