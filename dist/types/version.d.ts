@@ -6,4 +6,4 @@
  * release workflow bumps it with package.json — see the `extra-files` entry in
  * `release-please-config.json` — and a test fails if the two ever disagree.
  */
-export declare const VERSION = "0.8.0";
+export declare const VERSION = "0.9.0";

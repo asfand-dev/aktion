@@ -60539,7 +60539,7 @@ function Q4(t, e) {
     return c[s.risk] - c[l.risk] || s.name.localeCompare(l.name);
   }), a;
 }
-const eO = "0.8.0", Fn = "theme", ya = "streaming", nl = "response", Ri = "showerrors", Mi = "src", tO = "scroll-restoration", ol = "dir", sl = "margin", Jm = "route";
+const eO = "0.9.0", Fn = "theme", ya = "streaming", nl = "response", Ri = "showerrors", Mi = "src", tO = "scroll-restoration", ol = "dir", sl = "margin", Jm = "route";
 function rO(t) {
   const e = t.getPath(), r = { ...t.getParams() }, i = t.getActivePattern(), a = {};
   if (typeof window < "u" && window.location) {
