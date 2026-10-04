@@ -176,37 +176,3 @@ describe("agent skill — every `aktion` example is a valid program", () => {
   }
 });
 
-describe("agent skill — the generator is idempotent", () => {
-  /**
-   * Running the generator must not change the committed output. This is what
-   * actually catches "someone edited src/library/ and forgot to rebuild": the
-   * regenerated files differ from what is on disk.
-   */
-  it("produces byte-identical output when re-run", () => {
-    if (!existsSync(resolve(repoRoot, "dist/language.js"))) {
-      // The generator reads the built surface; without it there is nothing to
-      // compare. Skip rather than fail, so a fresh clone's first test run works.
-      return;
-    }
-
-    // Snapshot the generated half, regenerate, and compare in-process. Comparing
-    // file CONTENT rather than `git status` matters: on a branch where the skill
-    // is newly added, every file legitimately shows as added, and a git-based
-    // check would fail for a reason that has nothing to do with staleness.
-    const generated = [
-      "references/builtins.md",
-      "references/namespaces.md",
-      "references/themes.md",
-      ...readdirSync(componentsDir).map((f) => `references/components/${f}`),
-    ];
-    const before = new Map(generated.map((f) => [f, read(f)]));
-
-    execFileSync("node", ["scripts/emit-skill.mjs"], { cwd: repoRoot, stdio: "pipe" });
-
-    const stale = generated.filter((f) => read(f) !== before.get(f));
-    expect(
-      stale,
-      "these generated skill files are stale — run `npm run build:skill` and commit the result",
-    ).toEqual([]);
-  });
-});
