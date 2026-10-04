@@ -5,6 +5,21 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## [0.9.0](https://github.com/asfand-dev/aktion/compare/v0.8.0...v0.9.0) (2026-10-04)
+
+
+### Features
+
+* **formatter:** keep let/const/var and refuse to change the program ([#24](https://github.com/asfand-dev/aktion/issues/24)) ([6f0b49e](https://github.com/asfand-dev/aktion/commit/6f0b49e3c3fb9992210407412c8480b9dcfa5712))
+* **parser:** require a statement boundary and report unknown characters ([#25](https://github.com/asfand-dev/aktion/issues/25)) ([f37bfad](https://github.com/asfand-dev/aktion/commit/f37bfad09f323622cec3bcb763a694268af99f39))
+* **showcase:** introduce component showcase page and automated screenshot capture ([#27](https://github.com/asfand-dev/aktion/issues/27)) ([5accf0b](https://github.com/asfand-dev/aktion/commit/5accf0b917a4bd8bc7ef7d6a8a335b0166a8c3ce))
+* write Aktion modules in TypeScript and JavaScript ([#28](https://github.com/asfand-dev/aktion/issues/28)) ([4ac7d8b](https://github.com/asfand-dev/aktion/commit/4ac7d8b72171725adfaf6ccf6e6e4c40b59e22d9))
+
+
+### Bug Fixes
+
+* **data-grid:** let the columnMenuAnchor element close its own panel ([#29](https://github.com/asfand-dev/aktion/issues/29)) ([da52aa3](https://github.com/asfand-dev/aktion/commit/da52aa39cb2a6677914f313849abca4013b642e1))
+
 ## 2026-10-04
 
 ### Security: Crafted Import Paths Can No Longer Stall the Compiler
