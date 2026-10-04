@@ -1,5 +1,9 @@
-import { Plugin } from 'vite';
-import { CompiledProgram, ModuleResolver } from '../compiler/index.js';
+import { Plugin, UserConfig } from 'vite';
+import { CompiledProgram, ModuleResolver, ModuleFrontends } from '../compiler/index.js';
+import { TypeScriptFrontendOptions } from './typescript.js';
+import { AktionDeclarationsOptions } from './declarations.js';
+export { loadTypeScriptFrontend, createTypeScriptFrontend, tryLoadTypeScriptFrontend, tryCreateTypeScriptFrontend, unavailableTypeScriptFrontend, typeScriptFrontendFromEraser, computeSoftNewlines, checkErasureInvariant, MISSING_ERASER_MESSAGE, type TypeEraser, type TypeEraseResult, type TypeEraseDiagnostic, type TypeScriptFrontendOptions, } from './typescript.js';
+export { aktionDeclarationText, declarationFileName, emitAktionDeclarations, updateAktionDeclaration, DECLARATION_HEADER, DEFAULT_DECLARATIONS_DIR, type AktionDeclarationsOptions, type AktionDeclarationsResult, } from './declarations.js';
 /**
  * How a `.aktion` import specifier becomes a file on disk.
  *
@@ -37,8 +41,12 @@ export interface AktionResolveOptions {
     roots?: string[];
     /**
      * Suffixes tried when a specifier names no file directly.
-     * Default: `[".aktion", "/index.aktion"]`, so `"./lib/format"` finds
-     * `lib/format.aktion` and `"./lib"` finds `lib/index.aktion`.
+     * Default: `[".aktion", ".aktion.ts", ".aktion.js", "/index.aktion",
+     * "/index.aktion.ts", "/index.aktion.js"]`, so `"./lib/format"` finds
+     * `lib/format.aktion` (or `.aktion.ts` / `.aktion.js`) and `"./lib"` finds
+     * `lib/index.aktion`. Setting it REPLACES the list (an `aktion.config.json`
+     * value too), so include the TypeScript / JavaScript suffixes if you want
+     * them.
      */
     extensions?: string[];
 }
@@ -64,7 +72,45 @@ export interface AktionPluginOptions extends AktionResolveOptions {
      * to this config object alone.
      */
     config?: boolean;
+    /**
+     * Compile `.aktion.ts` modules. On by default whenever the optional peer
+     * `ts-blank-space` is installed (without it, each `.aktion.ts` module reports
+     * "needs the `ts-blank-space` package"). Pass `{ eraser }` to plug in another
+     * position-preserving type eraser, or `false` to refuse `.aktion.ts`.
+     */
+    typescript?: TypeScriptFrontendOptions | false;
+    /**
+     * Ship each module's original text with the compiled program
+     * (`CompiledProgram.sourcesContent`) so DevTools can show the files — and
+     * line numbers — the author wrote. Default: true. Turn off to trim
+     * production bundles.
+     */
+    devtools?: boolean;
+    /**
+     * Write a `name.d.aktion.ts` declaration for every `.aktion` module — on
+     * `buildStart`, and again whenever one changes under the dev server — so
+     * `.aktion.ts` code that imports from `.aktion` files is type-checked
+     * (see {@link emitAktionDeclarations}). `true` uses the defaults
+     * (`src/**\/*.aktion` into `.aktion-types`, which needs
+     * `"rootDirs": ["src", ".aktion-types/src"]` and `"allowArbitraryExtensions": true`
+     * in the tsconfig). Default: off.
+     */
+    dts?: boolean | Omit<AktionDeclarationsOptions, "root" | "write">;
 }
+/**
+ * Config the plugin contributes:
+ *
+ *   - `optimizeDeps.exclude` for `aktion-runtime/dsl`: Vite's dependency scanner
+ *     reads `.aktion.ts` files as plain TypeScript and tries to pre-bundle their
+ *     imports, and the types-only `./dsl` subpath has nothing to bundle
+ *     ("No known conditions for "./dsl" specifier");
+ *   - an exclusion of `.aktion.ts` ids from Vite's own TypeScript transform
+ *     (`esbuild` in Vite 5–7, `oxc` in Vite 8), which otherwise re-processes the
+ *     plugin's output — re-parsing a large JSON blob and dropping unused
+ *     imports. Setting `exclude` replaces the default (`/\.js$/`), so the
+ *     default is restated unless the user already chose one.
+ */
+export declare function aktionViteConfig(user: UserConfig, viteMajor: number | undefined): UserConfig;
 /**
  * Add to `vite.config.ts`:
  *
@@ -72,7 +118,11 @@ export interface AktionPluginOptions extends AktionResolveOptions {
  *   export default { plugins: [aktion()] };
  */
 export declare function aktionPlugin(options?: AktionPluginOptions): Plugin;
-/** True for `*.aktion` ids (query/hash stripped). Exported for tests. */
+/**
+ * True for the ids of Aktion modules — `*.aktion`, `*.aktion.ts`, `*.aktion.js`
+ * (query/hash stripped). Plain `*.ts` / `*.js` ids are native code and are left
+ * to Vite. Exported for tests.
+ */
 export declare function isAktionId(id: string): boolean;
 export { aktionPlugin as default };
 export interface CompileOptions extends AktionResolveOptions {
@@ -90,9 +140,19 @@ export interface CompileOptions extends AktionResolveOptions {
      * the build does without restating them.
      */
     config?: boolean;
+    /**
+     * Frontends per module language, merged over the defaults. The default
+     * `typescript` frontend is created synchronously from `ts-blank-space`, which
+     * needs Node ≥ 20.19 / 22.12 (`require` of an ES module); on older Node, or
+     * to control the eraser, pass `typescript: await loadTypeScriptFrontend()` —
+     * or use {@link compileAktionFileAsync} / {@link compileAktionSourceAsync}.
+     */
+    frontends?: ModuleFrontends;
+    /** Include each module's original text (`CompiledProgram.sourcesContent`). Default: true. */
+    sourcesContent?: boolean;
 }
 /**
- * Link a `.aktion` file from disk into a {@link CompiledProgram}, without a
+ * Link an Aktion module from disk (`.aktion`, `.aktion.js` or `.aktion.ts`) into a {@link CompiledProgram}, without a
  * bundler.
  *
  * The Vite plugin is normally what produces this artefact, which leaves anything
@@ -115,6 +175,12 @@ export interface CompileOptions extends AktionResolveOptions {
  *   error. The message lists every diagnostic with its position.
  */
 export declare function compileAktionFile(entryPath: string, options?: CompileOptions): CompiledProgram;
+/**
+ * {@link compileAktionFile}, loading the TypeScript frontend asynchronously —
+ * works on every Node version the plugin supports, including Node 18 where
+ * `ts-blank-space` (an ES module) cannot be `require`d.
+ */
+export declare function compileAktionFileAsync(entryPath: string, options?: CompileOptions): Promise<CompiledProgram>;
 /**
  * Link an in-memory program whose imports resolve against the real filesystem,
  * relative to `virtualPath`.
@@ -140,6 +206,11 @@ export declare function compileAktionFile(entryPath: string, options?: CompileOp
  * specifiers.
  */
 export declare function compileAktionSource(source: string, virtualPath: string, options?: CompileOptions): CompiledProgram;
+/**
+ * {@link compileAktionSource}, loading the TypeScript frontend asynchronously
+ * (see {@link compileAktionFileAsync}).
+ */
+export declare function compileAktionSourceAsync(source: string, virtualPath: string, options?: CompileOptions): Promise<CompiledProgram>;
 /**
  * True when `candidate` is `root` or sits underneath it.
  *

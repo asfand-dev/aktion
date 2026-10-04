@@ -1,5 +1,6 @@
 import { Program } from '../parser/types.js';
-import { LinkDiagnostic, ModuleResolver } from './linker.js';
+import { ModuleFrontends } from './frontend.js';
+import { LinkDiagnostic, LinkedModule, ModuleResolver } from './linker.js';
 /**
  * Resolve an import specifier to a module key.
  *
@@ -23,6 +24,12 @@ export interface LinkProjectOptions {
      * tests / hosts that want a custom transport or to disable remote loading.
      */
     fetch?: (url: string) => Promise<string>;
+    /**
+     * How each module language is compiled — see `LinkOptions.frontends`.
+     * Defaults to `.aktion` + `.aktion.js`; pass a `typescript` frontend to link
+     * `.aktion.ts` modules in the page.
+     */
+    frontends?: ModuleFrontends;
 }
 export interface LinkProjectResult {
     /** The merged, scope-renamed program. */
@@ -33,6 +40,8 @@ export interface LinkProjectResult {
     diagnostics: LinkDiagnostic[];
     /** Resolved paths/URLs of the imported modules (excludes the entry). */
     dependencies: string[];
+    /** Every linked module, in `program.sources` order — see `LinkResult.modules`. */
+    modules: LinkedModule[];
 }
 /**
  * Link an in-memory project (entry + files) into a single `CompiledProgram`-

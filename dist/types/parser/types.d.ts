@@ -31,6 +31,14 @@ export interface LambdaExpr {
     kind: "Lambda";
     params: ReadonlyArray<LambdaParam>;
     body: Expression;
+    /**
+     * The name of the function declaration this lambda replaces: the
+     * JS-semantics layer turns a nested `function inc() {}` of a `.aktion.js` /
+     * `.aktion.ts` module into `const inc = function () {}` (W2), and keeps the
+     * name here so coverage and DevTools still call it `inc`. The parser never
+     * sets it; the runtime ignores it.
+     */
+    name?: string;
     loc?: SourceLocation;
 }
 export interface LambdaParam {
@@ -112,6 +120,12 @@ export interface ObjectProperty {
      * evaluating this expression. Falls back to a string coercion.
      */
     computedKey?: Expression;
+    /**
+     * True when written as method shorthand — `{ save(item) { … } }` — rather
+     * than `{ save: (item) => { … } }`. `value` is then a `Lambda` with a block
+     * body; the flag only tells the printer to write the shorthand back.
+     */
+    method?: boolean;
 }
 export interface ObjectExpr {
     kind: "Object";
@@ -243,6 +257,12 @@ export interface AssignmentStatement {
      */
     declaration?: DeclarationKeyword;
     /**
+     * True for a declaration written without a value — `let x` / `var x` (never
+     * `const`, which requires one). `expression` is then `void 0`, so the binding
+     * reads `undefined`; the flag only tells the printer to write `let x` back.
+     */
+    uninitialized?: boolean;
+    /**
      * True when prefixed with `export` (multi-file modules). Used by the linker
      * to decide importability; the streaming runtime ignores it.
      */
@@ -309,6 +329,17 @@ export interface ComponentDeclaration {
  */
 export interface DeclParam {
     name: string;
+    /**
+     * The name callers use for this parameter when the local `name` was renamed
+     * by a compiler pass (e.g. the TS/JS frontend's hygienic renaming). The
+     * parser never sets it.
+     *
+     * It matters for components, whose calling convention is partly by NAME:
+     * named props (`Card({ title: "T" })`, `Card(child, { title: "T" })`) and
+     * the named-slot logic match prop keys against `publicName ?? name`, while
+     * the value is still bound to the local `name` inside the body.
+     */
+    publicName?: string;
     defaultValue?: Expression;
     optional?: boolean;
     /** True for `...rest` parameters — must be the final param. */
@@ -446,6 +477,13 @@ export interface ReturnStatement {
 export interface ExpressionStatement {
     kind: "ExpressionStatement";
     expression: Expression;
+    /**
+     * True for `export default $app(…)` — the only default export Aktion has,
+     * so that TypeScript sees the entry module's default export. It means the
+     * same as `$app(…)` (`expression` is that call); the flag only tells the
+     * printer to write `export default` back.
+     */
+    exportDefault?: boolean;
     loc?: SourceLocation;
     /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
     leadingComments?: ReadonlyArray<AttachedComment>;

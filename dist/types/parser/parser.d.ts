@@ -7,6 +7,15 @@ export interface ParseOptions {
      * See {@link TokenizeOptions.streaming}.
      */
     streaming?: boolean;
+    /**
+     * Offsets of `\n` characters in `source` that do not end a line for the
+     * grammar: no statement ends there, but positions after them stay exact.
+     * See {@link TokenizeOptions.softNewlines}. The TypeScript frontend passes
+     * the line breaks left inside erased multi-line type annotations, so
+     * `const x = foo<⏎ Bar⏎>(1)` (erased to `foo` + blank lines + `(1)`) stays
+     * one call instead of becoming two statements.
+     */
+    softNewlines?: ReadonlySet<number>;
 }
 export declare function parse(source: string, options?: ParseOptions): Program;
 /**

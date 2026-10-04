@@ -1,3 +1,16 @@
+const MODULE_LOCAL_SYMBOL = /^__a(\d+)_(.+)$/;
+function moduleLocalBaseName(symbol) {
+  const match = MODULE_LOCAL_SYMBOL.exec(symbol);
+  return match ? match[2] : null;
+}
+const LOCAL_BINDING_SYMBOL = /^__l(\d+)_(.+)$/;
+function localBindingBaseName(symbol) {
+  const match = LOCAL_BINDING_SYMBOL.exec(symbol);
+  return match ? match[2] : null;
+}
+function authoredName(symbol) {
+  return moduleLocalBaseName(symbol) ?? localBindingBaseName(symbol) ?? symbol;
+}
 function isNode(value) {
   if (typeof value !== "object" || value === null) return false;
   const kind = value.kind;
@@ -45,11 +58,6 @@ function visitRecord(record, owner, key2, depth, visit) {
     }
   }
 }
-const MODULE_LOCAL_SYMBOL = /^__a(\d+)_(.+)$/;
-function moduleLocalBaseName(symbol) {
-  const match = MODULE_LOCAL_SYMBOL.exec(symbol);
-  return match ? match[2] : null;
-}
 const INLINE_SOURCE_PATH = "<inline>";
 const STORE_KEY = "__AKTION_COVERAGE_V1__";
 function store() {
@@ -76,11 +84,11 @@ function functionName(node) {
     case "ComponentDeclaration":
     case "ActionDeclaration":
     case "HookDeclaration":
-      return moduleLocalBaseName(node.name) ?? (node.name || "(anonymous)");
+      return node.name ? authoredName(node.name) : "(anonymous)";
     case "EffectDeclaration":
       return "effect";
     case "Lambda":
-      return "(anonymous)";
+      return node.name ? authoredName(node.name) : "(anonymous)";
     default:
       return null;
   }

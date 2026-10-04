@@ -47,6 +47,7 @@ const KEYWORDS$1 = {
 };
 function tokenize(source, comments, options = {}) {
   const tokens = [];
+  const softNewlines = options.softNewlines !== void 0 && options.softNewlines.size > 0 ? options.softNewlines : void 0;
   let i = 0;
   let line = 1;
   let column = 1;
@@ -192,15 +193,17 @@ function tokenize(source, comments, options = {}) {
     if (ch === "\n") {
       const startLine = line;
       const startCol = column;
+      const soft = softNewlines?.has(i) === true;
       advance();
-      push("Newline", "\n", startLine, startCol);
+      if (!soft) push("Newline", "\n", startLine, startCol);
       continue;
     }
     if (ch === "\u2028" || ch === "\u2029") {
       const startLine = line;
       const startCol = column;
+      const soft = softNewlines?.has(i) === true;
       advance();
-      push("Newline", ch, startLine, startCol);
+      if (!soft) push("Newline", ch, startLine, startCol);
       continue;
     }
     if (ch === " " || ch === "	" || ch === "\r" || ch === "\f" || ch === "\v" || ch > "" && /\s/.test(ch)) {
@@ -306,6 +309,7 @@ function tokenize(source, comments, options = {}) {
           const exprCol = column;
           advance();
           advance();
+          const exprOffset = i;
           let depth = 1;
           let source2 = "";
           while (i < source.length && depth > 0) {
@@ -355,7 +359,7 @@ function tokenize(source, comments, options = {}) {
             }
             source2 += advance();
           }
-          parts.push({ kind: "expr", source: source2, line: exprLine, column: exprCol });
+          parts.push({ kind: "expr", source: source2, line: exprLine, column: exprCol, offset: exprOffset });
           sawExpr = true;
           continue;
         }
@@ -587,6 +591,30 @@ function isIdentifierStart(ch) {
 function isIdentifierChar(ch) {
   return isIdentifierStart(ch) || isDigit(ch);
 }
+function moduleLocalSymbol(moduleId, name) {
+  return `__a${moduleId}_${name}`;
+}
+const MODULE_LOCAL_SYMBOL = /^__a(\d+)_(.+)$/;
+function moduleLocalBaseName(symbol) {
+  const match = MODULE_LOCAL_SYMBOL.exec(symbol);
+  return match ? match[2] : null;
+}
+const LOCAL_BINDING_SYMBOL = /^__l(\d+)_(.+)$/;
+function localBindingBaseName(symbol) {
+  const match = LOCAL_BINDING_SYMBOL.exec(symbol);
+  return match ? match[2] : null;
+}
+function authoredName(symbol) {
+  return moduleLocalBaseName(symbol) ?? localBindingBaseName(symbol) ?? symbol;
+}
+const shapes = /* @__PURE__ */ new WeakMap();
+function recordEffectCallShape(decl, shape) {
+  if (shape.callback === void 0 && shape.deps === void 0) return;
+  shapes.set(decl, shape);
+}
+function effectCallShape(decl) {
+  return shapes.get(decl);
+}
 function isNode(value) {
   if (typeof value !== "object" || value === null) return false;
   const kind = value.kind;
@@ -645,9 +673,12 @@ function stampSourceIndex(root, index) {
 }
 function parse(source, options = {}) {
   const comments = [];
-  const tokens = tokenize(source, comments, { streaming: options.streaming });
+  const tokens = tokenize(source, comments, {
+    streaming: options.streaming,
+    softNewlines: options.softNewlines
+  });
   const openLiteral = tokens[tokens.length - 2]?.open === true;
-  const ctx = new ParserContext(tokens, comments);
+  const ctx = new ParserContext(tokens, comments, options.softNewlines);
   const statements = [];
   const errors = [];
   while (!ctx.isEnd()) {
@@ -655,7 +686,9 @@ function parse(source, options = {}) {
     try {
       const stmt = parseStatement(ctx, true);
       if (stmt) statements.push(stmt);
+      statements.push(...ctx.takePending());
     } catch (err) {
+      ctx.takePending();
       const error = err;
       errors.push(error);
       ctx.recoverToNextLine();
@@ -707,6 +740,21 @@ function statementBoundaryError(head, prev, next) {
   }
   if (prev.type === "Identifier" && prev.value === "yield") {
     return at(prev, "`yield` is not supported in Aktion — there are no generators.");
+  }
+  if (head === prev && prev.type === "Identifier" && next.type === "Punctuation" && next.value === ":") {
+    return at(
+      prev,
+      `Labels (\`${prev.value}:\`) are not supported in Aktion — use a flag variable, or move the loop into a function and \`return\` from it.`
+    );
+  }
+  if (head === prev && prev.type === "Keyword" && (prev.value === "break" || prev.value === "continue") && next.type === "Identifier") {
+    return at(
+      next,
+      `\`${prev.value} ${next.value}\` is not supported in Aktion — there are no labels, so \`${prev.value}\` always applies to the innermost loop. Use a flag variable, or move the loop into a function and \`return\` from it.`
+    );
+  }
+  if (next.type === "Operator" && isAssignmentOperator(next.value)) {
+    return at(next, "Chained assignment (`a = b = 1`) is not supported in Aktion — assign each name in its own statement.");
   }
   if (head === prev && prev.type === "Identifier" && next.type === "Identifier" && TYPESCRIPT_DECLARATION_WORDS.has(prev.value)) {
     return at(
@@ -856,20 +904,20 @@ function parseExpressionStatement(ctx) {
   let expression = parseExpression(ctx);
   const next = ctx.peek();
   if (next.type === "Operator" && isAssignmentOperator(next.value)) {
-    if (isAssignableTarget(expression)) {
-      ctx.consume();
-      const value = parseExpression(ctx);
-      expression = {
-        kind: "BuiltinCall",
-        name: "__rui_assign__",
-        arguments: [
-          expression,
-          value,
-          { kind: "Literal", value: next.value }
-        ],
-        loc: { line: next.line, column: next.column }
-      };
-    }
+    if (!isAssignableTarget(expression)) throw invalidAssignmentTarget(expression, start2, next);
+    ctx.consume();
+    skipNewlinesBeforeOperand(ctx);
+    const value = parseExpression(ctx);
+    expression = {
+      kind: "BuiltinCall",
+      name: "__rui_assign__",
+      arguments: [
+        expression,
+        value,
+        { kind: "Literal", value: next.value }
+      ],
+      loc: { line: next.line, column: next.column }
+    };
   } else if (next.type === "Operator" && (next.value === "++" || next.value === "--")) {
     if (isAssignableTarget(expression)) {
       ctx.consume();
@@ -897,6 +945,48 @@ function isAssignableTarget(expr) {
   if (expr.kind === "Identifier") return true;
   return false;
 }
+const DESTRUCTURING_ASSIGNMENT_MESSAGE = "Destructuring assignment (`[a, b] = …`, `({ a } = …)`) is not supported in Aktion — declare new names instead (`const [a, b] = …`), or assign each one separately.";
+function invalidAssignmentTarget(target, head, operator) {
+  if (target.kind === "Array" || target.kind === "Object") {
+    return { message: DESTRUCTURING_ASSIGNMENT_MESSAGE, line: head.line, column: head.column };
+  }
+  return {
+    message: `Cannot assign to this expression with \`${operator.value}\` — only a name, a \`$state\` atom or a property (\`a.b\`, \`a[i]\`) can be assigned.`,
+    line: operator.line,
+    column: operator.column
+  };
+}
+function skipNewlinesBeforeOperand(ctx) {
+  const { token, skipped } = peekNonNewline(ctx);
+  if (skipped === 0 || !canStartOperand(ctx, token, skipped)) return;
+  for (let i = 0; i < skipped; i += 1) ctx.consume();
+}
+const OPERAND_KEYWORDS = /* @__PURE__ */ new Set(["function", "new", "typeof", "void", "delete", "await", "async"]);
+function canStartOperand(ctx, token, offset) {
+  switch (token.type) {
+    case "Identifier":
+    case "StateIdentifier": {
+      const after = ctx.peek(offset + 1);
+      return !(after.type === "Operator" && isAssignmentOperator(after.value));
+    }
+    case "Number":
+    case "String":
+    case "TemplateString":
+    case "Boolean":
+    case "Null":
+    case "Regex":
+    case "Error":
+      return true;
+    case "Keyword":
+      return OPERAND_KEYWORDS.has(token.value);
+    case "Punctuation":
+      return token.value === "(" || token.value === "[" || token.value === "{";
+    case "Operator":
+      return token.value === "!" || token.value === "-" || token.value === "+" || token.value === "~" || token.value === "++" || token.value === "--";
+    default:
+      return false;
+  }
+}
 function parseFunctionDecl(ctx) {
   const start2 = ctx.expect("Keyword", "function");
   const isHook = ctx.peek().type === "StateIdentifier";
@@ -913,8 +1003,9 @@ function parseFunctionDecl(ctx) {
       loc: { line: start2.line, column: start2.column }
     };
   }
-  const isPascalCase = nameTok.value.length > 0 && nameTok.value[0] >= "A" && nameTok.value[0] <= "Z";
-  if (isPascalCase) {
+  const authoredName2 = moduleLocalBaseName(nameTok.value) ?? nameTok.value;
+  const isPascalCase2 = authoredName2.length > 0 && authoredName2[0] >= "A" && authoredName2[0] <= "Z";
+  if (isPascalCase2) {
     return {
       kind: "ComponentDeclaration",
       name: nameTok.value,
@@ -934,6 +1025,9 @@ function parseFunctionDecl(ctx) {
 }
 function parseFunctionParams(ctx) {
   ctx.expect("Punctuation", "(");
+  return ctx.withNewlines(true, () => parseFunctionParamList(ctx));
+}
+function parseFunctionParamList(ctx) {
   const params = [];
   skipWhitespace(ctx);
   if (!(ctx.peek().type === "Punctuation" && ctx.peek().value === ")")) {
@@ -996,13 +1090,21 @@ function parseFunctionParams(ctx) {
 function parseEffectStatement(ctx) {
   const start2 = ctx.consume();
   ctx.expect("Punctuation", "(");
+  const decl = ctx.withNewlines(true, () => parseEffectArguments(ctx, start2));
+  skipTerminator(ctx);
+  return decl;
+}
+function parseEffectArguments(ctx, start2) {
   skipWhitespace(ctx);
+  const shape = {};
+  const callbackTok = ctx.peek();
   const callbackExpr = parseExpression(ctx);
   let body;
   if (callbackExpr.kind === "Lambda") {
     body = callbackExpr.body.kind === "Block" ? callbackExpr.body : { kind: "Block", body: [{ kind: "ExpressionStatement", expression: callbackExpr.body }] };
   } else {
     body = { kind: "Block", body: [] };
+    shape.callback = { line: callbackTok.line, column: callbackTok.column };
   }
   const triggers = [];
   let rateLimit;
@@ -1025,12 +1127,13 @@ function parseEffectStatement(ctx) {
       }
       ctx.expect("Punctuation", "]");
     } else {
+      const depsTok = ctx.peek();
       parseExpression(ctx);
+      shape.deps = { line: depsTok.line, column: depsTok.column };
     }
   }
   skipWhitespace(ctx);
   ctx.expect("Punctuation", ")");
-  skipTerminator(ctx);
   const decl = {
     kind: "EffectDeclaration",
     name: `__effect_L${start2.line}_C${start2.column}`,
@@ -1039,6 +1142,7 @@ function parseEffectStatement(ctx) {
     loc: { line: start2.line, column: start2.column }
   };
   if (rateLimit) decl.rateLimit = rateLimit;
+  recordEffectCallShape(decl, shape);
   return decl;
 }
 function parseEffectDep(ctx, triggers, setRateLimit) {
@@ -1093,11 +1197,64 @@ function parseEffectDep(ctx, triggers, setRateLimit) {
 function declarationOf(token) {
   return token.value === "let" || token.value === "const" || token.value === "var" ? { declaration: token.value } : {};
 }
-function parseVarDecl(ctx) {
-  const start2 = ctx.consume();
+function parseVarDecl(ctx, inForHead = false) {
+  const keyword = ctx.consume();
+  const declarators = [];
+  let start2 = keyword;
+  while (true) {
+    const declarator = parseDeclarator(ctx, keyword, start2);
+    nodeEndLine.set(declarator, ctx.previousConsumedLine());
+    declarators.push(declarator);
+    const comma = ctx.peek();
+    if (!(comma.type === "Punctuation" && comma.value === ",")) break;
+    if (inForHead) {
+      throw {
+        message: "Declaring several variables in a `for (…)` head is not supported in Aktion — declare the others before the loop.",
+        line: comma.line,
+        column: comma.column
+      };
+    }
+    ctx.consume();
+    skipNewlines(ctx);
+    start2 = ctx.peek();
+  }
+  if (!inForHead) skipTerminator(ctx);
+  const [first, ...rest] = declarators;
+  ctx.queuePending(rest);
+  return first;
+}
+function undefinedValue() {
+  return { kind: "Unary", operator: "void", argument: { kind: "Literal", value: 0 } };
+}
+function parseDeclarator(ctx, keyword, start2) {
   const head = ctx.peek();
+  const loc = { line: start2.line, column: start2.column };
   if (head.type === "Punctuation" && (head.value === "[" || head.value === "{")) {
-    return parseDestructureDecl(ctx, start2);
+    const pattern = parseDestructuringPattern(ctx);
+    consumeNewlinesIfNext(ctx, isAssignToken);
+    const eq2 = ctx.peek();
+    if (eq2.type === "Punctuation" && eq2.value === ":") throw typeAnnotationError(eq2, pattern.kind === "array" ? "[…]" : "{ … }");
+    if (!isAssignToken(eq2)) {
+      throw {
+        message: unexpected(
+          eq2,
+          `Missing initializer in a destructuring declaration — destructure a value: \`${keyword.value} ${pattern.kind === "array" ? "[a, b]" : "{ a, b }"} = value\`.`
+        ),
+        line: eq2.line,
+        column: eq2.column
+      };
+    }
+    ctx.consume();
+    skipNewlinesBeforeOperand(ctx);
+    const expression = parseExpression(ctx);
+    return {
+      kind: "DestructureStatement",
+      patternKind: pattern.kind,
+      bindings: pattern.bindings,
+      expression,
+      ...declarationOf(keyword),
+      loc
+    };
   }
   let identifier = "";
   let isState = false;
@@ -1108,40 +1265,55 @@ function parseVarDecl(ctx) {
     identifier = ctx.consume().value;
   } else {
     throw {
-      message: unexpected(head, `Expected identifier after "${start2.value}", got ${head.type} "${head.value}"`),
+      message: unexpected(head, `Expected identifier after "${keyword.value}", got ${head.type} "${head.value}"`),
       line: head.line,
       column: head.column
     };
   }
-  ctx.expect("Operator", "=");
-  const expression = parseExpression(ctx);
-  skipTerminator(ctx);
+  const name = isState ? `$${identifier}` : identifier;
+  consumeNewlinesIfNext(ctx, isAssignToken);
+  const eq = ctx.peek();
+  if (isAssignToken(eq)) {
+    ctx.consume();
+    skipNewlinesBeforeOperand(ctx);
+    const expression = parseExpression(ctx);
+    return { kind: "Assignment", identifier, isState, expression, ...declarationOf(keyword), loc };
+  }
+  if (eq.type === "Error") throw { message: unexpected(eq, ""), line: eq.line, column: eq.column };
+  if (eq.type === "Punctuation" && eq.value === ":") throw typeAnnotationError(eq, name);
+  if (keyword.value === "const") {
+    throw {
+      message: `Missing initializer in \`const ${name}\` — a \`const\` needs a value (\`const ${name} = …\`); use \`let ${name}\` to declare it without one.`,
+      line: head.line,
+      column: head.column
+    };
+  }
   return {
     kind: "Assignment",
     identifier,
     isState,
-    expression,
-    ...declarationOf(start2),
-    loc: { line: start2.line, column: start2.column }
+    expression: undefinedValue(),
+    uninitialized: true,
+    ...declarationOf(keyword),
+    loc
   };
 }
-function parseDestructureDecl(ctx, start2) {
-  const pattern = parseDestructuringPattern(ctx);
-  ctx.expect("Operator", "=");
-  const expression = parseExpression(ctx);
-  skipTerminator(ctx);
+function isAssignToken(t) {
+  return t.type === "Operator" && t.value === "=";
+}
+function typeAnnotationError(colon, target) {
   return {
-    kind: "DestructureStatement",
-    patternKind: pattern.kind,
-    bindings: pattern.bindings,
-    expression,
-    ...declarationOf(start2),
-    loc: { line: start2.line, column: start2.column }
+    message: `Type annotations (\`${target}: …\`) are not supported in Aktion — it has no static types, so remove the annotation.`,
+    line: colon.line,
+    column: colon.column
   };
 }
 function parseDestructuringPattern(ctx) {
   const head = ctx.consume();
   const patternKind = head.value === "[" ? "array" : "object";
+  return ctx.withNewlines(true, () => parsePatternBody(ctx, patternKind));
+}
+function parsePatternBody(ctx, patternKind) {
   const bindings = [];
   if (patternKind === "array") {
     skipWhitespace(ctx);
@@ -1202,21 +1374,24 @@ function parseDestructuringPattern(ctx) {
         ctx.consume();
         isRest = true;
       }
-      const keyTok = ctx.expect("Identifier");
-      let alias = keyTok.value;
+      const keyTok = isRest ? ctx.expect("Identifier") : parsePatternKey(ctx);
+      const key2 = keyTok.type === "Number" ? String(numericLiteralValue(keyTok.value)) : keyTok.value;
+      let alias = key2;
       let sourceKey;
       let nestedPattern;
       if (!isRest && ctx.peek().type === "Punctuation" && ctx.peek().value === ":") {
         ctx.consume();
         skipWhitespace(ctx);
         if (ctx.peek().type === "Punctuation" && (ctx.peek().value === "{" || ctx.peek().value === "[")) {
-          sourceKey = keyTok.value;
+          sourceKey = key2;
           nestedPattern = parseDestructuringPattern(ctx);
         } else {
           const aliasTok = ctx.expect("Identifier");
-          sourceKey = keyTok.value;
+          sourceKey = key2;
           alias = aliasTok.value;
         }
+      } else if (keyTok.type !== "Identifier") {
+        throw patternKeyNeedsName(keyTok);
       }
       let defaultValue;
       if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
@@ -1240,6 +1415,24 @@ function parseDestructuringPattern(ctx) {
   }
   return { kind: patternKind, bindings };
 }
+function parsePatternKey(ctx) {
+  const tok = ctx.peek();
+  if (tok.type === "Identifier" || tok.type === "Keyword" || tok.type === "Number" || tok.type === "String" && tok.template !== true) {
+    return ctx.consume();
+  }
+  return ctx.expect("Identifier");
+}
+function patternKeyNeedsName(tok) {
+  const shown = tok.type === "String" ? JSON.stringify(tok.value) : tok.value;
+  const what = tok.type === "Keyword" ? `\`${tok.value}\` is a reserved word, so it cannot be a binding name` : tok.type === "Number" ? `The key \`${shown}\` is a number, so it cannot be a binding name` : `The key \`${shown}\` is quoted, so it cannot be a binding name`;
+  const err = {
+    message: `${what} — rename it: \`{ ${shown}: name }\`.`,
+    line: tok.line,
+    column: tok.column
+  };
+  err.__definitive = true;
+  return err;
+}
 function collectPatternNames(pattern) {
   const names = [];
   for (const binding of pattern.bindings) {
@@ -1253,11 +1446,15 @@ function collectPatternNames(pattern) {
 }
 function parseBlock(ctx) {
   const start2 = ctx.expect("Punctuation", "{");
+  return ctx.withNewlines(false, () => parseBlockBody(ctx, start2));
+}
+function parseBlockBody(ctx, start2) {
   const body = [];
   skipWhitespace(ctx);
   while (!(ctx.peek().type === "Punctuation" && ctx.peek().value === "}")) {
     const stmt = parseStatement(ctx);
     if (stmt) body.push(stmt);
+    body.push(...ctx.takePending());
     skipWhitespace(ctx);
   }
   const close = ctx.expect("Punctuation", "}");
@@ -1282,12 +1479,14 @@ function parseBlockOrSingleStatement(ctx) {
   }
   const head = ctx.peek();
   const stmt = parseStatement(ctx);
+  const body = [...stmt ? [stmt] : [], ...ctx.takePending()];
+  const last = body[body.length - 1];
   const block = {
     kind: "Block",
-    body: stmt ? [stmt] : [],
+    body,
     loc: { line: head.line, column: head.column }
   };
-  nodeEndLine.set(block, stmt ? nodeEndLine.get(stmt) ?? head.line : head.line);
+  nodeEndLine.set(block, last ? nodeEndLine.get(last) ?? head.line : head.line);
   return block;
 }
 function parseAwait(ctx) {
@@ -1314,9 +1513,33 @@ function parseReturn(ctx) {
     loc: { line: start2.line, column: start2.column }
   };
 }
+const EOF_TOKEN = { type: "EOF", value: "", line: 0, column: 0 };
 class ParserContext {
-  constructor(tokens, comments = []) {
+  constructor(tokens, comments = [], softNewlines) {
     __publicField(this, "index", 0);
+    /**
+     * Whether newlines are significant, innermost region last: `true` while
+     * inside `( … )`, `[ … ]`, an object literal or a destructuring pattern —
+     * where JavaScript never ends a statement, so a line break is whitespace —
+     * and `false` inside a `{ … }` statement block, where statements end at
+     * newlines again even if the block itself sits inside parentheses
+     * (`f(() => {⏎ a()⏎ b()⏎})`). Empty means statement level: significant.
+     *
+     * While the innermost entry is `true`, `peek` / `consume` (and so `match` /
+     * `expect`) step over `Newline` tokens as if they were not there. Regions are
+     * entered only through `withNewlines`, whose `finally` unwinds the stack when
+     * a parse error is thrown inside one.
+     */
+    __publicField(this, "newlineModes", []);
+    /** The innermost `newlineModes` entry (`false` when empty), cached for `peek` / `consume`. */
+    __publicField(this, "skipNewlines", false);
+    /**
+     * Statements a single source statement produced beyond the one returned —
+     * the second and later declarators of `let a = 1, b = 2`. Every statement
+     * list (`parse`, `parseBlock`, switch cases, brace-less bodies) appends them
+     * right after the `parseStatement` call that returned their first sibling.
+     */
+    __publicField(this, "pending", []);
     /**
      * Indices into `comments` already claimed by SOME container's
      * `attachComments`/`collectDanglingComments`/switch-case-header pass.
@@ -1329,12 +1552,60 @@ class ParserContext {
     __publicField(this, "consumedComments", /* @__PURE__ */ new Set());
     this.tokens = tokens;
     this.comments = comments;
+    this.softNewlines = softNewlines;
   }
   isEnd() {
     return this.peek().type === "EOF";
   }
+  /**
+   * Run `parse` with newlines ignored (`true`) or significant (`false`), then
+   * restore the enclosing mode — also when `parse` throws.
+   */
+  withNewlines(ignore, parse2) {
+    this.newlineModes.push(ignore);
+    this.skipNewlines = ignore;
+    try {
+      return parse2();
+    } finally {
+      this.newlineModes.pop();
+      this.skipNewlines = this.newlineModes.length > 0 && this.newlineModes[this.newlineModes.length - 1] === true;
+    }
+  }
   peek(offset = 0) {
-    return this.tokens[this.index + offset] ?? { type: "EOF", value: "", line: 0, column: 0 };
+    if (!this.skipNewlines) return this.tokens[this.index + offset] ?? EOF_TOKEN;
+    let remaining = offset;
+    for (let i = this.index; i < this.tokens.length; i += 1) {
+      const tok = this.tokens[i];
+      if (tok.type === "Newline") continue;
+      if (remaining === 0) return tok;
+      remaining -= 1;
+    }
+    return EOF_TOKEN;
+  }
+  /** Queue statements for the statement list being parsed (see `pending`). */
+  queuePending(statements) {
+    this.pending.push(...statements);
+  }
+  /** Take (and clear) the queued statements. */
+  takePending() {
+    if (this.pending.length === 0) return [];
+    const out = this.pending;
+    this.pending = [];
+    return out;
+  }
+  /**
+   * The soft newlines inside `length` characters of source starting at
+   * `offset`, shifted to start at `base` — what the sub-parse of a template
+   * interpolation (`base` = its synthetic prefix) needs. `undefined` when there
+   * are none.
+   */
+  softNewlinesWithin(offset, length, base) {
+    if (!this.softNewlines || this.softNewlines.size === 0) return void 0;
+    const out = /* @__PURE__ */ new Set();
+    for (const at of this.softNewlines) {
+      if (at >= offset && at < offset + length) out.add(base + (at - offset));
+    }
+    return out.size > 0 ? out : void 0;
   }
   /**
    * True when a `/* … *\/` comment that spans lines sits between `a` and `b`.
@@ -1349,7 +1620,10 @@ class ParserContext {
     return this.tokens[i];
   }
   consume() {
-    const tok = this.tokens[this.index] ?? { type: "EOF", value: "", line: 0, column: 0 };
+    if (this.skipNewlines) {
+      while (this.tokens[this.index]?.type === "Newline") this.index += 1;
+    }
+    const tok = this.tokens[this.index] ?? EOF_TOKEN;
     this.index += 1;
     return tok;
   }
@@ -1433,6 +1707,7 @@ function parseAssignment(ctx) {
     };
   }
   const eq = ctx.expect("Operator", "=");
+  skipNewlinesBeforeOperand(ctx);
   const expression = parseExpression(ctx);
   skipTerminator(ctx);
   return {
@@ -1445,6 +1720,8 @@ function parseAssignment(ctx) {
 }
 function parseImportStatement(ctx) {
   const start2 = ctx.expect("Keyword", "import");
+  const unsupported = unsupportedImportForm(ctx, start2);
+  if (unsupported) throw unsupported;
   ctx.expect("Punctuation", "{");
   const specifiers = [];
   skipWhitespace(ctx);
@@ -1452,6 +1729,16 @@ function parseImportStatement(ctx) {
     const importedTok = ctx.peek();
     let imported;
     let isState = false;
+    if (importedTok.type === "Identifier" && importedTok.value === "type" && ctx.peek(1).type === "Identifier") {
+      throw { message: IMPORT_TYPE_MESSAGE, line: importedTok.line, column: importedTok.column };
+    }
+    if (importedTok.type === "Keyword" && importedTok.value === "default") {
+      throw {
+        message: 'Default imports are not supported in Aktion — modules only have named exports; import the name the module exports (`import { Name } from "…"`).',
+        line: importedTok.line,
+        column: importedTok.column
+      };
+    }
     if (importedTok.type === "StateIdentifier") {
       imported = ctx.consume().value;
       isState = true;
@@ -1517,9 +1804,52 @@ function parseImportStatement(ctx) {
     loc: { line: start2.line, column: start2.column }
   };
 }
+const DYNAMIC_IMPORT_MESSAGE = 'Dynamic `import()` is not supported in Aktion — use a static `import { … } from "…"` at the top of the module.';
+const IMPORT_META_MESSAGE = "`import.meta` is not supported in Aktion — pass the value in from the host page instead.";
+const ASYNC_REASON = "it runs functions synchronously and returns their value, not a Promise. Remove `async` and chain Promises with `.then(…)`.";
+const IMPORT_TYPE_MESSAGE = "`import type` is not supported in a `.aktion` file — Aktion has no static types, so remove it (a `.aktion.ts` module may use it: types are erased before parsing).";
+function unsupportedImportForm(ctx, start2) {
+  const next = ctx.peek();
+  const at = (tok, message) => ({ message, line: tok.line, column: tok.column });
+  if (next.type === "Punctuation" && next.value === "(") return at(start2, DYNAMIC_IMPORT_MESSAGE);
+  if (next.type === "Punctuation" && next.value === ".") return at(start2, IMPORT_META_MESSAGE);
+  if (next.type === "Identifier" && next.value === "type") {
+    const after = ctx.peek(1);
+    const isTypeImport = after.type === "Punctuation" && after.value === "{" || after.type === "Operator" && after.value === "*" || after.type === "Identifier" && after.value !== "from";
+    if (isTypeImport) return at(next, IMPORT_TYPE_MESSAGE);
+  }
+  if (next.type === "String") {
+    return at(
+      start2,
+      `Side-effect imports (\`import ${JSON.stringify(next.value)}\`) are not supported in Aktion — import the names you use: \`import { name } from "…"\`.`
+    );
+  }
+  if (next.type === "Operator" && next.value === "*") {
+    return at(
+      next,
+      'Namespace imports (`import * as name`) are not supported in Aktion — import each binding by name: `import { a, b } from "…"`.'
+    );
+  }
+  if (next.type === "Identifier" || next.type === "StateIdentifier") {
+    const name = next.type === "StateIdentifier" ? `$${next.value}` : next.value;
+    return at(
+      next,
+      `Default imports are not supported in Aktion — modules only have named exports; write \`import { ${name} } from "…"\`.`
+    );
+  }
+  return null;
+}
 function parseExportStatement(ctx) {
   const start2 = ctx.expect("Keyword", "export");
   const next = ctx.peek();
+  if (next.type === "Keyword" && next.value === "default") return parseExportDefault(ctx, next);
+  if (next.type === "Operator" && next.value === "*") {
+    throw {
+      message: "`export * from …` is not supported — Aktion modules cannot re-export; import what you need from that module directly.",
+      line: next.line,
+      column: next.column
+    };
+  }
   if (next.type === "Punctuation" && next.value === "{") {
     throw {
       message: "`export { … }` lists are not supported yet — use inline `export <declaration>` (e.g. `export function Foo() {…}`, `export $count = 0`).",
@@ -1535,13 +1865,18 @@ function parseExportStatement(ctx) {
     stmt = parseFunctionDecl(ctx);
   } else if (next.type === "Keyword" && (next.value === "let" || next.value === "const" || next.value === "var")) {
     stmt = parseVarDecl(ctx);
-    if (stmt && stmt.kind === "DestructureStatement") {
-      throw {
-        message: "`export` of a destructuring declaration is not supported — export named bindings individually.",
-        line: next.line,
-        column: next.column
-      };
+    const more = ctx.takePending();
+    for (const declarator of [stmt, ...more]) {
+      if (declarator.kind === "DestructureStatement") {
+        throw {
+          message: "`export` of a destructuring declaration is not supported — export named bindings individually.",
+          line: declarator.loc?.line ?? next.line,
+          column: declarator.loc?.column ?? next.column
+        };
+      }
+      if (declarator.kind === "Assignment") declarator.exported = true;
     }
+    ctx.queuePending(more);
   } else if (couldStartAssignment(ctx)) {
     stmt = parseAssignment(ctx);
   } else {
@@ -1560,6 +1895,26 @@ function parseExportStatement(ctx) {
     line: start2.line,
     column: start2.column
   };
+}
+function parseExportDefault(ctx, defaultTok) {
+  ctx.consume();
+  const head = ctx.peek();
+  if (head.type === "Error") throw { message: unexpected(head, ""), line: head.line, column: head.column };
+  if (head.type === "StateIdentifier" && head.value === "app") {
+    const stmt = parseExpressionStatement(ctx);
+    if (stmt.kind === "ExpressionStatement" && isAppCall$2(stmt.expression)) {
+      stmt.exportDefault = true;
+      return stmt;
+    }
+  }
+  throw {
+    message: "`export default` is only supported for the entry's `$app(…)` call — export anything else by name (`export function App() {…}`, `export const value = …`).",
+    line: defaultTok.line,
+    column: defaultTok.column
+  };
+}
+function isAppCall$2(expr) {
+  return expr.kind === "Invoke" && expr.optional !== true && expr.callee.kind === "StateRef" && expr.callee.name === "app";
 }
 function parseExpression(ctx) {
   return parseTernary(ctx);
@@ -1839,18 +2194,13 @@ function parseUnary(ctx) {
           continue;
         }
         if (t.type === "Punctuation" && t.value === "[") {
-          ctx.consume();
-          const computed = parseExpression(ctx);
-          ctx.expect("Punctuation", "]");
-          callee = { kind: "Member", object: callee, computed };
+          callee = { kind: "Member", object: callee, computed: parseBracketedKey(ctx) };
           continue;
         }
         break;
       }
       if (ctx.peek().type === "Punctuation" && ctx.peek().value === "(") {
-        ctx.consume();
-        args = parseCallArgs(ctx);
-        ctx.expect("Punctuation", ")");
+        args = parseParenArgs(ctx);
       }
     }
     const newNode = {
@@ -1903,9 +2253,7 @@ function parsePostfixFrom(ctx, base) {
       }
       const after = ctx.peek();
       if (after.type === "Punctuation" && after.value === "(") {
-        ctx.consume();
-        const args = parseCallArgs(ctx);
-        ctx.expect("Punctuation", ")");
+        const args = parseParenArgs(ctx);
         expr = {
           kind: "MethodCall",
           object: expr,
@@ -1921,14 +2269,9 @@ function parsePostfixFrom(ctx, base) {
     if (tok.type === "Operator" && tok.value === "?.") {
       ctx.consume();
       if (ctx.peek().type === "Punctuation" && ctx.peek().value === "[") {
-        ctx.consume();
-        const computed = parseExpression(ctx);
-        ctx.expect("Punctuation", "]");
-        expr = { kind: "Member", object: expr, computed, optional: true };
+        expr = { kind: "Member", object: expr, computed: parseBracketedKey(ctx), optional: true };
       } else if (ctx.peek().type === "Punctuation" && ctx.peek().value === "(") {
-        ctx.consume();
-        const args = parseCallArgs(ctx);
-        ctx.expect("Punctuation", ")");
+        const args = parseParenArgs(ctx);
         expr = {
           kind: "Invoke",
           callee: expr,
@@ -1947,9 +2290,7 @@ function parsePostfixFrom(ctx, base) {
         }
         const after = ctx.peek();
         if (after.type === "Punctuation" && after.value === "(") {
-          ctx.consume();
-          const args = parseCallArgs(ctx);
-          ctx.expect("Punctuation", ")");
+          const args = parseParenArgs(ctx);
           expr = {
             kind: "MethodCall",
             object: expr,
@@ -1965,16 +2306,11 @@ function parsePostfixFrom(ctx, base) {
       continue;
     }
     if (tok.type === "Punctuation" && tok.value === "[") {
-      ctx.consume();
-      const computed = parseExpression(ctx);
-      ctx.expect("Punctuation", "]");
-      expr = { kind: "Member", object: expr, computed };
+      expr = { kind: "Member", object: expr, computed: parseBracketedKey(ctx) };
       continue;
     }
     if (tok.type === "Punctuation" && tok.value === "(") {
-      ctx.consume();
-      const args = parseCallArgs(ctx);
-      ctx.expect("Punctuation", ")");
+      const args = parseParenArgs(ctx);
       expr = {
         kind: "Invoke",
         callee: expr,
@@ -1999,6 +2335,25 @@ function parsePrimary(ctx) {
     err.__definitive = true;
     throw err;
   }
+  if (tok.type === "Keyword" && tok.value === "async") {
+    const next = ctx.peek(1);
+    const what = next.type === "Keyword" && next.value === "function" ? "function expressions" : "arrow functions";
+    throw {
+      message: `\`async\` ${what} are not supported in Aktion — ${ASYNC_REASON}`,
+      line: tok.line,
+      column: tok.column
+    };
+  }
+  if (tok.type === "Keyword" && tok.value === "import") {
+    const next = ctx.peek(1);
+    if (next.type === "Punctuation" && (next.value === "(" || next.value === ".")) {
+      throw {
+        message: next.value === "(" ? DYNAMIC_IMPORT_MESSAGE : IMPORT_META_MESSAGE,
+        line: tok.line,
+        column: tok.column
+      };
+    }
+  }
   if (tok.type === "Keyword") {
     if (tok.value === "function") {
       const lookahead = ctx.peek(1);
@@ -2021,9 +2376,7 @@ function parsePrimary(ctx) {
     if (tok.value === "function" || tok.value === "let" || tok.value === "const" || tok.value === "var" || tok.value === "of" || tok.value === "in" || tok.value === "case" || tok.value === "break" || tok.value === "continue" || tok.value === "default") {
       ctx.consume();
       if (ctx.peek().type === "Punctuation" && ctx.peek().value === "(") {
-        ctx.consume();
-        const args = parseCallArgs(ctx);
-        ctx.expect("Punctuation", ")");
+        const args = parseParenArgs(ctx);
         return {
           kind: "Call",
           callee: tok.value,
@@ -2076,7 +2429,8 @@ function parsePrimary(ctx) {
       } else {
         flushChunk();
       }
-      const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`);
+      const softNewlines = part.offset === void 0 ? void 0 : ctx.softNewlinesWithin(part.offset, part.source.length, TEMPLATE_SUB_PREFIX.length);
+      const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`, softNewlines ? { softNewlines } : {});
       const firstStmt = sub.statements[0];
       if (firstStmt && firstStmt.kind === "Assignment") {
         rebaseTemplateLocations(firstStmt.expression, part.line, part.column);
@@ -2125,9 +2479,7 @@ function parsePrimary(ctx) {
       };
     }
     if (ctx.peek().type === "Punctuation" && ctx.peek().value === "(") {
-      ctx.consume();
-      const args = parseCallArgs(ctx);
-      ctx.expect("Punctuation", ")");
+      const args = parseParenArgs(ctx);
       return {
         kind: "Call",
         callee: tok.value,
@@ -2143,14 +2495,20 @@ function parsePrimary(ctx) {
   }
   if (tok.type === "Punctuation" && tok.value === "[") {
     ctx.consume();
-    const elements = parseCallArgs(ctx);
-    ctx.expect("Punctuation", "]");
+    const elements = ctx.withNewlines(true, () => {
+      const items = parseCallArgs(ctx);
+      ctx.expect("Punctuation", "]");
+      return items;
+    });
     return { kind: "Array", elements };
   }
   if (tok.type === "Punctuation" && tok.value === "{") {
     ctx.consume();
-    const properties = parseObjectProps(ctx);
-    ctx.expect("Punctuation", "}");
+    const properties = ctx.withNewlines(true, () => {
+      const props = parseObjectProps(ctx);
+      ctx.expect("Punctuation", "}");
+      return props;
+    });
     return { kind: "Object", properties };
   }
   if (tok.type === "Punctuation" && tok.value === "(") {
@@ -2159,9 +2517,29 @@ function parsePrimary(ctx) {
     if (lambda) return lambda;
     ctx.restore(saved);
     ctx.consume();
-    const expr = parseExpression(ctx);
-    ctx.expect("Punctuation", ")");
-    return expr;
+    return ctx.withNewlines(true, () => {
+      const expr = parseExpression(ctx);
+      const next = ctx.peek();
+      if (next.type === "Punctuation" && next.value === ",") {
+        throw {
+          message: "The comma operator is not supported in Aktion — write each expression as its own statement (inside an arrow function, use a `{ … }` body).",
+          line: next.line,
+          column: next.column
+        };
+      }
+      if (next.type === "Operator" && isAssignmentOperator(next.value)) {
+        if (expr.kind === "Array" || expr.kind === "Object") {
+          throw { message: DESTRUCTURING_ASSIGNMENT_MESSAGE, line: tok.line, column: tok.column };
+        }
+        throw {
+          message: "Assignment inside an expression is not supported in Aktion — assign in its own statement first, then use the name.",
+          line: next.line,
+          column: next.column
+        };
+      }
+      ctx.expect("Punctuation", ")");
+      return expr;
+    });
   }
   throw {
     message: unexpected(tok, `Unexpected token ${tok.type} "${tok.value}"`),
@@ -2170,15 +2548,37 @@ function parsePrimary(ctx) {
   };
 }
 function parseEffectCallAsExpr(ctx, nameTok) {
-  ctx.consume();
-  const args = parseCallArgs(ctx);
-  ctx.expect("Punctuation", ")");
+  const args = parseParenArgs(ctx);
   return {
     kind: "Call",
     callee: nameTok.value,
     arguments: args,
     loc: { line: nameTok.line, column: nameTok.column }
   };
+}
+function parseParenArgs(ctx) {
+  ctx.expect("Punctuation", "(");
+  return ctx.withNewlines(true, () => {
+    const args = parseCallArgs(ctx);
+    ctx.expect("Punctuation", ")");
+    return args;
+  });
+}
+function parseBracketedKey(ctx) {
+  ctx.expect("Punctuation", "[");
+  return ctx.withNewlines(true, () => {
+    const key2 = parseExpression(ctx);
+    ctx.expect("Punctuation", "]");
+    return key2;
+  });
+}
+function parseConditionHead(ctx) {
+  ctx.expect("Punctuation", "(");
+  return ctx.withNewlines(true, () => {
+    const test = parseExpression(ctx);
+    ctx.expect("Punctuation", ")");
+    return test;
+  });
 }
 function parseCallArgs(ctx) {
   const args = [];
@@ -2210,9 +2610,7 @@ function parseArgItem(ctx) {
 }
 function parseIfStatement(ctx) {
   const start2 = ctx.expect("Keyword", "if");
-  ctx.expect("Punctuation", "(");
-  const test = parseExpression(ctx);
-  ctx.expect("Punctuation", ")");
+  const test = parseConditionHead(ctx);
   const consequent = parseBlockOrSingleStatement(ctx);
   let alternate;
   skipWhitespace(ctx);
@@ -2239,10 +2637,18 @@ function parseIfStatement(ctx) {
 }
 function parseSwitchStatement(ctx) {
   const start2 = ctx.expect("Keyword", "switch");
-  ctx.expect("Punctuation", "(");
-  const discriminant = parseExpression(ctx);
-  ctx.expect("Punctuation", ")");
+  const discriminant = parseConditionHead(ctx);
   const openBrace = ctx.expect("Punctuation", "{");
+  const cases = ctx.withNewlines(false, () => parseSwitchCases(ctx, openBrace));
+  skipTerminator(ctx);
+  return {
+    kind: "SwitchStatement",
+    discriminant,
+    cases,
+    loc: { line: start2.line, column: start2.column }
+  };
+}
+function parseSwitchCases(ctx, openBrace) {
   const cases = [];
   skipWhitespace(ctx);
   let lastLine = openBrace.line;
@@ -2269,6 +2675,7 @@ function parseSwitchStatement(ctx) {
     while (!ctx.isEnd() && !(ctx.peek().type === "Keyword" && (ctx.peek().value === "case" || ctx.peek().value === "default")) && !(ctx.peek().type === "Punctuation" && ctx.peek().value === "}")) {
       const stmt = parseStatement(ctx);
       if (stmt) body.push(stmt);
+      body.push(...ctx.takePending());
       skipWhitespace(ctx);
     }
     const caseEndLineExclusive = ctx.peek().line;
@@ -2291,26 +2698,38 @@ function parseSwitchStatement(ctx) {
     skipWhitespace(ctx);
   }
   ctx.expect("Punctuation", "}");
-  skipTerminator(ctx);
-  return {
-    kind: "SwitchStatement",
-    discriminant,
-    cases,
-    loc: { line: start2.line, column: start2.column }
-  };
+  return cases;
 }
 function parseForStatement(ctx) {
   const start2 = ctx.expect("Keyword", "for");
   ctx.expect("Punctuation", "(");
-  skipWhitespace(ctx);
-  const headSnapshot = ctx.snapshot();
+  const head = ctx.withNewlines(true, () => parseForHead(ctx));
+  const body = parseBlockOrSingleStatement(ctx);
+  skipTerminator(ctx);
+  const loc = { line: start2.line, column: start2.column };
+  if (head.kind === "classic") {
+    return { kind: "ForClassicStatement", init: head.init, test: head.test, update: head.update, body, loc };
+  }
+  if (head.kind === "for-in") {
+    return { kind: "ForInStatement", item: head.item, ...head.declaration, iterable: head.iterable, body, loc };
+  }
+  return {
+    kind: "ForOfStatement",
+    item: head.item,
+    pattern: head.pattern,
+    ...head.declaration,
+    iterable: head.iterable,
+    body,
+    loc
+  };
+}
+function parseForHead(ctx) {
   let kind = "for-of";
   {
     let depth = 1;
-    let i = 0;
-    while (true) {
-      const tok = ctx.peek(i);
-      if (tok.type === "EOF") break;
+    for (let i = ctx.snapshot(); ; i += 1) {
+      const tok = ctx.tokenAt(i);
+      if (!tok || tok.type === "EOF") break;
       if (tok.type === "Punctuation" && tok.value === "(") depth += 1;
       else if (tok.type === "Punctuation" && tok.value === ")") {
         depth -= 1;
@@ -2325,11 +2744,9 @@ function parseForStatement(ctx) {
         kind = "for-in";
         break;
       }
-      i += 1;
     }
   }
-  ctx.restore(headSnapshot);
-  if (kind === "classic") return parseForClassic(ctx, start2);
+  if (kind === "classic") return parseForClassicHead(ctx);
   let declaration = {};
   if (ctx.peek().type === "Keyword" && (ctx.peek().value === "let" || ctx.peek().value === "const" || ctx.peek().value === "var")) {
     declaration = declarationOf(ctx.consume());
@@ -2349,35 +2766,15 @@ function parseForStatement(ctx) {
   }
   const iterable = parseExpression(ctx);
   ctx.expect("Punctuation", ")");
-  const body = parseBlockOrSingleStatement(ctx);
-  skipTerminator(ctx);
-  if (kind === "for-in") {
-    return {
-      kind: "ForInStatement",
-      item,
-      ...declaration,
-      iterable,
-      body,
-      loc: { line: start2.line, column: start2.column }
-    };
-  }
-  return {
-    kind: "ForOfStatement",
-    item,
-    pattern,
-    ...declaration,
-    iterable,
-    body,
-    loc: { line: start2.line, column: start2.column }
-  };
+  return { kind, item, pattern, declaration, iterable };
 }
-function parseForClassic(ctx, start2) {
+function parseForClassicHead(ctx) {
   let init;
   if (!(ctx.peek().type === "Semicolon")) {
     if (ctx.peek().type === "Keyword" && (ctx.peek().value === "let" || ctx.peek().value === "const" || ctx.peek().value === "var")) {
-      const decl = parseVarDecl(ctx);
+      const decl = parseVarDecl(ctx, true);
       if (decl.kind === "Assignment") init = decl;
-      skipWhitespace(ctx);
+      ctx.expect("Semicolon");
     } else {
       const exprStart = ctx.peek();
       const expression = parseExpression(ctx);
@@ -2387,39 +2784,33 @@ function parseForClassic(ctx, start2) {
         loc: { line: exprStart.line, column: exprStart.column }
       };
       ctx.expect("Semicolon");
-      skipWhitespace(ctx);
     }
   } else {
     ctx.expect("Semicolon");
-    skipWhitespace(ctx);
   }
   let test;
   if (!(ctx.peek().type === "Semicolon")) {
     test = parseExpression(ctx);
   }
   ctx.expect("Semicolon");
-  skipWhitespace(ctx);
   let update;
   if (!(ctx.peek().type === "Punctuation" && ctx.peek().value === ")")) {
     update = parseAssignmentLikeExpression(ctx);
   }
+  const comma = ctx.peek();
+  if (comma.type === "Punctuation" && comma.value === ",") {
+    throw {
+      message: "The comma operator is not supported in Aktion — a `for (…)` update must be a single expression; update the other variable inside the loop body.",
+      line: comma.line,
+      column: comma.column
+    };
+  }
   ctx.expect("Punctuation", ")");
-  const body = parseBlockOrSingleStatement(ctx);
-  skipTerminator(ctx);
-  return {
-    kind: "ForClassicStatement",
-    init,
-    test,
-    update,
-    body,
-    loc: { line: start2.line, column: start2.column }
-  };
+  return { kind: "classic", init, test, update };
 }
 function parseWhileStatement(ctx) {
   const start2 = ctx.expect("Keyword", "while");
-  ctx.expect("Punctuation", "(");
-  const test = parseExpression(ctx);
-  ctx.expect("Punctuation", ")");
+  const test = parseConditionHead(ctx);
   const body = parseBlockOrSingleStatement(ctx);
   skipTerminator(ctx);
   return {
@@ -2434,9 +2825,7 @@ function parseDoWhileStatement(ctx) {
   const body = parseBlockOrSingleStatement(ctx);
   skipWhitespace(ctx);
   ctx.expect("Keyword", "while");
-  ctx.expect("Punctuation", "(");
-  const test = parseExpression(ctx);
-  ctx.expect("Punctuation", ")");
+  const test = parseConditionHead(ctx);
   skipTerminator(ctx);
   return {
     kind: "DoWhileStatement",
@@ -2476,10 +2865,19 @@ function parseTryStatement(ctx) {
     ctx.consume();
     if (ctx.peek().type === "Punctuation" && ctx.peek().value === "(") {
       ctx.consume();
-      if (ctx.peek().type === "Identifier") {
-        catchParam = ctx.consume().value;
-      }
-      ctx.expect("Punctuation", ")");
+      catchParam = ctx.withNewlines(true, () => {
+        const tok = ctx.peek();
+        if (tok.type === "Punctuation" && (tok.value === "{" || tok.value === "[")) {
+          throw {
+            message: "Destructuring the `catch` parameter is not supported in Aktion — catch the error by name (`catch (error)`) and read its fields (`error.message`).",
+            line: tok.line,
+            column: tok.column
+          };
+        }
+        const name = tok.type === "Identifier" ? ctx.consume().value : void 0;
+        ctx.expect("Punctuation", ")");
+        return name;
+      });
     }
     catchBlock = parseBlock(ctx);
     skipWhitespace(ctx);
@@ -2505,6 +2903,21 @@ function tryParseLambdaFromParenList(ctx) {
   const start2 = ctx.peek();
   if (start2.type !== "Punctuation" || start2.value !== "(") return null;
   ctx.consume();
+  const params = ctx.withNewlines(true, () => parseLambdaParamList(ctx));
+  if (params === null) return null;
+  if (!(ctx.peek().type === "Operator" && ctx.peek().value === "=>")) {
+    return null;
+  }
+  ctx.consume();
+  const body = parseLambdaBody(ctx);
+  return {
+    kind: "Lambda",
+    params,
+    body,
+    loc: { line: start2.line, column: start2.column }
+  };
+}
+function parseLambdaParamList(ctx) {
   const params = [];
   skipWhitespace(ctx);
   if (!(ctx.peek().type === "Punctuation" && ctx.peek().value === ")")) {
@@ -2520,7 +2933,8 @@ function tryParseLambdaFromParenList(ctx) {
         let pattern;
         try {
           pattern = parseDestructuringPattern(ctx);
-        } catch {
+        } catch (err) {
+          if (err && typeof err === "object" && err.__definitive) throw err;
           return null;
         }
         const param2 = { name: "", pattern };
@@ -2536,6 +2950,7 @@ function tryParseLambdaFromParenList(ctx) {
         skipWhitespace(ctx);
         if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
           ctx.consume();
+          if (isCloseParen(ctx.peek())) break;
           continue;
         }
         break;
@@ -2557,27 +2972,21 @@ function tryParseLambdaFromParenList(ctx) {
       if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
         if (isRest) return null;
         ctx.consume();
+        if (isCloseParen(ctx.peek())) break;
         continue;
       }
       break;
     }
   }
   skipWhitespace(ctx);
-  if (!(ctx.peek().type === "Punctuation" && ctx.peek().value === ")")) {
+  if (!isCloseParen(ctx.peek())) {
     return null;
   }
   ctx.consume();
-  if (!(ctx.peek().type === "Operator" && ctx.peek().value === "=>")) {
-    return null;
-  }
-  ctx.consume();
-  const body = parseLambdaBody(ctx);
-  return {
-    kind: "Lambda",
-    params,
-    body,
-    loc: { line: start2.line, column: start2.column }
-  };
+  return params;
+}
+function isCloseParen(tok) {
+  return tok.type === "Punctuation" && tok.value === ")";
 }
 function parseLambdaBody(ctx) {
   skipWhitespace(ctx);
@@ -2592,6 +3001,7 @@ function parseAssignmentLikeExpression(ctx) {
   if (next.type === "Operator") {
     if (isAssignmentOperator(next.value)) {
       ctx.consume();
+      skipNewlinesBeforeOperand(ctx);
       const value = parseExpression(ctx);
       return {
         kind: "BuiltinCall",
@@ -2639,6 +3049,8 @@ function parseObjectProps(ctx) {
       }
       break;
     }
+    const unsupported = unsupportedMemberForm(ctx, keyTok);
+    if (unsupported) throw unsupported;
     let key2;
     let computedKey;
     if (keyTok.type === "Punctuation" && keyTok.value === "[") {
@@ -2661,14 +3073,21 @@ function parseObjectProps(ctx) {
     }
     const after = ctx.peek();
     let value;
+    let method2 = false;
     if (!computedKey && keyTok.type === "Identifier" && after.type === "Punctuation" && (after.value === "," || after.value === "}")) {
       value = { kind: "Identifier", name: key2, loc: { line: keyTok.line, column: keyTok.column } };
+    } else if (after.type === "Punctuation" && after.value === "(") {
+      const params = parseFunctionParams(ctx);
+      const body = parseBlock(ctx);
+      value = { kind: "Lambda", params, body, loc: { line: keyTok.line, column: keyTok.column } };
+      method2 = true;
     } else {
       ctx.expect("Punctuation", ":");
       value = parseExpression(ctx);
     }
     const prop2 = { key: key2, value };
     if (computedKey) prop2.computedKey = computedKey;
+    if (method2) prop2.method = true;
     props.push(prop2);
     skipWhitespace(ctx);
     if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
@@ -2682,6 +3101,25 @@ function parseObjectProps(ctx) {
   skipWhitespace(ctx);
   return props;
 }
+function unsupportedMemberForm(ctx, keyTok) {
+  const at = (message) => ({ message, line: keyTok.line, column: keyTok.column });
+  if (keyTok.type === "Operator" && keyTok.value === "*") {
+    return at("Generator methods (`*name() {}`) are not supported in Aktion — there are no generators.");
+  }
+  const next = ctx.peek(1);
+  const startsKey = next.type === "Identifier" || next.type === "Keyword" || next.type === "String" || next.type === "Number" || next.type === "StateIdentifier" || next.type === "Punctuation" && next.value === "[";
+  if (keyTok.type === "Identifier" && (keyTok.value === "get" || keyTok.value === "set") && startsKey) {
+    return at("getters and setters are not supported — use a plain property or a function");
+  }
+  if (keyTok.type === "Keyword" && keyTok.value === "async" && (startsKey || next.type === "Operator" && next.value === "*")) {
+    return at(`\`async\` methods are not supported in Aktion — ${ASYNC_REASON}`);
+  }
+  return null;
+}
+function skipNewlines(ctx) {
+  while (ctx.match("Newline")) {
+  }
+}
 function skipWhitespace(ctx) {
   while (ctx.match("Newline") || ctx.match("Semicolon")) {
   }
@@ -2693,11 +3131,13 @@ function attachComments(ctx, statements, containerStartLine, containerEndLineExc
   for (let i = 0; i < statements.length; i += 1) {
     const stmt = statements[i];
     const stmtStartLine = stmt.loc?.line ?? containerEndLineExclusive;
+    const sharesLine = stmt.loc !== void 0 && stmtStartLine === prevStmtEndLine && (nodeEndLine.get(stmt) ?? stmtStartLine) === stmtStartLine;
     if (prevStmtEndLine !== null) {
       const trailing = [];
       while (true) {
         const c = ctx.peekComment(containerStartLine);
         if (!c || !inWindow(c) || c.line !== prevStmtEndLine) break;
+        if (sharesLine && c.column > stmt.loc.column) break;
         ctx.takeComment(containerStartLine);
         trailing.push({ ...c });
         lastTouchedLine = c.endLine;
@@ -2770,6 +3210,7 @@ function defineCompiledProgram(compiled) {
   return compiled;
 }
 const SAFE_IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const PLAIN_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const NEEDS_ESCAPE_DOUBLE = /[\\"\n\r\t]/;
 const NEEDS_ESCAPE_SINGLE = /[\\'\n\r\t]/;
 const DEFAULT_INDENT_WIDTH = 2;
@@ -2796,9 +3237,10 @@ function pad(indent, opts) {
 function printPattern(pattern, indent, opts) {
   const open = pattern.kind === "array" ? "[" : "{";
   const close = pattern.kind === "array" ? "]" : "}";
+  const key2 = (k) => PLAIN_KEY.test(k) ? k : printStringLiteral(k, opts);
   const parts = pattern.bindings.map((b) => {
     const lead = b.rest ? "..." : "";
-    const target = b.pattern ? pattern.kind === "object" && b.sourceKey ? `${b.sourceKey}: ${printPattern(b.pattern, indent, opts)}` : printPattern(b.pattern, indent, opts) : b.sourceKey ? `${b.sourceKey}: ${b.name}` : b.name || "";
+    const target = b.pattern ? pattern.kind === "object" && b.sourceKey ? `${key2(b.sourceKey)}: ${printPattern(b.pattern, indent, opts)}` : printPattern(b.pattern, indent, opts) : b.sourceKey ? `${key2(b.sourceKey)}: ${b.name}` : b.name || "";
     const def = b.defaultValue ? ` = ${printExpression(b.defaultValue, indent, opts)}` : "";
     return `${lead}${target}${def}`;
   });
@@ -2872,12 +3314,13 @@ function printStatement(stmt, indent, opts) {
     }
     case "Assignment": {
       const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
+      if (stmt.uninitialized) return `${padStr}${exp}${stmt.declaration ?? "let"} ${lhs}`;
       const expr = printExpression(stmt.expression, indent, opts);
       const kw = stmt.declaration ? `${stmt.declaration} ` : "";
       return `${padStr}${exp}${kw}${lhs} = ${expr}`;
     }
     case "ComponentDeclaration": {
-      const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
+      const params = printDeclParams(stmt.params, opts);
       const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
       const body = printBlockBody(stmt.body, indent + 1, opts);
       return body.length > 0 ? `${head}
@@ -2897,7 +3340,7 @@ ${body}
 ${padStr}}, ${depsArray})`;
     }
     case "ActionDeclaration": {
-      const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
+      const params = printDeclParams(stmt.params, opts);
       const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
       const body = printBlockBody(stmt.body, indent + 1, opts);
       return `${head}
@@ -2905,7 +3348,7 @@ ${body}
 ${padStr}}`;
     }
     case "HookDeclaration": {
-      const params = stmt.params.map((p) => printDeclParam(p, opts)).join(", ");
+      const params = printDeclParams(stmt.params, opts);
       const head = `${padStr}${exp}function $${stmt.name}(${params}) {`;
       const body = printBlockBody(stmt.body, indent + 1, opts);
       return `${head}
@@ -2919,7 +3362,8 @@ ${padStr}}`;
       return stmt.argument ? `${padStr}return ${printExpression(stmt.argument, indent, opts)}` : `${padStr}return`;
     }
     case "ExpressionStatement": {
-      return `${padStr}${printExpression(stmt.expression, indent, opts)}`;
+      const prefix = stmt.exportDefault ? "export default " : "";
+      return `${padStr}${prefix}${printExpression(stmt.expression, indent, opts)}`;
     }
     case "IfStatement": {
       const test = printExpression(stmt.test, indent, opts);
@@ -3010,11 +3454,14 @@ ${padStr}}`;
     }
   }
 }
-function printDeclParam(p, opts) {
-  if (p.defaultValue) {
-    return `${p.name} = ${printExpression(p.defaultValue, 0, opts)}`;
-  }
-  return p.name;
+function printDeclParams(params, opts) {
+  return params.map((p) => printParam(p, 0, opts)).join(", ");
+}
+function printParam(p, indent, opts) {
+  const rest = p.rest ? "..." : "";
+  const target = p.pattern ? printPattern(p.pattern, indent, opts) : p.name;
+  const def = p.defaultValue ? ` = ${printExpression(p.defaultValue, indent, opts)}` : "";
+  return `${rest}${target}${def}`;
 }
 function printTrigger(t, opts) {
   if (t.kind === "lifecycle") return printStringLiteral(t.name, opts);
@@ -3132,11 +3579,9 @@ ${pad(indent, opts)}}`;
     case "Spread":
       return `...${printExpression(expr.argument, indent, opts)}`;
     case "Lambda": {
-      const params = expr.params.map((p) => {
-        const prefix = p.rest ? "..." : "";
-        return p.defaultValue ? `${prefix}${p.name} = ${printExpression(p.defaultValue, indent, opts)}` : `${prefix}${p.name}`;
-      }).join(", ");
-      const head = expr.params.length === 1 && !expr.params[0].defaultValue && !expr.params[0].rest ? expr.params[0].name : `(${params})`;
+      const params = expr.params.map((p) => printParam(p, indent, opts)).join(", ");
+      const only = expr.params.length === 1 ? expr.params[0] : void 0;
+      const head = only && !only.defaultValue && !only.rest && !only.pattern ? only.name : `(${params})`;
       return `${head} => ${printExpression(expr.body, indent, opts)}`;
     }
     case "Block":
@@ -3168,6 +3613,11 @@ ${caseText}`;
 }
 function printObjectProp(prop2, indent, opts) {
   if (prop2.spread) return `...${printExpression(prop2.value, indent, opts)}`;
+  if (prop2.method && prop2.value.kind === "Lambda" && prop2.value.body.kind === "Block") {
+    const name = prop2.computedKey ? `[${printExpression(prop2.computedKey, indent, opts)}]` : PLAIN_KEY.test(prop2.key) ? prop2.key : printStringLiteral(prop2.key, opts);
+    const params = prop2.value.params.map((p) => printParam(p, indent, opts)).join(", ");
+    return `${name}(${params}) ${printExpression(prop2.value.body, indent, opts)}`;
+  }
   const value = printExpression(prop2.value, indent, opts);
   if (prop2.value.kind === "Identifier" && prop2.value.name === prop2.key && SAFE_IDENT.test(prop2.key)) {
     return prop2.key;
@@ -3209,29 +3659,6524 @@ function printTemplate(quasis, expressions, indent, opts) {
   }
   return `\`${parts.join("")}\``;
 }
-function moduleLocalSymbol(moduleId, name) {
-  return `__a${moduleId}_${name}`;
+const components$1 = [
+  {
+    name: "Accordion",
+    slots: [
+      "items",
+      "showArrow",
+      "type",
+      "onChange"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange"
+    }
+  },
+  {
+    name: "AccordionItem",
+    slots: [
+      "title",
+      "children",
+      "open",
+      "subtitle",
+      "showArrow",
+      "variant",
+      "disabled",
+      "onToggle"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children",
+      summary: "subtitle",
+      tone: "variant",
+      onOpenChange: "onToggle",
+      ontoggle: "onToggle"
+    }
+  },
+  {
+    name: "ActionLink",
+    slots: [
+      "label",
+      "onClick",
+      "disabled",
+      "icon",
+      "iconPosition",
+      "ariaLabel",
+      "tone"
+    ],
+    positional: 0,
+    aliases: {
+      action: "onClick",
+      onclick: "onClick",
+      variant: "tone"
+    }
+  },
+  {
+    name: "ActionStripe",
+    slots: [
+      "label",
+      "description",
+      "icon",
+      "value",
+      "href",
+      "disabled",
+      "onClick",
+      "trailing",
+      "target"
+    ],
+    positional: 0,
+    aliases: {
+      subtitle: "description",
+      meta: "description",
+      action: "onClick",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "ActivityLog",
+    slots: [
+      "items",
+      "variant",
+      "emptyLabel",
+      "onItemClick",
+      "loading",
+      "loaderLabel"
+    ],
+    positional: 0,
+    aliases: {
+      tone: "variant"
+    }
+  },
+  {
+    name: "AppShell",
+    slots: [
+      "sidebar",
+      "content",
+      "topbar",
+      "collapsible",
+      "sidebarOpen",
+      "onSidebarOpenChange"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "AspectRatio",
+    slots: [
+      "ratio",
+      "children"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "Async",
+    slots: [
+      "resource",
+      "loading",
+      "error",
+      "empty",
+      "data",
+      "retry"
+    ],
+    positional: 0,
+    aliases: {
+      onRetry: "retry"
+    }
+  },
+  {
+    name: "AudioPlayer",
+    slots: [
+      "src",
+      "sources",
+      "title",
+      "artist",
+      "controls",
+      "autoplay",
+      "loop",
+      "icon",
+      "muted",
+      "onEnded"
+    ],
+    positional: 0,
+    aliases: {
+      onended: "onEnded"
+    }
+  },
+  {
+    name: "AuthorByline",
+    slots: [
+      "name",
+      "avatar",
+      "role",
+      "date",
+      "href",
+      "readingTime"
+    ],
+    positional: 0,
+    aliases: {
+      src: "avatar"
+    }
+  },
+  {
+    name: "Avatar",
+    slots: [
+      "name",
+      "src",
+      "size",
+      "status",
+      "fallback"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "AvatarGroup",
+    slots: [
+      "items",
+      "max",
+      "size",
+      "total",
+      "fallback"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "BackToTop",
+    slots: [
+      "label",
+      "showAfter",
+      "position"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Backdrop",
+    slots: [
+      "grid",
+      "blobs",
+      "particles",
+      "type",
+      "particleColors",
+      "speed",
+      "linkDistance",
+      "particleSize",
+      "fixed"
+    ],
+    positional: 0,
+    aliases: {
+      particleType: "type",
+      colors: "particleColors"
+    }
+  },
+  {
+    name: "Badge",
+    slots: [
+      "label",
+      "tone",
+      "icon",
+      "size"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone"
+    }
+  },
+  {
+    name: "BadgeList",
+    slots: [
+      "labels",
+      "tone",
+      "size",
+      "tones",
+      "icons",
+      "max"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone",
+      variants: "tones"
+    }
+  },
+  {
+    name: "Banner",
+    slots: [
+      "title",
+      "message",
+      "action",
+      "icon",
+      "tone",
+      "dismissible",
+      "onDismiss",
+      "href",
+      "onClick"
+    ],
+    positional: 0,
+    aliases: {
+      description: "message",
+      variant: "tone",
+      closable: "dismissible",
+      onClose: "onDismiss",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "BarChart",
+    slots: [
+      "labels",
+      "series",
+      "title",
+      "stacked",
+      "horizontal",
+      "xAxisLabel",
+      "yAxisLabel",
+      "showLegend",
+      "height",
+      "loading",
+      "emptyText",
+      "onBarClick",
+      "ariaLabel",
+      "decorative"
+    ],
+    positional: 0,
+    aliases: {
+      alt: "ariaLabel"
+    }
+  },
+  {
+    name: "Bento",
+    slots: [
+      "items",
+      "columns",
+      "gap",
+      "rowHeight",
+      "dense"
+    ],
+    positional: 0,
+    aliases: {
+      children: "items",
+      cells: "items"
+    }
+  },
+  {
+    name: "BentoCell",
+    slots: [
+      "child",
+      "span",
+      "rowSpan"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "BottomSheet",
+    slots: [
+      "children",
+      "open",
+      "title",
+      "onClose",
+      "label",
+      "height",
+      "showClose",
+      "footer"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children",
+      content: "children",
+      onclose: "onClose"
+    }
+  },
+  {
+    name: "Box",
+    slots: [
+      "children",
+      "padding",
+      "margin",
+      "border",
+      "background",
+      "maxWidth",
+      "radius"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "Brand",
+    slots: [
+      "name",
+      "logoSrc",
+      "version",
+      "href"
+    ],
+    positional: 0,
+    aliases: {
+      label: "name",
+      logo: "logoSrc"
+    }
+  },
+  {
+    name: "Breadcrumb",
+    slots: [
+      "items",
+      "separator",
+      "maxItems",
+      "onItemClick",
+      "homeIcon",
+      "autoLink"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "BreadcrumbItem",
+    slots: [
+      "label",
+      "href",
+      "icon",
+      "to",
+      "onClick"
+    ],
+    positional: 0,
+    aliases: {
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "BrowserFrame",
+    slots: [
+      "child",
+      "url",
+      "height",
+      "clip"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child",
+      content: "child"
+    }
+  },
+  {
+    name: "Button",
+    slots: [
+      "label",
+      "onClick",
+      "variant",
+      "type",
+      "size",
+      "icon",
+      "iconPosition",
+      "iconOnly",
+      "loading",
+      "fullWidth",
+      "disabled",
+      "href"
+    ],
+    positional: 0,
+    aliases: {
+      action: "onClick",
+      onclick: "onClick",
+      tone: "variant"
+    }
+  },
+  {
+    name: "ButtonGroup",
+    slots: [
+      "items",
+      "size",
+      "fullWidth",
+      "ariaLabel"
+    ],
+    positional: 0,
+    aliases: {
+      full: "fullWidth",
+      ariaLabelledBy: "ariaLabel",
+      label: "ariaLabel"
+    }
+  },
+  {
+    name: "Buttons",
+    slots: [
+      "items",
+      "direction"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Calendar",
+    slots: [
+      "month",
+      "year",
+      "selected",
+      "onSelect",
+      "events",
+      "firstDay",
+      "navigable",
+      "onNavigate",
+      "minDate",
+      "maxDate",
+      "disabledDates",
+      "onEventClick",
+      "locale",
+      "weekdayLabels",
+      "monthLabels"
+    ],
+    positional: 0,
+    aliases: {
+      blackoutDates: "disabledDates"
+    }
+  },
+  {
+    name: "CalendarView",
+    slots: [
+      "value",
+      "month",
+      "events",
+      "view",
+      "firstDay",
+      "onSelect",
+      "onMonthChange",
+      "onEventClick",
+      "maxEventsPerDay",
+      "min",
+      "max",
+      "disabledDates",
+      "hideNav"
+    ],
+    positional: 0,
+    aliases: {
+      onNavigate: "onMonthChange"
+    }
+  },
+  {
+    name: "Callout",
+    slots: [
+      "tone",
+      "title",
+      "description",
+      "icon",
+      "compact",
+      "actions",
+      "hideIcon",
+      "live",
+      "dismissible",
+      "onDismiss"
+    ],
+    positional: 1,
+    aliases: {
+      variant: "tone",
+      text: "description",
+      footer: "actions",
+      noIcon: "hideIcon",
+      closable: "dismissible",
+      onClose: "onDismiss"
+    }
+  },
+  {
+    name: "Card",
+    slots: [
+      "children",
+      "variant",
+      "padding",
+      "onClick",
+      "href"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children",
+      tone: "variant",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "CardFooter",
+    slots: [
+      "children",
+      "justify"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "CardHeader",
+    slots: [
+      "title",
+      "subtitle",
+      "eyebrow",
+      "actions",
+      "level"
+    ],
+    positional: 0,
+    aliases: {
+      preheadline: "eyebrow",
+      kicker: "eyebrow"
+    }
+  },
+  {
+    name: "CardSection",
+    slots: [
+      "children",
+      "tone",
+      "align"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children",
+      variant: "tone",
+      status: "tone"
+    }
+  },
+  {
+    name: "Carousel",
+    slots: [
+      "items",
+      "activeIndex",
+      "ratio",
+      "showDots",
+      "showArrows",
+      "onChange",
+      "autoplay",
+      "interval",
+      "label",
+      "empty",
+      "emptyText"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange"
+    }
+  },
+  {
+    name: "Cart",
+    slots: [
+      "items",
+      "onQty",
+      "onRemove",
+      "currency",
+      "footer",
+      "disabled",
+      "loading",
+      "error"
+    ],
+    positional: 0,
+    aliases: {
+      busy: "disabled"
+    }
+  },
+  {
+    name: "Center",
+    slots: [
+      "children",
+      "axis",
+      "minHeight",
+      "gap",
+      "padding",
+      "inline"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "ChatBubble",
+    slots: [
+      "author",
+      "body",
+      "time",
+      "avatarSrc",
+      "from",
+      "status",
+      "content",
+      "onRetry"
+    ],
+    positional: 0,
+    aliases: {
+      text: "body",
+      message: "body",
+      src: "avatarSrc",
+      role: "from",
+      children: "content"
+    }
+  },
+  {
+    name: "CheckBoxGroup",
+    slots: [
+      "name",
+      "items",
+      "value",
+      "onChange",
+      "label",
+      "hint",
+      "error",
+      "required",
+      "disabled",
+      "labelHidden",
+      "warning",
+      "description",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "CheckBoxItem",
+    slots: [
+      "label",
+      "name",
+      "description",
+      "defaultChecked",
+      "disabled",
+      "value"
+    ],
+    positional: 0,
+    aliases: {
+      checked: "defaultChecked"
+    }
+  },
+  {
+    name: "Checkbox",
+    slots: [
+      "id",
+      "label",
+      "value",
+      "onChange",
+      "disabled",
+      "description",
+      "required",
+      "error",
+      "hint",
+      "indeterminate",
+      "labelHidden",
+      "warning",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      checked: "value",
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "CodeBlock",
+    slots: [
+      "language",
+      "codeString",
+      "showLineNumbers",
+      "highlightLines",
+      "highlight",
+      "copy",
+      "header",
+      "width",
+      "height",
+      "filename",
+      "wrap"
+    ],
+    positional: 1,
+    aliases: {
+      code: "codeString",
+      title: "filename"
+    }
+  },
+  {
+    name: "CodeEditor",
+    slots: [
+      "id",
+      "value",
+      "language",
+      "placeholder",
+      "minHeight",
+      "tabSize",
+      "showGutter",
+      "readonly",
+      "onChange",
+      "maxHeight",
+      "filename",
+      "copyable",
+      "onSave",
+      "name",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "required",
+      "warning",
+      "description",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      helperText: "hint",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "CodeWindow",
+    slots: [
+      "code",
+      "file",
+      "language",
+      "status",
+      "preview",
+      "copy",
+      "height",
+      "maxHeight",
+      "showLineNumbers",
+      "highlightLines"
+    ],
+    positional: 0,
+    aliases: {
+      codeString: "code"
+    }
+  },
+  {
+    name: "Col",
+    slots: [
+      "header",
+      "values",
+      "format",
+      "align",
+      "sortable",
+      "filterable",
+      "render",
+      "onClick",
+      "currency",
+      "width",
+      "wrap",
+      "headerTooltip",
+      "locale",
+      "initiallyHidden",
+      "pinned",
+      "resizable",
+      "minWidth",
+      "maxWidth",
+      "headerHidden"
+    ],
+    positional: 0,
+    aliases: {
+      cell: "render",
+      onclick: "onClick",
+      cellClick: "onClick",
+      hint: "headerTooltip",
+      colHidden: "initiallyHidden"
+    }
+  },
+  {
+    name: "ColorPicker",
+    slots: [
+      "id",
+      "value",
+      "label",
+      "swatches",
+      "disabled",
+      "onChange",
+      "format",
+      "allowAlpha",
+      "showInput",
+      "showSwatches",
+      "name",
+      "hint",
+      "error",
+      "required",
+      "warning",
+      "description",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      helperText: "hint",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "Column",
+    slots: [
+      "children",
+      "gap",
+      "align",
+      "justify",
+      "wrap",
+      "reverse",
+      "padding",
+      "inline",
+      "alignContent"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "Combobox",
+    slots: [
+      "id",
+      "items",
+      "value",
+      "placeholder",
+      "emptyLabel",
+      "disabled",
+      "open",
+      "onOpenChange",
+      "onChange",
+      "label",
+      "hint",
+      "error",
+      "required",
+      "loading",
+      "onSearch",
+      "clearable",
+      "onBlur",
+      "onFocus",
+      "creatable",
+      "labelHidden",
+      "warning",
+      "description",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      onopenchange: "onOpenChange",
+      onchange: "onChange",
+      onblur: "onBlur",
+      onfocus: "onFocus",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "CommandPalette",
+    slots: [
+      "items",
+      "open",
+      "placeholder",
+      "shortcut",
+      "onSelect",
+      "onClose",
+      "loading",
+      "emptyLabel",
+      "label",
+      "maxResults"
+    ],
+    positional: 0,
+    aliases: {
+      onOpenChange: "onClose"
+    }
+  },
+  {
+    name: "Comment",
+    slots: [
+      "author",
+      "body",
+      "time",
+      "avatarSrc",
+      "actions"
+    ],
+    positional: 0,
+    aliases: {
+      text: "body",
+      message: "body",
+      src: "avatarSrc"
+    }
+  },
+  {
+    name: "ComparisonTable",
+    slots: [
+      "columns",
+      "rows",
+      "highlightColumn",
+      "featureLabel",
+      "caption",
+      "stickyFirstColumn"
+    ],
+    positional: 0,
+    aliases: {
+      ariaLabel: "caption"
+    }
+  },
+  {
+    name: "Confetti",
+    slots: [
+      "fire",
+      "count",
+      "colors",
+      "duration",
+      "onDone"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "ConfirmDialog",
+    slots: [
+      "title",
+      "open",
+      "message",
+      "confirmLabel",
+      "cancelLabel",
+      "tone",
+      "onConfirm",
+      "onCancel",
+      "loading",
+      "confirmDisabled",
+      "icon",
+      "confirmFirst"
+    ],
+    positional: 0,
+    aliases: {
+      body: "message",
+      variant: "tone"
+    }
+  },
+  {
+    name: "Container",
+    slots: [
+      "children",
+      "size",
+      "maxWidth",
+      "padding"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "ContextMenu",
+    slots: [
+      "target",
+      "items",
+      "label",
+      "trigger",
+      "disabled",
+      "placement",
+      "offset",
+      "open",
+      "onOpenChange"
+    ],
+    positional: 0,
+    aliases: {
+      side: "placement"
+    }
+  },
+  {
+    name: "CopyButton",
+    slots: [
+      "text",
+      "label",
+      "copiedLabel",
+      "iconOnly"
+    ],
+    positional: 0,
+    aliases: {
+      value: "text",
+      variant: "iconOnly"
+    }
+  },
+  {
+    name: "CountUp",
+    slots: [
+      "value",
+      "suffix",
+      "prefix",
+      "duration",
+      "decimals"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "CountdownTimer",
+    slots: [
+      "to",
+      "endLabel",
+      "onEnd",
+      "units",
+      "showDays"
+    ],
+    positional: 0,
+    aliases: {
+      target: "to",
+      date: "to",
+      onFinish: "onEnd",
+      onComplete: "onEnd"
+    }
+  },
+  {
+    name: "Css",
+    slots: [
+      "child",
+      "style",
+      "class"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child",
+      className: "class",
+      classes: "class"
+    }
+  },
+  {
+    name: "DataGrid",
+    slots: [
+      "columns",
+      "rowIds",
+      "caption",
+      "sort",
+      "selectedIds",
+      "selectable",
+      "page",
+      "perPage",
+      "emptyLabel",
+      "onRowClick",
+      "toolbar",
+      "density",
+      "striped",
+      "stickyHeader",
+      "stickyFirstColumn",
+      "exportable",
+      "exportFilename",
+      "loading",
+      "error",
+      "loadingLabel",
+      "maxHeight",
+      "allowOverflow",
+      "onSort",
+      "onSelectionChange",
+      "perPageOptions",
+      "onPerPageChange",
+      "persistKey",
+      "resizable",
+      "columnMenu",
+      "globalSearch",
+      "onGlobalSearch",
+      "wrapCells",
+      "rowNumbers",
+      "highlightOnHover",
+      "scrollArrows",
+      "columnMenuOpen",
+      "onColumnMenuOpenChange",
+      "columnMenuButton",
+      "columnMenuAnchor",
+      "columnMenuTitle",
+      "columnMenuDescription",
+      "columnMenuResetLabel",
+      "ariaLabel"
+    ],
+    positional: 0,
+    aliases: {
+      rowAction: "onRowClick",
+      oncolumnmenuopenchange: "onColumnMenuOpenChange",
+      arialabel: "ariaLabel"
+    }
+  },
+  {
+    name: "DatePicker",
+    slots: [
+      "id",
+      "value",
+      "label",
+      "min",
+      "max",
+      "placeholder",
+      "disabled",
+      "onChange",
+      "hint",
+      "error",
+      "required",
+      "onBlur",
+      "onFocus",
+      "locale",
+      "warning",
+      "description",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      onblur: "onBlur",
+      onfocus: "onFocus",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "DateRangePicker",
+    slots: [
+      "id",
+      "from",
+      "to",
+      "label",
+      "min",
+      "max",
+      "disabled",
+      "onChange",
+      "hint",
+      "error",
+      "required",
+      "onBlur",
+      "onFocus",
+      "locale",
+      "warning",
+      "description",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      onblur: "onBlur",
+      onfocus: "onFocus",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "DateTimePicker",
+    slots: [
+      "id",
+      "value",
+      "min",
+      "max",
+      "step",
+      "onChange",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus"
+    }
+  },
+  {
+    name: "DescriptionItem",
+    slots: [
+      "label",
+      "value",
+      "icon"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "DescriptionList",
+    slots: [
+      "items",
+      "columns"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "DiffViewer",
+    slots: [
+      "left",
+      "right",
+      "mode",
+      "leftTitle",
+      "rightTitle",
+      "lineNumbers",
+      "contextLines",
+      "maxHeight"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Display",
+    slots: [
+      "content",
+      "size",
+      "align",
+      "balance",
+      "weight"
+    ],
+    positional: 0,
+    aliases: {
+      children: "content",
+      title: "content"
+    }
+  },
+  {
+    name: "Draggable",
+    slots: [
+      "child",
+      "data",
+      "type",
+      "disabled",
+      "ariaLabel",
+      "onDragStart",
+      "onDragEnd"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "Drawer",
+    slots: [
+      "title",
+      "open",
+      "children",
+      "side",
+      "footer",
+      "onClose",
+      "width",
+      "closeOnBackdrop"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children",
+      onclose: "onClose",
+      size: "width"
+    }
+  },
+  {
+    name: "DrawingCanvas",
+    slots: [
+      "width",
+      "height",
+      "color",
+      "lineWidth",
+      "background",
+      "clearable",
+      "value",
+      "onChange",
+      "onEnd",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden",
+      "ariaLabel"
+    ],
+    positional: 0,
+    aliases: {
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus",
+      arialabel: "ariaLabel"
+    }
+  },
+  {
+    name: "DropZone",
+    slots: [
+      "child",
+      "onDrop",
+      "label",
+      "accept",
+      "disabled",
+      "ariaLabel"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "DropdownMenu",
+    slots: [
+      "trigger",
+      "items",
+      "side",
+      "align",
+      "label",
+      "open",
+      "onOpenChange",
+      "disabled"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "EmptyState",
+    slots: [
+      "title",
+      "description",
+      "icon",
+      "illustration",
+      "action",
+      "actions"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "ErrorBoundary",
+    slots: [
+      "fallback",
+      "onError",
+      "showDetails",
+      "onRetry",
+      "children"
+    ],
+    positional: 4,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "ErrorState",
+    slots: [
+      "title",
+      "description",
+      "actions",
+      "icon"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Eyebrow",
+    slots: [
+      "text"
+    ],
+    positional: 0,
+    aliases: {
+      label: "text",
+      children: "text"
+    }
+  },
+  {
+    name: "FeatureGrid",
+    slots: [
+      "items",
+      "columns"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "FeatureItem",
+    slots: [
+      "title",
+      "description",
+      "icon",
+      "tone",
+      "href",
+      "onClick"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone",
+      action: "onClick",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "FieldRepeater",
+    slots: [
+      "items",
+      "fields",
+      "onAdd",
+      "onRemove",
+      "addLabel",
+      "onChange",
+      "removeLabel",
+      "min",
+      "max"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "FieldSet",
+    slots: [
+      "legend",
+      "children",
+      "helper",
+      "disabled",
+      "error",
+      "required"
+    ],
+    positional: 0,
+    aliases: {
+      title: "legend",
+      label: "legend",
+      child: "children",
+      fields: "children",
+      hint: "helper",
+      description: "helper"
+    }
+  },
+  {
+    name: "FileUpload",
+    slots: [
+      "id",
+      "label",
+      "hint",
+      "accept",
+      "multiple",
+      "onSelect",
+      "icon",
+      "disabled",
+      "maxSize",
+      "error",
+      "progress",
+      "onRemove"
+    ],
+    positional: 0,
+    aliases: {
+      action: "onSelect",
+      onChange: "onSelect"
+    }
+  },
+  {
+    name: "FilterChips",
+    slots: [
+      "chips",
+      "onRemove",
+      "onClear",
+      "clearLabel",
+      "max",
+      "disabled"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "FilterPill",
+    slots: [
+      "label",
+      "active",
+      "count",
+      "icon",
+      "disabled",
+      "onToggle"
+    ],
+    positional: 0,
+    aliases: {
+      selected: "active",
+      pressed: "active",
+      onClick: "onToggle",
+      action: "onToggle"
+    }
+  },
+  {
+    name: "FlipList",
+    slots: [
+      "children",
+      "duration",
+      "horizontal"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "FloatingActionButton",
+    slots: [
+      "icon",
+      "label",
+      "onClick",
+      "position",
+      "extended",
+      "disabled"
+    ],
+    positional: 0,
+    aliases: {
+      action: "onClick",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "FocusTrap",
+    slots: [
+      "child",
+      "active",
+      "restoreFocus",
+      "onEscape",
+      "autoFocus"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "FollowUpBlock",
+    slots: [
+      "items",
+      "title",
+      "onSelect",
+      "disabled",
+      "layout"
+    ],
+    positional: 0,
+    aliases: {
+      columns: "layout"
+    }
+  },
+  {
+    name: "FollowUpItem",
+    slots: [
+      "label",
+      "message"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Footer",
+    slots: [
+      "brand",
+      "tagline",
+      "columns",
+      "legal",
+      "social"
+    ],
+    positional: 0,
+    aliases: {
+      copyright: "legal"
+    }
+  },
+  {
+    name: "FooterColumn",
+    slots: [
+      "title",
+      "links"
+    ],
+    positional: 0,
+    aliases: {
+      children: "links",
+      items: "links"
+    }
+  },
+  {
+    name: "Form",
+    slots: [
+      "id",
+      "buttons",
+      "fields",
+      "onSubmit",
+      "error",
+      "loading"
+    ],
+    positional: 0,
+    aliases: {
+      onsubmit: "onSubmit",
+      submitting: "loading"
+    }
+  },
+  {
+    name: "FormControl",
+    slots: [
+      "label",
+      "field",
+      "hint",
+      "error",
+      "required",
+      "for",
+      "warning",
+      "description",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      control: "field",
+      htmlFor: "for",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "FormSection",
+    slots: [
+      "label",
+      "children",
+      "helper",
+      "level"
+    ],
+    positional: 0,
+    aliases: {
+      title: "label",
+      child: "children",
+      fields: "children",
+      description: "helper"
+    }
+  },
+  {
+    name: "Fragment",
+    slots: [
+      "children"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "Gallery",
+    slots: [
+      "items",
+      "columns",
+      "ratio",
+      "onSelect",
+      "fit",
+      "label",
+      "empty",
+      "emptyText"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Gantt",
+    slots: [
+      "tasks",
+      "startDate",
+      "endDate",
+      "axis",
+      "ticks",
+      "today",
+      "onTaskClick"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Gauge",
+    slots: [
+      "value",
+      "min",
+      "max",
+      "label",
+      "tone",
+      "size",
+      "caption",
+      "unit",
+      "format",
+      "thresholds",
+      "showRange",
+      "ariaLabel",
+      "decorative"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone",
+      suffix: "unit",
+      alt: "ariaLabel"
+    }
+  },
+  {
+    name: "GradientText",
+    slots: [
+      "text",
+      "gradient"
+    ],
+    positional: 0,
+    aliases: {
+      children: "text",
+      label: "text"
+    }
+  },
+  {
+    name: "Grid",
+    slots: [
+      "children",
+      "columns",
+      "gap",
+      "rowGap",
+      "columnGap",
+      "minChildWidth",
+      "alignItems",
+      "justifyItems",
+      "dense"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children",
+      minItemWidth: "minChildWidth"
+    }
+  },
+  {
+    name: "GridItem",
+    slots: [
+      "child",
+      "span",
+      "offset",
+      "spanAt",
+      "rowSpan"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "HTMLTag",
+    slots: [
+      "tag",
+      "attributes",
+      "children"
+    ],
+    positional: 0,
+    aliases: {
+      attrs: "attributes",
+      props: "attributes",
+      child: "children"
+    }
+  },
+  {
+    name: "Heading",
+    slots: [
+      "content",
+      "level",
+      "size",
+      "align"
+    ],
+    positional: 0,
+    aliases: {
+      children: "content",
+      title: "content"
+    }
+  },
+  {
+    name: "Heatmap",
+    slots: [
+      "xLabels",
+      "yLabels",
+      "values",
+      "title",
+      "tone",
+      "showValues",
+      "min",
+      "max",
+      "valueFormat",
+      "emptyText",
+      "onCellClick",
+      "ariaLabel",
+      "decorative"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone",
+      alt: "ariaLabel"
+    }
+  },
+  {
+    name: "Hero",
+    slots: [
+      "title",
+      "subtitle",
+      "primary",
+      "secondary",
+      "eyebrow",
+      "highlights",
+      "imageSrc",
+      "caption",
+      "height",
+      "actions",
+      "layout",
+      "tone",
+      "overlay",
+      "align"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone"
+    }
+  },
+  {
+    name: "Histogram",
+    slots: [
+      "values",
+      "binCount",
+      "bins",
+      "title",
+      "tone",
+      "xLabel",
+      "yLabel",
+      "height",
+      "emptyText",
+      "loading",
+      "onBinClick",
+      "ariaLabel",
+      "decorative"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone",
+      alt: "ariaLabel"
+    }
+  },
+  {
+    name: "HoverCard",
+    slots: [
+      "trigger",
+      "content",
+      "side",
+      "open",
+      "align",
+      "width",
+      "openDelay",
+      "closeDelay",
+      "label",
+      "onOpenChange"
+    ],
+    positional: 0,
+    aliases: {
+      children: "content",
+      placement: "side",
+      ariaLabel: "label"
+    }
+  },
+  {
+    name: "Icon",
+    slots: [
+      "name",
+      "variant",
+      "size",
+      "color",
+      "label",
+      "title"
+    ],
+    positional: 0,
+    aliases: {
+      tone: "variant",
+      ariaLabel: "label",
+      alt: "label"
+    }
+  },
+  {
+    name: "IconButton",
+    slots: [
+      "icon",
+      "label",
+      "onClick",
+      "variant",
+      "size",
+      "disabled",
+      "active",
+      "loading",
+      "type",
+      "href"
+    ],
+    positional: 0,
+    aliases: {
+      action: "onClick",
+      onclick: "onClick",
+      tone: "variant",
+      pressed: "active",
+      selected: "active"
+    }
+  },
+  {
+    name: "Image",
+    slots: [
+      "src",
+      "alt",
+      "caption",
+      "ratio",
+      "fit",
+      "fallback",
+      "placeholder",
+      "loading",
+      "sizes",
+      "srcset",
+      "onClick"
+    ],
+    positional: 0,
+    aliases: {
+      srcSet: "srcset",
+      onclick: "onClick",
+      action: "onClick"
+    }
+  },
+  {
+    name: "InboxPanel",
+    slots: [
+      "items",
+      "emptyLabel",
+      "onMarkAllRead",
+      "loading",
+      "loadingLabel",
+      "markAllLabel",
+      "unreadLabel",
+      "earlierLabel"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "InfiniteList",
+    slots: [
+      "items",
+      "onLoadMore",
+      "loading",
+      "hasMore",
+      "loaderLabel",
+      "error",
+      "onRetry",
+      "emptyLabel",
+      "rootMargin",
+      "threshold",
+      "retryLabel"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "InlineEdit",
+    slots: [
+      "value",
+      "label",
+      "onSave",
+      "placeholder",
+      "type",
+      "onCancel",
+      "disabled",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden"
+    ],
+    positional: 0,
+    aliases: {
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus"
+    }
+  },
+  {
+    name: "Input",
+    slots: [
+      "id",
+      "placeholder",
+      "type",
+      "validations",
+      "value",
+      "onChange",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden",
+      "readOnly",
+      "autocomplete",
+      "maxLength"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus",
+      readonly: "readOnly",
+      autoComplete: "autocomplete",
+      maxlength: "maxLength"
+    }
+  },
+  {
+    name: "InputGroup",
+    slots: [
+      "field",
+      "icon",
+      "leading",
+      "action",
+      "suffix",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden"
+    ],
+    positional: 0,
+    aliases: {
+      prefix: "leading",
+      trailing: "action",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus"
+    }
+  },
+  {
+    name: "JsonTree",
+    slots: [
+      "data",
+      "expanded",
+      "expandedDepth",
+      "maxHeight"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "KanbanBoard",
+    slots: [
+      "columns",
+      "onCardMove",
+      "draggable"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "KanbanCard",
+    slots: [
+      "title",
+      "description",
+      "tags",
+      "assignee",
+      "tone",
+      "icon",
+      "onClick"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone",
+      action: "onClick",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "KanbanColumn",
+    slots: [
+      "title",
+      "items",
+      "tone",
+      "actions",
+      "limit"
+    ],
+    positional: 0,
+    aliases: {
+      cards: "items",
+      variant: "tone"
+    }
+  },
+  {
+    name: "Kbd",
+    slots: [
+      "keys",
+      "size"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "KbdShortcut",
+    slots: [
+      "keys",
+      "size",
+      "separator"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Lazy",
+    slots: [
+      "loader",
+      "fallback",
+      "children",
+      "error",
+      "onError",
+      "retry"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "Lightbox",
+    slots: [
+      "items",
+      "open",
+      "index",
+      "onClose",
+      "showThumbnail"
+    ],
+    positional: 0,
+    aliases: {
+      onclose: "onClose"
+    }
+  },
+  {
+    name: "LineChart",
+    slots: [
+      "labels",
+      "series",
+      "data",
+      "title",
+      "filled",
+      "stacked",
+      "yMin",
+      "yMax",
+      "xAxisLabel",
+      "yAxisLabel",
+      "showLegend",
+      "height",
+      "loading",
+      "emptyText",
+      "onPointClick",
+      "ariaLabel",
+      "decorative"
+    ],
+    positional: 0,
+    aliases: {
+      alt: "ariaLabel"
+    }
+  },
+  {
+    name: "Link",
+    slots: [
+      "label",
+      "to",
+      "href",
+      "external",
+      "variant",
+      "disabled",
+      "onClick",
+      "download"
+    ],
+    positional: 0,
+    aliases: {
+      child: "label",
+      children: "label",
+      tone: "variant",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "List",
+    slots: [
+      "items",
+      "ordered",
+      "emptyLabel",
+      "divided",
+      "gap"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "ListBlock",
+    slots: [
+      "items",
+      "ordered",
+      "marker",
+      "start"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "ListItem",
+    slots: [
+      "title",
+      "description",
+      "icon",
+      "onClick",
+      "href",
+      "trailing",
+      "active",
+      "tone"
+    ],
+    positional: 0,
+    aliases: {
+      meta: "description",
+      onclick: "onClick",
+      action: "onClick",
+      actions: "trailing",
+      accessory: "trailing",
+      selected: "active",
+      variant: "tone"
+    }
+  },
+  {
+    name: "LiveCursor",
+    slots: [
+      "x",
+      "y",
+      "label",
+      "color",
+      "space",
+      "smooth",
+      "typing"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "LiveRegion",
+    slots: [
+      "text",
+      "politeness",
+      "visible"
+    ],
+    positional: 0,
+    aliases: {
+      children: "text"
+    }
+  },
+  {
+    name: "LoadingDots",
+    slots: [
+      "label",
+      "size",
+      "tone"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone"
+    }
+  },
+  {
+    name: "LoadingState",
+    slots: [
+      "title",
+      "description",
+      "actions",
+      "icon"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "LogoChip",
+    slots: [
+      "label",
+      "icon",
+      "imageSrc",
+      "href"
+    ],
+    positional: 0,
+    aliases: {
+      logo: "imageSrc",
+      image: "imageSrc",
+      src: "imageSrc"
+    }
+  },
+  {
+    name: "LogoCloud",
+    slots: [
+      "items",
+      "label"
+    ],
+    positional: 0,
+    aliases: {
+      children: "items",
+      chips: "items"
+    }
+  },
+  {
+    name: "Lottie",
+    slots: [
+      "src",
+      "data",
+      "loop",
+      "autoplay",
+      "speed",
+      "width",
+      "height",
+      "poster",
+      "fallback",
+      "label",
+      "playing",
+      "onComplete",
+      "onError"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Map",
+    slots: [
+      "lat",
+      "lng",
+      "zoom",
+      "markers",
+      "height",
+      "caption",
+      "title"
+    ],
+    positional: 0,
+    aliases: {
+      locations: "markers"
+    }
+  },
+  {
+    name: "Markdown",
+    slots: [
+      "content",
+      "linkTarget"
+    ],
+    positional: 0,
+    aliases: {
+      target: "linkTarget"
+    }
+  },
+  {
+    name: "MaskedInput",
+    slots: [
+      "id",
+      "mask",
+      "value",
+      "placeholder",
+      "unmasked",
+      "inputMode",
+      "onChange",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden"
+    ],
+    positional: 0,
+    aliases: {
+      rawValue: "unmasked",
+      inputmode: "inputMode",
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus"
+    }
+  },
+  {
+    name: "MasonryGrid",
+    slots: [
+      "items",
+      "columns",
+      "gap"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "MediaCard",
+    slots: [
+      "title",
+      "imageSrc",
+      "description",
+      "tags",
+      "meta",
+      "actions",
+      "badge",
+      "orientation",
+      "ratio",
+      "href",
+      "onClick"
+    ],
+    positional: 0,
+    aliases: {
+      src: "imageSrc",
+      image: "imageSrc",
+      action: "onClick",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "MentionInput",
+    slots: [
+      "id",
+      "people",
+      "value",
+      "placeholder",
+      "rows",
+      "maxSuggestions",
+      "mentionFormat",
+      "loading",
+      "onSearch",
+      "onChange",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus"
+    }
+  },
+  {
+    name: "MenuItem",
+    slots: [
+      "label",
+      "onClick",
+      "icon",
+      "shortcut",
+      "variant",
+      "disabled",
+      "checked",
+      "role",
+      "keepOpen"
+    ],
+    positional: 0,
+    aliases: {
+      action: "onClick",
+      onclick: "onClick",
+      tone: "variant"
+    }
+  },
+  {
+    name: "MenuLabel",
+    slots: [
+      "label"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "MenuSeparator",
+    slots: [],
+    positional: -1,
+    aliases: {}
+  },
+  {
+    name: "Metric",
+    slots: [
+      "value",
+      "label",
+      "gradient",
+      "countUp",
+      "duration",
+      "trend"
+    ],
+    positional: 0,
+    aliases: {
+      delta: "trend",
+      change: "trend"
+    }
+  },
+  {
+    name: "MetricStrip",
+    slots: [
+      "items",
+      "columns"
+    ],
+    positional: 0,
+    aliases: {
+      children: "items",
+      metrics: "items"
+    }
+  },
+  {
+    name: "Modal",
+    slots: [
+      "title",
+      "open",
+      "children",
+      "size",
+      "footer",
+      "closable",
+      "closeOnBackdrop",
+      "onClose",
+      "onRequestClose",
+      "lazy"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children",
+      onclose: "onClose"
+    }
+  },
+  {
+    name: "Mount",
+    slots: [
+      "setup",
+      "update",
+      "cleanup",
+      "props",
+      "tag",
+      "deps",
+      "onError"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "MultiSelect",
+    slots: [
+      "id",
+      "items",
+      "value",
+      "placeholder",
+      "emptyLabel",
+      "max",
+      "disabled",
+      "open",
+      "onOpenChange",
+      "onChange",
+      "label",
+      "hint",
+      "error",
+      "required",
+      "min",
+      "onSearch",
+      "loading",
+      "creatable",
+      "labelHidden",
+      "warning",
+      "description",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      onopenchange: "onOpenChange",
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "MultiStepForm",
+    slots: [
+      "steps",
+      "current",
+      "onSubmit",
+      "prevLabel",
+      "nextLabel",
+      "submitLabel",
+      "stepsLayout",
+      "nextDisabled",
+      "submitting",
+      "onStepChange",
+      "onStepClick",
+      "clickableSteps",
+      "showProgress",
+      "hideFooter",
+      "emptyText"
+    ],
+    positional: 0,
+    aliases: {
+      layout: "stepsLayout",
+      stepsDirection: "stepsLayout"
+    }
+  },
+  {
+    name: "NavBar",
+    slots: [
+      "brand",
+      "links",
+      "actions",
+      "sticky",
+      "blur"
+    ],
+    positional: 0,
+    aliases: {
+      items: "links"
+    }
+  },
+  {
+    name: "NavLink",
+    slots: [
+      "label",
+      "to",
+      "variant",
+      "exact",
+      "icon",
+      "prefetch",
+      "disabled"
+    ],
+    positional: 0,
+    aliases: {
+      tone: "variant"
+    }
+  },
+  {
+    name: "Navbar",
+    slots: [
+      "brand",
+      "items",
+      "actions",
+      "sticky",
+      "variant",
+      "collapsible"
+    ],
+    positional: 0,
+    aliases: {
+      links: "items",
+      tone: "variant"
+    }
+  },
+  {
+    name: "NavbarItem",
+    slots: [
+      "label",
+      "to",
+      "href",
+      "icon",
+      "active",
+      "onClick",
+      "external",
+      "disabled"
+    ],
+    positional: 0,
+    aliases: {
+      action: "onClick",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "Notification",
+    slots: [
+      "title",
+      "message",
+      "time",
+      "icon",
+      "avatarSrc",
+      "tone",
+      "unread",
+      "actions",
+      "author",
+      "onClick",
+      "dismissible",
+      "onDismiss"
+    ],
+    positional: 0,
+    aliases: {
+      description: "message",
+      src: "avatarSrc",
+      variant: "tone",
+      actor: "author",
+      action: "onClick",
+      onclick: "onClick",
+      closable: "dismissible",
+      onClose: "onDismiss"
+    }
+  },
+  {
+    name: "NotificationBell",
+    slots: [
+      "count",
+      "items",
+      "onOpen",
+      "onItemClick",
+      "onMarkAllRead",
+      "align",
+      "loading",
+      "emptyLabel",
+      "label",
+      "markAllLabel",
+      "maxCount"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "NumberInput",
+    slots: [
+      "id",
+      "value",
+      "min",
+      "max",
+      "step",
+      "placeholder",
+      "onChange",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden",
+      "prefix",
+      "suffix",
+      "precision",
+      "readOnly",
+      "onLimit"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus",
+      readonly: "readOnly"
+    }
+  },
+  {
+    name: "OnClick",
+    slots: [
+      "child",
+      "onClick",
+      "disabled",
+      "stopPropagation",
+      "role",
+      "keyboard"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child",
+      action: "onClick",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "OnFocus",
+    slots: [
+      "child",
+      "onFocus",
+      "onBlur"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child",
+      onfocus: "onFocus",
+      onblur: "onBlur"
+    }
+  },
+  {
+    name: "OnGesture",
+    slots: [
+      "child",
+      "swipe",
+      "longPress",
+      "doubleTap",
+      "pan",
+      "onPanEnd",
+      "threshold",
+      "disabled",
+      "ariaLabel"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child",
+      onSwipe: "swipe",
+      onLongPress: "longPress",
+      onDoubleTap: "doubleTap",
+      onPan: "pan",
+      panEnd: "onPanEnd",
+      onRelease: "onPanEnd"
+    }
+  },
+  {
+    name: "OnIntersect",
+    slots: [
+      "child",
+      "onEnter",
+      "onLeave",
+      "onChange",
+      "threshold",
+      "rootMargin",
+      "root",
+      "once",
+      "disabled"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "OnKeyboard",
+    slots: [
+      "child",
+      "onKeyDown",
+      "onKeyUp",
+      "onKeyPress",
+      "focusable",
+      "global"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child",
+      onkeydown: "onKeyDown",
+      onkeyup: "onKeyUp",
+      onkeypress: "onKeyPress"
+    }
+  },
+  {
+    name: "OnMount",
+    slots: [
+      "child",
+      "onMount",
+      "onUnmount",
+      "deps"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "OnMouse",
+    slots: [
+      "child",
+      "enter",
+      "leave",
+      "hover",
+      "move",
+      "down",
+      "up",
+      "click",
+      "doubleClick",
+      "contextMenu",
+      "scroll",
+      "wheel",
+      "pointerDown",
+      "pointerMove",
+      "pointerUp",
+      "drag",
+      "drop",
+      "dragStart",
+      "dragEnd",
+      "dragEnter",
+      "dragLeave",
+      "dragOver",
+      "draggable",
+      "passiveScroll"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "OnboardingChecklist",
+    slots: [
+      "items",
+      "title",
+      "subtitle",
+      "onDismiss",
+      "onComplete"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "OrderSummary",
+    slots: [
+      "items",
+      "subtotal",
+      "shipping",
+      "tax",
+      "total",
+      "currency",
+      "discount",
+      "locale",
+      "loading",
+      "note",
+      "empty"
+    ],
+    positional: 0,
+    aliases: {
+      lines: "items"
+    }
+  },
+  {
+    name: "Overlay",
+    slots: [
+      "base",
+      "items"
+    ],
+    positional: 0,
+    aliases: {
+      overlays: "items"
+    }
+  },
+  {
+    name: "OverlayItem",
+    slots: [
+      "child",
+      "anchor",
+      "offset"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "PageHeader",
+    slots: [
+      "title",
+      "subtitle",
+      "breadcrumbs",
+      "actions",
+      "status",
+      "onCrumbClick"
+    ],
+    positional: 0,
+    aliases: {
+      badge: "status"
+    }
+  },
+  {
+    name: "Pagination",
+    slots: [
+      "page",
+      "totalPages",
+      "siblings",
+      "total",
+      "perPage",
+      "perPageOptions",
+      "compact",
+      "onChange",
+      "disabled",
+      "onPerPageChange"
+    ],
+    positional: 0,
+    aliases: {
+      pages: "totalPages",
+      onPageChange: "onChange"
+    }
+  },
+  {
+    name: "Parallax",
+    slots: [
+      "child",
+      "speed",
+      "maxOffset"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "PasswordInput",
+    slots: [
+      "id",
+      "value",
+      "placeholder",
+      "strengthMeter",
+      "autocomplete",
+      "onChange",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden"
+    ],
+    positional: 0,
+    aliases: {
+      showStrength: "strengthMeter",
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus"
+    }
+  },
+  {
+    name: "PersonChip",
+    slots: [
+      "name",
+      "role",
+      "avatarSrc",
+      "size",
+      "status",
+      "onClick"
+    ],
+    positional: 0,
+    aliases: {
+      src: "avatarSrc",
+      action: "onClick",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "PieChart",
+    slots: [
+      "labels",
+      "values",
+      "title",
+      "showValues",
+      "valueFormat",
+      "donut",
+      "innerRadius",
+      "size",
+      "showLegend",
+      "legendPosition",
+      "loading",
+      "emptyText",
+      "onSliceClick",
+      "ariaLabel",
+      "decorative"
+    ],
+    positional: 0,
+    aliases: {
+      alt: "ariaLabel"
+    }
+  },
+  {
+    name: "Pill",
+    slots: [
+      "label",
+      "tone",
+      "icon"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone",
+      status: "tone"
+    }
+  },
+  {
+    name: "PinInput",
+    slots: [
+      "id",
+      "length",
+      "value",
+      "type",
+      "mask",
+      "autoFocus",
+      "onChange",
+      "onComplete",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden"
+    ],
+    positional: 0,
+    aliases: {
+      autofocus: "autoFocus",
+      onchange: "onChange",
+      oncomplete: "onComplete",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus"
+    }
+  },
+  {
+    name: "Popover",
+    slots: [
+      "trigger",
+      "content",
+      "title",
+      "side",
+      "align",
+      "width",
+      "open",
+      "onOpenChange",
+      "showClose",
+      "disabled"
+    ],
+    positional: 0,
+    aliases: {
+      children: "content",
+      placement: "side"
+    }
+  },
+  {
+    name: "Portal",
+    slots: [
+      "target",
+      "children"
+    ],
+    positional: 1,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "PresenceAvatars",
+    slots: [
+      "people",
+      "max",
+      "size",
+      "onClick"
+    ],
+    positional: 0,
+    aliases: {
+      users: "people",
+      children: "people",
+      onPersonClick: "onClick",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "PriceTag",
+    slots: [
+      "price",
+      "compareAt",
+      "currency",
+      "size",
+      "currencyPosition",
+      "period"
+    ],
+    positional: 0,
+    aliases: {
+      was: "compareAt",
+      original: "compareAt",
+      suffix: "period",
+      per: "period"
+    }
+  },
+  {
+    name: "PricingCard",
+    slots: [
+      "plan",
+      "price",
+      "period",
+      "description",
+      "features",
+      "action",
+      "badge",
+      "featured",
+      "ribbon"
+    ],
+    positional: 0,
+    aliases: {
+      cta: "action",
+      highlighted: "featured",
+      badgeLabel: "ribbon"
+    }
+  },
+  {
+    name: "PricingTable",
+    slots: [
+      "tiers",
+      "columns"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "ProductCard",
+    slots: [
+      "title",
+      "image",
+      "price",
+      "compareAt",
+      "currency",
+      "rating",
+      "badge",
+      "action",
+      "onAdd",
+      "href",
+      "onClick",
+      "reviewCount",
+      "soldOut"
+    ],
+    positional: 0,
+    aliases: {
+      src: "image",
+      onSelect: "onClick",
+      onclick: "onClick",
+      reviews: "reviewCount",
+      disabled: "soldOut"
+    }
+  },
+  {
+    name: "ProfileCard",
+    slots: [
+      "name",
+      "role",
+      "avatarSrc",
+      "bio",
+      "tags",
+      "actions"
+    ],
+    positional: 0,
+    aliases: {
+      src: "avatarSrc"
+    }
+  },
+  {
+    name: "Progress",
+    slots: [
+      "value",
+      "max",
+      "label",
+      "tone",
+      "indeterminate",
+      "showValue",
+      "segments",
+      "buffered"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone"
+    }
+  },
+  {
+    name: "ProgressRing",
+    slots: [
+      "value",
+      "max",
+      "label",
+      "caption",
+      "tone",
+      "size",
+      "indeterminate",
+      "icon"
+    ],
+    positional: 0,
+    aliases: {
+      description: "caption",
+      variant: "tone"
+    }
+  },
+  {
+    name: "Prose",
+    slots: [
+      "children",
+      "size"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children",
+      content: "children"
+    }
+  },
+  {
+    name: "QRCode",
+    slots: [
+      "data",
+      "size",
+      "ecc",
+      "color",
+      "background",
+      "margin",
+      "label"
+    ],
+    positional: 0,
+    aliases: {
+      value: "data",
+      text: "data",
+      alt: "label"
+    }
+  },
+  {
+    name: "QuantityStepper",
+    slots: [
+      "value",
+      "min",
+      "max",
+      "step",
+      "onChange",
+      "disabled",
+      "label",
+      "size"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      ariaLabel: "label"
+    }
+  },
+  {
+    name: "QueryBuilder",
+    slots: [
+      "fields",
+      "value",
+      "onChange",
+      "operators",
+      "disabled",
+      "maxRules"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Quote",
+    slots: [
+      "text",
+      "cite",
+      "tone"
+    ],
+    positional: 0,
+    aliases: {
+      attribution: "cite",
+      author: "cite",
+      variant: "tone"
+    }
+  },
+  {
+    name: "RadarChart",
+    slots: [
+      "axes",
+      "series",
+      "max",
+      "title",
+      "size",
+      "showDots",
+      "showValues",
+      "emptyText",
+      "ariaLabel",
+      "decorative"
+    ],
+    positional: 0,
+    aliases: {
+      alt: "ariaLabel"
+    }
+  },
+  {
+    name: "Radio",
+    slots: [
+      "id",
+      "items",
+      "value",
+      "onChange",
+      "label",
+      "hint",
+      "error",
+      "required",
+      "disabled",
+      "direction",
+      "labelHidden",
+      "slots",
+      "warning",
+      "description",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "Rating",
+    slots: [
+      "value",
+      "max",
+      "label",
+      "count",
+      "size",
+      "interactive",
+      "readonly",
+      "halfStep",
+      "icon",
+      "onChange",
+      "allowClear",
+      "tone"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      variant: "tone",
+      color: "tone"
+    }
+  },
+  {
+    name: "ReactionPicker",
+    slots: [
+      "reactions",
+      "onReact",
+      "disabled"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "ReadingProgress",
+    slots: [
+      "gradient",
+      "height",
+      "target",
+      "color"
+    ],
+    positional: 0,
+    aliases: {
+      scrollContainer: "target"
+    }
+  },
+  {
+    name: "Redirect",
+    slots: [
+      "path",
+      "replace"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "RelativeTime",
+    slots: [
+      "value"
+    ],
+    positional: 0,
+    aliases: {
+      date: "value",
+      time: "value"
+    }
+  },
+  {
+    name: "RequirementList",
+    slots: [
+      "items",
+      "title",
+      "pending",
+      "announce",
+      "announceText",
+      "metLabel",
+      "unmetLabel"
+    ],
+    positional: 0,
+    aliases: {
+      rules: "items",
+      requirements: "items"
+    }
+  },
+  {
+    name: "ResizablePanels",
+    slots: [
+      "primary",
+      "secondary",
+      "initialPrimaryWidth",
+      "minPrimaryWidth",
+      "minSecondaryWidth",
+      "onResize"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Reveal",
+    slots: [
+      "child",
+      "animation",
+      "delay",
+      "duration",
+      "threshold",
+      "once"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "RichTextEditor",
+    slots: [
+      "id",
+      "value",
+      "placeholder",
+      "minHeight",
+      "disabled",
+      "onChange",
+      "tools",
+      "maxHeight",
+      "readonly",
+      "name",
+      "label",
+      "hint",
+      "error",
+      "required",
+      "warning",
+      "description",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      helperText: "hint",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "RouteView",
+    slots: [
+      "children",
+      "routeKey",
+      "animation",
+      "duration",
+      "scrollToTop",
+      "announce"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "Row",
+    slots: [
+      "children",
+      "gap",
+      "align",
+      "justify",
+      "grow",
+      "wrap",
+      "reverse",
+      "padding",
+      "inline",
+      "alignContent"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "ScatterChart",
+    slots: [
+      "series",
+      "xLabel",
+      "yLabel",
+      "title",
+      "pointSize",
+      "pointOpacity",
+      "xMin",
+      "xMax",
+      "yMin",
+      "yMax",
+      "height",
+      "showLegend",
+      "emptyText",
+      "onPointClick",
+      "ariaLabel",
+      "decorative"
+    ],
+    positional: 0,
+    aliases: {
+      alt: "ariaLabel"
+    }
+  },
+  {
+    name: "ScrollArea",
+    slots: [
+      "children",
+      "maxHeight",
+      "direction",
+      "height",
+      "stickToBottom"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "ScrollSpy",
+    slots: [
+      "sections",
+      "title",
+      "offset",
+      "top",
+      "onChange"
+    ],
+    positional: 0,
+    aliases: {
+      items: "sections",
+      onchange: "onChange"
+    }
+  },
+  {
+    name: "SearchBar",
+    slots: [
+      "id",
+      "placeholder",
+      "value",
+      "shortcut",
+      "onSubmit",
+      "submitLabel",
+      "onChange",
+      "clearable",
+      "onClear",
+      "disabled",
+      "loading",
+      "ariaLabel"
+    ],
+    positional: 0,
+    aliases: {
+      action: "onSubmit",
+      onClick: "onSubmit",
+      onchange: "onChange"
+    }
+  },
+  {
+    name: "Section",
+    slots: [
+      "children",
+      "background",
+      "width",
+      "padding",
+      "align",
+      "eyebrow",
+      "title",
+      "subtitle",
+      "id",
+      "actions"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children",
+      bg: "background",
+      description: "subtitle"
+    }
+  },
+  {
+    name: "SectionBlock",
+    slots: [
+      "title",
+      "children",
+      "description",
+      "actions",
+      "level",
+      "icon"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "SectionHeader",
+    slots: [
+      "title",
+      "subtitle",
+      "eyebrow",
+      "status",
+      "actions"
+    ],
+    positional: 0,
+    aliases: {
+      description: "subtitle",
+      badge: "status"
+    }
+  },
+  {
+    name: "SegmentedControl",
+    slots: [
+      "options",
+      "value",
+      "onChange",
+      "disabled",
+      "size",
+      "label"
+    ],
+    positional: 0,
+    aliases: {
+      items: "options",
+      onchange: "onChange",
+      ariaLabel: "label"
+    }
+  },
+  {
+    name: "Select",
+    slots: [
+      "id",
+      "items",
+      "label",
+      "placeholder",
+      "value",
+      "searchable",
+      "onChange",
+      "hint",
+      "error",
+      "required",
+      "disabled",
+      "onBlur",
+      "onFocus",
+      "loading",
+      "onSearch",
+      "labelHidden",
+      "emptyLabel",
+      "warning",
+      "description",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      onblur: "onBlur",
+      onfocus: "onFocus",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "SelectItem",
+    slots: [
+      "value",
+      "label",
+      "disabled",
+      "group"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Separator",
+    slots: [
+      "orientation",
+      "label",
+      "decorative"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Series",
+    slots: [
+      "name",
+      "values",
+      "color",
+      "points"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "ShareButtons",
+    slots: [
+      "url",
+      "title",
+      "networks",
+      "showLabels"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Sheet",
+    slots: [
+      "children",
+      "open",
+      "side",
+      "title",
+      "onClose",
+      "label",
+      "width",
+      "footer",
+      "dismissible"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children",
+      content: "children",
+      onclose: "onClose"
+    }
+  },
+  {
+    name: "Show",
+    slots: [
+      "when",
+      "children",
+      "fallback"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "Sidebar",
+    slots: [
+      "items",
+      "brand",
+      "tagline",
+      "footer",
+      "collapsed",
+      "fullHeight",
+      "label"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "SidebarItem",
+    slots: [
+      "label",
+      "icon",
+      "active",
+      "badge",
+      "to",
+      "onClick",
+      "href",
+      "disabled"
+    ],
+    positional: 0,
+    aliases: {
+      action: "onClick",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "SidebarSection",
+    slots: [
+      "label",
+      "items"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "SignaturePad",
+    slots: [
+      "width",
+      "height",
+      "color",
+      "lineWidth",
+      "background",
+      "clearable",
+      "value",
+      "onChange",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden",
+      "ariaLabel"
+    ],
+    positional: 0,
+    aliases: {
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus",
+      arialabel: "ariaLabel"
+    }
+  },
+  {
+    name: "Skeleton",
+    slots: [
+      "variant",
+      "lines",
+      "height",
+      "shape",
+      "width",
+      "label",
+      "live"
+    ],
+    positional: 0,
+    aliases: {
+      tone: "variant",
+      count: "lines",
+      columns: "lines"
+    }
+  },
+  {
+    name: "SkipLink",
+    slots: [
+      "to",
+      "label"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Slider",
+    slots: [
+      "id",
+      "min",
+      "max",
+      "step",
+      "value",
+      "label",
+      "showValue",
+      "disabled",
+      "onChange",
+      "suffix",
+      "format",
+      "hint",
+      "error",
+      "marks",
+      "warning",
+      "description",
+      "optional",
+      "invalid",
+      "describedBy"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy"
+    }
+  },
+  {
+    name: "Sortable",
+    slots: [
+      "items",
+      "onReorder",
+      "handle",
+      "horizontal",
+      "disabled",
+      "ariaLabel"
+    ],
+    positional: 0,
+    aliases: {
+      children: "items"
+    }
+  },
+  {
+    name: "Spacer",
+    slots: [
+      "size",
+      "flex"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Sparkline",
+    slots: [
+      "values",
+      "tone",
+      "width",
+      "height",
+      "min",
+      "max",
+      "label"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone",
+      ariaLabel: "label"
+    }
+  },
+  {
+    name: "SpeedDial",
+    slots: [
+      "actions",
+      "icon",
+      "open",
+      "onOpenChange",
+      "position",
+      "label"
+    ],
+    positional: 0,
+    aliases: {
+      items: "actions"
+    }
+  },
+  {
+    name: "Spinner",
+    slots: [
+      "size",
+      "label",
+      "tone"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone"
+    }
+  },
+  {
+    name: "Split",
+    slots: [
+      "left",
+      "right",
+      "ratio",
+      "gap",
+      "divider",
+      "sticky",
+      "stickyOffset",
+      "stackAt",
+      "reverseOnStack",
+      "align"
+    ],
+    positional: 0,
+    aliases: {
+      primary: "left",
+      secondary: "right"
+    }
+  },
+  {
+    name: "SplitView",
+    slots: [
+      "primary",
+      "detail",
+      "primaryWidth",
+      "showDetail"
+    ],
+    positional: 0,
+    aliases: {
+      secondary: "detail",
+      splitAt: "primaryWidth"
+    }
+  },
+  {
+    name: "Spotlight",
+    slots: [
+      "title",
+      "open",
+      "description",
+      "actions",
+      "onClose",
+      "target"
+    ],
+    positional: 0,
+    aliases: {
+      action: "actions",
+      onclose: "onClose"
+    }
+  },
+  {
+    name: "Stack",
+    slots: [
+      "children",
+      "direction",
+      "gap",
+      "align",
+      "justify",
+      "alignContent",
+      "wrap",
+      "reverse",
+      "uniform",
+      "inline",
+      "padding"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "StackItem",
+    slots: [
+      "child",
+      "grow",
+      "shrink",
+      "basis",
+      "alignSelf",
+      "order",
+      "minWidth",
+      "maxWidth"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "StatCard",
+    slots: [
+      "label",
+      "value",
+      "trend",
+      "delta",
+      "icon",
+      "spark",
+      "tone",
+      "hint",
+      "onClick"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone",
+      description: "hint",
+      onclick: "onClick",
+      action: "onClick"
+    }
+  },
+  {
+    name: "Stats",
+    slots: [
+      "items",
+      "layout",
+      "columns",
+      "align"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "StatusDot",
+    slots: [
+      "label",
+      "tone",
+      "pulse"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone"
+    }
+  },
+  {
+    name: "Steps",
+    slots: [
+      "items",
+      "orientation"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Sticky",
+    slots: [
+      "children",
+      "side",
+      "offset",
+      "zIndex"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "Styles",
+    slots: [
+      "css",
+      "scope",
+      "tokens"
+    ],
+    positional: 0,
+    aliases: {
+      content: "css",
+      rules: "css"
+    }
+  },
+  {
+    name: "SuccessState",
+    slots: [
+      "title",
+      "description",
+      "actions",
+      "icon"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Svg",
+    slots: [
+      "content",
+      "viewBox",
+      "width",
+      "height",
+      "fill",
+      "stroke",
+      "strokeWidth",
+      "preserveAspectRatio",
+      "label"
+    ],
+    positional: 0,
+    aliases: {
+      paths: "content",
+      markup: "content",
+      "stroke-width": "strokeWidth"
+    }
+  },
+  {
+    name: "Swatch",
+    slots: [
+      "name",
+      "background",
+      "foreground",
+      "colors",
+      "onClick",
+      "selected"
+    ],
+    positional: 0,
+    aliases: {
+      onSelect: "onClick",
+      onclick: "onClick",
+      active: "selected"
+    }
+  },
+  {
+    name: "Switch",
+    slots: [
+      "id",
+      "label",
+      "value",
+      "description",
+      "disabled",
+      "onChange",
+      "labelHidden"
+    ],
+    positional: 0,
+    aliases: {
+      checked: "value",
+      onchange: "onChange"
+    }
+  },
+  {
+    name: "TabBar",
+    slots: [
+      "items",
+      "active",
+      "onChange",
+      "pinned"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "TabItem",
+    slots: [
+      "value",
+      "label",
+      "children",
+      "badge",
+      "icon",
+      "disabled"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "Table",
+    slots: [
+      "columns",
+      "caption",
+      "density",
+      "striped",
+      "sticky",
+      "emptyLabel",
+      "loading",
+      "loadingRows",
+      "maxHeight",
+      "onRowClick",
+      "allowOverflow",
+      "ariaLabel",
+      "locale"
+    ],
+    positional: 0,
+    aliases: {
+      title: "caption",
+      rowAction: "onRowClick",
+      overflow: "allowOverflow"
+    }
+  },
+  {
+    name: "TableOfContents",
+    slots: [
+      "items",
+      "title",
+      "activeHref",
+      "onSelect"
+    ],
+    positional: 0,
+    aliases: {
+      children: "items",
+      active: "activeHref",
+      onChange: "onSelect"
+    }
+  },
+  {
+    name: "Tabs",
+    slots: [
+      "items",
+      "defaultValue",
+      "orientation",
+      "onChange",
+      "value",
+      "fitted"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange"
+    }
+  },
+  {
+    name: "TagInput",
+    slots: [
+      "id",
+      "value",
+      "placeholder",
+      "max",
+      "suggestions",
+      "onChange",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus"
+    }
+  },
+  {
+    name: "Terminal",
+    slots: [
+      "lines",
+      "file",
+      "prompt",
+      "height",
+      "maxHeight"
+    ],
+    positional: 0,
+    aliases: {
+      children: "lines",
+      content: "lines"
+    }
+  },
+  {
+    name: "Testimonial",
+    slots: [
+      "quote",
+      "author",
+      "role",
+      "avatarSrc",
+      "rating"
+    ],
+    positional: 0,
+    aliases: {
+      name: "author",
+      src: "avatarSrc"
+    }
+  },
+  {
+    name: "Text",
+    slots: [
+      "value",
+      "variant",
+      "tone",
+      "align",
+      "style",
+      "as",
+      "truncate",
+      "lines"
+    ],
+    positional: 0,
+    aliases: {
+      tag: "as",
+      clamp: "lines"
+    }
+  },
+  {
+    name: "TextArea",
+    slots: [
+      "id",
+      "placeholder",
+      "rows",
+      "value",
+      "onChange",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden",
+      "maxLength",
+      "readOnly",
+      "autoResize"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus",
+      maxlength: "maxLength",
+      readonly: "readOnly"
+    }
+  },
+  {
+    name: "TextContent",
+    slots: [
+      "value",
+      "variant",
+      "tone",
+      "align",
+      "style",
+      "as",
+      "truncate",
+      "lines"
+    ],
+    positional: 0,
+    aliases: {
+      tag: "as",
+      clamp: "lines"
+    }
+  },
+  {
+    name: "ThemeToggle",
+    slots: [
+      "light",
+      "dark"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "Tile",
+    slots: [
+      "label",
+      "icon",
+      "value",
+      "description",
+      "tone",
+      "onClick",
+      "href",
+      "selected",
+      "iconPosition"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone",
+      action: "onClick",
+      onclick: "onClick",
+      active: "selected"
+    }
+  },
+  {
+    name: "TimePicker",
+    slots: [
+      "id",
+      "value",
+      "min",
+      "max",
+      "step",
+      "onChange",
+      "disabled",
+      "label",
+      "hint",
+      "error",
+      "warning",
+      "description",
+      "required",
+      "optional",
+      "invalid",
+      "describedBy",
+      "onBlur",
+      "onFocus",
+      "name",
+      "labelHidden"
+    ],
+    positional: 0,
+    aliases: {
+      onchange: "onChange",
+      ariaInvalid: "invalid",
+      ariaDescribedBy: "describedBy",
+      onblur: "onBlur",
+      onfocus: "onFocus"
+    }
+  },
+  {
+    name: "Timeline",
+    slots: [
+      "items"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "TimelineItem",
+    slots: [
+      "title",
+      "time",
+      "description",
+      "icon",
+      "tone",
+      "content",
+      "href",
+      "onClick"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone",
+      action: "onClick",
+      onclick: "onClick"
+    }
+  },
+  {
+    name: "Toast",
+    slots: [
+      "title",
+      "message",
+      "tone",
+      "icon",
+      "duration",
+      "action",
+      "onClose",
+      "position",
+      "pauseOnHover"
+    ],
+    positional: 0,
+    aliases: {
+      description: "message",
+      variant: "tone"
+    }
+  },
+  {
+    name: "Toasts",
+    slots: [
+      "children",
+      "position",
+      "max"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children",
+      limit: "max"
+    }
+  },
+  {
+    name: "ToggleGroup",
+    slots: [
+      "id",
+      "items",
+      "value",
+      "variant",
+      "size",
+      "onChange",
+      "multiple",
+      "type",
+      "disabled",
+      "label"
+    ],
+    positional: 0,
+    aliases: {
+      tone: "variant",
+      onchange: "onChange",
+      ariaLabel: "label"
+    }
+  },
+  {
+    name: "Toolbar",
+    slots: [
+      "left",
+      "right",
+      "center",
+      "searchable",
+      "searchPlaceholder",
+      "searchValue",
+      "onSearch",
+      "searchId"
+    ],
+    positional: 0,
+    aliases: {
+      onSearchChange: "onSearch",
+      onChange: "onSearch"
+    }
+  },
+  {
+    name: "Tooltip",
+    slots: [
+      "label",
+      "trigger",
+      "side",
+      "delay",
+      "open",
+      "align",
+      "onOpenChange"
+    ],
+    positional: 0,
+    aliases: {
+      children: "trigger",
+      placement: "side",
+      delayDuration: "delay",
+      enterDelay: "delay"
+    }
+  },
+  {
+    name: "TopBar",
+    slots: [
+      "title",
+      "subtitle",
+      "left",
+      "center",
+      "right",
+      "sticky"
+    ],
+    positional: 0,
+    aliases: {
+      badges: "left",
+      search: "center",
+      actions: "right"
+    }
+  },
+  {
+    name: "Tour",
+    slots: [
+      "steps",
+      "current",
+      "open",
+      "onOpenChange",
+      "onComplete",
+      "onSkip",
+      "skipLabel",
+      "backLabel",
+      "nextLabel",
+      "finishLabel"
+    ],
+    positional: 0,
+    aliases: {
+      onopenchange: "onOpenChange"
+    }
+  },
+  {
+    name: "Transition",
+    slots: [
+      "child",
+      "show",
+      "preset",
+      "duration",
+      "onExited"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "Tree",
+    slots: [
+      "items",
+      "selectedId",
+      "onSelect",
+      "expandedIds",
+      "ariaLabel",
+      "emptyLabel",
+      "checkable",
+      "checkedIds",
+      "onCheck"
+    ],
+    positional: 0,
+    aliases: {
+      selected: "selectedId",
+      value: "selectedId",
+      checkedKeys: "checkedIds"
+    }
+  },
+  {
+    name: "TreeNode",
+    slots: [
+      "label",
+      "children",
+      "icon",
+      "expanded",
+      "active",
+      "badge",
+      "onClick",
+      "href",
+      "disabled",
+      "onToggle",
+      "nodeId",
+      "hasChildren"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children",
+      selected: "active",
+      action: "onClick",
+      onclick: "onClick",
+      value: "nodeId",
+      lazy: "hasChildren"
+    }
+  },
+  {
+    name: "Truncate",
+    slots: [
+      "text",
+      "maxLines",
+      "expandLabel",
+      "collapseLabel",
+      "expanded",
+      "onToggle",
+      "child"
+    ],
+    positional: 0,
+    aliases: {
+      children: "child"
+    }
+  },
+  {
+    name: "TypingIndicator",
+    slots: [
+      "name"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "ValidationSummary",
+    slots: [
+      "errors",
+      "title",
+      "tone",
+      "count",
+      "onErrorClick"
+    ],
+    positional: 0,
+    aliases: {
+      variant: "tone"
+    }
+  },
+  {
+    name: "VariantSelector",
+    slots: [
+      "options",
+      "value",
+      "kind",
+      "label",
+      "onChange",
+      "disabled",
+      "multiple",
+      "size"
+    ],
+    positional: 0,
+    aliases: {
+      items: "options",
+      onchange: "onChange"
+    }
+  },
+  {
+    name: "VideoPlayer",
+    slots: [
+      "src",
+      "sources",
+      "poster",
+      "caption",
+      "controls",
+      "autoplay",
+      "loop",
+      "muted",
+      "ratio",
+      "tracks",
+      "onEnded",
+      "fallback",
+      "onError"
+    ],
+    positional: 0,
+    aliases: {
+      onended: "onEnded",
+      onerror: "onError"
+    }
+  },
+  {
+    name: "VirtualGrid",
+    slots: [
+      "items",
+      "columns",
+      "itemHeight",
+      "gap",
+      "height",
+      "minItemWidth",
+      "onItemClick",
+      "empty",
+      "loading"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "VirtualList",
+    slots: [
+      "items",
+      "itemHeight",
+      "renderItem",
+      "height",
+      "onItemClick",
+      "empty",
+      "loading"
+    ],
+    positional: 0,
+    aliases: {}
+  },
+  {
+    name: "VisuallyHidden",
+    slots: [
+      "children"
+    ],
+    positional: 0,
+    aliases: {
+      child: "children"
+    }
+  },
+  {
+    name: "WebComponent",
+    slots: [
+      "tag",
+      "attributes",
+      "properties",
+      "on",
+      "children"
+    ],
+    positional: 0,
+    aliases: {
+      attrs: "attributes",
+      props: "properties",
+      events: "on",
+      child: "children"
+    }
+  }
+];
+const hooks = [
+  "id",
+  "memo",
+  "reducer",
+  "ref",
+  "state"
+];
+const factories = [
+  "form",
+  "http",
+  "mutation",
+  "query",
+  "script",
+  "socket",
+  "sse",
+  "store"
+];
+const namespaces = [
+  "console",
+  "dom",
+  "i18n",
+  "storage",
+  "toast",
+  "util"
+];
+const builtins = [
+  "app",
+  "effect",
+  "emit",
+  "head",
+  "optimistic",
+  "router",
+  "theme"
+];
+const manifest = {
+  components: components$1,
+  hooks,
+  factories,
+  namespaces,
+  builtins
+};
+const DSL_MODULE_ID = "aktion-runtime/dsl";
+const RESERVED_AKTION_SUFFIXES = [".aktion.tsx", ".aktion.jsx"];
+const NATIVE_MODULE_RE = /\.(?:[cm]?[jt]sx?|json|css|wasm)$/i;
+function stripQuery(id) {
+  const q = id.indexOf("?");
+  const base = q === -1 ? id : id.slice(0, q);
+  const h = base.indexOf("#");
+  return h === -1 ? base : base.slice(0, h);
 }
-const MODULE_LOCAL_SYMBOL = /^__a(\d+)_(.+)$/;
-function moduleLocalBaseName(symbol) {
-  const match = MODULE_LOCAL_SYMBOL.exec(symbol);
-  return match ? match[2] : null;
+function isReservedAktionPath(path) {
+  const clean = stripQuery(path).toLowerCase();
+  return RESERVED_AKTION_SUFFIXES.some((suffix) => clean.endsWith(suffix));
 }
-function linkProgram(entrySource, entryPath, resolver) {
+function moduleLanguage(path) {
+  const clean = stripQuery(path).toLowerCase();
+  if (clean.endsWith(".aktion.ts")) return "typescript";
+  if (clean.endsWith(".aktion.js")) return "javascript";
+  if (clean.endsWith(".aktion")) return "aktion";
+  if (isReservedAktionPath(clean)) return null;
+  if (NATIVE_MODULE_RE.test(clean)) return null;
+  return "aktion";
+}
+function isNativeModulePath(path) {
+  return moduleLanguage(path) === null && !isReservedAktionPath(path);
+}
+const LIBRARY_COMPONENTS = new Set(manifest.components.map((c) => c.name));
+const BUILTIN_HOOKS = new Set(manifest.hooks);
+const HANDLE_FACTORIES = new Set(manifest.factories);
+const STORE_FACTORIES = /* @__PURE__ */ new Set(["store", "form"]);
+const RUNTIME_STATE_NAMES = /* @__PURE__ */ new Set([
+  ...manifest.hooks,
+  ...manifest.factories,
+  ...manifest.namespaces,
+  ...manifest.builtins
+]);
+const RESERVED_INJECTED = /* @__PURE__ */ new Map([
+  ["route", "it holds the current route"],
+  ["aktion", "it holds the program's UI root"],
+  ["theme", "it holds the active theme tokens"],
+  ["params", "it holds the route parameters"],
+  ["outlet", "it renders the router outlet"],
+  ["cleanup", "it registers effect cleanups"],
+  ["setTimeout", "the runtime tracks its timers so it can clear them"],
+  ["setInterval", "the runtime tracks its timers so it can clear them"],
+  ["clearTimeout", "the runtime tracks its timers so it can clear them"],
+  ["clearInterval", "the runtime tracks its timers so it can clear them"]
+]);
+const ARRAY_MUTATORS = /* @__PURE__ */ new Set([
+  "push",
+  "pop",
+  "shift",
+  "unshift",
+  "splice",
+  "sort",
+  "reverse",
+  "fill",
+  "copyWithin"
+]);
+const COLLECTION_MUTATORS = /* @__PURE__ */ new Set(["set", "add", "delete", "clear"]);
+function mutatesInPlace(method2, init) {
+  if (ARRAY_MUTATORS.has(method2)) {
+    if (!init) return true;
+    switch (init.kind) {
+      case "Object":
+      case "Literal":
+      case "Template":
+      case "Lambda":
+        return false;
+      case "New":
+        return init.callee.kind === "Identifier" && init.callee.name === "Array";
+      default:
+        return true;
+    }
+  }
+  return COLLECTION_MUTATORS.has(method2) && init?.kind === "New";
+}
+const VALUE_BINARY = /* @__PURE__ */ new Set([
+  "+",
+  "-",
+  "*",
+  "/",
+  "%",
+  "**",
+  "==",
+  "!=",
+  "===",
+  "!==",
+  ">",
+  "<",
+  ">=",
+  "<=",
+  "instanceof",
+  "in",
+  "&",
+  "|",
+  "^",
+  "<<",
+  ">>",
+  ">>>"
+]);
+const VALUE_UNARY = /* @__PURE__ */ new Set(["!", "-", "+", "~", "typeof"]);
+const LOGICAL = /* @__PURE__ */ new Set(["&&", "||", "??"]);
+const RESERVED_SYMBOL = /^__[al]\d+_/;
+const MESSAGES = {
+  E101: "`await` is not supported in Aktion modules: Aktion bodies run synchronously, so `await x` is the Promise itself and a statement-level `await f()` is skipped. Chain it instead — `f().then((value) => { … })` — or use `$http(…)` and its `.onDone`.",
+  E102: "`async` functions are not supported: Aktion runs them synchronously and returns their value, not a Promise. Remove `async` and chain Promises with `.then(…)`.",
+  E103this: "`this` is always null in Aktion — there are no methods or classes; pass the value as a parameter.",
+  E103arguments: "`arguments` is not available in Aktion — use a rest parameter `(...args)`.",
+  E104: "`var` is not supported in Aktion modules — use `let` or `const`.",
+  E105: (name) => `\`${name}\` is reassigned after a closure captured it. Aktion closures copy values when they are created, so the closure would not see — or keep — the new value. Use a \`$state\` atom, \`$ref(…)\` inside a component, or an object box (\`const box = { value: … }\`).`,
+  E106: (name) => `\`${name}\` is used by a closure before it is declared. Aktion closures capture their scope when they are created, so \`${name}\` does not exist yet. Move the declaration of \`${name}\` above the closure; for recursion, declare a module-level \`function ${name}(…)\`.`,
+  E107: (name, fn) => `Module-level \`${name}\` is changed${fn ? ` in \`${fn}\`` : ""}, but Aktion rebuilds module-level bindings on every render, so the change is lost on the next render. Keep mutable data in a state atom (\`let $${name} = …\`) or, inside a component, in \`$ref(…)\`.`,
+  E108method: (name, method2) => `\`$${name}.${method2}(…)\` changes state in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value instead, e.g. \`$${name} = [...$${name}, item]\`.`,
+  E108key: (name) => `\`$${name}[…]\` is changed in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value instead, e.g. \`$${name} = $${name}.map(…)\` or \`$${name} = { ...$${name}, [key]: value }\`.`,
+  E108delete: (name) => `\`delete $${name}…\` changes state in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value instead, e.g. a copy without the key: \`const { [key]: _, ...rest } = $${name}; $${name} = rest\`.`,
+  E109: (name) => `Per-instance state \`$${name}\` must be declared at the top level of the component body — inside a block it becomes a global atom.`,
+  E110: (hook) => `\`$${hook}(…)\` must be called at the top level of a component or of a \`function $useX\` hook — not inside a callback, a condition, a loop, an action, or a lambda that is not a module-level component.`,
+  E111: (name) => `\`${name}\` is a component (its name starts with a capital letter), so calling it produces a UI node, not a value. Rename the helper to camelCase (\`${camelCase(name)}\`).`,
+  E112: (name, reason) => `\`${name}\` is reserved by the Aktion runtime (${reason}) — rename it.`,
+  E113: "Block statements `{ … }` are not supported — Aktion reads `{` at the start of a statement as an object literal. Remove the braces.",
+  E114: (name, dep) => `\`$${name}\` is derived from \`$${dep}\` (its initializer reads state), so Aktion recomputes it whenever \`$${dep}\` changes and overwrites this assignment. Initialize it with a literal and update it in actions, or compute the value where it is used.`,
+  E115: (name) => `Names starting with \`__a<n>_\` or \`__l<n>_\` are reserved for the Aktion compiler — rename \`${name}\`.`,
+  E117: "Spreads inside component props are ignored by Aktion — list the props explicitly (`{ variant: extra.variant, … }`).",
+  E118: "`$app(…)` registers the UI root and must be a top-level statement of the entry module (optionally `export default $app(…)`).",
+  E119: "Pass the effect body inline: `$effect(() => load(), [...])` — Aktion only runs an inline function here.",
+  E120: '`$effect` dependencies must be an array literal of `$atoms` and trigger strings (`"mount"`, `"every(1000)"`, …).',
+  E121: "Returning a cleanup function from an effect has no effect in Aktion — call `cleanup(() => …)` inside the body instead.",
+  E124: (name, field) => `Destructuring a \`$store\`/\`$form\` handle reads \`undefined\` in Aktion — read the fields as \`${name}.${field}\`.`,
+  E125: (written, bare) => `\`${written}\` is not declared — declare it with \`let\` (state: \`let $${bare} = …\` at module level or at the top of the component body).`,
+  E126: "Declare components and hooks at module top level.",
+  W201: (name, fn) => `\`${name}\` calls \`${fn}\`, and Aktion re-evaluates module-level bindings on every render. Use \`$state(…)\`/\`$memo(…)\` in a component, or compute it in an effect or action.`,
+  W202: (fn, atom) => `\`${fn}\` assigns \`$${atom}\` and is called while rendering; Aktion applies such writes once and does not re-render. Call it from an event handler or an effect.`
+};
+function isPascalCase(name) {
+  const c = name.charCodeAt(0);
+  return c >= 65 && c <= 90;
+}
+function camelCase(name) {
+  return name.length === 0 ? name : name[0].toLowerCase() + name.slice(1);
+}
+function isStoreCall(expr) {
+  return expr !== void 0 && expr.kind === "Invoke" && expr.callee.kind === "StateRef" && STORE_FACTORIES.has(expr.callee.name);
+}
+function isAppCall$1(expr) {
+  return expr.kind === "Invoke" && expr.callee.kind === "StateRef" && expr.callee.name === "app";
+}
+function invokeStart(expr, fallback) {
+  const loc = expr.loc ?? fallback;
+  if (expr.callee.kind !== "StateRef" || !expr.loc) return loc;
+  const column = expr.loc.column - expr.callee.name.length - 1;
+  return column >= 1 ? { ...expr.loc, column } : loc;
+}
+function forEachPatternLeaf(pattern, visit, visitDefault) {
+  for (const binding of pattern.bindings) {
+    if (binding.defaultValue) visitDefault(binding.defaultValue);
+    if (binding.pattern) forEachPatternLeaf(binding.pattern, visit, visitDefault);
+    else if (binding.name) visit(binding, pattern.kind === "object");
+  }
+}
+function renamePatternLeaf(binding, inObject, symbol) {
+  if (inObject && !binding.rest && binding.sourceKey === void 0) binding.sourceKey = binding.name;
+  binding.name = symbol;
+}
+function normalizeComponentForms(program) {
+  let changed = false;
+  const statements = program.statements.map((stmt) => {
+    if (stmt.kind !== "Assignment" || stmt.isState || stmt.declaration !== "const" || !isPascalCase(stmt.identifier) || stmt.expression.kind !== "Lambda") {
+      return stmt;
+    }
+    changed = true;
+    return arrowAsComponent(stmt, stmt.expression);
+  });
+  return changed ? { ...program, statements } : program;
+}
+function arrowAsComponent(stmt, lambda) {
+  const returnLoc = lambda.body.loc ?? lambda.loc ?? stmt.loc;
+  const body = lambda.body.kind === "Block" ? lambda.body : {
+    kind: "Block",
+    body: [{ kind: "Return", argument: lambda.body, ...returnLoc ? { loc: returnLoc } : {} }],
+    ...lambda.loc ? { loc: lambda.loc } : {}
+  };
+  return {
+    kind: "ComponentDeclaration",
+    name: stmt.identifier,
+    params: lambda.params.map((p) => ({ ...p })),
+    slots: [],
+    body,
+    ...stmt.exported ? { exported: true } : {},
+    ...stmt.loc ? { loc: stmt.loc } : {},
+    ...stmt.leadingComments ? { leadingComments: stmt.leadingComments } : {},
+    ...stmt.trailingComments ? { trailingComments: stmt.trailingComments } : {}
+  };
+}
+const LOCAL_KINDS = /* @__PURE__ */ new Set(["param", "local", "nested-function", "loop", "catch"]);
+const NOWHERE = { line: 0, column: 0 };
+function newScope(parent, fn, loopDepth) {
+  return { parent, fn, loopDepth, plain: /* @__PURE__ */ new Map(), state: /* @__PURE__ */ new Map() };
+}
+function captureOf(from, owner) {
+  let capture = null;
+  for (let f = from; f !== null && f !== owner; f = f.parent) capture = f;
+  return capture;
+}
+function commonPrefix(a, b) {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i += 1;
+  return i;
+}
+class Analyzer {
+  constructor() {
+    __publicField(this, "index", 0);
+    __publicField(this, "nextLoop", 0);
+    __publicField(this, "moduleScope", newScope(null, null, 0));
+    __publicField(this, "scope", this.moduleScope);
+    __publicField(this, "fn", null);
+    __publicField(this, "loops", []);
+    __publicField(this, "locs", []);
+    __publicField(this, "appRoots", /* @__PURE__ */ new Set());
+    __publicField(this, "reserved", /* @__PURE__ */ new Set());
+    __publicField(this, "fnOf", /* @__PURE__ */ new Map());
+    __publicField(this, "renderCalls", []);
+    __publicField(this, "bindings", []);
+    __publicField(this, "refs", []);
+    __publicField(this, "findings", []);
+    __publicField(this, "importedMutations", []);
+  }
+  run(program) {
+    this.hoistModule(program.statements);
+    for (const stmt of program.statements) this.stmt(stmt, { moduleTop: true, bodyOf: null });
+    this.checkClosures();
+    this.checkModuleBindings();
+    this.checkDerivedAtoms();
+    this.checkRenderWrites();
+    return this;
+  }
+  // ── bookkeeping ──
+  report(code, loc, message) {
+    this.findings.push({
+      code,
+      severity: code.startsWith("W") ? "warning" : "error",
+      message,
+      loc: loc ?? this.here()
+    });
+  }
+  here() {
+    return this.locs[this.locs.length - 1] ?? NOWHERE;
+  }
+  enter(loc) {
+    if (!loc) return false;
+    this.locs.push(loc);
+    return true;
+  }
+  leave(pushed) {
+    if (pushed) this.locs.pop();
+  }
+  pushScope() {
+    this.scope = newScope(this.scope, this.fn, this.loops.length);
+    return this.scope;
+  }
+  popScope() {
+    this.scope = this.scope.parent ?? this.moduleScope;
+  }
+  /**
+   * E115 — the compiler's own name shapes. Tested on the bare name: the linker
+   * renames atoms as well (`$total` → `$__a3_total`), so `$__a1_x` collides too.
+   */
+  checkReserved(name, state, loc) {
+    if (!RESERVED_SYMBOL.test(name)) return;
+    const written = state ? `$${name}` : name;
+    if (this.reserved.has(written)) return;
+    this.reserved.add(written);
+    this.report("E115", loc ?? this.here(), MESSAGES.E115(written));
+  }
+  declare(name, state, kind, extra = {}) {
+    const table = state ? this.scope.state : this.scope.plain;
+    const existing = table.get(name);
+    if (existing) return existing;
+    this.checkReserved(name, state, extra.loc);
+    const binding = {
+      name,
+      state,
+      kind,
+      scope: this.scope,
+      loc: extra.loc,
+      init: extra.init,
+      decl: extra.decl,
+      importSource: extra.importSource,
+      importedName: extra.importedName,
+      params: extra.params,
+      instance: extra.instance ?? false,
+      ready: extra.ready ?? Number.POSITIVE_INFINITY
+    };
+    table.set(name, binding);
+    this.bindings.push(binding);
+    return binding;
+  }
+  resolve(name, state) {
+    for (let s = this.scope; s !== null; s = s.parent) {
+      const found = (state ? s.state : s.plain).get(name);
+      if (found) return found;
+    }
+    return null;
+  }
+  addRef(name, state, binding, loc, flags) {
+    const ref = {
+      name,
+      state,
+      binding,
+      index: this.index,
+      loc,
+      fn: this.fn,
+      loops: [...this.loops],
+      write: flags.write ?? false,
+      declaring: flags.declaring ?? false,
+      rename: flags.rename
+    };
+    this.refs.push(ref);
+    return ref;
+  }
+  /** A read of `name` here. */
+  read(name, state, loc, rename) {
+    this.checkReserved(name, state, loc);
+    const binding = this.resolve(name, state);
+    this.addRef(name, state, binding, loc, rename ? { rename } : {});
+    return binding;
+  }
+  /** An assignment to `name` here (not a declaration). */
+  write(name, state, loc, rename) {
+    this.checkReserved(name, state, loc);
+    const binding = this.resolve(name, state);
+    this.addRef(name, state, binding, loc, { write: true, ...rename ? { rename } : {} });
+    if (state) this.fn?.stateWrites.push(name);
+    if (!binding) {
+      if (!(state && RUNTIME_STATE_NAMES.has(name))) {
+        this.report("E125", loc, MESSAGES.E125(state ? `$${name}` : name, name));
+      }
+      return;
+    }
+    if (!state && (binding.kind === "module" || this.isUserImport(binding))) {
+      this.report("E107", loc, MESSAGES.E107(name, this.fnLabel()));
+    }
+  }
+  /** The binding's own declaration site. */
+  declaring(binding, loc, rename) {
+    this.addRef(binding.name, binding.state, binding, loc, { declaring: true, write: true, ...rename ? { rename } : {} });
+  }
+  isUserImport(binding) {
+    return binding.kind === "import" && binding.importSource !== DSL_MODULE_ID;
+  }
+  /** The nearest named function, for "… is changed in `fn`". */
+  fnLabel() {
+    for (let f = this.fn; f !== null; f = f.parent) if (f.label) return f.label;
+    return null;
+  }
+  newFn(kind, label, start2, hookHost, node) {
+    const fn = {
+      kind,
+      label,
+      parent: this.fn,
+      start: start2,
+      loops: [...this.loops],
+      hookHost,
+      stateWrites: []
+    };
+    this.fnOf.set(node, fn);
+    return fn;
+  }
+  /** Hook calls are allowed in a statement that is a direct child of a component / hook body. */
+  hooksAt(context) {
+    return context.bodyOf !== null && context.bodyOf === this.fn && this.fn.hookHost;
+  }
+  isHook(name) {
+    if (BUILTIN_HOOKS.has(name)) return true;
+    const binding = this.resolve(name, true);
+    if (!binding) return false;
+    if (binding.decl?.kind === "HookDeclaration") return true;
+    return this.isUserImport(binding) && /^use[A-Z0-9_]/.test(name);
+  }
+  // ── declarations ──
+  hoistModule(statements) {
+    for (const stmt of statements) {
+      switch (stmt.kind) {
+        case "Assignment":
+          if (stmt.declaration) {
+            this.declare(stmt.identifier, stmt.isState, "module", {
+              loc: stmt.loc,
+              init: stmt.expression,
+              decl: stmt,
+              ready: 0,
+              ...stmt.expression.kind === "Lambda" ? { params: stmt.expression.params } : {}
+            });
+          }
+          break;
+        case "DestructureStatement":
+          forEachPatternLeaf(
+            { kind: stmt.patternKind, bindings: stmt.bindings },
+            (b) => this.declare(b.name, false, "module", { loc: stmt.loc, decl: stmt, ready: 0 }),
+            () => {
+            }
+          );
+          break;
+        case "ComponentDeclaration":
+        case "ActionDeclaration":
+          this.declare(stmt.name, false, "function", { loc: stmt.loc, decl: stmt, params: stmt.params, ready: 0 });
+          break;
+        case "HookDeclaration":
+          this.declare(stmt.name, true, "function", { loc: stmt.loc, decl: stmt, params: stmt.params, ready: 0 });
+          break;
+        case "Import":
+          for (const spec of stmt.specifiers) {
+            this.declare(spec.local, spec.isState === true, "import", {
+              loc: stmt.loc,
+              importSource: stmt.source,
+              importedName: spec.imported,
+              ready: 0
+            });
+          }
+          break;
+      }
+    }
+  }
+  /** Declarations of a block, visible (with TDZ) throughout it — JavaScript block scoping. */
+  hoistBlock(statements, bodyOf) {
+    for (const stmt of statements) {
+      switch (stmt.kind) {
+        case "Assignment":
+          if (stmt.declaration) {
+            this.declare(stmt.identifier, stmt.isState, "local", {
+              loc: stmt.loc,
+              init: stmt.expression,
+              decl: stmt,
+              instance: stmt.isState && bodyOf !== null && bodyOf.kind === "component" && bodyOf === this.fn,
+              ...stmt.expression.kind === "Lambda" ? { params: stmt.expression.params } : {}
+            });
+          }
+          break;
+        case "DestructureStatement":
+          forEachPatternLeaf(
+            { kind: stmt.patternKind, bindings: stmt.bindings },
+            (b) => this.declare(b.name, false, "local", { loc: stmt.loc, decl: stmt }),
+            () => {
+            }
+          );
+          break;
+        case "ActionDeclaration":
+        case "ComponentDeclaration":
+          this.declare(stmt.name, false, "nested-function", { loc: stmt.loc, decl: stmt, params: stmt.params });
+          break;
+        case "HookDeclaration":
+          this.declare(stmt.name, true, "nested-function", { loc: stmt.loc, decl: stmt, params: stmt.params });
+          break;
+      }
+    }
+  }
+  param(p, component, fnStart) {
+    if (p.defaultValue) this.expr(p.defaultValue, { hooks: false, value: false });
+    const loc = this.here();
+    if (p.pattern) {
+      forEachPatternLeaf(
+        p.pattern,
+        (leaf, inObject) => {
+          const binding2 = this.declare(leaf.name, false, "param", { loc, ready: fnStart });
+          this.declaring(binding2, loc, (symbol) => renamePatternLeaf(leaf, inObject, symbol));
+        },
+        (expr) => this.expr(expr, { hooks: false, value: false })
+      );
+      return;
+    }
+    if (!p.name) return;
+    const binding = this.declare(p.name, false, "param", { loc, ready: fnStart });
+    this.declaring(binding, loc, (symbol) => {
+      if (component && p.publicName === void 0) p.publicName = p.name;
+      p.name = symbol;
+    });
+  }
+  // ── statements ──
+  stmt(stmt, context) {
+    this.index += 1;
+    const pushed = this.enter(stmt.loc);
+    const hooks2 = this.hooksAt(context);
+    switch (stmt.kind) {
+      case "Import":
+        break;
+      case "Assignment":
+        this.assignment(stmt, context, hooks2);
+        break;
+      case "DestructureStatement":
+        this.destructure(stmt, context, hooks2);
+        break;
+      case "ComponentDeclaration":
+      case "ActionDeclaration":
+      case "HookDeclaration":
+        this.declaration(stmt, context);
+        break;
+      case "EffectDeclaration":
+        this.effect(stmt);
+        break;
+      case "Await":
+        this.report("E101", stmt.loc, MESSAGES.E101);
+        this.expr(stmt.argument, { hooks: false, value: false });
+        break;
+      case "Return":
+        if (stmt.argument) {
+          if (this.fn?.kind === "effect") this.report("E121", stmt.loc, MESSAGES.E121);
+          if (this.fn?.kind === "component" && this.fn.label && returnsPlainValue(stmt.argument)) {
+            this.report("E111", stmt.loc, MESSAGES.E111(this.fn.label));
+          }
+          this.expr(stmt.argument, { hooks: hooks2, value: false });
+        }
+        break;
+      case "ExpressionStatement":
+        if (stmt.expression.kind === "Object") this.report("E113", stmt.loc, MESSAGES.E113);
+        if (context.moduleTop && isAppCall$1(stmt.expression)) this.appRoots.add(stmt.expression);
+        this.expr(stmt.expression, { hooks: hooks2, value: false });
+        break;
+      case "IfStatement":
+        this.expr(stmt.test, { hooks: false, value: true });
+        this.block(stmt.consequent, null);
+        if (stmt.alternate) {
+          if (stmt.alternate.kind === "IfStatement") this.stmt(stmt.alternate, { moduleTop: false, bodyOf: null });
+          else this.block(stmt.alternate, null);
+        }
+        break;
+      case "SwitchStatement":
+        this.expr(stmt.discriminant, { hooks: false, value: true });
+        this.pushScope();
+        for (const c of stmt.cases) this.hoistBlock(c.body, null);
+        for (const c of stmt.cases) {
+          if (c.test) this.expr(c.test, { hooks: false, value: false });
+          for (const s of c.body) this.stmt(s, { moduleTop: false, bodyOf: null });
+        }
+        this.popScope();
+        break;
+      case "ForOfStatement":
+      case "ForInStatement": {
+        if (stmt.declaration === "var") this.report("E104", stmt.loc, MESSAGES.E104);
+        this.expr(stmt.iterable, { hooks: false, value: false });
+        const loop = this.enterLoop();
+        this.pushScope();
+        this.loopHead(stmt);
+        this.block(stmt.body, null);
+        this.popScope();
+        this.leaveLoop(loop);
+        break;
+      }
+      case "ForClassicStatement": {
+        this.pushScope();
+        if (stmt.init) {
+          if (stmt.init.kind === "Assignment" && stmt.init.declaration) {
+            const init = stmt.init;
+            if (init.declaration === "var") this.report("E104", init.loc, MESSAGES.E104);
+            this.expr(init.expression, { hooks: false, value: false });
+            const binding = this.declare(init.identifier, init.isState, "loop", {
+              loc: init.loc,
+              init: init.expression,
+              decl: init,
+              ready: this.index
+            });
+            this.declaring(binding, init.loc ?? this.here(), init.isState ? void 0 : (symbol) => {
+              init.identifier = symbol;
+            });
+          } else {
+            this.stmt(stmt.init, { moduleTop: false, bodyOf: null });
+          }
+        }
+        const loop = this.enterLoop();
+        if (stmt.test) this.expr(stmt.test, { hooks: false, value: true });
+        this.block(stmt.body, null);
+        if (stmt.update) this.expr(stmt.update, { hooks: false, value: false });
+        this.leaveLoop(loop);
+        this.popScope();
+        break;
+      }
+      case "WhileStatement": {
+        const loop = this.enterLoop();
+        this.expr(stmt.test, { hooks: false, value: true });
+        this.block(stmt.body, null);
+        this.leaveLoop(loop);
+        break;
+      }
+      case "DoWhileStatement": {
+        const loop = this.enterLoop();
+        this.block(stmt.body, null);
+        this.expr(stmt.test, { hooks: false, value: true });
+        this.leaveLoop(loop);
+        break;
+      }
+      case "BreakStatement":
+      case "ContinueStatement":
+        break;
+      case "ThrowStatement":
+        this.expr(stmt.argument, { hooks: false, value: false });
+        break;
+      case "TryStatement":
+        this.block(stmt.block, null);
+        if (stmt.catchBlock) {
+          this.pushScope();
+          if (stmt.catchParam) {
+            const binding = this.declare(stmt.catchParam, false, "catch", { loc: stmt.loc, ready: this.index });
+            this.declaring(binding, stmt.loc ?? this.here(), (symbol) => {
+              stmt.catchParam = symbol;
+            });
+          }
+          this.block(stmt.catchBlock, null);
+          this.popScope();
+        }
+        if (stmt.finallyBlock) this.block(stmt.finallyBlock, null);
+        break;
+    }
+    this.leave(pushed);
+  }
+  enterLoop() {
+    const id = this.nextLoop++;
+    this.loops.push(id);
+    return id;
+  }
+  leaveLoop(id) {
+    const at = this.loops.lastIndexOf(id);
+    if (at !== -1) this.loops.length = at;
+  }
+  loopHead(stmt) {
+    const loc = stmt.loc ?? this.here();
+    if (stmt.kind === "ForOfStatement" && stmt.pattern) {
+      forEachPatternLeaf(
+        stmt.pattern,
+        (leaf, inObject) => {
+          if (stmt.declaration) {
+            const binding = this.declare(leaf.name, false, "loop", { loc, ready: this.index });
+            this.declaring(binding, loc, (symbol) => renamePatternLeaf(leaf, inObject, symbol));
+          } else {
+            this.write(leaf.name, false, loc, (symbol) => renamePatternLeaf(leaf, inObject, symbol));
+          }
+        },
+        (expr) => this.expr(expr, { hooks: false, value: false })
+      );
+      return;
+    }
+    const rename = (symbol) => {
+      stmt.item = symbol;
+    };
+    if (stmt.declaration) {
+      const binding = this.declare(stmt.item, false, "loop", { loc, ready: this.index });
+      this.declaring(binding, loc, rename);
+    } else {
+      this.write(stmt.item, false, loc, rename);
+    }
+  }
+  assignment(stmt, context, hooks2) {
+    if (stmt.declaration === "var") this.report("E104", stmt.loc, MESSAGES.E104);
+    const loc = stmt.loc ?? this.here();
+    const label = context.moduleTop && stmt.expression.kind === "Lambda" ? stmt.identifier : void 0;
+    this.expr(stmt.expression, { hooks: hooks2, value: false, ...label ? { label } : {} });
+    const rename = stmt.isState ? void 0 : (symbol) => {
+      stmt.identifier = symbol;
+    };
+    if (!stmt.declaration) {
+      this.write(stmt.identifier, stmt.isState, loc, rename);
+      return;
+    }
+    const table = stmt.isState ? this.scope.state : this.scope.plain;
+    const binding = table.get(stmt.identifier);
+    if (!binding || binding.decl !== stmt) {
+      this.write(stmt.identifier, stmt.isState, loc, rename);
+      return;
+    }
+    if (binding.ready === Number.POSITIVE_INFINITY) binding.ready = this.index;
+    this.declaring(binding, loc, rename);
+    if (stmt.isState) {
+      this.fn?.stateWrites.push(stmt.identifier);
+      if (this.fn?.kind === "component" && context.bodyOf !== this.fn) {
+        this.report("E109", loc, MESSAGES.E109(stmt.identifier));
+      }
+    } else if (context.moduleTop) {
+      const unstable = renderUnstableCall(stmt.expression, (n) => this.resolve(n, false) === null);
+      if (unstable) this.report("W201", loc, MESSAGES.W201(stmt.identifier, unstable));
+    }
+  }
+  destructure(stmt, context, hooks2) {
+    if (stmt.declaration === "var") this.report("E104", stmt.loc, MESSAGES.E104);
+    const loc = stmt.loc ?? this.here();
+    this.expr(stmt.expression, { hooks: hooks2, value: false });
+    if (stmt.patternKind === "object") {
+      const handle = this.handleName(stmt.expression);
+      if (handle) this.report("E124", loc, MESSAGES.E124(handle, firstField(stmt.bindings)));
+    }
+    const pattern = { kind: stmt.patternKind, bindings: stmt.bindings };
+    const leaves = [];
+    forEachPatternLeaf(
+      pattern,
+      (leaf, inObject) => leaves.push({ leaf, inObject }),
+      (expr) => this.expr(expr, { hooks: false, value: false })
+    );
+    for (const { leaf, inObject } of leaves) {
+      const binding = this.scope.plain.get(leaf.name);
+      const rename = (symbol) => renamePatternLeaf(leaf, inObject, symbol);
+      if (!binding || binding.decl !== stmt) {
+        this.write(leaf.name, false, loc, rename);
+        continue;
+      }
+      if (binding.ready === Number.POSITIVE_INFINITY) binding.ready = this.index;
+      this.declaring(binding, loc, rename);
+    }
+    if (context.moduleTop) {
+      const unstable = renderUnstableCall(stmt.expression, (n) => this.resolve(n, false) === null);
+      const first = leaves[0];
+      if (unstable && first) this.report("W201", loc, MESSAGES.W201(first.leaf.name, unstable));
+    }
+  }
+  declaration(stmt, context) {
+    const nested = !context.moduleTop;
+    const isComponent = stmt.kind === "ComponentDeclaration";
+    const isHook = stmt.kind === "HookDeclaration";
+    const loc = stmt.loc ?? this.here();
+    if (nested && (isComponent || isHook)) this.report("E126", loc, MESSAGES.E126);
+    if (!nested) this.checkReserved(stmt.name, isHook, loc);
+    const start2 = this.index;
+    const kind = nested ? "nested" : isComponent ? "component" : isHook ? "hook" : "action";
+    const fn = this.newFn(kind, isHook ? `$${stmt.name}` : stmt.name, start2, isComponent || isHook, stmt);
+    const savedFn = this.fn;
+    this.fn = fn;
+    this.pushScope();
+    for (const p of stmt.params) this.param(p, isComponent && !nested, start2);
+    this.block(stmt.body, fn);
+    this.popScope();
+    this.fn = savedFn;
+    if (nested) {
+      const binding = (isHook ? this.scope.state : this.scope.plain).get(stmt.name);
+      if (binding && binding.decl === stmt) {
+        binding.ready = this.index;
+        this.declaring(binding, loc, isHook ? void 0 : (symbol) => {
+          stmt.name = symbol;
+        });
+      }
+    }
+  }
+  effect(stmt) {
+    const shape = effectCallShape(stmt);
+    if (shape?.callback) this.report("E119", shape.callback, MESSAGES.E119);
+    if (shape?.deps) this.report("E120", shape.deps, MESSAGES.E120);
+    const loc = stmt.loc ?? this.here();
+    for (const trigger of stmt.triggers) {
+      if (trigger.kind === "state") this.read(trigger.name.split(".")[0], true, loc);
+    }
+    const fn = this.newFn("effect", null, this.index, false, stmt);
+    const savedFn = this.fn;
+    this.fn = fn;
+    this.pushScope();
+    this.block(stmt.body, fn);
+    this.popScope();
+    this.fn = savedFn;
+  }
+  block(block, bodyOf) {
+    this.index += 1;
+    const pushed = this.enter(block.loc);
+    this.pushScope();
+    this.hoistBlock(block.body, bodyOf);
+    for (const stmt of block.body) this.stmt(stmt, { moduleTop: false, bodyOf });
+    this.popScope();
+    this.leave(pushed);
+  }
+  // ── expressions ──
+  expr(expr, context) {
+    this.index += 1;
+    const pushed = this.enter(expr.loc);
+    const neutral = { hooks: context.hooks, value: false };
+    const asValue = { hooks: context.hooks, value: true };
+    const conditional = { hooks: false, value: false };
+    switch (expr.kind) {
+      case "Literal":
+        break;
+      case "Identifier": {
+        const loc = expr.loc ?? this.here();
+        if (expr.name === "this") {
+          this.report("E103", loc, MESSAGES.E103this);
+          break;
+        }
+        if (expr.name === "arguments") {
+          this.report("E103", loc, MESSAGES.E103arguments);
+          break;
+        }
+        this.read(expr.name, false, loc, (symbol) => {
+          expr.name = symbol;
+        });
+        break;
+      }
+      case "StateRef":
+        this.read(expr.name, true, expr.loc ?? this.here());
+        break;
+      case "Array":
+        for (const element of expr.elements) this.expr(element, neutral);
+        break;
+      case "Object":
+        for (const prop2 of expr.properties) {
+          if (prop2.computedKey) this.expr(prop2.computedKey, asValue);
+          this.expr(prop2.value, neutral);
+        }
+        break;
+      case "Member":
+        this.expr(expr.object, asValue);
+        if (expr.computed) this.expr(expr.computed, asValue);
+        break;
+      case "Unary":
+        if (expr.operator === "delete") this.mutation(expr.argument, "delete", void 0, expr.loc);
+        this.expr(expr.argument, VALUE_UNARY.has(expr.operator) ? asValue : neutral);
+        break;
+      case "Binary":
+        if (LOGICAL.has(expr.operator)) {
+          this.expr(expr.left, neutral);
+          this.expr(expr.right, conditional);
+        } else {
+          this.expr(expr.left, VALUE_BINARY.has(expr.operator) ? asValue : neutral);
+          this.expr(expr.right, VALUE_BINARY.has(expr.operator) ? asValue : neutral);
+        }
+        break;
+      case "Ternary":
+        this.expr(expr.test, { hooks: context.hooks, value: true });
+        this.expr(expr.consequent, conditional);
+        this.expr(expr.alternate, conditional);
+        break;
+      case "Call":
+        this.call(expr, context);
+        break;
+      case "MethodCall":
+        if (ARRAY_MUTATORS.has(expr.method) || COLLECTION_MUTATORS.has(expr.method)) {
+          this.mutation(expr.object, "method", expr.method, expr.loc);
+        }
+        this.expr(expr.object, asValue);
+        for (const arg of expr.arguments) this.expr(arg, neutral);
+        break;
+      case "Invoke":
+        this.invoke(expr, context);
+        break;
+      case "BuiltinCall":
+        this.builtin(expr, context);
+        break;
+      case "New":
+        this.expr(expr.callee, asValue);
+        for (const arg of expr.arguments) this.expr(arg, neutral);
+        break;
+      case "Template":
+        for (const e of expr.expressions) this.expr(e, asValue);
+        break;
+      case "Spread":
+        this.expr(expr.argument, neutral);
+        break;
+      case "Lambda":
+        this.lambda(expr, context.label ?? null);
+        break;
+      case "Block":
+        this.block(expr, null);
+        break;
+    }
+    this.leave(pushed);
+  }
+  call(expr, context) {
+    const loc = expr.loc ?? this.here();
+    const binding = this.read(expr.callee, false, loc, (symbol) => {
+      expr.callee = symbol;
+    });
+    if (isPascalCase(expr.callee)) {
+      if (context.value && this.isUserComponent(binding)) this.report("E111", loc, MESSAGES.E111(expr.callee));
+      if (binding === null || binding.kind === "import" && binding.importSource === DSL_MODULE_ID) {
+        this.checkPropsSpread(expr);
+      }
+    }
+    if (binding) {
+      this.checkPatternArguments(expr, binding);
+      if (this.fn === null || this.fn.hookHost) this.renderCalls.push({ binding, loc });
+    }
+    const neutral = { hooks: context.hooks, value: false };
+    for (const arg of expr.arguments) this.expr(arg, neutral);
+  }
+  invoke(expr, context) {
+    const neutral = { hooks: context.hooks, value: false };
+    if (expr.callee.kind === "StateRef") {
+      const name = expr.callee.name;
+      const start2 = invokeStart(expr, this.here());
+      if (name === "app" && !this.appRoots.has(expr)) this.report("E118", start2, MESSAGES.E118);
+      if (!context.hooks && this.isHook(name)) this.report("E110", start2, MESSAGES.E110(name));
+      this.read(name, true, start2);
+    } else {
+      this.expr(expr.callee, { hooks: context.hooks, value: true });
+    }
+    for (const arg of expr.arguments) this.expr(arg, neutral);
+  }
+  builtin(expr, context) {
+    const neutral = { hooks: context.hooks, value: false };
+    const [target, value] = expr.arguments;
+    switch (expr.name) {
+      case "__rui_await__":
+        this.report("E101", expr.loc, MESSAGES.E101);
+        if (target) this.expr(target, neutral);
+        return;
+      case "__rui_assign__":
+        if (target) this.assignTarget(target, "assign", expr.loc, value);
+        return;
+      case "__rui_postfix__":
+      case "__rui_prefix__":
+        if (target) this.assignTarget(target, "update", expr.loc, void 0);
+        return;
+      default:
+        for (const arg of expr.arguments) this.expr(arg, neutral);
+    }
+  }
+  assignTarget(target, kind, at, value) {
+    const loc = at ?? this.here();
+    const neutral = { hooks: false, value: false };
+    if (target.kind === "Identifier") {
+      if (value) this.expr(value, neutral);
+      this.index += 1;
+      this.write(target.name, false, loc, (symbol) => {
+        target.name = symbol;
+      });
+      return;
+    }
+    if (target.kind === "StateRef") {
+      if (value) this.expr(value, neutral);
+      this.index += 1;
+      this.write(target.name, true, loc);
+      return;
+    }
+    if (target.kind === "Member") this.mutation(target, kind, void 0, loc);
+    this.expr(target, neutral);
+    if (value) this.expr(value, neutral);
+  }
+  lambda(expr, label) {
+    const start2 = this.index;
+    const fn = this.newFn("lambda", label, start2, false, expr);
+    const savedFn = this.fn;
+    this.fn = fn;
+    this.pushScope();
+    for (const p of expr.params) this.param(p, false, start2);
+    if (expr.body.kind === "Block") this.block(expr.body, fn);
+    else this.expr(expr.body, { hooks: false, value: false });
+    this.popScope();
+    this.fn = savedFn;
+  }
+  // ── inline rules ──
+  isUserComponent(binding) {
+    if (!binding) return false;
+    if (binding.kind === "function") return binding.decl?.kind === "ComponentDeclaration";
+    return this.isUserImport(binding) && isPascalCase(binding.name);
+  }
+  /** E117 — `{ ...extra }` in the props bag of a library or host component. */
+  checkPropsSpread(expr) {
+    let bag;
+    for (const arg of expr.arguments) if (arg.kind === "Object") bag = arg;
+    if (!bag || bag.kind !== "Object") return;
+    for (const prop2 of bag.properties) {
+      if (prop2.spread) this.report("E117", prop2.value.loc ?? expr.loc, MESSAGES.E117);
+    }
+  }
+  /** The name to show for a `$store`/`$form` handle `expr` evaluates to, or `null` when it is none. */
+  handleName(expr) {
+    if (isStoreCall(expr)) return expr.callee.kind === "StateRef" ? expr.callee.name : "store";
+    if (expr.kind === "Identifier") {
+      const binding = this.resolve(expr.name, false);
+      return binding && isStoreCall(binding.init) ? expr.name : null;
+    }
+    if (expr.kind === "StateRef") {
+      const binding = this.resolve(expr.name, true);
+      return binding && isStoreCall(binding.init) ? `$${expr.name}` : null;
+    }
+    return null;
+  }
+  /** E124 at a call site: a handle passed to a parameter that destructures it. */
+  checkPatternArguments(expr, binding) {
+    const params = binding.params;
+    if (!params) return;
+    expr.arguments.forEach((arg, i) => {
+      const param = params[i];
+      if (!param?.pattern || param.pattern.kind !== "object") return;
+      const handle = this.handleName(arg);
+      if (handle) this.report("E124", arg.loc ?? expr.loc, MESSAGES.E124(handle, firstField(param.pattern.bindings)));
+    });
+  }
+  /**
+   * An in-place change of what `subject` evaluates to: `obj.k = v`, `list.push(x)`,
+   * `delete o.k`, `a[i]++`. `subject` is the member chain being changed (or the
+   * receiver of a mutating method).
+   */
+  mutation(subject, kind, method2, at) {
+    let node = subject;
+    let dynamicKey = false;
+    let path = false;
+    while (node.kind === "Member") {
+      if (node.computed && node.computed.kind !== "Literal") dynamicKey = true;
+      node = node.object;
+      path = true;
+    }
+    if (node.kind !== "Identifier" && node.kind !== "StateRef") return;
+    if (kind !== "method" && !path) return;
+    const state = node.kind === "StateRef";
+    const binding = this.resolve(node.name, state);
+    if (!binding) return;
+    const loc = at ?? this.here();
+    if (kind === "method" && !mutatesInPlace(method2 ?? "", path ? void 0 : binding.init)) {
+      if (!(state && this.isUserImport(binding))) return;
+    }
+    if (!state) {
+      if ((binding.kind === "module" || this.isUserImport(binding)) && this.fn !== null) {
+        this.report("E107", loc, MESSAGES.E107(node.name, this.fnLabel()));
+      }
+      return;
+    }
+    if (kind !== "method") this.fn?.stateWrites.push(node.name);
+    const inPlace = kind === "method" || kind === "delete" || dynamicKey;
+    if (!inPlace) return;
+    const message = kind === "method" ? MESSAGES.E108method(node.name, method2 ?? "") : kind === "delete" ? MESSAGES.E108delete(node.name) : MESSAGES.E108key(node.name);
+    if (this.isUserImport(binding)) {
+      this.importedMutations.push({
+        source: binding.importSource,
+        imported: binding.importedName ?? binding.name,
+        ...kind === "method" && method2 !== void 0 ? { method: method2 } : {},
+        path,
+        message,
+        line: loc.line,
+        column: loc.column
+      });
+      return;
+    }
+    if (isDataAtom(binding)) this.report("E108", loc, message);
+  }
+  // ── whole-module rules ──
+  /** E105 and E106 — closures copy their scope when they are created. */
+  checkClosures() {
+    const captures = /* @__PURE__ */ new Map();
+    for (const ref of this.refs) {
+      const binding = ref.binding;
+      if (!binding || binding.state || ref.declaring || !LOCAL_KINDS.has(binding.kind)) continue;
+      const capture = captureOf(ref.fn, binding.scope.fn);
+      if (capture) {
+        const list = captures.get(binding) ?? [];
+        if (!list.includes(capture)) list.push(capture);
+        captures.set(binding, list);
+        if (capture.start < binding.ready) this.report("E106", ref.loc, MESSAGES.E106(ref.name));
+      } else if (binding.kind === "nested-function" && ref.index < binding.ready) {
+        this.report("E106", ref.loc, MESSAGES.E106(ref.name));
+      }
+    }
+    for (const ref of this.refs) {
+      const binding = ref.binding;
+      if (!ref.write || ref.declaring || !binding || binding.state) continue;
+      if (!LOCAL_KINDS.has(binding.kind) || binding.kind === "loop") continue;
+      const closures = captures.get(binding);
+      if (!closures) continue;
+      const insideClosure = captureOf(ref.fn, binding.scope.fn) !== null;
+      const afterClosure = closures.some((c) => c.start < ref.index);
+      const sameLoop = closures.some((c) => commonPrefix(c.loops, ref.loops) > binding.scope.loopDepth);
+      if (insideClosure || afterClosure || sameLoop) this.report("E105", ref.loc, MESSAGES.E105(ref.name));
+    }
+  }
+  /** E112 — module-level names the runtime owns. */
+  checkModuleBindings() {
+    for (const binding of this.moduleScope.plain.values()) {
+      const injected = RESERVED_INJECTED.get(binding.name);
+      if (injected) {
+        this.report("E112", binding.loc, MESSAGES.E112(binding.name, injected));
+        continue;
+      }
+      if (!LIBRARY_COMPONENTS.has(binding.name)) continue;
+      if (binding.kind === "function" || binding.kind === "import") continue;
+      if (binding.init?.kind === "Lambda") continue;
+      this.report("E112", binding.loc, MESSAGES.E112(binding.name, `it is the built-in \`${binding.name}\` component`));
+    }
+  }
+  /** E114 — a derived module-level atom that is also assigned. */
+  checkDerivedAtoms() {
+    for (const binding of this.moduleScope.state.values()) {
+      if (binding.kind !== "module" || !binding.init) continue;
+      const dep = derivedDependency(binding.init, binding.name, (name) => this.moduleScope.state.has(name));
+      if (!dep) continue;
+      const assigned = this.refs.some((r) => r.binding === binding && r.write && !r.declaring);
+      if (assigned) this.report("E114", binding.loc, MESSAGES.E114(binding.name, dep));
+    }
+  }
+  /** W202 — a camelCase function that assigns state, called while rendering. */
+  checkRenderWrites() {
+    for (const { binding, loc } of this.renderCalls) {
+      if (binding.scope !== this.moduleScope || isPascalCase(binding.name)) continue;
+      const node = binding.decl?.kind === "ActionDeclaration" ? binding.decl : binding.init;
+      const fn = node ? this.fnOf.get(node) : void 0;
+      const atom = fn?.stateWrites[0];
+      if (atom !== void 0) this.report("W202", loc, MESSAGES.W202(binding.name, atom));
+    }
+  }
+}
+function firstField(bindings) {
+  for (const b of bindings) {
+    if (b.rest) continue;
+    const key2 = b.sourceKey ?? b.name;
+    if (key2) return key2;
+  }
+  return "field";
+}
+function returnsPlainValue(expr) {
+  switch (expr.kind) {
+    case "Literal":
+      return expr.value !== null;
+    case "Template":
+      return true;
+    case "Binary":
+      return VALUE_BINARY.has(expr.operator);
+    case "Unary":
+      return VALUE_UNARY.has(expr.operator);
+    default:
+      return false;
+  }
+}
+function isDataAtom(binding) {
+  if (!binding.state || binding.kind !== "module" && !binding.instance) return false;
+  return isDataExpression(binding.init);
+}
+function isDataExpression(expr) {
+  if (!expr) return false;
+  switch (expr.kind) {
+    case "Literal":
+    case "Array":
+    case "Object":
+    case "Template":
+    case "Binary":
+    case "Unary":
+      return true;
+    case "Ternary":
+      return isDataExpression(expr.consequent) || isDataExpression(expr.alternate);
+    case "New":
+      return expr.callee.kind === "Identifier" && ["Map", "Set", "Array", "Object", "Date"].includes(expr.callee.name);
+    default:
+      return false;
+  }
+}
+function dataAtomInitializers(program) {
+  const out = /* @__PURE__ */ new Map();
+  const seen = /* @__PURE__ */ new Set();
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "Assignment" || !stmt.isState || seen.has(stmt.identifier)) continue;
+    seen.add(stmt.identifier);
+    if (isDataExpression(stmt.expression)) out.set(stmt.identifier, stmt.expression);
+  }
+  return out;
+}
+function importedStateMutationApplies(mutation, exporter) {
+  const init = dataAtomInitializers(exporter).get(mutation.imported);
+  if (!init) return false;
+  if (mutation.method === void 0) return true;
+  return mutatesInPlace(mutation.method, mutation.path ? void 0 : init);
+}
+function derivedDependency(expr, self, isAtom) {
+  let found = null;
+  const visit = (e) => {
+    if (found !== null) return;
+    switch (e.kind) {
+      case "StateRef":
+        if (e.name !== self && isAtom(e.name)) found = e.name;
+        return;
+      case "Lambda":
+        return;
+      case "Invoke":
+        if (e.callee.kind === "StateRef" && (RUNTIME_STATE_NAMES.has(e.callee.name) || HANDLE_FACTORIES.has(e.callee.name))) {
+          return;
+        }
+        visit(e.callee);
+        e.arguments.forEach(visit);
+        return;
+      default:
+        forEachChildExpression(e, visit);
+    }
+  };
+  visit(expr);
+  return found;
+}
+function forEachChildExpression(expr, visit) {
+  switch (expr.kind) {
+    case "Array":
+      expr.elements.forEach(visit);
+      return;
+    case "Object":
+      for (const p of expr.properties) {
+        if (p.computedKey) visit(p.computedKey);
+        visit(p.value);
+      }
+      return;
+    case "Member":
+      visit(expr.object);
+      if (expr.computed) visit(expr.computed);
+      return;
+    case "Unary":
+    case "Spread":
+      visit(expr.argument);
+      return;
+    case "Binary":
+      visit(expr.left);
+      visit(expr.right);
+      return;
+    case "Ternary":
+      visit(expr.test);
+      visit(expr.consequent);
+      visit(expr.alternate);
+      return;
+    case "Call":
+    case "BuiltinCall":
+      expr.arguments.forEach(visit);
+      return;
+    case "MethodCall":
+      visit(expr.object);
+      expr.arguments.forEach(visit);
+      return;
+    case "Invoke":
+    case "New":
+      visit(expr.callee);
+      expr.arguments.forEach(visit);
+      return;
+    case "Template":
+      expr.expressions.forEach(visit);
+      return;
+    default:
+      return;
+  }
+}
+function renderUnstableCall(expr, isFree) {
+  let found = null;
+  const rootOf = (e) => {
+    let path = "";
+    let node = e;
+    while (node.kind === "Member" && node.property !== void 0) {
+      path = `.${node.property}${path}`;
+      node = node.object;
+    }
+    return node.kind === "Identifier" ? { name: node.name, path } : null;
+  };
+  const visit = (e) => {
+    if (found !== null || e.kind === "Lambda") return;
+    if (e.kind === "MethodCall") {
+      if (e.object.kind === "StateRef" && e.object.name === "util" && e.method === "now") {
+        found = "$util.now()";
+        return;
+      }
+      const root = rootOf(e.object);
+      if (root && isFree(root.name)) {
+        const call = `${root.name}${root.path}.${e.method}()`;
+        if (root.path === "" && root.name === "Date" && e.method === "now") found = call;
+        else if (root.path === "" && root.name === "Math" && e.method === "random") found = call;
+        else if (root.path === "" && root.name === "performance" && e.method === "now") found = call;
+        else if (root.name === "crypto") found = call;
+        if (found !== null) return;
+      }
+    }
+    if (e.kind === "New" && e.callee.kind === "Identifier" && e.callee.name === "Date" && isFree("Date")) {
+      found = "new Date()";
+      return;
+    }
+    if (e.kind === "Call" && e.callee === "fetch" && isFree("fetch")) {
+      found = "fetch()";
+      return;
+    }
+    forEachChildExpression(e, visit);
+  };
+  visit(expr);
+  return found;
+}
+function findAsyncModifiers(source) {
+  let tokens;
+  try {
+    tokens = tokenize(source);
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const tok = tokens[i];
+    if (tok.type !== "Keyword" || tok.value !== "async") continue;
+    let prev;
+    for (let j = i - 1; j >= 0; j -= 1) {
+      if (tokens[j].type !== "Newline") {
+        prev = tokens[j];
+        break;
+      }
+    }
+    if (prev && (prev.value === "." || prev.value === "?.")) continue;
+    let next;
+    for (let j = i + 1; j < tokens.length; j += 1) {
+      if (tokens[j].type !== "Newline") {
+        next = tokens[j];
+        break;
+      }
+    }
+    if (!next) continue;
+    const modifies = next.type === "Keyword" && next.value === "function" || next.type === "Punctuation" && next.value === "(" || next.type === "Identifier" || next.type === "StateIdentifier";
+    if (modifies) out.push({ line: tok.line, column: tok.column });
+  }
+  return out;
+}
+function checkJavaScriptSemantics(program, path, options = {}) {
+  const findings = [...new Analyzer().run(program).findings];
+  if (options.source !== void 0) {
+    for (const loc of findAsyncModifiers(options.source)) {
+      findings.push({ code: "E102", severity: "error", message: MESSAGES.E102, loc });
+    }
+  }
+  return toDiagnostics(findings, path);
+}
+function collectImportedStateMutations(program) {
+  return new Analyzer().run(program).importedMutations;
+}
+function asyncModifierDiagnostic(loc, path) {
+  return { severity: "error", message: MESSAGES.E102, line: loc.line, column: loc.column, path, code: "E102" };
+}
+function toDiagnostics(findings, path) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  const sorted = [...findings].sort(
+    (a, b) => a.loc.line - b.loc.line || a.loc.column - b.loc.column || a.code.localeCompare(b.code)
+  );
+  for (const f of sorted) {
+    const key2 = `${f.code}:${f.loc.line}:${f.loc.column}:${f.message}`;
+    if (seen.has(key2)) continue;
+    seen.add(key2);
+    out.push({ severity: f.severity, message: f.message, line: f.loc.line, column: f.loc.column, path, code: f.code });
+  }
+  return out;
+}
+function lowerJavaScriptSemantics(program) {
+  const analysis = new Analyzer().run(program);
+  let counter = 0;
+  for (const binding of analysis.bindings) {
+    if (binding.state || !LOCAL_KINDS.has(binding.kind)) continue;
+    counter += 1;
+    binding.symbol = `__l${counter}_${binding.name}`;
+  }
+  for (const ref of analysis.refs) {
+    const symbol = ref.binding?.symbol;
+    if (symbol !== void 0 && ref.rename) ref.rename(symbol);
+  }
+  liftNestedFunctions(program);
+  appendImplicitReturns(program);
+  return program;
+}
+function liftNestedFunctions(program) {
+  const lists = [];
+  walk(program, ({ node }) => {
+    if (node.kind === "Block") lists.push(node.body);
+    else if (node.kind === "SwitchStatement") for (const c of node.cases) lists.push(c.body);
+  });
+  for (const list of lists) {
+    for (let i = 0; i < list.length; i += 1) {
+      const stmt = list[i];
+      if (stmt.kind === "ActionDeclaration") list[i] = nestedFunctionAsLambda(stmt);
+    }
+  }
+}
+function nestedFunctionAsLambda(decl) {
+  const lambda = {
+    kind: "Lambda",
+    params: decl.params.map((p) => {
+      const out2 = { name: p.name };
+      if (p.defaultValue) out2.defaultValue = p.defaultValue;
+      if (p.rest) out2.rest = true;
+      if (p.pattern) out2.pattern = p.pattern;
+      return out2;
+    }),
+    body: decl.body,
+    // So coverage and DevTools still call it by the name the author wrote.
+    name: decl.name
+  };
+  if (decl.loc) lambda.loc = decl.loc;
+  const out = {
+    kind: "Assignment",
+    identifier: decl.name,
+    isState: false,
+    expression: lambda,
+    declaration: "const"
+  };
+  if (decl.loc) out.loc = decl.loc;
+  if (decl.leadingComments) out.leadingComments = decl.leadingComments;
+  if (decl.trailingComments) out.trailingComments = decl.trailingComments;
+  return out;
+}
+function appendImplicitReturns(program) {
+  const bodies = [];
+  walk(program, ({ node }) => {
+    if (node.kind === "ComponentDeclaration" || node.kind === "ActionDeclaration" || node.kind === "HookDeclaration") {
+      bodies.push(node.body);
+    } else if (node.kind === "Lambda" && node.body.kind === "Block") {
+      bodies.push(node.body);
+    }
+  });
+  for (const body of bodies) {
+    const last = body.body[body.body.length - 1];
+    if (last && (last.kind === "Return" || last.kind === "ThrowStatement")) continue;
+    body.body.push({ kind: "Return" });
+  }
+}
+const aktionFrontend = {
+  language: "aktion",
+  compile(source) {
+    return { program: parse(source), diagnostics: [], aktionSource: source };
+  }
+};
+function compileJavaScriptModule(code, path, options = {}) {
+  const parseOptions = {};
+  if (options.softNewlines && options.softNewlines.size > 0) parseOptions.softNewlines = options.softNewlines;
+  const parsed = parse(code, parseOptions);
+  if (parsed.errors.length > 0) {
+    const asyncAt = new Map(findAsyncModifiers(code).map((loc) => [`${loc.line}:${loc.column}`, loc]));
+    const replaced = [];
+    const errors = parsed.errors.filter((e) => {
+      const loc = asyncAt.get(`${e.line}:${e.column}`);
+      if (!loc) return true;
+      replaced.push(asyncModifierDiagnostic(loc, path));
+      return false;
+    });
+    return { program: { ...parsed, errors }, diagnostics: replaced, aktionSource: code };
+  }
+  const normalized = normalizeComponentForms(parsed);
+  const diagnostics = checkJavaScriptSemantics(normalized, path, { source: code });
+  if (diagnostics.some((d) => d.severity === "error")) {
+    return { program: normalized, diagnostics, aktionSource: code };
+  }
+  const importedStateMutations = collectImportedStateMutations(normalized);
+  const program = lowerJavaScriptSemantics(normalized);
+  return {
+    program,
+    diagnostics,
+    aktionSource: code,
+    ...importedStateMutations.length > 0 ? { importedStateMutations } : {}
+  };
+}
+const javascriptFrontend = {
+  language: "javascript",
+  compile(source, path) {
+    return compileJavaScriptModule(source, path);
+  }
+};
+const defaultFrontends = {
+  aktion: aktionFrontend,
+  javascript: javascriptFrontend
+};
+const LANGUAGE_LABEL = {
+  aktion: "Aktion",
+  javascript: "JavaScript",
+  typescript: "TypeScript"
+};
+function baseName(path) {
+  const suffixStart = path.search(/[?#]/);
+  const clean = suffixStart < 0 ? path : path.slice(0, suffixStart);
+  const slash = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"));
+  return slash < 0 ? clean : clean.slice(slash + 1);
+}
+function nativeImportMessage(spec, resolvedPath) {
+  const name = baseName(resolvedPath);
+  const stem = name.replace(/\.(?:[cm]?[jt]sx?|json|css|wasm)$/i, "");
+  const suggestion = /\.(?:[cm]?ts|tsx)$/i.test(name) ? `${stem}.aktion.ts` : `${stem}.aktion.js`;
+  return `"${spec}" is not an Aktion module. Aktion modules end in .aktion, .aktion.ts or .aktion.js — rename it to ${suggestion} to write it as Aktion, or keep it native and pass values in from the host (importing native modules is not supported yet).`;
+}
+function linkProgram(entrySource, entryPath, resolver, options = {}) {
+  const frontends = options.frontends ?? defaultFrontends;
   const modules = /* @__PURE__ */ new Map();
   const order = [];
   const visiting = /* @__PURE__ */ new Set();
   const diagnostics = [];
   let nextId = 0;
-  const fail = (path, line, column, message) => {
-    diagnostics.push({
+  const report2 = (path, line, column, message, severity, code) => {
+    const diagnostic = {
       line,
       column,
       message: path === entryPath ? message : `${path}: ${message}`,
-      severity: "error"
-    });
+      severity,
+      path
+    };
+    if (code) diagnostic.code = code;
+    diagnostics.push(diagnostic);
   };
-  function load(path, sourceOverride) {
+  const fail = (path, line, column, message, code) => report2(path, line, column, message, "error", code);
+  function load(path, sourceOverride, language) {
     const existing = modules.get(path);
     if (existing) return existing;
     if (visiting.has(path)) return void 0;
@@ -3244,46 +10189,122 @@ function linkProgram(entrySource, entryPath, resolver) {
         src = resolver.load(path);
       } catch {
         visiting.delete(path);
-        fail(entryPath, 0, 0, `Failed to load imported module "${path}".`);
+        fail(entryPath, 0, 0, `Failed to load imported module "${path}".`, "AKT-LINK-LOAD");
         return void 0;
       }
     }
-    const program2 = parse(src);
+    const frontend = frontends[language];
+    if (!frontend) {
+      visiting.delete(path);
+      fail(
+        path,
+        0,
+        0,
+        `"${path}" is a ${LANGUAGE_LABEL[language]} Aktion module, but no ${language} frontend is configured — compile it with aktion-runtime/vite, or pass a ${language} frontend to linkProgram (loadTypeScriptFrontend() from aktion-runtime/vite).`,
+        "AKT-LINK-NO-FRONTEND"
+      );
+      return void 0;
+    }
+    let compiled;
+    try {
+      compiled = frontend.compile(src, path);
+    } catch (err) {
+      visiting.delete(path);
+      fail(path, 0, 0, `Failed to compile "${path}": ${err?.message ?? String(err)}`, "AKT-LINK-FRONTEND");
+      return void 0;
+    }
+    const { program: program2 } = compiled;
     for (const e of program2.errors) fail(path, e.line, e.column, e.message);
+    for (const d of compiled.diagnostics) {
+      report2(path, d.line, d.column, d.message, d.severity, d.code);
+    }
     const rec = {
       id: nextId++,
       path,
+      language,
+      originalSource: src,
+      aktionSource: compiled.aktionSource,
       program: program2,
       edges: [],
+      builtinImports: [],
       declaredPlain: /* @__PURE__ */ new Set(),
       declaredState: /* @__PURE__ */ new Set(),
       exportedPlain: /* @__PURE__ */ new Set(),
       exportedState: /* @__PURE__ */ new Set(),
       renamePlain: /* @__PURE__ */ new Map(),
-      renameState: /* @__PURE__ */ new Map()
+      renameState: /* @__PURE__ */ new Map(),
+      importedStateMutations: compiled.importedStateMutations ?? []
     };
     modules.set(path, rec);
     buildSymbolTable(rec);
     for (const stmt of program2.statements) {
       if (stmt.kind !== "Import") continue;
-      const resolved = resolver.resolve(stmt.source, path);
-      rec.edges.push({ stmt, resolvedPath: resolved });
-      if (resolved === null) {
-        fail(path, stmt.loc?.line ?? 0, stmt.loc?.column ?? 0, `Cannot resolve import "${stmt.source}".`);
+      const line = stmt.loc?.line ?? 0;
+      const column = stmt.loc?.column ?? 0;
+      if (stmt.source === DSL_MODULE_ID) {
+        checkBuiltinImport(rec, stmt, fail);
+        rec.builtinImports.push(stmt);
         continue;
       }
-      load(resolved, null);
+      const resolved = resolver.resolve(stmt.source, path);
+      if (resolved === null) {
+        rec.edges.push({ stmt, resolvedPath: null });
+        const why = resolver.explain?.(stmt.source, path);
+        fail(path, line, column, `Cannot resolve import "${stmt.source}".${why ? ` ${why}` : ""}`, "AKT-LINK-RESOLVE");
+        continue;
+      }
+      const language2 = moduleLanguage(resolved);
+      if (language2 === null) {
+        rec.edges.push({ stmt, resolvedPath: null });
+        if (isReservedAktionPath(resolved)) {
+          fail(
+            path,
+            line,
+            column,
+            `"${stmt.source}": JSX Aktion modules (.aktion.tsx / .aktion.jsx) are not supported yet — use .aktion.ts or .aktion.js.`,
+            "AKT-LINK-JSX"
+          );
+        } else {
+          fail(path, line, column, nativeImportMessage(stmt.source, resolved), "AKT-LINK-NATIVE");
+        }
+        continue;
+      }
+      rec.edges.push({ stmt, resolvedPath: resolved });
+      load(resolved, null, language2);
     }
     visiting.delete(path);
     order.push(path);
     return rec;
   }
-  load(entryPath, entrySource);
+  let entryLanguage = moduleLanguage(entryPath);
+  if (entryLanguage === null) {
+    if (isNativeModulePath(entryPath)) {
+      report2(
+        entryPath,
+        1,
+        1,
+        `Aktion entry "${baseName(entryPath)}" has a JavaScript extension; rename it to ${baseName(entryPath).replace(/\.[^.]+$/, "")}.aktion (or .aktion.js for JavaScript semantics). It is linked as an .aktion module for now.`,
+        "warning",
+        "AKT-LINK-NATIVE-ENTRY"
+      );
+    } else {
+      fail(
+        entryPath,
+        1,
+        1,
+        `"${baseName(entryPath)}": JSX Aktion modules (.aktion.tsx / .aktion.jsx) are not supported yet — use .aktion.ts or .aktion.js.`,
+        "AKT-LINK-JSX"
+      );
+    }
+    entryLanguage = "aktion";
+  }
+  load(entryPath, entrySource, entryLanguage);
   for (const rec of modules.values()) {
     if (rec.path === entryPath) continue;
     for (const name of rec.declaredPlain) rec.renamePlain.set(name, moduleLocalSymbol(rec.id, name));
     for (const name of rec.declaredState) rec.renameState.set(name, moduleLocalSymbol(rec.id, name));
   }
+  const exportSymbol = (src, name, renames) => renames.get(name) ?? (src.path === entryPath ? name : moduleLocalSymbol(src.id, name));
   for (const rec of modules.values()) {
     for (const { stmt, resolvedPath } of rec.edges) {
       if (resolvedPath === null) continue;
@@ -3294,17 +10315,26 @@ function linkProgram(entrySource, entryPath, resolver) {
         const column = stmt.loc?.column ?? 0;
         if (spec.isState) {
           if (!src.exportedState.has(spec.imported)) {
-            fail(rec.path, line, column, `"${stmt.source}" does not export \`$${spec.imported}\`.`);
+            fail(rec.path, line, column, `"${stmt.source}" does not export \`$${spec.imported}\`.`, "AKT-LINK-EXPORT");
             continue;
           }
-          rec.renameState.set(spec.local, src.renameState.get(spec.imported) ?? moduleLocalSymbol(src.id, spec.imported));
+          rec.renameState.set(spec.local, exportSymbol(src, spec.imported, src.renameState));
         } else {
           if (!src.exportedPlain.has(spec.imported)) {
-            fail(rec.path, line, column, `"${stmt.source}" does not export \`${spec.imported}\`.`);
+            fail(rec.path, line, column, `"${stmt.source}" does not export \`${spec.imported}\`.`, "AKT-LINK-EXPORT");
             continue;
           }
-          rec.renamePlain.set(spec.local, src.renamePlain.get(spec.imported) ?? moduleLocalSymbol(src.id, spec.imported));
+          rec.renamePlain.set(spec.local, exportSymbol(src, spec.imported, src.renamePlain));
         }
+      }
+    }
+  }
+  for (const rec of modules.values()) {
+    for (const mutation of rec.importedStateMutations) {
+      const edge = rec.edges.find((e) => e.stmt.source === mutation.source && e.resolvedPath !== null);
+      const exporter = edge ? modules.get(edge.resolvedPath) : void 0;
+      if (exporter && importedStateMutationApplies(mutation, exporter.program)) {
+        fail(rec.path, mutation.line, mutation.column, mutation.message, "E108");
       }
     }
   }
@@ -3338,11 +10368,50 @@ function linkProgram(entrySource, entryPath, resolver) {
     errors: entryRec ? entryRec.program.errors : []
   };
   if (multiModule) program.sources = sources;
+  const linkedModules = [];
+  for (const path of sources) {
+    const rec = modules.get(path);
+    if (!rec) continue;
+    linkedModules.push({
+      path: rec.path,
+      language: rec.language,
+      originalSource: rec.originalSource,
+      aktionSource: rec.aktionSource
+    });
+  }
   return {
     program,
     diagnostics,
-    dependencies: order.filter((p) => p !== entryPath)
+    dependencies: order.filter((p) => p !== entryPath),
+    modules: linkedModules
   };
+}
+function checkBuiltinImport(rec, stmt, fail) {
+  const line = stmt.loc?.line ?? 0;
+  const column = stmt.loc?.column ?? 0;
+  for (const spec of stmt.specifiers) {
+    const sigil = spec.isState ? "$" : "";
+    if (spec.local !== spec.imported) {
+      fail(
+        rec.path,
+        line,
+        column,
+        `Import Aktion built-ins by their own name (\`${sigil}${spec.imported}\`); aliases are not supported.`,
+        "E122"
+      );
+      continue;
+    }
+    const declared = spec.isState ? rec.declaredState.has(spec.local) : rec.declaredPlain.has(spec.local);
+    if (declared) {
+      fail(
+        rec.path,
+        line,
+        column,
+        `\`${sigil}${spec.local}\` is imported from aktion-runtime/dsl and also declared here — remove one.`,
+        "E123"
+      );
+    }
+  }
 }
 function buildSymbolTable(rec) {
   for (const stmt of rec.program.statements) {
@@ -3494,14 +10563,21 @@ function makeRenamer(rec) {
   function renameTopLevel(stmt) {
     if (stmt.kind === "DestructureStatement") {
       renameExpr(stmt.expression);
-      const renamePatternBindings = (bindings) => {
+      const renamePatternBindings = (bindings, kind) => {
         for (const b of bindings) {
           if (b.defaultValue) renameExpr(b.defaultValue);
-          if (b.pattern) renamePatternBindings(b.pattern.bindings);
-          else b.name = rPlain(b.name);
+          if (b.pattern) {
+            renamePatternBindings(b.pattern.bindings, b.pattern.kind);
+            continue;
+          }
+          const renamed = rPlain(b.name);
+          if (kind === "object" && !b.rest && b.sourceKey === void 0 && renamed !== b.name) {
+            b.sourceKey = b.name;
+          }
+          b.name = renamed;
         }
       };
-      renamePatternBindings(stmt.bindings);
+      renamePatternBindings(stmt.bindings, stmt.patternKind);
       return;
     }
     renameStatement(stmt, true);
@@ -3670,9 +10746,22 @@ async function defaultFetch(url) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.text();
 }
+function importsOf(source, path, frontends) {
+  const language = moduleLanguage(path);
+  const frontend = language === null ? void 0 : frontends[language];
+  if (!frontend) return [];
+  try {
+    return frontend.compile(source, path).program.statements.filter(
+      (s) => s.kind === "Import"
+    );
+  } catch {
+    return [];
+  }
+}
 async function linkProject(options) {
   const { entry, files } = options;
   const fetchImpl = options.fetch ?? defaultFetch;
+  const frontends = options.frontends ?? defaultFrontends;
   const fetchDiagnostics = [];
   const sources = { ...files };
   const seen = /* @__PURE__ */ new Set();
@@ -3688,7 +10777,9 @@ async function linkProject(options) {
             line: 0,
             column: 0,
             message: `Failed to fetch module "${path}": ${err.message ?? err}`,
-            severity: "error"
+            severity: "error",
+            path,
+            code: "AKT-LINK-FETCH"
           });
           return;
         }
@@ -3696,17 +10787,11 @@ async function linkProject(options) {
         return;
       }
     }
-    let program;
-    try {
-      program = parse(sources[path]);
-    } catch {
-      return;
-    }
     const children = [];
-    for (const stmt of program.statements) {
-      if (stmt.kind !== "Import") continue;
+    for (const stmt of importsOf(sources[path], path, frontends)) {
+      if (stmt.source === DSL_MODULE_ID) continue;
       const resolved = resolveSpecifier(stmt.source, path);
-      if (resolved !== null) children.push(walk2(resolved));
+      if (resolved !== null && moduleLanguage(resolved) !== null) children.push(walk2(resolved));
     }
     await Promise.all(children);
   }
@@ -3715,13 +10800,21 @@ async function linkProject(options) {
       program: { statements: [], errors: [] },
       source: "",
       diagnostics: [
-        { line: 0, column: 0, message: `Entry module "${entry}" was not found.`, severity: "error" }
+        {
+          line: 0,
+          column: 0,
+          message: `Entry module "${entry}" was not found.`,
+          severity: "error",
+          path: entry,
+          code: "AKT-LINK-ENTRY"
+        }
       ],
-      dependencies: []
+      dependencies: [],
+      modules: []
     };
   }
   await walk2(entry);
-  const linked = linkProgram(sources[entry], entry, createMemoryResolver(sources));
+  const linked = linkProgram(sources[entry], entry, createMemoryResolver(sources), { frontends });
   let source;
   try {
     source = printProgram(linked.program);
@@ -3732,7 +10825,8 @@ async function linkProject(options) {
     program: linked.program,
     source,
     diagnostics: [...fetchDiagnostics, ...linked.diagnostics],
-    dependencies: linked.dependencies
+    dependencies: linked.dependencies,
+    modules: linked.modules
   };
 }
 function applyDelta(source, ops) {
@@ -6397,8 +13491,9 @@ Object.freeze(
   Object.fromEntries(namespaceCatalog.map((n) => [n.name, n]))
 );
 const httpResourceMembers = [
-  prop("data", "Parsed response body — `null` until the request resolves."),
-  prop("error", "`null` on success; `{ status, body }` on a non-2xx; the thrown error on network failure."),
+  prop("state", 'Request lifecycle: "idle" | "loading" | "data" | "error" | "stale" ("stale" = refetching while the previous data is still shown).'),
+  prop("data", "Parsed response body — `undefined` until the first successful response."),
+  prop("error", "`undefined` on success; `{ status, body }` on a non-2xx; `{ graphqlErrors }` for a GraphQL error; the thrown error on network failure."),
   prop("status", "HTTP status code of the last response, e.g. `200`."),
   prop("loading", "`true` while a request is in flight."),
   prop("headers", "Response headers as a plain object."),
@@ -6412,14 +13507,16 @@ const queryResourceMembers = [
   method("loadMore", "loadMore()", "Fetch the next page (infinite mode)."),
   prop("hasMore", "`true` while more pages are available (infinite mode)."),
   prop("loadingMore", "`true` while a `loadMore()` page is in flight."),
+  prop("page", "The last loaded page number — in `offset` mode, the number of pages loaded (infinite mode)."),
   prop("pages", "Raw page bodies loaded so far (infinite mode); `.data` is the flattened items.")
 ];
 const mutationResourceMembers = [
   method("mutate", "mutate(overrides?)", "Fire the request; overrides shallow-merge over the config. `optimistic` applies instantly and rolls back on failure."),
   prop("data", "Response body of the last successful mutation."),
-  prop("error", "`null` on success; error details on failure."),
+  prop("error", "`undefined` on success; error details on failure."),
   prop("loading", "`true` while the mutation request is in flight."),
   prop("status", "HTTP status code of the last response."),
+  method("reset", "reset()", "Clear data / error / status back to the resting state (aborts an in-flight mutation)."),
   prop("onDone", "Settable callback fired when the mutation settles.")
 ];
 const socketResourceMembers = [
@@ -6448,7 +13545,7 @@ const formResourceMembers = [
   prop("valid", "`true` when the last validation pass found no errors."),
   prop("submitting", "`true` from submit() until an async onSubmit settles."),
   prop("validating", "`true` while async rules ($util.rules.asyncCustom) are in flight."),
-  method("field", "field(name)", "Controlled prop bag: { value, error, name, onChange, onBlur } — spread onto an input."),
+  method("field", "field(name)", "Controlled prop bag: { value, error, name, onChange, onBlur } — pass its members to an input (`{ value: b.value, onChange: b.onChange }`); a `...spread` inside component props is dropped."),
   method("touch", "touch(name)", "Mark a field touched + validate it (wire to `onBlur`)."),
   method("setField", "setField(name, value)", "Set one field value (clears its error)."),
   method("setValues", "setValues(values)", "Merge several field values at once."),
@@ -37274,10 +44371,23 @@ class StateStore {
 }
 const FORBIDDEN_PATH_SEGMENTS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
 const MAX_MATERIALISED_INDEX = 1e6;
+function toArrayLength(value) {
+  if (typeof value === "symbol" || typeof value === "bigint") return null;
+  const length = Number(value);
+  return Number.isInteger(length) && length >= 0 && length <= MAX_MATERIALISED_INDEX ? length : null;
+}
 function updateAtPath(target, path, index, value) {
   if (index >= path.length) return value;
   const key2 = path[index];
   if (FORBIDDEN_PATH_SEGMENTS.has(key2)) return target;
+  if (Array.isArray(target) && key2 === "length") {
+    if (index !== path.length - 1) return target;
+    const length = toArrayLength(value);
+    if (length === null) return target;
+    const next = target.slice();
+    next.length = length;
+    return next;
+  }
   const asIndex = key2 !== "" && !Number.isNaN(Number(key2)) ? Number(key2) : null;
   if (Array.isArray(target) && asIndex !== null) {
     const next = target.slice();
@@ -37330,11 +44440,11 @@ function functionName(node) {
     case "ComponentDeclaration":
     case "ActionDeclaration":
     case "HookDeclaration":
-      return moduleLocalBaseName(node.name) ?? (node.name || "(anonymous)");
+      return node.name ? authoredName(node.name) : "(anonymous)";
     case "EffectDeclaration":
       return "effect";
     case "Lambda":
-      return "(anonymous)";
+      return node.name ? authoredName(node.name) : "(anonymous)";
     default:
       return null;
   }
@@ -43252,12 +50362,7 @@ function evaluate(expr, ctx) {
       const out = [];
       for (const element of expr.elements) {
         if (element.kind === "Spread") {
-          const value = evaluate(element.argument, ctx);
-          if (Array.isArray(value)) {
-            for (const item of value) out.push(item);
-          } else if (value != null) {
-            if (typeof value === "string") for (const ch of value) out.push(ch);
-          }
+          spreadIterable(out, evaluate(element.argument, ctx), ctx);
           continue;
         }
         out.push(evaluate(element, ctx));
@@ -44261,17 +51366,7 @@ function evaluateInvoke(expr, ctx) {
     return expr.optional ? void 0 : null;
   }
   if (typeof callee !== "function") return null;
-  const positional = [];
-  for (const arg of expr.arguments) {
-    if (arg.kind === "Spread") {
-      const value = evaluate(arg.argument, ctx);
-      if (Array.isArray(value)) {
-        for (const item of value) positional.push(item);
-      }
-      continue;
-    }
-    positional.push(evaluate(arg, ctx));
-  }
+  const positional = evaluateCallArgs(expr.arguments, ctx);
   try {
     return callee.apply(void 0, positional);
   } catch (err) {
@@ -44282,17 +51377,7 @@ function evaluateInvoke(expr, ctx) {
 function evaluateNew(expr, ctx) {
   const callee = evaluate(expr.callee, ctx);
   if (typeof callee !== "function") return null;
-  const positional = [];
-  for (const arg of expr.arguments) {
-    if (arg.kind === "Spread") {
-      const value = evaluate(arg.argument, ctx);
-      if (Array.isArray(value)) {
-        for (const item of value) positional.push(item);
-      }
-      continue;
-    }
-    positional.push(evaluate(arg, ctx));
-  }
+  const positional = evaluateCallArgs(expr.arguments, ctx);
   try {
     return Reflect.construct(callee, positional);
   } catch (err) {
@@ -44594,18 +51679,7 @@ function evaluateMethodCall(expr, ctx) {
   if (FORBIDDEN_PROPERTY_NAMES.has(expr.method)) return null;
   const fn = isStoreHandle(target) ? target.__methods[expr.method] : target[expr.method];
   if (typeof fn !== "function") return null;
-  const positional = [];
-  for (const arg of expr.arguments) {
-    if (arg.kind === "Spread") {
-      const value = evaluate(arg.argument, ctx);
-      if (Array.isArray(value)) {
-        for (const item of value) positional.push(item);
-      }
-      continue;
-    }
-    positional.push(evaluate(arg, ctx));
-  }
-  const callArgs = positional;
+  const callArgs = evaluateCallArgs(expr.arguments, ctx);
   try {
     return fn.apply(target, callArgs);
   } catch (err) {
@@ -44614,16 +51688,29 @@ function evaluateMethodCall(expr, ctx) {
     return null;
   }
 }
+function spreadIterable(out, value, ctx) {
+  if (Array.isArray(value)) {
+    for (const item of value) out.push(item);
+    return true;
+  }
+  if (typeof value === "string") {
+    for (const ch of value) out.push(ch);
+    return true;
+  }
+  if (value !== null && typeof value === "object" && typeof value[Symbol.iterator] === "function") {
+    for (const item of value) {
+      tickIterations(ctx.budget, 1, "a `...` spread");
+      out.push(item);
+    }
+    return true;
+  }
+  return false;
+}
 function evaluateCallArgs(args, ctx) {
   const out = [];
   for (const arg of args) {
     if (arg.kind === "Spread") {
-      const value = evaluate(arg.argument, ctx);
-      if (Array.isArray(value)) {
-        for (const item of value) out.push(item);
-      } else if (value != null && typeof value === "object" && Symbol.iterator in value) {
-        for (const item of value) out.push(item);
-      }
+      spreadIterable(out, evaluate(arg.argument, ctx), ctx);
       continue;
     }
     out.push(evaluate(arg, ctx));
@@ -44677,15 +51764,7 @@ function evaluateComponentCall(callee, args, ctx, loc) {
   }
   if (Object.prototype.hasOwnProperty.call(GLOBAL_NAMESPACES, callee) && typeof GLOBAL_NAMESPACES[callee] === "function" && !ctx.componentDecls.has(callee) && !(ctx.library && findComponent(ctx.library, callee))) {
     const fn = GLOBAL_NAMESPACES[callee];
-    const evaluated2 = [];
-    for (const arg of args) {
-      if (arg.kind === "Spread") {
-        const value = evaluate(arg.argument, ctx);
-        if (Array.isArray(value)) for (const item of value) evaluated2.push(item);
-        continue;
-      }
-      evaluated2.push(evaluate(arg, ctx));
-    }
+    const evaluated2 = evaluateCallArgs(args, ctx);
     try {
       return fn(...evaluated2);
     } catch (err) {
@@ -44697,15 +51776,7 @@ function evaluateComponentCall(callee, args, ctx, loc) {
     const hostGlobal = lookupHostGlobal(callee);
     if (hostGlobal.found && typeof hostGlobal.value === "function") {
       const fn = hostGlobal.value;
-      const evaluated2 = [];
-      for (const arg of args) {
-        if (arg.kind === "Spread") {
-          const value = evaluate(arg.argument, ctx);
-          if (Array.isArray(value)) for (const item of value) evaluated2.push(item);
-          continue;
-        }
-        evaluated2.push(evaluate(arg, ctx));
-      }
+      const evaluated2 = evaluateCallArgs(args, ctx);
       try {
         return fn(...evaluated2);
       } catch (err) {
@@ -44833,6 +51904,9 @@ function resolveLibraryCallArgs(ctx, callee, propArgs) {
   }
   return { args, argMeta, universal };
 }
+function componentParamPublicName(param) {
+  return param.publicName ?? param.name;
+}
 function invokeComponentDecl(decl, args, ctx, loc) {
   if (ctx.coverage) recordFunction(ctx.coverage, decl.loc);
   const positionalExprs = [];
@@ -44848,13 +51922,13 @@ function invokeComponentDecl(decl, args, ctx, loc) {
   let trailingObjArg = trailingObjIdx >= 0 ? args[trailingObjIdx] : null;
   let expandAsNamed = false;
   if (trailingObjArg && trailingObjArg.kind === "Object") {
-    const paramNames = new Set(decl.params.map((p) => p.name));
+    const publicNames = new Set(decl.params.map(componentParamPublicName));
     const objKeys = [];
     let allIdentifierKeys = true;
     for (const prop2 of trailingObjArg.properties) {
       if (prop2.spread) continue;
       objKeys.push(prop2.key);
-      if (prop2.key === "key" || paramNames.has(prop2.key)) {
+      if (prop2.key === "key" || publicNames.has(prop2.key)) {
         expandAsNamed = true;
       }
       if (!/^[A-Za-z_$][\w$]*$/.test(prop2.key)) allIdentifierKeys = false;
@@ -44869,7 +51943,7 @@ function invokeComponentDecl(decl, args, ctx, loc) {
         ctx.strictWarned.add(dedupeKey);
         const where = loc ? ` (line ${loc.line}, col ${loc.column})` : "";
         console.warn(
-          `[aktion] strict: object { ${objKeys.join(", ")} } passed to <${decl.name}>${where} is being forwarded as a positional argument because none of its keys match a parameter (${decl.params.map((p) => p.name).join(", ") || "none"}). If you meant named props, check for a renamed/misspelled parameter.`
+          `[aktion] strict: object { ${objKeys.join(", ")} } passed to <${decl.name}>${where} is being forwarded as a positional argument because none of its keys match a parameter (${decl.params.map(componentParamPublicName).join(", ") || "none"}). If you meant named props, check for a renamed/misspelled parameter.`
         );
       }
     }
@@ -44899,11 +51973,8 @@ function invokeComponentDecl(decl, args, ctx, loc) {
   for (let i = 0; i < positionalExprs.length; i += 1) {
     const expr = positionalExprs[i];
     const value = positional[i];
-    if (expr.kind === "Spread" && Array.isArray(value)) {
-      for (const item of value) flatPositional.push(item);
-    } else {
-      flatPositional.push(value);
-    }
+    if (expr.kind === "Spread" && spreadIterable(flatPositional, value, ctx)) continue;
+    flatPositional.push(value);
   }
   const evaluatedNamed = {};
   for (const [name, expr] of Object.entries(named)) {
@@ -44938,8 +52009,9 @@ function evaluateUserComponent(node, ctx, instanceKey) {
       continue;
     }
     let value;
-    if (named[param.name] !== void 0) {
-      value = named[param.name];
+    const publicName = componentParamPublicName(param);
+    if (named[publicName] !== void 0) {
+      value = named[publicName];
     } else if (positional[i] !== void 0) {
       value = positional[i];
     } else if (param.defaultValue) {
@@ -44954,18 +52026,21 @@ function evaluateUserComponent(node, ctx, instanceKey) {
     const childrenValue = extras.length === 1 ? extras[0] : extras;
     ctx.loopVars.set("children", childrenValue);
   }
-  const paramNames = /* @__PURE__ */ new Set();
+  const publicNames = /* @__PURE__ */ new Set();
+  const localNames = /* @__PURE__ */ new Set();
   for (const p of decl.params) {
-    if (p.name) paramNames.add(p.name);
+    if (!p.name) continue;
+    localNames.add(p.name);
+    publicNames.add(componentParamPublicName(p));
   }
   const slotsValue = {};
   for (const slotName of decl.slots) {
     if (named[slotName] !== void 0) slotsValue[slotName] = named[slotName];
   }
   for (const [key2, value] of Object.entries(named)) {
-    if (paramNames.has(key2) || value === void 0) continue;
+    if (publicNames.has(key2) || value === void 0) continue;
     slotsValue[key2] = value;
-    if (/^[A-Za-z_$][\w$]*$/.test(key2) && key2 !== "children" && key2 !== "slots" && !ctx.componentDecls.has(key2)) {
+    if (/^[A-Za-z_$][\w$]*$/.test(key2) && key2 !== "children" && key2 !== "slots" && !localNames.has(key2) && !ctx.componentDecls.has(key2)) {
       bindComponentLocal(key2, value);
     }
   }
@@ -45197,15 +52272,7 @@ function evaluateIdHook(args, ctx, loc) {
 }
 function invokeHookDecl(decl, argExprs, ctx) {
   if (ctx.coverage) recordFunction(ctx.coverage, decl.loc);
-  const args = [];
-  for (const arg of argExprs) {
-    if (arg.kind === "Spread") {
-      const value = evaluate(arg.argument, ctx);
-      if (Array.isArray(value)) for (const item of value) args.push(item);
-      continue;
-    }
-    args.push(evaluate(arg, ctx));
-  }
+  const args = evaluateCallArgs(argExprs, ctx);
   return runDeclBodySync(decl.params, decl.body, args, ctx);
 }
 let warnedHookOutsideComponent = false;
@@ -45300,12 +52367,6 @@ function applyAssignOp(op, current, next) {
     }
     case "**=":
       return toNumber(current) ** toNumber(next);
-    case "&&=":
-      return current ? next : current;
-    case "||=":
-      return current ? current : next;
-    case "??=":
-      return current == null ? next : current;
     case "&=":
       return toInt32(current) & toInt32(next);
     case "|=":
@@ -45352,17 +52413,15 @@ function evaluateTimerCall(callee, args, ctx) {
   ctx.timers.intervals.add(id);
   return id;
 }
-function evaluateSyntheticAssign(args, ctx) {
-  const [targetExpr, valueExpr, opExpr] = args;
-  if (!targetExpr || !valueExpr) return null;
-  const op = opExpr && opExpr.kind === "Literal" ? String(opExpr.value ?? "=") : "=";
-  const rhs = evaluate(valueExpr, ctx);
+function updateAssignmentTarget(targetExpr, ctx, update) {
+  const commit = (current, store2) => {
+    const { next, write } = update(current);
+    if (write) store2(next);
+    return { kind: "updated", current, next };
+  };
   if (targetExpr.kind === "StateRef") {
     const target = resolveStateAlias(ctx, targetExpr.name);
-    const current = ctx.state.get(target);
-    const next = applyAssignOp(op, current, rhs);
-    ctx.state.set(target, next);
-    return next;
+    return commit(ctx.state.get(target), (next) => ctx.state.set(target, next));
   }
   if (targetExpr.kind === "Member") {
     const extracted = extractStatePath(targetExpr, ctx);
@@ -45374,64 +52433,96 @@ function evaluateSyntheticAssign(args, ctx) {
           parent = parent?.[extracted.path[i]];
         }
         if (parent && typeof parent === "object") {
+          const bag = parent;
           const key22 = extracted.path[extracted.path.length - 1];
-          if (FORBIDDEN_PROPERTY_NAMES.has(key22)) return null;
-          const current2 = parent[key22];
-          const next2 = applyAssignOp(op, current2, rhs);
-          parent[key22] = next2;
-          ctx.notify?.();
-          return next2;
+          if (FORBIDDEN_PROPERTY_NAMES.has(key22)) return { kind: "refused" };
+          return commit(bag[key22], (next) => {
+            bag[key22] = next;
+            ctx.notify?.();
+          });
         }
       }
-      const current = readAtPath(rootValue, extracted.path);
-      const next = applyAssignOp(op, current, rhs);
-      ctx.state.setPath(extracted.name, extracted.path, next);
-      return next;
+      return commit(
+        readAtPath(rootValue, extracted.path),
+        (next) => ctx.state.setPath(extracted.name, extracted.path, next)
+      );
     }
     const storePath = extractStorePath(targetExpr, ctx);
     if (storePath) {
-      const current = readAtPath(ctx.state.get(storePath.atom), storePath.path);
-      const next = applyAssignOp(op, current, rhs);
-      ctx.state.setPath(storePath.atom, storePath.path, next);
-      return next;
+      return commit(
+        readAtPath(ctx.state.get(storePath.atom), storePath.path),
+        (next) => ctx.state.setPath(storePath.atom, storePath.path, next)
+      );
     }
     const root = evaluate(targetExpr.object, ctx);
     const key2 = targetExpr.computed ? evaluate(targetExpr.computed, ctx) : targetExpr.property;
     if (root && typeof root === "object" && key2 != null) {
-      if (FORBIDDEN_PROPERTY_NAMES.has(String(key2))) return null;
-      const current = root[String(key2)];
-      const next = applyAssignOp(op, current, rhs);
-      root[String(key2)] = next;
-      return next;
+      const prop2 = String(key2);
+      if (FORBIDDEN_PROPERTY_NAMES.has(prop2)) return { kind: "refused" };
+      const object = root;
+      return commit(object[prop2], (next) => {
+        object[prop2] = next;
+      });
     }
-    return rhs;
+    return { kind: "unresolved" };
   }
   if (targetExpr.kind === "Identifier") {
     const name = targetExpr.name;
     if (ctx.loopVars.has(name)) {
-      const current2 = ctx.loopVars.get(name);
-      const next2 = applyAssignOp(op, current2, rhs);
-      ctx.loopVars.set(name, next2);
-      return next2;
+      return commit(ctx.loopVars.get(name), (next) => ctx.loopVars.set(name, next));
     }
     if (ctx.bindings.has(name) || ctx.mutableBindings.has(name)) {
-      const current2 = ctx.mutableBindings.has(name) ? ctx.mutableBindings.get(name) : ctx.bindings.get(name)();
-      const next2 = applyAssignOp(op, current2, rhs);
-      ctx.mutableBindings.set(name, next2);
-      return next2;
+      const current = ctx.mutableBindings.has(name) ? ctx.mutableBindings.get(name) : ctx.bindings.get(name)();
+      return commit(current, (next) => ctx.mutableBindings.set(name, next));
     }
-    const current = ctx.loopVars.get(name);
-    const next = applyAssignOp(op, current, rhs);
-    ctx.loopVars.set(name, next);
-    return next;
+    return commit(ctx.loopVars.get(name), (next) => ctx.loopVars.set(name, next));
   }
-  return rhs;
+  return { kind: "unresolved" };
+}
+function logicalAssignKeepsTarget(op, current) {
+  switch (op) {
+    case "&&=":
+      return !current;
+    case "||=":
+      return Boolean(current);
+    case "??=":
+      return current != null;
+  }
+}
+function isLogicalAssignOp(op) {
+  return op === "&&=" || op === "||=" || op === "??=";
+}
+function evaluateSyntheticAssign(args, ctx) {
+  const [targetExpr, valueExpr, opExpr] = args;
+  if (!targetExpr || !valueExpr) return null;
+  const op = opExpr && opExpr.kind === "Literal" ? String(opExpr.value ?? "=") : "=";
+  if (isLogicalAssignOp(op)) {
+    const outcome2 = updateAssignmentTarget(
+      targetExpr,
+      ctx,
+      (current) => logicalAssignKeepsTarget(op, current) ? { next: current, write: false } : { next: evaluate(valueExpr, ctx), write: true }
+    );
+    if (outcome2.kind === "updated") return outcome2.next;
+    if (outcome2.kind === "refused") return null;
+    return evaluate(valueExpr, ctx);
+  }
+  const rhs = evaluate(valueExpr, ctx);
+  const outcome = updateAssignmentTarget(targetExpr, ctx, (current) => ({
+    next: applyAssignOp(op, current, rhs),
+    write: true
+  }));
+  if (outcome.kind === "updated") return outcome.next;
+  return outcome.kind === "refused" ? null : rhs;
 }
 function readAtPath(target, path) {
   let cursor = target;
   for (const segment of path) {
     if (cursor == null) return void 0;
     if (Array.isArray(cursor)) {
+      if (segment === "length") {
+        cursor = cursor.length;
+        continue;
+      }
       const idx = Number(segment);
       cursor = Number.isNaN(idx) ? void 0 : cursor[idx];
       continue;
@@ -45449,44 +52540,13 @@ function applyIncrement(args, ctx, mode) {
   if (!targetExpr) return null;
   const op = opExpr && opExpr.kind === "Literal" ? String(opExpr.value ?? "++") : "++";
   const delta = op === "--" ? -1 : 1;
-  if (targetExpr.kind === "StateRef") {
-    const target = resolveStateAlias(ctx, targetExpr.name);
-    const current = toNumber(ctx.state.get(target));
-    const next = current + delta;
-    ctx.state.set(target, next);
-    return mode === "prefix" ? next : current;
-  }
-  if (targetExpr.kind === "Member") {
-    const extracted = extractStatePath(targetExpr, ctx);
-    if (extracted) {
-      const current = toNumber(readAtPath(ctx.state.get(extracted.name), extracted.path));
-      const next = current + delta;
-      ctx.state.setPath(extracted.name, extracted.path, next);
-      return mode === "prefix" ? next : current;
-    }
-  }
-  if (targetExpr.kind === "Identifier") {
-    const name = targetExpr.name;
-    if (ctx.loopVars.has(name)) {
-      const current2 = toNumber(ctx.loopVars.get(name));
-      const next2 = current2 + delta;
-      ctx.loopVars.set(name, next2);
-      return mode === "prefix" ? next2 : current2;
-    }
-    if (ctx.bindings.has(name) || ctx.mutableBindings.has(name)) {
-      const current2 = toNumber(
-        ctx.mutableBindings.has(name) ? ctx.mutableBindings.get(name) : ctx.bindings.get(name)()
-      );
-      const next2 = current2 + delta;
-      ctx.mutableBindings.set(name, next2);
-      return mode === "prefix" ? next2 : current2;
-    }
-    const current = toNumber(ctx.loopVars.get(name));
-    const next = current + delta;
-    ctx.loopVars.set(name, next);
-    return mode === "prefix" ? next : current;
-  }
-  return null;
+  let old = 0;
+  const outcome = updateAssignmentTarget(targetExpr, ctx, (current) => {
+    old = toNumber(current);
+    return { next: old + delta, write: true };
+  });
+  if (outcome.kind !== "updated") return null;
+  return mode === "prefix" ? outcome.next : old;
 }
 function evaluateSyntheticPostfix(args, ctx) {
   return applyIncrement(args, ctx, "postfix");
@@ -46064,7 +53124,7 @@ function applyUserOverrides(node, overrides) {
   const positional = [...node.positional];
   const named = { ...node.named };
   for (const [name, value] of overrides) {
-    const index = node.decl.params.findIndex((p) => p.name === name);
+    const index = node.decl.params.findIndex((p) => (p.publicName ?? p.name) === name);
     if (index >= 0) {
       while (positional.length <= index) positional.push(void 0);
       positional[index] = value;
@@ -46647,7 +53707,7 @@ class Renderer {
         ctx.trackedState = outerTracker;
         for (const dep of instanceDeps) outerTracker.add(dep);
       }
-      const { value, effects, hooks } = evaluated;
+      const { value, effects, hooks: hooks2 } = evaluated;
       if (this.profiling) {
         this.profile(
           instancePath,
@@ -46664,7 +53724,7 @@ class Renderer {
         this.options.mountInstanceEffects(instancePath, effects, ctxRef);
         if (effects.length > 0) this.instancesWithEffects.add(instancePath);
       }
-      if (hooks > 0) this.instancesWithHooks.add(instancePath);
+      if (hooks2 > 0) this.instancesWithHooks.add(instancePath);
       this.memoCache.set(instancePath, {
         positional: node.positional,
         named: node.named,
@@ -46684,7 +53744,7 @@ class Renderer {
   /** Prop records for a user component instance, or `undefined` when off. */
   userProps(node, overrides) {
     if (!this.captureProps) return void 0;
-    const names = node.decl.params.map((p, i) => p.name || (p.pattern ? `{pattern ${i}}` : `#${i}`));
+    const names = node.decl.params.map((p, i) => p.publicName ?? (p.name || (p.pattern ? `{pattern ${i}}` : `#${i}`)));
     return this.buildPropRecords(names, node.positional, [], node.named, void 0, overrides);
   }
   renderComponent(node, path) {
@@ -47187,6 +54247,8 @@ function runEffectBody(decl, ctx, mounted2, options) {
     for (const stmt of decl.body.body) {
       runStatement(stmt, ctx, mounted2, options);
     }
+  } catch (err) {
+    if (!(err instanceof ReturnSignal)) throw err;
   } finally {
     ctx.cleanupSink = priorCleanupSink;
     if (restoreAliases) {
@@ -47249,6 +54311,8 @@ function runStatement(stmt, ctx, mounted2, options) {
     case "DestructureStatement":
       runControlFlowStatement(stmt, ctx);
       return void 0;
+    case "Return":
+      throw new ReturnSignal(stmt.argument ? evaluate(stmt.argument, ctx) : void 0);
     default:
       return void 0;
   }
@@ -65068,6 +72132,23 @@ class AktionElement extends HTMLElement {
      * `sourceId` getter so HMR / host tooling can target the right instances.
      */
     __publicField(this, "compiledSourceId", null);
+    /**
+     * The AST of the compiled program currently mounted, kept after
+     * `pendingCompiled` is consumed. A re-plan that does not replace the program
+     * — a reconnect, a DevTools reload — plans from (a shallow copy of) this
+     * instead of re-parsing `currentResponse`: for a linked program that text is
+     * only a re-print of the AST (or, from older plugins, the entry module
+     * alone), and re-parsing it lost the imported modules or demoted imported
+     * components to actions. Cleared by every path that replaces the program.
+     */
+    __publicField(this, "compiledProgram", null);
+    /**
+     * Original text of each module of the mounted compiled program, by
+     * `program.sources` index (`CompiledProgram.sourcesContent`). DevTools shows
+     * these — with the line numbers every `loc` refers to — instead of the
+     * runnable `currentResponse`.
+     */
+    __publicField(this, "compiledSourcesContent", null);
     __publicField(this, "renderScheduled", false);
     /** True when the program text changed and the runtime needs a re-plan. */
     __publicField(this, "programDirty", true);
@@ -65120,6 +72201,8 @@ class AktionElement extends HTMLElement {
      * program triggers, and are merged into the error banner + `error` event.
      */
     __publicField(this, "srcDiagnostics", []);
+    /** The same `src` diagnostics with their positions, for the `error` event. */
+    __publicField(this, "srcErrors", []);
     /**
      * Monotonic token guarding overlapping `src` loads. A rapid `src` change
      * (or a reconnect mid-fetch) bumps the token so a stale in-flight load
@@ -65501,13 +72584,13 @@ class AktionElement extends HTMLElement {
     }
     this.currentResponse = text;
     this.chunked = false;
-    this.pendingCompiled = null;
-    this.compiledSourceId = null;
+    this.forgetCompiled();
     this.programDirty = true;
     this.state.rebind([]);
     this.renderer.reset();
     this.parseErrors = [];
     this.srcDiagnostics = [];
+    this.srcErrors = [];
     this.scheduleRender();
   }
   /**
@@ -65584,13 +72667,13 @@ class AktionElement extends HTMLElement {
   loadSnapshot(payload) {
     this.currentResponse = payload.programText;
     this.chunked = false;
-    this.pendingCompiled = null;
-    this.compiledSourceId = null;
+    this.forgetCompiled();
     this.programDirty = true;
     this.state.rebind([]);
     this.renderer.reset();
     this.parseErrors = [];
     this.srcDiagnostics = [];
+    this.srcErrors = [];
     this.state.hydrate(payload.state);
     this.scheduleRender();
   }
@@ -65617,11 +72700,14 @@ class AktionElement extends HTMLElement {
     this.chunked = false;
     this.compiledSourceId = compiled.path;
     this.pendingCompiled = { ...compiled.program, errors: [...compiled.program.errors] };
+    this.compiledProgram = compiled.program;
+    this.compiledSourcesContent = compiled.sourcesContent ?? null;
     this.programDirty = true;
     this.state.rebind([]);
     this.renderer.reset();
     this.parseErrors = [];
     this.srcDiagnostics = [];
+    this.srcErrors = [];
     if (state) this.state.hydrate(state);
     this.scheduleRender();
   }
@@ -65631,6 +72717,18 @@ class AktionElement extends HTMLElement {
    */
   get sourceId() {
     return this.compiledSourceId;
+  }
+  /**
+   * Drop every trace of a mounted compiled program — the pending AST, the
+   * retained one, its module texts and its id — because the program is being
+   * replaced through the string path. Without this a not-yet-rendered
+   * `mountCompiled` (or the retained AST) could win over the new text.
+   */
+  forgetCompiled() {
+    this.pendingCompiled = null;
+    this.compiledSourceId = null;
+    this.compiledProgram = null;
+    this.compiledSourcesContent = null;
   }
   /** Current `src` attribute value, or `null` when none is set. */
   get src() {
@@ -65655,6 +72753,7 @@ class AktionElement extends HTMLElement {
   async loadFromSrc(src) {
     const token = this.srcLoadToken += 1;
     this.srcDiagnostics = [];
+    this.srcErrors = [];
     let entryUrl;
     try {
       const base = typeof document !== "undefined" ? document.baseURI : void 0;
@@ -65692,7 +72791,9 @@ class AktionElement extends HTMLElement {
         path: entryUrl
       })
     );
-    this.srcDiagnostics = result.diagnostics.filter((d) => d.severity !== "warning").map((d) => d.line > 0 ? `Line ${d.line}: ${d.message}` : d.message);
+    const linkErrors = result.diagnostics.filter((d) => d.severity !== "warning");
+    this.srcDiagnostics = linkErrors.map((d) => d.line > 0 ? `Line ${d.line}: ${d.message}` : d.message);
+    this.srcErrors = linkErrors.map((d) => ({ line: d.line, column: d.column, message: d.message }));
   }
   /** A `src` load is stale if a newer one started or the element detached. */
   isStaleSrcLoad(token) {
@@ -65726,6 +72827,8 @@ class AktionElement extends HTMLElement {
     if (text === "") return;
     this.currentResponse += text;
     this.chunked = true;
+    this.compiledProgram = null;
+    this.compiledSourcesContent = null;
     this.programDirty = true;
     this.scheduleRender();
   }
@@ -65784,14 +72887,14 @@ class AktionElement extends HTMLElement {
   clear() {
     this.currentResponse = "";
     this.chunked = false;
-    this.pendingCompiled = null;
-    this.compiledSourceId = null;
+    this.forgetCompiled();
     this.state.rebind([]);
     this.effectRunner.reset();
     this.renderer.reset();
     this.programDirty = true;
     this.parseErrors = [];
     this.srcDiagnostics = [];
+    this.srcErrors = [];
     this.errorEl.hidden = true;
     this.errorEl.replaceChildren();
     this.rootEl.replaceChildren();
@@ -66019,12 +73122,13 @@ class AktionElement extends HTMLElement {
   devtoolsSources() {
     const paths = this.devtoolsProgram?.sources;
     const entry = this.compiledSourceId ?? "<inline>";
+    const contents = this.compiledSourcesContent;
     if (!paths || paths.length === 0) {
-      return [{ path: entry, text: this.currentResponse }];
+      return [{ path: entry, text: contents?.[0] ?? this.currentResponse }];
     }
     return paths.map((path, index) => ({
       path,
-      text: index === 0 ? this.currentResponse : ""
+      text: contents?.[index] ?? (index === 0 ? this.currentResponse : "")
     }));
   }
   /**
@@ -66039,7 +73143,7 @@ class AktionElement extends HTMLElement {
   devtoolsAnalyze(text) {
     const source = text ?? this.currentResponse;
     try {
-      const program = parse(source);
+      const program = text === void 0 && this.compiledProgram !== null ? { ...this.compiledProgram, errors: [...this.compiledProgram.errors] } : parse(source);
       const schemaErrors = validateProgramSchema(program, this.library);
       const diagnostics = describeDiagnostics({
         parse: [...program.errors, ...schemaErrors],
@@ -66833,8 +73937,9 @@ class AktionElement extends HTMLElement {
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail)
     });
     const compiled = this.pendingCompiled;
-    const program = compiled ?? parse(this.currentResponse, { streaming: this.streaming || this.chunked });
-    this.lenientTail = compiled === null && program.openLiteral === true;
+    const retained = compiled === null && this.compiledProgram !== null ? { ...this.compiledProgram, errors: [...this.compiledProgram.errors] } : null;
+    const program = compiled ?? retained ?? parse(this.currentResponse, { streaming: this.streaming || this.chunked });
+    this.lenientTail = compiled === null && retained === null && program.openLiteral === true;
     this.pendingCompiled = null;
     const schemaErrors = validateProgramSchema(program, this.library);
     if (schemaErrors.length > 0) {
@@ -66873,9 +73978,10 @@ class AktionElement extends HTMLElement {
     for (const error of program.errors) {
       this.reportDevtoolsError("plan", error.message, `line ${error.line}`);
     }
-    if (program.errors.length > 0 && !this.streaming) {
+    const errors = [...program.errors, ...this.srcErrors];
+    if (errors.length > 0 && !this.streaming) {
       this.dispatchEvent(new CustomEvent("error", {
-        detail: { errors: program.errors },
+        detail: { errors },
         bubbles: true,
         composed: true
       }));

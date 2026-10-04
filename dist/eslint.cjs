@@ -457,15 +457,13 @@ const aktionProcessor = {
   }
 };
 const aktionRecommendedRules = {
-  // GENUINE GRAMMAR INCOMPATIBILITY: `parseObjectProps` in
-  // `src/parser/parser.ts` accepts a `key: value` entry or a bare
-  // property-value shorthand (`{ foo }` for `{ foo: foo }`) but has no
-  // production at all for ES6 METHOD shorthand (`{ onClick() { … } }`) — the
-  // token immediately after an object key is either `:` or a `,`/`}` that
-  // closes the property-value-shorthand case; anything else (e.g. a `(`
-  // opening a method's parameter list) is a parse error. `object-shorthand`'s
-  // autofix rewrites `onClick: () => { … }` handlers into `onClick() { … }`,
-  // which is valid JS/TS but an Aktion parse error.
+  // FORMERLY A GRAMMAR INCOMPATIBILITY, KEPT OFF: `object-shorthand`'s autofix
+  // rewrites a `key: function (…) { … }` handler into method shorthand
+  // (`{ onClick() { … } }`). That used to be a parse error; since the parser
+  // widening (2026-10-02) it parses to the same `Lambda` handler
+  // (`tests/eslint-corpus-sweep.test.ts` pins the round trip). The override is
+  // kept so existing `.aktion` corpora are not restyled by an upgrade; the
+  // TypeScript preset below enforces the `properties` form instead.
   "object-shorthand": "off",
   // GENUINE GRAMMAR INCOMPATIBILITY: `parseExportStatement` in
   // `src/parser/parser.ts` throws an explicit parse error on `export { … }`
@@ -532,6 +530,157 @@ const aktionRecommendedRules = {
   // corpus with a `case N: return …` shaped switch statement.
   "unicorn/switch-case-braces": "off"
 };
+const aktionTypeScriptRules = {
+  // RECONFIGURED, not off: method shorthand (`{ onClick() { … } }`) parses to
+  // the same handler since the parser widening, but the guide keeps handlers in
+  // property form; `properties` enforces only `{ title }` for `{ title: title }`,
+  // which the JS-semantics layer keeps working after renaming locals (W1).
+  "object-shorthand": ["error", "properties"],
+  // GENUINE GRAMMAR INCOMPATIBILITY, reconfigured rather than off: a braced
+  // case body parses as an object literal (no `BlockStatement` production, see
+  // above), so unicorn's default `always` corrupts every switch it fixes, while
+  // `avoid` only ever REMOVES braces. It does not report braces around a body
+  // that declares something (`case 1: { const y = x … }`), which still fails
+  // to parse.
+  "unicorn/switch-case-braces": ["error", "avoid"],
+  // GENUINE GRAMMAR INCOMPATIBILITY: the fix creates an `export { … } from …`
+  // list, which `parseExportStatement` rejects (see above).
+  "unicorn/prefer-export-from": "off",
+  // GENUINE GRAMMAR INCOMPATIBILITY: the fix creates a tagged template
+  // (`` String.raw`…` ``), which the parser rejects (see above).
+  "unicorn/prefer-string-raw": "off",
+  // SEMANTIC DIVERGENCE: the fix turns `const count = cart.count` into
+  // `const { count } = cart`, and destructuring a `$store`/`$form` handle reads
+  // nothing (measured: `null`) where the member access reads the field.
+  "prefer-destructuring": "off",
+  // DSL-IDIOM FALSE POSITIVE: the premise (build the Set once, look up many
+  // times) does not hold — a module-level binding re-seeds from its
+  // initialiser on every render (`resetMutableBindings`), so the Set is rebuilt
+  // as often as the array it replaces.
+  "unicorn/prefer-set-has": "off",
+  // SEMANTIC DIVERGENCE: the fix hoists a nested block's statements to the
+  // function body, and a `$x = …` at the top level of a component body
+  // declares per-instance state initialised ONCE (`evaluateUserComponent`),
+  // where the same statement inside a block assigns on every render.
+  "unicorn/prefer-early-return": "off",
+  // SEMANTIC DIVERGENCE: the fix swaps `window` for `globalThis`; both resolve
+  // through the host-global passthrough, but an explicit access policy
+  // (`setGlobalAccessPolicy(["window", …])`) admits only the names it lists,
+  // so the rewrite can turn a permitted read into a blocked one.
+  "unicorn/prefer-global-this": "off",
+  // CROSS-MODULE RENAME: exported names are only reported, but the fix renames
+  // an exported component's PARAMETERS (measured: `export function Row(btn)`
+  // → `Row(button)`), and parameter names are a component's named-argument
+  // API — a caller's `Row({ btn: x })` binds by parameter name
+  // (`invokeComponentDecl`).
+  "unicorn/name-replacements": "off",
+  // GENUINE GRAMMAR INCOMPATIBILITY: the fix prefixes the whole name, so
+  // `let $open = false` becomes `let is$open = false` (measured), which the
+  // lexer reads as `is` followed by the atom `$open` — a parse error.
+  "unicorn/consistent-boolean-name": "off",
+  // DSL-IDIOM FALSE POSITIVE: components are PascalCase calls without `new`
+  // (`Button(…)`, see above).
+  "new-cap": "off",
+  // DSL-IDIOM FALSE POSITIVE: a component tree is nested calls by
+  // construction (see above).
+  "unicorn/max-nested-calls": "off",
+  // DSL-IDIOM FALSE POSITIVE: `$app(…)` and `$effect(…)` are bare top-level
+  // calls by design (see above).
+  "unicorn/no-top-level-side-effects": "off",
+  // DSL-IDIOM FALSE POSITIVE: exported state is `export let $count = 0`, a
+  // `let` that importing modules write to.
+  "import-x/no-mutable-exports": "off",
+  // DSL-IDIOM FALSE POSITIVE: `$` state is declared with `let` and is often
+  // written only through a two-way binding (`Input("Name", { value: $name })`)
+  // or by an importing module — writes ESLint cannot see.
+  "prefer-const": "off"
+};
+const aktionPropsLiteralRule = {
+  meta: {
+    type: "problem",
+    docs: {
+      description: "Require the props of an Aktion library component call to be an object literal written at the call site, without spreads (needs type information)",
+      recommended: true
+    },
+    messages: {
+      propsNotLiteral: 'Aktion only reads props from an object literal written at the call site — inline it: Button("Go", { …opts }) is not supported either (spreads are dropped), so list the props.',
+      propsSpread: "Spreads inside component props are ignored by Aktion — list the props explicitly (`{ variant: extra.variant, … }`)."
+    },
+    schema: []
+  },
+  create(context) {
+    const { sourceCode } = context;
+    const services = sourceCode.parserServices;
+    const program = services?.program;
+    const nodeMap = services?.esTreeNodeToTSNodeMap;
+    if (!program || !nodeMap) return {};
+    const checker = program.getTypeChecker();
+    return {
+      CallExpression(node) {
+        const { callee } = node;
+        if (callee.type !== "Identifier" || !COMPONENT_NAME.test(callee.name)) return;
+        if (isDeclaredInModuleGraph(sourceCode, callee)) return;
+        const tsCall = nodeMap.get(node);
+        if (!tsCall) return;
+        const signature = checker.getResolvedSignature(tsCall);
+        if (!signature) return;
+        for (const [index, argument] of node.arguments.entries()) {
+          if (argument.type === "SpreadElement") return;
+          if (parameterAt(signature, index)?.getName() !== PROPS_PARAMETER) continue;
+          const bag = withoutTypeOnlyWrappers(argument);
+          if (bag.type !== "ObjectExpression") {
+            context.report({ node: argument, messageId: "propsNotLiteral" });
+            continue;
+          }
+          for (const property of bag.properties) {
+            if (property.type === "SpreadElement") {
+              context.report({ node: property, messageId: "propsSpread" });
+            }
+          }
+        }
+      }
+    };
+  }
+};
+const COMPONENT_NAME = /^[A-Z]/;
+const PROPS_PARAMETER = "props";
+const DSL_MODULE = "aktion-runtime/dsl";
+const TYPE_ONLY_WRAPPERS = /* @__PURE__ */ new Set([
+  "TSAsExpression",
+  "TSSatisfiesExpression",
+  "TSNonNullExpression",
+  "TSTypeAssertion"
+]);
+function withoutTypeOnlyWrappers(node) {
+  let current = node;
+  while (TYPE_ONLY_WRAPPERS.has(current.type)) {
+    current = current.expression;
+  }
+  return current;
+}
+function parameterAt(signature, index) {
+  const parameters = signature.getParameters();
+  const restIndex = parameters.length - 1;
+  const last = parameters[restIndex];
+  if (last !== void 0 && index >= restIndex && isRestParameter(last)) return last;
+  return parameters[index];
+}
+function isRestParameter(parameter) {
+  const declaration = parameter.valueDeclaration;
+  return declaration?.dotDotDotToken !== void 0;
+}
+function isDeclaredInModuleGraph(sourceCode, callee) {
+  for (let scope = sourceCode.getScope(callee); scope; scope = scope.upper) {
+    const variable = scope.set.get(callee.name);
+    if (variable) return variable.defs.some((definition) => !isDslImport(definition));
+  }
+  return false;
+}
+function isDslImport(definition) {
+  if (definition.type !== "ImportBinding") return false;
+  const parent = definition.parent;
+  return parent?.source?.value === DSL_MODULE;
+}
 const aktionEslintPlugin = {
   meta: {
     name: "aktion-runtime",
@@ -539,6 +688,9 @@ const aktionEslintPlugin = {
   },
   processors: {
     aktion: aktionProcessor
+  },
+  rules: {
+    "props-literal": aktionPropsLiteralRule
   }
 };
 const recommendedConfig = [
@@ -561,11 +713,31 @@ const recommendedConfig = [
     }
   }
 ];
+const aktionTypeScriptConfig = [
+  {
+    name: "aktion/typescript/plugin",
+    plugins: {
+      aktion: aktionEslintPlugin
+    }
+  },
+  {
+    name: "aktion/typescript/rules",
+    files: ["**/*.aktion.ts", "**/*.aktion.js"],
+    rules: {
+      ...aktionTypeScriptRules,
+      "aktion/props-literal": "error"
+    }
+  }
+];
 aktionEslintPlugin.configs = {
-  recommended: recommendedConfig
+  recommended: recommendedConfig,
+  typescript: aktionTypeScriptConfig
 };
 exports.aktionProcessor = aktionProcessor;
+exports.aktionPropsLiteralRule = aktionPropsLiteralRule;
 exports.aktionRecommendedRules = aktionRecommendedRules;
+exports.aktionTypeScriptConfig = aktionTypeScriptConfig;
+exports.aktionTypeScriptRules = aktionTypeScriptRules;
 exports.applyInsertions = applyInsertions;
 exports.computeLineStarts = computeLineStarts;
 exports.default = aktionEslintPlugin;

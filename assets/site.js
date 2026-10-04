@@ -90,6 +90,7 @@ const NAV_GROUPS = [
     label: "Resources",
     items: [
       { href: "live-demos.html", label: "Live demos" },
+      { href: "showcase.html", label: "Component showcase" },
       { href: "playground.html", label: "Playground" },
       { href: "visual-editor.html", label: "Visual editor" },
       { href: "chat-bot.html", label: "Chat bot", badge: "AI" },
@@ -142,6 +143,7 @@ const PAGE_KEYWORDS = {
   "theme-generator.html": "theme generator builder studio create custom theme colors palette radius typography fonts spacing shadows gradient brand $theme tokens live preview copy generate design system",
   "brand-themes.html": "brand themes token maps partial theme tokens settheme setresponse css variables rui prefix palette gallery side-by-side comparison brand palette",
   "live-demos.html": "demos catalog showcase mini-apps blocks components",
+  "showcase.html": "showcase kitchen sink every component all components one page gallery overview screenshot visual review pull request themes dark mode",
   "playground.html": "editor preview live",
   "visual-editor.html": "drag drop visual editor canvas inspector palette no-code wysiwyg",
   "chat-bot.html": "chat bot llm openrouter generate website builder app builder files images upload",

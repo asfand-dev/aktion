@@ -7,11 +7,12 @@ export interface PropSpec {
     optional?: boolean;
     /**
      * Aktion 0.5 §19.1 — at most one prop per spec may be marked
-     * positional. Authors may pass exactly one positional argument at the
-     * call site; it lands in this prop's slot regardless of its position in
-     * the `props` array. Every other prop must be provided as a named
-     * argument (`prop: value`). Specs without any `positional: true` flag
-     * reject every positional argument at evaluation time.
+     * positional. The FIRST positional argument of a call lands in this
+     * prop's slot regardless of its position in the `props` array (a spec
+     * without the flag uses slot 0 — see `findPositionalIndex`). Any further
+     * positional arguments fill the remaining unfilled slots in declaration
+     * order (`slotForNthPositional`), so `Callout("Saved", "success")` binds
+     * `title` (the flagged slot 1) and then `tone` (slot 0).
      */
     positional?: boolean;
     /**

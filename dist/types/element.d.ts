@@ -34,6 +34,23 @@ export declare class AktionElement extends HTMLElement {
      * `sourceId` getter so HMR / host tooling can target the right instances.
      */
     private compiledSourceId;
+    /**
+     * The AST of the compiled program currently mounted, kept after
+     * `pendingCompiled` is consumed. A re-plan that does not replace the program
+     * — a reconnect, a DevTools reload — plans from (a shallow copy of) this
+     * instead of re-parsing `currentResponse`: for a linked program that text is
+     * only a re-print of the AST (or, from older plugins, the entry module
+     * alone), and re-parsing it lost the imported modules or demoted imported
+     * components to actions. Cleared by every path that replaces the program.
+     */
+    private compiledProgram;
+    /**
+     * Original text of each module of the mounted compiled program, by
+     * `program.sources` index (`CompiledProgram.sourcesContent`). DevTools shows
+     * these — with the line numbers every `loc` refers to — instead of the
+     * runnable `currentResponse`.
+     */
+    private compiledSourcesContent;
     private renderScheduled;
     /** True when the program text changed and the runtime needs a re-plan. */
     private programDirty;
@@ -86,6 +103,8 @@ export declare class AktionElement extends HTMLElement {
      * program triggers, and are merged into the error banner + `error` event.
      */
     private srcDiagnostics;
+    /** The same `src` diagnostics with their positions, for the `error` event. */
+    private srcErrors;
     /**
      * Monotonic token guarding overlapping `src` loads. A rapid `src` change
      * (or a reconnect mid-fetch) bumps the token so a stale in-flight load
@@ -293,6 +312,13 @@ export declare class AktionElement extends HTMLElement {
      * element is driven by the streamed-string path.
      */
     get sourceId(): string | null;
+    /**
+     * Drop every trace of a mounted compiled program — the pending AST, the
+     * retained one, its module texts and its id — because the program is being
+     * replaced through the string path. Without this a not-yet-rendered
+     * `mountCompiled` (or the retained AST) could win over the new text.
+     */
+    private forgetCompiled;
     /** Current `src` attribute value, or `null` when none is set. */
     get src(): string | null;
     set src(value: string | null);

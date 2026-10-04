@@ -9865,7 +9865,9 @@ function a11yPane(ctx, element) {
 function sourcePane(ctx, detail) {
   const line = detail.source?.line;
   if (!line || !ctx.app) return h("div", { class: "hint" }, "This instance carries no source position (it may come from a compiled program).");
-  const program = ctx.app.getProgram();
+  const moduleIndex = detail.source?.source ?? 0;
+  const sources = can(ctx.app, "getSources") ? ctx.app.getSources() : null;
+  const program = sources?.[moduleIndex]?.text || ctx.app.getProgram();
   const lines2 = ctx.memo("it:lines", [program], () => highlightLines(program));
   const from = Math.max(1, line - 6);
   const to = Math.min(lines2.length, line + 8);
@@ -18979,8 +18981,11 @@ function render$2(ctx) {
       } }),
       button({ label: errors > 0 ? "Apply anyway" : "Apply", size: "sm", variant: errors > 0 ? "danger" : "primary", icon: "play", kbd: "⌘ S", testid: "source-apply", disabled: !can(app, "setProgram"), onClick: () => applyDraft(ctx, ui.sourceDraft ?? text2) })
     ] : [
+      // Edit the RUNNABLE program (`getProgram()`): for a compiled mount
+      // the module text shown here may be TypeScript, or only the entry
+      // of a linked graph, and applying either would not run.
       canEdit ? button({ label: "Edit", size: "sm", icon: "edit", testid: "source-edit", onClick: () => {
-        ui.sourceDraft = active.text;
+        ui.sourceDraft = app.getProgram();
         ui.sourceDiff = null;
         ctx.refresh();
       } }) : null,

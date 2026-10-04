@@ -33,3 +33,44 @@ import { Linter } from 'eslint';
  * corruption the same way it was designed to.
  */
 export declare const aktionRecommendedRules: Linter.RulesRecord;
+/**
+ * Rule settings for Aktion modules AUTHORED IN TypeScript or JavaScript —
+ * `*.aktion.ts` and `*.aktion.js`. Those files never pass through
+ * `aktionProcessor`: to ESLint they are ordinary `.ts`/`.js` files, linted by
+ * whatever parser and (type-aware) rule set the consumer already applies to
+ * that extension. Aktion, however, compiles them by erasing the types and
+ * handing the result to the SAME parser and evaluator as `.aktion` source, so
+ * an autofix that is safe for JavaScript can still produce code Aktion cannot
+ * parse — or code that parses and then runs differently.
+ *
+ * The record is the subset of the downstream dcd-monorepo consumer's measured
+ * `.aktion` rule set (its root `eslint.aktion.js`, `aktionRules`, each entry
+ * checked against a 155-file corpus on aktion-runtime 0.8.0) that holds for
+ * erased TypeScript/JavaScript exactly as it does for `.aktion`. The parser and
+ * evaluator facts below were re-checked against this repo's own `src/`; the
+ * ones marked "measured" were run (the fix through ESLint, its output through
+ * `parse()` or the evaluator). Each entry is cited as one of:
+ *
+ * - **GENUINE GRAMMAR INCOMPATIBILITY** / **DSL-IDIOM FALSE POSITIVE** — as in
+ *   `aktionRecommendedRules` above.
+ * - **SEMANTIC DIVERGENCE** — the autofix's output parses, but the Aktion
+ *   evaluator computes something other than what JavaScript would, so the
+ *   "equivalent" rewrite silently changes behaviour.
+ * - **CROSS-MODULE RENAME** — the autofix renames, in the one file ESLint is
+ *   looking at, a name that other modules depend on, so they break.
+ *
+ * Every entry is `"off"` except `unicorn/switch-case-braces`, which is
+ * reconfigured instead. ESLint does not validate a rule that is off, so the
+ * `"off"` entries are inert where their plugin is not installed. The one
+ * enabled entry is not: a config applying this record needs
+ * `eslint-plugin-unicorn` registered under the `unicorn` namespace (XO and
+ * unicorn's own `configs.recommended` both do that), or ESLint rejects the
+ * config with `Could not find plugin "unicorn"`. Without unicorn, add a later
+ * block with `"unicorn/switch-case-braces": "off"` — the autofix it guards
+ * against cannot run without the plugin either.
+ *
+ * `aktion/props-literal` is not in this record because it is this package's
+ * own rule (`props-literal.ts`): `aktionTypeScriptConfig` in
+ * `src/eslint-api.ts` registers the plugin and enables it next to these.
+ */
+export declare const aktionTypeScriptRules: Linter.RulesRecord;

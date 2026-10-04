@@ -59,4 +59,4 @@ export { builtInThemes, builtInThemeFonts, resolveTheme, sanitiseThemeTokens, ty
  * tooling concern, and without it a Node host cannot validate an app split
  * across `import`ed modules (every imported name reads as unknown).
  */
-export { linkProgram, linkProject, resolveSpecifier, createMemoryResolver, type LinkResult, type LinkDiagnostic, type ModuleResolver, type LinkProjectOptions, type LinkProjectResult, } from './compiler/index.js';
+export { linkProgram, linkProject, resolveSpecifier, createMemoryResolver, nativeImportMessage, moduleLanguage, isAktionModulePath, isNativeModulePath, DSL_MODULE_ID, aktionFrontend, javascriptFrontend, defaultFrontends, compileJavaScriptModule, normalizeComponentForms, checkJavaScriptSemantics, lowerJavaScriptSemantics, type LinkResult, type LinkDiagnostic, type LinkOptions, type LinkedModule, type ModuleResolver, type LinkProjectOptions, type LinkProjectResult, type ModuleLanguage, type ModuleFrontend, type ModuleFrontends, type FrontendResult, } from './compiler/index.js';

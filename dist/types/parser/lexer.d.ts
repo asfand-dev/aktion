@@ -38,6 +38,13 @@ export type TemplatePart = {
     source: string;
     line: number;
     column: number;
+    /**
+     * Index in the tokenized text of `source`'s first character (just past
+     * the `${`). `source` is a verbatim slice of the input, so this is what
+     * lets the parser carry {@link TokenizeOptions.softNewlines} into the
+     * interpolation's own sub-parse.
+     */
+    offset?: number;
 };
 export interface Token {
     type: TokenType;
@@ -91,6 +98,20 @@ export interface TokenizeOptions {
      * close it.)
      */
     streaming?: boolean;
+    /**
+     * Offsets (indices into `source`) of `\n` characters that are NOT line
+     * terminators for the grammar: the lexer emits no `Newline` token for them,
+     * but still advances the line counter, so every position after them stays
+     * exact.
+     *
+     * Used by the TypeScript frontend. It blanks type annotations with spaces
+     * and keeps their line breaks, so a newline that sat inside a multi-line type
+     * (`foo<⏎ Bar⏎>(1)`, `const o: {⏎ a: number⏎} = …`) would otherwise end the
+     * statement it is part of. Any other offset in the set is ignored. Only
+     * `\n` offsets are expected; an offset of a U+2028 / U+2029 line separator
+     * is honoured the same way.
+     */
+    softNewlines?: ReadonlySet<number>;
 }
 /**
  * Tokenize `source`. When `comments` is passed, every `//` line comment and
