@@ -17,6 +17,20 @@ Each entry is dated and summarises what was added, changed, or fixed.
 - Pull requests now get full-page screenshots of the showcase (desktop light,
   desktop dark and mobile) in a single comment that updates on every push, so
   a change to any component shows up in review.
+## 2026-10-03
+
+### DataGrid: A Toolbar Button Can Close the Column Panel It Opened
+
+- Fixed the column-settings panel not closing when the button that opened it
+  was pressed a second time. With `columnMenuButton: false`, a
+  `columnMenuAnchor` and a bound `columnMenuOpen`, pressing the anchor counted
+  as a click outside the panel: the grid closed it on `mousedown`, and the
+  button's own `click` then toggled it straight back open, so the button could
+  only ever open the panel. When `columnMenuButton` is `false`, a press on the
+  element named by `columnMenuAnchor`, or anything inside it, is no longer
+  treated as an outside click. With the built-in button shown the anchor is
+  only a placement hint, so nothing changes there. Any other press outside the
+  panel still closes it.
 
 ## 2026-10-01
 
