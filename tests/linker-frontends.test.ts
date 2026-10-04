@@ -208,6 +208,15 @@ describe("imports of native code", () => {
     expect(nativeImportMessage("./h.mts", "/src/h.mts")).toContain("rename it to h.aktion.ts");
   });
 
+  it("names the file without its `?query` or `#fragment` suffix", () => {
+    expect(nativeImportMessage("./h.js?raw", "/src/h.js?raw")).toContain("rename it to h.aktion.js");
+    expect(nativeImportMessage("./h.mts#top", "/src/h.mts#top")).toContain("rename it to h.aktion.ts");
+    expect(nativeImportMessage("./h.js?a=1#top", "/src/h.js?a=1#top")).toContain("rename it to h.aktion.js");
+    // A separator inside the suffix must not be taken for the end of the file name.
+    expect(nativeImportMessage("./h.js?to=/a/b", "/src/h.js?to=/a/b")).toContain("rename it to h.aktion.js");
+    expect(nativeImportMessage("./h.js", "C:\\src\\h.js?raw")).toContain("rename it to h.aktion.js");
+  });
+
   it("reserves `.aktion.tsx` / `.aktion.jsx` with their own message", () => {
     const res = link({ "/app.aktion": 'import { V } from "./v.aktion.tsx"\n$app(V())' }, "/app.aktion");
     expect(res.diagnostics.map((d) => d.code)).toEqual(["AKT-LINK-JSX"]);

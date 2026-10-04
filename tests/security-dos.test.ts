@@ -10,6 +10,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { render, cleanup, flush } from "../src/testing/index.js";
 import { highlightLine } from "../src/library/highlight.js";
+import { nativeImportMessage } from "../src/compiler/linker.js";
 
 afterEach(() => {
   cleanup();
@@ -78,6 +79,25 @@ describe("syntax highlighter", () => {
   it("still highlights a normal line", () => {
     const tokens = highlightLine(`const x = "hi";`, "javascript", { inBlockComment: false });
     expect(tokens.some((t) => t.cls === "keyword" || t.cls === "string")).toBe(true);
+  });
+});
+
+describe("native import diagnostic", () => {
+  it("bounds work on a path with a long run of `#`", () => {
+    // An import specifier is program text. Stripping its `?query` / `#fragment`
+    // with `/[?#].*$/` was the measured 6s case: a line break after the run
+    // stops `.*` short of `$`, so every `#` rescanned the rest of the string.
+    const hostile = `/src/h.js${"#".repeat(100000)}\n`;
+    const start = performance.now();
+    const message = nativeImportMessage("./h.js", hostile);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(1000);
+    // The file name is still recovered from the text before the first `#`.
+    expect(message).toContain("rename it to h.aktion.js");
+  });
+
+  it("still names an ordinary path", () => {
+    expect(nativeImportMessage("./h.ts", "/src/h.ts")).toContain("rename it to h.aktion.ts");
   });
 });
 

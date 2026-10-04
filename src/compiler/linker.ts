@@ -166,7 +166,10 @@ const LANGUAGE_LABEL: Record<ModuleLanguage, string> = {
 
 /** Last path segment of `path`, for diagnostics (`src/lib/utils.ts` → `utils.ts`). */
 function baseName(path: string): string {
-  const clean = path.replace(/[?#].*$/, "");
+  // Find the first `?`/`#` with `search` rather than `replace(/[?#].*$/, "")`:
+  // that pattern is quadratic on a long run of `#` ending in a line break.
+  const suffixStart = path.search(/[?#]/);
+  const clean = suffixStart < 0 ? path : path.slice(0, suffixStart);
   const slash = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"));
   return slash < 0 ? clean : clean.slice(slash + 1);
 }

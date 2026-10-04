@@ -5,6 +5,16 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-10-04
+
+### Security: Crafted Import Paths Can No Longer Stall the Compiler
+
+- Fixed a denial-of-service weakness (reported by CodeQL code scanning) in the
+  error shown when a program imports a native file such as `./utils.ts`. An
+  import path with a very long run of `#` characters could keep the compiler
+  busy for several seconds while it worked out the file name for the message;
+  the name is now found in a single pass.
+
 ## 2026-10-02
 
 ### Component Showcase Page
