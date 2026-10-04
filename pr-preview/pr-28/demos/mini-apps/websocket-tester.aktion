@@ -1,0 +1,72 @@
+// WebSocket Tester — a developer utility: connect to any WS endpoint, send payloads, watch frames.
+// Standalone tool for: API debugging, realtime feature development (a tiny Postman-for-sockets).
+// Uses: $socket (status / reconnect / send-queue), TypingIndicator, RelativeTime, CopyButton, sx.
+$app(Column([header, body], { gap: "lg", padding: "md" }))
+
+// Public echo server — whatever you send comes straight back.
+$url = "wss://echo.websocket.org"
+$active = "wss://echo.websocket.org"
+$draft = `{ "hello": "aktion" }`
+$sentCount = 0
+
+// reconnect: true retries dropped connections with exponential backoff;
+// messages sent while "connecting" are queued and flushed once open.
+$ws = $socket({ url: $active, reconnect: true, bufferSize: 30 })
+
+function connect() { if ($url) $active = $url }
+function send() {
+  if (!$draft) return
+  $ws.send($draft)
+  $sentCount = $sentCount + 1
+}
+
+statusTone = $ws.status == "open" ? "success" : $ws.status == "connecting" ? "warning" : "danger"
+
+header = PageHeader("WebSocket Tester", {
+  subtitle: "Inspect any WS endpoint — frames are queued while connecting and flushed on open",
+  badge: Badge($ws.status, { tone: statusTone, icon: $ws.status == "open" ? "plug-circle-check" : "plug" })
+})
+
+connectCard = Card([
+  SectionHeader("Endpoint", { eyebrow: "CONNECTION" }),
+  Row([
+    StackItem(Input("wsUrl", { value: $url, placeholder: "wss://…", onChange: v => { $url = v } }), { grow: 1 }),
+    Button("Connect", { variant: "primary", icon: "plug", onClick: connect })
+  ], { gap: "sm", align: "center" }),
+  DescriptionList([
+    DescriptionItem("Status", { value: $ws.status }),
+    DescriptionItem("Reconnect attempts", { value: String($ws.attempts ?? 0) }),
+    DescriptionItem("Frames received", { value: String($ws.messages.length) }),
+    DescriptionItem("Frames sent", { value: String($sentCount) })
+  ], { columns: 2 }),
+  Show($ws.status == "connecting", {
+    children: Row([TypingIndicator("server"), Text("Handshaking — sends are queued, not dropped", { variant: "small", tone: "muted" })], { gap: "sm", align: "center" })
+  }),
+  Button("Close connection", { variant: "secondary", icon: "power-off", onClick: () => $ws.close(), disabled: $ws.status == "closed" })
+], { animate: "fade-up" })
+
+composer = Card([
+  SectionHeader("Send a frame", { eyebrow: "COMPOSER", subtitle: "JSON is auto-parsed on the way back" }),
+  TextArea("draft", { rows: 4, value: $draft, placeholder: "Raw text or JSON…" }),
+  Row([
+    Button("Send", { variant: "primary", icon: "paper-plane", onClick: send, disabled: !$draft }),
+    CopyButton($draft, { label: "Copy payload" })
+  ], { gap: "sm" })
+], { animate: { preset: "fade-up", delay: 80 } })
+
+frameRow = (m, i) => Box([Column([
+  Row([
+    Badge("recv", { tone: "success", size: "xs", icon: "arrow-down" }),
+    StackItem(Text(typeof m == "string" ? m : JSON.stringify(m), { variant: "body", style: "font-family: ui-monospace, monospace; word-break: break-all;" }), { grow: 1 })
+  ], { gap: "sm", align: "start" })
+], { gap: "xs" })], { padding: "sm", border: "subtle", background: "surface", key: `f-${i}` })
+
+frames = Card([
+  SectionHeader("Received frames", { eyebrow: "LAST 30", actions: [Badge($ws.connected ? "listening" : "idle", { tone: $ws.connected ? "success" : "neutral", size: "sm" })] }),
+  Show($ws.messages.length > 0, {
+    fallback: EmptyState("Nothing received yet", { description: "Send a frame — the echo server returns it instantly.", icon: "satellite-dish" }),
+    children: ScrollArea([Column([...$ws.messages].reverse().map((m, i) => frameRow(m, i)), { gap: "xs" })], { maxHeight: "420px" })
+  })
+])
+
+body = Grid([Column([connectCard, composer], { gap: "lg" }), frames], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
