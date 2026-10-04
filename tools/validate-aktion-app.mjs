@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
  * Validate a MULTI-MODULE Aktion app: link the import graph from an entry file,
- * then schema-check the merged program against the component library.
+ * then schema-check the merged program against the component library. Modules
+ * may be written in `.aktion`, `.aktion.js` or `.aktion.ts` — each is compiled
+ * by the same frontend the Vite plugin uses, so the JavaScript-semantics rules
+ * (E1xx / W2xx) and TypeScript erasure errors are reported here too.
  *
  * `tools/validate-aktion.mjs` handles single, self-contained programs. An app
  * split across `import`ed modules needs the linker first, otherwise every
@@ -40,11 +43,14 @@ for (const [path, script] of [
   }
 }
 
-const { linkProgram, validateProgramSchema, defaultLibrary, getLintWarnings } =
+const { linkProgram, validateProgramSchema, defaultLibrary, defaultFrontends, getLintWarnings } =
   await import(pathToFileURL(bundle).href);
-const { createNodeResolver, loadAktionConfig, mergeResolveOptions } = await import(
+const { createNodeResolver, loadAktionConfig, mergeResolveOptions, tryLoadTypeScriptFrontend } = await import(
   pathToFileURL(pluginBundle).href
 );
+// `.aktion.ts` modules need `ts-blank-space`; without it each one reports what
+// to install instead of failing the whole run.
+const frontends = { ...defaultFrontends, typescript: await tryLoadTypeScriptFrontend() };
 
 // ---- arguments -------------------------------------------------------------
 // `--alias name=dir` and `--root dir` are repeatable; everything else is the entry.
@@ -100,7 +106,7 @@ try {
   // (path, resolver) type-checks at runtime but parses the *path string* as the
   // program — a graph with no imports, no components and therefore no findings,
   // which reports OK for every input including a file that does not link at all.
-  result = linkProgram(entrySource, entryPath, resolver);
+  result = linkProgram(entrySource, entryPath, resolver, { frontends });
 } catch (e) {
   console.log(`LINK ERROR: ${e && e.message ? e.message : String(e)}`);
   process.exit(1);
@@ -128,7 +134,9 @@ if (result.program) {
   }
 
   // The lint pass takes SOURCE, not a Program — so it runs over the entry and
-  // every module the linker loaded, each read from its own file.
+  // every module the linker loaded, on the Aktion text each module's frontend
+  // parsed (`LinkResult.modules[i].aktionSource`): for a `.aktion.ts` module
+  // that is the type-erased text, same lines and columns as the file.
   //
   // It used to run over `printProgram(result.program)` instead, and that was
   // silently vacuous. Three things went wrong at once, and each on its own was
@@ -142,31 +150,14 @@ if (result.program) {
   //      lint rule matches — so even a clean re-parse would miss the one warning
   //      that fires most often in real code.
   //
-  // Linting the real files is better than fixing the round-trip anyway: the line
-  // numbers point at what the author wrote, and the message can name the file.
-  const linted = new Set();
-  const lintSource = (path, source) => {
-    if (linted.has(path)) return;
-    linted.add(path);
-    const where = path === entryPath ? "" : `${path}: `;
-    for (const w of getLintWarnings(source, defaultLibrary)) {
+  // Linting each module's own text is better than fixing the round-trip anyway:
+  // the line numbers point at what the author wrote, and the message can name
+  // the file. The linker already read every module, so nothing is re-read.
+  for (const module of result.modules ?? []) {
+    const where = module.path === entryPath ? "" : `${module.path}: `;
+    for (const w of getLintWarnings(module.aktionSource, defaultLibrary)) {
       report(w.line, "warning", `${where}${w.message}`);
     }
-  };
-
-  lintSource(entryPath, entrySource);
-  for (const dep of result.dependencies ?? []) {
-    let source;
-    try {
-      source = readFileSync(dep, "utf8");
-    } catch {
-      // The linker already resolved and read it, so a failure here is a race,
-      // not a missing file. Reported rather than skipped: a module that cannot be
-      // re-read is a module nothing linted.
-      report(0, "error", `${dep}: could not be re-read for linting`);
-      continue;
-    }
-    lintSource(dep, source);
   }
 }
 

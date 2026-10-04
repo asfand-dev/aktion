@@ -3,6 +3,8 @@ import { render, renderCompiled, cleanup, coverage } from "../src/testing/index.
 import { linkProgram, defineCompiledProgram, COMPILED_PROGRAM_VERSION } from "../src/compiler/index.js";
 import type { ModuleResolver } from "../src/compiler/index.js";
 import { parse } from "../src/parser/index.js";
+import { defaultFrontends } from "../src/compiler/frontend.js";
+import { createTypeScriptFrontend } from "../src/plugin/typescript.js";
 
 /** Link an in-memory multi-file project the way the Vite plugin does. */
 function link(files: Record<string, string>, entry: string) {
@@ -530,5 +532,55 @@ describe("DSL coverage — brace lines are not instrumented", () => {
 
     const report = coverage.report();
     expect(report.files[0]!.lines[2]).toBeGreaterThan(0);
+  });
+});
+
+describe("DSL coverage — TypeScript modules", () => {
+  it("lands a `.aktion.ts` module's hits on its own path and TypeScript line numbers", async () => {
+    const files: Record<string, string> = {
+      "/p/app.aktion": 'import { Panel } from "./panel.aktion.ts"\n$app(Panel("hi"))',
+      "/p/panel.aktion.ts": [
+        "interface Props { label: string }", // 1
+        "export function Panel(label: string): unknown {", // 2
+        "  function decorate(s: string): string {", // 3
+        '    return "<" + s + ">"', // 4
+        "  }", // 5
+        "  return Text(decorate(label))", // 6
+        "}", // 7
+        "export function unused(): number {", // 8
+        "  return 1", // 9
+        "}", // 10
+      ].join("\n"),
+    };
+    const resolver: ModuleResolver = {
+      resolve: (spec, importer) => `${importer.slice(0, importer.lastIndexOf("/"))}/${spec.slice(2)}`,
+      load: (path) => files[path]!,
+    };
+    const result = linkProgram(files["/p/app.aktion"]!, "/p/app.aktion", resolver, {
+      frontends: { ...defaultFrontends, typescript: createTypeScriptFrontend() },
+    });
+    expect(result.diagnostics).toEqual([]);
+    const screen = renderCompiled(
+      defineCompiledProgram({
+        __aktionCompiled: COMPILED_PROGRAM_VERSION,
+        program: result.program,
+        source: files["/p/app.aktion"]!,
+        path: "/p/app.aktion",
+      }),
+    );
+    await screen.flush();
+    expect(screen.getByText("<hi>")).toBeDefined();
+
+    const panel = coverage.report().files.find((f) => f.path === "/p/panel.aktion.ts")!;
+    expect(panel).toBeDefined();
+    // `unused` never runs: its body (line 9) is the only hole. W3's synthetic
+    // `return`s carry no loc, so they add no phantom lines.
+    expect(panel.uncoveredLines).toEqual([9]);
+    const fn = (name: string) => panel.functions.find((f) => f.name === name);
+    expect(fn("Panel")!.hits).toBeGreaterThan(0);
+    // The nested function was lifted into a lambda (W2) but keeps its name and line.
+    expect(fn("decorate")).toMatchObject({ line: 3 });
+    expect(fn("decorate")!.hits).toBeGreaterThan(0);
+    expect(fn("unused")!.hits).toBe(0);
   });
 });

@@ -1959,6 +1959,63 @@ names canonical (the `aktion` binding + the `$state` names that `serializeState`
 trailing comma, and a syntax error in an **imported** module is reported as a
 link diagnostic rather than silently dropping that module's statements.
 
+### TypeScript and JavaScript modules
+
+A module can also be written in TypeScript (`.aktion.ts`) or JavaScript
+(`.aktion.js`). The three kinds import each other and share `$state`; the
+`.aktion` in the name is what makes a file an Aktion module (`store.ts` is host
+code, and importing it from a module is an error that names the file to rename).
+
+```ts aktion
+// src/app.aktion.ts
+import { $app, Button, Column, Text, type AktionNode } from "aktion-runtime/dsl";
+
+let $count = 0;
+
+function Counter(label: string): AktionNode {
+  return Button(`${label}: ${$count}`, { onClick: () => { $count = $count + 1; } });
+}
+
+export default $app(Column([Text("Typed Aktion"), Counter("Clicks")]));
+```
+
+- **Types are erased, not translated.** `ts-blank-space` (an optional peer —
+  `npm i -D ts-blank-space`) blanks every annotation with spaces, so errors,
+  coverage and DevTools point at the line and column you wrote.
+- **`aktion-runtime/dsl` types the built-ins** — every component (one overload
+  per way a call binds its arguments), hook and namespace — so `tsc` checks
+  component calls and props. The linker drops the import.
+- **JavaScript semantics, checked.** Aktion interprets the code under its own
+  rules, so `.aktion.ts` / `.aktion.js` modules are rewritten where that is safe
+  (each local gets its own name, nested functions become `const` functions in
+  place, every function body ends in `return`) and rejected where it is not —
+  `await`, `async`, `var`, `this`, a closure reading a variable reassigned after
+  it was created, in-place changes of a `$` atom, and more, each with a stable
+  code (`E101`–`E126`, `W201`–`W202`) at the exact line.
+- **Typed `.aktion` imports.** `aktion({ dts: true })` (or the `aktion-dts` bin)
+  writes `name.d.aktion.ts` declarations, so a `.aktion.ts` module can import
+  from a `.aktion` one with types.
+
+```js aktion
+// src/app.aktion.js — the same in JavaScript
+import { $app, Button, Column, Text } from "aktion-runtime/dsl";
+
+let $count = 0;
+
+function Counter(label) {
+  return Button(`${label}: ${$count}`, { onClick: () => { $count = $count + 1; } });
+}
+
+export default $app(Column([Text("Untyped, still checked"), Counter("Clicks")]));
+```
+
+Scaffold either with `npx create-aktion my-app --lang ts` (or `--lang js`), and
+see the [TypeScript guide](https://asfand-dev.github.io/aktion/typescript.html#aktion-ts)
+for the tsconfig, the rules, and what Aktion does differently from JavaScript.
+`.aktion.ts` modules are compiled by the Vite plugin and the Node compile
+helpers (`compileAktionFile`); the in-browser linker handles `.aktion` and
+`.aktion.js`.
+
 ### Vite plugin
 
 The `aktion-runtime/vite` plugin compiles `.aktion` files at build time so you
@@ -2014,11 +2071,13 @@ el.mountCompiled(defineCompiledProgram({ __aktionCompiled: 1, program, source, p
 | Import                          | Runs in | Purpose                                                                     |
 | ------------------------------- | ------- | --------------------------------------------------------------------------- |
 | `aktion-runtime`                | browser | `<aktion-app>` + `mountCompiled` + the browser-safe linker (`linkProject`)  |
-| `aktion-runtime/vite`           | Node    | the Vite/Rollup plugin (`aktion()`)                                         |
+| `aktion-runtime/vite`           | Node    | the Vite/Rollup plugin (`aktion()`), `compileAktionFile`, the TypeScript frontend, `emitAktionDeclarations` (also the `aktion-dts` bin) |
 | `aktion-runtime/language`       | Node    | DOM-free diagnostics / lint warnings / hover / completions / signature help / definition / references / rename / document symbols / semantic tokens / formatting / snippets, plus the parser, the schema validator, the linker, and the theme data (editors, LSP, CLIs) |
 | `aktion-runtime/test`           | browser / happy-dom | `render` / `renderComponent` → a `Screen` (queries, `screen.user`, `screen.state`), plus `waitFor` / `act` / `flush` / `within` / `axe` / `json` / `cleanup` |
 | `aktion-runtime/devtools`       | browser | the DevTools panel + inspector bridge (`el.connectDevtools()`)              |
 | `aktion-runtime/aktion-modules` | types   | ambient `*.aktion` module declarations                                      |
+| `aktion-runtime/dsl`            | types   | every built-in component, hook and namespace, for `.aktion.ts` modules      |
+| `aktion-runtime/dsl-globals`    | types   | the same names declared ambiently (a tsconfig without the DOM lib)          |
 | `aktion-runtime/skill`          | any     | the [agent skill](#agent-skill) entry point (`skills/aktion/SKILL.md`)       |
 | `aktion-runtime/system_prompt.txt` · `/system_prompt_chat.txt` | any | the two generated prompt texts, as package assets |
 

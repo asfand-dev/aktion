@@ -23,7 +23,10 @@ export default defineConfig({
     target: "node18",
     minify: false,
     rollupOptions: {
-      external: ["vite", "rollup", /^node:/, /^aktion-runtime/],
+      // `ts-blank-space` (an optional peer) and the TypeScript it loads are
+      // resolved from the user's install at runtime — never bundled: TypeScript
+      // is ~9 MB, and the eraser must parse with ts-blank-space's own copy.
+      external: ["vite", "rollup", /^node:/, /^aktion-runtime/, "ts-blank-space", "typescript"],
       // The entry exports both `aktionPlugin` and `default`; make it explicit
       // (ESM `import aktion from` / CJS `require(...).default`).
       output: { exports: "named" },

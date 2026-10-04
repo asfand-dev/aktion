@@ -1,0 +1,33 @@
+// The list card. `Async` branches on the `$todos` resource state (loading /
+// error / empty / data). A resource's `.data` is undefined until the first
+// response lands, so the rows are mapped from a guarded local.
+import {
+  Async,
+  Button,
+  Card,
+  Column,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  SectionHeader,
+} from "aktion-runtime/dsl";
+import { $todos } from "../store.aktion.js";
+import { TodoItem } from "./todo-item.aktion.js";
+
+export function TodoList() {
+  const items = $todos.data;
+  const rows = items ? items.map((todo) => TodoItem(todo)) : [];
+  return Card([
+    SectionHeader("Todos", {
+      eyebrow: "LIST",
+      subtitle: "Backed by a live REST API",
+      actions: [Button("Refresh", { onClick: () => $todos.refetch(), variant: "ghost", size: "sm", icon: "rotate" })],
+    }),
+    Async($todos, {
+      loading: LoadingState("Loading todos…"),
+      error: ErrorState("Couldn't load todos", { description: "The mock API may be waking up — hit Refresh." }),
+      empty: EmptyState("No todos yet", { description: "Add your first todo above.", icon: "list-check" }),
+      data: Column(rows, { gap: "s" }),
+    }),
+  ]);
+}

@@ -1,0 +1,26 @@
+{
+  // Type-checks the fixtures against the COMMITTED declarations with no build:
+  // `aktion-runtime/dsl` resolves to src/dsl/index.d.ts, whose relative
+  // `../compiler/runtime.js` import then reaches the real src/compiler/runtime.ts,
+  // so the `CompiledProgram` `$app` returns is the one `mountCompiled` takes.
+  // Extends the repo config because that relative import pulls src/ into the
+  // program, and src/ is only guaranteed to compile under the repo's flags.
+  // Run by tests/dsl-types.test.ts (`tsc -p tests/fixtures/dsl-types`).
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "rootDir": "../../..",
+    "types": [],
+    "allowImportingTsExtensions": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "paths": {
+      "aktion-runtime": ["../../../src/index.ts"],
+      "aktion-runtime/dsl": ["../../../src/dsl/index.d.ts"]
+    }
+  },
+  "include": [],
+  "files": ["main.ts", "app.aktion.ts", "surface.aktion.ts", "host-usage.dsl.ts", "negative.dsl.ts"]
+}

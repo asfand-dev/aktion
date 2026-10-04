@@ -1,21 +1,25 @@
 import { defineConfig } from "vite";
+import { copyFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import dts from "vite-plugin-dts";
 import type { Plugin } from "vite";
+
+/** `.aktion`, `.aktion.ts` and `.aktion.js` — every Aktion module kind. */
+const AKTION_MODULE = /\.aktion(?:\.[jt]s)?$/;
 
 function watchAktionFiles(): Plugin {
   return {
     name: "watch-aktion-files",
     configureServer(server) {
-      server.watcher.add("**/*.aktion");
+      server.watcher.add(["**/*.aktion", "**/*.aktion.ts", "**/*.aktion.js"]);
       server.watcher.on("change", (file) => {
-        if (file.endsWith(".aktion")) {
+        if (AKTION_MODULE.test(file)) {
           server.ws.send({ type: "full-reload" });
         }
       });
     },
     handleHotUpdate({ file, server }) {
-      if (file.endsWith(".aktion")) {
+      if (AKTION_MODULE.test(file)) {
         server.ws.send({ type: "full-reload" });
         return [];
       }
@@ -36,6 +40,13 @@ export default defineConfig({
       // `aktion-runtime/aktion-modules` export resolves.
       copyDtsFiles: true,
       rollupTypes: false,
+      // The ambient `aktion-runtime/dsl-globals` flavour is excluded from this
+      // repo's own tsconfig (its globals would leak into runtime source), so the
+      // program above never sees it — copy it next to the module flavour.
+      afterBuild: () => {
+        mkdirSync(resolve(__dirname, "dist/types/dsl"), { recursive: true });
+        copyFileSync(resolve(__dirname, "src/dsl/globals.d.ts"), resolve(__dirname, "dist/types/dsl/globals.d.ts"));
+      },
     }),
   ],
   build: {

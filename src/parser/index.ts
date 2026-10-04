@@ -15,3 +15,11 @@ export {
   isQuiescent,
   type FrontierResult,
 } from "./frontier.js";
+export {
+  LOCAL_BINDING_SYMBOL,
+  MODULE_LOCAL_SYMBOL,
+  authoredName,
+  localBindingBaseName,
+  moduleLocalBaseName,
+  moduleLocalSymbol,
+} from "./module-symbols.js";

@@ -497,7 +497,12 @@ function a11yPane(ctx: ViewContext, element: Element | null): Child {
 function sourcePane(ctx: ViewContext, detail: InstanceDetail): Child {
   const line = detail.source?.line;
   if (!line || !ctx.app) return h("div", { class: "hint" }, "This instance carries no source position (it may come from a compiled program).");
-  const program = ctx.app.getProgram();
+  // Show the module the instance was authored in: a compiled program's
+  // `getSources()` carries each module's original text, which is what the
+  // position refers to (the runnable `getProgram()` text is a re-print).
+  const moduleIndex = detail.source?.source ?? 0;
+  const sources = can(ctx.app, "getSources") ? ctx.app.getSources() : null;
+  const program = sources?.[moduleIndex]?.text || ctx.app.getProgram();
   const lines = ctx.memo("it:lines", [program], () => highlightLines(program));
   const from = Math.max(1, line - 6);
   const to = Math.min(lines.length, line + 8);

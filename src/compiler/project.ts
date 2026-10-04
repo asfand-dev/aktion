@@ -15,10 +15,11 @@
  * `fetch`; hosts can override it via the `fetch` option (used by tests).
  */
 
-import { parse } from "../parser/index.js";
 import { printProgram } from "../tooling/formatter.js";
-import type { Program } from "../parser/types.js";
-import { linkProgram, type LinkDiagnostic, type ModuleResolver } from "./linker.js";
+import type { ImportStatement, Program } from "../parser/types.js";
+import { defaultFrontends, DSL_MODULE_ID, type ModuleFrontends } from "./frontend.js";
+import { linkProgram, type LinkDiagnostic, type LinkedModule, type ModuleResolver } from "./linker.js";
+import { moduleLanguage } from "./module-kind.js";
 
 /** True for an absolute URL specifier (`https://…`, `http://…`, etc.). */
 function isUrl(spec: string): boolean {
@@ -100,6 +101,12 @@ export interface LinkProjectOptions {
    * tests / hosts that want a custom transport or to disable remote loading.
    */
   fetch?: (url: string) => Promise<string>;
+  /**
+   * How each module language is compiled — see `LinkOptions.frontends`.
+   * Defaults to `.aktion` + `.aktion.js`; pass a `typescript` frontend to link
+   * `.aktion.ts` modules in the page.
+   */
+  frontends?: ModuleFrontends;
 }
 
 export interface LinkProjectResult {
@@ -111,6 +118,8 @@ export interface LinkProjectResult {
   diagnostics: LinkDiagnostic[];
   /** Resolved paths/URLs of the imported modules (excludes the entry). */
   dependencies: string[];
+  /** Every linked module, in `program.sources` order — see `LinkResult.modules`. */
+  modules: LinkedModule[];
 }
 
 async function defaultFetch(url: string): Promise<string> {
@@ -120,6 +129,25 @@ async function defaultFetch(url: string): Promise<string> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.text();
+}
+
+/**
+ * The import statements of a module, found by compiling it with the frontend
+ * for its language. Parsing a `.aktion.ts` file as plain Aktion would drop
+ * every line a type annotation broke, imports included — so a module whose
+ * language has no frontend contributes no edges here (the linker reports it).
+ */
+function importsOf(source: string, path: string, frontends: ModuleFrontends): ImportStatement[] {
+  const language = moduleLanguage(path);
+  const frontend = language === null ? undefined : frontends[language];
+  if (!frontend) return [];
+  try {
+    return frontend.compile(source, path).program.statements.filter(
+      (s): s is ImportStatement => s.kind === "Import",
+    );
+  } catch {
+    return []; // a throwing frontend is diagnosed by the linker's own compile
+  }
 }
 
 /**
@@ -133,6 +161,7 @@ async function defaultFetch(url: string): Promise<string> {
 export async function linkProject(options: LinkProjectOptions): Promise<LinkProjectResult> {
   const { entry, files } = options;
   const fetchImpl = options.fetch ?? defaultFetch;
+  const frontends = options.frontends ?? defaultFrontends;
   const fetchDiagnostics: LinkDiagnostic[] = [];
 
   // Working copy: project files plus any URL sources we fetch. The sync linker
@@ -156,6 +185,8 @@ export async function linkProject(options: LinkProjectOptions): Promise<LinkProj
             column: 0,
             message: `Failed to fetch module "${path}": ${(err as Error).message ?? err}`,
             severity: "error",
+            path,
+            code: "AKT-LINK-FETCH",
           });
           return;
         }
@@ -164,17 +195,13 @@ export async function linkProject(options: LinkProjectOptions): Promise<LinkProj
       }
     }
 
-    let program: Program;
-    try {
-      program = parse(sources[path]!);
-    } catch {
-      return; // parse failure surfaces through the linker's own parse
-    }
     const children: Promise<void>[] = [];
-    for (const stmt of program.statements) {
-      if (stmt.kind !== "Import") continue;
+    for (const stmt of importsOf(sources[path]!, path, frontends)) {
+      if (stmt.source === DSL_MODULE_ID) continue; // built-ins: never fetched
       const resolved = resolveSpecifier(stmt.source, path);
-      if (resolved !== null) children.push(walk(resolved));
+      // Native modules are rejected by the linker without being read — so
+      // don't fetch them either.
+      if (resolved !== null && moduleLanguage(resolved) !== null) children.push(walk(resolved));
     }
     await Promise.all(children);
   }
@@ -184,15 +211,23 @@ export async function linkProject(options: LinkProjectOptions): Promise<LinkProj
       program: { statements: [], errors: [] },
       source: "",
       diagnostics: [
-        { line: 0, column: 0, message: `Entry module "${entry}" was not found.`, severity: "error" },
+        {
+          line: 0,
+          column: 0,
+          message: `Entry module "${entry}" was not found.`,
+          severity: "error",
+          path: entry,
+          code: "AKT-LINK-ENTRY",
+        },
       ],
       dependencies: [],
+      modules: [],
     };
   }
 
   await walk(entry);
 
-  const linked = linkProgram(sources[entry]!, entry, createMemoryResolver(sources));
+  const linked = linkProgram(sources[entry]!, entry, createMemoryResolver(sources), { frontends });
 
   let source: string;
   try {
@@ -206,5 +241,6 @@ export async function linkProject(options: LinkProjectOptions): Promise<LinkProj
     source,
     diagnostics: [...fetchDiagnostics, ...linked.diagnostics],
     dependencies: linked.dependencies,
+    modules: linked.modules,
   };
 }

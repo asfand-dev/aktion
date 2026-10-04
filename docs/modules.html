@@ -96,6 +96,8 @@
           scope</strong>. The files are <strong>linked in the browser</strong> &mdash;
           no build step &mdash; or
           <a href="#vite">ahead of time by the Vite plugin</a>, from the same linker.
+          A module can also be written in <a href="#languages">TypeScript or
+          JavaScript</a> (<code>.aktion.ts</code>, <code>.aktion.js</code>).
         </p>
       </header>
 
@@ -266,6 +268,34 @@ export function increment() {
         <code>hydrateState()</code>, and <code>applyDelta()</code> target.
       </p>
 
+      <h2 id="languages">Modules in TypeScript and JavaScript</h2>
+      <p>
+        The file name says which language a module is written in. All three compile
+        to the same program, import each other, and share <code>$</code> state:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>File</th><th>Language</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>counter.aktion</code></td><td>The Aktion DSL</td><td>Linked everywhere, including in the browser.</td></tr>
+          <tr><td><code>counter.aktion.js</code></td><td>JavaScript in the Aktion subset</td><td>Checked for code that would behave differently from JavaScript; linked everywhere.</td></tr>
+          <tr><td><code>counter.aktion.ts</code></td><td>The same, with TypeScript types</td><td>The types are erased by <code>ts-blank-space</code>, so it is compiled by the <a href="#vite">Vite plugin</a> and the Node compile helpers &mdash; not by the in-browser linker.</td></tr>
+          <tr><td><code>counter.ts</code>, <code>counter.js</code>, <code>.json</code>, <code>.css</code></td><td>Native code</td><td><strong>Not importable</strong> from an Aktion module: the import is refused with a message naming the file to rename.</td></tr>
+        </tbody>
+      </table>
+<pre><code>// store.aktion.ts
+export let $count = 0;
+export function increment(step: number = 1): void { $count = $count + step; }</code></pre>
+<pre><code>// app.aktion — imports the TypeScript module like any other
+import { $count, increment } from "./store.aktion.ts"
+$app(Button("n=" + $count, { onClick: () =&gt; increment() }))</code></pre>
+      <p>
+        <code>aktion-runtime/dsl</code> declares every built-in for TypeScript; an
+        Aktion module may import from it (in any language), only by the built-in&rsquo;s
+        own name. Writing modules in TypeScript, and what Aktion does differently from
+        JavaScript, is covered in the <a href="typescript.html#aktion-ts">TypeScript
+        guide</a>.
+      </p>
+
       <h2 id="specifiers">Where modules resolve from</h2>
       <p>
         A specifier can be relative, absolute (from the project root), or a full
@@ -315,6 +345,26 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
           In a bundled project, use relative specifiers only.
         </p>
       </div>
+      <p>
+        On the filesystem, a specifier that names no file is completed in this order:
+        <code>.aktion</code>, <code>.aktion.ts</code>, <code>.aktion.js</code>, then
+        <code>/index.aktion</code>, <code>/index.aktion.ts</code>,
+        <code>/index.aktion.js</code> &mdash; so <code>./store</code> finds
+        <code>store.aktion.ts</code>. A specifier that names a file exactly is not
+        completed (<code>./store.aktion</code> when only <code>store.aktion.ts</code>
+        exists reports <code>Did you mean "./store.aktion.ts"?</code>). The
+        <code>extensions</code> option replaces this list outright, so a project that
+        pins it must add the new suffixes itself.
+      </p>
+      <div class="callout warn">
+        <h4>Keep one language per module name</h4>
+        <p>
+          <strong><code>store.aktion</code> next to <code>store.aktion.ts</code> is
+          refused</strong>, whatever the specifier:
+          <code>"store.aktion" and "store.aktion.ts" both exist — keep one (TypeScript and Vite resolve "./store.aktion" to different files).</code>
+          TypeScript would type-check one file while the bundler built the other.
+        </p>
+      </div>
 
       <h2 id="entry">The entry file</h2>
       <p>
@@ -322,7 +372,10 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
         <code>app.aktion</code> in the playground. The entry is what defines the
         rendered root (a <code>$app(&hellip;)</code> statement, or the legacy
         <code>aktion = &hellip;</code> binding); imported files normally only
-        <em>declare and export</em>. The linker walks every <code>import</code> from
+        <em>declare and export</em>. <code>export default $app(&hellip;)</code> is the
+        same statement &mdash; it is what gives TypeScript a typed default export for
+        <code>import app from "./app.aktion.ts"</code>; any other
+        <code>export default</code> is an error. The linker walks every <code>import</code> from
         the entry, merges the whole graph into one program, and the runtime renders
         it &mdash; import cycles are fine (each file is merged once).
       </p>
@@ -363,6 +416,21 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
             <td><code>Greeting.aktion: Unexpected token &hellip;</code></td>
             <td>A <strong>dependency&rsquo;s own parse error</strong>, prefixed with its path.</td>
             <td>Fix the syntax in that file.</td>
+          </tr>
+          <tr>
+            <td><code>"./utils.ts" is not an Aktion module. Aktion modules end in .aktion, .aktion.ts or .aktion.js — rename it to utils.aktion.ts …</code></td>
+            <td>An import of <strong>native code</strong>. It is never read; host code passes such values in instead.</td>
+            <td>Rename the file to an Aktion suffix, or keep it native and pass values from the host.</td>
+          </tr>
+          <tr>
+            <td><code>"…" is a typescript Aktion module, but no typescript frontend is configured</code></td>
+            <td>A <code>.aktion.ts</code> module reached a linker without a TypeScript frontend &mdash; the in-browser linker, or a Node tool that did not pass one.</td>
+            <td>Build with <code>aktion-runtime/vite</code>, or pass <code>frontends: { typescript: await loadTypeScriptFrontend() }</code>.</td>
+          </tr>
+          <tr>
+            <td><code>E101</code> &hellip; <code>E126</code>, <code>W201</code>, <code>W202</code></td>
+            <td>A <code>.aktion.ts</code> / <code>.aktion.js</code> construct that Aktion would run differently from JavaScript.</td>
+            <td>See the <a href="typescript.html#aktion-ts-semantics">TypeScript guide</a>; each message says what to write instead.</td>
           </tr>
           <tr>
             <td><code>Entry module "app.aktion" was not found</code></td>
@@ -431,7 +499,7 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
       </p>
       <h3 id="vite-options">Plugin options</h3>
       <p>
-        <code>aktionPlugin(options?)</code> accepts three options, all optional:
+        <code>aktionPlugin(options?)</code> accepts these options, all optional:
       </p>
       <table class="signature-table">
         <thead>
@@ -455,6 +523,30 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
             <td><code>boolean</code></td>
             <td><code>false</code></td>
             <td>Promote linker <em>warnings</em> to build errors. Errors already fail the build either way.</td>
+          </tr>
+          <tr>
+            <td><code>alias</code>, <code>roots</code>, <code>extensions</code></td>
+            <td>see <code>AktionResolveOptions</code></td>
+            <td>&mdash;</td>
+            <td>Map package-style prefixes to directories, admit extra directories, or replace the extension list. Also read from an <code>aktion.config.json</code> above the project (<code>config: false</code> turns that off).</td>
+          </tr>
+          <tr>
+            <td><code>typescript</code></td>
+            <td><code>{ eraser? } | false</code></td>
+            <td>on when <code>ts-blank-space</code> is installed</td>
+            <td>Compile <code>.aktion.ts</code> modules. <code>{ eraser }</code> plugs in another position-preserving type eraser; <code>false</code> refuses <code>.aktion.ts</code>.</td>
+          </tr>
+          <tr>
+            <td><code>devtools</code></td>
+            <td><code>boolean</code></td>
+            <td><code>true</code></td>
+            <td>Ship each module&rsquo;s original text (<code>sourcesContent</code>) so DevTools shows the files you wrote. Turn off to trim production bundles.</td>
+          </tr>
+          <tr>
+            <td><code>dts</code></td>
+            <td><code>boolean | { include?, exclude?, outDir? }</code></td>
+            <td><code>false</code></td>
+            <td>Write <code>name.d.aktion.ts</code> declarations for <code>.aktion</code> modules, so TypeScript can import from them (see the <a href="typescript.html#aktion-ts-sidecars">TypeScript guide</a>).</td>
           </tr>
         </tbody>
       </table>
@@ -483,21 +575,6 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
           for a layout you control and trust. Prefer raising the Vite
           <code>root</code>, or re-exporting the shared files from inside the project.
           See <a href="security.html">Security</a> for the reasoning.
-        </p>
-      </div>
-      <div class="callout warn">
-        <h4><code>strict: true</code> currently rejects <code>$app(&hellip;)</code> programs</h4>
-        <p>
-          <strong>The plugin warns when a linked program has no top-level
-          <code>aktion = &hellip;</code> binding</strong>, and that check does not
-          recognise the modern <code>$app(&hellip;)</code> root. So every
-          <code>$app</code>&#8209;based entry emits
-          <code>No top-level `aktion = &hellip;` entry binding found</code>.
-        </p>
-        <p>
-          It is harmless noise with the default options, but <code>strict: true</code>
-          turns it into a fatal build error. Leave <code>strict</code> off until the
-          check understands <code>$app</code>.
         </p>
       </div>
 
@@ -610,10 +687,19 @@ const resolver = {
         <tbody>
           <tr><td><code>__aktionCompiled</code></td><td><code>1</code></td><td>Version marker. Must equal <code>COMPILED_PROGRAM_VERSION</code>.</td></tr>
           <tr><td><code>program</code></td><td><code>Program</code></td><td>The merged, scope-renamed AST.</td></tr>
-          <tr><td><code>source</code></td><td><code>string</code></td><td>The original (or re&#8209;emitted) text. Powers <code>applyDelta</code>, <code>serializeState</code> round&#8209;trips, and debugging.</td></tr>
+          <tr><td><code>source</code></td><td><code>string</code></td><td>The whole linked program as runnable Aktion text (the Vite plugin and <code>compileAktion*</code> print the merged AST). Powers <code>applyDelta</code>, <code>serializeState</code> round&#8209;trips, <code>renderToString</code>, and debugging.</td></tr>
           <tr><td><code>path</code></td><td><code>string</code></td><td>Module id. Used for diagnostics and to target HMR &mdash; it is what <code>el.sourceId</code> reports.</td></tr>
+          <tr><td><code>sourcesContent</code></td><td><code>string[]</code> (optional)</td><td>Each module&rsquo;s original text, indexed like <code>program.sources</code> &mdash; for a <code>.aktion.ts</code> module, the TypeScript you wrote. DevTools shows these; older artefacts without the field still mount.</td></tr>
         </tbody>
       </table>
+      <p>
+        Because <code>source</code> is the <em>merged</em> program, an imported
+        module&rsquo;s private names appear in it under their linker symbols
+        (<code>__a1_Counter</code>, <code>$__a2_total</code>): an
+        <code>applyDelta</code> that targets one must use that spelling.
+        <code>moduleLocalBaseName("__a2_total")</code> recovers the name you wrote,
+        and the entry module&rsquo;s own names are never renamed.
+      </p>
       <p>
         Two helpers guard that shape. <code>defineCompiledProgram(obj)</code> is an
         identity function whose only job is to give you one typed construction point,

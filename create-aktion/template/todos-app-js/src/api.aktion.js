@@ -1,0 +1,13 @@
+// API config + pure helpers. Point `base` at your own REST backend — the mock
+// implements the standard /todos collection: GET list, POST create,
+// PATCH/PUT update, DELETE remove.
+
+export const base = "https://mock-api-one-chi.vercel.app/api/mock/todo";
+
+export function remaining(todos) {
+  return todos.filter((t) => !t.isCompleted).length;
+}
+
+export function summary(todos) {
+  return remaining(todos) + " of " + todos.length + " left";
+}

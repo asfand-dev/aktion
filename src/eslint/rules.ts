@@ -34,15 +34,13 @@ import type { Linter } from "eslint";
  * corruption the same way it was designed to.
  */
 export const aktionRecommendedRules: Linter.RulesRecord = {
-  // GENUINE GRAMMAR INCOMPATIBILITY: `parseObjectProps` in
-  // `src/parser/parser.ts` accepts a `key: value` entry or a bare
-  // property-value shorthand (`{ foo }` for `{ foo: foo }`) but has no
-  // production at all for ES6 METHOD shorthand (`{ onClick() { … } }`) — the
-  // token immediately after an object key is either `:` or a `,`/`}` that
-  // closes the property-value-shorthand case; anything else (e.g. a `(`
-  // opening a method's parameter list) is a parse error. `object-shorthand`'s
-  // autofix rewrites `onClick: () => { … }` handlers into `onClick() { … }`,
-  // which is valid JS/TS but an Aktion parse error.
+  // FORMERLY A GRAMMAR INCOMPATIBILITY, KEPT OFF: `object-shorthand`'s autofix
+  // rewrites a `key: function (…) { … }` handler into method shorthand
+  // (`{ onClick() { … } }`). That used to be a parse error; since the parser
+  // widening (2026-10-02) it parses to the same `Lambda` handler
+  // (`tests/eslint-corpus-sweep.test.ts` pins the round trip). The override is
+  // kept so existing `.aktion` corpora are not restyled by an upgrade; the
+  // TypeScript preset below enforces the `properties` form instead.
   "object-shorthand": "off",
   // GENUINE GRAMMAR INCOMPATIBILITY: `parseExportStatement` in
   // `src/parser/parser.ts` throws an explicit parse error on `export { … }`
@@ -108,4 +106,110 @@ export const aktionRecommendedRules: Linter.RulesRecord = {
   // `docs/demos/blocks/profile-header.aktion`, the only two files in this
   // corpus with a `case N: return …` shaped switch statement.
   "unicorn/switch-case-braces": "off",
+};
+
+/**
+ * Rule settings for Aktion modules AUTHORED IN TypeScript or JavaScript —
+ * `*.aktion.ts` and `*.aktion.js`. Those files never pass through
+ * `aktionProcessor`: to ESLint they are ordinary `.ts`/`.js` files, linted by
+ * whatever parser and (type-aware) rule set the consumer already applies to
+ * that extension. Aktion, however, compiles them by erasing the types and
+ * handing the result to the SAME parser and evaluator as `.aktion` source, so
+ * an autofix that is safe for JavaScript can still produce code Aktion cannot
+ * parse — or code that parses and then runs differently.
+ *
+ * The record is the subset of the downstream dcd-monorepo consumer's measured
+ * `.aktion` rule set (its root `eslint.aktion.js`, `aktionRules`, each entry
+ * checked against a 155-file corpus on aktion-runtime 0.8.0) that holds for
+ * erased TypeScript/JavaScript exactly as it does for `.aktion`. The parser and
+ * evaluator facts below were re-checked against this repo's own `src/`; the
+ * ones marked "measured" were run (the fix through ESLint, its output through
+ * `parse()` or the evaluator). Each entry is cited as one of:
+ *
+ * - **GENUINE GRAMMAR INCOMPATIBILITY** / **DSL-IDIOM FALSE POSITIVE** — as in
+ *   `aktionRecommendedRules` above.
+ * - **SEMANTIC DIVERGENCE** — the autofix's output parses, but the Aktion
+ *   evaluator computes something other than what JavaScript would, so the
+ *   "equivalent" rewrite silently changes behaviour.
+ * - **CROSS-MODULE RENAME** — the autofix renames, in the one file ESLint is
+ *   looking at, a name that other modules depend on, so they break.
+ *
+ * Every entry is `"off"` except `unicorn/switch-case-braces`, which is
+ * reconfigured instead. ESLint does not validate a rule that is off, so the
+ * `"off"` entries are inert where their plugin is not installed. The one
+ * enabled entry is not: a config applying this record needs
+ * `eslint-plugin-unicorn` registered under the `unicorn` namespace (XO and
+ * unicorn's own `configs.recommended` both do that), or ESLint rejects the
+ * config with `Could not find plugin "unicorn"`. Without unicorn, add a later
+ * block with `"unicorn/switch-case-braces": "off"` — the autofix it guards
+ * against cannot run without the plugin either.
+ *
+ * `aktion/props-literal` is not in this record because it is this package's
+ * own rule (`props-literal.ts`): `aktionTypeScriptConfig` in
+ * `src/eslint-api.ts` registers the plugin and enables it next to these.
+ */
+export const aktionTypeScriptRules: Linter.RulesRecord = {
+  // RECONFIGURED, not off: method shorthand (`{ onClick() { … } }`) parses to
+  // the same handler since the parser widening, but the guide keeps handlers in
+  // property form; `properties` enforces only `{ title }` for `{ title: title }`,
+  // which the JS-semantics layer keeps working after renaming locals (W1).
+  "object-shorthand": ["error", "properties"],
+  // GENUINE GRAMMAR INCOMPATIBILITY, reconfigured rather than off: a braced
+  // case body parses as an object literal (no `BlockStatement` production, see
+  // above), so unicorn's default `always` corrupts every switch it fixes, while
+  // `avoid` only ever REMOVES braces. It does not report braces around a body
+  // that declares something (`case 1: { const y = x … }`), which still fails
+  // to parse.
+  "unicorn/switch-case-braces": ["error", "avoid"],
+  // GENUINE GRAMMAR INCOMPATIBILITY: the fix creates an `export { … } from …`
+  // list, which `parseExportStatement` rejects (see above).
+  "unicorn/prefer-export-from": "off",
+  // GENUINE GRAMMAR INCOMPATIBILITY: the fix creates a tagged template
+  // (`` String.raw`…` ``), which the parser rejects (see above).
+  "unicorn/prefer-string-raw": "off",
+  // SEMANTIC DIVERGENCE: the fix turns `const count = cart.count` into
+  // `const { count } = cart`, and destructuring a `$store`/`$form` handle reads
+  // nothing (measured: `null`) where the member access reads the field.
+  "prefer-destructuring": "off",
+  // DSL-IDIOM FALSE POSITIVE: the premise (build the Set once, look up many
+  // times) does not hold — a module-level binding re-seeds from its
+  // initialiser on every render (`resetMutableBindings`), so the Set is rebuilt
+  // as often as the array it replaces.
+  "unicorn/prefer-set-has": "off",
+  // SEMANTIC DIVERGENCE: the fix hoists a nested block's statements to the
+  // function body, and a `$x = …` at the top level of a component body
+  // declares per-instance state initialised ONCE (`evaluateUserComponent`),
+  // where the same statement inside a block assigns on every render.
+  "unicorn/prefer-early-return": "off",
+  // SEMANTIC DIVERGENCE: the fix swaps `window` for `globalThis`; both resolve
+  // through the host-global passthrough, but an explicit access policy
+  // (`setGlobalAccessPolicy(["window", …])`) admits only the names it lists,
+  // so the rewrite can turn a permitted read into a blocked one.
+  "unicorn/prefer-global-this": "off",
+  // CROSS-MODULE RENAME: exported names are only reported, but the fix renames
+  // an exported component's PARAMETERS (measured: `export function Row(btn)`
+  // → `Row(button)`), and parameter names are a component's named-argument
+  // API — a caller's `Row({ btn: x })` binds by parameter name
+  // (`invokeComponentDecl`).
+  "unicorn/name-replacements": "off",
+  // GENUINE GRAMMAR INCOMPATIBILITY: the fix prefixes the whole name, so
+  // `let $open = false` becomes `let is$open = false` (measured), which the
+  // lexer reads as `is` followed by the atom `$open` — a parse error.
+  "unicorn/consistent-boolean-name": "off",
+  // DSL-IDIOM FALSE POSITIVE: components are PascalCase calls without `new`
+  // (`Button(…)`, see above).
+  "new-cap": "off",
+  // DSL-IDIOM FALSE POSITIVE: a component tree is nested calls by
+  // construction (see above).
+  "unicorn/max-nested-calls": "off",
+  // DSL-IDIOM FALSE POSITIVE: `$app(…)` and `$effect(…)` are bare top-level
+  // calls by design (see above).
+  "unicorn/no-top-level-side-effects": "off",
+  // DSL-IDIOM FALSE POSITIVE: exported state is `export let $count = 0`, a
+  // `let` that importing modules write to.
+  "import-x/no-mutable-exports": "off",
+  // DSL-IDIOM FALSE POSITIVE: `$` state is declared with `let` and is often
+  // written only through a two-way binding (`Input("Name", { value: $name })`)
+  // or by an importing module — writes ESLint cannot see.
+  "prefer-const": "off",
 };

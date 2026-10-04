@@ -63,7 +63,8 @@ async function writeDemosManifest() {
   const manifest = {};
   for (const folder of folders) {
     const files = await readdir(resolve(demosDir, folder));
-    manifest[folder] = files.filter((f) => f.endsWith(".aktion")).sort();
+    // Every Aktion module kind: `.aktion`, and `.aktion.ts` / `.aktion.js`.
+    manifest[folder] = files.filter((f) => /\.aktion(?:\.[jt]s)?$/.test(f)).sort();
   }
   await writeFile(resolve(demosDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 }

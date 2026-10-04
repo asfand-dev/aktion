@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.7",
+    "happy-dom": "^20.11.1"
+  }
+}

@@ -48,6 +48,30 @@ npm create aktion@latest my-app -- --template dashboard
 npx create-aktion my-app -y --template todos-app
 ```
 
+## TypeScript and JavaScript
+
+Aktion modules can also be written in TypeScript (`.aktion.ts`) or JavaScript
+(`.aktion.js`) — pick with `--lang`:
+
+```bash
+npx create-aktion my-app -y --template todos-app --lang ts
+npx create-aktion my-app -y --template empty --lang js
+```
+
+| `--lang`  | Modules        | What changes |
+|-----------|----------------|--------------|
+| `aktion`  | `.aktion`      | The default: the Aktion DSL. |
+| `ts`      | `.aktion.ts`   | Typed against the component library through `aktion-runtime/dsl`; the recommended `tsconfig.json`; `ts-blank-space` (which erases the types without moving a character) and a `typecheck` script; the plugin's `dts` option, so `.aktion` modules you add are typed too. |
+| `js`      | `.aktion.js`   | Plain JavaScript modules; `allowJs`, so host code and tests see their exports. |
+
+The `empty` and `todos-app` templates come in all three languages. Whatever the
+language, host code (`src/main.ts`) and tests are TypeScript, and the three
+module kinds can import each other — a `.aktion.ts` store can feed `.aktion`
+components. Aktion runs TypeScript and JavaScript under its own rules and
+reports anything that would behave differently from JavaScript (`async`/`await`,
+`var`, `this`, a closure reading a variable reassigned after it was created, …)
+with an error at the exact line.
+
 ## Options
 
 ```
@@ -55,6 +79,8 @@ create-aktion <project-name> [options]
 
   -t, --template <name>   empty | dashboard | website | todos-app | chatbot | portfolio
                           (default: empty)
+  -l, --lang <language>   aktion | ts | js — the language of the Aktion modules
+                          (default: aktion; ts and js: empty, todos-app)
       --pm <manager>      Package manager for the printed next-steps (npm | pnpm | yarn | bun)
   -y, --yes               Skip prompts (use defaults; required in CI / non-TTY)
   -h, --help              Show help
@@ -71,7 +97,8 @@ compiled program and drive it like a user.
 ```
 my-app/
   src/
-    app.aktion              entry (assigns `aktion`, imports the rest)
+    app.aktion              entry (registers the UI root, imports the rest) —
+                            app.aktion.ts / app.aktion.js with --lang ts / js
     …                       components/, pages/, data/, store, lib (per template)
     main.ts                 mounts the compiled program
     env.d.ts

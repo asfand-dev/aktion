@@ -48,7 +48,7 @@
 
 import { walk } from "../parser/index.js";
 import type { Program, SourceLocation, Statement, Expression } from "../parser/types.js";
-import { moduleLocalBaseName } from "../compiler/linker.js";
+import { authoredName } from "../parser/module-symbols.js";
 
 /* -------------------------------------------------------------------------- */
 /*  Report shapes                                                              */
@@ -192,13 +192,15 @@ function functionName(node: Statement | Expression): string | null {
       // (`__a1_Panel`). Report the name the author wrote — the mangling is an
       // implementation detail of module scoping, and its numeric part changes
       // when an unrelated import is added.
-      return moduleLocalBaseName(node.name) ?? (node.name || "(anonymous)");
+      return node.name ? authoredName(node.name) : "(anonymous)";
     case "EffectDeclaration":
       // Effects are named `__effect_L12_C3` by the parser; the location is
       // already in the record, so show the construct instead of the mangling.
       return "effect";
     case "Lambda":
-      return "(anonymous)";
+      // A nested `function inc()` of a `.aktion.ts` module is lifted into a
+      // lambda (W2) that keeps its name.
+      return node.name ? authoredName(node.name) : "(anonymous)";
     default:
       return null;
   }

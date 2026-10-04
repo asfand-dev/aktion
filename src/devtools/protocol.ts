@@ -501,7 +501,7 @@ export interface InstanceDetail {
   kind: ComponentKind;
   parentKey: string | null;
   depth: number;
-  source?: { line: number; column: number };
+  source?: { line: number; column: number; /** Index into `program.sources` (absent = the entry). */ source?: number };
   explicitKey?: string;
   /** Props / arguments as of the last render. */
   props: ComponentPropRecord[];

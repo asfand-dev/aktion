@@ -1,6 +1,6 @@
 ---
 name: aktion
-description: Build applications in the Aktion DSL (.aktion files) — dashboards, CRUD apps, settings consoles, inboxes, admin panels, multi-page sites, landing pages, chat UIs. Use when authoring or editing .aktion source, or when a request involves $app, $http, $query, $router, $store, $form, $theme, $effect, or the Aktion component library. Covers the language, the 282-component catalogue, layout density, theming, routing, data fetching, and the mistakes the schema validator cannot catch. Not for host-page integration (embedding the <aktion-app> element, framework wiring, CDN setup) — that is README.md's job.
+description: Build applications in the Aktion DSL (.aktion files, or .aktion.ts / .aktion.js modules) — dashboards, CRUD apps, settings consoles, inboxes, admin panels, multi-page sites, landing pages, chat UIs. Use when authoring or editing .aktion source, or when a request involves $app, $http, $query, $router, $store, $form, $theme, $effect, or the Aktion component library. Covers the language, the 282-component catalogue, layout density, theming, routing, data fetching, and the mistakes the schema validator cannot catch. Not for host-page integration (embedding the <aktion-app> element, framework wiring, CDN setup) — that is README.md's job.
 license: MIT
 ---
 
@@ -197,6 +197,48 @@ see this?" — not a generated page.
 10. **Icons are Font Awesome names without the `fa-` prefix** — `"house"`,
     `"chart-line"`, `"sack-dollar"`. Optional variant prefix: `"regular:star"`,
     `"brands:github"`. **Never emit raw emoji.**
+
+## When the modules are TypeScript or JavaScript
+
+A project scaffolded with `--lang ts` or `--lang js` writes its modules as
+`.aktion.ts` / `.aktion.js` files. Write new modules in the project's language;
+everything above still applies, and these rules come on top — the compiler
+rejects each one it can see with a coded error at the exact line:
+
+- **Declare every atom with `let`** — `let $count = 0`, at module level or at the
+  top of a component body. A bare `$count = 0` is an undeclared name (E125).
+- **Import built-ins from `aktion-runtime/dsl`, by their own names**, and types
+  with `import type`. Spell module extensions: `./store.aktion.ts`.
+- **The entry ends with `export default $app(App())`.**
+- **No `async`/`await`** (chain `.then(…)`, or use `$http(…)` and `.onDone`), no
+  `var`, no `this`/`arguments`, no `enum`/`namespace`.
+- **Closures copy their scope when they are created.** Do not reassign a local
+  that a closure captured, or use one in a closure before declaring it — keep
+  changing values in a `$` atom.
+- **Change state by assignment**: `$todos = [...$todos, t]`, never
+  `$todos.push(t)`; module-level non-`$` bindings are rebuilt every render, so
+  never mutate them from a function.
+- **Hooks only at the top of a component body; components and hooks only at
+  module top level.**
+
+```ts aktion
+// src/app.aktion.ts
+import { $app, Button, Column, PageHeader, Text, type AktionNode } from "aktion-runtime/dsl";
+
+let $count = 0;
+
+function Counter(label: string): AktionNode {
+  return Button(`${label}: ${$count}`, { onClick: () => { $count = $count + 1; }, variant: "primary" });
+}
+
+export default $app(Column([PageHeader("Counter"), Text("Click to count."), Counter("Clicks")], { gap: "l" }));
+```
+
+Validate the same way — `node tools/validate-aktion.mjs src/store.aktion.ts`
+checks one module, `node tools/validate-aktion-app.mjs src/app.aktion.ts` the
+graph — and run `npx tsc` too: the types catch wrong props and arities the
+schema check reports later. The full rules are in the TypeScript guide
+(`docs/typescript.html#aktion-ts`).
 
 ## Shape of a program
 
