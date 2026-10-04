@@ -2240,7 +2240,7 @@ $app(QueryBuilder(
 ))`,
   "JsonTree": `$app(JsonTree({
   name: "aktion",
-  version: "0.7.0",
+  version: "0.8.0",
   features: ["streaming", "theming", "routing"],
   config: {theme: "system", locale: "en"}
 }, { expanded: true }))`,
