@@ -1630,7 +1630,14 @@ class Analyzer {
     for (const binding of this.moduleScope.plain.values()) {
       const injected = RESERVED_INJECTED.get(binding.name);
       if (injected) {
-        this.report("E112", binding.loc, MESSAGES.E112(binding.name, injected));
+        // `import { params } from "aktion-runtime/dsl"` names the runtime's own
+        // binding — the linker drops the import, so the name resolves at
+        // runtime — and is what lets `tsc` see it. Anything else that binds the
+        // name is E112; a module that both imports and declares it is E123,
+        // which the linker reports.
+        if (binding.kind !== "import" || binding.importSource !== DSL_MODULE_ID) {
+          this.report("E112", binding.loc, MESSAGES.E112(binding.name, injected));
+        }
         continue;
       }
       if (!LIBRARY_COMPONENTS.has(binding.name)) continue;

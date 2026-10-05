@@ -70,7 +70,7 @@ export interface LambdaExpr {
    * JS-semantics layer turns a nested `function inc() {}` of a `.aktion.js` /
    * `.aktion.ts` module into `const inc = function () {}` (W2), and keeps the
    * name here so coverage and DevTools still call it `inc`. The parser never
-   * sets it; the runtime ignores it.
+   * sets it; the runtime ignores it, and `printProgram` does not print it.
    */
   name?: string;
   /**
@@ -273,8 +273,9 @@ export interface CallExpr {
    * its path (`"./cards"` and `"./cards.aktion.ts"` bind alike). TypeScript
    * types that call with the component's plain signature; a call that reaches
    * a `.aktion` component keeps the named-props convention its generated
-   * declaration types. Like `DeclParam.publicName`, it lives only in the AST:
-   * printing the program back to text drops it.
+   * declaration types. Text cannot carry it (nor `DeclParam.publicName`), so
+   * `printProgram` writes such a call in a form the DSL binds the same way —
+   * see `printPositionalCall` in `src/tooling/formatter.ts`.
    */
   positional?: true;
   loc?: SourceLocation;
@@ -407,8 +408,8 @@ export interface ComponentDeclaration {
    * Declared in a `.aktion.js` / `.aktion.ts` module. A call marked
    * `CallExpr.positional` binds its arguments as JavaScript does only when it
    * reaches such a component. The parser never sets it — the JS-semantics
-   * layer does — and, like `CallExpr.positional`, printing the program back
-   * to text drops it.
+   * layer does. Text cannot carry it; `printProgram` prints the calls that
+   * reach the component accordingly instead.
    */
   javascript?: true;
   loc?: SourceLocation;
@@ -432,7 +433,8 @@ export interface DeclParam {
    * It matters for components, whose calling convention is partly by NAME:
    * named props (`Card({ title: "T" })`, `Card(child, { title: "T" })`) and
    * the named-slot logic match prop keys against `publicName ?? name`, while
-   * the value is still bound to the local `name` inside the body.
+   * the value is still bound to the local `name` inside the body. Text cannot
+   * carry it, so `printProgram` prints such named props under the local name.
    */
   publicName?: string;
   defaultValue?: Expression;

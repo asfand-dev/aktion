@@ -309,18 +309,30 @@ describe("aktion-runtime/dsl builtins — the behaviour the declarations state",
     expect(renderToTextTree('$app($router({ "/": Text("home") }))').errors).toEqual([]);
   });
 
-  it("$util.url.hash is filled in only when the URL also has a ?query", () => {
-    // evaluator.ts readUrlSnapshot sets `hash` only beside a `location.search`.
-    // Fixing that means rewording UrlSnapshot.hash in scripts/dsl-types/builtins.ts too.
+  it("$util.url.hash is the fragment, read the way the router reads the URL", () => {
+    // `hash` used to be filled in only beside a `location.search` (`/p#s` → "" in
+    // history mode), and a hash router reported its own route as the fragment.
     const before = `${location.pathname}${location.search}${location.hash}`;
-    const hashOf = (url: string): unknown => {
+    const urlOf = (url: string, mode?: "hash" | "history"): { hash: unknown; query: unknown } => {
       history.replaceState({}, "", url);
-      return (evaluate(expression("$util.url"), newContext()) as { hash: unknown }).hash;
+      const ctx = newContext(mode ? { router: new Router({ mode }) } : {});
+      const { hash, query } = evaluate(expression("$util.url"), ctx) as { hash: unknown; query: unknown };
+      return { hash, query };
     };
     try {
-      expect(hashOf("/p?x=1#s")).toBe("s");
-      expect(hashOf("/p#s")).toBe("");
-      expect(hashOf("/#/p?x=1")).toBe("");
+      // History mode: `location.search` and `location.hash`.
+      expect(urlOf("/p#s", "history")).toEqual({ hash: "s", query: {} });
+      expect(urlOf("/p?x=1#s", "history")).toEqual({ hash: "s", query: { x: "1" } });
+      expect(urlOf("/p#s?y=2", "history")).toEqual({ hash: "s?y=2", query: {} });
+      // Hash mode: the hash is the route; the fragment follows a second `#`.
+      expect(urlOf("/p#s", "hash")).toEqual({ hash: "", query: {} });
+      expect(urlOf("/?x=1#/p", "hash")).toEqual({ hash: "", query: { x: "1" } });
+      expect(urlOf("/#/p?x=1", "hash")).toEqual({ hash: "", query: { x: "1" } });
+      expect(urlOf("/#/p?x=1#s", "hash")).toEqual({ hash: "s", query: { x: "1" } });
+      expect(urlOf("/#/p#s", "hash")).toEqual({ hash: "s", query: {} });
+      // No router: a hash starting with `/` is taken for a hash route.
+      expect(urlOf("/p#s")).toEqual({ hash: "s", query: {} });
+      expect(urlOf("/#/p?x=1")).toEqual({ hash: "", query: { x: "1" } });
     } finally {
       history.replaceState({}, "", before);
     }
