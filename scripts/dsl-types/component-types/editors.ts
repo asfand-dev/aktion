@@ -6,12 +6,14 @@ export default {
     props: {
       onChange: "(source: string) => unknown",
       onSave: "(source: string) => unknown",
+      optional: "boolean | string",
     },
   },
   ColorPicker: {
     props: {
       value: "string",
       onChange: "(color: string) => unknown",
+      optional: "boolean | string",
     },
   },
   ContextMenu: {
@@ -52,6 +54,7 @@ export default {
   RichTextEditor: {
     props: {
       onChange: "(html: string) => unknown",
+      optional: "boolean | string",
     },
   },
 } satisfies ComponentTypeTable;

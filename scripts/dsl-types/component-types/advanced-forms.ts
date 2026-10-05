@@ -11,6 +11,7 @@ export default {
       onChange: "(value: string) => unknown",
       onBlur: "(value: string) => unknown",
       onFocus: "(value: string) => unknown",
+      optional: "boolean | string",
     },
   },
   MaskedInput: {
@@ -18,6 +19,7 @@ export default {
       onChange: "(value: string) => unknown",
       onBlur: "(value: string) => unknown",
       onFocus: "(value: string) => unknown",
+      optional: "boolean | string",
     },
   },
   MentionInput: {
@@ -30,6 +32,7 @@ export default {
       onChange: "(value: string) => unknown",
       onBlur: "(value: string) => unknown",
       onFocus: "(value: string) => unknown",
+      optional: "boolean | string",
     },
   },
   MultiStepForm: {
@@ -53,6 +56,7 @@ export default {
       onChange: "(value: string) => unknown",
       onBlur: "(value: string) => unknown",
       onFocus: "(value: string) => unknown",
+      optional: "boolean | string",
     },
   },
   PinInput: {
@@ -61,6 +65,7 @@ export default {
       onComplete: "(code: string) => unknown",
       onBlur: "(value: string) => unknown",
       onFocus: "(value: string) => unknown",
+      optional: "boolean | string",
     },
   },
   RequirementList: {
@@ -79,6 +84,7 @@ export default {
       onChange: "(tags: string[]) => unknown",
       onBlur: "(tags: string[]) => unknown",
       onFocus: "(tags: string[]) => unknown",
+      optional: "boolean | string",
     },
   },
   TimePicker: {
@@ -90,6 +96,7 @@ export default {
       onChange: "(value: string) => unknown",
       onBlur: "(value: string) => unknown",
       onFocus: "(value: string) => unknown",
+      optional: "boolean | string",
     },
   },
   ValidationSummary: {

@@ -12,6 +12,7 @@ export default {
       // The pad's PNG data URL.
       onBlur: "(value: string) => unknown",
       onFocus: "(value: string) => unknown",
+      optional: "boolean | string",
     },
   },
   SignaturePad: {
@@ -23,6 +24,7 @@ export default {
       // The same value `onChange` reports: `""` while the pad holds no signature.
       onBlur: "(value: string) => unknown",
       onFocus: "(value: string) => unknown",
+      optional: "boolean | string",
     },
   },
 } satisfies ComponentTypeTable;

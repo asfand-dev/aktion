@@ -95,6 +95,7 @@ export default {
       onCancel: "() => unknown",
       onBlur: "(value: string) => unknown",
       onFocus: "(value: string) => unknown",
+      optional: "boolean | string",
     },
   },
   JsonTree: {
