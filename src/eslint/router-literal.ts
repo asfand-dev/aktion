@@ -20,6 +20,10 @@ import { isDeclaredInModuleGraph, withoutTypeOnlyWrappers } from "./props-litera
  *   `routes` (`$router({ ...base, default: NotFound() })`) → `armSpread`: the
  *   evaluator skips spread entries (`if (prop.spread) continue`), so those arms
  *   never match;
+ * - a computed path in the table or in a layout arm's `routes`
+ *   (`$router({ [path]: Page() })`, `["/"]` too) → `armComputed`: the arm is
+ *   ignored and the router falls through to `default` (the compiler's E127
+ *   for these modules);
  * - a layout arm (an object literal with a `layout` key) whose `routes` is not
  *   an object literal (`{ layout: Shell(outlet), routes: children }`) →
  *   `routesNotLiteral`: `asLayoutArm` keeps `routes` only when it is a literal,
@@ -38,7 +42,7 @@ export const aktionRouterLiteralRule: Rule.RuleModule = {
     type: "problem",
     docs: {
       description:
-        "Require the route table of `$router(…)`, and the `routes` of each layout arm, to be an object literal written at the call site, without spreads",
+        "Require the route table of `$router(…)`, and the `routes` of each layout arm, to be an object literal written at the call site, without spreads or computed paths",
       recommended: true,
     },
     messages: {
@@ -46,6 +50,8 @@ export const aktionRouterLiteralRule: Rule.RuleModule = {
         "`$router` reads its route table by syntax — pass an object literal written here and list every arm (`$router({ \"/\": Home(), default: NotFound() })`); anything else renders nothing.",
       armSpread:
         "Aktion reads route tables by syntax and skips spread entries, so these arms never match — list each arm explicitly.",
+      armComputed:
+        "Aktion reads each route path by syntax and ignores a computed one, so this arm never matches — write the path as a string key (`\"/users/:id\": …`).",
       routesNotLiteral:
         "A layout arm's `routes` is read by syntax — write the child routes as an object literal here; anything else leaves `outlet` empty.",
     },
@@ -54,11 +60,15 @@ export const aktionRouterLiteralRule: Rule.RuleModule = {
   create(context) {
     const { sourceCode } = context;
 
-    /** Check one route table literal: its spreads, then each layout arm in it. */
+    /** Check one route table literal: its spreads and computed paths, then each layout arm in it. */
     const checkTable = (table: ESTree.ObjectExpression): void => {
       for (const entry of table.properties) {
         if (entry.type === "SpreadElement") {
           context.report({ node: entry, messageId: "armSpread" });
+          continue;
+        }
+        if (entry.computed) {
+          context.report({ node: entry.key, messageId: "armComputed" });
           continue;
         }
         const arm = withoutTypeOnlyWrappers(entry.value);
