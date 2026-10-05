@@ -15,7 +15,28 @@ import { parseDuration as parseDurationSeconds, safeRegexTest } from "./util.js"
  * ----------------------------------------------------------------------- */
 
 const SAFE_COLOR = /^[a-zA-Z0-9#%.,()\s+-]+$/;
-const COLOR_TOKENS: Record<string, string> = {
+
+/*
+ * Parameter types of `Style`, printed into the `aktion-runtime/dsl`
+ * declarations (scripts/dsl-types/runtime-types.ts) — hence exported and
+ * self-contained.
+ */
+
+/** The theme colour names `gradient` / `alpha` resolve to their CSS variable. */
+export type UtilStyleColorToken =
+  | "primary" | "accent" | "success" | "warning" | "danger" | "info"
+  | "text" | "muted" | "bg" | "surface" | "border";
+
+/** A theme colour name, or a plain CSS colour (anything unsafe resolves to nothing). */
+export type UtilStyleColor = UtilStyleColorToken | (string & {});
+
+/** One `cx` argument: falsy values are skipped, arrays recurse, an object contributes its truthy keys. */
+export type UtilStyleClassValue =
+  | string | number | boolean | null | undefined
+  | readonly UtilStyleClassValue[]
+  | { readonly [className: string]: unknown };
+
+const COLOR_TOKENS: Record<UtilStyleColorToken, string> = {
   primary: "var(--rui-color-primary)",
   accent: "var(--rui-color-accent)",
   success: "var(--rui-color-success)",
@@ -31,7 +52,7 @@ const COLOR_TOKENS: Record<string, string> = {
 
 function safeColor(value: unknown): string {
   const s = String(value ?? "").trim();
-  if (s in COLOR_TOKENS) return COLOR_TOKENS[s]!;
+  if (s in COLOR_TOKENS) return COLOR_TOKENS[s as UtilStyleColorToken];
   if (!s || s.length > 64 || !SAFE_COLOR.test(s)) return "";
   if (/url\s*\(|expression\s*\(|javascript\s*:|@import/i.test(s)) return "";
   return s;
@@ -50,7 +71,7 @@ export const Style = {
    * `{ "is-active": cond }`; returns a space-joined, de-duped class string.
    * Tokens that aren't valid CSS identifiers are dropped.
    */
-  cx: (...args: unknown[]): string => {
+  cx: (...args: readonly UtilStyleClassValue[]): string => {
     const out: string[] = [];
     const push = (v: unknown): void => {
       if (!v) return;
@@ -74,7 +95,7 @@ export const Style = {
    * Build a safe `linear-gradient(...)` from an array of color stops (and an
    * optional angle in degrees). Returns "" if fewer than two valid stops.
    */
-  gradient: (stops: unknown, angle?: unknown): string => {
+  gradient: (stops: readonly UtilStyleColor[], angle?: number): string => {
     const arr = Array.isArray(stops) ? stops : [stops];
     const safe = arr.map(safeColor).filter(Boolean);
     if (safe.length < 2) return "";
@@ -83,7 +104,7 @@ export const Style = {
   },
 
   /** color-mix wrapper: blend a color with transparent at `amount` (0–1). */
-  alpha: (color: unknown, amount: unknown): string => {
+  alpha: (color: UtilStyleColor, amount: number): string => {
     const c = safeColor(color);
     if (!c) return "";
     const a = Math.max(0, Math.min(1, Number(amount)));
@@ -92,7 +113,7 @@ export const Style = {
   },
 
   /** Build a responsive `clamp(min, preferred, max)` size. */
-  clamp: (min: unknown, preferred: unknown, max: unknown): string =>
+  clamp: (min: string | number, preferred: string | number, max: string | number): string =>
     `clamp(${safeLength(min)}, ${safeLength(preferred)}, ${safeLength(max)})`,
 
   /**
@@ -100,7 +121,9 @@ export const Style = {
    * → `var(--rui-spacing-l)`, `style.token("colors.primary")` →
    * `var(--rui-color-primary)`. Falls back to "" for unknown shapes.
    */
-  token: (path: unknown): string => {
+  token: (
+    path: `${"colors" | "color" | "spacing" | "radius" | "shadows" | "shadow" | "gradients" | "gradient"}.${string}` | (string & {}),
+  ): string => {
     const p = String(path ?? "").trim();
     if (!/^[a-zA-Z0-9.]+$/.test(p)) return "";
     const [group, ...rest] = p.split(".");
@@ -116,7 +139,7 @@ export const Style = {
   },
 
   /** Serialize a plain object of CSS declarations to a sanitised style string. */
-  toStyle: (obj: unknown): string => {
+  toStyle: (obj: Readonly<Record<string, string | number | false | null | undefined>>): string => {
     if (!obj || typeof obj !== "object" || Array.isArray(obj)) return "";
     const parts: string[] = [];
     for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
@@ -147,7 +170,7 @@ export type StyleNamespace = typeof Style;
  * of either — async validators (V.2 `asyncCustom`) resolve server-side checks
  * like username uniqueness.
  */
-type Validator = (value: unknown) => string | null | Promise<string | null>;
+export type Validator<T = unknown> = (value: T) => string | null | Promise<string | null>;
 
 const isThenable = (v: unknown): v is Promise<unknown> =>
   Boolean(v) && typeof (v as { then?: unknown }).then === "function";
@@ -257,14 +280,15 @@ export const Rules = {
   maxLength: (n: number, message?: string): Validator =>
     (v) => (isEmpty(v) || String(v).length <= n ? null : (message ?? `Must be at most ${n} characters`)),
 
-  pattern: (re: unknown, message = "Invalid format"): Validator => {
+  // A RegExp contributes its SOURCE only: its flags (`/x/i`) are dropped.
+  pattern: (re: RegExp | string, message = "Invalid format"): Validator => {
     // Both the pattern and the value being validated are untrusted, so this is
     // a ReDoS pair. Run it through the bounded tester rather than `rx.test`.
     const source = re instanceof RegExp ? re.source : String(re ?? "");
     return (v) => (isEmpty(v) || safeRegexTest(source, String(v)) ? null : message);
   },
 
-  oneOf: (options: unknown[], message = "Not an allowed value"): Validator =>
+  oneOf: (options: readonly unknown[], message = "Not an allowed value"): Validator =>
     (v) => (isEmpty(v) || (Array.isArray(options) && options.includes(v)) ? null : message),
 
   /**
@@ -358,7 +382,7 @@ export const Rules = {
    * default. Pass your own when the two are worth separating — a field with a
    * documented floor usually is.
    */
-  duration: (bounds?: unknown, message?: string): Validator => {
+  duration: (bounds?: { readonly min?: number; readonly max?: number } | string, message?: string): Validator => {
     const asMessage = typeof bounds === "string" ? bounds : message;
     const range = (bounds && typeof bounds === "object" ? bounds : {}) as {
       min?: unknown;
@@ -379,7 +403,10 @@ export const Rules = {
   matches: (other: unknown, message = "Values do not match"): Validator =>
     (v) => (v === other ? null : message),
 
-  custom: (fn: unknown, message = "Invalid"): Validator =>
+  custom: <T = unknown>(
+    fn: (value: T) => boolean | string | null | undefined | PromiseLike<boolean | string | null | undefined>,
+    message = "Invalid",
+  ): Validator<T> =>
     (v) => {
       if (typeof fn !== "function") return null;
       try {
@@ -402,7 +429,10 @@ export const Rules = {
    * for server-side checks (e.g. username uniqueness). `$form` awaits these
    * before submitting; a rejected promise counts as invalid.
    */
-  asyncCustom: (fn: unknown, message = "Invalid"): Validator =>
+  asyncCustom: <T = unknown>(
+    fn: (value: T) => boolean | string | null | undefined | PromiseLike<boolean | string | null | undefined>,
+    message = "Invalid",
+  ): Validator<T> =>
     (v) => {
       if (typeof fn !== "function") return null;
       try {

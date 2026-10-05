@@ -126,7 +126,7 @@ const utilMembers: readonly NamespaceMember[] = [
   method("startsWith", "startsWith(text, prefix)", "True when the text starts with the prefix."),
   method("endsWith", "endsWith(text, suffix)", "True when the text ends with the suffix."),
   method("contains", "contains(text, needle)", "True when the text contains the needle."),
-  method("match", "match(text, pattern)", "Test the text against a regular-expression pattern."),
+  method("match", "match(text, pattern)", "Test the text against a regular expression given as a SOURCE string (`\"^a.+z$\"`). A RegExp value stringifies with its slashes and does not match as meant."),
   // Math
   method("round", "round(value, decimals?)", "Round to n decimal places."),
   method("floor", "floor(value)", "Round down to an integer."),
@@ -154,8 +154,8 @@ const utilMembers: readonly NamespaceMember[] = [
   method("derived", "derived(fn)", "Computed reactive value — recomputes from the atoms the lambda reads."),
   method("onError", "onError(fn)", "Program-level error sink — fires with { error, source } when an action throws."),
   method("onNavigate", "onNavigate(fn)", "Navigation guard: return false to block, a path string to redirect, anything else to allow."),
-  method("onRequest", "onRequest(fn)", "HTTP request interceptor — a partial return merges over every outgoing request."),
-  method("onResponse", "onResponse(fn)", "HTTP response interceptor — replace the response, or `return retry()` to re-issue once (the client awaits what you return; `await` inside the body does not suspend)."),
+  method("onRequest", "onRequest(fn)", "HTTP request interceptor — a partial return merges over every outgoing request (headers shallow-merged), or mutate the request and return nothing. Runs synchronously: a returned Promise is ignored."),
+  method("onResponse", "onResponse(fn)", "HTTP response interceptor — return a full replacement response (it replaces, it does not merge), `return retry()` to re-issue once, or nothing to pass it through (the client awaits what you return; `await` inside the body does not suspend)."),
   method("invalidate", "invalidate(keys)", "Refetch every cached $query whose key contains one of the substrings."),
   // Reactive environment (listeners attach lazily on first read)
   prop("scroll", 'Reactive scroll: .x / .y / .progress (0–1) / .direction ("up"|"down").'),
@@ -189,7 +189,7 @@ const utilMembers: readonly NamespaceMember[] = [
   method("rules.max", "rules.max(n, message?)", "Number ≤ n."),
   method("rules.minLength", "rules.minLength(n, message?)", "String length ≥ n."),
   method("rules.maxLength", "rules.maxLength(n, message?)", "String length ≤ n."),
-  method("rules.pattern", "rules.pattern(re, message?)", "Match a regular expression."),
+  method("rules.pattern", "rules.pattern(re, message?)", "Match a regular expression (a RegExp or its source string). A RegExp's flags are ignored: `/x/i` matches case-sensitively."),
   method("rules.oneOf", "rules.oneOf(options, message?)", "Value is in the allowed list."),
   method("rules.integer", "rules.integer(message?)", "A whole number — min/max bound the magnitude but not the step."),
   method("rules.range", "rules.range(lo, hi, message?)", "Inclusive numeric range — min + max in one rule, so the message names both ends."),
@@ -214,7 +214,7 @@ const utilMembers: readonly NamespaceMember[] = [
   method("geolocate", "geolocate(options?)", "Resolve { lat, lng, accuracy } via the Geolocation API."),
   method("isOnline", "isOnline()", "Current navigator.onLine flag."),
   method("deviceType", "deviceType()", '"mobile" | "tablet" | "desktop" heuristic.'),
-  method("worker", "worker(fn, ...args)", "Run a closure-free function in a Web Worker; resolves its return value."),
+  method("worker", "worker(fn, ...args)", "Run a closure-free HOST JavaScript function in a Web Worker; resolves its return value. `fn` is serialised with `toString()`, so an Aktion lambda (the runtime's closure) cannot run there — only the no-Worker fallback runs it."),
   method("registerServiceWorker", "registerServiceWorker(url, scope?)", "Register a service worker for PWA/offline."),
   method("webManifest", "webManifest(config)", "Build a sanitised web-app manifest (name, icons, themeColor…)."),
   method("nativeShell", "nativeShell()", "Detect the wrapper: capacitor/cordova/tauri/electron/react-native or \"web\"."),
@@ -280,7 +280,7 @@ const toastMembers: readonly NamespaceMember[] = [
 const domMembers: readonly NamespaceMember[] = [
   method("onResize", "onResize(node, callback)", "Observe element size with a ResizeObserver; callback gets { width, height, entry }. Returns a disposer; auto-disposed on replan."),
   method("onIntersect", "onIntersect(node, callback, options?)", "Observe viewport intersection with an IntersectionObserver; callback gets the entry. Options: { root?, rootMargin?, threshold? }."),
-  method("onMutation", "onMutation(node, callback, options?)", "Observe DOM mutations with a MutationObserver. Options: { childList?, attributes?, subtree?, characterData? }."),
+  method("onMutation", "onMutation(node, callback, options?)", "Observe DOM mutations with a MutationObserver; callback gets the records. Options: { childList?, attributes?, subtree?, characterData? } — childList and attributes default to TRUE, subtree and characterData to false."),
   method("measure", "measure(node)", "One-shot read → { rect, scroll, viewport } (getBoundingClientRect + scroll offsets + window size)."),
 ];
 
@@ -339,7 +339,7 @@ const socketResourceMembers: readonly NamespaceMember[] = [
   prop("last", "Most recent message (JSON auto-parsed), or null."),
   prop("messages", "Buffered messages, newest last (capped to bufferSize)."),
   prop("attempts", "Reconnect attempts in the current streak (resets on success)."),
-  prop("error", "Last socket error event, if any."),
+  prop("error", "The last error: the socket `error` event, the error a bad URL threw, or `{ message }` when WebSocket is unavailable; `undefined` once open."),
   method("send", "send(data)", "Send a message (objects JSON-stringified). Queues while connecting; flushes on open."),
   method("close", "close()", "Close for good — disables auto-reconnect."),
 ];
@@ -349,7 +349,7 @@ const sseResourceMembers: readonly NamespaceMember[] = [
   prop("connected", "`true` while the stream is open."),
   prop("last", "Most recent event payload (JSON auto-parsed)."),
   prop("messages", "Buffered events, newest last (capped to bufferSize)."),
-  prop("error", "Last stream error, if any."),
+  prop("error", "The last error: the EventSource `error` event, the error a bad URL threw, or `{ message }` when EventSource is unavailable; `undefined` once open."),
   method("close", "close()", "Close the stream."),
 ];
 
@@ -367,7 +367,7 @@ const formResourceMembers: readonly NamespaceMember[] = [
   method("setValues", "setValues(values)", "Merge several field values at once."),
   method("validate", "validate()", "Validate every field → boolean (a Promise when async rules exist)."),
   method("validateField", "validateField(name)", "Validate one field → message | null (Promise for async rules)."),
-  method("submit", "submit()", "Touch all → validate → onSubmit(values) when valid. Alias: handleSubmit()."),
+  method("submit", "submit()", "Touch every field that has rules → validate → onSubmit(values) when valid. Returns false when invalid, true after a synchronous onSubmit, and a Promise when a rule or onSubmit is async. Alias: handleSubmit()."),
   method("handleSubmit", "handleSubmit()", "Alias of submit()."),
   method("reset", "reset()", "Restore initial values; clears errors/touched/dirty."),
 ];
@@ -522,7 +522,7 @@ const httpConfigKeys: readonly ConfigKey[] = [
 
 const queryConfigKeys: readonly ConfigKey[] = [
   ...httpConfigKeys,
-  cfg("key", "string", "Cache key — identical keys share one in-flight request + cached bag."),
+  cfg("key", "string | number", "Cache key — identical keys share one in-flight request + cached bag."),
   cfg("ttl", "number", "Milliseconds before cached data is considered stale and auto-refetched."),
   cfg("refetchInterval", "number", "Poll interval in ms (live dashboards)."),
   cfg("refetchOnFocus", "boolean", "Refetch when the tab regains focus."),
@@ -536,7 +536,10 @@ const mutationConfigKeys: readonly ConfigKey[] = [
   cfg("body", "object", "Default body; shallow-merged with `.mutate(overrides)`."),
   cfg("headers", "object", "Request headers as a plain object."),
   cfg("query", "object", "Object serialised into the URL querystring."),
-  cfg("optimistic", "(vars) => void", "Runs synchronously before the request; auto-rolled-back on failure."),
+  cfg("credentials", 'enum: "omit" | "same-origin" | "include"', "Fetch credentials mode (e.g. \"include\" for cookie-authenticated writes)."),
+  cfg("mode", 'enum: "cors" | "no-cors" | "same-origin"', "Fetch request mode."),
+  cfg("cache", 'enum: "default" | "no-store" | "reload" | "no-cache" | "force-cache"', "Fetch cache mode."),
+  cfg("optimistic", "(vars) => void", "Runs synchronously before the request with the object passed to `.mutate(overrides)` (or `{}`); state it changes is rolled back on failure. Its return value is ignored and a throw is swallowed."),
   cfg("invalidates", "string[]", "Refetch every cached $query whose key contains a listed substring on success."),
   cfg("gql", "string", "GraphQL mutation document."),
   cfg("variables", "object", "GraphQL variables paired with `gql`."),
@@ -546,7 +549,7 @@ const socketConfigKeys: readonly ConfigKey[] = [
   cfg("url", "string", "WebSocket URL (ws:// or wss://)."),
   cfg("protocols", "string | string[]", "Optional sub-protocol(s)."),
   cfg("bufferSize", "number", "Max buffered messages kept in `.messages`."),
-  cfg("onMessage", "(msg) => void", "Callback fired for each received message."),
+  cfg("onMessage", "(msg) => void", "Callback fired for each received message — JSON-parsed when it parses, else the raw string (the same value `.last` holds). A throw is swallowed."),
   cfg("reconnect", "boolean | number", "Retry dropped connections (true, or a max-attempt count) with backoff."),
 ];
 
@@ -555,14 +558,14 @@ const sseConfigKeys: readonly ConfigKey[] = [
   cfg("event", "string", "Named event to listen for (defaults to message)."),
   cfg("withCredentials", "boolean", "Send credentials with the EventSource request."),
   cfg("bufferSize", "number", "Max buffered events kept in `.messages`."),
-  cfg("onMessage", "(msg) => void", "Callback fired for each received event payload (JSON auto-parsed)."),
+  cfg("onMessage", "(msg) => void", "Callback fired for each received event payload — JSON-parsed when it parses, else the raw string (the same value `.last` holds). A throw is swallowed."),
 ];
 
 const scriptConfigKeys: readonly ConfigKey[] = [
   cfg("src", "string", "URL of the script (or stylesheet) to load. De-duplicated per src."),
   cfg("global", "string", "Name of the window global the script defines — read into `.value` once ready (e.g. \"Stripe\")."),
   cfg("type", "string", 'Script type attribute (e.g. "module" for ESM).'),
-  cfg("as", 'enum: "script" | "style"', "Force the resource kind. Inferred from a `.css` src otherwise."),
+  cfg("as", 'enum: "script" | "style" | "stylesheet" | "css"', "Force the resource kind (the last three all mean a stylesheet). Inferred from a `.css` src otherwise."),
   cfg("attributes", "object", "Extra attributes to set on the injected <script>/<link> (e.g. crossorigin, integrity)."),
 ];
 
@@ -572,15 +575,15 @@ const headConfigKeys: readonly ConfigKey[] = [
   cfg("meta", "object", "Named meta tags: { description, \"theme-color\", keywords, … } → <meta name content>."),
   cfg("og", "object", "Open Graph tags: { title, image, type, … } → <meta property=\"og:KEY\">."),
   cfg("twitter", "object", "Twitter card tags: { card, site, … } → <meta name=\"twitter:KEY\">."),
-  cfg("link", "object[]", "Array of <link> descriptors, e.g. [{ rel: \"canonical\", href }]."),
+  cfg("link", "object | object[]", "A <link> descriptor or an array of them, e.g. [{ rel: \"canonical\", href }]. Only metadata / resource-hint rels are kept (no \"stylesheet\" or \"preload\"), and a link without a safe href is dropped."),
   cfg("jsonLd", "object | object[]", "JSON-LD structured data → <script type=\"application/ld+json\">. @context defaults to schema.org."),
-  cfg("base", "string | object", "<base href> for the document."),
+  cfg("base", "string | object", "<base href> for the document (a string, or { href }): a same-origin relative path only — an absolute or protocol-relative one is dropped."),
   cfg("htmlAttrs", "object", "Attributes for the <html> element, e.g. { lang: \"en\", dir: \"ltr\" }."),
 ];
 
 const formConfigKeys: readonly ConfigKey[] = [
   cfg("values", "object", "Initial field values — the clean snapshot."),
-  cfg("rules", "object", "Per-field validator arrays: { field: [$util.rules.required(), …] }."),
+  cfg("rules", "object", "Per-field validator arrays: { field: [$util.rules.required(), …] }. Each field's validators receive that field's value."),
   cfg("onSubmit", "(values) => void", "Called with the values once validation passes."),
 ];
 

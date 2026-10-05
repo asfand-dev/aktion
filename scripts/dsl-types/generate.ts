@@ -11,9 +11,10 @@
  * the curated per-component types (`scripts/dsl-types/component-types/`),
  * `UNIVERSAL_PROP_NAMES`, `LEGACY_SIZE_TOKEN_ALIASES`, `RESPONSIVE_BREAKPOINTS`,
  * `SPACING_TOKENS`, the language catalogues (`src/language/*`), the built-in
- * theme names, `SAFE_HOST_GLOBALS`, the runtime's TS types and the TypeScript
- * libs. Output is deterministic: no timestamps, no version stamp (a release
- * bump must not make the committed files stale), sorted where order is free.
+ * theme names, `SAFE_HOST_GLOBALS`, the `$toast` / `$head` value tables, the
+ * runtime's TS types and the TypeScript libs. Output is deterministic: no
+ * timestamps, no version stamp (a release bump must not make the committed
+ * files stale), sorted where order is free.
  *
  * `ts` is passed in (not imported) so this module bundles without TypeScript
  * and runs from a `data:` URL — see `scripts/emit-dsl-types.mjs`.
@@ -34,6 +35,8 @@ import {
 } from "../../src/language/namespaces.js";
 import { builtInThemes } from "../../src/theme/index.js";
 import { SAFE_HOST_GLOBALS } from "../../src/runtime/evaluator.js";
+import { SAFE_HTML_ATTRS, SAFE_LINK_ATTRS, SAFE_LINK_RELS } from "../../src/runtime/head.js";
+import { TOAST_TONES, TOASTS_POSITIONS } from "../../src/library/components/feedback.js";
 import { INJECTED_NAMES, classifyBuiltins, emitBuiltins } from "./builtins.js";
 import { byCodePoint, emitComponents, type ComponentManifestEntry } from "./components.js";
 import { COMPONENT_TYPES } from "./component-types/index.js";
@@ -109,6 +112,9 @@ export function generateDslTypes(input: { ts: typeof TS; repoRoot: string }): Ge
     themeNames: Object.keys(builtInThemes),
     runtimeTypes,
     libGlobals,
+    toastTones: TOAST_TONES,
+    toastPositions: TOASTS_POSITIONS,
+    head: { linkRels: [...SAFE_LINK_RELS], linkAttributes: SAFE_LINK_ATTRS, htmlAttributes: [...SAFE_HTML_ATTRS] },
   });
 
   const components = emitComponents({
