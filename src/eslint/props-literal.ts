@@ -80,7 +80,7 @@ export const aktionPropsLiteralRule: Rule.RuleModule = {
     type: "problem",
     docs: {
       description:
-        "Require the props of an Aktion library component call to be an object literal written at the call site, without spreads (needs type information)",
+        "Require the props of an Aktion library component call to be an object literal written at the call site, without spreads, and flag an object literal Aktion reads as props where TypeScript matched a positional parameter (needs type information)",
       recommended: true,
     },
     messages: {
