@@ -4,14 +4,14 @@ import type { ComponentTypeTable } from "./types.js";
 export default {
   CodeEditor: {
     props: {
-      onChange: "(source: string) => void",
-      onSave: "(source: string) => void",
+      onChange: "(source: string) => unknown",
+      onSave: "(source: string) => unknown",
     },
   },
   ColorPicker: {
     props: {
       value: "string",
-      onChange: "(color: string) => void",
+      onChange: "(color: string) => unknown",
     },
   },
   ContextMenu: {
@@ -46,12 +46,12 @@ export default {
       // `false` / `null` / `undefined` are skipped (a conditional row); any other
       // component node is ignored at runtime, so the types refuse it.
       items: "readonly (AktionNode<\"MenuItem\"> | AktionNode<\"MenuSeparator\"> | ContextMenuItemData | ContextMenuSeparatorData | false | null | undefined)[]",
-      onOpenChange: "(open: boolean) => void",
+      onOpenChange: "(open: boolean) => unknown",
     },
   },
   RichTextEditor: {
     props: {
-      onChange: "(html: string) => void",
+      onChange: "(html: string) => unknown",
     },
   },
 } satisfies ComponentTypeTable;

@@ -4,7 +4,7 @@ import type { ComponentTypeTable } from "./types.js";
 export default {
   Drawer: {
     props: {
-      onClose: "() => void",
+      onClose: "() => unknown",
     },
   },
   InboxPanel: {
@@ -13,7 +13,7 @@ export default {
     },
     props: {
       items: "readonly InboxPanelItem[]",
-      onMarkAllRead: "() => void",
+      onMarkAllRead: "() => unknown",
     },
   },
   MasonryGrid: {
@@ -27,18 +27,18 @@ export default {
     },
     props: {
       items: "readonly OnboardingChecklistItem[]",
-      onDismiss: "() => void",
-      onComplete: "() => void",
+      onDismiss: "() => unknown",
+      onComplete: "() => unknown",
     },
   },
   ResizablePanels: {
     props: {
-      onResize: "(primaryPercent: number) => void",
+      onResize: "(primaryPercent: number) => unknown",
     },
   },
   Spotlight: {
     props: {
-      onClose: "() => void",
+      onClose: "() => unknown",
       target: "string",
     },
   },
@@ -54,9 +54,9 @@ export default {
     props: {
       steps: "readonly (TourStep | string)[]",
       current: "number",
-      onOpenChange: "(open: false) => void",
-      onComplete: "() => void",
-      onSkip: "(stepIndex: number) => void",
+      onOpenChange: "(open: false) => unknown",
+      onComplete: "() => unknown",
+      onSkip: "(stepIndex: number) => unknown",
     },
   },
 } satisfies ComponentTypeTable;

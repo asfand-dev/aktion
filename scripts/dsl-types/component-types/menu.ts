@@ -29,12 +29,12 @@ export default {
     },
     props: {
       items: "readonly DropdownMenuEntry[]",
-      onOpenChange: "(open: boolean) => void",
+      onOpenChange: "(open: boolean) => unknown",
     },
   },
   MenuItem: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
 } satisfies ComponentTypeTable;

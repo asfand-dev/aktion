@@ -14,7 +14,7 @@ export default {
     props: {
       xLabels: "readonly (string | number)[]",
       yLabels: "readonly (string | number)[]",
-      onCellClick: "(value: number, xLabel: string, yLabel: string) => void",
+      onCellClick: "(value: number, xLabel: string, yLabel: string) => unknown",
     },
   },
   Histogram: {
@@ -24,7 +24,7 @@ export default {
     props: {
       bins: "readonly HistogramBin[]",
       height: "number | `${number}px`",
-      onBinClick: "(binLabel: string, count: number, binIndex: number) => void",
+      onBinClick: "(binLabel: string, count: number, binIndex: number) => unknown",
     },
   },
   RadarChart: {
@@ -36,7 +36,7 @@ export default {
   ScatterChart: {
     props: {
       height: "number | `${number}px`",
-      onPointClick: "(x: number, y: number, label: string, seriesName: string) => void",
+      onPointClick: "(x: number, y: number, label: string, seriesName: string) => unknown",
     },
   },
 } satisfies ComponentTypeTable;

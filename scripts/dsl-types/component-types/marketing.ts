@@ -12,12 +12,12 @@ export default {
     props: {
       // null / "" while the target is still loading: the cells show `--`.
       to: "string | number | Date | null",
-      onEnd: "() => void",
+      onEnd: "() => unknown",
     },
   },
   FloatingActionButton: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   Heading: {
@@ -28,13 +28,13 @@ export default {
   ProductCard: {
     props: {
       price: "string | number | AktionNode",
-      onAdd: "() => void",
-      onClick: "() => void",
+      onAdd: "() => unknown",
+      onClick: "() => unknown",
     },
   },
   QuantityStepper: {
     props: {
-      onChange: "(value: number) => void",
+      onChange: "(value: number) => unknown",
     },
   },
   RelativeTime: {
@@ -50,14 +50,14 @@ export default {
     props: {
       options: "readonly (V | SegmentedControlOption<V>)[]",
       value: "V | null",
-      onChange: "(value: V) => void",
+      onChange: "(value: V) => unknown",
     },
   },
   Swatch: {
     props: {
       background: "string",
       foreground: "string",
-      onClick: "(name: string) => void",
+      onClick: "(name: string) => unknown",
     },
   },
   TableOfContents: {
@@ -66,7 +66,7 @@ export default {
     },
     props: {
       items: "readonly TableOfContentsItem[]",
-      onSelect: "(href: string) => void",
+      onSelect: "(href: string) => unknown",
     },
   },
   ThemeToggle: {

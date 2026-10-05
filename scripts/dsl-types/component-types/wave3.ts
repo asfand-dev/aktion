@@ -8,8 +8,8 @@ export default {
     },
     props: {
       items: "readonly CartItem[]",
-      onQty: "(id: string, qty: number) => void",
-      onRemove: "(id: string) => void",
+      onQty: "(id: string, qty: number) => unknown",
+      onRemove: "(id: string) => unknown",
       currency: "string",
     },
   },
@@ -30,7 +30,7 @@ export default {
     },
     props: {
       reactions: "readonly ReactionPickerReaction[]",
-      onReact: "(emoji: string) => void",
+      onReact: "(emoji: string) => unknown",
     },
   },
   TabBar: {
@@ -39,7 +39,7 @@ export default {
     },
     props: {
       items: "readonly TabBarItem[]",
-      onChange: "(id: string) => void",
+      onChange: "(id: string) => unknown",
     },
   },
 } satisfies ComponentTypeTable;

@@ -17,33 +17,33 @@ export default {
   },
   ChatBubble: {
     props: {
-      onRetry: "() => void",
+      onRetry: "() => unknown",
     },
   },
   HoverCard: {
     props: {
-      onOpenChange: "(open: boolean) => void",
+      onOpenChange: "(open: boolean) => unknown",
     },
   },
   Popover: {
     props: {
-      onOpenChange: "(open: boolean) => void",
+      onOpenChange: "(open: boolean) => unknown",
     },
   },
   Rating: {
     props: {
       icon: "\"star\" | \"heart\" | \"thumb\" | \"fire\" | \"bolt\" | (string & {})",
-      onChange: "(value: number) => void",
+      onChange: "(value: number) => unknown",
     },
   },
   Switch: {
     props: {
-      onChange: "(checked: boolean) => void",
+      onChange: "(checked: boolean) => unknown",
     },
   },
   Toast: {
     props: {
-      onClose: "() => void",
+      onClose: "() => unknown",
     },
   },
   ToggleGroup: {
@@ -65,12 +65,12 @@ export default {
       id: "string | number | readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[]",
       items: "readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[]",
       value: "V | readonly V[] | null",
-      onChange: "(value: V | V[]) => void",
+      onChange: "(value: V | V[]) => unknown",
     },
   },
   Tooltip: {
     props: {
-      onOpenChange: "(open: boolean) => void",
+      onOpenChange: "(open: boolean) => unknown",
     },
   },
 } satisfies ComponentTypeTable;

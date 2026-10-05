@@ -4,13 +4,13 @@ import type { ComponentTypeTable } from "./types.js";
 export default {
   ActionLink: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   FollowUpBlock: {
     props: {
       items: "readonly (AktionNode<\"FollowUpItem\"> | FollowUpItemData | string)[]",
-      onSelect: "(message: string, label: string) => void",
+      onSelect: "(message: string, label: string) => unknown",
     },
   },
   ListBlock: {

@@ -14,24 +14,24 @@ export default {
     },
     props: {
       items: "readonly BreadcrumbEntry[]",
-      onItemClick: "(index: number, label: string) => void",
+      onItemClick: "(index: number, label: string) => unknown",
       homeIcon: "boolean | string",
     },
   },
   BreadcrumbItem: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   NavbarItem: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   Pagination: {
     props: {
-      onChange: "(page: number) => void",
-      onPerPageChange: "(perPage: number) => void",
+      onChange: "(page: number) => unknown",
+      onPerPageChange: "(perPage: number) => unknown",
     },
   },
 } satisfies ComponentTypeTable;

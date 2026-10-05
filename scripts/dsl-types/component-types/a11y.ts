@@ -5,7 +5,7 @@ export default {
   FocusTrap: {
     props: {
       child: "Children",
-      onEscape: "() => void",
+      onEscape: "() => unknown",
       autoFocus: "boolean | string",
     },
   },

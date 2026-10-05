@@ -14,7 +14,7 @@ export default {
   Callout: {
     props: {
       icon: "string | number | false",
-      onDismiss: "() => void",
+      onDismiss: "() => unknown",
     },
   },
   CodeBlock: {
@@ -33,7 +33,7 @@ export default {
   Image: {
     props: {
       ratio: "AspectRatioValue",
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   Text: {

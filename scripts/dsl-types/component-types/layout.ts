@@ -5,12 +5,12 @@ export default {
   Accordion: {
     props: {
       items: "readonly (AktionNode<\"AccordionItem\"> | AktionNode<\"Fragment\"> | null | undefined)[]",
-      onChange: "(title: string, open: boolean) => void",
+      onChange: "(title: string, open: boolean) => unknown",
     },
   },
   AccordionItem: {
     props: {
-      onToggle: "(open: boolean) => void",
+      onToggle: "(open: boolean) => unknown",
     },
   },
   AspectRatio: {
@@ -23,7 +23,7 @@ export default {
   },
   Card: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   CardHeader: {
@@ -47,8 +47,8 @@ export default {
   },
   Modal: {
     props: {
-      onClose: "() => void",
-      onRequestClose: "() => void",
+      onClose: "() => unknown",
+      onRequestClose: "() => unknown",
     },
   },
   StackItem: {
@@ -71,7 +71,7 @@ export default {
     props: {
       // `false` / `null` / `undefined` are skipped (a conditional tab).
       items: "readonly (AktionNode<\"TabItem\"> | false | null | undefined)[]",
-      onChange: "(value: string) => void",
+      onChange: "(value: string) => unknown",
     },
   },
 } satisfies ComponentTypeTable;

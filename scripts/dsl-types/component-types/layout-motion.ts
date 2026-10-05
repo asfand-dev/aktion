@@ -25,13 +25,13 @@ export default {
     generics: [{ name: "Data", default: "unknown" }],
     props: {
       data: "Data",
-      onDragStart: "(data: NoInfer<Data>) => void",
-      onDragEnd: "() => void",
+      onDragStart: "(data: NoInfer<Data>) => unknown",
+      onDragEnd: "() => unknown",
     },
   },
   DropZone: {
     props: {
-      onDrop: "(data: unknown) => void",
+      onDrop: "(data: unknown) => unknown",
     },
   },
   OnGesture: {
@@ -45,11 +45,11 @@ export default {
 }`,
     },
     props: {
-      swipe: "(direction: OnGestureSwipeDirection) => void",
-      longPress: "() => void",
-      doubleTap: "() => void",
-      pan: "(offset: OnGesturePanOffset) => void",
-      onPanEnd: "(offset: OnGesturePanOffset) => void",
+      swipe: "(direction: OnGestureSwipeDirection) => unknown",
+      longPress: "() => unknown",
+      doubleTap: "() => unknown",
+      pan: "(offset: OnGesturePanOffset) => unknown",
+      onPanEnd: "(offset: OnGesturePanOffset) => unknown",
     },
   },
   Parallax: {
@@ -66,7 +66,7 @@ export default {
   Sortable: {
     props: {
       items: "readonly (AktionNode | string | number)[]",
-      onReorder: "(fromIndex: number, toIndex: number) => void",
+      onReorder: "(fromIndex: number, toIndex: number) => unknown",
     },
   },
   Split: {
@@ -79,7 +79,7 @@ export default {
   },
   Transition: {
     props: {
-      onExited: "() => void",
+      onExited: "() => unknown",
     },
   },
 } satisfies ComponentTypeTable;

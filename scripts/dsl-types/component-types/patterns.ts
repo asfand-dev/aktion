@@ -4,18 +4,18 @@ import type { ComponentTypeTable } from "./types.js";
 export default {
   ActionStripe: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   AppShell: {
     props: {
-      onSidebarOpenChange: "(open: boolean) => void",
+      onSidebarOpenChange: "(open: boolean) => unknown",
     },
   },
   Banner: {
     props: {
-      onDismiss: "() => void",
-      onClick: "() => void",
+      onDismiss: "() => unknown",
+      onClick: "() => unknown",
     },
   },
   DescriptionItem: {
@@ -30,7 +30,7 @@ export default {
   },
   FeatureItem: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   Hero: {
@@ -40,24 +40,24 @@ export default {
   },
   KanbanBoard: {
     props: {
-      onCardMove: "(cardTitle: string, toColumn: string, fromColumn: string) => void",
+      onCardMove: "(cardTitle: string, toColumn: string, fromColumn: string) => unknown",
     },
   },
   KanbanCard: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   MediaCard: {
     props: {
       ratio: "`${number}:${number}` | `${number}` | number",
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   Notification: {
     props: {
-      onClick: "() => void",
-      onDismiss: "() => void",
+      onClick: "() => unknown",
+      onDismiss: "() => unknown",
     },
   },
   PageHeader: {
@@ -67,12 +67,12 @@ export default {
     props: {
       breadcrumbs: "readonly (string | number | PageHeaderCrumb | AktionNode)[] | AktionNode<\"Breadcrumb\"> | false",
       status: "AktionNode<\"Badge\"> | AktionNode<\"Pill\"> | AktionNode<\"StatusDot\">",
-      onCrumbClick: "(label: string, index: number) => void",
+      onCrumbClick: "(label: string, index: number) => unknown",
     },
   },
   PersonChip: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   PricingCard: {
@@ -82,7 +82,7 @@ export default {
   },
   SidebarItem: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   Stats: {
@@ -104,17 +104,17 @@ export default {
   },
   Tile: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   TimelineItem: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   Toolbar: {
     props: {
-      onSearch: "(query: string) => void",
+      onSearch: "(query: string) => unknown",
     },
   },
 } satisfies ComponentTypeTable;

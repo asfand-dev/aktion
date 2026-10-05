@@ -6,7 +6,7 @@ export default {
     props: {
       labels: "readonly (string | number)[]",
       height: "number | `${number}` | `${number}px`",
-      onBarClick: "(label: string, value: number, seriesName: string) => void",
+      onBarClick: "(label: string, value: number, seriesName: string) => unknown",
     },
   },
   LineChart: {
@@ -17,14 +17,14 @@ export default {
       labels: "readonly (string | number)[]",
       data: "readonly LineChartRow[]",
       height: "number | `${number}` | `${number}px`",
-      onPointClick: "(label: string, value: number, seriesName: string) => void",
+      onPointClick: "(label: string, value: number, seriesName: string) => unknown",
     },
   },
   PieChart: {
     props: {
       labels: "readonly (string | number)[]",
       size: "number | `${number}` | `${number}px`",
-      onSliceClick: "(label: string, value: number, share: number) => void",
+      onSliceClick: "(label: string, value: number, share: number) => unknown",
     },
   },
   Series: {

@@ -8,11 +8,11 @@ export default {
       setup: "(node: DomElement, props: Props) => Instance",
       // Runs once `setup` has returned, whatever it returned — so `instance` can
       // be the `undefined` of a setup that only fills `node`.
-      update: "(instance: Instance, props: Props, node: DomElement) => void",
-      cleanup: "(instance: Instance | undefined) => void",
+      update: "(instance: Instance, props: Props, node: DomElement) => unknown",
+      cleanup: "(instance: Instance | undefined) => unknown",
       props: "Props",
       deps: "readonly unknown[]",
-      onError: "(error: unknown, stage: \"setup\" | \"update\") => void",
+      onError: "(error: unknown, stage: \"setup\" | \"update\") => unknown",
     },
   },
   WebComponent: {

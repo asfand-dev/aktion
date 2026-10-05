@@ -14,7 +14,7 @@ export default {
     props: {
       src: "string",
       sources: "readonly AudioPlayerSource[]",
-      onEnded: "() => void",
+      onEnded: "() => unknown",
     },
   },
   Carousel: {
@@ -24,7 +24,7 @@ export default {
     props: {
       items: "readonly (AktionNode | string | CarouselImage)[]",
       ratio: "`${number}:${number}` | `${number}` | number",
-      onChange: "(index: number) => void",
+      onChange: "(index: number) => unknown",
     },
   },
   Gallery: {
@@ -40,7 +40,7 @@ export default {
     props: {
       items: "readonly Item[]",
       ratio: "`${number}:${number}` | `${number}` | number",
-      onSelect: "(index: number, item: Item) => void",
+      onSelect: "(index: number, item: Item) => unknown",
     },
   },
   Lightbox: {
@@ -53,7 +53,7 @@ export default {
     },
     props: {
       items: "readonly (string | LightboxImage | AktionNode<\"Image\">)[]",
-      onClose: "() => void",
+      onClose: "() => unknown",
     },
   },
   Map: {
@@ -95,8 +95,8 @@ export default {
       sources: "readonly VideoPlayerSource[]",
       ratio: "`${number}:${number}` | `${number}` | number",
       tracks: "readonly VideoPlayerTrack[]",
-      onEnded: "() => void",
-      onError: "() => void",
+      onEnded: "() => unknown",
+      onError: "() => unknown",
     },
   },
 } satisfies ComponentTypeTable;

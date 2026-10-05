@@ -4,7 +4,7 @@ import type { ComponentTypeTable } from "./types.js";
 export default {
   Button: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   CheckBoxGroup: {
@@ -14,13 +14,13 @@ export default {
     props: {
       items: "readonly (AktionNode<\"CheckBoxItem\"> | CheckBoxGroupItemData | string)[]",
       value: "Readonly<Record<string, boolean>>",
-      onChange: "(value: Record<string, boolean>) => void",
+      onChange: "(value: Record<string, boolean>) => unknown",
       optional: "boolean | string",
     },
   },
   Checkbox: {
     props: {
-      onChange: "(checked: boolean) => void",
+      onChange: "(checked: boolean) => unknown",
       optional: "boolean | string",
     },
   },
@@ -31,11 +31,11 @@ export default {
     props: {
       items: "readonly (AktionNode<\"SelectItem\"> | SelectItemData | ComboboxItemData | string)[]",
       value: "string | number | null",
-      onOpenChange: "(open: boolean) => void",
-      onChange: "(value: string) => void",
-      onSearch: "(query: string) => void",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      onOpenChange: "(open: boolean) => unknown",
+      onChange: "(value: string) => unknown",
+      onSearch: "(query: string) => unknown",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
       optional: "boolean | string",
     },
   },
@@ -44,9 +44,9 @@ export default {
       value: "string | null",
       min: "string",
       max: "string",
-      onChange: "(value: string) => void",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      onChange: "(value: string) => unknown",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
       locale: "string",
       optional: "boolean | string",
     },
@@ -60,22 +60,22 @@ export default {
       to: "string | null",
       min: "string",
       max: "string",
-      onChange: "(range: DateRangePickerRange) => void",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      onChange: "(range: DateRangePickerRange) => unknown",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
       locale: "string",
       optional: "boolean | string",
     },
   },
   FileUpload: {
     props: {
-      onSelect: "(files: DomFile[]) => void",
-      onRemove: "(file: DomFile) => void",
+      onSelect: "(files: DomFile[]) => unknown",
+      onRemove: "(file: DomFile) => unknown",
     },
   },
   Form: {
     props: {
-      onSubmit: "() => void",
+      onSubmit: "() => unknown",
     },
   },
   FormControl: {
@@ -93,64 +93,64 @@ export default {
     props: {
       validations: "readonly InputValidationHint[] | InputValidationRules",
       value: "string | number | null",
-      onChange: "(value: string) => void",
+      onChange: "(value: string) => unknown",
       optional: "boolean | string",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
       autocomplete: "InputAutocomplete",
     },
   },
   InputGroup: {
     props: {
       optional: "boolean | string",
-      onBlur: "(value: string | string[]) => void",
-      onFocus: "(value: string | string[]) => void",
+      onBlur: "(value: string | string[]) => unknown",
+      onFocus: "(value: string | string[]) => unknown",
     },
   },
   MultiSelect: {
     props: {
       items: "readonly (AktionNode<\"SelectItem\"> | SelectItemData | ComboboxItemData | string)[]",
       value: "readonly (string | number)[]",
-      onOpenChange: "(open: boolean) => void",
-      onChange: "(values: string[]) => void",
-      onSearch: "(query: string) => void",
+      onOpenChange: "(open: boolean) => unknown",
+      onChange: "(values: string[]) => unknown",
+      onSearch: "(query: string) => unknown",
       optional: "boolean | string",
     },
   },
   NumberInput: {
     props: {
       value: "number | null",
-      onChange: "(value: number | null) => void",
+      onChange: "(value: number | null) => unknown",
       optional: "boolean | string",
-      onBlur: "(value: number | null) => void",
-      onFocus: "(value: number | null) => void",
-      onLimit: "(limit: \"min\" | \"max\") => void",
+      onBlur: "(value: number | null) => unknown",
+      onFocus: "(value: number | null) => unknown",
+      onLimit: "(limit: \"min\" | \"max\") => unknown",
     },
   },
   Radio: {
     props: {
       items: "readonly (AktionNode<\"SelectItem\"> | SelectItemData | string)[]",
       value: "string | number | null",
-      onChange: "(value: string) => void",
+      onChange: "(value: string) => unknown",
       optional: "boolean | string",
     },
   },
   SearchBar: {
     props: {
       value: "string | number | null",
-      onSubmit: "() => void",
-      onChange: "(value: string) => void",
-      onClear: "() => void",
+      onSubmit: "() => unknown",
+      onChange: "(value: string) => unknown",
+      onClear: "() => unknown",
     },
   },
   Select: {
     props: {
       items: "readonly (AktionNode<\"SelectItem\"> | SelectItemData | string)[]",
       value: "string | number | null",
-      onChange: "(value: string) => void",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
-      onSearch: "(query: string) => void",
+      onChange: "(value: string) => unknown",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
+      onSearch: "(query: string) => unknown",
       optional: "boolean | string",
     },
   },
@@ -159,7 +159,7 @@ export default {
       SliderMark: "export interface SliderMark { readonly value: number; readonly label?: string | number; }",
     },
     props: {
-      onChange: "(value: number) => void",
+      onChange: "(value: number) => unknown",
       marks: "readonly (number | SliderMark)[]",
       optional: "boolean | string",
     },
@@ -167,10 +167,10 @@ export default {
   TextArea: {
     props: {
       value: "string | number | null",
-      onChange: "(value: string) => void",
+      onChange: "(value: string) => unknown",
       optional: "boolean | string",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
     },
   },
 } satisfies ComponentTypeTable;

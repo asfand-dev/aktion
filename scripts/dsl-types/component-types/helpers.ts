@@ -9,14 +9,14 @@ export default {
       error: "Children",
       empty: "Children",
       data: "Children",
-      retry: "() => void",
+      retry: "() => unknown",
     },
   },
   ErrorBoundary: {
     props: {
       fallback: "Children",
-      onError: "(error: unknown) => void",
-      onRetry: "() => void",
+      onError: "(error: unknown) => unknown",
+      onRetry: "() => unknown",
     },
   },
   Lazy: {
@@ -27,8 +27,8 @@ export default {
       loader: "LazyLoader",
       fallback: "Children",
       error: "Children",
-      onError: "(error: unknown) => void",
-      retry: "() => void",
+      onError: "(error: unknown) => unknown",
+      retry: "() => unknown",
     },
   },
   Portal: {

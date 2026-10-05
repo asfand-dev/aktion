@@ -4,25 +4,25 @@ import type { ComponentTypeTable } from "./types.js";
 export default {
   BottomSheet: {
     props: {
-      onClose: "() => void",
+      onClose: "() => unknown",
     },
   },
   Confetti: {
     props: {
-      onDone: "() => void",
+      onDone: "() => unknown",
     },
   },
   ConfirmDialog: {
     props: {
-      onConfirm: "() => void",
-      onCancel: "() => void",
+      onConfirm: "() => unknown",
+      onCancel: "() => unknown",
     },
   },
   Lottie: {
     props: {
       data: "Readonly<Record<string, unknown>> | { readonly v?: string; readonly fr?: number; readonly ip?: number; readonly op?: number; readonly w?: number; readonly h?: number; readonly nm?: string; readonly layers?: readonly unknown[]; readonly assets?: readonly unknown[] }",
-      onComplete: "() => void",
-      onError: "(reason: \"missing-library\" | \"load-failed\") => void",
+      onComplete: "() => unknown",
+      onError: "(reason: \"missing-library\" | \"load-failed\") => unknown",
     },
   },
   OrderSummary: {
@@ -48,7 +48,7 @@ export default {
     },
     props: {
       people: "readonly Person[]",
-      onClick: "(person: Person) => void",
+      onClick: "(person: Person) => unknown",
     },
   },
   ScrollSpy: {
@@ -57,12 +57,12 @@ export default {
     },
     props: {
       sections: "readonly ScrollSpySection[]",
-      onChange: "(id: string) => void",
+      onChange: "(id: string) => unknown",
     },
   },
   Sheet: {
     props: {
-      onClose: "() => void",
+      onClose: "() => unknown",
     },
   },
   SpeedDial: {
@@ -71,7 +71,7 @@ export default {
     },
     props: {
       actions: "readonly SpeedDialAction[]",
-      onOpenChange: "(open: boolean) => void",
+      onOpenChange: "(open: boolean) => unknown",
     },
   },
   Svg: {
@@ -92,7 +92,7 @@ export default {
     props: {
       options: "readonly (string | number | VariantSelectorOption)[]",
       value: "string | number | readonly (string | number)[]",
-      onChange: "(value: string | string[]) => void",
+      onChange: "(value: string | string[]) => unknown",
     },
   },
 } satisfies ComponentTypeTable;

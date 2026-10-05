@@ -8,16 +8,16 @@ export default {
       min: "string",
       max: "string",
       step: "number | \"any\"",
-      onChange: "(value: string) => void",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      onChange: "(value: string) => unknown",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
     },
   },
   MaskedInput: {
     props: {
-      onChange: "(value: string) => void",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      onChange: "(value: string) => unknown",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
     },
   },
   MentionInput: {
@@ -26,10 +26,10 @@ export default {
     },
     props: {
       people: "readonly (string | MentionInputPerson)[]",
-      onSearch: "(query: string) => void",
-      onChange: "(value: string) => void",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      onSearch: "(query: string) => unknown",
+      onChange: "(value: string) => unknown",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
     },
   },
   MultiStepForm: {
@@ -43,24 +43,24 @@ export default {
     },
     props: {
       steps: "readonly MultiStepFormStep[]",
-      onSubmit: "() => void",
-      onStepChange: "(step: number) => void",
-      onStepClick: "(index: number) => void",
+      onSubmit: "() => unknown",
+      onStepChange: "(step: number) => unknown",
+      onStepClick: "(index: number) => unknown",
     },
   },
   PasswordInput: {
     props: {
-      onChange: "(value: string) => void",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      onChange: "(value: string) => unknown",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
     },
   },
   PinInput: {
     props: {
-      onChange: "(value: string) => void",
-      onComplete: "(code: string) => void",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      onChange: "(value: string) => unknown",
+      onComplete: "(code: string) => unknown",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
     },
   },
   RequirementList: {
@@ -76,9 +76,9 @@ export default {
   TagInput: {
     props: {
       suggestions: "readonly (string | number)[]",
-      onChange: "(tags: string[]) => void",
-      onBlur: "(tags: string[]) => void",
-      onFocus: "(tags: string[]) => void",
+      onChange: "(tags: string[]) => unknown",
+      onBlur: "(tags: string[]) => unknown",
+      onFocus: "(tags: string[]) => unknown",
     },
   },
   TimePicker: {
@@ -87,9 +87,9 @@ export default {
       min: "string",
       max: "string",
       step: "number | \"any\"",
-      onChange: "(value: string) => void",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      onChange: "(value: string) => unknown",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
     },
   },
   ValidationSummary: {
@@ -100,7 +100,7 @@ export default {
     },
     props: {
       errors: "readonly (string | ValidationSummaryError | false | null | undefined)[]",
-      onErrorClick: "(field: string) => void",
+      onErrorClick: "(field: string) => unknown",
     },
   },
 } satisfies ComponentTypeTable;

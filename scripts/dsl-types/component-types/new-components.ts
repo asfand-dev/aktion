@@ -14,8 +14,8 @@ export default {
     },
     props: {
       items: "readonly (CommandPaletteItem | string | number)[]",
-      onSelect: "(value: string) => void",
-      onClose: "(open: false) => void",
+      onSelect: "(value: string) => unknown",
+      onClose: "(open: false) => unknown",
     },
   },
   FieldRepeater: {
@@ -34,9 +34,9 @@ export default {
     props: {
       items: "readonly Item[]",
       fields: "readonly (FieldRepeaterField<Item> | (keyof Item & string) | (string & {}))[]",
-      onAdd: "() => void",
-      onRemove: "(index: number) => void",
-      onChange: "(index: number, field: string, value: string | boolean, rows: Record<string, unknown>[]) => void",
+      onAdd: "() => unknown",
+      onRemove: "(index: number) => unknown",
+      onChange: "(index: number, field: string, value: string | boolean, rows: Record<string, unknown>[]) => unknown",
     },
   },
   FilterChips: {
@@ -48,13 +48,13 @@ export default {
     },
     props: {
       chips: "readonly (FilterChipsChip | string | number)[]",
-      onRemove: "(value: string) => void",
-      onClear: "() => void",
+      onRemove: "(value: string) => unknown",
+      onClear: "() => unknown",
     },
   },
   FilterPill: {
     props: {
-      onToggle: "(active: boolean) => void",
+      onToggle: "(active: boolean) => unknown",
     },
   },
   Gantt: {
@@ -77,12 +77,12 @@ export default {
       tasks: "readonly GanttTask[]",
       startDate: "string",
       endDate: "string",
-      onTaskClick: "(id: string) => void",
+      onTaskClick: "(id: string) => unknown",
     },
   },
   IconButton: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   InlineEdit: {
@@ -90,11 +90,11 @@ export default {
       InlineEditInputType: "export type InlineEditInputType = \"text\" | \"number\" | \"email\" | \"tel\" | \"url\" | \"password\" | \"search\" | \"color\" | \"date\" | \"time\" | \"datetime-local\" | \"month\" | \"week\" | \"textarea\";",
     },
     props: {
-      onSave: "(value: string) => void",
+      onSave: "(value: string) => unknown",
       type: "InlineEditInputType",
-      onCancel: "() => void",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      onCancel: "() => unknown",
+      onBlur: "(value: string) => unknown",
+      onFocus: "(value: string) => unknown",
     },
   },
   JsonTree: {
@@ -115,9 +115,9 @@ export default {
     },
     props: {
       items: "readonly Item[]",
-      onOpen: "() => void",
-      onItemClick: "(item: Item, index: number) => void",
-      onMarkAllRead: "() => void",
+      onOpen: "() => unknown",
+      onItemClick: "(item: Item, index: number) => unknown",
+      onMarkAllRead: "() => unknown",
     },
   },
   QueryBuilder: {
@@ -146,13 +146,13 @@ export default {
     props: {
       fields: "readonly (QueryBuilderField | string)[]",
       value: "readonly QueryBuilderRule[]",
-      onChange: "(rules: QueryBuilderRule[]) => void",
+      onChange: "(rules: QueryBuilderRule[]) => unknown",
       operators: "readonly (QueryBuilderOperator | QueryBuilderOperatorDef)[]",
     },
   },
   Truncate: {
     props: {
-      onToggle: "(expanded: boolean) => void",
+      onToggle: "(expanded: boolean) => unknown",
       child: "Children",
     },
   },
@@ -160,7 +160,7 @@ export default {
     generics: [{ name: "Item", default: "Children", constraint: "Children" }],
     props: {
       items: "readonly Item[]",
-      onItemClick: "(item: Item, index: number) => void",
+      onItemClick: "(item: Item, index: number) => unknown",
       empty: "Children",
     },
   },
@@ -169,7 +169,7 @@ export default {
     props: {
       items: "readonly Item[]",
       renderItem: "(row: Item, index: number) => Children",
-      onItemClick: "(row: Item, index: number) => void",
+      onItemClick: "(row: Item, index: number) => unknown",
       empty: "Children",
     },
   },

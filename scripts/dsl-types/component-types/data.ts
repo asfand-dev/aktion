@@ -7,7 +7,7 @@ export default {
     props: {
       values: "readonly Value[]",
       render: "(value: Value, index: number, row: Record<string, unknown>) => AktionChild | readonly AktionChild[]",
-      onClick: "(value: Value, index: number, row: Record<string, unknown>) => void",
+      onClick: "(value: Value, index: number, row: Record<string, unknown>) => unknown",
       currency: "\"USD\" | \"EUR\" | \"GBP\" | \"CHF\" | (string & {})",
       locale: "string",
     },
@@ -31,7 +31,7 @@ export default {
   },
   ListItem: {
     props: {
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   Sparkline: {
@@ -43,28 +43,28 @@ export default {
     props: {
       icon: "\"none\" | (string & {}) | false",
       spark: "readonly (number | null | undefined)[]",
-      onClick: "() => void",
+      onClick: "() => unknown",
     },
   },
   Table: {
     props: {
       columns: "readonly (AktionNode<\"Col\"> | null | undefined)[]",
-      onRowClick: "(rowIndex: number, row: Record<string, unknown>) => void",
+      onRowClick: "(rowIndex: number, row: Record<string, unknown>) => unknown",
       locale: "string",
     },
   },
   Tree: {
     props: {
-      onSelect: "(nodeId: string) => void",
+      onSelect: "(nodeId: string) => unknown",
       expandedIds: "readonly (string | number)[]",
       checkedIds: "readonly (string | number)[]",
-      onCheck: "(checkedIds: string[]) => void",
+      onCheck: "(checkedIds: string[]) => unknown",
     },
   },
   TreeNode: {
     props: {
-      onClick: "() => void",
-      onToggle: "(open: boolean) => void",
+      onClick: "() => unknown",
+      onToggle: "(open: boolean) => unknown",
     },
   },
 } satisfies ComponentTypeTable;

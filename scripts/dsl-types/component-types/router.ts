@@ -4,7 +4,7 @@ import type { ComponentTypeTable } from "./types.js";
 export default {
   NavLink: {
     props: {
-      prefetch: "(to: string) => void",
+      prefetch: "(to: string) => unknown",
     },
   },
 } satisfies ComponentTypeTable;
