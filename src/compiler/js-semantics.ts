@@ -66,6 +66,15 @@ const BUILTIN_HOOKS: ReadonlySet<string> = new Set(manifest.hooks);
 /** Factories whose result is a handle whose methods are its API (`$store(…)`, `$http(…)`, …). */
 const HANDLE_FACTORIES: ReadonlySet<string> = new Set(manifest.factories);
 
+/**
+ * The factories whose handle outlives the render that rebuilds its binding:
+ * `$store(…)` / `$form(…)` are cached by their call site and `$query(…)` by
+ * its request, so the initializer hands back the same handle (E107, see
+ * `Analyzer.survivesRebuild`). `$http`, `$mutation`, `$sse`, `$socket`
+ * and `$script` build a new handle on every render.
+ */
+const CACHED_HANDLE_FACTORIES: ReadonlySet<string> = new Set(["store", "form", "query"]);
+
 /** The factories whose handle reads `undefined` when destructured (S39). */
 const STORE_FACTORIES: ReadonlySet<string> = new Set(["store", "form"]);
 
@@ -661,8 +670,9 @@ class Analyzer {
     return binding;
   }
 
-  private resolve(name: string, state: boolean): Binding | null {
-    for (let s: Scope | null = this.scope; s !== null; s = s.parent) {
+  /** The binding `name` refers to from `from` (the current scope by default). */
+  private resolve(name: string, state: boolean, from: Scope | null = this.scope): Binding | null {
+    for (let s: Scope | null = from; s !== null; s = s.parent) {
       const found = (state ? s.state : s.plain).get(name);
       if (found) return found;
     }
@@ -1405,9 +1415,9 @@ class Analyzer {
     return language === "javascript" || language === "typescript";
   }
 
-  /** `$name` is the runtime's own (not shadowed by a user hook or import). */
-  private isRuntimeName(name: string): boolean {
-    const binding = this.resolve(name, true);
+  /** `$name` is the runtime's own (not shadowed by a user hook or import) — seen from `from`. */
+  private isRuntimeName(name: string, from: Scope | null = this.scope): boolean {
+    const binding = this.resolve(name, true, from);
     return binding === null || (binding.kind === "import" && binding.importSource === DSL_MODULE_ID);
   }
 
@@ -1513,13 +1523,15 @@ class Analyzer {
       if (!(state && this.isUserImport(binding))) return;
     }
     if (!state) {
-      // E107: the module-level binding is changed after it was built — and the
-      // change is lost, because every render rebuilds the binding from its
-      // initializer. Inside a function that is the next render; at module top
-      // level (`xs.push(2)`, `byId[it.id] = it` in a top-level loop) it is the
-      // first one, since the imperative top-level statements run once per plan
-      // and the render then re-seeds the binding.
-      if (binding.kind === "module" || this.isUserImport(binding)) {
+      // E107: the module-level binding is changed after it was built, and
+      // every render rebuilds the binding from its initializer. When that
+      // builds a fresh value (`[]`, `{}`, `new Map()`, a call) the change is
+      // lost: inside a function on the next render; at module top level
+      // (`xs.push(2)`, `byId[it.id] = it` in a top-level loop) on the first
+      // one, since the imperative top-level statements run once per plan and
+      // the render then re-seeds the binding. An initializer that hands back
+      // the same object every time keeps the change — see survivesRebuild.
+      if ((binding.kind === "module" || this.isUserImport(binding)) && !this.survivesRebuild(binding)) {
         this.report(
           "E107",
           loc,
@@ -1552,6 +1564,45 @@ class Analyzer {
       return;
     }
     if (isDataAtom(binding)) this.report("E108", loc, message);
+  }
+
+  /**
+   * A module-level binding whose initializer hands back the SAME object on
+   * every render, so an in-place change of it outlives the rebuild (no E107):
+   *
+   *   - a `$store(…)`, `$form(…)` or `$query(…)` handle
+   *     ({@link CACHED_HANDLE_FACTORIES}) — `cart.items = [item]`,
+   *     `signup.values.name = "Ada"`;
+   *   - a host object read through a global — `const root =
+   *     document.documentElement`, then `root.dataset.theme = "dark"`.
+   *
+   * Measured on the `.aktion` control in tests/compiler-module-mutation.test.ts.
+   * An import is judged by its own module, which this one cannot see, so it
+   * never qualifies.
+   */
+  private survivesRebuild(binding: Binding): boolean {
+    const init = binding.init;
+    if (binding.kind !== "module" || !init) return false;
+    if (init.kind === "Invoke") {
+      return (
+        init.callee.kind === "StateRef" &&
+        CACHED_HANDLE_FACTORIES.has(init.callee.name) &&
+        this.isRuntimeName(init.callee.name, binding.scope)
+      );
+    }
+    // `document`, `document.documentElement`, `window["app"]`: a member chain
+    // with fixed keys, rooted in a name that no binding declares. The names
+    // the runtime injects (`route`, `params`, `theme`, …) are rebuilt with it.
+    let root: Expression = init;
+    while (root.kind === "Member") {
+      if (root.computed && root.computed.kind !== "Literal") return false;
+      root = root.object;
+    }
+    return (
+      root.kind === "Identifier" &&
+      !RESERVED_INJECTED.has(root.name) &&
+      this.resolve(root.name, false, binding.scope) === null
+    );
   }
 
   // ── whole-module rules ──
