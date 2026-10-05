@@ -33,9 +33,15 @@ const ASSIGNMENT_IN_CALL = [
   "",
 ].join("\n");
 
+// A module-level reassignment after the `export let` that declares the atom.
+const REASSIGNED = ["export let $items = [];", "$items = load();", "function load() { return [1, 2]; }", "$app(Text(String($items)))", ""].join("\n");
+
+// The same, with the declaration spanning lines.
+const REASSIGNED_MULTILINE = ["// items", "export let $b = [", "  1,", "];", "$b = [2];", "$app(Text(String($b)))", ""].join("\n");
+
 describe("findDeclaration in .aktion.ts / .aktion.js modules", () => {
-  it("both modules compile", () => {
-    for (const source of [NESTED_HELPER, ASSIGNMENT_IN_CALL]) {
+  it("every module compiles", () => {
+    for (const source of [NESTED_HELPER, ASSIGNMENT_IN_CALL, REASSIGNED, REASSIGNED_MULTILINE]) {
       const out = compileJavaScriptModule(source, "/m.aktion.js");
       expect(out.program.errors).toEqual([]);
       expect(out.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
@@ -48,6 +54,16 @@ describe("findDeclaration in .aktion.ts / .aktion.js modules", () => {
 
   it("lands on `export let $q`, not on an assignment inside a multi-line call", () => {
     expect(findDeclaration(ASSIGNMENT_IN_CALL, "q", true)?.start).toEqual({ line: 1, column: 12 });
+  });
+
+  it("lands on `export let`, not on a module-level reassignment after it", () => {
+    expect(findDeclaration(REASSIGNED, "items", true)?.start).toEqual({ line: 1, column: 12 });
+    expect(findDeclaration(REASSIGNED_MULTILINE, "b", true)?.start).toEqual({ line: 2, column: 12 });
+  });
+
+  it("…which is never a declaration in a module: `$x = …` without `let` is E125", () => {
+    const out = compileJavaScriptModule("$items = [];\n$app(Text(String($items)))\n", "/m.aktion.js");
+    expect(out.diagnostics.filter((d) => d.severity === "error").map((d) => d.code)).toEqual(["E125"]);
   });
 
   it("still finds a nested helper when nothing at module level has the name", () => {

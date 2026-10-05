@@ -172,16 +172,19 @@ export function getDefinitionTarget(source: string, position: Position): Definit
  * What another module imports is a module-level declaration, so one is
  * preferred over a same-named `function` nested in a body (a supported helper
  * in `.aktion.ts` / `.aktion.js` modules, where `export let` / `export const`
- * is the module-level form): a module-level `function` or `$x = …` first,
- * then a module-level `let` / `const`, and only then any declaration at all.
+ * is the module-level form). A module-level `let` / `const` / `var` comes
+ * first: it is always the declaration, while a module-level `$x = …` after it
+ * only reassigns (in a `.aktion.ts` / `.aktion.js` module `$x = …` never
+ * declares — E125 without `let`). Then a module-level `function` or `$x = …`,
+ * the `.aktion` declaration forms, and only then any declaration at all.
  */
 export function findDeclaration(source: string, name: string, isState: boolean): Range | null {
   const tokens = tokenize(source);
+  const binding = findTopLevelLetDeclaration(tokens, name, isState);
+  if (binding) return binding;
   const table = collectSymbols(tokens);
   const topLevel = isState ? table.topState.get(name) : table.topIdent.get(name);
   if (topLevel) return topLevel.kind === "import" ? null : topLevel.range;
-  const binding = findTopLevelLetDeclaration(tokens, name, isState);
-  if (binding) return binding;
   const decl = isState ? table.state.get(name) : table.ident.get(name);
   return decl && decl.kind !== "import" ? decl.range : null;
 }
