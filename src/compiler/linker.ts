@@ -191,6 +191,43 @@ export function nativeImportMessage(spec: string, resolvedPath: string): string 
 }
 
 /**
+ * Message for a TypeScript import of native code whose names are ALL inline
+ * type-only (`import { type Todo } from "./types.ts"`). `tsc` accepts it, but
+ * under `verbatimModuleSyntax` erasure keeps the declaration as
+ * `import {} from "./types.ts"` — a side-effect import of the native file —
+ * so the generic "rename it to types.aktion.ts" advice would be wrong.
+ *
+ * Exported so the docs and tests quote one source of truth.
+ */
+export function typeOnlyNativeImportMessage(spec: string, names: ReadonlyArray<string>): string {
+  const list = names.join(", ");
+  return (
+    `Every name in this import is a type (\`import { type ${names[0] ?? "T"} }\`), so erasing the types leaves ` +
+    `\`import {} from "${spec}"\`, which still loads "${spec}" — and Aktion cannot import native code. ` +
+    `Write \`import type { ${list} } from "${spec}"\`: a type-only import is erased completely.`
+  );
+}
+
+/**
+ * The names of an `import { type A, type B as C } from "…"` at `line:column`
+ * of `source` when EVERY specifier carries an inline `type` modifier, else
+ * `null`. Read from the original TypeScript text: erasure blanks the names.
+ */
+function inlineTypeOnlyNames(source: string, line: number, column: number): string[] | null {
+  let offset = 0;
+  for (let l = 1; l < line; l += 1) {
+    const next = source.indexOf("\n", offset);
+    if (next === -1) return null;
+    offset = next + 1;
+  }
+  const match = /^import\s*\{([^}]*)\}\s*from\b/.exec(source.slice(offset + column - 1));
+  if (!match) return null;
+  const entries = match[1]!.split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+  if (entries.length === 0 || !entries.every((entry) => /^type\s/.test(entry))) return null;
+  return entries.map((entry) => entry.replace(/^type\s+/, ""));
+}
+
+/**
  * Link the import graph rooted at `entrySource`/`entryPath` into one program.
  *
  * Each module is compiled by the frontend for its language
@@ -343,7 +380,15 @@ export function linkProgram(
             "AKT-LINK-JSX",
           );
         } else {
-          fail(path, line, column, nativeImportMessage(stmt.source, resolved), "AKT-LINK-NATIVE");
+          const typeNames =
+            rec.language === "typescript" && stmt.specifiers.length === 0 ? inlineTypeOnlyNames(src, line, column) : null;
+          fail(
+            path,
+            line,
+            column,
+            typeNames ? typeOnlyNativeImportMessage(stmt.source, typeNames) : nativeImportMessage(stmt.source, resolved),
+            "AKT-LINK-NATIVE",
+          );
         }
         continue;
       }

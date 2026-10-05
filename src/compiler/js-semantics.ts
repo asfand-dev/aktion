@@ -14,7 +14,7 @@
  *     `const Name = (…) => …` becomes a component, as React authors expect.
  *   - **Checks** {@link checkJavaScriptSemantics}: constructs whose Aktion
  *     meaning differs from their JavaScript meaning, and that no rewrite can
- *     fix, become diagnostics with a stable code (E101–E126 errors, W201–W202
+ *     fix, become diagnostics with a stable code (E101–E127 errors, W201–W202
  *     warnings).
  *   - **W1–W3** {@link lowerJavaScriptSemantics}: rewrites that make the
  *     evaluator compute what JavaScript would — every local gets a unique name
@@ -217,6 +217,19 @@ const MESSAGES = {
   E121:
     "Returning a cleanup function from an effect has no effect in Aktion — call `cleanup(() => …)` inside the body " +
     "instead.",
+  E127arms:
+    "`$router(…)` takes its route arms as an object literal written at the call — " +
+    "`$router({ \"/\": Home(), default: NotFound() })`. Aktion reads the arms from the source, so a value built " +
+    "elsewhere is ignored and the router renders nothing.",
+  E127spread:
+    "Spreads in `$router({ … })` are ignored — Aktion reads the route arms from the source. List every arm in the " +
+    "object literal.",
+  E127computed:
+    "Computed route paths in `$router({ … })` are ignored — Aktion reads each arm's path from the source. Write the " +
+    "path as a string key (`\"/users/:id\": …`).",
+  E127routes:
+    "A layout arm's `routes` must be an object literal written in place — Aktion reads it from the source, so a value " +
+    "built elsewhere renders no child route.",
   E124: (name: string, field: string) =>
     "Destructuring a `$store`/`$form` handle reads `undefined` in Aktion — read the fields as " +
     `\`${name}.${field}\`.`,
@@ -257,16 +270,54 @@ function isAppCall(expr: Expression): expr is InvokeExpr {
   return expr.kind === "Invoke" && expr.callee.kind === "StateRef" && expr.callee.name === "app";
 }
 
+/** Line/column ↔ offset over a module's text (1-based positions, as the parser reports them). */
+class SourceText {
+  private readonly lineStarts: number[] = [0];
+
+  constructor(readonly text: string) {
+    for (let i = 0; i < text.length; i += 1) if (text[i] === "\n") this.lineStarts.push(i + 1);
+  }
+
+  offsetOf(loc: SourceLocation): number | null {
+    const start = this.lineStarts[loc.line - 1];
+    return start === undefined ? null : start + loc.column - 1;
+  }
+
+  locationOf(offset: number): SourceLocation {
+    // The last line starting at or before `offset` (binary search).
+    let lo = 0;
+    let hi = this.lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (this.lineStarts[mid]! <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    return { line: lo + 1, column: offset - this.lineStarts[lo]! + 1 };
+  }
+}
+
 /**
  * Where a `$name(…)` call starts. The parser locates an `Invoke` at its `(`
  * (and its `StateRef` callee not at all), but a diagnostic should point at the
- * `$`: step back over `$name` — the overwhelmingly common spelling has nothing
- * between the name and `(`.
+ * `$`. With the module text, step back from the `(` over whitespace — which is
+ * what the TypeScript frontend leaves of the type arguments in
+ * `$state<number>(0)`, and what `$memo (…)` has — then over `$name`. Without
+ * it, assume nothing sits between the name and `(`.
  */
-function invokeStart(expr: InvokeExpr, fallback: SourceLocation): SourceLocation {
+function invokeStart(expr: InvokeExpr, fallback: SourceLocation, source?: SourceText): SourceLocation {
   const loc = expr.loc ?? fallback;
   if (expr.callee.kind !== "StateRef" || !expr.loc) return loc;
-  const column = expr.loc.column - expr.callee.name.length - 1;
+  const name = expr.callee.name;
+  const paren = source?.offsetOf(expr.loc);
+  if (source && paren !== null && paren !== undefined && source.text[paren] === "(") {
+    let end = paren - 1;
+    while (end >= 0 && /\s/.test(source.text[end]!)) end -= 1;
+    const dollar = end - name.length;
+    if (dollar >= 0 && source.text[dollar] === "$" && source.text.slice(dollar + 1, end + 1) === name) {
+      return { ...expr.loc, ...source.locationOf(dollar) };
+    }
+  }
+  const column = expr.loc.column - name.length - 1;
   return column >= 1 ? { ...expr.loc, column } : loc;
 }
 
@@ -493,6 +544,9 @@ function commonPrefix(a: readonly number[], b: readonly number[]): number {
 }
 
 class Analyzer {
+  /** The module text, when the caller has it — positions `$name(…)` diagnostics exactly. */
+  constructor(private readonly source?: SourceText) {}
+
   private index = 0;
   private nextLoop = 0;
   private readonly moduleScope: Scope = newScope(null, null, 0);
@@ -1248,9 +1302,10 @@ class Analyzer {
     const neutral: ExprContext = { hooks: context.hooks, value: false };
     if (expr.callee.kind === "StateRef") {
       const name = expr.callee.name;
-      const start = invokeStart(expr, this.here());
+      const start = invokeStart(expr, this.here(), this.source);
       if (name === "app" && !this.appRoots.has(expr)) this.report("E118", start, MESSAGES.E118);
       if (!context.hooks && this.isHook(name)) this.report("E110", start, MESSAGES.E110(name));
+      if (name === "router" && this.isRuntimeName("router")) this.checkRouterArms(expr, start);
       this.read(name, true, start);
     } else {
       this.expr(expr.callee, { hooks: context.hooks, value: true });
@@ -1348,6 +1403,46 @@ class Analyzer {
     if (!this.isUserImport(binding) || !isPascalCase(binding.name) || binding.importSource === undefined) return false;
     const language = moduleLanguage(binding.importSource);
     return language === "javascript" || language === "typescript";
+  }
+
+  /** `$name` is the runtime's own (not shadowed by a user hook or import). */
+  private isRuntimeName(name: string): boolean {
+    const binding = this.resolve(name, true);
+    return binding === null || (binding.kind === "import" && binding.importSource === DSL_MODULE_ID);
+  }
+
+  /**
+   * E127 — `$router(…)` reads its arms from the AST, not from a value: the
+   * evaluator matches the properties of the object literal written at the call
+   * (skipping spreads, and comparing each arm's literal key with the path), and
+   * a layout arm's `routes` the same way. Anything else is silently ignored.
+   */
+  private checkRouterArms(expr: InvokeExpr, start: SourceLocation): void {
+    const arms = expr.arguments[0];
+    if (!arms || arms.kind !== "Object") {
+      this.report("E127", arms?.loc ?? start, MESSAGES.E127arms);
+      return;
+    }
+    const visit = (object: Expression & { kind: "Object" }): void => {
+      for (const prop of object.properties) {
+        if (prop.spread) {
+          this.report("E127", prop.value.loc ?? start, MESSAGES.E127spread);
+          continue;
+        }
+        if (prop.computedKey) {
+          this.report("E127", prop.computedKey.loc ?? start, MESSAGES.E127computed);
+          continue;
+        }
+        if (prop.value.kind !== "Object") continue;
+        // A layout arm: `{ layout: Shell(outlet), routes: { … } }`.
+        const layout = prop.value.properties.some((p) => !p.spread && !p.computedKey && p.key === "layout");
+        const routes = prop.value.properties.find((p) => !p.spread && !p.computedKey && p.key === "routes");
+        if (!layout || !routes) continue;
+        if (routes.value.kind === "Object") visit(routes.value);
+        else this.report("E127", routes.value.loc ?? start, MESSAGES.E127routes);
+      }
+    };
+    visit(arms);
   }
 
   /** E117 — `{ ...extra }` in the props bag of a library or host component. */
@@ -1812,14 +1907,16 @@ export function findAsyncModifiers(source: string): SourceLocation[] {
 export interface CheckJavaScriptOptions {
   /**
    * The module text the program was parsed from. Needed for E102 (`async`
-   * modifiers leave no trace in the AST); without it that rule is skipped.
+   * modifiers leave no trace in the AST); without it that rule is skipped,
+   * and a `$name(…)` diagnostic assumes nothing sits between the name and
+   * its `(`.
    */
   source?: string;
 }
 
 /**
  * Check a `.aktion.js` / `.aktion.ts` module for constructs whose Aktion
- * meaning differs from their JavaScript meaning (E101–E126, W201–W202).
+ * meaning differs from their JavaScript meaning (E101–E127, W201–W202).
  *
  * Run on the program as the author wrote it, after {@link normalizeComponentForms}.
  * Every diagnostic carries `path`, a stable `code` and the author's
@@ -1830,7 +1927,8 @@ export function checkJavaScriptSemantics(
   path: string,
   options: CheckJavaScriptOptions = {},
 ): LinkDiagnostic[] {
-  const findings = [...new Analyzer().run(program).findings];
+  const text = options.source !== undefined ? new SourceText(options.source) : undefined;
+  const findings = [...new Analyzer(text).run(program).findings];
   if (options.source !== undefined) {
     for (const loc of findAsyncModifiers(options.source)) {
       findings.push({ code: "E102", severity: "error", message: MESSAGES.E102, loc });
