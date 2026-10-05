@@ -6,7 +6,8 @@
  *   - host code gets an Aktion module's DEFAULT export only. A named import
  *     used to read `undefined` under Vitest and fail a build with a bare
  *     "is not exported"; it now throws, or fails the build, with an
- *     Aktion-specific explanation;
+ *     Aktion-specific explanation — except an export named `then`, which would
+ *     make the module namespace a thenable that `await import()` calls;
  *   - `?raw` / `?url` imports of an Aktion module are Vite's, not compiled;
  *   - an unresolvable specifier that names the module in the other language
  *     (`./x.aktion.js` for `x.aktion.ts`) says which file exists.
@@ -43,6 +44,8 @@ beforeAll(() => {
     "",
   ].join("\n"));
   put("src/app.aktion", 'import { remaining } from "./api.aktion.ts"\nexport label = "x"\n$app(Text("left: " + remaining([])))\n');
+  // An action that happens to be called `then`.
+  put("src/thenable.aktion", 'export count = 1\nexport function then(step) { return step }\n$app(Text("x"))\n');
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -60,6 +63,8 @@ describe("named imports from host code", () => {
       'export const concat = () => base + "/todos";',
       "export const read = () => $count.toString();",
       "export const kind = typeof remaining;",
+      'export const loadThenable = async () => (await import("./thenable.aktion")).default.path;',
+      'export const thenableKeys = async () => Object.keys(await import("./thenable.aktion")).sort();',
       "",
     ].join("\n"));
     server = await createServer({
@@ -86,6 +91,12 @@ describe("named imports from host code", () => {
     // A non-function export must not read as `undefined` either: "undefined/todos".
     expect(() => (host.concat as () => unknown)()).toThrow(/`base` is not available to host code/);
     expect(() => (host.read as () => unknown)()).toThrow(/`\$count` is not available to host code/);
+  });
+
+  it("an export named `then` gets no stand-in, so the namespace is not a thenable", async () => {
+    const host = (await server.ssrLoadModule("/src/host.ts")) as Record<string, () => Promise<unknown>>;
+    await expect(host.loadThenable!()).resolves.toBe(join(dir, "src/thenable.aktion"));
+    expect(await host.thenableKeys!()).toEqual(["count", "default"]);
   });
 
   it("a build fails at the import, naming the binding and the default-import alternative", async () => {

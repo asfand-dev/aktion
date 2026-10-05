@@ -1007,13 +1007,17 @@ function emitModule(
  * Builds leave them out: there a named import fails at bundle time (the
  * plugin's `moduleParsed`).
  *
+ * An export named `then` gets no stand-in: a namespace with a callable `then`
+ * is a thenable, so `await import("./x.aktion")` would call it and reject
+ * instead of yielding the module.
+ *
  * The text never contains `");` or `] });`, which tests unpacking the program
  * literal match on.
  */
 function hostOnlyExports(result: LinkResult, path: string): string {
   const entry = result.modules[0];
   if (!entry) return "";
-  const names = aktionExportNames(parse(entry.aktionSource));
+  const names = aktionExportNames(parse(entry.aktionSource)).filter((name) => name !== "then");
   if (names.length === 0) return "";
   const message =
     `"[aktion] \`" + __aktionNames[i] + "\` is not available to host code: the Aktion module " + ` +

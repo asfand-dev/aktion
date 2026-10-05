@@ -390,7 +390,10 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
         "./api.aktion.ts"</code> in host code fails the <code>vite build</code> (with
         this explanation on Vite 5&ndash;7; Vite&nbsp;8 reports the missing export
         itself), and under <code>vite dev</code> or Vitest the binding throws the
-        explanation as soon as it is used. To unit-test a helper, call it from
+        explanation as soon as it is used. (An export named <code>then</code> is
+        left out there instead: with a callable <code>then</code> the module would be
+        a thenable, and <code>await import()</code> would call it instead of
+        returning the module.) To unit-test a helper, call it from
         a program (<code>compileAktionSource</code>, see <a href="testing.html#multi-file">Testing</a>).
       </p>
 
