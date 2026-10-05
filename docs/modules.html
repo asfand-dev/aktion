@@ -546,7 +546,7 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
             <td><code>dts</code></td>
             <td><code>boolean | { include?, exclude?, outDir? }</code></td>
             <td><code>false</code></td>
-            <td>Write <code>name.d.aktion.ts</code> declarations for <code>.aktion</code> modules, so TypeScript can import from them (see the <a href="typescript.html#aktion-ts-sidecars">TypeScript guide</a>).</td>
+            <td>Write <code>name.d.aktion.ts</code> declarations for <code>.aktion</code> modules, so TypeScript can import from them (see the <a href="typescript.html#aktion-ts-sidecars">TypeScript guide</a>). The modules of each <code>alias</code> target are declared too, mirrored under <code>.aktion-types/&lt;prefix&gt;/</code>; give the alias a tsconfig <code>paths</code> entry that falls back to that mirror, e.g. <code>"@acme/ui/*": ["../../libs/ui/src/*", "./.aktion-types/@acme/ui/*"]</code> (TypeScript needs the <code>paths</code> entry for an alias either way). A directory reached through <code>roots</code> is not mirrored: run <code>aktion-dts --out-dir .</code> in that package, so each declaration sits next to its module.</td>
           </tr>
         </tbody>
       </table>

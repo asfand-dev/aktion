@@ -69,6 +69,7 @@ export {
 
 export {
   aktionDeclarationText,
+  aktionExportNames,
   declarationFileName,
   emitAktionDeclarations,
   updateAktionDeclaration,
@@ -168,7 +169,8 @@ export interface AktionPluginOptions extends AktionResolveOptions {
    * (see {@link emitAktionDeclarations}). `true` uses the defaults
    * (`src/**\/*.aktion` into `.aktion-types`, which needs
    * `"rootDirs": ["src", ".aktion-types/src"]` and `"allowArbitraryExtensions": true`
-   * in the tsconfig). Default: off.
+   * in the tsconfig). The modules of every {@link AktionResolveOptions.alias}
+   * target are declared too, under `.aktion-types/<prefix>/`. Default: off.
    */
   dts?: boolean | Omit<AktionDeclarationsOptions, "root" | "write">;
 }
@@ -308,14 +310,17 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
     async buildStart(this: { warn?: (message: string) => void }) {
       await loadTypeScript();
       if (options.dts) {
-        const result = emitAktionDeclarations({ ...declarationOptions(), root: projectRoot });
+        const result = emitAktionDeclarations({ alias: resolution.alias, ...declarationOptions(), root: projectRoot });
+        for (const w of result.warnings) this.warn?.(w);
         for (const d of result.diagnostics) this.warn?.(`${d.path}:${d.line}:${d.column} ${d.message}`);
       }
     },
     configureServer(server: { watcher?: { on(event: string, listener: (file: string) => void): unknown } }) {
       if (!options.dts || !server.watcher) return;
       const refresh = (file: string): void => {
-        if (/\.aktion$/i.test(file)) updateAktionDeclaration(file, { ...declarationOptions(), root: projectRoot });
+        if (/\.aktion$/i.test(file)) {
+          updateAktionDeclaration(file, { alias: resolution.alias, ...declarationOptions(), root: projectRoot });
+        }
       };
       server.watcher.on("add", refresh);
       server.watcher.on("change", refresh);
