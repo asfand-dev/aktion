@@ -4698,11 +4698,29 @@ export function evaluateUserComponent(
   const bindComponentLocal = (name: string, value: unknown) => {
     ctx.loopVars.set(name, value);
   };
-  // The named props no parameter claims by name — the props object a
-  // destructured parameter reads when the call passed it as named props.
+  // React-style props: `Card({ title: "T", key: "c1" })` for
+  // `function Card({ title })` makes `key` the instance identity, which turns
+  // the object into named props — and a component whose FIRST parameter is an
+  // object pattern then reads them as its props object. Only when nothing else
+  // claims them: no positional argument, and no named prop that matches a
+  // declared parameter (`footer` in `Chart({ footer: "F" })` for
+  // `function Chart({ data } = …, footer)` means the props are per parameter,
+  // so the pattern keeps its default). A pattern further along never reads
+  // them: those named props are named slots (`header` in
+  // `Panel({ title: "T", header: H })`).
+  // (A `.aktion` body used to see them only through the slot bindings named
+  // like the props below, which miss the pattern's leaves once W1 has renamed
+  // them in a `.aktion.js` / `.aktion.ts` component.)
   const paramNames = new Set(decl.params.filter((p) => !p.pattern).map(componentParamPublicName));
-  const unclaimed = Object.keys(named).filter((key) => !paramNames.has(key) && named[key] !== undefined);
-  let propsBagUsed = false;
+  const namedKeys = Object.keys(named).filter((key) => named[key] !== undefined);
+  const bagKeys = namedKeys.filter((key) => !FORBIDDEN_PROPERTY_NAMES.has(key));
+  const propsBag: Record<string, unknown> | undefined =
+    decl.params[0]?.pattern?.kind === "object" &&
+    positional.length === 0 &&
+    bagKeys.length > 0 &&
+    namedKeys.every((key) => !paramNames.has(key))
+      ? Object.fromEntries(bagKeys.map((key) => [key, named[key]]))
+      : undefined;
   for (let i = 0; i < decl.params.length; i += 1) {
     const param = decl.params[i]!;
     // `...rest` gathers every remaining positional argument into an array, as
@@ -4716,19 +4734,7 @@ export function evaluateUserComponent(
     // Destructured param: `function Card({ title, tone = "info" })` — the
     // matching argument is a positional object/array we fan out by shape.
     if (param.pattern) {
-      let source: unknown = positional[i];
-      // React-style props: `Card({ title: "T", key: "c1" })` makes `key` the
-      // instance identity, which turns the object into named props — so the
-      // first object pattern that received nothing positionally reads them.
-      // (A `.aktion` body used to see them only through the slot bindings
-      // named like the props below, which miss the pattern's leaves once W1
-      // has renamed them in a `.aktion.js` / `.aktion.ts` component.)
-      if (source === undefined && !propsBagUsed && param.pattern.kind === "object" && unclaimed.length > 0) {
-        const bag: Record<string, unknown> = {};
-        for (const key of unclaimed) if (!FORBIDDEN_PROPERTY_NAMES.has(key)) bag[key] = named[key];
-        source = bag;
-        propsBagUsed = true;
-      }
+      let source: unknown = i === 0 && propsBag !== undefined ? propsBag : positional[i];
       if (source === undefined && param.defaultValue) {
         source = evaluate(param.defaultValue, ctx);
       }

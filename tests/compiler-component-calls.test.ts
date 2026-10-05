@@ -224,6 +224,39 @@ describe("the DSL's named props are kept where the caller's types promise them",
     expect(screen.shadowRoot.querySelector('[data-rui-key="c1"]')).not.toBeNull();
   });
 
+  it("a named prop that matches a declared parameter leaves a pattern's default object alone", async () => {
+    // `footer` binds the second parameter, so the props are per parameter and
+    // the unclaimed `tone` is a named slot — not the first parameter's props.
+    const src = lines(
+      'function Chart({ data, color } = { data: [1, 2], color: "red" }, footer) {',
+      '  return Text("n=" + (data ? data.length : "") + " c=" + (color ? color : "") + " f=" + footer)',
+      "}",
+      '$app(Column([Chart({ key: "c1", footer: "F", tone: "x" })]))',
+    );
+    expect(await texts({ "app.aktion": src }, "app.aktion")).toBe("n=2 c=red f=F");
+  });
+
+  it("a named slot does not reach an object pattern after the first parameter", async () => {
+    const src = lines(
+      "function Panel(title, { compact } = { compact: true }) {",
+      '  return Text(title + " compact=" + compact)',
+      "}",
+      '$app(Column([Panel({ title: "T", header: "H" })]))',
+    );
+    expect(await texts({ "app.aktion": src }, "app.aktion")).toBe("T compact=true");
+  });
+
+  it("the props object reaches a first-parameter pattern only when no positional argument came", async () => {
+    const src = lines(
+      'function Card({ title } = { title: "default" }, extra) {',
+      '  return Text("title=" + title + " extra=" + extra)',
+      "}",
+      'const given = { title: "given" }',
+      '$app(Column([Card(given, { key: "k1", extra: "E" }), Card({ title: "bag", key: "k2" })]))',
+    );
+    expect(await texts({ "app.aktion": src }, "app.aktion")).toBe("title=given extra=E | title=bag extra=");
+  });
+
   it("the same call in a `.aktion` program binds the destructured props too", async () => {
     const src = lines(
       'function Card({ title, tone = "info" }) {',
