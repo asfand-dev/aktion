@@ -9,13 +9,18 @@
  * The evaluator collects these into `node.universal`; the renderer calls
  * {@link applyUniversal} on the element returned by a component's `render`.
  * One hook styles all 196 components without editing each spec.
+ *
+ * The lookup tables below are exported for `scripts/dsl-types/style-types.ts`,
+ * which prints the `aktion-runtime/dsl` style types (`SxProps`, `AnimateValue`,
+ * `AriaRole`, …) FROM them, so a value added here is typed without a second
+ * edit, and a value removed here stops type-checking.
  */
 
-import { asString, asNumber, sanitiseCssColor, sanitiseCssLength } from "./utils.js";
-import { responsiveClassFor, isResponsiveMap, stateClassFor, type ResponsiveGroup, type StateRuleGroup } from "./responsive-style.js";
+import { asString, asNumber, sanitiseCssColor, sanitiseCssLength, RESPONSIVE_BREAKPOINTS } from "./utils.js";
+import { INTERACTION_STATES, responsiveClassFor, isResponsiveMap, stateClassFor, type ResponsiveGroup, type StateRuleGroup } from "./responsive-style.js";
 
 /** Spacing scale → CSS variable. Mirrors Tailwind-ish mental model. */
-const SPACING: Record<string, string> = {
+export const SPACING: Readonly<Record<string, string>> = {
   none: "0",
   "3xs": "var(--rui-spacing-3xs)",
   "2xs": "var(--rui-spacing-2xs)",
@@ -41,7 +46,7 @@ const SPACING: Record<string, string> = {
 };
 
 /** Named colors → CSS variable. */
-const COLORS: Record<string, string> = {
+export const COLORS: Readonly<Record<string, string>> = {
   bg: "var(--rui-color-bg)",
   "bg-subtle": "var(--rui-color-bg-subtle)",
   surface: "var(--rui-color-surface)",
@@ -63,7 +68,7 @@ const COLORS: Record<string, string> = {
   current: "currentColor",
 };
 
-const RADIUS: Record<string, string> = {
+export const RADIUS: Readonly<Record<string, string>> = {
   none: "0",
   xs: "var(--rui-radius-xs)",
   sm: "var(--rui-radius-sm)",
@@ -74,14 +79,14 @@ const RADIUS: Record<string, string> = {
   circle: "50%",
 };
 
-const SHADOW: Record<string, string> = {
+export const SHADOW: Readonly<Record<string, string>> = {
   none: "none",
   sm: "var(--rui-shadow-sm)",
   md: "var(--rui-shadow-md)",
   lg: "var(--rui-shadow-lg)",
 };
 
-const SIZE_KEYWORDS: Record<string, string> = {
+export const SIZE_KEYWORDS: Readonly<Record<string, string>> = {
   full: "100%",
   half: "50%",
   screen: "100vh",
@@ -94,7 +99,7 @@ const SIZE_KEYWORDS: Record<string, string> = {
   auto: "auto",
 };
 
-const ALIGN: Record<string, string> = {
+export const ALIGN: Readonly<Record<string, string>> = {
   start: "flex-start",
   center: "center",
   end: "flex-end",
@@ -102,7 +107,7 @@ const ALIGN: Record<string, string> = {
   baseline: "baseline",
 };
 
-const JUSTIFY: Record<string, string> = {
+export const JUSTIFY: Readonly<Record<string, string>> = {
   start: "flex-start",
   center: "center",
   end: "flex-end",
@@ -115,7 +120,7 @@ const JUSTIFY: Record<string, string> = {
 // Layer tokens resolve through `--rui-z-*` variables (themeable via
 // `$theme({ zIndex: {...} })` — I.2) with the documented defaults as
 // fallbacks so they work without any theme override.
-const Z_INDEX: Record<string, string> = {
+export const Z_INDEX: Readonly<Record<string, string>> = {
   base: "var(--rui-z-base, 0)",
   raised: "var(--rui-z-raised, 10)",
   dropdown: "var(--rui-z-dropdown, 1000)",
@@ -129,7 +134,7 @@ const Z_INDEX: Record<string, string> = {
 };
 
 /** Typography presets for `sx.fontSize` (tokens) — raw lengths also accepted. */
-const FONT_SIZE: Record<string, string> = {
+export const FONT_SIZE: Readonly<Record<string, string>> = {
   xs: "0.75rem",
   sm: "var(--rui-font-size-sm)",
   base: "var(--rui-font-size-base)",
@@ -141,45 +146,87 @@ const FONT_SIZE: Record<string, string> = {
   "4xl": "2.25rem",
 };
 
-const FONT_WEIGHT = new Set(["100", "200", "300", "400", "500", "600", "700", "800", "900", "normal", "bold"]);
+export const FONT_WEIGHT: ReadonlySet<string> = new Set(["100", "200", "300", "400", "500", "600", "700", "800", "900", "normal", "bold"]);
 
-const DISPLAY = new Set(["flex", "grid", "block", "inline", "inline-flex", "inline-block", "none", "contents"]);
-const DIRECTION = new Set(["row", "column", "row-reverse", "column-reverse"]);
-const POSITION = new Set(["relative", "absolute", "fixed", "sticky", "static"]);
-const OVERFLOW = new Set(["hidden", "auto", "scroll", "visible", "clip"]);
-const CURSOR = new Set(["pointer", "default", "not-allowed", "grab", "grabbing", "text", "move", "wait", "help", "none"]);
-const TEXT_ALIGN = new Set(["left", "center", "right", "justify", "start", "end"]);
+export const DISPLAY: ReadonlySet<string> = new Set(["flex", "grid", "block", "inline", "inline-flex", "inline-block", "none", "contents"]);
+export const DIRECTION: ReadonlySet<string> = new Set(["row", "column", "row-reverse", "column-reverse"]);
+export const POSITION: ReadonlySet<string> = new Set(["relative", "absolute", "fixed", "sticky", "static"]);
+export const OVERFLOW: ReadonlySet<string> = new Set(["hidden", "auto", "scroll", "visible", "clip"]);
+export const CURSOR: ReadonlySet<string> = new Set(["pointer", "default", "not-allowed", "grab", "grabbing", "text", "move", "wait", "help", "none"]);
+export const TEXT_ALIGN: ReadonlySet<string> = new Set(["left", "center", "right", "justify", "start", "end"]);
 
-/** Resolve a spacing token or sanitised length. */
+/**
+ * Resolve a length. A finite number is pixels (`8` → `8px`, `0` → `0`), as in
+ * a React style object: emitted bare, `padding:8` is invalid CSS and the
+ * browser drops the whole declaration. Anything else must pass the length
+ * sanitiser (`"12px"`, `"60%"`, `"clamp(…)"`, `"var(--x)"`).
+ */
+function length(v: unknown): string | null {
+  if (typeof v === "number") return Number.isFinite(v) ? (v === 0 ? "0" : `${v}px`) : null;
+  return sanitiseCssLength(asString(v).trim(), "") || null;
+}
+
+/** Resolve a spacing token or a length. */
 function space(v: unknown): string | null {
+  if (typeof v === "number") return length(v);
   const s = asString(v).trim();
   if (!s) return null;
-  if (s in SPACING) return SPACING[s]!;
-  return sanitiseCssLength(s, "") || null;
+  return lookup(SPACING, s) ?? length(s);
 }
 
-/** Resolve a size keyword or sanitised length. */
+/** Resolve a size keyword or a length. */
 function size(v: unknown): string | null {
+  if (typeof v === "number") return length(v);
   const s = asString(v).trim();
   if (!s) return null;
-  if (s in SIZE_KEYWORDS) return SIZE_KEYWORDS[s]!;
-  return sanitiseCssLength(s, "") || null;
+  return lookup(SIZE_KEYWORDS, s) ?? length(s);
 }
 
-/** Resolve a color token, a gradient ref (`gradient.brand`), or a raw color. */
+/** Resolve a radius token or a length. */
+function radius(v: unknown): string | null {
+  if (typeof v === "number") return length(v);
+  const r = asString(v).trim();
+  return lookup(RADIUS, r) ?? length(r);
+}
+
+/** How a background value names a theme gradient: `gradient.brand`. */
+export const GRADIENT_REF_PREFIX = "gradient.";
+/** The CSS variables a {@link GRADIENT_REF_PREFIX} ref resolves to (`--rui-gradient-brand`). */
+export const GRADIENT_CSS_VAR_PREFIX = "--rui-gradient-";
+
+/** `gradient.<name>` → `var(--rui-gradient-<name>)`, or null when `s` is not a gradient ref. */
+function gradientRef(s: string): string | null {
+  if (!s.startsWith(GRADIENT_REF_PREFIX)) return null;
+  return `var(${GRADIENT_CSS_VAR_PREFIX}${cssIdent(s.slice(GRADIENT_REF_PREFIX.length))})`;
+}
+
+/**
+ * Resolve a color token or a raw color. A gradient ref is refused: a gradient
+ * is an image, so in a colour sink (`color`, `border-color`, the `border`
+ * shorthand) it is invalid at computed-value time. Only the background keys
+ * ({@link bg}, {@link overlayLayer}) take gradients.
+ */
 function color(v: unknown): string | null {
   const s = asString(v).trim();
   if (!s) return null;
-  if (s in COLORS) return COLORS[s]!;
-  if (s.startsWith("gradient.")) return `var(--rui-gradient-${cssIdent(s.slice("gradient.".length))})`;
+  const token = lookup(COLORS, s);
+  if (token) return token;
+  if (s.startsWith(GRADIENT_REF_PREFIX)) return null;
   return sanitiseCssColor(s) || null;
 }
 
 /** Background can be a gradient ref, a color token, or a raw color. */
 function bg(v: unknown): string | null {
-  const s = asString(v).trim();
-  if (s.startsWith("gradient.")) return `var(--rui-gradient-${cssIdent(s.slice("gradient.".length))})`;
-  return color(v);
+  return gradientRef(asString(v).trim()) ?? color(v);
+}
+
+/**
+ * An OWN entry of a lookup table, or null. A bare `key in TABLE` also matches
+ * `Object.prototype`: `p: "constructor"` used to emit
+ * `padding:function Object() { [native code] }`.
+ */
+function lookup(table: Readonly<Record<string, string>>, key: string): string | null {
+  return Object.prototype.hasOwnProperty.call(table, key) ? table[key]! : null;
 }
 
 function cssIdent(raw: string): string {
@@ -193,12 +240,12 @@ function num(v: unknown): string | null {
   return null;
 }
 
-/** Resolve a font-size token or sanitised length. */
+/** Resolve a font-size token or a length. */
 function fontSize(v: unknown): string | null {
+  if (typeof v === "number") return length(v);
   const s = asString(v).trim();
   if (!s) return null;
-  if (s in FONT_SIZE) return FONT_SIZE[s]!;
-  return sanitiseCssLength(s, "") || null;
+  return lookup(FONT_SIZE, s) ?? length(s);
 }
 
 /** Resolve a font weight (numeric 100–900 or normal/bold). */
@@ -225,20 +272,17 @@ function safeBgUrl(raw: string): string | null {
 function overlayLayer(v: unknown): string | null {
   const s = asString(v).trim();
   if (!s) return null;
-  if (s.startsWith("gradient.")) return `var(--rui-gradient-${cssIdent(s.slice("gradient.".length))})`;
+  const gradient = gradientRef(s);
+  if (gradient) return gradient;
   const c = color(s);
   return c ? `linear-gradient(${c}, ${c})` : null;
 }
 
-/** A single `sx` value may be a responsive map; we resolve the base value. */
+/** A single `sx` value may be a responsive map; we resolve the base value (the narrowest breakpoint set). */
 function resolveResponsive(v: unknown): unknown {
-  if (v && typeof v === "object" && !Array.isArray(v)) {
-    const map = v as Record<string, unknown>;
-    if ("base" in map || "sm" in map || "md" in map || "lg" in map || "xl" in map) {
-      return map.base ?? map.sm ?? map.md ?? map.lg ?? map.xl;
-    }
-  }
-  return v;
+  if (!isResponsiveMap(v)) return v;
+  for (const bp of RESPONSIVE_BREAKPOINTS) if (v[bp] != null) return v[bp];
+  return undefined;
 }
 
 /**
@@ -247,7 +291,7 @@ function resolveResponsive(v: unknown): unknown {
  * the base inline logic below so a breakpoint map and a single value resolve
  * identically.
  */
-const RESPONSIVE_RESOLVERS: Record<string, (v: unknown) => Array<[string, string]>> = {
+export const RESPONSIVE_RESOLVERS: Readonly<Record<string, (v: unknown) => Array<[string, string]>>> = {
   p: (v) => pair("padding", space(v)),
   // `px`/`mx` use logical inline properties so RTL documents mirror (X.1) —
   // identical rendering in LTR, correct mirroring under `dir="rtl"`.
@@ -278,12 +322,12 @@ const RESPONSIVE_RESOLVERS: Record<string, (v: unknown) => Array<[string, string
   maxH: (v) => pair("max-height", size(v)),
   bg: (v) => pair("background", bg(v)),
   color: (v) => pair("color", color(v)),
-  radius: (v) => { const r = asString(v).trim(); return pair("border-radius", r in RADIUS ? RADIUS[r]! : (sanitiseCssLength(r, "") || null)); },
-  shadow: (v) => { const s = asString(v).trim(); return s in SHADOW ? [["box-shadow", SHADOW[s]!]] : []; },
+  radius: (v) => pair("border-radius", radius(v)),
+  shadow: (v) => pair("box-shadow", lookup(SHADOW, asString(v).trim())),
   display: (v) => { const d = asString(v).trim(); return DISPLAY.has(d) ? [["display", d]] : []; },
   direction: (v) => { const d = asString(v).trim(); return DIRECTION.has(d) ? [["flex-direction", d]] : []; },
-  align: (v) => { const a = asString(v).trim(); return a in ALIGN ? [["align-items", ALIGN[a]!]] : []; },
-  justify: (v) => { const j = asString(v).trim(); return j in JUSTIFY ? [["justify-content", JUSTIFY[j]!]] : []; },
+  align: (v) => pair("align-items", lookup(ALIGN, asString(v).trim())),
+  justify: (v) => pair("justify-content", lookup(JUSTIFY, asString(v).trim())),
   textAlign: (v) => { const t = asString(v).trim(); return TEXT_ALIGN.has(t) ? [["text-align", t]] : []; },
   columns: (v) => { const c = num(v); return c ? [["grid-template-columns", `repeat(${c}, minmax(0, 1fr))`]] : []; },
   // Spec I.5 says EVERY sx value accepts a breakpoint map — cover the rest of
@@ -291,35 +335,53 @@ const RESPONSIVE_RESOLVERS: Record<string, (v: unknown) => Array<[string, string
   border: (v) => resolveBorder(v),
   borderColor: (v) => pair("border-color", color(v)),
   opacity: (v) => pair("opacity", num(v)),
-  zIndex: (v) => { const zs = asString(v).trim(); return pair("z-index", zs in Z_INDEX ? Z_INDEX[zs]! : num(zs)); },
+  zIndex: (v) => { const zs = asString(v).trim(); return pair("z-index", lookup(Z_INDEX, zs) ?? num(zs)); },
   overflow: (v) => { const o = asString(v).trim(); return OVERFLOW.has(o) ? [["overflow", o]] : []; },
   grow: (v) => pair("flex-grow", num(v)),
   shrink: (v) => pair("flex-shrink", num(v)),
   basis: (v) => pair("flex-basis", size(v)),
-  wrap: (v) => (v === true || asString(v) === "true" ? [["flex-wrap", "wrap"]] : v === false || asString(v) === "false" ? [["flex-wrap", "nowrap"]] : []),
+  wrap: (v) => pair("flex-wrap", flexWrap(v)),
   position: (v) => { const p = asString(v).trim(); return POSITION.has(p) ? [["position", p]] : []; },
   top: (v) => pair("top", size(v)),
   right: (v) => pair("right", size(v)),
   bottom: (v) => pair("bottom", size(v)),
   left: (v) => pair("left", size(v)),
-  inset: (v) => { const i = asString(v).trim(); return pair("inset", i === "0" ? "0" : sanitiseCssLength(i, "") || null); },
+  inset: (v) => pair("inset", length(v)),
   fontSize: (v) => pair("font-size", fontSize(v)),
   weight: (v) => pair("font-weight", fontWeight(v)),
   textDecoration: (v) => { const t = asString(v).trim(); return TEXT_DECORATION.has(t) ? [["text-decoration", t]] : []; },
 };
 
-const TEXT_DECORATION = new Set(["underline", "none", "line-through", "overline"]);
+export const TEXT_DECORATION: ReadonlySet<string> = new Set(["underline", "none", "line-through", "overline"]);
+
+/**
+ * `sx.border` keywords → the `border` shorthand. `true` reads as `"true"`
+ * (`asString`), so `border: true` is the default border. Any other value is a
+ * colour for a 1px solid border; `false` draws nothing.
+ */
+export const BORDER_PRESETS: Readonly<Record<string, string>> = {
+  none: "none",
+  subtle: "1px solid var(--rui-color-border-subtle)",
+  strong: "1px solid var(--rui-color-text)",
+  default: "1px solid var(--rui-color-border)",
+  true: "1px solid var(--rui-color-border)",
+};
 
 /** Shared border shorthand resolution (base + responsive passes). */
 function resolveBorder(v: unknown): Array<[string, string]> {
   const b = asString(v).trim();
-  if (!b) return [];
-  if (b === "none") return [["border", "none"]];
-  if (b === "subtle") return [["border", "1px solid var(--rui-color-border-subtle)"]];
-  if (b === "strong") return [["border", "1px solid var(--rui-color-text)"]];
-  if (b === "true" || b === "default") return [["border", "1px solid var(--rui-color-border)"]];
+  // `border: cond` with a false `cond` used to emit `1px solid false`.
+  if (!b || b === "false") return [];
+  const preset = lookup(BORDER_PRESETS, b);
+  if (preset) return [["border", preset]];
   const c = color(b);
   return c ? [["border", `1px solid ${c}`]] : [];
+}
+
+/** `sx.wrap`: `true` wraps, `false` forbids wrapping (overriding a component that wraps). */
+function flexWrap(v: unknown): string | null {
+  const w = asString(v).trim();
+  return w === "true" ? "wrap" : w === "false" ? "nowrap" : null;
 }
 
 function pair(prop: string, value: string | null): Array<[string, string]> {
@@ -339,7 +401,7 @@ function applyResponsive(sx: Record<string, unknown>, classes: string[]): Set<st
     const value = sx[key];
     if (!isResponsiveMap(value)) continue;
     const groups: ResponsiveGroup[] = [];
-    for (const bp of ["base", "sm", "md", "lg", "xl"]) {
+    for (const bp of RESPONSIVE_BREAKPOINTS) {
       if (!(bp in value)) continue;
       const decls = resolver(value[bp]);
       if (decls.length > 0) groups.push({ bp, decls });
@@ -352,6 +414,22 @@ function applyResponsive(sx: Record<string, unknown>, classes: string[]): Set<st
 }
 
 type Decl = [string, string | null];
+
+/**
+ * The `sx` keys {@link serializeSx} reads WITHOUT a responsive resolver: a
+ * breakpoint map on one of them collapses to its narrowest value. With the
+ * keys of {@link RESPONSIVE_RESOLVERS} and {@link SX_STATE_KEYS} this is the
+ * whole `sx` surface; the DSL type generator fails when the keys
+ * `serializeSx` actually reads disagree with the three tables.
+ */
+export const SX_BASE_ONLY_KEYS: readonly string[] = ["cursor", "backdrop", "bgImage", "bgOverlay", "bgSize"];
+/** The interaction-state keys of `sx` (not responsive). */
+export const SX_STATE_KEYS: readonly string[] = ["hover", "focus", "states"];
+
+/** `sx.backdrop` → the `backdrop-filter` it applies. */
+export const BACKDROP_FILTERS: Readonly<Record<string, string>> = { blur: "blur(12px)" };
+/** `sx.bgSize` values (read only with `bgImage`); anything else is the first, `cover`. */
+export const BG_SIZES: readonly string[] = ["cover", "contain"];
 
 /**
  * Serialize an `sx` object into a safe inline-style string + utility classes.
@@ -411,15 +489,9 @@ export function serializeSx(sxRaw: unknown): { style: string; classes: string[] 
 
   // Radius / shadow / opacity
   const rad = get("radius");
-  if (rad != null) {
-    const r = asString(rad).trim();
-    decls.push(["border-radius", r in RADIUS ? RADIUS[r]! : sanitiseCssLength(r, "") || null]);
-  }
+  if (rad != null) decls.push(["border-radius", radius(rad)]);
   const sh = get("shadow");
-  if (sh != null) {
-    const s = asString(sh).trim();
-    if (s in SHADOW) decls.push(["box-shadow", SHADOW[s]!]);
-  }
+  if (sh != null) decls.push(["box-shadow", lookup(SHADOW, asString(sh).trim())]);
   const op = num(get("opacity"));
   if (op) decls.push(["opacity", op]);
 
@@ -428,11 +500,11 @@ export function serializeSx(sxRaw: unknown): { style: string; classes: string[] 
   if (DISPLAY.has(disp)) decls.push(["display", disp]);
   const dir = asString(get("direction")).trim();
   if (DIRECTION.has(dir)) decls.push(["flex-direction", dir]);
-  const al = asString(get("align")).trim();
-  if (al in ALIGN) decls.push(["align-items", ALIGN[al]!]);
-  const ju = asString(get("justify")).trim();
-  if (ju in JUSTIFY) decls.push(["justify-content", JUSTIFY[ju]!]);
-  if (get("wrap") === true || asString(get("wrap")) === "true") decls.push(["flex-wrap", "wrap"]);
+  decls.push(["align-items", lookup(ALIGN, asString(get("align")).trim())]);
+  decls.push(["justify-content", lookup(JUSTIFY, asString(get("justify")).trim())]);
+  // Both values, as in the responsive pass: `wrap: false` used to emit nothing,
+  // so it could not override a component that wraps while `{ base: false }` could.
+  decls.push(["flex-wrap", flexWrap(get("wrap"))]);
   const grow = num(get("grow"));
   if (grow) decls.push(["flex-grow", grow]);
   const shrink = num(get("shrink"));
@@ -449,15 +521,11 @@ export function serializeSx(sxRaw: unknown): { style: string; classes: string[] 
   decls.push(["right", size(get("right"))]);
   decls.push(["bottom", size(get("bottom"))]);
   decls.push(["left", size(get("left"))]);
-  const inset = get("inset");
-  if (inset != null) {
-    const i = asString(inset).trim();
-    decls.push(["inset", i === "0" ? "0" : sanitiseCssLength(i, "") || null]);
-  }
+  decls.push(["inset", length(get("inset"))]);
   const z = get("zIndex");
   if (z != null) {
     const zs = asString(z).trim();
-    decls.push(["z-index", zs in Z_INDEX ? Z_INDEX[zs]! : num(zs)]);
+    decls.push(["z-index", lookup(Z_INDEX, zs) ?? num(zs)]);
   }
 
   // Typography
@@ -473,10 +541,10 @@ export function serializeSx(sxRaw: unknown): { style: string; classes: string[] 
   if (CURSOR.has(cur)) decls.push(["cursor", cur]);
   const ta = asString(get("textAlign")).trim();
   if (TEXT_ALIGN.has(ta)) decls.push(["text-align", ta]);
-  const backdrop = asString(get("backdrop")).trim();
-  if (backdrop === "blur") {
-    decls.push(["backdrop-filter", "blur(12px)"]);
-    decls.push(["-webkit-backdrop-filter", "blur(12px)"]);
+  const backdrop = lookup(BACKDROP_FILTERS, asString(get("backdrop")).trim());
+  if (backdrop) {
+    decls.push(["backdrop-filter", backdrop]);
+    decls.push(["-webkit-backdrop-filter", backdrop]);
   }
   // Background image (scheme-whitelisted url) + optional overlay wash (IX.3).
   const bgImage = asString(get("bgImage")).trim();
@@ -486,7 +554,8 @@ export function serializeSx(sxRaw: unknown): { style: string; classes: string[] 
     if (safe) {
       const url = `url("${safe}")`;
       decls.push(["background-image", overlay ? `${overlay}, ${url}` : url]);
-      decls.push(["background-size", asString(get("bgSize")).trim() === "contain" ? "contain" : "cover"]);
+      const bgSize = asString(get("bgSize")).trim();
+      decls.push(["background-size", BG_SIZES.includes(bgSize) ? bgSize : BG_SIZES[0]!]);
       decls.push(["background-position", "center"]);
     }
   } else if (overlay) {
@@ -509,26 +578,35 @@ export function serializeSx(sxRaw: unknown): { style: string; classes: string[] 
   return { style, classes };
 }
 
-const STATE_EFFECTS = new Set(["lift", "grow", "glow", "bright", "border", "underline", "scale"]);
+/**
+ * Bounded effect shorthands per state: each name is an `ak-<state>-<name>`
+ * utility class with a rule in `src/theme/styles.ts`. Focus has only two —
+ * `focus: "lift"` used to emit `ak-focus-lift`, a class no rule styles.
+ */
+export const HOVER_EFFECTS: ReadonlySet<string> = new Set(["lift", "grow", "glow", "bright", "border", "underline", "scale"]);
+export const FOCUS_EFFECTS: ReadonlySet<string> = new Set(["glow", "border"]);
 
 function collectStateClasses(raw: unknown, state: "hover" | "focus", classes: string[]): void {
   if (raw == null) return;
+  const effects = state === "hover" ? HOVER_EFFECTS : FOCUS_EFFECTS;
   if (typeof raw === "string") {
-    if (STATE_EFFECTS.has(raw)) classes.push(`ak-${state}-${raw}`);
+    if (effects.has(raw)) classes.push(`ak-${state}-${raw}`);
     return;
   }
   if (typeof raw === "object" && !Array.isArray(raw)) {
     for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-      if (v && STATE_EFFECTS.has(k)) classes.push(`ak-${state}-${k}`);
+      // `scale` is both an effect flag and a state-style transform: only
+      // `scale: true` is the flag. `scale: 1.04` is the transform alone — it
+      // used to add the `ak-hover-scale` utility (`scale(1.05)`) as well, and
+      // stylesheet order decided which transform won.
+      if (k === "scale" && v !== true) continue;
+      if (v && effects.has(k)) classes.push(`ak-${state}-${k}`);
     }
   }
 }
 
 /** States that accept an arbitrary bounded sx-object (I.4). */
-const ARBITRARY_STATES = new Set([
-  "hover", "focus", "focus-visible", "focus-within", "active",
-  "disabled", "checked", "group-hover",
-]);
+const ARBITRARY_STATES: ReadonlySet<string> = new Set(INTERACTION_STATES);
 
 /**
  * Compile `sx.states` (and rich object forms of `sx.hover` / `sx.focus`) into
@@ -570,28 +648,22 @@ function resolveStateDecls(obj: Record<string, unknown>): Array<[string, string]
   push("background", bg(obj.bg));
   push("color", color(obj.color));
   push("border-color", color(obj.borderColor));
-  if (obj.shadow != null) {
-    const s = asString(obj.shadow).trim();
-    if (s in SHADOW) push("box-shadow", SHADOW[s]!);
-  }
-  if (obj.radius != null) {
-    const r = asString(obj.radius).trim();
-    push("border-radius", r in RADIUS ? RADIUS[r]! : sanitiseCssLength(r, "") || null);
-  }
+  if (obj.shadow != null) push("box-shadow", lookup(SHADOW, asString(obj.shadow).trim()));
+  if (obj.radius != null) push("border-radius", radius(obj.radius));
   const op = num(obj.opacity);
   if (op) push("opacity", op);
   const cur = asString(obj.cursor).trim();
   if (CURSOR.has(cur)) push("cursor", cur);
   if (obj.textDecoration != null) {
     const td = asString(obj.textDecoration).trim();
-    if (["underline", "none", "line-through", "overline"].includes(td)) push("text-decoration", td);
+    if (TEXT_DECORATION.has(td)) push("text-decoration", td);
   }
   // Bounded transforms.
   const scale = num(obj.scale);
   if (scale) transforms.push(`scale(${scale})`);
-  const ty = sanitiseCssLength(asString(obj.translateY), "");
+  const ty = length(obj.translateY);
   if (ty) transforms.push(`translateY(${ty})`);
-  const tx = sanitiseCssLength(asString(obj.translateX), "");
+  const tx = length(obj.translateX);
   if (tx) transforms.push(`translateX(${tx})`);
   if (obj.rotate != null) {
     const deg = asNumber(obj.rotate);
@@ -605,11 +677,14 @@ function resolveStateDecls(obj: Record<string, unknown>): Array<[string, string]
  * Animation presets (Part III.1)
  * ------------------------------------------------------------------------ */
 
-const ANIMATE_PRESETS = new Set([
+export const ANIMATE_PRESETS: ReadonlySet<string> = new Set([
   "fade", "fade-up", "fade-down", "fade-left", "fade-right",
   "zoom", "zoom-in", "slide-up", "slide-down", "slide-left", "slide-right",
   "pulse", "float", "shimmer", "bounce", "spin", "ping", "wiggle",
 ]);
+
+/** The documented "no animation" value: it renders nothing, like a falsy `animate`. */
+export const ANIMATE_NONE = "none";
 
 /**
  * Resolve the `animate` universal prop → class + inline timing overrides.
@@ -632,7 +707,8 @@ export function resolveAnimate(raw: unknown): { classes: string[]; style: string
     if (o.duration != null) duration = asNumber(o.duration);
     repeat = o.repeat;
   }
-  if (!ANIMATE_PRESETS.has(preset)) return { classes, style: "" };
+  // `"none"` and an unknown name both render nothing.
+  if (preset === ANIMATE_NONE || !ANIMATE_PRESETS.has(preset)) return { classes, style: "" };
   classes.push("ak-anim", `ak-anim-${preset}`);
   if (delay != null && delay >= 0 && delay <= 20000) decls.push(`animation-delay:${Math.round(delay)}ms`);
   if (duration != null && duration > 0 && duration <= 20000) decls.push(`animation-duration:${Math.round(duration)}ms`);
@@ -648,7 +724,6 @@ export function resolveAnimate(raw: unknown): { classes: string[]; style: string
  * The universal channel
  * ------------------------------------------------------------------------ */
 
-/** Named props that every component implicitly accepts (the universal channel). */
 /**
  * Roles an app author may set through the universal `role` channel.
  *
@@ -659,7 +734,7 @@ export function resolveAnimate(raw: unknown): { classes: string[]; style: string
  * set of owned children or ARIA state is not, because a bare role override
  * cannot supply those.
  */
-const ALLOWED_ROLES = new Set([
+export const ALLOWED_ROLES: ReadonlySet<string> = new Set([
   // Landmarks and document structure
   "banner", "complementary", "contentinfo", "form", "main", "navigation",
   "region", "search", "article", "group", "list", "listitem", "separator",
@@ -673,6 +748,7 @@ const ALLOWED_ROLES = new Set([
   "none", "presentation",
 ]);
 
+/** Named props that every component implicitly accepts (the universal channel). */
 export const UNIVERSAL_PROP_NAMES = new Set([
   "sx", "animate", "id", "anchor", "className", "class", "style", "aria", "data", "tooltip", "hidden",
   // Escape valve for ARIA defects that cannot be fixed from outside the library:
