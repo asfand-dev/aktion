@@ -84,7 +84,13 @@ export const Series: ComponentSpec = {
     { name: "name", type: "string" },
     {
       name: "values",
-      type: "number[] | {x: number, y: number, label?: string}[] | [number, number, string?][]",
+      // No `{`, `object`, `any` or `Record` here, although ScatterChart takes
+      // `{x, y, label?}` objects in this slot: `propExpectsObject` reads the
+      // hint, and an object-shaped one makes `chooseNamedBagIndex` bind an
+      // all-unknown-keys object (`{ valeus: [1] }`) as this payload instead of
+      // reporting it as a misspelt prop. The description names the object
+      // form; the curated declaration (component-types/charts.ts) types it.
+      type: "number[] | [number, number, string?][]",
       optional: true,
       description: "One number per x-axis label — or, for ScatterChart, its points as `{x, y, label?}` objects or `[x, y, label?]` tuples",
     },

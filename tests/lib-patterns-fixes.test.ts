@@ -14,6 +14,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { cleanup, flush, render } from "../src/testing/index.js";
+import { parse } from "../src/parser/index.js";
+import { defaultLibrary, validateProgramSchema } from "../src/library/index.js";
 import { Gantt, JsonTree, Truncate } from "../src/library/components/new-components.js";
 import { Tour, Drawer } from "../src/library/components/advanced-patterns.js";
 import type { RenderHelpers } from "../src/library/types.js";
@@ -261,6 +263,25 @@ describe("Series colour", () => {
     const screen = render(`$app(BarChart(["a"], [Series("Revenue", [1], "#ff0000")]))`);
     await flush();
     expect(screen.shadowRoot.querySelector(".rui-chart-legend-swatch")?.getAttribute("style")).toBe("background:#ff0000");
+  });
+});
+
+describe("Series values hint", () => {
+  // `propExpectsObject` reads the hint, and an object-shaped hint makes
+  // `chooseNamedBagIndex` take an all-unknown-keys object in the `values`
+  // slot as the payload instead of the named-props bag, so a misspelt prop
+  // bound silently into `values` and the chart drew nothing.
+  const messages = (src: string): string[] =>
+    validateProgramSchema(parse(src), defaultLibrary).map((e) => e.message);
+
+  it("still reports a misspelt prop in the named-props bag", () => {
+    expect(messages(`$app(BarChart(["a"], [Series("Rev", { valeus: [1] })]))`).join("\n")).toContain('Unknown prop "valeus"');
+    expect(messages(`$app(ScatterChart([Series("A", { pts: [[1, 2]] })]))`).join("\n")).toContain('Unknown prop "pts"');
+  });
+
+  it("accepts both point forms and the named `values` / `points` props", () => {
+    expect(messages(`$app(ScatterChart([Series("A", [{ x: 1, y: 2 }]), Series("B", [[1, 2, "p"]])]))`)).toEqual([]);
+    expect(messages(`$app(ScatterChart([Series("A", { values: [{ x: 1, y: 2 }] }), Series("B", { points: [[1, 2]] })]))`)).toEqual([]);
   });
 });
 
