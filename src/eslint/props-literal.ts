@@ -39,7 +39,15 @@ import type * as ts from "typescript";
  * prop name (`chooseNamedBagIndex` takes the last object literal of a call of
  * two or more arguments as the bag as soon as one key is known) →
  * `objectReadAsProps`. `HTMLTag("section", { "data-x": "1", id: "a" })`
- * renders `<section id="a">`: the bag keeps `id` and drops `data-x`.
+ * renders `<section id="a">`: the bag keeps `id` and drops `data-x`. A lone
+ * object literal is elected the same way when the component has more than
+ * one positional slot, and only when every key is a prop name when it has
+ * one: `JsonTree({ id: 1, name: "x" })` reads `id` as the universal prop and
+ * renders no data, although TypeScript bound the object to `data: unknown`.
+ * Two lone literals stay silent: the payload of a component whose only prop
+ * takes an object (the runtime never elects it), and the bag form that names
+ * the slot itself and nothing else (`JsonTree({ data, expanded: true })`),
+ * which the runtime binds as written.
  *
  * When no overload matches, `getResolvedSignature` still returns a signature,
  * built for the error message, and its parameters say nothing about where an
@@ -63,8 +71,11 @@ import type * as ts from "typescript";
  *   the file at all (the ambient `aktion-runtime/dsl-globals` flavour). A
  *   component declared in the file, or imported from another module, is a
  *   USER component, and those bind a non-literal argument positionally, just
- *   as JavaScript does (`invokeComponentDecl`), so a parameter called `props`
- *   on one is not a mistake. This is the runtime's own library/user split.
+ *   as JavaScript does (`invokeComponentDecl`) — and every argument, object
+ *   literals included, when the call is written in a `.aktion.js` /
+ *   `.aktion.ts` module and the component is declared in one
+ *   (`invokeComponentDeclPositionally`) — so a parameter called `props` on one
+ *   is not a mistake. This is the runtime's own library/user split.
  * - An argument typed `any` is never `propsNotLiteral`. In an untyped
  *   `.aktion.js` module every parameter is `any`, which satisfies every
  *   overload, so `Button("Save", onSave)` resolves cleanly to the first one,
@@ -305,6 +316,7 @@ function looksLikeProps(call: CheckedCall, type: ts.Type): boolean {
  * two or more arguments, `chooseNamedBagIndex` elects the last object literal
  * as soon as one of its keys is a prop (or universal) name, keeps only those
  * keys, and binds the remaining arguments positionally from the first slot on.
+ * A call's only argument is elected by the rules `electsLoneObject` restates.
  *
  * The advice names the arguments after the object too: `props` is the last
  * parameter of every overload in the generated declarations, so they have to
@@ -312,7 +324,7 @@ function looksLikeProps(call: CheckedCall, type: ts.Type): boolean {
  * [ … ] })`).
  */
 function checkPositionalObject(context: Rule.RuleContext, call: CheckedCall, signature: ts.Signature): void {
-  if (!call.complete || call.arguments.length < 2) return;
+  if (!call.complete || call.arguments.length === 0) return;
   let index = -1;
   for (let i = call.arguments.length - 1; i >= 0; i -= 1) {
     if (withoutTypeOnlyWrappers(call.arguments[i]!).type === "ObjectExpression") {
@@ -329,6 +341,7 @@ function checkPositionalObject(context: Rule.RuleContext, call: CheckedCall, sig
   const known = keys.find((key) => key !== null && names.has(key));
   if (known === undefined || known === null) return;
   const dropped = keys.filter((key) => key === null || !names.has(key)).map((key) => (key === null ? "[…]" : key));
+  if (call.arguments.length === 1 && !electsLoneObject(call, parameter, keys, dropped.length > 0)) return;
   const effects: string[] = [];
   if (dropped.length > 0) {
     const list = dropped.map((key) => `\`${key}\``).join(", ");
@@ -358,6 +371,32 @@ function checkPositionalObject(context: Rule.RuleContext, call: CheckedCall, sig
       named: `{ ${[...entries].join(", ")} }`,
     },
   });
+}
+
+/**
+ * `chooseNamedBagIndex`'s answer, read from the callee's overloads, for a call
+ * whose ONLY argument is an object literal with at least one prop name and
+ * which TypeScript bound to `parameter`, a positional one (the first overload,
+ * `(data: unknown, props?)`, accepts any object):
+ *
+ * - a component whose only prop takes an object has no bag-only overload
+ *   (`props` first), and the runtime always keeps the object as that payload;
+ * - the bag form naming the slot itself, with no other key dropped
+ *   (`JsonTree({ data, expanded: true })`), is bound as written: TypeScript
+ *   merely tried the `(data, props?)` overload first;
+ * - otherwise the runtime elects the object as soon as one key is a prop name
+ *   when the component has more than one positional slot, and only when every
+ *   key is one when it has a single slot.
+ */
+function electsLoneObject(call: CheckedCall, parameter: ts.Symbol, keys: ReadonlyArray<string | null>, dropsKeys: boolean): boolean {
+  const signatures = calleeSignatures(call);
+  if (!signatures.some((signature) => signature.getParameters()[0]?.getName() === PROPS_PARAMETER)) return false;
+  if (!dropsKeys && keys.includes(parameter.getName())) return false;
+  const slots = Math.max(
+    0,
+    ...signatures.map((signature) => signature.getParameters().filter((p) => p.getName() !== PROPS_PARAMETER).length),
+  );
+  return slots > 1 || !dropsKeys;
 }
 
 /**
