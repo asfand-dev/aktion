@@ -3,7 +3,7 @@ import type { Linter } from "eslint";
 /**
  * Rule overrides that are properties of the Aktion LANGUAGE ITSELF, not of
  * any one consumer's app — every consumer routing `.aktion` files through
- * `aktionProcessor` (see `processor.ts`) hits the same eight false positives
+ * `aktionProcessor` (see `processor.ts`) hits the same ten false positives
  * / grammar incompatibilities, because they all stem from this repo's own
  * grammar (`src/parser/parser.ts`) or this repo's own component/reactivity
  * idiom (`src/library`, `src/runtime`), not from anything a consumer wrote.
@@ -22,9 +22,12 @@ import type { Linter } from "eslint";
  *   designed to do, correctly, against JS/TS in general, but the pattern it
  *   flags is the DSL's normal, unavoidable idiom, not a mistake.
  *
- * `tests/eslint-corpus-sweep.test.ts` re-verifies all eight against this
- * repo's own real `.aktion` corpus on every test run — see that file for the
- * measured trigger counts. That whole-corpus sweep is how the eighth entry
+ * `tests/eslint-corpus-sweep.test.ts` re-verifies the first eight against
+ * this repo's own real `.aktion` corpus on every test run — see that file for
+ * the measured trigger counts — and `tests/eslint-preset-idioms.test.ts`
+ * reproduces the last two (`unicorn/prefer-switch`,
+ * `unicorn/no-top-level-assignment-in-function`). That whole-corpus sweep is
+ * how the eighth entry
  * (`unicorn/switch-case-braces`) was found: it doesn't appear in the
  * downstream dcd-monorepo pilot this rule set was originally ported from
  * (its own `.aktion` corpus happens not to contain a `switch` statement
@@ -40,7 +43,8 @@ export const aktionRecommendedRules: Linter.RulesRecord = {
   // widening (2026-10-02) it parses to the same `Lambda` handler
   // (`tests/eslint-corpus-sweep.test.ts` pins the round trip). The override is
   // kept so existing `.aktion` corpora are not restyled by an upgrade; the
-  // TypeScript preset below enforces the `properties` form instead.
+  // TypeScript preset below switches the rule on in `properties` mode instead,
+  // which reports only `{ title: title }` — never a handler, in either form.
   "object-shorthand": "off",
   // GENUINE GRAMMAR INCOMPATIBILITY: `parseExportStatement` in
   // `src/parser/parser.ts` throws an explicit parse error on `export { … }`
@@ -106,6 +110,22 @@ export const aktionRecommendedRules: Linter.RulesRecord = {
   // `docs/demos/blocks/profile-header.aktion`, the only two files in this
   // corpus with a `case N: return …` shaped switch statement.
   "unicorn/switch-case-braces": "off",
+  // GENUINE GRAMMAR INCOMPATIBILITY, same root cause as
+  // `unicorn/switch-case-braces` above: `unicorn/prefer-switch`'s autofix
+  // turns an `if (x === "a") … else if (x === "b") … else if …` chain of three
+  // or more branches into a `switch`, and keeps every block consequent
+  // braced, so a branch that declares something becomes
+  // `case "ok": { const label = …; return … }` — measured: `parse()` rejects
+  // the output with `Expected Punctuation ":" but got Identifier "label"`.
+  "unicorn/prefer-switch": "off",
+  // DSL-IDIOM FALSE POSITIVE: an action that writes a module-level atom
+  // (`export $draft = ""` … `export function addTodo() { $draft = "" }`) is how
+  // Aktion state changes — assigning a `$` atom is what re-renders, and an
+  // action or event handler is where that assignment happens.
+  // `unicorn/no-top-level-assignment-in-function` reports every such write
+  // (measured: 18 times across `create-aktion/template/todos-app` and
+  // `chatbot`'s `store.aktion`).
+  "unicorn/no-top-level-assignment-in-function": "off",
 };
 
 /**
@@ -134,32 +154,40 @@ export const aktionRecommendedRules: Linter.RulesRecord = {
  * - **CROSS-MODULE RENAME** — the autofix renames, in the one file ESLint is
  *   looking at, a name that other modules depend on, so they break.
  *
- * Every entry is `"off"` except `unicorn/switch-case-braces`, which is
- * reconfigured instead. ESLint does not validate a rule that is off, so the
- * `"off"` entries are inert where their plugin is not installed. The one
- * enabled entry is not: a config applying this record needs
- * `eslint-plugin-unicorn` registered under the `unicorn` namespace (XO and
- * unicorn's own `configs.recommended` both do that), or ESLint rejects the
- * config with `Could not find plugin "unicorn"`. Without unicorn, add a later
- * block with `"unicorn/switch-case-braces": "off"` — the autofix it guards
- * against cannot run without the plugin either.
+ * Two entries switch a rule ON, as an error, instead of off: core
+ * `object-shorthand` in `properties` mode (a style choice, see its entry) and
+ * `unicorn/switch-case-braces` in `avoid` mode (an autofix guard). Because the
+ * preset is spread after the consumer's own rule sets, both override whatever
+ * the consumer set for these files — `"object-shorthand": "off"` included.
+ * Every other entry is `"off"`, and ESLint does not validate a rule that is
+ * off, so those entries are inert where their plugin is not installed.
+ * `object-shorthand` needs no plugin; `unicorn/switch-case-braces` does: a
+ * config applying this record needs `eslint-plugin-unicorn` registered under
+ * the `unicorn` namespace (XO and unicorn's own `configs.recommended` both do
+ * that), or ESLint rejects the config with `Could not find plugin "unicorn"`.
+ * Without unicorn, add a later block with `"unicorn/switch-case-braces":
+ * "off"` — the autofix it guards against cannot run without the plugin either.
  *
- * `aktion/props-literal` is not in this record because it is this package's
- * own rule (`props-literal.ts`): `aktionTypeScriptConfig` in
- * `src/eslint-api.ts` registers the plugin and enables it next to these.
+ * `aktion/props-literal` and `aktion/router-literal` are not in this record
+ * because they are this package's own rules (`props-literal.ts`,
+ * `router-literal.ts`): `aktionTypeScriptConfig` in `src/eslint-api.ts`
+ * registers the plugin and enables them next to these.
  */
 export const aktionTypeScriptRules: Linter.RulesRecord = {
-  // RECONFIGURED, not off: method shorthand (`{ onClick() { … } }`) parses to
-  // the same handler since the parser widening, but the guide keeps handlers in
-  // property form; `properties` enforces only `{ title }` for `{ title: title }`,
-  // which the JS-semantics layer keeps working after renaming locals (W1).
+  // SWITCHED ON, a style choice rather than a guard: `properties` mode reports
+  // (and fixes) only `{ title: title }` → `{ title }`, which the JS-semantics
+  // layer keeps working after renaming locals (W1). It checks no handler —
+  // neither method shorthand (`{ onClick() { … } }`, which parses to the same
+  // handler since the parser widening) nor `onClick: function () { … }`
+  // (measured).
   "object-shorthand": ["error", "properties"],
   // GENUINE GRAMMAR INCOMPATIBILITY, reconfigured rather than off: a braced
   // case body parses as an object literal (no `BlockStatement` production, see
   // above), so unicorn's default `always` corrupts every switch it fixes, while
   // `avoid` only ever REMOVES braces. It does not report braces around a body
   // that declares something (`case 1: { const y = x … }`), which still fails
-  // to parse.
+  // to parse — so `unicorn/prefer-switch`, whose fix writes such bodies, is
+  // off below.
   "unicorn/switch-case-braces": ["error", "avoid"],
   // GENUINE GRAMMAR INCOMPATIBILITY: the fix creates an `export { … } from …`
   // list, which `parseExportStatement` rejects (see above).
@@ -205,6 +233,16 @@ export const aktionTypeScriptRules: Linter.RulesRecord = {
   // DSL-IDIOM FALSE POSITIVE: `$app(…)` and `$effect(…)` are bare top-level
   // calls by design (see above).
   "unicorn/no-top-level-side-effects": "off",
+  // GENUINE GRAMMAR INCOMPATIBILITY: the fix turns an if/else-if chain into a
+  // `switch` whose braced case bodies parse as object literals; `avoid` above
+  // does not remove the braces around a body that declares something (see
+  // `aktionRecommendedRules`; measured on `.aktion.js`).
+  "unicorn/prefer-switch": "off",
+  // DSL-IDIOM FALSE POSITIVE: an exported action writing the module's own
+  // atom is how state changes — and, an import being a read-only binding in
+  // TypeScript (TS2632), the only way another module can change it (see
+  // `aktionRecommendedRules`).
+  "unicorn/no-top-level-assignment-in-function": "off",
   // DSL-IDIOM FALSE POSITIVE: exported state is `export let $count = 0`, a
   // `let` that importing modules write to.
   "import-x/no-mutable-exports": "off",
