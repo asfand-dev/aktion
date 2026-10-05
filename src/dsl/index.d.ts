@@ -66,6 +66,11 @@ interface __DomFileShape { readonly name: string; readonly size: number; readonl
 export type DomFile = __DomLib<"File", __DomFileShape>;
 /** Content-addressed identity override (`key:`), accepted by every component call. */
 export type Key = string | number;
+/** The trailing options parameter of a `.aktion.ts` / `.aktion.js` user component that takes a `key`: `function Item(label: string, _opts?: ComponentOptions)`. A call from such a module binds every argument positionally, as JavaScript does, so `Item(id, { key: id })` hands the object to `_opts` — and because it is an object LITERAL, written as the call's LAST argument with `key` as its only property, the runtime also reads it as the instance identity. An options object held in a variable is only bound to `_opts`. */
+export interface ComponentOptions {
+  /** Stable identity for per-instance state across re-orders. */
+  readonly key?: Key;
+}
 /** A breakpoint map honoured by responsive layout props (base / sm / md / lg / xl). */
 export type Responsive<T> = { readonly base?: T; readonly sm?: T; readonly md?: T; readonly lg?: T; readonly xl?: T };
 /** Exactly one spelling (a prop or one of its aliases) of a required prop. */
@@ -10324,7 +10329,7 @@ export interface MutationConfig extends HttpFetchOptions {
   /** Fetch cache mode. */
   cache?: "default" | "no-store" | "reload" | "no-cache" | "force-cache";
   /** Runs synchronously before the request with the object passed to `.mutate(overrides)` (or `{}`); state it changes is rolled back on failure. Its return value is ignored and a throw is swallowed. */
-  optimistic?: (overrides: Readonly<Partial<MutationConfig>>) => void;
+  optimistic?: (overrides: Readonly<Partial<MutationConfig>>) => unknown;
   /** Refetch every cached $query whose key contains a listed substring on success. */
   invalidates?: string | readonly string[];
   /** GraphQL mutation document. */
@@ -10349,7 +10354,7 @@ export interface HttpResourceError {
 export interface HttpResource<T = unknown> {
   /** Request lifecycle: "idle" | "loading" | "data" | "error" | "stale" ("stale" = refetching while the previous data is still shown). */
   readonly state: ResourceState;
-  /** Parsed response body — `undefined` until the first successful response. */
+  /** Parsed response body — `undefined` until the first successful response. Typed `T`, which is `unknown` unless the call passes a type argument (`$http<User[]>({ url })`, `$query<Row[]>({ url })`). */
   readonly data: T | undefined;
   /** `undefined` on success; `{ status, body }` on a non-2xx; `{ graphqlErrors }` for a GraphQL error; the thrown error on network failure. */
   readonly error: HttpResourceError | undefined;
@@ -10366,9 +10371,9 @@ export interface HttpResource<T = unknown> {
   /** Abort the in-flight request. */
   cancel(): void;
   /** Settable callback fired each time the request settles (success or error). */
-  onDone?: (resource: HttpResource<T>) => void;
+  onDone?: (resource: HttpResource<T>) => unknown;
 }
-/** An infinite `$query` bag. */
+/** An infinite `$query` bag. It has no `onDone`: an infinite query never calls one — chain `.loadMore().then(…)` / `.refetch().then(…)` instead. */
 export interface InfiniteQueryResource<Item = unknown> extends Omit<HttpResource<Item[]>, "data" | "onDone" | "cancel"> {
   /** Flattened items across every loaded page (starts as `[]`). */
   readonly data: Item[];
@@ -10384,8 +10389,6 @@ export interface InfiniteQueryResource<Item = unknown> extends Omit<HttpResource
   loadMore(): Promise<void>;
   /** A no-op: an infinite query has no single in-flight request to abort. */
   cancel(): void;
-  /** Settable callback fired each time the request settles (success or error). */
-  onDone?: (resource: InfiniteQueryResource<Item>) => void;
 }
 /** Deferred write bag: nothing is sent until `.mutate(…)`. */
 export interface MutationResource<T = unknown> {
@@ -10402,7 +10405,7 @@ export interface MutationResource<T = unknown> {
   /** Clear data / error / status back to the resting state (aborts an in-flight mutation). */
   reset(): void;
   /** Settable callback fired when the mutation settles. */
-  onDone?: (resource: MutationResource<T>) => void;
+  onDone?: (resource: MutationResource<T>) => unknown;
 }
 export interface SocketConfig<M = unknown> {
   /** WebSocket URL (ws:// or wss://). */
@@ -10412,7 +10415,7 @@ export interface SocketConfig<M = unknown> {
   /** Max buffered messages kept in `.messages`. */
   bufferSize?: number;
   /** Callback fired for each received message — JSON-parsed when it parses, else the raw string (the same value `.last` holds). A throw is swallowed. */
-  onMessage?: (message: M) => void;
+  onMessage?: (message: M) => unknown;
   /** Retry dropped connections (true, or a max-attempt count) with backoff. */
   reconnect?: boolean | number;
 }
@@ -10426,7 +10429,7 @@ export interface SseConfig<M = unknown> {
   /** Max buffered events kept in `.messages`. */
   bufferSize?: number;
   /** Callback fired for each received event payload — JSON-parsed when it parses, else the raw string (the same value `.last` holds). A throw is swallowed. */
-  onMessage?: (message: M) => void;
+  onMessage?: (message: M) => unknown;
 }
 export type SocketStatus = "connecting" | "open" | "closed";
 /** What a `$socket` / `$sse` bag's `.error` holds: the socket / EventSource `error` event, the error its constructor threw (a bad URL), or `{ message }` when the API is unavailable. `undefined` once the connection opens. */
@@ -10490,28 +10493,38 @@ export interface ScriptResource<V = unknown> {
 }
 /** `rel` values `$head({ link })` keeps (metadata and resource hints only); a link with any other `rel` is dropped. */
 export type HeadLinkRel = "canonical" | "alternate" | "prev" | "next" | "author" | "license" | "help" | "icon" | "shortcut icon" | "apple-touch-icon" | "apple-touch-icon-precomposed" | "mask-icon" | "manifest" | "search" | "dns-prefetch" | "preconnect" | "me";
-/** A `<link>` descriptor. Only these attributes are kept; any other key is dropped. */
-export interface HeadLink {
-  readonly rel: HeadLinkRel;
+/** The DOM's camelCase spellings of `HeadLink` attributes. They set the same attribute: `$head` matches link attribute names case-insensitively. */
+export interface HeadLinkAttributeAliases {
+  /** The `crossorigin` attribute. */
+  readonly crossOrigin?: "" | "anonymous" | "use-credentials" | null;
+  /** The `hreflang` attribute. */
+  readonly hrefLang?: string | number | null;
+  /** The `referrerpolicy` attribute. */
+  readonly referrerPolicy?: string | number | null;
+}
+/** A `<link>` descriptor. Only these attributes are kept; any other key is dropped. Each value is converted with `String()` (`sizes: 32` is `sizes="32"`); a null one leaves the attribute out. */
+export interface HeadLink extends HeadLinkAttributeAliases {
+  /** Matched case-insensitively, so `"Canonical"` and `"ICON"` are kept too. */
+  readonly rel: HeadLinkRel | Capitalize<HeadLinkRel> | Uppercase<HeadLinkRel>;
   /** Required: a link without one (or with an unsafe one) is dropped. Relative, `#`, `?` or absolute http(s) only. */
   readonly href: string;
-  readonly as?: string;
-  readonly type?: string;
-  readonly sizes?: string;
-  readonly media?: string;
-  readonly hreflang?: string;
-  readonly color?: string;
-  readonly title?: string;
-  readonly crossorigin?: "" | "anonymous" | "use-credentials";
-  readonly referrerpolicy?: string;
+  readonly as?: string | number | null;
+  readonly type?: string | number | null;
+  readonly sizes?: string | number | null;
+  readonly media?: string | number | null;
+  readonly hreflang?: string | number | null;
+  readonly color?: string | number | null;
+  readonly title?: string | number | null;
+  readonly crossorigin?: "" | "anonymous" | "use-credentials" | null;
+  readonly referrerpolicy?: string | number | null;
 }
 /** Attributes `$head({ htmlAttrs })` sets on `<html>`: these names plus any `data-*`. Any other attribute (notably `style`) is dropped; a nullish value is skipped. */
 export interface HeadHtmlAttrs {
-  readonly lang?: string;
-  readonly dir?: "ltr" | "rtl" | "auto";
-  readonly class?: string;
-  readonly translate?: "yes" | "no";
-  readonly id?: string;
+  readonly lang?: string | null;
+  readonly dir?: "ltr" | "rtl" | "auto" | null;
+  readonly class?: string | null;
+  readonly translate?: "yes" | "no" | null;
+  readonly id?: string | null;
   readonly [attribute: `data-${string}`]: string | number | boolean | null | undefined;
 }
 export interface HeadConfig {
@@ -10644,6 +10657,24 @@ export interface I18nInstance<K extends string = string, L extends string = stri
  * treated as empty; so is any other non-array (a `Set`, a `Map`, an object).
  */
 export type UtilList<T> = readonly T[] | null | undefined;
+/**
+ * What the helpers whose result does not depend on the element type (`count`,
+ * `sum`, `avg`, `min`, `max`, `join`) read: a {@link UtilList}, or a value
+ * typed `unknown` — an untyped `$query`'s `data` — which they guard at runtime,
+ * reading any non-array as empty. A value of a known non-array type (a string,
+ * a `Set`, an object) is still rejected: it would be read as `[]`.
+ */
+export type UtilAggregateInput<A> = unknown extends A ? A : UtilList<unknown>;
+/**
+ * What `pick` returns: the picked keys of `T`. When `T` may be `null` /
+ * `undefined` (data not loaded yet) every key is optional, because a nullish
+ * input gives `{}`.
+ */
+export type UtilPicked<T, K extends PropertyKey> =
+  [T] extends [object] ? Pick<T, K & keyof T> : Partial<Pick<NonNullable<T>, K & keyof NonNullable<T>>>;
+/** What `omit` returns: `T` without the omitted keys — every key optional when `T` may be nullish, as for {@link UtilPicked}. */
+export type UtilOmitted<T, K extends PropertyKey> =
+  [T] extends [object] ? Omit<T, K> : Partial<Omit<NonNullable<T>, K>>;
 /** A field of the row type, or a dotted path into it (`"owner.name"`). */
 export type UtilFieldPath<T> = (T extends object ? keyof T & string : never) | (string & {});
 /** The comparison operators of `filter` / `find` / `partition`. Any other string matches nothing. */
@@ -10828,15 +10859,15 @@ export interface RulesNamespace {
 /** The static `$util` helpers — printed from `typeof Util` (`src/runtime/util.ts`). */
 export interface UtilStatic {
   /** Number of items in an array. */
-  readonly count: (arr: UtilList<unknown>) => number;
+  readonly count: <A>(arr: UtilAggregateInput<A>) => number;
   /** Sum of the numeric values. */
-  readonly sum: (arr: UtilList<unknown>) => number;
+  readonly sum: <A>(arr: UtilAggregateInput<A>) => number;
   /** Arithmetic mean of the values. */
-  readonly avg: (arr: UtilList<unknown>) => number;
+  readonly avg: <A>(arr: UtilAggregateInput<A>) => number;
   /** Smallest numeric value. */
-  readonly min: (arr: UtilList<unknown>) => number;
+  readonly min: <A>(arr: UtilAggregateInput<A>) => number;
   /** Largest numeric value. */
-  readonly max: (arr: UtilList<unknown>) => number;
+  readonly max: <A>(arr: UtilAggregateInput<A>) => number;
   /** First element, or null when empty. */
   readonly first: <T>(arr: UtilList<T>) => T | null;
   /** Last element, or null when empty. */
@@ -10860,9 +10891,9 @@ export interface UtilStatic {
   /** Array with the value repeated n times. */
   readonly repeat: <T>(value: T, n: number) => T[];
   /** Object containing only the listed keys. */
-  readonly pick: <T extends object, K extends keyof T & string>(obj: T, keys: readonly K[]) => Pick<T, K>;
+  readonly pick: <T extends object | null | undefined, K extends keyof NonNullable<T> & string>(obj: T, keys: readonly K[]) => UtilPicked<T, K>;
   /** Object without the listed keys. */
-  readonly omit: <T extends object, K extends keyof T & string>(obj: T, keys: readonly K[]) => Omit<T, K>;
+  readonly omit: <T extends object | null | undefined, K extends keyof NonNullable<T> & string>(obj: T, keys: readonly K[]) => UtilOmitted<T, K>;
   /** Split an array into chunks of the given size. */
   readonly chunk: <T>(arr: UtilList<T>, size: number) => T[][];
   /** Flatten nested arrays to the given depth (default 1). */
@@ -10908,7 +10939,7 @@ export interface UtilStatic {
   /** End of the month containing the date (ISO). */
   readonly endOfMonth: (date: string | number | Date) => string;
   /** Join an array into a string with a separator. */
-  readonly join: (arr: UtilList<unknown>, sep?: string) => string;
+  readonly join: <A>(arr: UtilAggregateInput<A>, sep?: string) => string;
   /** Split a string into an array on a separator. */
   readonly split: (text: unknown, sep?: string) => string[];
   /** Trim surrounding whitespace. */
@@ -11060,7 +11091,7 @@ export interface AktionUtil extends UtilStatic {
   /** Computed reactive value — recomputes from the atoms the lambda reads. */
   derived<T>(fn: () => T): T;
   /** Program-level error sink — fires with { error, source } when an action throws. */
-  onError(fn: ((info: { readonly error: unknown; readonly source: string }) => void) | null): void;
+  onError(fn: ((info: { readonly error: unknown; readonly source: string }) => unknown) | null): void;
   /** Navigation guard: return false to block, a path string to redirect, anything else to allow. */
   onNavigate(fn: ((info: NavigationInfo) => boolean | string | void) | null): void;
   /** HTTP request interceptor — a partial return merges over every outgoing request (headers shallow-merged), or mutate the request and return nothing. Runs synchronously: a returned Promise is ignored. */
@@ -11221,11 +11252,11 @@ export interface DomMutationRecord {
 /** Element arguments are the nodes `Mount` / `OnMount` / ref callbacks hand you. A null or non-element node makes the call a no-op: an observer returns a disposer that does nothing, `measure` returns null. */
 export interface DomManager {
   /** Observe element size with a ResizeObserver; callback gets { width, height, entry }. Returns a disposer; auto-disposed on replan. */
-  onResize(node: DomElement | null | undefined, callback: (size: { readonly width: number; readonly height: number; /** The `ResizeObserverEntry`. */ readonly entry: unknown }) => void): DomDisposer;
+  onResize(node: DomElement | null | undefined, callback: (size: { readonly width: number; readonly height: number; /** The `ResizeObserverEntry`. */ readonly entry: unknown }) => unknown): DomDisposer;
   /** Observe viewport intersection with an IntersectionObserver; callback gets the entry. Options: { root?, rootMargin?, threshold? }. */
-  onIntersect(node: DomElement | null | undefined, callback: (entry: DomIntersectionEntry) => void, options?: { readonly root?: DomElement | null; readonly rootMargin?: string; readonly threshold?: number | readonly number[] }): DomDisposer;
+  onIntersect(node: DomElement | null | undefined, callback: (entry: DomIntersectionEntry) => unknown, options?: { readonly root?: DomElement | null; readonly rootMargin?: string; readonly threshold?: number | readonly number[] }): DomDisposer;
   /** Observe DOM mutations with a MutationObserver; callback gets the records. Options: { childList?, attributes?, subtree?, characterData? } — childList and attributes default to TRUE, subtree and characterData to false. */
-  onMutation(node: DomElement | null | undefined, callback: (records: readonly DomMutationRecord[]) => void, options?: { readonly childList?: boolean; readonly attributes?: boolean; readonly subtree?: boolean; readonly characterData?: boolean }): DomDisposer;
+  onMutation(node: DomElement | null | undefined, callback: (records: readonly DomMutationRecord[]) => unknown, options?: { readonly childList?: boolean; readonly attributes?: boolean; readonly subtree?: boolean; readonly characterData?: boolean }): DomDisposer;
   /** One-shot read → { rect, scroll, viewport } (getBoundingClientRect + scroll offsets + window size). */
   measure(node: DomElement | null | undefined): DomMeasurement | null;
 }
@@ -11245,19 +11276,19 @@ export declare function $reducer<S, A>(reducer: (state: S, action: A) => S, init
 /** Hook: stable unique id per component instance (like useId). */
 export declare function $id(prefix?: string): string;
 /** Declarative side effect; deps mix $state, "mount"/"unmount", "every(N)", "debounce(N)". `body` must be an inline arrow or function expression (a function reference parses to an empty body). Deps must be an array LITERAL of `$` atoms (or member paths such as `$user.name`) and trigger strings; empty or omitted deps mean `["mount"]`. Return nothing from the body — register teardown with `cleanup(fn)`. */
-export declare function $effect<const D extends readonly unknown[] = []>(body: () => void, deps?: EffectDependencies<D>): void;
+export declare function $effect<const D extends readonly unknown[] = []>(body: () => unknown, deps?: EffectDependencies<D>): void;
 /** Run optimistic writes; auto-rolls back state if the callback throws or rejects. */
 export declare function $optimistic<T>(fn: () => T): T;
 /** Global store: shared state + actions (like Zustand/Pinia). persist: "key" mirrors data to localStorage (persistIn: "session" for sessionStorage); history: true|depth adds undo()/redo()/clearHistory() + reactive canUndo/canRedo. Non-function entries become reactive state, function entries become methods `(s, ...args) => …` whose first parameter is the store handle — typed `any` inside the method, because TypeScript cannot infer a handle from the object literal it is defined in; callers of the returned store ARE fully typed. To type the handle, annotate it with `Store<Fields>` over an interface of the fields: `interface Cart { items: Item[] }` … `add: (s: Store<Cart>, item: Item) => { s.items = [...s.items, item] }`. One store per call site. */
 export declare function $store<C extends { readonly [key: string]: unknown }>(config: C & StoreOptions & { readonly [key: string]: ((s: any, ...args: any[]) => unknown) | {} | null | undefined }): Store<C>;
 /** Reactive form engine: values/errors/touched/dirty/valid/submitting/validating + field()/validate()/touch()/setField()/submit() (alias handleSubmit())/reset(). Async rules ($util.rules.asyncCustom) are awaited before submit; submitting stays true until an async onSubmit settles. */
 export declare function $form<V extends FormValues = FormValues>(config?: FormConfig<V>): FormHandle<V>;
-/** Reactive HTTP resource bag — { data, loading, error, refetch }. `T` is an unchecked assertion about the response body; `data` is `undefined` until the first successful response. */
+/** Reactive HTTP resource bag — { data, loading, error, refetch }. `data` is `unknown` unless you pass the body's type: `$http<User[]>({ url })`. `T` is an unchecked assertion about the response body; `data` is `undefined` until the first successful response. */
 export declare function $http<T = unknown>(config: HttpConfig): HttpResource<T>;
-/** Cached + deduplicated HTTP read. Polling via refetchInterval/refetchOnFocus/refetchOnReconnect; pagination via infinite: { param, limit, mode } (→ .loadMore()/.hasMore/.loadingMore); GraphQL via gql + variables. With `infinite: {…}` the bag accumulates pages (`.loadMore()`, `.hasMore`, `.data` is the flattened items); `Item` is inferred from a typed `infinite.select`. The infinite form ignores `ttl` and the `refetch*` options, so its config does not declare them. */
+/** Cached + deduplicated HTTP read. Polling via refetchInterval/refetchOnFocus/refetchOnReconnect; pagination via infinite: { param, limit, mode } (→ .loadMore()/.hasMore/.loadingMore); GraphQL via gql + variables. `data` is `unknown` unless you pass the body's type: `$query<Row[]>({ url })`. With `infinite: {…}` the bag accumulates pages (`.loadMore()`, `.hasMore`, `.data` is the flattened items); `Item` is inferred from a typed `infinite.select`, or passed: `$query<Row>({ url, infinite: {…} })`. The infinite form ignores `ttl` and the `refetch*` options, so its config does not declare them, and never fires `onDone`, so its bag does not declare it. */
 export declare function $query<T = unknown>(config: QueryConfig & { readonly infinite?: undefined }): HttpResource<T>;
 export declare function $query<Item = unknown>(config: InfiniteQueryConfig<Item>): InfiniteQueryResource<Item>;
-/** Deferred write; fires on .mutate(overrides?). optimistic: (vars) => {…} applies instantly (auto-rollback on failure); invalidates: [keys] refetches matching cached queries; gql for GraphQL. */
+/** Deferred write; fires on .mutate(overrides?). optimistic: (vars) => {…} applies instantly (auto-rollback on failure); invalidates: [keys] refetches matching cached queries; gql for GraphQL. `data` (and what `mutate()` resolves to) is `unknown` unless you pass the body's type: `$mutation<Saved>({ url })`. */
 export declare function $mutation<T = unknown>(config: MutationConfig): MutationResource<T>;
 /** Reactive WebSocket — { status: "connecting"|"open"|"closed", connected, last, messages, attempts, send, close }. reconnect: true|n retries with exponential backoff; sends queue while connecting and flush on open; close() stops for good. */
 export declare function $socket<M = unknown>(config: SocketConfig<M>): SocketResource<M>;
@@ -11269,7 +11300,7 @@ export declare function $script<V = unknown>(config: ScriptConfig): ScriptResour
 export declare function $head(config: HeadConfig): null;
 /** Register the root of the rendered UI tree — every program needs one. The return type is a type-level fiction: `export default $app(App())` gives host code a typed `CompiledProgram` default import. A bare string/number root is a validation error (root-not-renderable). */
 export declare function $app(root: AktionNode | readonly Children[] | null, ...more: Children[]): CompiledProgram;
-/** Outlet-first router: maps path patterns to component trees. Must be called with an object LITERAL: arms are evaluated lazily and only the matching one runs. Returns the matched arm's value (a layout arm's `layout`), or null when nothing matches and there is no `default`. Type an arm's `params` with `params as RouteParamsOf<"/users/:id">`. */
+/** Outlet-first router: maps path patterns to component trees. Must be called with an object LITERAL: arms are evaluated lazily and only the matching one runs. Returns the matched arm's value (a layout arm's `layout`), or null when nothing matches and there is no `default`. As the `$app` root a bare string arm is not renderable — wrap it in `Text(…)`. Type an arm's `params` with `params as RouteParamsOf<"/users/:id">`. */
 export declare function $router<const R extends RouteTable>(routes: R): RouterResult<R>;
 /** In-script theme override merged on top of the active base theme. Structured groups: colors/radius/font/spacing/shadows/gradients/zIndex/motion/fonts (web-font import)/icons (custom inline SVG), plus name/direction metadata. */
 export declare function $theme(config: ThemeConfig): ThemeHandle;
@@ -11298,16 +11329,16 @@ export declare const route: RouteHandle;
 export declare const params: Readonly<Record<string, string>>;
 /** Injected: the matched child route, bound inside a layout arm's `layout`. Whatever the matched child arm evaluates to (a node, an array, a string, a nested layout's result), or null when no child matches. */
 export declare const outlet: Children;
-/** Injected: extra positional arguments, bound inside a user component's body. */
+/** Injected: extra positional arguments, bound inside a user component's body. A type-checked call cannot pass more arguments than the component declares (TS2554), so only an untyped caller — a `.aktion` module, or `.aktion.js` without `checkJs` — fills this. In a `.aktion.ts` component, declare `children` as a parameter instead: `function Shell(title: string, children: Children)`. */
 export declare const children: Children;
-/** Injected: named props that matched no parameter, bound inside a user component's body. Values are ANY named prop the caller passed — nodes, callbacks, data — so they are `any`: check one before calling or rendering it. */
-export declare const slots: Readonly<Record<string, any>>;
+/** Injected: named props that matched no parameter, bound inside a user component's body. Values are whatever the caller passed — nodes, callbacks, data — so they are `unknown`: narrow one before calling it, and cast it to render it (`slots.header as Children`). In a `.aktion.ts` / `.aktion.js` component only a `.aktion` caller fills it: a call from another `.aktion.ts` / `.aktion.js` module binds every argument positionally, so an object of named props lands in a parameter (or in `children`). */
+export declare const slots: Readonly<Record<string, unknown>>;
 /** Injected: registers a teardown, bound inside an `$effect` body. */
-export declare function cleanup(fn: () => void): void;
+export declare function cleanup(fn: () => unknown): void;
 /** Injected: tracked timer (cleared when the program is torn down). */
-export declare function setTimeout<A extends unknown[]>(fn: (...args: A) => void, ms?: number, ...args: A): number;
+export declare function setTimeout<A extends unknown[]>(fn: (...args: A) => unknown, ms?: number, ...args: A): number;
 /** Injected: tracked timer (cleared when the program is torn down). */
-export declare function setInterval<A extends unknown[]>(fn: (...args: A) => void, ms?: number, ...args: A): number;
+export declare function setInterval<A extends unknown[]>(fn: (...args: A) => unknown, ms?: number, ...args: A): number;
 /** Injected: clears a tracked timer. */
 export declare function clearTimeout(id: number | null | undefined): void;
 /** Injected: clears a tracked timer. */
