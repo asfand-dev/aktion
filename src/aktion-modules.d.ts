@@ -6,13 +6,15 @@
  *
  *   /// <reference types="aktion-runtime/aktion-modules" />
  *
- * The relative import resolves both in this package's own build
- * (`src/compiler/runtime.ts`) and in the published package
- * (`dist/types/aktion-modules.d.ts` → `dist/types/compiler/runtime.d.ts`).
+ * The type comes through an `import("…")` type query, resolved against this
+ * file: in this package's own build it names `src/compiler/runtime.ts`, in the
+ * published package `dist/types/compiler/runtime.d.ts`. An `import` DECLARATION
+ * cannot do that — inside an ambient module it may not use a relative name
+ * (TS2439), and `skipLibCheck` would hide the error and leave the default
+ * export `any`.
  */
 
 declare module "*.aktion" {
-  import type { CompiledProgram } from "./compiler/runtime.js";
-  const compiled: CompiledProgram;
+  const compiled: import("./compiler/runtime.js").CompiledProgram;
   export default compiled;
 }
