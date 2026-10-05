@@ -33,6 +33,12 @@ tests/
   gives the editor completions and docs; the import is dropped at build time.
 - Atoms that change are declared with `let` (`export let $draft = ""`), and
   other modules change them through exported actions.
+- Host code (`src/main.ts`, `tests/`) imports only an Aktion module's default
+  export, the compiled program (`import app from "./app.aktion.js"`). Its other
+  exports — the helpers in `api.aktion.js` too — exist inside Aktion programs
+  only: importing one from host code fails `vite build`, and throws on use
+  under `vite dev` and Vitest. Test a helper through a program instead
+  (`compileAktionSource` from `aktion-runtime/vite`).
 - Aktion runs the code under its own rules and rejects what would behave
   differently from JavaScript (`async`/`await`, `var`, `this`, a closure reading
   a variable reassigned after it was created, …) with an error at the exact line.
