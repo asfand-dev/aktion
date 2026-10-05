@@ -700,7 +700,8 @@ function makeRenamer(rec: ModuleRecord) {
         renameExpr(expr.argument);
         return;
       case "Lambda":
-        push(paramNames(expr.params));
+        // A named function expression's own name is local to its body.
+        push(expr.selfName ? [expr.selfName, ...paramNames(expr.params)] : paramNames(expr.params));
         renameParamDefaults(expr.params);
         renameExpr(expr.body); // may be a Block
         pop();

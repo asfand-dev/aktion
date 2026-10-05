@@ -73,6 +73,13 @@ export interface LambdaExpr {
    * sets it; the runtime ignores it.
    */
   name?: string;
+  /**
+   * The name of a named function expression (`function fact(n) { … }` used
+   * as a value). As in JavaScript, the evaluator binds it to the function
+   * itself inside its own body — below the parameters, so a parameter of the
+   * same name wins — which is what lets the expression call itself.
+   */
+  selfName?: string;
   loc?: SourceLocation;
 }
 

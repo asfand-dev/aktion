@@ -2300,13 +2300,13 @@ function parsePrimary(ctx: ParserContext): Expression {
   }
 
   if (tok.type === "Keyword") {
-    // Anonymous function expression: `function (params) { body }` or
+    // Function expression: `function (params) { body }` or
     // `function name(params) { body }`. JS allows these as values
     // (e.g. `arr.map(function (e) { return Button(e) })`) so we parse
     // them into a `Lambda` node sharing the same params/body shape as
-    // an arrow function — `name`, if present, is currently discarded
-    // (function expressions are rarely referenced by their own name in
-    // this subset).
+    // an arrow function. The optional `name` is kept as `selfName`: as in
+    // JavaScript it is bound inside the function's own body (and nowhere
+    // else), so `function fact(n) { … fact(n - 1) }` can recurse.
     if (tok.value === "function") {
       const lookahead = ctx.peek(1);
       const lookahead2 = ctx.peek(2);
@@ -2316,13 +2316,14 @@ function parsePrimary(ctx: ParserContext): Expression {
       if (looksLikeFunctionExpr) {
         const start = tok;
         ctx.consume(); // function
-        if (ctx.peek().type === "Identifier") ctx.consume(); // optional name
+        const selfName = ctx.peek().type === "Identifier" ? ctx.consume().value : undefined;
         const params = parseFunctionParams(ctx);
         const body = parseBlock(ctx);
         return {
           kind: "Lambda",
           params,
           body: body as never,
+          ...(selfName !== undefined ? { selfName } : {}),
           loc: { line: start.line, column: start.column },
         };
       }

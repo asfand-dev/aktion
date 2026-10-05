@@ -2198,7 +2198,8 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       // can read `item` at click time even though the loop variable is
       // long gone by then.
       const capturedLoopVars = new Map(ctx.loopVars);
-      return (...callArgs: unknown[]) => {
+      const selfName = expr.selfName;
+      const lambda = (...callArgs: unknown[]): unknown => {
         // A lambda counts as covered when it is CALLED, not when the enclosing
         // expression built the closure — an event handler that never fires is
         // exactly the kind of dead code a coverage gate should surface.
@@ -2220,6 +2221,9 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
           });
           ctx.loopVars.set(name, value);
         };
+        // A named function expression sees its own name (bound before the
+        // parameters, so a parameter of the same name shadows it).
+        if (selfName) bindLocal(selfName, lambda);
         for (let i = 0; i < lambdaParams.length; i += 1) {
           const param = lambdaParams[i]!;
           // `(...rest) => …` — gather the remaining args into an array.
@@ -2254,6 +2258,7 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
           for (const frame of restoreAliases) ctx.stateAliases.push(frame);
         }
       };
+      return lambda;
     }
     default: return null;
   }

@@ -1307,6 +1307,15 @@ class Analyzer {
     const savedFn = this.fn;
     this.fn = fn;
     this.pushScope();
+    // A named function expression binds its own name in its body, so a
+    // self-call resolves (and W1 renames it with the references).
+    if (expr.selfName) {
+      const loc = expr.loc ?? this.here();
+      const self = this.declare(expr.selfName, false, "local", { loc, ready: start });
+      this.declaring(self, loc, (symbol) => {
+        expr.selfName = symbol;
+      });
+    }
     for (const p of expr.params) this.param(p, false, start);
     if (expr.body.kind === "Block") this.block(expr.body, fn);
     else this.expr(expr.body, { hooks: false, value: false });
