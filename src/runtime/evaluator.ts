@@ -369,7 +369,13 @@ function getUtilFacade(ctx: EvaluationContext): Record<string, unknown> {
  * subscribes the render to route changes (via the shared `route` state slot,
  * which the host rewrites on every navigation). Exposes `path`, `params`
  * (route path params, e.g. `/users/:id`), `query` (parsed query object),
- * `hash` (fragment after `#`), and a `navigate(to)` callable.
+ * `hash` (the fragment, without its `#`), and a `navigate(to)` callable.
+ *
+ * Where the query and the fragment live depends on the router mode. In
+ * `"history"` mode they are `location.search` and `location.hash`
+ * (`/p?x=1#s`). In `"hash"` mode (the default) the hash holds the route, so
+ * the query is the `?…` inside it unless `location.search` has one, and the
+ * fragment is what follows a SECOND `#` (`/#/p?x=1#s`), else `""`.
  */
 function readUrlSnapshot(ctx: EvaluationContext): Record<string, unknown> {
   // Subscribe to the route slot so the render re-runs on navigation — same
@@ -382,14 +388,22 @@ function readUrlSnapshot(ctx: EvaluationContext): Record<string, unknown> {
   let hash = "";
   if (typeof globalThis !== "undefined" && (globalThis as { location?: Location }).location) {
     const loc = (globalThis as { location?: Location }).location as Location;
-    // History router: `?a=b` lives in `location.search`, fragment in `location.hash`.
-    // Hash router: the whole route (`#/path?a=b`) lives in `location.hash`.
     let search = loc.search ?? "";
     const rawHash = loc.hash ? loc.hash.replace(/^#/, "") : "";
-    const qInHash = rawHash.indexOf("?");
-    if (!search && qInHash >= 0) {
-      search = rawHash.slice(qInHash);
-    } else if (search) {
+    // Read the URL the way the router does. Without one, a hash that starts
+    // with `/` is taken for a hash route.
+    const hashRoute = router ? router.getMode() !== "history" : rawHash.startsWith("/");
+    if (hashRoute) {
+      // Hash router: the route and its `?a=b` live in `location.hash`
+      // (`#/path?a=b`, which is where `setQuery` writes them); a second `#`
+      // starts the fragment (`#/path?a=b#section`).
+      const fragmentAt = rawHash.indexOf("#");
+      const route = fragmentAt >= 0 ? rawHash.slice(0, fragmentAt) : rawHash;
+      if (fragmentAt >= 0) hash = rawHash.slice(fragmentAt + 1);
+      const qInRoute = route.indexOf("?");
+      if (!search && qInRoute >= 0) search = route.slice(qInRoute);
+    } else {
+      // History router: `?a=b` lives in `location.search`, the fragment in `location.hash`.
       hash = rawHash;
     }
     if (search) {
