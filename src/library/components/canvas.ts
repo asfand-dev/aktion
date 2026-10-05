@@ -349,6 +349,11 @@ interface SurfaceSpec {
   /** Fires only when the stroke COUNT changes (stroke start, Clear). */
   onCount?: (count: number) => void;
   onEnd?: (url: string, info: PadResult) => void;
+  /**
+   * What the hidden form field (`valueField`) holds after a stroke — the PNG
+   * unless given. SignaturePad passes its `onChange` rule: `""` without ink.
+   */
+  fieldValue?: (url: string, info: PadResult) => string;
   helpers: RenderHelpers;
 }
 
@@ -403,9 +408,9 @@ function makeDrawingSurface(spec: SurfaceSpec): { root: HTMLElement; canvas: HTM
     // Remember what we emitted: the `value` echo of a bound `onEnd`/`onChange`
     // must not re-import the PNG we just produced.
     live.value = url;
-    const hidden = cv.closest(`.${rootClass}`)?.querySelector<HTMLInputElement>("input.rui-canvas-value");
-    if (hidden) hidden.value = url;
-    spec.onEnd?.(url, padResult(live));
+    const info = padResult(live);
+    writeValueField(cv, rootClass, spec.fieldValue ? spec.fieldValue(url, info) : url);
+    spec.onEnd?.(url, info);
   };
 
   // Handlers are omitted entirely while disabled — the reconciler then clears
@@ -496,6 +501,16 @@ function valueField(name: string, value: unknown): HTMLElement | null {
   return el("input", { type: "hidden", class: "rui-canvas-value", name, value: valueAttr(value) });
 }
 
+/**
+ * Write the LIVE pad's hidden field. An unbound pad is not re-rendered by a
+ * stroke or a Clear, so the field's rendered `value` attribute cannot do it —
+ * which is how a cleared pad went on submitting the drawing it had erased.
+ */
+function writeValueField(canvas: HTMLCanvasElement, rootClass: string, value: string): void {
+  const hidden = canvas.closest(`.${rootClass}`)?.querySelector<HTMLInputElement>("input.rui-canvas-value");
+  if (hidden) hidden.value = value;
+}
+
 export const DrawingCanvas: ComponentSpec = {
   name: "DrawingCanvas",
   description:
@@ -549,7 +564,9 @@ export const DrawingCanvas: ComponentSpec = {
         disabled: disabled ? "" : null,
       }, ["Clear"]);
       clearBtn.onclick = (event: Event) => {
-        clearPad(liveSurfaceCanvas(event, "rui-drawing-canvas", surface.canvas));
+        const live = liveSurfaceCanvas(event, "rui-drawing-canvas", surface.canvas);
+        clearPad(live);
+        writeValueField(live, "rui-drawing-canvas", "");
         helpers.invoke(props.onChange, 0);
       };
       bar.append(clearBtn);
@@ -566,7 +583,7 @@ export const SignaturePad: ComponentSpec = {
     "baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires " +
     "when the signature changes (empty string when cleared, and also when the " +
     "pad only received taps — so a stray tap cannot pass a truthiness check); " +
-    "`onBlur` / `onFocus` receive that same value. " +
+    "`onBlur` / `onFocus` receive that same value, and a `name`d pad submits it. " +
     "Pass the URL back as `value` to restore a signature after a re-render, " +
     "and `disabled` to lock the pad once it is submitted. `label`/`error`/" +
     "`required` render the usual field shell. Use in contracts, delivery " +
@@ -601,6 +618,9 @@ export const SignaturePad: ComponentSpec = {
       // Taps alone are not a signature: reporting "" keeps a blank-but-truthy
       // data URL from satisfying `$signature != ""` after an accidental touch.
       onEnd: (url, info) => helpers.invoke(props.onChange, info.inked ? url : "", info.strokes),
+      // …and the form field follows the same rule, or a `required` pad in a
+      // Form submitted a blank PNG as its signature.
+      fieldValue: (url, info) => (info.inked ? url : ""),
       helpers,
     });
     // The same value `onChange` reports. The raw data URL is a non-empty PNG
@@ -622,7 +642,9 @@ export const SignaturePad: ComponentSpec = {
         disabled: disabled ? "" : null,
       }, ["Clear"]);
       clearBtn.onclick = (event: Event) => {
-        clearPad(liveSurfaceCanvas(event, "rui-signature-pad", surface.canvas));
+        const live = liveSurfaceCanvas(event, "rui-signature-pad", surface.canvas);
+        clearPad(live);
+        writeValueField(live, "rui-signature-pad", "");
         helpers.invoke(props.onChange, "", 0);
       };
       bar.append(clearBtn);
