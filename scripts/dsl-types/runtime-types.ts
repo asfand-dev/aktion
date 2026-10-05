@@ -60,9 +60,9 @@ export interface RuntimeTypes {
  */
 export const PRINTED_DECLARATIONS: Readonly<Record<string, readonly string[]>> = {
   "runtime/util.ts": [
-    "UtilList", "UtilFieldPath", "UtilCompareOp", "UtilNumberFormatOptions", "UtilBlobLike", "UtilReadFileOptions",
-    "UtilWindowFlag", "UtilWindowFeatures", "UtilOpenUrlOptions", "UtilOpenWindowOptions", "UtilWebManifestConfig",
-    "UtilWebManifest",
+    "UtilList", "UtilAggregateInput", "UtilPicked", "UtilOmitted", "UtilFieldPath", "UtilCompareOp",
+    "UtilNumberFormatOptions", "UtilBlobLike", "UtilReadFileOptions", "UtilWindowFlag", "UtilWindowFeatures",
+    "UtilOpenUrlOptions", "UtilOpenWindowOptions", "UtilWebManifestConfig", "UtilWebManifest",
   ],
   "runtime/namespaces-extra.ts": ["UtilStyleColorToken", "UtilStyleColor", "UtilStyleClassValue"],
 };
