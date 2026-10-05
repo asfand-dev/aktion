@@ -5,7 +5,7 @@ export default {
   Bento: {
     props: {
       items: "readonly AktionNode[]",
-      rowHeight: "string | Responsive<string>",
+      rowHeight: "string | number | Responsive<string | number>",
     },
   },
   BentoCell: {
@@ -59,7 +59,6 @@ export default {
   },
   ReadingProgress: {
     props: {
-      height: "string",
       target: "\"page\" | (string & {})",
       color: "string",
     },
@@ -76,7 +75,6 @@ export default {
     },
     props: {
       ratio: "SplitRatio",
-      stickyOffset: "string",
     },
   },
   Transition: {

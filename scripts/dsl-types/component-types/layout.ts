@@ -15,16 +15,10 @@ export default {
   },
   AspectRatio: {
     types: {
-      AspectRatioValue: "export type AspectRatioValue = number | `${number}:${number}` | `${number}`;",
+      AspectRatioValue: "export type AspectRatioValue = number | `${number}:${number}` | `${number}/${number}` | `${number}`;",
     },
     props: {
       ratio: "AspectRatioValue",
-    },
-  },
-  Box: {
-    props: {
-      maxWidth: "string",
-      radius: "\"none\" | \"sm\" | \"md\" | \"lg\" | \"pill\"",
     },
   },
   Card: {
@@ -37,15 +31,9 @@ export default {
       level: "2 | 3 | 4 | 5 | 6",
     },
   },
-  Center: {
-    props: {
-      minHeight: "string",
-    },
-  },
   Grid: {
     props: {
       columns: "number | Responsive<number>",
-      minChildWidth: "string",
     },
   },
   GridItem: {
@@ -59,22 +47,13 @@ export default {
   },
   Modal: {
     props: {
-      size: "\"sm\" | \"md\" | \"lg\" | \"xl\" | \"full\"",
       onClose: "() => void",
       onRequestClose: "() => void",
     },
   },
-  ScrollArea: {
-    props: {
-      maxHeight: "string",
-      height: "string",
-    },
-  },
   StackItem: {
     props: {
-      basis: "\"auto\" | \"0\" | 0 | (string & {})",
-      minWidth: "string",
-      maxWidth: "string",
+      basis: "\"auto\" | \"0\" | number | (string & {})",
     },
   },
   Steps: {
@@ -83,11 +62,15 @@ export default {
       StepsItemData: "export interface StepsItemData {\n  /** Step heading. */\n  readonly title: string | number;\n  /** Secondary line under the title; null/omitted renders none. */\n  readonly details?: string | number | null;\n  /** Explicit state; wins over `complete` / `active`. */\n  readonly status?: StepsItemStatus | null;\n  /** Marks a finished step (used when `status` is absent or unrecognised). */\n  readonly complete?: boolean | null;\n  /** Marks the current step (used when neither `status` nor `complete` applies). */\n  readonly active?: boolean | null;\n}",
     },
     props: {
-      items: "readonly (StepsItemData | string | number)[]",
+      // A string is a title-only step and a node renders as-is; `false` /
+      // `null` / `undefined` are skipped (a conditional step).
+      items: "readonly (StepsItemData | AktionNode | string | number | false | null | undefined)[]",
     },
   },
   Tabs: {
     props: {
+      // `false` / `null` / `undefined` are skipped (a conditional tab).
+      items: "readonly (AktionNode<\"TabItem\"> | false | null | undefined)[]",
       onChange: "(value: string) => void",
     },
   },
