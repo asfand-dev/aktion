@@ -33,6 +33,27 @@ const toArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
  */
 export type UtilList<T> = readonly T[] | null | undefined;
 
+/**
+ * What the helpers whose result does not depend on the element type (`count`,
+ * `sum`, `avg`, `min`, `max`, `join`) read: a {@link UtilList}, or a value
+ * typed `unknown` — an untyped `$query`'s `data` — which they guard at runtime,
+ * reading any non-array as empty. A value of a known non-array type (a string,
+ * a `Set`, an object) is still rejected: it would be read as `[]`.
+ */
+export type UtilAggregateInput<A> = unknown extends A ? A : UtilList<unknown>;
+
+/**
+ * What `pick` returns: the picked keys of `T`. When `T` may be `null` /
+ * `undefined` (data not loaded yet) every key is optional, because a nullish
+ * input gives `{}`.
+ */
+export type UtilPicked<T, K extends PropertyKey> =
+  [T] extends [object] ? Pick<T, K & keyof T> : Partial<Pick<NonNullable<T>, K & keyof NonNullable<T>>>;
+
+/** What `omit` returns: `T` without the omitted keys — every key optional when `T` may be nullish, as for {@link UtilPicked}. */
+export type UtilOmitted<T, K extends PropertyKey> =
+  [T] extends [object] ? Omit<T, K> : Partial<Omit<NonNullable<T>, K>>;
+
 /** A field of the row type, or a dotted path into it (`"owner.name"`). */
 export type UtilFieldPath<T> = (T extends object ? keyof T & string : never) | (string & {});
 
@@ -152,12 +173,14 @@ const isBlobLike = (v: unknown): v is BlobLike =>
 /**
  * The one file out of whatever `FileUpload` handed over.
  *
- * `onSelect` is invoked with the whole pick — a `FileList` in the browser, a
- * plain array after a remove — so the overwhelmingly common call is
- * `$util.readFile(files)` rather than `$util.readFile(files[0])`. Accepting both
- * removes the single most likely mistake at the call site: indexing a `FileList`
- * is fine, but forgetting to is silent, and `readFile(aFileList)` would
- * otherwise resolve `""` as though the file were unreadable.
+ * `onSelect` is invoked with the whole pick — always a `File[]`: the accepted
+ * files, or the remaining ones after a remove — so the overwhelmingly common
+ * call is `$util.readFile(files)` rather than `$util.readFile(files[0])`.
+ * Accepting both removes the single most likely mistake at the call site:
+ * indexing the pick is fine, but forgetting to is silent, and
+ * `readFile(files)` would otherwise resolve `""` as though the file were
+ * unreadable. A `FileList` the caller passes itself (an `<input>`'s `files`) is
+ * read the same way.
  */
 const firstBlob = (input: unknown): BlobLike | null => {
   if (isBlobLike(input)) return input;
@@ -714,18 +737,18 @@ export function safeRegexTest(pattern: string, subject: string): boolean {
 
 export const Util = {
   // ── Aggregation ───────────────────────────────────────────
-  count: (arr: UtilList<unknown>): number => toArray(arr).length,
-  sum: (arr: UtilList<unknown>): number =>
+  count: <A>(arr: UtilAggregateInput<A>): number => toArray(arr).length,
+  sum: <A>(arr: UtilAggregateInput<A>): number =>
     toArray(arr).reduce<number>((a, v) => a + toNumber(v), 0),
-  avg: (arr: UtilList<unknown>): number => {
+  avg: <A>(arr: UtilAggregateInput<A>): number => {
     const xs = toArray(arr);
     return xs.length === 0 ? 0 : xs.reduce<number>((a, v) => a + toNumber(v), 0) / xs.length;
   },
-  min: (arr: UtilList<unknown>): number => {
+  min: <A>(arr: UtilAggregateInput<A>): number => {
     const xs = toArray(arr).map(toNumber);
     return xs.length === 0 ? 0 : Math.min(...xs);
   },
-  max: (arr: UtilList<unknown>): number => {
+  max: <A>(arr: UtilAggregateInput<A>): number => {
     const xs = toArray(arr).map(toNumber);
     return xs.length === 0 ? 0 : Math.max(...xs);
   },
@@ -802,21 +825,21 @@ export const Util = {
     }
     return Array.from({ length: count }, () => value);
   },
-  pick: <T extends object, K extends keyof T & string>(obj: T, keys: readonly K[]): Pick<T, K> => {
-    if (!isObject(obj)) return {} as Pick<T, K>;
+  pick: <T extends object | null | undefined, K extends keyof NonNullable<T> & string>(obj: T, keys: readonly K[]): UtilPicked<T, K> => {
+    if (!isObject(obj)) return {} as UtilPicked<T, K>;
     const ks = toArray(keys).map((k) => String(k ?? ""));
     const out: Record<string, unknown> = {};
     for (const k of ks) {
       if (k in obj) out[k] = obj[k];
     }
-    return out as Pick<T, K>;
+    return out as UtilPicked<T, K>;
   },
-  omit: <T extends object, K extends keyof T & string>(obj: T, keys: readonly K[]): Omit<T, K> => {
-    if (!isObject(obj)) return {} as Omit<T, K>;
+  omit: <T extends object | null | undefined, K extends keyof NonNullable<T> & string>(obj: T, keys: readonly K[]): UtilOmitted<T, K> => {
+    if (!isObject(obj)) return {} as UtilOmitted<T, K>;
     const drop = new Set(toArray(keys).map((k) => String(k ?? "")));
     const out: Record<string, unknown> = {};
     for (const k of Object.keys(obj)) if (!drop.has(k)) out[k] = obj[k];
-    return out as Omit<T, K>;
+    return out as UtilOmitted<T, K>;
   },
   chunk: <T>(arr: UtilList<T>, size: number): T[][] => {
     const xs = toArray(arr) as T[];
@@ -1032,7 +1055,7 @@ export const Util = {
   },
 
   // ── String / regex helpers ────────────────────────────────
-  join: (arr: UtilList<unknown>, sep = ","): string =>
+  join: <A>(arr: UtilAggregateInput<A>, sep = ","): string =>
     toArray(arr).map((v) => (v == null ? "" : String(v))).join(String(sep)),
   split: (text: unknown, sep = ","): string[] => String(text ?? "").split(String(sep)),
   trim: (text: unknown): string => String(text ?? "").trim(),
@@ -1236,8 +1259,8 @@ export const Util = {
    *   }
    *
    * `file` may be a single `File`/`Blob`, or the whole pick as `FileUpload`
-   * hands it over (a `FileList` or an array) — in which case the FIRST readable
-   * entry is used. Loop the pick yourself for `multiple`.
+   * hands it over (a `File[]`; a `FileList` works too) — in which case the
+   * FIRST readable entry is used. Loop the pick yourself for `multiple`.
    *
    * `options.as` selects the representation:
    *   `"text"`     (default) the decoded UTF-8 text

@@ -208,7 +208,7 @@ $storage().clear();
 
 export function Panel(title: string): AktionNode {
   const onClose = slots.onClose;
-  const header: Children = slots.header;
+  const header = slots.header as Children;
   return Column([Text(title), header, Button("Close", { onClick: () => { if (typeof onClose === "function") onClose(); } })]);
 }
 

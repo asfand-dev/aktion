@@ -37,7 +37,6 @@ import {
   type ModuleFrontend,
   type ModuleFrontends,
 } from "../compiler/index.js";
-import { parse } from "../parser/index.js";
 import type { Program } from "../parser/types.js";
 import { printProgram } from "../tooling/formatter.js";
 import {
@@ -108,6 +107,10 @@ export interface AktionResolveOptions {
    * separately from `@acme/ui`. Each target directory becomes an allowed root,
    * and an aliased import may not climb out of the target it matched — so an
    * alias widens resolution by exactly the directory it names and no further.
+   *
+   * A relative target resolves against the working directory (`path.resolve`)
+   * — for the build and, in the Vite plugin, for the `dts` declarations alike.
+   * An `aktion.config.json` target resolves against the file's own directory.
    */
   alias?: Record<string, string>;
   /**
@@ -244,8 +247,14 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
   let resolution: AktionResolveOptions = options;
   let typescriptFrontend: Promise<ModuleFrontend> | null = null;
 
-  const declarationOptions = (): Omit<AktionDeclarationsOptions, "root" | "write"> =>
-    typeof options.dts === "object" ? options.dts : {};
+  // The resolver's aliases, with absolute targets: the declaration emitter
+  // resolves a relative target against its `root` (the Vite root), the
+  // resolver against the working directory, so passing them as written made
+  // the `dts` mirror and the build disagree whenever the two differ.
+  const declarationOptions = (): Omit<AktionDeclarationsOptions, "root" | "write"> => ({
+    alias: absoluteAliasTargets(resolution.alias),
+    ...(typeof options.dts === "object" ? options.dts : {}),
+  });
 
   // Loaded once per plugin instance: eagerly in `buildStart`, and on demand in
   // `transform` for hosts that never call `buildStart` before transforming.
@@ -294,7 +303,7 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
 
       const moduleCode =
         emitModule(result, code, cleanId, runtimeModuleId, { sourcesContent: options.devtools !== false }) +
-        (isServe ? hostOnlyExports(result, displayPath(cleanId, projectRoot)) + HMR_FOOTER : "");
+        (isServe ? hostOnlyExports(result, frontends, displayPath(cleanId, projectRoot)) + HMR_FOOTER : "");
       // `moduleType: "js"`: Vite 8 (Rolldown) otherwise treats an `.aktion.ts`
       // id as TypeScript by its extension even after the oxc transform is
       // excluded. Rollup-based Vite ignores the field.
@@ -323,7 +332,7 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
     async buildStart(this: { warn?: (message: string) => void }) {
       await loadTypeScript();
       if (options.dts) {
-        const result = emitAktionDeclarations({ alias: resolution.alias, ...declarationOptions(), root: projectRoot });
+        const result = emitAktionDeclarations({ ...declarationOptions(), root: projectRoot });
         for (const w of result.warnings) this.warn?.(w);
         for (const d of result.diagnostics) this.warn?.(`${d.path}:${d.line}:${d.column} ${d.message}`);
       }
@@ -359,7 +368,7 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
       if (!options.dts || !server.watcher) return;
       const refresh = (file: string): void => {
         if (/\.aktion$/i.test(file)) {
-          updateAktionDeclaration(file, { alias: resolution.alias, ...declarationOptions(), root: projectRoot });
+          updateAktionDeclaration(file, { ...declarationOptions(), root: projectRoot });
         }
       };
       server.watcher.on("add", refresh);
@@ -703,8 +712,7 @@ export function createNodeResolver(
 ): ModuleResolver {
   const extensions = options.extensions ?? DEFAULT_EXTENSIONS;
   // Longest prefix first, so `@acme/ui/forms` can be aliased apart from `@acme/ui`.
-  const aliases = Object.entries(options.alias ?? {})
-    .map(([prefix, target]) => [prefix, resolvePath(target)] as const)
+  const aliases = Object.entries(absoluteAliasTargets(options.alias) ?? {})
     .sort((a, b) => b[0].length - a[0].length);
 
   const root = options.root === undefined ? process.cwd() : options.root;
@@ -816,6 +824,17 @@ export function createNodeResolver(
       return readFileSync(path, "utf8");
     },
   };
+}
+
+/**
+ * `alias` with every target absolute, resolved the one way {@link createNodeResolver}
+ * resolves it: `path.resolve`, so a relative target is relative to the working
+ * directory. The Vite plugin hands the same map to the declaration emitter,
+ * which would otherwise resolve a relative target against its own `root`.
+ */
+function absoluteAliasTargets(alias: Readonly<Record<string, string>> | undefined): Record<string, string> | undefined {
+  if (!alias) return undefined;
+  return Object.fromEntries(Object.entries(alias).map(([prefix, target]) => [prefix, resolvePath(target)]));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -997,6 +1016,9 @@ function emitModule(
   );
 }
 
+/** What `Object.prototype.toString` reports for a host-only stand-in: `[object AktionHostOnly]`. */
+const HOST_ONLY_TAG = "AktionHostOnly";
+
 /**
  * Dev-only stand-ins for the entry module's named exports. The emitted module's
  * only real export is `default`; without these, host code that imports a helper
@@ -1007,6 +1029,21 @@ function emitModule(
  * Builds leave them out: there a named import fails at bundle time (the
  * plugin's `moduleParsed`).
  *
+ * The names are those the entry's own frontend exports — the program the
+ * linker built its symbol table from. Re-parsing the entry's `aktionSource`
+ * instead (what this used to do) is not the same for a `.aktion.ts` entry:
+ * that text is the erased JavaScript, which the TypeScript frontend parses
+ * with soft newlines, and without them a declaration spanning an erased
+ * multi-line type (`function make(): {\n  a: number;\n} { … }`) does not
+ * parse, so its export got no stand-in and read `undefined` again.
+ *
+ * One read answers instead of throwing: `Symbol.toStringTag`, which is what
+ * `Object.prototype.toString` — and with it Vitest's automocker, typing each
+ * export of `vi.mock(path)` without a factory — reads. The tag is not
+ * `Function` / `Object` / `Module`, so the automocker keeps a stand-in as it
+ * is, like a primitive export, and still mocks the default export; using the
+ * stand-in afterwards throws as before.
+ *
  * An export named `then` gets no stand-in: a namespace with a callable `then`
  * is a thenable, so `await import("./x.aktion")` would call it and reject
  * instead of yielding the module.
@@ -1014,10 +1051,11 @@ function emitModule(
  * The text never contains `");` or `] });`, which tests unpacking the program
  * literal match on.
  */
-function hostOnlyExports(result: LinkResult, path: string): string {
+function hostOnlyExports(result: LinkResult, frontends: ModuleFrontends, path: string): string {
   const entry = result.modules[0];
-  if (!entry) return "";
-  const names = aktionExportNames(parse(entry.aktionSource)).filter((name) => name !== "then");
+  const frontend = entry ? frontends[entry.language] : undefined;
+  if (!entry || !frontend) return "";
+  const names = aktionExportNames(frontend.compile(entry.originalSource, entry.path).program).filter((name) => name !== "then");
   if (names.length === 0) return "";
   const message =
     `"[aktion] \`" + __aktionNames[i] + "\` is not available to host code: the Aktion module " + ` +
@@ -1028,7 +1066,8 @@ function hostOnlyExports(result: LinkResult, path: string): string {
     "function __aktionHostOnly(i) {\n" +
     `  const message = ${message};\n` +
     "  const fail = () => { throw new Error(message); };\n" +
-    "  return new Proxy(function () {}, { apply: fail, construct: fail, get: fail, set: fail, has: fail, ownKeys: fail, " +
+    `  const get = (_target, key) => (key === Symbol.toStringTag ? ${JSON.stringify(HOST_ONLY_TAG)} : fail());\n` +
+    "  return new Proxy(function () {}, { apply: fail, construct: fail, get, set: fail, has: fail, ownKeys: fail, " +
     "defineProperty: fail, deleteProperty: fail, getOwnPropertyDescriptor: fail, getPrototypeOf: fail, setPrototypeOf: fail });\n" +
     "}\n" +
     names.map((_, i) => `const __aktion_${i} = __aktionHostOnly(${i});\n`).join("") +

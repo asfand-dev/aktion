@@ -1,0 +1,25 @@
+{
+  // Lint fixtures for tests/tooling-round2-props-literal.test.ts, checked
+  // against the COMMITTED generated declarations (src/dsl/index.d.ts), set up
+  // like ../eslint-generated-dsl. Extends the repo config because the
+  // declarations' relative `../compiler/runtime.js` import pulls src/ into the
+  // program.
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "rootDir": "../../..",
+    "types": [],
+    "allowJs": true,
+    "checkJs": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "paths": {
+      "aktion-runtime/dsl": ["../../../src/dsl/index.d.ts"]
+    }
+  },
+  // (`exclude` is restated: the repo config's own list excludes tests/.)
+  "include": ["*.ts", "*.js"],
+  "exclude": []
+}

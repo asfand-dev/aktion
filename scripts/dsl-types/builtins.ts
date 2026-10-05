@@ -237,6 +237,11 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
     ...domBridge(typeName),
     jsdoc("Content-addressed identity override (`key:`), accepted by every component call.") +
       `export type ${typeName("Key")} = string | number;`,
+    // invokeComponentDeclPositionally (src/runtime/evaluator.ts) reads the
+    // identity from a LAST-argument object literal whose only property is
+    // `key`; tests/types-round2-runtime.test.ts measures it with this type.
+    jsdoc("The trailing options parameter of a `.aktion.ts` / `.aktion.js` user component that takes a `key`: `function Item(label: string, _opts?: ComponentOptions)`. A call from such a module binds every argument positionally, as JavaScript does, so `Item(id, { key: id })` hands the object to `_opts` — and because it is an object LITERAL, written as the call's LAST argument with `key` as its only property, the runtime also reads it as the instance identity. An options object held in a variable is only bound to `_opts`.") +
+      `export interface ${typeName("ComponentOptions")} {\n${jsdoc("Stable identity for per-instance state across re-orders.", "  ")}  readonly key?: Key;\n}`,
     jsdoc(`A breakpoint map honoured by responsive layout props (${breakpoints.join(" / ")}).`) +
       `export type ${typeName("Responsive")}<T> = { ${breakpoints.map((b) => `readonly ${b}?: T`).join("; ")} };`,
     jsdoc("Exactly one spelling (a prop or one of its aliases) of a required prop.") +
@@ -277,7 +282,7 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
   builtin("reducer", "export declare function $reducer<S, A>(reducer: (state: S, action: A) => S, initial: S): [state: S, dispatch: (action: A) => void];");
   builtin("id", "export declare function $id(prefix?: string): string;");
   // ---- effects
-  builtin("effect", "export declare function $effect<const D extends readonly unknown[] = []>(body: () => void, deps?: EffectDependencies<D>): void;");
+  builtin("effect", "export declare function $effect<const D extends readonly unknown[] = []>(body: () => unknown, deps?: EffectDependencies<D>): void;");
   builtin("optimistic", "export declare function $optimistic<T>(fn: () => T): T;");
   builtin("store", "export declare function $store<C extends { readonly [key: string]: unknown }>(config: C & StoreOptions & { readonly [key: string]: ((s: any, ...args: any[]) => unknown) | {} | null | undefined }): Store<C>;");
   builtin("form", "export declare function $form<V extends FormValues = FormValues>(config?: FormConfig<V>): FormHandle<V>;");
@@ -311,9 +316,10 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
     app: "The return type is a type-level fiction: `export default $app(App())` gives host code a typed `CompiledProgram` default import. A bare string/number root is a validation error (root-not-renderable).",
     effect: "`body` must be an inline arrow or function expression (a function reference parses to an empty body). Deps must be an array LITERAL of `$` atoms (or member paths such as `$user.name`) and trigger strings; empty or omitted deps mean `[\"mount\"]`. Return nothing from the body — register teardown with `cleanup(fn)`.",
     store: "Non-function entries become reactive state, function entries become methods `(s, ...args) => …` whose first parameter is the store handle — typed `any` inside the method, because TypeScript cannot infer a handle from the object literal it is defined in; callers of the returned store ARE fully typed. To type the handle, annotate it with `Store<Fields>` over an interface of the fields: `interface Cart { items: Item[] }` … `add: (s: Store<Cart>, item: Item) => { s.items = [...s.items, item] }`. One store per call site.",
-    query: "With `infinite: {…}` the bag accumulates pages (`.loadMore()`, `.hasMore`, `.data` is the flattened items); `Item` is inferred from a typed `infinite.select`. The infinite form ignores `ttl` and the `refetch*` options, so its config does not declare them.",
-    http: "`T` is an unchecked assertion about the response body; `data` is `undefined` until the first successful response.",
-    router: "Must be called with an object LITERAL: arms are evaluated lazily and only the matching one runs. Returns the matched arm's value (a layout arm's `layout`), or null when nothing matches and there is no `default`. Type an arm's `params` with `params as RouteParamsOf<\"/users/:id\">`.",
+    query: "`data` is `unknown` unless you pass the body's type: `$query<Row[]>({ url })`. With `infinite: {…}` the bag accumulates pages (`.loadMore()`, `.hasMore`, `.data` is the flattened items); `Item` is inferred from a typed `infinite.select`, or passed: `$query<Row>({ url, infinite: {…} })`. The infinite form ignores `ttl` and the `refetch*` options, so its config does not declare them, and never fires `onDone`, so its bag does not declare it.",
+    http: "`data` is `unknown` unless you pass the body's type: `$http<User[]>({ url })`. `T` is an unchecked assertion about the response body; `data` is `undefined` until the first successful response.",
+    mutation: "`data` (and what `mutate()` resolves to) is `unknown` unless you pass the body's type: `$mutation<Saved>({ url })`.",
+    router: "Must be called with an object LITERAL: arms are evaluated lazily and only the matching one runs. Returns the matched arm's value (a layout arm's `layout`), or null when nothing matches and there is no `default`. As the `$app` root a bare string arm is not renderable — wrap it in `Text(…)`. Type an arm's `params` with `params as RouteParamsOf<\"/users/:id\">`.",
     head: "Returns null — call it as a statement.",
     storage: "Also callable: `$storage(…)` returns the same namespace; the argument is evaluated and ignored.",
     i18n: "`t` completes the declared keys and `setCurrentLanguage` the declared languages; any other string is still accepted (an unknown key translates to itself).",
@@ -404,6 +410,12 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
   ];
 
   // ---- data layer
+  // A callback whose result the runtime ignores returns `unknown`, not `void`:
+  // `onDone = () => $todos.refetch()` hands back a Promise, which
+  // typescript-eslint's no-misused-promises reports wherever `void` is
+  // expected. `void` / a specific type stays where the result IS read (the
+  // `$util.onNavigate` / `onRequest` / `onResponse` interceptors, `select`,
+  // `$memo`, `$reducer`).
   const httpMembers = catalogueMembers("http");
   const queryMembers = catalogueMembers("query");
   const httpResource: Member[] = [
@@ -416,9 +428,12 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
     ["lastUpdated", "readonly lastUpdated?: number"],
     ["refetch", "refetch(): Promise<void>"],
     ["cancel", "cancel(): void"],
-    ["onDone", "onDone?: (resource: HttpResource<T>) => void"],
+    ["onDone", "onDone?: (resource: HttpResource<T>) => unknown"],
   ];
   expectMembers("$http resource", httpResource.map(([n]) => n), httpMembers.map((m) => m.name));
+  // No `onDone`: an infinite query never calls it (createInfiniteQueryResource
+  // in src/runtime/http.ts settles without it; measured in
+  // tests/types-round2-runtime.test.ts), so assigning one is a silent no-op.
   const infiniteExtra: Member[] = [
     ["data", "readonly data: Item[]"],
     ["hasMore", "readonly hasMore: boolean"],
@@ -427,7 +442,6 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
     ["pages", "readonly pages: readonly unknown[]"],
     ["loadMore", "loadMore(): Promise<void>"],
     ["cancel", "cancel(): void"],
-    ["onDone", "onDone?: (resource: InfiniteQueryResource<Item>) => void"],
   ];
   expectMembers("$query resource (plain + infinite)", [...new Set([...httpResource, ...infiniteExtra].map(([n]) => n))], queryMembers.map((m) => m.name));
   const mutationMembers = catalogueMembers("mutation");
@@ -438,7 +452,7 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
     ["status", "readonly status?: number"],
     ["mutate", "mutate(overrides?: Partial<MutationConfig>): Promise<T | undefined>"],
     ["reset", "reset(): void"],
-    ["onDone", "onDone?: (resource: MutationResource<T>) => void"],
+    ["onDone", "onDone?: (resource: MutationResource<T>) => unknown"],
   ];
   expectMembers("$mutation resource", mutationResource.map(([n]) => n), mutationMembers.map((m) => m.name));
   const socketMembers = catalogueMembers("socket");
@@ -477,16 +491,27 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
 
   // $head: the shapes follow the runtime's allow-lists, so a `rel` or an
   // attribute the runtime drops is a type error rather than a silent no-op.
+  // Within them, everything `sanitiseLinkEntry` (src/runtime/head.ts) keeps is
+  // accepted: it trims and lowercases the `rel` value and lowercases attribute
+  // names, and `String()`s each value (a nullish one drops the attribute) — so
+  // the capitalised / upper-case `rel` spellings, numbers, and the DOM's
+  // camelCase attribute names (`headLinkCamelCase`) all type-check.
   const headLinkOverrides: Readonly<Record<string, string>> = { crossorigin: `"" | "anonymous" | "use-credentials"` };
+  const headLinkCamelCase: Readonly<Record<string, string>> = { crossorigin: "crossOrigin", hreflang: "hrefLang", referrerpolicy: "referrerPolicy" };
   const headHtmlOverrides: Readonly<Record<string, string>> = { dir: `"ltr" | "rtl" | "auto"`, translate: `"yes" | "no"` };
   for (const [table, overrides, label] of [
     [input.head.linkAttributes, headLinkOverrides, "SAFE_LINK_ATTRS"],
+    [input.head.linkAttributes, headLinkCamelCase, "SAFE_LINK_ATTRS"],
     [input.head.htmlAttributes, headHtmlOverrides, "SAFE_HTML_ATTRS"],
   ] as const) {
     for (const key of Object.keys(overrides)) {
       if (!table.includes(key)) throw new Error(`emit-dsl-types: a $head type override names "${key}", which src/runtime/head.ts ${label} does not list`);
     }
   }
+  for (const [attribute, spelling] of Object.entries(headLinkCamelCase)) {
+    if (spelling.toLowerCase() !== attribute) throw new Error(`emit-dsl-types: "${spelling}" does not lowercase to the $head link attribute "${attribute}"`);
+  }
+  const headLinkValue = (name: string): string => `${headLinkOverrides[name] ?? "string | number"} | null`;
   const union = (values: readonly string[]): string => values.map((v) => JSON.stringify(v)).join(" | ");
 
   const dataSection = [
@@ -537,7 +562,7 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
         headers,
         body: "unknown",
         variables: "Readonly<Record<string, unknown>>",
-        optimistic: "(overrides: Readonly<Partial<MutationConfig>>) => void",
+        optimistic: "(overrides: Readonly<Partial<MutationConfig>>) => unknown",
         invalidates: "string | readonly string[]",
       },
     }),
@@ -554,20 +579,23 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
       ["message", "The message of a thrown error (a network failure, a throwing interceptor), or of the runtime's own `{ message }`."],
       ["name", "The name of a thrown error (`\"TypeError\"` for a network failure)."],
     ]), "What `.error` holds after a failure. The shape depends on the failure — `{ status, body }` (non-2xx), `{ graphqlErrors }` (GraphQL), the thrown error (network, interceptor), `{ message }` (no HTTP runtime) — so every key is optional: read `res.error?.status === 404` and branch."),
-    iface(`${typeName("HttpResource")}<T = unknown>`, httpResource, docsOf(httpMembers), "Reactive HTTP bag: fields update in place as the request progresses."),
+    iface(`${typeName("HttpResource")}<T = unknown>`, httpResource, new Map([
+      ...docsOf(httpMembers),
+      ["data", `${httpMembers.find((m) => m.name === "data")?.summary ?? ""} Typed \`T\`, which is \`unknown\` unless the call passes a type argument (\`$http<User[]>({ url })\`, \`$query<Row[]>({ url })\`).`],
+    ]), "Reactive HTTP bag: fields update in place as the request progresses."),
     iface(`${typeName("InfiniteQueryResource")}<Item = unknown> extends Omit<HttpResource<Item[]>, "data" | "onDone" | "cancel">`, infiniteExtra, new Map([
       ...docsOf(queryMembers),
       ["data", "Flattened items across every loaded page (starts as `[]`)."],
       ["cancel", "A no-op: an infinite query has no single in-flight request to abort."],
-    ]), "An infinite `$query` bag."),
+    ]), "An infinite `$query` bag. It has no `onDone`: an infinite query never calls one — chain `.loadMore().then(…)` / `.refetch().then(…)` instead."),
     iface(`${typeName("MutationResource")}<T = unknown>`, mutationResource, docsOf(mutationMembers), "Deferred write bag: nothing is sent until `.mutate(…)`."),
     configInterface("socket", `${typeName("SocketConfig")}<M = unknown>`, {
       required: ["url"],
-      overrides: { protocols: "string | readonly string[]", onMessage: "(message: M) => void" },
+      overrides: { protocols: "string | readonly string[]", onMessage: "(message: M) => unknown" },
     }),
     configInterface("sse", `${typeName("SseConfig")}<M = unknown>`, {
       required: ["url"],
-      overrides: { onMessage: "(message: M) => void" },
+      overrides: { onMessage: "(message: M) => unknown" },
     }),
     `export type ${typeName("SocketStatus")} = "connecting" | "open" | "closed";`,
     jsdoc("What a `$socket` / `$sse` bag's `.error` holds: the socket / EventSource `error` event, the error its constructor threw (a bad URL), or `{ message }` when the API is unavailable. `undefined` once the connection opens.") +
@@ -581,14 +609,22 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
     iface(`${typeName("ScriptResource")}<V = unknown>`, scriptResource, new Map([...docsOf(scriptMembers), ["error", "The load error (always an `Error`), or `null`."]]), "External script / stylesheet load bag."),
     jsdoc("`rel` values `$head({ link })` keeps (metadata and resource hints only); a link with any other `rel` is dropped.") +
       `export type ${typeName("HeadLinkRel")} = ${union(input.head.linkRels)};`,
-    iface(typeName("HeadLink"), [
-      ["rel", "readonly rel: HeadLinkRel"],
+    iface(typeName("HeadLinkAttributeAliases"), Object.entries(headLinkCamelCase).map(([attribute, spelling]): Member => [
+      spelling,
+      `readonly ${propKey(spelling)}?: ${headLinkValue(attribute)}`,
+    ]), new Map(Object.entries(headLinkCamelCase).map(([attribute, spelling]) => [spelling, `The \`${attribute}\` attribute.`])),
+    "The DOM's camelCase spellings of `HeadLink` attributes. They set the same attribute: `$head` matches link attribute names case-insensitively."),
+    iface(`${typeName("HeadLink")} extends HeadLinkAttributeAliases`, [
+      ["rel", "readonly rel: HeadLinkRel | Capitalize<HeadLinkRel> | Uppercase<HeadLinkRel>"],
       ["href", "readonly href: string"],
-      ...input.head.linkAttributes.map((name): Member => [name, `readonly ${propKey(name)}?: ${headLinkOverrides[name] ?? "string"}`]),
-    ], new Map([["href", "Required: a link without one (or with an unsafe one) is dropped. Relative, `#`, `?` or absolute http(s) only."]]),
-    "A `<link>` descriptor. Only these attributes are kept; any other key is dropped."),
+      ...input.head.linkAttributes.map((name): Member => [name, `readonly ${propKey(name)}?: ${headLinkValue(name)}`]),
+    ], new Map([
+      ["rel", "Matched case-insensitively, so `\"Canonical\"` and `\"ICON\"` are kept too."],
+      ["href", "Required: a link without one (or with an unsafe one) is dropped. Relative, `#`, `?` or absolute http(s) only."],
+    ]),
+    "A `<link>` descriptor. Only these attributes are kept; any other key is dropped. Each value is converted with `String()` (`sizes: 32` is `sizes=\"32\"`); a null one leaves the attribute out."),
     jsdoc("Attributes `$head({ htmlAttrs })` sets on `<html>`: these names plus any `data-*`. Any other attribute (notably `style`) is dropped; a nullish value is skipped.") +
-      `export interface ${typeName("HeadHtmlAttrs")} {\n${input.head.htmlAttributes.map((name) => `  readonly ${propKey(name)}?: ${headHtmlOverrides[name] ?? "string"};`).join("\n")}\n  readonly [attribute: \`data-\${string}\`]: string | number | boolean | null | undefined;\n}`,
+      `export interface ${typeName("HeadHtmlAttrs")} {\n${input.head.htmlAttributes.map((name) => `  readonly ${propKey(name)}?: ${headHtmlOverrides[name] ?? "string"} | null;`).join("\n")}\n  readonly [attribute: \`data-\${string}\`]: string | number | boolean | null | undefined;\n}`,
     configInterface("head", typeName("HeadConfig"), {
       overrides: {
         meta: record,
@@ -662,7 +698,7 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
     ["style", "readonly style: StyleNamespace"],
     ["rules", "readonly rules: RulesNamespace"],
     ["derived", "derived<T>(fn: () => T): T"],
-    ["onError", "onError(fn: ((info: { readonly error: unknown; readonly source: string }) => void) | null): void"],
+    ["onError", "onError(fn: ((info: { readonly error: unknown; readonly source: string }) => unknown) | null): void"],
     ["onNavigate", "onNavigate(fn: ((info: NavigationInfo) => boolean | string | void) | null): void"],
     ["onRequest", "onRequest(fn: (request: HttpInterceptedRequest) => Partial<HttpInterceptedRequest> | void): void"],
     ["onResponse", "onResponse(fn: (response: HttpInterceptedResponse, retry: () => Promise<HttpInterceptedResponse>) => HttpInterceptedResponse | void | Promise<HttpInterceptedResponse | void>): void"],
@@ -734,9 +770,9 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
   expectMembers("$toast", toastManager.map(([n]) => n), namespaceMembers("toast").map((m) => m.name));
   const domNode = "DomElement | null | undefined";
   const domManager: Member[] = [
-    ["onResize", `onResize(node: ${domNode}, callback: (size: { readonly width: number; readonly height: number; /** The \`ResizeObserverEntry\`. */ readonly entry: unknown }) => void): DomDisposer`],
-    ["onIntersect", `onIntersect(node: ${domNode}, callback: (entry: DomIntersectionEntry) => void, options?: { readonly root?: DomElement | null; readonly rootMargin?: string; readonly threshold?: number | readonly number[] }): DomDisposer`],
-    ["onMutation", `onMutation(node: ${domNode}, callback: (records: readonly DomMutationRecord[]) => void, options?: { readonly childList?: boolean; readonly attributes?: boolean; readonly subtree?: boolean; readonly characterData?: boolean }): DomDisposer`],
+    ["onResize", `onResize(node: ${domNode}, callback: (size: { readonly width: number; readonly height: number; /** The \`ResizeObserverEntry\`. */ readonly entry: unknown }) => unknown): DomDisposer`],
+    ["onIntersect", `onIntersect(node: ${domNode}, callback: (entry: DomIntersectionEntry) => unknown, options?: { readonly root?: DomElement | null; readonly rootMargin?: string; readonly threshold?: number | readonly number[] }): DomDisposer`],
+    ["onMutation", `onMutation(node: ${domNode}, callback: (records: readonly DomMutationRecord[]) => unknown, options?: { readonly childList?: boolean; readonly attributes?: boolean; readonly subtree?: boolean; readonly characterData?: boolean }): DomDisposer`],
     ["measure", `measure(node: ${domNode}): DomMeasurement | null`],
   ];
   expectMembers("$dom", domManager.map(([n]) => n), namespaceMembers("dom").map((m) => m.name));
@@ -911,10 +947,10 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
     params: "export declare const params: Readonly<Record<string, string>>;",
     outlet: "export declare const outlet: Children;",
     children: "export declare const children: Children;",
-    slots: "export declare const slots: Readonly<Record<string, any>>;",
-    cleanup: "export declare function cleanup(fn: () => void): void;",
-    setTimeout: "export declare function setTimeout<A extends unknown[]>(fn: (...args: A) => void, ms?: number, ...args: A): number;",
-    setInterval: "export declare function setInterval<A extends unknown[]>(fn: (...args: A) => void, ms?: number, ...args: A): number;",
+    slots: "export declare const slots: Readonly<Record<string, unknown>>;",
+    cleanup: "export declare function cleanup(fn: () => unknown): void;",
+    setTimeout: "export declare function setTimeout<A extends unknown[]>(fn: (...args: A) => unknown, ms?: number, ...args: A): number;",
+    setInterval: "export declare function setInterval<A extends unknown[]>(fn: (...args: A) => unknown, ms?: number, ...args: A): number;",
     clearTimeout: "export declare function clearTimeout(id: number | null | undefined): void;",
     clearInterval: "export declare function clearInterval(id: number | null | undefined): void;",
   };
@@ -923,7 +959,8 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
   const injectedDocs: Readonly<Record<string, string>> = {
     params: "Type them for one pattern with `params as RouteParamsOf<\"/users/:id\">`.",
     outlet: "Whatever the matched child arm evaluates to (a node, an array, a string, a nested layout's result), or null when no child matches.",
-    slots: "Values are ANY named prop the caller passed — nodes, callbacks, data — so they are `any`: check one before calling or rendering it.",
+    children: "A type-checked call cannot pass more arguments than the component declares (TS2554), so only an untyped caller — a `.aktion` module, or `.aktion.js` without `checkJs` — fills this. In a `.aktion.ts` component, declare `children` as a parameter instead: `function Shell(title: string, children: Children)`.",
+    slots: "Values are whatever the caller passed — nodes, callbacks, data — so they are `unknown`: narrow one before calling it, and cast it to render it (`slots.header as Children`). In a `.aktion.ts` / `.aktion.js` component only a `.aktion` caller fills it: a call from another `.aktion.ts` / `.aktion.js` module binds every argument positionally, so an object of named props lands in a parameter (or in `children`).",
   };
   const injectedText = [
     "/* ================================================================ injected names */",

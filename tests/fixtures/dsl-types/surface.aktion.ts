@@ -78,7 +78,7 @@ export function Counter(): AktionNode {
 }
 
 export function Panel(title: string): AktionNode {
-  return Card([Text(title), slots.header, children]);
+  return Card([Text(title), slots.header as Children, children]);
 }
 
 // ---- $store / $form ---------------------------------------------------------
