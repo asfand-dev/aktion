@@ -1,0 +1,27 @@
+{
+  // Lint fixtures for tests/eslint-generated-dsl.test.ts, checked against the
+  // COMMITTED generated declarations (src/dsl/index.d.ts) rather than the
+  // hand-written stand-in in ../eslint-typescript. Like the create-aktion
+  // `_base-js` template, `allowJs` is on and `checkJs` is not, so the untyped
+  // `.aktion.js` module is typed the way a user's is: loosely, with no errors
+  // shown. Extends the repo config because the declarations' relative
+  // `../compiler/runtime.js` import pulls src/ into the program.
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "rootDir": "../../..",
+    "types": [],
+    "allowJs": true,
+    "checkJs": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "paths": {
+      "aktion-runtime/dsl": ["../../../src/dsl/index.d.ts"]
+    }
+  },
+  // (`exclude` is restated: the repo config's own list excludes tests/.)
+  "include": ["*.ts", "*.js"],
+  "exclude": []
+}
