@@ -15,13 +15,30 @@
  *     trailing props bag).
  */
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { cleanup, flush, renderCompiled, type Screen } from "../src/testing/index.js";
 import { defineCompiledProgram, linkProject } from "../src/compiler/index.js";
 import { defaultFrontends } from "../src/compiler/frontend.js";
 import { createTypeScriptFrontend } from "../src/plugin/typescript.js";
+import { compileAktionFile } from "../src/plugin/index.js";
 
 afterEach(() => cleanup());
+
+const disk = mkdtempSync(join(tmpdir(), "aktion-component-calls-"));
+afterAll(() => rmSync(disk, { recursive: true, force: true }));
+
+/** Write `files` under a fresh directory of {@link disk}; returns the absolute path of `entry`. */
+function onDisk(name: string, files: Record<string, string>, entry: string): string {
+  for (const [path, text] of Object.entries(files)) {
+    const absolute = join(disk, name, path);
+    mkdirSync(dirname(absolute), { recursive: true });
+    writeFileSync(absolute, text, "utf8");
+  }
+  return join(disk, name, entry);
+}
 
 const frontends = { ...defaultFrontends, typescript: createTypeScriptFrontend() };
 const lines = (...l: string[]): string => l.join("\n");
@@ -188,6 +205,66 @@ describe("object-literal arguments in JavaScript-shaped modules bind positionall
     expect([...screen.shadowRoot.querySelectorAll(".rui-text")].map((el) => el.textContent)).toEqual(["A", "B"]);
     expect(screen.shadowRoot.querySelector('[data-rui-key="a"]')).not.toBeNull();
     expect(screen.shadowRoot.querySelector('[data-rui-key="b"]')).not.toBeNull();
+  });
+});
+
+describe("the callee's declaration decides, not how the import spells its path", () => {
+  /** `compileAktionFile` resolves through the node resolver, which completes extension-less specifiers. */
+  async function textsFromDisk(entryPath: string): Promise<string> {
+    const screen = renderCompiled(compileAktionFile(entryPath));
+    await flush();
+    return [...screen.shadowRoot.querySelectorAll(".rui-text")].map((el) => el.textContent?.trim()).join(" | ");
+  }
+
+  const tag = lines("export function Tag(tag) {", '  return Text("TAG=" + (tag ? tag.key + ":" + tag.value : "undef"))', "}");
+  const card = lines('export function Card(title, subtitle = "-") {', '  return Text(title + "/" + subtitle)', "}");
+  const call = '$app(Column([Tag({ key: "env", value: "prod" }), Card({ title: "Named" })]))';
+
+  it("`./cards` resolved to a `.aktion.js` module binds positionally, `./card` resolved to `.aktion` keeps named props", async () => {
+    const entry = onDisk(
+      "extensionless-js",
+      {
+        "app.aktion.js": lines('import { Tag } from "./cards"', 'import { Card } from "./card"', call),
+        "cards.aktion.js": tag,
+        "card.aktion": card,
+      },
+      "app.aktion.js",
+    );
+    expect(await textsFromDisk(entry)).toBe("TAG=env:prod | Named/-");
+  });
+
+  it("the same with the extensions spelled out", async () => {
+    const entry = onDisk(
+      "explicit-js",
+      {
+        "app.aktion.js": lines('import { Tag } from "./cards.aktion.js"', 'import { Card } from "./card.aktion"', call),
+        "cards.aktion.js": tag,
+        "card.aktion": card,
+      },
+      "app.aktion.js",
+    );
+    expect(await textsFromDisk(entry)).toBe("TAG=env:prod | Named/-");
+  });
+
+  it("an extension-less import from `.aktion.ts` of a `.aktion.ts` component", async () => {
+    const entry = onDisk(
+      "extensionless-ts",
+      {
+        "app.aktion.ts": lines(
+          'import { $app, Column } from "aktion-runtime/dsl"',
+          'import { Tag } from "./cards"',
+          '$app(Column([Tag({ key: "env", value: "prod" })]))',
+        ),
+        "cards.aktion.ts": lines(
+          'import { Text, type AktionNode } from "aktion-runtime/dsl"',
+          "export function Tag(tag: { key: string; value: string }): AktionNode {",
+          '  return Text("TAG=" + tag.key + ":" + tag.value)',
+          "}",
+        ),
+      },
+      "app.aktion.ts",
+    );
+    expect(await textsFromDisk(entry)).toBe("TAG=env:prod");
   });
 });
 

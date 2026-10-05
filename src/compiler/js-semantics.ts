@@ -19,9 +19,9 @@
  *   - **W1–W3** {@link lowerJavaScriptSemantics}: rewrites that make the
  *     evaluator compute what JavaScript would — every local gets a unique name
  *     (W1), a nested function becomes a `const` lambda in place (W2), and every
- *     function body ends in an explicit `return` (W3); a call to a component
- *     declared in a JavaScript-shaped module binds its arguments positionally
- *     (`CallExpr.positional`).
+ *     function body ends in an explicit `return` (W3); a call that reaches a
+ *     component declared in a JavaScript-shaped module binds its arguments
+ *     positionally (`CallExpr.positional`, `ComponentDeclaration.javascript`).
  *
  * The rules, the measurements behind them and the exact messages are specified
  * in `aktion-in-typescript.md` §6. Rewrites keep every original `loc`, so
@@ -53,7 +53,7 @@ import type {
 } from "../parser/types.js";
 import manifest from "../dsl/manifest.json";
 import type { LinkDiagnostic } from "./linker.js";
-import { DSL_MODULE_ID, moduleLanguage } from "./module-kind.js";
+import { DSL_MODULE_ID } from "./module-kind.js";
 
 // ── Vocabulary ──────────────────────────────────────────────────────────
 
@@ -1300,7 +1300,9 @@ class Analyzer {
     if (binding) {
       this.checkPatternArguments(expr, binding);
       if (this.fn === null || this.fn.hookHost) this.renderCalls.push({ binding, loc });
-      if (this.isJavaScriptComponent(binding) && expr.arguments.some((arg) => arg.kind === "Object")) {
+      // Whether it binds positionally depends on where the component it
+      // reaches was declared, which the evaluator knows (`CallExpr.positional`).
+      if (this.isUserComponent(binding) && expr.arguments.some((arg) => arg.kind === "Object")) {
         this.positionalCalls.push(expr);
       }
     }
@@ -1398,21 +1400,6 @@ class Analyzer {
     if (!binding) return false;
     if (binding.kind === "function") return binding.decl?.kind === "ComponentDeclaration";
     return this.isUserImport(binding) && isPascalCase(binding.name);
-  }
-
-  /**
-   * A component whose arguments TypeScript types with its plain
-   * signature: one declared in this module (a `function Card(…)` or a W4
-   * arrow), or imported from a `.aktion.ts` / `.aktion.js` module. A call to
-   * it binds positionally (`CallExpr.positional`). Not a `.aktion` import: its
-   * generated declaration types the trailing named-props bag, so the DSL
-   * convention is what the caller's types promise there.
-   */
-  private isJavaScriptComponent(binding: Binding): boolean {
-    if (binding.kind === "function") return binding.decl?.kind === "ComponentDeclaration";
-    if (!this.isUserImport(binding) || !isPascalCase(binding.name) || binding.importSource === undefined) return false;
-    const language = moduleLanguage(binding.importSource);
-    return language === "javascript" || language === "typescript";
   }
 
   /** `$name` is the runtime's own (not shadowed by a user hook or import) — seen from `from`. */
@@ -2040,15 +2027,18 @@ function toDiagnostics(findings: ReadonlyArray<Finding>, path: string): LinkDiag
  *     bare `return` (without `loc`, so coverage gains no phantom line), so
  *     falling off the end yields `undefined` instead of the last expression
  *     (S24).
- *   - **Positional calls** — a call to a component declared in a
- *     `.aktion.js` / `.aktion.ts` module is marked `positional`: its
- *     arguments bind as JavaScript binds them, so an object literal
- *     (`KVRow({ key: "a", value: "1" })`) is the value of the parameter at its
- *     position instead of a named-props bag that silently reroutes or drops
- *     it. TypeScript types such a call with the component's plain signature,
- *     so this is what the caller's types say. Calls to `.aktion` components,
- *     and every call written in a `.aktion` module, keep the DSL's named
- *     props.
+ *   - **Positional calls** — every component this module declares is marked
+ *     `javascript`, and every call it makes to a user component with an
+ *     object-literal argument is marked `positional`. When such a call reaches
+ *     a `javascript` component, its arguments bind as JavaScript binds them,
+ *     so an object literal (`KVRow({ key: "a", value: "1" })`) is the value of
+ *     the parameter at its position instead of a named-props bag that silently
+ *     reroutes or drops it. TypeScript types such a call with the component's
+ *     plain signature, so this is what the caller's types say. The evaluator
+ *     decides by the declaration, not by the import's spelling, so
+ *     `"./cards"` and `"./cards.aktion.js"` bind alike. Calls that reach
+ *     `.aktion` components, and every call written in a `.aktion` module,
+ *     keep the DSL's named props.
  *
  * Mutates and returns `program` (the frontend owns the freshly parsed tree).
  * Run only on a module {@link checkJavaScriptSemantics} accepted.
@@ -2067,6 +2057,7 @@ export function lowerJavaScriptSemantics(program: Program): Program {
     if (symbol !== undefined && ref.rename) ref.rename(symbol);
   }
   // Positional calls
+  for (const stmt of program.statements) if (stmt.kind === "ComponentDeclaration") stmt.javascript = true;
   for (const call of analysis.positionalCalls) call.positional = true;
   // W2
   liftNestedFunctions(program);

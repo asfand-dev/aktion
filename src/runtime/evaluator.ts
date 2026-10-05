@@ -4448,8 +4448,8 @@ function hasRestParam(decl: ComponentDeclaration): boolean {
 
 /**
  * {@link invokeComponentDecl} for a call the JS-semantics layer marked
- * `positional` (see `CallExpr.positional`): a `.aktion.js` / `.aktion.ts`
- * call to a component declared in a `.aktion.js` / `.aktion.ts` module.
+ * `positional` (see `CallExpr.positional`) that reaches a component declared
+ * in a `.aktion.js` / `.aktion.ts` module (`ComponentDeclaration.javascript`).
  * TypeScript types such a call with the component's plain signature, so every
  * argument — an object literal included — binds to the parameter at its
  * position, exactly as JavaScript binds it: `KVRow({ key: "a", value: "1" })`
@@ -4517,7 +4517,9 @@ function invokeComponentDecl(
   positionalCall = false,
 ): unknown {
   if (ctx.coverage) recordCoverageFunction(ctx.coverage, decl.loc);
-  if (positionalCall) return invokeComponentDeclPositionally(decl, args, ctx, loc);
+  // Decided by the declaration: a `.aktion` component keeps named props even
+  // when a JavaScript-shaped module calls it.
+  if (positionalCall && decl.javascript === true) return invokeComponentDeclPositionally(decl, args, ctx, loc);
   // Split positional vs. named for the slot-aware UserComponentNode. The
   // named-props block is the *last* ObjectExpr in `args` (rightmost),
   // which lets users write `Foo("hi", {x: 1})` (trailing) or
