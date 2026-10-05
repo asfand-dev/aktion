@@ -212,9 +212,19 @@ export function sanitiseCssUrl(raw: string): string {
  * through an inline `style` attribute. We accept a small alphabet that covers
  * every standard CSS length token; anything outside that — or values that
  * are unreasonably long — falls back to `fallback`.
+ *
+ * A plain NUMBER is pixels (`320` → `320px`, `0` → `0`), the React convention.
+ * Emitting it as written produced `height:320`, a declaration the CSS parser
+ * drops, so a `height: 320` box silently collapsed to its content. A numeric
+ * STRING (`"320"`) is returned as before: callers that hand digits on as an
+ * attribute value or unit-check them themselves depend on that.
  */
 const CSS_LENGTH_ALLOWED = /^[a-zA-Z0-9.%+\-*/\s(),]+$/;
 export function sanitiseCssLength(raw: unknown, fallback: string): string {
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw)) return fallback;
+    return raw === 0 ? "0" : `${raw}px`;
+  }
   const trimmed = (asString(raw) ?? "").trim();
   if (!trimmed) return fallback;
   if (trimmed.length > 64) return fallback;
