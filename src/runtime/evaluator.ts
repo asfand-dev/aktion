@@ -2169,7 +2169,7 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       if (ctx.coverage) recordCoverageBranch(ctx.coverage, expr.loc, test ? 0 : 1);
       return test ? evaluate(expr.consequent, ctx) : evaluate(expr.alternate, ctx);
     }
-    case "Call": return evaluateComponentCall(expr.callee, expr.arguments, ctx, expr.loc);
+    case "Call": return evaluateComponentCall(expr.callee, expr.arguments, ctx, expr.loc, expr.positional === true);
     case "MethodCall": return evaluateMethodCall(expr, ctx);
     case "Invoke": return evaluateInvoke(expr, ctx);
     case "New": return evaluateNew(expr, ctx);
@@ -2198,7 +2198,8 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
       // can read `item` at click time even though the loop variable is
       // long gone by then.
       const capturedLoopVars = new Map(ctx.loopVars);
-      return (...callArgs: unknown[]) => {
+      const selfName = expr.selfName;
+      const lambda = (...callArgs: unknown[]): unknown => {
         // A lambda counts as covered when it is CALLED, not when the enclosing
         // expression built the closure — an event handler that never fires is
         // exactly the kind of dead code a coverage gate should surface.
@@ -2220,6 +2221,9 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
           });
           ctx.loopVars.set(name, value);
         };
+        // A named function expression sees its own name (bound before the
+        // parameters, so a parameter of the same name shadows it).
+        if (selfName) bindLocal(selfName, lambda);
         for (let i = 0; i < lambdaParams.length; i += 1) {
           const param = lambdaParams[i]!;
           // `(...rest) => …` — gather the remaining args into an array.
@@ -2254,6 +2258,7 @@ export function evaluate(expr: Expression, ctx: EvaluationContext): unknown {
           for (const frame of restoreAliases) ctx.stateAliases.push(frame);
         }
       };
+      return lambda;
     }
     default: return null;
   }
@@ -2477,8 +2482,19 @@ function runDestructureStatement(
  * `[x, , y, ...rest]`) against a source value into a flat list of
  * `name → value` pairs. Shared by `let`-destructuring statements and
  * destructured function / lambda parameters so both honour defaults,
- * renames, holes, and rest the same way. Does NOT touch `loopVars` —
+ * renames, holes, and rest the same way. Leaves `loopVars` as it found it —
  * the caller decides how to bind + restore.
+ *
+ * Reads follow JavaScript:
+ *
+ *   - an array pattern takes its values from any iterable — a string, a
+ *     `Set`, a `Map` (`[[k, v]] = map`), an iterator — not only an array;
+ *   - an object pattern reads properties of any non-null value, boxing a
+ *     primitive (`{ length } = "abc"`) and including arrays (`{ 0: first }`),
+ *     except the names no DSL read may reach (`constructor`, `__proto__`,
+ *     `prototype` — see {@link FORBIDDEN_PROPERTY_NAMES});
+ *   - a default sees the leaves bound before it (`{ a, b = a + 1 }`,
+ *     `[x, y = x * 2]`).
  */
 export function resolvePatternBindings(
   pattern: DestructuringPattern,
@@ -2486,56 +2502,95 @@ export function resolvePatternBindings(
   ctx: EvaluationContext,
 ): Array<{ name: string; value: unknown }> {
   const out: Array<{ name: string; value: unknown }> = [];
+  resolvePatternInto(pattern, source, ctx, out);
+  return out;
+}
+
+/** {@link resolvePatternBindings} for one (possibly nested) pattern, appending to `out`. */
+function resolvePatternInto(
+  pattern: DestructuringPattern,
+  source: unknown,
+  ctx: EvaluationContext,
+  out: Array<{ name: string; value: unknown }>,
+): void {
+  // Evaluate a default with every leaf resolved so far in scope, then put
+  // `loopVars` back.
+  const evaluateDefault = (expr: Expression): unknown => {
+    if (out.length === 0) return evaluate(expr, ctx);
+    const saved = new Map<string, { had: boolean; prev: unknown }>();
+    for (const { name, value } of out) {
+      if (!saved.has(name)) saved.set(name, { had: ctx.loopVars.has(name), prev: ctx.loopVars.get(name) });
+      ctx.loopVars.set(name, value);
+    }
+    try {
+      return evaluate(expr, ctx);
+    } finally {
+      for (const [name, slot] of saved) {
+        if (slot.had) ctx.loopVars.set(name, slot.prev);
+        else ctx.loopVars.delete(name);
+      }
+    }
+  };
+  const settle = (binding: DestructuringPattern["bindings"][number], raw: unknown): void => {
+    const value = raw === undefined && binding.defaultValue ? evaluateDefault(binding.defaultValue) : raw;
+    // Nested pattern slot: `let [[a, b]] = rows` / `let { user: { name } } = resp`.
+    if (binding.pattern) resolvePatternInto(binding.pattern, value, ctx, out);
+    else if (binding.name !== "") out.push({ name: binding.name, value });
+  };
+
   if (pattern.kind === "array") {
-    const arr = Array.isArray(source) ? source : [];
+    const needsAll = pattern.bindings.some((b) => b.rest);
+    const items = patternItems(source, needsAll ? Number.POSITIVE_INFINITY : pattern.bindings.length, ctx);
     let cursor = 0;
     for (const binding of pattern.bindings) {
       if (binding.rest) {
-        out.push({ name: binding.name, value: arr.slice(cursor) });
-        cursor = arr.length;
+        out.push({ name: binding.name, value: items.slice(cursor) });
+        cursor = items.length;
         continue;
       }
-      let value: unknown = arr[cursor];
-      if (value === undefined && binding.defaultValue) {
-        value = evaluate(binding.defaultValue, ctx);
-      }
-      // Nested pattern slot: `let [[a, b]] = rows`.
-      if (binding.pattern) {
-        for (const pair of resolvePatternBindings(binding.pattern, value, ctx)) out.push(pair);
-      } else if (binding.name !== "") {
-        out.push({ name: binding.name, value });
-      }
+      settle(binding, items[cursor]);
       cursor += 1;
     }
-    return out;
+    return;
   }
-  const obj = source && typeof source === "object" && !Array.isArray(source)
-    ? (source as Record<string, unknown>)
-    : {};
+  const boxed: Record<string, unknown> | null = source == null ? null : (Object(source) as Record<string, unknown>);
   const consumedKeys = new Set<string>();
   for (const binding of pattern.bindings) {
     if (binding.rest) {
       const remainder: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(obj)) {
-        if (!consumedKeys.has(key)) remainder[key] = value;
+      if (boxed) {
+        for (const [key, value] of Object.entries(boxed)) {
+          if (!consumedKeys.has(key) && !FORBIDDEN_PROPERTY_NAMES.has(key)) remainder[key] = value;
+        }
       }
       out.push({ name: binding.name, value: remainder });
       continue;
     }
     const key = binding.sourceKey ?? binding.name;
     consumedKeys.add(key);
-    let value: unknown = obj[key];
-    if (value === undefined && binding.defaultValue) {
-      value = evaluate(binding.defaultValue, ctx);
-    }
-    // Nested pattern slot: `let { user: { name } } = resp`.
-    if (binding.pattern) {
-      for (const pair of resolvePatternBindings(binding.pattern, value, ctx)) out.push(pair);
-    } else {
-      out.push({ name: binding.name, value });
-    }
+    settle(binding, boxed && !FORBIDDEN_PROPERTY_NAMES.has(key) ? boxed[key] : undefined);
   }
-  return out;
+}
+
+/**
+ * The values an array pattern reads from `source`: the array itself, or the
+ * first `count` values of any other iterable (all of them for a `...rest`
+ * pattern), as JavaScript's iterator protocol yields them. A non-iterable
+ * source reads as empty.
+ */
+function patternItems(source: unknown, count: number, ctx: EvaluationContext): unknown[] {
+  if (Array.isArray(source)) return source;
+  if (source == null) return [];
+  const iterator = (Object(source) as { [Symbol.iterator]?: unknown })[Symbol.iterator];
+  if (typeof iterator !== "function") return [];
+  const items: unknown[] = [];
+  if (count === 0) return items;
+  for (const item of source as Iterable<unknown>) {
+    tickIterations(ctx.budget, 1, "a destructuring pattern");
+    items.push(item);
+    if (items.length >= count) break;
+  }
+  return items;
 }
 
 /** Run a `for (let key in obj) { … }` STATEMENT — iterates enumerable string keys. */
@@ -4056,6 +4111,8 @@ function evaluateComponentCall(
   args: Expression[],
   ctx: EvaluationContext,
   loc?: { line: number; column: number },
+  /** `CallExpr.positional` — bind a user component's arguments as JavaScript does. */
+  positional = false,
 ): unknown {
   // Aktion's own runtime factory builtins (`$store`, `$router`, `$http`,
   // `$theme`, `$i18n`, `$emit`, `$storage(...)`) are `$`-prefixed and dispatch
@@ -4071,7 +4128,7 @@ function evaluateComponentCall(
   const componentDecl = ctx.componentDecls.get(callee);
   const selfShadowsBuiltin = componentDecl !== undefined && isSelfShadowingLibraryName(callee, ctx);
   if (componentDecl && !selfShadowsBuiltin) {
-    return invokeComponentDecl(componentDecl, args, ctx, loc);
+    return invokeComponentDecl(componentDecl, args, ctx, loc, positional);
   }
   // Aktion 0.5 action declarations.
   //   - `save` (bare reference, e.g. `onClick: save`) returns a callable
@@ -4384,6 +4441,63 @@ function componentParamPublicName(param: DeclParam): string {
   return param.publicName ?? param.name;
 }
 
+/** True when the component's last parameter is `...rest`. */
+function hasRestParam(decl: ComponentDeclaration): boolean {
+  return decl.params.length > 0 && decl.params[decl.params.length - 1]!.rest === true;
+}
+
+/**
+ * {@link invokeComponentDecl} for a call the JS-semantics layer marked
+ * `positional` (see `CallExpr.positional`) that reaches a component declared
+ * in a `.aktion.js` / `.aktion.ts` module (`ComponentDeclaration.javascript`).
+ * TypeScript types such a call with the component's plain signature, so every
+ * argument — an object literal included — binds to the parameter at its
+ * position, exactly as JavaScript binds it: `KVRow({ key: "a", value: "1" })`
+ * hands the whole object to `entry`, and `Field("Name", { label, id })` keeps
+ * `label = "Name"`. No object literal is read as a named-props bag.
+ *
+ * The one DSL convention kept is `key:` on an object literal passed BEYOND the
+ * declared parameters (`Row(item, { key: item.id })` for `function Row(item)`):
+ * JavaScript ignores that argument, so reading its `key` as the instance
+ * identity changes no value the component sees. Like any extra argument it
+ * still lands in `children`.
+ */
+function invokeComponentDeclPositionally(
+  decl: ComponentDeclaration,
+  args: Expression[],
+  ctx: EvaluationContext,
+  loc?: { line: number; column: number },
+): UserComponentNode {
+  const positional: unknown[] = [];
+  let explicitKey: unknown;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i]!;
+    if (arg.kind === "Spread") {
+      // Same spread rule as the DSL path: any iterable expands; a value that is
+      // not iterable is passed through as one positional value.
+      const value = evaluate(arg.argument, ctx);
+      if (!spreadIterable(positional, value, ctx)) positional.push(value);
+      continue;
+    }
+    const value = evaluate(arg, ctx);
+    positional.push(value);
+    if (
+      arg.kind === "Object" && i >= decl.params.length && !hasRestParam(decl) &&
+      value !== null && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "key")
+    ) {
+      explicitKey = (value as { key?: unknown }).key;
+    }
+  }
+  return {
+    __kind: "UserComponent",
+    decl,
+    positional,
+    named: {},
+    explicitKey,
+    source: loc,
+  } satisfies UserComponentNode;
+}
+
 /**
  * Invoke a `function Name(p) { return ... }` declaration. Parameters are
  * bound to the supplied positional / named arguments and the block body
@@ -4399,8 +4513,13 @@ function invokeComponentDecl(
   args: Expression[],
   ctx: EvaluationContext,
   loc?: { line: number; column: number },
+  /** `CallExpr.positional`: the call binds its arguments as JavaScript does. */
+  positionalCall = false,
 ): unknown {
   if (ctx.coverage) recordCoverageFunction(ctx.coverage, decl.loc);
+  // Decided by the declaration: a `.aktion` component keeps named props even
+  // when a JavaScript-shaped module calls it.
+  if (positionalCall && decl.javascript === true) return invokeComponentDeclPositionally(decl, args, ctx, loc);
   // Split positional vs. named for the slot-aware UserComponentNode. The
   // named-props block is the *last* ObjectExpr in `args` (rightmost),
   // which lets users write `Foo("hi", {x: 1})` (trailing) or
@@ -4444,7 +4563,9 @@ function invokeComponentDecl(
     // param value — so treat it as named props / slots (`Panel(body, { header,
     // footer })`). Guarded to identifier keys so an opaque data payload passed
     // as the sole/only-remaining positional (`Foo({ data })`) stays positional.
-    if (!expandAsNamed && allIdentifierKeys && objKeys.length > 0) {
+    // Not for a component with a `...rest` parameter: that absorbs any number
+    // of positional values, objects included (`Legend({ name: "A" }, { name: "B" })`).
+    if (!expandAsNamed && allIdentifierKeys && objKeys.length > 0 && !hasRestParam(decl)) {
       const positionalBefore = args.length - 1; // every arg except the trailing object
       if (positionalBefore >= decl.params.length) expandAsNamed = true;
     }
@@ -4579,12 +4700,43 @@ export function evaluateUserComponent(
   const bindComponentLocal = (name: string, value: unknown) => {
     ctx.loopVars.set(name, value);
   };
+  // React-style props: `Card({ title: "T", key: "c1" })` for
+  // `function Card({ title })` makes `key` the instance identity, which turns
+  // the object into named props — and a component whose FIRST parameter is an
+  // object pattern then reads them as its props object. Only when nothing else
+  // claims them: no positional argument, and no named prop that matches a
+  // declared parameter (`footer` in `Chart({ footer: "F" })` for
+  // `function Chart({ data } = …, footer)` means the props are per parameter,
+  // so the pattern keeps its default). A pattern further along never reads
+  // them: those named props are named slots (`header` in
+  // `Panel({ title: "T", header: H })`).
+  // (A `.aktion` body used to see them only through the slot bindings named
+  // like the props below, which miss the pattern's leaves once W1 has renamed
+  // them in a `.aktion.js` / `.aktion.ts` component.)
+  const paramNames = new Set(decl.params.filter((p) => !p.pattern).map(componentParamPublicName));
+  const namedKeys = Object.keys(named).filter((key) => named[key] !== undefined);
+  const bagKeys = namedKeys.filter((key) => !FORBIDDEN_PROPERTY_NAMES.has(key));
+  const propsBag: Record<string, unknown> | undefined =
+    decl.params[0]?.pattern?.kind === "object" &&
+    positional.length === 0 &&
+    bagKeys.length > 0 &&
+    namedKeys.every((key) => !paramNames.has(key))
+      ? Object.fromEntries(bagKeys.map((key) => [key, named[key]]))
+      : undefined;
   for (let i = 0; i < decl.params.length; i += 1) {
     const param = decl.params[i]!;
+    // `...rest` gathers every remaining positional argument into an array, as
+    // in JavaScript (and as actions and lambdas already did). A named prop of
+    // the same name (`Tags({ labels: [...] })`) still wins.
+    if (param.rest) {
+      const publicName = componentParamPublicName(param);
+      bindComponentLocal(param.name, named[publicName] !== undefined ? named[publicName] : positional.slice(i));
+      break;
+    }
     // Destructured param: `function Card({ title, tone = "info" })` — the
     // matching argument is a positional object/array we fan out by shape.
     if (param.pattern) {
-      let source: unknown = positional[i];
+      let source: unknown = i === 0 && propsBag !== undefined ? propsBag : positional[i];
       if (source === undefined && param.defaultValue) {
         source = evaluate(param.defaultValue, ctx);
       }
@@ -4610,8 +4762,9 @@ export function evaluateUserComponent(
     }
     bindComponentLocal(param.name, value);
   }
-  // `children` slot from any extra trailing positional arguments.
-  if (positional.length > decl.params.length) {
+  // `children` slot from any extra trailing positional arguments — there are
+  // none when a `...rest` parameter took them all.
+  if (positional.length > decl.params.length && !hasRestParam(decl)) {
     const extras = positional.slice(decl.params.length);
     const childrenValue = extras.length === 1 ? extras[0] : extras;
     ctx.loopVars.set("children", childrenValue);

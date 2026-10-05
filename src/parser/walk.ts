@@ -60,6 +60,17 @@ function isNode(value: unknown): value is AnyNode {
 }
 
 /**
+ * Properties that hold no children: `loc` is a position, and the comment
+ * groups the parser attaches (`leadingComments`, `trailingComments`,
+ * `innerComments`) are trivia. A comment record carries a PascalCase `kind` of
+ * its own (`"Line"` / `"Block"`), so without this a `/* … *\/` comment would be
+ * reported as a `Block` node with no `body` — which crashed every pass that
+ * switches on `node.kind === "Block"` (the `.aktion.js` / `.aktion.ts`
+ * lowering among them).
+ */
+const NON_CHILD_KEYS: ReadonlySet<string> = new Set(["loc", "leadingComments", "trailingComments", "innerComments"]);
+
+/**
  * Visit every node in `program` in source order, depth-first, parents first.
  *
  * ```ts
@@ -87,8 +98,8 @@ function visitNode(
 ): void {
   if (visit({ node, parent, key, index, depth }) === false) return;
   for (const childKey of Object.keys(node)) {
-    // `loc` is a position, not a child; `kind`/`name`/`operator` are scalars.
-    if (childKey === "loc") continue;
+    // Positions and comments are not children; `kind`/`name`/`operator` are scalars.
+    if (NON_CHILD_KEYS.has(childKey)) continue;
     const value = (node as unknown as Record<string, unknown>)[childKey];
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i += 1) {
@@ -122,7 +133,7 @@ function visitRecord(
   visit: WalkVisitor,
 ): void {
   for (const inner of Object.keys(record)) {
-    if (inner === "loc") continue;
+    if (NON_CHILD_KEYS.has(inner)) continue;
     const value = record[inner];
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i += 1) {

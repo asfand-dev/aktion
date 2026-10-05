@@ -180,10 +180,11 @@ describe("E107 — a module-level binding changed after it was built", () => {
   it("an imported binding changed in place", () => {
     expect(at(lines('import { list } from "./data.aktion"', "function add(x) {", "  list.push(x)", "}"), "E107")).toEqual(["3:8"]);
   });
-  it("accepts building at module level and API methods named like mutators", () => {
+  it("accepts API methods named like mutators", () => {
+    // Building at module level (`const list = []` then `list.push(1)`) is E107
+    // — see tests/compiler-module-mutation.test.ts.
     const src = lines(
-      "const list = []",
-      "list.push(1)",
+      "const list = [1]",
       "const api = makeApi()",
       "function remove(id) {",
       "  api.delete(id)",
