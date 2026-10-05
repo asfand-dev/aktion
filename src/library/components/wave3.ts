@@ -83,7 +83,11 @@ export const QRCode: ComponentSpec = {
       // so the constraint holds no matter which theme is adopted.
       style: "max-width:100%;height:auto",
     });
-    svg.append(svgEl("rect", { x: "0", y: "0", width: String(dim), height: String(dim), fill: background }));
+    // "transparent" drops the backing rect, as documented (it used to be
+    // emitted anyway, painted with `fill="transparent"`).
+    if (background.toLowerCase() !== "transparent") {
+      svg.append(svgEl("rect", { x: "0", y: "0", width: String(dim), height: String(dim), fill: background }));
+    }
     // Build one path string for all dark modules (compact + fast).
     let d = "";
     for (let y = 0; y < count; y += 1) {

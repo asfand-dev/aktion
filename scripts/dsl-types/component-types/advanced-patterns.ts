@@ -5,7 +5,6 @@ export default {
   Drawer: {
     props: {
       onClose: "() => void",
-      width: "string",
     },
   },
   InboxPanel: {
@@ -34,9 +33,6 @@ export default {
   },
   ResizablePanels: {
     props: {
-      initialPrimaryWidth: "string",
-      minPrimaryWidth: "string | 0",
-      minSecondaryWidth: "string | 0",
       onResize: "(primaryPercent: number) => void",
     },
   },
@@ -44,11 +40,6 @@ export default {
     props: {
       onClose: "() => void",
       target: "string",
-    },
-  },
-  Sticky: {
-    props: {
-      offset: "string | 0",
     },
   },
   Tour: {

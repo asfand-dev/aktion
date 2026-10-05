@@ -88,7 +88,12 @@ function readGcalEvents(raw: unknown): { chips: Map<string, GcalEvent[]>; dots: 
       continue;
     }
     const colorRaw = asString(e.color ?? e.tone, "primary");
-    const color = CHIP_TONES[colorRaw] ?? sanitiseCssColor(colorRaw) ?? CHIP_TONES.primary!;
+    // `||`, not `??`: sanitiseCssColor rejects with "" (not null), and an
+    // empty `--rui-gcal-chip` is a SET property, so the stylesheet's primary
+    // fallback never applied and the white chip text lost its background.
+    // Own-key lookup so `color: "constructor"` is a colour word, not Object.
+    const tone = Object.prototype.hasOwnProperty.call(CHIP_TONES, colorRaw) ? CHIP_TONES[colorRaw] : undefined;
+    const color = tone ?? (sanitiseCssColor(colorRaw) || CHIP_TONES.primary!);
     const list = chips.get(date) ?? [];
     // `raw` is handed back to `onEventClick` so the author can open the event
     // they actually passed in, not a reconstruction of it.

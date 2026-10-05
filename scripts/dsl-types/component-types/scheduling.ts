@@ -8,8 +8,14 @@ export default {
       CalendarEventColor: "export type CalendarEventColor = \"primary\" | \"success\" | \"warning\" | \"danger\" | \"info\" | (string & {});",
       CalendarEvent: `export interface CalendarEvent {
   readonly date: string;
+  /** Chip text; an event with neither \`label\` nor \`title\` renders as a dot. */
   readonly label?: string | number;
+  /** Read as the chip text when \`label\` is absent. */
+  readonly title?: string | number;
+  /** A tone name or a CSS colour; one the sanitiser rejects falls back to \`primary\`. */
   readonly color?: CalendarEventColor;
+  /** Read as the colour when \`color\` is absent. */
+  readonly tone?: CalendarEventColor;
   readonly time?: string | number;
 }`,
     },

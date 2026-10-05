@@ -175,7 +175,8 @@ export const Hero: ComponentSpec = {
 
     if (layout === "cover") {
       const safeImageSrc = sanitiseCssUrl(asString(props.imageSrc));
-      const safeHeight = sanitiseCssLength(asString(props.height), "280px");
+      // The raw prop, not `asString(...)`: the sanitiser owns number handling.
+      const safeHeight = sanitiseCssLength(props.height, "280px");
       // Only emit layers we actually have. `url("")` resolves against the base
       // URL, so an omitted `imageSrc` made the browser fetch the host document
       // on every render and fail to decode it as an image.
@@ -296,7 +297,7 @@ export const PageHeader: ComponentSpec = {
   props: [
     { name: "title", type: "string" },
     { name: "subtitle", type: "string", optional: true },
-    { name: "breadcrumbs", type: "string[] | {label, to}[] | Breadcrumb | false", optional: true, description: "Array of strings or `{label, to}` objects (a `to` path renders a router link), a Breadcrumb(...) node, or `false` to suppress the auto-derived trail" },
+    { name: "breadcrumbs", type: "string[] | {label, to}[] | Breadcrumb | false", optional: true, description: "Array of strings or `{label, to}` objects (a `to` path renders a router link; `href` and `path` are read as the same ROUTER path, not an external URL, and `title` as the label), a Breadcrumb(...) node, or `false` to suppress the auto-derived trail" },
     { name: "actions", type: "Node[]", optional: true, description: "Buttons / NavLinks shown on the right" },
     { name: "status", type: "Badge", optional: true, aliases: ["badge"], description: "Optional Badge(...) rendered next to the title" },
     { name: "onCrumbClick", type: "callable", optional: true, description: "Called with (label, index) when a breadcrumb is clicked — makes string crumbs interactive" },
@@ -556,7 +557,7 @@ export const FeatureGrid: ComponentSpec = {
     "highlight product capabilities or page categories.",
   props: [
     { name: "items", type: "FeatureItem[]" },
-    { name: "columns", type: "number", optional: true, description: "Preferred column count (default auto)" },
+    { name: "columns", type: "number", optional: true, description: "Preferred column count, 1–4 — larger values clamp to 4 (default auto)" },
   ],
   render: (_node, props, helpers) => {
     // Read the count explicitly instead of relying on NaN falling through the
@@ -725,7 +726,7 @@ export const Banner: ComponentSpec = {
     { name: "dismissible", type: "boolean", optional: true, aliases: ["closable"], description: "Show a close button that hides the banner" },
     { name: "onDismiss", type: "callable", optional: true, aliases: ["onClose"], description: "Called when the banner is dismissed (implies `dismissible`)" },
     { name: "href", type: "string", optional: true, description: "Make the whole banner a link (release notes → changelog)" },
-    { name: "onClick", type: "callable", optional: true, aliases: ["onclick"], description: "Called when the banner itself is clicked" },
+    { name: "onClick", type: "callable", optional: true, aliases: ["onclick"], description: "Called when the banner itself is clicked — also when `href` is set (track the click, the link still navigates)" },
   ],
   render: (_node, props, helpers) => {
     const tone = asString(props.tone, "primary");
@@ -733,7 +734,12 @@ export const Banner: ComponentSpec = {
     // band is a live region; danger/warning interrupt, everything else is polite.
     const isAlert = tone === "danger" || tone === "warning";
     const href = asString(props.href) ? sanitiseHref(props.href) : "";
-    const clickable = !href && typeof props.onClick === "function";
+    // `onClick` fires alongside `href` (as on FeatureItem, MediaCard, Tile and
+    // TimelineItem) — it used to be dropped whenever `href` was set. The button
+    // role, tab stop and key handler stay with the link-less band; with `href`
+    // the root is an anchor.
+    const hasOnClick = typeof props.onClick === "function";
+    const clickable = !href && hasOnClick;
     const dismissible = asBoolean(props.dismissible) || props.onDismiss != null;
     const dismissed = helpers.useInstanceState<boolean>("dismissed", false);
     const tag = href ? "a" : "aside";
@@ -761,10 +767,10 @@ export const Banner: ComponentSpec = {
       "aria-live": isAlert ? "assertive" : "polite",
       tabindex: clickable ? "0" : null,
     });
-    if (clickable) {
+    if (hasOnClick) {
       const fire = (): void => helpers.invoke(props.onClick);
       root.onclick = fire;
-      root.onkeydown = activateOnKey(fire);
+      if (clickable) root.onkeydown = activateOnKey(fire);
     }
     const iconName = asString(props.icon) || pickIconForTone(tone) || "";
     const iconNode = renderIcon(iconName, { className: "rui-banner-icon" });
@@ -1012,14 +1018,14 @@ export const SectionHeader: ComponentSpec = {
   name: "SectionHeader",
   description:
     "Compact section header for the top of a Card or panel. Renders a small " +
-    "eyebrow, a title, an optional subtitle, an optional status Tag/Badge, " +
+    "eyebrow, a title, an optional subtitle, an optional status Badge/Pill/StatusDot, " +
     "and a right-aligned actions row. Use this inside a Card to introduce " +
     "a section instead of a bare `CardHeader`.",
   props: [
     { name: "title", type: "string" },
     { name: "subtitle", type: "string", optional: true, aliases: ["description"] },
     { name: "eyebrow", type: "string", optional: true, description: "Short uppercase label above the title" },
-    { name: "status", type: "Badge | Tag", optional: true, aliases: ["badge"] },
+    { name: "status", type: "Badge | Pill | StatusDot", optional: true, aliases: ["badge"], description: "Status node rendered next to the title — a Badge(...), Pill(...) or StatusDot(...)" },
     { name: "actions", type: "Node[]", optional: true, description: "Buttons / Links shown on the right" },
   ],
   render: (_node, props, helpers) => {
@@ -1460,7 +1466,8 @@ export const SplitView: ComponentSpec = {
     { name: "showDetail", type: "boolean", optional: true, description: "Which pane wins on narrow viewports: true = detail, false = list. Omit to keep both stacked." },
   ],
   render: (_node, props, helpers) => {
-    const width = sanitiseCssLength(asString(props.primaryWidth), "320px");
+    // The raw prop, not `asString(...)`: the sanitiser owns number handling.
+    const width = sanitiseCssLength(props.primaryWidth, "320px");
     // Only emit the attribute when the author opted in — an app that never
     // passes `showDetail` keeps the historical stacked behaviour.
     const mobilePane = props.showDetail === undefined || props.showDetail === null
@@ -1720,7 +1727,7 @@ export const PricingTable: ComponentSpec = {
     "centerpiece of any pricing or upgrade page.",
   props: [
     { name: "tiers", type: "PricingCard[]" },
-    { name: "columns", type: "number", optional: true, description: "Preferred column count (default auto)" },
+    { name: "columns", type: "number", optional: true, description: "Preferred column count, 1–4 — larger values clamp to 4 (default auto)" },
   ],
   render: (_node, props, helpers) => {
     // Same explicit read as FeatureGrid: `Number(props.columns ?? "auto")` is
@@ -1918,13 +1925,34 @@ export function renderInlineSparkline(values: number[], tone = "primary"): SVGSV
   return svg;
 }
 
+/** One `{label, value, hint?, tone?, spark?}` KPI of a `Stats` row or grid. */
+function renderStatsItem(raw: unknown): HTMLElement {
+  const item = (raw ?? {}) as {
+    label?: unknown; value?: unknown; hint?: unknown; tone?: unknown; spark?: unknown;
+  };
+  const tone = asString(item.tone, "default");
+  const block = el("div", { class: "rui-stats-item", "data-tone": tone });
+  block.append(el("div", { class: "rui-stats-label" }, [asString(item.label)]));
+  const valueRow = el("div", { class: "rui-stats-value-row" });
+  valueRow.append(el("div", { class: "rui-stats-value" }, [asString(item.value)]));
+  const sparkValues = asArray<unknown>(item.spark).map((v) => Number(v)).filter((n) => Number.isFinite(n));
+  if (sparkValues.length > 1) {
+    valueRow.append(renderInlineSparkline(sparkValues, tone));
+  }
+  block.append(valueRow);
+  const hint = asString(item.hint);
+  if (hint) block.append(el("div", { class: "rui-stats-hint" }, [hint]));
+  return block;
+}
+
 export const Stats: ComponentSpec = {
   name: "Stats",
   description:
     "KPI strip or grid. Pass `items` as `{label, value, hint?, tone?, spark?}` " +
-    "objects for strip layout, or as `StatCard(...)` nodes when `layout=\"grid\"`.",
+    "objects (strip layout by default) and/or `StatCard(...)` nodes; any " +
+    "StatCard item, or `layout=\"grid\"`, lays them out as a responsive grid.",
   props: [
-    { name: "items", type: "object[] | StatCard[]", description: "Stat objects or StatCard nodes when layout=grid" },
+    { name: "items", type: "(object | StatCard)[]", description: "Stat objects and/or StatCard nodes (a StatCard switches to grid layout)" },
     { name: "layout", type: "string", optional: true, enum: ["strip", "grid"], description: "strip = horizontal row; grid = responsive Grid" },
     { name: "columns", type: "number", optional: true, description: "Preferred column count for grid layout (1–6)" },
     { name: "align", type: "string", optional: true, enum: ["start", "center", "end"], description: "Strip alignment (layout=strip only)" },
@@ -1938,6 +1966,14 @@ export const Stats: ComponentSpec = {
     const layout = hasComponentItems ? "grid" : asString(props.layout, "strip");
     if (layout === "grid") {
       const columns = props.columns ? Math.max(1, Math.min(6, Math.floor(asNumber(props.columns)))) : 0;
+      // Grid hands every child to `renderNode`, which renders a plain object as
+      // an empty text node — so a `{label, value}` KPI under `layout: "grid"`
+      // (or beside a StatCard, which forces grid) silently vanished. Objects
+      // render as the same block the strip uses; nodes go through as before.
+      const gridHelpers: RenderHelpers = {
+        ...helpers,
+        renderNode: (child) => (asRecord(child) ? renderStatsItem(child) : helpers.renderNode(child)),
+      };
       const gridNode = Grid.render(
         { __kind: "Component", name: "Grid", args: [], argMeta: [] },
         {
@@ -1945,31 +1981,14 @@ export const Stats: ComponentSpec = {
           columns: columns > 0 ? columns : "auto",
           gap: "m",
         },
-        helpers,
+        gridHelpers,
       ) as HTMLElement;
       gridNode.classList.add("rui-metric-grid");
       return gridNode;
     }
     const align = asString(props.align, "start");
     const root = el("div", { class: "rui-stats", "data-align": align });
-    for (const raw of items) {
-      const item = (raw ?? {}) as {
-        label?: unknown; value?: unknown; hint?: unknown; tone?: unknown; spark?: unknown;
-      };
-      const tone = asString(item.tone, "default");
-      const block = el("div", { class: "rui-stats-item", "data-tone": tone });
-      block.append(el("div", { class: "rui-stats-label" }, [asString(item.label)]));
-      const valueRow = el("div", { class: "rui-stats-value-row" });
-      valueRow.append(el("div", { class: "rui-stats-value" }, [asString(item.value)]));
-      const sparkValues = asArray<unknown>(item.spark).map((v) => Number(v)).filter((n) => Number.isFinite(n));
-      if (sparkValues.length > 1) {
-        valueRow.append(renderInlineSparkline(sparkValues, tone));
-      }
-      block.append(valueRow);
-      const hint = asString(item.hint);
-      if (hint) block.append(el("div", { class: "rui-stats-hint" }, [hint]));
-      root.append(block);
-    }
+    for (const raw of items) root.append(renderStatsItem(raw));
     return root;
   },
 };
