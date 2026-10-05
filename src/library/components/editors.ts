@@ -10,7 +10,7 @@
 import type { ComponentSpec, RenderHelpers } from "../types.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
-  valueAttr, sanitiseHref, sanitiseCssColor,
+  valueAttr, sanitiseHref, sanitiseCssColor, sanitiseCssLength,
 } from "../utils.js";
 import { attachOnChange } from "./wrappers.js";
 import { withFieldShell, fieldShellExtraProps } from "./forms-shared.js";
@@ -226,8 +226,11 @@ export const RichTextEditor: ComponentSpec = {
     const liveSlot = helpers.useInstanceState<HTMLElement | null>("live", null);
     const assertedSlot = helpers.useInstanceState<string | null>("asserted", null);
     const emptyNow = asserts ? isEmpty(initial) : (emptySlot.get() ?? isEmpty(initial));
-    const heightStyle = `min-height:${asString(props.minHeight, "160px")};`
-      + (asString(props.maxHeight) ? `max-height:${asString(props.maxHeight)};` : "");
+    // Both lengths land in an inline `style`, and bare `asString` let a value
+    // such as "100px;position:fixed" close the declaration and append its own.
+    const maxHeight = sanitiseCssLength(props.maxHeight, "");
+    const heightStyle = `min-height:${sanitiseCssLength(props.minHeight, "160px")};`
+      + (maxHeight ? `max-height:${maxHeight};` : "");
     const editor = el("div", {
       class: "rui-rich-text-content",
       id,
@@ -464,8 +467,9 @@ export const CodeEditor: ComponentSpec = {
     const readonly = asBoolean(props.readonly);
     const disabled = asBoolean(props.disabled);
     const inert = readonly || disabled;
-    const minHeight = asString(props.minHeight, "200px");
-    const maxHeight = asString(props.maxHeight);
+    // Interpolated into the body's inline `style`: see RichTextEditor.
+    const minHeight = sanitiseCssLength(props.minHeight, "200px");
+    const maxHeight = sanitiseCssLength(props.maxHeight, "");
 
     // Same contract as `valueAttr`: a present `value` prop is an assertion, an
     // absent one means the text belongs to the user. `syncTextArea` in the
