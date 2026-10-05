@@ -281,6 +281,26 @@ $app(FileUpload("f", { onSelect: (files) => { $isArray = Array.isArray(files); $
     expect(screen.state.get("isArray")).toBe(true);
     expect(screen.state.get("count")).toBe(1);
   });
+
+  it("after a remove, hands over the remaining files as an array", async () => {
+    const screen = render(`$isArray = "unset"
+$names = ""
+$app(FileUpload("f", { multiple: true, onSelect: (files) => { $isArray = Array.isArray(files); $names = Array.from(files).map((f) => f.name).join(",") } }))`);
+    await screen.flush();
+    const input = screen.shadowRoot.querySelector<HTMLInputElement>(".rui-file-upload-input")!;
+    const a = new File(["a"], "a.txt");
+    const b = new File(["b"], "b.txt");
+    // A getter with no setter stands in for an engine where `writeFiles` cannot
+    // replace the input's files: they stay the full, stale pick.
+    const fileList = { 0: a, 1: b, length: 2, item: (i: number) => [a, b][i] ?? null, *[Symbol.iterator]() { yield a; yield b; } };
+    Object.defineProperty(input, "files", { configurable: true, get: () => fileList });
+    input.dispatchEvent(new Event("change"));
+    await screen.flush();
+    screen.shadowRoot.querySelector<HTMLButtonElement>(".rui-file-upload-remove")!.click();
+    await screen.flush();
+    expect(screen.state.get("isArray")).toBe(true);
+    expect(screen.state.get("names")).toBe("b.txt");
+  });
 });
 
 describe("prop descriptions say what the runtime does", () => {
