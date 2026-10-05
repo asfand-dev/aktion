@@ -1842,7 +1842,9 @@ export function lowerJavaScriptSemantics(program: Program): Program {
 function liftNestedFunctions(program: Program): void {
   const lists: Statement[][] = [];
   walk(program, ({ node }) => {
-    if (node.kind === "Block") lists.push(node.body as Statement[]);
+    // `Array.isArray`: only a real block has a statement list — anything else
+    // that reaches here with `kind: "Block"` must not crash the module.
+    if (node.kind === "Block" && Array.isArray(node.body)) lists.push(node.body as Statement[]);
     else if (node.kind === "SwitchStatement") for (const c of node.cases) lists.push(c.body as Statement[]);
   });
   for (const list of lists) {
