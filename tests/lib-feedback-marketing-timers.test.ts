@@ -57,6 +57,16 @@ $app(CountdownTimer($to, { onEnd: ended, units: ["hours", "minutes", "seconds"] 
     expect(screen.state.get("ends")).toBe(0);
   });
 
+  it("waits on a null target (the typed loading state) the same way", async () => {
+    const screen = await mount(COUNTDOWN, { to: null });
+    expect(done(screen)).toBeNull();
+    expect(cells(screen)).toBe("--:--:--");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(screen.state.get("ends")).toBe(0);
+    await write(screen, "to", Date.now() + 2000);
+    expect(cells(screen)).toBe("00:00:02");
+  });
+
   it("starts counting once the target arrives, and fires onEnd when it runs out", async () => {
     const screen = await mount(COUNTDOWN, { to: "" });
     await write(screen, "to", T0 + 3000);

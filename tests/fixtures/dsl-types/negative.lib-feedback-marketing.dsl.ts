@@ -1,7 +1,7 @@
 // Negative corpus for the feedback / menu / navigation / marketing / media
 // components. Format and layer tags: see the header of negative.dsl.ts.
 import {
-  Breadcrumb, Button, CodeWindow, Display, DropdownMenu, HoverCard, ProductCard, Section,
+  Breadcrumb, Button, CodeWindow, CountdownTimer, Display, DropdownMenu, HoverCard, ProductCard, Section,
   SegmentedControl, Text,
 } from "aktion-runtime/dsl";
 
@@ -20,6 +20,8 @@ HoverCard(Text("@ada"), [Text("Profile")], { width: true });
 ProductCard("Shoe", { price: true });
 // @ts-expect-error TS2769 [types] a boolean code renders as the text "true"
 CodeWindow(true);
+// @ts-expect-error TS2769 [types] a target may be pending (null / ""), but a boolean is never a date
+CountdownTimer(true);
 // @ts-expect-error TS2769 numeric options emit numbers, so a string handler is wrong (TS annotation: not standalone Aktion)
 SegmentedControl([{ value: 1, label: "One" }], { onChange: (value: string) => value.length });
 

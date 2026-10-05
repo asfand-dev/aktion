@@ -11,6 +11,7 @@ import {
 export let $count = 1;
 export let $view = "grid";
 export let $tab: "overview" | "settings" = "overview";
+export let $deadline: string | null = null;
 
 // ---- CSS lengths take a plain number (px) -------------------------------------
 
@@ -48,6 +49,8 @@ export function Marketing(): Children {
     ThemeToggle("shadcn-light", "shadcn-dark"),
     CountdownTimer(new Date(2030, 0, 1), { onEnd: () => {} }),
     CountdownTimer(""),                                                         // still loading: shows `--`
+    CountdownTimer($deadline, { endLabel: "Closed" }),                          // a not-yet-loaded target
+    CountdownTimer(null),
     RelativeTime(new Date()),
   ];
 }

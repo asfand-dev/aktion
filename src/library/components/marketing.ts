@@ -2124,9 +2124,9 @@ export const CountdownTimer: ComponentSpec = {
     "Live countdown to a target date/time (ISO string or timestamp). Ticks " +
     "every second, then shows `endLabel` and fires `onEnd` (enable checkout, " +
     "reveal a link, refresh a price). Changing `to` retargets the running " +
-    "clock, and `onEnd` fires once per target; an empty `to` (data still " +
-    "loading) shows `--` cells and fires nothing. `units` trims the boxes — a " +
-    "10-minute flash sale should not render two zeroed day/hour cells.",
+    "clock, and `onEnd` fires once per target; an empty or null `to` (data " +
+    "still loading) shows `--` cells and fires nothing. `units` trims the " +
+    "boxes — a 10-minute flash sale should not render two zeroed day/hour cells.",
   props: [
     { name: "to", type: "string | number", positional: true, required: true, aliases: ["target", "date"] },
     { name: "endLabel", type: "string", optional: true, description: "Shown when the countdown finishes (default 'Done')" },

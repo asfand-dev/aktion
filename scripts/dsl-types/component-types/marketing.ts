@@ -10,7 +10,8 @@ export default {
   },
   CountdownTimer: {
     props: {
-      to: "string | number | Date",
+      // null / "" while the target is still loading: the cells show `--`.
+      to: "string | number | Date | null",
       onEnd: "() => void",
     },
   },
