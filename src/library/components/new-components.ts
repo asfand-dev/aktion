@@ -292,11 +292,16 @@ function collapseContext(rows: DiffRow[], context: number): DiffRow[] {
 }
 
 function jsonPreview(value: unknown): string {
+  let json: string | undefined;
   try {
-    return JSON.stringify(value, null, 2);
+    // Typed `string`, but `undefined` for undefined, functions and symbols —
+    // which rendered as a leaf with no value at all.
+    json = JSON.stringify(value, null, 2) as string | undefined;
   } catch {
     return String(value);
   }
+  if (json !== undefined) return json;
+  return typeof value === "function" ? "[Function]" : String(value);
 }
 
 /* ----------------------------------------------------------------------- *
@@ -389,7 +394,7 @@ export const CommandPalette: ComponentSpec = {
     { name: "open", type: "boolean", optional: true, description: "Whether the palette is visible (default true)" },
     { name: "placeholder", type: "string", optional: true },
     { name: "shortcut", type: "string", optional: true, description: "Hint label, e.g. Cmd+K" },
-    { name: "onSelect", type: "callable", optional: true, description: "Receives the selected item's `value`" },
+    { name: "onSelect", type: "callable", optional: true, description: "Receives the selected item's `value` as a string (`5` arrives as `\"5\"`; the label when `value` is absent)" },
     { name: "onClose", type: "callable", optional: true, aliases: ["onOpenChange"], description: "Called with `false` whenever the palette is dismissed" },
     { name: "loading", type: "boolean", optional: true, description: "Show a pending state instead of the empty row" },
     { name: "emptyLabel", type: "string", optional: true, description: "Text shown when nothing matches (default \"No commands found\")" },
@@ -679,7 +684,7 @@ export const FilterChips: ComponentSpec = {
     "\"+N\" chip, and `disabled` to freeze the row while a filtered query is in flight.",
   props: [
     { name: "chips", type: "any[]", description: "Array of strings or {label, value} objects" },
-    { name: "onRemove", type: "callable", optional: true, description: "Receives the removed chip value as an argument" },
+    { name: "onRemove", type: "callable", optional: true, description: "Receives the removed chip's `value` as a string (the label when `value` is absent)" },
     { name: "onClear", type: "callable", optional: true },
     { name: "clearLabel", type: "string", optional: true, description: "Text of the clear-all control (default \"Clear all\")" },
     { name: "max", type: "number", optional: true, description: "Chips shown before the rest collapse into a \"+N\" chip" },
@@ -784,7 +789,7 @@ export const FieldRepeater: ComponentSpec = {
     { name: "addLabel", type: "string", optional: true },
     { name: "onChange", type: "callable", optional: true, description: "Receives `(index, fieldName, value, rows)` on every edit" },
     { name: "removeLabel", type: "string", optional: true, description: "Text of the per-row remove control (default \"Remove\")" },
-    { name: "min", type: "number", optional: true, description: "Rows that can never be removed (default 0)" },
+    { name: "min", type: "number", optional: true, description: "Minimum row count — every remove control is hidden once the list is down to this many rows (default 0)" },
     { name: "max", type: "number", optional: true, description: "Maximum rows — \"Add row\" is disabled at the cap" },
   ],
   render: (node, props, helpers) => {
@@ -1297,7 +1302,9 @@ function readOperators(raw: unknown): OperatorDef[] {
       return {
         value,
         label: asString(obj.label, OPERATOR_LABELS[value] ?? value),
-        type: asString(obj.type) || undefined,
+        // Folded the same way `readFields` folds a field's `type`, or a
+        // mixed-case custom type (`"Currency"` on both) never matched.
+        type: asString(obj.type).trim().toLowerCase() || undefined,
       };
     }
     const value = asString(entry);
@@ -1319,8 +1326,8 @@ export const QueryBuilder: ComponentSpec = {
   props: [
     { name: "fields", type: "any[]" },
     { name: "value", type: "any[]", optional: true },
-    { name: "onChange", type: "callable", optional: true, description: "Receives the next rule array" },
-    { name: "operators", type: "any[]", optional: true, description: "Operator tokens or `{value, label, type?}` objects — `type` scopes them to matching fields" },
+    { name: "onChange", type: "callable", optional: true, description: "Receives the next rule array on every edit (also when `value` is bound, after the write-back)" },
+    { name: "operators", type: "any[]", optional: true, description: "Operator tokens or `{value, label, type?}` objects — `type` (case-insensitive) scopes them to matching fields" },
     { name: "disabled", type: "boolean", optional: true, description: "Freeze the builder while a query is in flight" },
     { name: "maxRules", type: "number", optional: true, description: "Maximum number of rules (default unlimited)" },
   ],
@@ -1358,8 +1365,11 @@ export const QueryBuilder: ComponentSpec = {
     const commit = (origin: Element, next: Record<string, unknown>[]): void => {
       rulesSlot.set(next);
       seedSlot.set(jsonPreview(next));
+      // Write back AND report, like FieldRepeater: binding `value` (the mode
+      // the description recommends) used to silence `onChange` entirely, so a
+      // bound builder could not also refetch on edit.
       if (stateRef) helpers.setState(stateRef, next);
-      else helpers.invoke(props.onChange, next);
+      helpers.invoke(props.onChange, next);
       const liveRoot = origin.closest(".rui-query-builder") as HTMLElement | null;
       if (liveRoot) paint(liveRoot, next);
     };
@@ -1863,16 +1873,18 @@ function warnGanttDates(id: string, start: string, end: string): void {
 export const Gantt: ComponentSpec = {
   name: "Gantt",
   description:
-    "Simple Gantt chart. Pass `tasks` as `{id, label, start, end, progress?, tone?}` with ISO date strings; " +
-    "`progress` accepts either a 0-1 fraction or a 0-100 percentage, and `tone` colours the bar " +
-    "(`success`, `warning`, `danger`, …). Set `axis` for a date scale and `today` for a now marker.",
+    "Simple Gantt chart. Pass `tasks` as `{id, label, start, end, progress?, tone?}` with ISO date strings " +
+    "(`name` is read when `label` is absent, `status` when `tone` is); `progress` accepts either a 0-1 " +
+    "fraction or a 0-100 percentage, and `tone` colours the bar — one of `success`, `warning`, `danger`, " +
+    "`info` or `muted` (any other value draws the default bar). Set `axis` for a date scale and `today` " +
+    "for a now marker.",
   props: [
     { name: "tasks", type: "any[]" },
     { name: "startDate", type: "string", optional: true },
     { name: "endDate", type: "string", optional: true },
     { name: "axis", type: "boolean", optional: true, description: "Render a date axis above the bars" },
     { name: "ticks", type: "number", optional: true, description: "Axis tick count (default 5, implies `axis`)" },
-    { name: "today", type: "boolean | string", optional: true, description: "Draw a marker line at now, or at the given ISO date" },
+    { name: "today", type: "boolean | string | number", optional: true, description: "Draw a marker line: `true` at now, an ISO date string or an epoch-millisecond timestamp at that moment" },
     { name: "onTaskClick", type: "callable", optional: true, description: "Receives the clicked task's id" },
   ],
   render: (_node, props, helpers) => {
@@ -1912,9 +1924,13 @@ export const Gantt: ComponentSpec = {
         return new Date(time).toISOString().slice(0, 10);
       }
     };
-    const todayTime = props.today === undefined || props.today === false
-      ? null
-      : (typeof props.today === "string" ? parseDate(props.today) : Date.now());
+    // Only `true` means "now": `null` (a cleared `$variable`) used to draw the
+    // marker too, and a timestamp was ignored in favour of now.
+    const todayTime = props.today === true
+      ? Date.now()
+      : typeof props.today === "string"
+        ? parseDate(props.today)
+        : typeof props.today === "number" && Number.isFinite(props.today) ? props.today : null;
 
     if (wantsAxis) {
       const axis = el("div", { class: "rui-gantt-axis", "aria-hidden": "true" });
@@ -2019,7 +2035,7 @@ export const Truncate: ComponentSpec = {
     "Clamp long text (or a `child` node) with an expand control. The toggle hides itself when the content " +
     "already fits, and `expanded` + `onToggle` make the state controllable for \"expand all\" flows.",
   props: [
-    { name: "text", type: "string" },
+    { name: "text", type: "string", optional: true, description: "Plain text to clamp — omit it when passing `child`" },
     { name: "maxLines", type: "number", optional: true, description: "Lines before clamping (default 3)" },
     { name: "expandLabel", type: "string", optional: true },
     { name: "collapseLabel", type: "string", optional: true, description: "Text of the collapse control (default \"Show less\")" },
@@ -2283,9 +2299,43 @@ export const InlineEdit: ComponentSpec = {
     }
 
     root.append(display, input);
-    return withFieldShell(root, props);
+    const shell = withFieldShell(root, props);
+    moveShellControlAttributes(root, input, display);
+    return shell;
   },
 };
+
+/**
+ * `withFieldShell` writes its CONTROL contract (`name`, `aria-invalid`,
+ * `aria-describedby`, `required`, `disabled`) onto the element it is handed.
+ * InlineEdit hands it the `.rui-inline-edit` wrapper (so the shell's label
+ * wraps the display button and the input together), so those attributes landed
+ * on a div: the submitted name was always the generated id, and the
+ * description and invalid state reached no assistive tech. Move them onto the
+ * input; the description also goes on the display button, which is the
+ * control that holds focus while the field is not being edited.
+ */
+function moveShellControlAttributes(
+  wrapper: HTMLElement,
+  input: HTMLElement,
+  display: HTMLElement,
+): void {
+  const name = wrapper.getAttribute("name");
+  if (name) input.setAttribute("name", name);
+  if (wrapper.getAttribute("aria-invalid") === "true") input.setAttribute("aria-invalid", "true");
+  const describedBy = (wrapper.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
+  if (describedBy.length > 0) {
+    for (const target of [input, display]) {
+      const own = (target.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
+      target.setAttribute("aria-describedby", [...new Set([...own, ...describedBy])].join(" "));
+    }
+  }
+  // `required` and `disabled` are already on the input (and `disabled` on the
+  // display button); on the wrapper they only duplicated them on a div.
+  for (const attr of ["name", "aria-invalid", "aria-describedby", "required", "disabled"]) {
+    wrapper.removeAttribute(attr);
+  }
+}
 
 /* NotificationBell floating-panel wiring ---------------------------------- *
  *
@@ -2315,7 +2365,7 @@ export const NotificationBell: ComponentSpec = {
     { name: "count", type: "number", optional: true },
     { name: "items", type: "any[]", optional: true, description: "{title, message?, time?, href?, unread?} objects" },
     { name: "onOpen", type: "callable", optional: true },
-    { name: "onItemClick", type: "callable", optional: true, description: "Receives the clicked notification object and its index" },
+    { name: "onItemClick", type: "callable", optional: true, description: "Receives the clicked notification object and its index in `items`" },
     { name: "onMarkAllRead", type: "callable", optional: true, description: "Renders a \"mark all read\" footer control" },
     { name: "align", type: "string", optional: true, enum: ["left", "right"], description: "Which edge the panel aligns to (default right)" },
     { name: "loading", type: "boolean", optional: true, description: "Show a pending state instead of the empty message" },
@@ -2327,7 +2377,14 @@ export const NotificationBell: ComponentSpec = {
   render: (_node, props, helpers) => {
     const count = Math.max(0, Math.floor(asNumber(props.count, 0)));
     const maxCount = Math.max(1, Math.floor(asNumber(props.maxCount, 99)));
-    const items = readPlainObjects(props.items);
+    // Each object entry keeps its position in the `items` prop: filtering
+    // first made `onItemClick`'s index count only the objects, so it pointed at
+    // the wrong entry whenever the array held anything else.
+    const rawItems = asArray<unknown>(props.items);
+    const items = rawItems.flatMap((item, position) => (
+      item && typeof item === "object" && !Array.isArray(item)
+        ? [{ item: item as Record<string, unknown>, position }]
+        : []));
     const loading = asBoolean(props.loading);
     const align = asString(props.align, "right");
     const labelText = asString(props.label, "Notifications");
@@ -2384,14 +2441,14 @@ export const NotificationBell: ComponentSpec = {
         asString(props.emptyLabel, "No notifications"),
       ]));
     } else {
-      items.forEach((item, index) => {
+      items.forEach(({ item, position }) => {
         const href = asString(item.href).trim();
         const unread = asBoolean(item.unread);
         const shared = {
           class: "rui-notification-bell-item",
           role: "menuitem",
           tabindex: "-1",
-          "data-index": String(index),
+          "data-index": String(position),
           "data-unread": unread ? "true" : null,
         };
         // Rows are real controls now: a notification list you cannot open is
@@ -2409,8 +2466,8 @@ export const NotificationBell: ComponentSpec = {
           row.onclick = (event) => {
             const origin = (event.currentTarget ?? event.target) as HTMLElement;
             const at = Number(origin.getAttribute("data-index"));
-            const idx = Number.isFinite(at) ? at : index;
-            helpers.invoke(props.onItemClick, items[idx], idx);
+            const idx = Number.isFinite(at) ? at : position;
+            helpers.invoke(props.onItemClick, rawItems[idx], idx);
           };
         }
         panel.append(row);

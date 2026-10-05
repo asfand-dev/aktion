@@ -11,7 +11,7 @@
  */
 
 import type { ComponentSpec, PropSpec } from "../types.js";
-import { el, asArray, asString, asNumber, asBoolean } from "../utils.js";
+import { el, asArray, asString, asNumber, asBoolean, sanitiseCssColor } from "../utils.js";
 
 export const PALETTE: readonly string[] = [
   "var(--rui-chart-1, #6366f1)",
@@ -84,21 +84,21 @@ export const Series: ComponentSpec = {
     { name: "name", type: "string" },
     {
       name: "values",
-      type: "number[]",
+      type: "number[] | {x: number, y: number, label?: string}[] | [number, number, string?][]",
       optional: true,
-      description: "One value per x-axis label (ScatterChart also accepts its {x, y} points here)",
+      description: "One number per x-axis label — or, for ScatterChart, its points as `{x, y, label?}` objects or `[x, y, label?]` tuples",
     },
     {
       name: "color",
       type: "string",
       optional: true,
-      description: "Override the palette colour for this series (any CSS colour or var())",
+      description: "Override the palette colour for this series (any CSS colour or var(); a value that is not a plain colour falls back to the palette slot)",
     },
     {
       name: "points",
-      type: "{x: number, y: number, label?: string}[]",
+      type: "{x: number, y: number, label?: string}[] | [number, number, string?][]",
       optional: true,
-      description: "XY points for ScatterChart — the explicit alternative to passing them as `values`",
+      description: "XY points for ScatterChart (`{x, y, label?}` objects or `[x, y, label?]` tuples) — the explicit alternative to passing them as `values`",
     },
   ],
   render: (_node, props) => {
@@ -125,7 +125,7 @@ export const readSeries = (raw: unknown[]): SeriesData[] => {
     const node = s as { args?: unknown[] };
     const name = asString(node.args?.[0], `Series ${i + 1}`);
     const values = asArray<unknown>(node.args?.[1]).map((v) => asNumber(v));
-    const color = asString(node.args?.[2]).trim();
+    const color = sanitiseCssColor(node.args?.[2]);
     return color ? { name, values, color } : { name, values };
   });
 };
@@ -136,9 +136,17 @@ export interface SeriesStyle {
   color?: string;
 }
 
-/** A series' own colour when it declares one, its palette slot otherwise. */
+/**
+ * A series' own colour when it declares one, its palette slot otherwise.
+ *
+ * Sanitised HERE, at the one place every chart reads a series colour from, and
+ * not only in `readSeries`: the value is interpolated into the legend swatch's
+ * inline `style` (where a `;` opened extra declarations) and the SVG `fill`,
+ * and ScatterChart's own reader (`readScatterSeries`) passes `color` through
+ * untouched. A rejected colour falls back to the palette slot.
+ */
 export const seriesColor = (series: SeriesStyle, index: number): string =>
-  series.color || colorAt(index);
+  sanitiseCssColor(series.color) || colorAt(index);
 
 export const BarChart: ComponentSpec = {
   name: "BarChart",
@@ -393,7 +401,7 @@ export const LineChart: ComponentSpec = {
   props: [
     { name: "labels", type: "string[]", optional: true },
     { name: "series", type: "Series[]", optional: true },
-    { name: "data", type: "{x: string, [key: string]: number}[]", optional: true, description: "Row-shaped data — labels and series are auto-derived" },
+    { name: "data", type: "{x: string | number, label?: string, [key: string]: number | string | null}[]", optional: true, description: "Row-shaped data — labels and series are auto-derived: `x` (or `label` when `x` is absent) is the row's x-axis label, every other key whose value is a number or numeric string is one line, and text columns are skipped; a null or missing value leaves a gap" },
     { name: "title", type: "string", optional: true },
     { name: "filled", type: "boolean", optional: true, description: "Fill the area beneath each line (area-chart style)" },
     { name: "stacked", type: "boolean", optional: true, description: "Stack series when filled=true" },
@@ -405,7 +413,7 @@ export const LineChart: ComponentSpec = {
     { name: "height", type: "number", optional: true, description: "Plot height in px (default 240)" },
     { name: "loading", type: "boolean", optional: true, description: "Render a loading placeholder instead of the plot" },
     { name: "emptyText", type: "string", optional: true, description: "Message shown when there is no data (default \"No data\")" },
-    { name: "onPointClick", type: "callable", optional: true, description: "(label, value, seriesName) => void, fired when a data point is activated" },
+    { name: "onPointClick", type: "callable", optional: true, description: "(label, value, seriesName) => void, fired when a data point is activated (a gap has no point, so `value` is always a number)" },
     ...CHART_A11Y_PROPS,
   ],
   render: (_node, props, helpers) => {
@@ -530,6 +538,10 @@ export const LineChart: ComponentSpec = {
         if (!point) continue;
         const [x, y, i] = point;
         const raw = s.values[i];
+        // A stacked area plots every index (a gap stacks as 0), but a gap has no
+        // value to click or describe: its dot reported `null` (a hole in `data`)
+        // or `undefined` (past the end of a shorter Series) to `onPointClick`.
+        if (raw === null || raw === undefined) continue;
         const dot = svgEl("circle", {
           cx: x.toFixed(1),
           cy: y.toFixed(1),

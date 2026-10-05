@@ -241,7 +241,7 @@ export const OnClick: ComponentSpec = {
     "list rows, media tiles, custom layouts).",
   props: [
     { name: "child", type: "Node", positional: true, required: true, aliases: ["children"], description: "Component (or array of components) to wrap" },
-    { name: "onClick", type: "callable", required: true, aliases: ["action", "onclick"], description: "Callable invoked on click / tap. Receives the native MouseEvent." },
+    { name: "onClick", type: "callable", required: true, aliases: ["action", "onclick"], description: "Callable invoked on click / tap, and on Enter / Space while `keyboard` is on. Receives the native MouseEvent — or the KeyboardEvent for a key activation." },
     { name: "disabled", type: "boolean", optional: true, description: "Skip firing the handler while truthy (also sets aria-disabled and leaves the tab order)" },
     { name: "stopPropagation", type: "boolean", optional: true, description: "Call event.stopPropagation() after invoking the handler (default false)" },
     { name: "role", type: "string", optional: true, description: "ARIA role for the wrapper (default \"button\"). Pass \"none\" when the wrapped element is a list row / table cell whose container owns the semantics." },
@@ -342,7 +342,8 @@ export const OnMouse: ComponentSpec = {
     "Attach any combination of mouse / pointer / drag listeners to a " +
     "component. Pass only the props you need — unused events install no " +
     "handler so the wrapper is essentially free. Each handler receives " +
-    "the native MouseEvent / PointerEvent / DragEvent / WheelEvent. Use for " +
+    "the native MouseEvent / PointerEvent / DragEvent / WheelEvent (a plain " +
+    "Event for `scroll`). Use for " +
     "hover tracking, custom drag-and-drop, context menus, scroll-aware UIs.",
   props: [
     { name: "child", type: "Node", positional: true, required: true, aliases: ["children"], description: "Component to wrap" },
@@ -504,12 +505,13 @@ export const OnFocus: ComponentSpec = {
   description:
     "Attach focus / blur listeners to a component. Use to track input " +
     "focus rings, custom focus indicators, or autosave-on-blur flows. " +
-    "Listens for the bubbling `focusin` / `focusout` events, so focus " +
-    "entering or leaving any descendant is observed.",
+    "The wrapped subtree is treated as one unit: `onFocus` fires when focus " +
+    "enters it from outside and `onBlur` when focus leaves it, while moving " +
+    "focus between two descendants fires neither.",
   props: [
     { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
-    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Fired when focus enters the element or any descendant" },
-    { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Fired when focus leaves the element and all descendants" },
+    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Fired with the `focusin` FocusEvent when focus enters the element or any descendant from outside it" },
+    { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Fired with the `focusout` FocusEvent when focus leaves the element and all its descendants" },
   ],
   render: (node, props, helpers) => {
     const wrapper = transparentWrapper("rui-on-focus", node.universal);
@@ -520,10 +522,24 @@ export const OnFocus: ComponentSpec = {
     // transferable `on*` property, so the listeners are installed once — on the
     // node morph keeps — and read the handlers from the live box. Bound
     // unconditionally: a handler first supplied on a later render still fires.
+    //
+    // A move between two descendants is a focusout + focusin pair whose
+    // `relatedTarget` (the other end of the move) is inside the wrapper; that
+    // used to fire onBlur and then onFocus, so autosave-on-blur saved on every
+    // Tab between two of the wrapped fields. A null `relatedTarget` counts as
+    // outside.
     const live = useLiveWrapper(helpers, wrapper, "rui-on-focus-node");
     installOnce(helpers, "rui-on-focus-listeners", live, (target) => {
-      target.addEventListener("focusin", (event) => { helpers.invoke(box.props.onFocus, event); });
-      target.addEventListener("focusout", (event) => { helpers.invoke(box.props.onBlur, event); });
+      const fromInside = (event: Event): boolean => {
+        const other = (event as FocusEvent).relatedTarget;
+        return other instanceof Node && target.contains(other);
+      };
+      target.addEventListener("focusin", (event) => {
+        if (!fromInside(event)) helpers.invoke(box.props.onFocus, event);
+      });
+      target.addEventListener("focusout", (event) => {
+        if (!fromInside(event)) helpers.invoke(box.props.onBlur, event);
+      });
     });
     return wrapper;
   },
@@ -532,9 +548,9 @@ export const OnFocus: ComponentSpec = {
 /* ------------------------------------------------------------------------ *
  * OnIntersect — IntersectionObserver wrapper.
  *
- * The wrapper element is the observed target. `onEnter` fires once when
- * the element starts intersecting the viewport (or the supplied root);
- * `onLeave` fires when it stops. `onChange` fires for every state
+ * The wrapper element is the observed target. `onEnter` fires each time
+ * the element starts intersecting the viewport (or the supplied root) —
+ * once in all with `once: true`; `onLeave` fires when it stops. `onChange` fires for every state
  * transition with `{visible: boolean, ratio: number}`. Use for lazy-load,
  * infinite-scroll sentinels, impression tracking, and reveal animations.
  *
@@ -594,8 +610,9 @@ export const OnIntersect: ComponentSpec = {
   description:
     "Observe whether a component is visible in the viewport (or a scroll " +
     "container passed as `root`) using IntersectionObserver. Fires `onEnter` " +
-    "the first time the wrapped element becomes visible, `onLeave` when it " +
-    "leaves, and `onChange({visible, ratio})` for every transition. Use for " +
+    "each time the wrapped element becomes visible (only the first time with " +
+    "`once: true`), `onLeave` when it leaves, and `onChange({visible, ratio})` " +
+    "for every transition. Use for " +
     "lazy-load sentinels, infinite-scroll triggers, impression analytics, " +
     "and reveal-on-scroll animations. Set `disabled: true` once there is " +
     "nothing left to load.",

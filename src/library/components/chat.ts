@@ -103,7 +103,7 @@ let followUpIdSeq = 0;
 
 export const FollowUpBlock: ComponentSpec = {
   name: "FollowUpBlock",
-  description: "Suggested follow-up prompts shown as buttons. Each item dispatches its label as an assistant message (equivalent to `emit \"assistant-message\" { message }`) unless `onSelect` is supplied, which receives `(message, label)` instead. `disabled` makes the row inert while the assistant is responding; `layout: \"stack\"` puts one suggestion per line.",
+  description: "Suggested follow-up prompts shown as buttons. Each item dispatches its `message` — which defaults to its label — as an assistant message (equivalent to `emit \"assistant-message\" { message }`) unless `onSelect` is supplied, which receives `(message, label)` instead. `disabled` makes the row inert while the assistant is responding; `layout: \"stack\"` puts one suggestion per line.",
   props: [
     { name: "items", type: "FollowUpItem[]", description: "Array of FollowUpItem(label, message?), {label, message, disabled?} objects, or plain strings" },
     { name: "title", type: "string", optional: true },
