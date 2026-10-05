@@ -100,7 +100,8 @@ export function compileJavaScriptModule(
   path: string,
   options: CompileJavaScriptOptions = {},
 ): FrontendResult {
-  const parseOptions: ParseOptions & { softNewlines?: ReadonlySet<number> } = {};
+  // Statement blocks parse as blocks, so E113 reports them once at the `{`.
+  const parseOptions: ParseOptions = { statementBlocks: true };
   if (options.softNewlines && options.softNewlines.size > 0) parseOptions.softNewlines = options.softNewlines;
   const parsed = parse(code, parseOptions);
   if (parsed.errors.length > 0) {

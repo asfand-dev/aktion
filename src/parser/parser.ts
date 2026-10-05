@@ -69,6 +69,15 @@ export interface ParseOptions {
    * one call instead of becoming two statements.
    */
   softNewlines?: ReadonlySet<number>;
+  /**
+   * Read a `{` at the start of a statement that is not an object literal as a
+   * statement block — an `ExpressionStatement` whose expression is a `Block` —
+   * instead of failing inside the object-literal grammar. For the
+   * `.aktion.js` / `.aktion.ts` frontends, which reject block statements
+   * (E113) at the `{` with one diagnostic; `.aktion` keeps reading every
+   * statement-position `{` as an object literal.
+   */
+  statementBlocks?: boolean;
 }
 
 export function parse(source: string, options: ParseOptions = {}): Program {
@@ -78,7 +87,7 @@ export function parse(source: string, options: ParseOptions = {}): Program {
     softNewlines: options.softNewlines,
   });
   const openLiteral = tokens[tokens.length - 2]?.open === true;
-  const ctx = new ParserContext(tokens, comments, options.softNewlines);
+  const ctx = new ParserContext(tokens, comments, options.softNewlines, options.statementBlocks === true);
   const statements: Statement[] = [];
   const errors: ParseError[] = [];
 
@@ -340,6 +349,20 @@ function parseStatementImpl(ctx: ParserContext, _topLevel: boolean): Statement |
       case "throw":    return parseThrowStatement(ctx);
       case "try":      return parseTryStatement(ctx);
     }
+  }
+  if (ctx.statementBlocks && head.type === "Punctuation" && head.value === "{") {
+    // `{ a }` is still an object literal; anything else (`{ const x = 1 }`,
+    // `case 2: { … }`) is a statement block, whose own errors are real ones.
+    const start = ctx.snapshot();
+    try {
+      return parseExpressionStatement(ctx);
+    } catch {
+      ctx.restore(start);
+      ctx.takePending();
+    }
+    const block = parseBlock(ctx);
+    skipTerminator(ctx);
+    return { kind: "ExpressionStatement", expression: block, loc: { line: head.line, column: head.column } };
   }
   const saved = ctx.snapshot();
   if (couldStartAssignment(ctx)) {
@@ -1251,6 +1274,8 @@ class ParserContext {
     private readonly comments: RawComment[] = [],
     /** `ParseOptions.softNewlines`, kept for the sub-parse of template interpolations. */
     private readonly softNewlines?: ReadonlySet<number>,
+    /** `ParseOptions.statementBlocks`. */
+    readonly statementBlocks = false,
   ) {}
 
   isEnd(): boolean {

@@ -848,7 +848,11 @@ class Analyzer {
         }
         break;
       case "ExpressionStatement":
-        if (stmt.expression.kind === "Object") this.report("E113", stmt.loc, MESSAGES.E113);
+        // `{ a }` parses as an object literal; a real block (`{ const x = 1 }`)
+        // as a `Block` — `ParseOptions.statementBlocks`.
+        if (stmt.expression.kind === "Object" || stmt.expression.kind === "Block") {
+          this.report("E113", stmt.loc, MESSAGES.E113);
+        }
         if (context.moduleTop && isAppCall(stmt.expression)) this.appRoots.add(stmt.expression);
         this.expr(stmt.expression, { hooks, value: false });
         break;
