@@ -20,6 +20,7 @@ export function Lengths(): Children {
     Popover(Button("Filters"), [Text("Body")], { width: 300 }),
     Map(52.52, { lng: 13.4, height: 240 }),
     OverlayItem(Text("New"), { offset: 8 }),
+    OverlayItem(Text("Flush"), { anchor: "top-left", offset: 0 }),             // 0 emits an inset, not the 8px default
     CodeWindow("const a = 1", { height: 200, maxHeight: 400 }),
     Terminal(["$ npm test"], { height: 120, maxHeight: "40vh" }),
     BrowserFrame(Text("page"), { height: 300 }),

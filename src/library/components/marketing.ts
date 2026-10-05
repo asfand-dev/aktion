@@ -205,7 +205,11 @@ export const OverlayItem: ComponentSpec = {
       "data-anchor": asString(props.anchor, "top-right"),
       // Validated as a CSS length: a raw value could otherwise close the custom
       // property with `;` and append arbitrary declarations to this element.
-      style: props.offset ? `--ak-ov-off:${sanitiseCssLength(props.offset, "8px")}` : null,
+      // A numeric 0 is a real offset, not "unset": only a missing or empty
+      // value leaves the stylesheet's 8px default in place.
+      style: props.offset != null && props.offset !== ""
+        ? `--ak-ov-off:${sanitiseCssLength(props.offset, "8px")}`
+        : null,
     });
     if (props.child != null) wrap.append(helpers.renderNode(props.child));
     return wrap;

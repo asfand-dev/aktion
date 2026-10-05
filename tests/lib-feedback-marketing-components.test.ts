@@ -45,6 +45,25 @@ describe("CodeWindow", () => {
   });
 });
 
+describe("OverlayItem", () => {
+  const style = async (offset: string): Promise<string | null> => {
+    const screen = await mount(`$app(Overlay(Text("b"), [OverlayItem(Text("x"), { offset: ${offset} })]))`);
+    const value = $(screen, ".rui-overlay-item")!.getAttribute("style");
+    cleanup();
+    return value;
+  };
+
+  it("insets the item by a numeric `offset` of 0 instead of the 8px default", async () => {
+    expect(await style(`0`)).toBe("--ak-ov-off:0");
+    expect(await style(`"0"`)).toBe("--ak-ov-off:0");
+  });
+
+  it("keeps the 8px default when no `offset` is given", async () => {
+    expect(await style(`null`)).toBeNull();
+    expect(await style(`""`)).toBeNull();
+  });
+});
+
 describe("ThemeToggle", () => {
   it("toggles back from a dark theme whose name does not contain 'dark'", async () => {
     const screen = await mount(`$app(ThemeToggle({ dark: "midnight" }))`);
