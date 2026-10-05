@@ -3,31 +3,36 @@ import type { ComponentTypeTable } from "./types.js";
 
 export default {
   ActivityLog: {
+    // The author's own entry type flows to `onItemClick`, which receives that
+    // very object — extra fields (an `id`) included.
+    generics: [{ name: "Item", default: "ActivityLogItem", constraint: "ActivityLogItem" }],
     types: {
-      ActivityLogItem: "export interface ActivityLogItem {\n  readonly title: string | number;\n  readonly actor?: string | number;\n  readonly description?: string | number;\n  /** Time label, e.g. `\"2h ago\"`. */\n  readonly time?: string;\n  /** Font Awesome icon name (or a literal glyph) for the marker; ignored when `avatarSrc` is set. */\n  readonly icon?: string;\n  /** Image URL rendered in the marker instead of the icon. */\n  readonly avatarSrc?: string;\n  readonly tone?: ActivityLogItemTone;\n  /** Renders the title as a link (takes precedence over `onItemClick`). */\n  readonly href?: string;\n  /** Secondary detail line (IP, browser, request id); monospace under `variant: \"audit\"`. */\n  readonly meta?: string | number;\n}",
-      ActivityLogItemInfo: "export interface ActivityLogItemInfo {\n  readonly title: string;\n  readonly description: string;\n  readonly actor: string;\n  readonly avatarSrc: string;\n  readonly href: string;\n  readonly time: string;\n  readonly icon: string;\n  /** `\"default\"` when the item had no tone. */\n  readonly tone: string;\n  readonly meta: string;\n}",
+      ActivityLogItem: "export interface ActivityLogItem {\n  readonly title: string | number;\n  readonly actor?: string | number;\n  readonly description?: string | number;\n  /** Time label, e.g. `\"2h ago\"`. */\n  readonly time?: string;\n  /** Font Awesome icon name (or a literal glyph) for the marker; ignored when `avatarSrc` is set. */\n  readonly icon?: string;\n  /** Image URL rendered in the marker instead of the icon. */\n  readonly avatarSrc?: string;\n  readonly tone?: ActivityLogItemTone;\n  /** Renders the title as a link (takes precedence over `onItemClick`, which a link never fires). */\n  readonly href?: string;\n  /** Secondary detail line (IP, browser, request id); monospace under `variant: \"audit\"`. */\n  readonly meta?: string | number;\n}",
       ActivityLogItemTone: "export type ActivityLogItemTone = \"default\" | \"primary\" | \"success\" | \"warning\" | \"danger\";",
     },
     props: {
-      items: "readonly ActivityLogItem[]",
-      onItemClick: "((index: number, item: ActivityLogItemInfo) => void)",
+      // Entries that are not objects are skipped (they still count for `index`).
+      items: "readonly (Item | null | undefined)[]",
+      onItemClick: "((index: number, item: Item) => void)",
     },
   },
   CalendarView: {
+    // As ActivityLog: `onEventClick` hands back the author's own event object.
+    generics: [{ name: "Item", default: "CalendarViewEvent", constraint: "CalendarViewEvent" }],
     types: {
       CalendarViewWeekday: "export type CalendarViewWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;",
-      CalendarViewEvent: "export interface CalendarViewEvent {\n  /** ISO day `YYYY-MM-DD`; only the first 10 characters are matched, so `YYYY-MM-DDTHH:mm` also works. Events without a date are skipped. */\n  readonly date: string;\n  readonly title: string | number;\n  /** Passed back to `onEventClick`; defaults to `${date}#${index}`. */\n  readonly id?: string | number;\n  /** Time label shown in the chip tooltip (`time — title`). */\n  readonly time?: string;\n  /** Chip colour (default `\"primary\"`). */\n  readonly tone?: CalendarViewEventTone;\n}",
-      CalendarViewEventInfo: "export interface CalendarViewEventInfo {\n  readonly id: string;\n  readonly date: string;\n  readonly title: string;\n  /** `\"\"` when the event had no time. */\n  readonly time: string;\n  /** The event's tone, `\"primary\"` when it had none. */\n  readonly tone: string;\n}",
+      CalendarViewEvent: "export interface CalendarViewEvent {\n  /** ISO day `YYYY-MM-DD`; only the first 10 characters are matched, so `YYYY-MM-DDTHH:mm` also works. Events without a date are skipped. */\n  readonly date: string;\n  readonly title: string | number;\n  /** Passed to `onEventClick` (as a string) as its first argument; defaults to `${date}#${index}`. */\n  readonly id?: string | number;\n  /** Time label shown in the chip tooltip (`time — title`). */\n  readonly time?: string;\n  /** Chip colour (default `\"primary\"`). */\n  readonly tone?: CalendarViewEventTone;\n}",
       CalendarViewEventTone: "export type CalendarViewEventTone = \"primary\" | \"success\" | \"warning\" | \"danger\" | \"info\";",
     },
     props: {
       value: "string",
       month: "string",
-      events: "readonly CalendarViewEvent[]",
+      // Entries that are not objects are skipped (they still count for the default id).
+      events: "readonly (Item | null | undefined)[]",
       firstDay: "CalendarViewWeekday",
       onSelect: "((date: string) => void)",
       onMonthChange: "((anchor: string) => void)",
-      onEventClick: "((eventId: string, event: CalendarViewEventInfo) => void)",
+      onEventClick: "((eventId: string, event: Item) => void)",
       min: "string",
       max: "string",
     },
@@ -45,7 +50,7 @@ export default {
   DataGrid: {
     types: {
       DataGridSortDirection: "export type DataGridSortDirection = \"asc\" | \"desc\";",
-      DataGridSort: "export interface DataGridSort {\n  /** Column key: the `Col` header, or `col-<index>` for a column whose header is empty. */\n  readonly key: string;\n  /** Sort direction; anything other than `\"desc\"` sorts ascending (default `\"asc\"`). */\n  readonly direction?: DataGridSortDirection;\n}",
+      DataGridSort: "export interface DataGridSort {\n  /** Column key: the `Col` header, or `col-<index>` for a column whose header is empty or repeats an earlier column's. */\n  readonly key: string;\n  /** Sort direction; anything other than `\"desc\"` sorts ascending (default `\"asc\"`). */\n  readonly direction?: DataGridSortDirection;\n}",
     },
     props: {
       columns: "readonly (AktionNode<\"Col\"> | null | undefined)[]",
@@ -53,7 +58,6 @@ export default {
       sort: "DataGridSort | null",
       selectedIds: "readonly string[]",
       onRowClick: "(rowIndex: number, row: Readonly<Record<string, unknown>>, rowId: string) => void",
-      maxHeight: "string",
       onSort: "(columnKey: string, direction: DataGridSortDirection) => void",
       onSelectionChange: "(selectedIds: string[]) => void",
       onPerPageChange: "(perPage: number) => void",
@@ -65,7 +69,7 @@ export default {
   },
   InfiniteList: {
     types: {
-      InfiniteListRootMargin: "/** IntersectionObserver margin: 1–4 space-separated px / % lengths (CSS margin order). Any other unit throws. */\nexport type InfiniteListRootMargin =\n  | InfiniteListRootMarginLength\n  | `${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength}`\n  | `${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength}`\n  | `${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength}`;",
+      InfiniteListRootMargin: "/** IntersectionObserver margin: a number of px, or 1–4 space-separated px / % lengths (CSS margin order). Any other unit falls back to the default `200px`. */\nexport type InfiniteListRootMargin =\n  | number\n  | InfiniteListRootMarginLength\n  | `${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength}`\n  | `${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength}`\n  | `${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength}`;",
       InfiniteListRootMarginLength: "export type InfiniteListRootMarginLength = `${number}px` | `${number}%`;",
     },
     props: {
