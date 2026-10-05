@@ -405,11 +405,18 @@ $app(Layout(AboutPage()))
       <p>
         <code>renderToString</code> evaluates your program and returns the
         resolved head alongside the HTML, so you can inject a crawlable
-        <code>&lt;head&gt;</code> into your page shell:
+        <code>&lt;head&gt;</code> into your page shell. For an app built from
+        modules, pass the compiled program itself &mdash; the default import of
+        its <code>.aktion</code> / <code>.aktion.ts</code> / <code>.aktion.js</code>
+        entry. <code>renderToString(app)</code> renders the linked AST, as
+        <code>mountCompiled</code> does in the browser, instead of re-parsing
+        <code>app.source</code>; the string form, <code>renderToString(source)</code>,
+        is for plain Aktion text:
       </p>
 <pre><code>import { renderToString } from "aktion-runtime";
+import app from "./app.aktion";   // the compiled program
 
-const { html, state, head, headAttrs } = renderToString(source);
+const { html, state, head, headAttrs } = renderToString(app);
 
 const page = `&lt;!doctype html&gt;
 &lt;html ${Object.entries(headAttrs).map(([k, v]) =&gt; `${k}="${v}"`).join(" ")}&gt;
@@ -435,7 +442,10 @@ const page = `&lt;!doctype html&gt;
       <p>
         Pending contributions are flushed synchronously when <code>head</code>
         or <code>headAttrs</code> is read, so SSR never races the microtask
-        commit. <code>renderToStaticMarkup(source)</code> returns only the
+        commit. On the client, hand <code>state</code> back with the same program
+        &mdash; <code>element.mountCompiled(app, state)</code>, or
+        <code>element.loadSnapshot({ programText, state })</code> for text.
+        <code>renderToStaticMarkup(source)</code> returns only the
         <code>html</code> string &mdash; reach for it when the page is fully
         static and you do not need to hydrate. Both require a DOM: register
         <code>happy-dom</code> or <code>jsdom</code> on <code>globalThis</code>

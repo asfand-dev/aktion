@@ -445,7 +445,7 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
             <td>Build with <code>aktion-runtime/vite</code>, or pass <code>frontends: { typescript: await loadTypeScriptFrontend() }</code>.</td>
           </tr>
           <tr>
-            <td><code>E101</code> &hellip; <code>E126</code>, <code>W201</code>, <code>W202</code></td>
+            <td><code>E101</code> &hellip; <code>E127</code>, <code>W201</code>, <code>W202</code></td>
             <td>A <code>.aktion.ts</code> / <code>.aktion.js</code> construct that Aktion would run differently from JavaScript.</td>
             <td>See the <a href="typescript.html#aktion-ts-semantics">TypeScript guide</a>; each message says what to write instead.</td>
           </tr>
@@ -704,7 +704,7 @@ const resolver = {
         <tbody>
           <tr><td><code>__aktionCompiled</code></td><td><code>1</code></td><td>Version marker. Must equal <code>COMPILED_PROGRAM_VERSION</code>.</td></tr>
           <tr><td><code>program</code></td><td><code>Program</code></td><td>The merged, scope-renamed AST.</td></tr>
-          <tr><td><code>source</code></td><td><code>string</code></td><td>The whole linked program as runnable Aktion text (the Vite plugin and <code>compileAktion*</code> print the merged AST). Powers <code>applyDelta</code>, <code>serializeState</code> round&#8209;trips, <code>renderToString</code>, and debugging.</td></tr>
+          <tr><td><code>source</code></td><td><code>string</code></td><td>The whole linked program as runnable Aktion text (the Vite plugin and <code>compileAktion*</code> print the merged AST). Powers <code>applyDelta</code>, <code>serializeState</code> round&#8209;trips, and debugging. To server-render the program, pass the whole artefact &mdash; <code>renderToString(app)</code> renders <code>program</code>, not this text.</td></tr>
           <tr><td><code>path</code></td><td><code>string</code></td><td>Module id. Used for diagnostics and to target HMR &mdash; it is what <code>el.sourceId</code> reports.</td></tr>
           <tr><td><code>sourcesContent</code></td><td><code>string[]</code> (optional)</td><td>Each module&rsquo;s original text, indexed like <code>program.sources</code> &mdash; for a <code>.aktion.ts</code> module, the TypeScript you wrote. DevTools shows these; older artefacts without the field still mount.</td></tr>
         </tbody>

@@ -113,7 +113,10 @@
         <li><strong>Unknown keys and invalid values are ignored</strong> &mdash; never
           injected. A typo silently no&#8209;ops rather than breaking the page, which is
           also the one thing that can make <code>sx</code> puzzling:
-          <a href="#why-dropped">a checklist for a value that did nothing</a>.</li>
+          <a href="#why-dropped">a checklist for a value that did nothing</a>. In a
+          <code>.aktion.ts</code> module the <code>SxProps</code> type, printed from
+          the same tables, rejects them up front (see
+          <a href="typescript.html#aktion-dsl">TypeScript</a>).</li>
       </ul>
 <pre><code>// sx is just another prop on the options bag.
 Card([Text("Hello")], { sx: { p: "lg", bg: "surface", radius: "lg", shadow: "md" } })
@@ -147,6 +150,23 @@ Button("Save", { variant: "primary", sx: { mt: "md", w: "full" } })</code></pre>
           <code>"12px"</code>/<code>"60%"</code>, a raw color, or a number).</li>
         <li>Otherwise the value is <strong>dropped</strong>.</li>
       </ol>
+      <p>
+        <strong>A number on a length key is pixels</strong>, as in a React style
+        object: <code>p: 8</code> is <code>padding: 8px</code>, and <code>0</code>
+        stays <code>0</code>. That holds for <code>p</code> / <code>m</code> and their
+        sides, <code>gap</code>, <code>w</code> / <code>h</code> and the min / max
+        sizes, <code>basis</code>, <code>top</code> / <code>right</code> /
+        <code>bottom</code> / <code>left</code>, <code>inset</code>,
+        <code>radius</code> and <code>fontSize</code>, and for
+        <code>translateX</code> / <code>translateY</code> in a state style. A digit
+        <em>string</em> such as <code>"8"</code> has no unit, so write the number or
+        <code>"8px"</code>. Numbers stay unitless only where CSS wants a plain
+        number: <code>opacity</code>, <code>grow</code>, <code>shrink</code>,
+        <code>columns</code>, <code>zIndex</code> and <code>weight</code>, and a
+        state&rsquo;s <code>scale</code> and <code>rotate</code> (<code>rotate</code> in
+        degrees). Those
+        keys also take the number as a string (<code>opacity: "0.9"</code>).
+      </p>
       <p>
         Everything that survives step 2 or 3 becomes an <strong>inline style</strong> on the
         element the component renders; responsive maps become atomic classes in a shared
@@ -262,7 +282,11 @@ Button("Save", { variant: "primary", sx: { mt: "md", w: "full" } })</code></pre>
       <p>
         <strong>Gradients</strong> (use as <code>bg: "gradient.&lt;name&gt;"</code>):
         <span class="tok">gradient.brand</span><span class="tok">gradient.accent</span><span class="tok">gradient.warm</span><span class="tok">gradient.cool</span><span class="tok">gradient.success</span><span class="tok">gradient.danger</span>
-        &mdash; rebrandable via <code>$theme({ gradients: {&hellip;} })</code>.
+        &mdash; rebrandable via <code>$theme({ gradients: {&hellip;} })</code>. A
+        gradient is an image, not a colour, so <code>gradient.*</code> works only on
+        <code>bg</code> and <code>bgOverlay</code> (and a state&rsquo;s
+        <code>bg</code>); <code>color</code>, <code>borderColor</code> and
+        <code>border</code> drop it.
       </p>
       <table class="signature-table prop-table">
         <thead><tr><th>Key</th><th>Sets</th><th>Example</th></tr></thead>
@@ -290,7 +314,7 @@ Button("Save", { variant: "primary", sx: { mt: "md", w: "full" } })</code></pre>
       <table class="signature-table prop-table">
         <thead><tr><th>Key</th><th>Accepts</th><th>Example</th></tr></thead>
         <tbody>
-          <tr><td><code>border</code></td><td><code>none</code> · <code>subtle</code> · <code>strong</code> · <code>true</code>/<code>default</code> · a color token/value</td><td><code>{ border: "subtle" }</code></td></tr>
+          <tr><td><code>border</code></td><td><code>none</code> · <code>subtle</code> · <code>strong</code> · <code>true</code>/<code>default</code> · a color token/value for a 1px solid border; <code>false</code> draws nothing, so <code>border: isSelected</code> works</td><td><code>{ border: "subtle" }</code></td></tr>
           <tr><td><code>radius</code></td><td><span class="tok">none</span><span class="tok">xs</span><span class="tok">sm</span><span class="tok">md</span><span class="tok">lg</span><span class="tok">pill</span><span class="tok">full</span><span class="tok">circle</span> or a length</td><td><code>{ radius: "lg" }</code></td></tr>
           <tr><td><code>shadow</code></td><td><span class="tok">none</span><span class="tok">sm</span><span class="tok">md</span><span class="tok">lg</span></td><td><code>{ shadow: "md" }</code></td></tr>
           <tr><td><code>opacity</code></td><td>a number <code>0</code>&ndash;<code>1</code></td><td><code>{ opacity: 0.6 }</code></td></tr>
@@ -329,7 +353,7 @@ Button("Save", { variant: "primary", sx: { mt: "md", w: "full" } })</code></pre>
           <tr><td><code>direction</code></td><td><span class="tok">row</span><span class="tok">column</span><span class="tok">row-reverse</span><span class="tok">column-reverse</span></td><td><code>{ direction: "column" }</code></td></tr>
           <tr><td><code>align</code></td><td><span class="tok">start</span><span class="tok">center</span><span class="tok">end</span><span class="tok">stretch</span><span class="tok">baseline</span> (align&#8209;items)</td><td><code>{ align: "center" }</code></td></tr>
           <tr><td><code>justify</code></td><td><span class="tok">start</span><span class="tok">center</span><span class="tok">end</span><span class="tok">between</span><span class="tok">around</span><span class="tok">evenly</span><span class="tok">stretch</span></td><td><code>{ justify: "between" }</code></td></tr>
-          <tr><td><code>wrap</code></td><td><code>true</code> / <code>false</code></td><td><code>{ wrap: true }</code></td></tr>
+          <tr><td><code>wrap</code></td><td><code>true</code> wraps; <code>false</code> emits <code>flex-wrap: nowrap</code>, overriding a component that wraps</td><td><code>{ wrap: true }</code></td></tr>
           <tr><td><code>grow</code> / <code>shrink</code></td><td>a number (flex&#8209;grow / flex&#8209;shrink)</td><td><code>{ grow: 1 }</code></td></tr>
           <tr><td><code>basis</code></td><td>a size keyword or length (flex&#8209;basis)</td><td><code>{ basis: "200px" }</code></td></tr>
           <tr><td><code>columns</code></td><td>a number &rarr; that many equal grid columns</td><td><code>{ display: "grid", columns: 3 }</code></td></tr>
@@ -593,11 +617,23 @@ Button("Save", { variant: "primary", sx: { mt: "md", w: "full" } })</code></pre>
       <p>
         <code>hover</code> and <code>focus</code> accept a preset effect name (or an
         object of <code>{ effect: true }</code>) that maps to a prebuilt utility
-        class:
+        class. <code>hover</code> has seven:
         <span class="tok">lift</span><span class="tok">grow</span><span class="tok">glow</span><span class="tok">bright</span><span class="tok">border</span><span class="tok">underline</span><span class="tok">scale</span>.
+        <code>focus</code> has two: <span class="tok">glow</span> (on
+        <code>:focus-visible</code>) and <span class="tok">border</span> (on
+        <code>:focus-within</code>) &mdash; any other name, such as
+        <code>focus: "lift"</code>, does nothing.
       </p>
 <pre><code>Card([Text("Lift on hover")], { sx: { p: "lg", hover: "lift" } })
 Button("Glow", { sx: { hover: { glow: true }, focus: { border: true } } })</code></pre>
+      <p>
+        <code>hover</code>, <code>focus</code> and <code>states</code> (below) are the
+        only state keys: there is no <code>_hover</code> / <code>_focus</code>
+        spelling, and like any unknown key it is ignored. In the
+        object form, <code>scale</code> means two things: <code>scale: true</code> is
+        the <code>scale</code> effect, while <code>hover: { scale: 1.04 }</code> is the
+        transform alone, a state style like the ones below.
+      </p>
       <h3 id="state-objects">2. Arbitrary state styling with <code>states</code></h3>
       <p>
         For full control, <code>states</code> (or a rich object form of

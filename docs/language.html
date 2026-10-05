@@ -277,7 +277,7 @@ function Panel() {
       <h2 id="expressions">Expressions</h2>
       <p>The right-hand side of any binding is a value-producing JS expression:</p>
       <ul>
-        <li><strong>Strings &amp; template literals</strong> &mdash; <code>"hi"</code>, <code>'hi'</code>, and backticks with <code>${expr}</code> interpolation. Prefer template literals over <code>+</code> concatenation: <code>`Hi ${$user.name}, you have ${$util.count($todos)} todos`</code>.</li>
+        <li><strong>Strings &amp; template literals</strong> &mdash; <code>"hi"</code>, <code>'hi'</code>, and backticks with <code>${expr}</code> interpolation. Prefer template literals over <code>+</code> concatenation: <code>`Hi ${$user.name}, you have ${$util.count($todos)} todos`</code>. An interpolation that is not one complete expression (<code>${}</code>, <code>${a +}</code>, a typo) is a parse error at its own position.</li>
         <li><strong>Numbers, booleans, null</strong> &mdash; <code>42</code>, <code>3.14</code>, <code>1_000_000</code>, <code>true</code> / <code>false</code>, <code>null</code>.</li>
         <li><strong>Arrays &amp; objects</strong> &mdash; <code>[1, 2, 3]</code>, <code>{ name: "Ada", role: "Engineer" }</code>; both may span multiple lines.</li>
         <li><strong>Operators</strong> &mdash; arithmetic (<code>+ - * / % **</code>), comparison (<code>== != === !== &lt; &lt;= &gt; &gt;=</code>), logical (<code>&amp;&amp; || !</code>).</li>
@@ -285,6 +285,8 @@ function Panel() {
         <li><strong>Spread</strong> &mdash; <code>[...$a, ...$b]</code>, <code>{ ...$cur, status: "done" }</code>.</li>
         <li><strong>Member &amp; optional chaining</strong> &mdash; <code>$user.email</code>, <code>$orders.data[0].id</code>, <code>$user?.profile?.name</code>.</li>
         <li><strong>Nullish coalescing</strong> &mdash; <code>$user.name ?? "stranger"</code>.</li>
+        <li><strong>Destructuring</strong> &mdash; <code>let [first, ...rest] = items</code>, <code>let { name, age = 0 } = user</code>, in parameters too. It reads what JavaScript reads: an array pattern takes any iterable (a string, a <code>Set</code>, a <code>Map</code>), an object pattern reads the properties of any non-null value (<code>let { length } = "abc"</code>), and a default can use the names bound before it (<code>let { a, b = a + 1 } = obj</code>).</li>
+        <li><strong>Functions as values</strong> &mdash; arrow lambdas and <code>function</code> expressions. A named function expression can call itself by its name: <code>const fact = function f(n) { return n &lt; 2 ? 1 : n * f(n - 1) }</code>.</li>
       </ul>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
@@ -497,6 +499,15 @@ Reveal(Card([Text("hi")]), "fade", 100, true)</code></pre>
           these docs uses.
         </p>
       </div>
+      <p>
+        For your own components, a <code>...rest</code> parameter collects every
+        remaining argument into an array, as in JavaScript:
+      </p>
+<pre><code>function Tags(...labels) {
+  return Row(labels.map((label) =&gt; Badge(label)), { gap: "xs" })
+}
+
+Tags("new", "sale", "eco")   // labels is ["new", "sale", "eco"]</code></pre>
       <div class="lay-demo">
         <span class="lay-demo-label">Live</span>
 <pre><code>$app(Grid([
