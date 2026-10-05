@@ -76,9 +76,12 @@ function actualReports(result: ESLint.LintResult): string[] {
     .sort();
 }
 
-/** The 1-based line of `export const <name> =` in a fixture. */
+/** The 1-based line of `export const <name> =` (or `export function <name>(`) in a fixture. */
 function lineOf(file: string, name: string): number {
-  const line = fixtureLines(file).findIndex((text) => text.startsWith(`export const ${name} =`)) + 1;
+  const line =
+    fixtureLines(file).findIndex(
+      (text) => text.startsWith(`export const ${name} =`) || text.startsWith(`export function ${name}(`),
+    ) + 1;
   if (line === 0) throw new Error(`${file} declares no ${name}`);
   return line;
 }
@@ -92,7 +95,7 @@ describe("the eslint-generated-dsl fixture project", () => {
 
   it("type-checks the fixtures that must resolve cleanly", () => {
     expect(parsed.errors).toEqual([]);
-    for (const file of ["positional-object.aktion.ts", "router.aktion.ts", "untyped.aktion.js"]) {
+    for (const file of ["any-arguments.aktion.ts", "positional-object.aktion.ts", "router.aktion.ts", "untyped.aktion.js"]) {
       expect(diagnosticsIn(file).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")), file).toEqual([]);
     }
   });
@@ -110,9 +113,11 @@ describe("the eslint-generated-dsl fixture project", () => {
     expect(callLines.filter((line) => !errorLines.has(line))).toEqual([]);
   });
 
-  it("in untyped.aktion.js, every call but one matches no overload, with no error shown", () => {
+  it("in untyped.aktion.js, a call on a widened value matches no overload, with no error shown", () => {
     // The premise of the fixture: `getResolvedSignature` returns a signature
-    // that is not one of the callee's overloads.
+    // that is not one of the callee's overloads — except where an argument is
+    // an untyped (`any`) parameter, which every overload accepts, so the call
+    // resolves to the first one, `props` in second position.
     const file = "untyped.aktion.js";
     const checker = program.getTypeChecker();
     const source = program.getSourceFile(join(fixtureDir, file))!;
@@ -130,7 +135,11 @@ describe("the eslint-generated-dsl fixture project", () => {
     for (const name of ["handlerAndBag", "positionalVariant", "wholeProps", "trailingVariable", "spreadBag"]) {
       expect(resolvesToOverload.get(lineOf(file, name)), name).toBe(false);
     }
-    expect(resolvesToOverload.get(lineOf(file, "handlerOnly"))).toBe(true);
+    // (`NameColumn` is left out: `Col` is generic, so its resolution is an
+    // instantiation of the first overload rather than the overload itself.)
+    for (const name of ["handlerOnly", "Save", "Detail", "Option", "Greeting"]) {
+      expect(resolvesToOverload.get(lineOf(file, name)), name).toBe(true);
+    }
   });
 });
 

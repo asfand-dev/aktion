@@ -65,6 +65,12 @@ import type * as ts from "typescript";
  *   USER component, and those bind a non-literal argument positionally, just
  *   as JavaScript does (`invokeComponentDecl`), so a parameter called `props`
  *   on one is not a mistake. This is the runtime's own library/user split.
+ * - An argument typed `any` is never `propsNotLiteral`. In an untyped
+ *   `.aktion.js` module every parameter is `any`, which satisfies every
+ *   overload, so `Button("Save", onSave)` resolves cleanly to the first one,
+ *   `(label, props?)` — yet nothing says `onSave` holds props, and the runtime
+ *   binds it positionally, to `onClick`. TypeScript gives an unresolved name
+ *   the same flag.
  * - Arguments from the first spread argument on (`Button(...args)`) are
  *   skipped: which parameter each one reaches is not known statically. A call
  *   with a spread argument that also fails to type-check reports nothing.
@@ -131,6 +137,7 @@ export const aktionPropsLiteralRule: Rule.RuleModule = {
             : bagByCandidates(call, index, bag);
           if (!isBag) continue;
           if (bag.type !== "ObjectExpression") {
+            if (isAnyTyped(call, index)) continue;
             context.report({ node: argument, messageId: "propsNotLiteral" });
             continue;
           }
@@ -178,6 +185,13 @@ const PROPS_PARAMETER = "props";
 
 /** The module whose exports are the library (and host-registered) components. */
 const DSL_MODULE = "aktion-runtime/dsl";
+
+/**
+ * `ts.TypeFlags.Any`, as a number so the rule needs no runtime `typescript`
+ * import. The checker sets it on `any` and on the error type of a name it
+ * cannot resolve.
+ */
+const ANY_TYPE_FLAG = 1;
 
 /**
  * Wrappers that leave nothing behind once the `.aktion.ts` frontend erases the
@@ -229,6 +243,15 @@ function resolvedCleanly(call: CheckedCall, signature: ts.Signature): boolean {
     const parameter = parameterAt(signature, index);
     return parameter !== undefined && checker.isTypeAssignableTo(checker.getTypeAtLocation(argument), slotType(call, parameter));
   });
+}
+
+/**
+ * True when the argument at `index` is typed `any`: it satisfies whatever
+ * parameter TypeScript puts it in, so where it landed says nothing about
+ * whether it holds props.
+ */
+function isAnyTyped(call: CheckedCall, index: number): boolean {
+  return (call.checker.getTypeAtLocation(call.tsArguments[index]!).flags & ANY_TYPE_FLAG) !== 0;
 }
 
 /**
