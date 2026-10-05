@@ -352,7 +352,10 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
         <code>/index.aktion.js</code> &mdash; so <code>./store</code> finds
         <code>store.aktion.ts</code>. A specifier that names a file exactly is not
         completed (<code>./store.aktion</code> when only <code>store.aktion.ts</code>
-        exists reports <code>Did you mean "./store.aktion.ts"?</code>). The
+        exists reports <code>Did you mean "./store.aktion.ts"?</code>). Neither is
+        the TypeScript habit of writing <code>.js</code> for a <code>.ts</code> file:
+        <code>./store.aktion.js</code> when only <code>store.aktion.ts</code> exists
+        reports <code>Did you mean "./store.aktion.ts"?</code> too. The
         <code>extensions</code> option replaces this list outright, so a project that
         pins it must add the new suffixes itself.
       </p>
@@ -378,6 +381,17 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
         <code>export default</code> is an error. The linker walks every <code>import</code> from
         the entry, merges the whole graph into one program, and the runtime renders
         it &mdash; import cycles are fine (each file is merged once).
+      </p>
+      <p>
+        <strong>Host code imports only the default export.</strong> The compiled
+        program is the one thing an Aktion module gives <code>main.ts</code>, a test or
+        any other native module. Its named exports &mdash; components, helpers,
+        atoms &mdash; exist inside Aktion programs, so <code>import { summary } from
+        "./api.aktion.ts"</code> in host code fails the <code>vite build</code> (with
+        this explanation on Vite 5&ndash;7; Vite&nbsp;8 reports the missing export
+        itself), and under <code>vite dev</code> or Vitest the binding throws the
+        explanation as soon as it is used. To unit-test a helper, call it from
+        a program (<code>compileAktionSource</code>, see <a href="testing.html#multi-file">Testing</a>).
       </p>
 
       <h2 id="diagnostics">When a link fails</h2>
