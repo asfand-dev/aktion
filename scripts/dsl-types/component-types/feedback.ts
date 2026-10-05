@@ -2,11 +2,6 @@
 import type { ComponentTypeTable } from "./types.js";
 
 export default {
-  Avatar: {
-    props: {
-      size: "AvatarSize",
-    },
-  },
   AvatarGroup: {
     types: {
       AvatarGroupItem: `export interface AvatarGroupItem {
@@ -18,7 +13,6 @@ export default {
     },
     props: {
       items: "readonly (AktionNode<\"Avatar\"> | AvatarGroupItem | string)[]",
-      size: "AvatarGroupSize",
     },
   },
   ChatBubble: {
@@ -28,29 +22,16 @@ export default {
   },
   HoverCard: {
     props: {
-      width: "string",
       onOpenChange: "(open: boolean) => void",
-    },
-  },
-  Kbd: {
-    props: {
-      size: "KbdSize",
     },
   },
   Popover: {
     props: {
-      width: "string",
       onOpenChange: "(open: boolean) => void",
-    },
-  },
-  ProgressRing: {
-    props: {
-      size: "ProgressRingSize | number",
     },
   },
   Rating: {
     props: {
-      size: "RatingSize",
       icon: "\"star\" | \"heart\" | \"thumb\" | \"fire\" | \"bolt\" | (string & {})",
       onChange: "(value: number) => void",
     },
@@ -79,9 +60,11 @@ export default {
       ToggleGroupItem: "export type ToggleGroupItem<V extends ToggleGroupValue = ToggleGroupValue> = V | ToggleGroupItemTuple<V> | ToggleGroupItemObject<V>;",
     },
     props: {
+      // The positional slot: a DOM id, or the item list itself
+      // (`ToggleGroup(["Day", "Week"])` — the renderer reads it as `items`).
+      id: "string | number | readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[]",
       items: "readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[]",
       value: "V | readonly V[] | null",
-      size: "ToggleGroupSize",
       onChange: "(value: V | V[]) => void",
     },
   },
