@@ -98,9 +98,11 @@ function actualReports(result: ESLint.LintResult): string[] {
 
 describe("the eslint-typescript fixture project", () => {
   it("type-checks cleanly, so every call resolves to the overload the fixture intends", () => {
-    // A call with a type error still resolves — to a candidate TypeScript
-    // picked for the error message — which could put an argument on a
-    // `props` parameter by accident. Zero diagnostics rules that out.
+    // A call with a type error still resolves — to a signature TypeScript
+    // built for the error message — and the rule then binds the arguments
+    // from the overloads instead (tests/eslint-generated-dsl.test.ts covers
+    // that path). Zero diagnostics keeps every call here on the other one:
+    // the overload TypeScript actually picked.
     const configPath = join(fixtureDir, "tsconfig.json");
     const { config } = ts.readConfigFile(configPath, ts.sys.readFile);
     const parsed = ts.parseJsonConfigFileContent(config, ts.sys, fixtureDir);
