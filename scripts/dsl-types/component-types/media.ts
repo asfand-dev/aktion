@@ -69,7 +69,6 @@ export default {
     },
     props: {
       markers: "readonly MapMarker[]",
-      height: "string",
     },
   },
   VideoPlayer: {

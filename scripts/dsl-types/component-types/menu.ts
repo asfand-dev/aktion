@@ -6,10 +6,15 @@ export default {
     types: {
       DropdownMenuItemFields: `export interface DropdownMenuItemFields {
   readonly onClick?: () => void;
+  /** Alias of \`onClick\`. */
   readonly action?: () => void;
+  /** Alias of \`onClick\`. */
+  readonly onclick?: () => void;
   readonly icon?: string;
   readonly shortcut?: string | number;
   readonly variant?: MenuItemVariant;
+  /** Alias of \`variant\`. */
+  readonly tone?: MenuItemVariant;
   readonly disabled?: boolean;
   readonly checked?: boolean | null;
   readonly role?: MenuItemRole;
@@ -19,7 +24,8 @@ export default {
       DropdownMenuItemData: "export type DropdownMenuItemData = DropdownMenuItemFields & ({ readonly label: string | number } | { readonly title: string | number } | { readonly text: string | number });",
       DropdownMenuSeparatorData: "export type DropdownMenuSeparatorData = { readonly separator: true } | { readonly type: \"separator\" };",
       DropdownMenuLeaf: "export type DropdownMenuLeaf = AktionNode | DropdownMenuItemData | DropdownMenuSeparatorData | null | undefined;",
-      DropdownMenuEntry: "export type DropdownMenuEntry = DropdownMenuLeaf | readonly (DropdownMenuLeaf | readonly (DropdownMenuLeaf | readonly (DropdownMenuLeaf | readonly DropdownMenuLeaf[])[])[])[];",
+      // Nested arrays flatten to any depth.
+      DropdownMenuEntry: "export type DropdownMenuEntry = DropdownMenuLeaf | readonly DropdownMenuEntry[];",
     },
     props: {
       items: "readonly DropdownMenuEntry[]",

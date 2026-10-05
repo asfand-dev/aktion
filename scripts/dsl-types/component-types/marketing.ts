@@ -2,28 +2,17 @@
 import type { ComponentTypeTable } from "./types.js";
 
 export default {
-  BrowserFrame: {
-    props: {
-      height: "string",
-    },
-  },
   CodeWindow: {
     props: {
-      code: "string | AktionNode<\"CodeBlock\">",
+      code: "string | number | AktionNode<\"CodeBlock\">",
       language: "\"aktion\" | \"js\" | \"jsx\" | \"ts\" | \"tsx\" | \"javascript\" | \"typescript\" | \"mjs\" | \"cjs\" | \"py\" | \"python\" | \"css\" | \"scss\" | \"less\" | \"json\" | \"jsonc\" | \"html\" | \"xml\" | \"svg\" | \"vue\" | \"bash\" | \"md\" | \"yaml\" | \"sql\" | (string & {})",
-      height: "string",
-      maxHeight: "string",
     },
   },
   CountdownTimer: {
     props: {
-      to: "string | number | Date",
+      // null / "" while the target is still loading: the cells show `--`.
+      to: "string | number | Date | null",
       onEnd: "() => void",
-    },
-  },
-  Display: {
-    props: {
-      size: "\"hero\" | \"xl\" | \"lg\"",
     },
   },
   FloatingActionButton: {
@@ -34,16 +23,11 @@ export default {
   Heading: {
     props: {
       level: "1 | 2 | 3 | 4 | 5 | 6 | (number & {})",
-      size: "\"section\" | \"lg\" | \"md\" | \"sm\"",
-    },
-  },
-  OverlayItem: {
-    props: {
-      offset: "string",
     },
   },
   ProductCard: {
     props: {
+      price: "string | number | AktionNode",
       onAdd: "() => void",
       onClick: "() => void",
     },
@@ -58,18 +42,15 @@ export default {
       value: "string | number | Date",
     },
   },
-  Section: {
-    props: {
-      width: "\"sm\" | \"md\" | \"lg\" | \"xl\" | \"full\"",
-    },
-  },
   SegmentedControl: {
+    generics: [{ name: "V", default: "string | number", constraint: "string | number" }],
     types: {
-      SegmentedControlOption: "export interface SegmentedControlOption {\n  /** Emitted (stringified) to onChange and the bound $variable; also the label when `label` is omitted. */\n  readonly value: string | number;\n  readonly label?: string | number;\n  /** Font Awesome icon name. */\n  readonly icon?: string;\n  readonly disabled?: boolean;\n}",
+      SegmentedControlOption: "export interface SegmentedControlOption<V extends string | number = string | number> {\n  /** Emitted, with its type, to onChange and the bound $variable; also the label when `label` is omitted. */\n  readonly value: V;\n  readonly label?: string | number;\n  /** Font Awesome icon name. */\n  readonly icon?: string;\n  readonly disabled?: boolean;\n}",
     },
     props: {
-      options: "readonly (string | number | SegmentedControlOption)[]",
-      onChange: "(value: string) => void",
+      options: "readonly (V | SegmentedControlOption<V>)[]",
+      value: "V | null",
+      onChange: "(value: V) => void",
     },
   },
   Swatch: {
@@ -88,16 +69,11 @@ export default {
       onSelect: "(href: string) => void",
     },
   },
-  Terminal: {
-    props: {
-      height: "string",
-      maxHeight: "string",
-    },
-  },
   ThemeToggle: {
     props: {
-      light: "Exclude<BuiltInThemeName, `${string}dark${string}`>",
-      dark: "Extract<BuiltInThemeName, `${string}dark${string}`>",
+      // Any theme name: the toggle compares the host's theme with these two.
+      light: "BuiltInThemeName | (string & {})",
+      dark: "BuiltInThemeName | (string & {})",
     },
   },
 } satisfies ComponentTypeTable;
