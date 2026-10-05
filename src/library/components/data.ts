@@ -31,6 +31,9 @@ export const Col: ComponentSpec = {
     "keep `values` as the raw row data (return a component, string, or " +
     "array). `row` is the whole row (header-keyed) and stays correct even when " +
     "DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. " +
+    "A column whose header is empty or repeats an earlier column's header is " +
+    "keyed `col-<index>` instead, so two `Col(\"Price\", …)` never overwrite " +
+    "each other. " +
     "Pass `onClick: (value, index, row) => …` to make the whole cell " +
     "clickable (pointer + keyboard). `sortable` and `filterable` only take " +
     "effect inside `DataGrid` (Table ignores them). For an actions/kebab-menu " +
@@ -51,15 +54,15 @@ export const Col: ComponentSpec = {
     { name: "width", type: "string", optional: true, description: "CSS width for the column (`240px`, `30%`). Caps the column instead of letting one long value stretch the table." },
     { name: "wrap", type: "boolean", optional: true, description: "Let long cell text wrap onto several lines instead of pushing the table into horizontal scroll." },
     { name: "headerTooltip", type: "string", optional: true, aliases: ["hint"], description: "Explanation shown on hover/focus of the header cell — e.g. `MRR = monthly recurring revenue`." },
-    { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) used by `format: \"number\"|\"currency\"|\"date\"` for separators, digit grouping and date order. Defaults to the Table's `locale`, then the viewer's browser." },
+    { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) used by `format: \"number\"|\"currency\"|\"date\"` for separators, digit grouping and date order, in a Table and a DataGrid alike. Defaults to the Table's `locale` (a DataGrid has none), then the viewer's browser." },
     // Slots 13–17: DataGrid advanced features. Table ignores these.
     { name: "initiallyHidden", type: "boolean", optional: true, aliases: ["colHidden"], description: "DataGrid: initially hide this column. The user can reveal it from the column settings panel." },
-    { name: "pinned", type: "string", optional: true, enum: ["left", "right"], description: "DataGrid: pin this column to the left (or right) edge so it stays visible during horizontal scrolling." },
+    { name: "pinned", type: "string", optional: true, enum: ["left"], description: "DataGrid: pin this column to the left edge so it stays visible during horizontal scrolling. Pinned columns move to the front of the table." },
     { name: "resizable", type: "boolean", optional: true, description: "DataGrid: per-column override for resizing. Takes precedence over the grid-level `resizable` prop." },
-    { name: "minWidth", type: "string", optional: true, description: "DataGrid: minimum width when the column is resized (`80px`, `5rem`)." },
-    { name: "maxWidth", type: "string", optional: true, description: "DataGrid: maximum width when the column is resized (`400px`, `50%`)." },
+    { name: "minWidth", type: "string", optional: true, description: "DataGrid: minimum width when the column is resized (`80px`, `5rem`, or a number of px; default 50px). A `%` is a share of the grid's visible width." },
+    { name: "maxWidth", type: "string", optional: true, description: "DataGrid: maximum width when the column is resized (`400px`, `50%`, or a number of px; default 2000px). A `%` is a share of the grid's visible width." },
     // Slot 18. Appended at the end, like every prior addition — see the note above.
-    { name: "headerHidden", type: "boolean", optional: true, description: "Render the header cell visually empty (an actions/kebab-menu column needs no visible header) while `header` keeps naming the column everywhere else that reads it: the `<th>`'s accessible name, the column-settings panel row, and (DataGrid) the persistence key. Do NOT use `header: \"\"` for this — that drops the accessible name, blanks the column-settings row, and collides with any other column that also passed an empty header, since the persistence key is the header string. A sortable column keeps working: the sort button's accessible name still comes from the hidden label." },
+    { name: "headerHidden", type: "boolean", optional: true, description: "Render the header cell visually empty (an actions/kebab-menu column needs no visible header) while `header` keeps naming the column everywhere else that reads it: the `<th>`'s accessible name, the column-settings panel row, and (DataGrid) the persistence key. Do NOT use `header: \"\"` for this — that drops the accessible name, blanks the column-settings row, and leaves the column keyed by its position (`col-<index>`), so a saved layout follows whichever column lands at that index after columns are added or reordered. A sortable column keeps working: the sort button's accessible name still comes from the hidden label." },
   ],
   // Cols are read positionally inside Table.render — this render is a fallback.
   render: (_node, props) => {
@@ -196,7 +199,7 @@ export const Table: ComponentSpec = {
     const rowCount = Math.max(0, ...columnValues.map((c) => c.length));
     const onRowClick = props.onRowClick;
 
-    const headers = cols.map((col, c) => asString(col.args?.[0]) || `col-${c}`);
+    const headers = columnKeys(cols.map((col) => asString(col.args?.[0])));
     for (let r = 0; r < rowCount; r += 1) {
       const tr = el("tr");
       // Header-keyed row so a cell `render`/`onClick` can read sibling columns (#11).
@@ -1254,6 +1257,29 @@ function applyRovingTabindex(root: HTMLElement): void {
   const items = treeItems(root);
   const focusTarget = items.find((item) => item.getAttribute("aria-selected") === "true") ?? items[0];
   for (const item of items) item.tabIndex = item === focusTarget ? 0 : -1;
+}
+
+/**
+ * One unique key per column, shared by `Table` and `DataGrid`: the `Col`
+ * header, or `col-<index>` when the header is empty or repeats an earlier
+ * column's header.
+ *
+ * The key names the column in the header-keyed `row` handed to `render`,
+ * `onClick` and `onRowClick`, and — in DataGrid — in sorting, filtering, the
+ * column configuration and its persisted layout. Keying straight off the header
+ * gave two `Col("Price", …)` one shared key: the second column's values
+ * overwrote the first's in `row`, and DataGrid, which looks its columns up by
+ * key, drew the second column's data in both.
+ */
+export function columnKeys(headers: readonly string[]): string[] {
+  const seen = new Set<string>();
+  return headers.map((header, idx) => {
+    let key = header && !seen.has(header) ? header : `col-${idx}`;
+    // A header can itself read `col-1`; suffix until the key is free.
+    for (let n = 2; seen.has(key); n += 1) key = `col-${idx}-${n}`;
+    seen.add(key);
+    return key;
+  });
 }
 
 /**
