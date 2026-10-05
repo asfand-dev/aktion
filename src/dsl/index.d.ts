@@ -585,7 +585,7 @@ export interface ActivityLogItem {
   /** Time label, e.g. `"2h ago"`. */
   readonly time?: string;
   /** Font Awesome icon name (or a literal glyph) for the marker; ignored when `avatarSrc` is set. */
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   /** Image URL rendered in the marker instead of the icon. */
   readonly avatarSrc?: string;
   readonly tone?: ActivityLogItemTone;
@@ -595,6 +595,8 @@ export interface ActivityLogItem {
   readonly meta?: string | number;
 }
 export type ActivityLogItemTone = "default" | "primary" | "success" | "warning" | "danger";
+/** The entry type `onItemClick` receives: the inferred one, or `ActivityLogItem` when nothing was inferred (an empty list). */
+export type ActivityLogItemOf<T> = [T] extends [never] ? ActivityLogItem : T;
 export type AspectRatioValue = number | `${number}:${number}` | `${number}/${number}` | `${number}`;
 export interface AudioPlayerSource {
   /** http(s), blob:, data:audio/…, or a same-origin path. */
@@ -618,9 +620,11 @@ export interface BreadcrumbCrumbData {
   readonly label: string | number;
   readonly to?: string;
   readonly href?: string;
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
 }
 export type BreadcrumbEntry = AktionNode<"BreadcrumbItem"> | string | BreadcrumbCrumbData;
+/** The event type `onEventClick` receives: the inferred one, or `CalendarEvent` when nothing was inferred (an empty list). */
+export type CalendarEventOf<T> = [T] extends [never] ? CalendarEvent : T;
 export type CalendarEventColor = "primary" | "success" | "warning" | "danger" | "info" | (string & {});
 export interface CalendarEvent {
   readonly date: string;
@@ -647,6 +651,8 @@ export interface CalendarViewEvent {
   readonly tone?: CalendarViewEventTone;
 }
 export type CalendarViewEventTone = "primary" | "success" | "warning" | "danger" | "info";
+/** The event type `onEventClick` receives: the inferred one, or `CalendarViewEvent` when nothing was inferred (an empty list). */
+export type CalendarViewEventOf<T> = [T] extends [never] ? CalendarViewEvent : T;
 export interface CarouselImage {
   readonly src: string;
   /** Falls back to `caption`, then `title`. */
@@ -696,7 +702,7 @@ export interface ContextMenuItemData {
   readonly onClick?: () => void;
   /** Synonym of `onClick` (used only when `onClick` is absent). */
   readonly action?: () => void;
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   /** Trailing shortcut hint, e.g. "⌘C". */
   readonly shortcut?: string;
   readonly variant?: MenuItemVariant;
@@ -728,7 +734,7 @@ export interface DropdownMenuItemFields {
   readonly action?: () => void;
   /** Alias of `onClick`. */
   readonly onclick?: () => void;
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   readonly shortcut?: string | number;
   readonly variant?: MenuItemVariant;
   /** Alias of `variant`. */
@@ -756,6 +762,8 @@ export interface FilterChipsChip {
   readonly label: string | number;
   readonly value?: string | number;
 }
+/** The item type `onSelect` receives: the inferred one, or `GalleryItem` when nothing was inferred (an empty list). */
+export type GalleryItemOf<T> = [T] extends [never] ? GalleryItem : T;
 export interface GalleryImage {
   readonly src: string;
   readonly alt?: string;
@@ -803,7 +811,7 @@ export interface InboxPanelItem {
   /** Relative or absolute timestamp (omitted when empty). */
   readonly time?: string | number;
   /** Font Awesome icon shown in the coloured disc. Omit it and the row shows no icon (InboxPanel does not apply Notification's `bell` default). */
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   readonly tone?: NotificationTone;
   /** Groups the row under the Unread heading and highlights it. */
   readonly unread?: boolean;
@@ -847,7 +855,7 @@ export type ListItemData = {
   readonly meta?: string | number;
   readonly subtitle?: string | number;
   readonly hint?: string | number;
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   readonly tone?: ListItemTone;
   readonly active?: boolean;
   readonly selected?: boolean;
@@ -876,6 +884,8 @@ export interface MultiStepFormStep {
   /** Body rendered while this step is active. */
   readonly content?: Children;
 }
+/** The item type `onItemClick` receives: the inferred one, or `NotificationBellItem` when nothing was inferred (an empty list). */
+export type NotificationBellItemOf<T> = [T] extends [never] ? NotificationBellItem : T;
 export interface NotificationBellItem {
   readonly title: string | number;
   readonly message?: string | number;
@@ -955,6 +965,8 @@ export type PageHeaderCrumb = {
       readonly title: string | number;
     }
 );
+/** The person type `onClick` receives: the inferred one, or `PresenceAvatarsPerson` when nothing was inferred (an empty list). */
+export type PresenceAvatarsPersonOf<T> = [T] extends [never] ? PresenceAvatarsPerson : T;
 export interface PresenceAvatarsPerson {
   /** Display name: tooltip, accessible name and initials fallback. */
   readonly name: string;
@@ -1005,7 +1017,7 @@ export interface SegmentedControlOption<V extends string | number = string | num
   readonly value: V;
   readonly label?: string | number;
   /** Font Awesome icon name. */
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   readonly disabled?: boolean;
 }
 export type SeriesPoint =
@@ -1016,7 +1028,7 @@ export interface SpeedDialAction {
   /** Accessible name and tooltip of the mini-action button. */
   readonly label: string;
   /** Icon name (default "circle"). */
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   /** Runs on click; the dial then closes. */
   readonly onClick?: () => void;
   /** Synonym of `onClick` (used only when `onClick` is absent). */
@@ -1051,7 +1063,7 @@ export interface TabBarItem {
   readonly id: string | number;
   readonly label: string;
   /** Font Awesome icon name. */
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   readonly badge?: string | number;
   /** A leading "/" is a router path (`#/path`); anything else is a sanitised URL. */
   readonly href?: string;
@@ -1068,10 +1080,10 @@ export type ToggleGroupValue = string | number | boolean;
 export interface ToggleGroupItemObject<V extends ToggleGroupValue = ToggleGroupValue> {
   readonly value: V;
   readonly label?: string | number;
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   readonly disabled?: boolean;
 }
-export type ToggleGroupItemTuple<V extends ToggleGroupValue = ToggleGroupValue> = readonly [value: V, label?: string | number, icon?: string, disabled?: boolean];
+export type ToggleGroupItemTuple<V extends ToggleGroupValue = ToggleGroupValue> = readonly [value: V, label?: string | number, icon?: AktionIconName, disabled?: boolean];
 export type ToggleGroupItem<V extends ToggleGroupValue = ToggleGroupValue> = V | ToggleGroupItemTuple<V> | ToggleGroupItemObject<V>;
 export interface TourStep {
   readonly title: string | number;
@@ -1188,7 +1200,7 @@ export interface ActionLinkOptions extends BaseProps {
   /** Make the action inert, e.g. while a Retry is already running */
   disabled?: boolean;
   /** Font Awesome icon shown with the label */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Which side the icon sits on (default `start`) */
   iconPosition?: ActionLinkIconPosition;
   /** Accessible name, when the visible label alone does not identify the target — e.g. one "Rebuild" link per table row, where every link would otherwise be announced identically */
@@ -1205,10 +1217,10 @@ export declare function ActionLink(label: string | number, props: ActionLinkName
 export declare function ActionLink(props: ActionLinkProps): AktionNode<"ActionLink">;
 export declare function ActionLink(label: string | number, onClick: () => unknown, props?: Omit<ActionLinkOptions, "label" | "onClick" | "action" | "onclick">): AktionNode<"ActionLink">;
 export declare function ActionLink(label: string | number, onClick: () => unknown, disabled: boolean | null | undefined, props?: Omit<ActionLinkOptions, "label" | "onClick" | "action" | "onclick" | "disabled">): AktionNode<"ActionLink">;
-export declare function ActionLink(label: string | number, onClick: () => unknown, disabled: boolean | null | undefined, icon: string | number | null | undefined, props?: Omit<ActionLinkOptions, "label" | "onClick" | "action" | "onclick" | "disabled" | "icon">): AktionNode<"ActionLink">;
-export declare function ActionLink(label: string | number, onClick: () => unknown, disabled: boolean | null | undefined, icon: string | number | null | undefined, iconPosition: ActionLinkIconPosition | null | undefined, props?: Omit<ActionLinkOptions, "label" | "onClick" | "action" | "onclick" | "disabled" | "icon" | "iconPosition">): AktionNode<"ActionLink">;
-export declare function ActionLink(label: string | number, onClick: () => unknown, disabled: boolean | null | undefined, icon: string | number | null | undefined, iconPosition: ActionLinkIconPosition | null | undefined, ariaLabel: string | number | null | undefined, props?: Omit<ActionLinkOptions, "label" | "onClick" | "action" | "onclick" | "disabled" | "icon" | "iconPosition" | "ariaLabel">): AktionNode<"ActionLink">;
-export declare function ActionLink(label: string | number, onClick: () => unknown, disabled: boolean | null | undefined, icon: string | number | null | undefined, iconPosition: ActionLinkIconPosition | null | undefined, ariaLabel: string | number | null | undefined, tone: ActionLinkTone | null | undefined): AktionNode<"ActionLink">;
+export declare function ActionLink(label: string | number, onClick: () => unknown, disabled: boolean | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<ActionLinkOptions, "label" | "onClick" | "action" | "onclick" | "disabled" | "icon">): AktionNode<"ActionLink">;
+export declare function ActionLink(label: string | number, onClick: () => unknown, disabled: boolean | null | undefined, icon: AktionIconName | null | undefined, iconPosition: ActionLinkIconPosition | null | undefined, props?: Omit<ActionLinkOptions, "label" | "onClick" | "action" | "onclick" | "disabled" | "icon" | "iconPosition">): AktionNode<"ActionLink">;
+export declare function ActionLink(label: string | number, onClick: () => unknown, disabled: boolean | null | undefined, icon: AktionIconName | null | undefined, iconPosition: ActionLinkIconPosition | null | undefined, ariaLabel: string | number | null | undefined, props?: Omit<ActionLinkOptions, "label" | "onClick" | "action" | "onclick" | "disabled" | "icon" | "iconPosition" | "ariaLabel">): AktionNode<"ActionLink">;
+export declare function ActionLink(label: string | number, onClick: () => unknown, disabled: boolean | null | undefined, icon: AktionIconName | null | undefined, iconPosition: ActionLinkIconPosition | null | undefined, ariaLabel: string | number | null | undefined, tone: ActionLinkTone | null | undefined): AktionNode<"ActionLink">;
 
 /* ---- ActionStripe */
 export interface ActionStripeOptions extends BaseProps {
@@ -1219,7 +1231,7 @@ export interface ActionStripeOptions extends BaseProps {
   /** Alias of `description`. */
   meta?: string | number;
   /** Leading Font Awesome icon name */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Trailing value / status text shown before the chevron */
   value?: string | number;
   /** Render as a link instead of a button */
@@ -1241,12 +1253,12 @@ export type ActionStripeNamed = Omit<ActionStripeOptions, "label">;
 export declare function ActionStripe(label: string | number, props?: ActionStripeNamed): AktionNode<"ActionStripe">;
 export declare function ActionStripe(props: ActionStripeProps): AktionNode<"ActionStripe">;
 export declare function ActionStripe(label: string | number, description: string | number | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta">): AktionNode<"ActionStripe">;
-export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon">): AktionNode<"ActionStripe">;
-export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, value: string | number | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon" | "value">): AktionNode<"ActionStripe">;
-export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, value: string | number | null | undefined, href: string | number | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon" | "value" | "href">): AktionNode<"ActionStripe">;
-export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, value: string | number | null | undefined, href: string | number | null | undefined, disabled: boolean | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon" | "value" | "href" | "disabled">): AktionNode<"ActionStripe">;
-export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, value: string | number | null | undefined, href: string | number | null | undefined, disabled: boolean | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon" | "value" | "href" | "disabled" | "onClick" | "action" | "onclick">): AktionNode<"ActionStripe">;
-export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, value: string | number | null | undefined, href: string | number | null | undefined, disabled: boolean | null | undefined, onClick: (() => unknown) | null | undefined, trailing: AktionChild | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon" | "value" | "href" | "disabled" | "onClick" | "action" | "onclick" | "trailing">): AktionNode<"ActionStripe">;
+export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon">): AktionNode<"ActionStripe">;
+export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, value: string | number | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon" | "value">): AktionNode<"ActionStripe">;
+export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, value: string | number | null | undefined, href: string | number | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon" | "value" | "href">): AktionNode<"ActionStripe">;
+export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, value: string | number | null | undefined, href: string | number | null | undefined, disabled: boolean | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon" | "value" | "href" | "disabled">): AktionNode<"ActionStripe">;
+export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, value: string | number | null | undefined, href: string | number | null | undefined, disabled: boolean | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon" | "value" | "href" | "disabled" | "onClick" | "action" | "onclick">): AktionNode<"ActionStripe">;
+export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, value: string | number | null | undefined, href: string | number | null | undefined, disabled: boolean | null | undefined, onClick: (() => unknown) | null | undefined, trailing: AktionChild | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon" | "value" | "href" | "disabled" | "onClick" | "action" | "onclick" | "trailing">): AktionNode<"ActionStripe">;
 
 /* ---- ActivityLog */
 export interface ActivityLogOptions<Item extends ActivityLogItem = ActivityLogItem> extends BaseProps {
@@ -1258,7 +1270,7 @@ export interface ActivityLogOptions<Item extends ActivityLogItem = ActivityLogIt
   /** Message shown when `items` is empty (default `No activity yet`) */
   emptyLabel?: string | number;
   /** Callable fired with (index, item) when the title of an entry without an `href` is activated. `item` is the object you passed in `items`, every field intact (e.g. its `id`), and `index` its position in that array */
-  onItemClick?: ((index: number, item: Item) => unknown) | null;
+  onItemClick?: ((index: number, item: ActivityLogItemOf<Item>) => unknown) | null;
   /** Append a loading row while older activity is being fetched */
   loading?: boolean;
   /** Label for the loading row (default `Loading activity…`) */
@@ -1271,9 +1283,9 @@ export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogIt
 export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(props: ActivityLogProps<Item>): AktionNode<"ActivityLog">;
 export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, props?: Omit<ActivityLogOptions<Item>, "items" | "variant" | "tone">): AktionNode<"ActivityLog">;
 export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, props?: Omit<ActivityLogOptions<Item>, "items" | "variant" | "tone" | "emptyLabel">): AktionNode<"ActivityLog">;
-export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, onItemClick: ((index: number, item: Item) => unknown) | null | undefined, props?: Omit<ActivityLogOptions<Item>, "items" | "variant" | "tone" | "emptyLabel" | "onItemClick">): AktionNode<"ActivityLog">;
-export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, onItemClick: ((index: number, item: Item) => unknown) | null | undefined, loading: boolean | null | undefined, props?: Omit<ActivityLogOptions<Item>, "items" | "variant" | "tone" | "emptyLabel" | "onItemClick" | "loading">): AktionNode<"ActivityLog">;
-export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, onItemClick: ((index: number, item: Item) => unknown) | null | undefined, loading: boolean | null | undefined, loaderLabel: string | number | null | undefined): AktionNode<"ActivityLog">;
+export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, onItemClick: ((index: number, item: ActivityLogItemOf<Item>) => unknown) | null | undefined, props?: Omit<ActivityLogOptions<Item>, "items" | "variant" | "tone" | "emptyLabel" | "onItemClick">): AktionNode<"ActivityLog">;
+export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, onItemClick: ((index: number, item: ActivityLogItemOf<Item>) => unknown) | null | undefined, loading: boolean | null | undefined, props?: Omit<ActivityLogOptions<Item>, "items" | "variant" | "tone" | "emptyLabel" | "onItemClick" | "loading">): AktionNode<"ActivityLog">;
+export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, onItemClick: ((index: number, item: ActivityLogItemOf<Item>) => unknown) | null | undefined, loading: boolean | null | undefined, loaderLabel: string | number | null | undefined): AktionNode<"ActivityLog">;
 
 /* ---- AppShell */
 export interface AppShellOptions extends BaseProps {
@@ -1353,7 +1365,7 @@ export interface AudioPlayerOptions extends BaseProps {
   autoplay?: boolean;
   loop?: boolean;
   /** Leading icon (default `music`) */
-  icon?: string | number;
+  icon?: AktionIconName;
   muted?: boolean;
   /** Callable invoked when playback reaches the end */
   onEnded?: (() => unknown) | null;
@@ -1371,7 +1383,7 @@ export declare function AudioPlayer(src: string | null | undefined, sources: rea
 export declare function AudioPlayer(src: string | null | undefined, sources: readonly AudioPlayerSource[] | null | undefined, title: string | number | null | undefined, artist: string | number | null | undefined, controls: boolean | null | undefined, props?: Omit<AudioPlayerOptions, "src" | "sources" | "title" | "artist" | "controls">): AktionNode<"AudioPlayer">;
 export declare function AudioPlayer(src: string | null | undefined, sources: readonly AudioPlayerSource[] | null | undefined, title: string | number | null | undefined, artist: string | number | null | undefined, controls: boolean | null | undefined, autoplay: boolean | null | undefined, props?: Omit<AudioPlayerOptions, "src" | "sources" | "title" | "artist" | "controls" | "autoplay">): AktionNode<"AudioPlayer">;
 export declare function AudioPlayer(src: string | null | undefined, sources: readonly AudioPlayerSource[] | null | undefined, title: string | number | null | undefined, artist: string | number | null | undefined, controls: boolean | null | undefined, autoplay: boolean | null | undefined, loop: boolean | null | undefined, props?: Omit<AudioPlayerOptions, "src" | "sources" | "title" | "artist" | "controls" | "autoplay" | "loop">): AktionNode<"AudioPlayer">;
-export declare function AudioPlayer(src: string | null | undefined, sources: readonly AudioPlayerSource[] | null | undefined, title: string | number | null | undefined, artist: string | number | null | undefined, controls: boolean | null | undefined, autoplay: boolean | null | undefined, loop: boolean | null | undefined, icon: string | number | null | undefined, props?: Omit<AudioPlayerOptions, "src" | "sources" | "title" | "artist" | "controls" | "autoplay" | "loop" | "icon">): AktionNode<"AudioPlayer">;
+export declare function AudioPlayer(src: string | null | undefined, sources: readonly AudioPlayerSource[] | null | undefined, title: string | number | null | undefined, artist: string | number | null | undefined, controls: boolean | null | undefined, autoplay: boolean | null | undefined, loop: boolean | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<AudioPlayerOptions, "src" | "sources" | "title" | "artist" | "controls" | "autoplay" | "loop" | "icon">): AktionNode<"AudioPlayer">;
 
 /* ---- AuthorByline */
 export interface AuthorBylineOptions extends Omit<BaseProps, "role"> {
@@ -1503,7 +1515,7 @@ export interface BadgeOptions extends BaseProps {
   /** Alias of `tone`. */
   variant?: BadgeTone;
   /** Optional Font Awesome icon name (e.g. "star") */
-  icon?: string | number;
+  icon?: AktionIconName;
   size?: BadgeSize;
 }
 export type BadgeProps = BadgeOptions & { label: string | number };
@@ -1512,8 +1524,8 @@ export type BadgeNamed = Omit<BadgeOptions, "label">;
 export declare function Badge(label: string | number, props?: BadgeNamed): AktionNode<"Badge">;
 export declare function Badge(props: BadgeProps): AktionNode<"Badge">;
 export declare function Badge(label: string | number, tone: BadgeTone | null | undefined, props?: Omit<BadgeOptions, "label" | "tone" | "variant">): AktionNode<"Badge">;
-export declare function Badge(label: string | number, tone: BadgeTone | null | undefined, icon: string | number | null | undefined, props?: Omit<BadgeOptions, "label" | "tone" | "variant" | "icon">): AktionNode<"Badge">;
-export declare function Badge(label: string | number, tone: BadgeTone | null | undefined, icon: string | number | null | undefined, size: BadgeSize | null | undefined): AktionNode<"Badge">;
+export declare function Badge(label: string | number, tone: BadgeTone | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<BadgeOptions, "label" | "tone" | "variant" | "icon">): AktionNode<"Badge">;
+export declare function Badge(label: string | number, tone: BadgeTone | null | undefined, icon: AktionIconName | null | undefined, size: BadgeSize | null | undefined): AktionNode<"Badge">;
 
 /* ---- BadgeList */
 export interface BadgeListOptions extends BaseProps {
@@ -1528,7 +1540,7 @@ export interface BadgeListOptions extends BaseProps {
   /** Alias of `tones`. */
   variants?: readonly (BadgeListTone | null | undefined)[];
   /** Per-item leading Font Awesome icon names, index-aligned with `labels` */
-  icons?: readonly (string | null | undefined)[];
+  icons?: readonly (AktionIconName | null | undefined)[];
   /** Render at most N pills, then a `+N` overflow pill */
   max?: number;
 }
@@ -1540,8 +1552,8 @@ export declare function BadgeList(props: BadgeListProps): AktionNode<"BadgeList"
 export declare function BadgeList(labels: readonly (string | number | null | undefined)[], tone: BadgeListTone | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant">): AktionNode<"BadgeList">;
 export declare function BadgeList(labels: readonly (string | number | null | undefined)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant" | "size">): AktionNode<"BadgeList">;
 export declare function BadgeList(labels: readonly (string | number | null | undefined)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, tones: readonly (BadgeListTone | null | undefined)[] | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant" | "size" | "tones" | "variants">): AktionNode<"BadgeList">;
-export declare function BadgeList(labels: readonly (string | number | null | undefined)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, tones: readonly (BadgeListTone | null | undefined)[] | null | undefined, icons: readonly (string | null | undefined)[] | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant" | "size" | "tones" | "variants" | "icons">): AktionNode<"BadgeList">;
-export declare function BadgeList(labels: readonly (string | number | null | undefined)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, tones: readonly (BadgeListTone | null | undefined)[] | null | undefined, icons: readonly (string | null | undefined)[] | null | undefined, max: number | null | undefined): AktionNode<"BadgeList">;
+export declare function BadgeList(labels: readonly (string | number | null | undefined)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, tones: readonly (BadgeListTone | null | undefined)[] | null | undefined, icons: readonly (AktionIconName | null | undefined)[] | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant" | "size" | "tones" | "variants" | "icons">): AktionNode<"BadgeList">;
+export declare function BadgeList(labels: readonly (string | number | null | undefined)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, tones: readonly (BadgeListTone | null | undefined)[] | null | undefined, icons: readonly (AktionIconName | null | undefined)[] | null | undefined, max: number | null | undefined): AktionNode<"BadgeList">;
 
 /* ---- Banner */
 export interface BannerOptions extends BaseProps {
@@ -1551,7 +1563,7 @@ export interface BannerOptions extends BaseProps {
   description?: string | number;
   action?: AktionNode<"Button">;
   /** Font Awesome icon name */
-  icon?: string | number;
+  icon?: AktionIconName;
   tone?: BannerTone;
   /** Alias of `tone`. */
   variant?: BannerTone;
@@ -1577,11 +1589,11 @@ export declare function Banner(title: string | number, props?: BannerNamed): Akt
 export declare function Banner(props: BannerProps): AktionNode<"Banner">;
 export declare function Banner(title: string | number, message: string | number | null | undefined, props?: Omit<BannerOptions, "title" | "message" | "description">): AktionNode<"Banner">;
 export declare function Banner(title: string | number, message: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, props?: Omit<BannerOptions, "title" | "message" | "description" | "action">): AktionNode<"Banner">;
-export declare function Banner(title: string | number, message: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, icon: string | number | null | undefined, props?: Omit<BannerOptions, "title" | "message" | "description" | "action" | "icon">): AktionNode<"Banner">;
-export declare function Banner(title: string | number, message: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, icon: string | number | null | undefined, tone: BannerTone | null | undefined, props?: Omit<BannerOptions, "title" | "message" | "description" | "action" | "icon" | "tone" | "variant">): AktionNode<"Banner">;
-export declare function Banner(title: string | number, message: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, icon: string | number | null | undefined, tone: BannerTone | null | undefined, dismissible: boolean | null | undefined, props?: Omit<BannerOptions, "title" | "message" | "description" | "action" | "icon" | "tone" | "variant" | "dismissible" | "closable">): AktionNode<"Banner">;
-export declare function Banner(title: string | number, message: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, icon: string | number | null | undefined, tone: BannerTone | null | undefined, dismissible: boolean | null | undefined, onDismiss: (() => unknown) | null | undefined, props?: Omit<BannerOptions, "title" | "message" | "description" | "action" | "icon" | "tone" | "variant" | "dismissible" | "closable" | "onDismiss" | "onClose">): AktionNode<"Banner">;
-export declare function Banner(title: string | number, message: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, icon: string | number | null | undefined, tone: BannerTone | null | undefined, dismissible: boolean | null | undefined, onDismiss: (() => unknown) | null | undefined, href: string | number | null | undefined, props?: Omit<BannerOptions, "title" | "message" | "description" | "action" | "icon" | "tone" | "variant" | "dismissible" | "closable" | "onDismiss" | "onClose" | "href">): AktionNode<"Banner">;
+export declare function Banner(title: string | number, message: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<BannerOptions, "title" | "message" | "description" | "action" | "icon">): AktionNode<"Banner">;
+export declare function Banner(title: string | number, message: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, icon: AktionIconName | null | undefined, tone: BannerTone | null | undefined, props?: Omit<BannerOptions, "title" | "message" | "description" | "action" | "icon" | "tone" | "variant">): AktionNode<"Banner">;
+export declare function Banner(title: string | number, message: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, icon: AktionIconName | null | undefined, tone: BannerTone | null | undefined, dismissible: boolean | null | undefined, props?: Omit<BannerOptions, "title" | "message" | "description" | "action" | "icon" | "tone" | "variant" | "dismissible" | "closable">): AktionNode<"Banner">;
+export declare function Banner(title: string | number, message: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, icon: AktionIconName | null | undefined, tone: BannerTone | null | undefined, dismissible: boolean | null | undefined, onDismiss: (() => unknown) | null | undefined, props?: Omit<BannerOptions, "title" | "message" | "description" | "action" | "icon" | "tone" | "variant" | "dismissible" | "closable" | "onDismiss" | "onClose">): AktionNode<"Banner">;
+export declare function Banner(title: string | number, message: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, icon: AktionIconName | null | undefined, tone: BannerTone | null | undefined, dismissible: boolean | null | undefined, onDismiss: (() => unknown) | null | undefined, href: string | number | null | undefined, props?: Omit<BannerOptions, "title" | "message" | "description" | "action" | "icon" | "tone" | "variant" | "dismissible" | "closable" | "onDismiss" | "onClose" | "href">): AktionNode<"Banner">;
 
 /* ---- BarChart */
 export interface BarChartOptions extends BaseProps {
@@ -1761,10 +1773,10 @@ export interface BreadcrumbOptions extends BaseProps {
   separator?: string | number;
   /** Collapse the middle of the trail to an ellipsis once there are more items than this (keeps the first crumb and the tail) */
   maxItems?: number;
-  /** Called with (index, label) when a crumb is clicked — fires alongside any navigation */
+  /** Called with (index, label) when a crumb is clicked — before the crumb navigates (and before a BreadcrumbItem's own `onClick`), whatever form the crumb takes */
   onItemClick?: ((index: number, label: string) => unknown) | null;
   /** Leading icon on the FIRST crumb — `true` (default) uses `house`, `false` removes it, a string picks another Font Awesome name */
-  homeIcon?: boolean | string;
+  homeIcon?: boolean | AktionIconName;
   /** Derive a cumulative route from plain-string labels so they navigate (default `true`). Set `false` for a trail that is pure text unless an item names its own `to`/`href` */
   autoLink?: boolean;
 }
@@ -1776,8 +1788,8 @@ export declare function Breadcrumb(props: BreadcrumbProps): AktionNode<"Breadcru
 export declare function Breadcrumb(items: readonly BreadcrumbEntry[], separator: string | number | null | undefined, props?: Omit<BreadcrumbOptions, "items" | "separator">): AktionNode<"Breadcrumb">;
 export declare function Breadcrumb(items: readonly BreadcrumbEntry[], separator: string | number | null | undefined, maxItems: number | null | undefined, props?: Omit<BreadcrumbOptions, "items" | "separator" | "maxItems">): AktionNode<"Breadcrumb">;
 export declare function Breadcrumb(items: readonly BreadcrumbEntry[], separator: string | number | null | undefined, maxItems: number | null | undefined, onItemClick: ((index: number, label: string) => unknown) | null | undefined, props?: Omit<BreadcrumbOptions, "items" | "separator" | "maxItems" | "onItemClick">): AktionNode<"Breadcrumb">;
-export declare function Breadcrumb(items: readonly BreadcrumbEntry[], separator: string | number | null | undefined, maxItems: number | null | undefined, onItemClick: ((index: number, label: string) => unknown) | null | undefined, homeIcon: boolean | string | null | undefined, props?: Omit<BreadcrumbOptions, "items" | "separator" | "maxItems" | "onItemClick" | "homeIcon">): AktionNode<"Breadcrumb">;
-export declare function Breadcrumb(items: readonly BreadcrumbEntry[], separator: string | number | null | undefined, maxItems: number | null | undefined, onItemClick: ((index: number, label: string) => unknown) | null | undefined, homeIcon: boolean | string | null | undefined, autoLink: boolean | null | undefined): AktionNode<"Breadcrumb">;
+export declare function Breadcrumb(items: readonly BreadcrumbEntry[], separator: string | number | null | undefined, maxItems: number | null | undefined, onItemClick: ((index: number, label: string) => unknown) | null | undefined, homeIcon: boolean | AktionIconName | null | undefined, props?: Omit<BreadcrumbOptions, "items" | "separator" | "maxItems" | "onItemClick" | "homeIcon">): AktionNode<"Breadcrumb">;
+export declare function Breadcrumb(items: readonly BreadcrumbEntry[], separator: string | number | null | undefined, maxItems: number | null | undefined, onItemClick: ((index: number, label: string) => unknown) | null | undefined, homeIcon: boolean | AktionIconName | null | undefined, autoLink: boolean | null | undefined): AktionNode<"Breadcrumb">;
 
 /* ---- BreadcrumbItem */
 export interface BreadcrumbItemOptions extends BaseProps {
@@ -1785,7 +1797,7 @@ export interface BreadcrumbItemOptions extends BaseProps {
   /** External URL — use `to` for in-app routes */
   href?: string | number;
   /** Optional Font Awesome icon name */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** In-app route, e.g. "/projects" — navigated through the router without reloading the app */
   to?: string | number;
   /** Callable fired on click — use instead of `to`/`href` to pop a step without changing the URL */
@@ -1799,9 +1811,9 @@ export type BreadcrumbItemNamed = Omit<BreadcrumbItemOptions, "label">;
 export declare function BreadcrumbItem(label: string | number, props?: BreadcrumbItemNamed): AktionNode<"BreadcrumbItem">;
 export declare function BreadcrumbItem(props: BreadcrumbItemProps): AktionNode<"BreadcrumbItem">;
 export declare function BreadcrumbItem(label: string | number, href: string | number | null | undefined, props?: Omit<BreadcrumbItemOptions, "label" | "href">): AktionNode<"BreadcrumbItem">;
-export declare function BreadcrumbItem(label: string | number, href: string | number | null | undefined, icon: string | number | null | undefined, props?: Omit<BreadcrumbItemOptions, "label" | "href" | "icon">): AktionNode<"BreadcrumbItem">;
-export declare function BreadcrumbItem(label: string | number, href: string | number | null | undefined, icon: string | number | null | undefined, to: string | number | null | undefined, props?: Omit<BreadcrumbItemOptions, "label" | "href" | "icon" | "to">): AktionNode<"BreadcrumbItem">;
-export declare function BreadcrumbItem(label: string | number, href: string | number | null | undefined, icon: string | number | null | undefined, to: string | number | null | undefined, onClick: (() => unknown) | null | undefined): AktionNode<"BreadcrumbItem">;
+export declare function BreadcrumbItem(label: string | number, href: string | number | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<BreadcrumbItemOptions, "label" | "href" | "icon">): AktionNode<"BreadcrumbItem">;
+export declare function BreadcrumbItem(label: string | number, href: string | number | null | undefined, icon: AktionIconName | null | undefined, to: string | number | null | undefined, props?: Omit<BreadcrumbItemOptions, "label" | "href" | "icon" | "to">): AktionNode<"BreadcrumbItem">;
+export declare function BreadcrumbItem(label: string | number, href: string | number | null | undefined, icon: AktionIconName | null | undefined, to: string | number | null | undefined, onClick: (() => unknown) | null | undefined): AktionNode<"BreadcrumbItem">;
 
 /* ---- BrowserFrame */
 export interface BrowserFrameOptions extends BaseProps {
@@ -1843,7 +1855,7 @@ export interface ButtonOptions extends BaseProps {
   /** Size token `xs|sm|md|lg|xl` */
   size?: ButtonSize;
   /** Optional Font Awesome icon name */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Icon placement (default leading) */
   iconPosition?: ButtonIconPosition;
   /** Hide the label visually (keeps aria-label) */
@@ -1864,9 +1876,9 @@ export declare function Button(label: string | number, onClick: (() => unknown) 
 export declare function Button(label: string | number, onClick: (() => unknown) | null | undefined, variant: ButtonVariant | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone">): AktionNode<"Button">;
 export declare function Button(label: string | number, onClick: (() => unknown) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type">): AktionNode<"Button">;
 export declare function Button(label: string | number, onClick: (() => unknown) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: ButtonSize | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size">): AktionNode<"Button">;
-export declare function Button(label: string | number, onClick: (() => unknown) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: ButtonSize | null | undefined, icon: string | number | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size" | "icon">): AktionNode<"Button">;
-export declare function Button(label: string | number, onClick: (() => unknown) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: ButtonSize | null | undefined, icon: string | number | null | undefined, iconPosition: ButtonIconPosition | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size" | "icon" | "iconPosition">): AktionNode<"Button">;
-export declare function Button(label: string | number, onClick: (() => unknown) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: ButtonSize | null | undefined, icon: string | number | null | undefined, iconPosition: ButtonIconPosition | null | undefined, iconOnly: boolean | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size" | "icon" | "iconPosition" | "iconOnly">): AktionNode<"Button">;
+export declare function Button(label: string | number, onClick: (() => unknown) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: ButtonSize | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size" | "icon">): AktionNode<"Button">;
+export declare function Button(label: string | number, onClick: (() => unknown) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: ButtonSize | null | undefined, icon: AktionIconName | null | undefined, iconPosition: ButtonIconPosition | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size" | "icon" | "iconPosition">): AktionNode<"Button">;
+export declare function Button(label: string | number, onClick: (() => unknown) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: ButtonSize | null | undefined, icon: AktionIconName | null | undefined, iconPosition: ButtonIconPosition | null | undefined, iconOnly: boolean | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size" | "icon" | "iconPosition" | "iconOnly">): AktionNode<"Button">;
 
 /* ---- ButtonGroup */
 export interface ButtonGroupOptions extends BaseProps {
@@ -1933,7 +1945,7 @@ export interface CalendarOptions<Ev extends CalendarEvent = CalendarEvent> exten
   /** Alias of `disabledDates`. */
   blackoutDates?: readonly string[];
   /** (event, isoDate) => … when an event chip is clicked (the day cell still handles keyboard selection) */
-  onEventClick?: ((event: Ev, iso: string) => unknown) | null;
+  onEventClick?: ((event: CalendarEventOf<Ev>, iso: string) => unknown) | null;
   /** BCP 47 tag for the weekday/month/day names (e.g. `de-DE`) */
   locale?: string;
   /** Exactly 7 labels, Sunday first — overrides `locale` */
@@ -1972,7 +1984,7 @@ export interface CalendarViewOptions<Item extends CalendarViewEvent = CalendarVi
   /** Alias of `onMonthChange`. */
   onNavigate?: ((anchor: string) => unknown) | null;
   /** Callable fired with (eventId, event) when an event chip is clicked, where `event` is the object you passed in `events` (every field intact) and `eventId` its `id` as a string, or `<date>#<index>` when it has none; makes the chips real buttons */
-  onEventClick?: ((eventId: string, event: Item) => unknown) | null;
+  onEventClick?: ((eventId: string, event: CalendarViewEventOf<Item>) => unknown) | null;
   /** Event chips per day before a `+N more` toggle (default 3) */
   maxEventsPerDay?: number;
   /** Earliest selectable ISO date */
@@ -1995,7 +2007,7 @@ export declare function CalendarView<Item extends CalendarViewEvent = CalendarVi
 export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value: string | null | undefined, month: string | null | undefined, events: readonly (Item | null | undefined)[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, props?: Omit<CalendarViewOptions<Item>, "value" | "month" | "events" | "view" | "firstDay">): AktionNode<"CalendarView">;
 export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value: string | null | undefined, month: string | null | undefined, events: readonly (Item | null | undefined)[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, onSelect: ((date: string) => unknown) | null | undefined, props?: Omit<CalendarViewOptions<Item>, "value" | "month" | "events" | "view" | "firstDay" | "onSelect">): AktionNode<"CalendarView">;
 export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value: string | null | undefined, month: string | null | undefined, events: readonly (Item | null | undefined)[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, onSelect: ((date: string) => unknown) | null | undefined, onMonthChange: ((anchor: string) => unknown) | null | undefined, props?: Omit<CalendarViewOptions<Item>, "value" | "month" | "events" | "view" | "firstDay" | "onSelect" | "onMonthChange" | "onNavigate">): AktionNode<"CalendarView">;
-export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value: string | null | undefined, month: string | null | undefined, events: readonly (Item | null | undefined)[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, onSelect: ((date: string) => unknown) | null | undefined, onMonthChange: ((anchor: string) => unknown) | null | undefined, onEventClick: ((eventId: string, event: Item) => unknown) | null | undefined, props?: Omit<CalendarViewOptions<Item>, "value" | "month" | "events" | "view" | "firstDay" | "onSelect" | "onMonthChange" | "onNavigate" | "onEventClick">): AktionNode<"CalendarView">;
+export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value: string | null | undefined, month: string | null | undefined, events: readonly (Item | null | undefined)[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, onSelect: ((date: string) => unknown) | null | undefined, onMonthChange: ((anchor: string) => unknown) | null | undefined, onEventClick: ((eventId: string, event: CalendarViewEventOf<Item>) => unknown) | null | undefined, props?: Omit<CalendarViewOptions<Item>, "value" | "month" | "events" | "view" | "firstDay" | "onSelect" | "onMonthChange" | "onNavigate" | "onEventClick">): AktionNode<"CalendarView">;
 
 /* ---- Callout */
 export interface CalloutOptions extends BaseProps {
@@ -2008,7 +2020,7 @@ export interface CalloutOptions extends BaseProps {
   /** Alias of `description`. */
   text?: string | number;
   /** Font Awesome icon name (default: the tone's icon); `false` hides it, like `hideIcon` */
-  icon?: string | number | false;
+  icon?: AktionIconName | false;
   /** Render with the dense, one-line note shape. */
   compact?: boolean;
   /** Optional action row (buttons/links) rendered under the body */
@@ -2037,11 +2049,11 @@ export declare function Callout(title: string | number, props?: CalloutNamed): A
 export declare function Callout(props: CalloutProps): AktionNode<"Callout">;
 export declare function Callout(title: string | number, tone: CalloutTone | null | undefined, props?: Omit<CalloutOptions, "title" | "tone" | "variant">): AktionNode<"Callout">;
 export declare function Callout(title: string | number, tone: CalloutTone | null | undefined, description: string | number | null | undefined, props?: Omit<CalloutOptions, "title" | "tone" | "variant" | "description" | "text">): AktionNode<"Callout">;
-export declare function Callout(title: string | number, tone: CalloutTone | null | undefined, description: string | number | null | undefined, icon: string | number | false | null | undefined, props?: Omit<CalloutOptions, "title" | "tone" | "variant" | "description" | "text" | "icon">): AktionNode<"Callout">;
-export declare function Callout(title: string | number, tone: CalloutTone | null | undefined, description: string | number | null | undefined, icon: string | number | false | null | undefined, compact: boolean | null | undefined, props?: Omit<CalloutOptions, "title" | "tone" | "variant" | "description" | "text" | "icon" | "compact">): AktionNode<"Callout">;
-export declare function Callout(title: string | number, tone: CalloutTone | null | undefined, description: string | number | null | undefined, icon: string | number | false | null | undefined, compact: boolean | null | undefined, actions: Children | null | undefined, props?: Omit<CalloutOptions, "title" | "tone" | "variant" | "description" | "text" | "icon" | "compact" | "actions" | "footer">): AktionNode<"Callout">;
-export declare function Callout(title: string | number, tone: CalloutTone | null | undefined, description: string | number | null | undefined, icon: string | number | false | null | undefined, compact: boolean | null | undefined, actions: Children | null | undefined, hideIcon: boolean | null | undefined, props?: Omit<CalloutOptions, "title" | "tone" | "variant" | "description" | "text" | "icon" | "compact" | "actions" | "footer" | "hideIcon" | "noIcon">): AktionNode<"Callout">;
-export declare function Callout(title: string | number, tone: CalloutTone | null | undefined, description: string | number | null | undefined, icon: string | number | false | null | undefined, compact: boolean | null | undefined, actions: Children | null | undefined, hideIcon: boolean | null | undefined, live: boolean | null | undefined, props?: Omit<CalloutOptions, "title" | "tone" | "variant" | "description" | "text" | "icon" | "compact" | "actions" | "footer" | "hideIcon" | "noIcon" | "live">): AktionNode<"Callout">;
+export declare function Callout(title: string | number, tone: CalloutTone | null | undefined, description: string | number | null | undefined, icon: AktionIconName | false | null | undefined, props?: Omit<CalloutOptions, "title" | "tone" | "variant" | "description" | "text" | "icon">): AktionNode<"Callout">;
+export declare function Callout(title: string | number, tone: CalloutTone | null | undefined, description: string | number | null | undefined, icon: AktionIconName | false | null | undefined, compact: boolean | null | undefined, props?: Omit<CalloutOptions, "title" | "tone" | "variant" | "description" | "text" | "icon" | "compact">): AktionNode<"Callout">;
+export declare function Callout(title: string | number, tone: CalloutTone | null | undefined, description: string | number | null | undefined, icon: AktionIconName | false | null | undefined, compact: boolean | null | undefined, actions: Children | null | undefined, props?: Omit<CalloutOptions, "title" | "tone" | "variant" | "description" | "text" | "icon" | "compact" | "actions" | "footer">): AktionNode<"Callout">;
+export declare function Callout(title: string | number, tone: CalloutTone | null | undefined, description: string | number | null | undefined, icon: AktionIconName | false | null | undefined, compact: boolean | null | undefined, actions: Children | null | undefined, hideIcon: boolean | null | undefined, props?: Omit<CalloutOptions, "title" | "tone" | "variant" | "description" | "text" | "icon" | "compact" | "actions" | "footer" | "hideIcon" | "noIcon">): AktionNode<"Callout">;
+export declare function Callout(title: string | number, tone: CalloutTone | null | undefined, description: string | number | null | undefined, icon: AktionIconName | false | null | undefined, compact: boolean | null | undefined, actions: Children | null | undefined, hideIcon: boolean | null | undefined, live: boolean | null | undefined, props?: Omit<CalloutOptions, "title" | "tone" | "variant" | "description" | "text" | "icon" | "compact" | "actions" | "footer" | "hideIcon" | "noIcon" | "live">): AktionNode<"Callout">;
 
 /* ---- Card */
 export interface CardOptions extends BaseProps {
@@ -2485,7 +2497,7 @@ export interface CodeEditorOptions extends Omit<BaseProps, "id"> {
   /** Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it */
   description?: string | number;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -2644,7 +2656,7 @@ export interface ColorPickerOptions extends Omit<BaseProps, "id"> {
   /** Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it */
   description?: string | number;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -2913,7 +2925,7 @@ export interface ConfirmDialogOptions extends BaseProps {
   /** Guard the primary action until a condition is met */
   confirmDisabled?: boolean;
   /** Glyph beside the title (defaults from `tone`) */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Put Confirm before Cancel in the footer (default `false`, i.e. Cancel, then Confirm) — some design systems (IONOS Exos among them) put the primary action first in a dialog footer; this flips DOM order (so visual order and tab order move together), not just visual position. Initial focus still lands on Cancel either way, the safe default for a destructive dialog. */
   confirmFirst?: boolean;
 }
@@ -3338,7 +3350,7 @@ export interface DateTimePickerOptions extends Omit<BaseProps, "id"> {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -3377,7 +3389,7 @@ export declare function DateTimePicker(id: string | number, value: string | null
 export interface DescriptionItemOptions extends BaseProps {
   label?: string | number;
   value?: Children;
-  icon?: string | number;
+  icon?: AktionIconName;
 }
 export type DescriptionItemProps = DescriptionItemOptions & { label: string | number } & { value: Children };
 export type DescriptionItemNamed = Omit<DescriptionItemOptions, "label"> & { value: Children };
@@ -3385,7 +3397,7 @@ export type DescriptionItemNamed = Omit<DescriptionItemOptions, "label"> & { val
 export declare function DescriptionItem(label: string | number, props: DescriptionItemNamed): AktionNode<"DescriptionItem">;
 export declare function DescriptionItem(props: DescriptionItemProps): AktionNode<"DescriptionItem">;
 export declare function DescriptionItem(label: string | number, value: Children, props?: Omit<DescriptionItemOptions, "label" | "value">): AktionNode<"DescriptionItem">;
-export declare function DescriptionItem(label: string | number, value: Children, icon: string | number | null | undefined): AktionNode<"DescriptionItem">;
+export declare function DescriptionItem(label: string | number, value: Children, icon: AktionIconName | null | undefined): AktionNode<"DescriptionItem">;
 
 /* ---- DescriptionList */
 export interface DescriptionListOptions extends BaseProps {
@@ -3549,7 +3561,7 @@ export interface DrawingCanvasOptions extends BaseProps {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -3651,7 +3663,7 @@ export interface EmptyStateOptions extends BaseProps {
   title?: string | number;
   description?: string | number;
   /** Font Awesome icon name (defaults to "inbox") */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Image URL — takes precedence over `icon` when provided */
   illustration?: string | number;
   /** Single CTA (legacy slot) */
@@ -3665,10 +3677,10 @@ export type EmptyStateNamed = Omit<EmptyStateOptions, "title">;
 export declare function EmptyState(title: string | number, props?: EmptyStateNamed): AktionNode<"EmptyState">;
 export declare function EmptyState(props: EmptyStateProps): AktionNode<"EmptyState">;
 export declare function EmptyState(title: string | number, description: string | number | null | undefined, props?: Omit<EmptyStateOptions, "title" | "description">): AktionNode<"EmptyState">;
-export declare function EmptyState(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, props?: Omit<EmptyStateOptions, "title" | "description" | "icon">): AktionNode<"EmptyState">;
-export declare function EmptyState(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, illustration: string | number | null | undefined, props?: Omit<EmptyStateOptions, "title" | "description" | "icon" | "illustration">): AktionNode<"EmptyState">;
-export declare function EmptyState(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, illustration: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, props?: Omit<EmptyStateOptions, "title" | "description" | "icon" | "illustration" | "action">): AktionNode<"EmptyState">;
-export declare function EmptyState(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, illustration: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, actions: Children | null | undefined): AktionNode<"EmptyState">;
+export declare function EmptyState(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<EmptyStateOptions, "title" | "description" | "icon">): AktionNode<"EmptyState">;
+export declare function EmptyState(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, illustration: string | number | null | undefined, props?: Omit<EmptyStateOptions, "title" | "description" | "icon" | "illustration">): AktionNode<"EmptyState">;
+export declare function EmptyState(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, illustration: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, props?: Omit<EmptyStateOptions, "title" | "description" | "icon" | "illustration" | "action">): AktionNode<"EmptyState">;
+export declare function EmptyState(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, illustration: string | number | null | undefined, action: AktionNode<"Button"> | null | undefined, actions: Children | null | undefined): AktionNode<"EmptyState">;
 
 /* ---- ErrorBoundary */
 export interface ErrorBoundaryOptions extends BaseProps {
@@ -3699,7 +3711,7 @@ export interface ErrorStateOptions extends BaseProps {
   description?: string | number;
   actions?: Children;
   /** Font Awesome icon (default `circle-exclamation`) */
-  icon?: string | number;
+  icon?: AktionIconName;
 }
 export type ErrorStateProps = ErrorStateOptions;
 export type ErrorStateNamed = Omit<ErrorStateOptions, "title">;
@@ -3708,7 +3720,7 @@ export declare function ErrorState(title?: string | number, props?: ErrorStateNa
 export declare function ErrorState(props: ErrorStateProps): AktionNode<"ErrorState">;
 export declare function ErrorState(title: string | number | null | undefined, description: string | number | null | undefined, props?: Omit<ErrorStateOptions, "title" | "description">): AktionNode<"ErrorState">;
 export declare function ErrorState(title: string | number | null | undefined, description: string | number | null | undefined, actions: Children | null | undefined, props?: Omit<ErrorStateOptions, "title" | "description" | "actions">): AktionNode<"ErrorState">;
-export declare function ErrorState(title: string | number | null | undefined, description: string | number | null | undefined, actions: Children | null | undefined, icon: string | number | null | undefined): AktionNode<"ErrorState">;
+export declare function ErrorState(title: string | number | null | undefined, description: string | number | null | undefined, actions: Children | null | undefined, icon: AktionIconName | null | undefined): AktionNode<"ErrorState">;
 
 /* ---- Eyebrow */
 export interface EyebrowOptions extends BaseProps {
@@ -3742,7 +3754,7 @@ export interface FeatureItemOptions extends BaseProps {
   title?: string | number;
   description?: string | number;
   /** Font Awesome icon name shown in a colored disc */
-  icon?: string | number;
+  icon?: AktionIconName;
   tone?: FeatureItemTone;
   /** Alias of `tone`. */
   variant?: FeatureItemTone;
@@ -3761,10 +3773,10 @@ export type FeatureItemNamed = Omit<FeatureItemOptions, "title">;
 export declare function FeatureItem(title: string | number, props?: FeatureItemNamed): AktionNode<"FeatureItem">;
 export declare function FeatureItem(props: FeatureItemProps): AktionNode<"FeatureItem">;
 export declare function FeatureItem(title: string | number, description: string | number | null | undefined, props?: Omit<FeatureItemOptions, "title" | "description">): AktionNode<"FeatureItem">;
-export declare function FeatureItem(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, props?: Omit<FeatureItemOptions, "title" | "description" | "icon">): AktionNode<"FeatureItem">;
-export declare function FeatureItem(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, tone: FeatureItemTone | null | undefined, props?: Omit<FeatureItemOptions, "title" | "description" | "icon" | "tone" | "variant">): AktionNode<"FeatureItem">;
-export declare function FeatureItem(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, tone: FeatureItemTone | null | undefined, href: string | number | null | undefined, props?: Omit<FeatureItemOptions, "title" | "description" | "icon" | "tone" | "variant" | "href">): AktionNode<"FeatureItem">;
-export declare function FeatureItem(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, tone: FeatureItemTone | null | undefined, href: string | number | null | undefined, onClick: (() => unknown) | null | undefined): AktionNode<"FeatureItem">;
+export declare function FeatureItem(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<FeatureItemOptions, "title" | "description" | "icon">): AktionNode<"FeatureItem">;
+export declare function FeatureItem(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, tone: FeatureItemTone | null | undefined, props?: Omit<FeatureItemOptions, "title" | "description" | "icon" | "tone" | "variant">): AktionNode<"FeatureItem">;
+export declare function FeatureItem(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, tone: FeatureItemTone | null | undefined, href: string | number | null | undefined, props?: Omit<FeatureItemOptions, "title" | "description" | "icon" | "tone" | "variant" | "href">): AktionNode<"FeatureItem">;
+export declare function FeatureItem(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, tone: FeatureItemTone | null | undefined, href: string | number | null | undefined, onClick: (() => unknown) | null | undefined): AktionNode<"FeatureItem">;
 
 /* ---- FieldRepeater */
 export interface FieldRepeaterOptions<Item extends object = Record<string, unknown>> extends BaseProps {
@@ -3847,7 +3859,7 @@ export interface FileUploadOptions extends Omit<BaseProps, "id"> {
   /** Alias of `onSelect`. */
   onChange?: ((files: DomFile[]) => unknown) | null;
   /** Font Awesome icon (default "cloud-arrow-up") */
-  icon?: string | number;
+  icon?: AktionIconName;
   disabled?: boolean;
   /** Maximum accepted file size in bytes — larger files are rejected client-side and never reach `onSelect` */
   maxSize?: number;
@@ -3868,8 +3880,8 @@ export declare function FileUpload(id: string | number, label: string | number |
 export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept">): AktionNode<"FileUpload">;
 export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple">): AktionNode<"FileUpload">;
 export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, onSelect: ((files: DomFile[]) => unknown) | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple" | "onSelect" | "action" | "onChange">): AktionNode<"FileUpload">;
-export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, onSelect: ((files: DomFile[]) => unknown) | null | undefined, icon: string | number | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple" | "onSelect" | "action" | "onChange" | "icon">): AktionNode<"FileUpload">;
-export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, onSelect: ((files: DomFile[]) => unknown) | null | undefined, icon: string | number | null | undefined, disabled: boolean | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple" | "onSelect" | "action" | "onChange" | "icon" | "disabled">): AktionNode<"FileUpload">;
+export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, onSelect: ((files: DomFile[]) => unknown) | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple" | "onSelect" | "action" | "onChange" | "icon">): AktionNode<"FileUpload">;
+export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, onSelect: ((files: DomFile[]) => unknown) | null | undefined, icon: AktionIconName | null | undefined, disabled: boolean | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple" | "onSelect" | "action" | "onChange" | "icon" | "disabled">): AktionNode<"FileUpload">;
 
 /* ---- FilterChips */
 export interface FilterChipsOptions extends BaseProps {
@@ -3906,7 +3918,7 @@ export interface FilterPillOptions extends BaseProps {
   pressed?: boolean;
   /** Optional trailing match count */
   count?: number;
-  icon?: string | number;
+  icon?: AktionIconName;
   disabled?: boolean;
   /** Receives the next active state */
   onToggle?: ((active: boolean) => unknown) | null;
@@ -3922,9 +3934,9 @@ export declare function FilterPill(label: string | number, props?: FilterPillNam
 export declare function FilterPill(props: FilterPillProps): AktionNode<"FilterPill">;
 export declare function FilterPill(label: string | number, active: boolean | null | undefined, props?: Omit<FilterPillOptions, "label" | "active" | "selected" | "pressed">): AktionNode<"FilterPill">;
 export declare function FilterPill(label: string | number, active: boolean | null | undefined, count: number | null | undefined, props?: Omit<FilterPillOptions, "label" | "active" | "selected" | "pressed" | "count">): AktionNode<"FilterPill">;
-export declare function FilterPill(label: string | number, active: boolean | null | undefined, count: number | null | undefined, icon: string | number | null | undefined, props?: Omit<FilterPillOptions, "label" | "active" | "selected" | "pressed" | "count" | "icon">): AktionNode<"FilterPill">;
-export declare function FilterPill(label: string | number, active: boolean | null | undefined, count: number | null | undefined, icon: string | number | null | undefined, disabled: boolean | null | undefined, props?: Omit<FilterPillOptions, "label" | "active" | "selected" | "pressed" | "count" | "icon" | "disabled">): AktionNode<"FilterPill">;
-export declare function FilterPill(label: string | number, active: boolean | null | undefined, count: number | null | undefined, icon: string | number | null | undefined, disabled: boolean | null | undefined, onToggle: ((active: boolean) => unknown) | null | undefined): AktionNode<"FilterPill">;
+export declare function FilterPill(label: string | number, active: boolean | null | undefined, count: number | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<FilterPillOptions, "label" | "active" | "selected" | "pressed" | "count" | "icon">): AktionNode<"FilterPill">;
+export declare function FilterPill(label: string | number, active: boolean | null | undefined, count: number | null | undefined, icon: AktionIconName | null | undefined, disabled: boolean | null | undefined, props?: Omit<FilterPillOptions, "label" | "active" | "selected" | "pressed" | "count" | "icon" | "disabled">): AktionNode<"FilterPill">;
+export declare function FilterPill(label: string | number, active: boolean | null | undefined, count: number | null | undefined, icon: AktionIconName | null | undefined, disabled: boolean | null | undefined, onToggle: ((active: boolean) => unknown) | null | undefined): AktionNode<"FilterPill">;
 
 /* ---- FlipList */
 export interface FlipListOptions extends BaseProps {
@@ -3947,7 +3959,7 @@ export declare function FlipList(children: Children, duration: number | null | u
 
 /* ---- FloatingActionButton */
 export interface FloatingActionButtonOptions extends BaseProps {
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Accessible label (visible text when `extended`) */
   label?: string | number;
   onClick?: (() => unknown) | null;
@@ -3961,16 +3973,16 @@ export interface FloatingActionButtonOptions extends BaseProps {
   extended?: boolean;
   disabled?: boolean;
 }
-export type FloatingActionButtonProps = FloatingActionButtonOptions & { icon: string | number };
+export type FloatingActionButtonProps = FloatingActionButtonOptions & { icon: AktionIconName };
 export type FloatingActionButtonNamed = Omit<FloatingActionButtonOptions, "icon">;
 /** A fixed circular action button (FAB). `icon` + `onClick`; `position` picks the corner (bottom-right default — move it to sit beside a BackToTop or a chat launcher, or for RTL), `extended: true` shows `label` as visible text next to the icon, and `disabled` locks it while a request is in flight. */
-export declare function FloatingActionButton(icon: string | number, props?: FloatingActionButtonNamed): AktionNode<"FloatingActionButton">;
+export declare function FloatingActionButton(icon: AktionIconName, props?: FloatingActionButtonNamed): AktionNode<"FloatingActionButton">;
 export declare function FloatingActionButton(props: FloatingActionButtonProps): AktionNode<"FloatingActionButton">;
-export declare function FloatingActionButton(icon: string | number, label: string | number | null | undefined, props?: Omit<FloatingActionButtonOptions, "icon" | "label">): AktionNode<"FloatingActionButton">;
-export declare function FloatingActionButton(icon: string | number, label: string | number | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<FloatingActionButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick">): AktionNode<"FloatingActionButton">;
-export declare function FloatingActionButton(icon: string | number, label: string | number | null | undefined, onClick: (() => unknown) | null | undefined, position: FloatingActionButtonPosition | null | undefined, props?: Omit<FloatingActionButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "position">): AktionNode<"FloatingActionButton">;
-export declare function FloatingActionButton(icon: string | number, label: string | number | null | undefined, onClick: (() => unknown) | null | undefined, position: FloatingActionButtonPosition | null | undefined, extended: boolean | null | undefined, props?: Omit<FloatingActionButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "position" | "extended">): AktionNode<"FloatingActionButton">;
-export declare function FloatingActionButton(icon: string | number, label: string | number | null | undefined, onClick: (() => unknown) | null | undefined, position: FloatingActionButtonPosition | null | undefined, extended: boolean | null | undefined, disabled: boolean | null | undefined): AktionNode<"FloatingActionButton">;
+export declare function FloatingActionButton(icon: AktionIconName, label: string | number | null | undefined, props?: Omit<FloatingActionButtonOptions, "icon" | "label">): AktionNode<"FloatingActionButton">;
+export declare function FloatingActionButton(icon: AktionIconName, label: string | number | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<FloatingActionButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick">): AktionNode<"FloatingActionButton">;
+export declare function FloatingActionButton(icon: AktionIconName, label: string | number | null | undefined, onClick: (() => unknown) | null | undefined, position: FloatingActionButtonPosition | null | undefined, props?: Omit<FloatingActionButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "position">): AktionNode<"FloatingActionButton">;
+export declare function FloatingActionButton(icon: AktionIconName, label: string | number | null | undefined, onClick: (() => unknown) | null | undefined, position: FloatingActionButtonPosition | null | undefined, extended: boolean | null | undefined, props?: Omit<FloatingActionButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "position" | "extended">): AktionNode<"FloatingActionButton">;
+export declare function FloatingActionButton(icon: AktionIconName, label: string | number | null | undefined, onClick: (() => unknown) | null | undefined, position: FloatingActionButtonPosition | null | undefined, extended: boolean | null | undefined, disabled: boolean | null | undefined): AktionNode<"FloatingActionButton">;
 
 /* ---- FocusTrap */
 export interface FocusTrapOptions extends BaseProps {
@@ -4187,7 +4199,7 @@ export interface GalleryOptions<Item extends GalleryItem = GalleryItem> extends 
   /** Per-tile aspect ratio (default `1:1`) */
   ratio?: `${number}:${number}` | `${number}` | number;
   /** Callable fired when a tile is clicked */
-  onSelect?: ((index: number, item: Item) => unknown) | null;
+  onSelect?: ((index: number, item: GalleryItemOf<Item>) => unknown) | null;
   /** How each image fills its tile (default `cover`) */
   fit?: GalleryFit;
   /** Accessible name for the grid */
@@ -4204,11 +4216,11 @@ export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: r
 export declare function Gallery<Item extends GalleryItem = GalleryItem>(props: GalleryProps<Item>): AktionNode<"Gallery">;
 export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: readonly Item[], columns: number | null | undefined, props?: Omit<GalleryOptions<Item>, "items" | "columns">): AktionNode<"Gallery">;
 export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: readonly Item[], columns: number | null | undefined, ratio: `${number}:${number}` | `${number}` | number | null | undefined, props?: Omit<GalleryOptions<Item>, "items" | "columns" | "ratio">): AktionNode<"Gallery">;
-export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: readonly Item[], columns: number | null | undefined, ratio: `${number}:${number}` | `${number}` | number | null | undefined, onSelect: ((index: number, item: Item) => unknown) | null | undefined, props?: Omit<GalleryOptions<Item>, "items" | "columns" | "ratio" | "onSelect">): AktionNode<"Gallery">;
-export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: readonly Item[], columns: number | null | undefined, ratio: `${number}:${number}` | `${number}` | number | null | undefined, onSelect: ((index: number, item: Item) => unknown) | null | undefined, fit: GalleryFit | null | undefined, props?: Omit<GalleryOptions<Item>, "items" | "columns" | "ratio" | "onSelect" | "fit">): AktionNode<"Gallery">;
-export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: readonly Item[], columns: number | null | undefined, ratio: `${number}:${number}` | `${number}` | number | null | undefined, onSelect: ((index: number, item: Item) => unknown) | null | undefined, fit: GalleryFit | null | undefined, label: string | number | null | undefined, props?: Omit<GalleryOptions<Item>, "items" | "columns" | "ratio" | "onSelect" | "fit" | "label">): AktionNode<"Gallery">;
-export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: readonly Item[], columns: number | null | undefined, ratio: `${number}:${number}` | `${number}` | number | null | undefined, onSelect: ((index: number, item: Item) => unknown) | null | undefined, fit: GalleryFit | null | undefined, label: string | number | null | undefined, empty: AktionChild | null | undefined, props?: Omit<GalleryOptions<Item>, "items" | "columns" | "ratio" | "onSelect" | "fit" | "label" | "empty">): AktionNode<"Gallery">;
-export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: readonly Item[], columns: number | null | undefined, ratio: `${number}:${number}` | `${number}` | number | null | undefined, onSelect: ((index: number, item: Item) => unknown) | null | undefined, fit: GalleryFit | null | undefined, label: string | number | null | undefined, empty: AktionChild | null | undefined, emptyText: string | number | null | undefined): AktionNode<"Gallery">;
+export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: readonly Item[], columns: number | null | undefined, ratio: `${number}:${number}` | `${number}` | number | null | undefined, onSelect: ((index: number, item: GalleryItemOf<Item>) => unknown) | null | undefined, props?: Omit<GalleryOptions<Item>, "items" | "columns" | "ratio" | "onSelect">): AktionNode<"Gallery">;
+export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: readonly Item[], columns: number | null | undefined, ratio: `${number}:${number}` | `${number}` | number | null | undefined, onSelect: ((index: number, item: GalleryItemOf<Item>) => unknown) | null | undefined, fit: GalleryFit | null | undefined, props?: Omit<GalleryOptions<Item>, "items" | "columns" | "ratio" | "onSelect" | "fit">): AktionNode<"Gallery">;
+export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: readonly Item[], columns: number | null | undefined, ratio: `${number}:${number}` | `${number}` | number | null | undefined, onSelect: ((index: number, item: GalleryItemOf<Item>) => unknown) | null | undefined, fit: GalleryFit | null | undefined, label: string | number | null | undefined, props?: Omit<GalleryOptions<Item>, "items" | "columns" | "ratio" | "onSelect" | "fit" | "label">): AktionNode<"Gallery">;
+export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: readonly Item[], columns: number | null | undefined, ratio: `${number}:${number}` | `${number}` | number | null | undefined, onSelect: ((index: number, item: GalleryItemOf<Item>) => unknown) | null | undefined, fit: GalleryFit | null | undefined, label: string | number | null | undefined, empty: AktionChild | null | undefined, props?: Omit<GalleryOptions<Item>, "items" | "columns" | "ratio" | "onSelect" | "fit" | "label" | "empty">): AktionNode<"Gallery">;
+export declare function Gallery<Item extends GalleryItem = GalleryItem>(items: readonly Item[], columns: number | null | undefined, ratio: `${number}:${number}` | `${number}` | number | null | undefined, onSelect: ((index: number, item: GalleryItemOf<Item>) => unknown) | null | undefined, fit: GalleryFit | null | undefined, label: string | number | null | undefined, empty: AktionChild | null | undefined, emptyText: string | number | null | undefined): AktionNode<"Gallery">;
 
 /* ---- Gantt */
 export interface GanttOptions extends BaseProps {
@@ -4578,7 +4590,7 @@ export declare function HoverCard(trigger: AktionChild, content: Children, side:
 /* ---- Icon */
 export interface IconOptions extends BaseProps {
   /** FA name without the fa- prefix */
-  name?: string | number;
+  name?: AktionIconName;
   variant?: IconVariant;
   /** Alias of `variant`. */
   tone?: IconVariant;
@@ -4594,21 +4606,21 @@ export interface IconOptions extends BaseProps {
   /** Native hover tooltip (also used as the accessible name when `label` is omitted) */
   title?: string | number;
 }
-export type IconProps = IconOptions & { name: string | number };
+export type IconProps = IconOptions & { name: AktionIconName };
 export type IconNamed = Omit<IconOptions, "name">;
 /** Single Font Awesome icon. `name` is the FA name without the `fa-` prefix (e.g. `"house"`, `"chart-line"`). Use `variant` for non-solid styles (`regular`/`brands`) or prefix the name (`"regular:star"`). `color` accepts any CSS colour (`"#00ff00"`, `"tomato"`, `"var(--rui-color-primary)"`). Icons are decorative (hidden from screen readers) by default — pass `label` when the glyph carries the only meaning in its slot (a tick meaning "verified", a padlock next to a plan name) and it becomes an announced `role="img"`. `title` adds a native hover tooltip. */
-export declare function Icon(name: string | number, props?: IconNamed): AktionNode<"Icon">;
+export declare function Icon(name: AktionIconName, props?: IconNamed): AktionNode<"Icon">;
 export declare function Icon(props: IconProps): AktionNode<"Icon">;
-export declare function Icon(name: string | number, variant: IconVariant | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone">): AktionNode<"Icon">;
-export declare function Icon(name: string | number, variant: IconVariant | null | undefined, size: IconSize | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone" | "size">): AktionNode<"Icon">;
-export declare function Icon(name: string | number, variant: IconVariant | null | undefined, size: IconSize | null | undefined, color: string | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone" | "size" | "color">): AktionNode<"Icon">;
-export declare function Icon(name: string | number, variant: IconVariant | null | undefined, size: IconSize | null | undefined, color: string | null | undefined, label: string | number | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone" | "size" | "color" | "label" | "ariaLabel" | "alt">): AktionNode<"Icon">;
-export declare function Icon(name: string | number, variant: IconVariant | null | undefined, size: IconSize | null | undefined, color: string | null | undefined, label: string | number | null | undefined, title: string | number | null | undefined): AktionNode<"Icon">;
+export declare function Icon(name: AktionIconName, variant: IconVariant | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone">): AktionNode<"Icon">;
+export declare function Icon(name: AktionIconName, variant: IconVariant | null | undefined, size: IconSize | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone" | "size">): AktionNode<"Icon">;
+export declare function Icon(name: AktionIconName, variant: IconVariant | null | undefined, size: IconSize | null | undefined, color: string | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone" | "size" | "color">): AktionNode<"Icon">;
+export declare function Icon(name: AktionIconName, variant: IconVariant | null | undefined, size: IconSize | null | undefined, color: string | null | undefined, label: string | number | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone" | "size" | "color" | "label" | "ariaLabel" | "alt">): AktionNode<"Icon">;
+export declare function Icon(name: AktionIconName, variant: IconVariant | null | undefined, size: IconSize | null | undefined, color: string | null | undefined, label: string | number | null | undefined, title: string | number | null | undefined): AktionNode<"Icon">;
 
 /* ---- IconButton */
 export interface IconButtonOptions extends BaseProps {
   /** Font Awesome icon name */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Accessible label — the control's only name, so never omit it */
   label?: string | number;
   onClick?: (() => unknown) | null;
@@ -4636,18 +4648,18 @@ export interface IconButtonOptions extends BaseProps {
   /** Render as a link (sanitised) so middle-click and ctrl-click work */
   href?: string | number;
 }
-export type IconButtonProps = IconButtonOptions & { icon: string | number } & { label: string | number };
+export type IconButtonProps = IconButtonOptions & { icon: AktionIconName } & { label: string | number };
 export type IconButtonNamed = Omit<IconButtonOptions, "icon"> & { label: string | number };
 /** Icon-only button with an accessible label. Use for toolbars, table row actions, and compact controls. `active` makes it a toggle (reflected as `aria-pressed`), `loading` shows a spinner and blocks clicks, and `href` renders it as a link instead of a button. */
-export declare function IconButton(icon: string | number, props: IconButtonNamed): AktionNode<"IconButton">;
+export declare function IconButton(icon: AktionIconName, props: IconButtonNamed): AktionNode<"IconButton">;
 export declare function IconButton(props: IconButtonProps): AktionNode<"IconButton">;
-export declare function IconButton(icon: string | number, label: string | number, props?: Omit<IconButtonOptions, "icon" | "label">): AktionNode<"IconButton">;
-export declare function IconButton(icon: string | number, label: string | number, onClick: (() => unknown) | null | undefined, props?: Omit<IconButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick">): AktionNode<"IconButton">;
-export declare function IconButton(icon: string | number, label: string | number, onClick: (() => unknown) | null | undefined, variant: IconButtonVariant | null | undefined, props?: Omit<IconButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "variant" | "tone">): AktionNode<"IconButton">;
-export declare function IconButton(icon: string | number, label: string | number, onClick: (() => unknown) | null | undefined, variant: IconButtonVariant | null | undefined, size: IconButtonSize | null | undefined, props?: Omit<IconButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "size">): AktionNode<"IconButton">;
-export declare function IconButton(icon: string | number, label: string | number, onClick: (() => unknown) | null | undefined, variant: IconButtonVariant | null | undefined, size: IconButtonSize | null | undefined, disabled: boolean | null | undefined, props?: Omit<IconButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "size" | "disabled">): AktionNode<"IconButton">;
-export declare function IconButton(icon: string | number, label: string | number, onClick: (() => unknown) | null | undefined, variant: IconButtonVariant | null | undefined, size: IconButtonSize | null | undefined, disabled: boolean | null | undefined, active: boolean | null | undefined, props?: Omit<IconButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "size" | "disabled" | "active" | "pressed" | "selected">): AktionNode<"IconButton">;
-export declare function IconButton(icon: string | number, label: string | number, onClick: (() => unknown) | null | undefined, variant: IconButtonVariant | null | undefined, size: IconButtonSize | null | undefined, disabled: boolean | null | undefined, active: boolean | null | undefined, loading: boolean | null | undefined, props?: Omit<IconButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "size" | "disabled" | "active" | "pressed" | "selected" | "loading">): AktionNode<"IconButton">;
+export declare function IconButton(icon: AktionIconName, label: string | number, props?: Omit<IconButtonOptions, "icon" | "label">): AktionNode<"IconButton">;
+export declare function IconButton(icon: AktionIconName, label: string | number, onClick: (() => unknown) | null | undefined, props?: Omit<IconButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick">): AktionNode<"IconButton">;
+export declare function IconButton(icon: AktionIconName, label: string | number, onClick: (() => unknown) | null | undefined, variant: IconButtonVariant | null | undefined, props?: Omit<IconButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "variant" | "tone">): AktionNode<"IconButton">;
+export declare function IconButton(icon: AktionIconName, label: string | number, onClick: (() => unknown) | null | undefined, variant: IconButtonVariant | null | undefined, size: IconButtonSize | null | undefined, props?: Omit<IconButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "size">): AktionNode<"IconButton">;
+export declare function IconButton(icon: AktionIconName, label: string | number, onClick: (() => unknown) | null | undefined, variant: IconButtonVariant | null | undefined, size: IconButtonSize | null | undefined, disabled: boolean | null | undefined, props?: Omit<IconButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "size" | "disabled">): AktionNode<"IconButton">;
+export declare function IconButton(icon: AktionIconName, label: string | number, onClick: (() => unknown) | null | undefined, variant: IconButtonVariant | null | undefined, size: IconButtonSize | null | undefined, disabled: boolean | null | undefined, active: boolean | null | undefined, props?: Omit<IconButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "size" | "disabled" | "active" | "pressed" | "selected">): AktionNode<"IconButton">;
+export declare function IconButton(icon: AktionIconName, label: string | number, onClick: (() => unknown) | null | undefined, variant: IconButtonVariant | null | undefined, size: IconButtonSize | null | undefined, disabled: boolean | null | undefined, active: boolean | null | undefined, loading: boolean | null | undefined, props?: Omit<IconButtonOptions, "icon" | "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "size" | "disabled" | "active" | "pressed" | "selected" | "loading">): AktionNode<"IconButton">;
 
 /* ---- Image */
 export interface ImageOptions extends BaseProps {
@@ -4659,7 +4671,7 @@ export interface ImageOptions extends BaseProps {
   /** object-fit value (default `cover`) */
   fit?: ImageFit;
   /** Text label or Font Awesome icon shown when src is missing/unsafe/errored */
-  fallback?: string | number;
+  fallback?: AktionIconName;
   /** `blur` fades the image in on load */
   placeholder?: ImagePlaceholder;
   /** Native loading strategy (default lazy) */
@@ -4686,9 +4698,9 @@ export declare function Image(src: string | number, alt: string | number | null 
 export declare function Image(src: string | number, alt: string | number | null | undefined, caption: string | number | null | undefined, props?: Omit<ImageOptions, "src" | "alt" | "caption">): AktionNode<"Image">;
 export declare function Image(src: string | number, alt: string | number | null | undefined, caption: string | number | null | undefined, ratio: AspectRatioValue | null | undefined, props?: Omit<ImageOptions, "src" | "alt" | "caption" | "ratio">): AktionNode<"Image">;
 export declare function Image(src: string | number, alt: string | number | null | undefined, caption: string | number | null | undefined, ratio: AspectRatioValue | null | undefined, fit: ImageFit | null | undefined, props?: Omit<ImageOptions, "src" | "alt" | "caption" | "ratio" | "fit">): AktionNode<"Image">;
-export declare function Image(src: string | number, alt: string | number | null | undefined, caption: string | number | null | undefined, ratio: AspectRatioValue | null | undefined, fit: ImageFit | null | undefined, fallback: string | number | null | undefined, props?: Omit<ImageOptions, "src" | "alt" | "caption" | "ratio" | "fit" | "fallback">): AktionNode<"Image">;
-export declare function Image(src: string | number, alt: string | number | null | undefined, caption: string | number | null | undefined, ratio: AspectRatioValue | null | undefined, fit: ImageFit | null | undefined, fallback: string | number | null | undefined, placeholder: ImagePlaceholder | null | undefined, props?: Omit<ImageOptions, "src" | "alt" | "caption" | "ratio" | "fit" | "fallback" | "placeholder">): AktionNode<"Image">;
-export declare function Image(src: string | number, alt: string | number | null | undefined, caption: string | number | null | undefined, ratio: AspectRatioValue | null | undefined, fit: ImageFit | null | undefined, fallback: string | number | null | undefined, placeholder: ImagePlaceholder | null | undefined, loading: ImageLoading | null | undefined, props?: Omit<ImageOptions, "src" | "alt" | "caption" | "ratio" | "fit" | "fallback" | "placeholder" | "loading">): AktionNode<"Image">;
+export declare function Image(src: string | number, alt: string | number | null | undefined, caption: string | number | null | undefined, ratio: AspectRatioValue | null | undefined, fit: ImageFit | null | undefined, fallback: AktionIconName | null | undefined, props?: Omit<ImageOptions, "src" | "alt" | "caption" | "ratio" | "fit" | "fallback">): AktionNode<"Image">;
+export declare function Image(src: string | number, alt: string | number | null | undefined, caption: string | number | null | undefined, ratio: AspectRatioValue | null | undefined, fit: ImageFit | null | undefined, fallback: AktionIconName | null | undefined, placeholder: ImagePlaceholder | null | undefined, props?: Omit<ImageOptions, "src" | "alt" | "caption" | "ratio" | "fit" | "fallback" | "placeholder">): AktionNode<"Image">;
+export declare function Image(src: string | number, alt: string | number | null | undefined, caption: string | number | null | undefined, ratio: AspectRatioValue | null | undefined, fit: ImageFit | null | undefined, fallback: AktionIconName | null | undefined, placeholder: ImagePlaceholder | null | undefined, loading: ImageLoading | null | undefined, props?: Omit<ImageOptions, "src" | "alt" | "caption" | "ratio" | "fit" | "fallback" | "placeholder" | "loading">): AktionNode<"Image">;
 
 /* ---- InboxPanel */
 export interface InboxPanelOptions extends BaseProps {
@@ -4783,7 +4795,7 @@ export interface InlineEditOptions extends BaseProps {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -4899,7 +4911,7 @@ export interface InputGroupOptions extends BaseProps {
   /** The Input/Select/etc. to wrap */
   field?: AktionChild;
   /** Leading Font Awesome icon name */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Leading NODE in place of `icon` — a flag, avatar, colour swatch or badge, for an adornment no glyph can express. Wins over `icon` when both are given. */
   leading?: AktionChild;
   /** Alias of `leading`. */
@@ -4952,13 +4964,13 @@ export type InputGroupNamed = Omit<InputGroupOptions, "field">;
 /** Single field wrapped in a shared bordered shell with an optional leading adornment — `icon` for a Font Awesome name, `leading` for any node (a flag, avatar, colour swatch or badge) — and an optional trailing `action` node (button / IconButton / short text suffix). The focus ring is drawn around the whole composite, and the adornment is centred on the control at whatever height the theme gives it. Use for search fields, password reveal, copy-to-clipboard rows, unit-suffixed inputs, and locale / currency pickers that need a flag inside the box. */
 export declare function InputGroup(field: AktionChild, props?: InputGroupNamed): AktionNode<"InputGroup">;
 export declare function InputGroup(props: InputGroupProps): AktionNode<"InputGroup">;
-export declare function InputGroup(field: AktionChild, icon: string | number | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon">): AktionNode<"InputGroup">;
-export declare function InputGroup(field: AktionChild, icon: string | number | null | undefined, leading: AktionChild | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon" | "leading" | "prefix">): AktionNode<"InputGroup">;
-export declare function InputGroup(field: AktionChild, icon: string | number | null | undefined, leading: AktionChild | null | undefined, action: AktionChild | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon" | "leading" | "prefix" | "action" | "trailing">): AktionNode<"InputGroup">;
-export declare function InputGroup(field: AktionChild, icon: string | number | null | undefined, leading: AktionChild | null | undefined, action: AktionChild | null | undefined, suffix: string | number | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon" | "leading" | "prefix" | "action" | "trailing" | "suffix">): AktionNode<"InputGroup">;
-export declare function InputGroup(field: AktionChild, icon: string | number | null | undefined, leading: AktionChild | null | undefined, action: AktionChild | null | undefined, suffix: string | number | null | undefined, disabled: boolean | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon" | "leading" | "prefix" | "action" | "trailing" | "suffix" | "disabled">): AktionNode<"InputGroup">;
-export declare function InputGroup(field: AktionChild, icon: string | number | null | undefined, leading: AktionChild | null | undefined, action: AktionChild | null | undefined, suffix: string | number | null | undefined, disabled: boolean | null | undefined, label: string | number | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon" | "leading" | "prefix" | "action" | "trailing" | "suffix" | "disabled" | "label">): AktionNode<"InputGroup">;
-export declare function InputGroup(field: AktionChild, icon: string | number | null | undefined, leading: AktionChild | null | undefined, action: AktionChild | null | undefined, suffix: string | number | null | undefined, disabled: boolean | null | undefined, label: string | number | null | undefined, hint: string | number | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon" | "leading" | "prefix" | "action" | "trailing" | "suffix" | "disabled" | "label" | "hint">): AktionNode<"InputGroup">;
+export declare function InputGroup(field: AktionChild, icon: AktionIconName | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon">): AktionNode<"InputGroup">;
+export declare function InputGroup(field: AktionChild, icon: AktionIconName | null | undefined, leading: AktionChild | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon" | "leading" | "prefix">): AktionNode<"InputGroup">;
+export declare function InputGroup(field: AktionChild, icon: AktionIconName | null | undefined, leading: AktionChild | null | undefined, action: AktionChild | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon" | "leading" | "prefix" | "action" | "trailing">): AktionNode<"InputGroup">;
+export declare function InputGroup(field: AktionChild, icon: AktionIconName | null | undefined, leading: AktionChild | null | undefined, action: AktionChild | null | undefined, suffix: string | number | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon" | "leading" | "prefix" | "action" | "trailing" | "suffix">): AktionNode<"InputGroup">;
+export declare function InputGroup(field: AktionChild, icon: AktionIconName | null | undefined, leading: AktionChild | null | undefined, action: AktionChild | null | undefined, suffix: string | number | null | undefined, disabled: boolean | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon" | "leading" | "prefix" | "action" | "trailing" | "suffix" | "disabled">): AktionNode<"InputGroup">;
+export declare function InputGroup(field: AktionChild, icon: AktionIconName | null | undefined, leading: AktionChild | null | undefined, action: AktionChild | null | undefined, suffix: string | number | null | undefined, disabled: boolean | null | undefined, label: string | number | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon" | "leading" | "prefix" | "action" | "trailing" | "suffix" | "disabled" | "label">): AktionNode<"InputGroup">;
+export declare function InputGroup(field: AktionChild, icon: AktionIconName | null | undefined, leading: AktionChild | null | undefined, action: AktionChild | null | undefined, suffix: string | number | null | undefined, disabled: boolean | null | undefined, label: string | number | null | undefined, hint: string | number | null | undefined, props?: Omit<InputGroupOptions, "field" | "icon" | "leading" | "prefix" | "action" | "trailing" | "suffix" | "disabled" | "label" | "hint">): AktionNode<"InputGroup">;
 
 /* ---- JsonTree */
 export interface JsonTreeOptions extends Omit<BaseProps, "data"> {
@@ -5006,7 +5018,7 @@ export interface KanbanCardOptions extends BaseProps {
   /** Alias of `tone`. */
   variant?: KanbanCardTone;
   /** Optional Font Awesome icon name shown beside the title */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Optional callable fired when the card is clicked */
   onClick?: (() => unknown) | null;
   /** Alias of `onClick`. */
@@ -5023,8 +5035,8 @@ export declare function KanbanCard(title: string | number, description: string |
 export declare function KanbanCard(title: string | number, description: string | number | null | undefined, tags: readonly string[] | null | undefined, props?: Omit<KanbanCardOptions, "title" | "description" | "tags">): AktionNode<"KanbanCard">;
 export declare function KanbanCard(title: string | number, description: string | number | null | undefined, tags: readonly string[] | null | undefined, assignee: string | number | null | undefined, props?: Omit<KanbanCardOptions, "title" | "description" | "tags" | "assignee">): AktionNode<"KanbanCard">;
 export declare function KanbanCard(title: string | number, description: string | number | null | undefined, tags: readonly string[] | null | undefined, assignee: string | number | null | undefined, tone: KanbanCardTone | null | undefined, props?: Omit<KanbanCardOptions, "title" | "description" | "tags" | "assignee" | "tone" | "variant">): AktionNode<"KanbanCard">;
-export declare function KanbanCard(title: string | number, description: string | number | null | undefined, tags: readonly string[] | null | undefined, assignee: string | number | null | undefined, tone: KanbanCardTone | null | undefined, icon: string | number | null | undefined, props?: Omit<KanbanCardOptions, "title" | "description" | "tags" | "assignee" | "tone" | "variant" | "icon">): AktionNode<"KanbanCard">;
-export declare function KanbanCard(title: string | number, description: string | number | null | undefined, tags: readonly string[] | null | undefined, assignee: string | number | null | undefined, tone: KanbanCardTone | null | undefined, icon: string | number | null | undefined, onClick: (() => unknown) | null | undefined): AktionNode<"KanbanCard">;
+export declare function KanbanCard(title: string | number, description: string | number | null | undefined, tags: readonly string[] | null | undefined, assignee: string | number | null | undefined, tone: KanbanCardTone | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<KanbanCardOptions, "title" | "description" | "tags" | "assignee" | "tone" | "variant" | "icon">): AktionNode<"KanbanCard">;
+export declare function KanbanCard(title: string | number, description: string | number | null | undefined, tags: readonly string[] | null | undefined, assignee: string | number | null | undefined, tone: KanbanCardTone | null | undefined, icon: AktionIconName | null | undefined, onClick: (() => unknown) | null | undefined): AktionNode<"KanbanCard">;
 
 /* ---- KanbanColumn */
 export interface KanbanColumnOptions extends BaseProps {
@@ -5262,7 +5274,7 @@ export interface ListItemOptions extends BaseProps {
   /** Alias of `description`. */
   meta?: string | number;
   /** Font Awesome icon name */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Callable fired when the row is activated (click or Enter/Space) */
   onClick?: (() => unknown) | null;
   /** Alias of `onClick`. */
@@ -5292,12 +5304,12 @@ export type ListItemNamed = Omit<ListItemOptions, "title">;
 export declare function ListItem(title: string | number, props?: ListItemNamed): AktionNode<"ListItem">;
 export declare function ListItem(props: ListItemProps): AktionNode<"ListItem">;
 export declare function ListItem(title: string | number, description: string | number | null | undefined, props?: Omit<ListItemOptions, "title" | "description" | "meta">): AktionNode<"ListItem">;
-export declare function ListItem(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, props?: Omit<ListItemOptions, "title" | "description" | "meta" | "icon">): AktionNode<"ListItem">;
-export declare function ListItem(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<ListItemOptions, "title" | "description" | "meta" | "icon" | "onClick" | "onclick" | "action">): AktionNode<"ListItem">;
-export declare function ListItem(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, props?: Omit<ListItemOptions, "title" | "description" | "meta" | "icon" | "onClick" | "onclick" | "action" | "href">): AktionNode<"ListItem">;
-export declare function ListItem(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, trailing: Children | null | undefined, props?: Omit<ListItemOptions, "title" | "description" | "meta" | "icon" | "onClick" | "onclick" | "action" | "href" | "trailing" | "actions" | "accessory">): AktionNode<"ListItem">;
-export declare function ListItem(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, trailing: Children | null | undefined, active: boolean | null | undefined, props?: Omit<ListItemOptions, "title" | "description" | "meta" | "icon" | "onClick" | "onclick" | "action" | "href" | "trailing" | "actions" | "accessory" | "active" | "selected">): AktionNode<"ListItem">;
-export declare function ListItem(title: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, trailing: Children | null | undefined, active: boolean | null | undefined, tone: ListItemTone | null | undefined): AktionNode<"ListItem">;
+export declare function ListItem(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<ListItemOptions, "title" | "description" | "meta" | "icon">): AktionNode<"ListItem">;
+export declare function ListItem(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<ListItemOptions, "title" | "description" | "meta" | "icon" | "onClick" | "onclick" | "action">): AktionNode<"ListItem">;
+export declare function ListItem(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, props?: Omit<ListItemOptions, "title" | "description" | "meta" | "icon" | "onClick" | "onclick" | "action" | "href">): AktionNode<"ListItem">;
+export declare function ListItem(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, trailing: Children | null | undefined, props?: Omit<ListItemOptions, "title" | "description" | "meta" | "icon" | "onClick" | "onclick" | "action" | "href" | "trailing" | "actions" | "accessory">): AktionNode<"ListItem">;
+export declare function ListItem(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, trailing: Children | null | undefined, active: boolean | null | undefined, props?: Omit<ListItemOptions, "title" | "description" | "meta" | "icon" | "onClick" | "onclick" | "action" | "href" | "trailing" | "actions" | "accessory" | "active" | "selected">): AktionNode<"ListItem">;
+export declare function ListItem(title: string | number, description: string | number | null | undefined, icon: AktionIconName | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, trailing: Children | null | undefined, active: boolean | null | undefined, tone: ListItemTone | null | undefined): AktionNode<"ListItem">;
 
 /* ---- LiveCursor */
 export interface LiveCursorOptions extends BaseProps {
@@ -5370,7 +5382,7 @@ export interface LoadingStateOptions extends BaseProps {
   /** Buttons rendered under the text (Cancel, Run in background, …) */
   actions?: Children;
   /** Font Awesome icon shown INSTEAD of the spinner (e.g. `clock` for a queued state) */
-  icon?: string | number;
+  icon?: AktionIconName;
 }
 export type LoadingStateProps = LoadingStateOptions;
 export type LoadingStateNamed = Omit<LoadingStateOptions, "title">;
@@ -5379,13 +5391,13 @@ export declare function LoadingState(title?: string | number, props?: LoadingSta
 export declare function LoadingState(props: LoadingStateProps): AktionNode<"LoadingState">;
 export declare function LoadingState(title: string | number | null | undefined, description: string | number | null | undefined, props?: Omit<LoadingStateOptions, "title" | "description">): AktionNode<"LoadingState">;
 export declare function LoadingState(title: string | number | null | undefined, description: string | number | null | undefined, actions: Children | null | undefined, props?: Omit<LoadingStateOptions, "title" | "description" | "actions">): AktionNode<"LoadingState">;
-export declare function LoadingState(title: string | number | null | undefined, description: string | number | null | undefined, actions: Children | null | undefined, icon: string | number | null | undefined): AktionNode<"LoadingState">;
+export declare function LoadingState(title: string | number | null | undefined, description: string | number | null | undefined, actions: Children | null | undefined, icon: AktionIconName | null | undefined): AktionNode<"LoadingState">;
 
 /* ---- LogoChip */
 export interface LogoChipOptions extends BaseProps {
   label?: string | number;
   /** Font Awesome name (e.g. brands:react) */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Logo image src URL (wins over `icon`) */
   imageSrc?: string | number;
   /** Alias of `imageSrc`. */
@@ -5402,9 +5414,9 @@ export type LogoChipNamed = Omit<LogoChipOptions, "label">;
 /** A single labelled chip for a LogoCloud: a Font Awesome `icon` or a customer wordmark `image`, plus the name. Give it an `href` to link the chip at its integration/partner page. */
 export declare function LogoChip(label: string | number, props?: LogoChipNamed): AktionNode<"LogoChip">;
 export declare function LogoChip(props: LogoChipProps): AktionNode<"LogoChip">;
-export declare function LogoChip(label: string | number, icon: string | number | null | undefined, props?: Omit<LogoChipOptions, "label" | "icon">): AktionNode<"LogoChip">;
-export declare function LogoChip(label: string | number, icon: string | number | null | undefined, imageSrc: string | number | null | undefined, props?: Omit<LogoChipOptions, "label" | "icon" | "imageSrc" | "logo" | "image" | "src">): AktionNode<"LogoChip">;
-export declare function LogoChip(label: string | number, icon: string | number | null | undefined, imageSrc: string | number | null | undefined, href: string | number | null | undefined): AktionNode<"LogoChip">;
+export declare function LogoChip(label: string | number, icon: AktionIconName | null | undefined, props?: Omit<LogoChipOptions, "label" | "icon">): AktionNode<"LogoChip">;
+export declare function LogoChip(label: string | number, icon: AktionIconName | null | undefined, imageSrc: string | number | null | undefined, props?: Omit<LogoChipOptions, "label" | "icon" | "imageSrc" | "logo" | "image" | "src">): AktionNode<"LogoChip">;
+export declare function LogoChip(label: string | number, icon: AktionIconName | null | undefined, imageSrc: string | number | null | undefined, href: string | number | null | undefined): AktionNode<"LogoChip">;
 
 /* ---- LogoCloud */
 export interface LogoCloudOptions extends BaseProps {
@@ -5543,7 +5555,7 @@ export interface MaskedInputOptions extends Omit<BaseProps, "id"> {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -5673,7 +5685,7 @@ export interface MentionInputOptions extends Omit<BaseProps, "id"> {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -5718,7 +5730,7 @@ export interface MenuItemOptions extends Omit<BaseProps, "role"> {
   /** Alias of `onClick`. */
   onclick?: (() => unknown) | null;
   /** Font Awesome icon name shown before the label */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Trailing keyboard-shortcut hint (e.g. "⌘ K") */
   shortcut?: string | number;
   /** Use "danger" for destructive actions */
@@ -5740,12 +5752,12 @@ export type MenuItemNamed = Omit<MenuItemOptions, "label">;
 export declare function MenuItem(label: string | number, props?: MenuItemNamed): AktionNode<"MenuItem">;
 export declare function MenuItem(props: MenuItemProps): AktionNode<"MenuItem">;
 export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick">): AktionNode<"MenuItem">;
-export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, icon: string | number | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick" | "icon">): AktionNode<"MenuItem">;
-export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, icon: string | number | null | undefined, shortcut: string | number | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick" | "icon" | "shortcut">): AktionNode<"MenuItem">;
-export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, icon: string | number | null | undefined, shortcut: string | number | null | undefined, variant: MenuItemVariant | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick" | "icon" | "shortcut" | "variant" | "tone">): AktionNode<"MenuItem">;
-export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, icon: string | number | null | undefined, shortcut: string | number | null | undefined, variant: MenuItemVariant | null | undefined, disabled: boolean | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick" | "icon" | "shortcut" | "variant" | "tone" | "disabled">): AktionNode<"MenuItem">;
-export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, icon: string | number | null | undefined, shortcut: string | number | null | undefined, variant: MenuItemVariant | null | undefined, disabled: boolean | null | undefined, checked: boolean | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick" | "icon" | "shortcut" | "variant" | "tone" | "disabled" | "checked">): AktionNode<"MenuItem">;
-export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, icon: string | number | null | undefined, shortcut: string | number | null | undefined, variant: MenuItemVariant | null | undefined, disabled: boolean | null | undefined, checked: boolean | null | undefined, role: MenuItemRole | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick" | "icon" | "shortcut" | "variant" | "tone" | "disabled" | "checked" | "role">): AktionNode<"MenuItem">;
+export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick" | "icon">): AktionNode<"MenuItem">;
+export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, icon: AktionIconName | null | undefined, shortcut: string | number | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick" | "icon" | "shortcut">): AktionNode<"MenuItem">;
+export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, icon: AktionIconName | null | undefined, shortcut: string | number | null | undefined, variant: MenuItemVariant | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick" | "icon" | "shortcut" | "variant" | "tone">): AktionNode<"MenuItem">;
+export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, icon: AktionIconName | null | undefined, shortcut: string | number | null | undefined, variant: MenuItemVariant | null | undefined, disabled: boolean | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick" | "icon" | "shortcut" | "variant" | "tone" | "disabled">): AktionNode<"MenuItem">;
+export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, icon: AktionIconName | null | undefined, shortcut: string | number | null | undefined, variant: MenuItemVariant | null | undefined, disabled: boolean | null | undefined, checked: boolean | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick" | "icon" | "shortcut" | "variant" | "tone" | "disabled" | "checked">): AktionNode<"MenuItem">;
+export declare function MenuItem(label: string | number, onClick: (() => unknown) | null | undefined, icon: AktionIconName | null | undefined, shortcut: string | number | null | undefined, variant: MenuItemVariant | null | undefined, disabled: boolean | null | undefined, checked: boolean | null | undefined, role: MenuItemRole | null | undefined, props?: Omit<MenuItemOptions, "label" | "onClick" | "action" | "onclick" | "icon" | "shortcut" | "variant" | "tone" | "disabled" | "checked" | "role">): AktionNode<"MenuItem">;
 
 /* ---- MenuLabel */
 export interface MenuLabelOptions extends BaseProps {
@@ -6028,7 +6040,7 @@ export interface NavLinkOptions extends BaseProps {
   /** Match the current path exactly (default: prefix match). */
   exact?: boolean;
   /** Optional Font Awesome icon name shown before the label. */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Called once on first hover/focus (warm a `$query` cache for the target route). */
   prefetch?: ((to: string) => unknown) | null;
   /** Grey out the link and make it unclickable / unfocusable (a route the user cannot enter yet). */
@@ -6042,9 +6054,9 @@ export declare function NavLink(props: NavLinkProps): AktionNode<"NavLink">;
 export declare function NavLink(label: string | number, to: string | number, props?: Omit<NavLinkOptions, "label" | "to">): AktionNode<"NavLink">;
 export declare function NavLink(label: string | number, to: string | number, variant: NavLinkVariant | null | undefined, props?: Omit<NavLinkOptions, "label" | "to" | "variant" | "tone">): AktionNode<"NavLink">;
 export declare function NavLink(label: string | number, to: string | number, variant: NavLinkVariant | null | undefined, exact: boolean | null | undefined, props?: Omit<NavLinkOptions, "label" | "to" | "variant" | "tone" | "exact">): AktionNode<"NavLink">;
-export declare function NavLink(label: string | number, to: string | number, variant: NavLinkVariant | null | undefined, exact: boolean | null | undefined, icon: string | number | null | undefined, props?: Omit<NavLinkOptions, "label" | "to" | "variant" | "tone" | "exact" | "icon">): AktionNode<"NavLink">;
-export declare function NavLink(label: string | number, to: string | number, variant: NavLinkVariant | null | undefined, exact: boolean | null | undefined, icon: string | number | null | undefined, prefetch: ((to: string) => unknown) | null | undefined, props?: Omit<NavLinkOptions, "label" | "to" | "variant" | "tone" | "exact" | "icon" | "prefetch">): AktionNode<"NavLink">;
-export declare function NavLink(label: string | number, to: string | number, variant: NavLinkVariant | null | undefined, exact: boolean | null | undefined, icon: string | number | null | undefined, prefetch: ((to: string) => unknown) | null | undefined, disabled: boolean | null | undefined): AktionNode<"NavLink">;
+export declare function NavLink(label: string | number, to: string | number, variant: NavLinkVariant | null | undefined, exact: boolean | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<NavLinkOptions, "label" | "to" | "variant" | "tone" | "exact" | "icon">): AktionNode<"NavLink">;
+export declare function NavLink(label: string | number, to: string | number, variant: NavLinkVariant | null | undefined, exact: boolean | null | undefined, icon: AktionIconName | null | undefined, prefetch: ((to: string) => unknown) | null | undefined, props?: Omit<NavLinkOptions, "label" | "to" | "variant" | "tone" | "exact" | "icon" | "prefetch">): AktionNode<"NavLink">;
+export declare function NavLink(label: string | number, to: string | number, variant: NavLinkVariant | null | undefined, exact: boolean | null | undefined, icon: AktionIconName | null | undefined, prefetch: ((to: string) => unknown) | null | undefined, disabled: boolean | null | undefined): AktionNode<"NavLink">;
 
 /* ---- Navbar */
 export interface NavbarOptions extends BaseProps {
@@ -6083,7 +6095,7 @@ export interface NavbarItemOptions extends BaseProps {
   to?: string | number;
   /** External href; opens in a new tab when set with `external=true` */
   href?: string | number;
-  icon?: string | number;
+  icon?: AktionIconName;
   active?: boolean;
   /** Callable fired on click — runs alongside `to`/`href` navigation, not instead of it */
   onClick?: (() => unknown) | null;
@@ -6102,11 +6114,11 @@ export declare function NavbarItem(label: string | number, props?: NavbarItemNam
 export declare function NavbarItem(props: NavbarItemProps): AktionNode<"NavbarItem">;
 export declare function NavbarItem(label: string | number, to: string | number | null | undefined, props?: Omit<NavbarItemOptions, "label" | "to">): AktionNode<"NavbarItem">;
 export declare function NavbarItem(label: string | number, to: string | number | null | undefined, href: string | number | null | undefined, props?: Omit<NavbarItemOptions, "label" | "to" | "href">): AktionNode<"NavbarItem">;
-export declare function NavbarItem(label: string | number, to: string | number | null | undefined, href: string | number | null | undefined, icon: string | number | null | undefined, props?: Omit<NavbarItemOptions, "label" | "to" | "href" | "icon">): AktionNode<"NavbarItem">;
-export declare function NavbarItem(label: string | number, to: string | number | null | undefined, href: string | number | null | undefined, icon: string | number | null | undefined, active: boolean | null | undefined, props?: Omit<NavbarItemOptions, "label" | "to" | "href" | "icon" | "active">): AktionNode<"NavbarItem">;
-export declare function NavbarItem(label: string | number, to: string | number | null | undefined, href: string | number | null | undefined, icon: string | number | null | undefined, active: boolean | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<NavbarItemOptions, "label" | "to" | "href" | "icon" | "active" | "onClick" | "action" | "onclick">): AktionNode<"NavbarItem">;
-export declare function NavbarItem(label: string | number, to: string | number | null | undefined, href: string | number | null | undefined, icon: string | number | null | undefined, active: boolean | null | undefined, onClick: (() => unknown) | null | undefined, external: boolean | null | undefined, props?: Omit<NavbarItemOptions, "label" | "to" | "href" | "icon" | "active" | "onClick" | "action" | "onclick" | "external">): AktionNode<"NavbarItem">;
-export declare function NavbarItem(label: string | number, to: string | number | null | undefined, href: string | number | null | undefined, icon: string | number | null | undefined, active: boolean | null | undefined, onClick: (() => unknown) | null | undefined, external: boolean | null | undefined, disabled: boolean | null | undefined): AktionNode<"NavbarItem">;
+export declare function NavbarItem(label: string | number, to: string | number | null | undefined, href: string | number | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<NavbarItemOptions, "label" | "to" | "href" | "icon">): AktionNode<"NavbarItem">;
+export declare function NavbarItem(label: string | number, to: string | number | null | undefined, href: string | number | null | undefined, icon: AktionIconName | null | undefined, active: boolean | null | undefined, props?: Omit<NavbarItemOptions, "label" | "to" | "href" | "icon" | "active">): AktionNode<"NavbarItem">;
+export declare function NavbarItem(label: string | number, to: string | number | null | undefined, href: string | number | null | undefined, icon: AktionIconName | null | undefined, active: boolean | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<NavbarItemOptions, "label" | "to" | "href" | "icon" | "active" | "onClick" | "action" | "onclick">): AktionNode<"NavbarItem">;
+export declare function NavbarItem(label: string | number, to: string | number | null | undefined, href: string | number | null | undefined, icon: AktionIconName | null | undefined, active: boolean | null | undefined, onClick: (() => unknown) | null | undefined, external: boolean | null | undefined, props?: Omit<NavbarItemOptions, "label" | "to" | "href" | "icon" | "active" | "onClick" | "action" | "onclick" | "external">): AktionNode<"NavbarItem">;
+export declare function NavbarItem(label: string | number, to: string | number | null | undefined, href: string | number | null | undefined, icon: AktionIconName | null | undefined, active: boolean | null | undefined, onClick: (() => unknown) | null | undefined, external: boolean | null | undefined, disabled: boolean | null | undefined): AktionNode<"NavbarItem">;
 
 /* ---- Notification */
 export interface NotificationOptions extends BaseProps {
@@ -6117,7 +6129,7 @@ export interface NotificationOptions extends BaseProps {
   /** Relative or absolute timestamp */
   time?: string | number;
   /** Font Awesome icon name shown in a colored disc */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Avatar URL (alternative to `icon`) */
   avatarSrc?: string | number;
   /** Alias of `avatarSrc`. */
@@ -6154,11 +6166,11 @@ export declare function Notification(title: string | number, props?: Notificatio
 export declare function Notification(props: NotificationProps): AktionNode<"Notification">;
 export declare function Notification(title: string | number, message: string | number | null | undefined, props?: Omit<NotificationOptions, "title" | "message" | "description">): AktionNode<"Notification">;
 export declare function Notification(title: string | number, message: string | number | null | undefined, time: string | number | null | undefined, props?: Omit<NotificationOptions, "title" | "message" | "description" | "time">): AktionNode<"Notification">;
-export declare function Notification(title: string | number, message: string | number | null | undefined, time: string | number | null | undefined, icon: string | number | null | undefined, props?: Omit<NotificationOptions, "title" | "message" | "description" | "time" | "icon">): AktionNode<"Notification">;
-export declare function Notification(title: string | number, message: string | number | null | undefined, time: string | number | null | undefined, icon: string | number | null | undefined, avatarSrc: string | number | null | undefined, props?: Omit<NotificationOptions, "title" | "message" | "description" | "time" | "icon" | "avatarSrc" | "src">): AktionNode<"Notification">;
-export declare function Notification(title: string | number, message: string | number | null | undefined, time: string | number | null | undefined, icon: string | number | null | undefined, avatarSrc: string | number | null | undefined, tone: NotificationTone | null | undefined, props?: Omit<NotificationOptions, "title" | "message" | "description" | "time" | "icon" | "avatarSrc" | "src" | "tone" | "variant">): AktionNode<"Notification">;
-export declare function Notification(title: string | number, message: string | number | null | undefined, time: string | number | null | undefined, icon: string | number | null | undefined, avatarSrc: string | number | null | undefined, tone: NotificationTone | null | undefined, unread: boolean | null | undefined, props?: Omit<NotificationOptions, "title" | "message" | "description" | "time" | "icon" | "avatarSrc" | "src" | "tone" | "variant" | "unread">): AktionNode<"Notification">;
-export declare function Notification(title: string | number, message: string | number | null | undefined, time: string | number | null | undefined, icon: string | number | null | undefined, avatarSrc: string | number | null | undefined, tone: NotificationTone | null | undefined, unread: boolean | null | undefined, actions: Children | null | undefined, props?: Omit<NotificationOptions, "title" | "message" | "description" | "time" | "icon" | "avatarSrc" | "src" | "tone" | "variant" | "unread" | "actions">): AktionNode<"Notification">;
+export declare function Notification(title: string | number, message: string | number | null | undefined, time: string | number | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<NotificationOptions, "title" | "message" | "description" | "time" | "icon">): AktionNode<"Notification">;
+export declare function Notification(title: string | number, message: string | number | null | undefined, time: string | number | null | undefined, icon: AktionIconName | null | undefined, avatarSrc: string | number | null | undefined, props?: Omit<NotificationOptions, "title" | "message" | "description" | "time" | "icon" | "avatarSrc" | "src">): AktionNode<"Notification">;
+export declare function Notification(title: string | number, message: string | number | null | undefined, time: string | number | null | undefined, icon: AktionIconName | null | undefined, avatarSrc: string | number | null | undefined, tone: NotificationTone | null | undefined, props?: Omit<NotificationOptions, "title" | "message" | "description" | "time" | "icon" | "avatarSrc" | "src" | "tone" | "variant">): AktionNode<"Notification">;
+export declare function Notification(title: string | number, message: string | number | null | undefined, time: string | number | null | undefined, icon: AktionIconName | null | undefined, avatarSrc: string | number | null | undefined, tone: NotificationTone | null | undefined, unread: boolean | null | undefined, props?: Omit<NotificationOptions, "title" | "message" | "description" | "time" | "icon" | "avatarSrc" | "src" | "tone" | "variant" | "unread">): AktionNode<"Notification">;
+export declare function Notification(title: string | number, message: string | number | null | undefined, time: string | number | null | undefined, icon: AktionIconName | null | undefined, avatarSrc: string | number | null | undefined, tone: NotificationTone | null | undefined, unread: boolean | null | undefined, actions: Children | null | undefined, props?: Omit<NotificationOptions, "title" | "message" | "description" | "time" | "icon" | "avatarSrc" | "src" | "tone" | "variant" | "unread" | "actions">): AktionNode<"Notification">;
 
 /* ---- NotificationBell */
 export interface NotificationBellOptions<Item extends NotificationBellItem = NotificationBellItem> extends BaseProps {
@@ -6167,7 +6179,7 @@ export interface NotificationBellOptions<Item extends NotificationBellItem = Not
   items?: readonly Item[];
   onOpen?: (() => unknown) | null;
   /** Receives the clicked notification object and its index in `items` */
-  onItemClick?: ((item: Item, index: number) => unknown) | null;
+  onItemClick?: ((item: NotificationBellItemOf<Item>, index: number) => unknown) | null;
   /** Renders a "mark all read" footer control */
   onMarkAllRead?: (() => unknown) | null;
   /** Which edge the panel aligns to (default right) */
@@ -6190,11 +6202,11 @@ export declare function NotificationBell<Item extends NotificationBellItem = Not
 export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(props: NotificationBellProps<Item>): AktionNode<"NotificationBell">;
 export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(count: number | null | undefined, items: readonly Item[] | null | undefined, props?: Omit<NotificationBellOptions<Item>, "count" | "items">): AktionNode<"NotificationBell">;
 export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(count: number | null | undefined, items: readonly Item[] | null | undefined, onOpen: (() => unknown) | null | undefined, props?: Omit<NotificationBellOptions<Item>, "count" | "items" | "onOpen">): AktionNode<"NotificationBell">;
-export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(count: number | null | undefined, items: readonly Item[] | null | undefined, onOpen: (() => unknown) | null | undefined, onItemClick: ((item: Item, index: number) => unknown) | null | undefined, props?: Omit<NotificationBellOptions<Item>, "count" | "items" | "onOpen" | "onItemClick">): AktionNode<"NotificationBell">;
-export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(count: number | null | undefined, items: readonly Item[] | null | undefined, onOpen: (() => unknown) | null | undefined, onItemClick: ((item: Item, index: number) => unknown) | null | undefined, onMarkAllRead: (() => unknown) | null | undefined, props?: Omit<NotificationBellOptions<Item>, "count" | "items" | "onOpen" | "onItemClick" | "onMarkAllRead">): AktionNode<"NotificationBell">;
-export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(count: number | null | undefined, items: readonly Item[] | null | undefined, onOpen: (() => unknown) | null | undefined, onItemClick: ((item: Item, index: number) => unknown) | null | undefined, onMarkAllRead: (() => unknown) | null | undefined, align: NotificationBellAlign | null | undefined, props?: Omit<NotificationBellOptions<Item>, "count" | "items" | "onOpen" | "onItemClick" | "onMarkAllRead" | "align">): AktionNode<"NotificationBell">;
-export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(count: number | null | undefined, items: readonly Item[] | null | undefined, onOpen: (() => unknown) | null | undefined, onItemClick: ((item: Item, index: number) => unknown) | null | undefined, onMarkAllRead: (() => unknown) | null | undefined, align: NotificationBellAlign | null | undefined, loading: boolean | null | undefined, props?: Omit<NotificationBellOptions<Item>, "count" | "items" | "onOpen" | "onItemClick" | "onMarkAllRead" | "align" | "loading">): AktionNode<"NotificationBell">;
-export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(count: number | null | undefined, items: readonly Item[] | null | undefined, onOpen: (() => unknown) | null | undefined, onItemClick: ((item: Item, index: number) => unknown) | null | undefined, onMarkAllRead: (() => unknown) | null | undefined, align: NotificationBellAlign | null | undefined, loading: boolean | null | undefined, emptyLabel: string | number | null | undefined, props?: Omit<NotificationBellOptions<Item>, "count" | "items" | "onOpen" | "onItemClick" | "onMarkAllRead" | "align" | "loading" | "emptyLabel">): AktionNode<"NotificationBell">;
+export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(count: number | null | undefined, items: readonly Item[] | null | undefined, onOpen: (() => unknown) | null | undefined, onItemClick: ((item: NotificationBellItemOf<Item>, index: number) => unknown) | null | undefined, props?: Omit<NotificationBellOptions<Item>, "count" | "items" | "onOpen" | "onItemClick">): AktionNode<"NotificationBell">;
+export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(count: number | null | undefined, items: readonly Item[] | null | undefined, onOpen: (() => unknown) | null | undefined, onItemClick: ((item: NotificationBellItemOf<Item>, index: number) => unknown) | null | undefined, onMarkAllRead: (() => unknown) | null | undefined, props?: Omit<NotificationBellOptions<Item>, "count" | "items" | "onOpen" | "onItemClick" | "onMarkAllRead">): AktionNode<"NotificationBell">;
+export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(count: number | null | undefined, items: readonly Item[] | null | undefined, onOpen: (() => unknown) | null | undefined, onItemClick: ((item: NotificationBellItemOf<Item>, index: number) => unknown) | null | undefined, onMarkAllRead: (() => unknown) | null | undefined, align: NotificationBellAlign | null | undefined, props?: Omit<NotificationBellOptions<Item>, "count" | "items" | "onOpen" | "onItemClick" | "onMarkAllRead" | "align">): AktionNode<"NotificationBell">;
+export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(count: number | null | undefined, items: readonly Item[] | null | undefined, onOpen: (() => unknown) | null | undefined, onItemClick: ((item: NotificationBellItemOf<Item>, index: number) => unknown) | null | undefined, onMarkAllRead: (() => unknown) | null | undefined, align: NotificationBellAlign | null | undefined, loading: boolean | null | undefined, props?: Omit<NotificationBellOptions<Item>, "count" | "items" | "onOpen" | "onItemClick" | "onMarkAllRead" | "align" | "loading">): AktionNode<"NotificationBell">;
+export declare function NotificationBell<Item extends NotificationBellItem = NotificationBellItem>(count: number | null | undefined, items: readonly Item[] | null | undefined, onOpen: (() => unknown) | null | undefined, onItemClick: ((item: NotificationBellItemOf<Item>, index: number) => unknown) | null | undefined, onMarkAllRead: (() => unknown) | null | undefined, align: NotificationBellAlign | null | undefined, loading: boolean | null | undefined, emptyLabel: string | number | null | undefined, props?: Omit<NotificationBellOptions<Item>, "count" | "items" | "onOpen" | "onItemClick" | "onMarkAllRead" | "align" | "loading" | "emptyLabel">): AktionNode<"NotificationBell">;
 
 /* ---- NumberInput */
 export interface NumberInputOptions extends Omit<BaseProps, "id"> {
@@ -6726,7 +6738,7 @@ export interface PasswordInputOptions extends Omit<BaseProps, "id"> {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -6843,7 +6855,7 @@ export interface PillOptions extends BaseProps {
   /** Alias of `tone`. */
   status?: PillTone;
   /** Optional leading Font Awesome icon name */
-  icon?: string | number;
+  icon?: AktionIconName;
 }
 export type PillProps = PillOptions & { label: string | number };
 export type PillNamed = Omit<PillOptions, "label">;
@@ -6851,7 +6863,7 @@ export type PillNamed = Omit<PillOptions, "label">;
 export declare function Pill(label: string | number, props?: PillNamed): AktionNode<"Pill">;
 export declare function Pill(props: PillProps): AktionNode<"Pill">;
 export declare function Pill(label: string | number, tone: PillTone | null | undefined, props?: Omit<PillOptions, "label" | "tone" | "variant" | "status">): AktionNode<"Pill">;
-export declare function Pill(label: string | number, tone: PillTone | null | undefined, icon: string | number | null | undefined): AktionNode<"Pill">;
+export declare function Pill(label: string | number, tone: PillTone | null | undefined, icon: AktionIconName | null | undefined): AktionNode<"Pill">;
 
 /* ---- PinInput */
 export interface PinInputOptions extends Omit<BaseProps, "id"> {
@@ -6890,7 +6902,7 @@ export interface PinInputOptions extends Omit<BaseProps, "id"> {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -6990,11 +7002,11 @@ export interface PresenceAvatarsOptions<Person extends PresenceAvatarsPerson = P
   max?: number;
   size?: PresenceAvatarsSize;
   /** Fires with the clicked person object */
-  onClick?: ((person: Person) => unknown) | null;
+  onClick?: ((person: PresenceAvatarsPersonOf<Person>) => unknown) | null;
   /** Alias of `onClick`. */
-  onPersonClick?: ((person: Person) => unknown) | null;
+  onPersonClick?: ((person: PresenceAvatarsPersonOf<Person>) => unknown) | null;
   /** Alias of `onClick`. */
-  onclick?: ((person: Person) => unknown) | null;
+  onclick?: ((person: PresenceAvatarsPersonOf<Person>) => unknown) | null;
 }
 export type PresenceAvatarsProps<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson> = PresenceAvatarsOptions<Person> & OneOf<"people" | "users" | "children", readonly Person[]>;
 export type PresenceAvatarsNamed<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson> = Omit<PresenceAvatarsOptions<Person>, "people" | "users" | "children">;
@@ -7003,7 +7015,7 @@ export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = P
 export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson>(props: PresenceAvatarsProps<Person>): AktionNode<"PresenceAvatars">;
 export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson>(people: readonly Person[], max: number | null | undefined, props?: Omit<PresenceAvatarsOptions<Person>, "people" | "users" | "children" | "max">): AktionNode<"PresenceAvatars">;
 export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson>(people: readonly Person[], max: number | null | undefined, size: PresenceAvatarsSize | null | undefined, props?: Omit<PresenceAvatarsOptions<Person>, "people" | "users" | "children" | "max" | "size">): AktionNode<"PresenceAvatars">;
-export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson>(people: readonly Person[], max: number | null | undefined, size: PresenceAvatarsSize | null | undefined, onClick: ((person: Person) => unknown) | null | undefined): AktionNode<"PresenceAvatars">;
+export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson>(people: readonly Person[], max: number | null | undefined, size: PresenceAvatarsSize | null | undefined, onClick: ((person: PresenceAvatarsPersonOf<Person>) => unknown) | null | undefined): AktionNode<"PresenceAvatars">;
 
 /* ---- PriceTag */
 export interface PriceTagOptions extends BaseProps {
@@ -7212,7 +7224,7 @@ export interface ProgressRingOptions extends BaseProps {
   size?: ProgressRingSize | number;
   indeterminate?: boolean;
   /** Font Awesome icon rendered inside the ring instead of the label */
-  icon?: string | number;
+  icon?: AktionIconName;
 }
 export type ProgressRingProps = ProgressRingOptions;
 export type ProgressRingNamed = Omit<ProgressRingOptions, "value">;
@@ -7225,7 +7237,7 @@ export declare function ProgressRing(value: number | null | undefined, max: numb
 export declare function ProgressRing(value: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, caption: string | number | null | undefined, tone: ProgressRingTone | null | undefined, props?: Omit<ProgressRingOptions, "value" | "max" | "label" | "caption" | "description" | "tone" | "variant">): AktionNode<"ProgressRing">;
 export declare function ProgressRing(value: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, caption: string | number | null | undefined, tone: ProgressRingTone | null | undefined, size: ProgressRingSize | number | null | undefined, props?: Omit<ProgressRingOptions, "value" | "max" | "label" | "caption" | "description" | "tone" | "variant" | "size">): AktionNode<"ProgressRing">;
 export declare function ProgressRing(value: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, caption: string | number | null | undefined, tone: ProgressRingTone | null | undefined, size: ProgressRingSize | number | null | undefined, indeterminate: boolean | null | undefined, props?: Omit<ProgressRingOptions, "value" | "max" | "label" | "caption" | "description" | "tone" | "variant" | "size" | "indeterminate">): AktionNode<"ProgressRing">;
-export declare function ProgressRing(value: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, caption: string | number | null | undefined, tone: ProgressRingTone | null | undefined, size: ProgressRingSize | number | null | undefined, indeterminate: boolean | null | undefined, icon: string | number | null | undefined): AktionNode<"ProgressRing">;
+export declare function ProgressRing(value: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, caption: string | number | null | undefined, tone: ProgressRingTone | null | undefined, size: ProgressRingSize | number | null | undefined, indeterminate: boolean | null | undefined, icon: AktionIconName | null | undefined): AktionNode<"ProgressRing">;
 
 /* ---- Prose */
 export interface ProseOptions extends BaseProps {
@@ -7460,7 +7472,7 @@ export interface RatingOptions extends BaseProps {
   /** Allow half-star resolution when interactive */
   halfStep?: boolean;
   /** Icon family — `star` (default), `heart`, `thumb`, `fire`, `bolt`, or any FA name */
-  icon?: "star" | "heart" | "thumb" | "fire" | "bolt" | (string & {});
+  icon?: "star" | "heart" | "thumb" | "fire" | "bolt" | AktionIconName;
   /** Called with the new rating when the user picks a star (interactive mode) */
   onChange?: ((value: number) => unknown) | null;
   /** Alias of `onChange`. */
@@ -7671,7 +7683,7 @@ export interface RichTextEditorOptions extends Omit<BaseProps, "id"> {
   /** Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it */
   description?: string | number;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -7944,7 +7956,7 @@ export interface SectionBlockOptions extends BaseProps {
   /** Heading level 2-6 (default 3); the visual size is unchanged */
   level?: 2 | 3 | 4 | 5 | 6;
   /** Font Awesome icon shown before the title */
-  icon?: string | number;
+  icon?: AktionIconName;
 }
 export type SectionBlockProps = SectionBlockOptions & { title: string | number } & OneOf<"children" | "child", Children>;
 export type SectionBlockNamed = Omit<SectionBlockOptions, "title"> & OneOf<"children" | "child", Children>;
@@ -7955,7 +7967,7 @@ export declare function SectionBlock(title: string | number, children: Children,
 export declare function SectionBlock(title: string | number, children: Children, description: string | number | null | undefined, props?: Omit<SectionBlockOptions, "title" | "children" | "child" | "description">): AktionNode<"SectionBlock">;
 export declare function SectionBlock(title: string | number, children: Children, description: string | number | null | undefined, actions: Children | null | undefined, props?: Omit<SectionBlockOptions, "title" | "children" | "child" | "description" | "actions">): AktionNode<"SectionBlock">;
 export declare function SectionBlock(title: string | number, children: Children, description: string | number | null | undefined, actions: Children | null | undefined, level: 2 | 3 | 4 | 5 | 6 | null | undefined, props?: Omit<SectionBlockOptions, "title" | "children" | "child" | "description" | "actions" | "level">): AktionNode<"SectionBlock">;
-export declare function SectionBlock(title: string | number, children: Children, description: string | number | null | undefined, actions: Children | null | undefined, level: 2 | 3 | 4 | 5 | 6 | null | undefined, icon: string | number | null | undefined): AktionNode<"SectionBlock">;
+export declare function SectionBlock(title: string | number, children: Children, description: string | number | null | undefined, actions: Children | null | undefined, level: 2 | 3 | 4 | 5 | 6 | null | undefined, icon: AktionIconName | null | undefined): AktionNode<"SectionBlock">;
 
 /* ---- SectionHeader */
 export interface SectionHeaderOptions extends BaseProps {
@@ -7987,6 +7999,7 @@ export interface SegmentedControlOptions<V extends string | number = string | nu
   options?: readonly (V | SegmentedControlOption<V>)[];
   /** Alias of `options`. */
   items?: readonly (V | SegmentedControlOption<V>)[];
+  /** The selected option's value (compared as text, so `2` and `"2"` select the same option) */
   value?: V | null;
   onChange?: ((value: V) => unknown) | null;
   /** Alias of `onChange`. */
@@ -8115,7 +8128,7 @@ export interface SeriesOptions extends BaseProps {
   name?: string | number;
   /** One number per x-axis label — or, for ScatterChart, its points as `{x, y, label?}` objects or `[x, y, label?]` tuples */
   values?: readonly number[] | readonly SeriesPoint[];
-  /** Override the palette colour for this series (any CSS colour or var(); a value that is not a plain colour falls back to the palette slot) */
+  /** Override the palette colour for this series (any CSS colour, `var()` or `color-mix()`; a value carrying anything else — a `;`, quotes, `url()`, a comment — falls back to the palette slot) */
   color?: string;
   /** XY points for ScatterChart (`{x, y, label?}` objects or `[x, y, label?]` tuples) — the explicit alternative to passing them as `values` */
   points?: readonly SeriesPoint[];
@@ -8229,7 +8242,7 @@ export declare function Sidebar(items: readonly ((AktionNode<"SidebarItem"> | Ak
 export interface SidebarItemOptions extends BaseProps {
   label?: string | number;
   /** Font Awesome icon name rendered before the label */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Mark this item as the current page. When `to` is provided and `active` is omitted, the item auto-detects the active state from the current router path. */
   active?: boolean;
   /** Trailing chip (count or status) */
@@ -8252,13 +8265,13 @@ export type SidebarItemNamed = Omit<SidebarItemOptions, "label">;
 /** Single navigation item inside a Sidebar. Pass `active=true` to mark as the current page, a `to` path to navigate via the runtime router on click, an `onClick` callable for arbitrary click handling, or an optional `badge` (string/number) for a trailing chip. `to` and `onClick` can coexist — `onClick` is invoked AFTER the router navigates so authors can do extra work (analytics, side-effects). Items with `to`/`href` render as real links, so Cmd/middle-click opens a new tab; `disabled: true` greys a gated item out. */
 export declare function SidebarItem(label: string | number, props?: SidebarItemNamed): AktionNode<"SidebarItem">;
 export declare function SidebarItem(props: SidebarItemProps): AktionNode<"SidebarItem">;
-export declare function SidebarItem(label: string | number, icon: string | number | null | undefined, props?: Omit<SidebarItemOptions, "label" | "icon">): AktionNode<"SidebarItem">;
-export declare function SidebarItem(label: string | number, icon: string | number | null | undefined, active: boolean | null | undefined, props?: Omit<SidebarItemOptions, "label" | "icon" | "active">): AktionNode<"SidebarItem">;
-export declare function SidebarItem(label: string | number, icon: string | number | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, props?: Omit<SidebarItemOptions, "label" | "icon" | "active" | "badge">): AktionNode<"SidebarItem">;
-export declare function SidebarItem(label: string | number, icon: string | number | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, to: string | number | null | undefined, props?: Omit<SidebarItemOptions, "label" | "icon" | "active" | "badge" | "to">): AktionNode<"SidebarItem">;
-export declare function SidebarItem(label: string | number, icon: string | number | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, to: string | number | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<SidebarItemOptions, "label" | "icon" | "active" | "badge" | "to" | "onClick" | "action" | "onclick">): AktionNode<"SidebarItem">;
-export declare function SidebarItem(label: string | number, icon: string | number | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, to: string | number | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, props?: Omit<SidebarItemOptions, "label" | "icon" | "active" | "badge" | "to" | "onClick" | "action" | "onclick" | "href">): AktionNode<"SidebarItem">;
-export declare function SidebarItem(label: string | number, icon: string | number | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, to: string | number | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, disabled: boolean | null | undefined): AktionNode<"SidebarItem">;
+export declare function SidebarItem(label: string | number, icon: AktionIconName | null | undefined, props?: Omit<SidebarItemOptions, "label" | "icon">): AktionNode<"SidebarItem">;
+export declare function SidebarItem(label: string | number, icon: AktionIconName | null | undefined, active: boolean | null | undefined, props?: Omit<SidebarItemOptions, "label" | "icon" | "active">): AktionNode<"SidebarItem">;
+export declare function SidebarItem(label: string | number, icon: AktionIconName | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, props?: Omit<SidebarItemOptions, "label" | "icon" | "active" | "badge">): AktionNode<"SidebarItem">;
+export declare function SidebarItem(label: string | number, icon: AktionIconName | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, to: string | number | null | undefined, props?: Omit<SidebarItemOptions, "label" | "icon" | "active" | "badge" | "to">): AktionNode<"SidebarItem">;
+export declare function SidebarItem(label: string | number, icon: AktionIconName | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, to: string | number | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<SidebarItemOptions, "label" | "icon" | "active" | "badge" | "to" | "onClick" | "action" | "onclick">): AktionNode<"SidebarItem">;
+export declare function SidebarItem(label: string | number, icon: AktionIconName | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, to: string | number | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, props?: Omit<SidebarItemOptions, "label" | "icon" | "active" | "badge" | "to" | "onClick" | "action" | "onclick" | "href">): AktionNode<"SidebarItem">;
+export declare function SidebarItem(label: string | number, icon: AktionIconName | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, to: string | number | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, disabled: boolean | null | undefined): AktionNode<"SidebarItem">;
 
 /* ---- SidebarSection */
 export interface SidebarSectionOptions extends BaseProps {
@@ -8304,7 +8317,7 @@ export interface SignaturePadOptions extends BaseProps {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -8332,7 +8345,7 @@ export interface SignaturePadOptions extends BaseProps {
 }
 export type SignaturePadProps = SignaturePadOptions;
 export type SignaturePadNamed = Omit<SignaturePadOptions, "width">;
-/** A signature capture pad — a DrawingCanvas tuned for signing, with a baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires when the signature changes (empty string when cleared, and also when the pad only received taps — so a stray tap cannot pass a truthiness check); `onBlur` / `onFocus` receive that same value. Pass the URL back as `value` to restore a signature after a re-render, and `disabled` to lock the pad once it is submitted. `label`/`error`/`required` render the usual field shell. Use in contracts, delivery confirmation, and consent flows. */
+/** A signature capture pad — a DrawingCanvas tuned for signing, with a baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires when the signature changes (empty string when cleared, and also when the pad only received taps — so a stray tap cannot pass a truthiness check); `onBlur` / `onFocus` receive that same value, and a `name`d pad submits it. Pass the URL back as `value` to restore a signature after a re-render, and `disabled` to lock the pad once it is submitted. `label`/`error`/`required` render the usual field shell. Use in contracts, delivery confirmation, and consent flows. */
 export declare function SignaturePad(width?: number, props?: SignaturePadNamed): AktionNode<"SignaturePad">;
 export declare function SignaturePad(props: SignaturePadProps): AktionNode<"SignaturePad">;
 export declare function SignaturePad(width: number | null | undefined, height: number | null | undefined, props?: Omit<SignaturePadOptions, "width" | "height">): AktionNode<"SignaturePad">;
@@ -8526,7 +8539,7 @@ export interface SpeedDialOptions extends BaseProps {
   /** Alias of `actions`. */
   items?: readonly SpeedDialAction[];
   /** Main FAB icon (default 'plus') */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Expanded state — usually a $variable */
   open?: boolean;
   /** Fires with the new expanded state */
@@ -8540,11 +8553,11 @@ export type SpeedDialNamed = Omit<SpeedDialOptions, "actions" | "items">;
 /** A floating action button that expands a stack of mini-actions on click. Pass `actions` as {icon, label, onClick} (`action` is accepted as a synonym for `onClick`). Bind `open` to control it from outside; `position` picks the corner. Outside-click and Escape close it. */
 export declare function SpeedDial(actions: readonly SpeedDialAction[], props?: SpeedDialNamed): AktionNode<"SpeedDial">;
 export declare function SpeedDial(props: SpeedDialProps): AktionNode<"SpeedDial">;
-export declare function SpeedDial(actions: readonly SpeedDialAction[], icon: string | number | null | undefined, props?: Omit<SpeedDialOptions, "actions" | "items" | "icon">): AktionNode<"SpeedDial">;
-export declare function SpeedDial(actions: readonly SpeedDialAction[], icon: string | number | null | undefined, open: boolean | null | undefined, props?: Omit<SpeedDialOptions, "actions" | "items" | "icon" | "open">): AktionNode<"SpeedDial">;
-export declare function SpeedDial(actions: readonly SpeedDialAction[], icon: string | number | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: boolean) => unknown) | null | undefined, props?: Omit<SpeedDialOptions, "actions" | "items" | "icon" | "open" | "onOpenChange">): AktionNode<"SpeedDial">;
-export declare function SpeedDial(actions: readonly SpeedDialAction[], icon: string | number | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: boolean) => unknown) | null | undefined, position: SpeedDialPosition | null | undefined, props?: Omit<SpeedDialOptions, "actions" | "items" | "icon" | "open" | "onOpenChange" | "position">): AktionNode<"SpeedDial">;
-export declare function SpeedDial(actions: readonly SpeedDialAction[], icon: string | number | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: boolean) => unknown) | null | undefined, position: SpeedDialPosition | null | undefined, label: string | number | null | undefined): AktionNode<"SpeedDial">;
+export declare function SpeedDial(actions: readonly SpeedDialAction[], icon: AktionIconName | null | undefined, props?: Omit<SpeedDialOptions, "actions" | "items" | "icon">): AktionNode<"SpeedDial">;
+export declare function SpeedDial(actions: readonly SpeedDialAction[], icon: AktionIconName | null | undefined, open: boolean | null | undefined, props?: Omit<SpeedDialOptions, "actions" | "items" | "icon" | "open">): AktionNode<"SpeedDial">;
+export declare function SpeedDial(actions: readonly SpeedDialAction[], icon: AktionIconName | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: boolean) => unknown) | null | undefined, props?: Omit<SpeedDialOptions, "actions" | "items" | "icon" | "open" | "onOpenChange">): AktionNode<"SpeedDial">;
+export declare function SpeedDial(actions: readonly SpeedDialAction[], icon: AktionIconName | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: boolean) => unknown) | null | undefined, position: SpeedDialPosition | null | undefined, props?: Omit<SpeedDialOptions, "actions" | "items" | "icon" | "open" | "onOpenChange" | "position">): AktionNode<"SpeedDial">;
+export declare function SpeedDial(actions: readonly SpeedDialAction[], icon: AktionIconName | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: boolean) => unknown) | null | undefined, position: SpeedDialPosition | null | undefined, label: string | number | null | undefined): AktionNode<"SpeedDial">;
 
 /* ---- Spinner */
 export interface SpinnerOptions extends BaseProps {
@@ -8733,7 +8746,7 @@ export interface StatCardOptions extends BaseProps {
   /** Change vs previous period */
   delta?: string | number;
   /** Font Awesome icon name shown in a chip beside the label. Omit it and one is guessed from the label; pass `"none"` for no icon at all. */
-  icon?: "none" | (string & {}) | false;
+  icon?: "none" | AktionIconName | false;
   /** Optional inline sparkline values */
   spark?: readonly (number | null | undefined)[];
   tone?: StatCardTone;
@@ -8758,10 +8771,10 @@ export declare function StatCard(props: StatCardProps): AktionNode<"StatCard">;
 export declare function StatCard(label: string | number, value: string | number, props?: Omit<StatCardOptions, "label" | "value">): AktionNode<"StatCard">;
 export declare function StatCard(label: string | number, value: string | number, trend: StatCardTrend | null | undefined, props?: Omit<StatCardOptions, "label" | "value" | "trend">): AktionNode<"StatCard">;
 export declare function StatCard(label: string | number, value: string | number, trend: StatCardTrend | null | undefined, delta: string | number | null | undefined, props?: Omit<StatCardOptions, "label" | "value" | "trend" | "delta">): AktionNode<"StatCard">;
-export declare function StatCard(label: string | number, value: string | number, trend: StatCardTrend | null | undefined, delta: string | number | null | undefined, icon: "none" | (string & {}) | false | null | undefined, props?: Omit<StatCardOptions, "label" | "value" | "trend" | "delta" | "icon">): AktionNode<"StatCard">;
-export declare function StatCard(label: string | number, value: string | number, trend: StatCardTrend | null | undefined, delta: string | number | null | undefined, icon: "none" | (string & {}) | false | null | undefined, spark: readonly (number | null | undefined)[] | null | undefined, props?: Omit<StatCardOptions, "label" | "value" | "trend" | "delta" | "icon" | "spark">): AktionNode<"StatCard">;
-export declare function StatCard(label: string | number, value: string | number, trend: StatCardTrend | null | undefined, delta: string | number | null | undefined, icon: "none" | (string & {}) | false | null | undefined, spark: readonly (number | null | undefined)[] | null | undefined, tone: StatCardTone | null | undefined, props?: Omit<StatCardOptions, "label" | "value" | "trend" | "delta" | "icon" | "spark" | "tone" | "variant">): AktionNode<"StatCard">;
-export declare function StatCard(label: string | number, value: string | number, trend: StatCardTrend | null | undefined, delta: string | number | null | undefined, icon: "none" | (string & {}) | false | null | undefined, spark: readonly (number | null | undefined)[] | null | undefined, tone: StatCardTone | null | undefined, hint: string | number | null | undefined, props?: Omit<StatCardOptions, "label" | "value" | "trend" | "delta" | "icon" | "spark" | "tone" | "variant" | "hint" | "description">): AktionNode<"StatCard">;
+export declare function StatCard(label: string | number, value: string | number, trend: StatCardTrend | null | undefined, delta: string | number | null | undefined, icon: "none" | AktionIconName | false | null | undefined, props?: Omit<StatCardOptions, "label" | "value" | "trend" | "delta" | "icon">): AktionNode<"StatCard">;
+export declare function StatCard(label: string | number, value: string | number, trend: StatCardTrend | null | undefined, delta: string | number | null | undefined, icon: "none" | AktionIconName | false | null | undefined, spark: readonly (number | null | undefined)[] | null | undefined, props?: Omit<StatCardOptions, "label" | "value" | "trend" | "delta" | "icon" | "spark">): AktionNode<"StatCard">;
+export declare function StatCard(label: string | number, value: string | number, trend: StatCardTrend | null | undefined, delta: string | number | null | undefined, icon: "none" | AktionIconName | false | null | undefined, spark: readonly (number | null | undefined)[] | null | undefined, tone: StatCardTone | null | undefined, props?: Omit<StatCardOptions, "label" | "value" | "trend" | "delta" | "icon" | "spark" | "tone" | "variant">): AktionNode<"StatCard">;
+export declare function StatCard(label: string | number, value: string | number, trend: StatCardTrend | null | undefined, delta: string | number | null | undefined, icon: "none" | AktionIconName | false | null | undefined, spark: readonly (number | null | undefined)[] | null | undefined, tone: StatCardTone | null | undefined, hint: string | number | null | undefined, props?: Omit<StatCardOptions, "label" | "value" | "trend" | "delta" | "icon" | "spark" | "tone" | "variant" | "hint" | "description">): AktionNode<"StatCard">;
 
 /* ---- Stats */
 export interface StatsOptions extends BaseProps {
@@ -8861,7 +8874,7 @@ export interface SuccessStateOptions extends BaseProps {
   description?: string | number;
   actions?: Children;
   /** Default `circle-check` */
-  icon?: string | number;
+  icon?: AktionIconName;
 }
 export type SuccessStateProps = SuccessStateOptions;
 export type SuccessStateNamed = Omit<SuccessStateOptions, "title">;
@@ -8870,7 +8883,7 @@ export declare function SuccessState(title?: string | number, props?: SuccessSta
 export declare function SuccessState(props: SuccessStateProps): AktionNode<"SuccessState">;
 export declare function SuccessState(title: string | number | null | undefined, description: string | number | null | undefined, props?: Omit<SuccessStateOptions, "title" | "description">): AktionNode<"SuccessState">;
 export declare function SuccessState(title: string | number | null | undefined, description: string | number | null | undefined, actions: Children | null | undefined, props?: Omit<SuccessStateOptions, "title" | "description" | "actions">): AktionNode<"SuccessState">;
-export declare function SuccessState(title: string | number | null | undefined, description: string | number | null | undefined, actions: Children | null | undefined, icon: string | number | null | undefined): AktionNode<"SuccessState">;
+export declare function SuccessState(title: string | number | null | undefined, description: string | number | null | undefined, actions: Children | null | undefined, icon: AktionIconName | null | undefined): AktionNode<"SuccessState">;
 
 /* ---- Svg */
 export interface SvgOptions extends BaseProps {
@@ -9000,7 +9013,7 @@ export interface TabItemOptions extends BaseProps {
   /** Trailing chip rendered in the tab trigger (count / status) */
   badge?: string | number;
   /** Optional Font Awesome icon name shown before the label */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Render the trigger as unavailable (not selectable, skipped by keyboard nav) */
   disabled?: boolean;
 }
@@ -9012,8 +9025,8 @@ export declare function TabItem(props: TabItemProps): AktionNode<"TabItem">;
 export declare function TabItem(value: string | number, label: string | number, props: Omit<TabItemOptions, "value" | "label"> & OneOf<"children" | "child", Children>): AktionNode<"TabItem">;
 export declare function TabItem(value: string | number, label: string | number, children: Children, props?: Omit<TabItemOptions, "value" | "label" | "children" | "child">): AktionNode<"TabItem">;
 export declare function TabItem(value: string | number, label: string | number, children: Children, badge: string | number | null | undefined, props?: Omit<TabItemOptions, "value" | "label" | "children" | "child" | "badge">): AktionNode<"TabItem">;
-export declare function TabItem(value: string | number, label: string | number, children: Children, badge: string | number | null | undefined, icon: string | number | null | undefined, props?: Omit<TabItemOptions, "value" | "label" | "children" | "child" | "badge" | "icon">): AktionNode<"TabItem">;
-export declare function TabItem(value: string | number, label: string | number, children: Children, badge: string | number | null | undefined, icon: string | number | null | undefined, disabled: boolean | null | undefined): AktionNode<"TabItem">;
+export declare function TabItem(value: string | number, label: string | number, children: Children, badge: string | number | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<TabItemOptions, "value" | "label" | "children" | "child" | "badge" | "icon">): AktionNode<"TabItem">;
+export declare function TabItem(value: string | number, label: string | number, children: Children, badge: string | number | null | undefined, icon: AktionIconName | null | undefined, disabled: boolean | null | undefined): AktionNode<"TabItem">;
 
 /* ---- Table */
 export interface TableOptions extends BaseProps {
@@ -9142,7 +9155,7 @@ export interface TagInputOptions extends Omit<BaseProps, "id"> {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -9166,7 +9179,7 @@ export interface TagInputOptions extends Omit<BaseProps, "id"> {
 }
 export type TagInputProps = TagInputOptions & { id: string | number };
 export type TagInputNamed = Omit<TagInputOptions, "id">;
-/** Tag/chip input — type a value, press Enter (or comma) to commit, click × on a chip to remove. Tabbing away commits the pending text too. Pass a `$variable` (array of strings) as `value` for two-way binding. Use for keywords, recipients, labels, skills, allowlists. Pass `suggestions` for autocomplete and `label`/`hint`/`error` for the labelled field shell. */
+/** Tag/chip input — type a value, press Enter (or comma) to commit, click × on a chip to remove. Tabbing away commits the pending text too. Pass a `$variable` (array of strings) as `value` for two-way binding; inside a form each tag is submitted as its own `name` entry, as a multiple select does. Use for keywords, recipients, labels, skills, allowlists. Pass `suggestions` for autocomplete and `label`/`hint`/`error` for the labelled field shell. */
 export declare function TagInput(id: string | number, props?: TagInputNamed): AktionNode<"TagInput">;
 export declare function TagInput(props: TagInputProps): AktionNode<"TagInput">;
 export declare function TagInput(id: string | number, value: readonly string[] | null | undefined, props?: Omit<TagInputOptions, "id" | "value">): AktionNode<"TagInput">;
@@ -9382,7 +9395,7 @@ export declare function ThemeToggle(light: BuiltInThemeName | (string & {}) | nu
 export interface TileOptions extends BaseProps {
   label?: string | number;
   /** Font Awesome icon name shown in a colored disc */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Secondary value rendered next to/under the label */
   value?: string | number;
   description?: string | number;
@@ -9408,13 +9421,13 @@ export type TileNamed = Omit<TileOptions, "label">;
 /** Compact icon + label + optional value tile. Smaller and denser than `StatCard`, ideal for menu grids, quick-action panels, category directories, and category filters. Pair with `Grid` for uniform rows. Pass `href` for a directory tile that links to a route, and `selected` for the on-state of a filter tile. `iconPosition: "end"` moves the mark to the trailing edge — the shape a choice card wants, where the copy reads first and the illustration sits opposite it. */
 export declare function Tile(label: string | number, props?: TileNamed): AktionNode<"Tile">;
 export declare function Tile(props: TileProps): AktionNode<"Tile">;
-export declare function Tile(label: string | number, icon: string | number | null | undefined, props?: Omit<TileOptions, "label" | "icon">): AktionNode<"Tile">;
-export declare function Tile(label: string | number, icon: string | number | null | undefined, value: string | number | null | undefined, props?: Omit<TileOptions, "label" | "icon" | "value">): AktionNode<"Tile">;
-export declare function Tile(label: string | number, icon: string | number | null | undefined, value: string | number | null | undefined, description: string | number | null | undefined, props?: Omit<TileOptions, "label" | "icon" | "value" | "description">): AktionNode<"Tile">;
-export declare function Tile(label: string | number, icon: string | number | null | undefined, value: string | number | null | undefined, description: string | number | null | undefined, tone: TileTone | null | undefined, props?: Omit<TileOptions, "label" | "icon" | "value" | "description" | "tone" | "variant">): AktionNode<"Tile">;
-export declare function Tile(label: string | number, icon: string | number | null | undefined, value: string | number | null | undefined, description: string | number | null | undefined, tone: TileTone | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<TileOptions, "label" | "icon" | "value" | "description" | "tone" | "variant" | "onClick" | "action" | "onclick">): AktionNode<"Tile">;
-export declare function Tile(label: string | number, icon: string | number | null | undefined, value: string | number | null | undefined, description: string | number | null | undefined, tone: TileTone | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, props?: Omit<TileOptions, "label" | "icon" | "value" | "description" | "tone" | "variant" | "onClick" | "action" | "onclick" | "href">): AktionNode<"Tile">;
-export declare function Tile(label: string | number, icon: string | number | null | undefined, value: string | number | null | undefined, description: string | number | null | undefined, tone: TileTone | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, selected: boolean | null | undefined, props?: Omit<TileOptions, "label" | "icon" | "value" | "description" | "tone" | "variant" | "onClick" | "action" | "onclick" | "href" | "selected" | "active">): AktionNode<"Tile">;
+export declare function Tile(label: string | number, icon: AktionIconName | null | undefined, props?: Omit<TileOptions, "label" | "icon">): AktionNode<"Tile">;
+export declare function Tile(label: string | number, icon: AktionIconName | null | undefined, value: string | number | null | undefined, props?: Omit<TileOptions, "label" | "icon" | "value">): AktionNode<"Tile">;
+export declare function Tile(label: string | number, icon: AktionIconName | null | undefined, value: string | number | null | undefined, description: string | number | null | undefined, props?: Omit<TileOptions, "label" | "icon" | "value" | "description">): AktionNode<"Tile">;
+export declare function Tile(label: string | number, icon: AktionIconName | null | undefined, value: string | number | null | undefined, description: string | number | null | undefined, tone: TileTone | null | undefined, props?: Omit<TileOptions, "label" | "icon" | "value" | "description" | "tone" | "variant">): AktionNode<"Tile">;
+export declare function Tile(label: string | number, icon: AktionIconName | null | undefined, value: string | number | null | undefined, description: string | number | null | undefined, tone: TileTone | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<TileOptions, "label" | "icon" | "value" | "description" | "tone" | "variant" | "onClick" | "action" | "onclick">): AktionNode<"Tile">;
+export declare function Tile(label: string | number, icon: AktionIconName | null | undefined, value: string | number | null | undefined, description: string | number | null | undefined, tone: TileTone | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, props?: Omit<TileOptions, "label" | "icon" | "value" | "description" | "tone" | "variant" | "onClick" | "action" | "onclick" | "href">): AktionNode<"Tile">;
+export declare function Tile(label: string | number, icon: AktionIconName | null | undefined, value: string | number | null | undefined, description: string | number | null | undefined, tone: TileTone | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, selected: boolean | null | undefined, props?: Omit<TileOptions, "label" | "icon" | "value" | "description" | "tone" | "variant" | "onClick" | "action" | "onclick" | "href" | "selected" | "active">): AktionNode<"Tile">;
 
 /* ---- TimePicker */
 export interface TimePickerOptions extends Omit<BaseProps, "id"> {
@@ -9444,7 +9457,7 @@ export interface TimePickerOptions extends Omit<BaseProps, "id"> {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: boolean | string | number;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -9496,7 +9509,7 @@ export interface TimelineItemOptions extends BaseProps {
   time?: string | number;
   description?: string | number;
   /** Font Awesome icon name rendered inside the marker */
-  icon?: string | number;
+  icon?: AktionIconName;
   tone?: TimelineItemTone;
   /** Alias of `tone`. */
   variant?: TimelineItemTone;
@@ -9518,11 +9531,11 @@ export declare function TimelineItem(title: string | number, props?: TimelineIte
 export declare function TimelineItem(props: TimelineItemProps): AktionNode<"TimelineItem">;
 export declare function TimelineItem(title: string | number, time: string | number | null | undefined, props?: Omit<TimelineItemOptions, "title" | "time">): AktionNode<"TimelineItem">;
 export declare function TimelineItem(title: string | number, time: string | number | null | undefined, description: string | number | null | undefined, props?: Omit<TimelineItemOptions, "title" | "time" | "description">): AktionNode<"TimelineItem">;
-export declare function TimelineItem(title: string | number, time: string | number | null | undefined, description: string | number | null | undefined, icon: string | number | null | undefined, props?: Omit<TimelineItemOptions, "title" | "time" | "description" | "icon">): AktionNode<"TimelineItem">;
-export declare function TimelineItem(title: string | number, time: string | number | null | undefined, description: string | number | null | undefined, icon: string | number | null | undefined, tone: TimelineItemTone | null | undefined, props?: Omit<TimelineItemOptions, "title" | "time" | "description" | "icon" | "tone" | "variant">): AktionNode<"TimelineItem">;
-export declare function TimelineItem(title: string | number, time: string | number | null | undefined, description: string | number | null | undefined, icon: string | number | null | undefined, tone: TimelineItemTone | null | undefined, content: Children | null | undefined, props?: Omit<TimelineItemOptions, "title" | "time" | "description" | "icon" | "tone" | "variant" | "content">): AktionNode<"TimelineItem">;
-export declare function TimelineItem(title: string | number, time: string | number | null | undefined, description: string | number | null | undefined, icon: string | number | null | undefined, tone: TimelineItemTone | null | undefined, content: Children | null | undefined, href: string | number | null | undefined, props?: Omit<TimelineItemOptions, "title" | "time" | "description" | "icon" | "tone" | "variant" | "content" | "href">): AktionNode<"TimelineItem">;
-export declare function TimelineItem(title: string | number, time: string | number | null | undefined, description: string | number | null | undefined, icon: string | number | null | undefined, tone: TimelineItemTone | null | undefined, content: Children | null | undefined, href: string | number | null | undefined, onClick: (() => unknown) | null | undefined): AktionNode<"TimelineItem">;
+export declare function TimelineItem(title: string | number, time: string | number | null | undefined, description: string | number | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<TimelineItemOptions, "title" | "time" | "description" | "icon">): AktionNode<"TimelineItem">;
+export declare function TimelineItem(title: string | number, time: string | number | null | undefined, description: string | number | null | undefined, icon: AktionIconName | null | undefined, tone: TimelineItemTone | null | undefined, props?: Omit<TimelineItemOptions, "title" | "time" | "description" | "icon" | "tone" | "variant">): AktionNode<"TimelineItem">;
+export declare function TimelineItem(title: string | number, time: string | number | null | undefined, description: string | number | null | undefined, icon: AktionIconName | null | undefined, tone: TimelineItemTone | null | undefined, content: Children | null | undefined, props?: Omit<TimelineItemOptions, "title" | "time" | "description" | "icon" | "tone" | "variant" | "content">): AktionNode<"TimelineItem">;
+export declare function TimelineItem(title: string | number, time: string | number | null | undefined, description: string | number | null | undefined, icon: AktionIconName | null | undefined, tone: TimelineItemTone | null | undefined, content: Children | null | undefined, href: string | number | null | undefined, props?: Omit<TimelineItemOptions, "title" | "time" | "description" | "icon" | "tone" | "variant" | "content" | "href">): AktionNode<"TimelineItem">;
+export declare function TimelineItem(title: string | number, time: string | number | null | undefined, description: string | number | null | undefined, icon: AktionIconName | null | undefined, tone: TimelineItemTone | null | undefined, content: Children | null | undefined, href: string | number | null | undefined, onClick: (() => unknown) | null | undefined): AktionNode<"TimelineItem">;
 
 /* ---- Toast */
 export interface ToastOptions extends BaseProps {
@@ -9535,7 +9548,7 @@ export interface ToastOptions extends BaseProps {
   /** Alias of `tone`. */
   variant?: ToastTone;
   /** Font Awesome icon name (default picked from tone) */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Auto-dismiss after N milliseconds (e.g. 4000). Omit to keep the toast until the user closes it. */
   duration?: number;
   /** Optional inline `Button` action shown above the message */
@@ -9554,11 +9567,11 @@ export declare function Toast(title: string | number, props?: ToastNamed): Aktio
 export declare function Toast(props: ToastProps): AktionNode<"Toast">;
 export declare function Toast(title: string | number, message: string | number | null | undefined, props?: Omit<ToastOptions, "title" | "message" | "description">): AktionNode<"Toast">;
 export declare function Toast(title: string | number, message: string | number | null | undefined, tone: ToastTone | null | undefined, props?: Omit<ToastOptions, "title" | "message" | "description" | "tone" | "variant">): AktionNode<"Toast">;
-export declare function Toast(title: string | number, message: string | number | null | undefined, tone: ToastTone | null | undefined, icon: string | number | null | undefined, props?: Omit<ToastOptions, "title" | "message" | "description" | "tone" | "variant" | "icon">): AktionNode<"Toast">;
-export declare function Toast(title: string | number, message: string | number | null | undefined, tone: ToastTone | null | undefined, icon: string | number | null | undefined, duration: number | null | undefined, props?: Omit<ToastOptions, "title" | "message" | "description" | "tone" | "variant" | "icon" | "duration">): AktionNode<"Toast">;
-export declare function Toast(title: string | number, message: string | number | null | undefined, tone: ToastTone | null | undefined, icon: string | number | null | undefined, duration: number | null | undefined, action: AktionNode<"Button"> | null | undefined, props?: Omit<ToastOptions, "title" | "message" | "description" | "tone" | "variant" | "icon" | "duration" | "action">): AktionNode<"Toast">;
-export declare function Toast(title: string | number, message: string | number | null | undefined, tone: ToastTone | null | undefined, icon: string | number | null | undefined, duration: number | null | undefined, action: AktionNode<"Button"> | null | undefined, onClose: (() => unknown) | null | undefined, props?: Omit<ToastOptions, "title" | "message" | "description" | "tone" | "variant" | "icon" | "duration" | "action" | "onClose">): AktionNode<"Toast">;
-export declare function Toast(title: string | number, message: string | number | null | undefined, tone: ToastTone | null | undefined, icon: string | number | null | undefined, duration: number | null | undefined, action: AktionNode<"Button"> | null | undefined, onClose: (() => unknown) | null | undefined, position: ToastPosition | null | undefined, props?: Omit<ToastOptions, "title" | "message" | "description" | "tone" | "variant" | "icon" | "duration" | "action" | "onClose" | "position">): AktionNode<"Toast">;
+export declare function Toast(title: string | number, message: string | number | null | undefined, tone: ToastTone | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<ToastOptions, "title" | "message" | "description" | "tone" | "variant" | "icon">): AktionNode<"Toast">;
+export declare function Toast(title: string | number, message: string | number | null | undefined, tone: ToastTone | null | undefined, icon: AktionIconName | null | undefined, duration: number | null | undefined, props?: Omit<ToastOptions, "title" | "message" | "description" | "tone" | "variant" | "icon" | "duration">): AktionNode<"Toast">;
+export declare function Toast(title: string | number, message: string | number | null | undefined, tone: ToastTone | null | undefined, icon: AktionIconName | null | undefined, duration: number | null | undefined, action: AktionNode<"Button"> | null | undefined, props?: Omit<ToastOptions, "title" | "message" | "description" | "tone" | "variant" | "icon" | "duration" | "action">): AktionNode<"Toast">;
+export declare function Toast(title: string | number, message: string | number | null | undefined, tone: ToastTone | null | undefined, icon: AktionIconName | null | undefined, duration: number | null | undefined, action: AktionNode<"Button"> | null | undefined, onClose: (() => unknown) | null | undefined, props?: Omit<ToastOptions, "title" | "message" | "description" | "tone" | "variant" | "icon" | "duration" | "action" | "onClose">): AktionNode<"Toast">;
+export declare function Toast(title: string | number, message: string | number | null | undefined, tone: ToastTone | null | undefined, icon: AktionIconName | null | undefined, duration: number | null | undefined, action: AktionNode<"Button"> | null | undefined, onClose: (() => unknown) | null | undefined, position: ToastPosition | null | undefined, props?: Omit<ToastOptions, "title" | "message" | "description" | "tone" | "variant" | "icon" | "duration" | "action" | "onClose" | "position">): AktionNode<"Toast">;
 
 /* ---- Toasts */
 export interface ToastsOptions extends BaseProps {
@@ -9826,7 +9839,7 @@ export interface TreeNodeOptions extends BaseProps {
   /** Alias of `children`. */
   child?: readonly AktionNode<"TreeNode">[];
   /** Font Awesome icon shown before the label */
-  icon?: string | number;
+  icon?: AktionIconName;
   /** Whether the branch starts open (initial value — the user's own collapse wins afterwards) */
   expanded?: boolean;
   /** Highlights the row as the current selection */
@@ -9862,12 +9875,12 @@ export type TreeNodeNamed = Omit<TreeNodeOptions, "label">;
 export declare function TreeNode(label: string | number, props?: TreeNodeNamed): AktionNode<"TreeNode">;
 export declare function TreeNode(props: TreeNodeProps): AktionNode<"TreeNode">;
 export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child">): AktionNode<"TreeNode">;
-export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, icon: string | number | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child" | "icon">): AktionNode<"TreeNode">;
-export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, icon: string | number | null | undefined, expanded: boolean | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child" | "icon" | "expanded">): AktionNode<"TreeNode">;
-export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, icon: string | number | null | undefined, expanded: boolean | null | undefined, active: boolean | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child" | "icon" | "expanded" | "active" | "selected">): AktionNode<"TreeNode">;
-export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, icon: string | number | null | undefined, expanded: boolean | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child" | "icon" | "expanded" | "active" | "selected" | "badge">): AktionNode<"TreeNode">;
-export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, icon: string | number | null | undefined, expanded: boolean | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child" | "icon" | "expanded" | "active" | "selected" | "badge" | "onClick" | "action" | "onclick">): AktionNode<"TreeNode">;
-export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, icon: string | number | null | undefined, expanded: boolean | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child" | "icon" | "expanded" | "active" | "selected" | "badge" | "onClick" | "action" | "onclick" | "href">): AktionNode<"TreeNode">;
+export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, icon: AktionIconName | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child" | "icon">): AktionNode<"TreeNode">;
+export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, icon: AktionIconName | null | undefined, expanded: boolean | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child" | "icon" | "expanded">): AktionNode<"TreeNode">;
+export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, icon: AktionIconName | null | undefined, expanded: boolean | null | undefined, active: boolean | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child" | "icon" | "expanded" | "active" | "selected">): AktionNode<"TreeNode">;
+export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, icon: AktionIconName | null | undefined, expanded: boolean | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child" | "icon" | "expanded" | "active" | "selected" | "badge">): AktionNode<"TreeNode">;
+export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, icon: AktionIconName | null | undefined, expanded: boolean | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, onClick: (() => unknown) | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child" | "icon" | "expanded" | "active" | "selected" | "badge" | "onClick" | "action" | "onclick">): AktionNode<"TreeNode">;
+export declare function TreeNode(label: string | number, children: readonly AktionNode<"TreeNode">[] | null | undefined, icon: AktionIconName | null | undefined, expanded: boolean | null | undefined, active: boolean | null | undefined, badge: string | number | null | undefined, onClick: (() => unknown) | null | undefined, href: string | number | null | undefined, props?: Omit<TreeNodeOptions, "label" | "children" | "child" | "icon" | "expanded" | "active" | "selected" | "badge" | "onClick" | "action" | "onclick" | "href">): AktionNode<"TreeNode">;
 
 /* ---- Truncate */
 export interface TruncateOptions extends BaseProps {
@@ -10087,7 +10100,7 @@ export interface WebComponentOptions extends BaseProps {
   attributes?: Readonly<Record<string, string | number | boolean | null | undefined>>;
   /** Alias of `attributes`. */
   attrs?: Readonly<Record<string, string | number | boolean | null | undefined>>;
-  /** JS properties assigned on the element (for components that take rich, non-string props). `on*` keys (use `on`) and built-in DOM properties including `src`, `href`, `action`, `formAction`, `style`, `id`, `attributes`, `shadowRoot`, `contentEditable`, `innerHTML`, `outerHTML` and `srcdoc` are silently skipped — pass `src`/`href`/`id`/`style` through `attributes` (URLs are sanitised there), and content through `children`. */
+  /** JS properties assigned on the element (for components that take rich, non-string props). `on*` keys (use `on`), the built-in DOM properties `src`, `href`, `action`, `formAction`, `style`, `id`, `attributes`, `shadowRoot`, `contentEditable`, `innerHTML`, `outerHTML`, `insertAdjacentHTML` and `srcdoc`, and `constructor`, `__proto__` and `prototype` are silently skipped (in any letter case) — pass `src`/`href`/`id`/`style` through `attributes` (URLs are sanitised there), and content through `children`. */
   properties?: object;
   /** Alias of `properties`. */
   props?: object;
