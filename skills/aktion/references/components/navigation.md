@@ -34,7 +34,7 @@ Trail showing the user's location. Every crumb except the last one is a link tha
 | `items` | `BreadcrumbItem[] | string[] | {label, to}[]` | **yes** |  |
 | `separator` | `string` | no | Default `/` |
 | `maxItems` | `number` | no | Collapse the middle of the trail to an ellipsis once there are more items than this (keeps the first crumb and the tail) |
-| `onItemClick` | `callable` | no | Called with (index, label) when a crumb is clicked — fires alongside any navigation |
+| `onItemClick` | `callable` | no | Called with (index, label) when a crumb is clicked — before the crumb navigates (and before a BreadcrumbItem's own `onClick`), whatever form the crumb takes |
 | `homeIcon` | `boolean | string` | no | Leading icon on the FIRST crumb — `true` (default) uses `house`, `false` removes it, a string picks another Font Awesome name |
 | `autoLink` | `boolean` | no | Derive a cumulative route from plain-string labels so they navigate (default `true`). Set `false` for a trail that is pure text unless an item names its own `to`/`href` |
 

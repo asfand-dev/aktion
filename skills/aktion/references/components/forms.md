@@ -318,7 +318,7 @@ Multi-line input with inline @-mention suggestions. Typing `@` opens a popover l
 TagInput(id, value?, placeholder?, max?, suggestions?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
 ```
 
-Tag/chip input — type a value, press Enter (or comma) to commit, click × on a chip to remove. Tabbing away commits the pending text too. Pass a `$variable` (array of strings) as `value` for two-way binding. Use for keywords, recipients, labels, skills, allowlists. Pass `suggestions` for autocomplete and `label`/`hint`/`error` for the labelled field shell.
+Tag/chip input — type a value, press Enter (or comma) to commit, click × on a chip to remove. Tabbing away commits the pending text too. Pass a `$variable` (array of strings) as `value` for two-way binding; inside a form each tag is submitted as its own `name` entry, as a multiple select does. Use for keywords, recipients, labels, skills, allowlists. Pass `suggestions` for autocomplete and `label`/`hint`/`error` for the labelled field shell.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -1015,7 +1015,7 @@ A compact segmented toggle (iOS-style). `options` is an array of strings or {lab
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `options` | `any[]` | **yes** |  |
-| `value` | `string` | no |  |
+| `value` | `string | number` | no | The selected option's value (compared as text, so `2` and `"2"` select the same option) |
 | `onChange` | `callable` | no |  |
 | `disabled` | `boolean` | no | Lock every segment |
 | `size` | `"sm"` \| `"md"` \| `"lg"` | no |  |
@@ -1117,7 +1117,7 @@ A freehand drawing surface (pointer / touch / stylus). `onChange(count)` fires w
 SignaturePad(width?, height?, color?, lineWidth?, background?, clearable?, value?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?, ariaLabel?)
 ```
 
-A signature capture pad — a DrawingCanvas tuned for signing, with a baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires when the signature changes (empty string when cleared, and also when the pad only received taps — so a stray tap cannot pass a truthiness check); `onBlur` / `onFocus` receive that same value. Pass the URL back as `value` to restore a signature after a re-render, and `disabled` to lock the pad once it is submitted. `label`/`error`/`required` render the usual field shell. Use in contracts, delivery confirmation, and consent flows.
+A signature capture pad — a DrawingCanvas tuned for signing, with a baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires when the signature changes (empty string when cleared, and also when the pad only received taps — so a stray tap cannot pass a truthiness check); `onBlur` / `onFocus` receive that same value, and a `name`d pad submits it. Pass the URL back as `value` to restore a signature after a re-render, and `disabled` to lock the pad once it is submitted. `label`/`error`/`required` render the usual field shell. Use in contracts, delivery confirmation, and consent flows.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |

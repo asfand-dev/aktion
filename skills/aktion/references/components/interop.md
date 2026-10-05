@@ -50,7 +50,7 @@ Render and hydrate any native custom element / web component with reactive `attr
 | --- | --- | --- | --- |
 | `tag` | `string` | **yes** | Custom-element tag name (must contain a hyphen, e.g. "stripe-pricing-table"). |
 | `attributes` | `object` | no | Reactive attribute map. `$state` values update the element on change; `on*` keys are ignored. |
-| `properties` | `object` | no | JS properties assigned on the element (for components that take rich, non-string props). `on*` keys (use `on`) and built-in DOM properties including `src`, `href`, `action`, `formAction`, `style`, `id`, `attributes`, `shadowRoot`, `contentEditable`, `innerHTML`, `outerHTML` and `srcdoc` are silently skipped — pass `src`/`href`/`id`/`style` through `attributes` (URLs are sanitised there), and content through `children`. |
+| `properties` | `object` | no | JS properties assigned on the element (for components that take rich, non-string props). `on*` keys (use `on`), the built-in DOM properties `src`, `href`, `action`, `formAction`, `style`, `id`, `attributes`, `shadowRoot`, `contentEditable`, `innerHTML`, `outerHTML`, `insertAdjacentHTML` and `srcdoc`, and `constructor`, `__proto__` and `prototype` are silently skipped (in any letter case) — pass `src`/`href`/`id`/`style` through `attributes` (URLs are sanitised there), and content through `children`. |
 | `on` | `object` | no | Event map `{ eventName: handler }` bound once to the live element (handlers stay current across re-renders). |
 | `children` | `Node[]` | no | Light-DOM child nodes / text to slot inside the element. |
 

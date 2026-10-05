@@ -29,8 +29,18 @@ describe("router: normalisePath", () => {
     ["//foo///bar//", "/foo/bar"],
     ["/foo/bar?x=1", "/foo/bar"],
     ["users/42", "/users/42"],
+    // An inner fragment (hash mode: the location hash holds the route) is not
+    // part of the path, before or after a query string.
+    ["#/about#team", "/about"],
+    ["#/about?x=1#team", "/about"],
+    ["/about#team?x=1", "/about"],
   ])("normalises %j → %j", (input, expected) => {
     expect(normalisePath(input as string | null)).toBe(expected);
+  });
+
+  it("matches a hash-mode route that carries an inner fragment", () => {
+    expect(matchRoute("/about", "#/about#team")).toEqual({ matched: true, params: {} });
+    expect(matchRoute("/users/:id", "#/users/42#bio").params).toEqual({ id: "42" });
   });
 });
 

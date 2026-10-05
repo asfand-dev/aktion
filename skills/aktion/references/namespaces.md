@@ -269,7 +269,7 @@ Cached query bag (HTTP + pagination).
 | `lastUpdated` | property | `lastUpdated` | Epoch-ms of the last successful response. |
 | `refetch` | method | `refetch()` | Re-issue the original request. |
 | `cancel` | method | `cancel()` | Abort the in-flight request. |
-| `onDone` | property | `onDone` | Settable callback fired each time the request settles (success or error). |
+| `onDone` | property | `onDone` | Settable callback fired each time the request settles (success or error). Never fired in infinite mode — chain `.loadMore().then(…)` instead. |
 | `loadMore` | method | `loadMore()` | Fetch the next page (infinite mode). |
 | `hasMore` | property | `hasMore` | `true` while more pages are available (infinite mode). |
 | `loadingMore` | property | `loadingMore` | `true` while a `loadMore()` page is in flight. |

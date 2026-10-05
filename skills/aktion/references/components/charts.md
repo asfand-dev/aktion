@@ -233,6 +233,6 @@ Named data series for charts. Used inside BarChart, LineChart, PieChart, RadarCh
 | --- | --- | --- | --- |
 | `name` | `string` | **yes** |  |
 | `values` | `number[] | [number, number, string?][]` | no | One number per x-axis label — or, for ScatterChart, its points as `{x, y, label?}` objects or `[x, y, label?]` tuples |
-| `color` | `string` | no | Override the palette colour for this series (any CSS colour or var(); a value that is not a plain colour falls back to the palette slot) |
+| `color` | `string` | no | Override the palette colour for this series (any CSS colour, `var()` or `color-mix()`; a value carrying anything else — a `;`, quotes, `url()`, a comment — falls back to the palette slot) |
 | `points` | `{x: number, y: number, label?: string}[] | [number, number, string?][]` | no | XY points for ScatterChart (`{x, y, label?}` objects or `[x, y, label?]` tuples) — the explicit alternative to passing them as `values` |
 

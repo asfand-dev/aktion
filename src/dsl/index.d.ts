@@ -11050,7 +11050,7 @@ export interface UrlSnapshot {
   readonly params: Readonly<Record<string, string>>;
   /** The parsed query string. */
   readonly query: Readonly<Record<string, string>>;
-  /** The fragment after `#`, without the `#` — but currently filled in only when the URL also has a `?query` before it (`/p?x=1#s` → `"s"`); otherwise `""` (`/p#s`, and a hash-router URL such as `/#/p?x=1`). */
+  /** The URL fragment, without the `#`. With `router-mode="history"` it is `location.hash` (`/p#s` → `"s"`). In hash mode (the default) the hash holds the route, so it is what follows a second `#` (`/#/p?x=1#s` → `"s"`), else `""`. */
   readonly hash: string;
   /** Navigate to a path. */
   navigate(to: string): void;
