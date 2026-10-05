@@ -1902,9 +1902,9 @@ const installPopoverDismiss = (
   });
 };
 
-const TOAST_TONES = ["default", "primary", "success", "warning", "danger", "info"] as const;
+export const TOAST_TONES = ["default", "primary", "success", "warning", "danger", "info"] as const;
 
-const TOASTS_POSITIONS = [
+export const TOASTS_POSITIONS = [
   "top-right", "top-left", "top-center",
   "bottom-right", "bottom-left", "bottom-center",
 ] as const;

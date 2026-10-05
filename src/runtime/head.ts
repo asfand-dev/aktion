@@ -70,7 +70,7 @@ function isSafeAttrName(name: string): boolean {
  * `as=script` primes a script load), and `import` (legacy HTML imports).
  * Web fonts have their own vetted path: `$theme({ fonts: { import: [...] } })`.
  */
-const SAFE_LINK_RELS = new Set([
+export const SAFE_LINK_RELS: ReadonlySet<string> = new Set([
   "canonical", "alternate", "prev", "next", "author", "license", "help",
   "icon", "shortcut icon", "apple-touch-icon", "apple-touch-icon-precomposed",
   "mask-icon", "manifest", "search", "dns-prefetch", "preconnect", "me",
@@ -82,7 +82,16 @@ const SAFE_LINK_RELS = new Set([
  * full-viewport overlay over the host page (clickjacking) and beacon out via
  * `background-image`.
  */
-const SAFE_HTML_ATTRS = new Set(["lang", "dir", "class", "translate", "id"]);
+export const SAFE_HTML_ATTRS: ReadonlySet<string> = new Set(["lang", "dir", "class", "translate", "id"]);
+
+/**
+ * `<link>` attributes kept besides `rel` and `href`: inert descriptors.
+ * Anything else is dropped rather than guessed at. Exported, like the two
+ * sets above, so the `aktion-runtime/dsl` declarations are built from it.
+ */
+export const SAFE_LINK_ATTRS: readonly string[] = [
+  "as", "type", "sizes", "media", "hreflang", "color", "title", "crossorigin", "referrerpolicy",
+];
 
 /**
  * Sanitise a `<base href>`.
@@ -145,9 +154,7 @@ function sanitiseLinkEntry(link: Record<string, string>): Record<string, string>
       out.href = safe;
       continue;
     }
-    // `as`/`type`/`sizes`/`media`/`hreflang`/`color`/`title` are inert
-    // descriptors; anything else is dropped rather than guessed at.
-    if (["as", "type", "sizes", "media", "hreflang", "color", "title", "crossorigin", "referrerpolicy"].includes(lower)) {
+    if (SAFE_LINK_ATTRS.includes(lower)) {
       out[lower] = value;
     }
   }
