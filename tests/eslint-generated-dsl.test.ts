@@ -159,12 +159,20 @@ describe("aktion/props-literal and aktion/router-literal against the generated d
     const file = "positional-object.aktion.ts";
     const result = resultFor(results, file);
     const messageOn = (name: string): string | undefined =>
-      result.messages.find((message) => message.line === lineOf(file, name))?.message;
+      result.messages.find((message) => message.line === lineOf(file, name) && message.messageId === "objectReadAsProps")
+        ?.message;
     expect(messageOn("mixed")).toBe(
       "Aktion reads this object as the component's named props, not as its `attributes` argument, because `id` is a prop name: `data-x`, `title` are not props and are dropped. Pass it by name instead (`{ attributes: { … } }`).",
     );
     expect(messageOn("withChildren")).toBe(
-      "Aktion reads this object as the component's named props, not as its `attributes` argument, because `class` is a prop name: `data-id` is not a prop and is dropped, and the argument after it lands in `attributes` instead. Pass it by name instead (`{ attributes: { … } }`).",
+      "Aktion reads this object as the component's named props, not as its `attributes` argument, because `class` is a prop name: `data-id` is not a prop and is dropped, and the argument after it lands in `attributes` instead. Pass it, and the argument after it, by name instead (`{ attributes: { … }, children: … }`).",
+    );
+    expect(messageOn("webComponentAndMore")).toBe(
+      "Aktion reads this object as the component's named props, not as its `attributes` argument, because `id` is a prop name: `data-x` is not a prop and is dropped, and the argument after it lands in `attributes` instead. Pass it, and the arguments after it, by name instead (`{ attributes: { … }, properties: …, on: …, children: … }`).",
+    );
+    // The argument after it is on `props`: its own keys move into the bag.
+    expect(messageOn("withTrailingProps")).toBe(
+      "Aktion reads this object as the component's named props, not as its `attributes` argument, because `class` is a prop name: `data-id` is not a prop and is dropped, and the argument after it lands in `attributes` instead. Pass it, and the argument after it, by name instead (`{ attributes: { … }, … }`).",
     );
   });
 

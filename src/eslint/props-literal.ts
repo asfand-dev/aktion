@@ -95,7 +95,7 @@ export const aktionPropsLiteralRule: Rule.RuleModule = {
       propsSpread:
         "Spreads inside component props are ignored by Aktion — list the props explicitly (`{ variant: extra.variant, … }`).",
       objectReadAsProps:
-        "Aktion reads this object as the component's named props, not as its `{{parameter}}` argument, because `{{key}}` is a prop name: {{effect}}. Pass it by name instead (`{ {{parameter}}: { … } }`).",
+        "Aktion reads this object as the component's named props, not as its `{{parameter}}` argument, because `{{key}}` is a prop name: {{effect}}. Pass {{subject}} by name instead (`{{named}}`).",
     },
     schema: [],
   },
@@ -305,6 +305,11 @@ function looksLikeProps(call: CheckedCall, type: ts.Type): boolean {
  * two or more arguments, `chooseNamedBagIndex` elects the last object literal
  * as soon as one of its keys is a prop (or universal) name, keeps only those
  * keys, and binds the remaining arguments positionally from the first slot on.
+ *
+ * The advice names the arguments after the object too: `props` is the last
+ * parameter of every overload in the generated declarations, so they have to
+ * move into the bag with it (`HTMLTag("div", { attributes: { … }, children:
+ * [ … ] })`).
  */
 function checkPositionalObject(context: Rule.RuleContext, call: CheckedCall, signature: ts.Signature): void {
   if (!call.complete || call.arguments.length < 2) return;
@@ -333,10 +338,25 @@ function checkPositionalObject(context: Rule.RuleContext, call: CheckedCall, sig
     effects.push(`the argument after it lands in \`${parameter.getName()}\` instead`);
   }
   if (effects.length === 0) effects.push(`nothing reaches \`${parameter.getName()}\``);
+  const following = call.arguments.length - 1 - index;
+  const subject = following === 0 ? "it" : `it, and the argument${following === 1 ? "" : "s"} after it,`;
+  const entries = new Set([`${parameter.getName()}: { … }`]);
+  for (let i = index + 1; i < call.arguments.length; i += 1) {
+    // A later argument on a prop-named parameter moves in under that name;
+    // one on `props` (or on a parameter no bag declares) brings its own keys.
+    const name = parameterAt(signature, i)?.getName();
+    entries.add(name !== undefined && name !== PROPS_PARAMETER && names.has(name) ? `${name}: …` : "…");
+  }
   context.report({
     node: call.arguments[index]!,
     messageId: "objectReadAsProps",
-    data: { parameter: parameter.getName(), key: known, effect: effects.join(", and ") },
+    data: {
+      parameter: parameter.getName(),
+      key: known,
+      effect: effects.join(", and "),
+      subject,
+      named: `{ ${[...entries].join(", ")} }`,
+    },
   });
 }
 
