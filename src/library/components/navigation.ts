@@ -63,24 +63,30 @@ function asCrumbRecord(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * Report a click on a node crumb to `onItemClick`.
+ * Report a click on a node crumb to `onItemClick`, BEFORE the crumb acts on it.
  *
  * A BreadcrumbItem builds its own link, so there is no `onClick` slot left to
- * route the callback through; the crumb's root handles the click as it bubbles
- * up from that link instead. Only an activation that link would act on counts:
- * a plain click on an anchor (a modified click is the browser's "open in new
+ * route the callback through; the report is chained in front of that link's own
+ * handler instead. It used to run on the crumb's `li` as the click bubbled —
+ * after the link had already navigated — while record and string crumbs report
+ * before navigating, so a handler that reads or redirects the route saw a
+ * different order depending on how the crumb was written. Only an activation
+ * the link acts on counts, as for those crumbs: a plain click on an anchor that
+ * nothing has already handled (a modified click is the browser's "open in new
  * tab"), or any click on a button crumb.
  */
 function wireNodeCrumbClick(crumbEl: HTMLElement, report: () => void): void {
-  const own = crumbEl.onclick;
-  crumbEl.onclick = function onCrumbClick(event) {
-    own?.call(this, event);
-    const crumb = event.currentTarget as Element | null;
-    const link = (event.target as Element | null)?.closest?.(".rui-breadcrumb-link");
-    if (!crumb || !link || !crumb.contains(link)) return;
-    if (link.tagName === "A" && !isPlainClick(event)) return;
-    report();
-  };
+  const links = crumbEl.matches(".rui-breadcrumb-link")
+    ? [crumbEl]
+    : [...crumbEl.querySelectorAll<HTMLElement>(".rui-breadcrumb-link")];
+  for (const link of links) {
+    const own = link.onclick;
+    link.onclick = function onCrumbLinkClick(event) {
+      const anchor = ((event.currentTarget ?? link) as Element).tagName === "A";
+      if (!anchor || (!event.defaultPrevented && isPlainClick(event))) report();
+      return own?.call(this, event);
+    };
+  }
 }
 
 /**
@@ -231,7 +237,7 @@ export const Breadcrumb: ComponentSpec = {
     { name: "items", type: "BreadcrumbItem[] | string[] | {label, to}[]" },
     { name: "separator", type: "string", optional: true, description: "Default `/`" },
     { name: "maxItems", type: "number", optional: true, description: "Collapse the middle of the trail to an ellipsis once there are more items than this (keeps the first crumb and the tail)" },
-    { name: "onItemClick", type: "callable", optional: true, description: "Called with (index, label) when a crumb is clicked — fires alongside any navigation" },
+    { name: "onItemClick", type: "callable", optional: true, description: "Called with (index, label) when a crumb is clicked — before the crumb navigates (and before a BreadcrumbItem's own `onClick`), whatever form the crumb takes" },
     { name: "homeIcon", type: "boolean | string", optional: true, description: "Leading icon on the FIRST crumb — `true` (default) uses `house`, `false` removes it, a string picks another Font Awesome name" },
     { name: "autoLink", type: "boolean", optional: true, description: "Derive a cumulative route from plain-string labels so they navigate (default `true`). Set `false` for a trail that is pure text unless an item names its own `to`/`href`" },
   ],

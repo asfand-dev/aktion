@@ -176,6 +176,9 @@ export const VideoPlayer: ComponentSpec = {
     }
     const sources = asArray<unknown>(props.sources);
     let lastSource: HTMLElement | null = null;
+    // Every URL this render asks the browser to try, in order — the identity a
+    // load failure is remembered under (see `failedSlot` below).
+    const tried: string[] = [];
     if (sources.length > 0) {
       for (const raw of sources) {
         if (!raw || typeof raw !== "object") continue;
@@ -184,11 +187,16 @@ export const VideoPlayer: ComponentSpec = {
         if (!safeSrc) continue;
         lastSource = el("source", { src: safeSrc, type: asString(s.type) || null });
         video.append(lastSource);
+        tried.push(safeSrc);
       }
     } else {
       const safeSrc = sanitiseMediaSrc(props.src);
-      if (safeSrc) video.setAttribute("src", safeSrc);
+      if (safeSrc) {
+        video.setAttribute("src", safeSrc);
+        tried.push(safeSrc);
+      }
     }
+    const sourceKey = tried.join("\n");
     for (const raw of asArray<unknown>(props.tracks)) {
       if (!raw || typeof raw !== "object") continue;
       const t = raw as { src?: unknown; label?: unknown; srclang?: unknown; kind?: unknown; default?: unknown };
@@ -217,6 +225,12 @@ export const VideoPlayer: ComponentSpec = {
     );
 
     const fallbackText = asString(props.fallback);
+    const loadFailedText = fallbackText || "This video could not be loaded.";
+    // A load failure is remembered per instance, keyed by the sources that
+    // failed: the fallback appended to the live frame alone was removed by the
+    // next commit (any re-render — a caption change — left a black frame), and
+    // a NEW source still gets its attempt.
+    const failedSlot = helpers.useInstanceState<string>("video-failed-sources", "");
     const hasSource = video.hasAttribute("src") || video.querySelector("source") !== null;
     if (!hasSource) {
       // A blocked scheme, an omitted `src`, or a typo used to render as a bare
@@ -225,10 +239,12 @@ export const VideoPlayer: ComponentSpec = {
     }
     // `onerror` IS transferable, so these closures stay current across renders.
     const reportLoadFailure = (event: Event | string): void => {
+      failedSlot.set(sourceKey);
       const live = ((event as Event).currentTarget ?? (event as Event).target) as Element | null;
       const frame = live?.closest(".rui-video-player-frame");
+      // `useInstanceState.set` schedules no render, so this one paints it now.
       if (frame && !frame.querySelector(".rui-video-player-empty")) {
-        frame.append(renderMediaFallback(fallbackText || "This video could not be loaded."));
+        frame.append(renderMediaFallback(loadFailedText));
       }
       helpers.invoke(props.onError);
     };
@@ -249,6 +265,8 @@ export const VideoPlayer: ComponentSpec = {
       video.onclick = (event) => toggleMediaPlayback(event, ".rui-video-player-frame");
       playerWrap.append(playBtn);
     }
+    // Last, where `reportLoadFailure` appends it on the live frame.
+    if (hasSource && failedSlot.get() === sourceKey) playerWrap.append(renderMediaFallback(loadFailedText));
 
     root.append(playerWrap);
     const caption = asString(props.caption);
