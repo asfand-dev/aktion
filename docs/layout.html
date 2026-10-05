@@ -478,7 +478,11 @@ $app(Column([
       <p>
         Always give <code>ButtonGroup</code> an <code>ariaLabel</code>: it renders
         <code>role="group"</code>, and a group with no accessible name is announced as an
-        anonymous one. <code>size</code> and <code>fullWidth</code> apply to every button
+        anonymous one. <code>ariaLabel</code> (alias <code>label</code>) takes the name
+        text itself. When a visible heading already names the group, pass that
+        element&rsquo;s id instead as <code>ariaLabelledBy</code> &mdash; it takes
+        element id(s), not text, renders as <code>aria-labelledby</code>, and wins over
+        <code>ariaLabel</code>. <code>size</code> and <code>fullWidth</code> apply to every button
         in the group, so set them on the group rather than on each child.
       </p>
       <div class="lay-demo">

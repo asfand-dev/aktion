@@ -710,11 +710,20 @@ $app(pages)
   `(x = 0) => x + 1` (defaults), `(...args) => sum(args)` (rest),
   `({ a, b }) => a + b` / `([x, y]) => x` (destructured params),
   `(args) => { … }` (multi-statement, may `return`). The body can wrap
-  onto the next line (`x =>\n  expr`).
+  onto the next line (`x =>\n  expr`). A named function expression can
+  call itself by its name
+  (`const fact = function f(n) { return n < 2 ? 1 : n * f(n - 1) }`).
+- Rest parameters — a `...rest` parameter on a lambda, a function or a
+  component receives an array of the remaining arguments
+  (`function Tags(...labels)` called as `Tags("a", "b")` gets `["a", "b"]`).
 - Destructured parameters — both `function` declarations and lambdas
   accept array / object patterns (`function Card({ title, tone = "info" })`,
   `function head([first, ...rest])`), with the same defaults / renames /
-  rest support as `let`-destructuring.
+  rest support as `let`-destructuring. Destructuring reads what JavaScript
+  reads: an array pattern takes any iterable (a string, a `Set`, a `Map`), an
+  object pattern reads the properties of any non-null value
+  (`let { length } = "abc"`), and a default can use the names bound before it
+  (`let { a, b = a + 1 } = obj`).
 - JS expression niceties — array / object spread (`[...xs, y]`,
   `{ ...base, k: v }`, `fn(...args)`), array / object destructuring in
   `let` / `const` / `var` (`let [a, b, ...rest] = arr`,
@@ -834,7 +843,8 @@ Highlights:
 
 - One statement per line.
 - Three string flavours: `"double"`, `'single'`, and `` `backtick` `` with
-  `${expression}` interpolation.
+  `${expression}` interpolation. An interpolation that is not one complete
+  expression (`${}`, a typo) is a parse error at its position.
 - Optional chaining (`obj?.prop`) and nullish coalescing (`a ?? b`).
 - Spread in arrays (`[...$pinned, ...$todos]`) and objects
   (`{...$current, status: "done"}`).
@@ -2004,14 +2014,17 @@ export default $app(Column([Text("Typed Aktion"), Counter("Clicks")]));
   coverage and DevTools point at the line and column you wrote.
 - **`aktion-runtime/dsl` types the built-ins** — every component (one overload
   per way a call binds its arguments), hook and namespace — so `tsc` checks
-  component calls and props. The linker drops the import.
+  component calls and props. The types are exact: enum props are literal
+  unions, callbacks receive exactly what the renderer passes, `sx` and
+  `$theme` keys are closed, and components that hand your data back are
+  generic. The linker drops the import.
 - **JavaScript semantics, checked.** Aktion interprets the code under its own
   rules, so `.aktion.ts` / `.aktion.js` modules are rewritten where that is safe
   (each local gets its own name, nested functions become `const` functions in
   place, every function body ends in `return`) and rejected where it is not —
   `await`, `async`, `var`, `this`, a closure reading a variable reassigned after
   it was created, in-place changes of a `$` atom, and more, each with a stable
-  code (`E101`–`E126`, `W201`–`W202`) at the exact line.
+  code (`E101`–`E127`, `W201`–`W202`) at the exact line.
 - **Typed `.aktion` imports.** `aktion({ dts: true })` (or the `aktion-dts` bin)
   writes `name.d.aktion.ts` declarations, so a `.aktion.ts` module can import
   from a `.aktion` one with types.
