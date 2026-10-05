@@ -9,7 +9,7 @@
 
 import type { ComponentSpec, RenderHelpers } from "../types.js";
 import {
-  el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseHref,
+  el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseHref, isComponentNode,
 } from "../utils.js";
 
 /** In-app targets always go through the hash router, never the document. */
@@ -51,11 +51,36 @@ function derivedPath(labels: readonly string[], index: number): string {
   return `/${segments.join("/")}`;
 }
 
-/** Read `{ label, to, href, icon }` off a plain object crumb. */
+/**
+ * Read `{ label, to, href, icon }` off a plain object crumb. A component node —
+ * a library call or one of the program's own components, which wraps a
+ * BreadcrumbItem — is not a record: reading it as one gave an empty label.
+ */
 function asCrumbRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  if ((value as { __kind?: string }).__kind === "Component") return null;
+  if (isComponentNode(value)) return null;
   return value as Record<string, unknown>;
+}
+
+/**
+ * Report a click on a node crumb to `onItemClick`.
+ *
+ * A BreadcrumbItem builds its own link, so there is no `onClick` slot left to
+ * route the callback through; the crumb's root handles the click as it bubbles
+ * up from that link instead. Only an activation that link would act on counts:
+ * a plain click on an anchor (a modified click is the browser's "open in new
+ * tab"), or any click on a button crumb.
+ */
+function wireNodeCrumbClick(crumbEl: HTMLElement, report: () => void): void {
+  const own = crumbEl.onclick;
+  crumbEl.onclick = function onCrumbClick(event) {
+    own?.call(this, event);
+    const crumb = event.currentTarget as Element | null;
+    const link = (event.target as Element | null)?.closest?.(".rui-breadcrumb-link");
+    if (!crumb || !link || !crumb.contains(link)) return;
+    if (link.tagName === "A" && !isPlainClick(event)) return;
+    report();
+  };
 }
 
 /**
@@ -229,7 +254,11 @@ export const Breadcrumb: ComponentSpec = {
           : DEFAULT_HOME_ICON;
     // Labels for the derived routes — read from the WHOLE trail, not just the
     // crumbs `maxItems` leaves visible, so collapsing never shortens a path.
+    // A node crumb has no label to read before it renders; "" leaves the string
+    // crumbs after it inert, where its stringified "[object Object]" derived
+    // `/object-object/…` routes the author never described.
     const labels = items.map((item) => {
+      if (isComponentNode(item)) return "";
       const record = asCrumbRecord(item);
       if (record) return asString(record.label ?? record.title);
       return asString(item);
@@ -266,12 +295,16 @@ export const Breadcrumb: ComponentSpec = {
       const item = items[index];
       const isLast = index === items.length - 1;
       const isFirst = index === 0;
-      if (item && typeof item === "object" && (item as { __kind?: string }).__kind === "Component") {
-        const rendered = helpers.renderNode(item) as HTMLElement;
-        // A BreadcrumbItem builds its own DOM, so the icon is applied after the
-        // fact (see prependCrumbIcon) rather than through props.
-        if (isFirst && homeIconName && rendered instanceof HTMLElement) {
-          prependCrumbIcon(rendered, homeIconName);
+      if (isComponentNode(item)) {
+        const rendered = helpers.renderNode(item);
+        if (rendered instanceof HTMLElement) {
+          // A BreadcrumbItem builds its own DOM, so the icon is applied after
+          // the fact (see prependCrumbIcon) rather than through props.
+          if (isFirst && homeIconName) prependCrumbIcon(rendered, homeIconName);
+          if (onItemClick) {
+            const label = rendered.querySelector(".rui-breadcrumb-label")?.textContent ?? "";
+            wireNodeCrumbClick(rendered, () => helpers.invoke(onItemClick, index, label));
+          }
         }
         list.append(rendered);
         return;
