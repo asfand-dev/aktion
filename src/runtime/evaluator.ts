@@ -2477,8 +2477,19 @@ function runDestructureStatement(
  * `[x, , y, ...rest]`) against a source value into a flat list of
  * `name → value` pairs. Shared by `let`-destructuring statements and
  * destructured function / lambda parameters so both honour defaults,
- * renames, holes, and rest the same way. Does NOT touch `loopVars` —
+ * renames, holes, and rest the same way. Leaves `loopVars` as it found it —
  * the caller decides how to bind + restore.
+ *
+ * Reads follow JavaScript:
+ *
+ *   - an array pattern takes its values from any iterable — a string, a
+ *     `Set`, a `Map` (`[[k, v]] = map`), an iterator — not only an array;
+ *   - an object pattern reads properties of any non-null value, boxing a
+ *     primitive (`{ length } = "abc"`) and including arrays (`{ 0: first }`),
+ *     except the names no DSL read may reach (`constructor`, `__proto__`,
+ *     `prototype` — see {@link FORBIDDEN_PROPERTY_NAMES});
+ *   - a default sees the leaves bound before it (`{ a, b = a + 1 }`,
+ *     `[x, y = x * 2]`).
  */
 export function resolvePatternBindings(
   pattern: DestructuringPattern,
@@ -2486,56 +2497,95 @@ export function resolvePatternBindings(
   ctx: EvaluationContext,
 ): Array<{ name: string; value: unknown }> {
   const out: Array<{ name: string; value: unknown }> = [];
+  resolvePatternInto(pattern, source, ctx, out);
+  return out;
+}
+
+/** {@link resolvePatternBindings} for one (possibly nested) pattern, appending to `out`. */
+function resolvePatternInto(
+  pattern: DestructuringPattern,
+  source: unknown,
+  ctx: EvaluationContext,
+  out: Array<{ name: string; value: unknown }>,
+): void {
+  // Evaluate a default with every leaf resolved so far in scope, then put
+  // `loopVars` back.
+  const evaluateDefault = (expr: Expression): unknown => {
+    if (out.length === 0) return evaluate(expr, ctx);
+    const saved = new Map<string, { had: boolean; prev: unknown }>();
+    for (const { name, value } of out) {
+      if (!saved.has(name)) saved.set(name, { had: ctx.loopVars.has(name), prev: ctx.loopVars.get(name) });
+      ctx.loopVars.set(name, value);
+    }
+    try {
+      return evaluate(expr, ctx);
+    } finally {
+      for (const [name, slot] of saved) {
+        if (slot.had) ctx.loopVars.set(name, slot.prev);
+        else ctx.loopVars.delete(name);
+      }
+    }
+  };
+  const settle = (binding: DestructuringPattern["bindings"][number], raw: unknown): void => {
+    const value = raw === undefined && binding.defaultValue ? evaluateDefault(binding.defaultValue) : raw;
+    // Nested pattern slot: `let [[a, b]] = rows` / `let { user: { name } } = resp`.
+    if (binding.pattern) resolvePatternInto(binding.pattern, value, ctx, out);
+    else if (binding.name !== "") out.push({ name: binding.name, value });
+  };
+
   if (pattern.kind === "array") {
-    const arr = Array.isArray(source) ? source : [];
+    const needsAll = pattern.bindings.some((b) => b.rest);
+    const items = patternItems(source, needsAll ? Number.POSITIVE_INFINITY : pattern.bindings.length, ctx);
     let cursor = 0;
     for (const binding of pattern.bindings) {
       if (binding.rest) {
-        out.push({ name: binding.name, value: arr.slice(cursor) });
-        cursor = arr.length;
+        out.push({ name: binding.name, value: items.slice(cursor) });
+        cursor = items.length;
         continue;
       }
-      let value: unknown = arr[cursor];
-      if (value === undefined && binding.defaultValue) {
-        value = evaluate(binding.defaultValue, ctx);
-      }
-      // Nested pattern slot: `let [[a, b]] = rows`.
-      if (binding.pattern) {
-        for (const pair of resolvePatternBindings(binding.pattern, value, ctx)) out.push(pair);
-      } else if (binding.name !== "") {
-        out.push({ name: binding.name, value });
-      }
+      settle(binding, items[cursor]);
       cursor += 1;
     }
-    return out;
+    return;
   }
-  const obj = source && typeof source === "object" && !Array.isArray(source)
-    ? (source as Record<string, unknown>)
-    : {};
+  const boxed: Record<string, unknown> | null = source == null ? null : (Object(source) as Record<string, unknown>);
   const consumedKeys = new Set<string>();
   for (const binding of pattern.bindings) {
     if (binding.rest) {
       const remainder: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(obj)) {
-        if (!consumedKeys.has(key)) remainder[key] = value;
+      if (boxed) {
+        for (const [key, value] of Object.entries(boxed)) {
+          if (!consumedKeys.has(key) && !FORBIDDEN_PROPERTY_NAMES.has(key)) remainder[key] = value;
+        }
       }
       out.push({ name: binding.name, value: remainder });
       continue;
     }
     const key = binding.sourceKey ?? binding.name;
     consumedKeys.add(key);
-    let value: unknown = obj[key];
-    if (value === undefined && binding.defaultValue) {
-      value = evaluate(binding.defaultValue, ctx);
-    }
-    // Nested pattern slot: `let { user: { name } } = resp`.
-    if (binding.pattern) {
-      for (const pair of resolvePatternBindings(binding.pattern, value, ctx)) out.push(pair);
-    } else {
-      out.push({ name: binding.name, value });
-    }
+    settle(binding, boxed && !FORBIDDEN_PROPERTY_NAMES.has(key) ? boxed[key] : undefined);
   }
-  return out;
+}
+
+/**
+ * The values an array pattern reads from `source`: the array itself, or the
+ * first `count` values of any other iterable (all of them for a `...rest`
+ * pattern), as JavaScript's iterator protocol yields them. A non-iterable
+ * source reads as empty.
+ */
+function patternItems(source: unknown, count: number, ctx: EvaluationContext): unknown[] {
+  if (Array.isArray(source)) return source;
+  if (source == null) return [];
+  const iterator = (Object(source) as { [Symbol.iterator]?: unknown })[Symbol.iterator];
+  if (typeof iterator !== "function") return [];
+  const items: unknown[] = [];
+  if (count === 0) return items;
+  for (const item of source as Iterable<unknown>) {
+    tickIterations(ctx.budget, 1, "a destructuring pattern");
+    items.push(item);
+    if (items.length >= count) break;
+  }
+  return items;
 }
 
 /** Run a `for (let key in obj) { … }` STATEMENT — iterates enumerable string keys. */
