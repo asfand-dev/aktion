@@ -181,7 +181,7 @@ describe("aktion/props-literal without type information", () => {
 });
 
 describe("aktionTypeScriptConfig", () => {
-  const presetRules = { ...aktionTypeScriptRules, "aktion/props-literal": "error" };
+  const presetRules = { ...aktionTypeScriptRules, "aktion/props-literal": "error", "aktion/router-literal": "error" };
 
   it("registers the plugin by reference and applies the rules to .aktion.ts/.aktion.js", () => {
     expect(aktionEslintPlugin.configs?.typescript).toBe(aktionTypeScriptConfig);
@@ -224,8 +224,10 @@ describe("aktionTypeScriptConfig", () => {
     ]);
     for (const file of AKTION_MODULES) {
       const result = resultFor(results, file);
-      // The preset's only enabled rules are `aktion/props-literal` and
-      // `unicorn/switch-case-braces`; the fixtures contain no `switch`.
+      // Besides `aktion/props-literal`, the preset enables
+      // `aktion/router-literal`, `unicorn/switch-case-braces` and
+      // `object-shorthand`; the fixtures contain no `$router`, no `switch` and
+      // no `{ x: x }`.
       expect(result.messages.map((message) => message.ruleId).filter((id) => id !== "aktion/props-literal")).toEqual([]);
       expect(actualReports(result)).toEqual(expectedReports(file));
     }
@@ -283,12 +285,14 @@ describe("aktionTypeScriptRules entries", () => {
         "unicorn/consistent-boolean-name",
         "unicorn/max-nested-calls",
         "unicorn/name-replacements",
+        "unicorn/no-top-level-assignment-in-function",
         "unicorn/no-top-level-side-effects",
         "unicorn/prefer-early-return",
         "unicorn/prefer-export-from",
         "unicorn/prefer-global-this",
         "unicorn/prefer-set-has",
         "unicorn/prefer-string-raw",
+        "unicorn/prefer-switch",
         "unicorn/switch-case-braces",
       ].sort(),
     );
@@ -302,7 +306,13 @@ describe("aktionTypeScriptRules entries", () => {
     expect("unicorn/prefer-spread" in aktionTypeScriptRules).toBe(false);
     // Shared with the `.aktion` preset, so the two cannot drift apart where
     // they make the same call.
-    for (const id of ["unicorn/prefer-export-from", "unicorn/prefer-string-raw", "new-cap"]) {
+    for (const id of [
+      "unicorn/prefer-export-from",
+      "unicorn/prefer-string-raw",
+      "unicorn/prefer-switch",
+      "unicorn/no-top-level-assignment-in-function",
+      "new-cap",
+    ]) {
       expect(aktionTypeScriptRules[id]).toEqual(aktionRecommendedRules[id]);
     }
   });
