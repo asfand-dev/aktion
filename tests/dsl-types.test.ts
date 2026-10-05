@@ -22,7 +22,7 @@
  * tests, so they overlap with each other and with the in-process checks.
  */
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,24 +95,36 @@ const tsc = (project: string): Promise<Run> => node([tscBin, "-p", project, "--p
 
 /* ---------------------------------------------------------------- the negative corpus */
 
-const CORPUS = resolve(fixtureDir, "negative.dsl.ts");
+/**
+ * The negative corpora: every `negative*.dsl.ts` next to this file
+ * (`negative.dsl.ts`, plus one `negative.<area>.dsl.ts` per surface, so each
+ * area owns its cases).
+ */
+const CORPORA = readdirSync(fixtureDir).filter((f) => /^negative(\.[\w-]+)?\.dsl\.ts$/.test(f)).sort();
+/** The positive module fixtures: `surface*.aktion.ts` (one per area) next to `app.aktion.ts`. */
+const SURFACES = readdirSync(fixtureDir).filter((f) => /^surface(\.[\w-]+)?\.aktion\.ts$/.test(f)).sort();
 /** A real directive: `// @ts-expect-error` opening a line comment (prose that mentions one is not). */
 const ANY_DIRECTIVE = /^\s*\/\/ @ts-expect-error\b/;
 const DIRECTIVE = /^\s*\/\/ @ts-expect-error (TS\d+)(?: \[(validator|parser|types)\])? (.+)$/;
 
-interface Case { line: number; code: string; layer?: "validator" | "parser" | "types"; why: string; source: string }
+interface Case { file: string; line: number; code: string; layer?: "validator" | "parser" | "types"; why: string; source: string }
 
 function corpusCases(): Case[] {
-  const lines = read(CORPUS).split("\n");
   const cases: Case[] = [];
-  lines.forEach((text, i) => {
-    if (!ANY_DIRECTIVE.test(text)) return;
-    const m = DIRECTIVE.exec(text);
-    if (!m) throw new Error(`negative.dsl.ts:${i + 1}: malformed directive — expected "// @ts-expect-error TS<code> [layer] why"`);
-    cases.push({ line: i + 2, code: m[1]!, layer: m[2] as Case["layer"], why: m[3]!, source: lines[i + 1]!.trim() });
-  });
+  for (const file of CORPORA) {
+    const lines = read(resolve(fixtureDir, file)).split("\n");
+    lines.forEach((text, i) => {
+      if (!ANY_DIRECTIVE.test(text)) return;
+      const m = DIRECTIVE.exec(text);
+      if (!m) throw new Error(`${file}:${i + 1}: malformed directive — expected "// @ts-expect-error TS<code> [layer] why"`);
+      cases.push({ file, line: i + 2, code: m[1]!, layer: m[2] as Case["layer"], why: m[3]!, source: lines[i + 1]!.trim() });
+    });
+  }
   return cases;
 }
+
+/** The staged, directive-free copy of a corpus file. */
+const strippedName = (file: string): string => file.replace(/\.dsl\.ts$/, ".stripped.ts");
 
 /* ---------------------------------------------------------------- staging */
 
@@ -170,17 +182,19 @@ beforeAll(() => {
   mkdirSync(join(stage, "compiler"));
   for (const name of ["index.d.ts", "globals.d.ts"]) writeFileSync(join(stage, "dsl", name), read(join(dslDir, name)));
   writeFileSync(join(stage, "compiler/runtime.d.ts"), STUB_RUNTIME);
-  // The corpus with every directive blanked, so each case's own error shows.
-  writeFileSync(join(stage, "negative.stripped.ts"), read(CORPUS).split("\n").map((l) => (ANY_DIRECTIVE.test(l) ? "//" : l)).join("\n"));
+  // Each corpus with every directive blanked, so each case's own error shows.
+  for (const file of CORPORA) {
+    writeFileSync(join(stage, strippedName(file)), read(resolve(fixtureDir, file)).split("\n").map((l) => (ANY_DIRECTIVE.test(l) ? "//" : l)).join("\n"));
+  }
 
-  const moduleFixtures = ["app.aktion.ts", "surface.aktion.ts", "host-usage.dsl.ts", "negative.dsl.ts"].map((f) => join(fixtureDir, f));
+  const moduleFixtures = ["app.aktion.ts", ...SURFACES, "host-usage.dsl.ts", ...CORPORA].map((f) => join(fixtureDir, f));
   const ambientFixtures = [join(stage, "dsl/globals.d.ts"), ...["ambient/app.aktion.ts", "ambient/negative.dsl.ts"].map((f) => join(fixtureDir, f))];
   runs.real = tsc(resolve(fixtureDir, "tsconfig.json"));
   runs.dom = tsc(writeProject("dom", ["ES2022", "DOM", "DOM.Iterable"], moduleFixtures));
   runs.nodom = tsc(writeProject("nodom", ["ES2022"], moduleFixtures));
   runs.ambient = tsc(writeProject("ambient", ["ES2022"], ambientFixtures));
   runs.ambientWithDom = tsc(writeProject("ambient-dom", ["ES2022", "DOM"], ambientFixtures));
-  runs.stripped = tsc(writeProject("stripped", ["ES2022"], [join(stage, "negative.stripped.ts")]));
+  runs.stripped = tsc(writeProject("stripped", ["ES2022"], CORPORA.map((f) => join(stage, strippedName(f)))));
 });
 
 afterAll(async () => {
@@ -638,13 +652,22 @@ describe("aktion-runtime/dsl — tsc fixtures", () => {
     expect(cases.length).toBeGreaterThan(30);
     const run = await runs.stripped!;
     const errors = tscErrors(run.output);
-    const byLine = new Map<number, string[]>();
-    for (const e of errors) byLine.set(e.line, [...(byLine.get(e.line) ?? []), e.code]);
-    for (const c of cases) {
-      expect(byLine.get(c.line), `negative.dsl.ts:${c.line} (${c.why}) should fail with ${c.code}:\n  ${c.source}`).toContain(c.code);
+    // tsc prints the staged path; key every error by `<corpus file>:<line>`.
+    const where = (file: string, line: number): string => `${file}:${line}`;
+    const corpusOf = (path: string): string => {
+      const base = path.split(/[\\/]/).pop()!;
+      return CORPORA.find((f) => strippedName(f) === base) ?? base;
+    };
+    const byLine = new Map<string, string[]>();
+    for (const e of errors) {
+      const k = where(corpusOf(e.file), e.line);
+      byLine.set(k, [...(byLine.get(k) ?? []), e.code]);
     }
-    const caseLines = new Set(cases.map((c) => c.line));
-    expect(errors.filter((e) => !caseLines.has(e.line)).map((e) => `${e.line}: ${e.code} ${e.message}`)).toEqual([]);
+    for (const c of cases) {
+      expect(byLine.get(where(c.file, c.line)), `${c.file}:${c.line} (${c.why}) should fail with ${c.code}:\n  ${c.source}`).toContain(c.code);
+    }
+    const caseLines = new Set(cases.map((c) => where(c.file, c.line)));
+    expect(errors.filter((e) => !caseLines.has(where(corpusOf(e.file), e.line))).map((e) => `${corpusOf(e.file)}:${e.line}: ${e.code} ${e.message}`)).toEqual([]);
   }, TSC_TIMEOUT);
 
   it("negative cases tagged with an Aktion layer are rejected (or accepted) by that layer too", () => {
@@ -652,7 +675,7 @@ describe("aktion-runtime/dsl — tsc fixtures", () => {
     expect(tagged.length).toBeGreaterThan(20);
     for (const c of tagged) {
       const program = parse(c.source.replace(/;\s*$/, ""));
-      const where = `negative.dsl.ts:${c.line} [${c.layer}] ${c.source}`;
+      const where = `${c.file}:${c.line} [${c.layer}] ${c.source}`;
       if (c.layer === "parser") {
         expect(program.errors.length, where).toBeGreaterThan(0);
         continue;

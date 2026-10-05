@@ -48,8 +48,6 @@ Select("country", { label: "Country" });
 Select("country");
 // @ts-expect-error TS2769 [types] a required prop spelt twice (canonical + alias) — exactly one spelling
 Column({ children: [Text("a")], child: Text("b") });
-// @ts-expect-error TS2769 [types] a `Node` prop takes one child, not an array
-Async(null, { loading: [Text("a"), Text("b")] });
 // @ts-expect-error TS2769 [types] the named props must be the LAST argument
 Button("Go", { onClick: () => {} }, "primary");
 

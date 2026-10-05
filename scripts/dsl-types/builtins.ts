@@ -224,8 +224,9 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
       `export type ${typeName("AktionChild")} = AktionNode | string | number | null | undefined;`,
     jsdoc("Renderable children: one child, or (nested) arrays of children.") +
       `export type ${typeName("Children")} = AktionChild | readonly Children[];`,
-    jsdoc("Any function value passed as an event handler / callback prop. The library declares no handler signatures, so arguments are untyped.") +
+    jsdoc("Any function value. Every component callback prop has its own exact signature; this alias remains for code that stores handlers generically.") +
       `export type ${typeName("Callable")} = (...args: any[]) => unknown;`,
+    ...domBridge(typeName),
     jsdoc("Content-addressed identity override (`key:`), accepted by every component call.") +
       `export type ${typeName("Key")} = string | number;`,
     jsdoc(`A breakpoint map honoured by responsive layout props (${breakpoints.join(" / ")}).`) +
@@ -796,4 +797,53 @@ function typeReferences(ts: typeof TS, typeText: string): string[] {
   };
   visit(sf);
   return refs.filter((r) => !typeParameters.has(r));
+}
+
+/**
+ * The `Dom*` bridge types: what component callbacks receive when the renderer
+ * hands over a DOM value (an event, an element, a picked file). Each resolves
+ * to `lib.dom`'s own type when the DOM lib is loaded — so host-flavoured
+ * projects get the full `KeyboardEvent` — and otherwise to a structural SUBSET
+ * of it, which is sound because the runtime always passes the real object.
+ * Detection reads `typeof globalThis`, where `lib.dom` declares every
+ * constructor (`declare var KeyboardEvent: { prototype: KeyboardEvent; … }`).
+ */
+export function domBridge(typeName: (name: string) => string): string[] {
+  const shapes: Array<[name: string, lib: string, doc: string, members: string]> = [
+    ["DomEvent", "Event", "A DOM event (`lib.dom`'s `Event`).",
+      "readonly type: string; readonly target: unknown; readonly currentTarget: unknown; readonly defaultPrevented: boolean; readonly timeStamp: number; preventDefault(): void; stopPropagation(): void"],
+    ["DomKeyboardEvent", "KeyboardEvent", "A keyboard event (`lib.dom`'s `KeyboardEvent`).",
+      "readonly key: string; readonly code: string; readonly altKey: boolean; readonly ctrlKey: boolean; readonly metaKey: boolean; readonly shiftKey: boolean; readonly repeat: boolean; readonly isComposing: boolean"],
+    ["DomMouseEvent", "MouseEvent", "A mouse event (`lib.dom`'s `MouseEvent`).",
+      "readonly button: number; readonly buttons: number; readonly clientX: number; readonly clientY: number; readonly pageX: number; readonly pageY: number; readonly offsetX: number; readonly offsetY: number; readonly screenX: number; readonly screenY: number; readonly altKey: boolean; readonly ctrlKey: boolean; readonly metaKey: boolean; readonly shiftKey: boolean"],
+    ["DomPointerEvent", "PointerEvent", "A pointer event (`lib.dom`'s `PointerEvent`).",
+      "readonly pointerId: number; readonly pointerType: string; readonly pressure: number; readonly width: number; readonly height: number; readonly isPrimary: boolean"],
+    ["DomFocusEvent", "FocusEvent", "A focus event (`lib.dom`'s `FocusEvent`).", "readonly relatedTarget: unknown"],
+    ["DomDragEvent", "DragEvent", "A drag event (`lib.dom`'s `DragEvent`).", "readonly dataTransfer: unknown"],
+    ["DomWheelEvent", "WheelEvent", "A wheel event (`lib.dom`'s `WheelEvent`).",
+      "readonly deltaX: number; readonly deltaY: number; readonly deltaZ: number; readonly deltaMode: number"],
+    ["DomClipboardEvent", "ClipboardEvent", "A clipboard event (`lib.dom`'s `ClipboardEvent`).", "readonly clipboardData: unknown"],
+    ["DomInputEvent", "InputEvent", "An input event (`lib.dom`'s `InputEvent`).",
+      "readonly data: string | null; readonly inputType: string; readonly isComposing: boolean"],
+    ["DomElement", "HTMLElement", "A rendered element (`lib.dom`'s `HTMLElement`), as `Mount` / `OnMount` / ref callbacks receive it.",
+      "readonly tagName: string; readonly id: string; readonly className: string; readonly textContent: string | null; readonly isConnected: boolean; focus(): void; blur(): void; scrollIntoView(arg?: boolean | { readonly behavior?: \"auto\" | \"smooth\" | \"instant\"; readonly block?: \"start\" | \"center\" | \"end\" | \"nearest\"; readonly inline?: \"start\" | \"center\" | \"end\" | \"nearest\" }): void; getAttribute(name: string): string | null; setAttribute(name: string, value: string): void; removeAttribute(name: string): void"],
+    ["DomFile", "File", "A picked / dropped file (`lib.dom`'s `File`).",
+      "readonly name: string; readonly size: number; readonly type: string; readonly lastModified: number; text(): Promise<string>; arrayBuffer(): Promise<ArrayBuffer>"],
+  ];
+  // The fallbacks nest like lib.dom's interfaces do.
+  const parent: Readonly<Record<string, string>> = {
+    DomKeyboardEvent: "DomEvent", DomMouseEvent: "DomEvent", DomFocusEvent: "DomEvent", DomClipboardEvent: "DomEvent", DomInputEvent: "DomEvent",
+    DomPointerEvent: "DomMouseEvent", DomDragEvent: "DomMouseEvent", DomWheelEvent: "DomMouseEvent",
+  };
+  const lines = [
+    jsdoc("`lib.dom`'s instance type `N` when the DOM lib is loaded, else `Fallback`.") +
+      `type ${typeName("__DomLib")}<N extends string, Fallback> = typeof globalThis extends { readonly [K in N]: { readonly prototype: infer E } } ? E : Fallback;`,
+  ];
+  for (const [name, lib, doc, members] of shapes) {
+    const shape = `__${name}Shape`;
+    const base = parent[name] ? ` extends __${parent[name]}Shape` : "";
+    lines.push(`interface ${typeName(shape)}${base} { ${members} }`);
+    lines.push(`${jsdoc(`${doc} Without the DOM lib: the structural subset the runtime guarantees.`)}export type ${typeName(name)} = __DomLib<${JSON.stringify(lib)}, ${shape}>;`);
+  }
+  return lines;
 }

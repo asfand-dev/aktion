@@ -122,3 +122,34 @@ function emit(node: TS.TypeNode, ctx: TypeStrContext): string {
       return "unknown";
   }
 }
+
+/**
+ * Every type-reference identifier in a type expression (or, with
+ * `declaration`, in a sequence of type declarations), minus the type
+ * parameters it declares itself (`<K extends …>`, mapped `[K in …]`, `infer K`).
+ * Qualified names report their first segment (`Foo.Bar` → `Foo`).
+ */
+export function referencedTypeNames(ts: typeof TS, text: string, declaration = false): string[] {
+  const sf = ts.createSourceFile("ref.ts", declaration ? text : `type __Ref = ${text};`, ts.ScriptTarget.ES2022, true);
+  const refs: string[] = [];
+  const own = new Set<string>(["__Ref"]);
+  const visit = (node: TS.Node): void => {
+    if (ts.isTypeParameterDeclaration(node)) own.add(node.name.text);
+    if ((ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) && node.name) own.add(node.name.text);
+    if (ts.isTypeReferenceNode(node)) {
+      const name = node.typeName;
+      refs.push(ts.isIdentifier(name) ? name.text : name.getText().split(".")[0]!);
+    }
+    if (ts.isExpressionWithTypeArguments(node) && ts.isIdentifier(node.expression)) refs.push(node.expression.text);
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return [...new Set(refs)].filter((r) => !own.has(r));
+}
+
+/** Parse diagnostics of a type expression (or declarations): empty when it is valid TypeScript. */
+export function typeSyntaxErrors(ts: typeof TS, text: string, declaration = false): string[] {
+  const sf = ts.createSourceFile("check.ts", declaration ? text : `type __Check = ${text};`, ts.ScriptTarget.ES2022, true);
+  const diagnostics = (sf as unknown as { parseDiagnostics?: ReadonlyArray<{ messageText: unknown }> }).parseDiagnostics ?? [];
+  return diagnostics.map((d) => (typeof d.messageText === "string" ? d.messageText : JSON.stringify(d.messageText)));
+}

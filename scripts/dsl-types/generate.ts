@@ -8,6 +8,7 @@
  *                          compiler's JS-semantics checks (DOM-free JSON)
  *
  * Inputs: `defaultLibrary` (+ `findPositionalIndex` / `propExpectsObject`),
+ * the curated per-component types (`scripts/dsl-types/component-types/`),
  * `UNIVERSAL_PROP_NAMES`, `LEGACY_SIZE_TOKEN_ALIASES`, `RESPONSIVE_BREAKPOINTS`,
  * `SPACING_TOKENS`, the language catalogues (`src/language/*`), the built-in
  * theme names, `SAFE_HOST_GLOBALS`, the runtime's TS types and the TypeScript
@@ -35,7 +36,9 @@ import { builtInThemes } from "../../src/theme/index.js";
 import { SAFE_HOST_GLOBALS } from "../../src/runtime/evaluator.js";
 import { INJECTED_NAMES, classifyBuiltins, emitBuiltins } from "./builtins.js";
 import { byCodePoint, emitComponents, type ComponentManifestEntry } from "./components.js";
+import { COMPONENT_TYPES } from "./component-types/index.js";
 import { readLibGlobals, readRuntimeTypes } from "./runtime-types.js";
+import { referencedTypeNames, typeSyntaxErrors } from "./typestr.js";
 
 export const OUTPUT_FILES = ["index.d.ts", "globals.d.ts", "manifest.json"] as const;
 export type OutputFile = (typeof OUTPUT_FILES)[number];
@@ -61,33 +64,12 @@ export interface GenerateResult {
     unresolvedTypeNames: Record<string, string[]>;
     overridesApplied: string[];
     hybridConstructors: string[];
+    genericComponents: string[];
+    supportTypes: number;
     domCollisions: string[];
     ambientUnavailable: string[];
   };
 }
-
-/**
- * Per-prop types where the library's coarse `type` hint under-describes what the
- * renderer accepts (each is a candidate for a first-class `PropSpec.tsType`).
- * A key naming a prop the library no longer declares fails generation.
- */
-const TYPE_OVERRIDES: Readonly<Record<string, string>> = {
-  // "SelectItem(value, label) nodes, {value, label} objects or bare strings".
-  "Select.items": `readonly (AktionNode<"SelectItem"> | SelectItemData | string)[]`,
-  "Radio.items": `readonly (AktionNode<"SelectItem"> | SelectItemData | string)[]`,
-  // "SelectItem(value, label) or {value, label}" — no bare strings.
-  "Combobox.items": `readonly (AktionNode<"SelectItem"> | SelectItemData)[]`,
-  "MultiSelect.items": `readonly (AktionNode<"SelectItem"> | SelectItemData)[]`,
-  // "FollowUpItem(label, message?), {label, message, disabled?} objects, or plain strings".
-  "FollowUpBlock.items": `readonly (AktionNode<"FollowUpItem"> | FollowUpItemData | string)[]`,
-  // "Avatar(...) nodes or {name, src, status?, fallback?} objects".
-  "AvatarGroup.items": `readonly (AktionNode<"Avatar"> | AvatarItemData)[]`,
-  // The hint `BreadcrumbItem[] | string[] | {label, to}[]` would forbid mixing
-  // the three forms in one trail, and `{label, to}` names no member types.
-  "Breadcrumb.items": `readonly (AktionNode<"BreadcrumbItem"> | string | { readonly label: string; readonly to?: string; readonly href?: string })[]`,
-  "PageHeader.breadcrumbs": `readonly (string | { readonly label: string; readonly to?: string; readonly href?: string })[] | AktionNode<"Breadcrumb"> | false`,
-  "PricingCard.features": `readonly (string | { readonly label: string; readonly included?: boolean })[]`,
-};
 
 /**
  * `SAFE_HOST_GLOBALS` that `lib.es2022` does not declare, with the minimal
@@ -137,7 +119,8 @@ export function generateDslTypes(input: { ts: typeof TS; repoRoot: string }): Ge
     universalPropNames: UNIVERSAL_PROP_NAMES,
     legacySizeAliases: LEGACY_SIZE_TOKEN_ALIASES,
     spacingTokens: SPACING_TOKENS,
-    overrides: TYPE_OVERRIDES,
+    componentTypes: COMPONENT_TYPES,
+    requireCallableSignatures: false,
     constructorInterface: libGlobals.constructorInterface,
     esGlobalValues: libGlobals.esValues,
     reservedNames: new Set([...builtins.declaredNames, "CompiledProgram"]),
@@ -153,6 +136,22 @@ export function generateDslTypes(input: { ts: typeof TS; repoRoot: string }): Ge
   for (const name of builtins.valueExports) {
     if (libGlobals.esValues.has(name)) {
       throw new Error(`emit-dsl-types: the DSL name "${name}" collides with a JavaScript global`);
+    }
+  }
+  // A curated type may only mention what this module declares, lib.es2022, or
+  // its own type parameters: a DOM type would break the no-DOM flavour, and a
+  // typo would silently become an error type only tsc on a consumer reports.
+  const known = new Set([...seen, ...libGlobals.esTypes]);
+  for (const entry of components.curated) {
+    const syntax = typeSyntaxErrors(ts, entry.text, entry.declaration);
+    if (syntax.length > 0) throw new Error(`emit-dsl-types: the curated type of ${entry.where} does not parse (${syntax.join("; ")}): ${entry.text}`);
+    for (const ref of referencedTypeNames(ts, entry.text, entry.declaration)) {
+      if (!known.has(ref) && !entry.scope.includes(ref)) {
+        throw new Error(
+          `emit-dsl-types: the curated type of ${entry.where} mentions "${ref}", which is neither declared by aktion-runtime/dsl, ` +
+            `nor by lib.es2022, nor a type parameter in scope${libGlobals.domOnlyValues.has(ref) ? " (it is a DOM type — use a Dom* bridge type)" : ""}: ${entry.text}`,
+        );
+      }
     }
   }
 
@@ -187,6 +186,12 @@ export function generateDslTypes(input: { ts: typeof TS; repoRoot: string }): Ge
     "/* ================================================================ enum tokens */",
     "",
     ...components.enumAliases,
+    "",
+    "/* ================================================================ component support types */",
+    "// Object shapes and payloads the components' props take. Curated in",
+    "// scripts/dsl-types/component-types/ against the renderers.",
+    "",
+    components.supportTypes.join("\n"),
     "",
     `/* ================================================================ components (${components.stats.components}) */`,
     "",
@@ -312,6 +317,8 @@ export function generateDslTypes(input: { ts: typeof TS; repoRoot: string }): Ge
       unresolvedTypeNames: components.stats.unresolvedTypeNames,
       overridesApplied: components.stats.overridesApplied,
       hybridConstructors: components.stats.hybridConstructors,
+      genericComponents: components.stats.genericComponents,
+      supportTypes: components.supportTypes.length,
       domCollisions,
       ambientUnavailable,
     },
