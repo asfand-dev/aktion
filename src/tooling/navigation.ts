@@ -84,6 +84,12 @@ interface SymbolDecl {
   /** True for `$`-prefixed symbols (atoms, hooks). */
   sigil: boolean;
   range: Range;
+  /**
+   * Declared at module level — outside every `{ }`, `( )` and `[ ]` — so it
+   * can be what another module imports. A `function` nested in a component
+   * or action body is not.
+   */
+  topLevel: boolean;
 }
 
 interface SymbolTable {
@@ -91,6 +97,10 @@ interface SymbolTable {
   state: Map<string, SymbolDecl>;
   /** Identifier namespace: components + actions, keyed by name. */
   ident: Map<string, SymbolDecl>;
+  /** The first MODULE-LEVEL declaration of each `$` name (see `SymbolDecl.topLevel`). */
+  topState: Map<string, SymbolDecl>;
+  /** The first MODULE-LEVEL declaration of each identifier. */
+  topIdent: Map<string, SymbolDecl>;
   /** All declarations in source order (for the document outline). */
   all: SymbolDecl[];
 }
@@ -158,13 +168,22 @@ export function getDefinitionTarget(source: string, position: Position): Definit
  * Find the declaration of a top-level `name` in `source` (used by a host to
  * land on an imported symbol's definition in another file). `isState`
  * disambiguates the `$`-namespace from the identifier namespace.
+ *
+ * What another module imports is a module-level declaration, so one is
+ * preferred over a same-named `function` nested in a body (a supported helper
+ * in `.aktion.ts` / `.aktion.js` modules, where `export let` / `export const`
+ * is the module-level form): a module-level `function` or `$x = …` first,
+ * then a module-level `let` / `const`, and only then any declaration at all.
  */
 export function findDeclaration(source: string, name: string, isState: boolean): Range | null {
   const tokens = tokenize(source);
   const table = collectSymbols(tokens);
+  const topLevel = isState ? table.topState.get(name) : table.topIdent.get(name);
+  if (topLevel) return topLevel.kind === "import" ? null : topLevel.range;
+  const binding = findTopLevelLetDeclaration(tokens, name, isState);
+  if (binding) return binding;
   const decl = isState ? table.state.get(name) : table.ident.get(name);
-  if (decl) return decl.kind === "import" ? null : decl.range;
-  return findTopLevelLetDeclaration(tokens, name, isState);
+  return decl && decl.kind !== "import" ? decl.range : null;
 }
 
 /**
@@ -178,8 +197,7 @@ function findTopLevelLetDeclaration(tokens: Token[], name: string, isState: bool
   let depth = 0;
   for (let i = 0; i < tokens.length; i += 1) {
     const t = tokens[i]!;
-    if (t.type === "Punctuation" && t.value === "{") depth += 1;
-    else if (t.type === "Punctuation" && t.value === "}") depth = Math.max(0, depth - 1);
+    if (t.type === "Punctuation") depth = nestingAfter(t, depth);
     else if (depth === 0 && t.type === "Keyword" && (t.value === "let" || t.value === "const" || t.value === "var")) {
       const nameTok = nextMeaningful(tokens, i + 1);
       if (!nameTok || nameTok.value !== name) continue;
@@ -281,9 +299,13 @@ function resolveSymbol(tokens: Token[], tok: Token): SymbolDecl | null {
  * of malformed input — it only reads token types/values and never throws.
  */
 function collectSymbols(tokens: Token[]): SymbolTable {
-  const table: SymbolTable = { state: new Map(), ident: new Map(), all: [] };
+  const table: SymbolTable = { state: new Map(), ident: new Map(), topState: new Map(), topIdent: new Map(), all: [] };
 
   const add = (decl: SymbolDecl): void => {
+    if (decl.topLevel) {
+      const top = decl.sigil ? table.topState : table.topIdent;
+      if (!top.has(decl.name)) top.set(decl.name, decl);
+    }
     const bucket = decl.sigil ? table.state : table.ident;
     if (bucket.has(decl.name)) return; // first declaration wins
     bucket.set(decl.name, decl);
@@ -291,6 +313,10 @@ function collectSymbols(tokens: Token[]): SymbolTable {
   };
 
   let depth = 0;
+  // `(` / `[` nesting: a line break inside a call or an array does not start a
+  // statement, so the `$q = …` line of a multi-line `$effect(() =>` /
+  // `  $q = $q.trim()` / `, [$q])` declares nothing.
+  let groups = 0;
   let stmtStart = true;
 
   for (let i = 0; i < tokens.length; i += 1) {
@@ -304,43 +330,52 @@ function collectSymbols(tokens: Token[]): SymbolTable {
 
     // `import { A, B as C, $shared } from "./mod.aktion"`.
     if (t.type === "Keyword" && t.value === "import") {
-      i = scanImport(tokens, i, add);
+      i = scanImport(tokens, i, add, depth === 0 && groups === 0);
       stmtStart = true;
       continue;
     }
+
+    const topLevel = depth === 0 && groups === 0;
 
     // `function Name(...)` / `function $useX(...)` declarations.
     if (t.type === "Keyword" && t.value === "function") {
       const nameTok = nextMeaningful(tokens, i + 1);
       if (nameTok) {
         if (nameTok.type === "StateIdentifier") {
-          add({ name: nameTok.value, kind: "hook", sigil: true, range: tokenRange(nameTok) });
+          add({ name: nameTok.value, kind: "hook", sigil: true, range: tokenRange(nameTok), topLevel });
         } else if (nameTok.type === "Identifier") {
           add({
             name: nameTok.value,
             kind: isPascalCase(nameTok.value) ? "component" : "action",
             sigil: false,
             range: tokenRange(nameTok),
+            topLevel,
           });
         }
       }
     }
 
     // Top-level reactive atom declaration: `$name = …` (or `export $name = …`).
-    if (t.type === "StateIdentifier" && stmtStart && depth === 0) {
+    if (t.type === "StateIdentifier" && stmtStart && topLevel) {
       const next = nextMeaningful(tokens, i + 1);
       if (next && next.type === "Operator" && next.value === "=") {
-        add({ name: t.value, kind: "state", sigil: true, range: tokenRange(t) });
+        add({ name: t.value, kind: "state", sigil: true, range: tokenRange(t), topLevel });
       }
     }
 
-    // Update statement-start + brace depth for the NEXT token.
+    // Update statement-start + brace / group depth for the NEXT token.
     if (t.type === "Punctuation" && t.value === "{") {
       depth += 1;
       stmtStart = true;
     } else if (t.type === "Punctuation" && t.value === "}") {
       depth = Math.max(0, depth - 1);
       stmtStart = true;
+    } else if (t.type === "Punctuation" && (t.value === "(" || t.value === "[")) {
+      groups += 1;
+      stmtStart = false;
+    } else if (t.type === "Punctuation" && (t.value === ")" || t.value === "]")) {
+      groups = Math.max(0, groups - 1);
+      stmtStart = false;
     } else if (t.type === "Keyword" && t.value === "export") {
       // `export` is transparent — the declaration that follows is still at a
       // statement-start position.
@@ -361,10 +396,11 @@ function scanImport(
   tokens: Token[],
   start: number,
   add: (decl: SymbolDecl) => void,
+  topLevel: boolean,
 ): number {
   const { clause, end } = readImportClause(tokens, start);
   for (const spec of clause.specifiers) {
-    add({ name: spec.local, kind: "import", sigil: spec.isState, range: spec.localRange });
+    add({ name: spec.local, kind: "import", sigil: spec.isState, range: spec.localRange, topLevel });
   }
   return end;
 }
@@ -486,6 +522,13 @@ function findNameTokenAt(tokens: Token[], position: Position): Token | null {
     }
   }
   return best;
+}
+
+/** Bracket depth after punctuation `t`: every `{` `(` `[` opens, every `}` `)` `]` closes. */
+function nestingAfter(t: Token, depth: number): number {
+  if (t.value === "{" || t.value === "(" || t.value === "[") return depth + 1;
+  if (t.value === "}" || t.value === ")" || t.value === "]") return Math.max(0, depth - 1);
+  return depth;
 }
 
 function nextMeaningful(tokens: Token[], from: number): Token | null {
