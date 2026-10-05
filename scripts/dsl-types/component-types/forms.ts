@@ -5,12 +5,6 @@ export default {
   Button: {
     props: {
       onClick: "() => void",
-      size: "\"xs\" | \"sm\" | \"md\" | \"lg\" | \"xl\" | \"m\" | \"small\" | \"normal\" | \"large\"",
-    },
-  },
-  ButtonGroup: {
-    props: {
-      size: "\"sm\" | \"md\" | \"lg\"",
     },
   },
   CheckBoxGroup: {
@@ -21,13 +15,13 @@ export default {
       items: "readonly (AktionNode<\"CheckBoxItem\"> | CheckBoxGroupItemData | string)[]",
       value: "Readonly<Record<string, boolean>>",
       onChange: "(value: Record<string, boolean>) => void",
-      optional: "true | string",
+      optional: "boolean | string",
     },
   },
   Checkbox: {
     props: {
       onChange: "(checked: boolean) => void",
-      optional: "true | string",
+      optional: "boolean | string",
     },
   },
   Combobox: {
@@ -42,7 +36,7 @@ export default {
       onSearch: "(query: string) => void",
       onBlur: "(value: string) => void",
       onFocus: "(value: string) => void",
-      optional: "true | string",
+      optional: "boolean | string",
     },
   },
   DatePicker: {
@@ -54,7 +48,7 @@ export default {
       onBlur: "(value: string) => void",
       onFocus: "(value: string) => void",
       locale: "string",
-      optional: "true | string",
+      optional: "boolean | string",
     },
   },
   DateRangePicker: {
@@ -70,12 +64,12 @@ export default {
       onBlur: "(value: string) => void",
       onFocus: "(value: string) => void",
       locale: "string",
-      optional: "true | string",
+      optional: "boolean | string",
     },
   },
   FileUpload: {
     props: {
-      onSelect: "(files: ArrayLike<DomFile>) => void",
+      onSelect: "(files: DomFile[]) => void",
       onRemove: "(file: DomFile) => void",
     },
   },
@@ -87,20 +81,20 @@ export default {
   FormControl: {
     props: {
       description: "string | number | AktionNode",
-      optional: "true | string",
+      optional: "boolean | string",
     },
   },
   Input: {
     types: {
       InputValidationHint: "export type InputValidationHint = \"required\" | \"email\" | `minLength:${number}` | `maxLength:${number}` | `pattern:${string}` | `min:${string}` | `max:${string}`;",
-      InputValidationRules: "export interface InputValidationRules { readonly minLength?: number | `${number}`; readonly maxLength?: number | `${number}`; readonly pattern?: string; readonly min?: number | string; readonly max?: number | string; }",
+      InputValidationRules: "export interface InputValidationRules { readonly required?: boolean | null; readonly email?: boolean | null; readonly minLength?: number | `${number}` | false | null; readonly maxLength?: number | `${number}` | false | null; readonly pattern?: string | false | null; readonly min?: number | string | false | null; readonly max?: number | string | false | null; }",
       InputAutocomplete: "export type InputAutocomplete = \"on\" | \"off\" | \"name\" | \"honorific-prefix\" | \"given-name\" | \"additional-name\" | \"family-name\" | \"honorific-suffix\" | \"nickname\" | \"email\" | \"username\" | \"new-password\" | \"current-password\" | \"one-time-code\" | \"organization-title\" | \"organization\" | \"street-address\" | \"address-line1\" | \"address-line2\" | \"address-line3\" | \"address-level4\" | \"address-level3\" | \"address-level2\" | \"address-level1\" | \"country\" | \"country-name\" | \"postal-code\" | \"cc-name\" | \"cc-given-name\" | \"cc-additional-name\" | \"cc-family-name\" | \"cc-number\" | \"cc-exp\" | \"cc-exp-month\" | \"cc-exp-year\" | \"cc-csc\" | \"cc-type\" | \"transaction-currency\" | \"transaction-amount\" | \"language\" | \"bday\" | \"bday-day\" | \"bday-month\" | \"bday-year\" | \"sex\" | \"tel\" | \"tel-country-code\" | \"tel-national\" | \"tel-area-code\" | \"tel-local\" | \"tel-local-prefix\" | \"tel-local-suffix\" | \"tel-extension\" | \"impp\" | \"url\" | \"photo\" | \"username webauthn\" | \"current-password webauthn\" | (string & {});",
     },
     props: {
       validations: "readonly InputValidationHint[] | InputValidationRules",
       value: "string | number | null",
       onChange: "(value: string) => void",
-      optional: "true | string",
+      optional: "boolean | string",
       onBlur: "(value: string) => void",
       onFocus: "(value: string) => void",
       autocomplete: "InputAutocomplete",
@@ -108,9 +102,9 @@ export default {
   },
   InputGroup: {
     props: {
-      optional: "true | string",
-      onBlur: "(value: string) => void",
-      onFocus: "(value: string) => void",
+      optional: "boolean | string",
+      onBlur: "(value: string | string[]) => void",
+      onFocus: "(value: string | string[]) => void",
     },
   },
   MultiSelect: {
@@ -120,14 +114,14 @@ export default {
       onOpenChange: "(open: boolean) => void",
       onChange: "(values: string[]) => void",
       onSearch: "(query: string) => void",
-      optional: "true | string",
+      optional: "boolean | string",
     },
   },
   NumberInput: {
     props: {
       value: "number | null",
       onChange: "(value: number | null) => void",
-      optional: "true | string",
+      optional: "boolean | string",
       onBlur: "(value: number | null) => void",
       onFocus: "(value: number | null) => void",
       onLimit: "(limit: \"min\" | \"max\") => void",
@@ -138,7 +132,7 @@ export default {
       items: "readonly (AktionNode<\"SelectItem\"> | SelectItemData | string)[]",
       value: "string | number | null",
       onChange: "(value: string) => void",
-      optional: "true | string",
+      optional: "boolean | string",
     },
   },
   SearchBar: {
@@ -157,7 +151,7 @@ export default {
       onBlur: "(value: string) => void",
       onFocus: "(value: string) => void",
       onSearch: "(query: string) => void",
-      optional: "true | string",
+      optional: "boolean | string",
     },
   },
   Slider: {
@@ -167,14 +161,14 @@ export default {
     props: {
       onChange: "(value: number) => void",
       marks: "readonly (number | SliderMark)[]",
-      optional: "true | string",
+      optional: "boolean | string",
     },
   },
   TextArea: {
     props: {
       value: "string | number | null",
       onChange: "(value: string) => void",
-      optional: "true | string",
+      optional: "boolean | string",
       onBlur: "(value: string) => void",
       onFocus: "(value: string) => void",
     },
