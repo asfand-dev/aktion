@@ -13,12 +13,11 @@
  *   - MultiStepForm — Steps + content + prev/next composite.
  */
 
-import type { ComponentSpec } from "../types.js";
+import type { ComponentSpec, RenderHelpers } from "../types.js";
 import {
   autoId,
   el, asArray, asString, asBoolean, asNumber, renderIcon, valueAttr, sanitiseHref,
 } from "../utils.js";
-import { attachOnChange } from "./wrappers.js";
 import { FIELD_SHELL_PROPS, withFieldShell, attachFocusHandlers } from "./forms-shared.js";
 import { closeFloating, deferToPaint, openFloating } from "../floating.js";
 
@@ -68,6 +67,27 @@ function stepAttr(raw: unknown): string | null {
   if (raw === null || raw === undefined) return null;
   if (typeof raw === "string" && raw.trim().toLowerCase() === "any") return "any";
   return String(Math.max(1, Math.floor(asNumber(raw, 60))));
+}
+
+/**
+ * Report a committed value to `onChange` through the `onchange` PROPERTY,
+ * chained after whatever `bindState` installed there.
+ *
+ * `attachOnChange` (wrappers.ts) registers with `addEventListener`, which the
+ * morph reconciler cannot transfer onto the node it keeps: a handler that first
+ * appeared on a later render never fired, one withdrawn later kept firing, and
+ * a lambda closing over `.map` locals stayed frozen at the first render. Same
+ * contract as `bindChangeHandler` in forms.ts: the prop is read inside the
+ * handler and the value off the live node.
+ */
+function bindCommitHandler(input: HTMLInputElement, props: Record<string, unknown>, helpers: RenderHelpers): void {
+  const previous = input.onchange;
+  input.onchange = (event) => {
+    previous?.call(input, event);
+    if (props.onChange == null) return;
+    const live = (event.currentTarget ?? event.target ?? input) as HTMLInputElement;
+    helpers.invoke(props.onChange, live.value);
+  };
 }
 
 /* ----------------------------------------------------------------------- *
@@ -553,10 +573,12 @@ export const TagInput: ComponentSpec = {
       const next = commitDraft(liveInput);
       if (props.onBlur != null) helpers.invoke(props.onBlur, next);
     };
+    // The committed tags, like `onBlur` and every other control's focus
+    // callback. The draft this used to pass is nearly always empty on focus,
+    // because leaving the field commits it.
     if (props.onFocus != null) {
-      input.onfocus = (event) => {
-        const liveInput = (event.currentTarget ?? event.target) as HTMLInputElement;
-        helpers.invoke(props.onFocus, liveInput.value);
+      input.onfocus = () => {
+        helpers.invoke(props.onFocus, tags);
       };
     }
     root.append(input);
@@ -988,7 +1010,7 @@ export const TimePicker: ComponentSpec = {
     { name: "value", type: "string", optional: true, description: "HH:MM value; typically $variable" },
     { name: "min", type: "string", optional: true },
     { name: "max", type: "string", optional: true },
-    { name: "step", type: "number", optional: true, description: "Seconds between selectable times" },
+    { name: "step", type: "number | string", optional: true, description: "Seconds between selectable times (a positive integer), or `\"any\"` to allow seconds" },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new HH:MM string when the user picks a time" },
     ...FIELD_SHELL_PROPS,
   ],
@@ -1018,10 +1040,7 @@ export const TimePicker: ComponentSpec = {
         getValue: (n) => (n as HTMLInputElement).value,
       });
     }
-    attachOnChange(input, props.onChange, helpers, {
-      event: "change",
-      getValue: (n) => (n as HTMLInputElement).value,
-    });
+    bindCommitHandler(input, props, helpers);
     attachFocusHandlers(input, props, helpers);
     root.append(input);
     const shell = withFieldShell(root, { ...props, id });
@@ -1043,7 +1062,7 @@ export const DateTimePicker: ComponentSpec = {
     { name: "value", type: "string", optional: true, description: "ISO date-time value; typically $variable" },
     { name: "min", type: "string", optional: true },
     { name: "max", type: "string", optional: true },
-    { name: "step", type: "number", optional: true, description: "Seconds between selectable times" },
+    { name: "step", type: "number | string", optional: true, description: "Seconds between selectable times (a positive integer), or `\"any\"` to allow seconds" },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new ISO `YYYY-MM-DDTHH:MM` string" },
     ...FIELD_SHELL_PROPS,
   ],
@@ -1071,10 +1090,7 @@ export const DateTimePicker: ComponentSpec = {
         getValue: (n) => (n as HTMLInputElement).value,
       });
     }
-    attachOnChange(input, props.onChange, helpers, {
-      event: "change",
-      getValue: (n) => (n as HTMLInputElement).value,
-    });
+    bindCommitHandler(input, props, helpers);
     attachFocusHandlers(input, props, helpers);
     root.append(input);
     const shell = withFieldShell(root, { ...props, id });
@@ -1498,7 +1514,7 @@ export const MultiStepForm: ComponentSpec = {
     { name: "prevLabel", type: "string", optional: true, description: "Default \"Back\"" },
     { name: "nextLabel", type: "string", optional: true, description: "Default \"Continue\"" },
     { name: "submitLabel", type: "string", optional: true, description: "Default \"Submit\" (final step)" },
-    { name: "stepsLayout", type: "string", optional: true, enum: ["column", "row"], aliases: ["layout", "stepsDirection"], description: "Direction of the steps indicator (default \"column\")" },
+    { name: "stepsLayout", type: "string", optional: true, enum: ["column", "row", "vertical", "horizontal"], aliases: ["layout", "stepsDirection"], description: "Direction of the steps indicator: \"column\" (default) or \"row\"; \"vertical\" and \"horizontal\" are accepted synonyms" },
     { name: "nextDisabled", type: "boolean", optional: true, description: "Block Continue/Submit while the active step is incomplete" },
     { name: "submitting", type: "boolean", optional: true, description: "Disable the footer buttons while the submit is in flight" },
     { name: "onStepChange", type: "callable", optional: true, description: "Called with the new 0-indexed step whenever the step changes" },

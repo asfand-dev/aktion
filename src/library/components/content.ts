@@ -15,6 +15,7 @@ import {
 import { ICON_SIZES, hasCustomIcon, resolveIconClasses } from "../../icons/index.js";
 import { highlightLine, isHighlightable } from "../highlight.js";
 import { setSanitisedHtml } from "../html-sanitizer.js";
+import { parseAspectRatio } from "./layout.js";
 
 /** Build a line's content as highlighted token spans (VIII.3). */
 function appendHighlightedLine(
@@ -271,7 +272,7 @@ export const Image: ComponentSpec = {
     { name: "src", type: "string" },
     { name: "alt", type: "string", optional: true },
     { name: "caption", type: "string", optional: true },
-    { name: "ratio", type: "string", optional: true, description: "Aspect ratio shorthand (e.g. `16:9`, `1:1`, `4:3`)" },
+    { name: "ratio", type: "string", optional: true, description: "Aspect ratio shorthand (e.g. `16:9`, `1:1`, `4/3`, or a decimal like `1.5`); anything else reserves no ratio" },
     { name: "fit", type: "string", optional: true, enum: IMAGE_FIT, description: "object-fit value (default `cover`)" },
     { name: "fallback", type: "string", optional: true, description: "Text label or Font Awesome icon shown when src is missing/unsafe/errored" },
     { name: "placeholder", type: "string", optional: true, enum: ["blur", "none"], description: "`blur` fades the image in on load" },
@@ -281,7 +282,9 @@ export const Image: ComponentSpec = {
     { name: "onClick", type: "callable", optional: true, aliases: ["onclick", "action"], description: "Makes the image activatable (gallery thumbnail, clickable avatar) — adds button semantics and keyboard activation" },
   ],
   render: (_node, props, helpers) => {
-    const ratio = props.ratio ? parseImageRatio(asString(props.ratio)) : "";
+    // An unusable ratio reserves nothing: the old fallback, `aspect-ratio:auto`,
+    // still switched on the clipping below for a box that had no ratio at all.
+    const ratio = parseAspectRatio(props.ratio) ?? "";
     const clickable = props.onClick !== undefined && props.onClick !== null;
     const alt = asString(props.alt);
     const wrapperStyle = [
@@ -393,18 +396,6 @@ export const Image: ComponentSpec = {
     return wrapper;
   },
 };
-
-function parseImageRatio(input: string): string {
-  if (!input) return "auto";
-  if (input.includes(":")) {
-    const [w, h] = input.split(":");
-    const num = Number(w);
-    const den = Number(h);
-    if (Number.isFinite(num) && Number.isFinite(den) && den > 0) return `${num} / ${den}`;
-  }
-  const n = Number(input);
-  return Number.isFinite(n) && n > 0 ? `${n} / 1` : "auto";
-}
 
 const BADGE_VARIANTS = ["neutral", "primary", "success", "warning", "danger", "info"] as const;
 
@@ -533,26 +524,30 @@ export const BadgeList: ComponentSpec = {
     const tones = asArray<unknown>(props.tones);
     const icons = asArray<unknown>(props.icons);
     const root = el("div", { class: "rui-badge-list" });
+    // Each label keeps its ORIGINAL index: `tones` / `icons` are aligned with
+    // `labels` as written, so indexing them after the empty labels were dropped
+    // moved every later tone and icon onto the wrong pill.
     const labels = asArray<unknown>(props.labels)
-      .map((raw) => asString(raw))
-      .filter((label) => label !== "");
+      .map((raw, index) => ({ label: asString(raw), index }))
+      .filter((entry) => entry.label !== "");
     const rawMax = Number(props.max);
     // `.rui-badge-list` wraps, so an unbounded cluster from user data turns
     // into a wall of pills that dominates the card it lives in.
     const max = Number.isFinite(rawMax) && rawMax > 0 ? Math.floor(rawMax) : labels.length;
     const shown = labels.slice(0, max);
-    shown.forEach((label, i) => {
-      const itemTone = asString(tones[i]) || variant;
-      root.append(renderBadgePill(label, itemTone, size, icons[i]));
-    });
+    for (const { label, index } of shown) {
+      const itemTone = asString(tones[index]) || variant;
+      root.append(renderBadgePill(label, itemTone, size, icons[index]));
+    }
     const hidden = labels.length - shown.length;
     if (hidden > 0) {
+      const rest = labels.slice(max).map((entry) => entry.label).join(", ");
       const overflow = renderBadgePill(`+${hidden}`, variant, size);
       overflow.setAttribute("data-overflow", "true");
       // The hidden labels are still reachable — as a tooltip and as the pill's
       // accessible name, so "+3" is not a dead end for a screen reader either.
-      overflow.setAttribute("title", labels.slice(max).join(", "));
-      overflow.setAttribute("aria-label", `${hidden} more: ${labels.slice(max).join(", ")}`);
+      overflow.setAttribute("title", rest);
+      overflow.setAttribute("aria-label", `${hidden} more: ${rest}`);
       root.append(overflow);
     }
     return root;
@@ -576,7 +571,7 @@ export const Callout: ComponentSpec = {
     { name: "tone", type: "string", optional: true, enum: CALLOUT_VARIANTS, aliases: ["variant"] },
     { name: "title", type: "string", positional: true, required: true },
     { name: "description", type: "string", optional: true, aliases: ["text"], description: "Body text" },
-    { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name" },
+    { name: "icon", type: "string | false", optional: true, description: "Font Awesome icon name (default: the tone's icon); `false` hides it, like `hideIcon`" },
     { name: "compact", type: "boolean", optional: true, description: "Render with the dense, one-line note shape." },
     {
       name: "actions",

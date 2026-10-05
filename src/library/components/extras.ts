@@ -148,7 +148,21 @@ function wireOverlayLayer(
  * Inline SVG (Part IX.2)
  * ----------------------------------------------------------------------- */
 
-const VIEWBOX_RE = /^[\d.\s-]+$/;
+/**
+ * A `viewBox` as SVG writes it — four numbers separated by whitespace and/or
+ * commas, with a non-negative width and height — normalised to the
+ * space-separated form, or null. The character test this replaced rejected
+ * the comma form (`0,0,48,48`), so 48-unit artwork fell back to `0 0 24 24`
+ * and was three quarters clipped.
+ */
+function parseViewBox(raw: string): string | null {
+  const parts = raw.trim().split(/[\s,]+/);
+  if (parts.length !== 4) return null;
+  const nums = parts.map(Number);
+  if (nums.some((n) => !Number.isFinite(n)) || nums[2]! < 0 || nums[3]! < 0) return null;
+  return nums.join(" ");
+}
+
 const SVG_PAINT_RE = /^[a-zA-Z#()0-9,.\s-]+$/;
 const PRESERVE_AR_RE = /^[a-zA-Z\s]+$/;
 
@@ -164,10 +178,10 @@ export const Svg: ComponentSpec = {
     "stripped.",
   props: [
     { name: "content", type: "string", positional: true, required: true, aliases: ["paths", "markup"] },
-    { name: "viewBox", type: "string", optional: true, description: "e.g. \"0 0 24 24\" (default)" },
+    { name: "viewBox", type: "string", optional: true, description: "Four numbers, space- or comma-separated, e.g. \"0 0 24 24\" (default)" },
     { name: "width", type: "string", optional: true },
     { name: "height", type: "string", optional: true },
-    { name: "fill", type: "string", optional: true, description: "currentColor (default), none, or a token color" },
+    { name: "fill", type: "string", optional: true, description: "SVG paint: currentColor (default), none, a hex / rgb() / named colour, or url(#gradientId). Theme tokens are not resolved here; colour the parent and keep currentColor" },
     { name: "stroke", type: "string", optional: true, description: "Stroke colour — for outline icon sets (Lucide, Feather)" },
     { name: "strokeWidth", type: "string | number", optional: true, aliases: ["stroke-width"] },
     { name: "preserveAspectRatio", type: "string", optional: true, description: "e.g. \"none\" to stretch to the box" },
@@ -187,7 +201,7 @@ export const Svg: ComponentSpec = {
     // `fill="none" stroke="currentColor"` icons as solid blobs.
     const rootAttrs = safe?.rootAttrs ?? {};
     const vb = asString(props.viewBox) || rootAttrs.viewbox || "0 0 24 24";
-    svg.setAttribute("viewBox", VIEWBOX_RE.test(vb) ? vb : "0 0 24 24");
+    svg.setAttribute("viewBox", parseViewBox(vb) ?? "0 0 24 24");
     const fill = asString(props.fill) || rootAttrs.fill || "currentColor";
     svg.setAttribute("fill", SVG_PAINT_RE.test(fill) ? fill : "currentColor");
     const stroke = asString(props.stroke) || rootAttrs.stroke || "";
@@ -951,7 +965,8 @@ export const OrderSummary: ComponentSpec = {
   name: "OrderSummary",
   description:
     "An order/cart summary: line items, subtotal, discount, shipping, tax, " +
-    "and a bold total. Pass `items` as {label, amount, qty?} and the named " +
+    "and a bold total. Pass `items` as {label, amount, qty?} (`quantity` is " +
+    "accepted for `qty`) and the named " +
     "totals. `currency` takes an ISO code (\"EUR\" — properly localised via " +
     "`locale`) or a bare symbol prefix. `loading` shows placeholders while an " +
     "async shipping/tax quote resolves.",
@@ -1032,7 +1047,8 @@ export const ScrollSpy: ComponentSpec = {
   description:
     "A sticky in-page nav that highlights the section currently in view. " +
     "`sections` is an array of {label, id} matching element ids on the page " +
-    "(set via the universal `id` prop). Clicking smooth-scrolls to a section; " +
+    "(set via the universal `id` prop, which takes a letter followed by " +
+    "letters, digits, `_` or `-`). Clicking smooth-scrolls to a section; " +
     "`offset` clears a sticky header and `top` sets the sticky offset.",
   props: [
     { name: "sections", type: "object[]", positional: true, required: true, aliases: ["items"] },
@@ -1056,9 +1072,13 @@ export const ScrollSpy: ComponentSpec = {
     const title = asString(props.title);
     if (title) root.append(el("div", { class: "rui-scrollspy-title" }, [title]));
     const list = el("ul", { class: "rui-scrollspy-list" });
+    // Ids are kept verbatim: they are only looked up with `getElementById` and
+    // written into a `#…` href, neither of which needs escaping. Stripping them
+    // to [A-Za-z0-9_-] turned "intro.part" into an id that matched nothing, and
+    // "a.b" into "ab" — someone else's section.
     const sections = asArray<unknown>(props.sections).map((raw) => {
       const s = (raw ?? {}) as { label?: unknown; id?: unknown };
-      return { label: asString(s.label), id: asString(s.id).replace(/[^A-Za-z0-9_-]/g, "") };
+      return { label: asString(s.label), id: asString(s.id).trim() };
     }).filter((s) => s.id);
     const active = activeSlot.get();
     for (const s of sections) {
@@ -1518,6 +1538,17 @@ export const Lottie: ComponentSpec = {
         if (speed !== 1) anim.setSpeed?.(speed);
         if (playing === false) anim.pause?.();
         if (props.onComplete != null) anim.addEventListener?.("complete", () => helpers.invoke(props.onComplete));
+        // The `catch` below only sees a synchronous setup error. A `src` that
+        // 404s or does not parse fails later, inside lottie-web, which documents
+        // a `data_failed` event for it (lottie-web is not installed in this repo,
+        // so only the subscription is under test). Reported once per mount.
+        let failed = false;
+        anim.addEventListener?.("data_failed", () => {
+          if (failed) return;
+          failed = true;
+          live.classList.add("rui-lottie-empty");
+          helpers.invoke(props.onError, "load-failed");
+        });
         helpers.registerDisposer(() => { try { anim.destroy?.(); } catch { /* noop */ } }, "rui-lottie");
         if (playing !== null && typeof MutationObserver !== "undefined") {
           const observer = new MutationObserver(() => {

@@ -5,7 +5,6 @@ export default {
   BottomSheet: {
     props: {
       onClose: "() => void",
-      height: "string",
     },
   },
   Confetti: {
@@ -22,8 +21,6 @@ export default {
   Lottie: {
     props: {
       data: "Readonly<Record<string, unknown>> | { readonly v?: string; readonly fr?: number; readonly ip?: number; readonly op?: number; readonly w?: number; readonly h?: number; readonly nm?: string; readonly layers?: readonly unknown[]; readonly assets?: readonly unknown[] }",
-      width: "string",
-      height: "string",
       onComplete: "() => void",
       onError: "(reason: \"missing-library\" | \"load-failed\") => void",
     },
@@ -51,24 +48,21 @@ export default {
     },
     props: {
       people: "readonly Person[]",
-      size: "\"sm\" | \"md\" | \"lg\"",
       onClick: "(person: Person) => void",
     },
   },
   ScrollSpy: {
     types: {
-      ScrollSpySection: "export interface ScrollSpySection {\n  /** Id of the target element (set with the universal `id`/`anchor` prop). Characters outside [A-Za-z0-9_-] are stripped. */\n  readonly id: string;\n  readonly label: string;\n}",
+      ScrollSpySection: "export interface ScrollSpySection {\n  /** Id of the target element, matched verbatim (the universal `id`/`anchor` prop only sets ids that start with a letter and contain letters, digits, `_` or `-`). */\n  readonly id: string;\n  readonly label: string;\n}",
     },
     props: {
       sections: "readonly ScrollSpySection[]",
-      top: "string",
       onChange: "(id: string) => void",
     },
   },
   Sheet: {
     props: {
       onClose: "() => void",
-      width: "string",
     },
   },
   SpeedDial: {

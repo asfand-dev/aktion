@@ -6,7 +6,7 @@
 
 import type { ComponentSpec, InstanceStateSlot, RenderHelpers } from "../types.js";
 import {
-  el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseCssLength,
+  el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseCssLength, isComponentNode,
   sanitiseHref, readResponsiveProp, RESPONSIVE_BREAKPOINTS, type Breakpoint, type ResponsiveProp,
   SPACING_TOKENS, normalizeSpacingToken, spacingCssValue,
 } from "../utils.js";
@@ -203,7 +203,9 @@ export const StackItem: ComponentSpec = {
       // Literal fallbacks throughout: `sanitiseCssLength(v, v)` hands the
       // rejected string back as its own fallback, which makes the guard a
       // no-op and lets `10px;position:fixed;inset:0` reach the style attribute.
-      styleParts.push(`flex-basis:${sanitiseCssLength(basis, "auto")}`);
+      // The RAW prop goes in (here and below), not its `asString` copy, so
+      // `sanitiseCssLength` receives a number as a number, not a digit string.
+      styleParts.push(`flex-basis:${sanitiseCssLength(props.basis, "auto")}`);
     }
     const alignSelf = asString(props.alignSelf);
     if (alignSelf) attrs["data-align-self"] = alignSelf;
@@ -212,10 +214,8 @@ export const StackItem: ComponentSpec = {
       attrs["data-order"] = String(order);
       styleParts.push(`order:${order}`);
     }
-    const minWidth = asString(props.minWidth);
-    if (minWidth) styleParts.push(`min-width:${sanitiseCssLength(minWidth, "0")}`);
-    const maxWidth = asString(props.maxWidth);
-    if (maxWidth) styleParts.push(`max-width:${sanitiseCssLength(maxWidth, "none")}`);
+    if (asString(props.minWidth)) styleParts.push(`min-width:${sanitiseCssLength(props.minWidth, "0")}`);
+    if (asString(props.maxWidth)) styleParts.push(`max-width:${sanitiseCssLength(props.maxWidth, "none")}`);
     if (styleParts.length > 0) attrs.style = styleParts.join(";");
     const root = el("div", attrs);
     root.append(helpers.renderNode(props.child));
@@ -437,11 +437,10 @@ export const Center: ComponentSpec = {
     const padding = normalizeSpacingToken(props.padding, asString(props.padding));
     if (padding) attrs["data-padding"] = padding;
     const styleParts: string[] = [];
-    const minHeight = asString(props.minHeight);
     // Literal fallback: passing `minHeight` as its own fallback returns the
     // rejected string unchanged, so the guard would let extra declarations
-    // ride along into the inline style.
-    if (minHeight) styleParts.push(`min-height:${sanitiseCssLength(minHeight, "auto")}`);
+    // ride along into the inline style. The raw prop goes in, as in StackItem.
+    if (asString(props.minHeight)) styleParts.push(`min-height:${sanitiseCssLength(props.minHeight, "auto")}`);
     if (styleParts.length > 0) attrs.style = styleParts.join(";");
     const root = el("div", attrs);
     for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
@@ -664,9 +663,11 @@ export const Steps: ComponentSpec = {
   name: "Steps",
   description:
     "Numbered step-by-step guide. Pass items as `{title, details?, active?, " +
-    "status?}` objects. `active` marks the current step; `status` " +
-    "(`pending|active|complete|error`) additionally distinguishes finished and " +
-    "failed steps. `orientation: \"horizontal\"` lays the steps across the top " +
+    "complete?, status?}` objects (a string is a title-only step, a component " +
+    "node is rendered as-is, and `null`/`false` items are skipped). `active` " +
+    "marks the current step and `complete` a finished one; `status` " +
+    "(`pending|active|complete|error`) wins over both and also marks failed " +
+    "steps. `orientation: \"horizontal\"` lays the steps across the top " +
     "of a wizard instead of down the page.",
   props: [
     { name: "items", type: "object[]" },
@@ -678,7 +679,12 @@ export const Steps: ComponentSpec = {
       "data-orientation": asString(props.orientation, "vertical"),
     });
     for (const item of asArray<unknown>(props.items)) {
-      if (item && typeof item === "object" && (item as { __kind?: string }).__kind === "Component") {
+      // A conditional step (`$admin ? {…} : null`, `cond && {…}`) is a hole,
+      // not an empty pending step.
+      if (item === null || item === undefined || item === false) continue;
+      // A user component's node is `UserComponent`, not `Component`; read as a
+      // data object it rendered an EMPTY pending step.
+      if (isComponentNode(item)) {
         // A component item still needs an `<li>`: a bare `<div>` inside `<ol>`
         // is invalid list markup and misses the 44px step gutter. `data-bare`
         // suppresses the counter badge so the ladder keeps its numbering.
@@ -819,8 +825,22 @@ export const Tabs: ComponentSpec = {
 
     // Render the panels FIRST: every trigger's value/label/badge/icon comes
     // from the rendered panel, which is the only place the resolved TabItem
-    // props are observable (see readTabEntry).
-    const entries = items.map((item, idx) => readTabEntry(item, idx, helpers));
+    // props are observable (see readTabEntry). A conditional tab (`null`,
+    // `false`) is a hole — wrapped like any other value it became a phantom
+    // "Tab N" trigger over an empty panel.
+    const entries: TabEntry[] = [];
+    for (const item of items) {
+      if (item === null || item === undefined || item === false) {
+        // Still spend the hole's `renderNode` call (its empty text node is
+        // discarded): each child's instance path is numbered by call order, so
+        // skipping it would move every later tab to a new path the moment the
+        // hole fills, dropping the state inside it (a nested Tabs' selection,
+        // an uncontrolled editor's text).
+        helpers.renderNode(null);
+        continue;
+      }
+      entries.push(readTabEntry(item, entries.length, helpers));
+    }
 
     // Stable id prefix so each trigger can point at its panel and back.
     const idSlot = helpers.useInstanceState<string>("rui-tabs-id", "");
@@ -1152,6 +1172,11 @@ export const Accordion: ComponentSpec = {
         item.ontoggle = (event) => {
           const live = (event.currentTarget ?? event.target) as HTMLDetailsElement;
           if (prior) prior.call(live, event);
+          // The echo of a controlled item's own `open` assertion is not a change
+          // — AccordionItem.ontoggle skips it for the same reason, and an
+          // inverting handler here would otherwise loop just as it did there.
+          const asserted = live.getAttribute("data-rui-open");
+          if (asserted !== null && asserted === String(live.open)) return;
           const title = live.querySelector(".rui-accordion-title")?.textContent ?? "";
           helpers.invoke(props.onChange, title, live.open);
         };
@@ -1184,7 +1209,7 @@ export function resolveSpan(span: unknown): number {
 // folds aliases into the canonical slot before render — so `minChildWidth` is
 // the only key that ever carries the value.
 function gridMinChildWidth(props: Record<string, unknown>): string {
-  return sanitiseCssLength(asString(props.minChildWidth) || "220px", "220px");
+  return sanitiseCssLength(props.minChildWidth, "220px");
 }
 
 export const GridItem: ComponentSpec = {
@@ -1303,10 +1328,9 @@ export const Box: ComponentSpec = {
     };
     const styleParts: string[] = [];
     if (radius && BOX_RADIUS[radius]) styleParts.push(`border-radius:${BOX_RADIUS[radius]}`);
-    const maxWidth = asString(props.maxWidth);
-    // Literal fallback — see StackItem: `sanitiseCssLength(v, v)` returns the
-    // rejected value and defeats the guard entirely.
-    if (maxWidth) styleParts.push(`max-width:${sanitiseCssLength(maxWidth, "none")}`);
+    // Literal fallback, raw prop — see StackItem: `sanitiseCssLength(v, v)`
+    // returns the rejected value and defeats the guard entirely.
+    if (asString(props.maxWidth)) styleParts.push(`max-width:${sanitiseCssLength(props.maxWidth, "none")}`);
     if (padding.kind === "single") {
       const pad = padding.value ? normalizeSpacingToken(padding.value, String(padding.value)) : null;
       if (pad) attrs["data-padding"] = pad;
@@ -1382,7 +1406,12 @@ export const Grid: ComponentSpec = {
   ],
   render: (_node, props, helpers) => {
     const children = asArray(props.children);
-    const hasGridItems = children.some((child) => isComponentNamed(child, "GridItem"));
+    // Rendered up front so span mode can be read off the OUTPUT: a user
+    // component that returns a GridItem is a `UserComponent` node named after
+    // itself, so checking the input nodes alone missed it.
+    const rendered = children.map((child) => helpers.renderNode(child));
+    const hasGridItems = children.some((child) => isComponentNamed(child, "GridItem"))
+      || rendered.some(containsGridItem);
     const columns = readResponsiveProp<number | string>(props.columns);
     const gap = readResponsiveProp<string>(props.gap);
     const rowGap = readResponsiveProp<string>(props.rowGap);
@@ -1417,7 +1446,7 @@ export const Grid: ComponentSpec = {
         const minChild = asString(props.minChildWidth);
         if (minChild) {
           attrs["data-min-child-width"] = "true";
-          styleParts.push(`--rui-grid-min-child:${sanitiseCssLength(minChild, "220px")}`);
+          styleParts.push(`--rui-grid-min-child:${sanitiseCssLength(props.minChildWidth, "220px")}`);
         }
       } else {
         styleParts.push(`--rui-grid-min-item:${gridMinChildWidth(props)}`);
@@ -1434,7 +1463,7 @@ export const Grid: ComponentSpec = {
       const minChild = asString(props.minChildWidth);
       if (minChild) {
         attrs["data-min-child-width"] = "true";
-        styleParts.push(`--rui-grid-min-child:${sanitiseCssLength(minChild, "220px")}`);
+        styleParts.push(`--rui-grid-min-child:${sanitiseCssLength(props.minChildWidth, "220px")}`);
       }
     }
 
@@ -1473,10 +1502,19 @@ export const Grid: ComponentSpec = {
 
     if (styleParts.length > 0) attrs.style = styleParts.join(";");
     const root = el("div", attrs);
-    for (const child of children) root.append(helpers.renderNode(child));
+    for (const node of rendered) root.append(node);
     return root;
   },
 };
+
+/** Whether a rendered Grid child is (or, as a Fragment, holds) a GridItem cell. */
+function containsGridItem(rendered: Node): boolean {
+  if (rendered instanceof HTMLElement) return rendered.classList.contains("rui-grid-item");
+  if (rendered instanceof DocumentFragment) {
+    return Array.from(rendered.children).some((child) => child.classList.contains("rui-grid-item"));
+  }
+  return false;
+}
 
 export const AspectRatio: ComponentSpec = {
   name: "AspectRatio",
@@ -1486,11 +1524,11 @@ export const AspectRatio: ComponentSpec = {
     "further children are overlays positioned on top of it (a \"LIVE\" badge " +
     "over a thumbnail), not stacked below.",
   props: [
-    { name: "ratio", type: "string", description: "`width:height` (e.g. `16:9`, `4:3`) or a decimal like `1.78`" },
+    { name: "ratio", type: "string", description: "`width:height` or `width/height` (e.g. `16:9`, `4/3`) or a decimal like `1.78`; anything else falls back to 16:9" },
     { name: "children", aliases: ["child"], type: "Node[]" },
   ],
   render: (_node, props, helpers) => {
-    const ratio = parseRatio(asString(props.ratio, "16:9"));
+    const ratio = parseAspectRatio(props.ratio) ?? "16 / 9";
     const children = asArray(props.children);
     const root = el("div", {
       class: "rui-aspect-ratio",
@@ -1505,18 +1543,27 @@ export const AspectRatio: ComponentSpec = {
   },
 };
 
-function parseRatio(input: string): string {
-  if (input.includes(":")) {
-    const [w, h] = input.split(":");
-    const num = Number(w);
-    const den = Number(h);
-    // Both components must be POSITIVE: `aspect-ratio: 0 / 1` (or a negative
-    // ratio) is invalid, the declaration is dropped, and the `overflow: hidden`
-    // box collapses to zero height — an invisible element with no error.
-    if (Number.isFinite(num) && num > 0 && Number.isFinite(den) && den > 0) return `${num} / ${den}`;
+/**
+ * Parse a `ratio` shorthand — `16:9`, `4/3` (CSS's own spelling) or a decimal
+ * like `1.78` — into an `aspect-ratio` value, or null when it is not one.
+ *
+ * Shared by AspectRatio and Image, which used to carry two parsers that
+ * disagreed. Both components must be POSITIVE: `aspect-ratio: 0 / 1` (or a
+ * negative ratio) is invalid, the declaration is dropped, and an
+ * `overflow: hidden` box collapses to zero height — an invisible element with
+ * no error.
+ */
+export function parseAspectRatio(raw: unknown): string | null {
+  const input = asString(raw).trim();
+  if (!input) return null;
+  const pair = /^([^:/]+)[:/]([^:/]+)$/.exec(input);
+  if (pair) {
+    const num = Number(pair[1]!.trim());
+    const den = Number(pair[2]!.trim());
+    return Number.isFinite(num) && num > 0 && Number.isFinite(den) && den > 0 ? `${num} / ${den}` : null;
   }
   const n = Number(input);
-  return Number.isFinite(n) && n > 0 ? `${n} / 1` : "16 / 9";
+  return Number.isFinite(n) && n > 0 ? `${n} / 1` : null;
 }
 
 /**
@@ -1550,9 +1597,8 @@ export const ScrollArea: ComponentSpec = {
     // `height` used to be an alias of `maxHeight`, so a chat pane asked for a
     // stable 400px box and got one that grew from ~90px — reflowing the page on
     // every message. The two are now separate declarations.
-    const height = asString(props.height);
     const styleParts = [`max-height:${sanitiseCssLength(props.maxHeight, "320px")}`];
-    if (height) styleParts.push(`height:${sanitiseCssLength(height, "auto")}`);
+    if (asString(props.height)) styleParts.push(`height:${sanitiseCssLength(props.height, "auto")}`);
     const stick = asBoolean(props.stickToBottom);
     const root = el("div", {
       class: "rui-scroll-area",

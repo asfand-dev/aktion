@@ -78,7 +78,7 @@ export default {
       suggestions: "readonly (string | number)[]",
       onChange: "(tags: string[]) => void",
       onBlur: "(tags: string[]) => void",
-      onFocus: "(draft: string) => void",
+      onFocus: "(tags: string[]) => void",
     },
   },
   TimePicker: {

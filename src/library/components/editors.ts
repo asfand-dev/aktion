@@ -10,13 +10,38 @@
 import type { ComponentSpec, RenderHelpers } from "../types.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
-  valueAttr, sanitiseHref, sanitiseCssColor,
+  valueAttr, sanitiseHref, sanitiseCssLength,
 } from "../utils.js";
-import { attachOnChange } from "./wrappers.js";
 import { withFieldShell, fieldShellExtraProps } from "./forms-shared.js";
 import { setSanitisedHtml, readSanitisedHtml } from "../html-sanitizer.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
 import { closeFloating, openFloating, deferToPaint, type FloatingSide } from "../floating.js";
+
+/**
+ * Report `onChange` through the `oninput` PROPERTY, chained after whatever
+ * `bindState` (or the component itself) already installed there.
+ *
+ * `attachOnChange` (wrappers.ts) registers with `addEventListener`, which the
+ * morph reconciler cannot transfer onto the node it keeps: a handler supplied
+ * only on a later render never fired, one withdrawn later kept firing, and a
+ * lambda closing over `.map` locals stayed frozen at the first render. Same
+ * contract as `bindChangeHandler` in forms.ts: the prop is read inside the
+ * handler and the value off the live node.
+ */
+function bindInputChange(
+  element: HTMLElement,
+  props: Record<string, unknown>,
+  helpers: RenderHelpers,
+  getValue: (live: HTMLElement) => unknown,
+): void {
+  const previous = element.oninput;
+  element.oninput = (event) => {
+    previous?.call(element, event);
+    if (props.onChange == null) return;
+    const live = (event.currentTarget ?? event.target ?? element) as HTMLElement;
+    helpers.invoke(props.onChange, getValue(live));
+  };
+}
 
 /* ----------------------------------------------------------------------- *
  * RichTextEditor
@@ -226,8 +251,11 @@ export const RichTextEditor: ComponentSpec = {
     const liveSlot = helpers.useInstanceState<HTMLElement | null>("live", null);
     const assertedSlot = helpers.useInstanceState<string | null>("asserted", null);
     const emptyNow = asserts ? isEmpty(initial) : (emptySlot.get() ?? isEmpty(initial));
-    const heightStyle = `min-height:${asString(props.minHeight, "160px")};`
-      + (asString(props.maxHeight) ? `max-height:${asString(props.maxHeight)};` : "");
+    // Both lengths land in an inline `style`, and bare `asString` let a value
+    // such as "100px;position:fixed" close the declaration and append its own.
+    const maxHeight = sanitiseCssLength(props.maxHeight, "");
+    const heightStyle = `min-height:${sanitiseCssLength(props.minHeight, "160px")};`
+      + (maxHeight ? `max-height:${maxHeight};` : "");
     const editor = el("div", {
       class: "rui-rich-text-content",
       id,
@@ -326,10 +354,7 @@ export const RichTextEditor: ComponentSpec = {
     // whenever the selection can have moved.
     editor.onkeyup = (event) => syncRteToolStates((event.currentTarget ?? event.target) as Element);
     editor.onmouseup = (event) => syncRteToolStates((event.currentTarget ?? event.target) as Element);
-    attachOnChange(editor, props.onChange, helpers, {
-      event: "input",
-      getValue: (n) => readSanitisedHtml(n as HTMLElement),
-    });
+    bindInputChange(editor, props, helpers, readSanitisedHtml);
     root.append(editor);
     return withFieldShell(root, props, { idKey: "id" });
   },
@@ -464,8 +489,9 @@ export const CodeEditor: ComponentSpec = {
     const readonly = asBoolean(props.readonly);
     const disabled = asBoolean(props.disabled);
     const inert = readonly || disabled;
-    const minHeight = asString(props.minHeight, "200px");
-    const maxHeight = asString(props.maxHeight);
+    // Interpolated into the body's inline `style`: see RichTextEditor.
+    const minHeight = sanitiseCssLength(props.minHeight, "200px");
+    const maxHeight = sanitiseCssLength(props.maxHeight, "");
 
     // Same contract as `valueAttr`: a present `value` prop is an assertion, an
     // absent one means the text belongs to the user. `syncTextArea` in the
@@ -597,12 +623,8 @@ export const CodeEditor: ComponentSpec = {
       e.preventDefault();
       reindent(target, e.shiftKey, " ".repeat(tabSize));
     };
-    if (!inert) {
-      attachOnChange(textarea, props.onChange, helpers, {
-        event: "input",
-        getValue: readSource,
-      });
-    }
+    // `readSource` already ran in the handler this chains onto.
+    if (!inert) bindInputChange(textarea, props, helpers, (live) => (live as HTMLTextAreaElement).value);
     body.append(textarea);
     root.append(body);
     return withFieldShell(root, props, { idKey: "id" });
@@ -621,6 +643,10 @@ const LONG_PRESS_MS = 500;
 /** How far a touch may drift before it counts as a scroll, not a press. */
 const LONG_PRESS_SLOP = 10;
 
+const CONTEXT_ITEM_ROLES = ["menuitem", "menuitemcheckbox", "menuitemradio"] as const;
+/** Every row role, for the focus and arrow-key queries. */
+const CONTEXT_ROW = "[role^=menuitem]";
+
 interface ContextMenuItem {
   label: string;
   action: unknown;
@@ -629,42 +655,66 @@ interface ContextMenuItem {
   variant: string;
   disabled: boolean;
   separator: boolean;
+  /** `null` for a plain action row; a boolean makes the row checkable. */
+  checked: boolean | null;
+  role: string;
+  keepOpen: boolean;
 }
 
+const CONTEXT_SEPARATOR: ContextMenuItem = {
+  label: "", action: null, icon: "", shortcut: "", variant: "default", disabled: false,
+  separator: true, checked: null, role: "menuitem", keepOpen: false,
+};
+
+/** One row, from MenuItem's slots or the object form — the same props either way. */
+function contextRow(source: {
+  label: unknown; action: unknown; icon?: unknown; shortcut?: unknown; variant?: unknown;
+  disabled?: unknown; checked?: unknown; role?: unknown; keepOpen?: unknown;
+}): ContextMenuItem {
+  const role = asString(source.role, "menuitem");
+  return {
+    label: asString(source.label),
+    action: source.action,
+    icon: asString(source.icon),
+    shortcut: asString(source.shortcut),
+    variant: asString(source.variant, "default"),
+    disabled: asBoolean(source.disabled),
+    separator: false,
+    checked: source.checked === undefined || source.checked === null ? null : asBoolean(source.checked),
+    role: (CONTEXT_ITEM_ROLES as readonly string[]).includes(role) ? role : "menuitem",
+    keepOpen: asBoolean(source.keepOpen),
+  };
+}
+
+/**
+ * Resolve one `items` entry. The object form takes `onClick` (or the legacy
+ * `action`) and MenuItem's `tone` alias for `variant`; an object without a
+ * label is ignored, as DropdownMenu ignores one.
+ *
+ * MenuItem used to keep only its first six slots, so `checked` / `role` /
+ * `keepOpen` were lost and a checkbox row rendered as a plain one that always
+ * closed the menu. Any other component node (a `Button(...)`) fell through to
+ * the object branch and became an enabled row with an empty label; it is
+ * dropped now, like strings and label-less objects.
+ */
 function extractContextItem(raw: unknown): ContextMenuItem | null {
-  if (!raw) return null;
-  if (typeof raw === "object") {
-    const node = raw as { __kind?: string; name?: string; args?: unknown[] };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const node = raw as { __kind?: string; name?: string; args?: unknown[] };
+  if (node.__kind !== undefined) {
     if (node.__kind === "Component" && node.name === "MenuItem" && Array.isArray(node.args)) {
-      const args = node.args;
-      return {
-        label: asString(args[0]),
-        action: args[1],
-        icon: asString(args[2]),
-        shortcut: asString(args[3]),
-        variant: asString(args[4], "default"),
-        disabled: asBoolean(args[5]),
-        separator: false,
-      };
+      // MenuItem's slot order: label, onClick, icon, shortcut, variant,
+      // disabled, checked, role, keepOpen.
+      const [label, action, icon, shortcut, variant, disabled, checked, role, keepOpen] = node.args;
+      return contextRow({ label, action, icon, shortcut, variant, disabled, checked, role, keepOpen });
     }
-    if (node.__kind === "Component" && node.name === "MenuSeparator") {
-      return { label: "", action: null, icon: "", shortcut: "", variant: "default", disabled: false, separator: true };
-    }
-    const r = raw as Record<string, unknown>;
-    if (r.separator) {
-      return { label: "", action: null, icon: "", shortcut: "", variant: "default", disabled: false, separator: true };
-    }
-    return {
-      label: asString(r.label),
-      action: r.action,
-      icon: asString(r.icon),
-      shortcut: asString(r.shortcut),
-      variant: asString(r.variant, "default"),
-      disabled: asBoolean(r.disabled),
-      separator: false,
-    };
+    if (node.__kind === "Component" && node.name === "MenuSeparator") return CONTEXT_SEPARATOR;
+    return null;
   }
-  return null;
+  const r = raw as Record<string, unknown>;
+  if (r.separator) return CONTEXT_SEPARATOR;
+  const label = asString(r.label);
+  if (!label) return null;
+  return contextRow({ ...r, label, action: r.onClick ?? r.action, variant: r.variant ?? r.tone });
 }
 
 interface PointerMenuState {
@@ -897,8 +947,8 @@ const openMenuAt = (origin: Element, anchor: HTMLElement, ctx: MenuContext): voi
   // start; without it Escape also never reached a handler. An `aria-disabled`
   // row is reachable by arrow key but a dead landing spot, so prefer an
   // actionable one and only fall back to the first row.
-  const rows = panel.querySelectorAll<HTMLElement>("[role=menuitem]");
-  (panel.querySelector<HTMLElement>("[role=menuitem]:not([aria-disabled='true'])") ?? rows[0])?.focus();
+  const rows = panel.querySelectorAll<HTMLElement>(CONTEXT_ROW);
+  (panel.querySelector<HTMLElement>(`${CONTEXT_ROW}:not([aria-disabled='true'])`) ?? rows[0])?.focus();
 };
 
 /** Apply an open/closed transition, keeping instance state and the program in sync. */
@@ -920,8 +970,10 @@ export const ContextMenu: ComponentSpec = {
   description:
     "Right-click (or long-press on touch) menu that attaches to a child " +
     "node. Wraps `target` and shows the menu at the pointer. Items are " +
-    "`MenuItem(...)` nodes, `MenuSeparator()` entries, or `{label, action, " +
-    "icon?, shortcut?, variant?, disabled?, separator?}` objects. Set " +
+    "`MenuItem(...)` nodes (including `checked` / `role` / `keepOpen` rows), " +
+    "`MenuSeparator()` entries, or `{label, onClick (or action), icon?, " +
+    "shortcut?, variant (or tone)?, disabled?, checked?, role?, keepOpen?}` / " +
+    "`{separator: true}` objects; anything else is ignored. Set " +
     "`trigger: \"click\"` for the overflow-menu pattern, `disabled` to " +
     "suppress it on locked rows, and pass a `$variable` as `open` to " +
     "observe or drive the open state. Shift+F10 (or the ContextMenu key) " +
@@ -931,7 +983,7 @@ export const ContextMenu: ComponentSpec = {
     "browser entries.",
   props: [
     { name: "target", type: "Node", description: "Child node the menu is bound to" },
-    { name: "items", type: "any[]", description: "MenuItem nodes or {label, action} objects" },
+    { name: "items", type: "any[]", description: "MenuItem / MenuSeparator nodes or {label, onClick} objects; other values are ignored" },
     { name: "label", type: "string", optional: true, description: "ARIA label for the menu" },
     { name: "trigger", type: "string", optional: true, enum: CONTEXT_TRIGGERS, description: "What opens the menu (default `contextmenu`)" },
     { name: "disabled", type: "boolean", optional: true, description: "Never open the menu (locked / read-only rows)" },
@@ -1007,25 +1059,50 @@ export const ContextMenu: ComponentSpec = {
         menu.append(el("div", { class: "rui-menu-separator", role: "separator" }));
         continue;
       }
+      // A `checked` value implies a checkbox row unless radio semantics were
+      // asked for, as in DropdownMenu: `role="menuitem"` may not carry
+      // `aria-checked`.
+      const role = item.role !== "menuitem"
+        ? item.role
+        : item.checked !== null ? "menuitemcheckbox" : "menuitem";
+      const checkable = role !== "menuitem";
       const btn = el("button", {
         type: "button",
         class: "rui-menu-item",
-        role: "menuitem",
+        role,
         "data-variant": item.variant,
         // `aria-disabled`, not the native attribute: a `role="menu"` row must
         // stay focusable so a keyboard user learns the action exists but is
         // unavailable. No click handler is attached below, so it is inert.
         "aria-disabled": item.disabled ? "true" : null,
         "data-disabled": item.disabled ? "true" : null,
+        "aria-checked": checkable ? (item.checked === true ? "true" : "false") : null,
+        "data-checked": item.checked === true ? "true" : null,
+        "data-keep-open": item.keepOpen ? "true" : null,
         // Roving focus: the menu is one tab stop and Up/Down move within it.
         tabindex: "-1",
       });
+      if (checkable) {
+        // Same inline sizing as DropdownMenu's check column, so a mixed group's
+        // labels line up without new CSS.
+        btn.append(el("span", {
+          class: "rui-menu-item-check",
+          "aria-hidden": "true",
+          style: "width:14px;display:inline-flex;justify-content:center",
+        }, [item.checked === true ? "✓" : ""]));
+      }
       const iconNode = renderIcon(item.icon, { className: "rui-menu-item-icon" });
       if (iconNode) btn.append(iconNode);
       btn.append(el("span", { class: "rui-menu-item-label" }, [item.label]));
       if (item.shortcut) btn.append(el("span", { class: "rui-menu-item-shortcut" }, [item.shortcut]));
       if (!item.disabled) {
         btn.onclick = (event) => {
+          // A `keepOpen` row (a toggle the user flips several times) leaves
+          // the menu where it is; the re-render repaints its check.
+          if (item.keepOpen) {
+            helpers.invoke(item.action);
+            return;
+          }
           const origin = (event.currentTarget ?? event.target) as Element;
           // Close before invoking, like MenuItem inside DropdownMenu does: the
           // action may push state and re-render, and the panel has to be out of
@@ -1144,7 +1221,7 @@ export const ContextMenu: ComponentSpec = {
       if (typeahead && !panel.contains(from)) return;
       // `aria-disabled` rows stay in the ring: announcing one as
       // present-but-unavailable is only useful if the user can reach it.
-      const options = Array.from(panel.querySelectorAll<HTMLButtonElement>("[role=menuitem]"));
+      const options = Array.from(panel.querySelectorAll<HTMLButtonElement>(CONTEXT_ROW));
       if (options.length === 0) return;
       const active = (panel.getRootNode() as Document | ShadowRoot).activeElement;
       const found = options.findIndex((o) => o === active);
@@ -1320,7 +1397,7 @@ export const ColorPicker: ComponentSpec = {
     { name: "id", type: "string" },
     { name: "value", type: "string", optional: true, description: "Bound color value (typically $variable)" },
     { name: "label", type: "string", optional: true },
-    { name: "swatches", type: "string[]", optional: true, description: "Preset colors (default to a 12-color palette)" },
+    { name: "swatches", type: "string[]", optional: true, description: "Preset colors as hex, rgb() or hsl() strings (default: a 12-color palette); other values, such as named colors, are skipped" },
     { name: "disabled", type: "boolean", optional: true },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the newly-selected color string" },
     { name: "format", type: "string", optional: true, enum: COLOR_FORMATS, description: "Notation written back to state / onChange (default `hex`)" },
@@ -1380,7 +1457,7 @@ export const ColorPicker: ComponentSpec = {
     /**
      * The canonical value for this control, recomposed from the LIVE nodes.
      *
-     * Runs as `bindState`'s / `attachOnChange`'s `getValue`, so it is also where
+     * Runs as `bindState`'s / `bindInputChange`'s `getValue`, so it is also where
      * the chip → text mirroring happens: keeping both in one property-based
      * `oninput` slot is the only way the morph reconciler can transfer them as
      * a unit. Every node is resolved from the event target — the closure's own
@@ -1417,9 +1494,7 @@ export const ColorPicker: ComponentSpec = {
         readColor((event.currentTarget ?? event.target) as HTMLElement);
       };
     }
-    if (!disabled) {
-      attachOnChange(colorInput, props.onChange, helpers, { event: "input", getValue: readColor });
-    }
+    if (!disabled) bindInputChange(colorInput, props, helpers, readColor);
 
     if (!disabled) {
       textInput.oninput = (event) => {
@@ -1456,20 +1531,21 @@ export const ColorPicker: ComponentSpec = {
       const palette = swatches.length > 0 ? swatches : DEFAULT_SWATCHES;
       const activeHex = normaliseHex(display, allowAlpha);
       for (const swatch of palette) {
-        // An unparseable swatch used to be restored verbatim into the inline
-        // `style` attribute, which let `"red;position:fixed;inset:0"` paint a
-        // transparent full-viewport clickjacking layer.
-        const safeColor = normaliseHex(swatch, allowAlpha) || sanitiseCssColor(swatch);
-        if (!safeColor) continue;
-        const canonical = normaliseHex(safeColor, allowAlpha);
+        // Only colours the picker can parse become swatches: a named colour
+        // ("tomato") or `var(--token)` painted a button whose click did nothing,
+        // because the chip and the written-back value only speak hex / rgb() /
+        // hsl(). The canonical hex is also the only thing that reaches the
+        // inline `style`, so `"red;position:fixed;inset:0"` cannot either.
+        const canonical = normaliseHex(swatch, allowAlpha);
+        if (!canonical) continue;
         const btn = el("button", {
           type: "button",
           class: "rui-color-picker-swatch",
-          style: `background:${safeColor}`,
-          "aria-label": safeColor,
-          title: safeColor,
+          style: `background:${canonical}`,
+          "aria-label": canonical,
+          title: canonical,
           "data-color": canonical,
-          "data-active": canonical !== "" && canonical === activeHex ? "true" : "false",
+          "data-active": canonical === activeHex ? "true" : "false",
           disabled: disabled ? "" : null,
         });
         btn.onclick = (event) => {
@@ -1477,7 +1553,7 @@ export const ColorPicker: ComponentSpec = {
           const live = origin.closest(".rui-color-picker");
           const chip = live?.querySelector<HTMLInputElement>(".rui-color-picker-color");
           if (!chip) return;
-          const picked = parseColor(origin.getAttribute("data-color") ?? safeColor);
+          const picked = parseColor(origin.getAttribute("data-color") ?? canonical);
           if (!picked) return;
           const field = live?.querySelector<HTMLInputElement>(".rui-color-picker-hex");
           // Write the text field explicitly: clicking a button does not blur it

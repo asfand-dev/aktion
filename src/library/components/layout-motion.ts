@@ -874,6 +874,34 @@ function normaliseDragType(raw: unknown): string {
 let KEYBOARD_DRAG: { data: unknown; type: string; owner: object } | null = null;
 
 /**
+ * The exact payload of a pointer drag, JSON-encoded. `text/plain` keeps a
+ * string payload verbatim for drops outside the app, but parsing that copy
+ * turned `data: "42"` into the number 42 (and `"true"`/`"null"` likewise);
+ * this format round-trips every JSON value unchanged.
+ */
+const DRAG_PAYLOAD_FORMAT = "application/x-rui-drag-payload+json";
+
+/**
+ * The pointer drag in flight from this document, so a DropZone here receives
+ * the Draggable's original value — exactly what the keyboard path hands over —
+ * rather than a JSON copy of it. Matched by its encoded payload, so a drag that
+ * started in another document still falls back to the transfer.
+ */
+let POINTER_DRAG: { data: unknown; json: string } | null = null;
+
+/** What a pointer drop hands `onDrop`: see {@link DRAG_PAYLOAD_FORMAT} and {@link POINTER_DRAG}. */
+function readDropPayload(transfer: DataTransfer | null | undefined): unknown {
+  const json = transfer?.getData(DRAG_PAYLOAD_FORMAT) ?? "";
+  if (json) {
+    if (POINTER_DRAG && POINTER_DRAG.json === json) return POINTER_DRAG.data;
+    try { return JSON.parse(json); } catch { /* fall through to the text copy */ }
+  }
+  // Not one of ours (text dragged in from elsewhere): parsed JSON when possible.
+  const raw = transfer?.getData("text/plain") ?? "";
+  try { return JSON.parse(raw); } catch { return raw; }
+}
+
+/**
  * Release the visual grab state of whichever Draggable is picked up. The
  * Draggable never hears that a DropZone consumed its payload, so the zone
  * clears the affordance and the Draggable's next render agrees (its own render
@@ -899,7 +927,7 @@ export const Draggable: ComponentSpec = {
     "a DropZone to drop — give it an `ariaLabel` so they know what it is.",
   props: [
     { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
-    { name: "data", type: "any", optional: true, description: "Payload (stringified) handed to the DropZone" },
+    { name: "data", type: "any", optional: true, description: "Payload handed to the DropZone's `onDrop` unchanged, by pointer or keyboard (a drop into another page receives a JSON copy)" },
     { name: "type", type: "string", optional: true, description: "Payload kind, e.g. \"card\" / \"file\" / \"tag\" — a DropZone's `accept` matches against it" },
     { name: "disabled", type: "boolean", optional: true, description: "Not draggable (locked, in flight, not the user's to move)" },
     { name: "ariaLabel", type: "string", optional: true, description: "What is being dragged, announced to screen readers" },
@@ -933,8 +961,6 @@ export const Draggable: ComponentSpec = {
     });
     wrap.append(renderChild(helpers, props.child));
     if (disabled) return wrap;
-    const payload = (): string =>
-      typeof props.data === "string" ? props.data : JSON.stringify(props.data ?? null);
     const setDragging = (node: HTMLElement | null, next: "none" | "pointer" | "keyboard"): void => {
       modeSlot.set({ mode: next });
       if (!node) return;
@@ -946,16 +972,21 @@ export const Draggable: ComponentSpec = {
       ((e.currentTarget ?? e.target) as HTMLElement | null)?.closest?.(".rui-draggable") ?? null;
     // Property handlers (morph contract) + live-node class toggles.
     wrap.ondragstart = (e: DragEvent) => {
+      POINTER_DRAG = null;
       try {
-        const text = payload();
+        const json = JSON.stringify(props.data ?? null) ?? "null";
+        const text = typeof props.data === "string" ? props.data : json;
         e.dataTransfer?.setData("text/plain", text);
+        e.dataTransfer?.setData(DRAG_PAYLOAD_FORMAT, json);
         // Second copy under the typed format so `accept` can match on dragover.
         if (type) e.dataTransfer?.setData(dragTypeFormat(type), text);
+        POINTER_DRAG = { data: props.data, json };
       } catch { /* ignore */ }
       setDragging(liveWrap(e), "pointer");
       helpers.invoke(props.onDragStart, props.data);
     };
     wrap.ondragend = (e: DragEvent) => {
+      POINTER_DRAG = null;
       setDragging(liveWrap(e), "none");
       helpers.invoke(props.onDragEnd);
     };
@@ -987,8 +1018,9 @@ export const Draggable: ComponentSpec = {
 export const DropZone: ComponentSpec = {
   name: "DropZone",
   description:
-    "A target that accepts a Draggable. `onDrop(data)` receives the dropped " +
-    "payload (parsed JSON when possible). `accept` lists the Draggable `type`s " +
+    "A target that accepts a Draggable. `onDrop(data)` receives the " +
+    "Draggable's `data` unchanged (text dragged in from outside the app " +
+    "arrives as parsed JSON when possible). `accept` lists the Draggable `type`s " +
     "this zone can take (comma-separated) — anything else is refused before it " +
     "is dropped, so a 'To do' / 'Done' / 'Archive' board can express what goes " +
     "where; `disabled` makes the zone inert. Pass `child` for the zone's " +
@@ -1062,10 +1094,7 @@ export const DropZone: ComponentSpec = {
       const node = liveZone(e);
       if (!accepts(e.dataTransfer)) { setOver(node, false); return; }
       e.preventDefault();
-      const raw = e.dataTransfer?.getData("text/plain") ?? "";
-      let data: unknown = raw;
-      try { data = JSON.parse(raw); } catch { /* keep raw string */ }
-      drop(node, data);
+      drop(node, readDropPayload(e.dataTransfer));
     };
     zone.onkeydown = (e: KeyboardEvent) => {
       if (e.key !== " " && e.key !== "Enter") return;
@@ -1107,7 +1136,7 @@ export const Parallax: ComponentSpec = {
   props: [
     { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
     { name: "speed", type: "number", optional: true, description: "−1…1 (default 0.3)" },
-    { name: "maxOffset", type: "string", optional: true, description: "Maximum travel in either direction — a length (\"120px\") or a percentage of the layer's height (\"40%\"). Default 50%" },
+    { name: "maxOffset", type: "string", optional: true, description: "Maximum travel in either direction — pixels (`120` or \"120px\") or a percentage of the layer's height (\"40%\"). Other units (rem, vh, calc()) are not measured and fall back to the default, 50%" },
   ],
   render: (_node, props, helpers) => {
     // The offset is instance state and is emitted by every render: morph copies

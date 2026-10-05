@@ -4,7 +4,9 @@ import type { ComponentTypeTable } from "./types.js";
 export default {
   BadgeList: {
     props: {
-      labels: "readonly (string | number)[]",
+      // An empty or missing label renders no pill but keeps its index, so
+      // `tones` / `icons` stay aligned with `labels` as written.
+      labels: "readonly (string | number | null | undefined)[]",
       tones: "readonly (BadgeListTone | null | undefined)[]",
       icons: "readonly (string | null | undefined)[]",
     },
@@ -21,18 +23,10 @@ export default {
     },
     props: {
       language: "CodeBlockLanguage",
-      width: "string",
-      height: "string",
-    },
-  },
-  Container: {
-    props: {
-      maxWidth: "string",
     },
   },
   Icon: {
     props: {
-      size: "\"xs\" | \"sm\" | \"md\" | \"lg\" | \"xl\"",
       color: "string",
     },
   },
