@@ -61,6 +61,20 @@ export const shorthandEffects = [
   Text("zIndex", { sx: { zIndex: 10, weight: "bold", fontSize: "clamp(1rem, 2vw, 2rem)" } }),
 ];
 
+// ---- numeric strings: the runtime parses "0.9" like 0.9 on every numeric key ----
+
+// docs/tutorial.html teaches this form (the "Style Icon" lesson and its hint).
+export const tutorialHover = Text("Fancy", {
+  sx: { p: "l", bg: "gradient.brand", color: "#fff", radius: "lg", shadow: "lg", weight: "800", states: { hover: { opacity: "0.9" } } },
+  animate: "fade-up",
+});
+export const numericStrings = [
+  Text("base", { sx: { opacity: "0.5", grow: "1", shrink: "0", columns: "3", zIndex: "60" } }),
+  Text("responsive", { sx: { opacity: { base: "1", md: 0.8 }, columns: { base: "1", md: "3" } } }),
+  Text("states", { sx: { hover: { opacity: "0.9", scale: "1.02", rotate: "-3" }, states: { active: { scale: "0.98" } } } }),
+  Text("timing", { animate: { preset: "pulse", delay: "50", duration: "300", repeat: "3" } }),
+];
+
 // ---- animate --------------------------------------------------------------
 
 export const animations: AnimateValue[] = ["fade", "none", { name: "spin" }, { preset: "pulse", repeat: 3 }, { preset: "zoom-in", repeat: true }];

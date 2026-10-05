@@ -133,6 +133,9 @@ export function emitStyleTypes(input: StyleTypesInput, typeName: (name: string) 
     decl("SxLength",
       "A CSS length: a number is pixels (`8` → `8px`, `0` → `0`), or a string that passes the length sanitiser — `\"12px\"`, `\"60%\"`, `\"clamp(1rem, 2vw, 2rem)\"`, `\"var(--gap)\"` (letters, digits, `. % + - * / ( ) ,` and spaces; at most 64 characters).",
       "number | (string & {})"),
+    decl("SxNumber",
+      "A unitless number, or the same number as a string (`\"0.9\"`, `\"-1\"`): the runtime parses both. Write plain decimals — `num()` (src/library/sx.ts) drops `\"1e3\"`, `\".5\"` and `\"+1\"`, which `${number}` admits.",
+      "number | `${number}`"),
     decl("SxSpaceToken",
       "The `sx` spacing scale, `auto`, and the safe-area insets (`SPACING`, src/library/sx.ts). Distinct from `SpacingToken`: `sx` has no `small` / `normal` / `large`.",
       literals(space)),
@@ -173,7 +176,7 @@ export function emitStyleTypes(input: StyleTypesInput, typeName: (name: string) 
     decl("SxTextAlign", "Closed (`TEXT_ALIGN`, src/library/sx.ts).", literals(sx.TEXT_ALIGN)),
     decl("SxTextDecoration", "Closed (`TEXT_DECORATION`, src/library/sx.ts).", literals(sx.TEXT_DECORATION)),
     decl("SxZIndex", "A layer token (`Z_INDEX`, src/library/sx.ts; themeable through `$theme({ zIndex })`) or a number.",
-      `${literals(Object.keys(sx.Z_INDEX))} | number`),
+      `${literals(Object.keys(sx.Z_INDEX))} | SxNumber`),
     decl("SxFontSize", "A type-scale token (`FONT_SIZE`, src/library/sx.ts) or a length.", `${literals(Object.keys(sx.FONT_SIZE))} | SxLength`),
     decl("SxFontWeight", "Closed (`FONT_WEIGHT`, src/library/sx.ts): the numeric weights as numbers or strings, `normal`, `bold`.",
       [literals(weights), ...weights.filter((w) => /^\d+$/.test(w))].join(" | ")),
@@ -196,13 +199,13 @@ export function emitStyleTypes(input: StyleTypesInput, typeName: (name: string) 
     ["borderColor", "SxColor"],
     ["shadow", "SxShadow"],
     ["radius", "SxRadius"],
-    ["opacity", "number"],
+    ["opacity", "SxNumber"],
     ["cursor", "SxCursor"],
     ["textDecoration", "SxTextDecoration"],
-    ["scale", "number", "`transform: scale(n)`."],
+    ["scale", "SxNumber", "`transform: scale(n)`."],
     ["translateX", "SxLength"],
     ["translateY", "SxLength"],
-    ["rotate", "number", "Degrees, at most ±360; anything else is dropped."],
+    ["rotate", "SxNumber", "Degrees, at most ±360; anything else is dropped."],
   ];
   const stateKeysRead = keysRead((probe) => sx.serializeSx({ states: { [input.interactionStates[0]!]: probe } }));
   expectSame("sx state-style keys", STATE_STYLE.map(([k]) => k), stateKeysRead,
@@ -239,10 +242,10 @@ export function emitStyleTypes(input: StyleTypesInput, typeName: (name: string) 
     ["w", "SxSize"], ["h", "SxSize"], ["minW", "SxSize"], ["maxW", "SxMaxSize"], ["minH", "SxSize"], ["maxH", "SxMaxSize"],
     ["bg", "SxBackground"], ["color", "SxColor"],
     ["border", "SxBorder"], ["borderColor", "SxColor"],
-    ["radius", "SxRadius"], ["shadow", "SxShadow"], ["opacity", "number", "0–1."],
+    ["radius", "SxRadius"], ["shadow", "SxShadow"], ["opacity", "SxNumber", "0–1."],
     ["display", "SxDisplay"], ["direction", "SxDirection", "`flex-direction`."], ["align", "SxAlign"], ["justify", "SxJustify"],
-    ["wrap", "boolean", "`true` wraps, `false` forbids wrapping."], ["grow", "number"], ["shrink", "number"], ["basis", "SxSize"],
-    ["columns", "number", "N equal grid columns."],
+    ["wrap", "boolean", "`true` wraps, `false` forbids wrapping."], ["grow", "SxNumber"], ["shrink", "SxNumber"], ["basis", "SxSize"],
+    ["columns", "SxNumber", "N equal grid columns."],
     ["position", "SxPosition"], ["top", "SxOffset"], ["right", "SxOffset"], ["bottom", "SxOffset"], ["left", "SxOffset"],
     ["inset", "SxLength"], ["zIndex", "SxZIndex"],
     ["fontSize", "SxFontSize"], ["weight", "SxFontWeight"], ["textDecoration", "SxTextDecoration"],
@@ -274,9 +277,9 @@ export function emitStyleTypes(input: StyleTypesInput, typeName: (name: string) 
   const presets = [...sx.ANIMATE_PRESETS];
   if (presets.includes(sx.ANIMATE_NONE)) throw new Error(`emit-dsl-types: ANIMATE_NONE ("${sx.ANIMATE_NONE}") is also an animation preset`);
   const ANIMATE_TIMING: ReadonlyArray<readonly [string, string, string]> = [
-    ["delay", "number", "Milliseconds, 0–20000; anything outside is ignored."],
-    ["duration", "number", "Milliseconds, above 0 and at most 20000; anything outside is ignored."],
-    ["repeat", "number | true | \"infinite\"", "An iteration count, or loop forever."],
+    ["delay", "SxNumber", "Milliseconds, 0–20000; anything outside is ignored."],
+    ["duration", "SxNumber", "Milliseconds, above 0 and at most 20000; anything outside is ignored."],
+    ["repeat", "SxNumber | true | \"infinite\"", "An iteration count, or loop forever."],
   ];
   // `preset` and its alias `name` select the preset; the rest is timing.
   const ANIMATE_PRESET_KEYS = ["preset", "name"] as const;

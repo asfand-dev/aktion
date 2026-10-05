@@ -23,8 +23,14 @@ Text("x", { sx: { backdrop: "blur(4px)" } });
 Text("x", { sx: { bgSize: "auto" } });
 // @ts-expect-error TS2769 [types] an unknown layer token is not a z-index
 Text("x", { sx: { zIndex: "header" } });
-// @ts-expect-error TS2769 [types] `opacity` is a number
+// @ts-expect-error TS2769 [types] `opacity` is a number or a numeric string: "50%" is dropped
 Text("x", { sx: { opacity: "50%" } });
+// @ts-expect-error TS2769 [types] a state's `opacity` is a number or a numeric string: "90%" is dropped
+Text("x", { sx: { states: { hover: { opacity: "90%" } } } });
+// @ts-expect-error TS2769 [types] `columns` is a count, not a grid template ("3fr" is dropped)
+Text("x", { sx: { columns: "3fr" } });
+// @ts-expect-error TS2769 [types] `grow` is a number or a numeric string: "auto" is dropped
+Text("x", { sx: { grow: "auto" } });
 // @ts-expect-error TS2769 [types] `wrap` is a boolean, not a flex-wrap keyword
 Text("x", { sx: { wrap: "wrap-reverse" } });
 
