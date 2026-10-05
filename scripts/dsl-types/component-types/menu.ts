@@ -10,7 +10,7 @@ export default {
   readonly action?: () => void;
   /** Alias of \`onClick\`. */
   readonly onclick?: () => void;
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   readonly shortcut?: string | number;
   readonly variant?: MenuItemVariant;
   /** Alias of \`variant\`. */
@@ -34,6 +34,7 @@ export default {
   },
   MenuItem: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },

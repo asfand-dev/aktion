@@ -35,7 +35,7 @@ export default {
   },
   TabBar: {
     types: {
-      TabBarItem: "export interface TabBarItem {\n  /** Compared with `active` and passed to `onChange` (as a string). */\n  readonly id: string | number;\n  readonly label: string;\n  /** Font Awesome icon name. */\n  readonly icon?: string;\n  readonly badge?: string | number;\n  /** A leading \"/\" is a router path (`#/path`); anything else is a sanitised URL. */\n  readonly href?: string;\n  readonly disabled?: boolean;\n}",
+      TabBarItem: "export interface TabBarItem {\n  /** Compared with `active` and passed to `onChange` (as a string). */\n  readonly id: string | number;\n  readonly label: string;\n  /** Font Awesome icon name. */\n  readonly icon?: AktionIconName;\n  readonly badge?: string | number;\n  /** A leading \"/\" is a router path (`#/path`); anything else is a sanitised URL. */\n  readonly href?: string;\n  readonly disabled?: boolean;\n}",
     },
     props: {
       items: "readonly TabBarItem[]",

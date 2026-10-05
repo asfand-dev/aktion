@@ -12,6 +12,7 @@ export default {
 }`,
     },
     props: {
+      icon: "AktionIconName",
       src: "string",
       sources: "readonly AudioPlayerSource[]",
       onEnded: "() => unknown",

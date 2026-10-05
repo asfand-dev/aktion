@@ -14,6 +14,7 @@ export default {
   },
   ConfirmDialog: {
     props: {
+      icon: "AktionIconName",
       onConfirm: "() => unknown",
       onCancel: "() => unknown",
     },
@@ -68,9 +69,10 @@ export default {
   },
   SpeedDial: {
     types: {
-      SpeedDialAction: "export interface SpeedDialAction {\n  /** Accessible name and tooltip of the mini-action button. */\n  readonly label: string;\n  /** Icon name (default \"circle\"). */\n  readonly icon?: string;\n  /** Runs on click; the dial then closes. */\n  readonly onClick?: () => void;\n  /** Synonym of `onClick` (used only when `onClick` is absent). */\n  readonly action?: () => void;\n}",
+      SpeedDialAction: "export interface SpeedDialAction {\n  /** Accessible name and tooltip of the mini-action button. */\n  readonly label: string;\n  /** Icon name (default \"circle\"). */\n  readonly icon?: AktionIconName;\n  /** Runs on click; the dial then closes. */\n  readonly onClick?: () => void;\n  /** Synonym of `onClick` (used only when `onClick` is absent). */\n  readonly action?: () => void;\n}",
     },
     props: {
+      icon: "AktionIconName",
       actions: "readonly SpeedDialAction[]",
       onOpenChange: "(open: boolean) => unknown",
     },

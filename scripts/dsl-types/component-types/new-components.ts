@@ -54,6 +54,7 @@ export default {
   },
   FilterPill: {
     props: {
+      icon: "AktionIconName",
       onToggle: "(active: boolean) => unknown",
     },
   },
@@ -82,6 +83,7 @@ export default {
   },
   IconButton: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },

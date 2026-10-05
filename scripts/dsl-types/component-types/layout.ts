@@ -67,6 +67,11 @@ export default {
       items: "readonly (StepsItemData | AktionNode | string | number | false | null | undefined)[]",
     },
   },
+  TabItem: {
+    props: {
+      icon: "AktionIconName",
+    },
+  },
   Tabs: {
     props: {
       // `false` / `null` / `undefined` are skipped (a conditional tab).

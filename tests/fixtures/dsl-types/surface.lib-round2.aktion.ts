@@ -1,15 +1,53 @@
-// Positive fixture for round 2 of the library fixes: the field-shell
-// `optional` marker on every field-shell component, and the generic item
-// callbacks with an empty list. Nothing here is expected to fail.
+// Positive fixture for round 2 of the library fixes: icon-name props typed
+// `AktionIconName`, the field-shell `optional` marker on every field-shell
+// component, and the generic item callbacks with an empty list. Nothing here
+// is expected to fail.
 import {
-  ActivityLog, Calendar, CalendarView, CodeEditor, ColorPicker, DateTimePicker, DrawingCanvas, Gallery,
-  InlineEdit, MaskedInput, MentionInput, NotificationBell, PasswordInput, PinInput, PresenceAvatars,
-  RichTextEditor, SignaturePad, TagInput, TimePicker,
-  type Children,
+  ActivityLog, BadgeList, Breadcrumb, BreadcrumbItem, Button, Calendar, CalendarView, Callout, CodeEditor,
+  ColorPicker, ContextMenu, DateTimePicker, DrawingCanvas, DropdownMenu, FloatingActionButton, Gallery, Icon,
+  IconButton, Image, InlineEdit, MaskedInput, MentionInput, NotificationBell, PasswordInput, PinInput,
+  PresenceAvatars, Rating, RichTextEditor, SegmentedControl, SignaturePad, SpeedDial, StatCard, TabBar,
+  TabItem, Tabs, TagInput, Text, TimePicker, ToggleGroup,
+  type AktionIconName, type Children,
 } from "aktion-runtime/dsl";
 
 export let $title = "";
 export let $date = "";
+
+// ---- icon names: a Font Awesome name, a style-prefixed one, or text -----------
+
+const brand: AktionIconName = "brands:github";
+
+export function Icons(): Children {
+  return [
+    Icon("house"),
+    Icon(brand, { label: "GitHub" }),
+    Icon("regular:star"),
+    Button("Save", { icon: "floppy-disk" }),
+    IconButton("gear", { label: "Settings" }),
+    FloatingActionButton("plus", { label: "New" }),
+    Image("/missing.png", { fallback: "image" }),
+    Image("/missing.png", { fallback: "Image unavailable" }),
+    // `false` hides the icon; "none" turns StatCard's guess off.
+    Callout("Saved", { icon: false }),
+    Callout("Saved", { icon: "circle-check" }),
+    StatCard("Users", { value: 12, icon: "none" }),
+    StatCard("Users", { value: 12, icon: false }),
+    Breadcrumb(["Home", "Docs"], { homeIcon: false }),
+    Breadcrumb([{ label: "Home", to: "/", icon: "house" }, "Docs"], { homeIcon: "compass" }),
+    BreadcrumbItem("Home", { to: "/", icon: "house" }),
+    Rating({ value: 3, icon: "heart" }),
+    Rating({ value: 3, icon: "regular:circle" }),
+    BadgeList(["a", "b"], { icons: ["star", null] }),
+    ToggleGroup("view", { items: [["grid", "Grid", "table-cells"], { value: "list", icon: "list" }] }),
+    SegmentedControl([{ value: "a", label: "A", icon: "bolt" }]),
+    Tabs([TabItem("a", "A", [Text("Body")], { icon: "house" })]),
+    TabBar([{ id: "home", label: "Home", icon: "house" }]),
+    SpeedDial({ actions: [{ label: "Share", icon: "share" }] }),
+    DropdownMenu(Button("Menu"), [{ label: "Delete", icon: "trash", tone: "danger" }]),
+    ContextMenu(Text("target"), [{ label: "Copy", icon: "copy" }]),
+  ];
+}
 
 // ---- the optional marker: `true`, a translation, or `false` -------------------
 

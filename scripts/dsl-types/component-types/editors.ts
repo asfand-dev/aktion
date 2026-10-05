@@ -25,7 +25,7 @@ export default {
   readonly onClick?: () => void;
   /** Synonym of \`onClick\` (used only when \`onClick\` is absent). */
   readonly action?: () => void;
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   /** Trailing shortcut hint, e.g. "⌘C". */
   readonly shortcut?: string;
   readonly variant?: MenuItemVariant;

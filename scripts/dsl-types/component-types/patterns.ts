@@ -4,6 +4,7 @@ import type { ComponentTypeTable } from "./types.js";
 export default {
   ActionStripe: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },
@@ -14,12 +15,14 @@ export default {
   },
   Banner: {
     props: {
+      icon: "AktionIconName",
       onDismiss: "() => unknown",
       onClick: "() => unknown",
     },
   },
   DescriptionItem: {
     props: {
+      icon: "AktionIconName",
       value: "Children",
     },
   },
@@ -28,8 +31,14 @@ export default {
       columns: "1 | 2",
     },
   },
+  EmptyState: {
+    props: {
+      icon: "AktionIconName",
+    },
+  },
   FeatureItem: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },
@@ -45,6 +54,7 @@ export default {
   },
   KanbanCard: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },
@@ -56,6 +66,7 @@ export default {
   },
   Notification: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
       onDismiss: "() => unknown",
     },
@@ -82,6 +93,7 @@ export default {
   },
   SidebarItem: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },
@@ -104,11 +116,13 @@ export default {
   },
   Tile: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },
   TimelineItem: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },
