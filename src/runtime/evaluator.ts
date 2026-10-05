@@ -52,7 +52,7 @@ import { Util } from "./util.js";
 import { Style, Rules } from "./namespaces-extra.js";
 import { registerIcons } from "../icons/index.js";
 import { loadBuiltInThemeFonts, loadFonts } from "../theme/fonts.js";
-import { findThemeByName } from "../theme/index.js";
+import { findThemeByName, THEME_GRADIENT_FUNCTIONS } from "../theme/index.js";
 import { matchRoute, matchRoutePrefix, type Router, type NavigationGuard } from "./router.js";
 import { findComponent } from "../library/registry.js";
 import { findPositionalIndex, chooseNamedBagIndex, callArgShapes } from "../library/types.js";
@@ -6062,9 +6062,16 @@ function collectThemeTokens(value: unknown): Record<string, string> {
 }
 
 /**
+ * The gradient functions a raw gradient string may start with, built from the
+ * table the DSL types print `ThemeGradient` from, so the two cannot drift.
+ */
+const GRADIENT_FUNCTION_PREFIX = new RegExp(`^(?:${THEME_GRADIENT_FUNCTIONS.join("|")})-gradient\\(`);
+
+/**
  * Convert a gradient token value into a safe CSS `linear-gradient(...)`.
  * Accepts: an array of colors (`["#6366f1", "#ec4899"]`), an object
- * `{ stops: [...], angle?: number }`, or a raw gradient/color string.
+ * `{ stops: [...], angle?: number }`, or a raw gradient string whose function
+ * is one of `THEME_GRADIENT_FUNCTIONS` (`radial-gradient(…)`, …).
  * Color stops are validated; anything unsafe collapses the gradient to "".
  */
 function gradientToCss(value: unknown): string {
@@ -6090,7 +6097,7 @@ function gradientToCss(value: unknown): string {
   }
   if (typeof value === "string") {
     const s = value.trim();
-    if (/^(linear|radial|conic)-gradient\(/.test(s) && !/expression\s*\(|javascript\s*:|@import|<\/?\w/i.test(s) && s.length <= 256) {
+    if (GRADIENT_FUNCTION_PREFIX.test(s) && !/expression\s*\(|javascript\s*:|@import|<\/?\w/i.test(s) && s.length <= 256) {
       return s;
     }
   }
