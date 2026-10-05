@@ -771,7 +771,7 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
       ["path", "The current route path."],
       ["params", "The matched route's path params (`/users/:id` → `{ id }`)."],
       ["query", "The parsed query string."],
-      ["hash", "The fragment after `#`."],
+      ["hash", "The fragment after `#`, without the `#` — but currently filled in only when the URL also has a `?query` before it (`/p?x=1#s` → `\"s\"`); otherwise `\"\"` (`/p#s`, and a hash-router URL such as `/#/p?x=1`)."],
       ["navigate", "Navigate to a path."],
       ...docsOf(utilCatalogue, "url."),
     ]), "Reactive URL snapshot (`$util.url`)."),

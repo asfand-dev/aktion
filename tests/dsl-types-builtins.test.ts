@@ -31,6 +31,7 @@ import { createSocketResource } from "../src/runtime/realtime.js";
 import { createScriptResource } from "../src/runtime/interop.js";
 import { createI18n } from "../src/runtime/i18n.js";
 import { Router } from "../src/runtime/router.js";
+import { renderToTextTree } from "../src/runtime/ssr.js";
 import { storage } from "../src/runtime/storage.js";
 import { Util } from "../src/runtime/util.js";
 import { Rules, Style } from "../src/runtime/namespaces-extra.js";
@@ -64,6 +65,17 @@ function interfaceMembers(name: string): string[] {
   throw new Error(`index.d.ts declares no interface ${name}`);
 }
 
+/** `export interface <name>`'s named members → their declared type's source text. */
+function interfaceMemberTypes(name: string): Record<string, string> {
+  for (const s of sf.statements) {
+    if (ts.isInterfaceDeclaration(s) && s.name.text === name) {
+      return Object.fromEntries(s.members.flatMap((m) =>
+        ts.isPropertySignature(m) && m.type ? [[m.name.getText(sf).replace(/^"|"$/g, ""), m.type.getText(sf)]] : []));
+    }
+  }
+  throw new Error(`index.d.ts declares no interface ${name}`);
+}
+
 const newContext = (extra: Partial<Parameters<typeof createContext>[1]> = {}): EvaluationContext =>
   createContext(new StateStore(), { library: defaultLibrary, ...extra });
 const expression = (src: string): Expression => {
@@ -90,10 +102,39 @@ describe("aktion-runtime/dsl builtins — closed value sets equal the runtime's 
     expect(literalUnion("ToastStackPosition")).toEqual([...TOASTS_POSITIONS]);
   });
 
+  it("$toast.configure: every ToastStackPosition is a corner toast.ts's own STACK_POSITIONS honours", () => {
+    // configure() checks a private copy of the corner list, not TOASTS_POSITIONS;
+    // a corner the type allows but that copy lacks would be silently dropped.
+    for (const position of literalUnion("ToastStackPosition")) {
+      const ctx = newContext();
+      (evaluate(expression("$toast"), ctx) as { configure: (o: unknown) => void }).configure({ position });
+      expect(ctx.toastPosition, position).toBe(position);
+    }
+  });
+
   it("$head: the link rels, link attributes and <html> attributes are head.ts's allow-lists", () => {
     expect(literalUnion("HeadLinkRel")).toEqual([...SAFE_LINK_RELS]);
     expect(interfaceMembers("HeadLink")).toEqual(["rel", "href", ...SAFE_LINK_ATTRS]);
     expect(interfaceMembers("HeadHtmlAttrs")).toEqual([...SAFE_HTML_ATTRS]);
+  });
+
+  it("$util.openWindow features: UtilWindowFeatures is exactly the runtime's allow-lists; any other key is dropped", () => {
+    // util.ts's element types tie each allow-list entry to an interface key of
+    // the matching kind; this pins the other direction (no interface key missing
+    // from both lists) and the number / flag split.
+    const types = interfaceMemberTypes("UtilWindowFeatures");
+    const keys = Object.keys(types);
+    expect(keys.length).toBeGreaterThan(10);
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    try {
+      Util.openWindow({ features: { ...Object.fromEntries(keys.map((k) => [k, 1])), evil: 1 } as never });
+      const emitted = Object.fromEntries(String(open.mock.calls[0]?.[2] ?? "").split(",").map((part) => part.split("=")));
+      expect(Object.keys(emitted).sort()).toEqual([...keys].sort());
+      // A number feature is serialised as its number, a flag as yes / no.
+      for (const key of keys) expect(emitted[key], key).toBe(types[key] === "number" ? "1" : "yes");
+    } finally {
+      open.mockRestore();
+    }
   });
 
   it("$util comparison operators: each declared one is honoured, any other string matches nothing", () => {
@@ -259,6 +300,30 @@ describe("aktion-runtime/dsl builtins — the behaviour the declarations state",
     expect(evaluate(expression("$router({ default: [1, 2] })"), ctx)).toEqual([1, 2]);
     expect(evaluate(expression('$router({ "/": { layout: outlet, routes: { default: "text" } } })'), ctx)).toBe("text");
     expect(evaluate(expression('$router({ "/": { layout: outlet, routes: { default: ["a", "b"] } } })'), ctx)).toEqual(["a", "b"]);
+  });
+
+  it("a router arm that yields a bare string is root-not-renderable at render time (the validator flags only a literal root)", () => {
+    const result = renderToTextTree('$app($router({ "/": "home" }))');
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(" ")).toContain("root-not-renderable");
+    expect(renderToTextTree('$app($router({ "/": Text("home") }))').errors).toEqual([]);
+  });
+
+  it("$util.url.hash is filled in only when the URL also has a ?query", () => {
+    // evaluator.ts readUrlSnapshot sets `hash` only beside a `location.search`.
+    // Fixing that means rewording UrlSnapshot.hash in scripts/dsl-types/builtins.ts too.
+    const before = `${location.pathname}${location.search}${location.hash}`;
+    const hashOf = (url: string): unknown => {
+      history.replaceState({}, "", url);
+      return (evaluate(expression("$util.url"), newContext()) as { hash: unknown }).hash;
+    };
+    try {
+      expect(hashOf("/p?x=1#s")).toBe("s");
+      expect(hashOf("/p#s")).toBe("");
+      expect(hashOf("/#/p?x=1")).toBe("");
+    } finally {
+      history.replaceState({}, "", before);
+    }
   });
 
   it("slots carries every unmatched named prop — callbacks included", async () => {

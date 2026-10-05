@@ -284,9 +284,19 @@ const openableUrl = (raw: unknown): string => {
 const isFeatureOn = (value: unknown): boolean =>
   value === true || value === 1 || value === "1" || value === "yes" || value === "true";
 
-/** Window features that may be set, and how each is serialised. */
-const WINDOW_FEATURE_NUMBERS = new Set(["width", "height", "left", "top", "screenX", "screenY", "innerWidth", "innerHeight"]);
-const WINDOW_FEATURE_FLAGS = new Set(["popup", "menubar", "toolbar", "location", "status", "resizable", "scrollbars", "noopener", "noreferrer"]);
+/** The `UtilWindowFeatures` keys whose value type is `V`. */
+type WindowFeatureKey<V> = {
+  [K in keyof UtilWindowFeatures]-?: NonNullable<UtilWindowFeatures[K]> extends V ? K : never;
+}[keyof UtilWindowFeatures];
+
+/**
+ * Window features that may be set, and how each is serialised. The element
+ * types tie every entry to a `UtilWindowFeatures` key of the matching kind; the
+ * other direction (every interface key is on a list) is pinned by
+ * `tests/dsl-types-builtins.test.ts`.
+ */
+const WINDOW_FEATURE_NUMBERS: ReadonlySet<string> = new Set<WindowFeatureKey<number>>(["width", "height", "left", "top", "screenX", "screenY", "innerWidth", "innerHeight"]);
+const WINDOW_FEATURE_FLAGS: ReadonlySet<string> = new Set<WindowFeatureKey<UtilWindowFlag>>(["popup", "menubar", "toolbar", "location", "status", "resizable", "scrollbars", "noopener", "noreferrer"]);
 
 /**
  * Build the third argument to `window.open` from an options bag, dropping

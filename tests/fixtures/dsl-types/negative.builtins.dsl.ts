@@ -122,7 +122,7 @@ $storage.local.set("k", 1, { path: "/" });
 $storage({ persist: true });
 
 // ---- routing / injected / i18n / effects ------------------------------------------------
-// @ts-expect-error TS2345 [types] a string root renders a blank page (the validator only catches a literal one)
+// @ts-expect-error TS2345 [types] a bare-string root is root-not-renderable (renderToTextTree reports it; the validator only catches a literal one)
 $app($router({ "/": "home" }));
 // @ts-expect-error TS2339 a pattern's params are exactly its captures
 const missing: string = ({} as RouteParamsOf<"/users/:id">).name;
