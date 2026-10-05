@@ -37,6 +37,7 @@ export default {
   PresenceAvatars: {
     generics: [{ name: "Person", default: "PresenceAvatarsPerson", constraint: "PresenceAvatarsPerson" }],
     types: {
+      PresenceAvatarsPersonOf: "/** The person type `onClick` receives: the inferred one, or `PresenceAvatarsPerson` when nothing was inferred (an empty list). */\nexport type PresenceAvatarsPersonOf<T> = [T] extends [never] ? PresenceAvatarsPerson : T;",
       PresenceAvatarsPerson: `export interface PresenceAvatarsPerson {
   /** Display name: tooltip, accessible name and initials fallback. */
   readonly name: string;
@@ -48,7 +49,7 @@ export default {
     },
     props: {
       people: "readonly Person[]",
-      onClick: "(person: Person) => unknown",
+      onClick: "(person: PresenceAvatarsPersonOf<Person>) => unknown",
     },
   },
   ScrollSpy: {
