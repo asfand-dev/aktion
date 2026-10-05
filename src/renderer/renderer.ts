@@ -54,12 +54,13 @@ import {
 import type { StateStore } from "../runtime/state.js";
 import { pathsOverlap } from "../runtime/state.js";
 import type { Router } from "../runtime/router.js";
-import { sanitiseHref } from "../library/utils.js";
+import { canonicalSizeToken, RESPONSIVE_BREAKPOINTS, sanitiseHref } from "../library/utils.js";
 import { findComponent } from "../library/registry.js";
 import { applyUniversal } from "../library/sx.js";
 import {
   mapPositionalArgs,
   type ComponentLibrary,
+  type ComponentSpec,
   type InstanceStateSlot,
   type RenderHelpers,
 } from "../library/types.js";
@@ -254,6 +255,85 @@ function applyLibraryOverrides(
     }
   }
   return { ...node, args, universal };
+}
+
+/** One enum-carrying prop slot of a library spec, as `canonicalEnumArgs` reads it. */
+interface EnumSlot {
+  index: number;
+  values: ReadonlySet<string>;
+  /** The prop's type hint has an `object` member, i.e. it takes a breakpoint map. */
+  responsive: boolean;
+}
+
+const ENUM_SLOTS = new WeakMap<ComponentSpec, readonly EnumSlot[]>();
+
+function enumSlotsOf(spec: ComponentSpec): readonly EnumSlot[] {
+  let slots = ENUM_SLOTS.get(spec);
+  if (!slots) {
+    slots = spec.props.flatMap((prop, index) => (prop.enum && prop.enum.length > 0
+      ? [{
+          index,
+          values: new Set(prop.enum),
+          responsive: prop.type.split("|").some((part) => part.trim() === "object"),
+        }]
+      : []));
+    ENUM_SLOTS.set(spec, slots);
+  }
+  return slots;
+}
+
+/** `value` in its canonical spelling when it is a legacy one for a member of `values`, else unchanged. */
+function canonicalEnumValue(value: unknown, values: ReadonlySet<string>): unknown {
+  if (typeof value !== "string" || values.has(value)) return value;
+  const canonical = canonicalSizeToken(value);
+  return values.has(canonical) ? canonical : value;
+}
+
+/**
+ * Rewrite legacy size spellings (`s` / `m` / `l` / `small` / `normal` /
+ * `large`, see `canonicalSizeToken`) to the canonical member of each enum prop
+ * before a library spec renders.
+ *
+ * The validator accepts a legacy spelling whenever its canonical form is in the
+ * prop's enum, and the generated DSL types advertise it — but a renderer that
+ * copies the token into `data-size` or a lookup table only knows the canonical
+ * names, so `Button({ size: "s" })` and `Avatar({ size: "large" })` validated
+ * clean and silently rendered the default — 19 enum props across the library
+ * did, when this was written. Doing it here, once, covers every spec and every
+ * value that reaches a spec at runtime (a `$variable` the validator never
+ * sees), instead of trusting each renderer to remember.
+ *
+ * Only a string that is NOT already in the enum and whose canonical form IS is
+ * touched; anything else reaches the renderer exactly as written, so its own
+ * fallback still decides. On a prop that takes a breakpoint map (its type hint
+ * has an `object` member) each breakpoint's value is treated the same way.
+ *
+ * A copy, never a mutation — the node may be a memoised value (see
+ * `applyLibraryOverrides`). Returns `node` itself when nothing changed.
+ */
+function canonicalEnumArgs(spec: ComponentSpec, node: ComponentNode): ComponentNode {
+  let args: unknown[] | null = null;
+  for (const slot of enumSlotsOf(spec)) {
+    if (slot.index >= node.args.length) continue;
+    const raw = node.args[slot.index];
+    let next = canonicalEnumValue(raw, slot.values);
+    if (next === raw && slot.responsive && raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+      let map: Record<string, unknown> | null = null;
+      for (const bp of RESPONSIVE_BREAKPOINTS) {
+        if (!Object.prototype.hasOwnProperty.call(raw, bp)) continue;
+        const value = (raw as Record<string, unknown>)[bp];
+        const canonical = canonicalEnumValue(value, slot.values);
+        if (canonical === value) continue;
+        map ??= { ...(raw as Record<string, unknown>) };
+        map[bp] = canonical;
+      }
+      if (map) next = map;
+    }
+    if (next === raw) continue;
+    args ??= [...node.args];
+    args[slot.index] = next;
+  }
+  return args ? { ...node, args } : node;
 }
 
 /** The same, for a user-declared `function Foo(a, b)` invocation. */
@@ -1053,7 +1133,10 @@ export class Renderer {
     if (overrides && overrides.size > 0) {
       node = applyLibraryOverrides(node, spec, overrides);
     }
-    const props = mapPositionalArgs(spec, node.args);
+    // What the spec renders from. `node` itself stays as the author wrote it, so
+    // the DevTools prop records below still show `size: "small"`.
+    const renderNode = canonicalEnumArgs(spec, node);
+    const props = mapPositionalArgs(spec, renderNode.args);
 
     // Track an auto-increment counter so `helpers.renderNode(child)` calls
     // get a stable sibling index even when a component renders several
@@ -1171,7 +1254,7 @@ export class Renderer {
     const libPhase: RenderPhase = this.profiledInstances.has(instancePath) ? "update" : "mount";
     const libStart = this.profiling ? nowMs() : 0;
     try {
-      const rawOut = spec.render(node, props, helpers);
+      const rawOut = spec.render(renderNode, props, helpers);
       // A fragment-returning component (Show / Async / Lazy) gets a host span
       // so the universal channel is not silently discarded — see hostUniversal.
       const out = node.universal ? hostUniversal(rawOut, node.universal) : rawOut;
