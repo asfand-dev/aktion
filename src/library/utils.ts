@@ -236,19 +236,30 @@ export function sanitiseCssLength(raw: unknown, fallback: string): string {
  * Validate an LLM-supplied CSS colour value before it lands on an inline
  * `color: …` declaration. Accepts the full standard colour vocabulary —
  * hex (`#00ff00`), named colours (`tomato`), functional notations
- * (`rgb(...)`, `hsl(...)`, `color-mix(...)`), and `var(--token)` — while
+ * (`rgb(...)`, `hsl(...)`, `oklch(...)`, `color-mix(...)`) including the
+ * slash-alpha form (`rgb(0 0 0 / 50%)`), and `var(--token, fallback)` — while
  * rejecting anything that could break out of the single declaration:
- * `;`/`{`/`}` (declaration separators), quotes/backslash/angle-brackets,
+ * `;`/`{`/`}` (declaration separators), `:`, `!`, quotes/backslash/
+ * angle-brackets, a comment (`/*` would swallow the declarations after it),
  * and the `url()` / `expression()` / `javascript:` / `@import` attack
  * vectors. Returns an empty string for blank or rejected input so callers
  * can drop the style entirely.
+ *
+ * The length cap only bounds the work: the alphabet alone is what keeps a value
+ * inside its declaration. It is generous enough for a nested fallback chain
+ * (`var(--brand, color-mix(in oklch, var(--accent) 40%, white))`), which the
+ * old 64-character cap rejected along with every slash-alpha colour.
  */
-const CSS_COLOR_ALLOWED = /^[a-zA-Z0-9#%.,()\s+\-]+$/;
+const CSS_COLOR_ALLOWED = /^[a-zA-Z0-9#%.,()\s+\-/]+$/;
+const CSS_COLOR_MAX_LENGTH = 256;
 export function sanitiseCssColor(raw: unknown): string {
   const trimmed = asString(raw).trim();
   if (!trimmed) return "";
-  if (trimmed.length > 64) return "";
+  if (trimmed.length > CSS_COLOR_MAX_LENGTH) return "";
   if (!CSS_COLOR_ALLOWED.test(trimmed)) return "";
+  // `*` is outside the alphabet, so neither comment delimiter can be spelled
+  // today; this keeps a later widening of the alphabet from allowing one.
+  if (/\/\*|\*\//.test(trimmed)) return "";
   if (/\burl\s*\(|\bexpression\s*\(|javascript\s*:|@import\b/i.test(trimmed)) return "";
   return trimmed;
 }
