@@ -1471,6 +1471,7 @@ function installComputedStateDerivations(
     ctx.trackedState = tracker;
     try {
       const value = evaluate(entry.expr, ctx);
+      if (isDerivedResourceCall(entry.expr)) keepOnDone(ctx.state.get(entry.name), value);
       ctx.state.set(entry.name, value);
     } finally {
       ctx.trackedState = previousTracker;
@@ -1570,6 +1571,36 @@ function isHttpResourceCall(expr: Expression): boolean {
     expr.callee.kind === "StateRef" &&
     expr.callee.name === "http"
   );
+}
+
+/**
+ * `true` for a `$query({...})` / `$mutation({...})` call. Unlike `$http`, an
+ * atom holding one is a derivation: its bag is built in the derivation pass —
+ * after the top-level statements ran — and built again whenever state its
+ * config reads changes (a new `url` is a new query).
+ */
+function isDerivedResourceCall(expr: Expression): boolean {
+  return (
+    expr.kind === "Invoke" &&
+    expr.callee.kind === "StateRef" &&
+    (expr.callee.name === "query" || expr.callee.name === "mutation")
+  );
+}
+
+/**
+ * Carry `onDone` to a `$query` / `$mutation` atom's newly built bag.
+ * `$save.onDone = () => $list.refetch()` at the top level runs before the
+ * derivation pass builds `$save`'s bag (it lands on the atom's seed value),
+ * and a rebuild after a dependency changed starts from a fresh bag, so the
+ * callback would otherwise be dropped. A bag that already has its own `onDone`
+ * (a cached `$query` another atom shares) keeps it.
+ */
+function keepOnDone(previous: unknown, next: unknown): void {
+  if (previous === next || !isEndpointResource(next) || typeof next.onDone === "function") return;
+  const onDone = previous !== null && typeof previous === "object"
+    ? (previous as { onDone?: unknown }).onDone
+    : undefined;
+  if (typeof onDone === "function") next.onDone = onDone as EndpointResource["onDone"];
 }
 
 /**
