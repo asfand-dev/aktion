@@ -315,7 +315,8 @@ const httpResourceMembers: readonly NamespaceMember[] = [
 ];
 
 const queryResourceMembers: readonly NamespaceMember[] = [
-  ...httpResourceMembers,
+  ...httpResourceMembers.filter((m) => m.name !== "onDone"),
+  prop("onDone", "Settable callback fired each time the request settles (success or error). Never fired in infinite mode — chain `.loadMore().then(…)` instead."),
   method("loadMore", "loadMore()", "Fetch the next page (infinite mode)."),
   prop("hasMore", "`true` while more pages are available (infinite mode)."),
   prop("loadingMore", "`true` while a `loadMore()` page is in flight."),
