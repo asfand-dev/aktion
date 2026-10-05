@@ -232,7 +232,7 @@ rejects each one it can see with a coded error at the exact line:
 - **Your components bind by position, as JavaScript does.** A call from one of
   these modules to a component declared in one passes `UserCard({ name })` as
   the first argument, not as named props. To key a row, give the component a
-  trailing `_opts?: { readonly key?: Key }` parameter and pass `{ key: item.id }`
+  trailing `_opts?: ComponentOptions` parameter (`{ readonly key?: Key }`) and pass `{ key: item.id }`
   last; for children, declare a `children: Children` parameter (or
   `...kids: AktionNode[]`). Both are in the example below.
 - **Trust `tsc`.** The `aktion-runtime/dsl` types are exact — every prop, enum
@@ -242,7 +242,7 @@ rejects each one it can see with a coded error at the exact line:
 
 ```ts aktion
 // src/app.aktion.ts
-import { $app, Button, Column, PageHeader, Text, type AktionNode, type Children, type Key } from "aktion-runtime/dsl";
+import { $app, Button, Column, PageHeader, Text, type AktionNode, type Children, type ComponentOptions } from "aktion-runtime/dsl";
 
 let $count = 0;
 const fruit = [{ id: 1, label: "Apples" }, { id: 2, label: "Pears" }];
@@ -252,7 +252,7 @@ function Counter(label: string): AktionNode {
 }
 
 // A trailing `_opts` parameter takes a key; a declared parameter takes children.
-function Item(label: string, _opts?: { readonly key?: Key }): AktionNode {
+function Item(label: string, _opts?: ComponentOptions): AktionNode {
   return Text(label);
 }
 function Shelf(title: string, children: Children): AktionNode {

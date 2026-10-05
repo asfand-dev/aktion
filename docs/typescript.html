@@ -150,10 +150,10 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
         <code>function Panel(title: string)</code>. Two conventions type-check and bind
         as written:
       </p>
-<pre><code>import { Column, Row, Text, type AktionNode, type Children, type Key } from "aktion-runtime/dsl";
+<pre><code>import { Column, Row, Text, type AktionNode, type Children, type ComponentOptions } from "aktion-runtime/dsl";
 
-// A trailing optional parameter takes the key.
-export function OrderRow(name: string, total: number, _opts?: { readonly key?: Key }): AktionNode {
+// A trailing optional parameter takes the key (`ComponentOptions` is `{ readonly key?: Key }`).
+export function OrderRow(name: string, total: number, _opts?: ComponentOptions): AktionNode {
   return Row([Text(name), Text(String(total))], { gap: "s" });
 }
 

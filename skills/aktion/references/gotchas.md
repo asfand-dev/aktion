@@ -44,7 +44,7 @@ value of the parameter at its position (`KVRow({ key: "a", value: "1" })` passes
 the whole object to the first parameter). `key:` is read as the identity key only
 from an extra object after the declared parameters, or from a last argument whose
 only property is `key` (`Item(id, { key: id })` for
-`function Item(label: string, _opts?: { readonly key?: Key })`). The import's
+`function Item(label: string, _opts?: ComponentOptions)`, where `ComponentOptions` is `{ readonly key?: Key }`). The import's
 spelling (`./cards` or `./cards.aktion.ts`) makes no difference. A call written in
 `.aktion`, or to a component declared in `.aktion`, keeps named props.
 
