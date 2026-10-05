@@ -102,11 +102,43 @@ function relocateControlAria(wrapper: HTMLElement, control: HTMLElement): void {
       control.setAttribute("aria-required", "true");
       continue;
     }
-    if (attr === "disabled" && !supportsDisabled) {
-      control.setAttribute("aria-disabled", "true");
+    if (attr === "disabled") {
+      if (supportsDisabled) control.setAttribute("disabled", value);
+      else control.setAttribute("aria-disabled", "true");
+      lockPicker(control);
       continue;
     }
     control.setAttribute(attr, value);
+  }
+}
+
+/**
+ * Make a custom picker really disabled, not only announced as disabled.
+ *
+ * An enclosing `InputGroup(…, { disabled: true })` reaches the picker through
+ * the DOM it rendered — the picker's own `disabled` prop was never set, so its
+ * handlers still ran. A `<button>` trigger takes the native attribute, but
+ * MultiSelect's is a `div role="combobox"`, where `aria-disabled` alone left a
+ * tab stop that still opened the list: assistive tech announced a disabled
+ * control that worked. Every button inside the picker (MultiSelect's chip
+ * remove, Combobox's clear, the options) is disabled with it — a greyed-out
+ * field that still deletes its value is worse than none, and MultiSelect's own
+ * `disabled` had left its chips removable too. The fresh tree is what the morph
+ * reconciler applies, so a handler cleared here is cleared on the live node,
+ * and a later render without `disabled` brings every one of them back.
+ */
+function lockPicker(trigger: HTMLElement): void {
+  if (!trigger.matches(PICKER_TRIGGER_SELECTOR)) return;
+  const picker = trigger.closest<HTMLElement>(".rui-combobox, .rui-multiselect") ?? trigger;
+  picker.setAttribute("data-disabled", "true");
+  if (!(trigger instanceof HTMLButtonElement)) {
+    trigger.removeAttribute("tabindex");
+    trigger.onclick = null;
+    trigger.onkeydown = null;
+  }
+  for (const button of picker.querySelectorAll<HTMLButtonElement>("button")) {
+    button.setAttribute("disabled", "");
+    button.onclick = null;
   }
 }
 
