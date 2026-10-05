@@ -8,7 +8,7 @@ Aktion module written in TypeScript.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm run typecheck  # tsc --noEmit
+npm run typecheck  # declarations for any .aktion module (aktion-dts), then tsc
 npm run build      # production build → dist/
 npm test           # run the unit tests (Vitest, network mocked)
 ```
@@ -37,6 +37,12 @@ tests/
 - Atoms that change are declared with `let` (`export let $draft = ""`), and
   other modules change them through exported actions.
 - Types are imported with `import type` — they are erased before linking.
+- Host code (`src/main.ts`, `tests/`) imports only an Aktion module's default
+  export, the compiled program (`import app from "./app.aktion.ts"`). Its other
+  exports — the helpers in `api.aktion.ts` too — exist inside Aktion programs
+  only: importing one from host code fails `vite build`, and throws on use
+  under `vite dev` and Vitest. Test a helper through a program instead
+  (`compileAktionSource` from `aktion-runtime/vite`).
 - Aktion runs the code under its own rules and rejects what would behave
   differently from JavaScript (`async`/`await`, `var`, `this`, a closure reading
   a variable reassigned after it was created, …) with an error at the exact line.

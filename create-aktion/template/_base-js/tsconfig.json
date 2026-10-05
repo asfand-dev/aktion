@@ -8,7 +8,10 @@
     "noEmit": true,
     "skipLibCheck": true,
     // `.aktion.js` modules contribute their types to host code and tests.
-    // Add `"checkJs": true` to have `tsc` check them too.
+    // `"checkJs": true` would type-check the modules themselves too, but under
+    // `strict` they then need JSDoc types (parameters, `$http` resources), which
+    // these modules do not carry. Write them in TypeScript (`--lang ts`) to have
+    // them checked.
     "allowJs": true,
     "types": ["vite/client"]
   },

@@ -7,7 +7,7 @@ Vite.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm run typecheck  # tsc --noEmit over src/ and tests/
+npm run typecheck  # declarations for any .aktion module (aktion-dts), then tsc over src/ and tests/
 npm run build      # production build → dist/
 npm run preview    # preview the production build
 ```
@@ -18,7 +18,9 @@ npm run preview    # preview the production build
   `export default $app(...)`.
 - The `aktion-runtime/vite` plugin erases the types (with `ts-blank-space`,
   without moving a character, so errors point at your lines) and compiles the
-  module like any `.aktion` file; `src/main.ts` mounts the result.
+  module like any `.aktion` file; `src/main.ts` mounts the result. Host code
+  imports only that default export: an Aktion module's other exports exist
+  inside Aktion programs.
 - Built-ins (`Column`, `Text`, `$state`, `$http`, …) come from
   `aktion-runtime/dsl`, a types-only module: `tsc` checks every call against the
   component library, and the import vanishes at build time.

@@ -16,7 +16,8 @@ npm run preview    # preview the production build
 - `src/app.aktion.js` is the **entry** module — it registers the UI root with
   `export default $app(...)`.
 - The `aktion-runtime/vite` plugin compiles it like any `.aktion` file;
-  `src/main.ts` mounts the result.
+  `src/main.ts` mounts the result. Host code imports only that default export:
+  an Aktion module's other exports exist inside Aktion programs.
 - Built-ins (`Column`, `Text`, `$state`, `$http`, …) can be imported from
   `aktion-runtime/dsl`, a types-only module that gives your editor completions
   and documentation; the import vanishes at build time.

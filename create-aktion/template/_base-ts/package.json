@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "typecheck": "tsc"
+    "typecheck": "aktion-dts --quiet && tsc"
   },
   "devDependencies": {
     "ts-blank-space": "~0.9.0",
