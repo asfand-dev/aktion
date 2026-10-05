@@ -17,7 +17,7 @@ export default {
       labels: "readonly (string | number)[]",
       data: "readonly LineChartRow[]",
       height: "number | `${number}` | `${number}px`",
-      onPointClick: "(label: string, value: number | null | undefined, seriesName: string) => void",
+      onPointClick: "(label: string, value: number, seriesName: string) => void",
     },
   },
   PieChart: {

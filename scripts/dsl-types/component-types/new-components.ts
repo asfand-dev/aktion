@@ -63,17 +63,20 @@ export default {
       GanttTask: `export interface GanttTask {
   readonly id?: string | number;
   readonly label?: string | number;
+  /** Read as the bar label when \`label\` is absent. */
+  readonly name?: string | number;
   readonly start: string;
   readonly end: string;
   readonly progress?: number;
   readonly tone?: GanttTaskTone;
+  /** Read as the tone when \`tone\` is absent. */
+  readonly status?: GanttTaskTone;
 }`,
     },
     props: {
       tasks: "readonly GanttTask[]",
       startDate: "string",
       endDate: "string",
-      today: "boolean | string",
       onTaskClick: "(id: string) => void",
     },
   },
@@ -124,6 +127,7 @@ export default {
       QueryBuilderOperatorDef: `export interface QueryBuilderOperatorDef {
   readonly value: QueryBuilderOperator;
   readonly label?: string | number;
+  /** Scopes the operator to fields of this \`type\` (compared case-insensitively). */
   readonly type?: QueryBuilderFieldType;
 }`,
       QueryBuilderField: `export interface QueryBuilderField {
