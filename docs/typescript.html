@@ -198,8 +198,9 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
       </ul>
       <p>
         The rest it <strong>rejects</strong>, with an error at the exact line and a
-        stable code (the full list, with every message, is in the
-        <a href="https://github.com/asfand-dev/aktion/blob/main/CHANGELOG.md">CHANGELOG</a>):
+        stable code (the
+        <a href="https://github.com/asfand-dev/aktion/blob/main/CHANGELOG.md">CHANGELOG</a>
+        lists every code; each error message says what to write instead):
       </p>
       <table class="signature-table">
         <thead><tr><th>Code</th><th>Rejected</th><th>Instead</th></tr></thead>
@@ -214,6 +215,7 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
           <tr><td>E112, E115</td><td>names the runtime owns (<code>route</code>, <code>params</code>, a binding named like a built-in component, <code>__a1_x</code> / <code>__l1_x</code>)</td><td>rename</td></tr>
           <tr><td>E113, E117&ndash;E121</td><td>block statements, spreads in a built-in&rsquo;s props, <code>$app</code> anywhere but the top level, an <code>$effect</code> callback that is not inline, deps that are not an array literal, returning a cleanup from an effect</td><td>see each message</td></tr>
           <tr><td>E114, E124&ndash;E126</td><td>a derived atom that is also assigned, destructuring a <code>$store</code> / <code>$form</code> handle, assigning an undeclared name, components or hooks declared inside functions</td><td>see each message</td></tr>
+          <tr><td>E122, E123</td><td>an aliased <code>aktion-runtime/dsl</code> import (<code>{ Button as B }</code>); a name imported from <code>aktion-runtime/dsl</code> and also declared in the module</td><td>import each built-in by its own name; remove one of the two</td></tr>
           <tr><td>W201, W202</td><td><em>Warnings:</em> a module-level value from <code>Date.now()</code>, <code>Math.random()</code> or <code>crypto</code> (recomputed each render); a state-writing function called while rendering</td><td>compute it in a component, effect or action</td></tr>
         </tbody>
       </table>
@@ -224,7 +226,9 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
         <li>property access on an array plucks (<code>users.name</code>), and reading a method as a value (<code>const up = s.toUpperCase</code>) gives <code>undefined</code>;</li>
         <li>a call to an unknown function renders a placeholder instead of throwing &mdash; <code>tsc</code> catches the unknown name;</li>
         <li><code>cond &amp;&amp; Text("x")</code> renders <code>false</code> when <code>cond</code> is false &mdash; use <code>cond ? Text("x") : null</code> (the types reject the boolean child);</li>
-        <li>a props bag must be an object literal at the call: <code>Button("Go", opts)</code> binds <code>opts</code> to <code>onClick</code>. The ESLint rule <code>aktion/props-literal</code> flags it.</li>
+        <li>a props bag must be an object literal at the call: <code>Button("Go", opts)</code> binds <code>opts</code> to <code>onClick</code>. The ESLint rule <code>aktion/props-literal</code> flags it;</li>
+        <li>the other way round, in a call with two or more arguments the last object literal is read as the props bag as soon as one of its keys is a prop name, even where TypeScript matched it to an object parameter: <code>HTMLTag("section", { "data-x": "1", id: "a" })</code> renders <code>&lt;section id="a"&gt;</code> and drops <code>data-x</code>. Pass <code>{ attributes: { … }, id: "a" }</code> instead; <code>aktion/props-literal</code> flags this too;</li>
+        <li><code>$router</code> reads its route table, and each layout arm&rsquo;s <code>routes</code>, by syntax: a variable or a call renders nothing and spread entries are skipped, although <code>RouteTable</code> accepts any object. The ESLint rule <code>aktion/router-literal</code> flags both.</li>
       </ul>
 
       <h3 id="aktion-ts-sidecars">Importing <code>.aktion</code> modules from TypeScript</h3>
@@ -256,9 +260,12 @@ npx aktion-dts --check</code></pre>
       <h3 id="aktion-ts-eslint">Linting</h3>
       <p>
         <code>aktion-runtime/eslint</code> exports <code>aktionTypeScriptConfig</code>
-        for <code>**/*.aktion.ts</code> and <code>**/*.aktion.js</code>: it turns off
-        the rules whose autofixes break Aktion code, and adds the type-aware
-        <code>aktion/props-literal</code> rule. Spread it after your own config:
+        for <code>**/*.aktion.ts</code> and <code>**/*.aktion.js</code>. It turns off
+        the rules whose autofixes break Aktion code and the ones that report
+        Aktion&rsquo;s own idioms (component calls, top-level <code>$app</code> and
+        <code>$effect</code>, actions that assign atoms). It adds two rules of its
+        own: the type-aware <code>aktion/props-literal</code> and
+        <code>aktion/router-literal</code>. Spread it after your own config:
       </p>
 <pre><code>// eslint.config.js
 import tseslint from "typescript-eslint";
@@ -268,9 +275,30 @@ import { aktionTypeScriptConfig } from "aktion-runtime/eslint";
 export default [
   ...tseslint.configs.recommended,
   unicorn.configs.recommended,
-  { languageOptions: { parserOptions: { projectService: true } } },
+  {
+    languageOptions: {
+      parserOptions: {
+        projectService: { allowDefaultProject: ["*.config.js", "*.config.ts"] },
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
   ...aktionTypeScriptConfig,
 ];</code></pre>
+      <p>
+        <code>allowDefaultProject</code> is there for the files at the project root:
+        <code>eslint.config.js</code>, <code>vite.config.ts</code> and
+        <code>vitest.config.ts</code> are outside the tsconfig&rsquo;s
+        <code>include</code>, and without it the project service refuses to parse
+        them. Because the preset comes last, it also wins over your own settings
+        for these files, and two of its entries switch a rule <em>on</em> as an
+        error: <code>object-shorthand</code> in <code>properties</code> mode
+        (<code>{ title: title }</code> becomes <code>{ title }</code>) and
+        <code>unicorn/switch-case-braces</code> in <code>avoid</code> mode, which
+        removes the braces Aktion cannot parse around a <code>case</code> body. The
+        second needs <code>eslint-plugin-unicorn</code>; without it, add a block
+        after the preset that turns <code>unicorn/switch-case-braces</code> off.
+      </p>
 
       <h2 id="install">Install &amp; tsconfig</h2>
       <p>
@@ -349,18 +377,21 @@ export default [
           <tr><td><code>aktion-runtime</code></td><td>The runtime: registers <code>&lt;aktion-app&gt;</code> on import, plus <code>registerComponents</code>, the themes, the SSR helpers, and every core type.</td></tr>
           <tr><td><code>aktion-runtime/test</code></td><td>The Testing-Library-style API (<code>render</code>, <code>renderComponent</code>, <code>within</code>, <code>axe</code>, <code>fetch</code> mocks). See <a href="testing.html">Testing</a>.</td></tr>
           <tr><td><code>aktion-runtime/devtools</code></td><td>The DevTools backend and in-page panel. See <a href="devtools.html">DevTools</a>.</td></tr>
+          <tr><td><code>aktion-runtime/coverage</code></td><td>The DOM&#8209;free <code>coverage</code> API &mdash; the lines, functions and branches of Aktion source the interpreter reached &mdash; sharing one session with <code>aktion-runtime/test</code>, for a Vitest <code>globalSetup</code> or a Node script. See <a href="testing.html">Testing</a>.</td></tr>
           <tr><td><code>aktion-runtime/language</code></td><td>DOM&#8209;free language + tooling surface: diagnostics, completions, hover, navigation, semantic tokens, signature help, <code>formatProgram</code>.</td></tr>
+          <tr><td><code>aktion-runtime/eslint</code></td><td>The ESLint processor and presets: <code>configs.recommended</code> for <code>.aktion</code> files, <code>aktionTypeScriptConfig</code> and the <code>aktion/props-literal</code> and <code>aktion/router-literal</code> rules for <code>.aktion.ts</code> / <code>.aktion.js</code> &mdash; see <a href="#aktion-ts-eslint">Linting</a>.</td></tr>
           <tr><td><code>aktion-runtime/vite</code></td><td>The Vite plugin for <code>.aktion</code>, <code>.aktion.ts</code> and <code>.aktion.js</code> modules (default export), the compile helpers, the TypeScript frontend and <code>emitAktionDeclarations</code>.</td></tr>
           <tr><td><code>aktion-runtime/dsl</code></td><td><em>Types only.</em> Every built-in component, hook and namespace, for <code>.aktion.ts</code> modules &mdash; see <a href="#aktion-dsl">above</a>.</td></tr>
           <tr><td><code>aktion-runtime/dsl-globals</code></td><td><em>Types only.</em> The same names declared ambiently, for a tsconfig without the DOM lib.</td></tr>
           <tr><td><code>aktion-runtime/aktion-modules</code></td><td><em>Types only.</em> Ambient <code>declare module "*.aktion"</code> declarations &mdash; see above.</td></tr>
-          <tr><td><code>aktion-runtime/style.css</code></td><td>The base stylesheet, for hosts that render outside the shadow root.</td></tr>
           <tr><td><code>aktion-runtime/system_prompt.txt</code><br /><code>aktion-runtime/system_prompt_chat.txt</code></td><td>The full and chat-sized system prompts as plain text files, for build steps that read them from disk. From a program, prefer <code>element.getSystemPrompt()</code>.</td></tr>
+          <tr><td><code>aktion-runtime/skill</code></td><td>The Aktion agent skill (<code>SKILL.md</code>), for tools that load it from the package.</td></tr>
         </tbody>
       </table>
       <p>
-        Only <code>aktion-runtime</code> and <code>aktion-runtime/vite</code> ship a
-        CommonJS build; the rest are ESM&#8209;only.
+        Only <code>aktion-runtime</code>, <code>aktion-runtime/vite</code> and
+        <code>aktion-runtime/eslint</code> ship a CommonJS build; the other
+        JavaScript entries are ESM&#8209;only.
       </p>
 
       <h2 id="types">The public types</h2>
