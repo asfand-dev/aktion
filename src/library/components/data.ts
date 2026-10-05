@@ -57,7 +57,9 @@ export const Col: ComponentSpec = {
     { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) used by `format: \"number\"|\"currency\"|\"date\"` for separators, digit grouping and date order, in a Table and a DataGrid alike. Defaults to the Table's `locale` (a DataGrid has none), then the viewer's browser." },
     // Slots 13–17: DataGrid advanced features. Table ignores these.
     { name: "initiallyHidden", type: "boolean", optional: true, aliases: ["colHidden"], description: "DataGrid: initially hide this column. The user can reveal it from the column settings panel." },
-    { name: "pinned", type: "string", optional: true, enum: ["left"], description: "DataGrid: pin this column to the left edge so it stays visible during horizontal scrolling. Pinned columns move to the front of the table." },
+    // No "right": DataGrid only ever pinned to the left edge, so `"right"` was
+    // offered here and silently did nothing.
+    { name: "pinned", type: "string", optional: true, enum: ["left", "none"], description: "DataGrid: `\"left\"` pins this column to the left edge so it stays visible during horizontal scrolling (pinned columns move to the front of the table); `\"none\"`, the default, leaves it unpinned. There is no right-edge pinning." },
     { name: "resizable", type: "boolean", optional: true, description: "DataGrid: per-column override for resizing. Takes precedence over the grid-level `resizable` prop." },
     { name: "minWidth", type: "string", optional: true, description: "DataGrid: minimum width when the column is resized (`80px`, `5rem`, or a number of px; default 50px). A `%` is a share of the grid's visible width." },
     { name: "maxWidth", type: "string", optional: true, description: "DataGrid: maximum width when the column is resized (`400px`, `50%`, or a number of px; default 2000px). A `%` is a share of the grid's visible width." },

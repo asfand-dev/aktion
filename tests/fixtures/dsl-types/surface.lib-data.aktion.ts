@@ -37,7 +37,7 @@ export function Feeds(): Children {
 export function Grids(): Children {
   return [
     DataGrid([
-      Col("Name", ["a"], { width: 240, minWidth: 120, maxWidth: "50%" }),
+      Col("Name", ["a"], { width: 240, minWidth: 120, maxWidth: "50%", pinned: "none" }),
       Col("Notes", ["b"], { minWidth: "5rem", maxWidth: 400, pinned: "left" }),
     ], { maxHeight: 480, resizable: true }),
     Table([Col("Amount", [1234.5], { format: "number", locale: "de-DE", width: "30%" })], { maxHeight: 320 }),

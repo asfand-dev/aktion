@@ -13,6 +13,8 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { render, cleanup, flush } from "../src/testing/index.js";
+import { parse } from "../src/parser/index.js";
+import { defaultLibrary, validateProgramSchema } from "../src/library/index.js";
 
 afterEach(() => cleanup());
 
@@ -130,6 +132,26 @@ describe("Col(minWidth:) as a resize bound", () => {
 
   it("falls back to 50px for a length that does not parse", async () => {
     expect(await resizeTo('"wide"')).toBe("50px");
+  });
+});
+
+describe("Col(pinned:)", () => {
+  const errorsFor = (pinned: string): string[] =>
+    validateProgramSchema(parse(`$app(DataGrid([Col("A", [1], { pinned: "${pinned}" })]))`), defaultLibrary).map((e) => e.message);
+
+  it("offers only the edge DataGrid pins to, plus an explicit none", () => {
+    expect(errorsFor("left")).toEqual([]);
+    expect(errorsFor("none")).toEqual([]);
+    // "right" used to validate and then render unpinned.
+    expect(errorsFor("right").join("\n")).toMatch(/pinned="right"/);
+  });
+
+  it("pins on \"left\" and leaves a \"none\" column unpinned", async () => {
+    const screen = render(`$app(DataGrid([Col("A", ["a"], { pinned: "none" }), Col("B", ["b"], { pinned: "left" })]))`);
+    await settle();
+    const pinned = [...screen.shadowRoot.querySelectorAll(".rui-data-grid-table thead th[data-col-key]")]
+      .map((th) => `${th.getAttribute("data-col-key")}:${th.getAttribute("data-pinned") ?? "-"}`);
+    expect(pinned).toEqual(["B:true", "A:-"]);
   });
 });
 
