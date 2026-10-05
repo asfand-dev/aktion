@@ -128,22 +128,35 @@ describe("Col(minWidth:) as a resize bound", () => {
     expect(await resizeTo('"120px"')).toBe("120px");
   });
 
-  it("measures any other length against the grid's viewport", async () => {
-    // Stand in for layout: the probe is the only element styled `width: 5rem`.
+  it("measures any other length against the grid's viewport, in layout px", async () => {
+    // Stand in for layout inside a `transform: scale(0.5)` container, with the
+    // numbers Chromium measured there: a `5rem` probe is 80px of layout
+    // (`offsetWidth`) and a 40px rect. The probe is the only element styled
+    // `width: 5rem`; the bound is written back as CSS px, so it must be 80.
     const proto = HTMLElement.prototype;
-    const original = proto.getBoundingClientRect;
+    const originalRect = proto.getBoundingClientRect;
+    const originalOffset = Object.getOwnPropertyDescriptor(proto, "offsetWidth");
     const parents: string[] = [];
     proto.getBoundingClientRect = function (this: HTMLElement): DOMRect {
       if (this.style.width === "5rem") {
-        parents.push(this.parentElement?.className ?? "");
-        return { x: 0, y: 0, top: 0, left: 0, bottom: 0, right: 80, width: 80, height: 0, toJSON: () => ({}) } as DOMRect;
+        return { x: 0, y: 0, top: 0, left: 0, bottom: 0, right: 40, width: 40, height: 0, toJSON: () => ({}) } as DOMRect;
       }
-      return original.call(this);
+      return originalRect.call(this);
     };
+    Object.defineProperty(proto, "offsetWidth", {
+      configurable: true,
+      get(this: HTMLElement): number {
+        if (this.style.width !== "5rem") return 0;
+        parents.push(this.parentElement?.className ?? "");
+        return 80;
+      },
+    });
     try {
       expect(await resizeTo('"5rem"')).toBe("80px");
     } finally {
-      proto.getBoundingClientRect = original;
+      proto.getBoundingClientRect = originalRect;
+      if (originalOffset) Object.defineProperty(proto, "offsetWidth", originalOffset);
+      else delete (proto as unknown as { offsetWidth?: unknown }).offsetWidth;
     }
     expect(parents).toEqual(["rui-data-grid-viewport"]);
   });

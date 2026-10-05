@@ -2574,6 +2574,12 @@ const LENGTH_PROBE =
  * with a hidden probe placed in `context`. The caller passes the grid's
  * viewport, whose `position: relative` makes it the probe's containing block
  * — so a `%` is a share of the grid's visible width.
+ *
+ * Measured with `offsetWidth`, the LAYOUT width, because the result is written
+ * back as a CSS px width. `getBoundingClientRect()` reports the transformed
+ * size: inside a `transform: scale(0.5)` container, Chromium gives a `5rem`
+ * probe a rect 40px wide and an `offsetWidth` of 80 (and a `50%` one of a
+ * 600px box 150 vs 300), so the bound came out at half the size it named.
  */
 function lengthToPx(length: string, context: Element | null): number {
   const trimmed = length.trim();
@@ -2587,7 +2593,7 @@ function lengthToPx(length: string, context: Element | null): number {
   // The browser drops a value it cannot parse as a width: nothing to measure.
   if (!probe.style.width) return 0;
   context.append(probe);
-  const measured = probe.getBoundingClientRect().width;
+  const measured = probe.offsetWidth;
   probe.remove();
   return Number.isFinite(measured) && measured > 0 ? measured : 0;
 }
