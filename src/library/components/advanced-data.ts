@@ -264,7 +264,9 @@ function initColumnConfig(
   if (!persisted) return config;
   if (persisted.order) {
     const colKeys = new Set(defaultOrder);
-    const validOrder = persisted.order.filter((k) => colKeys.has(k));
+    // De-duplicated first: before repeated headers got `col-<index>` keys, two
+    // `Col("Price")` both saved as "Price", and keeping both drew that column twice.
+    const validOrder = [...new Set(persisted.order)].filter((k) => colKeys.has(k));
     const missing = defaultOrder.filter((k) => !validOrder.includes(k));
     config.order = [...validOrder, ...missing];
   }
@@ -318,7 +320,8 @@ function normalizeOrder(order: string[], pinned: Set<string>): string[] {
 function reconcileColumnConfig(cols: ColDef[], config: ColumnConfig): ColumnConfig {
   const keys = cols.map((c) => c.key);
   const known = new Set(keys);
-  const kept = config.order.filter((k) => known.has(k));
+  // A repeated key shortens `kept`, so the length check below rebuilds the order.
+  const kept = [...new Set(config.order)].filter((k) => known.has(k));
   const added = keys.filter((k) => !kept.includes(k));
   if (added.length === 0 && kept.length === config.order.length) return config;
   const prune = (set: Set<string>): Set<string> => new Set([...set].filter((k) => known.has(k)));

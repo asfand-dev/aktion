@@ -66,6 +66,24 @@ $app(DataGrid([Col("Price", [1, 2]), Col("Price", [100, 200])], {
     expect(cells).toEqual(["1", "1/100"]);
   });
 
+  it("DataGrid draws each column once from a layout saved under the old shared key", async () => {
+    // Before `col-<index>` keys, both columns were keyed "Price", and the grid
+    // persisted that on every resize, reorder, hide or pin.
+    localStorage.setItem("aktion-datagrid-dup-headers", JSON.stringify({
+      v: 1, order: ["Price", "Price"], hidden: [], pinned: [], widths: {},
+    }));
+    try {
+      const screen = render(`$app(DataGrid([Col("Price", [1, 2]), Col("Price", [100, 200])], { persistKey: "dup-headers" }))`);
+      await settle();
+      const keys = [...screen.shadowRoot.querySelectorAll(".rui-data-grid-table thead th[data-col-key]")]
+        .map((th) => th.getAttribute("data-col-key"));
+      expect(keys).toEqual(["Price", "col-1"]);
+      expect(bodyCells(screen.shadowRoot)).toEqual(["1", "100"]);
+    } finally {
+      localStorage.removeItem("aktion-datagrid-dup-headers");
+    }
+  });
+
   it("a header that reads like a generated key does not collide with one", async () => {
     const screen = render(`$app(DataGrid([Col("col-1", ["a"]), Col("", ["b"]), Col("col-1", ["c"])]))`);
     await settle();
