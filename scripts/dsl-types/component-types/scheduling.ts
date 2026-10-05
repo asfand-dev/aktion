@@ -5,6 +5,7 @@ export default {
   Calendar: {
     generics: [{ name: "Ev", default: "CalendarEvent", constraint: "CalendarEvent" }],
     types: {
+      CalendarEventOf: "/** The event type `onEventClick` receives: the inferred one, or `CalendarEvent` when nothing was inferred (an empty list). */\nexport type CalendarEventOf<T> = [T] extends [never] ? CalendarEvent : T;",
       CalendarEventColor: "export type CalendarEventColor = \"primary\" | \"success\" | \"warning\" | \"danger\" | \"info\" | (string & {});",
       CalendarEvent: `export interface CalendarEvent {
   readonly date: string;
@@ -27,7 +28,7 @@ export default {
       minDate: "string",
       maxDate: "string",
       disabledDates: "readonly string[]",
-      onEventClick: "(event: Ev, iso: string) => unknown",
+      onEventClick: "(event: CalendarEventOf<Ev>, iso: string) => unknown",
       locale: "string",
       weekdayLabels: "readonly string[]",
       monthLabels: "readonly string[]",

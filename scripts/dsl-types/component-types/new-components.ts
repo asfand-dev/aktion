@@ -54,6 +54,7 @@ export default {
   },
   FilterPill: {
     props: {
+      icon: "AktionIconName",
       onToggle: "(active: boolean) => unknown",
     },
   },
@@ -82,6 +83,7 @@ export default {
   },
   IconButton: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },
@@ -95,6 +97,7 @@ export default {
       onCancel: "() => unknown",
       onBlur: "(value: string) => unknown",
       onFocus: "(value: string) => unknown",
+      optional: "boolean | string",
     },
   },
   JsonTree: {
@@ -105,6 +108,7 @@ export default {
   NotificationBell: {
     generics: [{ name: "Item", default: "NotificationBellItem", constraint: "NotificationBellItem" }],
     types: {
+      NotificationBellItemOf: "/** The item type `onItemClick` receives: the inferred one, or `NotificationBellItem` when nothing was inferred (an empty list). */\nexport type NotificationBellItemOf<T> = [T] extends [never] ? NotificationBellItem : T;",
       NotificationBellItem: `export interface NotificationBellItem {
   readonly title: string | number;
   readonly message?: string | number;
@@ -116,7 +120,7 @@ export default {
     props: {
       items: "readonly Item[]",
       onOpen: "() => unknown",
-      onItemClick: "(item: Item, index: number) => unknown",
+      onItemClick: "(item: NotificationBellItemOf<Item>, index: number) => unknown",
       onMarkAllRead: "() => unknown",
     },
   },

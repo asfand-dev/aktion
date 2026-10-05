@@ -13,12 +13,12 @@
  *   - MultiStepForm — Steps + content + prev/next composite.
  */
 
-import type { ComponentSpec, RenderHelpers } from "../types.js";
+import type { ComponentSpec } from "../types.js";
 import {
   autoId,
   el, asArray, asString, asBoolean, asNumber, renderIcon, valueAttr, sanitiseHref,
 } from "../utils.js";
-import { FIELD_SHELL_PROPS, withFieldShell, attachFocusHandlers } from "./forms-shared.js";
+import { FIELD_SHELL_PROPS, withFieldShell, attachFocusHandlers, bindChangeHandler } from "./forms-shared.js";
 import { closeFloating, deferToPaint, openFloating } from "../floating.js";
 
 const PIN_TYPES = ["numeric", "alphanumeric"] as const;
@@ -69,27 +69,6 @@ function stepAttr(raw: unknown): string | null {
   return String(Math.max(1, Math.floor(asNumber(raw, 60))));
 }
 
-/**
- * Report a committed value to `onChange` through the `onchange` PROPERTY,
- * chained after whatever `bindState` installed there.
- *
- * `attachOnChange` (wrappers.ts) registers with `addEventListener`, which the
- * morph reconciler cannot transfer onto the node it keeps: a handler that first
- * appeared on a later render never fired, one withdrawn later kept firing, and
- * a lambda closing over `.map` locals stayed frozen at the first render. Same
- * contract as `bindChangeHandler` in forms.ts: the prop is read inside the
- * handler and the value off the live node.
- */
-function bindCommitHandler(input: HTMLInputElement, props: Record<string, unknown>, helpers: RenderHelpers): void {
-  const previous = input.onchange;
-  input.onchange = (event) => {
-    previous?.call(input, event);
-    if (props.onChange == null) return;
-    const live = (event.currentTarget ?? event.target ?? input) as HTMLInputElement;
-    helpers.invoke(props.onChange, live.value);
-  };
-}
-
 /* ----------------------------------------------------------------------- *
  * PinInput / OtpInput
  * ----------------------------------------------------------------------- */
@@ -103,6 +82,8 @@ function padSlots(chars: readonly string[], length: number): string[] {
 
 interface PinOptions {
   id: string;
+  /** Form field name of the hidden input that submits the joined code. */
+  name: string;
   length: number;
   type: string;
   /** One entry per slot, empty string for a gap. */
@@ -115,7 +96,7 @@ interface PinOptions {
 }
 
 function renderPin(opts: PinOptions): HTMLElement {
-  const { id, length, type, chars, disabled, mask, groupLabel, onSlots, onFocusChange } = opts;
+  const { id, name, length, type, chars, disabled, mask, groupLabel, onSlots, onFocusChange } = opts;
   const alphanumeric = type === "alphanumeric";
   const root = el("div", {
     class: "rui-pin-input",
@@ -148,6 +129,16 @@ function renderPin(opts: PinOptions): HTMLElement {
     inputs.push(input);
     root.append(input);
   }
+  // The code a form submits. No slot can carry the `name`: each holds one
+  // character, so named slots would submit `1`, `2`, `3`, `4` for "1234". The
+  // value is the joined string `onChange` reports, so a gap shortens it.
+  root.append(el("input", {
+    type: "hidden",
+    class: "rui-pin-input-value",
+    name,
+    value: chars.join(""),
+    disabled: disabled ? "" : null,
+  }));
   const getLiveSlots = (origin: Element): HTMLInputElement[] => {
     const pinRoot = origin.closest(".rui-pin-input");
     if (!pinRoot) return inputs;
@@ -161,6 +152,17 @@ function renderPin(opts: PinOptions): HTMLElement {
    */
   const collectLive = (origin: Element): string[] =>
     padSlots(getLiveSlots(origin).map((slot) => slot.value), length);
+  /**
+   * Report an edit, keeping the live hidden field in step first. An unbound
+   * PinInput does not re-render while the user types, so the next render's
+   * `value` attribute is not there to do it.
+   */
+  const reportSlots = (origin: Element): void => {
+    const slots = collectLive(origin);
+    const hidden = origin.closest(".rui-pin-input")?.querySelector<HTMLInputElement>("input.rui-pin-input-value");
+    if (hidden) hidden.value = slots.join("");
+    onSlots(slots);
+  };
   inputs.forEach((input, idx) => {
     input.oninput = (event) => {
       const target = (event.currentTarget ?? event.target) as HTMLInputElement;
@@ -181,7 +183,7 @@ function renderPin(opts: PinOptions): HTMLElement {
         target.value = v;
         if (v && idx < length - 1) liveSlots[idx + 1]?.focus();
       }
-      onSlots(collectLive(target));
+      reportSlots(target);
     };
     input.onkeydown = (event) => {
       const e = event as KeyboardEvent;
@@ -194,7 +196,7 @@ function renderPin(opts: PinOptions): HTMLElement {
           prev.value = "";
           prev.focus();
         }
-        onSlots(collectLive(target));
+        reportSlots(target);
       } else if (e.key === "ArrowLeft" && idx > 0) {
         e.preventDefault();
         liveSlots[idx - 1]?.focus();
@@ -268,6 +270,7 @@ export const PinInput: ComponentSpec = {
 
     const root = renderPin({
       id,
+      name: asString(props.name, id),
       length,
       type,
       chars,
@@ -303,7 +306,8 @@ export const PinInput: ComponentSpec = {
       });
     }
 
-    const shell = withFieldShell(root, { ...props, id });
+    // The hidden field carries `name` (see `renderPin`).
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     // `required` is meaningless on the group element and wrong on a single slot.
     forwardFieldAria(root, root, { native: false });
     return shell;
@@ -449,7 +453,7 @@ export const PasswordInput: ComponentSpec = {
       labelRow.append(el("span", { class: "rui-password-input-strength-label" }, [strength.label]));
       root.append(labelRow);
     }
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, input);
     return shell;
   },
@@ -465,7 +469,8 @@ export const TagInput: ComponentSpec = {
     "Tag/chip input — type a value, press Enter (or comma) to commit, " +
     "click × on a chip to remove. Tabbing away commits the pending text " +
     "too. Pass a `$variable` (array of strings) as `value` for two-way " +
-    "binding. Use for keywords, recipients, labels, skills, allowlists. " +
+    "binding; inside a form each tag is submitted as its own `name` entry, " +
+    "as a multiple select does. Use for keywords, recipients, labels, skills, allowlists. " +
     "Pass `suggestions` for autocomplete and `label`/`hint`/`error` for the " +
     "labelled field shell.",
   props: [
@@ -521,7 +526,8 @@ export const TagInput: ComponentSpec = {
       type: "text",
       class: "rui-tag-input-field",
       id,
-      name: id,
+      // No `name`: this field holds the uncommitted draft, not the value — the
+      // tags are submitted by the hidden fields below.
       // Keyed so the morph reconciler parks the live field when a new chip is
       // inserted ahead of it. Without a key the chip landed on the field's
       // index, the tag mismatch replaced the node, and focus was lost after
@@ -587,9 +593,23 @@ export const TagInput: ComponentSpec = {
       for (const value of suggestions) list.append(el("option", { value }));
       root.append(list);
     }
+    // One hidden field per tag, all under the field's `name` (default `id`) —
+    // the shape a native `<select multiple>` submits, so `FormData.getAll(name)`
+    // is the tag list. The text field used to submit its DRAFT under the id —
+    // usually empty, since leaving the field commits it — and the tags not at all.
+    const fieldName = asString(props.name, id);
+    for (const tag of tags) {
+      root.append(el("input", {
+        type: "hidden",
+        class: "rui-tag-input-value",
+        name: fieldName,
+        value: tag,
+        disabled: disabled ? "" : null,
+      }));
+    }
     // The label goes through the field shell so it matches every other field in
     // the form (the old `.rui-tag-input-label` wrapper had no CSS at all).
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, input, { native: false });
     return shell;
   },
@@ -734,7 +754,7 @@ export const MentionInput: ComponentSpec = {
     const textarea = el("textarea", {
       class: "rui-mention-input-field",
       id,
-      name: id,
+      name: asString(props.name, id),
       rows: String(Math.max(2, Math.floor(asNumber(props.rows, 3)))),
       placeholder: asString(props.placeholder, "Type @ to mention someone"),
       disabled: disabled ? "" : null,
@@ -987,7 +1007,7 @@ export const MentionInput: ComponentSpec = {
     // is passed: this tree is still detached, so nothing is promoted here.
     paintSuggestions(suggestions, querySlot.get());
     if (suggestions.getAttribute("data-open") === "true") positionMentionOnMount(root);
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, textarea);
     return shell;
   },
@@ -1040,10 +1060,10 @@ export const TimePicker: ComponentSpec = {
         getValue: (n) => (n as HTMLInputElement).value,
       });
     }
-    bindCommitHandler(input, props, helpers);
+    bindChangeHandler(input, props, helpers, { event: "change", getValue: (live) => (live as HTMLInputElement).value });
     attachFocusHandlers(input, props, helpers);
     root.append(input);
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, input);
     return shell;
   },
@@ -1090,10 +1110,10 @@ export const DateTimePicker: ComponentSpec = {
         getValue: (n) => (n as HTMLInputElement).value,
       });
     }
-    bindCommitHandler(input, props, helpers);
+    bindChangeHandler(input, props, helpers, { event: "change", getValue: (live) => (live as HTMLInputElement).value });
     attachFocusHandlers(input, props, helpers);
     root.append(input);
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, input);
     return shell;
   },

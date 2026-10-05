@@ -8,23 +8,25 @@ export default {
   readonly label: string | number;
   readonly to?: string;
   readonly href?: string;
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
 }`,
       BreadcrumbEntry: "export type BreadcrumbEntry = AktionNode<\"BreadcrumbItem\"> | string | BreadcrumbCrumbData;",
     },
     props: {
       items: "readonly BreadcrumbEntry[]",
       onItemClick: "(index: number, label: string) => unknown",
-      homeIcon: "boolean | string",
+      homeIcon: "boolean | AktionIconName",
     },
   },
   BreadcrumbItem: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },
   NavbarItem: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },

@@ -385,12 +385,27 @@ function applyAttributes(node: Element, attributes: Record<string, unknown>): vo
  * Event-handler properties (`onclick`, …) are excluded separately by prefix:
  * assigning a string there is inert, but assigning a function would let a DSL
  * value run on a host-page event outside the runtime's handler plumbing.
+ *
+ * Written in their DOM spelling because the `properties` description lists
+ * them from here; matching is case-insensitive.
  */
-const BLOCKED_PROPERTIES = new Set([
-  "innerhtml", "outerhtml", "insertadjacenthtml", "srcdoc", "src", "href",
-  "action", "formaction", "style", "id", "attributes", "shadowroot",
-  "contenteditable", "constructor", "__proto__", "prototype",
-]);
+const BLOCKED_DOM_PROPERTIES = [
+  "src", "href", "action", "formAction", "style", "id", "attributes", "shadowRoot",
+  "contentEditable", "innerHTML", "outerHTML", "insertAdjacentHTML", "srcdoc",
+] as const;
+
+/** The prototype-chain keys, which would reach the node's prototype, not a property. */
+const BLOCKED_PROTOTYPE_KEYS = ["constructor", "__proto__", "prototype"] as const;
+
+const BLOCKED_PROPERTIES = new Set(
+  [...BLOCKED_DOM_PROPERTIES, ...BLOCKED_PROTOTYPE_KEYS].map((key) => key.toLowerCase()),
+);
+
+/** `` `a`, `b` and `c` `` — a code list for a prop description. */
+const codeList = (names: readonly string[]): string => {
+  const quoted = names.map((name) => `\`${name}\``);
+  return quoted.length > 1 ? `${quoted.slice(0, -1).join(", ")} and ${quoted[quoted.length - 1]}` : quoted.join("");
+};
 
 function applyProperties(node: Element, properties: Record<string, unknown>): void {
   const target = node as unknown as Record<string, unknown>;
@@ -426,7 +441,7 @@ export const WebComponent: ComponentSpec = {
   props: [
     { name: "tag", type: "string", positional: true, required: true, description: "Custom-element tag name (must contain a hyphen, e.g. \"stripe-pricing-table\")." },
     { name: "attributes", type: "object", optional: true, aliases: ["attrs"], description: "Reactive attribute map. `$state` values update the element on change; `on*` keys are ignored." },
-    { name: "properties", type: "object", optional: true, aliases: ["props"], description: "JS properties assigned on the element (for components that take rich, non-string props). `on*` keys (use `on`) and built-in DOM properties including `src`, `href`, `action`, `formAction`, `style`, `id`, `attributes`, `shadowRoot`, `contentEditable`, `innerHTML`, `outerHTML` and `srcdoc` are silently skipped — pass `src`/`href`/`id`/`style` through `attributes` (URLs are sanitised there), and content through `children`." },
+    { name: "properties", type: "object", optional: true, aliases: ["props"], description: `JS properties assigned on the element (for components that take rich, non-string props). \`on*\` keys (use \`on\`), the built-in DOM properties ${codeList(BLOCKED_DOM_PROPERTIES)}, and ${codeList(BLOCKED_PROTOTYPE_KEYS)} are silently skipped (in any letter case) — pass \`src\`/\`href\`/\`id\`/\`style\` through \`attributes\` (URLs are sanitised there), and content through \`children\`.` },
     { name: "on", type: "object", optional: true, aliases: ["events"], description: "Event map `{ eventName: handler }` bound once to the live element (handlers stay current across re-renders)." },
     { name: "children", aliases: ["child"], type: "Node[]", optional: true, description: "Light-DOM child nodes / text to slot inside the element." },
   ],

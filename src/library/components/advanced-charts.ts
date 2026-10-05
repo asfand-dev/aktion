@@ -14,7 +14,7 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { el, asArray, asString, asNumber, asBoolean } from "../utils.js";
+import { el, asArray, asString, asNumber, asBoolean, sanitiseCssColor } from "../utils.js";
 import {
   AXIS_CAPTION_PX,
   CHART_A11Y_PROPS,
@@ -571,7 +571,9 @@ function readScatterSeries(raw: unknown[]): { name: string; points: ScatterPoint
   return raw.map((entry, i) => {
     const node = entry as { args?: unknown[] };
     const name = asString(node.args?.[0], `Series ${i + 1}`);
-    const color = asString(node.args?.[2]).trim();
+    // Sanitised here as well as in `seriesColor`, so no reader of this list can
+    // meet an unsanitised colour.
+    const color = sanitiseCssColor(node.args?.[2]);
     // Points arrive either in the explicit `points` slot or — the documented
     // `Series(name, points)` form — positionally in the `values` slot.
     const raw2 = node.args?.[3] ?? node.args?.[1];

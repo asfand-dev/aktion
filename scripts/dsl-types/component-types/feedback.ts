@@ -30,9 +30,14 @@ export default {
       onOpenChange: "(open: boolean) => unknown",
     },
   },
+  ProgressRing: {
+    props: {
+      icon: "AktionIconName",
+    },
+  },
   Rating: {
     props: {
-      icon: "\"star\" | \"heart\" | \"thumb\" | \"fire\" | \"bolt\" | (string & {})",
+      icon: "\"star\" | \"heart\" | \"thumb\" | \"fire\" | \"bolt\" | AktionIconName",
       onChange: "(value: number) => unknown",
     },
   },
@@ -43,6 +48,7 @@ export default {
   },
   Toast: {
     props: {
+      icon: "AktionIconName",
       onClose: "() => unknown",
     },
   },
@@ -53,10 +59,10 @@ export default {
       ToggleGroupItemObject: `export interface ToggleGroupItemObject<V extends ToggleGroupValue = ToggleGroupValue> {
   readonly value: V;
   readonly label?: string | number;
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   readonly disabled?: boolean;
 }`,
-      ToggleGroupItemTuple: "export type ToggleGroupItemTuple<V extends ToggleGroupValue = ToggleGroupValue> = readonly [value: V, label?: string | number, icon?: string, disabled?: boolean];",
+      ToggleGroupItemTuple: "export type ToggleGroupItemTuple<V extends ToggleGroupValue = ToggleGroupValue> = readonly [value: V, label?: string | number, icon?: AktionIconName, disabled?: boolean];",
       ToggleGroupItem: "export type ToggleGroupItem<V extends ToggleGroupValue = ToggleGroupValue> = V | ToggleGroupItemTuple<V> | ToggleGroupItemObject<V>;",
     },
     props: {

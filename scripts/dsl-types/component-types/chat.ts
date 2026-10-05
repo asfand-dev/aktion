@@ -4,6 +4,7 @@ import type { ComponentTypeTable } from "./types.js";
 export default {
   ActionLink: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },
@@ -20,6 +21,7 @@ export default {
   },
   SectionBlock: {
     props: {
+      icon: "AktionIconName",
       level: "2 | 3 | 4 | 5 | 6",
     },
   },

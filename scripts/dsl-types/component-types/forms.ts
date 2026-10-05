@@ -4,6 +4,7 @@ import type { ComponentTypeTable } from "./types.js";
 export default {
   Button: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },
@@ -69,6 +70,7 @@ export default {
   },
   FileUpload: {
     props: {
+      icon: "AktionIconName",
       onSelect: "(files: DomFile[]) => unknown",
       onRemove: "(file: DomFile) => unknown",
     },
@@ -102,6 +104,7 @@ export default {
   },
   InputGroup: {
     props: {
+      icon: "AktionIconName",
       optional: "boolean | string",
       onBlur: "(value: string | string[]) => unknown",
       onFocus: "(value: string | string[]) => unknown",

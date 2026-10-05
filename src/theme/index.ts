@@ -1796,6 +1796,22 @@ export interface ResolvedTheme {
   tokens: ThemeTokens;
 }
 
+/** Theme inputs already reported, so re-resolving one (every render) warns once. */
+const WARNED_THEMES = new Set<string>();
+
+/**
+ * Say why a theme fell back to light. The fallback itself is kept — a page that
+ * names a theme this build does not ship must still render — but it used to be
+ * silent, so a typo (`theme="midnite"`) or a ThemeToggle side naming a theme
+ * that does not exist looked like a styling bug in the light theme.
+ */
+function warnThemeFallback(key: string, reason: string): void {
+  if (WARNED_THEMES.has(key)) return;
+  WARNED_THEMES.add(key);
+  // eslint-disable-next-line no-console
+  console.warn(`[aktion] ${reason} — using the light theme.`);
+}
+
 export function resolveTheme(input: ThemeInput | null | undefined): ResolvedTheme {
   if (!input) return { name: "light", tokens: lightTheme };
   if (typeof input === "string") {
@@ -1804,6 +1820,7 @@ export function resolveTheme(input: ThemeInput | null | undefined): ResolvedThem
       try {
         return { name: "custom", tokens: mergeTheme(JSON.parse(input) as Partial<ThemeTokens>) };
       } catch {
+        warnThemeFallback(input.trim(), "the theme string starts with \"{\" but is not valid JSON");
         return { name: "light", tokens: lightTheme };
       }
     }
@@ -1812,6 +1829,9 @@ export function resolveTheme(input: ThemeInput | null | undefined): ResolvedThem
     // The CANONICAL name, so a retired alias (`modern`) lands on the marker
     // its replacement's CSS block is keyed on (`shadcn-light`).
     if (tokens) return { name: canonical, tokens };
+    if (key) {
+      warnThemeFallback(key, `"${input.trim()}" is not a theme (built-in themes: ${Object.keys(builtInThemes).join(", ")})`);
+    }
     return { name: "light", tokens: lightTheme };
   }
   return { name: "custom", tokens: mergeTheme(input) };

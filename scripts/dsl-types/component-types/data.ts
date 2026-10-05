@@ -19,7 +19,7 @@ export default {
   readonly meta?: string | number;
   readonly subtitle?: string | number;
   readonly hint?: string | number;
-  readonly icon?: string;
+  readonly icon?: AktionIconName;
   readonly tone?: ListItemTone;
   readonly active?: boolean;
   readonly selected?: boolean;
@@ -31,6 +31,7 @@ export default {
   },
   ListItem: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },
@@ -41,7 +42,7 @@ export default {
   },
   StatCard: {
     props: {
-      icon: "\"none\" | (string & {}) | false",
+      icon: "\"none\" | AktionIconName | false",
       spark: "readonly (number | null | undefined)[]",
       onClick: "() => unknown",
     },
@@ -63,6 +64,7 @@ export default {
   },
   TreeNode: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
       onToggle: "(open: boolean) => unknown",
     },

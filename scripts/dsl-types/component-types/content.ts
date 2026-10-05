@@ -2,18 +2,23 @@
 import type { ComponentTypeTable } from "./types.js";
 
 export default {
+  Badge: {
+    props: {
+      icon: "AktionIconName",
+    },
+  },
   BadgeList: {
     props: {
       // An empty or missing label renders no pill but keeps its index, so
       // `tones` / `icons` stay aligned with `labels` as written.
       labels: "readonly (string | number | null | undefined)[]",
       tones: "readonly (BadgeListTone | null | undefined)[]",
-      icons: "readonly (string | null | undefined)[]",
+      icons: "readonly (AktionIconName | null | undefined)[]",
     },
   },
   Callout: {
     props: {
-      icon: "string | number | false",
+      icon: "AktionIconName | false",
       onDismiss: "() => unknown",
     },
   },
@@ -27,13 +32,20 @@ export default {
   },
   Icon: {
     props: {
+      name: "AktionIconName",
       color: "string",
     },
   },
   Image: {
     props: {
+      fallback: "AktionIconName",
       ratio: "AspectRatioValue",
       onClick: "() => unknown",
+    },
+  },
+  Pill: {
+    props: {
+      icon: "AktionIconName",
     },
   },
   Text: {

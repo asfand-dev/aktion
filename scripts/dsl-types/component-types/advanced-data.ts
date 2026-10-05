@@ -7,13 +7,16 @@ export default {
     // very object — extra fields (an `id`) included.
     generics: [{ name: "Item", default: "ActivityLogItem", constraint: "ActivityLogItem" }],
     types: {
-      ActivityLogItem: "export interface ActivityLogItem {\n  readonly title: string | number;\n  readonly actor?: string | number;\n  readonly description?: string | number;\n  /** Time label, e.g. `\"2h ago\"`. */\n  readonly time?: string;\n  /** Font Awesome icon name (or a literal glyph) for the marker; ignored when `avatarSrc` is set. */\n  readonly icon?: string;\n  /** Image URL rendered in the marker instead of the icon. */\n  readonly avatarSrc?: string;\n  readonly tone?: ActivityLogItemTone;\n  /** Renders the title as a link (takes precedence over `onItemClick`, which a link never fires). */\n  readonly href?: string;\n  /** Secondary detail line (IP, browser, request id); monospace under `variant: \"audit\"`. */\n  readonly meta?: string | number;\n}",
+      ActivityLogItem: "export interface ActivityLogItem {\n  readonly title: string | number;\n  readonly actor?: string | number;\n  readonly description?: string | number;\n  /** Time label, e.g. `\"2h ago\"`. */\n  readonly time?: string;\n  /** Font Awesome icon name (or a literal glyph) for the marker; ignored when `avatarSrc` is set. */\n  readonly icon?: AktionIconName;\n  /** Image URL rendered in the marker instead of the icon. */\n  readonly avatarSrc?: string;\n  readonly tone?: ActivityLogItemTone;\n  /** Renders the title as a link (takes precedence over `onItemClick`, which a link never fires). */\n  readonly href?: string;\n  /** Secondary detail line (IP, browser, request id); monospace under `variant: \"audit\"`. */\n  readonly meta?: string | number;\n}",
       ActivityLogItemTone: "export type ActivityLogItemTone = \"default\" | \"primary\" | \"success\" | \"warning\" | \"danger\";",
+      // An empty literal (`ActivityLog([], …)`) infers `Item = never`, which
+      // would make every read of the callback's `item` an error.
+      ActivityLogItemOf: "/** The entry type `onItemClick` receives: the inferred one, or `ActivityLogItem` when nothing was inferred (an empty list). */\nexport type ActivityLogItemOf<T> = [T] extends [never] ? ActivityLogItem : T;",
     },
     props: {
       // Entries that are not objects are skipped (they still count for `index`).
       items: "readonly (Item | null | undefined)[]",
-      onItemClick: "((index: number, item: Item) => unknown)",
+      onItemClick: "((index: number, item: ActivityLogItemOf<Item>) => unknown)",
     },
   },
   CalendarView: {
@@ -23,6 +26,7 @@ export default {
       CalendarViewWeekday: "export type CalendarViewWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;",
       CalendarViewEvent: "export interface CalendarViewEvent {\n  /** ISO day `YYYY-MM-DD`; only the first 10 characters are matched, so `YYYY-MM-DDTHH:mm` also works. Events without a date are skipped. */\n  readonly date: string;\n  readonly title: string | number;\n  /** Passed to `onEventClick` (as a string) as its first argument; defaults to `${date}#${index}`. */\n  readonly id?: string | number;\n  /** Time label shown in the chip tooltip (`time — title`). */\n  readonly time?: string;\n  /** Chip colour (default `\"primary\"`). */\n  readonly tone?: CalendarViewEventTone;\n}",
       CalendarViewEventTone: "export type CalendarViewEventTone = \"primary\" | \"success\" | \"warning\" | \"danger\" | \"info\";",
+      CalendarViewEventOf: "/** The event type `onEventClick` receives: the inferred one, or `CalendarViewEvent` when nothing was inferred (an empty list). */\nexport type CalendarViewEventOf<T> = [T] extends [never] ? CalendarViewEvent : T;",
     },
     props: {
       value: "string",
@@ -32,7 +36,7 @@ export default {
       firstDay: "CalendarViewWeekday",
       onSelect: "((date: string) => unknown)",
       onMonthChange: "((anchor: string) => unknown)",
-      onEventClick: "((eventId: string, event: Item) => unknown)",
+      onEventClick: "((eventId: string, event: CalendarViewEventOf<Item>) => unknown)",
       min: "string",
       max: "string",
     },

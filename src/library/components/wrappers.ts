@@ -1045,32 +1045,3 @@ export const Css: ComponentSpec = {
     return span;
   },
 };
-
-/* ------------------------------------------------------------------------ *
- * Shared helpers re-exported for sibling input components.
- *
- * Inputs (Input, Checkbox, Switch, etc.) accept an `onChange(value)` prop
- * that fires with the freshly-read value. We expose a tiny helper so the
- * dozen input renderers can hook into the same event in one line:
- *
- *   attachOnChange(input, props.onChange, helpers, {
- *     event: "change",
- *     getValue: (el) => (el as HTMLInputElement).value,
- *   });
- *
- * The helper uses `addEventListener` so it composes cleanly with the
- * property-based `oninput` / `onchange` set by `bindState` — both run
- * on the same DOM event.
- * ------------------------------------------------------------------------ */
-export function attachOnChange(
-  element: HTMLElement,
-  callback: unknown,
-  helpers: RenderHelpers,
-  options: { event?: string; getValue: (el: HTMLElement) => unknown },
-): void {
-  if (callback === null || callback === undefined) return;
-  const eventName = options.event ?? "change";
-  element.addEventListener(eventName, () => {
-    helpers.invoke(callback, options.getValue(element));
-  });
-}

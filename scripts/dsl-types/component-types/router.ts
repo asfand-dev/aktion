@@ -4,6 +4,7 @@ import type { ComponentTypeTable } from "./types.js";
 export default {
   NavLink: {
     props: {
+      icon: "AktionIconName",
       prefetch: "(to: string) => unknown",
     },
   },

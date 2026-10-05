@@ -12,6 +12,7 @@ export default {
 }`,
     },
     props: {
+      icon: "AktionIconName",
       src: "string",
       sources: "readonly AudioPlayerSource[]",
       onEnded: "() => unknown",
@@ -30,6 +31,7 @@ export default {
   Gallery: {
     generics: [{ name: "Item", default: "GalleryItem", constraint: "GalleryItem" }],
     types: {
+      GalleryItemOf: "/** The item type `onSelect` receives: the inferred one, or `GalleryItem` when nothing was inferred (an empty list). */\nexport type GalleryItemOf<T> = [T] extends [never] ? GalleryItem : T;",
       GalleryImage: `export interface GalleryImage {
   readonly src: string;
   readonly alt?: string;
@@ -40,7 +42,7 @@ export default {
     props: {
       items: "readonly Item[]",
       ratio: "`${number}:${number}` | `${number}` | number",
-      onSelect: "(index: number, item: Item) => unknown",
+      onSelect: "(index: number, item: GalleryItemOf<Item>) => unknown",
     },
   },
   Lightbox: {

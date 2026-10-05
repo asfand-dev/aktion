@@ -17,12 +17,18 @@ export default {
   },
   FloatingActionButton: {
     props: {
+      icon: "AktionIconName",
       onClick: "() => unknown",
     },
   },
   Heading: {
     props: {
       level: "1 | 2 | 3 | 4 | 5 | 6 | (number & {})",
+    },
+  },
+  LogoChip: {
+    props: {
+      icon: "AktionIconName",
     },
   },
   ProductCard: {
@@ -45,7 +51,7 @@ export default {
   SegmentedControl: {
     generics: [{ name: "V", default: "string | number", constraint: "string | number" }],
     types: {
-      SegmentedControlOption: "export interface SegmentedControlOption<V extends string | number = string | number> {\n  /** Emitted, with its type, to onChange and the bound $variable; also the label when `label` is omitted. */\n  readonly value: V;\n  readonly label?: string | number;\n  /** Font Awesome icon name. */\n  readonly icon?: string;\n  readonly disabled?: boolean;\n}",
+      SegmentedControlOption: "export interface SegmentedControlOption<V extends string | number = string | number> {\n  /** Emitted, with its type, to onChange and the bound $variable; also the label when `label` is omitted. */\n  readonly value: V;\n  readonly label?: string | number;\n  /** Font Awesome icon name. */\n  readonly icon?: AktionIconName;\n  readonly disabled?: boolean;\n}",
     },
     props: {
       options: "readonly (V | SegmentedControlOption<V>)[]",

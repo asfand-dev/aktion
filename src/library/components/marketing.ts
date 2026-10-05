@@ -1491,7 +1491,11 @@ export const SegmentedControl: ComponentSpec = {
     "segments; `size` sets the height and `disabled` locks the whole control.",
   props: [
     { name: "options", type: "any[]", positional: true, required: true, aliases: ["items"] },
-    { name: "value", type: "string", optional: true },
+    // `string | number`: option values keep their type (see the description), so
+    // a numeric option's `value` is a number. No `object` in the hint, so
+    // `propExpectsObject` stays false and a trailing `{…}` is still read as the
+    // named props, never as `value` (`chooseNamedBagIndex`).
+    { name: "value", type: "string | number", optional: true, description: "The selected option's value (compared as text, so `2` and `\"2\"` select the same option)" },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"] },
     { name: "disabled", type: "boolean", optional: true, description: "Lock every segment" },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },

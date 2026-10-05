@@ -12,36 +12,11 @@ import {
   el, asArray, asString, asBoolean, asNumber, renderIcon,
   valueAttr, sanitiseHref, sanitiseCssLength,
 } from "../utils.js";
-import { withFieldShell, fieldShellExtraProps } from "./forms-shared.js";
+import { withFieldShell, fieldShellExtraProps, bindChangeHandler } from "./forms-shared.js";
 import { setSanitisedHtml, readSanitisedHtml } from "../html-sanitizer.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
 import { closeFloating, openFloating, deferToPaint, type FloatingSide } from "../floating.js";
-
-/**
- * Report `onChange` through the `oninput` PROPERTY, chained after whatever
- * `bindState` (or the component itself) already installed there.
- *
- * `attachOnChange` (wrappers.ts) registers with `addEventListener`, which the
- * morph reconciler cannot transfer onto the node it keeps: a handler supplied
- * only on a later render never fired, one withdrawn later kept firing, and a
- * lambda closing over `.map` locals stayed frozen at the first render. Same
- * contract as `bindChangeHandler` in forms.ts: the prop is read inside the
- * handler and the value off the live node.
- */
-function bindInputChange(
-  element: HTMLElement,
-  props: Record<string, unknown>,
-  helpers: RenderHelpers,
-  getValue: (live: HTMLElement) => unknown,
-): void {
-  const previous = element.oninput;
-  element.oninput = (event) => {
-    previous?.call(element, event);
-    if (props.onChange == null) return;
-    const live = (event.currentTarget ?? event.target ?? element) as HTMLElement;
-    helpers.invoke(props.onChange, getValue(live));
-  };
-}
+import { MenuItem } from "./menu.js";
 
 /* ----------------------------------------------------------------------- *
  * RichTextEditor
@@ -354,9 +329,9 @@ export const RichTextEditor: ComponentSpec = {
     // whenever the selection can have moved.
     editor.onkeyup = (event) => syncRteToolStates((event.currentTarget ?? event.target) as Element);
     editor.onmouseup = (event) => syncRteToolStates((event.currentTarget ?? event.target) as Element);
-    bindInputChange(editor, props, helpers, readSanitisedHtml);
+    bindChangeHandler(editor, props, helpers, { event: "input", getValue: readSanitisedHtml });
     root.append(editor);
-    return withFieldShell(root, props, { idKey: "id" });
+    return withFieldShell(root, props, { idKey: "id", ownsName: true });
   },
 };
 
@@ -624,10 +599,12 @@ export const CodeEditor: ComponentSpec = {
       reindent(target, e.shiftKey, " ".repeat(tabSize));
     };
     // `readSource` already ran in the handler this chains onto.
-    if (!inert) bindInputChange(textarea, props, helpers, (live) => (live as HTMLTextAreaElement).value);
+    if (!inert) {
+      bindChangeHandler(textarea, props, helpers, { event: "input", getValue: (live) => (live as HTMLTextAreaElement).value });
+    }
     body.append(textarea);
     root.append(body);
-    return withFieldShell(root, props, { idKey: "id" });
+    return withFieldShell(root, props, { idKey: "id", ownsName: true });
   },
 };
 
@@ -643,7 +620,12 @@ const LONG_PRESS_MS = 500;
 /** How far a touch may drift before it counts as a scroll, not a press. */
 const LONG_PRESS_SLOP = 10;
 
-const CONTEXT_ITEM_ROLES = ["menuitem", "menuitemcheckbox", "menuitemradio"] as const;
+/**
+ * The row roles a ContextMenu item may ask for — MenuItem's `role` enum, read
+ * off its spec so the two menus cannot accept different roles. This was a
+ * hand-copied list of menu.ts's own.
+ */
+const CONTEXT_ITEM_ROLES: readonly string[] = MenuItem.props.find((p) => p.name === "role")?.enum ?? ["menuitem"];
 /** Every row role, for the focus and arrow-key queries. */
 const CONTEXT_ROW = "[role^=menuitem]";
 
@@ -681,7 +663,7 @@ function contextRow(source: {
     disabled: asBoolean(source.disabled),
     separator: false,
     checked: source.checked === undefined || source.checked === null ? null : asBoolean(source.checked),
-    role: (CONTEXT_ITEM_ROLES as readonly string[]).includes(role) ? role : "menuitem",
+    role: CONTEXT_ITEM_ROLES.includes(role) ? role : "menuitem",
     keepOpen: asBoolean(source.keepOpen),
   };
 }
@@ -1457,7 +1439,7 @@ export const ColorPicker: ComponentSpec = {
     /**
      * The canonical value for this control, recomposed from the LIVE nodes.
      *
-     * Runs as `bindState`'s / `bindInputChange`'s `getValue`, so it is also where
+     * Runs as `bindState`'s / `bindChangeHandler`'s `getValue`, so it is also where
      * the chip → text mirroring happens: keeping both in one property-based
      * `oninput` slot is the only way the morph reconciler can transfer them as
      * a unit. Every node is resolved from the event target — the closure's own
@@ -1494,7 +1476,7 @@ export const ColorPicker: ComponentSpec = {
         readColor((event.currentTarget ?? event.target) as HTMLElement);
       };
     }
-    if (!disabled) bindInputChange(colorInput, props, helpers, readColor);
+    if (!disabled) bindChangeHandler(colorInput, props, helpers, { event: "input", getValue: readColor });
 
     if (!disabled) {
       textInput.oninput = (event) => {
@@ -1566,6 +1548,6 @@ export const ColorPicker: ComponentSpec = {
       }
       root.append(swatchRow);
     }
-    return withFieldShell(root, props, { idKey: "id" });
+    return withFieldShell(root, props, { idKey: "id", ownsName: true });
   },
 };

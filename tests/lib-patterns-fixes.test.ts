@@ -168,7 +168,7 @@ describe("Calendar event chips", () => {
   it("falls back to the primary tone when the chip colour is rejected", async () => {
     const screen = render(`
       $app(Calendar(0, { year: 2026, events: [
-        { date: "2026-01-03", label: "Slash", color: "rgb(1 2 3 / 50%)" },
+        { date: "2026-01-03", label: "Breakout", color: "red;position:fixed" },
         { date: "2026-01-04", label: "Proto", color: "constructor" },
         { date: "2026-01-05", label: "Tone", tone: "success" },
       ] }))

@@ -140,9 +140,9 @@
       <table class="signature-table">
         <thead><tr><th>Prop</th><th>Type</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr><td><code>setup</code> <span class="req">required</span></td><td><code>callable</code></td><td><code>(node, props) =&gt; instance</code>. The return value is the instance handle passed to <code>update</code> / <code>cleanup</code>.</td></tr>
-          <tr><td><code>update</code></td><td><code>callable</code></td><td><code>(instance, props) =&gt; void</code>, run when <code>props</code> (or <code>deps</code>) change.</td></tr>
-          <tr><td><code>cleanup</code></td><td><code>callable</code></td><td><code>(instance) =&gt; void</code>, run when the component leaves the tree.</td></tr>
+          <tr><td><code>setup</code> <span class="req">required</span></td><td><code>callable</code></td><td><code>(node, props) =&gt; instance</code>. The return value, if any, is the instance handle passed to <code>update</code> / <code>cleanup</code>.</td></tr>
+          <tr><td><code>update</code></td><td><code>callable</code></td><td><code>(instance, props, node) =&gt; void</code>, run when <code>props</code> (or <code>deps</code>) change once <code>setup</code> has returned &mdash; also when it returned nothing (<code>instance</code> is then <code>undefined</code>; <code>node</code> is the live host). Never after a <code>setup</code> that threw.</td></tr>
+          <tr><td><code>cleanup</code></td><td><code>callable</code></td><td><code>(instance) =&gt; void</code>, run when the component leaves the tree. <code>instance</code> is <code>undefined</code> when <code>setup</code> returned nothing, threw, or never ran.</td></tr>
           <tr><td><code>props</code></td><td><code>object</code></td><td>Reactive bag handed to <code>setup</code> / <code>update</code>. Bind <code>$state</code> here to drive the widget.</td></tr>
           <tr><td><code>tag</code></td><td><code>string</code></td><td>Host element, one of <code>div</code>, <code>span</code>, <code>section</code>, <code>article</code>, <code>aside</code>, <code>figure</code>, <code>canvas</code>, <code>p</code>, <code>pre</code>, <code>form</code>. Anything else falls back to <code>div</code>. Default <code>"div"</code>.</td></tr>
           <tr><td><code>deps</code></td><td><code>any[]</code></td><td>Explicit dependency list gating <code>update</code>. When present, <code>props</code> is ignored for the change check &mdash; see <a href="#mount-updates">When update runs</a>.</td></tr>
@@ -163,16 +163,22 @@
             <td><code>setup</code> <span class="req">required</span></td>
             <td><code>(node, props) =&gt; instance</code></td>
             <td>Once, on a microtask right after the host element is attached to
-              the document. Build your widget here and <strong>return the
-              instance handle</strong> &mdash; it is passed back to
-              <code>update</code> and <code>cleanup</code>.</td>
+              the document. Build your widget here and return the instance
+              handle, if it has one &mdash; it is passed back to
+              <code>update</code> and <code>cleanup</code>. A widget that only
+              fills <code>node</code> may return nothing.</td>
           </tr>
           <tr>
             <td><code>update</code></td>
-            <td><code>(instance, props) =&gt; void</code></td>
+            <td><code>(instance, props, node) =&gt; void</code></td>
             <td>On every re-render where <code>props</code> (or
-              <code>deps</code>) changed. Push the new data into the live widget.
-              Deferred to a microtask, so it runs after the reconcile pass.</td>
+              <code>deps</code>) changed, once <code>setup</code> has returned
+              &mdash; including when it returned nothing: <code>instance</code> is
+              then <code>undefined</code>, and <code>node</code>, the live host,
+              is how you reach the widget. Never after a <code>setup</code> that
+              threw (there is no widget to update). Push the new data into the
+              live widget. Deferred to a microtask, so it runs after the
+              reconcile pass.</td>
           </tr>
           <tr>
             <td><code>cleanup</code></td>
@@ -180,7 +186,9 @@
             <td>Once, when the component leaves the render tree &mdash; and also
               when a reactive <code>tag</code> changes, because that replaces the
               host element. Destroy the widget / remove listeners so it
-              can&rsquo;t leak.</td>
+              can&rsquo;t leak. <code>instance</code> is <code>undefined</code>
+              when <code>setup</code> returned nothing, threw, or never ran (the
+              component left before its host attached).</td>
           </tr>
         </tbody>
       </table>
@@ -642,7 +650,8 @@ function Checkout() {
       <p>
         Returning the whole <code>{ stripe, elements, card }</code> triple is the
         pattern to copy when teardown needs more than one handle &mdash;
-        <code>cleanup</code> receives exactly what <code>setup</code> returned.
+        <code>cleanup</code> receives exactly what <code>setup</code> returned
+        (<code>undefined</code> if it threw).
       </p>
 
       <h2 id="choosing">Mount vs. WebComponent vs. OnMount</h2>

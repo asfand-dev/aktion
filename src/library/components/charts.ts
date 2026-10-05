@@ -98,7 +98,7 @@ export const Series: ComponentSpec = {
       name: "color",
       type: "string",
       optional: true,
-      description: "Override the palette colour for this series (any CSS colour or var(); a value that is not a plain colour falls back to the palette slot)",
+      description: "Override the palette colour for this series (any CSS colour, `var()` or `color-mix()`; a value carrying anything else — a `;`, quotes, `url()`, a comment — falls back to the palette slot)",
     },
     {
       name: "points",
@@ -146,10 +146,11 @@ export interface SeriesStyle {
  * A series' own colour when it declares one, its palette slot otherwise.
  *
  * Sanitised HERE, at the one place every chart reads a series colour from, and
- * not only in `readSeries`: the value is interpolated into the legend swatch's
- * inline `style` (where a `;` opened extra declarations) and the SVG `fill`,
- * and ScatterChart's own reader (`readScatterSeries`) passes `color` through
- * untouched. A rejected colour falls back to the palette slot.
+ * not only in the readers (`readSeries`, ScatterChart's `readScatterSeries`):
+ * the value is interpolated into the legend swatch's inline `style` (where a
+ * `;` opened extra declarations) and the SVG `fill`, and a `SeriesStyle` built
+ * anywhere else would otherwise reach both unchecked. A rejected colour falls
+ * back to the palette slot.
  */
 export const seriesColor = (series: SeriesStyle, index: number): string =>
   sanitiseCssColor(series.color) || colorAt(index);

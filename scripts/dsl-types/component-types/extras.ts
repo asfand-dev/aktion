@@ -14,6 +14,7 @@ export default {
   },
   ConfirmDialog: {
     props: {
+      icon: "AktionIconName",
       onConfirm: "() => unknown",
       onCancel: "() => unknown",
     },
@@ -37,6 +38,7 @@ export default {
   PresenceAvatars: {
     generics: [{ name: "Person", default: "PresenceAvatarsPerson", constraint: "PresenceAvatarsPerson" }],
     types: {
+      PresenceAvatarsPersonOf: "/** The person type `onClick` receives: the inferred one, or `PresenceAvatarsPerson` when nothing was inferred (an empty list). */\nexport type PresenceAvatarsPersonOf<T> = [T] extends [never] ? PresenceAvatarsPerson : T;",
       PresenceAvatarsPerson: `export interface PresenceAvatarsPerson {
   /** Display name: tooltip, accessible name and initials fallback. */
   readonly name: string;
@@ -48,7 +50,7 @@ export default {
     },
     props: {
       people: "readonly Person[]",
-      onClick: "(person: Person) => unknown",
+      onClick: "(person: PresenceAvatarsPersonOf<Person>) => unknown",
     },
   },
   ScrollSpy: {
@@ -67,9 +69,10 @@ export default {
   },
   SpeedDial: {
     types: {
-      SpeedDialAction: "export interface SpeedDialAction {\n  /** Accessible name and tooltip of the mini-action button. */\n  readonly label: string;\n  /** Icon name (default \"circle\"). */\n  readonly icon?: string;\n  /** Runs on click; the dial then closes. */\n  readonly onClick?: () => void;\n  /** Synonym of `onClick` (used only when `onClick` is absent). */\n  readonly action?: () => void;\n}",
+      SpeedDialAction: "export interface SpeedDialAction {\n  /** Accessible name and tooltip of the mini-action button. */\n  readonly label: string;\n  /** Icon name (default \"circle\"). */\n  readonly icon?: AktionIconName;\n  /** Runs on click; the dial then closes. */\n  readonly onClick?: () => void;\n  /** Synonym of `onClick` (used only when `onClick` is absent). */\n  readonly action?: () => void;\n}",
     },
     props: {
+      icon: "AktionIconName",
       actions: "readonly SpeedDialAction[]",
       onOpenChange: "(open: boolean) => unknown",
     },
