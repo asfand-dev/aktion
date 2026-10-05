@@ -131,6 +131,8 @@ const UNSTYLED_BY_DESIGN: Readonly<Record<string, string>> = {
 
   /* behaviour: no box to style */
   "rui-canvas-value": "hidden input carrying the form value",
+  "rui-pin-input-value": "hidden input carrying the form value",
+  "rui-tag-input-value": "hidden input carrying the form value",
   "rui-portal": "portal container, positioned by its target",
   "rui-portal-anchor": "zero-size marker for the portal's origin",
   "rui-redirect": "hidden marker element",
