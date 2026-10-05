@@ -3312,8 +3312,11 @@ export const ComparisonTable: ComponentSpec = {
  * InfiniteList — scroll-to-load list
  * ----------------------------------------------------------------------- */
 
-const ROOT_MARGIN_LENGTH = /^-?\d+(?:\.\d+)?(?:px|%)$/i;
-const ROOT_MARGIN_NUMBER = /^-?\d+(?:\.\d+)?$/;
+// The CSS number grammar: a sign, `12` / `12.5` / `.5`, an exponent. Chromium's
+// observer accepts `.5px`, `+10px` and `1e3px` and throws for a trailing `.`
+// (`1.px`), so a decimal point must be followed by a digit.
+const ROOT_MARGIN_LENGTH = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?(?:px|%)$/i;
+const ROOT_MARGIN_NUMBER = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?$/i;
 
 /**
  * `rootMargin` for the sentinel observer: one to four px / % lengths, where a

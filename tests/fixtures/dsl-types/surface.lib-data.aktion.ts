@@ -44,6 +44,8 @@ export function Grids(): Children {
     ComparisonTable(["Free", "Pro"], [{ label: "SSO", values: [false, true] }], { ariaLabel: "Plans" }),
     InfiniteList([Text("row")], { rootMargin: 200 }),
     InfiniteList([Text("row")], { rootMargin: "0px 10%" }),
+    // A leading `.` or `+` and an exponent: kept by the runtime, accepted by Chromium.
+    InfiniteList([Text("row")], { rootMargin: ".5px +10px 1e3px -1.5E-2%" }),
   ];
 }
 

@@ -105,6 +105,12 @@ describe("InfiniteList(rootMargin:)", () => {
 
   it("keeps up to four px / % lengths as written", async () => {
     expect(await marginFor('"-10px 5% 0px 12.5PX"')).toBe("-10px 5% 0px 12.5PX");
+    // The rest of the CSS number grammar, each accepted by Chromium's observer.
+    expect(await marginFor('".5px +10px 1e3px -1.5E-2%"')).toBe(".5px +10px 1e3px -1.5E-2%");
+  });
+
+  it("gives a bare number in any CSS spelling px", async () => {
+    expect(await marginFor('".5 +10 1e3"')).toBe(".5px +10px 1e3px");
   });
 
   it("falls back to the default for a unit the observer rejects", async () => {
@@ -112,5 +118,12 @@ describe("InfiniteList(rootMargin:)", () => {
     expect(await marginFor('"2rem"')).toBe("200px");
     expect(await marginFor('"calc(10px + 5px)"')).toBe("200px");
     expect(await marginFor('"1px 2px 3px 4px 5px"')).toBe("200px");
+  });
+
+  it("falls back to the default for a number the observer cannot parse", async () => {
+    // Chromium throws for a trailing decimal point and a fractional exponent.
+    expect(await marginFor('"1.px"')).toBe("200px");
+    expect(await marginFor('"1e3.5px"')).toBe("200px");
+    expect(await marginFor('"+-1px"')).toBe("200px");
   });
 });
