@@ -165,12 +165,20 @@ const MESSAGES = {
     `Module-level \`${name}\` is changed${fn ? ` in \`${fn}\`` : ""}, but Aktion rebuilds module-level bindings on ` +
     "every render, so the change is lost on the next render. Keep mutable data in a state atom " +
     `(\`let $${name} = …\`) or, inside a component, in \`$ref(…)\`.`,
+  E107init: (name: string) =>
+    `Module-level \`${name}\` is changed in place after it was built, but Aktion rebuilds module-level bindings ` +
+    "from their initializer on every render, so the change is lost. Build the whole value in the initializer " +
+    "(`const xs = [1, 2]`, `Object.fromEntries(items.map((it) => [it.id, it]))`, `new Map([[key, value]])`), " +
+    `or keep data that changes in a state atom (\`let $${name} = …\`).`,
   E108method: (name: string, method: string) =>
     `\`$${name}.${method}(…)\` changes state in place, and Aktion only re-renders when a \`$\` atom is assigned. ` +
     `Assign a new value instead, e.g. \`$${name} = [...$${name}, item]\`.`,
   E108key: (name: string) =>
     `\`$${name}[…]\` is changed in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value ` +
     `instead, e.g. \`$${name} = $${name}.map(…)\` or \`$${name} = { ...$${name}, [key]: value }\`.`,
+  E108assign: (name: string) =>
+    `\`Object.assign($${name}, …)\` changes state in place, and Aktion only re-renders when a \`$\` atom is ` +
+    `assigned. Assign a new value instead, e.g. \`$${name} = { ...$${name}, ...changes }\`.`,
   E108delete: (name: string) =>
     `\`delete $${name}…\` changes state in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a ` +
     `new value instead, e.g. a copy without the key: \`const { [key]: _, ...rest } = $${name}; $${name} = rest\`.`,
@@ -1173,6 +1181,10 @@ class Analyzer {
         if (ARRAY_MUTATORS.has(expr.method) || COLLECTION_MUTATORS.has(expr.method)) {
           this.mutation(expr.object, "method", expr.method, expr.loc);
         }
+        // `Object.assign(target, …)` changes its first argument in place.
+        if (isObjectAssign(expr, (n) => this.resolve(n, false) === null) && expr.arguments[0]) {
+          this.mutation(expr.arguments[0], "target", undefined, expr.loc);
+        }
         this.expr(expr.object, asValue);
         for (const arg of expr.arguments) this.expr(arg, neutral);
         break;
@@ -1341,12 +1353,13 @@ class Analyzer {
 
   /**
    * An in-place change of what `subject` evaluates to: `obj.k = v`, `list.push(x)`,
-   * `delete o.k`, `a[i]++`. `subject` is the member chain being changed (or the
-   * receiver of a mutating method).
+   * `delete o.k`, `a[i]++`, `Object.assign(o, …)`. `subject` is the member chain
+   * being changed (or the receiver of a mutating method, or the `target` of
+   * `Object.assign`).
    */
   private mutation(
     subject: Expression,
-    kind: "method" | "assign" | "update" | "delete",
+    kind: "method" | "assign" | "update" | "delete" | "target",
     method: string | undefined,
     at: SourceLocation | undefined,
   ): void {
@@ -1360,7 +1373,7 @@ class Analyzer {
     }
     if (node.kind !== "Identifier" && node.kind !== "StateRef") return;
     // `delete x` / `x = …` are not in-place changes of a value.
-    if (kind !== "method" && !path) return;
+    if (kind !== "method" && kind !== "target" && !path) return;
     const state = node.kind === "StateRef";
     const binding = this.resolve(node.name, state);
     if (!binding) return;
@@ -1370,22 +1383,32 @@ class Analyzer {
       if (!(state && this.isUserImport(binding))) return;
     }
     if (!state) {
-      // E107: the change happens inside a function, after the module-level
-      // binding was built — and is lost when the next render rebuilds it.
-      if ((binding.kind === "module" || this.isUserImport(binding)) && this.fn !== null) {
-        this.report("E107", loc, MESSAGES.E107(node.name, this.fnLabel()));
+      // E107: the module-level binding is changed after it was built — and the
+      // change is lost, because every render rebuilds the binding from its
+      // initializer. Inside a function that is the next render; at module top
+      // level (`xs.push(2)`, `byId[it.id] = it` in a top-level loop) it is the
+      // first one, since the imperative top-level statements run once per plan
+      // and the render then re-seeds the binding.
+      if (binding.kind === "module" || this.isUserImport(binding)) {
+        this.report(
+          "E107",
+          loc,
+          this.fn !== null ? MESSAGES.E107(node.name, this.fnLabel()) : MESSAGES.E107init(node.name),
+        );
       }
       return;
     }
-    if (kind !== "method") this.fn?.stateWrites.push(node.name);
-    const inPlace = kind === "method" || kind === "delete" || dynamicKey;
+    if (kind !== "method" && kind !== "target") this.fn?.stateWrites.push(node.name);
+    const inPlace = kind === "method" || kind === "target" || kind === "delete" || dynamicKey;
     if (!inPlace) return; // `$o.k = v` is a reactive, copy-on-write path write
     const message =
       kind === "method"
         ? MESSAGES.E108method(node.name, method ?? "")
-        : kind === "delete"
-          ? MESSAGES.E108delete(node.name)
-          : MESSAGES.E108key(node.name);
+        : kind === "target"
+          ? MESSAGES.E108assign(node.name)
+          : kind === "delete"
+            ? MESSAGES.E108delete(node.name)
+            : MESSAGES.E108key(node.name);
     if (this.isUserImport(binding)) {
       this.importedMutations.push({
         source: binding.importSource!,
@@ -1470,6 +1493,11 @@ class Analyzer {
       if (atom !== undefined) this.report("W202", loc, MESSAGES.W202(binding.name, atom));
     }
   }
+}
+
+/** `Object.assign(…)` on the global `Object` (`isFree("Object")`: not shadowed by a binding). */
+function isObjectAssign(expr: Expression & { kind: "MethodCall" }, isFree: (name: string) => boolean): boolean {
+  return expr.method === "assign" && expr.object.kind === "Identifier" && expr.object.name === "Object" && isFree("Object");
 }
 
 function firstField(bindings: ReadonlyArray<DestructuringBinding>): string {
