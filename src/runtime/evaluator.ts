@@ -4592,7 +4592,8 @@ function invokeComponentDecl(
     // §2.3): the caller passed a `{...}` whose keys match NONE of the
     // component's params, so it's quietly forwarded as a positional arg. The
     // usual cause is a renamed parameter. Behaviour is unchanged; we only warn.
-    if (!expandAsNamed && ctx.strict && objKeys.length > 0 && decl.params.length > 0) {
+    // Not for a `...rest` component, which takes objects positionally by design.
+    if (!expandAsNamed && ctx.strict && objKeys.length > 0 && decl.params.length > 0 && !hasRestParam(decl)) {
       const dedupeKey = `trailing:${decl.name}:${objKeys.slice().sort().join(",")}`;
       if (!ctx.strictWarned.has(dedupeKey)) {
         ctx.strictWarned.add(dedupeKey);

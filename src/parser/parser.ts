@@ -3302,7 +3302,11 @@ function parseObjectProps(ctx: ParserContext): ObjectProperty[] {
     if (keyTok.type === "Punctuation" && keyTok.value === "[") {
       ctx.consume();
       skipWhitespace(ctx);
+      const keyStart = ctx.peek();
       computedKey = parseExpression(ctx);
+      // A literal key (`["/x"]`) carries no position of its own; give it its
+      // first token's, so a diagnostic about the key can point at it.
+      if (!computedKey.loc) computedKey.loc = { line: keyStart.line, column: keyStart.column };
       skipWhitespace(ctx);
       ctx.expect("Punctuation", "]");
       key = "";
