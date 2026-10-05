@@ -8,6 +8,8 @@
  *   - The documented object form of `Input(validations:)` was inverted.
  *   - `InputGroup` wrote `name` onto its wrapper div, and found the wrong
  *     element inside a `MultiSelect` / reported `""` for a `Combobox`.
+ *   - `FormControl` around a composite field must still label the first
+ *     control in document order, never a picker's hidden filter box.
  *   - `ButtonGroup(ariaLabelledBy:)` became the group's name TEXT.
  *   - `FileUpload(onSelect:)` handed over a `FileList` or an array, depending.
  */
@@ -230,6 +232,36 @@ $app(InputGroup(Input("q", { value: "hello" }), { onBlur: (v) => $blurred = v })
     screen.shadowRoot.querySelector("input")!.dispatchEvent(new Event("blur"));
     await screen.flush();
     expect(screen.state.get("blurred")).toBe("hello");
+  });
+});
+
+describe("FormControl labels the first control in document order", () => {
+  const labelFor = (root: ParentNode): string | null | undefined =>
+    root.querySelector(".rui-form-label")?.getAttribute("for");
+
+  it("an Input with a Combobox action keeps the label and the error on the Input", () => {
+    const root = fragment(`FormControl("Amount", InputGroup(Input("amt"), { action: Combobox("cur", { items: ["EUR", "USD"] }) }), { error: "Bad" })`);
+    expect(labelFor(root)).toBe("amt");
+    const amount = root.querySelector("#amt")!;
+    expect(amount.getAttribute("aria-invalid")).toBe("true");
+    expect(amount.getAttribute("aria-describedby")?.split(" ")).toContain("amt-error");
+    const currency = root.querySelector("#cur")!;
+    expect(currency.hasAttribute("aria-invalid")).toBe(false);
+    expect(currency.hasAttribute("aria-describedby")).toBe(false);
+  });
+
+  it("an Input before a MultiSelect in a Row keeps the label on the Input", () => {
+    expect(labelFor(fragment(`FormControl("Search", Row([Input("q"), MultiSelect("tags", { items: ["a", "b"] })]))`))).toBe("q");
+  });
+
+  it("a picker before an Input in a Row gets the label — tree order, not selector order", () => {
+    expect(labelFor(fragment(`FormControl("Owner", Row([Combobox("o", { items: ["a", "b"] }), Input("note")]))`))).toBe("o");
+    expect(labelFor(fragment(`FormControl("Tags", Row([MultiSelect("t", { items: ["a", "b"] }), Input("note")]))`))).toBe("t");
+  });
+
+  it("a bare picker gets the label on its trigger, never on the panel's filter box", () => {
+    expect(labelFor(fragment(`FormControl("Owner", Combobox("o", { items: ["a", "b"] }))`))).toBe("o");
+    expect(labelFor(fragment(`FormControl("Tags", MultiSelect("t", { items: ["a", "b"] }))`))).toBe("t");
   });
 });
 

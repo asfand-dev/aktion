@@ -159,18 +159,26 @@ const PICKER_TRIGGER_SELECTOR = ".rui-combobox-trigger, .rui-multiselect-trigger
 
 /**
  * The form control inside a wrapped field (InputGroup's `field`, FormControl's
- * `field`).
+ * `field`): the first one in document order.
  *
- * A picker's trigger wins over any native control, because Combobox and
- * MultiSelect also render a native `<input>` — the filter box inside their
- * (closed) panel. A single selector list leaves the choice to the engine:
- * happy-dom returned the filter for `"input, …, .rui-combobox-trigger"`, so
- * `disabled`, the validation aria and the focus callbacks landed on a hidden
- * box. Asking for the trigger first makes the answer the same everywhere.
+ * Combobox and MultiSelect also render a native `<input>` — the filter box
+ * inside their (closed) panel — so anything inside a picker's panel is
+ * skipped; the trigger before it is the control. Document order, not "a picker
+ * first": a FormControl around `InputGroup(Input(…), { action: Combobox(…) })`
+ * labels the Input, not the currency picker beside it.
+ *
+ * `querySelectorAll`, not `querySelector` with the same list: happy-dom 15
+ * resolves `querySelector(list)` selector by selector (it returned the filter
+ * for `"input, .rui-combobox-trigger"` with the trigger earlier in the tree),
+ * while its `querySelectorAll` returns tree order, as the DOM specifies for
+ * both.
  */
 function findFieldControl(scope: Element): HTMLElement | null {
-  return scope.querySelector<HTMLElement>(PICKER_TRIGGER_SELECTOR)
-    ?? scope.querySelector<HTMLElement>("input, select, textarea");
+  for (const node of scope.querySelectorAll<HTMLElement>(`input, select, textarea, ${PICKER_TRIGGER_SELECTOR}`)) {
+    // The panel consts are declared further down; this runs at render time.
+    if (!node.closest(`${COMBOBOX_PANEL}, ${MULTISELECT_PANEL}`)) return node;
+  }
+  return null;
 }
 
 /**
