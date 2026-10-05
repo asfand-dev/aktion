@@ -254,6 +254,19 @@ export interface CallExpr {
   kind: "Call";
   callee: string;
   arguments: Expression[];
+  /**
+   * Bind a user component's arguments as JavaScript binds them: every
+   * argument — an object literal included — goes to the parameter at its
+   * position, and none is read as the DSL's named-props bag (`Card({ title })`
+   * for `function Card(title)`). The parser never sets it. The JS-semantics
+   * layer sets it on a call written in a `.aktion.js` / `.aktion.ts` module to
+   * a component declared in one, because TypeScript types that call with the
+   * component's plain signature; a call to a `.aktion` component keeps the
+   * named-props convention its generated declaration types. Like
+   * `DeclParam.publicName`, it lives only in the AST: printing the program
+   * back to text drops it.
+   */
+  positional?: true;
   loc?: SourceLocation;
 }
 

@@ -19,7 +19,9 @@
  *   - **W1–W3** {@link lowerJavaScriptSemantics}: rewrites that make the
  *     evaluator compute what JavaScript would — every local gets a unique name
  *     (W1), a nested function becomes a `const` lambda in place (W2), and every
- *     function body ends in an explicit `return` (W3).
+ *     function body ends in an explicit `return` (W3); a call to a component
+ *     declared in a JavaScript-shaped module binds its arguments positionally
+ *     (`CallExpr.positional`).
  *
  * The rules, the measurements behind them and the exact messages are specified
  * in `aktion-in-typescript.md` §6. Rewrites keep every original `loc`, so
@@ -51,7 +53,7 @@ import type {
 } from "../parser/types.js";
 import manifest from "../dsl/manifest.json";
 import type { LinkDiagnostic } from "./linker.js";
-import { DSL_MODULE_ID } from "./module-kind.js";
+import { DSL_MODULE_ID, moduleLanguage } from "./module-kind.js";
 
 // ── Vocabulary ──────────────────────────────────────────────────────────
 
@@ -507,6 +509,8 @@ class Analyzer {
   readonly refs: Ref[] = [];
   readonly findings: Finding[] = [];
   readonly importedMutations: ImportedStateMutation[] = [];
+  /** Calls whose arguments bind positionally, as in JavaScript (`CallExpr.positional`). */
+  readonly positionalCalls: CallExpr[] = [];
 
   run(program: Program): this {
     this.hoistModule(program.statements);
@@ -1228,6 +1232,9 @@ class Analyzer {
     if (binding) {
       this.checkPatternArguments(expr, binding);
       if (this.fn === null || this.fn.hookHost) this.renderCalls.push({ binding, loc });
+      if (this.isJavaScriptComponent(binding) && expr.arguments.some((arg) => arg.kind === "Object")) {
+        this.positionalCalls.push(expr);
+      }
     }
     const neutral: ExprContext = { hooks: context.hooks, value: false };
     for (const arg of expr.arguments) this.expr(arg, neutral);
@@ -1313,6 +1320,21 @@ class Analyzer {
     if (!binding) return false;
     if (binding.kind === "function") return binding.decl?.kind === "ComponentDeclaration";
     return this.isUserImport(binding) && isPascalCase(binding.name);
+  }
+
+  /**
+   * A component whose arguments TypeScript types with its plain
+   * signature: one declared in this module (a `function Card(…)` or a W4
+   * arrow), or imported from a `.aktion.ts` / `.aktion.js` module. A call to
+   * it binds positionally (`CallExpr.positional`). Not a `.aktion` import: its
+   * generated declaration types the trailing named-props bag, so the DSL
+   * convention is what the caller's types promise there.
+   */
+  private isJavaScriptComponent(binding: Binding): boolean {
+    if (binding.kind === "function") return binding.decl?.kind === "ComponentDeclaration";
+    if (!this.isUserImport(binding) || !isPascalCase(binding.name) || binding.importSource === undefined) return false;
+    const language = moduleLanguage(binding.importSource);
+    return language === "javascript" || language === "typescript";
   }
 
   /** E117 — `{ ...extra }` in the props bag of a library or host component. */
@@ -1842,6 +1864,15 @@ function toDiagnostics(findings: ReadonlyArray<Finding>, path: string): LinkDiag
  *     bare `return` (without `loc`, so coverage gains no phantom line), so
  *     falling off the end yields `undefined` instead of the last expression
  *     (S24).
+ *   - **Positional calls** — a call to a component declared in a
+ *     `.aktion.js` / `.aktion.ts` module is marked `positional`: its
+ *     arguments bind as JavaScript binds them, so an object literal
+ *     (`KVRow({ key: "a", value: "1" })`) is the value of the parameter at its
+ *     position instead of a named-props bag that silently reroutes or drops
+ *     it. TypeScript types such a call with the component's plain signature,
+ *     so this is what the caller's types say. Calls to `.aktion` components,
+ *     and every call written in a `.aktion` module, keep the DSL's named
+ *     props.
  *
  * Mutates and returns `program` (the frontend owns the freshly parsed tree).
  * Run only on a module {@link checkJavaScriptSemantics} accepted.
@@ -1859,6 +1890,8 @@ export function lowerJavaScriptSemantics(program: Program): Program {
     const symbol = ref.binding?.symbol;
     if (symbol !== undefined && ref.rename) ref.rename(symbol);
   }
+  // Positional calls
+  for (const call of analysis.positionalCalls) call.positional = true;
   // W2
   liftNestedFunctions(program);
   // W3
