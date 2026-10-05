@@ -13,7 +13,6 @@ import type {
   Program,
   Statement,
   ComponentDeclaration,
-  DeclParam,
   EffectDeclaration,
   ActionDeclaration,
   HookDeclaration,
@@ -24,6 +23,12 @@ import type {
   DestructuringPattern,
   SourceLocation,
 } from "../parser/types.js";
+import {
+  componentParamPublicName,
+  hasRestParam,
+  positionalKeyArguments,
+  trailingPropsArgument,
+} from "../parser/component-call.js";
 import {
   isEnabled as isCoverageEnabled,
   registerProgram as registerCoverageProgram,
@@ -4447,23 +4452,6 @@ function resolveLibraryCallArgs(
 }
 
 /**
- * The name a caller uses for a component parameter: its `publicName` when a
- * compiler pass renamed the local binding (the TS/JS frontend's hygienic
- * renaming), else the declared `name`. Everything that is part of the
- * calling convention BY NAME — matching named props, binding them, and
- * telling a named slot apart from a parameter — goes through this; the value
- * itself is always bound to the local `name`.
- */
-function componentParamPublicName(param: DeclParam): string {
-  return param.publicName ?? param.name;
-}
-
-/** True when the component's last parameter is `...rest`. */
-function hasRestParam(decl: ComponentDeclaration): boolean {
-  return decl.params.length > 0 && decl.params[decl.params.length - 1]!.rest === true;
-}
-
-/**
  * {@link invokeComponentDecl} for a call the JS-semantics layer marked
  * `positional` (see `CallExpr.positional`) that reaches a component declared
  * in a `.aktion.js` / `.aktion.ts` module (`ComponentDeclaration.javascript`).
@@ -4489,6 +4477,7 @@ function invokeComponentDeclPositionally(
   loc?: { line: number; column: number },
 ): UserComponentNode {
   const positional: unknown[] = [];
+  const keyArguments = new Set(positionalKeyArguments(args, decl.params));
   let explicitKey: unknown;
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]!;
@@ -4501,10 +4490,8 @@ function invokeComponentDeclPositionally(
     }
     const value = evaluate(arg, ctx);
     positional.push(value);
-    const keyOnly = arg.kind === "Object" && i === args.length - 1 &&
-      arg.properties.length === 1 && !arg.properties[0]!.spread && arg.properties[0]!.key === "key";
     if (
-      arg.kind === "Object" && (keyOnly || (i >= decl.params.length && !hasRestParam(decl))) &&
+      keyArguments.has(i) &&
       value !== null && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "key")
     ) {
       explicitKey = (value as { key?: unknown }).key;
@@ -4550,71 +4537,37 @@ function invokeComponentDecl(
   const named: Record<string, Expression> = {};
   let explicitKeyExpr: Expression | undefined;
 
-  let trailingObjIdx = -1;
-  for (let i = args.length - 1; i >= 0; i -= 1) {
-    if (args[i]!.kind === "Object") {
-      trailingObjIdx = i;
-      break;
+  // Whether the rightmost object literal binds as named props or is one
+  // positional value — `trailingPropsArgument` has the rules. In short: named
+  // when one of its keys is `key` or a parameter's public name (keys are
+  // matched against the names CALLERS use, `componentParamPublicName`, which
+  // differ from the local names when a compiler pass renamed the parameters),
+  // or when the arguments before it fill every parameter (named slots,
+  // `Panel(body, { header, footer })`); otherwise positional, so a caller can
+  // pass an opaque data/slots object without surprising key-routing.
+  const trailing = trailingPropsArgument(args, decl.params);
+  // Strict-mode diagnostic for the silent named→positional flip (feedback
+  // §2.3): the caller passed a `{...}` whose keys match NONE of the
+  // component's params, so it's quietly forwarded as a positional arg. The
+  // usual cause is a renamed parameter. Behaviour is unchanged; we only warn.
+  // Not for a `...rest` component, which takes objects positionally by design.
+  if (trailing && !trailing.named && ctx.strict && decl.params.length > 0 && !hasRestParam(decl.params)) {
+    const objKeys = (args[trailing.index] as ObjectExpr).properties.filter((p) => !p.spread).map((p) => p.key);
+    const dedupeKey = `trailing:${decl.name}:${objKeys.slice().sort().join(",")}`;
+    if (objKeys.length > 0 && !ctx.strictWarned.has(dedupeKey)) {
+      ctx.strictWarned.add(dedupeKey);
+      const where = loc ? ` (line ${loc.line}, col ${loc.column})` : "";
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[aktion] strict: object { ${objKeys.join(", ")} } passed to <${decl.name}>${where} ` +
+          `is being forwarded as a positional argument because none of its keys match a ` +
+          `parameter (${decl.params.map(componentParamPublicName).join(", ") || "none"}). ` +
+          `If you meant named props, check for a renamed/misspelled parameter.`,
+      );
     }
   }
-  let trailingObjArg = trailingObjIdx >= 0 ? args[trailingObjIdx]! : null;
-
-  // Decide whether to treat the trailing object as named-args or a regular
-  // positional arg. Rule: if the object has `key:` or any key that matches
-  // one of the component's param names, it expands to named-args. If none
-  // of its keys match any param name, it's passed positionally — this lets
-  // callers pass an opaque data/slots object to a user component without
-  // surprising key-routing. Keys are matched against the names CALLERS use
-  // (`componentParamPublicName`), which differ from the local names when a
-  // compiler pass renamed the parameters.
-  let expandAsNamed = false;
-  if (trailingObjArg && trailingObjArg.kind === "Object") {
-    const publicNames = new Set(decl.params.map(componentParamPublicName));
-    const objKeys: string[] = [];
-    let allIdentifierKeys = true;
-    for (const prop of trailingObjArg.properties) {
-      if (prop.spread) continue;
-      objKeys.push(prop.key);
-      if (prop.key === "key" || publicNames.has(prop.key)) {
-        expandAsNamed = true;
-      }
-      if (!/^[A-Za-z_$][\w$]*$/.test(prop.key)) allIdentifierKeys = false;
-    }
-    // Named slots (XIII.1): when the positional args BEFORE the trailing object
-    // already satisfy every declared param, the object can't be a positional
-    // param value — so treat it as named props / slots (`Panel(body, { header,
-    // footer })`). Guarded to identifier keys so an opaque data payload passed
-    // as the sole/only-remaining positional (`Foo({ data })`) stays positional.
-    // Not for a component with a `...rest` parameter: that absorbs any number
-    // of positional values, objects included (`Legend({ name: "A" }, { name: "B" })`).
-    if (!expandAsNamed && allIdentifierKeys && objKeys.length > 0 && !hasRestParam(decl)) {
-      const positionalBefore = args.length - 1; // every arg except the trailing object
-      if (positionalBefore >= decl.params.length) expandAsNamed = true;
-    }
-    // Strict-mode diagnostic for the silent named→positional flip (feedback
-    // §2.3): the caller passed a `{...}` whose keys match NONE of the
-    // component's params, so it's quietly forwarded as a positional arg. The
-    // usual cause is a renamed parameter. Behaviour is unchanged; we only warn.
-    // Not for a `...rest` component, which takes objects positionally by design.
-    if (!expandAsNamed && ctx.strict && objKeys.length > 0 && decl.params.length > 0 && !hasRestParam(decl)) {
-      const dedupeKey = `trailing:${decl.name}:${objKeys.slice().sort().join(",")}`;
-      if (!ctx.strictWarned.has(dedupeKey)) {
-        ctx.strictWarned.add(dedupeKey);
-        const where = loc ? ` (line ${loc.line}, col ${loc.column})` : "";
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[aktion] strict: object { ${objKeys.join(", ")} } passed to <${decl.name}>${where} ` +
-            `is being forwarded as a positional argument because none of its keys match a ` +
-            `parameter (${decl.params.map(componentParamPublicName).join(", ") || "none"}). ` +
-            `If you meant named props, check for a renamed/misspelled parameter.`,
-        );
-      }
-    }
-  }
-  if (!expandAsNamed) {
-    trailingObjIdx = -1;
-    trailingObjArg = null;
-  }
+  const trailingObjIdx = trailing?.named ? trailing.index : -1;
+  const trailingObjArg = trailingObjIdx >= 0 ? args[trailingObjIdx]! : null;
 
   for (let i = 0; i < args.length; i += 1) {
     if (i === trailingObjIdx) continue;
@@ -4787,7 +4740,7 @@ export function evaluateUserComponent(
   }
   // `children` slot from any extra trailing positional arguments — there are
   // none when a `...rest` parameter took them all.
-  if (positional.length > decl.params.length && !hasRestParam(decl)) {
+  if (positional.length > decl.params.length && !hasRestParam(decl.params)) {
     const extras = positional.slice(decl.params.length);
     const childrenValue = extras.length === 1 ? extras[0] : extras;
     ctx.loopVars.set("children", childrenValue);
