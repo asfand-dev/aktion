@@ -75,6 +75,12 @@ export function buildFontUrl(list: unknown): string {
 }
 
 /**
+ * The key of a `$theme({ fonts })` / `$theme({ font })` group that lists web
+ * fonts to import (a shorthand string or an array of them).
+ */
+export const FONT_IMPORT_KEY = "import";
+
+/**
  * Inject the web fonts named in `import` into `document.head` (idempotent).
  * `record` is the `fonts` group from a `$theme({ fonts: {...} })` call; only
  * its `import` array is used here (the `family`/`familyHeading` tokens are
@@ -82,7 +88,7 @@ export function buildFontUrl(list: unknown): string {
  */
 export function loadFonts(record: unknown): string {
   if (!record || typeof record !== "object" || Array.isArray(record)) return "";
-  const list = (record as Record<string, unknown>).import;
+  const list = (record as Record<string, unknown>)[FONT_IMPORT_KEY];
   if (list == null) return "";
   const url = buildFontUrl(list);
   if (!url || injectedUrls.has(url)) return url;

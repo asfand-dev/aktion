@@ -11,8 +11,8 @@
  * the curated per-component types (`scripts/dsl-types/component-types/`),
  * `UNIVERSAL_PROP_NAMES`, `LEGACY_SIZE_TOKEN_ALIASES`, `RESPONSIVE_BREAKPOINTS`,
  * `SPACING_TOKENS`, the language catalogues (`src/language/*`), the built-in
- * theme names, `SAFE_HOST_GLOBALS`, the runtime's TS types and the TypeScript
- * libs. Output is deterministic: no timestamps, no version stamp (a release
+ * theme names, `SAFE_HOST_GLOBALS`, the `sx` / theme / icon lookup tables
+ * (`style-types.ts`), the runtime's TS types and the TypeScript libs. Output is deterministic: no timestamps, no version stamp (a release
  * bump must not make the committed files stale), sorted where order is free.
  *
  * `ts` is passed in (not imported) so this module bundles without TypeScript
@@ -21,7 +21,9 @@
 import type * as TS from "typescript";
 import { defaultLibrary } from "../../src/library/index.js";
 import { findPositionalIndex, propExpectsObject } from "../../src/library/types.js";
+import * as sxTables from "../../src/library/sx.js";
 import { UNIVERSAL_PROP_NAMES } from "../../src/library/sx.js";
+import { INTERACTION_STATES } from "../../src/library/responsive-style.js";
 import { LEGACY_SIZE_TOKEN_ALIASES, RESPONSIVE_BREAKPOINTS, SPACING_TOKENS } from "../../src/library/utils.js";
 import { universalPropCatalog } from "../../src/language/components.js";
 import { builtinCatalog } from "../../src/language/builtins.js";
@@ -32,8 +34,16 @@ import {
   namespaceCatalog,
   routeMembers,
 } from "../../src/language/namespaces.js";
-import { builtInThemes } from "../../src/theme/index.js";
-import { SAFE_HOST_GLOBALS } from "../../src/runtime/evaluator.js";
+import { THEME_GRADIENT_FUNCTIONS, builtInThemes, themeTokenCssVar, themeTokenNames } from "../../src/theme/index.js";
+import { FONT_IMPORT_KEY } from "../../src/theme/fonts.js";
+import { SUPPORTED_VARIANTS } from "../../src/icons/index.js";
+import {
+  SAFE_HOST_GLOBALS,
+  SPACING_THEME_KEY_ALIASES,
+  STRUCTURED_THEME_GROUPS,
+  THEME_GROUP_PREFIX,
+  THEME_METADATA_KEYS,
+} from "../../src/runtime/evaluator.js";
 import { INJECTED_NAMES, classifyBuiltins, emitBuiltins } from "./builtins.js";
 import { byCodePoint, emitComponents, type ComponentManifestEntry } from "./components.js";
 import { COMPONENT_TYPES } from "./component-types/index.js";
@@ -109,6 +119,24 @@ export function generateDslTypes(input: { ts: typeof TS; repoRoot: string }): Ge
     themeNames: Object.keys(builtInThemes),
     runtimeTypes,
     libGlobals,
+    style: {
+      sx: sxTables,
+      interactionStates: INTERACTION_STATES,
+      theme: {
+        tokenNames: themeTokenNames(),
+        tokenCssVar: themeTokenCssVar,
+        gradientFunctions: THEME_GRADIENT_FUNCTIONS,
+        fontImportKey: FONT_IMPORT_KEY,
+        structuredGroups: STRUCTURED_THEME_GROUPS,
+        metadataKeys: THEME_METADATA_KEYS,
+        spacingAliases: SPACING_THEME_KEY_ALIASES,
+        groupPrefix: THEME_GROUP_PREFIX,
+        catalogue: findBuiltinConfig("theme") ?? [],
+      },
+      iconVariants: SUPPORTED_VARIANTS,
+      components: defaultLibrary.components,
+      universalPropNames: UNIVERSAL_PROP_NAMES,
+    },
   });
 
   const components = emitComponents({
