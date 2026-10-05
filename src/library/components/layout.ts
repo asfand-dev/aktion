@@ -828,9 +828,19 @@ export const Tabs: ComponentSpec = {
     // props are observable (see readTabEntry). A conditional tab (`null`,
     // `false`) is a hole — wrapped like any other value it became a phantom
     // "Tab N" trigger over an empty panel.
-    const entries = items
-      .filter((item) => item !== null && item !== undefined && item !== false)
-      .map((item, idx) => readTabEntry(item, idx, helpers));
+    const entries: TabEntry[] = [];
+    for (const item of items) {
+      if (item === null || item === undefined || item === false) {
+        // Still spend the hole's `renderNode` call (its empty text node is
+        // discarded): each child's instance path is numbered by call order, so
+        // skipping it would move every later tab to a new path the moment the
+        // hole fills, dropping the state inside it (a nested Tabs' selection,
+        // an uncontrolled editor's text).
+        helpers.renderNode(null);
+        continue;
+      }
+      entries.push(readTabEntry(item, entries.length, helpers));
+    }
 
     // Stable id prefix so each trigger can point at its panel and back.
     const idSlot = helpers.useInstanceState<string>("rui-tabs-id", "");

@@ -4,7 +4,8 @@
  *
  *   - Steps treated a user-component node as a data object (an EMPTY pending
  *     step) and rendered `null` items as empty steps; Tabs turned a `null` item
- *     into a phantom "Tab N" trigger.
+ *     into a phantom "Tab N" trigger (and skipping it must not renumber the
+ *     instance paths of the tabs after it).
  *   - Grid only switched to span mode for library `GridItem` nodes, not for a
  *     user component that returns one.
  *   - BadgeList indexed `tones` / `icons` against the label list AFTER empty
@@ -65,6 +66,27 @@ describe("Tabs", () => {
     const screen = await mount(`$app(Tabs([TabItem("a", "A", [Text("x")]), null, undefined]))`);
     expect(all(screen, ".rui-tab-trigger").map(text)).toEqual(["A"]);
     expect(all(screen, ".rui-tab-content")).toHaveLength(1);
+  });
+
+  it("keeps the instance state of later tabs when a conditional tab ahead of them appears", async () => {
+    const screen = await mount(`
+let $admin = false
+$app(Tabs([
+  $admin ? TabItem("adm", "Admin", [Text("admin")]) : null,
+  TabItem("a", "Alpha", [Tabs([TabItem("one", "One", [Text("1")]), TabItem("two", "Two", [Text("2")])])]),
+], "a"))`);
+    const inner = (): HTMLElement[] =>
+      all<HTMLElement>(screen, ".rui-tab-panels .rui-tab-trigger");
+    const selected = (): Record<string, string | null> =>
+      Object.fromEntries(inner().map((b) => [text(b), b.getAttribute("aria-selected")]));
+    inner().find((b) => text(b) === "Two")!.click();
+    await screen.flush();
+    expect(selected()).toEqual({ One: "false", Two: "true" });
+
+    await screen.state.set("admin", true);
+    const outer = screen.shadowRoot.querySelector(".rui-tabs > .rui-tab-list");
+    expect(Array.from(outer!.querySelectorAll(".rui-tab-trigger")).map(text)).toEqual(["Admin", "Alpha"]);
+    expect(selected()).toEqual({ One: "false", Two: "true" });
   });
 });
 
