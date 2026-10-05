@@ -1,8 +1,8 @@
 /**
  * What the generated `name.d.aktion.ts` declarations say (src/plugin/declarations.ts):
  * parameter types from literal defaults, hook arity, atom types from their
- * initializers, a typed named-props overload with `key`, collision-free names —
- * and modules reached through an `alias`. Each claim is checked by a real `tsc`
+ * initializers and every write the module makes, typed named-props overloads
+ * with `key`, collision-free names — and modules reached through an `alias`. Each claim is checked by a real `tsc`
  * run with `skipLibCheck: false`, so an invalid declaration fails the test
  * instead of hiding behind the templates' `skipLibCheck: true`.
  *
@@ -113,6 +113,40 @@ const PILL = [
   "",
 ].join("\n");
 
+const TWO = 'export function Two(label = "x", count = 0) { return Text(label) }\n';
+
+const CLASH = [
+  "export compiled = 5",
+  'export function Foo({ a }, p0) { return Text("x") }',
+  "export class = 1",
+  // React-habit components: a parameter called `props`.
+  'export function Card(props) { return Text("x") }',
+  "export function Card2(title, props) { return Text(title) }",
+  "",
+].join("\n");
+
+const HANDLES = [
+  'export $sock = $socket({ url: "wss://example.test/ws" })',
+  'export $events = $sse({ url: "/events" })',
+  'export $scr = $script({ src: "/vendor.js" })',
+  'export $tr = $i18n({ defaultLanguage: "en" })',
+  'export $th = $theme({ name: "dark" })',
+  'export let $todos = [{ id: 1, title: "Buy milk" }, { id: 2, title: "Walk", done: true }]',
+  'export let $filters = { status: "all" }',
+  'export let $tags = ["a"]',
+  'export let $prefs = { theme: "dark" }',
+  "export let $code = null",
+  "export let $ticks = 0",
+  "export function clear() {",
+  "  $filters.status = null",
+  "  $tags[0] = 5",
+  '  $prefs.lang = "de"',
+  '  $code ??= "A1"',
+  "  $ticks++",
+  "}",
+  "",
+].join("\n");
+
 describe("what a declaration states", () => {
   const text = aktionDeclarationText(PILL, "src/pill.aktion").text;
 
@@ -135,6 +169,79 @@ describe("what a declaration states", () => {
     expect(text).toContain("export declare let $selected: number | null;");
     // `$count = $count + by` keeps a primitive's kind.
     expect(text).toContain("export declare let $count: number;");
+  });
+
+  it("types the positionals after the props as the parameters they fill", () => {
+    // `Pill({ key: 1 }, "x")` binds "x" to `label`, not to `children`.
+    expect(text).toContain(
+      'export declare function Pill(props: PillProps & { readonly label?: never } & ({ readonly key: Key } | { readonly tone: string | null | undefined }), label: any): AktionNode<"Pill">;',
+    );
+    expect(text).toContain(
+      'export declare function Pill(props: PillProps & { readonly label?: never; readonly tone?: never } & { readonly key: Key }, label: any, tone: string | null | undefined): AktionNode<"Pill">;',
+    );
+    // Children only once every parameter is filled.
+    expect(text).toContain(
+      'export declare function Pill(label: any, props: PillProps & { readonly label?: never; readonly tone?: never }, tone: string | null | undefined, p2: any, ...children: Children[]): AktionNode<"Pill">;',
+    );
+    expect(text).not.toMatch(/function Pill\(props: [^)]*\), \.\.\.children/);
+  });
+
+  it("types the resource handles each builtin returns", () => {
+    const { text: handles } = aktionDeclarationText(HANDLES);
+    expect(handles).toContain("export declare let $sock: SocketResource<unknown>;");
+    expect(handles).toContain("export declare let $events: SseResource<unknown>;");
+    expect(handles).toContain("export declare let $scr: ScriptResource<unknown>;");
+    expect(handles).toContain("export declare let $tr: I18nInstance;");
+    expect(handles).toContain("export declare let $th: ThemeHandle;");
+    expect(handles).toContain(
+      'import type { CompiledProgram, I18nInstance, ScriptResource, SocketResource, SseResource, ThemeHandle } from "aktion-runtime/dsl";',
+    );
+  });
+
+  it("widens an atom by every write: through a member, an index, a compound assignment, `++`", () => {
+    const { text: handles } = aktionDeclarationText(HANDLES);
+    expect(handles).toContain("export declare let $filters: any;");
+    expect(handles).toContain("export declare let $tags: any;");
+    expect(handles).toContain("export declare let $prefs: any;");
+    // `??=` stores its operand; `++` leaves a number.
+    expect(handles).toContain("export declare let $code: string | null;");
+    expect(handles).toContain("export declare let $ticks: number;");
+    const writes = (body: string, init = '{ a: "x" }'): string =>
+      aktionDeclarationText(`export let $v = ${init}\nexport function f() { ${body} }`).text.match(/declare let \$v: (.*);/)![1]!;
+    expect(writes("$v.a = 1")).toBe("any");
+    expect(writes("$v.a += 1")).toBe("any");
+    expect(writes("$v.n++")).toBe("any");
+    expect(writes("delete $v.a")).toBe("any");
+    expect(writes("$v.list.push(1)", "{ list: [] }")).toBe("any");
+    expect(writes("Object.assign($v, { b: 1 })")).toBe("any");
+    expect(writes("$v.push(null)", "[1]")).toBe("any");
+    // The runtime turns a primitive written through a member into an object.
+    expect(writes("$v.a = 1", '"s"')).toBe("any");
+    expect(writes("$v.length = 9", "0")).toBe("any");
+    expect(writes("$v += 1", '"s"')).toBe("string");
+    expect(writes('$v += "px"', "0")).toBe("number | string");
+    expect(writes("$v -= 1", '"s"')).toBe("string | number");
+    expect(writes("$v ||= 2", "null")).toBe("number | null");
+    expect(writes("$v += 1", "[1]")).toBe("any");
+    // A single-expression lambda body assigns too.
+    expect(aktionDeclarationText('export let $v = "s"\nexport const f = () => $v = null').text).toContain(
+      "export declare let $v: string | null;",
+    );
+  });
+
+  it("merges object literals into one shape, a key optional where one lacks it", () => {
+    const { text: handles } = aktionDeclarationText(HANDLES);
+    expect(handles).toContain("export declare let $todos: Array<{ id: number; title: string; done?: boolean }>;");
+    const type = (src: string): string => aktionDeclarationText(src).text.match(/declare let \$v: (.*);/)![1]!;
+    expect(type('export let $v = [{ meta: { a: 1 } }, { meta: { b: "x" } }, { meta: null }]')).toBe(
+      "Array<{ meta: { a?: number; b?: string } | null }>",
+    );
+    expect(type('export let $v = [{ id: 1 }, "x"]')).toBe("Array<{ id: number } | string>");
+    expect(type("export let $v = [{ on: null }, { on: () => 1 }]")).toBe("Array<{ on: ((...args: any[]) => any) | null }>");
+    expect(type('export let $v = { name: "Ada" }\nexport function f() { $v = { name: "Bob", age: 3 } }')).toBe(
+      "{ name: string; age?: number }",
+    );
+    expect(type("export let $v = [1]\nexport function f() { $v = [] }")).toBe("any[]");
   });
 
   it("forgets an object's shape once the module assigns it something unknown", () => {
@@ -161,6 +268,8 @@ describe("what a declaration states", () => {
         'export $x = "s"',
         "export function act(new, class) { return 1 }",
         "export class = 1",
+        'export function Card(props) { return Text("x") }',
+        "export function Card2(title, props) { return Text(title) }",
       ].join("\n"),
     );
     expect(clash).toContain("export declare const compiled: number;");
@@ -170,6 +279,12 @@ describe("what a declaration states", () => {
     expect(clash).toContain("export declare let $x: string | number;");
     expect(clash).toContain("export declare function act(_new?: any, _class?: any): any;");
     expect(clash).toContain("declare const _class: number;\nexport { _class as class };");
+    // A parameter called `props` moves the overloads' own props aside.
+    expect(clash).toContain('export declare function Card(_props: CardProps & { readonly props?: never }, props: any, ...children: Children[]): AktionNode<"Card">;');
+    expect(clash).toContain(
+      'export declare function Card2(title: any, props: any, _props: Card2Props & { readonly title?: never; readonly props?: never }, ...children: Children[]): AktionNode<"Card2">;',
+    );
+    expect(clash).not.toMatch(/\bprops: [^,)]*, props:/);
   });
 });
 
@@ -178,8 +293,10 @@ describe("the declarations type-check, and type what the runtime binds", () => {
   const GOOD = [
     'import { Text, type AktionNode } from "aktion-runtime/dsl";',
     'import app, { Pill, bump, $useThing, Shell, Row2, Panel, $items, $user, $res, $pages, $signup, $selected, $count } from "./pill.aktion";',
-    'import { compiled, Foo } from "./clash.aktion";',
+    'import { compiled, Foo, Card, Card2 } from "./clash.aktion";',
     'import { $later } from "./late.aktion";',
+    'import { Two } from "./two.aktion";',
+    'import { $sock, $events, $scr, $tr, $th, $todos, $filters, $tags, $prefs, $code, $ticks } from "./handles.aktion";',
     'export const a: AktionNode<"Pill"> = Pill("x");',
     'export const b = [Pill("x", "muted"), Pill("x", null), Pill("x", { key: 1 }), Pill("x", { tone: "loud" }), Pill("x", { tone: undefined })];',
     'export const c = Pill({ label: "x", tone: "y", key: "k" });',
@@ -197,10 +314,22 @@ describe("the declarations type-check, and type what the runtime binds", () => {
     "export const q: number | null = $selected;",
     "export const r = [app.program, Foo({ a: 1 }, 2)];",
     "export const u: boolean | undefined = $later?.loading;",
+    // Positionals after the props fill the parameters, then `children`.
+    'export const v = [Pill({ key: "k" }, "g", "loud"), Two({ key: "k" }, "s", 7, "kid"), Two({ count: 2 }, "t"), Two()];',
+    'export const w = [Card({ title: "x" }), Card(1, { key: 1 }), Card2("t", { key: 1 }), Card2("t", { props: 2 })];',
+    // One member of each resource handle: a renamed dsl export fails the declaration.
+    "export const x: [boolean, unknown, boolean, string, Readonly<Record<string, string>>] = [$sock.connected, $events.last, $scr.ready, $tr.t(\"k\"), $th.tokens];",
+    // Merged shapes read the key only some elements have.
+    "export const y: number[] = $todos.filter((t) => t.done === true).map((t) => t.id + t.title.length);",
+    // Written through a member, so typed by what the writes leave.
+    "export const z: [null, number, string] = [$filters.status, $tags[0], $prefs.lang];",
+    "export const zz: [string | null, number] = [$code, $ticks];",
     "",
   ].join("\n");
   const BAD = [
     'import { Pill, bump, $useThing, Shell, Row2, $res, $user, $items, $selected } from "./pill.aktion";',
+    'import { Two } from "./two.aktion";',
+    'import { $code, $todos } from "./handles.aktion";',
     "// @ts-expect-error TS2769 a number where the default says string",
     'Pill("x", 42);',
     "// @ts-expect-error TS2769 `key` is a string or a number",
@@ -225,6 +354,16 @@ describe("the declarations type-check, and type what the runtime binds", () => {
     "export const s: string = $items;",
     "// @ts-expect-error TS2322 may be null",
     "export const t: number = $selected;",
+    "// @ts-expect-error TS2769 the 42 after the props is `label`, whose default says string",
+    "Two({ key: 1 }, 42);",
+    "// @ts-expect-error TS2769 `label` given after the props and by name: the runtime drops the positional one",
+    'Two({ label: "a" }, "s");',
+    "// @ts-expect-error TS2769 `count` given after the props and by name",
+    'Two({ count: 1 }, "s", 2);',
+    "// @ts-expect-error TS2322 `??=` may store a string",
+    "export const c: number = $code;",
+    "// @ts-expect-error TS2339 no element has such a key",
+    "$todos[0]!.nope;",
     "",
   ].join("\n");
 
@@ -232,7 +371,9 @@ describe("the declarations type-check, and type what the runtime binds", () => {
     project = join(work, "precision");
     put(project, {
       "src/pill.aktion": PILL,
-      "src/clash.aktion": 'export compiled = 5\nexport function Foo({ a }, p0) { return Text("x") }\nexport class = 1\n',
+      "src/clash.aktion": CLASH,
+      "src/two.aktion": TWO,
+      "src/handles.aktion": HANDLES,
       // The resource type comes from an assignment only: its import must too.
       "src/late.aktion": 'export $later = null\nexport function load() { $later = $mutation({ url: "/y" }) }\n',
       "src/good.aktion.ts": GOOD,
@@ -260,7 +401,7 @@ describe("the declarations type-check, and type what the runtime binds", () => {
       const blanked = tsc(join(project, "tsconfig.bad.json"));
       const reported = reportedFailures(blanked.output, "src/bad.aktion.ts");
       expect(reported).toEqual(expectedFailures(BAD));
-      expect(reported.length).toBe(12);
+      expect(reported.length).toBe(17);
     } finally {
       writeFileSync(join(project, "src/bad.aktion.ts"), BAD);
     }
@@ -276,6 +417,7 @@ describe("the overloads follow the runtime's binding", () => {
     const program = compileAktionSource(
       [
         'function Pill(label, tone = "muted", { size }) { return Text("[" + label + "|" + tone + "|" + size + "]") }',
+        'function Two(label = "x", count = 0) { return Text("(" + label + "|" + count + "|" + children + ")") }',
         "$app(Column([",
         '  Pill("a", "muted", { size: 1 }),', // positional: the `{ size }` pattern
         '  Pill("b", { size: 2 }),', //          positional too — into `tone`
@@ -283,6 +425,11 @@ describe("the overloads follow the runtime's binding", () => {
         '  Pill("d", null),', //                  `null` is passed, not defaulted
         '  Pill("e", { tone: undefined }),', //   named, and `undefined` defaults
         '  Pill("f", "muted", undefined, { size: 3 }),', // every slot filled: a named slot
+        '  Pill({ key: "k" }, "g", "loud"),', //  after the props: `label`, then `tone`
+        '  Two({ key: "k" }, "s", 7, "kid"),', // the parameters, then `children`
+        "  Two({ key: 1 }, 42),", //               so the 42 is `label`
+        '  Two({ label: "a" }, "lost"),', //       named `label` wins; the positional is dropped
+        '  Two({ count: 1 }, "t", 2),', //         named `count` wins; the 2 is dropped
         "]))",
       ].join("\n"),
       join(work, "binding.aktion"),
@@ -297,6 +444,12 @@ describe("the overloads follow the runtime's binding", () => {
     expect(text).toContain("[d||]");
     expect(text).toContain("[e|muted|]");
     expect(text).toContain("[f|muted|3]");
+    expect(text).toContain("[g|loud|]");
+    expect(text).toContain("(s|7|kid)");
+    expect(text).toContain("(42|0|)");
+    expect(text).toContain("(a|0|)");
+    expect(text).toContain("(t|1|)");
+    expect(text).not.toContain("lost");
   });
 });
 
