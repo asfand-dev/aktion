@@ -37,6 +37,17 @@ parameters, it is forwarded positionally rather than destructured. That is what
 makes a "slots" bag work — and also what makes a typo'd prop name silently arrive
 as a positional argument instead of raising an error.
 
+This is the `.aktion` convention. In a `.aktion.ts` / `.aktion.js` module, a call
+to a component that is itself declared in a `.aktion.ts` / `.aktion.js` module
+binds every argument by position, as JavaScript does: an object literal is the
+value of the parameter at its position (`KVRow({ key: "a", value: "1" })` passes
+the whole object to the first parameter). `key:` is read as the identity key only
+from an extra object after the declared parameters, or from a last argument whose
+only property is `key` (`Item(id, { key: id })` for
+`function Item(label: string, _opts?: { readonly key?: Key })`). The import's
+spelling (`./cards` or `./cards.aktion.ts`) makes no difference. A call written in
+`.aktion`, or to a component declared in `.aktion`, keeps named props.
+
 ### Named slots
 
 Once positional parameters are filled, extra named props become **both** a `slots`
@@ -138,6 +149,25 @@ exactly **one** `$app(...)` per program.
 
 Call `$head({...})` inside a component body, not as a dangling top-level
 statement, or it never runs.
+
+---
+
+## Routing
+
+### `$router` reads its arms from the source
+
+`$router({ … })` reads the route table by syntax, so only an object literal written
+at the call works. Each of these validates, then misbehaves:
+
+- the table in a variable (`$router(routes)`) renders **nothing**;
+- a spread arm (`$router({ ...more, default: NotFound() })`) is skipped;
+- a computed path (`[path]: Page()`) is ignored;
+- a layout arm whose `routes` is not an object literal renders the layout with an
+  empty `outlet`.
+
+List every arm, with a string path, in the literal at the call. In `.aktion.ts` /
+`.aktion.js` modules the compiler rejects all four (E127), and the ESLint rule
+`aktion/router-literal` flags the first, second and fourth in the editor.
 
 ---
 
@@ -298,6 +328,13 @@ skeleton ranges.
 
 `$util.derived` is often better than `$memo` when the dependency list is obvious
 from the body.
+
+`$util.worker(fn, …args)` runs `fn` in a Web Worker by serialising it with
+`toString()`, so `fn` must be a host JavaScript function the page defines
+(`window.sumTo = function (n) { … }`) and the program reads by name. A lambda
+written in the program serialises as the runtime's own closure: only the
+no-Worker fallback can run it, so it works where `Worker` is missing (happy-dom,
+jsdom) and the promise rejects in a real browser.
 
 ---
 

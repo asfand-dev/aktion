@@ -208,37 +208,76 @@ rejects each one it can see with a coded error at the exact line:
 - **Declare every atom with `let`** — `let $count = 0`, at module level or at the
   top of a component body. A bare `$count = 0` is an undeclared name (E125).
 - **Import built-ins from `aktion-runtime/dsl`, by their own names**, and types
-  with `import type`. Spell module extensions: `./store.aktion.ts`.
-- **The entry ends with `export default $app(App())`.**
+  with `import type { Todo }` — the inline `import { type Todo }` still loads the
+  file and is refused. Spell module extensions: `./store.aktion.ts`, not
+  `./store.aktion.js`.
+- **The entry ends with `export default $app(App())`.** Host code takes only
+  that default export — `import app from "./app.aktion.ts"`, then
+  `mountCompiled(app)`; a named import of a module's other exports from
+  `main.ts` fails the build.
 - **No `async`/`await`** (chain `.then(…)`, or use `$http(…)` and `.onDone`), no
-  `var`, no `this`/`arguments`, no `enum`/`namespace`.
+  `var`, no `this`/`arguments`, no `enum`/`namespace`, no block statements
+  (`{ … }`, `case X: { … }`).
 - **Closures copy their scope when they are created.** Do not reassign a local
   that a closure captured, or use one in a closure before declaring it — keep
   changing values in a `$` atom.
 - **Change state by assignment**: `$todos = [...$todos, t]`, never
-  `$todos.push(t)`; module-level non-`$` bindings are rebuilt every render, so
-  never mutate them from a function.
+  `$todos.push(t)` or `Object.assign($cfg, …)`. Module-level non-`$` bindings are
+  rebuilt every render, so never change them in place — not in a function, not
+  at top level: build the whole value in its initializer (E107).
+- **`$router({ … })` takes its arms as an object literal at the call** — no
+  variable, spread or computed path (E127).
 - **Hooks only at the top of a component body; components and hooks only at
   module top level.**
+- **Your components bind by position, as JavaScript does.** A call from one of
+  these modules to a component declared in one passes `UserCard({ name })` as
+  the first argument, not as named props. To key a row, give the component a
+  trailing `_opts?: { readonly key?: Key }` parameter and pass `{ key: item.id }`
+  last; for children, declare a `children: Children` parameter (or
+  `...kids: AktionNode[]`). Both are in the example below.
+- **Trust `tsc`.** The `aktion-runtime/dsl` types are exact — every prop, enum
+  value, callback argument, `sx` key and `$theme` token is typed from the
+  runtime — so a `tsc` error on a value means the runtime would drop or misuse
+  it. Fix the value; never cast the error away.
 
 ```ts aktion
 // src/app.aktion.ts
-import { $app, Button, Column, PageHeader, Text, type AktionNode } from "aktion-runtime/dsl";
+import { $app, Button, Column, PageHeader, Text, type AktionNode, type Children, type Key } from "aktion-runtime/dsl";
 
 let $count = 0;
+const fruit = [{ id: 1, label: "Apples" }, { id: 2, label: "Pears" }];
 
 function Counter(label: string): AktionNode {
   return Button(`${label}: ${$count}`, { onClick: () => { $count = $count + 1; }, variant: "primary" });
 }
 
-export default $app(Column([PageHeader("Counter"), Text("Click to count."), Counter("Clicks")], { gap: "l" }));
+// A trailing `_opts` parameter takes a key; a declared parameter takes children.
+function Item(label: string, _opts?: { readonly key?: Key }): AktionNode {
+  return Text(label);
+}
+function Shelf(title: string, children: Children): AktionNode {
+  return Column([Text(title, { variant: "large-heavy" }), children], { gap: "s" });
+}
+
+export default $app(Column([
+  PageHeader("Counter"),
+  Counter("Clicks"),
+  Shelf("Fruit", fruit.map((f) => Item(f.label, { key: f.id }))),
+], { gap: "l" }));
 ```
 
 Validate the same way — `node tools/validate-aktion.mjs src/store.aktion.ts`
 checks one module, `node tools/validate-aktion-app.mjs src/app.aktion.ts` the
-graph — and run `npx tsc` too: the types catch wrong props and arities the
-schema check reports later. The full rules are in the TypeScript guide
-(`docs/typescript.html#aktion-ts`).
+graph — and run `npx tsc` too: the types catch wrong props, values and arities
+before the schema check does. If the project lints with ESLint, spread
+`aktionTypeScriptConfig` from `aktion-runtime/eslint` last. It adds
+`aktion/props-literal` — a built-in's props must be an object literal at the
+call, and an object literal that mixes prop keys (`id`, `class`) with attribute
+keys is read as the props bag, so pass `{ attributes: { … }, id }` — and
+`aktion/router-literal` for `$router` tables. Root config files
+(`eslint.config.js`, `vite.config.ts`) are outside the tsconfig, so the parser
+needs `projectService: { allowDefaultProject: ["*.config.js", "*.config.ts"] }`.
+The full rules are in the TypeScript guide (`docs/typescript.html#aktion-ts`).
 
 ## Shape of a program
 
