@@ -127,6 +127,12 @@ function resolveHostTag(input: unknown): string {
 
 interface MountState {
   started: boolean;
+  /**
+   * `setup` ran and returned — whatever it returned. This, not
+   * `instance !== undefined`, is what lets `update` run: a widget whose `setup`
+   * only fills `node` and returns nothing never received a prop change.
+   */
+  ready: boolean;
   instance: unknown;
   /** Latest widget props — read by the deferred setup + compared on update. */
   props: Record<string, unknown>;
@@ -172,6 +178,7 @@ function runMountCleanup(state: MountState): void {
   state.instance = undefined;
   state.node = null;
   state.started = false;
+  state.ready = false;
   if (typeof cleanup !== "function") return;
   defer(() => {
     try {
@@ -192,16 +199,16 @@ export const Mount: ComponentSpec = {
     "First-class host for an imperative / third-party widget that owns its " +
     "own DOM (chart, map, editor, payment element, captcha, video SDK). " +
     "Aktion creates the host element; `setup(node, props)` runs once after it " +
-    "attaches and returns an instance handle, `update(instance, props)` runs " +
-    "when `props` change (or when `deps` change, if you pass them), and " +
+    "attaches and may return an instance handle, `update(instance, props, node)` " +
+    "runs when `props` change (or when `deps` change, if you pass them), and " +
     "`cleanup(instance)` runs on unmount. `onError(err, stage)` fires if " +
     "`setup`/`update` throws, so a failed map / payment element / captcha can " +
     "show a fallback. The host is preserved across re-renders so the widget is " +
     "never rebuilt. Apply layout with `sx`.",
   props: [
-    { name: "setup", type: "callable", required: true, description: "`(node, props) => instance` — runs once after the host attaches; return value is the instance handle passed to `update`/`cleanup`." },
-    { name: "update", type: "callable", optional: true, description: "`(instance, props) => void` — runs when `props` (or `deps`) change." },
-    { name: "cleanup", type: "callable", optional: true, description: "`(instance) => void` — runs when the component leaves the tree (destroy/teardown)." },
+    { name: "setup", type: "callable", required: true, description: "`(node, props) => instance` — runs once after the host attaches; the return value (if any) is the instance handle passed to `update`/`cleanup`." },
+    { name: "update", type: "callable", optional: true, description: "`(instance, props, node) => void` — runs when `props` (or `deps`) change, once `setup` has returned — also when it returned nothing (`instance` is then `undefined`; update the widget through `node`, the live host). Never runs after a `setup` that threw." },
+    { name: "cleanup", type: "callable", optional: true, description: "`(instance) => void` — runs when the component leaves the tree (destroy/teardown). `instance` is `undefined` when `setup` returned nothing, threw, or never ran (the component left before its host attached)." },
     { name: "props", type: "object", optional: true, description: "Reactive prop bag handed to `setup`/`update`. Bind `$state` here to drive the widget." },
     { name: "tag", type: "string", optional: true, enum: ["div", "span", "section", "article", "aside", "figure", "canvas", "p", "pre", "form"], description: "Host element tag (default \"div\")." },
     { name: "deps", type: "any[]", optional: true, description: "Explicit dependency list gating `update`. Use when the `props` bag is rebuilt on every commit, or to force an update after an in-place mutation." },
@@ -213,6 +220,7 @@ export const Mount: ComponentSpec = {
     const deps = props.deps === undefined ? null : asArray<unknown>(props.deps);
     const slot = helpers.useInstanceState<MountState>("rui-mount", {
       started: false,
+      ready: false,
       instance: undefined,
       props: widgetProps,
       prevProps: null,
@@ -273,9 +281,10 @@ export const Mount: ComponentSpec = {
         // component that rendered them, and the widget expects an empty host.
         if (live !== host) live.replaceChildren();
         try {
-          state.instance = typeof props.setup === "function"
-            ? (props.setup as (n: Node, p: Record<string, unknown>) => unknown)(live, state.props)
-            : undefined;
+          if (typeof props.setup === "function") {
+            state.instance = (props.setup as (n: Node, p: Record<string, unknown>) => unknown)(live, state.props);
+            state.ready = true;
+          }
         } catch (err) {
           reportMountError(state, helpers.invoke, "setup", err);
         }
@@ -294,12 +303,16 @@ export const Mount: ComponentSpec = {
     const changed = deps !== null
       ? !sameBag(prevDeps, deps)
       : !sameBag(state.prevProps, widgetProps);
-    if (state.instance !== undefined && typeof props.update === "function" && changed) {
-      const update = props.update as (instance: unknown, p: Record<string, unknown>) => void;
+    // Not after a `setup` that threw: there is no widget to update.
+    if (state.ready && typeof props.update === "function" && changed) {
+      const update = props.update as (instance: unknown, p: Record<string, unknown>, n: Element | null) => void;
       const instance = state.instance;
+      // The live host as well, so a widget with no handle of its own can still
+      // be updated in place.
+      const hostNode = state.node;
       defer(() => {
         try {
-          update(instance, widgetProps);
+          update(instance, widgetProps, hostNode);
         } catch (err) {
           reportMountError(state, helpers.invoke, "update", err);
         }
@@ -413,7 +426,7 @@ export const WebComponent: ComponentSpec = {
   props: [
     { name: "tag", type: "string", positional: true, required: true, description: "Custom-element tag name (must contain a hyphen, e.g. \"stripe-pricing-table\")." },
     { name: "attributes", type: "object", optional: true, aliases: ["attrs"], description: "Reactive attribute map. `$state` values update the element on change; `on*` keys are ignored." },
-    { name: "properties", type: "object", optional: true, aliases: ["props"], description: "JS properties assigned on the element (for components that take rich, non-string props)." },
+    { name: "properties", type: "object", optional: true, aliases: ["props"], description: "JS properties assigned on the element (for components that take rich, non-string props). `on*` keys (use `on`) and built-in DOM properties including `src`, `href`, `action`, `formAction`, `style`, `id`, `attributes`, `shadowRoot`, `contentEditable`, `innerHTML`, `outerHTML` and `srcdoc` are silently skipped — pass `src`/`href`/`id`/`style` through `attributes` (URLs are sanitised there), and content through `children`." },
     { name: "on", type: "object", optional: true, aliases: ["events"], description: "Event map `{ eventName: handler }` bound once to the live element (handlers stay current across re-renders)." },
     { name: "children", aliases: ["child"], type: "Node[]", optional: true, description: "Light-DOM child nodes / text to slot inside the element." },
   ],
