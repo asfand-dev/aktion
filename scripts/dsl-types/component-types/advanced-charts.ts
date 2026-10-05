@@ -7,7 +7,6 @@ export default {
       GaugeThreshold: "export type GaugeThreshold = { readonly value: number; readonly tone?: GaugeTone } | { readonly at: number; readonly tone?: GaugeTone };",
     },
     props: {
-      size: "\"sm\" | \"md\" | \"lg\"",
       thresholds: "readonly GaugeThreshold[]",
     },
   },

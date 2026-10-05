@@ -6,7 +6,9 @@ export default {
     generics: [{ name: "Instance", default: "unknown" }, { name: "Props", default: "Record<string, unknown>", constraint: "object" }],
     props: {
       setup: "(node: DomElement, props: Props) => Instance",
-      update: "(instance: Exclude<Instance, undefined>, props: Props) => void",
+      // Runs once `setup` has returned, whatever it returned — so `instance` can
+      // be the `undefined` of a setup that only fills `node`.
+      update: "(instance: Instance, props: Props, node: DomElement) => void",
       cleanup: "(instance: Instance | undefined) => void",
       props: "Props",
       deps: "readonly unknown[]",

@@ -9,11 +9,7 @@ export default {
       render: "(value: Value, index: number, row: Record<string, unknown>) => AktionChild | readonly AktionChild[]",
       onClick: "(value: Value, index: number, row: Record<string, unknown>) => void",
       currency: "\"USD\" | \"EUR\" | \"GBP\" | \"CHF\" | (string & {})",
-      width: "string",
       locale: "string",
-      pinned: "\"left\"",
-      minWidth: "`${number}px`",
-      maxWidth: "`${number}px`",
     },
   },
   List: {
@@ -53,7 +49,6 @@ export default {
   Table: {
     props: {
       columns: "readonly (AktionNode<\"Col\"> | null | undefined)[]",
-      maxHeight: "string",
       onRowClick: "(rowIndex: number, row: Record<string, unknown>) => void",
       locale: "string",
     },

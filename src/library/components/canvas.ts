@@ -205,14 +205,31 @@ function padDataUrl(canvas: HTMLCanvasElement): string {
 /** What a finished stroke reports back to the component. */
 interface PadResult {
   strokes: number;
-  /** True once at least one stroke is a real line — taps alone are not ink. */
+  /** True once the pad holds ink — see `padHasInk`. */
   inked: boolean;
 }
 
+/**
+ * Whether the pad holds a signature: a restored `value`, or at least one stroke
+ * that is a real line. Taps alone are not ink.
+ *
+ * The restored bitmap counts. Strokes alone said a restored signature that then
+ * took a stray tap was empty, and `SignaturePad` reported `""` — which, echoed
+ * back through a bound `value`, wiped the signature off the pad.
+ */
+const padHasInk = (pad: PadState): boolean =>
+  pad.base !== null || pad.strokes.some((path) => path.length >= 2);
+
 const padResult = (pad: PadState): PadResult => ({
   strokes: pad.strokes.length,
-  inked: pad.strokes.some((path) => path.length >= 2),
+  inked: padHasInk(pad),
 });
+
+/** `SignaturePad`'s value: the PNG data URL, or `""` while the pad holds no ink. */
+function signatureValue(canvas: HTMLCanvasElement): string {
+  const pad = PADS.get(canvas);
+  return pad && padHasInk(pad) ? padDataUrl(canvas) : "";
+}
 
 /** Resize the buffer, rescaling existing strokes so the artwork keeps its place. */
 function resizePad(
@@ -548,7 +565,8 @@ export const SignaturePad: ComponentSpec = {
     "A signature capture pad — a DrawingCanvas tuned for signing, with a " +
     "baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires " +
     "when the signature changes (empty string when cleared, and also when the " +
-    "pad only received taps — so a stray tap cannot pass a truthiness check). " +
+    "pad only received taps — so a stray tap cannot pass a truthiness check); " +
+    "`onBlur` / `onFocus` receive that same value. " +
     "Pass the URL back as `value` to restore a signature after a re-render, " +
     "and `disabled` to lock the pad once it is submitted. `label`/`error`/" +
     "`required` render the usual field shell. Use in contracts, delivery " +
@@ -585,7 +603,9 @@ export const SignaturePad: ComponentSpec = {
       onEnd: (url, info) => helpers.invoke(props.onChange, info.inked ? url : "", info.strokes),
       helpers,
     });
-    attachFocusHandlers(surface.canvas, props, helpers, (node) => padDataUrl(node as HTMLCanvasElement));
+    // The same value `onChange` reports. The raw data URL is a non-empty PNG
+    // even for a blank pad, so a validate-on-blur `value != ""` passed unsigned.
+    attachFocusHandlers(surface.canvas, props, helpers, (node) => signatureValue(node as HTMLCanvasElement));
     // The baseline hangs off its own box around the canvas, not off the root:
     // anchored to the root it was offset past a toolbar whose height is
     // font-relative, so a larger root font pushed the guide below the pad.
