@@ -1793,6 +1793,51 @@ function rebaseTemplateLocations(root: Expression, line: number, column: number)
   });
 }
 
+/**
+ * A position in an interpolation's sub-program, moved to where it sits in the
+ * source — the same arithmetic as {@link rebaseTemplateLocations}.
+ */
+function rebaseTemplatePosition(pos: { line: number; column: number }, line: number, column: number): SourceLocation {
+  const exprStartColumn = column + "${".length;
+  return {
+    line: line + (pos.line - 1),
+    column: pos.line === 1 ? Math.max(exprStartColumn, exprStartColumn + (pos.column - (TEMPLATE_SUB_PREFIX.length + 1))) : pos.column,
+  };
+}
+
+/**
+ * Why a `${…}` interpolation (sub-parsed as `sub`) is not one complete
+ * expression, positioned in the source; `null` when it is. `line`/`column`
+ * are the lexer's position for the `$` of `${`.
+ */
+function interpolationError(sub: Program, source: string, line: number, column: number): ParseError | null {
+  if (source.trim() === "") {
+    return {
+      message: "Empty `${}` in a template literal — write an expression inside it, or remove it.",
+      line,
+      column,
+    };
+  }
+  const first = sub.errors[0];
+  if (first) {
+    const at = rebaseTemplatePosition(first, line, column);
+    const message = first.message.startsWith("Unexpected token EOF")
+      ? "Unexpected end of the `${…}` interpolation — it needs a complete expression."
+      : first.message;
+    return { message, ...at };
+  }
+  const extra = sub.statements[1];
+  if (sub.statements.length !== 1 || sub.statements[0]!.kind !== "Assignment" || extra) {
+    const loc = (extra as { loc?: SourceLocation } | undefined)?.loc;
+    const at = loc ? rebaseTemplatePosition(loc, line, column) : { line, column };
+    return {
+      message: "A `${…}` interpolation holds a single expression — move the other statements out of the template.",
+      ...at,
+    };
+  }
+  return null;
+}
+
 function parseTernary(ctx: ParserContext): Expression {
   const test = parseLogicalOr(ctx);
   if (consumeNewlinesIfNext(ctx, (t) => t.type === "Punctuation" && t.value === "?")) {
@@ -2399,6 +2444,15 @@ function parsePrimary(ctx: ParserContext): Expression {
         ? undefined
         : ctx.softNewlinesWithin(part.offset, part.source.length, TEMPLATE_SUB_PREFIX.length);
       const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`, softNewlines ? { softNewlines } : {});
+      // An interpolation that is not one complete expression is an error, at
+      // its own position — never a silent `""` (which used to swallow
+      // `${import.meta.env.X}`, `${10n}`, `${async () => …}` and plain typos).
+      // A template still open at the end of a streamed prefix may hold a cut-off
+      // interpolation, so it keeps the lenient reading until it is complete.
+      if (tok.open !== true) {
+        const problem = interpolationError(sub, part.source, part.line, part.column);
+        if (problem) throw problem;
+      }
       const firstStmt = sub.statements[0];
       if (firstStmt && firstStmt.kind === "Assignment") {
         // The interpolation was parsed as its own one-line program, so every

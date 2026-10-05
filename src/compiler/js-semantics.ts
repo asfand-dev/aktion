@@ -1761,6 +1761,20 @@ export function findAsyncModifiers(source: string): SourceLocation[] {
   const out: SourceLocation[] = [];
   for (let i = 0; i < tokens.length; i += 1) {
     const tok = tokens[i]!;
+    // A template literal is one token: look inside each `${…}`, whose own
+    // text starts two columns after the `$` (later lines keep their columns).
+    if (tok.type === "TemplateString") {
+      for (const part of tok.parts ?? []) {
+        if (part.kind !== "expr") continue;
+        for (const loc of findAsyncModifiers(part.source)) {
+          out.push({
+            line: part.line + loc.line - 1,
+            column: loc.line === 1 ? part.column + 2 + (loc.column - 1) : loc.column,
+          });
+        }
+      }
+      continue;
+    }
     if (tok.type !== "Keyword" || tok.value !== "async") continue;
     let prev: (typeof tokens)[number] | undefined;
     for (let j = i - 1; j >= 0; j -= 1) {
