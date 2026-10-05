@@ -996,6 +996,9 @@ function emitModule(
   );
 }
 
+/** What `Object.prototype.toString` reports for a host-only stand-in: `[object AktionHostOnly]`. */
+const HOST_ONLY_TAG = "AktionHostOnly";
+
 /**
  * Dev-only stand-ins for the entry module's named exports. The emitted module's
  * only real export is `default`; without these, host code that imports a helper
@@ -1013,6 +1016,13 @@ function emitModule(
  * with soft newlines, and without them a declaration spanning an erased
  * multi-line type (`function make(): {\n  a: number;\n} { … }`) does not
  * parse, so its export got no stand-in and read `undefined` again.
+ *
+ * One read answers instead of throwing: `Symbol.toStringTag`, which is what
+ * `Object.prototype.toString` — and with it Vitest's automocker, typing each
+ * export of `vi.mock(path)` without a factory — reads. The tag is not
+ * `Function` / `Object` / `Module`, so the automocker keeps a stand-in as it
+ * is, like a primitive export, and still mocks the default export; using the
+ * stand-in afterwards throws as before.
  *
  * An export named `then` gets no stand-in: a namespace with a callable `then`
  * is a thenable, so `await import("./x.aktion")` would call it and reject
@@ -1036,7 +1046,8 @@ function hostOnlyExports(result: LinkResult, frontends: ModuleFrontends, path: s
     "function __aktionHostOnly(i) {\n" +
     `  const message = ${message};\n` +
     "  const fail = () => { throw new Error(message); };\n" +
-    "  return new Proxy(function () {}, { apply: fail, construct: fail, get: fail, set: fail, has: fail, ownKeys: fail, " +
+    `  const get = (_target, key) => (key === Symbol.toStringTag ? ${JSON.stringify(HOST_ONLY_TAG)} : fail());\n` +
+    "  return new Proxy(function () {}, { apply: fail, construct: fail, get, set: fail, has: fail, ownKeys: fail, " +
     "defineProperty: fail, deleteProperty: fail, getOwnPropertyDescriptor: fail, getPrototypeOf: fail, setPrototypeOf: fail });\n" +
     "}\n" +
     names.map((_, i) => `const __aktion_${i} = __aktionHostOnly(${i});\n`).join("") +
