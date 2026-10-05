@@ -37,7 +37,6 @@ import {
   type ModuleFrontend,
   type ModuleFrontends,
 } from "../compiler/index.js";
-import { parse } from "../parser/index.js";
 import type { Program } from "../parser/types.js";
 import { printProgram } from "../tooling/formatter.js";
 import {
@@ -294,7 +293,7 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
 
       const moduleCode =
         emitModule(result, code, cleanId, runtimeModuleId, { sourcesContent: options.devtools !== false }) +
-        (isServe ? hostOnlyExports(result, displayPath(cleanId, projectRoot)) + HMR_FOOTER : "");
+        (isServe ? hostOnlyExports(result, frontends, displayPath(cleanId, projectRoot)) + HMR_FOOTER : "");
       // `moduleType: "js"`: Vite 8 (Rolldown) otherwise treats an `.aktion.ts`
       // id as TypeScript by its extension even after the oxc transform is
       // excluded. Rollup-based Vite ignores the field.
@@ -1007,6 +1006,14 @@ function emitModule(
  * Builds leave them out: there a named import fails at bundle time (the
  * plugin's `moduleParsed`).
  *
+ * The names are those the entry's own frontend exports — the program the
+ * linker built its symbol table from. Re-parsing the entry's `aktionSource`
+ * instead (what this used to do) is not the same for a `.aktion.ts` entry:
+ * that text is the erased JavaScript, which the TypeScript frontend parses
+ * with soft newlines, and without them a declaration spanning an erased
+ * multi-line type (`function make(): {\n  a: number;\n} { … }`) does not
+ * parse, so its export got no stand-in and read `undefined` again.
+ *
  * An export named `then` gets no stand-in: a namespace with a callable `then`
  * is a thenable, so `await import("./x.aktion")` would call it and reject
  * instead of yielding the module.
@@ -1014,10 +1021,11 @@ function emitModule(
  * The text never contains `");` or `] });`, which tests unpacking the program
  * literal match on.
  */
-function hostOnlyExports(result: LinkResult, path: string): string {
+function hostOnlyExports(result: LinkResult, frontends: ModuleFrontends, path: string): string {
   const entry = result.modules[0];
-  if (!entry) return "";
-  const names = aktionExportNames(parse(entry.aktionSource)).filter((name) => name !== "then");
+  const frontend = entry ? frontends[entry.language] : undefined;
+  if (!entry || !frontend) return "";
+  const names = aktionExportNames(frontend.compile(entry.originalSource, entry.path).program).filter((name) => name !== "then");
   if (names.length === 0) return "";
   const message =
     `"[aktion] \`" + __aktionNames[i] + "\` is not available to host code: the Aktion module " + ` +
