@@ -11,7 +11,7 @@ import { closeFloating, deferToPaint, syncFloatingPanel } from "../floating.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
 import {
   extractComboboxItems, withFieldShell, FIELD_SHELL_PROPS, attachFocusHandlers, fieldShellExtraProps,
-  optionalMarkText, optionalMarkNode,
+  optionalMarkText, optionalMarkNode, bindChangeHandler, composeHandler,
 } from "./forms-shared.js";
 
 /**
@@ -55,50 +55,6 @@ export function normaliseButtonSize(value: unknown): string {
   if (v === "lg") return "lg";
   if (v === "xl" || v === "extra-large") return "xl";
   return "md";
-}
-
-/**
- * Wire an `onChange`-style prop as a DOM **property** handler, composed on top
- * of whatever handler `bindState` already installed for the same event.
- *
- * `attachOnChange` (wrappers.ts) registers with `addEventListener`, and the
- * morph reconciler cannot transfer those onto the node it keeps — so the
- * callback captured by the FIRST render is the only one that ever runs. Inside
- * a `.map` that lambda still holds the departed row's loop variables, so typing
- * in row 2 renames row 1 while the visible value (a property handler, refreshed
- * by morph) stays correct: silent data corruption.
- *
- * The property is assigned unconditionally and the prop is read *inside* the
- * handler, so a callback that only appears on a later render (`onChange:
- * $editing ? save : null`) is picked up as well.
- */
-function bindChangeHandler(
-  element: HTMLElement,
-  props: Record<string, unknown>,
-  helpers: RenderHelpers,
-  options: { event: string; getValue: (node: HTMLElement) => unknown; prop?: string },
-): void {
-  composeHandler(element, `on${options.event}`, (event) => {
-    const handler = props[options.prop ?? "onChange"];
-    if (handler == null) return;
-    const live = (event.currentTarget ?? event.target ?? element) as HTMLElement;
-    helpers.invoke(handler, options.getValue(live));
-  });
-}
-
-/**
- * Chain an extra property handler after whatever is already assigned to
- * `propKey` — `bindState` owns the same keys (`oninput` / `onchange`), and
- * layering a second `addEventListener` instead is exactly what morph cannot
- * carry over.
- */
-function composeHandler(element: HTMLElement, propKey: string, extra: (event: Event) => void): void {
-  const record = element as unknown as Record<string, unknown>;
-  const previous = record[propKey] as ((event: Event) => void) | null | undefined;
-  record[propKey] = (event: Event) => {
-    previous?.call(element, event);
-    extra(event);
-  };
 }
 
 /**

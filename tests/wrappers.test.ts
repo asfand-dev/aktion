@@ -13,8 +13,8 @@ import {
   OnFocus,
   OnIntersect,
   Css,
-  attachOnChange,
 } from "../src/library/components/wrappers.js";
+import { bindChangeHandler } from "../src/library/components/forms-shared.js";
 import {
   Input,
   TextArea,
@@ -697,39 +697,62 @@ describe("Input components — onChange(value)", () => {
 });
 
 /* ------------------------------------------------------------------------ *
- * attachOnChange helper
+ * bindChangeHandler (forms-shared) — the one morph-safe `onChange` binder.
+ * It replaced this module's `attachOnChange`, whose `addEventListener`
+ * registration the morph reconciler could not transfer onto a kept node.
  * ------------------------------------------------------------------------ */
 
-describe("attachOnChange helper", () => {
-  it("does nothing when the callback is null/undefined", () => {
+describe("bindChangeHandler", () => {
+  it("does nothing while the prop is null/undefined", () => {
     const input = document.createElement("input");
-    attachOnChange(input, null, makeHelpers(), {
-      event: "input",
-      getValue: () => "x",
-    });
-    // No listener attached — dispatching the event is a no-op.
+    bindChangeHandler(input, { onChange: null }, makeHelpers(), { event: "input", getValue: () => "x" });
     expect(() => input.dispatchEvent(new Event("input"))).not.toThrow();
   });
 
-  it("invokes the callback with the read value on the chosen event", () => {
+  it("invokes the callback with the read value on the chosen event only", () => {
     const input = document.createElement("input");
     const onChange = vi.fn();
-    attachOnChange(input, onChange, makeHelpers(), {
+    bindChangeHandler(input, { onChange }, makeHelpers(), {
       event: "input",
       getValue: (el) => (el as HTMLInputElement).value.toUpperCase(),
     });
     input.value = "hello";
     input.dispatchEvent(new Event("input"));
+    input.dispatchEvent(new Event("change"));
+    expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith("HELLO");
   });
 
-  it("defaults to the `change` event when none is provided", () => {
+  it("is a property handler, which the morph reconciler carries to the node it keeps", () => {
     const input = document.createElement("input");
+    bindChangeHandler(input, { onChange: vi.fn() }, makeHelpers(), { event: "change", getValue: () => "v" });
+    expect(typeof input.onchange).toBe("function");
+  });
+
+  it("runs after the handler already on the property", () => {
+    const input = document.createElement("input");
+    const order: string[] = [];
+    input.oninput = () => { order.push("own"); };
+    bindChangeHandler(input, { onChange: () => order.push("onChange") }, makeHelpers(), { event: "input", getValue: () => "v" });
+    input.dispatchEvent(new Event("input"));
+    expect(order).toEqual(["own", "onChange"]);
+  });
+
+  it("reads the prop when the event fires, so a callback supplied later is used", () => {
+    const input = document.createElement("input");
+    const props: Record<string, unknown> = { onChange: null };
+    bindChangeHandler(input, props, makeHelpers(), { event: "input", getValue: () => "late" });
     const onChange = vi.fn();
-    attachOnChange(input, onChange, makeHelpers(), {
-      getValue: () => "v",
-    });
+    props.onChange = onChange;
+    input.dispatchEvent(new Event("input"));
+    expect(onChange).toHaveBeenCalledWith("late");
+  });
+
+  it("reads another prop when asked to", () => {
+    const input = document.createElement("input");
+    const onCommit = vi.fn();
+    bindChangeHandler(input, { onCommit }, makeHelpers(), { event: "change", getValue: () => "v", prop: "onCommit" });
     input.dispatchEvent(new Event("change"));
-    expect(onChange).toHaveBeenCalledWith("v");
+    expect(onCommit).toHaveBeenCalledWith("v");
   });
 });

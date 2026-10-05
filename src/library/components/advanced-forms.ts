@@ -13,12 +13,12 @@
  *   - MultiStepForm — Steps + content + prev/next composite.
  */
 
-import type { ComponentSpec, RenderHelpers } from "../types.js";
+import type { ComponentSpec } from "../types.js";
 import {
   autoId,
   el, asArray, asString, asBoolean, asNumber, renderIcon, valueAttr, sanitiseHref,
 } from "../utils.js";
-import { FIELD_SHELL_PROPS, withFieldShell, attachFocusHandlers } from "./forms-shared.js";
+import { FIELD_SHELL_PROPS, withFieldShell, attachFocusHandlers, bindChangeHandler } from "./forms-shared.js";
 import { closeFloating, deferToPaint, openFloating } from "../floating.js";
 
 const PIN_TYPES = ["numeric", "alphanumeric"] as const;
@@ -67,27 +67,6 @@ function stepAttr(raw: unknown): string | null {
   if (raw === null || raw === undefined) return null;
   if (typeof raw === "string" && raw.trim().toLowerCase() === "any") return "any";
   return String(Math.max(1, Math.floor(asNumber(raw, 60))));
-}
-
-/**
- * Report a committed value to `onChange` through the `onchange` PROPERTY,
- * chained after whatever `bindState` installed there.
- *
- * `attachOnChange` (wrappers.ts) registers with `addEventListener`, which the
- * morph reconciler cannot transfer onto the node it keeps: a handler that first
- * appeared on a later render never fired, one withdrawn later kept firing, and
- * a lambda closing over `.map` locals stayed frozen at the first render. Same
- * contract as `bindChangeHandler` in forms.ts: the prop is read inside the
- * handler and the value off the live node.
- */
-function bindCommitHandler(input: HTMLInputElement, props: Record<string, unknown>, helpers: RenderHelpers): void {
-  const previous = input.onchange;
-  input.onchange = (event) => {
-    previous?.call(input, event);
-    if (props.onChange == null) return;
-    const live = (event.currentTarget ?? event.target ?? input) as HTMLInputElement;
-    helpers.invoke(props.onChange, live.value);
-  };
 }
 
 /* ----------------------------------------------------------------------- *
@@ -1040,7 +1019,7 @@ export const TimePicker: ComponentSpec = {
         getValue: (n) => (n as HTMLInputElement).value,
       });
     }
-    bindCommitHandler(input, props, helpers);
+    bindChangeHandler(input, props, helpers, { event: "change", getValue: (live) => (live as HTMLInputElement).value });
     attachFocusHandlers(input, props, helpers);
     root.append(input);
     const shell = withFieldShell(root, { ...props, id });
@@ -1090,7 +1069,7 @@ export const DateTimePicker: ComponentSpec = {
         getValue: (n) => (n as HTMLInputElement).value,
       });
     }
-    bindCommitHandler(input, props, helpers);
+    bindChangeHandler(input, props, helpers, { event: "change", getValue: (live) => (live as HTMLInputElement).value });
     attachFocusHandlers(input, props, helpers);
     root.append(input);
     const shell = withFieldShell(root, { ...props, id });

@@ -4,7 +4,7 @@
  * intact.
  *
  *   - `onChange` on TimePicker, DateTimePicker, RichTextEditor, CodeEditor and
- *     ColorPicker went through `attachOnChange`, an `addEventListener` the
+ *     ColorPicker went through `attachOnChange` (since removed), an `addEventListener` the
  *     reconciler cannot transfer onto the node it keeps. A handler supplied on a
  *     later render never fired, one withdrawn later kept firing, and a lambda
  *     closing over loop locals stayed frozen at the first render.
