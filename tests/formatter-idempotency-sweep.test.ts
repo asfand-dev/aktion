@@ -186,17 +186,30 @@ describe("repo .aktion programs format to a fixed point", () => {
  * `data-display.aktion` and `forms.aktion` now reach the AST guard and are
  * skipped there instead, because the printer still drops grouping
  * parentheses (`a || (b ? c : d)`, `!(a && b)`).
+ *
+ * Moved from 79 / 48 / 39 to 164 / 0 / 0 / 2 when the printer became faithful
+ * to the AST: it restores grouping parentheses from a precedence table that
+ * mirrors the parser's, keeps the space in `typeof x` / `void 0` / `- -1`,
+ * groups an object literal returned from an arrow, prints computed keys,
+ * named function expressions and `-0`, and escapes template chunks. Every
+ * corpus file now prints to the program it parses to. The 2 files skipped
+ * for a comment are the ones `KNOWN_COMMENT_GAPS` and
+ * `KNOWN_COMMENT_SCOPE_GAPS` list: `formatProgram` now also refuses output
+ * that drops or moves a comment, which those mid-expression comments would
+ * be (the printer drops one written between object-literal properties).
  */
 const EXPECTED_CORPUS_SPLIT = {
   total: 166,
-  formatted: 79,
-  skippedDifferentProgram: 48,
-  skippedDidNotReparse: 39,
+  formatted: 164,
+  skippedDifferentProgram: 0,
+  skippedDidNotReparse: 0,
+  skippedComment: 2,
 };
 
 describe("repo .aktion programs: how formatProgram treats the corpus", () => {
   it("formats, or skips with a reason, exactly the pinned number of files", () => {
-    const split = { total: 0, formatted: 0, skippedDifferentProgram: 0, skippedDidNotReparse: 0 };
+    const split = { total: 0, formatted: 0, skippedDifferentProgram: 0, skippedDidNotReparse: 0, skippedComment: 0 };
+    const skippedForComment: string[] = [];
     for (const file of files) {
       const result = formatProgram(readFileSync(file, "utf8"));
       split.total += 1;
@@ -205,9 +218,15 @@ describe("repo .aktion programs: how formatProgram treats the corpus", () => {
       if (message === undefined) split.formatted += 1;
       else if (/did not re-parse/.test(message)) split.skippedDidNotReparse += 1;
       else if (/same program/.test(message)) split.skippedDifferentProgram += 1;
-      else throw new Error(`unexpected warning: ${message}`);
+      else if (/drop or move a comment/.test(message)) {
+        split.skippedComment += 1;
+        skippedForComment.push(relative(root, file));
+      } else throw new Error(`unexpected warning: ${message}`);
     }
     expect(split).toEqual(EXPECTED_CORPUS_SPLIT);
+    expect(skippedForComment.sort()).toEqual(
+      [...new Set([...Object.keys(KNOWN_COMMENT_GAPS), ...Object.keys(KNOWN_COMMENT_SCOPE_GAPS)])].sort(),
+    );
   });
 
   it("every formatted file really parses to the program it started as", () => {

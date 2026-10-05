@@ -1,8 +1,11 @@
 /**
  * `formatProgram` only returns formatted text when it re-parses to the same
- * program as the input. The printer is not precedence-aware, so without this
- * guard it could silently change what a program means — e.g.
- * `($a * $r) / (1 - x)` printed as `$a * $r / 1 - x`.
+ * program as the input and keeps every comment where it was. The grammar has
+ * no grouping node, so the printer restores the parentheses an expression
+ * needs from a precedence table; before it did, `($a * $r) / (1 - x)` printed
+ * as `$a * $r / 1 - x` and only this guard kept the program intact. The guard
+ * stays as a safety net; the comment half is what still triggers on parsed
+ * input, for a comment written inside an expression.
  */
 import { describe, expect, it } from "vitest";
 import { formatProgram, printProgram, structuralFingerprint } from "../src/tooling/formatter.js";
@@ -27,13 +30,12 @@ function expectSkipped(source: string): void {
 }
 
 describe("formatProgram — AST-equality guard", () => {
-  it("returns the source unchanged, with a warning, when printing would drop needed parentheses", () => {
+  it("keeps the parentheses a program needs, and drops the ones it does not", () => {
     const source = "payment = ($amount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -months))\n";
-    const printed = printProgram(parse(source));
-    expect(parse(printed).errors).toEqual([]);
-    expect(printed).not.toBe(source);
-    expectSkipped(source);
-    expect(formatProgram(source).warnings![0]!.message).toMatch(/not parse to the same program/);
+    const result = formatProgram(source);
+    expect(result.warnings).toBeUndefined();
+    expect(result.formatted).toBe("payment = $amount * monthlyRate / (1 - Math.pow(1 + monthlyRate, -months))\n");
+    expect(fingerprint(result.formatted)).toBe(fingerprint(source));
   });
 
   it.each([
@@ -41,22 +43,34 @@ describe("formatProgram — AST-equality guard", () => {
     'x = (html || "").trim()\n',
     "x = (a ? b : c) + 1\n",
     "x = a - (b - c)\n",
-  ])("keeps %j untouched because the printer would drop its parentheses", (source) => {
-    expectSkipped(source);
+    "x = !(a && b)\n",
+    "x = a || (b ? c : d)\n",
+    "x = (-a) ** 2\n",
+  ])("formats %j with its parentheses", (source) => {
+    expect(formatProgram(source)).toEqual({ formatted: source, errors: [] });
   });
 
-  it("returns the source with a warning when the printed text does not re-parse", () => {
-    // The printer drops the parentheses around an object literal returned from an arrow function.
+  it("groups an object literal returned from an arrow function", () => {
     const source = "rows = items.map(m => ({ role: m.role, content: m.content }))\n";
-    expect(parse(printProgram(parse(source))).errors.length).toBeGreaterThan(0);
-    expectSkipped(source);
-    expect(formatProgram(source).warnings![0]!.message).toMatch(/did not re-parse/);
+    expect(formatProgram(source)).toEqual({ formatted: source, errors: [] });
   });
 
-  it("returns the source with a warning when a double negation prints as `--`", () => {
-    const source = "x = -(-1)\n";
-    expect(printProgram(parse(source))).toBe("x = --1\n");
-    expectSkipped(source);
+  it("prints a double negation as `- -1`, not the `--` operator", () => {
+    expect(printProgram(parse("x = -(-1)\n"))).toBe("x = - -1\n");
+    expect(formatProgram("x = -(-1)\n")).toEqual({ formatted: "x = - -1\n", errors: [] });
+  });
+
+  it("returns the source with a warning when printing would drop or move a comment", () => {
+    // Comments attach to statements; one between the properties of an object
+    // literal (or the elements of an array) has none, and the printer drops it.
+    for (const source of [
+      "x = {\n  a: 1,\n  // between properties\n  b: 2\n}\n",
+      "x = f([\n  1,\n  // between elements\n  2\n])\n",
+    ]) {
+      expect(printProgram(parse(source))).not.toContain("// between");
+      expectSkipped(source);
+      expect(formatProgram(source).warnings![0]!.message).toMatch(/drop or move a comment/);
+    }
   });
 
   it("still formats a pure reformat", () => {
@@ -102,10 +116,10 @@ describe("formatProgram — AST-equality guard", () => {
 });
 
 describe("formatProgram — numbers that JSON cannot tell apart", () => {
-  it("refuses to print `-0` as `0`", () => {
+  it("prints `-0` as `-0`, not `0`", () => {
     for (const source of ["x = 1 / -0\n", "x = Object.is(-0, 0)\n"]) {
-      expect(printProgram(parse(source))).not.toContain("-0");
-      expectSkipped(source);
+      expect(printProgram(parse(source))).toBe(source);
+      expect(formatProgram(source)).toEqual({ formatted: source, errors: [] });
     }
   });
 
