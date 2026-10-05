@@ -555,7 +555,7 @@ export const DrawingCanvas: ComponentSpec = {
       bar.append(clearBtn);
       surface.root.append(bar);
     }
-    return withFieldShell(surface.root, props);
+    return withFieldShell(surface.root, props, { ownsName: true });
   },
 };
 
@@ -628,6 +628,6 @@ export const SignaturePad: ComponentSpec = {
       bar.append(clearBtn);
       surface.root.append(bar);
     }
-    return withFieldShell(surface.root, props);
+    return withFieldShell(surface.root, props, { ownsName: true });
   },
 };

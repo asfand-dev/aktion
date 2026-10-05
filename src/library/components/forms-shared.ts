@@ -22,11 +22,17 @@ import { asArray, asString, asBoolean, el } from "../utils.js";
  * same slot, and a field that is simultaneously wrong and merely unusual has
  * nothing to gain from saying both. All of them join `aria-describedby`
  * (description first), so the control is described by everything it shows.
+ *
+ * `ownsName` is for a composite that hands the shell its WRAPPER and names its
+ * own form control from `props.name` — an inner `<input>` / `<textarea>`, or a
+ * hidden field carrying a value no visible control holds (a PIN, a tag list, a
+ * drawing). The shell then leaves `name` alone: on the wrapper it was inert,
+ * because a `<div name>` is submitted with no form.
  */
 export function withFieldShell(
   control: HTMLElement,
   props: Record<string, unknown>,
-  options: { idKey?: string } = {},
+  options: { idKey?: string; ownsName?: boolean } = {},
 ): HTMLElement {
   // `disabled` and `name` are applied before the early return below, because a
   // field with no label/hint/error still has to honour them — otherwise a bare
@@ -37,7 +43,7 @@ export function withFieldShell(
   // it declared-but-dead on TextArea, Select, NumberInput and the rest. The
   // controls default `name` to `id`, so this only overrides when supplied.
   const fieldName = asString(props.name);
-  if (fieldName) control.setAttribute("name", fieldName);
+  if (fieldName && !options.ownsName) control.setAttribute("name", fieldName);
 
   const label = asString(props.label);
   const hint = asString(props.hint);

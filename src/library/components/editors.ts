@@ -330,7 +330,7 @@ export const RichTextEditor: ComponentSpec = {
     editor.onmouseup = (event) => syncRteToolStates((event.currentTarget ?? event.target) as Element);
     bindChangeHandler(editor, props, helpers, { event: "input", getValue: readSanitisedHtml });
     root.append(editor);
-    return withFieldShell(root, props, { idKey: "id" });
+    return withFieldShell(root, props, { idKey: "id", ownsName: true });
   },
 };
 
@@ -603,7 +603,7 @@ export const CodeEditor: ComponentSpec = {
     }
     body.append(textarea);
     root.append(body);
-    return withFieldShell(root, props, { idKey: "id" });
+    return withFieldShell(root, props, { idKey: "id", ownsName: true });
   },
 };
 
@@ -1542,6 +1542,6 @@ export const ColorPicker: ComponentSpec = {
       }
       root.append(swatchRow);
     }
-    return withFieldShell(root, props, { idKey: "id" });
+    return withFieldShell(root, props, { idKey: "id", ownsName: true });
   },
 };
