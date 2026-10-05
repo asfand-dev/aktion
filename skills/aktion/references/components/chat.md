@@ -56,7 +56,7 @@ Chat-styled list with bullets, useful for steps or summaries. `items` takes plai
 FollowUpBlock(items, title?, onSelect?, disabled?, layout?)
 ```
 
-Suggested follow-up prompts shown as buttons. Each item dispatches its label as an assistant message (equivalent to `emit "assistant-message" { message }`) unless `onSelect` is supplied, which receives `(message, label)` instead. `disabled` makes the row inert while the assistant is responding; `layout: "stack"` puts one suggestion per line.
+Suggested follow-up prompts shown as buttons. Each item dispatches its `message` — which defaults to its label — as an assistant message (equivalent to `emit "assistant-message" { message }`) unless `onSelect` is supplied, which receives `(message, label)` instead. `disabled` makes the row inert while the assistant is responding; `layout: "stack"` puts one suggestion per line.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |

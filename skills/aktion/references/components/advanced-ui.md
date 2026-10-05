@@ -61,7 +61,7 @@ Cmd-K style searchable command list. Pass `items` as `{label, value, group?, sho
 | `open` | `boolean` | no | Whether the palette is visible (default true) |
 | `placeholder` | `string` | no |  |
 | `shortcut` | `string` | no | Hint label, e.g. Cmd+K |
-| `onSelect` | `callable` | no | Receives the selected item's `value` |
+| `onSelect` | `callable` | no | Receives the selected item's `value` as a string (`5` arrives as `"5"`; the label when `value` is absent) |
 | `onClose` | `callable` | no | Called with `false` whenever the palette is dismissed |
 | `loading` | `boolean` | no | Show a pending state instead of the empty row |
 | `emptyLabel` | `string` | no | Text shown when nothing matches (default "No commands found") |
@@ -79,7 +79,7 @@ Removable filter chips with an optional clear-all control. Set `max` to collapse
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `chips` | `any[]` | **yes** | Array of strings or {label, value} objects |
-| `onRemove` | `callable` | no | Receives the removed chip value as an argument |
+| `onRemove` | `callable` | no | Receives the removed chip's `value` as a string (the label when `value` is absent) |
 | `onClear` | `callable` | no |  |
 | `clearLabel` | `string` | no | Text of the clear-all control (default "Clear all") |
 | `max` | `number` | no | Chips shown before the rest collapse into a "+N" chip |
@@ -119,7 +119,7 @@ Dynamic list of field groups (invoice lines, recipients, key/value pairs). Pass 
 | `addLabel` | `string` | no |  |
 | `onChange` | `callable` | no | Receives `(index, fieldName, value, rows)` on every edit |
 | `removeLabel` | `string` | no | Text of the per-row remove control (default "Remove") |
-| `min` | `number` | no | Rows that can never be removed (default 0) |
+| `min` | `number` | no | Minimum row count — every remove control is hidden once the list is down to this many rows (default 0) |
 | `max` | `number` | no | Maximum rows — "Add row" is disabled at the cap |
 
 ### VirtualList
@@ -152,8 +152,8 @@ Visual AND/OR filter builder. Pass `fields` as `{name, label, type?, operators?}
 | --- | --- | --- | --- |
 | `fields` | `any[]` | **yes** |  |
 | `value` | `any[]` | no |  |
-| `onChange` | `callable` | no | Receives the next rule array |
-| `operators` | `any[]` | no | Operator tokens or `{value, label, type?}` objects — `type` scopes them to matching fields |
+| `onChange` | `callable` | no | Receives the next rule array on every edit (also when `value` is bound, after the write-back) |
+| `operators` | `any[]` | no | Operator tokens or `{value, label, type?}` objects — `type` (case-insensitive) scopes them to matching fields |
 | `disabled` | `boolean` | no | Freeze the builder while a query is in flight |
 | `maxRules` | `number` | no | Maximum number of rules (default unlimited) |
 
@@ -197,7 +197,7 @@ Expandable JSON tree viewer for objects and arrays. Arrow keys walk the tree, En
 Gantt(tasks, startDate?, endDate?, axis?, ticks?, today?, onTaskClick?)
 ```
 
-Simple Gantt chart. Pass `tasks` as `{id, label, start, end, progress?, tone?}` with ISO date strings; `progress` accepts either a 0-1 fraction or a 0-100 percentage, and `tone` colours the bar (`success`, `warning`, `danger`, …). Set `axis` for a date scale and `today` for a now marker.
+Simple Gantt chart. Pass `tasks` as `{id, label, start, end, progress?, tone?}` with ISO date strings (`name` is read when `label` is absent, `status` when `tone` is); `progress` accepts either a 0-1 fraction or a 0-100 percentage, and `tone` colours the bar — one of `success`, `warning`, `danger`, `info` or `muted` (any other value draws the default bar). Set `axis` for a date scale and `today` for a now marker.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -206,20 +206,20 @@ Simple Gantt chart. Pass `tasks` as `{id, label, start, end, progress?, tone?}` 
 | `endDate` | `string` | no |  |
 | `axis` | `boolean` | no | Render a date axis above the bars |
 | `ticks` | `number` | no | Axis tick count (default 5, implies `axis`) |
-| `today` | `boolean | string` | no | Draw a marker line at now, or at the given ISO date |
+| `today` | `boolean | string | number` | no | Draw a marker line: `true` at now, an ISO date string or an epoch-millisecond timestamp at that moment |
 | `onTaskClick` | `callable` | no | Receives the clicked task's id |
 
 ### Truncate
 
 ```
-Truncate(text, maxLines?, expandLabel?, collapseLabel?, expanded?, onToggle?, child?)
+Truncate(text?, maxLines?, expandLabel?, collapseLabel?, expanded?, onToggle?, child?)
 ```
 
 Clamp long text (or a `child` node) with an expand control. The toggle hides itself when the content already fits, and `expanded` + `onToggle` make the state controllable for "expand all" flows.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
-| `text` | `string` | **yes** |  |
+| `text` | `string` | no | Plain text to clamp — omit it when passing `child` |
 | `maxLines` | `number` | no | Lines before clamping (default 3) |
 | `expandLabel` | `string` | no |  |
 | `collapseLabel` | `string` | no | Text of the collapse control (default "Show less") |
@@ -253,7 +253,7 @@ Click-to-edit inline field. Enter or blur commits (only when the value actually 
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 
@@ -270,7 +270,7 @@ Bell icon with unread count badge and dropdown notification list. Pass `items` a
 | `count` | `number` | no |  |
 | `items` | `any[]` | no | {title, message?, time?, href?, unread?} objects |
 | `onOpen` | `callable` | no |  |
-| `onItemClick` | `callable` | no | Receives the clicked notification object and its index |
+| `onItemClick` | `callable` | no | Receives the clicked notification object and its index in `items` |
 | `onMarkAllRead` | `callable` | no | Renders a "mark all read" footer control |
 | `align` | `"left"` \| `"right"` | no | Which edge the panel aligns to (default right) |
 | `loading` | `boolean` | no | Show a pending state instead of the empty message |
@@ -338,7 +338,7 @@ Translates its child vertically as the page scrolls for a depth effect. `speed` 
 | --- | --- | --- | --- |
 | `child` | `Node` | **yes** |  |
 | `speed` | `number` | no | −1…1 (default 0.3) |
-| `maxOffset` | `string` | no | Maximum travel in either direction — a length ("120px") or a percentage of the layer's height ("40%"). Default 50% |
+| `maxOffset` | `string` | no | Maximum travel in either direction — pixels (`120` or "120px") or a percentage of the layer's height ("40%"). Other units (rem, vh, calc()) are not measured and fall back to the default, 50% |
 
 ### ReadingProgress
 
@@ -383,7 +383,7 @@ Makes its child draggable, carrying a `data` payload picked up by a DropZone. `t
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `child` | `Node` | **yes** |  |
-| `data` | `any` | no | Payload (stringified) handed to the DropZone |
+| `data` | `any` | no | Payload handed to the DropZone's `onDrop` unchanged, by pointer or keyboard (a drop into another page receives a JSON copy) |
 | `type` | `string` | no | Payload kind, e.g. "card" / "file" / "tag" — a DropZone's `accept` matches against it |
 | `disabled` | `boolean` | no | Not draggable (locked, in flight, not the user's to move) |
 | `ariaLabel` | `string` | no | What is being dragged, announced to screen readers |
@@ -396,7 +396,7 @@ Makes its child draggable, carrying a `data` payload picked up by a DropZone. `t
 DropZone(child?, onDrop?, label?, accept?, disabled?, ariaLabel?)
 ```
 
-A target that accepts a Draggable. `onDrop(data)` receives the dropped payload (parsed JSON when possible). `accept` lists the Draggable `type`s this zone can take (comma-separated) — anything else is refused before it is dropped, so a 'To do' / 'Done' / 'Archive' board can express what goes where; `disabled` makes the zone inert. Pass `child` for the zone's content, or just `label` for a bare labelled target. Keyboard users focus the zone and press Space/Enter to drop what a Draggable picked up.
+A target that accepts a Draggable. `onDrop(data)` receives the Draggable's `data` unchanged (text dragged in from outside the app arrives as parsed JSON when possible). `accept` lists the Draggable `type`s this zone can take (comma-separated) — anything else is refused before it is dropped, so a 'To do' / 'Done' / 'Archive' board can express what goes where; `disabled` makes the zone inert. Pass `child` for the zone's content, or just `label` for a bare labelled target. Keyboard users focus the zone and press Space/Enter to drop what a Draggable picked up.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |

@@ -74,7 +74,7 @@ Page-level header with breadcrumbs, title, subtitle, status tag, and a right-ali
 | --- | --- | --- | --- |
 | `title` | `string` | **yes** |  |
 | `subtitle` | `string` | no |  |
-| `breadcrumbs` | `string[] | {label, to}[] | Breadcrumb | false` | no | Array of strings or `{label, to}` objects (a `to` path renders a router link), a Breadcrumb(...) node, or `false` to suppress the auto-derived trail |
+| `breadcrumbs` | `string[] | {label, to}[] | Breadcrumb | false` | no | Array of strings or `{label, to}` objects (a `to` path renders a router link; `href` and `path` are read as the same ROUTER path, not an external URL, and `title` as the label), a Breadcrumb(...) node, or `false` to suppress the auto-derived trail |
 | `actions` | `Node[]` | no | Buttons / NavLinks shown on the right |
 | `status` | `Badge` | no | Optional Badge(...) rendered next to the title |
 | `onCrumbClick` | `callable` | no | Called with (label, index) when a breadcrumb is clicked — makes string crumbs interactive |
@@ -133,14 +133,14 @@ Single event on a Timeline. Pass `content` for rich children (Badge, Link, Butto
 ActivityLog(items, variant?, emptyLabel?, onItemClick?, loading?, loaderLabel?)
 ```
 
-Purpose-built feed of user/system activity. Each entry has `actor`, `title`, `description?`, `time?`, `icon?`, `avatarSrc?`, `tone?`, `href?`, and optional `meta` (IP, browser, request id). An entry's `href` renders its title as a link; `onItemClick` makes every title a button. Use `variant="audit"` to render `meta` in monospace for security/admin trails. Pass items as `{actor, title, description, time, icon, tone, avatarSrc, href, meta}` objects.
+Purpose-built feed of user/system activity. Each entry has `actor`, `title`, `description?`, `time?`, `icon?`, `avatarSrc?`, `tone?`, `href?`, and optional `meta` (IP, browser, request id). An entry's `href` renders its title as a link, and `onItemClick` makes every other title a button (a link never fires it). Use `variant="audit"` to render `meta` in monospace for security/admin trails. Pass items as `{actor, title, description, time, icon, tone, avatarSrc, href, meta}` objects.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `items` | `object[]` | **yes** |  |
 | `variant` | `"default"` \| `"audit"` | no | audit = monospace `meta` styling for security/admin trails |
 | `emptyLabel` | `string` | no | Message shown when `items` is empty (default `No activity yet`) |
-| `onItemClick` | `callable` | no | Callable fired with (index, item) when an entry title is activated |
+| `onItemClick` | `callable` | no | Callable fired with (index, item) when the title of an entry without an `href` is activated. `item` is the object you passed in `items`, every field intact (e.g. its `id`), and `index` its position in that array |
 | `loading` | `boolean` | no | Append a loading row while older activity is being fetched |
 | `loaderLabel` | `string` | no | Label for the loading row (default `Loading activity…`) |
 
@@ -155,7 +155,7 @@ Responsive grid of FeatureItem tiles (typically 2–3 columns). Use to highlight
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `items` | `FeatureItem[]` | **yes** |  |
-| `columns` | `number` | no | Preferred column count (default auto) |
+| `columns` | `number` | no | Preferred column count, 1–4 — larger values clamp to 4 (default auto) |
 
 ### FeatureItem
 
@@ -241,7 +241,7 @@ Full-width announcement banner. Use at the top of a page for promos, release not
 | `dismissible` | `boolean` | no | Show a close button that hides the banner |
 | `onDismiss` | `callable` | no | Called when the banner is dismissed (implies `dismissible`) |
 | `href` | `string` | no | Make the whole banner a link (release notes → changelog) |
-| `onClick` | `callable` | no | Called when the banner itself is clicked |
+| `onClick` | `callable` | no | Called when the banner itself is clicked — also when `href` is set (track the click, the link still navigates) |
 
 ### Notification
 
@@ -394,14 +394,14 @@ Single card on a Kanban board.
 SectionHeader(title, subtitle?, eyebrow?, status?, actions?)
 ```
 
-Compact section header for the top of a Card or panel. Renders a small eyebrow, a title, an optional subtitle, an optional status Tag/Badge, and a right-aligned actions row. Use this inside a Card to introduce a section instead of a bare `CardHeader`.
+Compact section header for the top of a Card or panel. Renders a small eyebrow, a title, an optional subtitle, an optional status Badge/Pill/StatusDot, and a right-aligned actions row. Use this inside a Card to introduce a section instead of a bare `CardHeader`.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `title` | `string` | **yes** |  |
 | `subtitle` | `string` | no |  |
 | `eyebrow` | `string` | no | Short uppercase label above the title |
-| `status` | `Badge | Tag` | no |  |
+| `status` | `Badge | Pill | StatusDot` | no | Status node rendered next to the title — a Badge(...), Pill(...) or StatusDot(...) |
 | `actions` | `Node[]` | no | Buttons / Links shown on the right |
 
 ### Toolbar
@@ -495,7 +495,7 @@ Responsive grid of PricingCard tiers. Items size uniformly across a row and wrap
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `tiers` | `PricingCard[]` | **yes** |  |
-| `columns` | `number` | no | Preferred column count (default auto) |
+| `columns` | `number` | no | Preferred column count, 1–4 — larger values clamp to 4 (default auto) |
 
 ### PricingCard
 
@@ -565,7 +565,7 @@ Full-card success placeholder. Use for confirmation screens ("Order placed", "Pa
 ### Tour
 
 ```
-Tour(steps, current, open?, onOpenChange?, onComplete?, onSkip?, skipLabel?, backLabel?, nextLabel?, finishLabel?)
+Tour(steps, current?, open?, onOpenChange?, onComplete?, onSkip?, skipLabel?, backLabel?, nextLabel?, finishLabel?)
 ```
 
 Product-tour controller — renders the current step's title, description, and a Prev/Next/Skip row. Bind `current` to a `$variable` (0-indexed) to drive the step from your own state; without a binding the component advances itself. Bind `open` to a `$variable` so Skip/Finish can close it (otherwise it closes itself). Pass `steps` as `{title, description, target?}` objects; the optional `target` is a CSS selector that renders alongside the step for designers to reference.
@@ -573,9 +573,9 @@ Product-tour controller — renders the current step's title, description, and a
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `steps` | `object[]` | **yes** |  |
-| `current` | `number` | **yes** | 0-indexed active step — bind a $variable |
+| `current` | `number` | no | 0-indexed active step (default 0) — bind a $variable to drive it; without a binding the tour advances itself |
 | `open` | `boolean` | no | Whether the tour is visible — bind a $variable to control it |
-| `onOpenChange` | `callable` | no | Called with the new boolean open state whenever the component opens or closes. |
+| `onOpenChange` | `callable` | no | Called with `false` whenever the user closes the tour (Escape, Skip or Finish). Opening is driven by `open`, so it does not fire then. |
 | `onComplete` | `callable` | no | Fired when the user reaches Finish |
 | `onSkip` | `callable` | no | Fired when the user bails out via Skip (falls back to `onComplete` when omitted) |
 | `skipLabel` | `string` | no | Default "Skip" |
@@ -634,15 +634,15 @@ A single labelled chip for a LogoCloud: a Font Awesome `icon` or a customer word
 ProductCard(title, image?, price?, compareAt?, currency?, rating?, badge?, action?, onAdd?, href?, onClick?, reviewCount?, soldOut?)
 ```
 
-An e-commerce product card: image, title, optional rating, a PriceTag, and an add-to-cart action. Pass `price`/`compareAt` directly or a custom `price` node. Give it `href` or `onClick` to make the whole card open the product (the card's hover lift promises it), `rating` + `reviewCount` for credible stars, and `soldOut` to dim it and stop the add button firing.
+An e-commerce product card: image, title, optional rating, a PriceTag, and an add-to-cart action. Pass `price`/`compareAt` (formatted by a PriceTag), or a custom `price` node rendered as-is. Give it `href` or `onClick` to make the whole card open the product (the card's hover lift promises it), `rating` + `reviewCount` for credible stars, and `soldOut` to dim it and stop the add button firing.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `title` | `string` | **yes** |  |
 | `image` | `string` | no |  |
-| `price` | `string | number` | no |  |
-| `compareAt` | `string | number` | no |  |
-| `currency` | `string` | no |  |
+| `price` | `string | number | Node` | no | Price for the built-in PriceTag, or your own node (e.g. a PriceTag with a `period`) |
+| `compareAt` | `string | number` | no | Struck-through original price (ignored when `price` is a node) |
+| `currency` | `string` | no | Currency symbol (ignored when `price` is a node) |
 | `rating` | `number` | no | 0–5 stars |
 | `badge` | `string` | no | Corner ribbon label (e.g. 'Sale') |
 | `action` | `Node` | no | Add-to-cart Button; omit it and pass `onAdd` for the built-in icon button |
@@ -742,7 +742,7 @@ A terminal window rendering monospace lines. Pass `lines` as an array of strings
 ThemeToggle(light?, dark?)
 ```
 
-A sun/moon button that toggles the host between light and dark themes — no host glue required. It flips the <aktion-app> `theme` attribute and dispatches a `theme-change` event the host can listen for.
+A sun/moon button that toggles the host between light and dark themes — no host glue required. It flips the <aktion-app> `theme` attribute between `light` and `dark` (any theme names) and dispatches a `theme-change` event the host can listen for.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |

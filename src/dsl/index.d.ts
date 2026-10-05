@@ -70,12 +70,248 @@ export type Key = string | number;
 export type Responsive<T> = { readonly base?: T; readonly sm?: T; readonly md?: T; readonly lg?: T; readonly xl?: T };
 /** Exactly one spelling (a prop or one of its aliases) of a required prop. */
 export type OneOf<K extends string, T> = { [P in K]: { [Q in P]: T } & { [Q in Exclude<K, P>]?: never } }[K];
-/** Token-aware style object (`sx: { p: "md", bg: "surface" }`). Keys are validated by the runtime, not by these types. */
-export interface SxProps {
-  readonly [key: string]: unknown;
+/** A CSS length: a number is pixels (`8` → `8px`, `0` → `0`), or a string that passes the length sanitiser — `"12px"`, `"60%"`, `"clamp(1rem, 2vw, 2rem)"`, `"var(--gap)"` (letters, digits, `. % + - * / ( ) ,` and spaces; at most 64 characters). */
+export type SxLength = number | (string & {});
+/** A unitless number, or the same number as a string (`"0.9"`, `"-1"`): the runtime parses both. Write plain decimals — `num()` (src/library/sx.ts) drops `"1e3"`, `".5"` and `"+1"`, which `${number}` admits. */
+export type SxNumber = number | `${number}`;
+/** The `sx` spacing scale, `auto`, and the safe-area insets (`SPACING`, src/library/sx.ts). Distinct from `SpacingToken`: `sx` has no `small` / `normal` / `large`. */
+export type SxSpaceToken = "none" | "3xs" | "2xs" | "xs" | "s" | "sm" | "m" | "md" | "l" | "lg" | "xl" | "2xl" | "3xl" | "auto" | "safe" | "safe-top" | "safe-right" | "safe-bottom" | "safe-left";
+/** `p`: a spacing token (`safe` is the 4-side safe-area shorthand) or a length. */
+export type SxPadding = Exclude<SxSpaceToken, "auto"> | SxLength;
+/** `px` `py` `pt` `pr` `pb` `pl` `ps` `pe`: one side or axis — use the directional `safe-*` insets. */
+export type SxPaddingSide = Exclude<SxSpaceToken, "auto" | "safe"> | SxLength;
+/** `m`: a spacing token or a length. */
+export type SxMargin = SxSpaceToken | SxLength;
+/** `mx` `my` `mt` `mr` `mb` `ml` `ms` `me`. */
+export type SxMarginSide = Exclude<SxSpaceToken, "safe"> | SxLength;
+/** `gap`: a spacing token or a length. */
+export type SxGap = Exclude<SxSpaceToken, "auto" | "safe"> | SxLength;
+/** Size keywords (`SIZE_KEYWORDS`, src/library/sx.ts): `full` = 100%, `screen` = 100vh, `min` / `max` / `fit` = the intrinsic sizes, …. */
+export type SxSizeKeyword = "full" | "half" | "screen" | "screen-w" | "screen-h" | "dvh" | "min" | "max" | "fit" | "auto";
+/** `w` `h` `minW` `minH` `basis`: a size keyword or a length. */
+export type SxSize = SxSizeKeyword | SxLength;
+/** `maxW` `maxH`: a size keyword or a length (`max-width: auto` is not CSS — use `"none"`). */
+export type SxMaxSize = Exclude<SxSizeKeyword, "auto"> | SxLength;
+/** `top` `right` `bottom` `left`: a size keyword or a length. */
+export type SxOffset = Exclude<SxSizeKeyword, "min" | "max" | "fit"> | SxLength;
+/** Theme colour tokens (`COLORS`, src/library/sx.ts) — kebab-case, unlike `$theme({ colors })`'s camelCase keys. */
+export type SxColorToken = "bg" | "bg-subtle" | "surface" | "surface-muted" | "border" | "border-subtle" | "text" | "text-muted" | "muted" | "primary" | "primary-hover" | "primary-text" | "accent" | "success" | "warning" | "danger" | "info" | "transparent" | "current";
+/** A colour token or any colour that passes the colour sanitiser (`#0969da`, `rgb(…)`, `color-mix(…)`, `var(--x)`). Not a gradient. */
+export type SxColor = SxColorToken | (string & {});
+/** The theme's gradient tokens (the `--rui-gradient-*` variables). */
+export type SxGradientName = "brand" | "accent" | "warm" | "cool" | "success" | "danger";
+/** `bg`, `bgOverlay` and a state's `bg`: a colour, or a theme gradient (`"gradient.brand"`). */
+export type SxBackground = SxColorToken | `gradient.${SxGradientName}` | (string & {});
+/** A radius token (`RADIUS`, src/library/sx.ts) or a length. */
+export type SxRadius = "none" | "xs" | "sm" | "md" | "lg" | "pill" | "full" | "circle" | SxLength;
+/** Shadow tokens (`SHADOW`, src/library/sx.ts). Closed: any other value is dropped. */
+export type SxShadow = "none" | "sm" | "md" | "lg";
+/** A border keyword (`BORDER_PRESETS`, src/library/sx.ts) — `true` is the default border, `false` draws nothing — or a colour for a 1px solid border. */
+export type SxBorder = "none" | "subtle" | "strong" | "default" | boolean | SxColor;
+/** Closed (`DISPLAY`, src/library/sx.ts). */
+export type SxDisplay = "flex" | "grid" | "block" | "inline" | "inline-flex" | "inline-block" | "none" | "contents";
+/** Closed (`DIRECTION`, src/library/sx.ts). */
+export type SxDirection = "row" | "column" | "row-reverse" | "column-reverse";
+/** `align-items` (`ALIGN`, src/library/sx.ts). */
+export type SxAlign = "start" | "center" | "end" | "stretch" | "baseline";
+/** `justify-content` (`JUSTIFY`, src/library/sx.ts): `between` = space-between, …. */
+export type SxJustify = "start" | "center" | "end" | "between" | "around" | "evenly" | "stretch";
+/** Closed (`POSITION`, src/library/sx.ts). */
+export type SxPosition = "relative" | "absolute" | "fixed" | "sticky" | "static";
+/** Closed (`OVERFLOW`, src/library/sx.ts). */
+export type SxOverflow = "hidden" | "auto" | "scroll" | "visible" | "clip";
+/** Closed (`CURSOR`, src/library/sx.ts). */
+export type SxCursor = "pointer" | "default" | "not-allowed" | "grab" | "grabbing" | "text" | "move" | "wait" | "help" | "none";
+/** Closed (`TEXT_ALIGN`, src/library/sx.ts). */
+export type SxTextAlign = "left" | "center" | "right" | "justify" | "start" | "end";
+/** Closed (`TEXT_DECORATION`, src/library/sx.ts). */
+export type SxTextDecoration = "underline" | "none" | "line-through" | "overline";
+/** A layer token (`Z_INDEX`, src/library/sx.ts; themeable through `$theme({ zIndex })`) or a number. */
+export type SxZIndex = "base" | "raised" | "dropdown" | "sticky" | "banner" | "overlay" | "modal" | "popover" | "toast" | "tooltip" | SxNumber;
+/** A type-scale token (`FONT_SIZE`, src/library/sx.ts) or a length. */
+export type SxFontSize = "xs" | "sm" | "base" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | SxLength;
+/** Closed (`FONT_WEIGHT`, src/library/sx.ts): the numeric weights as numbers or strings, `normal`, `bold`. */
+export type SxFontWeight = "100" | "200" | "300" | "400" | "500" | "600" | "700" | "800" | "900" | "normal" | "bold" | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
+/** `backdrop` filters (`BACKDROP_FILTERS`, src/library/sx.ts). */
+export type SxBackdrop = "blur";
+/** `bgSize` (`BG_SIZES`, src/library/sx.ts); read only with `bgImage`, and anything else is `cover`. */
+export type SxBgSize = "cover" | "contain";
+/** Hover effect shorthands (`HOVER_EFFECTS`, src/library/sx.ts): each is an `ak-hover-*` utility class. */
+export type SxHoverEffect = "lift" | "grow" | "glow" | "bright" | "border" | "underline" | "scale";
+/** Focus effect shorthands (`FOCUS_EFFECTS`, src/library/sx.ts): `glow` on `:focus-visible`, `border` on `:focus-within`. */
+export type SxFocusEffect = "glow" | "border";
+/** The states `sx.states` styles (src/library/responsive-style.ts). `group-hover` fires while an ancestor with class `ak-group` is hovered; `disabled` also matches `[disabled]` / `[data-disabled="true"]`, `checked` also `[aria-checked="true"]`. */
+export type SxInteractionState = "hover" | "focus" | "focus-visible" | "focus-within" | "active" | "disabled" | "checked" | "group-hover";
+/** An `sx` value, or a breakpoint map of it (`{ base: 8, md: 16 }` emits real `@media` rules). */
+export type SxValue<T> = T | Responsive<T>;
+/** A bounded style object for one interaction state. */
+export interface SxStateStyle {
+  readonly bg?: SxBackground;
+  readonly color?: SxColor;
+  readonly borderColor?: SxColor;
+  readonly shadow?: SxShadow;
+  readonly radius?: SxRadius;
+  readonly opacity?: SxNumber;
+  readonly cursor?: SxCursor;
+  readonly textDecoration?: SxTextDecoration;
+  /** `transform: scale(n)`. */
+  readonly scale?: SxNumber;
+  readonly translateX?: SxLength;
+  readonly translateY?: SxLength;
+  /** Degrees, at most ±360; anything else is dropped. */
+  readonly rotate?: SxNumber;
 }
-/** An animation preset name, or a preset with timing overrides. */
-export type AnimateValue = string | { readonly preset?: string; readonly name?: string; readonly duration?: number | string; readonly delay?: number | string; readonly easing?: string; readonly repeat?: number | boolean | "infinite" };
+/** The object form of `hover`: effect flags plus state styles. */
+export interface SxHoverStyle {
+  readonly bg?: SxBackground;
+  readonly color?: SxColor;
+  readonly borderColor?: SxColor;
+  readonly shadow?: SxShadow;
+  readonly radius?: SxRadius;
+  readonly opacity?: SxNumber;
+  readonly cursor?: SxCursor;
+  readonly textDecoration?: SxTextDecoration;
+  /** `true` is the `scale` effect; a value is the state style. `transform: scale(n)`. */
+  readonly scale?: SxNumber | boolean;
+  readonly translateX?: SxLength;
+  readonly translateY?: SxLength;
+  /** Degrees, at most ±360; anything else is dropped. */
+  readonly rotate?: SxNumber;
+  /** The `lift` effect. */
+  readonly lift?: boolean;
+  /** The `grow` effect. */
+  readonly grow?: boolean;
+  /** The `glow` effect. */
+  readonly glow?: boolean;
+  /** The `bright` effect. */
+  readonly bright?: boolean;
+  /** The `border` effect. */
+  readonly border?: boolean;
+  /** The `underline` effect. */
+  readonly underline?: boolean;
+}
+/** The object form of `focus`: effect flags plus state styles. */
+export interface SxFocusStyle {
+  readonly bg?: SxBackground;
+  readonly color?: SxColor;
+  readonly borderColor?: SxColor;
+  readonly shadow?: SxShadow;
+  readonly radius?: SxRadius;
+  readonly opacity?: SxNumber;
+  readonly cursor?: SxCursor;
+  readonly textDecoration?: SxTextDecoration;
+  /** `transform: scale(n)`. */
+  readonly scale?: SxNumber;
+  readonly translateX?: SxLength;
+  readonly translateY?: SxLength;
+  /** Degrees, at most ±360; anything else is dropped. */
+  readonly rotate?: SxNumber;
+  /** The `glow` effect. */
+  readonly glow?: boolean;
+  /** The `border` effect. */
+  readonly border?: boolean;
+}
+/** Per-state style objects: `states: { active: { scale: 0.98 }, "focus-visible": { borderColor: "primary" } }`. */
+export type SxStates = { readonly [S in SxInteractionState]?: SxStateStyle };
+/** The bounded, token-aware `sx` style object (`sx: { p: "md", bg: "surface", hover: "lift" }`). Unknown keys are ignored by the runtime, so they are rejected here; there is no `_hover` — use `hover`, `focus` or `states`. Keys typed `SxValue<…>` also take a breakpoint map. */
+export interface SxProps {
+  readonly p?: SxValue<SxPadding>;
+  /** `padding-inline` (mirrors under RTL). */
+  readonly px?: SxValue<SxPaddingSide>;
+  readonly py?: SxValue<SxPaddingSide>;
+  readonly pt?: SxValue<SxPaddingSide>;
+  readonly pr?: SxValue<SxPaddingSide>;
+  readonly pb?: SxValue<SxPaddingSide>;
+  readonly pl?: SxValue<SxPaddingSide>;
+  /** `padding-inline-start`. */
+  readonly ps?: SxValue<SxPaddingSide>;
+  /** `padding-inline-end`. */
+  readonly pe?: SxValue<SxPaddingSide>;
+  readonly m?: SxValue<SxMargin>;
+  /** `margin-inline` (mirrors under RTL). */
+  readonly mx?: SxValue<SxMarginSide>;
+  readonly my?: SxValue<SxMarginSide>;
+  readonly mt?: SxValue<SxMarginSide>;
+  readonly mr?: SxValue<SxMarginSide>;
+  readonly mb?: SxValue<SxMarginSide>;
+  readonly ml?: SxValue<SxMarginSide>;
+  /** `margin-inline-start`. */
+  readonly ms?: SxValue<SxMarginSide>;
+  /** `margin-inline-end`. */
+  readonly me?: SxValue<SxMarginSide>;
+  readonly gap?: SxValue<SxGap>;
+  readonly w?: SxValue<SxSize>;
+  readonly h?: SxValue<SxSize>;
+  readonly minW?: SxValue<SxSize>;
+  readonly maxW?: SxValue<SxMaxSize>;
+  readonly minH?: SxValue<SxSize>;
+  readonly maxH?: SxValue<SxMaxSize>;
+  readonly bg?: SxValue<SxBackground>;
+  readonly color?: SxValue<SxColor>;
+  readonly border?: SxValue<SxBorder>;
+  readonly borderColor?: SxValue<SxColor>;
+  readonly radius?: SxValue<SxRadius>;
+  readonly shadow?: SxValue<SxShadow>;
+  /** 0–1. */
+  readonly opacity?: SxValue<SxNumber>;
+  readonly display?: SxValue<SxDisplay>;
+  /** `flex-direction`. */
+  readonly direction?: SxValue<SxDirection>;
+  readonly align?: SxValue<SxAlign>;
+  readonly justify?: SxValue<SxJustify>;
+  /** `true` wraps, `false` forbids wrapping. */
+  readonly wrap?: SxValue<boolean>;
+  readonly grow?: SxValue<SxNumber>;
+  readonly shrink?: SxValue<SxNumber>;
+  readonly basis?: SxValue<SxSize>;
+  /** N equal grid columns. */
+  readonly columns?: SxValue<SxNumber>;
+  readonly position?: SxValue<SxPosition>;
+  readonly top?: SxValue<SxOffset>;
+  readonly right?: SxValue<SxOffset>;
+  readonly bottom?: SxValue<SxOffset>;
+  readonly left?: SxValue<SxOffset>;
+  readonly inset?: SxValue<SxLength>;
+  readonly zIndex?: SxValue<SxZIndex>;
+  readonly fontSize?: SxValue<SxFontSize>;
+  readonly weight?: SxValue<SxFontWeight>;
+  readonly textDecoration?: SxValue<SxTextDecoration>;
+  readonly overflow?: SxValue<SxOverflow>;
+  readonly cursor?: SxCursor;
+  readonly textAlign?: SxValue<SxTextAlign>;
+  readonly backdrop?: SxBackdrop;
+  /** An http(s), protocol-relative, root-relative, relative or `data:image/*` URL; other schemes are dropped. */
+  readonly bgImage?: string;
+  /** A tint or gradient layered over `bgImage` (or on its own). */
+  readonly bgOverlay?: SxBackground;
+  readonly bgSize?: SxBgSize;
+  /** An effect name, or `{ …effect flags, …state styles }`. */
+  readonly hover?: SxHoverEffect | SxHoverStyle;
+  /** An effect name, or `{ …effect flags, …state styles }`. */
+  readonly focus?: SxFocusEffect | SxFocusStyle;
+  readonly states?: SxStates;
+}
+/** Animation presets (`ANIMATE_PRESETS`, src/library/sx.ts); each is an `ak-anim-*` class. */
+export type AnimatePreset = "fade" | "fade-up" | "fade-down" | "fade-left" | "fade-right" | "zoom" | "zoom-in" | "slide-up" | "slide-down" | "slide-left" | "slide-right" | "pulse" | "float" | "shimmer" | "bounce" | "spin" | "ping" | "wiggle";
+/** Timing overrides for an animation preset. */
+export interface AnimateTiming {
+  /** Milliseconds, 0–20000; anything outside is ignored. */
+  readonly delay?: SxNumber;
+  /** Milliseconds, above 0 and at most 20000; anything outside is ignored. */
+  readonly duration?: SxNumber;
+  /** An iteration count, or loop forever. */
+  readonly repeat?: SxNumber | true | "infinite";
+}
+/** A preset (`preset`, or its alias `name` — exactly one) with timing overrides. Without a preset nothing animates. */
+export type AnimateConfig = OneOf<"preset" | "name", AnimatePreset> & AnimateTiming;
+/** A preset name, `"none"` for no animation, or a preset with timing overrides. */
+export type AnimateValue = AnimatePreset | "none" | AnimateConfig;
+/** The roles the universal `role` channel accepts (`ALLOWED_ROLES`, src/library/sx.ts); any other role is dropped. */
+export type AriaRole = "banner" | "complementary" | "contentinfo" | "form" | "main" | "navigation" | "region" | "search" | "article" | "group" | "list" | "listitem" | "separator" | "heading" | "figure" | "note" | "definition" | "term" | "status" | "alert" | "log" | "timer" | "marquee" | "progressbar" | "meter" | "button" | "link" | "img" | "toolbar" | "tooltip" | "dialog" | "tab" | "tabpanel" | "tablist" | "menuitem" | "option" | "checkbox" | "radio" | "switch" | "none" | "presentation";
+/** Augmentation point for custom icon names (`$theme({ icons })`, `registerIcons`), so they autocomplete wherever `AktionIconName` is accepted: `declare module "aktion-runtime/dsl" { interface AktionIconRegistry { logo: true } }`. */
+export interface AktionIconRegistry {}
+/** An icon name: a Font Awesome 6 name without `fa-` (`"house"`), optionally prefixed with a style (`"regular:star"`), or a registered custom icon. Open: the runtime also renders non-ASCII text (an emoji) inline. */
+export type AktionIconName = (keyof AktionIconRegistry & string) | `${"solid" | "regular" | "brands"}:${string}` | (string & {});
 /** `{ value, label }` option objects accepted next to `SelectItem` nodes by Select / Radio / Combobox / MultiSelect. */
 export interface SelectItemData {
   readonly value: string | number;
@@ -89,12 +325,12 @@ export interface FollowUpItemData {
   readonly message?: string;
   readonly disabled?: boolean;
 }
-/** `{ name, src }` objects accepted next to `Avatar` nodes by `AvatarGroup`. */
+/** `{ name, src }` objects accepted next to `Avatar` nodes by `AvatarGroup` (the shape of `AvatarGroupItem`). */
 export interface AvatarItemData {
-  readonly name?: string;
+  readonly name?: string | number;
   readonly src?: string;
-  readonly status?: string;
-  readonly fallback?: string;
+  readonly status?: AvatarStatus;
+  readonly fallback?: AvatarFallback;
 }
 /** Props every component accepts: `key` plus the universal style / behaviour channel. */
 export interface BaseProps {
@@ -102,14 +338,14 @@ export interface BaseProps {
   key?: Key;
   /** Scroll-anchor id — the target for `SkipLink`, `ScrollSpy` and `#hash` links. */
   anchor?: string;
-  /** Motion channel accepted by EVERY component. A preset name (`"fade"`, `"slide-up"`, `"pulse"`, `"none"`) or an object with `{ preset, duration, delay, easing, repeat }`. */
-  animate?: AnimateValue;
+  /** Motion channel accepted by EVERY component. A preset name (`"fade"`, `"slide-up"`, `"pulse"`, …; `"none"` for no animation) or an object `{ preset, duration, delay, repeat }`, with `duration` and `delay` in milliseconds. */
+  animate?: AnimateValue | null;
   /** ARIA attributes as a plain object, e.g. `{ label: "Close", expanded: false }` → `aria-*`. */
   aria?: Readonly<Record<string, string | number | boolean | null | undefined>>;
   /** Alias of `className`. */
-  class?: string;
-  /** Extra CSS classes appended to the rendered root element. */
-  className?: string;
+  class?: string | readonly string[];
+  /** Extra CSS classes (a space-separated string or an array) appended to the rendered root element. */
+  className?: string | readonly string[];
   /** `data-*` attributes as a plain object, e.g. `{ testid: "row-1" }`. */
   data?: Readonly<Record<string, string | number | boolean | null | undefined>>;
   /** Second spelling of the `data` channel, for the components that declare a `data` prop of their own (LineChart, JsonTree, Async, Draggable, Lottie, QRCode) and would otherwise shadow it. */
@@ -118,18 +354,18 @@ export interface BaseProps {
   hidden?: boolean;
   /** DOM id on the rendered root element. */
   id?: string;
-  /** Override the rendered ARIA role. An escape valve for accessibility defects; use sparingly. */
-  role?: string;
-  /** Inline CSS. Prefer `sx`, which is token- and breakpoint-aware. */
-  style?: string | Readonly<Record<string, string | number>>;
-  /** Style channel accepted by EVERY component: layout, colour, typography, spacing, borders, effects. Values may be responsive maps (`{base, sm, md, lg}`), interaction states (`{_hover, _focus, _active}`), or theme-token refs (`"primary"`, `"gradient.brand"`, `"space.md"`). */
-  sx?: SxProps;
+  /** Override the rendered ARIA role. Allow-listed (landmarks, live regions, common widget roles, `none` / `presentation`): any other role is dropped. An escape valve for accessibility defects; use sparingly. */
+  role?: AriaRole;
+  /** Inline CSS declarations as a STRING (`"color: red; padding: 4px"`); build one from an object with `$util.style.toStyle({…})`. Prefer `sx`, which is token- and breakpoint-aware. */
+  style?: string;
+  /** Style channel accepted by EVERY component: a bounded set of layout, colour, typography, spacing, border and effect keys (`p`, `gap`, `w`, `bg`, `color`, `radius`, `shadow`, …; unknown keys are ignored). Values are theme tokens (`"md"`, `"primary"`, `"gradient.brand"` on `bg`), sanitised CSS strings, or numbers — pixels on length keys (`p: 8` → `8px`). Most keys also take a breakpoint map (`{ base, sm, md, lg, xl }`). Interaction states: `hover` / `focus` (an effect name such as `"lift"`, or a style object) and `states: { active, "focus-visible", disabled, … }`. */
+  sx?: SxProps | null;
   /** End-to-end test hook: renders `data-testid` on the component's ROOT element. Works on every component, including the six that shadow the `data` channel. Prefer role/label queries; reach for this where they are genuinely ambiguous. */
-  testId?: string;
+  testId?: string | number;
   /** Alias of `testId`. */
-  testid?: string;
+  testid?: string | number;
   /** Native hover tooltip (`title`) on the rendered root element. */
-  tooltip?: string;
+  tooltip?: string | number;
 }
 
 import type { CompiledProgram } from "../compiler/runtime.js";
@@ -178,7 +414,7 @@ export type ChatBubbleStatus = "sending" | "sent" | "delivered" | "read" | "erro
 export type CodeEditorLanguage = "text" | "javascript" | "typescript" | "json" | "html" | "css" | "bash" | "python" | "sql" | "markdown";
 export type ColFormat = "text" | "number" | "currency" | "date";
 export type ColAlign = "left" | "center" | "right";
-export type ColPinned = "left" | "right";
+export type ColPinned = "left" | "none";
 export type ColorPickerFormat = "hex" | "rgb" | "hsl";
 export type ColumnAlign = "start" | "center" | "end" | "stretch";
 export type ColumnJustify = "start" | "center" | "end" | "between" | "around" | "evenly";
@@ -243,7 +479,7 @@ export type MenuItemVariant = "default" | "danger";
 export type MenuItemRole = "menuitem" | "menuitemcheckbox" | "menuitemradio";
 export type ModalSize = "sm" | "md" | "lg" | "xl" | "full" | "s" | "m" | "l" | "small" | "normal" | "large";
 export type MountTag = "div" | "span" | "section" | "article" | "aside" | "figure" | "canvas" | "p" | "pre" | "form";
-export type MultiStepFormStepsLayout = "column" | "row";
+export type MultiStepFormStepsLayout = "column" | "row" | "vertical" | "horizontal";
 export type NavLinkVariant = "default" | "primary" | "ghost" | "pill";
 export type NavbarVariant = "default" | "transparent";
 export type NotificationTone = "default" | "primary" | "success" | "warning" | "danger" | "info";
@@ -348,25 +584,13 @@ export interface ActivityLogItem {
   /** Image URL rendered in the marker instead of the icon. */
   readonly avatarSrc?: string;
   readonly tone?: ActivityLogItemTone;
-  /** Renders the title as a link (takes precedence over `onItemClick`). */
+  /** Renders the title as a link (takes precedence over `onItemClick`, which a link never fires). */
   readonly href?: string;
   /** Secondary detail line (IP, browser, request id); monospace under `variant: "audit"`. */
   readonly meta?: string | number;
 }
-export interface ActivityLogItemInfo {
-  readonly title: string;
-  readonly description: string;
-  readonly actor: string;
-  readonly avatarSrc: string;
-  readonly href: string;
-  readonly time: string;
-  readonly icon: string;
-  /** `"default"` when the item had no tone. */
-  readonly tone: string;
-  readonly meta: string;
-}
 export type ActivityLogItemTone = "default" | "primary" | "success" | "warning" | "danger";
-export type AspectRatioValue = number | `${number}:${number}` | `${number}`;
+export type AspectRatioValue = number | `${number}:${number}` | `${number}/${number}` | `${number}`;
 export interface AudioPlayerSource {
   /** http(s), blob:, data:audio/…, or a same-origin path. */
   readonly src: string;
@@ -395,8 +619,14 @@ export type BreadcrumbEntry = AktionNode<"BreadcrumbItem"> | string | Breadcrumb
 export type CalendarEventColor = "primary" | "success" | "warning" | "danger" | "info" | (string & {});
 export interface CalendarEvent {
   readonly date: string;
+  /** Chip text; an event with neither `label` nor `title` renders as a dot. */
   readonly label?: string | number;
+  /** Read as the chip text when `label` is absent. */
+  readonly title?: string | number;
+  /** A tone name or a CSS colour; one the sanitiser rejects falls back to `primary`. */
   readonly color?: CalendarEventColor;
+  /** Read as the colour when `color` is absent. */
+  readonly tone?: CalendarEventColor;
   readonly time?: string | number;
 }
 export type CalendarViewWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -404,21 +634,12 @@ export interface CalendarViewEvent {
   /** ISO day `YYYY-MM-DD`; only the first 10 characters are matched, so `YYYY-MM-DDTHH:mm` also works. Events without a date are skipped. */
   readonly date: string;
   readonly title: string | number;
-  /** Passed back to `onEventClick`; defaults to `${date}#${index}`. */
+  /** Passed to `onEventClick` (as a string) as its first argument; defaults to `${date}#${index}`. */
   readonly id?: string | number;
   /** Time label shown in the chip tooltip (`time — title`). */
   readonly time?: string;
   /** Chip colour (default `"primary"`). */
   readonly tone?: CalendarViewEventTone;
-}
-export interface CalendarViewEventInfo {
-  readonly id: string;
-  readonly date: string;
-  readonly title: string;
-  /** `""` when the event had no time. */
-  readonly time: string;
-  /** The event's tone, `"primary"` when it had none. */
-  readonly tone: string;
 }
 export type CalendarViewEventTone = "primary" | "success" | "warning" | "danger" | "info";
 export interface CarouselImage {
@@ -464,15 +685,25 @@ export interface ComparisonTableRow {
   readonly group?: string | number;
 }
 export interface ContextMenuItemData {
+  /** Row text. An object without a label is ignored. */
   readonly label: string | number;
-  /** Runs when the row is activated (after the menu closes). Not called for disabled rows. */
+  /** Runs when the row is activated (after the menu closes, unless `keepOpen`). Not called for disabled rows. */
+  readonly onClick?: () => void;
+  /** Synonym of `onClick` (used only when `onClick` is absent). */
   readonly action?: () => void;
   readonly icon?: string;
   /** Trailing shortcut hint, e.g. "⌘C". */
   readonly shortcut?: string;
   readonly variant?: MenuItemVariant;
+  /** Synonym of `variant` (used only when `variant` is absent). */
+  readonly tone?: MenuItemVariant;
   /** Row stays focusable (aria-disabled) but does nothing. */
   readonly disabled?: boolean;
+  /** Makes the row checkable (`menuitemcheckbox`, unless `role` says radio) and shows this state. */
+  readonly checked?: boolean;
+  readonly role?: MenuItemRole;
+  /** Leave the menu open after the row is activated (a toggle flipped several times). */
+  readonly keepOpen?: boolean;
   readonly separator?: false;
 }
 export interface ContextMenuSeparatorData {
@@ -480,7 +711,7 @@ export interface ContextMenuSeparatorData {
 }
 export type DataGridSortDirection = "asc" | "desc";
 export interface DataGridSort {
-  /** Column key: the `Col` header, or `col-<index>` for a column whose header is empty. */
+  /** Column key: the `Col` header, or `col-<index>` for a column whose header is empty or repeats an earlier column's. */
   readonly key: string;
   /** Sort direction; anything other than `"desc"` sorts ascending (default `"asc"`). */
   readonly direction?: DataGridSortDirection;
@@ -488,10 +719,15 @@ export interface DataGridSort {
 export interface DateRangePickerRange { readonly from: string; readonly to: string; }
 export interface DropdownMenuItemFields {
   readonly onClick?: () => void;
+  /** Alias of `onClick`. */
   readonly action?: () => void;
+  /** Alias of `onClick`. */
+  readonly onclick?: () => void;
   readonly icon?: string;
   readonly shortcut?: string | number;
   readonly variant?: MenuItemVariant;
+  /** Alias of `variant`. */
+  readonly tone?: MenuItemVariant;
   readonly disabled?: boolean;
   readonly checked?: boolean | null;
   readonly role?: MenuItemRole;
@@ -501,7 +737,7 @@ export interface DropdownMenuItemFields {
 export type DropdownMenuItemData = DropdownMenuItemFields & ({ readonly label: string | number } | { readonly title: string | number } | { readonly text: string | number });
 export type DropdownMenuSeparatorData = { readonly separator: true } | { readonly type: "separator" };
 export type DropdownMenuLeaf = AktionNode | DropdownMenuItemData | DropdownMenuSeparatorData | null | undefined;
-export type DropdownMenuEntry = DropdownMenuLeaf | readonly (DropdownMenuLeaf | readonly (DropdownMenuLeaf | readonly (DropdownMenuLeaf | readonly DropdownMenuLeaf[])[])[])[];
+export type DropdownMenuEntry = DropdownMenuLeaf | readonly DropdownMenuEntry[];
 export type FieldRepeaterFieldType = "text" | "number" | "email" | "tel" | "url" | "password" | "search" | "color" | "date" | "time" | "datetime-local" | "month" | "week" | "checkbox" | "textarea" | "select";
 export type FieldRepeaterOption = string | number | { readonly label: string | number; readonly value?: string | number };
 export interface FieldRepeaterField<Row extends object = Record<string, unknown>> {
@@ -525,10 +761,14 @@ export type GanttTaskTone = "success" | "warning" | "danger" | "info" | "muted";
 export interface GanttTask {
   readonly id?: string | number;
   readonly label?: string | number;
+  /** Read as the bar label when `label` is absent. */
+  readonly name?: string | number;
   readonly start: string;
   readonly end: string;
   readonly progress?: number;
   readonly tone?: GanttTaskTone;
+  /** Read as the tone when `tone` is absent. */
+  readonly status?: GanttTaskTone;
 }
 export type GaugeThreshold = { readonly value: number; readonly tone?: GaugeTone } | { readonly at: number; readonly tone?: GaugeTone };
 export type GridItemSpan = number | `${number}` | `${number}/${number}` | "auto" | "fit" | "auto-fit" | "full" | "100%";
@@ -571,8 +811,9 @@ export interface InboxPanelItem {
   /** Buttons rendered inside the row; their clicks do not trigger `onClick`. */
   readonly actions?: Children;
 }
-/** IntersectionObserver margin: 1–4 space-separated px / % lengths (CSS margin order). Any other unit throws. */
+/** IntersectionObserver margin: a number of px, or 1–4 space-separated px / % lengths (CSS margin order). Any other unit falls back to the default `200px`. */
 export type InfiniteListRootMargin =
+  | number
   | InfiniteListRootMarginLength
   | `${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength}`
   | `${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength} ${InfiniteListRootMarginLength}`
@@ -580,7 +821,7 @@ export type InfiniteListRootMargin =
 export type InfiniteListRootMarginLength = `${number}px` | `${number}%`;
 export type InlineEditInputType = "text" | "number" | "email" | "tel" | "url" | "password" | "search" | "color" | "date" | "time" | "datetime-local" | "month" | "week" | "textarea";
 export type InputValidationHint = "required" | "email" | `minLength:${number}` | `maxLength:${number}` | `pattern:${string}` | `min:${string}` | `max:${string}`;
-export interface InputValidationRules { readonly minLength?: number | `${number}`; readonly maxLength?: number | `${number}`; readonly pattern?: string; readonly min?: number | string; readonly max?: number | string; }
+export interface InputValidationRules { readonly required?: boolean | null; readonly email?: boolean | null; readonly minLength?: number | `${number}` | false | null; readonly maxLength?: number | `${number}` | false | null; readonly pattern?: string | false | null; readonly min?: number | string | false | null; readonly max?: number | string | false | null; }
 export type InputAutocomplete = "on" | "off" | "name" | "honorific-prefix" | "given-name" | "additional-name" | "family-name" | "honorific-suffix" | "nickname" | "email" | "username" | "new-password" | "current-password" | "one-time-code" | "organization-title" | "organization" | "street-address" | "address-line1" | "address-line2" | "address-line3" | "address-level4" | "address-level3" | "address-level2" | "address-level1" | "country" | "country-name" | "postal-code" | "cc-name" | "cc-given-name" | "cc-additional-name" | "cc-family-name" | "cc-number" | "cc-exp" | "cc-exp-month" | "cc-exp-year" | "cc-csc" | "cc-type" | "transaction-currency" | "transaction-amount" | "language" | "bday" | "bday-day" | "bday-month" | "bday-year" | "sex" | "tel" | "tel-country-code" | "tel-national" | "tel-area-code" | "tel-local" | "tel-local-prefix" | "tel-local-suffix" | "tel-extension" | "impp" | "url" | "photo" | "username webauthn" | "current-password webauthn" | (string & {});
 export type LazyLoader = (() => Children | PromiseLike<Children | void>) | PromiseLike<Children | void> | Children;
 export interface LightboxImage {
@@ -691,16 +932,24 @@ export interface OrderSummaryItem {
   /** Synonym of `qty`. */
   readonly quantity?: number;
 }
-export interface PageHeaderCrumb {
-  /** Crumb text. */
-  readonly label: string | number;
+export type PageHeaderCrumb = {
   /** Router path (`/orders`); renders a `#/orders` link and navigates via the runtime router. */
   readonly to?: string;
   /** Second spelling of `to` — also a ROUTER path, not an external URL. */
   readonly href?: string;
   /** Third spelling of `to`. */
   readonly path?: string;
-}
+} & (
+  | {
+      /** Crumb text. */
+      readonly label: string | number;
+      readonly title?: string | number;
+    }
+  | {
+      /** Second spelling of `label` (read when `label` is absent). */
+      readonly title: string | number;
+    }
+);
 export interface PresenceAvatarsPerson {
   /** Display name: tooltip, accessible name and initials fallback. */
   readonly name: string;
@@ -714,6 +963,7 @@ export type QueryBuilderFieldType = "text" | "number" | "date" | "datetime-local
 export interface QueryBuilderOperatorDef {
   readonly value: QueryBuilderOperator;
   readonly label?: string | number;
+  /** Scopes the operator to fields of this `type` (compared case-insensitively). */
   readonly type?: QueryBuilderFieldType;
 }
 export interface QueryBuilderField {
@@ -741,13 +991,13 @@ export type RequirementListItem =
   | { readonly label: string | number; readonly met?: boolean | null }
   | { readonly text: string | number; readonly met?: boolean | null };
 export interface ScrollSpySection {
-  /** Id of the target element (set with the universal `id`/`anchor` prop). Characters outside [A-Za-z0-9_-] are stripped. */
+  /** Id of the target element, matched verbatim (the universal `id`/`anchor` prop only sets ids that start with a letter and contain letters, digits, `_` or `-`). */
   readonly id: string;
   readonly label: string;
 }
-export interface SegmentedControlOption {
-  /** Emitted (stringified) to onChange and the bound $variable; also the label when `label` is omitted. */
-  readonly value: string | number;
+export interface SegmentedControlOption<V extends string | number = string | number> {
+  /** Emitted, with its type, to onChange and the bound $variable; also the label when `label` is omitted. */
+  readonly value: V;
   readonly label?: string | number;
   /** Font Awesome icon name. */
   readonly icon?: string;
@@ -994,31 +1244,31 @@ export declare function ActionStripe(label: string | number, description: string
 export declare function ActionStripe(label: string | number, description: string | number | null | undefined, icon: string | number | null | undefined, value: string | number | null | undefined, href: string | number | null | undefined, disabled: boolean | null | undefined, onClick: (() => void) | null | undefined, trailing: AktionChild | null | undefined, props?: Omit<ActionStripeOptions, "label" | "description" | "subtitle" | "meta" | "icon" | "value" | "href" | "disabled" | "onClick" | "action" | "onclick" | "trailing">): AktionNode<"ActionStripe">;
 
 /* ---- ActivityLog */
-export interface ActivityLogOptions extends BaseProps {
-  items?: readonly ActivityLogItem[];
+export interface ActivityLogOptions<Item extends ActivityLogItem = ActivityLogItem> extends BaseProps {
+  items?: readonly (Item | null | undefined)[];
   /** audit = monospace `meta` styling for security/admin trails */
   variant?: ActivityLogVariant;
   /** Alias of `variant`. */
   tone?: ActivityLogVariant;
   /** Message shown when `items` is empty (default `No activity yet`) */
   emptyLabel?: string | number;
-  /** Callable fired with (index, item) when an entry title is activated */
-  onItemClick?: ((index: number, item: ActivityLogItemInfo) => void) | null;
+  /** Callable fired with (index, item) when the title of an entry without an `href` is activated. `item` is the object you passed in `items`, every field intact (e.g. its `id`), and `index` its position in that array */
+  onItemClick?: ((index: number, item: Item) => void) | null;
   /** Append a loading row while older activity is being fetched */
   loading?: boolean;
   /** Label for the loading row (default `Loading activity…`) */
   loaderLabel?: string | number;
 }
-export type ActivityLogProps = ActivityLogOptions & { items: readonly ActivityLogItem[] };
-export type ActivityLogNamed = Omit<ActivityLogOptions, "items">;
-/** Purpose-built feed of user/system activity. Each entry has `actor`, `title`, `description?`, `time?`, `icon?`, `avatarSrc?`, `tone?`, `href?`, and optional `meta` (IP, browser, request id). An entry's `href` renders its title as a link; `onItemClick` makes every title a button. Use `variant="audit"` to render `meta` in monospace for security/admin trails. Pass items as `{actor, title, description, time, icon, tone, avatarSrc, href, meta}` objects. */
-export declare function ActivityLog(items: readonly ActivityLogItem[], props?: ActivityLogNamed): AktionNode<"ActivityLog">;
-export declare function ActivityLog(props: ActivityLogProps): AktionNode<"ActivityLog">;
-export declare function ActivityLog(items: readonly ActivityLogItem[], variant: ActivityLogVariant | null | undefined, props?: Omit<ActivityLogOptions, "items" | "variant" | "tone">): AktionNode<"ActivityLog">;
-export declare function ActivityLog(items: readonly ActivityLogItem[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, props?: Omit<ActivityLogOptions, "items" | "variant" | "tone" | "emptyLabel">): AktionNode<"ActivityLog">;
-export declare function ActivityLog(items: readonly ActivityLogItem[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, onItemClick: ((index: number, item: ActivityLogItemInfo) => void) | null | undefined, props?: Omit<ActivityLogOptions, "items" | "variant" | "tone" | "emptyLabel" | "onItemClick">): AktionNode<"ActivityLog">;
-export declare function ActivityLog(items: readonly ActivityLogItem[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, onItemClick: ((index: number, item: ActivityLogItemInfo) => void) | null | undefined, loading: boolean | null | undefined, props?: Omit<ActivityLogOptions, "items" | "variant" | "tone" | "emptyLabel" | "onItemClick" | "loading">): AktionNode<"ActivityLog">;
-export declare function ActivityLog(items: readonly ActivityLogItem[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, onItemClick: ((index: number, item: ActivityLogItemInfo) => void) | null | undefined, loading: boolean | null | undefined, loaderLabel: string | number | null | undefined): AktionNode<"ActivityLog">;
+export type ActivityLogProps<Item extends ActivityLogItem = ActivityLogItem> = ActivityLogOptions<Item> & { items: readonly (Item | null | undefined)[] };
+export type ActivityLogNamed<Item extends ActivityLogItem = ActivityLogItem> = Omit<ActivityLogOptions<Item>, "items">;
+/** Purpose-built feed of user/system activity. Each entry has `actor`, `title`, `description?`, `time?`, `icon?`, `avatarSrc?`, `tone?`, `href?`, and optional `meta` (IP, browser, request id). An entry's `href` renders its title as a link, and `onItemClick` makes every other title a button (a link never fires it). Use `variant="audit"` to render `meta` in monospace for security/admin trails. Pass items as `{actor, title, description, time, icon, tone, avatarSrc, href, meta}` objects. */
+export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], props?: ActivityLogNamed<Item>): AktionNode<"ActivityLog">;
+export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(props: ActivityLogProps<Item>): AktionNode<"ActivityLog">;
+export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, props?: Omit<ActivityLogOptions<Item>, "items" | "variant" | "tone">): AktionNode<"ActivityLog">;
+export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, props?: Omit<ActivityLogOptions<Item>, "items" | "variant" | "tone" | "emptyLabel">): AktionNode<"ActivityLog">;
+export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, onItemClick: ((index: number, item: Item) => void) | null | undefined, props?: Omit<ActivityLogOptions<Item>, "items" | "variant" | "tone" | "emptyLabel" | "onItemClick">): AktionNode<"ActivityLog">;
+export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, onItemClick: ((index: number, item: Item) => void) | null | undefined, loading: boolean | null | undefined, props?: Omit<ActivityLogOptions<Item>, "items" | "variant" | "tone" | "emptyLabel" | "onItemClick" | "loading">): AktionNode<"ActivityLog">;
+export declare function ActivityLog<Item extends ActivityLogItem = ActivityLogItem>(items: readonly (Item | null | undefined)[], variant: ActivityLogVariant | null | undefined, emptyLabel: string | number | null | undefined, onItemClick: ((index: number, item: Item) => void) | null | undefined, loading: boolean | null | undefined, loaderLabel: string | number | null | undefined): AktionNode<"ActivityLog">;
 
 /* ---- AppShell */
 export interface AppShellOptions extends BaseProps {
@@ -1048,7 +1298,7 @@ export declare function AppShell(sidebar: AktionNode<"Sidebar">, content: Childr
 
 /* ---- AspectRatio */
 export interface AspectRatioOptions extends BaseProps {
-  /** `width:height` (e.g. `16:9`, `4:3`) or a decimal like `1.78` */
+  /** `width:height` or `width/height` (e.g. `16:9`, `4/3`) or a decimal like `1.78`; anything else falls back to 16:9 */
   ratio?: AspectRatioValue;
   children?: Children;
   /** Alias of `children`. */
@@ -1166,7 +1416,7 @@ export declare function Avatar(name: string | number, src: string | number | nul
 
 /* ---- AvatarGroup */
 export interface AvatarGroupOptions extends BaseProps {
-  /** Avatar(...) nodes or {name, src, status?, fallback?} objects */
+  /** Avatar(...) nodes, {name, src, status?, fallback?} objects, or name strings */
   items?: readonly (AktionNode<"Avatar"> | AvatarGroupItem | string)[];
   /** Maximum avatars to show (default 4) */
   max?: number;
@@ -1178,7 +1428,7 @@ export interface AvatarGroupOptions extends BaseProps {
 }
 export type AvatarGroupProps = AvatarGroupOptions & { items: readonly (AktionNode<"Avatar"> | AvatarGroupItem | string)[] };
 export type AvatarGroupNamed = Omit<AvatarGroupOptions, "items">;
-/** Stack of overlapping avatars with a `+N` chip when the list overflows. Pass either Avatar(...) nodes or plain {name, src, status?, fallback?} objects. Set `total` when the list is only a page of a larger set (5 avatars out of 200 members renders `+195`), and `fallback: "initials"` to keep the whole pile offline (the default DiceBear illustration is a network request per member). */
+/** Stack of overlapping avatars with a `+N` chip when the list overflows. Pass Avatar(...) nodes, plain {name, src, status?, fallback?} objects, or bare name strings. Set `total` when the list is only a page of a larger set (5 avatars out of 200 members renders `+195`), and `fallback: "initials"` to keep the whole pile offline (the default DiceBear illustration is a network request per member). */
 export declare function AvatarGroup(items: readonly (AktionNode<"Avatar"> | AvatarGroupItem | string)[], props?: AvatarGroupNamed): AktionNode<"AvatarGroup">;
 export declare function AvatarGroup(props: AvatarGroupProps): AktionNode<"AvatarGroup">;
 export declare function AvatarGroup(items: readonly (AktionNode<"Avatar"> | AvatarGroupItem | string)[], max: number | null | undefined, props?: Omit<AvatarGroupOptions, "items" | "max">): AktionNode<"AvatarGroup">;
@@ -1263,7 +1513,7 @@ export declare function Badge(label: string | number, tone: BadgeTone | null | u
 /* ---- BadgeList */
 export interface BadgeListOptions extends BaseProps {
   /** Array of badge labels */
-  labels?: readonly (string | number)[];
+  labels?: readonly (string | number | null | undefined)[];
   tone?: BadgeListTone;
   /** Alias of `tone`. */
   variant?: BadgeListTone;
@@ -1277,16 +1527,16 @@ export interface BadgeListOptions extends BaseProps {
   /** Render at most N pills, then a `+N` overflow pill */
   max?: number;
 }
-export type BadgeListProps = BadgeListOptions & { labels: readonly (string | number)[] };
+export type BadgeListProps = BadgeListOptions & { labels: readonly (string | number | null | undefined)[] };
 export type BadgeListNamed = Omit<BadgeListOptions, "labels">;
 /** Cluster of Badge pills rendered from an array of strings. `tone` sets the whole cluster; `tones` / `icons` are index-aligned arrays that override it per item (so one item can be `success` and the next `danger`). `max` caps how many pills render and appends a `+N` overflow pill for the rest. */
-export declare function BadgeList(labels: readonly (string | number)[], props?: BadgeListNamed): AktionNode<"BadgeList">;
+export declare function BadgeList(labels: readonly (string | number | null | undefined)[], props?: BadgeListNamed): AktionNode<"BadgeList">;
 export declare function BadgeList(props: BadgeListProps): AktionNode<"BadgeList">;
-export declare function BadgeList(labels: readonly (string | number)[], tone: BadgeListTone | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant">): AktionNode<"BadgeList">;
-export declare function BadgeList(labels: readonly (string | number)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant" | "size">): AktionNode<"BadgeList">;
-export declare function BadgeList(labels: readonly (string | number)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, tones: readonly (BadgeListTone | null | undefined)[] | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant" | "size" | "tones" | "variants">): AktionNode<"BadgeList">;
-export declare function BadgeList(labels: readonly (string | number)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, tones: readonly (BadgeListTone | null | undefined)[] | null | undefined, icons: readonly (string | null | undefined)[] | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant" | "size" | "tones" | "variants" | "icons">): AktionNode<"BadgeList">;
-export declare function BadgeList(labels: readonly (string | number)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, tones: readonly (BadgeListTone | null | undefined)[] | null | undefined, icons: readonly (string | null | undefined)[] | null | undefined, max: number | null | undefined): AktionNode<"BadgeList">;
+export declare function BadgeList(labels: readonly (string | number | null | undefined)[], tone: BadgeListTone | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant">): AktionNode<"BadgeList">;
+export declare function BadgeList(labels: readonly (string | number | null | undefined)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant" | "size">): AktionNode<"BadgeList">;
+export declare function BadgeList(labels: readonly (string | number | null | undefined)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, tones: readonly (BadgeListTone | null | undefined)[] | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant" | "size" | "tones" | "variants">): AktionNode<"BadgeList">;
+export declare function BadgeList(labels: readonly (string | number | null | undefined)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, tones: readonly (BadgeListTone | null | undefined)[] | null | undefined, icons: readonly (string | null | undefined)[] | null | undefined, props?: Omit<BadgeListOptions, "labels" | "tone" | "variant" | "size" | "tones" | "variants" | "icons">): AktionNode<"BadgeList">;
+export declare function BadgeList(labels: readonly (string | number | null | undefined)[], tone: BadgeListTone | null | undefined, size: BadgeListSize | null | undefined, tones: readonly (BadgeListTone | null | undefined)[] | null | undefined, icons: readonly (string | null | undefined)[] | null | undefined, max: number | null | undefined): AktionNode<"BadgeList">;
 
 /* ---- Banner */
 export interface BannerOptions extends BaseProps {
@@ -1310,7 +1560,7 @@ export interface BannerOptions extends BaseProps {
   onClose?: (() => void) | null;
   /** Make the whole banner a link (release notes → changelog) */
   href?: string | number;
-  /** Called when the banner itself is clicked */
+  /** Called when the banner itself is clicked — also when `href` is set (track the click, the link still navigates) */
   onClick?: (() => void) | null;
   /** Alias of `onClick`. */
   onclick?: (() => void) | null;
@@ -1382,7 +1632,7 @@ export interface BentoOptions extends BaseProps {
   columns?: number;
   gap?: SpacingToken;
   /** Fixed row track size, e.g. "180px" — set it whenever any cell spans rows or holds images (default minmax(110px, auto) stretches rows to content). May be a responsive map like `{base: "220px", md: "180px"}` since the same track is far too short once the grid collapses to one column */
-  rowHeight?: string | Responsive<string>;
+  rowHeight?: string | number | Responsive<string | number>;
   /** Backfill holes with later cells (default true) */
   dense?: boolean;
 }
@@ -1393,8 +1643,8 @@ export declare function Bento(items: readonly AktionNode[], props?: BentoNamed):
 export declare function Bento(props: BentoProps): AktionNode<"Bento">;
 export declare function Bento(items: readonly AktionNode[], columns: number | null | undefined, props?: Omit<BentoOptions, "items" | "children" | "cells" | "columns">): AktionNode<"Bento">;
 export declare function Bento(items: readonly AktionNode[], columns: number | null | undefined, gap: SpacingToken | null | undefined, props?: Omit<BentoOptions, "items" | "children" | "cells" | "columns" | "gap">): AktionNode<"Bento">;
-export declare function Bento(items: readonly AktionNode[], columns: number | null | undefined, gap: SpacingToken | null | undefined, rowHeight: string | Responsive<string> | null | undefined, props?: Omit<BentoOptions, "items" | "children" | "cells" | "columns" | "gap" | "rowHeight">): AktionNode<"Bento">;
-export declare function Bento(items: readonly AktionNode[], columns: number | null | undefined, gap: SpacingToken | null | undefined, rowHeight: string | Responsive<string> | null | undefined, dense: boolean | null | undefined): AktionNode<"Bento">;
+export declare function Bento(items: readonly AktionNode[], columns: number | null | undefined, gap: SpacingToken | null | undefined, rowHeight: string | number | Responsive<string | number> | null | undefined, props?: Omit<BentoOptions, "items" | "children" | "cells" | "columns" | "gap" | "rowHeight">): AktionNode<"Bento">;
+export declare function Bento(items: readonly AktionNode[], columns: number | null | undefined, gap: SpacingToken | null | undefined, rowHeight: string | number | Responsive<string | number> | null | undefined, dense: boolean | null | undefined): AktionNode<"Bento">;
 
 /* ---- BentoCell */
 export interface BentoCellOptions extends BaseProps {
@@ -1429,7 +1679,7 @@ export interface BottomSheetOptions extends BaseProps {
   /** Accessible name when there is no visible `title` */
   label?: string | number;
   /** Fixed panel height, e.g. "50vh" (default: hugs content, max 85vh) */
-  height?: string;
+  height?: string | number;
   /** Render the × button (default true) */
   showClose?: boolean;
   /** Pinned action row */
@@ -1444,9 +1694,9 @@ export declare function BottomSheet(children: Children, open: boolean | null | u
 export declare function BottomSheet(children: Children, open: boolean | null | undefined, title: string | number | null | undefined, props?: Omit<BottomSheetOptions, "children" | "child" | "content" | "open" | "title">): AktionNode<"BottomSheet">;
 export declare function BottomSheet(children: Children, open: boolean | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, props?: Omit<BottomSheetOptions, "children" | "child" | "content" | "open" | "title" | "onClose" | "onclose">): AktionNode<"BottomSheet">;
 export declare function BottomSheet(children: Children, open: boolean | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, label: string | number | null | undefined, props?: Omit<BottomSheetOptions, "children" | "child" | "content" | "open" | "title" | "onClose" | "onclose" | "label">): AktionNode<"BottomSheet">;
-export declare function BottomSheet(children: Children, open: boolean | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, label: string | number | null | undefined, height: string | null | undefined, props?: Omit<BottomSheetOptions, "children" | "child" | "content" | "open" | "title" | "onClose" | "onclose" | "label" | "height">): AktionNode<"BottomSheet">;
-export declare function BottomSheet(children: Children, open: boolean | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, label: string | number | null | undefined, height: string | null | undefined, showClose: boolean | null | undefined, props?: Omit<BottomSheetOptions, "children" | "child" | "content" | "open" | "title" | "onClose" | "onclose" | "label" | "height" | "showClose">): AktionNode<"BottomSheet">;
-export declare function BottomSheet(children: Children, open: boolean | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, label: string | number | null | undefined, height: string | null | undefined, showClose: boolean | null | undefined, footer: Children | null | undefined): AktionNode<"BottomSheet">;
+export declare function BottomSheet(children: Children, open: boolean | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, label: string | number | null | undefined, height: string | number | null | undefined, props?: Omit<BottomSheetOptions, "children" | "child" | "content" | "open" | "title" | "onClose" | "onclose" | "label" | "height">): AktionNode<"BottomSheet">;
+export declare function BottomSheet(children: Children, open: boolean | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, label: string | number | null | undefined, height: string | number | null | undefined, showClose: boolean | null | undefined, props?: Omit<BottomSheetOptions, "children" | "child" | "content" | "open" | "title" | "onClose" | "onclose" | "label" | "height" | "showClose">): AktionNode<"BottomSheet">;
+export declare function BottomSheet(children: Children, open: boolean | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, label: string | number | null | undefined, height: string | number | null | undefined, showClose: boolean | null | undefined, footer: Children | null | undefined): AktionNode<"BottomSheet">;
 
 /* ---- Box */
 export interface BoxOptions extends BaseProps {
@@ -1462,9 +1712,9 @@ export interface BoxOptions extends BaseProps {
   /** Semantic background token */
   background?: BoxBackground;
   /** CSS max-width */
-  maxWidth?: string;
+  maxWidth?: string | number;
   /** Corner rounding — independent of `border` */
-  radius?: "none" | "sm" | "md" | "lg" | "pill";
+  radius?: BoxRadius;
 }
 export type BoxProps = BoxOptions & OneOf<"children" | "child", Children>;
 export type BoxNamed = Omit<BoxOptions, "children" | "child">;
@@ -1475,8 +1725,8 @@ export declare function Box(children: Children, padding: SpacingToken | Responsi
 export declare function Box(children: Children, padding: SpacingToken | Responsive<SpacingToken> | null | undefined, margin: SpacingToken | Responsive<SpacingToken> | null | undefined, props?: Omit<BoxOptions, "children" | "child" | "padding" | "margin">): AktionNode<"Box">;
 export declare function Box(children: Children, padding: SpacingToken | Responsive<SpacingToken> | null | undefined, margin: SpacingToken | Responsive<SpacingToken> | null | undefined, border: BoxBorder | null | undefined, props?: Omit<BoxOptions, "children" | "child" | "padding" | "margin" | "border">): AktionNode<"Box">;
 export declare function Box(children: Children, padding: SpacingToken | Responsive<SpacingToken> | null | undefined, margin: SpacingToken | Responsive<SpacingToken> | null | undefined, border: BoxBorder | null | undefined, background: BoxBackground | null | undefined, props?: Omit<BoxOptions, "children" | "child" | "padding" | "margin" | "border" | "background">): AktionNode<"Box">;
-export declare function Box(children: Children, padding: SpacingToken | Responsive<SpacingToken> | null | undefined, margin: SpacingToken | Responsive<SpacingToken> | null | undefined, border: BoxBorder | null | undefined, background: BoxBackground | null | undefined, maxWidth: string | null | undefined, props?: Omit<BoxOptions, "children" | "child" | "padding" | "margin" | "border" | "background" | "maxWidth">): AktionNode<"Box">;
-export declare function Box(children: Children, padding: SpacingToken | Responsive<SpacingToken> | null | undefined, margin: SpacingToken | Responsive<SpacingToken> | null | undefined, border: BoxBorder | null | undefined, background: BoxBackground | null | undefined, maxWidth: string | null | undefined, radius: "none" | "sm" | "md" | "lg" | "pill" | null | undefined): AktionNode<"Box">;
+export declare function Box(children: Children, padding: SpacingToken | Responsive<SpacingToken> | null | undefined, margin: SpacingToken | Responsive<SpacingToken> | null | undefined, border: BoxBorder | null | undefined, background: BoxBackground | null | undefined, maxWidth: string | number | null | undefined, props?: Omit<BoxOptions, "children" | "child" | "padding" | "margin" | "border" | "background" | "maxWidth">): AktionNode<"Box">;
+export declare function Box(children: Children, padding: SpacingToken | Responsive<SpacingToken> | null | undefined, margin: SpacingToken | Responsive<SpacingToken> | null | undefined, border: BoxBorder | null | undefined, background: BoxBackground | null | undefined, maxWidth: string | number | null | undefined, radius: BoxRadius | null | undefined): AktionNode<"Box">;
 
 /* ---- Brand */
 export interface BrandOptions extends BaseProps {
@@ -1557,7 +1807,7 @@ export interface BrowserFrameOptions extends BaseProps {
   content?: AktionChild;
   url?: string | number;
   /** Mock viewport height (CSS length); the body scrolls */
-  height?: string;
+  height?: string | number;
   /** Clip the child at the frame edge (hides popovers that overflow it) */
   clip?: boolean;
 }
@@ -1567,8 +1817,8 @@ export type BrowserFrameNamed = Omit<BrowserFrameOptions, "child" | "children" |
 export declare function BrowserFrame(child: AktionChild, props?: BrowserFrameNamed): AktionNode<"BrowserFrame">;
 export declare function BrowserFrame(props: BrowserFrameProps): AktionNode<"BrowserFrame">;
 export declare function BrowserFrame(child: AktionChild, url: string | number | null | undefined, props?: Omit<BrowserFrameOptions, "child" | "children" | "content" | "url">): AktionNode<"BrowserFrame">;
-export declare function BrowserFrame(child: AktionChild, url: string | number | null | undefined, height: string | null | undefined, props?: Omit<BrowserFrameOptions, "child" | "children" | "content" | "url" | "height">): AktionNode<"BrowserFrame">;
-export declare function BrowserFrame(child: AktionChild, url: string | number | null | undefined, height: string | null | undefined, clip: boolean | null | undefined): AktionNode<"BrowserFrame">;
+export declare function BrowserFrame(child: AktionChild, url: string | number | null | undefined, height: string | number | null | undefined, props?: Omit<BrowserFrameOptions, "child" | "children" | "content" | "url" | "height">): AktionNode<"BrowserFrame">;
+export declare function BrowserFrame(child: AktionChild, url: string | number | null | undefined, height: string | number | null | undefined, clip: boolean | null | undefined): AktionNode<"BrowserFrame">;
 
 /* ---- Button */
 export interface ButtonOptions extends BaseProps {
@@ -1586,7 +1836,7 @@ export interface ButtonOptions extends BaseProps {
   /** HTML button type — `submit` submits the enclosing Form, `reset` clears it */
   type?: ButtonType;
   /** Size token `xs|sm|md|lg|xl` */
-  size?: "xs" | "sm" | "md" | "lg" | "xl" | "m" | "small" | "normal" | "large";
+  size?: ButtonSize;
   /** Optional Font Awesome icon name */
   icon?: string | number;
   /** Icon placement (default leading) */
@@ -1608,16 +1858,16 @@ export declare function Button(props: ButtonProps): AktionNode<"Button">;
 export declare function Button(label: string | number, onClick: (() => void) | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick">): AktionNode<"Button">;
 export declare function Button(label: string | number, onClick: (() => void) | null | undefined, variant: ButtonVariant | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone">): AktionNode<"Button">;
 export declare function Button(label: string | number, onClick: (() => void) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type">): AktionNode<"Button">;
-export declare function Button(label: string | number, onClick: (() => void) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: "xs" | "sm" | "md" | "lg" | "xl" | "m" | "small" | "normal" | "large" | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size">): AktionNode<"Button">;
-export declare function Button(label: string | number, onClick: (() => void) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: "xs" | "sm" | "md" | "lg" | "xl" | "m" | "small" | "normal" | "large" | null | undefined, icon: string | number | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size" | "icon">): AktionNode<"Button">;
-export declare function Button(label: string | number, onClick: (() => void) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: "xs" | "sm" | "md" | "lg" | "xl" | "m" | "small" | "normal" | "large" | null | undefined, icon: string | number | null | undefined, iconPosition: ButtonIconPosition | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size" | "icon" | "iconPosition">): AktionNode<"Button">;
-export declare function Button(label: string | number, onClick: (() => void) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: "xs" | "sm" | "md" | "lg" | "xl" | "m" | "small" | "normal" | "large" | null | undefined, icon: string | number | null | undefined, iconPosition: ButtonIconPosition | null | undefined, iconOnly: boolean | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size" | "icon" | "iconPosition" | "iconOnly">): AktionNode<"Button">;
+export declare function Button(label: string | number, onClick: (() => void) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: ButtonSize | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size">): AktionNode<"Button">;
+export declare function Button(label: string | number, onClick: (() => void) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: ButtonSize | null | undefined, icon: string | number | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size" | "icon">): AktionNode<"Button">;
+export declare function Button(label: string | number, onClick: (() => void) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: ButtonSize | null | undefined, icon: string | number | null | undefined, iconPosition: ButtonIconPosition | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size" | "icon" | "iconPosition">): AktionNode<"Button">;
+export declare function Button(label: string | number, onClick: (() => void) | null | undefined, variant: ButtonVariant | null | undefined, type: ButtonType | null | undefined, size: ButtonSize | null | undefined, icon: string | number | null | undefined, iconPosition: ButtonIconPosition | null | undefined, iconOnly: boolean | null | undefined, props?: Omit<ButtonOptions, "label" | "onClick" | "action" | "onclick" | "variant" | "tone" | "type" | "size" | "icon" | "iconPosition" | "iconOnly">): AktionNode<"Button">;
 
 /* ---- ButtonGroup */
 export interface ButtonGroupOptions extends BaseProps {
   items?: readonly AktionNode<"Button">[];
   /** Size token applied to every button in the group */
-  size?: "sm" | "md" | "lg";
+  size?: ButtonGroupSize;
   /** Stretch the group to fill its container, dividing width evenly */
   fullWidth?: boolean;
   /** Alias of `fullWidth`. */
@@ -1625,18 +1875,19 @@ export interface ButtonGroupOptions extends BaseProps {
   /** Accessible name for the group (e.g. "Time range") — the group role is anonymous without it */
   ariaLabel?: string | number;
   /** Alias of `ariaLabel`. */
-  ariaLabelledBy?: string | number;
-  /** Alias of `ariaLabel`. */
   label?: string | number;
+  /** Space-separated id(s) of the element(s) that name the group (a visible heading) — rendered as `aria-labelledby`, which takes precedence over `ariaLabel` */
+  ariaLabelledBy?: string | number;
 }
 export type ButtonGroupProps = ButtonGroupOptions & { items: readonly AktionNode<"Button">[] };
 export type ButtonGroupNamed = Omit<ButtonGroupOptions, "items">;
 /** Row of buttons joined edge-to-edge into a single continuous control — only the outer corners are rounded and adjoining borders are shared. Use for related actions that form one unit (segmented actions, split/paired buttons, view switchers with real actions). For a single-select pill track use `SegmentedControl`; for spaced-out independent actions use `Buttons`. */
 export declare function ButtonGroup(items: readonly AktionNode<"Button">[], props?: ButtonGroupNamed): AktionNode<"ButtonGroup">;
 export declare function ButtonGroup(props: ButtonGroupProps): AktionNode<"ButtonGroup">;
-export declare function ButtonGroup(items: readonly AktionNode<"Button">[], size: "sm" | "md" | "lg" | null | undefined, props?: Omit<ButtonGroupOptions, "items" | "size">): AktionNode<"ButtonGroup">;
-export declare function ButtonGroup(items: readonly AktionNode<"Button">[], size: "sm" | "md" | "lg" | null | undefined, fullWidth: boolean | null | undefined, props?: Omit<ButtonGroupOptions, "items" | "size" | "fullWidth" | "full">): AktionNode<"ButtonGroup">;
-export declare function ButtonGroup(items: readonly AktionNode<"Button">[], size: "sm" | "md" | "lg" | null | undefined, fullWidth: boolean | null | undefined, ariaLabel: string | number | null | undefined): AktionNode<"ButtonGroup">;
+export declare function ButtonGroup(items: readonly AktionNode<"Button">[], size: ButtonGroupSize | null | undefined, props?: Omit<ButtonGroupOptions, "items" | "size">): AktionNode<"ButtonGroup">;
+export declare function ButtonGroup(items: readonly AktionNode<"Button">[], size: ButtonGroupSize | null | undefined, fullWidth: boolean | null | undefined, props?: Omit<ButtonGroupOptions, "items" | "size" | "fullWidth" | "full">): AktionNode<"ButtonGroup">;
+export declare function ButtonGroup(items: readonly AktionNode<"Button">[], size: ButtonGroupSize | null | undefined, fullWidth: boolean | null | undefined, ariaLabel: string | number | null | undefined, props?: Omit<ButtonGroupOptions, "items" | "size" | "fullWidth" | "full" | "ariaLabel" | "label">): AktionNode<"ButtonGroup">;
+export declare function ButtonGroup(items: readonly AktionNode<"Button">[], size: ButtonGroupSize | null | undefined, fullWidth: boolean | null | undefined, ariaLabel: string | number | null | undefined, ariaLabelledBy: string | number | null | undefined): AktionNode<"ButtonGroup">;
 
 /* ---- Buttons */
 export interface ButtonsOptions extends BaseProps {
@@ -1699,15 +1950,15 @@ export declare function Calendar<Ev extends CalendarEvent = CalendarEvent>(month
 export declare function Calendar<Ev extends CalendarEvent = CalendarEvent>(month: number | null | undefined, year: number | null | undefined, selected: string | null | undefined, onSelect: ((iso: string) => void) | null | undefined, events: readonly (string | Ev)[] | null | undefined, firstDay: number | null | undefined, navigable: boolean | null | undefined, onNavigate: ((year: number, month: number) => void) | null | undefined, props?: Omit<CalendarOptions<Ev>, "month" | "year" | "selected" | "onSelect" | "events" | "firstDay" | "navigable" | "onNavigate">): AktionNode<"Calendar">;
 
 /* ---- CalendarView */
-export interface CalendarViewOptions extends BaseProps {
+export interface CalendarViewOptions<Item extends CalendarViewEvent = CalendarViewEvent> extends BaseProps {
   /** Selected ISO date (YYYY-MM-DD); bind a $variable */
   value?: string;
   /** Visible month — ISO date or YYYY-MM. Bind a $variable to follow the prev/next controls (defaults to `value`, else today) */
   month?: string;
   /** Array of {date, title, tone?, time?, id?} objects */
-  events?: readonly CalendarViewEvent[];
+  events?: readonly (Item | null | undefined)[];
   view?: CalendarViewView;
-  /** 0=Sunday, 1=Monday (default 1) */
+  /** 0=Sunday, 1=Monday … 6=Saturday (default 1); other numbers are floored and wrapped into that range */
   firstDay?: CalendarViewWeekday;
   /** Callable fired when a day is clicked; receives the ISO date string */
   onSelect?: ((date: string) => void) | null;
@@ -1715,8 +1966,8 @@ export interface CalendarViewOptions extends BaseProps {
   onMonthChange?: ((anchor: string) => void) | null;
   /** Alias of `onMonthChange`. */
   onNavigate?: ((anchor: string) => void) | null;
-  /** Callable fired with (eventId, event) when an event chip is clicked; makes the chips real buttons */
-  onEventClick?: ((eventId: string, event: CalendarViewEventInfo) => void) | null;
+  /** Callable fired with (eventId, event) when an event chip is clicked, where `event` is the object you passed in `events` (every field intact) and `eventId` its `id` as a string, or `<date>#<index>` when it has none; makes the chips real buttons */
+  onEventClick?: ((eventId: string, event: Item) => void) | null;
   /** Event chips per day before a `+N more` toggle (default 3) */
   maxEventsPerDay?: number;
   /** Earliest selectable ISO date */
@@ -1728,18 +1979,18 @@ export interface CalendarViewOptions extends BaseProps {
   /** Hide the built-in prev / next / today controls */
   hideNav?: boolean;
 }
-export type CalendarViewProps = CalendarViewOptions;
-export type CalendarViewNamed = Omit<CalendarViewOptions, "value">;
+export type CalendarViewProps<Item extends CalendarViewEvent = CalendarViewEvent> = CalendarViewOptions<Item>;
+export type CalendarViewNamed<Item extends CalendarViewEvent = CalendarViewEvent> = Omit<CalendarViewOptions<Item>, "value">;
 /** Full-month or week calendar grid for scheduling apps — distinct from the form-input `DatePicker`. Pass events as an array of `{date: 'YYYY-MM-DD', title, tone?, time?, id?}` objects. Bind `value` to a `$variable` for the selected date (ISO string) and `month` for the visible month; the built-in ‹ / › / Today controls write both. Use `view="week"` for a single-week strip. `firstDay=1` (Monday) matches most business apps. `onEventClick` makes the event chips clickable, `min` / `max` / `disabledDates` block days. */
-export declare function CalendarView(value?: string, props?: CalendarViewNamed): AktionNode<"CalendarView">;
-export declare function CalendarView(props: CalendarViewProps): AktionNode<"CalendarView">;
-export declare function CalendarView(value: string | null | undefined, month: string | null | undefined, props?: Omit<CalendarViewOptions, "value" | "month">): AktionNode<"CalendarView">;
-export declare function CalendarView(value: string | null | undefined, month: string | null | undefined, events: readonly CalendarViewEvent[] | null | undefined, props?: Omit<CalendarViewOptions, "value" | "month" | "events">): AktionNode<"CalendarView">;
-export declare function CalendarView(value: string | null | undefined, month: string | null | undefined, events: readonly CalendarViewEvent[] | null | undefined, view: CalendarViewView | null | undefined, props?: Omit<CalendarViewOptions, "value" | "month" | "events" | "view">): AktionNode<"CalendarView">;
-export declare function CalendarView(value: string | null | undefined, month: string | null | undefined, events: readonly CalendarViewEvent[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, props?: Omit<CalendarViewOptions, "value" | "month" | "events" | "view" | "firstDay">): AktionNode<"CalendarView">;
-export declare function CalendarView(value: string | null | undefined, month: string | null | undefined, events: readonly CalendarViewEvent[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, onSelect: ((date: string) => void) | null | undefined, props?: Omit<CalendarViewOptions, "value" | "month" | "events" | "view" | "firstDay" | "onSelect">): AktionNode<"CalendarView">;
-export declare function CalendarView(value: string | null | undefined, month: string | null | undefined, events: readonly CalendarViewEvent[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, onSelect: ((date: string) => void) | null | undefined, onMonthChange: ((anchor: string) => void) | null | undefined, props?: Omit<CalendarViewOptions, "value" | "month" | "events" | "view" | "firstDay" | "onSelect" | "onMonthChange" | "onNavigate">): AktionNode<"CalendarView">;
-export declare function CalendarView(value: string | null | undefined, month: string | null | undefined, events: readonly CalendarViewEvent[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, onSelect: ((date: string) => void) | null | undefined, onMonthChange: ((anchor: string) => void) | null | undefined, onEventClick: ((eventId: string, event: CalendarViewEventInfo) => void) | null | undefined, props?: Omit<CalendarViewOptions, "value" | "month" | "events" | "view" | "firstDay" | "onSelect" | "onMonthChange" | "onNavigate" | "onEventClick">): AktionNode<"CalendarView">;
+export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value?: string, props?: CalendarViewNamed<Item>): AktionNode<"CalendarView">;
+export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(props: CalendarViewProps<Item>): AktionNode<"CalendarView">;
+export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value: string | null | undefined, month: string | null | undefined, props?: Omit<CalendarViewOptions<Item>, "value" | "month">): AktionNode<"CalendarView">;
+export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value: string | null | undefined, month: string | null | undefined, events: readonly (Item | null | undefined)[] | null | undefined, props?: Omit<CalendarViewOptions<Item>, "value" | "month" | "events">): AktionNode<"CalendarView">;
+export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value: string | null | undefined, month: string | null | undefined, events: readonly (Item | null | undefined)[] | null | undefined, view: CalendarViewView | null | undefined, props?: Omit<CalendarViewOptions<Item>, "value" | "month" | "events" | "view">): AktionNode<"CalendarView">;
+export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value: string | null | undefined, month: string | null | undefined, events: readonly (Item | null | undefined)[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, props?: Omit<CalendarViewOptions<Item>, "value" | "month" | "events" | "view" | "firstDay">): AktionNode<"CalendarView">;
+export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value: string | null | undefined, month: string | null | undefined, events: readonly (Item | null | undefined)[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, onSelect: ((date: string) => void) | null | undefined, props?: Omit<CalendarViewOptions<Item>, "value" | "month" | "events" | "view" | "firstDay" | "onSelect">): AktionNode<"CalendarView">;
+export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value: string | null | undefined, month: string | null | undefined, events: readonly (Item | null | undefined)[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, onSelect: ((date: string) => void) | null | undefined, onMonthChange: ((anchor: string) => void) | null | undefined, props?: Omit<CalendarViewOptions<Item>, "value" | "month" | "events" | "view" | "firstDay" | "onSelect" | "onMonthChange" | "onNavigate">): AktionNode<"CalendarView">;
+export declare function CalendarView<Item extends CalendarViewEvent = CalendarViewEvent>(value: string | null | undefined, month: string | null | undefined, events: readonly (Item | null | undefined)[] | null | undefined, view: CalendarViewView | null | undefined, firstDay: CalendarViewWeekday | null | undefined, onSelect: ((date: string) => void) | null | undefined, onMonthChange: ((anchor: string) => void) | null | undefined, onEventClick: ((eventId: string, event: Item) => void) | null | undefined, props?: Omit<CalendarViewOptions<Item>, "value" | "month" | "events" | "view" | "firstDay" | "onSelect" | "onMonthChange" | "onNavigate" | "onEventClick">): AktionNode<"CalendarView">;
 
 /* ---- Callout */
 export interface CalloutOptions extends BaseProps {
@@ -1751,7 +2002,7 @@ export interface CalloutOptions extends BaseProps {
   description?: string | number;
   /** Alias of `description`. */
   text?: string | number;
-  /** Optional Font Awesome icon name */
+  /** Font Awesome icon name (default: the tone's icon); `false` hides it, like `hideIcon` */
   icon?: string | number | false;
   /** Render with the dense, one-line note shape. */
   compact?: boolean;
@@ -1957,7 +2208,7 @@ export interface CenterOptions extends BaseProps {
   /** Which axis to center on (default both) */
   axis?: CenterAxis;
   /** CSS min-height — set to center vertically inside a tall region (e.g. `60vh`, `400px`) */
-  minHeight?: string;
+  minHeight?: string | number;
   /** Spacing between stacked children (default `md`) */
   gap?: SpacingToken;
   /** Inner padding token */
@@ -1971,10 +2222,10 @@ export type CenterNamed = Omit<CenterOptions, "children" | "child">;
 export declare function Center(children: Children, props?: CenterNamed): AktionNode<"Center">;
 export declare function Center(props: CenterProps): AktionNode<"Center">;
 export declare function Center(children: Children, axis: CenterAxis | null | undefined, props?: Omit<CenterOptions, "children" | "child" | "axis">): AktionNode<"Center">;
-export declare function Center(children: Children, axis: CenterAxis | null | undefined, minHeight: string | null | undefined, props?: Omit<CenterOptions, "children" | "child" | "axis" | "minHeight">): AktionNode<"Center">;
-export declare function Center(children: Children, axis: CenterAxis | null | undefined, minHeight: string | null | undefined, gap: SpacingToken | null | undefined, props?: Omit<CenterOptions, "children" | "child" | "axis" | "minHeight" | "gap">): AktionNode<"Center">;
-export declare function Center(children: Children, axis: CenterAxis | null | undefined, minHeight: string | null | undefined, gap: SpacingToken | null | undefined, padding: SpacingToken | null | undefined, props?: Omit<CenterOptions, "children" | "child" | "axis" | "minHeight" | "gap" | "padding">): AktionNode<"Center">;
-export declare function Center(children: Children, axis: CenterAxis | null | undefined, minHeight: string | null | undefined, gap: SpacingToken | null | undefined, padding: SpacingToken | null | undefined, inline: boolean | null | undefined): AktionNode<"Center">;
+export declare function Center(children: Children, axis: CenterAxis | null | undefined, minHeight: string | number | null | undefined, props?: Omit<CenterOptions, "children" | "child" | "axis" | "minHeight">): AktionNode<"Center">;
+export declare function Center(children: Children, axis: CenterAxis | null | undefined, minHeight: string | number | null | undefined, gap: SpacingToken | null | undefined, props?: Omit<CenterOptions, "children" | "child" | "axis" | "minHeight" | "gap">): AktionNode<"Center">;
+export declare function Center(children: Children, axis: CenterAxis | null | undefined, minHeight: string | number | null | undefined, gap: SpacingToken | null | undefined, padding: SpacingToken | null | undefined, props?: Omit<CenterOptions, "children" | "child" | "axis" | "minHeight" | "gap" | "padding">): AktionNode<"Center">;
+export declare function Center(children: Children, axis: CenterAxis | null | undefined, minHeight: string | number | null | undefined, gap: SpacingToken | null | undefined, padding: SpacingToken | null | undefined, inline: boolean | null | undefined): AktionNode<"Center">;
 
 /* ---- ChatBubble */
 export interface ChatBubbleOptions extends Omit<BaseProps, "role"> {
@@ -2041,7 +2292,7 @@ export interface CheckBoxGroupOptions extends BaseProps {
   /** Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it */
   description?: string | number;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -2075,7 +2326,7 @@ export interface CheckBoxItemOptions extends BaseProps {
   checked?: boolean;
   /** Lock this option (greyed out, not togglable) */
   disabled?: boolean;
-  /** Submitted value for this option (defaults to `name`) — use when the group maps to an array of ids */
+  /** The native checkbox's submitted `value` for a native form post (defaults to `name`). The group's own `value` / `onChange` stay keyed by `name` either way */
   value?: string | number;
 }
 export type CheckBoxItemProps = CheckBoxItemOptions & { label: string | number } & { name: string | number };
@@ -2117,7 +2368,7 @@ export interface CheckboxOptions extends Omit<BaseProps, "id"> {
   /** Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` */
   warning?: string | number;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -2159,9 +2410,9 @@ export interface CodeBlockOptions extends BaseProps {
   /** Show the header bar (default true); false = chromeless, fills its container */
   header?: boolean;
   /** Explicit width (CSS length) */
-  width?: string;
+  width?: string | number;
   /** Explicit height (CSS length); overflowing code scrolls */
-  height?: string;
+  height?: string | number;
   /** File path shown in the header in place of the language token (e.g. `src/index.ts`) */
   filename?: string | number;
   /** Alias of `filename`. */
@@ -2180,7 +2431,7 @@ export declare function CodeBlock(codeString: string | number, language: CodeBlo
 export declare function CodeBlock(codeString: string | number, language: CodeBlockLanguage | null | undefined, showLineNumbers: boolean | null | undefined, highlightLines: string | number | null | undefined, highlight: boolean | null | undefined, props?: Omit<CodeBlockOptions, "codeString" | "code" | "language" | "showLineNumbers" | "highlightLines" | "highlight">): AktionNode<"CodeBlock">;
 export declare function CodeBlock(codeString: string | number, language: CodeBlockLanguage | null | undefined, showLineNumbers: boolean | null | undefined, highlightLines: string | number | null | undefined, highlight: boolean | null | undefined, copy: boolean | null | undefined, props?: Omit<CodeBlockOptions, "codeString" | "code" | "language" | "showLineNumbers" | "highlightLines" | "highlight" | "copy">): AktionNode<"CodeBlock">;
 export declare function CodeBlock(codeString: string | number, language: CodeBlockLanguage | null | undefined, showLineNumbers: boolean | null | undefined, highlightLines: string | number | null | undefined, highlight: boolean | null | undefined, copy: boolean | null | undefined, header: boolean | null | undefined, props?: Omit<CodeBlockOptions, "codeString" | "code" | "language" | "showLineNumbers" | "highlightLines" | "highlight" | "copy" | "header">): AktionNode<"CodeBlock">;
-export declare function CodeBlock(codeString: string | number, language: CodeBlockLanguage | null | undefined, showLineNumbers: boolean | null | undefined, highlightLines: string | number | null | undefined, highlight: boolean | null | undefined, copy: boolean | null | undefined, header: boolean | null | undefined, width: string | null | undefined, props?: Omit<CodeBlockOptions, "codeString" | "code" | "language" | "showLineNumbers" | "highlightLines" | "highlight" | "copy" | "header" | "width">): AktionNode<"CodeBlock">;
+export declare function CodeBlock(codeString: string | number, language: CodeBlockLanguage | null | undefined, showLineNumbers: boolean | null | undefined, highlightLines: string | number | null | undefined, highlight: boolean | null | undefined, copy: boolean | null | undefined, header: boolean | null | undefined, width: string | number | null | undefined, props?: Omit<CodeBlockOptions, "codeString" | "code" | "language" | "showLineNumbers" | "highlightLines" | "highlight" | "copy" | "header" | "width">): AktionNode<"CodeBlock">;
 
 /* ---- CodeEditor */
 export interface CodeEditorOptions extends Omit<BaseProps, "id"> {
@@ -2191,7 +2442,7 @@ export interface CodeEditorOptions extends Omit<BaseProps, "id"> {
   language?: CodeEditorLanguage;
   placeholder?: string | number;
   /** CSS min-height for the editor area (default 200px) */
-  minHeight?: string;
+  minHeight?: string | number;
   /** Spaces per Tab (default 2) */
   tabSize?: number;
   /** Show line-number gutter (default true) */
@@ -2203,7 +2454,7 @@ export interface CodeEditorOptions extends Omit<BaseProps, "id"> {
   /** Alias of `onChange`. */
   onchange?: ((source: string) => void) | null;
   /** CSS max-height for the editor area; the body scrolls past it */
-  maxHeight?: string;
+  maxHeight?: string | number;
   /** Filename shown on the left of the header */
   filename?: string | number;
   /** Show a copy-to-clipboard button on the right of the header */
@@ -2247,17 +2498,17 @@ export declare function CodeEditor(props: CodeEditorProps): AktionNode<"CodeEdit
 export declare function CodeEditor(id: string | number, value: string | number | null | undefined, props?: Omit<CodeEditorOptions, "id" | "value">): AktionNode<"CodeEditor">;
 export declare function CodeEditor(id: string | number, value: string | number | null | undefined, language: CodeEditorLanguage | null | undefined, props?: Omit<CodeEditorOptions, "id" | "value" | "language">): AktionNode<"CodeEditor">;
 export declare function CodeEditor(id: string | number, value: string | number | null | undefined, language: CodeEditorLanguage | null | undefined, placeholder: string | number | null | undefined, props?: Omit<CodeEditorOptions, "id" | "value" | "language" | "placeholder">): AktionNode<"CodeEditor">;
-export declare function CodeEditor(id: string | number, value: string | number | null | undefined, language: CodeEditorLanguage | null | undefined, placeholder: string | number | null | undefined, minHeight: string | null | undefined, props?: Omit<CodeEditorOptions, "id" | "value" | "language" | "placeholder" | "minHeight">): AktionNode<"CodeEditor">;
-export declare function CodeEditor(id: string | number, value: string | number | null | undefined, language: CodeEditorLanguage | null | undefined, placeholder: string | number | null | undefined, minHeight: string | null | undefined, tabSize: number | null | undefined, props?: Omit<CodeEditorOptions, "id" | "value" | "language" | "placeholder" | "minHeight" | "tabSize">): AktionNode<"CodeEditor">;
-export declare function CodeEditor(id: string | number, value: string | number | null | undefined, language: CodeEditorLanguage | null | undefined, placeholder: string | number | null | undefined, minHeight: string | null | undefined, tabSize: number | null | undefined, showGutter: boolean | null | undefined, props?: Omit<CodeEditorOptions, "id" | "value" | "language" | "placeholder" | "minHeight" | "tabSize" | "showGutter">): AktionNode<"CodeEditor">;
-export declare function CodeEditor(id: string | number, value: string | number | null | undefined, language: CodeEditorLanguage | null | undefined, placeholder: string | number | null | undefined, minHeight: string | null | undefined, tabSize: number | null | undefined, showGutter: boolean | null | undefined, readonly: boolean | null | undefined, props?: Omit<CodeEditorOptions, "id" | "value" | "language" | "placeholder" | "minHeight" | "tabSize" | "showGutter" | "readonly">): AktionNode<"CodeEditor">;
+export declare function CodeEditor(id: string | number, value: string | number | null | undefined, language: CodeEditorLanguage | null | undefined, placeholder: string | number | null | undefined, minHeight: string | number | null | undefined, props?: Omit<CodeEditorOptions, "id" | "value" | "language" | "placeholder" | "minHeight">): AktionNode<"CodeEditor">;
+export declare function CodeEditor(id: string | number, value: string | number | null | undefined, language: CodeEditorLanguage | null | undefined, placeholder: string | number | null | undefined, minHeight: string | number | null | undefined, tabSize: number | null | undefined, props?: Omit<CodeEditorOptions, "id" | "value" | "language" | "placeholder" | "minHeight" | "tabSize">): AktionNode<"CodeEditor">;
+export declare function CodeEditor(id: string | number, value: string | number | null | undefined, language: CodeEditorLanguage | null | undefined, placeholder: string | number | null | undefined, minHeight: string | number | null | undefined, tabSize: number | null | undefined, showGutter: boolean | null | undefined, props?: Omit<CodeEditorOptions, "id" | "value" | "language" | "placeholder" | "minHeight" | "tabSize" | "showGutter">): AktionNode<"CodeEditor">;
+export declare function CodeEditor(id: string | number, value: string | number | null | undefined, language: CodeEditorLanguage | null | undefined, placeholder: string | number | null | undefined, minHeight: string | number | null | undefined, tabSize: number | null | undefined, showGutter: boolean | null | undefined, readonly: boolean | null | undefined, props?: Omit<CodeEditorOptions, "id" | "value" | "language" | "placeholder" | "minHeight" | "tabSize" | "showGutter" | "readonly">): AktionNode<"CodeEditor">;
 
 /* ---- CodeWindow */
 export interface CodeWindowOptions extends BaseProps {
   /** Source text (a legacy CodeBlock(...) node is also accepted) */
-  code?: string | AktionNode<"CodeBlock">;
+  code?: string | number | AktionNode<"CodeBlock">;
   /** Alias of `code`. */
-  codeString?: string | AktionNode<"CodeBlock">;
+  codeString?: string | number | AktionNode<"CodeBlock">;
   /** Filename shown in the title bar */
   file?: string | number;
   /** Highlight language (default: from the file extension, else aktion) */
@@ -2269,26 +2520,26 @@ export interface CodeWindowOptions extends BaseProps {
   /** Show a copy-the-source button in the title bar */
   copy?: boolean;
   /** Explicit code-pane height (CSS length); overflow scrolls */
-  height?: string;
+  height?: string | number;
   /** Cap the code-pane height (CSS length); overflow scrolls */
-  maxHeight?: string;
+  maxHeight?: string | number;
   /** Render a left-side line-number gutter */
   showLineNumbers?: boolean;
   /** Highlight ranges, e.g. "3-5,8" */
   highlightLines?: string | number;
 }
-export type CodeWindowProps = CodeWindowOptions & OneOf<"code" | "codeString", string | AktionNode<"CodeBlock">>;
+export type CodeWindowProps = CodeWindowOptions & OneOf<"code" | "codeString", string | number | AktionNode<"CodeBlock">>;
 export type CodeWindowNamed = Omit<CodeWindowOptions, "code" | "codeString">;
 /** An editor/IDE window chrome (traffic-light dots + filename + status area) around source code. Pass the code as a plain STRING — it renders through a chromeless CodeBlock that fills the pane (no inner border, language label, or copy button), syntax-highlighted via `language` (default: inferred from the `file` extension, else aktion). Set `preview: true` to run the source as a LIVE app beside the code (split view with a pulsing 'Live render' badge); a custom node is also accepted for non-Aktion previews. `copy` adds a copy-to-clipboard button to the title bar, `height`/`maxHeight` cap the pane (long snippets scroll), and `showLineNumbers`/`highlightLines` point the reader at a specific line. The canonical way to show code in docs/marketing. */
-export declare function CodeWindow(code: string | AktionNode<"CodeBlock">, props?: CodeWindowNamed): AktionNode<"CodeWindow">;
+export declare function CodeWindow(code: string | number | AktionNode<"CodeBlock">, props?: CodeWindowNamed): AktionNode<"CodeWindow">;
 export declare function CodeWindow(props: CodeWindowProps): AktionNode<"CodeWindow">;
-export declare function CodeWindow(code: string | AktionNode<"CodeBlock">, file: string | number | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file">): AktionNode<"CodeWindow">;
-export declare function CodeWindow(code: string | AktionNode<"CodeBlock">, file: string | number | null | undefined, language: "aktion" | "js" | "jsx" | "ts" | "tsx" | "javascript" | "typescript" | "mjs" | "cjs" | "py" | "python" | "css" | "scss" | "less" | "json" | "jsonc" | "html" | "xml" | "svg" | "vue" | "bash" | "md" | "yaml" | "sql" | (string & {}) | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file" | "language">): AktionNode<"CodeWindow">;
-export declare function CodeWindow(code: string | AktionNode<"CodeBlock">, file: string | number | null | undefined, language: "aktion" | "js" | "jsx" | "ts" | "tsx" | "javascript" | "typescript" | "mjs" | "cjs" | "py" | "python" | "css" | "scss" | "less" | "json" | "jsonc" | "html" | "xml" | "svg" | "vue" | "bash" | "md" | "yaml" | "sql" | (string & {}) | null | undefined, status: AktionChild | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file" | "language" | "status">): AktionNode<"CodeWindow">;
-export declare function CodeWindow(code: string | AktionNode<"CodeBlock">, file: string | number | null | undefined, language: "aktion" | "js" | "jsx" | "ts" | "tsx" | "javascript" | "typescript" | "mjs" | "cjs" | "py" | "python" | "css" | "scss" | "less" | "json" | "jsonc" | "html" | "xml" | "svg" | "vue" | "bash" | "md" | "yaml" | "sql" | (string & {}) | null | undefined, status: AktionChild | null | undefined, preview: boolean | AktionChild | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file" | "language" | "status" | "preview">): AktionNode<"CodeWindow">;
-export declare function CodeWindow(code: string | AktionNode<"CodeBlock">, file: string | number | null | undefined, language: "aktion" | "js" | "jsx" | "ts" | "tsx" | "javascript" | "typescript" | "mjs" | "cjs" | "py" | "python" | "css" | "scss" | "less" | "json" | "jsonc" | "html" | "xml" | "svg" | "vue" | "bash" | "md" | "yaml" | "sql" | (string & {}) | null | undefined, status: AktionChild | null | undefined, preview: boolean | AktionChild | null | undefined, copy: boolean | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file" | "language" | "status" | "preview" | "copy">): AktionNode<"CodeWindow">;
-export declare function CodeWindow(code: string | AktionNode<"CodeBlock">, file: string | number | null | undefined, language: "aktion" | "js" | "jsx" | "ts" | "tsx" | "javascript" | "typescript" | "mjs" | "cjs" | "py" | "python" | "css" | "scss" | "less" | "json" | "jsonc" | "html" | "xml" | "svg" | "vue" | "bash" | "md" | "yaml" | "sql" | (string & {}) | null | undefined, status: AktionChild | null | undefined, preview: boolean | AktionChild | null | undefined, copy: boolean | null | undefined, height: string | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file" | "language" | "status" | "preview" | "copy" | "height">): AktionNode<"CodeWindow">;
-export declare function CodeWindow(code: string | AktionNode<"CodeBlock">, file: string | number | null | undefined, language: "aktion" | "js" | "jsx" | "ts" | "tsx" | "javascript" | "typescript" | "mjs" | "cjs" | "py" | "python" | "css" | "scss" | "less" | "json" | "jsonc" | "html" | "xml" | "svg" | "vue" | "bash" | "md" | "yaml" | "sql" | (string & {}) | null | undefined, status: AktionChild | null | undefined, preview: boolean | AktionChild | null | undefined, copy: boolean | null | undefined, height: string | null | undefined, maxHeight: string | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file" | "language" | "status" | "preview" | "copy" | "height" | "maxHeight">): AktionNode<"CodeWindow">;
+export declare function CodeWindow(code: string | number | AktionNode<"CodeBlock">, file: string | number | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file">): AktionNode<"CodeWindow">;
+export declare function CodeWindow(code: string | number | AktionNode<"CodeBlock">, file: string | number | null | undefined, language: "aktion" | "js" | "jsx" | "ts" | "tsx" | "javascript" | "typescript" | "mjs" | "cjs" | "py" | "python" | "css" | "scss" | "less" | "json" | "jsonc" | "html" | "xml" | "svg" | "vue" | "bash" | "md" | "yaml" | "sql" | (string & {}) | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file" | "language">): AktionNode<"CodeWindow">;
+export declare function CodeWindow(code: string | number | AktionNode<"CodeBlock">, file: string | number | null | undefined, language: "aktion" | "js" | "jsx" | "ts" | "tsx" | "javascript" | "typescript" | "mjs" | "cjs" | "py" | "python" | "css" | "scss" | "less" | "json" | "jsonc" | "html" | "xml" | "svg" | "vue" | "bash" | "md" | "yaml" | "sql" | (string & {}) | null | undefined, status: AktionChild | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file" | "language" | "status">): AktionNode<"CodeWindow">;
+export declare function CodeWindow(code: string | number | AktionNode<"CodeBlock">, file: string | number | null | undefined, language: "aktion" | "js" | "jsx" | "ts" | "tsx" | "javascript" | "typescript" | "mjs" | "cjs" | "py" | "python" | "css" | "scss" | "less" | "json" | "jsonc" | "html" | "xml" | "svg" | "vue" | "bash" | "md" | "yaml" | "sql" | (string & {}) | null | undefined, status: AktionChild | null | undefined, preview: boolean | AktionChild | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file" | "language" | "status" | "preview">): AktionNode<"CodeWindow">;
+export declare function CodeWindow(code: string | number | AktionNode<"CodeBlock">, file: string | number | null | undefined, language: "aktion" | "js" | "jsx" | "ts" | "tsx" | "javascript" | "typescript" | "mjs" | "cjs" | "py" | "python" | "css" | "scss" | "less" | "json" | "jsonc" | "html" | "xml" | "svg" | "vue" | "bash" | "md" | "yaml" | "sql" | (string & {}) | null | undefined, status: AktionChild | null | undefined, preview: boolean | AktionChild | null | undefined, copy: boolean | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file" | "language" | "status" | "preview" | "copy">): AktionNode<"CodeWindow">;
+export declare function CodeWindow(code: string | number | AktionNode<"CodeBlock">, file: string | number | null | undefined, language: "aktion" | "js" | "jsx" | "ts" | "tsx" | "javascript" | "typescript" | "mjs" | "cjs" | "py" | "python" | "css" | "scss" | "less" | "json" | "jsonc" | "html" | "xml" | "svg" | "vue" | "bash" | "md" | "yaml" | "sql" | (string & {}) | null | undefined, status: AktionChild | null | undefined, preview: boolean | AktionChild | null | undefined, copy: boolean | null | undefined, height: string | number | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file" | "language" | "status" | "preview" | "copy" | "height">): AktionNode<"CodeWindow">;
+export declare function CodeWindow(code: string | number | AktionNode<"CodeBlock">, file: string | number | null | undefined, language: "aktion" | "js" | "jsx" | "ts" | "tsx" | "javascript" | "typescript" | "mjs" | "cjs" | "py" | "python" | "css" | "scss" | "less" | "json" | "jsonc" | "html" | "xml" | "svg" | "vue" | "bash" | "md" | "yaml" | "sql" | (string & {}) | null | undefined, status: AktionChild | null | undefined, preview: boolean | AktionChild | null | undefined, copy: boolean | null | undefined, height: string | number | null | undefined, maxHeight: string | number | null | undefined, props?: Omit<CodeWindowOptions, "code" | "codeString" | "file" | "language" | "status" | "preview" | "copy" | "height" | "maxHeight">): AktionNode<"CodeWindow">;
 
 /* ---- Col */
 export interface ColOptions<Value = unknown> extends BaseProps {
@@ -2315,33 +2566,33 @@ export interface ColOptions<Value = unknown> extends BaseProps {
   /** ISO 4217 code used by `format: "currency"` — `EUR`, `GBP`, `CHF`, … (default `USD`). */
   currency?: "USD" | "EUR" | "GBP" | "CHF" | (string & {});
   /** CSS width for the column (`240px`, `30%`). Caps the column instead of letting one long value stretch the table. */
-  width?: string;
+  width?: string | number;
   /** Let long cell text wrap onto several lines instead of pushing the table into horizontal scroll. */
   wrap?: boolean;
   /** Explanation shown on hover/focus of the header cell — e.g. `MRR = monthly recurring revenue`. */
   headerTooltip?: string | number;
   /** Alias of `headerTooltip`. */
   hint?: string | number;
-  /** BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) used by `format: "number"|"currency"|"date"` for separators, digit grouping and date order. Defaults to the Table's `locale`, then the viewer's browser. */
+  /** BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) used by `format: "number"|"currency"|"date"` for separators, digit grouping and date order, in a Table and a DataGrid alike. Defaults to the Table's `locale` (a DataGrid has none), then the viewer's browser. */
   locale?: string;
   /** DataGrid: initially hide this column. The user can reveal it from the column settings panel. */
   initiallyHidden?: boolean;
   /** Alias of `initiallyHidden`. */
   colHidden?: boolean;
-  /** DataGrid: pin this column to the left (or right) edge so it stays visible during horizontal scrolling. */
-  pinned?: "left";
+  /** DataGrid: `"left"` pins this column to the left edge so it stays visible during horizontal scrolling (pinned columns move to the front of the table); `"none"`, the default, leaves it unpinned. There is no right-edge pinning. */
+  pinned?: ColPinned;
   /** DataGrid: per-column override for resizing. Takes precedence over the grid-level `resizable` prop. */
   resizable?: boolean;
-  /** DataGrid: minimum width when the column is resized (`80px`, `5rem`). */
-  minWidth?: `${number}px`;
-  /** DataGrid: maximum width when the column is resized (`400px`, `50%`). */
-  maxWidth?: `${number}px`;
-  /** Render the header cell visually empty (an actions/kebab-menu column needs no visible header) while `header` keeps naming the column everywhere else that reads it: the `<th>`'s accessible name, the column-settings panel row, and (DataGrid) the persistence key. Do NOT use `header: ""` for this — that drops the accessible name, blanks the column-settings row, and collides with any other column that also passed an empty header, since the persistence key is the header string. A sortable column keeps working: the sort button's accessible name still comes from the hidden label. */
+  /** DataGrid: minimum width when the column is resized (`80px`, `5rem`, or a number of px; default 50px). A `%` is a share of the grid's visible width. */
+  minWidth?: string | number;
+  /** DataGrid: maximum width when the column is resized (`400px`, `50%`, or a number of px; default 2000px). A `%` is a share of the grid's visible width. */
+  maxWidth?: string | number;
+  /** Render the header cell visually empty (an actions/kebab-menu column needs no visible header) while `header` keeps naming the column everywhere else that reads it: the `<th>`'s accessible name, the column-settings panel row, and (DataGrid) the persistence key. Do NOT use `header: ""` for this — that drops the accessible name, blanks the column-settings row, and leaves the column keyed by its position (`col-<index>`), so a saved layout follows whichever column lands at that index after columns are added or reordered. A sortable column keeps working: the sort button's accessible name still comes from the hidden label. */
   headerHidden?: boolean;
 }
 export type ColProps<Value = unknown> = ColOptions<Value> & { header: string | number } & { values: readonly Value[] };
 export type ColNamed<Value = unknown> = Omit<ColOptions<Value>, "header"> & { values: readonly Value[] };
-/** Single column inside a Table or DataGrid. Use `align` for per-column text alignment, `format` for cell rendering (`text|number|currency|date`), `currency` for the money code used by `format: "currency"`, `locale` for the BCP-47 tag those formats are rendered in, and `width`/`wrap` to stop one long column from forcing the whole table into horizontal scroll. `values` may be plain values OR an array of component nodes — e.g. `Col("Status", rows.map(r => Badge(r.status)))` or `Col("Actions", rows.map(r => Button("Edit")))` — each component renders directly in its cell. Pass `render: (value, index, row) => …` for the same effect when you prefer to keep `values` as the raw row data (return a component, string, or array). `row` is the whole row (header-keyed) and stays correct even when DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. Pass `onClick: (value, index, row) => …` to make the whole cell clickable (pointer + keyboard). `sortable` and `filterable` only take effect inside `DataGrid` (Table ignores them). For an actions/kebab-menu column that needs no visible header, use `headerHidden: true` — NOT `header: ""`, which loses the accessible name and (in DataGrid) the persistence key derived from `header`. */
+/** Single column inside a Table or DataGrid. Use `align` for per-column text alignment, `format` for cell rendering (`text|number|currency|date`), `currency` for the money code used by `format: "currency"`, `locale` for the BCP-47 tag those formats are rendered in, and `width`/`wrap` to stop one long column from forcing the whole table into horizontal scroll. `values` may be plain values OR an array of component nodes — e.g. `Col("Status", rows.map(r => Badge(r.status)))` or `Col("Actions", rows.map(r => Button("Edit")))` — each component renders directly in its cell. Pass `render: (value, index, row) => …` for the same effect when you prefer to keep `values` as the raw row data (return a component, string, or array). `row` is the whole row (header-keyed) and stays correct even when DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. A column whose header is empty or repeats an earlier column's header is keyed `col-<index>` instead, so two `Col("Price", …)` never overwrite each other. Pass `onClick: (value, index, row) => …` to make the whole cell clickable (pointer + keyboard). `sortable` and `filterable` only take effect inside `DataGrid` (Table ignores them). For an actions/kebab-menu column that needs no visible header, use `headerHidden: true` — NOT `header: ""`, which loses the accessible name and (in DataGrid) the persistence key derived from `header`. */
 export declare function Col<Value = unknown>(header: string | number, props: ColNamed<Value>): AktionNode<"Col">;
 export declare function Col<Value = unknown>(props: ColProps<Value>): AktionNode<"Col">;
 export declare function Col<Value = unknown>(header: string | number, values: readonly Value[], props?: Omit<ColOptions<Value>, "header" | "values">): AktionNode<"Col">;
@@ -2358,7 +2609,7 @@ export interface ColorPickerOptions extends Omit<BaseProps, "id"> {
   /** Bound color value (typically $variable) */
   value?: string;
   label?: string | number;
-  /** Preset colors (default to a 12-color palette) */
+  /** Preset colors as hex, rgb() or hsl() strings (default: a 12-color palette); other values, such as named colors, are skipped */
   swatches?: readonly string[];
   disabled?: boolean;
   /** Called with the newly-selected color string */
@@ -2478,7 +2729,7 @@ export interface ComboboxOptions extends Omit<BaseProps, "id"> {
   required?: boolean;
   /** Matches are being fetched — shows "Loading…" instead of the (lying) empty label */
   loading?: boolean;
-  /** Called with the query on every keystroke for server-side search; disables local filtering */
+  /** Called with the query ~200ms after typing stops, for server-side search; disables local filtering */
   onSearch?: ((query: string) => void) | null;
   /** Show a clear (×) control so the selection can be reset to the placeholder */
   clearable?: boolean;
@@ -2486,7 +2737,7 @@ export interface ComboboxOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the selected value when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -2499,7 +2750,7 @@ export interface ComboboxOptions extends Omit<BaseProps, "id"> {
   /** Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it */
   description?: string | number;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -2530,7 +2781,7 @@ export interface CommandPaletteOptions extends BaseProps {
   placeholder?: string | number;
   /** Hint label, e.g. Cmd+K */
   shortcut?: string | number;
-  /** Receives the selected item's `value` */
+  /** Receives the selected item's `value` as a string (`5` arrives as `"5"`; the label when `value` is absent) */
   onSelect?: ((value: string) => void) | null;
   /** Called with `false` whenever the palette is dismissed */
   onClose?: ((open: false) => void) | null;
@@ -2594,12 +2845,14 @@ export interface ComparisonTableOptions extends BaseProps {
   highlightColumn?: number;
   /** Header of the first (row-label) column — default `Feature` */
   featureLabel?: string | number;
-  /** Table caption; also its accessible name */
+  /** Visible table caption; also its accessible name */
   caption?: string | number;
-  /** Alias of `caption`. */
-  ariaLabel?: string | number;
   /** Keep the feature labels visible while the plan columns scroll horizontally */
   stickyFirstColumn?: boolean;
+  /** Accessible name for a table whose visible name is already a heading beside it — a `<caption>` there would be a visible duplicate. Ignored when `caption` is set, which already names the table. */
+  ariaLabel?: string | number;
+  /** Alias of `ariaLabel`. */
+  arialabel?: string | number;
 }
 export type ComparisonTableProps = ComparisonTableOptions & { columns: readonly (string | number)[] } & { rows: readonly ComparisonTableRow[] };
 export type ComparisonTableNamed = Omit<ComparisonTableOptions, "columns"> & { rows: readonly ComparisonTableRow[] };
@@ -2609,8 +2862,9 @@ export declare function ComparisonTable(props: ComparisonTableProps): AktionNode
 export declare function ComparisonTable(columns: readonly (string | number)[], rows: readonly ComparisonTableRow[], props?: Omit<ComparisonTableOptions, "columns" | "rows">): AktionNode<"ComparisonTable">;
 export declare function ComparisonTable(columns: readonly (string | number)[], rows: readonly ComparisonTableRow[], highlightColumn: number | null | undefined, props?: Omit<ComparisonTableOptions, "columns" | "rows" | "highlightColumn">): AktionNode<"ComparisonTable">;
 export declare function ComparisonTable(columns: readonly (string | number)[], rows: readonly ComparisonTableRow[], highlightColumn: number | null | undefined, featureLabel: string | number | null | undefined, props?: Omit<ComparisonTableOptions, "columns" | "rows" | "highlightColumn" | "featureLabel">): AktionNode<"ComparisonTable">;
-export declare function ComparisonTable(columns: readonly (string | number)[], rows: readonly ComparisonTableRow[], highlightColumn: number | null | undefined, featureLabel: string | number | null | undefined, caption: string | number | null | undefined, props?: Omit<ComparisonTableOptions, "columns" | "rows" | "highlightColumn" | "featureLabel" | "caption" | "ariaLabel">): AktionNode<"ComparisonTable">;
-export declare function ComparisonTable(columns: readonly (string | number)[], rows: readonly ComparisonTableRow[], highlightColumn: number | null | undefined, featureLabel: string | number | null | undefined, caption: string | number | null | undefined, stickyFirstColumn: boolean | null | undefined): AktionNode<"ComparisonTable">;
+export declare function ComparisonTable(columns: readonly (string | number)[], rows: readonly ComparisonTableRow[], highlightColumn: number | null | undefined, featureLabel: string | number | null | undefined, caption: string | number | null | undefined, props?: Omit<ComparisonTableOptions, "columns" | "rows" | "highlightColumn" | "featureLabel" | "caption">): AktionNode<"ComparisonTable">;
+export declare function ComparisonTable(columns: readonly (string | number)[], rows: readonly ComparisonTableRow[], highlightColumn: number | null | undefined, featureLabel: string | number | null | undefined, caption: string | number | null | undefined, stickyFirstColumn: boolean | null | undefined, props?: Omit<ComparisonTableOptions, "columns" | "rows" | "highlightColumn" | "featureLabel" | "caption" | "stickyFirstColumn">): AktionNode<"ComparisonTable">;
+export declare function ComparisonTable(columns: readonly (string | number)[], rows: readonly ComparisonTableRow[], highlightColumn: number | null | undefined, featureLabel: string | number | null | undefined, caption: string | number | null | undefined, stickyFirstColumn: boolean | null | undefined, ariaLabel: string | number | null | undefined): AktionNode<"ComparisonTable">;
 
 /* ---- Confetti */
 export interface ConfettiOptions extends BaseProps {
@@ -2679,7 +2933,7 @@ export interface ContainerOptions extends BaseProps {
   /** sm=640 / md=820 / lg=1040 / xl=1280 / full=100% (default lg) */
   size?: ContainerSize;
   /** Custom CSS max-width (overrides `size`) */
-  maxWidth?: string;
+  maxWidth?: string | number;
   /** Horizontal padding (default md) */
   padding?: SpacingToken;
 }
@@ -2689,15 +2943,15 @@ export type ContainerNamed = Omit<ContainerOptions, "children" | "child">;
 export declare function Container(children: Children, props?: ContainerNamed): AktionNode<"Container">;
 export declare function Container(props: ContainerProps): AktionNode<"Container">;
 export declare function Container(children: Children, size: ContainerSize | null | undefined, props?: Omit<ContainerOptions, "children" | "child" | "size">): AktionNode<"Container">;
-export declare function Container(children: Children, size: ContainerSize | null | undefined, maxWidth: string | null | undefined, props?: Omit<ContainerOptions, "children" | "child" | "size" | "maxWidth">): AktionNode<"Container">;
-export declare function Container(children: Children, size: ContainerSize | null | undefined, maxWidth: string | null | undefined, padding: SpacingToken | null | undefined): AktionNode<"Container">;
+export declare function Container(children: Children, size: ContainerSize | null | undefined, maxWidth: string | number | null | undefined, props?: Omit<ContainerOptions, "children" | "child" | "size" | "maxWidth">): AktionNode<"Container">;
+export declare function Container(children: Children, size: ContainerSize | null | undefined, maxWidth: string | number | null | undefined, padding: SpacingToken | null | undefined): AktionNode<"Container">;
 
 /* ---- ContextMenu */
 export interface ContextMenuOptions extends BaseProps {
   /** Child node the menu is bound to */
   target?: AktionChild;
-  /** MenuItem nodes or {label, action} objects */
-  items?: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | null | undefined)[];
+  /** MenuItem / MenuSeparator nodes or {label, onClick} objects; other values are ignored */
+  items?: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | false | null | undefined)[];
   /** ARIA label for the menu */
   label?: string | number;
   /** What opens the menu (default `contextmenu`) */
@@ -2715,18 +2969,18 @@ export interface ContextMenuOptions extends BaseProps {
   /** Called with the new boolean open state */
   onOpenChange?: ((open: boolean) => void) | null;
 }
-export type ContextMenuProps = ContextMenuOptions & { target: AktionChild } & { items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | null | undefined)[] };
-export type ContextMenuNamed = Omit<ContextMenuOptions, "target"> & { items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | null | undefined)[] };
-/** Right-click (or long-press on touch) menu that attaches to a child node. Wraps `target` and shows the menu at the pointer. Items are `MenuItem(...)` nodes, `MenuSeparator()` entries, or `{label, action, icon?, shortcut?, variant?, disabled?, separator?}` objects. Set `trigger: "click"` for the overflow-menu pattern, `disabled` to suppress it on locked rows, and pass a `$variable` as `open` to observe or drive the open state. Shift+F10 (or the ContextMenu key) opens it from the keyboard, and ArrowUp/ArrowDown/Home/End plus typeahead move between items while Escape closes it and returns focus to the target. Use on table rows, tree nodes, kanban cards, file browser entries. */
+export type ContextMenuProps = ContextMenuOptions & { target: AktionChild } & { items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | false | null | undefined)[] };
+export type ContextMenuNamed = Omit<ContextMenuOptions, "target"> & { items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | false | null | undefined)[] };
+/** Right-click (or long-press on touch) menu that attaches to a child node. Wraps `target` and shows the menu at the pointer. Items are `MenuItem(...)` nodes (including `checked` / `role` / `keepOpen` rows), `MenuSeparator()` entries, or `{label, onClick (or action), icon?, shortcut?, variant (or tone)?, disabled?, checked?, role?, keepOpen?}` / `{separator: true}` objects; anything else is ignored. Set `trigger: "click"` for the overflow-menu pattern, `disabled` to suppress it on locked rows, and pass a `$variable` as `open` to observe or drive the open state. Shift+F10 (or the ContextMenu key) opens it from the keyboard, and ArrowUp/ArrowDown/Home/End plus typeahead move between items while Escape closes it and returns focus to the target. Use on table rows, tree nodes, kanban cards, file browser entries. */
 export declare function ContextMenu(target: AktionChild, props: ContextMenuNamed): AktionNode<"ContextMenu">;
 export declare function ContextMenu(props: ContextMenuProps): AktionNode<"ContextMenu">;
-export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | null | undefined)[], props?: Omit<ContextMenuOptions, "target" | "items">): AktionNode<"ContextMenu">;
-export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | null | undefined)[], label: string | number | null | undefined, props?: Omit<ContextMenuOptions, "target" | "items" | "label">): AktionNode<"ContextMenu">;
-export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | null | undefined)[], label: string | number | null | undefined, trigger: ContextMenuTrigger | null | undefined, props?: Omit<ContextMenuOptions, "target" | "items" | "label" | "trigger">): AktionNode<"ContextMenu">;
-export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | null | undefined)[], label: string | number | null | undefined, trigger: ContextMenuTrigger | null | undefined, disabled: boolean | null | undefined, props?: Omit<ContextMenuOptions, "target" | "items" | "label" | "trigger" | "disabled">): AktionNode<"ContextMenu">;
-export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | null | undefined)[], label: string | number | null | undefined, trigger: ContextMenuTrigger | null | undefined, disabled: boolean | null | undefined, placement: ContextMenuPlacement | null | undefined, props?: Omit<ContextMenuOptions, "target" | "items" | "label" | "trigger" | "disabled" | "placement" | "side">): AktionNode<"ContextMenu">;
-export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | null | undefined)[], label: string | number | null | undefined, trigger: ContextMenuTrigger | null | undefined, disabled: boolean | null | undefined, placement: ContextMenuPlacement | null | undefined, offset: number | null | undefined, props?: Omit<ContextMenuOptions, "target" | "items" | "label" | "trigger" | "disabled" | "placement" | "side" | "offset">): AktionNode<"ContextMenu">;
-export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | null | undefined)[], label: string | number | null | undefined, trigger: ContextMenuTrigger | null | undefined, disabled: boolean | null | undefined, placement: ContextMenuPlacement | null | undefined, offset: number | null | undefined, open: boolean | null | undefined, props?: Omit<ContextMenuOptions, "target" | "items" | "label" | "trigger" | "disabled" | "placement" | "side" | "offset" | "open">): AktionNode<"ContextMenu">;
+export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | false | null | undefined)[], props?: Omit<ContextMenuOptions, "target" | "items">): AktionNode<"ContextMenu">;
+export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | false | null | undefined)[], label: string | number | null | undefined, props?: Omit<ContextMenuOptions, "target" | "items" | "label">): AktionNode<"ContextMenu">;
+export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | false | null | undefined)[], label: string | number | null | undefined, trigger: ContextMenuTrigger | null | undefined, props?: Omit<ContextMenuOptions, "target" | "items" | "label" | "trigger">): AktionNode<"ContextMenu">;
+export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | false | null | undefined)[], label: string | number | null | undefined, trigger: ContextMenuTrigger | null | undefined, disabled: boolean | null | undefined, props?: Omit<ContextMenuOptions, "target" | "items" | "label" | "trigger" | "disabled">): AktionNode<"ContextMenu">;
+export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | false | null | undefined)[], label: string | number | null | undefined, trigger: ContextMenuTrigger | null | undefined, disabled: boolean | null | undefined, placement: ContextMenuPlacement | null | undefined, props?: Omit<ContextMenuOptions, "target" | "items" | "label" | "trigger" | "disabled" | "placement" | "side">): AktionNode<"ContextMenu">;
+export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | false | null | undefined)[], label: string | number | null | undefined, trigger: ContextMenuTrigger | null | undefined, disabled: boolean | null | undefined, placement: ContextMenuPlacement | null | undefined, offset: number | null | undefined, props?: Omit<ContextMenuOptions, "target" | "items" | "label" | "trigger" | "disabled" | "placement" | "side" | "offset">): AktionNode<"ContextMenu">;
+export declare function ContextMenu(target: AktionChild, items: readonly (AktionNode<"MenuItem"> | AktionNode<"MenuSeparator"> | ContextMenuItemData | ContextMenuSeparatorData | false | null | undefined)[], label: string | number | null | undefined, trigger: ContextMenuTrigger | null | undefined, disabled: boolean | null | undefined, placement: ContextMenuPlacement | null | undefined, offset: number | null | undefined, open: boolean | null | undefined, props?: Omit<ContextMenuOptions, "target" | "items" | "label" | "trigger" | "disabled" | "placement" | "side" | "offset" | "open">): AktionNode<"ContextMenu">;
 
 /* ---- CopyButton */
 export interface CopyButtonOptions extends BaseProps {
@@ -2773,14 +3027,14 @@ export declare function CountUp(value: number, suffix: string | number | null | 
 
 /* ---- CountdownTimer */
 export interface CountdownTimerOptions extends BaseProps {
-  to?: string | number | Date;
+  to?: string | number | Date | null;
   /** Alias of `to`. */
-  target?: string | number | Date;
+  target?: string | number | Date | null;
   /** Alias of `to`. */
-  date?: string | number | Date;
+  date?: string | number | Date | null;
   /** Shown when the countdown finishes (default 'Done') */
   endLabel?: string | number;
-  /** Fired once when the countdown reaches zero */
+  /** Fired once per target when the countdown reaches zero */
   onEnd?: (() => void) | null;
   /** Alias of `onEnd`. */
   onFinish?: (() => void) | null;
@@ -2791,15 +3045,15 @@ export interface CountdownTimerOptions extends BaseProps {
   /** Set false to drop the days cell */
   showDays?: boolean;
 }
-export type CountdownTimerProps = CountdownTimerOptions & OneOf<"to" | "target" | "date", string | number | Date>;
+export type CountdownTimerProps = CountdownTimerOptions & OneOf<"to" | "target" | "date", string | number | Date | null>;
 export type CountdownTimerNamed = Omit<CountdownTimerOptions, "to" | "target" | "date">;
-/** Live countdown to a target date/time (ISO string or timestamp). Ticks every second, then shows `endLabel` and fires `onEnd` (enable checkout, reveal a link, refresh a price). `units` trims the boxes — a 10-minute flash sale should not render two zeroed day/hour cells. */
-export declare function CountdownTimer(to: string | number | Date, props?: CountdownTimerNamed): AktionNode<"CountdownTimer">;
+/** Live countdown to a target date/time (ISO string or timestamp). Ticks every second, then shows `endLabel` and fires `onEnd` (enable checkout, reveal a link, refresh a price). Changing `to` retargets the running clock, and `onEnd` fires once per target; an empty or null `to` (data still loading) shows `--` cells and fires nothing. `units` trims the boxes — a 10-minute flash sale should not render two zeroed day/hour cells. */
+export declare function CountdownTimer(to: string | number | Date | null, props?: CountdownTimerNamed): AktionNode<"CountdownTimer">;
 export declare function CountdownTimer(props: CountdownTimerProps): AktionNode<"CountdownTimer">;
-export declare function CountdownTimer(to: string | number | Date, endLabel: string | number | null | undefined, props?: Omit<CountdownTimerOptions, "to" | "target" | "date" | "endLabel">): AktionNode<"CountdownTimer">;
-export declare function CountdownTimer(to: string | number | Date, endLabel: string | number | null | undefined, onEnd: (() => void) | null | undefined, props?: Omit<CountdownTimerOptions, "to" | "target" | "date" | "endLabel" | "onEnd" | "onFinish" | "onComplete">): AktionNode<"CountdownTimer">;
-export declare function CountdownTimer(to: string | number | Date, endLabel: string | number | null | undefined, onEnd: (() => void) | null | undefined, units: readonly CountdownTimerUnits[] | null | undefined, props?: Omit<CountdownTimerOptions, "to" | "target" | "date" | "endLabel" | "onEnd" | "onFinish" | "onComplete" | "units">): AktionNode<"CountdownTimer">;
-export declare function CountdownTimer(to: string | number | Date, endLabel: string | number | null | undefined, onEnd: (() => void) | null | undefined, units: readonly CountdownTimerUnits[] | null | undefined, showDays: boolean | null | undefined): AktionNode<"CountdownTimer">;
+export declare function CountdownTimer(to: string | number | Date | null, endLabel: string | number | null | undefined, props?: Omit<CountdownTimerOptions, "to" | "target" | "date" | "endLabel">): AktionNode<"CountdownTimer">;
+export declare function CountdownTimer(to: string | number | Date | null, endLabel: string | number | null | undefined, onEnd: (() => void) | null | undefined, props?: Omit<CountdownTimerOptions, "to" | "target" | "date" | "endLabel" | "onEnd" | "onFinish" | "onComplete">): AktionNode<"CountdownTimer">;
+export declare function CountdownTimer(to: string | number | Date | null, endLabel: string | number | null | undefined, onEnd: (() => void) | null | undefined, units: readonly CountdownTimerUnits[] | null | undefined, props?: Omit<CountdownTimerOptions, "to" | "target" | "date" | "endLabel" | "onEnd" | "onFinish" | "onComplete" | "units">): AktionNode<"CountdownTimer">;
+export declare function CountdownTimer(to: string | number | Date | null, endLabel: string | number | null | undefined, onEnd: (() => void) | null | undefined, units: readonly CountdownTimerUnits[] | null | undefined, showDays: boolean | null | undefined): AktionNode<"CountdownTimer">;
 
 /* ---- Css */
 export interface CssOptions extends Omit<BaseProps, "class" | "className" | "style"> {
@@ -2865,8 +3119,8 @@ export interface DataGridOptions extends BaseProps {
   error?: string | number;
   /** Label for the loading row (default `Loading…`) */
   loadingLabel?: string | number;
-  /** Scroll-area height cap, e.g. `70vh` / `480px`. Applied when `stickyHeader` is on (default `70vh`) — without it the header has no scrollport to stick to. */
-  maxHeight?: string;
+  /** Scroll-area height cap, e.g. `70vh` / `480px`. Applies whenever `allowOverflow` is off. Defaults to `70vh` while `stickyHeader` is on — without a cap the header has no scrollport to stick to — and to no cap otherwise. */
+  maxHeight?: string | number;
   /** Let cell content (menus, popovers) escape the scroll box instead of clipping it. Disables the sticky header. */
   allowOverflow?: boolean;
   /** Callable fired with (columnKey, direction) when a header is activated — use for server-side sorting */
@@ -2956,7 +3210,7 @@ export interface DatePickerOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -2967,7 +3221,7 @@ export interface DatePickerOptions extends Omit<BaseProps, "id"> {
   /** Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it */
   description?: string | number;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -3013,11 +3267,11 @@ export interface DateRangePickerOptions extends Omit<BaseProps, "id"> {
   error?: string | number;
   /** Mark both endpoints required */
   required?: boolean;
-  /** Called with the current value when focus leaves an endpoint (validate-on-blur) */
+  /** Called with that endpoint's current value (an ISO date) when focus leaves it (validate-on-blur) */
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when an endpoint gains focus */
+  /** Called with that endpoint's current value (an ISO date) when an endpoint gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -3028,7 +3282,7 @@ export interface DateRangePickerOptions extends Omit<BaseProps, "id"> {
   /** Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it */
   description?: string | number;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -3058,7 +3312,7 @@ export interface DateTimePickerOptions extends Omit<BaseProps, "id"> {
   value?: string;
   min?: string;
   max?: string;
-  /** Seconds between selectable times */
+  /** Seconds between selectable times (a positive integer), or `"any"` to allow seconds */
   step?: number | "any";
   /** Called with the new ISO `YYYY-MM-DDTHH:MM` string */
   onChange?: ((value: string) => void) | null;
@@ -3092,7 +3346,7 @@ export interface DateTimePickerOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -3178,7 +3432,7 @@ export interface DisplayOptions extends BaseProps {
   children?: string | number | Children;
   /** Alias of `content`. */
   title?: string | number | Children;
-  size?: "hero" | "xl" | "lg";
+  size?: DisplaySize;
   align?: DisplayAlign;
   balance?: boolean;
   weight?: number;
@@ -3188,17 +3442,17 @@ export type DisplayNamed = Omit<DisplayOptions, "content" | "children" | "title"
 /** Oversized display headline with built-in responsive `clamp()` sizing. The positional argument may be a plain string OR an array mixing strings and `GradientText(...)` runs. `size`: hero|xl|lg. `balance` wraps for even line lengths. */
 export declare function Display(content: string | number | Children, props?: DisplayNamed): AktionNode<"Display">;
 export declare function Display(props: DisplayProps): AktionNode<"Display">;
-export declare function Display(content: string | number | Children, size: "hero" | "xl" | "lg" | null | undefined, props?: Omit<DisplayOptions, "content" | "children" | "title" | "size">): AktionNode<"Display">;
-export declare function Display(content: string | number | Children, size: "hero" | "xl" | "lg" | null | undefined, align: DisplayAlign | null | undefined, props?: Omit<DisplayOptions, "content" | "children" | "title" | "size" | "align">): AktionNode<"Display">;
-export declare function Display(content: string | number | Children, size: "hero" | "xl" | "lg" | null | undefined, align: DisplayAlign | null | undefined, balance: boolean | null | undefined, props?: Omit<DisplayOptions, "content" | "children" | "title" | "size" | "align" | "balance">): AktionNode<"Display">;
-export declare function Display(content: string | number | Children, size: "hero" | "xl" | "lg" | null | undefined, align: DisplayAlign | null | undefined, balance: boolean | null | undefined, weight: number | null | undefined): AktionNode<"Display">;
+export declare function Display(content: string | number | Children, size: DisplaySize | null | undefined, props?: Omit<DisplayOptions, "content" | "children" | "title" | "size">): AktionNode<"Display">;
+export declare function Display(content: string | number | Children, size: DisplaySize | null | undefined, align: DisplayAlign | null | undefined, props?: Omit<DisplayOptions, "content" | "children" | "title" | "size" | "align">): AktionNode<"Display">;
+export declare function Display(content: string | number | Children, size: DisplaySize | null | undefined, align: DisplayAlign | null | undefined, balance: boolean | null | undefined, props?: Omit<DisplayOptions, "content" | "children" | "title" | "size" | "align" | "balance">): AktionNode<"Display">;
+export declare function Display(content: string | number | Children, size: DisplaySize | null | undefined, align: DisplayAlign | null | undefined, balance: boolean | null | undefined, weight: number | null | undefined): AktionNode<"Display">;
 
 /* ---- Draggable */
 export interface DraggableOptions<Data = unknown> extends Omit<BaseProps, "data"> {
   child?: AktionChild;
   /** Alias of `child`. */
   children?: AktionChild;
-  /** Payload (stringified) handed to the DropZone */
+  /** Payload handed to the DropZone's `onDrop` unchanged, by pointer or keyboard (a drop into another page receives a JSON copy) */
   data?: Data;
   /** Payload kind, e.g. "card" / "file" / "tag" — a DropZone's `accept` matches against it */
   type?: string | number;
@@ -3223,6 +3477,7 @@ export declare function Draggable<Data = unknown>(child: AktionChild, data: Data
 
 /* ---- Drawer */
 export interface DrawerOptions extends BaseProps {
+  /** Heading that names the dialog — without one it is announced as "Drawer" */
   title?: string | number;
   /** Open/closed state — usually a $variable */
   open?: boolean;
@@ -3237,24 +3492,24 @@ export interface DrawerOptions extends BaseProps {
   /** Alias of `onClose`. */
   onclose?: (() => void) | null;
   /** Panel width for left/right drawers, height for top/bottom (default 420px), e.g. "720px" or "60vw" */
-  width?: string;
+  width?: string | number;
   /** Alias of `width`. */
-  size?: string;
+  size?: string | number;
   /** Whether clicking the backdrop dismisses (default true) */
   closeOnBackdrop?: boolean;
 }
-export type DrawerProps = DrawerOptions & { title: string | number } & { open: boolean } & OneOf<"children" | "child", Children>;
+export type DrawerProps = DrawerOptions & { open: boolean } & OneOf<"children" | "child", Children>;
 export type DrawerNamed = Omit<DrawerOptions, "title"> & { open: boolean } & OneOf<"children" | "child", Children>;
 /** Side drawer overlay shown when `open` is true. Pass a `$variable` as `open` to control it. Choose `side` for slide direction (default right) and `width` for a wide detail drawer. `onClose` fires whenever the drawer is dismissed (× button, Escape, or backdrop click — set `closeOnBackdrop: false` to keep a form safe from stray clicks). */
-export declare function Drawer(title: string | number, props: DrawerNamed): AktionNode<"Drawer">;
+export declare function Drawer(title: string | number | undefined, props: DrawerNamed): AktionNode<"Drawer">;
 export declare function Drawer(props: DrawerProps): AktionNode<"Drawer">;
-export declare function Drawer(title: string | number, open: boolean, props: Omit<DrawerOptions, "title" | "open"> & OneOf<"children" | "child", Children>): AktionNode<"Drawer">;
-export declare function Drawer(title: string | number, open: boolean, children: Children, props?: Omit<DrawerOptions, "title" | "open" | "children" | "child">): AktionNode<"Drawer">;
-export declare function Drawer(title: string | number, open: boolean, children: Children, side: DrawerSide | null | undefined, props?: Omit<DrawerOptions, "title" | "open" | "children" | "child" | "side">): AktionNode<"Drawer">;
-export declare function Drawer(title: string | number, open: boolean, children: Children, side: DrawerSide | null | undefined, footer: Children | null | undefined, props?: Omit<DrawerOptions, "title" | "open" | "children" | "child" | "side" | "footer">): AktionNode<"Drawer">;
-export declare function Drawer(title: string | number, open: boolean, children: Children, side: DrawerSide | null | undefined, footer: Children | null | undefined, onClose: (() => void) | null | undefined, props?: Omit<DrawerOptions, "title" | "open" | "children" | "child" | "side" | "footer" | "onClose" | "onclose">): AktionNode<"Drawer">;
-export declare function Drawer(title: string | number, open: boolean, children: Children, side: DrawerSide | null | undefined, footer: Children | null | undefined, onClose: (() => void) | null | undefined, width: string | null | undefined, props?: Omit<DrawerOptions, "title" | "open" | "children" | "child" | "side" | "footer" | "onClose" | "onclose" | "width" | "size">): AktionNode<"Drawer">;
-export declare function Drawer(title: string | number, open: boolean, children: Children, side: DrawerSide | null | undefined, footer: Children | null | undefined, onClose: (() => void) | null | undefined, width: string | null | undefined, closeOnBackdrop: boolean | null | undefined): AktionNode<"Drawer">;
+export declare function Drawer(title: string | number | null | undefined, open: boolean, props: Omit<DrawerOptions, "title" | "open"> & OneOf<"children" | "child", Children>): AktionNode<"Drawer">;
+export declare function Drawer(title: string | number | null | undefined, open: boolean, children: Children, props?: Omit<DrawerOptions, "title" | "open" | "children" | "child">): AktionNode<"Drawer">;
+export declare function Drawer(title: string | number | null | undefined, open: boolean, children: Children, side: DrawerSide | null | undefined, props?: Omit<DrawerOptions, "title" | "open" | "children" | "child" | "side">): AktionNode<"Drawer">;
+export declare function Drawer(title: string | number | null | undefined, open: boolean, children: Children, side: DrawerSide | null | undefined, footer: Children | null | undefined, props?: Omit<DrawerOptions, "title" | "open" | "children" | "child" | "side" | "footer">): AktionNode<"Drawer">;
+export declare function Drawer(title: string | number | null | undefined, open: boolean, children: Children, side: DrawerSide | null | undefined, footer: Children | null | undefined, onClose: (() => void) | null | undefined, props?: Omit<DrawerOptions, "title" | "open" | "children" | "child" | "side" | "footer" | "onClose" | "onclose">): AktionNode<"Drawer">;
+export declare function Drawer(title: string | number | null | undefined, open: boolean, children: Children, side: DrawerSide | null | undefined, footer: Children | null | undefined, onClose: (() => void) | null | undefined, width: string | number | null | undefined, props?: Omit<DrawerOptions, "title" | "open" | "children" | "child" | "side" | "footer" | "onClose" | "onclose" | "width" | "size">): AktionNode<"Drawer">;
+export declare function Drawer(title: string | number | null | undefined, open: boolean, children: Children, side: DrawerSide | null | undefined, footer: Children | null | undefined, onClose: (() => void) | null | undefined, width: string | number | null | undefined, closeOnBackdrop: boolean | null | undefined): AktionNode<"Drawer">;
 
 /* ---- DrawingCanvas */
 export interface DrawingCanvasOptions extends BaseProps {
@@ -3289,7 +3544,7 @@ export interface DrawingCanvasOptions extends BaseProps {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string | number;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -3302,7 +3557,7 @@ export interface DrawingCanvasOptions extends BaseProps {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -3346,7 +3601,7 @@ export interface DropZoneOptions extends BaseProps {
 }
 export type DropZoneProps = DropZoneOptions;
 export type DropZoneNamed = Omit<DropZoneOptions, "child" | "children">;
-/** A target that accepts a Draggable. `onDrop(data)` receives the dropped payload (parsed JSON when possible). `accept` lists the Draggable `type`s this zone can take (comma-separated) — anything else is refused before it is dropped, so a 'To do' / 'Done' / 'Archive' board can express what goes where; `disabled` makes the zone inert. Pass `child` for the zone's content, or just `label` for a bare labelled target. Keyboard users focus the zone and press Space/Enter to drop what a Draggable picked up. */
+/** A target that accepts a Draggable. `onDrop(data)` receives the Draggable's `data` unchanged (text dragged in from outside the app arrives as parsed JSON when possible). `accept` lists the Draggable `type`s this zone can take (comma-separated) — anything else is refused before it is dropped, so a 'To do' / 'Done' / 'Archive' board can express what goes where; `disabled` makes the zone inert. Pass `child` for the zone's content, or just `label` for a bare labelled target. Keyboard users focus the zone and press Space/Enter to drop what a Draggable picked up. */
 export declare function DropZone(child?: AktionChild, props?: DropZoneNamed): AktionNode<"DropZone">;
 export declare function DropZone(props: DropZoneProps): AktionNode<"DropZone">;
 export declare function DropZone(child: AktionChild | null | undefined, onDrop: ((data: unknown) => void) | null | undefined, props?: Omit<DropZoneOptions, "child" | "children" | "onDrop">): AktionNode<"DropZone">;
@@ -3375,7 +3630,7 @@ export interface DropdownMenuOptions extends BaseProps {
 }
 export type DropdownMenuProps = DropdownMenuOptions & { trigger: AktionChild } & { items: readonly DropdownMenuEntry[] };
 export type DropdownMenuNamed = Omit<DropdownMenuOptions, "trigger"> & { items: readonly DropdownMenuEntry[] };
-/** Click-triggered dropdown menu. Click the trigger to toggle, click a MenuItem to run its action and close, click outside or press Escape to close without acting; ArrowUp/ArrowDown/Home/End and typeahead move between items. Items may be MenuItem / MenuSeparator / MenuLabel nodes, nested arrays of them, or plain `{label, onClick, icon?, shortcut?, disabled?, checked?, separator?}` objects. Bind a `$variable` to `open` for two-way control, or watch `onOpenChange(isOpen)`. */
+/** Click-triggered dropdown menu. Click the trigger to toggle, click a MenuItem to run its action and close, click outside or press Escape to close without acting; ArrowUp/ArrowDown/Home/End and typeahead move between items. Items may be MenuItem / MenuSeparator / MenuLabel nodes, nested arrays of them, or plain objects with MenuItem's fields (`{label, onClick, icon?, shortcut?, variant?, disabled?, checked?, role?, keepOpen?}`; `{separator: true}` for a rule). Bind a `$variable` to `open` for two-way control, or watch `onOpenChange(isOpen)`. */
 export declare function DropdownMenu(trigger: AktionChild, props: DropdownMenuNamed): AktionNode<"DropdownMenu">;
 export declare function DropdownMenu(props: DropdownMenuProps): AktionNode<"DropdownMenu">;
 export declare function DropdownMenu(trigger: AktionChild, items: readonly DropdownMenuEntry[], props?: Omit<DropdownMenuOptions, "trigger" | "items">): AktionNode<"DropdownMenu">;
@@ -3467,7 +3722,7 @@ export declare function Eyebrow(props: EyebrowProps): AktionNode<"Eyebrow">;
 /* ---- FeatureGrid */
 export interface FeatureGridOptions extends BaseProps {
   items?: readonly AktionNode<"FeatureItem">[];
-  /** Preferred column count (default auto) */
+  /** Preferred column count, 1–4 — larger values clamp to 4 (default auto) */
   columns?: number;
 }
 export type FeatureGridProps = FeatureGridOptions & { items: readonly AktionNode<"FeatureItem">[] };
@@ -3518,7 +3773,7 @@ export interface FieldRepeaterOptions<Item extends object = Record<string, unkno
   onChange?: ((index: number, field: string, value: string | boolean, rows: Record<string, unknown>[]) => void) | null;
   /** Text of the per-row remove control (default "Remove") */
   removeLabel?: string | number;
-  /** Rows that can never be removed (default 0) */
+  /** Minimum row count — every remove control is hidden once the list is down to this many rows (default 0) */
   min?: number;
   /** Maximum rows — "Add row" is disabled at the cap */
   max?: number;
@@ -3580,12 +3835,12 @@ export interface FileUploadOptions extends Omit<BaseProps, "id"> {
   /** Comma-separated MIME types or extensions */
   accept?: string | number;
   multiple?: boolean;
-  /** Callable fired with the accepted files when files are picked */
-  onSelect?: ((files: ArrayLike<DomFile>) => void) | null;
+  /** Called with the selected files as an array of `File`s — when files are picked or dropped (only the ones `maxSize` accepted), and again with the remaining files after the user removes one from the preview */
+  onSelect?: ((files: DomFile[]) => void) | null;
   /** Alias of `onSelect`. */
-  action?: ((files: ArrayLike<DomFile>) => void) | null;
+  action?: ((files: DomFile[]) => void) | null;
   /** Alias of `onSelect`. */
-  onChange?: ((files: ArrayLike<DomFile>) => void) | null;
+  onChange?: ((files: DomFile[]) => void) | null;
   /** Font Awesome icon (default "cloud-arrow-up") */
   icon?: string | number;
   disabled?: boolean;
@@ -3607,15 +3862,15 @@ export declare function FileUpload(id: string | number, label: string | number |
 export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint">): AktionNode<"FileUpload">;
 export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept">): AktionNode<"FileUpload">;
 export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple">): AktionNode<"FileUpload">;
-export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, onSelect: ((files: ArrayLike<DomFile>) => void) | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple" | "onSelect" | "action" | "onChange">): AktionNode<"FileUpload">;
-export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, onSelect: ((files: ArrayLike<DomFile>) => void) | null | undefined, icon: string | number | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple" | "onSelect" | "action" | "onChange" | "icon">): AktionNode<"FileUpload">;
-export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, onSelect: ((files: ArrayLike<DomFile>) => void) | null | undefined, icon: string | number | null | undefined, disabled: boolean | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple" | "onSelect" | "action" | "onChange" | "icon" | "disabled">): AktionNode<"FileUpload">;
+export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, onSelect: ((files: DomFile[]) => void) | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple" | "onSelect" | "action" | "onChange">): AktionNode<"FileUpload">;
+export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, onSelect: ((files: DomFile[]) => void) | null | undefined, icon: string | number | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple" | "onSelect" | "action" | "onChange" | "icon">): AktionNode<"FileUpload">;
+export declare function FileUpload(id: string | number, label: string | number | null | undefined, hint: string | number | null | undefined, accept: string | number | null | undefined, multiple: boolean | null | undefined, onSelect: ((files: DomFile[]) => void) | null | undefined, icon: string | number | null | undefined, disabled: boolean | null | undefined, props?: Omit<FileUploadOptions, "id" | "label" | "hint" | "accept" | "multiple" | "onSelect" | "action" | "onChange" | "icon" | "disabled">): AktionNode<"FileUpload">;
 
 /* ---- FilterChips */
 export interface FilterChipsOptions extends BaseProps {
   /** Array of strings or {label, value} objects */
   chips?: readonly (FilterChipsChip | string | number)[];
-  /** Receives the removed chip value as an argument */
+  /** Receives the removed chip's `value` as a string (the label when `value` is absent) */
   onRemove?: ((value: string) => void) | null;
   onClear?: (() => void) | null;
   /** Text of the clear-all control (default "Clear all") */
@@ -3751,7 +4006,7 @@ export interface FollowUpBlockOptions extends BaseProps {
 }
 export type FollowUpBlockProps = FollowUpBlockOptions & { items: readonly (AktionNode<"FollowUpItem"> | FollowUpItemData | string)[] };
 export type FollowUpBlockNamed = Omit<FollowUpBlockOptions, "items">;
-/** Suggested follow-up prompts shown as buttons. Each item dispatches its label as an assistant message (equivalent to `emit "assistant-message" { message }`) unless `onSelect` is supplied, which receives `(message, label)` instead. `disabled` makes the row inert while the assistant is responding; `layout: "stack"` puts one suggestion per line. */
+/** Suggested follow-up prompts shown as buttons. Each item dispatches its `message` — which defaults to its label — as an assistant message (equivalent to `emit "assistant-message" { message }`) unless `onSelect` is supplied, which receives `(message, label)` instead. `disabled` makes the row inert while the assistant is responding; `layout: "stack"` puts one suggestion per line. */
 export declare function FollowUpBlock(items: readonly (AktionNode<"FollowUpItem"> | FollowUpItemData | string)[], props?: FollowUpBlockNamed): AktionNode<"FollowUpBlock">;
 export declare function FollowUpBlock(props: FollowUpBlockProps): AktionNode<"FollowUpBlock">;
 export declare function FollowUpBlock(items: readonly (AktionNode<"FollowUpItem"> | FollowUpItemData | string)[], title: string | number | null | undefined, props?: Omit<FollowUpBlockOptions, "items" | "title">): AktionNode<"FollowUpBlock">;
@@ -3857,7 +4112,7 @@ export interface FormControlOptions extends BaseProps {
   /** Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it */
   description?: string | number | AktionNode;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -3959,22 +4214,22 @@ export interface GanttOptions extends BaseProps {
   axis?: boolean;
   /** Axis tick count (default 5, implies `axis`) */
   ticks?: number;
-  /** Draw a marker line at now, or at the given ISO date */
-  today?: boolean | string;
+  /** Draw a marker line: `true` at now, an ISO date string or an epoch-millisecond timestamp at that moment */
+  today?: boolean | string | number;
   /** Receives the clicked task's id */
   onTaskClick?: ((id: string) => void) | null;
 }
 export type GanttProps = GanttOptions & { tasks: readonly GanttTask[] };
 export type GanttNamed = Omit<GanttOptions, "tasks">;
-/** Simple Gantt chart. Pass `tasks` as `{id, label, start, end, progress?, tone?}` with ISO date strings; `progress` accepts either a 0-1 fraction or a 0-100 percentage, and `tone` colours the bar (`success`, `warning`, `danger`, …). Set `axis` for a date scale and `today` for a now marker. */
+/** Simple Gantt chart. Pass `tasks` as `{id, label, start, end, progress?, tone?}` with ISO date strings (`name` is read when `label` is absent, `status` when `tone` is); `progress` accepts either a 0-1 fraction or a 0-100 percentage, and `tone` colours the bar — one of `success`, `warning`, `danger`, `info` or `muted` (any other value draws the default bar). Set `axis` for a date scale and `today` for a now marker. */
 export declare function Gantt(tasks: readonly GanttTask[], props?: GanttNamed): AktionNode<"Gantt">;
 export declare function Gantt(props: GanttProps): AktionNode<"Gantt">;
 export declare function Gantt(tasks: readonly GanttTask[], startDate: string | null | undefined, props?: Omit<GanttOptions, "tasks" | "startDate">): AktionNode<"Gantt">;
 export declare function Gantt(tasks: readonly GanttTask[], startDate: string | null | undefined, endDate: string | null | undefined, props?: Omit<GanttOptions, "tasks" | "startDate" | "endDate">): AktionNode<"Gantt">;
 export declare function Gantt(tasks: readonly GanttTask[], startDate: string | null | undefined, endDate: string | null | undefined, axis: boolean | null | undefined, props?: Omit<GanttOptions, "tasks" | "startDate" | "endDate" | "axis">): AktionNode<"Gantt">;
 export declare function Gantt(tasks: readonly GanttTask[], startDate: string | null | undefined, endDate: string | null | undefined, axis: boolean | null | undefined, ticks: number | null | undefined, props?: Omit<GanttOptions, "tasks" | "startDate" | "endDate" | "axis" | "ticks">): AktionNode<"Gantt">;
-export declare function Gantt(tasks: readonly GanttTask[], startDate: string | null | undefined, endDate: string | null | undefined, axis: boolean | null | undefined, ticks: number | null | undefined, today: boolean | string | null | undefined, props?: Omit<GanttOptions, "tasks" | "startDate" | "endDate" | "axis" | "ticks" | "today">): AktionNode<"Gantt">;
-export declare function Gantt(tasks: readonly GanttTask[], startDate: string | null | undefined, endDate: string | null | undefined, axis: boolean | null | undefined, ticks: number | null | undefined, today: boolean | string | null | undefined, onTaskClick: ((id: string) => void) | null | undefined): AktionNode<"Gantt">;
+export declare function Gantt(tasks: readonly GanttTask[], startDate: string | null | undefined, endDate: string | null | undefined, axis: boolean | null | undefined, ticks: number | null | undefined, today: boolean | string | number | null | undefined, props?: Omit<GanttOptions, "tasks" | "startDate" | "endDate" | "axis" | "ticks" | "today">): AktionNode<"Gantt">;
+export declare function Gantt(tasks: readonly GanttTask[], startDate: string | null | undefined, endDate: string | null | undefined, axis: boolean | null | undefined, ticks: number | null | undefined, today: boolean | string | number | null | undefined, onTaskClick: ((id: string) => void) | null | undefined): AktionNode<"Gantt">;
 
 /* ---- Gauge */
 export interface GaugeOptions extends BaseProps {
@@ -3988,7 +4243,7 @@ export interface GaugeOptions extends BaseProps {
   tone?: GaugeTone;
   /** Alias of `tone`. */
   variant?: GaugeTone;
-  size?: "sm" | "md" | "lg";
+  size?: GaugeSize;
   /** Small caption below the gauge */
   caption?: string | number;
   /** Suffix appended to the value ("%", "ms", "pts") */
@@ -4017,9 +4272,9 @@ export declare function Gauge(value: number, min: number | null | undefined, pro
 export declare function Gauge(value: number, min: number | null | undefined, max: number | null | undefined, props?: Omit<GaugeOptions, "value" | "min" | "max">): AktionNode<"Gauge">;
 export declare function Gauge(value: number, min: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, props?: Omit<GaugeOptions, "value" | "min" | "max" | "label">): AktionNode<"Gauge">;
 export declare function Gauge(value: number, min: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, tone: GaugeTone | null | undefined, props?: Omit<GaugeOptions, "value" | "min" | "max" | "label" | "tone" | "variant">): AktionNode<"Gauge">;
-export declare function Gauge(value: number, min: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, tone: GaugeTone | null | undefined, size: "sm" | "md" | "lg" | null | undefined, props?: Omit<GaugeOptions, "value" | "min" | "max" | "label" | "tone" | "variant" | "size">): AktionNode<"Gauge">;
-export declare function Gauge(value: number, min: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, tone: GaugeTone | null | undefined, size: "sm" | "md" | "lg" | null | undefined, caption: string | number | null | undefined, props?: Omit<GaugeOptions, "value" | "min" | "max" | "label" | "tone" | "variant" | "size" | "caption">): AktionNode<"Gauge">;
-export declare function Gauge(value: number, min: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, tone: GaugeTone | null | undefined, size: "sm" | "md" | "lg" | null | undefined, caption: string | number | null | undefined, unit: string | number | null | undefined, props?: Omit<GaugeOptions, "value" | "min" | "max" | "label" | "tone" | "variant" | "size" | "caption" | "unit" | "suffix">): AktionNode<"Gauge">;
+export declare function Gauge(value: number, min: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, tone: GaugeTone | null | undefined, size: GaugeSize | null | undefined, props?: Omit<GaugeOptions, "value" | "min" | "max" | "label" | "tone" | "variant" | "size">): AktionNode<"Gauge">;
+export declare function Gauge(value: number, min: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, tone: GaugeTone | null | undefined, size: GaugeSize | null | undefined, caption: string | number | null | undefined, props?: Omit<GaugeOptions, "value" | "min" | "max" | "label" | "tone" | "variant" | "size" | "caption">): AktionNode<"Gauge">;
+export declare function Gauge(value: number, min: number | null | undefined, max: number | null | undefined, label: string | number | null | undefined, tone: GaugeTone | null | undefined, size: GaugeSize | null | undefined, caption: string | number | null | undefined, unit: string | number | null | undefined, props?: Omit<GaugeOptions, "value" | "min" | "max" | "label" | "tone" | "variant" | "size" | "caption" | "unit" | "suffix">): AktionNode<"Gauge">;
 
 /* ---- GradientText */
 export interface GradientTextOptions extends BaseProps {
@@ -4051,9 +4306,9 @@ export interface GridOptions extends BaseProps {
   /** Column gap override. May be a responsive map. */
   columnGap?: SpacingToken | Responsive<SpacingToken>;
   /** Minimum column width for AUTO-FIT mode, e.g. `"240px"` (default 220px). Also caps the floor in FIXED mode. */
-  minChildWidth?: string;
+  minChildWidth?: string | number;
   /** Alias of `minChildWidth`. */
-  minItemWidth?: string;
+  minItemWidth?: string | number;
   /** Vertical alignment of items within their cells */
   alignItems?: GridAlignItems;
   /** Horizontal alignment of items within their cells */
@@ -4070,9 +4325,9 @@ export declare function Grid(children: Children, columns: number | Responsive<nu
 export declare function Grid(children: Children, columns: number | Responsive<number> | null | undefined, gap: SpacingToken | Responsive<SpacingToken> | null | undefined, props?: Omit<GridOptions, "children" | "child" | "columns" | "gap">): AktionNode<"Grid">;
 export declare function Grid(children: Children, columns: number | Responsive<number> | null | undefined, gap: SpacingToken | Responsive<SpacingToken> | null | undefined, rowGap: SpacingToken | Responsive<SpacingToken> | null | undefined, props?: Omit<GridOptions, "children" | "child" | "columns" | "gap" | "rowGap">): AktionNode<"Grid">;
 export declare function Grid(children: Children, columns: number | Responsive<number> | null | undefined, gap: SpacingToken | Responsive<SpacingToken> | null | undefined, rowGap: SpacingToken | Responsive<SpacingToken> | null | undefined, columnGap: SpacingToken | Responsive<SpacingToken> | null | undefined, props?: Omit<GridOptions, "children" | "child" | "columns" | "gap" | "rowGap" | "columnGap">): AktionNode<"Grid">;
-export declare function Grid(children: Children, columns: number | Responsive<number> | null | undefined, gap: SpacingToken | Responsive<SpacingToken> | null | undefined, rowGap: SpacingToken | Responsive<SpacingToken> | null | undefined, columnGap: SpacingToken | Responsive<SpacingToken> | null | undefined, minChildWidth: string | null | undefined, props?: Omit<GridOptions, "children" | "child" | "columns" | "gap" | "rowGap" | "columnGap" | "minChildWidth" | "minItemWidth">): AktionNode<"Grid">;
-export declare function Grid(children: Children, columns: number | Responsive<number> | null | undefined, gap: SpacingToken | Responsive<SpacingToken> | null | undefined, rowGap: SpacingToken | Responsive<SpacingToken> | null | undefined, columnGap: SpacingToken | Responsive<SpacingToken> | null | undefined, minChildWidth: string | null | undefined, alignItems: GridAlignItems | null | undefined, props?: Omit<GridOptions, "children" | "child" | "columns" | "gap" | "rowGap" | "columnGap" | "minChildWidth" | "minItemWidth" | "alignItems">): AktionNode<"Grid">;
-export declare function Grid(children: Children, columns: number | Responsive<number> | null | undefined, gap: SpacingToken | Responsive<SpacingToken> | null | undefined, rowGap: SpacingToken | Responsive<SpacingToken> | null | undefined, columnGap: SpacingToken | Responsive<SpacingToken> | null | undefined, minChildWidth: string | null | undefined, alignItems: GridAlignItems | null | undefined, justifyItems: GridJustifyItems | null | undefined, props?: Omit<GridOptions, "children" | "child" | "columns" | "gap" | "rowGap" | "columnGap" | "minChildWidth" | "minItemWidth" | "alignItems" | "justifyItems">): AktionNode<"Grid">;
+export declare function Grid(children: Children, columns: number | Responsive<number> | null | undefined, gap: SpacingToken | Responsive<SpacingToken> | null | undefined, rowGap: SpacingToken | Responsive<SpacingToken> | null | undefined, columnGap: SpacingToken | Responsive<SpacingToken> | null | undefined, minChildWidth: string | number | null | undefined, props?: Omit<GridOptions, "children" | "child" | "columns" | "gap" | "rowGap" | "columnGap" | "minChildWidth" | "minItemWidth">): AktionNode<"Grid">;
+export declare function Grid(children: Children, columns: number | Responsive<number> | null | undefined, gap: SpacingToken | Responsive<SpacingToken> | null | undefined, rowGap: SpacingToken | Responsive<SpacingToken> | null | undefined, columnGap: SpacingToken | Responsive<SpacingToken> | null | undefined, minChildWidth: string | number | null | undefined, alignItems: GridAlignItems | null | undefined, props?: Omit<GridOptions, "children" | "child" | "columns" | "gap" | "rowGap" | "columnGap" | "minChildWidth" | "minItemWidth" | "alignItems">): AktionNode<"Grid">;
+export declare function Grid(children: Children, columns: number | Responsive<number> | null | undefined, gap: SpacingToken | Responsive<SpacingToken> | null | undefined, rowGap: SpacingToken | Responsive<SpacingToken> | null | undefined, columnGap: SpacingToken | Responsive<SpacingToken> | null | undefined, minChildWidth: string | number | null | undefined, alignItems: GridAlignItems | null | undefined, justifyItems: GridJustifyItems | null | undefined, props?: Omit<GridOptions, "children" | "child" | "columns" | "gap" | "rowGap" | "columnGap" | "minChildWidth" | "minItemWidth" | "alignItems" | "justifyItems">): AktionNode<"Grid">;
 
 /* ---- GridItem */
 export interface GridItemOptions extends BaseProps {
@@ -4131,7 +4386,7 @@ export interface HeadingOptions extends BaseProps {
   title?: string | number | Children;
   /** Heading level 1–6 (default 2) */
   level?: 1 | 2 | 3 | 4 | 5 | 6 | (number & {});
-  size?: "section" | "lg" | "md" | "sm";
+  size?: HeadingSize;
   align?: HeadingAlign;
 }
 export type HeadingProps = HeadingOptions & OneOf<"content" | "children" | "title", string | number | Children>;
@@ -4140,12 +4395,14 @@ export type HeadingNamed = Omit<HeadingOptions, "content" | "children" | "title"
 export declare function Heading(content: string | number | Children, props?: HeadingNamed): AktionNode<"Heading">;
 export declare function Heading(props: HeadingProps): AktionNode<"Heading">;
 export declare function Heading(content: string | number | Children, level: 1 | 2 | 3 | 4 | 5 | 6 | (number & {}) | null | undefined, props?: Omit<HeadingOptions, "content" | "children" | "title" | "level">): AktionNode<"Heading">;
-export declare function Heading(content: string | number | Children, level: 1 | 2 | 3 | 4 | 5 | 6 | (number & {}) | null | undefined, size: "section" | "lg" | "md" | "sm" | null | undefined, props?: Omit<HeadingOptions, "content" | "children" | "title" | "level" | "size">): AktionNode<"Heading">;
-export declare function Heading(content: string | number | Children, level: 1 | 2 | 3 | 4 | 5 | 6 | (number & {}) | null | undefined, size: "section" | "lg" | "md" | "sm" | null | undefined, align: HeadingAlign | null | undefined): AktionNode<"Heading">;
+export declare function Heading(content: string | number | Children, level: 1 | 2 | 3 | 4 | 5 | 6 | (number & {}) | null | undefined, size: HeadingSize | null | undefined, props?: Omit<HeadingOptions, "content" | "children" | "title" | "level" | "size">): AktionNode<"Heading">;
+export declare function Heading(content: string | number | Children, level: 1 | 2 | 3 | 4 | 5 | 6 | (number & {}) | null | undefined, size: HeadingSize | null | undefined, align: HeadingAlign | null | undefined): AktionNode<"Heading">;
 
 /* ---- Heatmap */
 export interface HeatmapOptions extends BaseProps {
+  /** Column labels; a column without one is numbered from 1 */
   xLabels?: readonly (string | number)[];
+  /** Row labels; a row without one is numbered from 1 */
   yLabels?: readonly (string | number)[];
   /** Matrix indexed by row (y), then column (x) */
   values?: readonly (readonly number[])[];
@@ -4172,18 +4429,18 @@ export interface HeatmapOptions extends BaseProps {
   /** Take the graphic out of the accessibility tree. Only for a chart that repeats information already present in the surrounding text */
   decorative?: boolean;
 }
-export type HeatmapProps = HeatmapOptions & { xLabels: readonly (string | number)[] } & { yLabels: readonly (string | number)[] } & { values: readonly (readonly number[])[] };
-export type HeatmapNamed = Omit<HeatmapOptions, "xLabels"> & { yLabels: readonly (string | number)[] } & { values: readonly (readonly number[])[] };
+export type HeatmapProps = HeatmapOptions & { values: readonly (readonly number[])[] };
+export type HeatmapNamed = Omit<HeatmapOptions, "xLabels"> & { values: readonly (readonly number[])[] };
 /** Color-intensity matrix grid (calendar-style or correlation-style). Pass `xLabels`, `yLabels`, and a `values` array of arrays (rows × columns). Cell intensity scales across the data range — pin it with `min`/`max` when two heatmaps must be comparable (or for a -1..1 correlation matrix). Set `showValues: false` for a GitHub-style colour-only grid. Use for activity heatmaps, schedule density, correlation matrices. */
-export declare function Heatmap(xLabels: readonly (string | number)[], props: HeatmapNamed): AktionNode<"Heatmap">;
+export declare function Heatmap(xLabels: readonly (string | number)[] | undefined, props: HeatmapNamed): AktionNode<"Heatmap">;
 export declare function Heatmap(props: HeatmapProps): AktionNode<"Heatmap">;
-export declare function Heatmap(xLabels: readonly (string | number)[], yLabels: readonly (string | number)[], props: Omit<HeatmapOptions, "xLabels" | "yLabels"> & { values: readonly (readonly number[])[] }): AktionNode<"Heatmap">;
-export declare function Heatmap(xLabels: readonly (string | number)[], yLabels: readonly (string | number)[], values: readonly (readonly number[])[], props?: Omit<HeatmapOptions, "xLabels" | "yLabels" | "values">): AktionNode<"Heatmap">;
-export declare function Heatmap(xLabels: readonly (string | number)[], yLabels: readonly (string | number)[], values: readonly (readonly number[])[], title: string | number | null | undefined, props?: Omit<HeatmapOptions, "xLabels" | "yLabels" | "values" | "title">): AktionNode<"Heatmap">;
-export declare function Heatmap(xLabels: readonly (string | number)[], yLabels: readonly (string | number)[], values: readonly (readonly number[])[], title: string | number | null | undefined, tone: HeatmapTone | null | undefined, props?: Omit<HeatmapOptions, "xLabels" | "yLabels" | "values" | "title" | "tone" | "variant">): AktionNode<"Heatmap">;
-export declare function Heatmap(xLabels: readonly (string | number)[], yLabels: readonly (string | number)[], values: readonly (readonly number[])[], title: string | number | null | undefined, tone: HeatmapTone | null | undefined, showValues: boolean | null | undefined, props?: Omit<HeatmapOptions, "xLabels" | "yLabels" | "values" | "title" | "tone" | "variant" | "showValues">): AktionNode<"Heatmap">;
-export declare function Heatmap(xLabels: readonly (string | number)[], yLabels: readonly (string | number)[], values: readonly (readonly number[])[], title: string | number | null | undefined, tone: HeatmapTone | null | undefined, showValues: boolean | null | undefined, min: number | null | undefined, props?: Omit<HeatmapOptions, "xLabels" | "yLabels" | "values" | "title" | "tone" | "variant" | "showValues" | "min">): AktionNode<"Heatmap">;
-export declare function Heatmap(xLabels: readonly (string | number)[], yLabels: readonly (string | number)[], values: readonly (readonly number[])[], title: string | number | null | undefined, tone: HeatmapTone | null | undefined, showValues: boolean | null | undefined, min: number | null | undefined, max: number | null | undefined, props?: Omit<HeatmapOptions, "xLabels" | "yLabels" | "values" | "title" | "tone" | "variant" | "showValues" | "min" | "max">): AktionNode<"Heatmap">;
+export declare function Heatmap(xLabels: readonly (string | number)[] | null | undefined, yLabels: readonly (string | number)[] | null | undefined, props: Omit<HeatmapOptions, "xLabels" | "yLabels"> & { values: readonly (readonly number[])[] }): AktionNode<"Heatmap">;
+export declare function Heatmap(xLabels: readonly (string | number)[] | null | undefined, yLabels: readonly (string | number)[] | null | undefined, values: readonly (readonly number[])[], props?: Omit<HeatmapOptions, "xLabels" | "yLabels" | "values">): AktionNode<"Heatmap">;
+export declare function Heatmap(xLabels: readonly (string | number)[] | null | undefined, yLabels: readonly (string | number)[] | null | undefined, values: readonly (readonly number[])[], title: string | number | null | undefined, props?: Omit<HeatmapOptions, "xLabels" | "yLabels" | "values" | "title">): AktionNode<"Heatmap">;
+export declare function Heatmap(xLabels: readonly (string | number)[] | null | undefined, yLabels: readonly (string | number)[] | null | undefined, values: readonly (readonly number[])[], title: string | number | null | undefined, tone: HeatmapTone | null | undefined, props?: Omit<HeatmapOptions, "xLabels" | "yLabels" | "values" | "title" | "tone" | "variant">): AktionNode<"Heatmap">;
+export declare function Heatmap(xLabels: readonly (string | number)[] | null | undefined, yLabels: readonly (string | number)[] | null | undefined, values: readonly (readonly number[])[], title: string | number | null | undefined, tone: HeatmapTone | null | undefined, showValues: boolean | null | undefined, props?: Omit<HeatmapOptions, "xLabels" | "yLabels" | "values" | "title" | "tone" | "variant" | "showValues">): AktionNode<"Heatmap">;
+export declare function Heatmap(xLabels: readonly (string | number)[] | null | undefined, yLabels: readonly (string | number)[] | null | undefined, values: readonly (readonly number[])[], title: string | number | null | undefined, tone: HeatmapTone | null | undefined, showValues: boolean | null | undefined, min: number | null | undefined, props?: Omit<HeatmapOptions, "xLabels" | "yLabels" | "values" | "title" | "tone" | "variant" | "showValues" | "min">): AktionNode<"Heatmap">;
+export declare function Heatmap(xLabels: readonly (string | number)[] | null | undefined, yLabels: readonly (string | number)[] | null | undefined, values: readonly (readonly number[])[], title: string | number | null | undefined, tone: HeatmapTone | null | undefined, showValues: boolean | null | undefined, min: number | null | undefined, max: number | null | undefined, props?: Omit<HeatmapOptions, "xLabels" | "yLabels" | "values" | "title" | "tone" | "variant" | "showValues" | "min" | "max">): AktionNode<"Heatmap">;
 
 /* ---- Hero */
 export interface HeroOptions extends BaseProps {
@@ -4202,7 +4459,7 @@ export interface HeroOptions extends BaseProps {
   /** Small caption above CTAs (cover layout) */
   caption?: string | number;
   /** Min-height for cover layout (default 280px) */
-  height?: string;
+  height?: string | number;
   /** CTA row (cover layout; alternative to primary/secondary) */
   actions?: Children;
   /** default = text-first; cover = image-backed band */
@@ -4288,7 +4545,7 @@ export interface HoverCardOptions extends BaseProps {
   /** Alignment along the trigger edge (default "start") */
   align?: HoverCardAlign;
   /** CSS width for the card (default 240–320px) */
-  width?: string;
+  width?: string | number;
   /** Milliseconds to wait before revealing (default 0; 700 is a good hover-card value) */
   openDelay?: number;
   /** Milliseconds to keep the card after the pointer leaves, so the user can move onto it */
@@ -4309,9 +4566,9 @@ export declare function HoverCard(trigger: AktionChild, content: Children, props
 export declare function HoverCard(trigger: AktionChild, content: Children, side: HoverCardSide | null | undefined, props?: Omit<HoverCardOptions, "trigger" | "content" | "children" | "side" | "placement">): AktionNode<"HoverCard">;
 export declare function HoverCard(trigger: AktionChild, content: Children, side: HoverCardSide | null | undefined, open: boolean | null | undefined, props?: Omit<HoverCardOptions, "trigger" | "content" | "children" | "side" | "placement" | "open">): AktionNode<"HoverCard">;
 export declare function HoverCard(trigger: AktionChild, content: Children, side: HoverCardSide | null | undefined, open: boolean | null | undefined, align: HoverCardAlign | null | undefined, props?: Omit<HoverCardOptions, "trigger" | "content" | "children" | "side" | "placement" | "open" | "align">): AktionNode<"HoverCard">;
-export declare function HoverCard(trigger: AktionChild, content: Children, side: HoverCardSide | null | undefined, open: boolean | null | undefined, align: HoverCardAlign | null | undefined, width: string | null | undefined, props?: Omit<HoverCardOptions, "trigger" | "content" | "children" | "side" | "placement" | "open" | "align" | "width">): AktionNode<"HoverCard">;
-export declare function HoverCard(trigger: AktionChild, content: Children, side: HoverCardSide | null | undefined, open: boolean | null | undefined, align: HoverCardAlign | null | undefined, width: string | null | undefined, openDelay: number | null | undefined, props?: Omit<HoverCardOptions, "trigger" | "content" | "children" | "side" | "placement" | "open" | "align" | "width" | "openDelay">): AktionNode<"HoverCard">;
-export declare function HoverCard(trigger: AktionChild, content: Children, side: HoverCardSide | null | undefined, open: boolean | null | undefined, align: HoverCardAlign | null | undefined, width: string | null | undefined, openDelay: number | null | undefined, closeDelay: number | null | undefined, props?: Omit<HoverCardOptions, "trigger" | "content" | "children" | "side" | "placement" | "open" | "align" | "width" | "openDelay" | "closeDelay">): AktionNode<"HoverCard">;
+export declare function HoverCard(trigger: AktionChild, content: Children, side: HoverCardSide | null | undefined, open: boolean | null | undefined, align: HoverCardAlign | null | undefined, width: string | number | null | undefined, props?: Omit<HoverCardOptions, "trigger" | "content" | "children" | "side" | "placement" | "open" | "align" | "width">): AktionNode<"HoverCard">;
+export declare function HoverCard(trigger: AktionChild, content: Children, side: HoverCardSide | null | undefined, open: boolean | null | undefined, align: HoverCardAlign | null | undefined, width: string | number | null | undefined, openDelay: number | null | undefined, props?: Omit<HoverCardOptions, "trigger" | "content" | "children" | "side" | "placement" | "open" | "align" | "width" | "openDelay">): AktionNode<"HoverCard">;
+export declare function HoverCard(trigger: AktionChild, content: Children, side: HoverCardSide | null | undefined, open: boolean | null | undefined, align: HoverCardAlign | null | undefined, width: string | number | null | undefined, openDelay: number | null | undefined, closeDelay: number | null | undefined, props?: Omit<HoverCardOptions, "trigger" | "content" | "children" | "side" | "placement" | "open" | "align" | "width" | "openDelay" | "closeDelay">): AktionNode<"HoverCard">;
 
 /* ---- Icon */
 export interface IconOptions extends BaseProps {
@@ -4320,7 +4577,7 @@ export interface IconOptions extends BaseProps {
   variant?: IconVariant;
   /** Alias of `variant`. */
   tone?: IconVariant;
-  size?: "xs" | "sm" | "md" | "lg" | "xl";
+  size?: IconSize;
   /** CSS colour applied to the glyph (hex, named, rgb()/hsl(), or var(--token)) */
   color?: string;
   /** Accessible name — set when the icon is not decorative; announced as role="img" */
@@ -4338,10 +4595,10 @@ export type IconNamed = Omit<IconOptions, "name">;
 export declare function Icon(name: string | number, props?: IconNamed): AktionNode<"Icon">;
 export declare function Icon(props: IconProps): AktionNode<"Icon">;
 export declare function Icon(name: string | number, variant: IconVariant | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone">): AktionNode<"Icon">;
-export declare function Icon(name: string | number, variant: IconVariant | null | undefined, size: "xs" | "sm" | "md" | "lg" | "xl" | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone" | "size">): AktionNode<"Icon">;
-export declare function Icon(name: string | number, variant: IconVariant | null | undefined, size: "xs" | "sm" | "md" | "lg" | "xl" | null | undefined, color: string | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone" | "size" | "color">): AktionNode<"Icon">;
-export declare function Icon(name: string | number, variant: IconVariant | null | undefined, size: "xs" | "sm" | "md" | "lg" | "xl" | null | undefined, color: string | null | undefined, label: string | number | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone" | "size" | "color" | "label" | "ariaLabel" | "alt">): AktionNode<"Icon">;
-export declare function Icon(name: string | number, variant: IconVariant | null | undefined, size: "xs" | "sm" | "md" | "lg" | "xl" | null | undefined, color: string | null | undefined, label: string | number | null | undefined, title: string | number | null | undefined): AktionNode<"Icon">;
+export declare function Icon(name: string | number, variant: IconVariant | null | undefined, size: IconSize | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone" | "size">): AktionNode<"Icon">;
+export declare function Icon(name: string | number, variant: IconVariant | null | undefined, size: IconSize | null | undefined, color: string | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone" | "size" | "color">): AktionNode<"Icon">;
+export declare function Icon(name: string | number, variant: IconVariant | null | undefined, size: IconSize | null | undefined, color: string | null | undefined, label: string | number | null | undefined, props?: Omit<IconOptions, "name" | "variant" | "tone" | "size" | "color" | "label" | "ariaLabel" | "alt">): AktionNode<"Icon">;
+export declare function Icon(name: string | number, variant: IconVariant | null | undefined, size: IconSize | null | undefined, color: string | null | undefined, label: string | number | null | undefined, title: string | number | null | undefined): AktionNode<"Icon">;
 
 /* ---- IconButton */
 export interface IconButtonOptions extends BaseProps {
@@ -4392,7 +4649,7 @@ export interface ImageOptions extends BaseProps {
   src?: string | number;
   alt?: string | number;
   caption?: string | number;
-  /** Aspect ratio shorthand (e.g. `16:9`, `1:1`, `4:3`) */
+  /** Aspect ratio shorthand (e.g. `16:9`, `1:1`, `4/3`, or a decimal like `1.5`); anything else reserves no ratio */
   ratio?: AspectRatioValue;
   /** object-fit value (default `cover`) */
   fit?: ImageFit;
@@ -4476,7 +4733,7 @@ export interface InfiniteListOptions extends BaseProps {
   onRetry?: (() => void) | null;
   /** Message shown when there are no items (default `No results`) */
   emptyLabel?: string | number;
-  /** Prefetch distance for the scroll sentinel (default `200px`) */
+  /** Prefetch distance for the scroll sentinel: one to four `px` / `%` lengths in CSS margin order, or a number of px (default `200px`). Other units are not supported by the browser's IntersectionObserver and fall back to the default. */
   rootMargin?: InfiniteListRootMargin;
   /** Fraction of the sentinel that must be visible, 0–1 (default 0) */
   threshold?: number;
@@ -4534,7 +4791,7 @@ export interface InlineEditOptions extends BaseProps {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -4562,7 +4819,7 @@ export interface InputOptions extends Omit<BaseProps, "id"> {
   id?: string | number;
   placeholder?: string | number;
   type?: InputType;
-  /** Array or object of validation hints (`required`, `minLength:n`, `maxLength:n`, `pattern:re`, `email`) */
+  /** Validation hints: an array (`["required", "minLength:3", "email"]`) or an object (`{ required: true, minLength: 3, email: true }`). Hints are `required`, `email`, `minLength`, `maxLength`, `pattern`, `min`, `max`; in the object form a flag is on when `true` and a `false`/`null` entry is ignored */
   validations?: readonly InputValidationHint[] | InputValidationRules;
   /** Bound value (typically $variable) */
   value?: string | number | null;
@@ -4585,7 +4842,7 @@ export interface InputOptions extends Omit<BaseProps, "id"> {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -4598,7 +4855,7 @@ export interface InputOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -4663,7 +4920,7 @@ export interface InputGroupOptions extends BaseProps {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -4673,13 +4930,13 @@ export interface InputGroupOptions extends BaseProps {
   /** Alias of `describedBy`. */
   ariaDescribedBy?: string | number;
   /** Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) */
-  onBlur?: ((value: string) => void) | null;
+  onBlur?: ((value: string | string[]) => void) | null;
   /** Alias of `onBlur`. */
-  onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
-  onFocus?: ((value: string) => void) | null;
+  onblur?: ((value: string | string[]) => void) | null;
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
+  onFocus?: ((value: string | string[]) => void) | null;
   /** Alias of `onFocus`. */
-  onfocus?: ((value: string) => void) | null;
+  onfocus?: ((value: string | string[]) => void) | null;
   /** Form field name submitted to the server (defaults to `id`) */
   name?: string | number;
   /** Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context */
@@ -4848,7 +5105,7 @@ export interface LightboxOptions extends BaseProps {
   open?: boolean;
   /** 0-indexed current image; typically a $variable */
   index?: number;
-  /** Callable invoked whenever the viewer closes */
+  /** Callable invoked when the viewer closes itself (backdrop, ×, Escape) — not when your program sets a bound `open` to false */
   onClose?: (() => void) | null;
   /** Alias of `onClose`. */
   onclose?: (() => void) | null;
@@ -4869,7 +5126,7 @@ export declare function Lightbox(items: readonly (string | LightboxImage | Aktio
 export interface LineChartOptions extends Omit<BaseProps, "data"> {
   labels?: readonly (string | number)[];
   series?: readonly AktionNode<"Series">[];
-  /** Row-shaped data — labels and series are auto-derived */
+  /** Row-shaped data — labels and series are auto-derived: `x` (or `label` when `x` is absent) is the row's x-axis label, every other key whose value is a number or numeric string is one line, and text columns are skipped; a null or missing value leaves a gap */
   data?: readonly LineChartRow[];
   title?: string | number;
   /** Fill the area beneath each line (area-chart style) */
@@ -4892,8 +5149,8 @@ export interface LineChartOptions extends Omit<BaseProps, "data"> {
   loading?: boolean;
   /** Message shown when there is no data (default "No data") */
   emptyText?: string | number;
-  /** (label, value, seriesName) => void, fired when a data point is activated */
-  onPointClick?: ((label: string, value: number | null | undefined, seriesName: string) => void) | null;
+  /** (label, value, seriesName) => void, fired when a data point is activated (a gap has no point, so `value` is always a number) */
+  onPointClick?: ((label: string, value: number, seriesName: string) => void) | null;
   /** Accessible name for the graphic, overriding the generated one — the way to name a chart that has no visible `title` */
   ariaLabel?: string | number;
   /** Alias of `ariaLabel`. */
@@ -5170,8 +5427,8 @@ export interface LottieOptions extends Omit<BaseProps, "data"> {
   autoplay?: boolean;
   /** Playback rate, clamped to 0.1–10 */
   speed?: number;
-  width?: string;
-  height?: string;
+  width?: string | number;
+  height?: string | number;
   /** Image shown when lottie-web is unavailable */
   poster?: string | number;
   /** Node shown when lottie-web is unavailable and no poster */
@@ -5194,9 +5451,9 @@ export declare function Lottie(src: string | number | null | undefined, data: Re
 export declare function Lottie(src: string | number | null | undefined, data: Readonly<Record<string, unknown>> | { readonly v?: string; readonly fr?: number; readonly ip?: number; readonly op?: number; readonly w?: number; readonly h?: number; readonly nm?: string; readonly layers?: readonly unknown[]; readonly assets?: readonly unknown[] } | null | undefined, loop: boolean | null | undefined, props?: Omit<LottieOptions, "src" | "data" | "loop">): AktionNode<"Lottie">;
 export declare function Lottie(src: string | number | null | undefined, data: Readonly<Record<string, unknown>> | { readonly v?: string; readonly fr?: number; readonly ip?: number; readonly op?: number; readonly w?: number; readonly h?: number; readonly nm?: string; readonly layers?: readonly unknown[]; readonly assets?: readonly unknown[] } | null | undefined, loop: boolean | null | undefined, autoplay: boolean | null | undefined, props?: Omit<LottieOptions, "src" | "data" | "loop" | "autoplay">): AktionNode<"Lottie">;
 export declare function Lottie(src: string | number | null | undefined, data: Readonly<Record<string, unknown>> | { readonly v?: string; readonly fr?: number; readonly ip?: number; readonly op?: number; readonly w?: number; readonly h?: number; readonly nm?: string; readonly layers?: readonly unknown[]; readonly assets?: readonly unknown[] } | null | undefined, loop: boolean | null | undefined, autoplay: boolean | null | undefined, speed: number | null | undefined, props?: Omit<LottieOptions, "src" | "data" | "loop" | "autoplay" | "speed">): AktionNode<"Lottie">;
-export declare function Lottie(src: string | number | null | undefined, data: Readonly<Record<string, unknown>> | { readonly v?: string; readonly fr?: number; readonly ip?: number; readonly op?: number; readonly w?: number; readonly h?: number; readonly nm?: string; readonly layers?: readonly unknown[]; readonly assets?: readonly unknown[] } | null | undefined, loop: boolean | null | undefined, autoplay: boolean | null | undefined, speed: number | null | undefined, width: string | null | undefined, props?: Omit<LottieOptions, "src" | "data" | "loop" | "autoplay" | "speed" | "width">): AktionNode<"Lottie">;
-export declare function Lottie(src: string | number | null | undefined, data: Readonly<Record<string, unknown>> | { readonly v?: string; readonly fr?: number; readonly ip?: number; readonly op?: number; readonly w?: number; readonly h?: number; readonly nm?: string; readonly layers?: readonly unknown[]; readonly assets?: readonly unknown[] } | null | undefined, loop: boolean | null | undefined, autoplay: boolean | null | undefined, speed: number | null | undefined, width: string | null | undefined, height: string | null | undefined, props?: Omit<LottieOptions, "src" | "data" | "loop" | "autoplay" | "speed" | "width" | "height">): AktionNode<"Lottie">;
-export declare function Lottie(src: string | number | null | undefined, data: Readonly<Record<string, unknown>> | { readonly v?: string; readonly fr?: number; readonly ip?: number; readonly op?: number; readonly w?: number; readonly h?: number; readonly nm?: string; readonly layers?: readonly unknown[]; readonly assets?: readonly unknown[] } | null | undefined, loop: boolean | null | undefined, autoplay: boolean | null | undefined, speed: number | null | undefined, width: string | null | undefined, height: string | null | undefined, poster: string | number | null | undefined, props?: Omit<LottieOptions, "src" | "data" | "loop" | "autoplay" | "speed" | "width" | "height" | "poster">): AktionNode<"Lottie">;
+export declare function Lottie(src: string | number | null | undefined, data: Readonly<Record<string, unknown>> | { readonly v?: string; readonly fr?: number; readonly ip?: number; readonly op?: number; readonly w?: number; readonly h?: number; readonly nm?: string; readonly layers?: readonly unknown[]; readonly assets?: readonly unknown[] } | null | undefined, loop: boolean | null | undefined, autoplay: boolean | null | undefined, speed: number | null | undefined, width: string | number | null | undefined, props?: Omit<LottieOptions, "src" | "data" | "loop" | "autoplay" | "speed" | "width">): AktionNode<"Lottie">;
+export declare function Lottie(src: string | number | null | undefined, data: Readonly<Record<string, unknown>> | { readonly v?: string; readonly fr?: number; readonly ip?: number; readonly op?: number; readonly w?: number; readonly h?: number; readonly nm?: string; readonly layers?: readonly unknown[]; readonly assets?: readonly unknown[] } | null | undefined, loop: boolean | null | undefined, autoplay: boolean | null | undefined, speed: number | null | undefined, width: string | number | null | undefined, height: string | number | null | undefined, props?: Omit<LottieOptions, "src" | "data" | "loop" | "autoplay" | "speed" | "width" | "height">): AktionNode<"Lottie">;
+export declare function Lottie(src: string | number | null | undefined, data: Readonly<Record<string, unknown>> | { readonly v?: string; readonly fr?: number; readonly ip?: number; readonly op?: number; readonly w?: number; readonly h?: number; readonly nm?: string; readonly layers?: readonly unknown[]; readonly assets?: readonly unknown[] } | null | undefined, loop: boolean | null | undefined, autoplay: boolean | null | undefined, speed: number | null | undefined, width: string | number | null | undefined, height: string | number | null | undefined, poster: string | number | null | undefined, props?: Omit<LottieOptions, "src" | "data" | "loop" | "autoplay" | "speed" | "width" | "height" | "poster">): AktionNode<"Lottie">;
 
 /* ---- Map */
 export interface MapOptions extends BaseProps {
@@ -5211,7 +5468,7 @@ export interface MapOptions extends BaseProps {
   /** Alias of `markers`. */
   locations?: readonly MapMarker[];
   /** CSS height (default 320px) */
-  height?: string;
+  height?: string | number;
   caption?: string | number;
   /** Accessible name for the map frame (defaults to the caption) */
   title?: string | number;
@@ -5224,9 +5481,9 @@ export interface MapComponent {
   (lat: number, lng: number, props?: Omit<MapOptions, "lat" | "lng">): AktionNode<"Map">;
   (lat: number, lng: number, zoom: number | null | undefined, props?: Omit<MapOptions, "lat" | "lng" | "zoom">): AktionNode<"Map">;
   (lat: number, lng: number, zoom: number | null | undefined, markers: readonly MapMarker[] | null | undefined, props?: Omit<MapOptions, "lat" | "lng" | "zoom" | "markers" | "locations">): AktionNode<"Map">;
-  (lat: number, lng: number, zoom: number | null | undefined, markers: readonly MapMarker[] | null | undefined, height: string | null | undefined, props?: Omit<MapOptions, "lat" | "lng" | "zoom" | "markers" | "locations" | "height">): AktionNode<"Map">;
-  (lat: number, lng: number, zoom: number | null | undefined, markers: readonly MapMarker[] | null | undefined, height: string | null | undefined, caption: string | number | null | undefined, props?: Omit<MapOptions, "lat" | "lng" | "zoom" | "markers" | "locations" | "height" | "caption">): AktionNode<"Map">;
-  (lat: number, lng: number, zoom: number | null | undefined, markers: readonly MapMarker[] | null | undefined, height: string | null | undefined, caption: string | number | null | undefined, title: string | number | null | undefined): AktionNode<"Map">;
+  (lat: number, lng: number, zoom: number | null | undefined, markers: readonly MapMarker[] | null | undefined, height: string | number | null | undefined, props?: Omit<MapOptions, "lat" | "lng" | "zoom" | "markers" | "locations" | "height">): AktionNode<"Map">;
+  (lat: number, lng: number, zoom: number | null | undefined, markers: readonly MapMarker[] | null | undefined, height: string | number | null | undefined, caption: string | number | null | undefined, props?: Omit<MapOptions, "lat" | "lng" | "zoom" | "markers" | "locations" | "height" | "caption">): AktionNode<"Map">;
+  (lat: number, lng: number, zoom: number | null | undefined, markers: readonly MapMarker[] | null | undefined, height: string | number | null | undefined, caption: string | number | null | undefined, title: string | number | null | undefined): AktionNode<"Map">;
 }
 /** Static map view centered on a lat/lng coordinate. Renders an OpenStreetMap embed inside a sandboxed `<iframe>` (no external JS, no API key). Pass `lat` (-90…90) and `lng` (-180…180) as bare numbers; `zoom` controls the level (1–18, default 13). Optional `markers` are projected onto the map as pins and listed as labelled chips beneath it. Use for store locators, address cards, itinerary previews. */
 export declare const Map: MapComponent & MapConstructor;
@@ -5294,7 +5551,7 @@ export interface MaskedInputOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -5424,7 +5681,7 @@ export interface MentionInputOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -5554,7 +5811,7 @@ export interface ModalOptions extends BaseProps {
   /** Alias of `children`. */
   child?: Children;
   /** Width preset (default `md`) */
-  size?: "sm" | "md" | "lg" | "xl" | "full";
+  size?: ModalSize;
   /** Footer slot — typically a row of action Buttons */
   footer?: Children;
   /** Render the header × button (default true) */
@@ -5577,19 +5834,19 @@ export declare function Modal(title: string | number, props: ModalNamed): Aktion
 export declare function Modal(props: ModalProps): AktionNode<"Modal">;
 export declare function Modal(title: string | number, open: boolean, props: Omit<ModalOptions, "title" | "open"> & OneOf<"children" | "child", Children>): AktionNode<"Modal">;
 export declare function Modal(title: string | number, open: boolean, children: Children, props?: Omit<ModalOptions, "title" | "open" | "children" | "child">): AktionNode<"Modal">;
-export declare function Modal(title: string | number, open: boolean, children: Children, size: "sm" | "md" | "lg" | "xl" | "full" | null | undefined, props?: Omit<ModalOptions, "title" | "open" | "children" | "child" | "size">): AktionNode<"Modal">;
-export declare function Modal(title: string | number, open: boolean, children: Children, size: "sm" | "md" | "lg" | "xl" | "full" | null | undefined, footer: Children | null | undefined, props?: Omit<ModalOptions, "title" | "open" | "children" | "child" | "size" | "footer">): AktionNode<"Modal">;
-export declare function Modal(title: string | number, open: boolean, children: Children, size: "sm" | "md" | "lg" | "xl" | "full" | null | undefined, footer: Children | null | undefined, closable: boolean | null | undefined, props?: Omit<ModalOptions, "title" | "open" | "children" | "child" | "size" | "footer" | "closable">): AktionNode<"Modal">;
-export declare function Modal(title: string | number, open: boolean, children: Children, size: "sm" | "md" | "lg" | "xl" | "full" | null | undefined, footer: Children | null | undefined, closable: boolean | null | undefined, closeOnBackdrop: boolean | null | undefined, props?: Omit<ModalOptions, "title" | "open" | "children" | "child" | "size" | "footer" | "closable" | "closeOnBackdrop">): AktionNode<"Modal">;
-export declare function Modal(title: string | number, open: boolean, children: Children, size: "sm" | "md" | "lg" | "xl" | "full" | null | undefined, footer: Children | null | undefined, closable: boolean | null | undefined, closeOnBackdrop: boolean | null | undefined, onClose: (() => void) | null | undefined, props?: Omit<ModalOptions, "title" | "open" | "children" | "child" | "size" | "footer" | "closable" | "closeOnBackdrop" | "onClose" | "onclose">): AktionNode<"Modal">;
+export declare function Modal(title: string | number, open: boolean, children: Children, size: ModalSize | null | undefined, props?: Omit<ModalOptions, "title" | "open" | "children" | "child" | "size">): AktionNode<"Modal">;
+export declare function Modal(title: string | number, open: boolean, children: Children, size: ModalSize | null | undefined, footer: Children | null | undefined, props?: Omit<ModalOptions, "title" | "open" | "children" | "child" | "size" | "footer">): AktionNode<"Modal">;
+export declare function Modal(title: string | number, open: boolean, children: Children, size: ModalSize | null | undefined, footer: Children | null | undefined, closable: boolean | null | undefined, props?: Omit<ModalOptions, "title" | "open" | "children" | "child" | "size" | "footer" | "closable">): AktionNode<"Modal">;
+export declare function Modal(title: string | number, open: boolean, children: Children, size: ModalSize | null | undefined, footer: Children | null | undefined, closable: boolean | null | undefined, closeOnBackdrop: boolean | null | undefined, props?: Omit<ModalOptions, "title" | "open" | "children" | "child" | "size" | "footer" | "closable" | "closeOnBackdrop">): AktionNode<"Modal">;
+export declare function Modal(title: string | number, open: boolean, children: Children, size: ModalSize | null | undefined, footer: Children | null | undefined, closable: boolean | null | undefined, closeOnBackdrop: boolean | null | undefined, onClose: (() => void) | null | undefined, props?: Omit<ModalOptions, "title" | "open" | "children" | "child" | "size" | "footer" | "closable" | "closeOnBackdrop" | "onClose" | "onclose">): AktionNode<"Modal">;
 
 /* ---- Mount */
 export interface MountOptions<Instance = unknown, Props extends object = Record<string, unknown>> extends BaseProps {
-  /** `(node, props) => instance` — runs once after the host attaches; return value is the instance handle passed to `update`/`cleanup`. */
+  /** `(node, props) => instance` — runs once after the host attaches; the return value (if any) is the instance handle passed to `update`/`cleanup`. */
   setup?: ((node: DomElement, props: Props) => Instance) | null;
-  /** `(instance, props) => void` — runs when `props` (or `deps`) change. */
-  update?: ((instance: Exclude<Instance, undefined>, props: Props) => void) | null;
-  /** `(instance) => void` — runs when the component leaves the tree (destroy/teardown). */
+  /** `(instance, props, node) => void` — runs when `props` (or `deps`) change, once `setup` has returned — also when it returned nothing (`instance` is then `undefined`; update the widget through `node`, the live host). Never runs after a `setup` that threw. */
+  update?: ((instance: Instance, props: Props, node: DomElement) => void) | null;
+  /** `(instance) => void` — runs when the component leaves the tree (destroy/teardown). `instance` is `undefined` when `setup` returned nothing, threw, or never ran (the component left before its host attached). */
   cleanup?: ((instance: Instance | undefined) => void) | null;
   /** Reactive prop bag handed to `setup`/`update`. Bind `$state` here to drive the widget. */
   props?: Props;
@@ -5602,15 +5859,15 @@ export interface MountOptions<Instance = unknown, Props extends object = Record<
 }
 export type MountProps<Instance = unknown, Props extends object = Record<string, unknown>> = MountOptions<Instance, Props> & { setup: (node: DomElement, props: Props) => Instance };
 export type MountNamed<Instance = unknown, Props extends object = Record<string, unknown>> = Omit<MountOptions<Instance, Props>, "setup">;
-/** First-class host for an imperative / third-party widget that owns its own DOM (chart, map, editor, payment element, captcha, video SDK). Aktion creates the host element; `setup(node, props)` runs once after it attaches and returns an instance handle, `update(instance, props)` runs when `props` change (or when `deps` change, if you pass them), and `cleanup(instance)` runs on unmount. `onError(err, stage)` fires if `setup`/`update` throws, so a failed map / payment element / captcha can show a fallback. The host is preserved across re-renders so the widget is never rebuilt. Apply layout with `sx`. */
+/** First-class host for an imperative / third-party widget that owns its own DOM (chart, map, editor, payment element, captcha, video SDK). Aktion creates the host element; `setup(node, props)` runs once after it attaches and may return an instance handle, `update(instance, props, node)` runs when `props` change (or when `deps` change, if you pass them), and `cleanup(instance)` runs on unmount. `onError(err, stage)` fires if `setup`/`update` throws, so a failed map / payment element / captcha can show a fallback. The host is preserved across re-renders so the widget is never rebuilt. Apply layout with `sx`. */
 export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, props?: MountNamed<Instance, Props>): AktionNode<"Mount">;
 export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(props: MountProps<Instance, Props>): AktionNode<"Mount">;
-export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, update: ((instance: Exclude<Instance, undefined>, props: Props) => void) | null | undefined, props?: Omit<MountOptions<Instance, Props>, "setup" | "update">): AktionNode<"Mount">;
-export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, update: ((instance: Exclude<Instance, undefined>, props: Props) => void) | null | undefined, cleanup: ((instance: Instance | undefined) => void) | null | undefined, props?: Omit<MountOptions<Instance, Props>, "setup" | "update" | "cleanup">): AktionNode<"Mount">;
-export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, update: ((instance: Exclude<Instance, undefined>, props: Props) => void) | null | undefined, cleanup: ((instance: Instance | undefined) => void) | null | undefined, props_: Props | null | undefined, props?: Omit<MountOptions<Instance, Props>, "setup" | "update" | "cleanup" | "props">): AktionNode<"Mount">;
-export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, update: ((instance: Exclude<Instance, undefined>, props: Props) => void) | null | undefined, cleanup: ((instance: Instance | undefined) => void) | null | undefined, props_: Props | null | undefined, tag: MountTag | null | undefined, props?: Omit<MountOptions<Instance, Props>, "setup" | "update" | "cleanup" | "props" | "tag">): AktionNode<"Mount">;
-export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, update: ((instance: Exclude<Instance, undefined>, props: Props) => void) | null | undefined, cleanup: ((instance: Instance | undefined) => void) | null | undefined, props_: Props | null | undefined, tag: MountTag | null | undefined, deps: readonly unknown[] | null | undefined, props?: Omit<MountOptions<Instance, Props>, "setup" | "update" | "cleanup" | "props" | "tag" | "deps">): AktionNode<"Mount">;
-export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, update: ((instance: Exclude<Instance, undefined>, props: Props) => void) | null | undefined, cleanup: ((instance: Instance | undefined) => void) | null | undefined, props_: Props | null | undefined, tag: MountTag | null | undefined, deps: readonly unknown[] | null | undefined, onError: ((error: unknown, stage: "setup" | "update") => void) | null | undefined): AktionNode<"Mount">;
+export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, update: ((instance: Instance, props: Props, node: DomElement) => void) | null | undefined, props?: Omit<MountOptions<Instance, Props>, "setup" | "update">): AktionNode<"Mount">;
+export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, update: ((instance: Instance, props: Props, node: DomElement) => void) | null | undefined, cleanup: ((instance: Instance | undefined) => void) | null | undefined, props?: Omit<MountOptions<Instance, Props>, "setup" | "update" | "cleanup">): AktionNode<"Mount">;
+export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, update: ((instance: Instance, props: Props, node: DomElement) => void) | null | undefined, cleanup: ((instance: Instance | undefined) => void) | null | undefined, props_: Props | null | undefined, props?: Omit<MountOptions<Instance, Props>, "setup" | "update" | "cleanup" | "props">): AktionNode<"Mount">;
+export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, update: ((instance: Instance, props: Props, node: DomElement) => void) | null | undefined, cleanup: ((instance: Instance | undefined) => void) | null | undefined, props_: Props | null | undefined, tag: MountTag | null | undefined, props?: Omit<MountOptions<Instance, Props>, "setup" | "update" | "cleanup" | "props" | "tag">): AktionNode<"Mount">;
+export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, update: ((instance: Instance, props: Props, node: DomElement) => void) | null | undefined, cleanup: ((instance: Instance | undefined) => void) | null | undefined, props_: Props | null | undefined, tag: MountTag | null | undefined, deps: readonly unknown[] | null | undefined, props?: Omit<MountOptions<Instance, Props>, "setup" | "update" | "cleanup" | "props" | "tag" | "deps">): AktionNode<"Mount">;
+export declare function Mount<Instance = unknown, Props extends object = Record<string, unknown>>(setup: (node: DomElement, props: Props) => Instance, update: ((instance: Instance, props: Props, node: DomElement) => void) | null | undefined, cleanup: ((instance: Instance | undefined) => void) | null | undefined, props_: Props | null | undefined, tag: MountTag | null | undefined, deps: readonly unknown[] | null | undefined, onError: ((error: unknown, stage: "setup" | "update") => void) | null | undefined): AktionNode<"Mount">;
 
 /* ---- MultiSelect */
 export interface MultiSelectOptions extends Omit<BaseProps, "id"> {
@@ -5658,7 +5915,7 @@ export interface MultiSelectOptions extends Omit<BaseProps, "id"> {
   /** Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it */
   description?: string | number;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -5695,7 +5952,7 @@ export interface MultiStepFormOptions extends BaseProps {
   nextLabel?: string | number;
   /** Default "Submit" (final step) */
   submitLabel?: string | number;
-  /** Direction of the steps indicator (default "column") */
+  /** Direction of the steps indicator: "column" (default) or "row"; "vertical" and "horizontal" are accepted synonyms */
   stepsLayout?: MultiStepFormStepsLayout;
   /** Alias of `stepsLayout`. */
   layout?: MultiStepFormStepsLayout;
@@ -5904,7 +6161,7 @@ export interface NotificationBellOptions<Item extends NotificationBellItem = Not
   /** {title, message?, time?, href?, unread?} objects */
   items?: readonly Item[];
   onOpen?: (() => void) | null;
-  /** Receives the clicked notification object and its index */
+  /** Receives the clicked notification object and its index in `items` */
   onItemClick?: ((item: Item, index: number) => void) | null;
   /** Renders a "mark all read" footer control */
   onMarkAllRead?: (() => void) | null;
@@ -5963,7 +6220,7 @@ export interface NumberInputOptions extends Omit<BaseProps, "id"> {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -5976,7 +6233,7 @@ export interface NumberInputOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((value: number | null) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: number | null) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
   onFocus?: ((value: number | null) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: number | null) => void) | null;
@@ -6016,7 +6273,7 @@ export interface OnClickOptions extends Omit<BaseProps, "role"> {
   child?: Children;
   /** Alias of `child`. */
   children?: Children;
-  /** Callable invoked on click / tap. Receives the native MouseEvent. */
+  /** Callable invoked on click / tap, and on Enter / Space while `keyboard` is on. Receives the native MouseEvent — or the KeyboardEvent for a key activation. */
   onClick?: ((event: DomMouseEvent | DomKeyboardEvent) => void) | null;
   /** Alias of `onClick`. */
   action?: ((event: DomMouseEvent | DomKeyboardEvent) => void) | null;
@@ -6047,18 +6304,18 @@ export interface OnFocusOptions extends BaseProps {
   child?: Children;
   /** Alias of `child`. */
   children?: Children;
-  /** Fired when focus enters the element or any descendant */
+  /** Fired with the `focusin` FocusEvent when focus enters the element or any descendant from outside it */
   onFocus?: ((event: DomFocusEvent) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((event: DomFocusEvent) => void) | null;
-  /** Fired when focus leaves the element and all descendants */
+  /** Fired with the `focusout` FocusEvent when focus leaves the element and all its descendants */
   onBlur?: ((event: DomFocusEvent) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((event: DomFocusEvent) => void) | null;
 }
 export type OnFocusProps = OnFocusOptions & OneOf<"child" | "children", Children>;
 export type OnFocusNamed = Omit<OnFocusOptions, "child" | "children">;
-/** Attach focus / blur listeners to a component. Use to track input focus rings, custom focus indicators, or autosave-on-blur flows. Listens for the bubbling `focusin` / `focusout` events, so focus entering or leaving any descendant is observed. */
+/** Attach focus / blur listeners to a component. Use to track input focus rings, custom focus indicators, or autosave-on-blur flows. The wrapped subtree is treated as one unit: `onFocus` fires when focus enters it from outside and `onBlur` when focus leaves it, while moving focus between two descendants fires neither. */
 export declare function OnFocus(child: Children, props?: OnFocusNamed): AktionNode<"OnFocus">;
 export declare function OnFocus(props: OnFocusProps): AktionNode<"OnFocus">;
 export declare function OnFocus(child: Children, onFocus: ((event: DomFocusEvent) => void) | null | undefined, props?: Omit<OnFocusOptions, "child" | "children" | "onFocus" | "onfocus">): AktionNode<"OnFocus">;
@@ -6133,7 +6390,7 @@ export interface OnIntersectOptions extends BaseProps {
 }
 export type OnIntersectProps = OnIntersectOptions & OneOf<"child" | "children", Children>;
 export type OnIntersectNamed = Omit<OnIntersectOptions, "child" | "children">;
-/** Observe whether a component is visible in the viewport (or a scroll container passed as `root`) using IntersectionObserver. Fires `onEnter` the first time the wrapped element becomes visible, `onLeave` when it leaves, and `onChange({visible, ratio})` for every transition. Use for lazy-load sentinels, infinite-scroll triggers, impression analytics, and reveal-on-scroll animations. Set `disabled: true` once there is nothing left to load. */
+/** Observe whether a component is visible in the viewport (or a scroll container passed as `root`) using IntersectionObserver. Fires `onEnter` each time the wrapped element becomes visible (only the first time with `once: true`), `onLeave` when it leaves, and `onChange({visible, ratio})` for every transition. Use for lazy-load sentinels, infinite-scroll triggers, impression analytics, and reveal-on-scroll animations. Set `disabled: true` once there is nothing left to load. */
 export declare function OnIntersect(child: Children, props?: OnIntersectNamed): AktionNode<"OnIntersect">;
 export declare function OnIntersect(props: OnIntersectProps): AktionNode<"OnIntersect">;
 export declare function OnIntersect(child: Children, onEnter: ((entry: OnIntersectEntry) => void) | null | undefined, props?: Omit<OnIntersectOptions, "child" | "children" | "onEnter">): AktionNode<"OnIntersect">;
@@ -6253,7 +6510,7 @@ export interface OnMouseOptions extends BaseProps {
 }
 export type OnMouseProps = OnMouseOptions & OneOf<"child" | "children", Children>;
 export type OnMouseNamed = Omit<OnMouseOptions, "child" | "children">;
-/** Attach any combination of mouse / pointer / drag listeners to a component. Pass only the props you need — unused events install no handler so the wrapper is essentially free. Each handler receives the native MouseEvent / PointerEvent / DragEvent / WheelEvent. Use for hover tracking, custom drag-and-drop, context menus, scroll-aware UIs. */
+/** Attach any combination of mouse / pointer / drag listeners to a component. Pass only the props you need — unused events install no handler so the wrapper is essentially free. Each handler receives the native MouseEvent / PointerEvent / DragEvent / WheelEvent (a plain Event for `scroll`). Use for hover tracking, custom drag-and-drop, context menus, scroll-aware UIs. */
 export declare function OnMouse(child: Children, props?: OnMouseNamed): AktionNode<"OnMouse">;
 export declare function OnMouse(props: OnMouseProps): AktionNode<"OnMouse">;
 export declare function OnMouse(child: Children, enter: ((event: DomMouseEvent) => void) | null | undefined, props?: Omit<OnMouseOptions, "child" | "children" | "enter">): AktionNode<"OnMouse">;
@@ -6309,7 +6566,7 @@ export interface OrderSummaryOptions extends BaseProps {
 }
 export type OrderSummaryProps = OrderSummaryOptions & OneOf<"items" | "lines", readonly OrderSummaryItem[]>;
 export type OrderSummaryNamed = Omit<OrderSummaryOptions, "items" | "lines">;
-/** An order/cart summary: line items, subtotal, discount, shipping, tax, and a bold total. Pass `items` as {label, amount, qty?} and the named totals. `currency` takes an ISO code ("EUR" — properly localised via `locale`) or a bare symbol prefix. `loading` shows placeholders while an async shipping/tax quote resolves. */
+/** An order/cart summary: line items, subtotal, discount, shipping, tax, and a bold total. Pass `items` as {label, amount, qty?} (`quantity` is accepted for `qty`) and the named totals. `currency` takes an ISO code ("EUR" — properly localised via `locale`) or a bare symbol prefix. `loading` shows placeholders while an async shipping/tax quote resolves. */
 export declare function OrderSummary(items: readonly OrderSummaryItem[], props?: OrderSummaryNamed): AktionNode<"OrderSummary">;
 export declare function OrderSummary(props: OrderSummaryProps): AktionNode<"OrderSummary">;
 export declare function OrderSummary(items: readonly OrderSummaryItem[], subtotal: string | number | null | undefined, props?: Omit<OrderSummaryOptions, "items" | "lines" | "subtotal">): AktionNode<"OrderSummary">;
@@ -6341,7 +6598,7 @@ export interface OverlayItemOptions extends Omit<BaseProps, "anchor"> {
   children?: AktionChild;
   anchor?: OverlayItemAnchor;
   /** Inset distance (CSS length, e.g. 8px or 1rem) */
-  offset?: string;
+  offset?: string | number;
 }
 export type OverlayItemProps = OverlayItemOptions & OneOf<"child" | "children", AktionChild>;
 export type OverlayItemNamed = Omit<OverlayItemOptions, "child" | "children">;
@@ -6349,13 +6606,13 @@ export type OverlayItemNamed = Omit<OverlayItemOptions, "child" | "children">;
 export declare function OverlayItem(child: AktionChild, props?: OverlayItemNamed): AktionNode<"OverlayItem">;
 export declare function OverlayItem(props: OverlayItemProps): AktionNode<"OverlayItem">;
 export declare function OverlayItem(child: AktionChild, anchor: OverlayItemAnchor | null | undefined, props?: Omit<OverlayItemOptions, "child" | "children" | "anchor">): AktionNode<"OverlayItem">;
-export declare function OverlayItem(child: AktionChild, anchor: OverlayItemAnchor | null | undefined, offset: string | null | undefined): AktionNode<"OverlayItem">;
+export declare function OverlayItem(child: AktionChild, anchor: OverlayItemAnchor | null | undefined, offset: string | number | null | undefined): AktionNode<"OverlayItem">;
 
 /* ---- PageHeader */
 export interface PageHeaderOptions extends BaseProps {
   title?: string | number;
   subtitle?: string | number;
-  /** Array of strings or `{label, to}` objects (a `to` path renders a router link), a Breadcrumb(...) node, or `false` to suppress the auto-derived trail */
+  /** Array of strings or `{label, to}` objects (a `to` path renders a router link; `href` and `path` are read as the same ROUTER path, not an external URL, and `title` as the label), a Breadcrumb(...) node, or `false` to suppress the auto-derived trail */
   breadcrumbs?: readonly (string | number | PageHeaderCrumb | AktionNode)[] | AktionNode<"Breadcrumb"> | false;
   /** Buttons / NavLinks shown on the right */
   actions?: Children;
@@ -6423,7 +6680,7 @@ export interface ParallaxOptions extends BaseProps {
   children?: AktionChild;
   /** −1…1 (default 0.3) */
   speed?: number;
-  /** Maximum travel in either direction — a length ("120px") or a percentage of the layer's height ("40%"). Default 50% */
+  /** Maximum travel in either direction — pixels (`120` or "120px") or a percentage of the layer's height ("40%"). Other units (rem, vh, calc()) are not measured and fall back to the default, 50% */
   maxOffset?: number | `${number}` | `${number}px` | `${number}%`;
 }
 export type ParallaxProps = ParallaxOptions & OneOf<"child" | "children", AktionChild>;
@@ -6477,7 +6734,7 @@ export interface PasswordInputOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -6507,7 +6764,7 @@ export interface PersonChipOptions extends Omit<BaseProps, "role"> {
   avatarSrc?: string | number;
   /** Alias of `avatarSrc`. */
   src?: string | number;
-  size?: "sm" | "md" | "lg";
+  size?: PersonChipSize;
   status?: PersonChipStatus;
   onClick?: (() => void) | null;
   /** Alias of `onClick`. */
@@ -6522,9 +6779,9 @@ export declare function PersonChip(name: string | number, props?: PersonChipName
 export declare function PersonChip(props: PersonChipProps): AktionNode<"PersonChip">;
 export declare function PersonChip(name: string | number, role: string | number | null | undefined, props?: Omit<PersonChipOptions, "name" | "role">): AktionNode<"PersonChip">;
 export declare function PersonChip(name: string | number, role: string | number | null | undefined, avatarSrc: string | number | null | undefined, props?: Omit<PersonChipOptions, "name" | "role" | "avatarSrc" | "src">): AktionNode<"PersonChip">;
-export declare function PersonChip(name: string | number, role: string | number | null | undefined, avatarSrc: string | number | null | undefined, size: "sm" | "md" | "lg" | null | undefined, props?: Omit<PersonChipOptions, "name" | "role" | "avatarSrc" | "src" | "size">): AktionNode<"PersonChip">;
-export declare function PersonChip(name: string | number, role: string | number | null | undefined, avatarSrc: string | number | null | undefined, size: "sm" | "md" | "lg" | null | undefined, status: PersonChipStatus | null | undefined, props?: Omit<PersonChipOptions, "name" | "role" | "avatarSrc" | "src" | "size" | "status">): AktionNode<"PersonChip">;
-export declare function PersonChip(name: string | number, role: string | number | null | undefined, avatarSrc: string | number | null | undefined, size: "sm" | "md" | "lg" | null | undefined, status: PersonChipStatus | null | undefined, onClick: (() => void) | null | undefined): AktionNode<"PersonChip">;
+export declare function PersonChip(name: string | number, role: string | number | null | undefined, avatarSrc: string | number | null | undefined, size: PersonChipSize | null | undefined, props?: Omit<PersonChipOptions, "name" | "role" | "avatarSrc" | "src" | "size">): AktionNode<"PersonChip">;
+export declare function PersonChip(name: string | number, role: string | number | null | undefined, avatarSrc: string | number | null | undefined, size: PersonChipSize | null | undefined, status: PersonChipStatus | null | undefined, props?: Omit<PersonChipOptions, "name" | "role" | "avatarSrc" | "src" | "size" | "status">): AktionNode<"PersonChip">;
+export declare function PersonChip(name: string | number, role: string | number | null | undefined, avatarSrc: string | number | null | undefined, size: PersonChipSize | null | undefined, status: PersonChipStatus | null | undefined, onClick: (() => void) | null | undefined): AktionNode<"PersonChip">;
 
 /* ---- PieChart */
 export interface PieChartOptions extends BaseProps {
@@ -6641,7 +6898,7 @@ export interface PinInputOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -6680,7 +6937,7 @@ export interface PopoverOptions extends BaseProps {
   /** Alignment along the trigger edge (default "start") */
   align?: PopoverAlign;
   /** CSS width for the popover panel (default "280px") */
-  width?: string;
+  width?: string | number;
   /** Initial open state — use to demo or pre-open the popover */
   open?: boolean;
   /** Called with the new boolean whenever the popover opens or closes */
@@ -6699,9 +6956,9 @@ export declare function Popover(trigger: AktionChild, content: Children, props?:
 export declare function Popover(trigger: AktionChild, content: Children, title: string | number | null | undefined, props?: Omit<PopoverOptions, "trigger" | "content" | "children" | "title">): AktionNode<"Popover">;
 export declare function Popover(trigger: AktionChild, content: Children, title: string | number | null | undefined, side: PopoverSide | null | undefined, props?: Omit<PopoverOptions, "trigger" | "content" | "children" | "title" | "side" | "placement">): AktionNode<"Popover">;
 export declare function Popover(trigger: AktionChild, content: Children, title: string | number | null | undefined, side: PopoverSide | null | undefined, align: PopoverAlign | null | undefined, props?: Omit<PopoverOptions, "trigger" | "content" | "children" | "title" | "side" | "placement" | "align">): AktionNode<"Popover">;
-export declare function Popover(trigger: AktionChild, content: Children, title: string | number | null | undefined, side: PopoverSide | null | undefined, align: PopoverAlign | null | undefined, width: string | null | undefined, props?: Omit<PopoverOptions, "trigger" | "content" | "children" | "title" | "side" | "placement" | "align" | "width">): AktionNode<"Popover">;
-export declare function Popover(trigger: AktionChild, content: Children, title: string | number | null | undefined, side: PopoverSide | null | undefined, align: PopoverAlign | null | undefined, width: string | null | undefined, open: boolean | null | undefined, props?: Omit<PopoverOptions, "trigger" | "content" | "children" | "title" | "side" | "placement" | "align" | "width" | "open">): AktionNode<"Popover">;
-export declare function Popover(trigger: AktionChild, content: Children, title: string | number | null | undefined, side: PopoverSide | null | undefined, align: PopoverAlign | null | undefined, width: string | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: boolean) => void) | null | undefined, props?: Omit<PopoverOptions, "trigger" | "content" | "children" | "title" | "side" | "placement" | "align" | "width" | "open" | "onOpenChange">): AktionNode<"Popover">;
+export declare function Popover(trigger: AktionChild, content: Children, title: string | number | null | undefined, side: PopoverSide | null | undefined, align: PopoverAlign | null | undefined, width: string | number | null | undefined, props?: Omit<PopoverOptions, "trigger" | "content" | "children" | "title" | "side" | "placement" | "align" | "width">): AktionNode<"Popover">;
+export declare function Popover(trigger: AktionChild, content: Children, title: string | number | null | undefined, side: PopoverSide | null | undefined, align: PopoverAlign | null | undefined, width: string | number | null | undefined, open: boolean | null | undefined, props?: Omit<PopoverOptions, "trigger" | "content" | "children" | "title" | "side" | "placement" | "align" | "width" | "open">): AktionNode<"Popover">;
+export declare function Popover(trigger: AktionChild, content: Children, title: string | number | null | undefined, side: PopoverSide | null | undefined, align: PopoverAlign | null | undefined, width: string | number | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: boolean) => void) | null | undefined, props?: Omit<PopoverOptions, "trigger" | "content" | "children" | "title" | "side" | "placement" | "align" | "width" | "open" | "onOpenChange">): AktionNode<"Popover">;
 
 /* ---- Portal */
 export interface PortalOptions extends BaseProps {
@@ -6726,7 +6983,7 @@ export interface PresenceAvatarsOptions<Person extends PresenceAvatarsPerson = P
   children?: readonly Person[];
   /** Max avatars before a +N chip (default 5) */
   max?: number;
-  size?: "sm" | "md" | "lg";
+  size?: PresenceAvatarsSize;
   /** Fires with the clicked person object */
   onClick?: ((person: Person) => void) | null;
   /** Alias of `onClick`. */
@@ -6740,8 +6997,8 @@ export type PresenceAvatarsNamed<Person extends PresenceAvatarsPerson = Presence
 export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson>(people: readonly Person[], props?: PresenceAvatarsNamed<Person>): AktionNode<"PresenceAvatars">;
 export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson>(props: PresenceAvatarsProps<Person>): AktionNode<"PresenceAvatars">;
 export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson>(people: readonly Person[], max: number | null | undefined, props?: Omit<PresenceAvatarsOptions<Person>, "people" | "users" | "children" | "max">): AktionNode<"PresenceAvatars">;
-export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson>(people: readonly Person[], max: number | null | undefined, size: "sm" | "md" | "lg" | null | undefined, props?: Omit<PresenceAvatarsOptions<Person>, "people" | "users" | "children" | "max" | "size">): AktionNode<"PresenceAvatars">;
-export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson>(people: readonly Person[], max: number | null | undefined, size: "sm" | "md" | "lg" | null | undefined, onClick: ((person: Person) => void) | null | undefined): AktionNode<"PresenceAvatars">;
+export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson>(people: readonly Person[], max: number | null | undefined, size: PresenceAvatarsSize | null | undefined, props?: Omit<PresenceAvatarsOptions<Person>, "people" | "users" | "children" | "max" | "size">): AktionNode<"PresenceAvatars">;
+export declare function PresenceAvatars<Person extends PresenceAvatarsPerson = PresenceAvatarsPerson>(people: readonly Person[], max: number | null | undefined, size: PresenceAvatarsSize | null | undefined, onClick: ((person: Person) => void) | null | undefined): AktionNode<"PresenceAvatars">;
 
 /* ---- PriceTag */
 export interface PriceTagOptions extends BaseProps {
@@ -6815,7 +7072,7 @@ export declare function PricingCard(plan: string | number, price: string | numbe
 /* ---- PricingTable */
 export interface PricingTableOptions extends BaseProps {
   tiers?: readonly AktionNode<"PricingCard">[];
-  /** Preferred column count (default auto) */
+  /** Preferred column count, 1–4 — larger values clamp to 4 (default auto) */
   columns?: number;
 }
 export type PricingTableProps = PricingTableOptions & { tiers: readonly AktionNode<"PricingCard">[] };
@@ -6831,8 +7088,11 @@ export interface ProductCardOptions extends BaseProps {
   image?: string | number;
   /** Alias of `image`. */
   src?: string | number;
-  price?: string | number;
+  /** Price for the built-in PriceTag, or your own node (e.g. a PriceTag with a `period`) */
+  price?: string | number | AktionNode;
+  /** Struck-through original price (ignored when `price` is a node) */
   compareAt?: string | number;
+  /** Currency symbol (ignored when `price` is a node) */
   currency?: string | number;
   /** 0–5 stars */
   rating?: number;
@@ -6861,16 +7121,16 @@ export interface ProductCardOptions extends BaseProps {
 }
 export type ProductCardProps = ProductCardOptions & { title: string | number };
 export type ProductCardNamed = Omit<ProductCardOptions, "title">;
-/** An e-commerce product card: image, title, optional rating, a PriceTag, and an add-to-cart action. Pass `price`/`compareAt` directly or a custom `price` node. Give it `href` or `onClick` to make the whole card open the product (the card's hover lift promises it), `rating` + `reviewCount` for credible stars, and `soldOut` to dim it and stop the add button firing. */
+/** An e-commerce product card: image, title, optional rating, a PriceTag, and an add-to-cart action. Pass `price`/`compareAt` (formatted by a PriceTag), or a custom `price` node rendered as-is. Give it `href` or `onClick` to make the whole card open the product (the card's hover lift promises it), `rating` + `reviewCount` for credible stars, and `soldOut` to dim it and stop the add button firing. */
 export declare function ProductCard(title: string | number, props?: ProductCardNamed): AktionNode<"ProductCard">;
 export declare function ProductCard(props: ProductCardProps): AktionNode<"ProductCard">;
 export declare function ProductCard(title: string | number, image: string | number | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src">): AktionNode<"ProductCard">;
-export declare function ProductCard(title: string | number, image: string | number | null | undefined, price: string | number | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src" | "price">): AktionNode<"ProductCard">;
-export declare function ProductCard(title: string | number, image: string | number | null | undefined, price: string | number | null | undefined, compareAt: string | number | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src" | "price" | "compareAt">): AktionNode<"ProductCard">;
-export declare function ProductCard(title: string | number, image: string | number | null | undefined, price: string | number | null | undefined, compareAt: string | number | null | undefined, currency: string | number | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src" | "price" | "compareAt" | "currency">): AktionNode<"ProductCard">;
-export declare function ProductCard(title: string | number, image: string | number | null | undefined, price: string | number | null | undefined, compareAt: string | number | null | undefined, currency: string | number | null | undefined, rating: number | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src" | "price" | "compareAt" | "currency" | "rating">): AktionNode<"ProductCard">;
-export declare function ProductCard(title: string | number, image: string | number | null | undefined, price: string | number | null | undefined, compareAt: string | number | null | undefined, currency: string | number | null | undefined, rating: number | null | undefined, badge: string | number | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src" | "price" | "compareAt" | "currency" | "rating" | "badge">): AktionNode<"ProductCard">;
-export declare function ProductCard(title: string | number, image: string | number | null | undefined, price: string | number | null | undefined, compareAt: string | number | null | undefined, currency: string | number | null | undefined, rating: number | null | undefined, badge: string | number | null | undefined, action: AktionChild | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src" | "price" | "compareAt" | "currency" | "rating" | "badge" | "action">): AktionNode<"ProductCard">;
+export declare function ProductCard(title: string | number, image: string | number | null | undefined, price: string | number | AktionNode | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src" | "price">): AktionNode<"ProductCard">;
+export declare function ProductCard(title: string | number, image: string | number | null | undefined, price: string | number | AktionNode | null | undefined, compareAt: string | number | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src" | "price" | "compareAt">): AktionNode<"ProductCard">;
+export declare function ProductCard(title: string | number, image: string | number | null | undefined, price: string | number | AktionNode | null | undefined, compareAt: string | number | null | undefined, currency: string | number | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src" | "price" | "compareAt" | "currency">): AktionNode<"ProductCard">;
+export declare function ProductCard(title: string | number, image: string | number | null | undefined, price: string | number | AktionNode | null | undefined, compareAt: string | number | null | undefined, currency: string | number | null | undefined, rating: number | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src" | "price" | "compareAt" | "currency" | "rating">): AktionNode<"ProductCard">;
+export declare function ProductCard(title: string | number, image: string | number | null | undefined, price: string | number | AktionNode | null | undefined, compareAt: string | number | null | undefined, currency: string | number | null | undefined, rating: number | null | undefined, badge: string | number | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src" | "price" | "compareAt" | "currency" | "rating" | "badge">): AktionNode<"ProductCard">;
+export declare function ProductCard(title: string | number, image: string | number | null | undefined, price: string | number | AktionNode | null | undefined, compareAt: string | number | null | undefined, currency: string | number | null | undefined, rating: number | null | undefined, badge: string | number | null | undefined, action: AktionChild | null | undefined, props?: Omit<ProductCardOptions, "title" | "image" | "src" | "price" | "compareAt" | "currency" | "rating" | "badge" | "action">): AktionNode<"ProductCard">;
 
 /* ---- ProfileCard */
 export interface ProfileCardOptions extends Omit<BaseProps, "role"> {
@@ -7046,9 +7306,9 @@ export declare function QuantityStepper(value: number, min: number | null | unde
 export interface QueryBuilderOptions extends BaseProps {
   fields?: readonly (QueryBuilderField | string)[];
   value?: readonly QueryBuilderRule[];
-  /** Receives the next rule array */
+  /** Receives the next rule array on every edit (also when `value` is bound, after the write-back) */
   onChange?: ((rules: QueryBuilderRule[]) => void) | null;
-  /** Operator tokens or `{value, label, type?}` objects — `type` scopes them to matching fields */
+  /** Operator tokens or `{value, label, type?}` objects — `type` (case-insensitive) scopes them to matching fields */
   operators?: readonly (QueryBuilderOperator | QueryBuilderOperatorDef)[];
   /** Freeze the builder while a query is in flight */
   disabled?: boolean;
@@ -7154,7 +7414,7 @@ export interface RadioOptions extends Omit<BaseProps, "id"> {
   /** Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it */
   description?: string | number;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -7243,7 +7503,7 @@ export declare function ReactionPicker(reactions: readonly ReactionPickerReactio
 export interface ReadingProgressOptions extends BaseProps {
   gradient?: boolean;
   /** Bar thickness (CSS length, default 3px) */
-  height?: string;
+  height?: string | number;
   /** What to measure: a CSS selector for the scrolling element, or "page" for the document. Default: auto-detect */
   target?: "page" | (string & {});
   /** Alias of `target`. */
@@ -7256,9 +7516,9 @@ export type ReadingProgressNamed = Omit<ReadingProgressOptions, "gradient">;
 /** A thin progress bar that fills as the reader scrolls — article/docs reading affordance. Optional `gradient` fill or a `color` override. By default it measures whichever container actually scrolls the app (the page when the app owns the page scroll, otherwise the nearest scrolling ancestor — a chat pane, a dashboard panel, a modal body), and pins itself inside that container instead of the browser viewport. `target` overrides the choice with a CSS selector, or "page" to force the document. */
 export declare function ReadingProgress(gradient?: boolean, props?: ReadingProgressNamed): AktionNode<"ReadingProgress">;
 export declare function ReadingProgress(props: ReadingProgressProps): AktionNode<"ReadingProgress">;
-export declare function ReadingProgress(gradient: boolean | null | undefined, height: string | null | undefined, props?: Omit<ReadingProgressOptions, "gradient" | "height">): AktionNode<"ReadingProgress">;
-export declare function ReadingProgress(gradient: boolean | null | undefined, height: string | null | undefined, target: "page" | (string & {}) | null | undefined, props?: Omit<ReadingProgressOptions, "gradient" | "height" | "target" | "scrollContainer">): AktionNode<"ReadingProgress">;
-export declare function ReadingProgress(gradient: boolean | null | undefined, height: string | null | undefined, target: "page" | (string & {}) | null | undefined, color: string | null | undefined): AktionNode<"ReadingProgress">;
+export declare function ReadingProgress(gradient: boolean | null | undefined, height: string | number | null | undefined, props?: Omit<ReadingProgressOptions, "gradient" | "height">): AktionNode<"ReadingProgress">;
+export declare function ReadingProgress(gradient: boolean | null | undefined, height: string | number | null | undefined, target: "page" | (string & {}) | null | undefined, props?: Omit<ReadingProgressOptions, "gradient" | "height" | "target" | "scrollContainer">): AktionNode<"ReadingProgress">;
+export declare function ReadingProgress(gradient: boolean | null | undefined, height: string | number | null | undefined, target: "page" | (string & {}) | null | undefined, color: string | null | undefined): AktionNode<"ReadingProgress">;
 
 /* ---- Redirect */
 export interface RedirectOptions extends BaseProps {
@@ -7325,11 +7585,11 @@ export interface ResizablePanelsOptions extends BaseProps {
   primary?: Children;
   secondary?: Children;
   /** CSS width for the primary pane (default 40%) */
-  initialPrimaryWidth?: string;
+  initialPrimaryWidth?: string | number;
   /** Min width of the PRIMARY pane (default 240px) */
-  minPrimaryWidth?: string | 0;
+  minPrimaryWidth?: string | number;
   /** Min width of the secondary pane (default 0) */
-  minSecondaryWidth?: string | 0;
+  minSecondaryWidth?: string | number;
   /** Called with the primary pane's new width percentage when a drag or key press ends */
   onResize?: ((primaryPercent: number) => void) | null;
 }
@@ -7339,10 +7599,10 @@ export type ResizablePanelsNamed = Omit<ResizablePanelsOptions, "primary"> & { s
 export declare function ResizablePanels(primary: Children, props: ResizablePanelsNamed): AktionNode<"ResizablePanels">;
 export declare function ResizablePanels(props: ResizablePanelsProps): AktionNode<"ResizablePanels">;
 export declare function ResizablePanels(primary: Children, secondary: Children, props?: Omit<ResizablePanelsOptions, "primary" | "secondary">): AktionNode<"ResizablePanels">;
-export declare function ResizablePanels(primary: Children, secondary: Children, initialPrimaryWidth: string | null | undefined, props?: Omit<ResizablePanelsOptions, "primary" | "secondary" | "initialPrimaryWidth">): AktionNode<"ResizablePanels">;
-export declare function ResizablePanels(primary: Children, secondary: Children, initialPrimaryWidth: string | null | undefined, minPrimaryWidth: string | 0 | null | undefined, props?: Omit<ResizablePanelsOptions, "primary" | "secondary" | "initialPrimaryWidth" | "minPrimaryWidth">): AktionNode<"ResizablePanels">;
-export declare function ResizablePanels(primary: Children, secondary: Children, initialPrimaryWidth: string | null | undefined, minPrimaryWidth: string | 0 | null | undefined, minSecondaryWidth: string | 0 | null | undefined, props?: Omit<ResizablePanelsOptions, "primary" | "secondary" | "initialPrimaryWidth" | "minPrimaryWidth" | "minSecondaryWidth">): AktionNode<"ResizablePanels">;
-export declare function ResizablePanels(primary: Children, secondary: Children, initialPrimaryWidth: string | null | undefined, minPrimaryWidth: string | 0 | null | undefined, minSecondaryWidth: string | 0 | null | undefined, onResize: ((primaryPercent: number) => void) | null | undefined): AktionNode<"ResizablePanels">;
+export declare function ResizablePanels(primary: Children, secondary: Children, initialPrimaryWidth: string | number | null | undefined, props?: Omit<ResizablePanelsOptions, "primary" | "secondary" | "initialPrimaryWidth">): AktionNode<"ResizablePanels">;
+export declare function ResizablePanels(primary: Children, secondary: Children, initialPrimaryWidth: string | number | null | undefined, minPrimaryWidth: string | number | null | undefined, props?: Omit<ResizablePanelsOptions, "primary" | "secondary" | "initialPrimaryWidth" | "minPrimaryWidth">): AktionNode<"ResizablePanels">;
+export declare function ResizablePanels(primary: Children, secondary: Children, initialPrimaryWidth: string | number | null | undefined, minPrimaryWidth: string | number | null | undefined, minSecondaryWidth: string | number | null | undefined, props?: Omit<ResizablePanelsOptions, "primary" | "secondary" | "initialPrimaryWidth" | "minPrimaryWidth" | "minSecondaryWidth">): AktionNode<"ResizablePanels">;
+export declare function ResizablePanels(primary: Children, secondary: Children, initialPrimaryWidth: string | number | null | undefined, minPrimaryWidth: string | number | null | undefined, minSecondaryWidth: string | number | null | undefined, onResize: ((primaryPercent: number) => void) | null | undefined): AktionNode<"ResizablePanels">;
 
 /* ---- Reveal */
 export interface RevealOptions extends BaseProps {
@@ -7377,7 +7637,7 @@ export interface RichTextEditorOptions extends Omit<BaseProps, "id"> {
   /** Empty-state prompt */
   placeholder?: string | number;
   /** CSS min-height for the editor area (default 160px) */
-  minHeight?: string;
+  minHeight?: string | number;
   disabled?: boolean;
   /** Called with the current HTML on every keystroke */
   onChange?: ((html: string) => void) | null;
@@ -7386,7 +7646,7 @@ export interface RichTextEditorOptions extends Omit<BaseProps, "id"> {
   /** Subset (and order) of toolbar tools — defaults to all of them */
   tools?: readonly RichTextEditorTools[];
   /** CSS max-height for the editor area; the body scrolls past it */
-  maxHeight?: string;
+  maxHeight?: string | number;
   /** Content stays readable and selectable at full contrast but cannot be edited */
   readonly?: boolean;
   /** Form field name — the HTML body is mirrored into a hidden input for native submission */
@@ -7423,11 +7683,11 @@ export declare function RichTextEditor(id: string | number, props?: RichTextEdit
 export declare function RichTextEditor(props: RichTextEditorProps): AktionNode<"RichTextEditor">;
 export declare function RichTextEditor(id: string | number, value: string | number | null | undefined, props?: Omit<RichTextEditorOptions, "id" | "value">): AktionNode<"RichTextEditor">;
 export declare function RichTextEditor(id: string | number, value: string | number | null | undefined, placeholder: string | number | null | undefined, props?: Omit<RichTextEditorOptions, "id" | "value" | "placeholder">): AktionNode<"RichTextEditor">;
-export declare function RichTextEditor(id: string | number, value: string | number | null | undefined, placeholder: string | number | null | undefined, minHeight: string | null | undefined, props?: Omit<RichTextEditorOptions, "id" | "value" | "placeholder" | "minHeight">): AktionNode<"RichTextEditor">;
-export declare function RichTextEditor(id: string | number, value: string | number | null | undefined, placeholder: string | number | null | undefined, minHeight: string | null | undefined, disabled: boolean | null | undefined, props?: Omit<RichTextEditorOptions, "id" | "value" | "placeholder" | "minHeight" | "disabled">): AktionNode<"RichTextEditor">;
-export declare function RichTextEditor(id: string | number, value: string | number | null | undefined, placeholder: string | number | null | undefined, minHeight: string | null | undefined, disabled: boolean | null | undefined, onChange: ((html: string) => void) | null | undefined, props?: Omit<RichTextEditorOptions, "id" | "value" | "placeholder" | "minHeight" | "disabled" | "onChange" | "onchange">): AktionNode<"RichTextEditor">;
-export declare function RichTextEditor(id: string | number, value: string | number | null | undefined, placeholder: string | number | null | undefined, minHeight: string | null | undefined, disabled: boolean | null | undefined, onChange: ((html: string) => void) | null | undefined, tools: readonly RichTextEditorTools[] | null | undefined, props?: Omit<RichTextEditorOptions, "id" | "value" | "placeholder" | "minHeight" | "disabled" | "onChange" | "onchange" | "tools">): AktionNode<"RichTextEditor">;
-export declare function RichTextEditor(id: string | number, value: string | number | null | undefined, placeholder: string | number | null | undefined, minHeight: string | null | undefined, disabled: boolean | null | undefined, onChange: ((html: string) => void) | null | undefined, tools: readonly RichTextEditorTools[] | null | undefined, maxHeight: string | null | undefined, props?: Omit<RichTextEditorOptions, "id" | "value" | "placeholder" | "minHeight" | "disabled" | "onChange" | "onchange" | "tools" | "maxHeight">): AktionNode<"RichTextEditor">;
+export declare function RichTextEditor(id: string | number, value: string | number | null | undefined, placeholder: string | number | null | undefined, minHeight: string | number | null | undefined, props?: Omit<RichTextEditorOptions, "id" | "value" | "placeholder" | "minHeight">): AktionNode<"RichTextEditor">;
+export declare function RichTextEditor(id: string | number, value: string | number | null | undefined, placeholder: string | number | null | undefined, minHeight: string | number | null | undefined, disabled: boolean | null | undefined, props?: Omit<RichTextEditorOptions, "id" | "value" | "placeholder" | "minHeight" | "disabled">): AktionNode<"RichTextEditor">;
+export declare function RichTextEditor(id: string | number, value: string | number | null | undefined, placeholder: string | number | null | undefined, minHeight: string | number | null | undefined, disabled: boolean | null | undefined, onChange: ((html: string) => void) | null | undefined, props?: Omit<RichTextEditorOptions, "id" | "value" | "placeholder" | "minHeight" | "disabled" | "onChange" | "onchange">): AktionNode<"RichTextEditor">;
+export declare function RichTextEditor(id: string | number, value: string | number | null | undefined, placeholder: string | number | null | undefined, minHeight: string | number | null | undefined, disabled: boolean | null | undefined, onChange: ((html: string) => void) | null | undefined, tools: readonly RichTextEditorTools[] | null | undefined, props?: Omit<RichTextEditorOptions, "id" | "value" | "placeholder" | "minHeight" | "disabled" | "onChange" | "onchange" | "tools">): AktionNode<"RichTextEditor">;
+export declare function RichTextEditor(id: string | number, value: string | number | null | undefined, placeholder: string | number | null | undefined, minHeight: string | number | null | undefined, disabled: boolean | null | undefined, onChange: ((html: string) => void) | null | undefined, tools: readonly RichTextEditorTools[] | null | undefined, maxHeight: string | number | null | undefined, props?: Omit<RichTextEditorOptions, "id" | "value" | "placeholder" | "minHeight" | "disabled" | "onChange" | "onchange" | "tools" | "maxHeight">): AktionNode<"RichTextEditor">;
 
 /* ---- RouteView */
 export interface RouteViewOptions extends BaseProps {
@@ -7546,10 +7806,10 @@ export interface ScrollAreaOptions extends BaseProps {
   /** Alias of `children`. */
   child?: Children;
   /** CSS max-height — the pane grows with its content up to this cap (default 320px) */
-  maxHeight?: string;
+  maxHeight?: string | number;
   direction?: ScrollAreaDirection;
   /** CSS height — a FIXED box that neither grows nor shrinks with its content */
-  height?: string;
+  height?: string | number;
   /** Auto-scroll to the newest content (logs / chat), until the user scrolls up */
   stickToBottom?: boolean;
 }
@@ -7558,10 +7818,10 @@ export type ScrollAreaNamed = Omit<ScrollAreaOptions, "children" | "child">;
 /** Bounded scroll container. Use to clip long lists / logs / chat panels to a fixed max height with a clean scrollbar. `height` gives the pane a stable box (it does not grow with its content); `maxHeight` lets it grow up to a cap. `stickToBottom` keeps the newest line in view as content is appended, until the user scrolls up. */
 export declare function ScrollArea(children: Children, props?: ScrollAreaNamed): AktionNode<"ScrollArea">;
 export declare function ScrollArea(props: ScrollAreaProps): AktionNode<"ScrollArea">;
-export declare function ScrollArea(children: Children, maxHeight: string | null | undefined, props?: Omit<ScrollAreaOptions, "children" | "child" | "maxHeight">): AktionNode<"ScrollArea">;
-export declare function ScrollArea(children: Children, maxHeight: string | null | undefined, direction: ScrollAreaDirection | null | undefined, props?: Omit<ScrollAreaOptions, "children" | "child" | "maxHeight" | "direction">): AktionNode<"ScrollArea">;
-export declare function ScrollArea(children: Children, maxHeight: string | null | undefined, direction: ScrollAreaDirection | null | undefined, height: string | null | undefined, props?: Omit<ScrollAreaOptions, "children" | "child" | "maxHeight" | "direction" | "height">): AktionNode<"ScrollArea">;
-export declare function ScrollArea(children: Children, maxHeight: string | null | undefined, direction: ScrollAreaDirection | null | undefined, height: string | null | undefined, stickToBottom: boolean | null | undefined): AktionNode<"ScrollArea">;
+export declare function ScrollArea(children: Children, maxHeight: string | number | null | undefined, props?: Omit<ScrollAreaOptions, "children" | "child" | "maxHeight">): AktionNode<"ScrollArea">;
+export declare function ScrollArea(children: Children, maxHeight: string | number | null | undefined, direction: ScrollAreaDirection | null | undefined, props?: Omit<ScrollAreaOptions, "children" | "child" | "maxHeight" | "direction">): AktionNode<"ScrollArea">;
+export declare function ScrollArea(children: Children, maxHeight: string | number | null | undefined, direction: ScrollAreaDirection | null | undefined, height: string | number | null | undefined, props?: Omit<ScrollAreaOptions, "children" | "child" | "maxHeight" | "direction" | "height">): AktionNode<"ScrollArea">;
+export declare function ScrollArea(children: Children, maxHeight: string | number | null | undefined, direction: ScrollAreaDirection | null | undefined, height: string | number | null | undefined, stickToBottom: boolean | null | undefined): AktionNode<"ScrollArea">;
 
 /* ---- ScrollSpy */
 export interface ScrollSpyOptions extends BaseProps {
@@ -7572,7 +7832,7 @@ export interface ScrollSpyOptions extends BaseProps {
   /** Pixels to leave above the target (sticky header height) */
   offset?: number;
   /** Sticky offset from the viewport top (default 16px) */
-  top?: string;
+  top?: string | number;
   /** Fires with the id of the section entering view */
   onChange?: ((id: string) => void) | null;
   /** Alias of `onChange`. */
@@ -7580,13 +7840,13 @@ export interface ScrollSpyOptions extends BaseProps {
 }
 export type ScrollSpyProps = ScrollSpyOptions & OneOf<"sections" | "items", readonly ScrollSpySection[]>;
 export type ScrollSpyNamed = Omit<ScrollSpyOptions, "sections" | "items">;
-/** A sticky in-page nav that highlights the section currently in view. `sections` is an array of {label, id} matching element ids on the page (set via the universal `id` prop). Clicking smooth-scrolls to a section; `offset` clears a sticky header and `top` sets the sticky offset. */
+/** A sticky in-page nav that highlights the section currently in view. `sections` is an array of {label, id} matching element ids on the page (set via the universal `id` prop, which takes a letter followed by letters, digits, `_` or `-`). Clicking smooth-scrolls to a section; `offset` clears a sticky header and `top` sets the sticky offset. */
 export declare function ScrollSpy(sections: readonly ScrollSpySection[], props?: ScrollSpyNamed): AktionNode<"ScrollSpy">;
 export declare function ScrollSpy(props: ScrollSpyProps): AktionNode<"ScrollSpy">;
 export declare function ScrollSpy(sections: readonly ScrollSpySection[], title: string | number | null | undefined, props?: Omit<ScrollSpyOptions, "sections" | "items" | "title">): AktionNode<"ScrollSpy">;
 export declare function ScrollSpy(sections: readonly ScrollSpySection[], title: string | number | null | undefined, offset: number | null | undefined, props?: Omit<ScrollSpyOptions, "sections" | "items" | "title" | "offset">): AktionNode<"ScrollSpy">;
-export declare function ScrollSpy(sections: readonly ScrollSpySection[], title: string | number | null | undefined, offset: number | null | undefined, top: string | null | undefined, props?: Omit<ScrollSpyOptions, "sections" | "items" | "title" | "offset" | "top">): AktionNode<"ScrollSpy">;
-export declare function ScrollSpy(sections: readonly ScrollSpySection[], title: string | number | null | undefined, offset: number | null | undefined, top: string | null | undefined, onChange: ((id: string) => void) | null | undefined): AktionNode<"ScrollSpy">;
+export declare function ScrollSpy(sections: readonly ScrollSpySection[], title: string | number | null | undefined, offset: number | null | undefined, top: string | number | null | undefined, props?: Omit<ScrollSpyOptions, "sections" | "items" | "title" | "offset" | "top">): AktionNode<"ScrollSpy">;
+export declare function ScrollSpy(sections: readonly ScrollSpySection[], title: string | number | null | undefined, offset: number | null | undefined, top: string | number | null | undefined, onChange: ((id: string) => void) | null | undefined): AktionNode<"ScrollSpy">;
 
 /* ---- SearchBar */
 export interface SearchBarOptions extends Omit<BaseProps, "id"> {
@@ -7640,7 +7900,7 @@ export interface SectionOptions extends Omit<BaseProps, "id"> {
   background?: SectionBackground;
   /** Alias of `background`. */
   bg?: SectionBackground;
-  width?: "sm" | "md" | "lg" | "xl" | "full";
+  width?: SectionWidth;
   /** Band padding preset (default md) */
   padding?: SectionPadding;
   /** Centers the generated eyebrow/title/subtitle header; children keep their own alignment */
@@ -7660,12 +7920,12 @@ export type SectionNamed = Omit<SectionOptions, "children" | "child">;
 export declare function Section(children: Children, props?: SectionNamed): AktionNode<"Section">;
 export declare function Section(props: SectionProps): AktionNode<"Section">;
 export declare function Section(children: Children, background: SectionBackground | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg">): AktionNode<"Section">;
-export declare function Section(children: Children, background: SectionBackground | null | undefined, width: "sm" | "md" | "lg" | "xl" | "full" | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg" | "width">): AktionNode<"Section">;
-export declare function Section(children: Children, background: SectionBackground | null | undefined, width: "sm" | "md" | "lg" | "xl" | "full" | null | undefined, padding: SectionPadding | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg" | "width" | "padding">): AktionNode<"Section">;
-export declare function Section(children: Children, background: SectionBackground | null | undefined, width: "sm" | "md" | "lg" | "xl" | "full" | null | undefined, padding: SectionPadding | null | undefined, align: SectionAlign | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg" | "width" | "padding" | "align">): AktionNode<"Section">;
-export declare function Section(children: Children, background: SectionBackground | null | undefined, width: "sm" | "md" | "lg" | "xl" | "full" | null | undefined, padding: SectionPadding | null | undefined, align: SectionAlign | null | undefined, eyebrow: string | number | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg" | "width" | "padding" | "align" | "eyebrow">): AktionNode<"Section">;
-export declare function Section(children: Children, background: SectionBackground | null | undefined, width: "sm" | "md" | "lg" | "xl" | "full" | null | undefined, padding: SectionPadding | null | undefined, align: SectionAlign | null | undefined, eyebrow: string | number | null | undefined, title: string | number | Children | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg" | "width" | "padding" | "align" | "eyebrow" | "title">): AktionNode<"Section">;
-export declare function Section(children: Children, background: SectionBackground | null | undefined, width: "sm" | "md" | "lg" | "xl" | "full" | null | undefined, padding: SectionPadding | null | undefined, align: SectionAlign | null | undefined, eyebrow: string | number | null | undefined, title: string | number | Children | null | undefined, subtitle: string | number | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg" | "width" | "padding" | "align" | "eyebrow" | "title" | "subtitle" | "description">): AktionNode<"Section">;
+export declare function Section(children: Children, background: SectionBackground | null | undefined, width: SectionWidth | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg" | "width">): AktionNode<"Section">;
+export declare function Section(children: Children, background: SectionBackground | null | undefined, width: SectionWidth | null | undefined, padding: SectionPadding | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg" | "width" | "padding">): AktionNode<"Section">;
+export declare function Section(children: Children, background: SectionBackground | null | undefined, width: SectionWidth | null | undefined, padding: SectionPadding | null | undefined, align: SectionAlign | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg" | "width" | "padding" | "align">): AktionNode<"Section">;
+export declare function Section(children: Children, background: SectionBackground | null | undefined, width: SectionWidth | null | undefined, padding: SectionPadding | null | undefined, align: SectionAlign | null | undefined, eyebrow: string | number | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg" | "width" | "padding" | "align" | "eyebrow">): AktionNode<"Section">;
+export declare function Section(children: Children, background: SectionBackground | null | undefined, width: SectionWidth | null | undefined, padding: SectionPadding | null | undefined, align: SectionAlign | null | undefined, eyebrow: string | number | null | undefined, title: string | number | Children | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg" | "width" | "padding" | "align" | "eyebrow" | "title">): AktionNode<"Section">;
+export declare function Section(children: Children, background: SectionBackground | null | undefined, width: SectionWidth | null | undefined, padding: SectionPadding | null | undefined, align: SectionAlign | null | undefined, eyebrow: string | number | null | undefined, title: string | number | Children | null | undefined, subtitle: string | number | null | undefined, props?: Omit<SectionOptions, "children" | "child" | "background" | "bg" | "width" | "padding" | "align" | "eyebrow" | "title" | "subtitle" | "description">): AktionNode<"Section">;
 
 /* ---- SectionBlock */
 export interface SectionBlockOptions extends BaseProps {
@@ -7700,6 +7960,7 @@ export interface SectionHeaderOptions extends BaseProps {
   description?: string | number;
   /** Short uppercase label above the title */
   eyebrow?: string | number;
+  /** Status node rendered next to the title — a Badge(...), Pill(...) or StatusDot(...) */
   status?: AktionNode<"Badge"> | AktionNode<"Pill"> | AktionNode<"StatusDot">;
   /** Alias of `status`. */
   badge?: AktionNode<"Badge"> | AktionNode<"Pill"> | AktionNode<"StatusDot">;
@@ -7708,7 +7969,7 @@ export interface SectionHeaderOptions extends BaseProps {
 }
 export type SectionHeaderProps = SectionHeaderOptions & { title: string | number };
 export type SectionHeaderNamed = Omit<SectionHeaderOptions, "title">;
-/** Compact section header for the top of a Card or panel. Renders a small eyebrow, a title, an optional subtitle, an optional status Tag/Badge, and a right-aligned actions row. Use this inside a Card to introduce a section instead of a bare `CardHeader`. */
+/** Compact section header for the top of a Card or panel. Renders a small eyebrow, a title, an optional subtitle, an optional status Badge/Pill/StatusDot, and a right-aligned actions row. Use this inside a Card to introduce a section instead of a bare `CardHeader`. */
 export declare function SectionHeader(title: string | number, props?: SectionHeaderNamed): AktionNode<"SectionHeader">;
 export declare function SectionHeader(props: SectionHeaderProps): AktionNode<"SectionHeader">;
 export declare function SectionHeader(title: string | number, subtitle: string | number | null | undefined, props?: Omit<SectionHeaderOptions, "title" | "subtitle" | "description">): AktionNode<"SectionHeader">;
@@ -7717,14 +7978,14 @@ export declare function SectionHeader(title: string | number, subtitle: string |
 export declare function SectionHeader(title: string | number, subtitle: string | number | null | undefined, eyebrow: string | number | null | undefined, status: AktionNode<"Badge"> | AktionNode<"Pill"> | AktionNode<"StatusDot"> | null | undefined, actions: Children | null | undefined): AktionNode<"SectionHeader">;
 
 /* ---- SegmentedControl */
-export interface SegmentedControlOptions extends BaseProps {
-  options?: readonly (string | number | SegmentedControlOption)[];
+export interface SegmentedControlOptions<V extends string | number = string | number> extends BaseProps {
+  options?: readonly (V | SegmentedControlOption<V>)[];
   /** Alias of `options`. */
-  items?: readonly (string | number | SegmentedControlOption)[];
-  value?: string | number;
-  onChange?: ((value: string) => void) | null;
+  items?: readonly (V | SegmentedControlOption<V>)[];
+  value?: V | null;
+  onChange?: ((value: V) => void) | null;
   /** Alias of `onChange`. */
-  onchange?: ((value: string) => void) | null;
+  onchange?: ((value: V) => void) | null;
   /** Lock every segment */
   disabled?: boolean;
   size?: SegmentedControlSize;
@@ -7733,16 +7994,16 @@ export interface SegmentedControlOptions extends BaseProps {
   /** Alias of `label`. */
   ariaLabel?: string | number;
 }
-export type SegmentedControlProps = SegmentedControlOptions & OneOf<"options" | "items", readonly (string | number | SegmentedControlOption)[]>;
-export type SegmentedControlNamed = Omit<SegmentedControlOptions, "options" | "items">;
-/** A compact segmented toggle (iOS-style). `options` is an array of strings or {label, value, icon?, disabled?}. Bind `value` to a $variable; `onChange(value)` fires on select. Left/Right arrows move between segments; `size` sets the height and `disabled` locks the whole control. */
-export declare function SegmentedControl(options: readonly (string | number | SegmentedControlOption)[], props?: SegmentedControlNamed): AktionNode<"SegmentedControl">;
-export declare function SegmentedControl(props: SegmentedControlProps): AktionNode<"SegmentedControl">;
-export declare function SegmentedControl(options: readonly (string | number | SegmentedControlOption)[], value: string | number | null | undefined, props?: Omit<SegmentedControlOptions, "options" | "items" | "value">): AktionNode<"SegmentedControl">;
-export declare function SegmentedControl(options: readonly (string | number | SegmentedControlOption)[], value: string | number | null | undefined, onChange: ((value: string) => void) | null | undefined, props?: Omit<SegmentedControlOptions, "options" | "items" | "value" | "onChange" | "onchange">): AktionNode<"SegmentedControl">;
-export declare function SegmentedControl(options: readonly (string | number | SegmentedControlOption)[], value: string | number | null | undefined, onChange: ((value: string) => void) | null | undefined, disabled: boolean | null | undefined, props?: Omit<SegmentedControlOptions, "options" | "items" | "value" | "onChange" | "onchange" | "disabled">): AktionNode<"SegmentedControl">;
-export declare function SegmentedControl(options: readonly (string | number | SegmentedControlOption)[], value: string | number | null | undefined, onChange: ((value: string) => void) | null | undefined, disabled: boolean | null | undefined, size: SegmentedControlSize | null | undefined, props?: Omit<SegmentedControlOptions, "options" | "items" | "value" | "onChange" | "onchange" | "disabled" | "size">): AktionNode<"SegmentedControl">;
-export declare function SegmentedControl(options: readonly (string | number | SegmentedControlOption)[], value: string | number | null | undefined, onChange: ((value: string) => void) | null | undefined, disabled: boolean | null | undefined, size: SegmentedControlSize | null | undefined, label: string | number | null | undefined): AktionNode<"SegmentedControl">;
+export type SegmentedControlProps<V extends string | number = string | number> = SegmentedControlOptions<V> & OneOf<"options" | "items", readonly (V | SegmentedControlOption<V>)[]>;
+export type SegmentedControlNamed<V extends string | number = string | number> = Omit<SegmentedControlOptions<V>, "options" | "items">;
+/** A compact segmented toggle (iOS-style). `options` is an array of strings or {label, value, icon?, disabled?}. Bind `value` to a $variable; `onChange(value)` fires on select. Option values keep their type, so numeric options write numbers back. Left/Right arrows move between segments; `size` sets the height and `disabled` locks the whole control. */
+export declare function SegmentedControl<V extends string | number = string | number>(options: readonly (V | SegmentedControlOption<V>)[], props?: SegmentedControlNamed<V>): AktionNode<"SegmentedControl">;
+export declare function SegmentedControl<V extends string | number = string | number>(props: SegmentedControlProps<V>): AktionNode<"SegmentedControl">;
+export declare function SegmentedControl<V extends string | number = string | number>(options: readonly (V | SegmentedControlOption<V>)[], value: V | null | null | undefined, props?: Omit<SegmentedControlOptions<V>, "options" | "items" | "value">): AktionNode<"SegmentedControl">;
+export declare function SegmentedControl<V extends string | number = string | number>(options: readonly (V | SegmentedControlOption<V>)[], value: V | null | null | undefined, onChange: ((value: V) => void) | null | undefined, props?: Omit<SegmentedControlOptions<V>, "options" | "items" | "value" | "onChange" | "onchange">): AktionNode<"SegmentedControl">;
+export declare function SegmentedControl<V extends string | number = string | number>(options: readonly (V | SegmentedControlOption<V>)[], value: V | null | null | undefined, onChange: ((value: V) => void) | null | undefined, disabled: boolean | null | undefined, props?: Omit<SegmentedControlOptions<V>, "options" | "items" | "value" | "onChange" | "onchange" | "disabled">): AktionNode<"SegmentedControl">;
+export declare function SegmentedControl<V extends string | number = string | number>(options: readonly (V | SegmentedControlOption<V>)[], value: V | null | null | undefined, onChange: ((value: V) => void) | null | undefined, disabled: boolean | null | undefined, size: SegmentedControlSize | null | undefined, props?: Omit<SegmentedControlOptions<V>, "options" | "items" | "value" | "onChange" | "onchange" | "disabled" | "size">): AktionNode<"SegmentedControl">;
+export declare function SegmentedControl<V extends string | number = string | number>(options: readonly (V | SegmentedControlOption<V>)[], value: V | null | null | undefined, onChange: ((value: V) => void) | null | undefined, disabled: boolean | null | undefined, size: SegmentedControlSize | null | undefined, label: string | number | null | undefined): AktionNode<"SegmentedControl">;
 
 /* ---- Select */
 export interface SelectOptions extends Omit<BaseProps, "id"> {
@@ -7770,7 +8031,7 @@ export interface SelectOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -7787,7 +8048,7 @@ export interface SelectOptions extends Omit<BaseProps, "id"> {
   /** Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it */
   description?: string | number;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -7847,11 +8108,11 @@ export declare function Separator(orientation: SeparatorOrientation | null | und
 /* ---- Series */
 export interface SeriesOptions extends BaseProps {
   name?: string | number;
-  /** One value per x-axis label (ScatterChart also accepts its {x, y} points here) */
+  /** One number per x-axis label — or, for ScatterChart, its points as `{x, y, label?}` objects or `[x, y, label?]` tuples */
   values?: readonly number[] | readonly SeriesPoint[];
-  /** Override the palette colour for this series (any CSS colour or var()) */
+  /** Override the palette colour for this series (any CSS colour or var(); a value that is not a plain colour falls back to the palette slot) */
   color?: string;
-  /** XY points for ScatterChart — the explicit alternative to passing them as `values` */
+  /** XY points for ScatterChart (`{x, y, label?}` objects or `[x, y, label?]` tuples) — the explicit alternative to passing them as `values` */
   points?: readonly SeriesPoint[];
 }
 export type SeriesProps = SeriesOptions & { name: string | number };
@@ -7897,7 +8158,7 @@ export interface SheetOptions extends BaseProps {
   /** Accessible name when there is no visible `title` */
   label?: string | number;
   /** Panel width for left/right sides (default min(420px, 90vw)) */
-  width?: string;
+  width?: string | number;
   /** Pinned action row (Cancel / Apply) */
   footer?: Children;
   /** Backdrop click + Escape close it (default true) */
@@ -7913,8 +8174,8 @@ export declare function Sheet(children: Children, open: boolean | null | undefin
 export declare function Sheet(children: Children, open: boolean | null | undefined, side: SheetSide | null | undefined, title: string | number | null | undefined, props?: Omit<SheetOptions, "children" | "child" | "content" | "open" | "side" | "title">): AktionNode<"Sheet">;
 export declare function Sheet(children: Children, open: boolean | null | undefined, side: SheetSide | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, props?: Omit<SheetOptions, "children" | "child" | "content" | "open" | "side" | "title" | "onClose" | "onclose">): AktionNode<"Sheet">;
 export declare function Sheet(children: Children, open: boolean | null | undefined, side: SheetSide | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, label: string | number | null | undefined, props?: Omit<SheetOptions, "children" | "child" | "content" | "open" | "side" | "title" | "onClose" | "onclose" | "label">): AktionNode<"Sheet">;
-export declare function Sheet(children: Children, open: boolean | null | undefined, side: SheetSide | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, label: string | number | null | undefined, width: string | null | undefined, props?: Omit<SheetOptions, "children" | "child" | "content" | "open" | "side" | "title" | "onClose" | "onclose" | "label" | "width">): AktionNode<"Sheet">;
-export declare function Sheet(children: Children, open: boolean | null | undefined, side: SheetSide | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, label: string | number | null | undefined, width: string | null | undefined, footer: Children | null | undefined, props?: Omit<SheetOptions, "children" | "child" | "content" | "open" | "side" | "title" | "onClose" | "onclose" | "label" | "width" | "footer">): AktionNode<"Sheet">;
+export declare function Sheet(children: Children, open: boolean | null | undefined, side: SheetSide | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, label: string | number | null | undefined, width: string | number | null | undefined, props?: Omit<SheetOptions, "children" | "child" | "content" | "open" | "side" | "title" | "onClose" | "onclose" | "label" | "width">): AktionNode<"Sheet">;
+export declare function Sheet(children: Children, open: boolean | null | undefined, side: SheetSide | null | undefined, title: string | number | null | undefined, onClose: (() => void) | null | undefined, label: string | number | null | undefined, width: string | number | null | undefined, footer: Children | null | undefined, props?: Omit<SheetOptions, "children" | "child" | "content" | "open" | "side" | "title" | "onClose" | "onclose" | "label" | "width" | "footer">): AktionNode<"Sheet">;
 
 /* ---- Show */
 export interface ShowOptions extends BaseProps {
@@ -8038,7 +8299,7 @@ export interface SignaturePadOptions extends BaseProps {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string | number;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -8051,7 +8312,7 @@ export interface SignaturePadOptions extends BaseProps {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -8066,7 +8327,7 @@ export interface SignaturePadOptions extends BaseProps {
 }
 export type SignaturePadProps = SignaturePadOptions;
 export type SignaturePadNamed = Omit<SignaturePadOptions, "width">;
-/** A signature capture pad — a DrawingCanvas tuned for signing, with a baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires when the signature changes (empty string when cleared, and also when the pad only received taps — so a stray tap cannot pass a truthiness check). Pass the URL back as `value` to restore a signature after a re-render, and `disabled` to lock the pad once it is submitted. `label`/`error`/`required` render the usual field shell. Use in contracts, delivery confirmation, and consent flows. */
+/** A signature capture pad — a DrawingCanvas tuned for signing, with a baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires when the signature changes (empty string when cleared, and also when the pad only received taps — so a stray tap cannot pass a truthiness check); `onBlur` / `onFocus` receive that same value. Pass the URL back as `value` to restore a signature after a re-render, and `disabled` to lock the pad once it is submitted. `label`/`error`/`required` render the usual field shell. Use in contracts, delivery confirmation, and consent flows. */
 export declare function SignaturePad(width?: number, props?: SignaturePadNamed): AktionNode<"SignaturePad">;
 export declare function SignaturePad(props: SignaturePadProps): AktionNode<"SignaturePad">;
 export declare function SignaturePad(width: number | null | undefined, height: number | null | undefined, props?: Omit<SignaturePadOptions, "width" | "height">): AktionNode<"SignaturePad">;
@@ -8159,7 +8420,7 @@ export interface SliderOptions extends Omit<BaseProps, "id"> {
   /** Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it */
   description?: string | number;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -8314,7 +8575,7 @@ export interface SplitOptions extends BaseProps {
   /** Pin one pane while the other scrolls */
   sticky?: SplitSticky;
   /** How far below the viewport top the sticky pane pins (CSS length, default 88px) — set it to your header height */
-  stickyOffset?: string;
+  stickyOffset?: string | number;
   /** Breakpoint below which it stacks: sm 640px, md 768px, lg 1024px (default md) */
   stackAt?: SplitStackAt;
   /** Show the right pane FIRST once stacked (media-above-text on mobile) */
@@ -8331,8 +8592,8 @@ export declare function Split(left: AktionChild, right: AktionChild, ratio: Spli
 export declare function Split(left: AktionChild, right: AktionChild, ratio: SplitRatio | null | undefined, gap: SpacingToken | null | undefined, props?: Omit<SplitOptions, "left" | "primary" | "right" | "secondary" | "ratio" | "gap">): AktionNode<"Split">;
 export declare function Split(left: AktionChild, right: AktionChild, ratio: SplitRatio | null | undefined, gap: SpacingToken | null | undefined, divider: boolean | null | undefined, props?: Omit<SplitOptions, "left" | "primary" | "right" | "secondary" | "ratio" | "gap" | "divider">): AktionNode<"Split">;
 export declare function Split(left: AktionChild, right: AktionChild, ratio: SplitRatio | null | undefined, gap: SpacingToken | null | undefined, divider: boolean | null | undefined, sticky: SplitSticky | null | undefined, props?: Omit<SplitOptions, "left" | "primary" | "right" | "secondary" | "ratio" | "gap" | "divider" | "sticky">): AktionNode<"Split">;
-export declare function Split(left: AktionChild, right: AktionChild, ratio: SplitRatio | null | undefined, gap: SpacingToken | null | undefined, divider: boolean | null | undefined, sticky: SplitSticky | null | undefined, stickyOffset: string | null | undefined, props?: Omit<SplitOptions, "left" | "primary" | "right" | "secondary" | "ratio" | "gap" | "divider" | "sticky" | "stickyOffset">): AktionNode<"Split">;
-export declare function Split(left: AktionChild, right: AktionChild, ratio: SplitRatio | null | undefined, gap: SpacingToken | null | undefined, divider: boolean | null | undefined, sticky: SplitSticky | null | undefined, stickyOffset: string | null | undefined, stackAt: SplitStackAt | null | undefined, props?: Omit<SplitOptions, "left" | "primary" | "right" | "secondary" | "ratio" | "gap" | "divider" | "sticky" | "stickyOffset" | "stackAt">): AktionNode<"Split">;
+export declare function Split(left: AktionChild, right: AktionChild, ratio: SplitRatio | null | undefined, gap: SpacingToken | null | undefined, divider: boolean | null | undefined, sticky: SplitSticky | null | undefined, stickyOffset: string | number | null | undefined, props?: Omit<SplitOptions, "left" | "primary" | "right" | "secondary" | "ratio" | "gap" | "divider" | "sticky" | "stickyOffset">): AktionNode<"Split">;
+export declare function Split(left: AktionChild, right: AktionChild, ratio: SplitRatio | null | undefined, gap: SpacingToken | null | undefined, divider: boolean | null | undefined, sticky: SplitSticky | null | undefined, stickyOffset: string | number | null | undefined, stackAt: SplitStackAt | null | undefined, props?: Omit<SplitOptions, "left" | "primary" | "right" | "secondary" | "ratio" | "gap" | "divider" | "sticky" | "stickyOffset" | "stackAt">): AktionNode<"Split">;
 
 /* ---- SplitView */
 export interface SplitViewOptions extends BaseProps {
@@ -8343,9 +8604,9 @@ export interface SplitViewOptions extends BaseProps {
   /** Alias of `detail`. */
   secondary?: Children;
   /** CSS width for the primary pane (default 320px) */
-  primaryWidth?: string;
+  primaryWidth?: string | number;
   /** Alias of `primaryWidth`. */
-  splitAt?: string;
+  splitAt?: string | number;
   /** Which pane wins on narrow viewports: true = detail, false = list. Omit to keep both stacked. */
   showDetail?: boolean;
 }
@@ -8355,8 +8616,8 @@ export type SplitViewNamed = Omit<SplitViewOptions, "primary"> & OneOf<"detail" 
 export declare function SplitView(primary: Children, props: SplitViewNamed): AktionNode<"SplitView">;
 export declare function SplitView(props: SplitViewProps): AktionNode<"SplitView">;
 export declare function SplitView(primary: Children, detail: Children, props?: Omit<SplitViewOptions, "primary" | "detail" | "secondary">): AktionNode<"SplitView">;
-export declare function SplitView(primary: Children, detail: Children, primaryWidth: string | null | undefined, props?: Omit<SplitViewOptions, "primary" | "detail" | "secondary" | "primaryWidth" | "splitAt">): AktionNode<"SplitView">;
-export declare function SplitView(primary: Children, detail: Children, primaryWidth: string | null | undefined, showDetail: boolean | null | undefined): AktionNode<"SplitView">;
+export declare function SplitView(primary: Children, detail: Children, primaryWidth: string | number | null | undefined, props?: Omit<SplitViewOptions, "primary" | "detail" | "secondary" | "primaryWidth" | "splitAt">): AktionNode<"SplitView">;
+export declare function SplitView(primary: Children, detail: Children, primaryWidth: string | number | null | undefined, showDetail: boolean | null | undefined): AktionNode<"SplitView">;
 
 /* ---- Spotlight */
 export interface SpotlightOptions extends BaseProps {
@@ -8436,15 +8697,15 @@ export interface StackItemOptions extends BaseProps {
   /** flex-shrink (0 or 1 typical) */
   shrink?: number;
   /** flex-basis (`auto`, `0`, or CSS length) */
-  basis?: "auto" | "0" | 0 | (string & {});
+  basis?: "auto" | "0" | number | (string & {});
   /** Per-item cross-axis alignment */
   alignSelf?: StackItemAlignSelf;
   /** Visual order override */
   order?: number;
   /** CSS min-width */
-  minWidth?: string;
+  minWidth?: string | number;
   /** CSS max-width */
-  maxWidth?: string;
+  maxWidth?: string | number;
 }
 export type StackItemProps = StackItemOptions & OneOf<"child" | "children", AktionChild>;
 export type StackItemNamed = Omit<StackItemOptions, "child" | "children">;
@@ -8453,11 +8714,11 @@ export declare function StackItem(child: AktionChild, props?: StackItemNamed): A
 export declare function StackItem(props: StackItemProps): AktionNode<"StackItem">;
 export declare function StackItem(child: AktionChild, grow: number | null | undefined, props?: Omit<StackItemOptions, "child" | "children" | "grow">): AktionNode<"StackItem">;
 export declare function StackItem(child: AktionChild, grow: number | null | undefined, shrink: number | null | undefined, props?: Omit<StackItemOptions, "child" | "children" | "grow" | "shrink">): AktionNode<"StackItem">;
-export declare function StackItem(child: AktionChild, grow: number | null | undefined, shrink: number | null | undefined, basis: "auto" | "0" | 0 | (string & {}) | null | undefined, props?: Omit<StackItemOptions, "child" | "children" | "grow" | "shrink" | "basis">): AktionNode<"StackItem">;
-export declare function StackItem(child: AktionChild, grow: number | null | undefined, shrink: number | null | undefined, basis: "auto" | "0" | 0 | (string & {}) | null | undefined, alignSelf: StackItemAlignSelf | null | undefined, props?: Omit<StackItemOptions, "child" | "children" | "grow" | "shrink" | "basis" | "alignSelf">): AktionNode<"StackItem">;
-export declare function StackItem(child: AktionChild, grow: number | null | undefined, shrink: number | null | undefined, basis: "auto" | "0" | 0 | (string & {}) | null | undefined, alignSelf: StackItemAlignSelf | null | undefined, order: number | null | undefined, props?: Omit<StackItemOptions, "child" | "children" | "grow" | "shrink" | "basis" | "alignSelf" | "order">): AktionNode<"StackItem">;
-export declare function StackItem(child: AktionChild, grow: number | null | undefined, shrink: number | null | undefined, basis: "auto" | "0" | 0 | (string & {}) | null | undefined, alignSelf: StackItemAlignSelf | null | undefined, order: number | null | undefined, minWidth: string | null | undefined, props?: Omit<StackItemOptions, "child" | "children" | "grow" | "shrink" | "basis" | "alignSelf" | "order" | "minWidth">): AktionNode<"StackItem">;
-export declare function StackItem(child: AktionChild, grow: number | null | undefined, shrink: number | null | undefined, basis: "auto" | "0" | 0 | (string & {}) | null | undefined, alignSelf: StackItemAlignSelf | null | undefined, order: number | null | undefined, minWidth: string | null | undefined, maxWidth: string | null | undefined): AktionNode<"StackItem">;
+export declare function StackItem(child: AktionChild, grow: number | null | undefined, shrink: number | null | undefined, basis: "auto" | "0" | number | (string & {}) | null | undefined, props?: Omit<StackItemOptions, "child" | "children" | "grow" | "shrink" | "basis">): AktionNode<"StackItem">;
+export declare function StackItem(child: AktionChild, grow: number | null | undefined, shrink: number | null | undefined, basis: "auto" | "0" | number | (string & {}) | null | undefined, alignSelf: StackItemAlignSelf | null | undefined, props?: Omit<StackItemOptions, "child" | "children" | "grow" | "shrink" | "basis" | "alignSelf">): AktionNode<"StackItem">;
+export declare function StackItem(child: AktionChild, grow: number | null | undefined, shrink: number | null | undefined, basis: "auto" | "0" | number | (string & {}) | null | undefined, alignSelf: StackItemAlignSelf | null | undefined, order: number | null | undefined, props?: Omit<StackItemOptions, "child" | "children" | "grow" | "shrink" | "basis" | "alignSelf" | "order">): AktionNode<"StackItem">;
+export declare function StackItem(child: AktionChild, grow: number | null | undefined, shrink: number | null | undefined, basis: "auto" | "0" | number | (string & {}) | null | undefined, alignSelf: StackItemAlignSelf | null | undefined, order: number | null | undefined, minWidth: string | number | null | undefined, props?: Omit<StackItemOptions, "child" | "children" | "grow" | "shrink" | "basis" | "alignSelf" | "order" | "minWidth">): AktionNode<"StackItem">;
+export declare function StackItem(child: AktionChild, grow: number | null | undefined, shrink: number | null | undefined, basis: "auto" | "0" | number | (string & {}) | null | undefined, alignSelf: StackItemAlignSelf | null | undefined, order: number | null | undefined, minWidth: string | number | null | undefined, maxWidth: string | number | null | undefined): AktionNode<"StackItem">;
 
 /* ---- StatCard */
 export interface StatCardOptions extends BaseProps {
@@ -8499,8 +8760,8 @@ export declare function StatCard(label: string | number, value: string | number,
 
 /* ---- Stats */
 export interface StatsOptions extends BaseProps {
-  /** Stat objects or StatCard nodes when layout=grid */
-  items?: readonly StatsItem[] | readonly AktionNode<"StatCard">[];
+  /** Stat objects and/or StatCard nodes (a StatCard switches to grid layout) */
+  items?: readonly (StatsItem | AktionNode<"StatCard">)[];
   /** strip = horizontal row; grid = responsive Grid */
   layout?: StatsLayout;
   /** Preferred column count for grid layout (1–6) */
@@ -8508,14 +8769,14 @@ export interface StatsOptions extends BaseProps {
   /** Strip alignment (layout=strip only) */
   align?: StatsAlign;
 }
-export type StatsProps = StatsOptions & { items: readonly StatsItem[] | readonly AktionNode<"StatCard">[] };
+export type StatsProps = StatsOptions & { items: readonly (StatsItem | AktionNode<"StatCard">)[] };
 export type StatsNamed = Omit<StatsOptions, "items">;
-/** KPI strip or grid. Pass `items` as `{label, value, hint?, tone?, spark?}` objects for strip layout, or as `StatCard(...)` nodes when `layout="grid"`. */
-export declare function Stats(items: readonly StatsItem[] | readonly AktionNode<"StatCard">[], props?: StatsNamed): AktionNode<"Stats">;
+/** KPI strip or grid. Pass `items` as `{label, value, hint?, tone?, spark?}` objects (strip layout by default) and/or `StatCard(...)` nodes; any StatCard item, or `layout="grid"`, lays them out as a responsive grid. */
+export declare function Stats(items: readonly (StatsItem | AktionNode<"StatCard">)[], props?: StatsNamed): AktionNode<"Stats">;
 export declare function Stats(props: StatsProps): AktionNode<"Stats">;
-export declare function Stats(items: readonly StatsItem[] | readonly AktionNode<"StatCard">[], layout: StatsLayout | null | undefined, props?: Omit<StatsOptions, "items" | "layout">): AktionNode<"Stats">;
-export declare function Stats(items: readonly StatsItem[] | readonly AktionNode<"StatCard">[], layout: StatsLayout | null | undefined, columns: 1 | 2 | 3 | 4 | 5 | 6 | null | undefined, props?: Omit<StatsOptions, "items" | "layout" | "columns">): AktionNode<"Stats">;
-export declare function Stats(items: readonly StatsItem[] | readonly AktionNode<"StatCard">[], layout: StatsLayout | null | undefined, columns: 1 | 2 | 3 | 4 | 5 | 6 | null | undefined, align: StatsAlign | null | undefined): AktionNode<"Stats">;
+export declare function Stats(items: readonly (StatsItem | AktionNode<"StatCard">)[], layout: StatsLayout | null | undefined, props?: Omit<StatsOptions, "items" | "layout">): AktionNode<"Stats">;
+export declare function Stats(items: readonly (StatsItem | AktionNode<"StatCard">)[], layout: StatsLayout | null | undefined, columns: 1 | 2 | 3 | 4 | 5 | 6 | null | undefined, props?: Omit<StatsOptions, "items" | "layout" | "columns">): AktionNode<"Stats">;
+export declare function Stats(items: readonly (StatsItem | AktionNode<"StatCard">)[], layout: StatsLayout | null | undefined, columns: 1 | 2 | 3 | 4 | 5 | 6 | null | undefined, align: StatsAlign | null | undefined): AktionNode<"Stats">;
 
 /* ---- StatusDot */
 export interface StatusDotOptions extends BaseProps {
@@ -8536,16 +8797,16 @@ export declare function StatusDot(label: string | number, tone: StatusDotTone | 
 
 /* ---- Steps */
 export interface StepsOptions extends BaseProps {
-  items?: readonly (StepsItemData | string | number)[];
+  items?: readonly (StepsItemData | AktionNode | string | number | false | null | undefined)[];
   /** Layout direction (default `vertical`) */
   orientation?: StepsOrientation;
 }
-export type StepsProps = StepsOptions & { items: readonly (StepsItemData | string | number)[] };
+export type StepsProps = StepsOptions & { items: readonly (StepsItemData | AktionNode | string | number | false | null | undefined)[] };
 export type StepsNamed = Omit<StepsOptions, "items">;
-/** Numbered step-by-step guide. Pass items as `{title, details?, active?, status?}` objects. `active` marks the current step; `status` (`pending|active|complete|error`) additionally distinguishes finished and failed steps. `orientation: "horizontal"` lays the steps across the top of a wizard instead of down the page. */
-export declare function Steps(items: readonly (StepsItemData | string | number)[], props?: StepsNamed): AktionNode<"Steps">;
+/** Numbered step-by-step guide. Pass items as `{title, details?, active?, complete?, status?}` objects (a string is a title-only step, a component node is rendered as-is, and `null`/`false` items are skipped). `active` marks the current step and `complete` a finished one; `status` (`pending|active|complete|error`) wins over both and also marks failed steps. `orientation: "horizontal"` lays the steps across the top of a wizard instead of down the page. */
+export declare function Steps(items: readonly (StepsItemData | AktionNode | string | number | false | null | undefined)[], props?: StepsNamed): AktionNode<"Steps">;
 export declare function Steps(props: StepsProps): AktionNode<"Steps">;
-export declare function Steps(items: readonly (StepsItemData | string | number)[], orientation: StepsOrientation | null | undefined): AktionNode<"Steps">;
+export declare function Steps(items: readonly (StepsItemData | AktionNode | string | number | false | null | undefined)[], orientation: StepsOrientation | null | undefined): AktionNode<"Steps">;
 
 /* ---- Sticky */
 export interface StickyOptions extends BaseProps {
@@ -8554,7 +8815,7 @@ export interface StickyOptions extends BaseProps {
   child?: Children;
   side?: StickySide;
   /** CSS offset (default 0) */
-  offset?: string | 0;
+  offset?: string | number;
   /** Z-index (default 10) */
   zIndex?: number;
 }
@@ -8564,8 +8825,8 @@ export type StickyNamed = Omit<StickyOptions, "children" | "child">;
 export declare function Sticky(children: Children, props?: StickyNamed): AktionNode<"Sticky">;
 export declare function Sticky(props: StickyProps): AktionNode<"Sticky">;
 export declare function Sticky(children: Children, side: StickySide | null | undefined, props?: Omit<StickyOptions, "children" | "child" | "side">): AktionNode<"Sticky">;
-export declare function Sticky(children: Children, side: StickySide | null | undefined, offset: string | 0 | null | undefined, props?: Omit<StickyOptions, "children" | "child" | "side" | "offset">): AktionNode<"Sticky">;
-export declare function Sticky(children: Children, side: StickySide | null | undefined, offset: string | 0 | null | undefined, zIndex: number | null | undefined): AktionNode<"Sticky">;
+export declare function Sticky(children: Children, side: StickySide | null | undefined, offset: string | number | null | undefined, props?: Omit<StickyOptions, "children" | "child" | "side" | "offset">): AktionNode<"Sticky">;
+export declare function Sticky(children: Children, side: StickySide | null | undefined, offset: string | number | null | undefined, zIndex: number | null | undefined): AktionNode<"Sticky">;
 
 /* ---- Styles */
 export interface StylesOptions extends BaseProps {
@@ -8613,11 +8874,11 @@ export interface SvgOptions extends BaseProps {
   paths?: string | number;
   /** Alias of `content`. */
   markup?: string | number;
-  /** e.g. "0 0 24 24" (default) */
+  /** Four numbers, space- or comma-separated, e.g. "0 0 24 24" (default) */
   viewBox?: string;
   width?: string | number;
   height?: string | number;
-  /** currentColor (default), none, or a token color */
+  /** SVG paint: currentColor (default), none, a hex / rgb() / named colour, or url(#gradientId). Theme tokens are not resolved here; colour the parent and keep currentColor */
   fill?: "currentColor" | "none" | (string & {});
   /** Stroke colour — for outline icon sets (Lucide, Feather) */
   stroke?: "currentColor" | "none" | (string & {});
@@ -8768,7 +9029,7 @@ export interface TableOptions extends BaseProps {
   /** Skeleton rows drawn while `loading` (default 3) */
   loadingRows?: number;
   /** CSS max-height for the scroll box (`320px`, `50vh`) — overrides the default cap `sticky` applies */
-  maxHeight?: string;
+  maxHeight?: string | number;
   /** `(rowIndex, row) => void` — fired when a row is clicked or activated via keyboard. `row` is header-keyed. */
   onRowClick?: ((rowIndex: number, row: Record<string, unknown>) => void) | null;
   /** Alias of `onRowClick`. */
@@ -8822,7 +9083,7 @@ export declare function TableOfContents(items: readonly TableOfContentsItem[], t
 /* ---- Tabs */
 export interface TabsOptions extends BaseProps {
   /** Tab definitions */
-  items?: readonly AktionNode<"TabItem">[];
+  items?: readonly (AktionNode<"TabItem"> | false | null | undefined)[];
   /** Initially active tab value */
   defaultValue?: string | number;
   /** Layout direction (default `horizontal`) */
@@ -8836,16 +9097,16 @@ export interface TabsOptions extends BaseProps {
   /** Stretch the strip across its container and split it evenly between the triggers (ignored for `orientation="vertical"`) */
   fitted?: boolean;
 }
-export type TabsProps = TabsOptions & { items: readonly AktionNode<"TabItem">[] };
+export type TabsProps = TabsOptions & { items: readonly (AktionNode<"TabItem"> | false | null | undefined)[] };
 export type TabsNamed = Omit<TabsOptions, "items">;
 /** Tabbed container. Children must be TabItem components. Supports `orientation="vertical"` for sidebar-style tabs and built-in keyboard navigation (←/→ or ↑/↓, Home, End). Provide `onChange` to react when the user switches tabs (called with the new tab's value). Pass a `$variable` as `value` for a controlled strip — it is kept in sync both ways, so a button elsewhere on the page (or a route) can switch tabs and a user click updates the variable; `defaultValue` is the initial tab only. Set `fitted` for a strip that spans its container with equal-width triggers (the shape a two- or three-tab section header usually wants). */
-export declare function Tabs(items: readonly AktionNode<"TabItem">[], props?: TabsNamed): AktionNode<"Tabs">;
+export declare function Tabs(items: readonly (AktionNode<"TabItem"> | false | null | undefined)[], props?: TabsNamed): AktionNode<"Tabs">;
 export declare function Tabs(props: TabsProps): AktionNode<"Tabs">;
-export declare function Tabs(items: readonly AktionNode<"TabItem">[], defaultValue: string | number | null | undefined, props?: Omit<TabsOptions, "items" | "defaultValue">): AktionNode<"Tabs">;
-export declare function Tabs(items: readonly AktionNode<"TabItem">[], defaultValue: string | number | null | undefined, orientation: TabsOrientation | null | undefined, props?: Omit<TabsOptions, "items" | "defaultValue" | "orientation">): AktionNode<"Tabs">;
-export declare function Tabs(items: readonly AktionNode<"TabItem">[], defaultValue: string | number | null | undefined, orientation: TabsOrientation | null | undefined, onChange: ((value: string) => void) | null | undefined, props?: Omit<TabsOptions, "items" | "defaultValue" | "orientation" | "onChange" | "onchange">): AktionNode<"Tabs">;
-export declare function Tabs(items: readonly AktionNode<"TabItem">[], defaultValue: string | number | null | undefined, orientation: TabsOrientation | null | undefined, onChange: ((value: string) => void) | null | undefined, value: string | number | null | undefined, props?: Omit<TabsOptions, "items" | "defaultValue" | "orientation" | "onChange" | "onchange" | "value">): AktionNode<"Tabs">;
-export declare function Tabs(items: readonly AktionNode<"TabItem">[], defaultValue: string | number | null | undefined, orientation: TabsOrientation | null | undefined, onChange: ((value: string) => void) | null | undefined, value: string | number | null | undefined, fitted: boolean | null | undefined): AktionNode<"Tabs">;
+export declare function Tabs(items: readonly (AktionNode<"TabItem"> | false | null | undefined)[], defaultValue: string | number | null | undefined, props?: Omit<TabsOptions, "items" | "defaultValue">): AktionNode<"Tabs">;
+export declare function Tabs(items: readonly (AktionNode<"TabItem"> | false | null | undefined)[], defaultValue: string | number | null | undefined, orientation: TabsOrientation | null | undefined, props?: Omit<TabsOptions, "items" | "defaultValue" | "orientation">): AktionNode<"Tabs">;
+export declare function Tabs(items: readonly (AktionNode<"TabItem"> | false | null | undefined)[], defaultValue: string | number | null | undefined, orientation: TabsOrientation | null | undefined, onChange: ((value: string) => void) | null | undefined, props?: Omit<TabsOptions, "items" | "defaultValue" | "orientation" | "onChange" | "onchange">): AktionNode<"Tabs">;
+export declare function Tabs(items: readonly (AktionNode<"TabItem"> | false | null | undefined)[], defaultValue: string | number | null | undefined, orientation: TabsOrientation | null | undefined, onChange: ((value: string) => void) | null | undefined, value: string | number | null | undefined, props?: Omit<TabsOptions, "items" | "defaultValue" | "orientation" | "onChange" | "onchange" | "value">): AktionNode<"Tabs">;
+export declare function Tabs(items: readonly (AktionNode<"TabItem"> | false | null | undefined)[], defaultValue: string | number | null | undefined, orientation: TabsOrientation | null | undefined, onChange: ((value: string) => void) | null | undefined, value: string | number | null | undefined, fitted: boolean | null | undefined): AktionNode<"Tabs">;
 
 /* ---- TagInput */
 export interface TagInputOptions extends Omit<BaseProps, "id"> {
@@ -8889,10 +9150,10 @@ export interface TagInputOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((tags: string[]) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((tags: string[]) => void) | null;
-  /** Called when the control gains focus */
-  onFocus?: ((draft: string) => void) | null;
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
+  onFocus?: ((tags: string[]) => void) | null;
   /** Alias of `onFocus`. */
-  onfocus?: ((draft: string) => void) | null;
+  onfocus?: ((tags: string[]) => void) | null;
   /** Form field name submitted to the server (defaults to `id`) */
   name?: string | number;
   /** Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context */
@@ -8923,9 +9184,9 @@ export interface TerminalOptions extends BaseProps {
   /** Prompt marker for command lines (e.g. "$"); indented lines are treated as output */
   prompt?: string | number;
   /** Explicit body height (CSS length); overflow scrolls */
-  height?: string;
+  height?: string | number;
   /** Cap the body height (CSS length); overflow scrolls */
-  maxHeight?: string;
+  maxHeight?: string | number;
 }
 export type TerminalProps = TerminalOptions & OneOf<"lines" | "children" | "content", readonly string[]>;
 export type TerminalNamed = Omit<TerminalOptions, "lines" | "children" | "content">;
@@ -8934,8 +9195,8 @@ export declare function Terminal(lines: readonly string[], props?: TerminalNamed
 export declare function Terminal(props: TerminalProps): AktionNode<"Terminal">;
 export declare function Terminal(lines: readonly string[], file: string | number | null | undefined, props?: Omit<TerminalOptions, "lines" | "children" | "content" | "file">): AktionNode<"Terminal">;
 export declare function Terminal(lines: readonly string[], file: string | number | null | undefined, prompt: string | number | null | undefined, props?: Omit<TerminalOptions, "lines" | "children" | "content" | "file" | "prompt">): AktionNode<"Terminal">;
-export declare function Terminal(lines: readonly string[], file: string | number | null | undefined, prompt: string | number | null | undefined, height: string | null | undefined, props?: Omit<TerminalOptions, "lines" | "children" | "content" | "file" | "prompt" | "height">): AktionNode<"Terminal">;
-export declare function Terminal(lines: readonly string[], file: string | number | null | undefined, prompt: string | number | null | undefined, height: string | null | undefined, maxHeight: string | null | undefined): AktionNode<"Terminal">;
+export declare function Terminal(lines: readonly string[], file: string | number | null | undefined, prompt: string | number | null | undefined, height: string | number | null | undefined, props?: Omit<TerminalOptions, "lines" | "children" | "content" | "file" | "prompt" | "height">): AktionNode<"Terminal">;
+export declare function Terminal(lines: readonly string[], file: string | number | null | undefined, prompt: string | number | null | undefined, height: string | number | null | undefined, maxHeight: string | number | null | undefined): AktionNode<"Terminal">;
 
 /* ---- Testimonial */
 export interface TestimonialOptions extends Omit<BaseProps, "role"> {
@@ -9019,7 +9280,7 @@ export interface TextAreaOptions extends Omit<BaseProps, "id"> {
   /** Mark the field required (adds a `*` and the `required` attribute) */
   required?: boolean;
   /** Mark the field optional in its label: `true` for "(optional)", or a string to word it another way (e.g. a translation). Ignored when `required` is set */
-  optional?: true | string;
+  optional?: boolean | string;
   /** Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary */
   invalid?: boolean;
   /** Alias of `invalid`. */
@@ -9032,7 +9293,7 @@ export interface TextAreaOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -9101,16 +9362,16 @@ export declare function TextContent(value: string | number, variant: TextContent
 /* ---- ThemeToggle */
 export interface ThemeToggleOptions extends BaseProps {
   /** Theme name when toggled to light (default 'light') */
-  light?: Exclude<BuiltInThemeName, `${string}dark${string}`>;
+  light?: BuiltInThemeName | (string & {});
   /** Theme name when toggled to dark (default 'dark') */
-  dark?: Extract<BuiltInThemeName, `${string}dark${string}`>;
+  dark?: BuiltInThemeName | (string & {});
 }
 export type ThemeToggleProps = ThemeToggleOptions;
 export type ThemeToggleNamed = Omit<ThemeToggleOptions, "light">;
-/** A sun/moon button that toggles the host between light and dark themes — no host glue required. It flips the <aktion-app> `theme` attribute and dispatches a `theme-change` event the host can listen for. */
-export declare function ThemeToggle(light?: Exclude<BuiltInThemeName, `${string}dark${string}`>, props?: ThemeToggleNamed): AktionNode<"ThemeToggle">;
+/** A sun/moon button that toggles the host between light and dark themes — no host glue required. It flips the <aktion-app> `theme` attribute between `light` and `dark` (any theme names) and dispatches a `theme-change` event the host can listen for. */
+export declare function ThemeToggle(light?: BuiltInThemeName | (string & {}), props?: ThemeToggleNamed): AktionNode<"ThemeToggle">;
 export declare function ThemeToggle(props: ThemeToggleProps): AktionNode<"ThemeToggle">;
-export declare function ThemeToggle(light: Exclude<BuiltInThemeName, `${string}dark${string}`> | null | undefined, dark: Extract<BuiltInThemeName, `${string}dark${string}`> | null | undefined): AktionNode<"ThemeToggle">;
+export declare function ThemeToggle(light: BuiltInThemeName | (string & {}) | null | undefined, dark: BuiltInThemeName | (string & {}) | null | undefined): AktionNode<"ThemeToggle">;
 
 /* ---- Tile */
 export interface TileOptions extends BaseProps {
@@ -9157,7 +9418,7 @@ export interface TimePickerOptions extends Omit<BaseProps, "id"> {
   value?: string;
   min?: string;
   max?: string;
-  /** Seconds between selectable times */
+  /** Seconds between selectable times (a positive integer), or `"any"` to allow seconds */
   step?: number | "any";
   /** Called with the new HH:MM string when the user picks a time */
   onChange?: ((value: string) => void) | null;
@@ -9191,7 +9452,7 @@ export interface TimePickerOptions extends Omit<BaseProps, "id"> {
   onBlur?: ((value: string) => void) | null;
   /** Alias of `onBlur`. */
   onblur?: ((value: string) => void) | null;
-  /** Called when the control gains focus */
+  /** Called with the current value (the same value `onBlur` receives) when the control gains focus */
   onFocus?: ((value: string) => void) | null;
   /** Alias of `onFocus`. */
   onfocus?: ((value: string) => void) | null;
@@ -9274,7 +9535,7 @@ export interface ToastOptions extends BaseProps {
   duration?: number;
   /** Optional inline `Button` action shown above the message */
   action?: AktionNode<"Button">;
-  /** Callable invoked when the toast is dismissed (× button, auto-dismiss, or programmatic) */
+  /** Callable invoked when the toast dismisses itself (× button or auto-dismiss) — wire it to remove the toast from your list (`$toast.dismiss(t.id)`). Removing the toast yourself does not call it */
   onClose?: (() => void) | null;
   /** Pin a standalone Toast to a viewport corner without wrapping it in `Stack(...)` */
   position?: ToastPosition;
@@ -9317,7 +9578,9 @@ export declare function Toasts(children: Children, position: ToastsPosition | nu
 
 /* ---- ToggleGroup */
 export interface ToggleGroupOptions<V extends string | number | boolean = string | number | boolean> extends Omit<BaseProps, "id"> {
-  id?: string | number;
+  /** DOM id of the group — or the item list itself, when it is the only positional argument */
+  id?: string | number | readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[];
+  /** The items; required unless they are passed in the first slot */
   items?: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[];
   value?: V | readonly V[] | null;
   variant?: ToggleGroupVariant;
@@ -9339,18 +9602,18 @@ export interface ToggleGroupOptions<V extends string | number | boolean = string
   /** Alias of `label`. */
   ariaLabel?: string | number;
 }
-export type ToggleGroupProps<V extends string | number | boolean = string | number | boolean> = ToggleGroupOptions<V> & { id: string | number } & { items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] };
-export type ToggleGroupNamed<V extends string | number | boolean = string | number | boolean> = Omit<ToggleGroupOptions<V>, "id"> & { items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] };
-/** Group of Toggle-style buttons. Items are `[value, label]` arrays, `{value, label, icon?, disabled?}` objects, or plain strings (used for both value and label). Single-select by default — pass `multiple: true` for an independently toggleable set (a bold/italic/underline toolbar), which reads and writes an ARRAY of values. Pass a `$variable` as `value` for two-way binding; item values keep their original type, so numeric items write numbers back. `onChange(value)` fires with the new selection. Left/Right arrows move between items; give the group a `label` so screen readers can tell two groups apart. */
-export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number, props: ToggleGroupNamed<V>): AktionNode<"ToggleGroup">;
+export type ToggleGroupProps<V extends string | number | boolean = string | number | boolean> = ToggleGroupOptions<V>;
+export type ToggleGroupNamed<V extends string | number | boolean = string | number | boolean> = Omit<ToggleGroupOptions<V>, "id">;
+/** Group of Toggle-style buttons. Items are `[value, label]` arrays, `{value, label, icon?, disabled?}` objects, or plain strings (used for both value and label). Single-select by default — pass `multiple: true` for an independently toggleable set (a bold/italic/underline toolbar), which reads and writes an ARRAY of values. Pass a `$variable` as `value` for two-way binding; item values keep their original type, so numeric items write numbers back. `onChange(value)` fires with the new selection. Left/Right arrows move between items; give the group a `label` so screen readers can tell two groups apart. The item list may also be the only positional argument: `ToggleGroup(["Day", "Week"])`. */
+export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id?: string | number | readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[], props?: ToggleGroupNamed<V>): AktionNode<"ToggleGroup">;
 export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(props: ToggleGroupProps<V>): AktionNode<"ToggleGroup">;
-export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[], props?: Omit<ToggleGroupOptions<V>, "id" | "items">): AktionNode<"ToggleGroup">;
-export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[], value: V | readonly V[] | null | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items" | "value">): AktionNode<"ToggleGroup">;
-export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[], value: V | readonly V[] | null | null | undefined, variant: ToggleGroupVariant | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items" | "value" | "variant" | "tone">): AktionNode<"ToggleGroup">;
-export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[], value: V | readonly V[] | null | null | undefined, variant: ToggleGroupVariant | null | undefined, size: ToggleGroupSize | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items" | "value" | "variant" | "tone" | "size">): AktionNode<"ToggleGroup">;
-export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[], value: V | readonly V[] | null | null | undefined, variant: ToggleGroupVariant | null | undefined, size: ToggleGroupSize | null | undefined, onChange: ((value: V | V[]) => void) | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items" | "value" | "variant" | "tone" | "size" | "onChange" | "onchange">): AktionNode<"ToggleGroup">;
-export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[], value: V | readonly V[] | null | null | undefined, variant: ToggleGroupVariant | null | undefined, size: ToggleGroupSize | null | undefined, onChange: ((value: V | V[]) => void) | null | undefined, multiple: boolean | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items" | "value" | "variant" | "tone" | "size" | "onChange" | "onchange" | "multiple">): AktionNode<"ToggleGroup">;
-export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[], value: V | readonly V[] | null | null | undefined, variant: ToggleGroupVariant | null | undefined, size: ToggleGroupSize | null | undefined, onChange: ((value: V | V[]) => void) | null | undefined, multiple: boolean | null | undefined, type: ToggleGroupType | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items" | "value" | "variant" | "tone" | "size" | "onChange" | "onchange" | "multiple" | "type">): AktionNode<"ToggleGroup">;
+export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number | readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items">): AktionNode<"ToggleGroup">;
+export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number | readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, value: V | readonly V[] | null | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items" | "value">): AktionNode<"ToggleGroup">;
+export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number | readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, value: V | readonly V[] | null | null | undefined, variant: ToggleGroupVariant | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items" | "value" | "variant" | "tone">): AktionNode<"ToggleGroup">;
+export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number | readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, value: V | readonly V[] | null | null | undefined, variant: ToggleGroupVariant | null | undefined, size: ToggleGroupSize | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items" | "value" | "variant" | "tone" | "size">): AktionNode<"ToggleGroup">;
+export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number | readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, value: V | readonly V[] | null | null | undefined, variant: ToggleGroupVariant | null | undefined, size: ToggleGroupSize | null | undefined, onChange: ((value: V | V[]) => void) | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items" | "value" | "variant" | "tone" | "size" | "onChange" | "onchange">): AktionNode<"ToggleGroup">;
+export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number | readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, value: V | readonly V[] | null | null | undefined, variant: ToggleGroupVariant | null | undefined, size: ToggleGroupSize | null | undefined, onChange: ((value: V | V[]) => void) | null | undefined, multiple: boolean | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items" | "value" | "variant" | "tone" | "size" | "onChange" | "onchange" | "multiple">): AktionNode<"ToggleGroup">;
+export declare function ToggleGroup<V extends string | number | boolean = string | number | boolean>(id: string | number | readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, items: readonly (ToggleGroupItem<V> | readonly ToggleGroupValue[])[] | null | undefined, value: V | readonly V[] | null | null | undefined, variant: ToggleGroupVariant | null | undefined, size: ToggleGroupSize | null | undefined, onChange: ((value: V | V[]) => void) | null | undefined, multiple: boolean | null | undefined, type: ToggleGroupType | null | undefined, props?: Omit<ToggleGroupOptions<V>, "id" | "items" | "value" | "variant" | "tone" | "size" | "onChange" | "onchange" | "multiple" | "type">): AktionNode<"ToggleGroup">;
 
 /* ---- Toolbar */
 export interface ToolbarOptions extends BaseProps {
@@ -9455,11 +9718,11 @@ export declare function TopBar(title: string | number | null | undefined, subtit
 /* ---- Tour */
 export interface TourOptions extends BaseProps {
   steps?: readonly (TourStep | string)[];
-  /** 0-indexed active step — bind a $variable */
+  /** 0-indexed active step (default 0) — bind a $variable to drive it; without a binding the tour advances itself */
   current?: number;
   /** Whether the tour is visible — bind a $variable to control it */
   open?: boolean;
-  /** Called with the new boolean open state whenever the component opens or closes. */
+  /** Called with `false` whenever the user closes the tour (Escape, Skip or Finish). Opening is driven by `open`, so it does not fire then. */
   onOpenChange?: ((open: false) => void) | null;
   /** Alias of `onOpenChange`. */
   onopenchange?: ((open: false) => void) | null;
@@ -9476,18 +9739,18 @@ export interface TourOptions extends BaseProps {
   /** Default "Finish" */
   finishLabel?: string | number;
 }
-export type TourProps = TourOptions & { steps: readonly (TourStep | string)[] } & { current: number };
-export type TourNamed = Omit<TourOptions, "steps"> & { current: number };
+export type TourProps = TourOptions & { steps: readonly (TourStep | string)[] };
+export type TourNamed = Omit<TourOptions, "steps">;
 /** Product-tour controller — renders the current step's title, description, and a Prev/Next/Skip row. Bind `current` to a `$variable` (0-indexed) to drive the step from your own state; without a binding the component advances itself. Bind `open` to a `$variable` so Skip/Finish can close it (otherwise it closes itself). Pass `steps` as `{title, description, target?}` objects; the optional `target` is a CSS selector that renders alongside the step for designers to reference. */
-export declare function Tour(steps: readonly (TourStep | string)[], props: TourNamed): AktionNode<"Tour">;
+export declare function Tour(steps: readonly (TourStep | string)[], props?: TourNamed): AktionNode<"Tour">;
 export declare function Tour(props: TourProps): AktionNode<"Tour">;
-export declare function Tour(steps: readonly (TourStep | string)[], current: number, props?: Omit<TourOptions, "steps" | "current">): AktionNode<"Tour">;
-export declare function Tour(steps: readonly (TourStep | string)[], current: number, open: boolean | null | undefined, props?: Omit<TourOptions, "steps" | "current" | "open">): AktionNode<"Tour">;
-export declare function Tour(steps: readonly (TourStep | string)[], current: number, open: boolean | null | undefined, onOpenChange: ((open: false) => void) | null | undefined, props?: Omit<TourOptions, "steps" | "current" | "open" | "onOpenChange" | "onopenchange">): AktionNode<"Tour">;
-export declare function Tour(steps: readonly (TourStep | string)[], current: number, open: boolean | null | undefined, onOpenChange: ((open: false) => void) | null | undefined, onComplete: (() => void) | null | undefined, props?: Omit<TourOptions, "steps" | "current" | "open" | "onOpenChange" | "onopenchange" | "onComplete">): AktionNode<"Tour">;
-export declare function Tour(steps: readonly (TourStep | string)[], current: number, open: boolean | null | undefined, onOpenChange: ((open: false) => void) | null | undefined, onComplete: (() => void) | null | undefined, onSkip: ((stepIndex: number) => void) | null | undefined, props?: Omit<TourOptions, "steps" | "current" | "open" | "onOpenChange" | "onopenchange" | "onComplete" | "onSkip">): AktionNode<"Tour">;
-export declare function Tour(steps: readonly (TourStep | string)[], current: number, open: boolean | null | undefined, onOpenChange: ((open: false) => void) | null | undefined, onComplete: (() => void) | null | undefined, onSkip: ((stepIndex: number) => void) | null | undefined, skipLabel: string | number | null | undefined, props?: Omit<TourOptions, "steps" | "current" | "open" | "onOpenChange" | "onopenchange" | "onComplete" | "onSkip" | "skipLabel">): AktionNode<"Tour">;
-export declare function Tour(steps: readonly (TourStep | string)[], current: number, open: boolean | null | undefined, onOpenChange: ((open: false) => void) | null | undefined, onComplete: (() => void) | null | undefined, onSkip: ((stepIndex: number) => void) | null | undefined, skipLabel: string | number | null | undefined, backLabel: string | number | null | undefined, props?: Omit<TourOptions, "steps" | "current" | "open" | "onOpenChange" | "onopenchange" | "onComplete" | "onSkip" | "skipLabel" | "backLabel">): AktionNode<"Tour">;
+export declare function Tour(steps: readonly (TourStep | string)[], current: number | null | undefined, props?: Omit<TourOptions, "steps" | "current">): AktionNode<"Tour">;
+export declare function Tour(steps: readonly (TourStep | string)[], current: number | null | undefined, open: boolean | null | undefined, props?: Omit<TourOptions, "steps" | "current" | "open">): AktionNode<"Tour">;
+export declare function Tour(steps: readonly (TourStep | string)[], current: number | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: false) => void) | null | undefined, props?: Omit<TourOptions, "steps" | "current" | "open" | "onOpenChange" | "onopenchange">): AktionNode<"Tour">;
+export declare function Tour(steps: readonly (TourStep | string)[], current: number | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: false) => void) | null | undefined, onComplete: (() => void) | null | undefined, props?: Omit<TourOptions, "steps" | "current" | "open" | "onOpenChange" | "onopenchange" | "onComplete">): AktionNode<"Tour">;
+export declare function Tour(steps: readonly (TourStep | string)[], current: number | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: false) => void) | null | undefined, onComplete: (() => void) | null | undefined, onSkip: ((stepIndex: number) => void) | null | undefined, props?: Omit<TourOptions, "steps" | "current" | "open" | "onOpenChange" | "onopenchange" | "onComplete" | "onSkip">): AktionNode<"Tour">;
+export declare function Tour(steps: readonly (TourStep | string)[], current: number | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: false) => void) | null | undefined, onComplete: (() => void) | null | undefined, onSkip: ((stepIndex: number) => void) | null | undefined, skipLabel: string | number | null | undefined, props?: Omit<TourOptions, "steps" | "current" | "open" | "onOpenChange" | "onopenchange" | "onComplete" | "onSkip" | "skipLabel">): AktionNode<"Tour">;
+export declare function Tour(steps: readonly (TourStep | string)[], current: number | null | undefined, open: boolean | null | undefined, onOpenChange: ((open: false) => void) | null | undefined, onComplete: (() => void) | null | undefined, onSkip: ((stepIndex: number) => void) | null | undefined, skipLabel: string | number | null | undefined, backLabel: string | number | null | undefined, props?: Omit<TourOptions, "steps" | "current" | "open" | "onOpenChange" | "onopenchange" | "onComplete" | "onSkip" | "skipLabel" | "backLabel">): AktionNode<"Tour">;
 
 /* ---- Transition */
 export interface TransitionOptions extends BaseProps {
@@ -9603,6 +9866,7 @@ export declare function TreeNode(label: string | number, children: readonly Akti
 
 /* ---- Truncate */
 export interface TruncateOptions extends BaseProps {
+  /** Plain text to clamp — omit it when passing `child` */
   text?: string | number;
   /** Lines before clamping (default 3) */
   maxLines?: number;
@@ -9618,17 +9882,17 @@ export interface TruncateOptions extends BaseProps {
   /** Alias of `child`. */
   children?: Children;
 }
-export type TruncateProps = TruncateOptions & { text: string | number };
+export type TruncateProps = TruncateOptions;
 export type TruncateNamed = Omit<TruncateOptions, "text">;
 /** Clamp long text (or a `child` node) with an expand control. The toggle hides itself when the content already fits, and `expanded` + `onToggle` make the state controllable for "expand all" flows. */
-export declare function Truncate(text: string | number, props?: TruncateNamed): AktionNode<"Truncate">;
+export declare function Truncate(text?: string | number, props?: TruncateNamed): AktionNode<"Truncate">;
 export declare function Truncate(props: TruncateProps): AktionNode<"Truncate">;
-export declare function Truncate(text: string | number, maxLines: number | null | undefined, props?: Omit<TruncateOptions, "text" | "maxLines">): AktionNode<"Truncate">;
-export declare function Truncate(text: string | number, maxLines: number | null | undefined, expandLabel: string | number | null | undefined, props?: Omit<TruncateOptions, "text" | "maxLines" | "expandLabel">): AktionNode<"Truncate">;
-export declare function Truncate(text: string | number, maxLines: number | null | undefined, expandLabel: string | number | null | undefined, collapseLabel: string | number | null | undefined, props?: Omit<TruncateOptions, "text" | "maxLines" | "expandLabel" | "collapseLabel">): AktionNode<"Truncate">;
-export declare function Truncate(text: string | number, maxLines: number | null | undefined, expandLabel: string | number | null | undefined, collapseLabel: string | number | null | undefined, expanded: boolean | null | undefined, props?: Omit<TruncateOptions, "text" | "maxLines" | "expandLabel" | "collapseLabel" | "expanded">): AktionNode<"Truncate">;
-export declare function Truncate(text: string | number, maxLines: number | null | undefined, expandLabel: string | number | null | undefined, collapseLabel: string | number | null | undefined, expanded: boolean | null | undefined, onToggle: ((expanded: boolean) => void) | null | undefined, props?: Omit<TruncateOptions, "text" | "maxLines" | "expandLabel" | "collapseLabel" | "expanded" | "onToggle">): AktionNode<"Truncate">;
-export declare function Truncate(text: string | number, maxLines: number | null | undefined, expandLabel: string | number | null | undefined, collapseLabel: string | number | null | undefined, expanded: boolean | null | undefined, onToggle: ((expanded: boolean) => void) | null | undefined, child: Children | null | undefined): AktionNode<"Truncate">;
+export declare function Truncate(text: string | number | null | undefined, maxLines: number | null | undefined, props?: Omit<TruncateOptions, "text" | "maxLines">): AktionNode<"Truncate">;
+export declare function Truncate(text: string | number | null | undefined, maxLines: number | null | undefined, expandLabel: string | number | null | undefined, props?: Omit<TruncateOptions, "text" | "maxLines" | "expandLabel">): AktionNode<"Truncate">;
+export declare function Truncate(text: string | number | null | undefined, maxLines: number | null | undefined, expandLabel: string | number | null | undefined, collapseLabel: string | number | null | undefined, props?: Omit<TruncateOptions, "text" | "maxLines" | "expandLabel" | "collapseLabel">): AktionNode<"Truncate">;
+export declare function Truncate(text: string | number | null | undefined, maxLines: number | null | undefined, expandLabel: string | number | null | undefined, collapseLabel: string | number | null | undefined, expanded: boolean | null | undefined, props?: Omit<TruncateOptions, "text" | "maxLines" | "expandLabel" | "collapseLabel" | "expanded">): AktionNode<"Truncate">;
+export declare function Truncate(text: string | number | null | undefined, maxLines: number | null | undefined, expandLabel: string | number | null | undefined, collapseLabel: string | number | null | undefined, expanded: boolean | null | undefined, onToggle: ((expanded: boolean) => void) | null | undefined, props?: Omit<TruncateOptions, "text" | "maxLines" | "expandLabel" | "collapseLabel" | "expanded" | "onToggle">): AktionNode<"Truncate">;
+export declare function Truncate(text: string | number | null | undefined, maxLines: number | null | undefined, expandLabel: string | number | null | undefined, collapseLabel: string | number | null | undefined, expanded: boolean | null | undefined, onToggle: ((expanded: boolean) => void) | null | undefined, child: Children | null | undefined): AktionNode<"Truncate">;
 
 /* ---- TypingIndicator */
 export interface TypingIndicatorOptions extends BaseProps {
@@ -9718,14 +9982,14 @@ export interface VideoPlayerOptions extends BaseProps {
   onended?: (() => void) | null;
   /** Message shown when the source is missing/unsafe or fails to load */
   fallback?: string | number;
-  /** Callable invoked when the video fails to load */
+  /** Callable invoked when the video fails to load (`src`, or every `sources` entry). A missing or unsafe source only shows `fallback` */
   onError?: (() => void) | null;
   /** Alias of `onError`. */
   onerror?: (() => void) | null;
 }
 export type VideoPlayerProps = VideoPlayerOptions;
 export type VideoPlayerNamed = Omit<VideoPlayerOptions, "src">;
-/** Themed native `<video>` wrapper. Pass a `src` URL (or `sources` array for multi-codec fallback) and optional `poster`. Standard controls are visible by default; `controls=false` swaps them for a single play/pause button (click the video too). `autoplay` only works alongside `muted` — browsers block unmuted autoplay. Add `tracks` for captions/subtitles (required for prerecorded video, WCAG 1.2.2). `onEnded` fires on completion; a missing, unsafe, or failing source shows `fallback` and calls `onError`. Use for product demos, tutorials, and any inline video. */
+/** Themed native `<video>` wrapper. Pass a `src` URL (or `sources` array for multi-codec fallback) and optional `poster`. Standard controls are visible by default; `controls=false` swaps them for a single play/pause button (click the video too). `autoplay` only works alongside `muted` — browsers block unmuted autoplay. Add `tracks` for captions/subtitles (required for prerecorded video, WCAG 1.2.2). `onEnded` fires on completion. A missing or unsafe source shows `fallback`; a source that fails to load (with `sources`, once every entry has failed) shows it and calls `onError`. Use for product demos, tutorials, and any inline video. */
 export declare function VideoPlayer(src?: string, props?: VideoPlayerNamed): AktionNode<"VideoPlayer">;
 export declare function VideoPlayer(props: VideoPlayerProps): AktionNode<"VideoPlayer">;
 export declare function VideoPlayer(src: string | null | undefined, sources: readonly VideoPlayerSource[] | null | undefined, props?: Omit<VideoPlayerOptions, "src" | "sources">): AktionNode<"VideoPlayer">;
@@ -9818,7 +10082,7 @@ export interface WebComponentOptions extends BaseProps {
   attributes?: Readonly<Record<string, string | number | boolean | null | undefined>>;
   /** Alias of `attributes`. */
   attrs?: Readonly<Record<string, string | number | boolean | null | undefined>>;
-  /** JS properties assigned on the element (for components that take rich, non-string props). */
+  /** JS properties assigned on the element (for components that take rich, non-string props). `on*` keys (use `on`) and built-in DOM properties including `src`, `href`, `action`, `formAction`, `style`, `id`, `attributes`, `shadowRoot`, `contentEditable`, `innerHTML`, `outerHTML` and `srcdoc` are silently skipped — pass `src`/`href`/`id`/`style` through `attributes` (URLs are sanitised there), and content through `children`. */
   properties?: object;
   /** Alias of `properties`. */
   props?: object;
@@ -9852,8 +10116,10 @@ export interface RefBox<T> {
 }
 
 /* ---- effects */
-/** String triggers the `$effect` dependency parser understands. The `${bigint}` holes reject `"every(1.5)"`. */
-export type EffectTrigger = "mount" | "unmount" | `every(${bigint})` | `debounce(${bigint})` | `throttle(${bigint})`;
+/** Milliseconds in an interval trigger: a bigint literal that starts with a digit, so `"every(1.5)"` and `"every(-1)"` are rejected (hex such as `"every(0x10)"` still passes the types; the parser rejects it). */
+type __EffectMs = `${bigint}` & `${"0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"}${string}`;
+/** String triggers the `$effect` dependency parser understands (`every(ms)`, `debounce(ms)`, `throttle(ms)` take whole decimal milliseconds). */
+export type EffectTrigger = "mount" | "unmount" | `every(${__EffectMs})` | `debounce(${__EffectMs})` | `throttle(${__EffectMs})`;
 type __IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : false;
 type __CheckDependency<E> = [E] extends [string] ? (string extends E ? E : true extends __IsUnion<E> ? E : E extends EffectTrigger ? E : EffectTrigger) : E;
 /** Checks an `$effect` dependency array: an entry whose type is ONE string literal must be an `EffectTrigger`; anything else is read as a `$` atom (or member path) and passes. Caveat: an atom TypeScript has narrowed to a single literal (`let $tab: Tab = "a"` read in the same scope) looks like a literal too — widen it (`$tab as Tab`). */
@@ -9891,23 +10157,28 @@ export interface StoreHistory {
 export type Store<C> = StoreFields<C> & StoreMethods<C> & ("history" extends keyof C ? (C extends { readonly history: false | 0 } ? {} : StoreHistory) : {});
 
 /* ---- $form */
-/** A validator from `$util.rules.*`: an error message, or null when valid (a Promise for async rules). */
-export type Validator = (value: unknown) => string | Promise<string | null> | null;
+/** A validator from `$util.rules.*`: an error message, or null when valid (a Promise for async rules). `T` is the value it checks; `$form` hands each field's validators that field's value. */
+export type Validator<T = unknown> = (value: T) => string | Promise<string | null> | null;
 export type FormValues = Record<string, unknown>;
 export interface FormConfig<V extends FormValues = FormValues> {
   /** Initial field values — the clean snapshot. */
   values?: V;
-  /** Per-field validator arrays: { field: [$util.rules.required(), …] }. */
-  rules?: { readonly [K in keyof V]?: Validator | readonly Validator[] };
+  /** Per-field validator arrays: { field: [$util.rules.required(), …] }. Each field's validators receive that field's value. */
+  rules?: { readonly [K in keyof V]?: Validator<V[K]> | readonly Validator<V[K]>[] };
   /** Called with the values once validation passes. */
   onSubmit?: (values: V, extra?: unknown) => unknown;
 }
 /** The controlled prop bag `form.field(name)` returns. Spreading it into a component call (`{ ...form.field("x") }`) is DROPPED by the runtime — pass the members explicitly. */
 export interface FieldBinding<T> {
+  /** The field name. */
   readonly name: string;
+  /** The field's value (`values[name] ?? ""`). */
   readonly value: T | "";
+  /** The field's error, but only once the field is touched (`undefined` before). */
   readonly error: string | undefined;
+  /** Writes the field's value (and clears its error). */
   readonly onChange: (value: unknown) => void;
+  /** Marks the field touched and validates it. */
   readonly onBlur: () => void;
 }
 /** A `$form(…)` handle. Destructuring a handle reads `undefined` — read `form.values`, `form.valid`, … */
@@ -9938,10 +10209,10 @@ export interface FormHandle<V extends FormValues = FormValues> {
   validate(): boolean | Promise<boolean>;
   /** Validate one field → message | null (Promise for async rules). */
   validateField(name: keyof V & string): string | null | Promise<string | null>;
-  /** Touch all → validate → onSubmit(values) when valid. Alias: handleSubmit(). */
-  submit(extra?: unknown): unknown;
+  /** Touch every field that has rules → validate → onSubmit(values) when valid. Returns false when invalid, true after a synchronous onSubmit, and a Promise when a rule or onSubmit is async. Alias: handleSubmit(). */
+  submit(extra?: unknown): boolean | Promise<unknown>;
   /** Alias of submit(). */
-  handleSubmit(extra?: unknown): unknown;
+  handleSubmit(extra?: unknown): boolean | Promise<unknown>;
   /** Restore initial values; clears errors/touched/dirty. */
   reset(): void;
 }
@@ -9950,7 +10221,18 @@ export interface FormHandle<V extends FormValues = FormValues> {
 export type HttpMethod = "GET" | "HEAD" | "OPTIONS" | "POST" | "PUT" | "PATCH" | "DELETE";
 /** Lifecycle of an `$http` / `$query` bag (`"stale"`: refetching while the previous data is still shown). */
 export type ResourceState = "idle" | "loading" | "data" | "error" | "stale";
-export interface HttpConfig {
+/** `fetch` options that `$http`, `$query` and `$mutation` forward verbatim (every config key the runtime does not read itself is passed to `fetch`). */
+export interface HttpFetchOptions {
+  redirect?: "follow" | "error" | "manual";
+  referrer?: string;
+  /** An unknown policy makes `fetch` reject (a `TypeError`), which lands in `.error`. */
+  referrerPolicy?: "" | "no-referrer" | "no-referrer-when-downgrade" | "origin" | "origin-when-cross-origin" | "same-origin" | "strict-origin" | "strict-origin-when-cross-origin" | "unsafe-url";
+  integrity?: string;
+  /** Let the request outlive the page (an analytics beacon on unload). */
+  keepalive?: boolean;
+  priority?: "high" | "low" | "auto";
+}
+export interface HttpConfig extends HttpFetchOptions {
   /** Absolute request URL. */
   url: string;
   /** HTTP method. Defaults to GET. */
@@ -9971,16 +10253,9 @@ export interface HttpConfig {
   gql?: string;
   /** GraphQL variables paired with `gql`. */
   variables?: Readonly<Record<string, unknown>>;
-  /** Other `fetch` options are forwarded verbatim (`redirect`, `referrer`, `referrerPolicy`, `integrity`, `keepalive`, `priority`). */
-  redirect?: "follow" | "error" | "manual";
-  referrer?: string;
-  referrerPolicy?: string;
-  integrity?: string;
-  keepalive?: boolean;
-  priority?: "high" | "low" | "auto";
 }
 /** Pagination config for `$query({ infinite: {…} })`. */
-export interface InfiniteConfig {
+export interface InfiniteConfig<Item = unknown> {
   /** Query key carrying the page / offset (default `"page"`). */
   readonly param?: string;
   /** First page (default 1) or offset (default 0). */
@@ -9989,10 +10264,10 @@ export interface InfiniteConfig {
   readonly limit?: number;
   /** `"page"` (1, 2, 3…) or `"offset"` (0, limit, 2·limit…). */
   readonly mode?: "page" | "offset";
-  /** Map a page body to its item array when the items are nested (`body => body.results`). */
-  readonly select?: (body: any) => unknown;
+  /** Map a page body to its items when they are nested (`body => body.results`); a non-array result counts as an empty page. Without it the body itself must be the array. Annotate the body to infer `Item`. */
+  readonly select?: (body: any) => readonly Item[];
 }
-export interface QueryConfig {
+export interface QueryConfig extends HttpFetchOptions {
   /** Absolute request URL. */
   url: string;
   /** HTTP method. Defaults to GET. */
@@ -10014,7 +10289,7 @@ export interface QueryConfig {
   /** GraphQL variables paired with `gql`. */
   variables?: Readonly<Record<string, unknown>>;
   /** Cache key — identical keys share one in-flight request + cached bag. */
-  key?: string;
+  key?: string | number;
   /** Milliseconds before cached data is considered stale and auto-refetched. */
   ttl?: number;
   /** Poll interval in ms (live dashboards). */
@@ -10026,7 +10301,12 @@ export interface QueryConfig {
   /** Pagination config: { param?, start?, limit?, mode?, select? } → .loadMore()/.hasMore. */
   infinite?: InfiniteConfig;
 }
-export interface MutationConfig {
+/** The config of an infinite `$query`: no `ttl` or `refetch*` options, which only the plain form honours. */
+export interface InfiniteQueryConfig<Item = unknown> extends Omit<QueryConfig, "ttl" | "refetchInterval" | "refetchOnFocus" | "refetchOnReconnect" | "infinite"> {
+  /** Pagination config: { param?, start?, limit?, mode?, select? } → .loadMore()/.hasMore. */
+  readonly infinite: InfiniteConfig<Item>;
+}
+export interface MutationConfig extends HttpFetchOptions {
   /** Absolute request URL. */
   url: string;
   /** HTTP method. Defaults to POST. */
@@ -10037,14 +10317,33 @@ export interface MutationConfig {
   headers?: Readonly<Record<string, string | number | null | undefined>>;
   /** Object serialised into the URL querystring. */
   query?: Readonly<Record<string, string | number | boolean | null | undefined>>;
-  /** Runs synchronously before the request; auto-rolled-back on failure. */
-  optimistic?: (overrides: Readonly<Record<string, unknown>>) => void;
+  /** Fetch credentials mode (e.g. "include" for cookie-authenticated writes). */
+  credentials?: "omit" | "same-origin" | "include";
+  /** Fetch request mode. */
+  mode?: "cors" | "no-cors" | "same-origin";
+  /** Fetch cache mode. */
+  cache?: "default" | "no-store" | "reload" | "no-cache" | "force-cache";
+  /** Runs synchronously before the request with the object passed to `.mutate(overrides)` (or `{}`); state it changes is rolled back on failure. Its return value is ignored and a throw is swallowed. */
+  optimistic?: (overrides: Readonly<Partial<MutationConfig>>) => void;
   /** Refetch every cached $query whose key contains a listed substring on success. */
   invalidates?: string | readonly string[];
   /** GraphQL mutation document. */
   gql?: string;
   /** GraphQL variables paired with `gql`. */
   variables?: Readonly<Record<string, unknown>>;
+}
+/** What `.error` holds after a failure. The shape depends on the failure — `{ status, body }` (non-2xx), `{ graphqlErrors }` (GraphQL), the thrown error (network, interceptor), `{ message }` (no HTTP runtime) — so every key is optional: read `res.error?.status === 404` and branch. */
+export interface HttpResourceError {
+  /** The HTTP status of a non-2xx response. */
+  readonly status?: number;
+  /** The parsed body of a non-2xx response. */
+  readonly body?: unknown;
+  /** The `errors` array of a GraphQL response (even on a 200). */
+  readonly graphqlErrors?: readonly unknown[];
+  /** The message of a thrown error (a network failure, a throwing interceptor), or of the runtime's own `{ message }`. */
+  readonly message?: string;
+  /** The name of a thrown error (`"TypeError"` for a network failure). */
+  readonly name?: string;
 }
 /** Reactive HTTP bag: fields update in place as the request progresses. */
 export interface HttpResource<T = unknown> {
@@ -10053,7 +10352,7 @@ export interface HttpResource<T = unknown> {
   /** Parsed response body — `undefined` until the first successful response. */
   readonly data: T | undefined;
   /** `undefined` on success; `{ status, body }` on a non-2xx; `{ graphqlErrors }` for a GraphQL error; the thrown error on network failure. */
-  readonly error: unknown;
+  readonly error: HttpResourceError | undefined;
   /** HTTP status code of the last response, e.g. `200`. */
   readonly status?: number;
   /** `true` while a request is in flight. */
@@ -10070,7 +10369,7 @@ export interface HttpResource<T = unknown> {
   onDone?: (resource: HttpResource<T>) => void;
 }
 /** An infinite `$query` bag. */
-export interface InfiniteQueryResource<Item = unknown> extends Omit<HttpResource<Item[]>, "data" | "onDone"> {
+export interface InfiniteQueryResource<Item = unknown> extends Omit<HttpResource<Item[]>, "data" | "onDone" | "cancel"> {
   /** Flattened items across every loaded page (starts as `[]`). */
   readonly data: Item[];
   /** `true` while more pages are available (infinite mode). */
@@ -10083,6 +10382,8 @@ export interface InfiniteQueryResource<Item = unknown> extends Omit<HttpResource
   readonly pages: readonly unknown[];
   /** Fetch the next page (infinite mode). */
   loadMore(): Promise<void>;
+  /** A no-op: an infinite query has no single in-flight request to abort. */
+  cancel(): void;
   /** Settable callback fired each time the request settles (success or error). */
   onDone?: (resource: InfiniteQueryResource<Item>) => void;
 }
@@ -10091,7 +10392,7 @@ export interface MutationResource<T = unknown> {
   /** Response body of the last successful mutation. */
   readonly data: T | undefined;
   /** `undefined` on success; error details on failure. */
-  readonly error: unknown;
+  readonly error: HttpResourceError | undefined;
   /** `true` while the mutation request is in flight. */
   readonly loading: boolean;
   /** HTTP status code of the last response. */
@@ -10103,19 +10404,19 @@ export interface MutationResource<T = unknown> {
   /** Settable callback fired when the mutation settles. */
   onDone?: (resource: MutationResource<T>) => void;
 }
-export interface SocketConfig {
+export interface SocketConfig<M = unknown> {
   /** WebSocket URL (ws:// or wss://). */
   url: string;
   /** Optional sub-protocol(s). */
   protocols?: string | readonly string[];
   /** Max buffered messages kept in `.messages`. */
   bufferSize?: number;
-  /** Callback fired for each received message. */
-  onMessage?: (message: any) => void;
+  /** Callback fired for each received message — JSON-parsed when it parses, else the raw string (the same value `.last` holds). A throw is swallowed. */
+  onMessage?: (message: M) => void;
   /** Retry dropped connections (true, or a max-attempt count) with backoff. */
   reconnect?: boolean | number;
 }
-export interface SseConfig {
+export interface SseConfig<M = unknown> {
   /** EventSource URL. */
   url: string;
   /** Named event to listen for (defaults to message). */
@@ -10124,10 +10425,12 @@ export interface SseConfig {
   withCredentials?: boolean;
   /** Max buffered events kept in `.messages`. */
   bufferSize?: number;
-  /** Callback fired for each received event payload (JSON auto-parsed). */
-  onMessage?: (message: any) => void;
+  /** Callback fired for each received event payload — JSON-parsed when it parses, else the raw string (the same value `.last` holds). A throw is swallowed. */
+  onMessage?: (message: M) => void;
 }
 export type SocketStatus = "connecting" | "open" | "closed";
+/** What a `$socket` / `$sse` bag's `.error` holds: the socket / EventSource `error` event, the error its constructor threw (a bad URL), or `{ message }` when the API is unavailable. `undefined` once the connection opens. */
+export type RealtimeError = DomEvent | Error | { readonly message: string };
 /** Reactive WebSocket bag. */
 export interface SocketResource<M = unknown> {
   /** Connection lifecycle: "connecting" | "open" | "closed". */
@@ -10140,8 +10443,8 @@ export interface SocketResource<M = unknown> {
   readonly messages: readonly M[];
   /** Reconnect attempts in the current streak (resets on success). */
   readonly attempts: number;
-  /** Last socket error event, if any. */
-  readonly error: unknown;
+  /** The last error: the socket `error` event, the error a bad URL threw, or `{ message }` when WebSocket is unavailable; `undefined` once open. */
+  readonly error: RealtimeError | undefined;
   /** Send a message (objects JSON-stringified). Queues while connecting; flushes on open. */
   send(data: unknown): void;
   /** Close for good — disables auto-reconnect. */
@@ -10157,8 +10460,8 @@ export interface SseResource<M = unknown> {
   readonly last: M | null;
   /** Buffered events, newest last (capped to bufferSize). */
   readonly messages: readonly M[];
-  /** Last stream error, if any. */
-  readonly error: unknown;
+  /** The last error: the EventSource `error` event, the error a bad URL threw, or `{ message }` when EventSource is unavailable; `undefined` once open. */
+  readonly error: RealtimeError | undefined;
   /** Close the stream. */
   close(): void;
 }
@@ -10169,8 +10472,8 @@ export interface ScriptConfig {
   global?: string;
   /** Script type attribute (e.g. "module" for ESM). */
   type?: string;
-  /** Force the resource kind. Inferred from a `.css` src otherwise. */
-  as?: "script" | "style";
+  /** Force the resource kind (the last three all mean a stylesheet). Inferred from a `.css` src otherwise. */
+  as?: "script" | "style" | "stylesheet" | "css";
   /** Extra attributes to set on the injected <script>/<link> (e.g. crossorigin, integrity). */
   attributes?: Readonly<Record<string, string | number | boolean | null | undefined>>;
 }
@@ -10180,10 +10483,36 @@ export interface ScriptResource<V = unknown> {
   readonly ready: boolean;
   /** `true` while the resource is still downloading. */
   readonly loading: boolean;
-  /** The load error, or `null` on success. */
-  readonly error: unknown;
+  /** The load error (always an `Error`), or `null`. */
+  readonly error: Error | null;
   /** The resolved value — `window[global]` for a script with a `global` (e.g. window.Stripe), else `true`. `null` until ready. */
   readonly value: V | null;
+}
+/** `rel` values `$head({ link })` keeps (metadata and resource hints only); a link with any other `rel` is dropped. */
+export type HeadLinkRel = "canonical" | "alternate" | "prev" | "next" | "author" | "license" | "help" | "icon" | "shortcut icon" | "apple-touch-icon" | "apple-touch-icon-precomposed" | "mask-icon" | "manifest" | "search" | "dns-prefetch" | "preconnect" | "me";
+/** A `<link>` descriptor. Only these attributes are kept; any other key is dropped. */
+export interface HeadLink {
+  readonly rel: HeadLinkRel;
+  /** Required: a link without one (or with an unsafe one) is dropped. Relative, `#`, `?` or absolute http(s) only. */
+  readonly href: string;
+  readonly as?: string;
+  readonly type?: string;
+  readonly sizes?: string;
+  readonly media?: string;
+  readonly hreflang?: string;
+  readonly color?: string;
+  readonly title?: string;
+  readonly crossorigin?: "" | "anonymous" | "use-credentials";
+  readonly referrerpolicy?: string;
+}
+/** Attributes `$head({ htmlAttrs })` sets on `<html>`: these names plus any `data-*`. Any other attribute (notably `style`) is dropped; a nullish value is skipped. */
+export interface HeadHtmlAttrs {
+  readonly lang?: string;
+  readonly dir?: "ltr" | "rtl" | "auto";
+  readonly class?: string;
+  readonly translate?: "yes" | "no";
+  readonly id?: string;
+  readonly [attribute: `data-${string}`]: string | number | boolean | null | undefined;
 }
 export interface HeadConfig {
   /** Document title (sets document.title + <title>). */
@@ -10191,19 +10520,19 @@ export interface HeadConfig {
   /** Wrap `title` with a template, e.g. "%s — Acme". */
   titleTemplate?: string;
   /** Named meta tags: { description, "theme-color", keywords, … } → <meta name content>. */
-  meta?: Readonly<Record<string, string>>;
+  meta?: Readonly<Record<string, string | number | boolean | null | undefined>>;
   /** Open Graph tags: { title, image, type, … } → <meta property="og:KEY">. */
-  og?: Readonly<Record<string, string>>;
+  og?: Readonly<Record<string, string | number | boolean | null | undefined>>;
   /** Twitter card tags: { card, site, … } → <meta name="twitter:KEY">. */
-  twitter?: Readonly<Record<string, string>>;
-  /** Array of <link> descriptors, e.g. [{ rel: "canonical", href }]. */
-  link?: readonly Readonly<Record<string, string>>[];
+  twitter?: Readonly<Record<string, string | number | boolean | null | undefined>>;
+  /** A <link> descriptor or an array of them, e.g. [{ rel: "canonical", href }]. Only metadata / resource-hint rels are kept (no "stylesheet" or "preload"), and a link without a safe href is dropped. */
+  link?: HeadLink | readonly HeadLink[];
   /** JSON-LD structured data → <script type="application/ld+json">. @context defaults to schema.org. */
   jsonLd?: object | readonly object[];
-  /** <base href> for the document. */
-  base?: string | { readonly href: string; readonly target?: string };
+  /** <base href> for the document (a string, or { href }): a same-origin relative path only — an absolute or protocol-relative one is dropped. */
+  base?: string | { readonly href: string };
   /** Attributes for the <html> element, e.g. { lang: "en", dir: "ltr" }. */
-  htmlAttrs?: Readonly<Record<string, string>>;
+  htmlAttrs?: HeadHtmlAttrs;
 }
 
 /* ---- app / routing / theme / i18n */
@@ -10216,6 +10545,13 @@ export interface LayoutArm {
 }
 /** Route patterns (`"/users/:id"`, `"default"` / `"*"` for the fallback) → arm. */
 export type RouteTable = { readonly [pattern: string]: Children | LayoutArm };
+type __RouterArmResult<V> = V extends LayoutArm ? V["layout"] : V;
+/** What `$router(table)` evaluates to: one arm's value (a layout arm's `layout`), or null when nothing matches. */
+export type RouterResult<R> = { [K in keyof R]: __RouterArmResult<R[K]> }[keyof R] | null;
+type __RouteSegmentParam<S extends string> = S extends `:${infer Name}` ? (Name extends "" ? {} : { readonly [K in Name]: string }) : {};
+type __RouteParams<P extends string> = P extends `${infer Head}/${infer Tail}` ? (Head extends "*" ? { readonly _: string } : __RouteSegmentParam<Head> & __RouteParams<Tail>) : P extends "*" ? { readonly _: string } : __RouteSegmentParam<P>;
+/** The params a route pattern captures: `RouteParamsOf<"/users/:id/files/*">` is `{ id: string; _: string }` (a trailing `*` captures the rest of the path as `_`; a bare `"*"` captures nothing). Arms are expressions, so `params` cannot be typed per arm — cast it: `params as RouteParamsOf<"/users/:id">`. */
+export type RouteParamsOf<P extends string> = P extends "*" | "default" ? {} : { readonly [K in keyof __RouteParams<P>]: string };
 /** The reactive `route` handle. */
 export interface RouteHandle {
   /** Current URL path, e.g. `/users/42`. */
@@ -10230,30 +10566,50 @@ export interface RouteHandle {
   navigate(to: string): void;
 }
 export type BuiltInThemeName = "dark" | "heroui" | "heroui-dark" | "heroui-light" | "light" | "mui" | "mui-dark" | "mui-light" | "shadcn" | "shadcn-dark" | "shadcn-light" | "signal" | "signal-dark" | "signal-light" | "soft";
+/** At least two colour stops. */
+export type ThemeGradientStops = readonly [string, string, ...string[]];
+/** A theme gradient: colour stops (`linear-gradient(120deg, …)`), `{ stops, angle }` (degrees), or a gradient-function string. A plain colour is dropped. */
+export type ThemeGradient = ThemeGradientStops | { readonly stops: ThemeGradientStops; readonly angle?: number } | `${"linear" | "radial" | "conic"}-gradient(${string}`;
+/** `$theme({ colors })` keys (camelCase). */
+export type ThemeColorToken = "bg" | "bgSubtle" | "surface" | "surfaceMuted" | "border" | "borderSubtle" | "borderControl" | "text" | "textMuted" | "primary" | "primaryHover" | "primaryText" | "accent" | "accentHover" | "accentText" | "link" | "linkHover" | "focusRing" | "success" | "warning" | "danger" | "info" | "successText" | "warningText" | "dangerText" | "infoText" | "onSuccess" | "onWarning" | "onDanger" | "onInfo" | "surfaceHover";
+/** `$theme({ radius })` keys. */
+export type ThemeRadiusToken = "xs" | "sm" | "md" | "lg" | "pill" | "button" | "input";
+/** `$theme({ font })` keys. */
+export type ThemeFontToken = "family" | "familyHeading" | "familyMono" | "sizeBase" | "size10" | "size11" | "size13" | "size15" | "size18" | "size20" | "size24" | "size32" | "sizeSm" | "sizeLg" | "sizeHeading" | "sizeTitle" | "weightBody" | "weightHeading";
+/** `$theme({ spacing })` keys. */
+export type ThemeSpacingToken = "3xs" | "2xs" | "xs" | "s" | "m" | "l" | "xl" | "2xl" | "3xl" | "sm" | "md" | "lg";
+/** `$theme({ shadows })` keys. */
+export type ThemeShadowToken = "sm" | "md" | "lg";
+/** `$theme({ gradients })` keys, referenced from `sx` as `bg: "gradient.<name>"`. */
+export type ThemeGradientToken = "brand" | "accent" | "warm" | "cool" | "success" | "danger";
+/** `$theme({ zIndex })` keys. */
+export type ThemeZIndexToken = "base" | "raised" | "dropdown" | "sticky" | "banner" | "overlay" | "modal" | "popover" | "toast" | "tooltip";
+/** `$theme({ motion })` keys. */
+export type ThemeMotionToken = "fast" | "base" | "slow" | "ease";
 export interface ThemeConfig {
   /** Selects a built-in base theme ("light", "dark", "shadcn"/"-light"/"-dark", "mui"/"-light"/"-dark", "heroui"/"-light"/"-dark", "signal"/"-light"/"-dark", "soft"). */
   name?: BuiltInThemeName;
-  /** Reading direction (metadata). */
+  /** @deprecated No runtime effect: `$theme` skips it as metadata. Set `dir` on `<aktion-app>` for a right-to-left layout. */
   direction?: "ltr" | "rtl";
-  /** CSS color tokens: bg, surface, border, text, primary, accent, success, warning, danger, info, …. */
-  colors?: Readonly<Record<string, string>>;
+  /** CSS color tokens, camelCase: bg, bgSubtle, surface, border, text, textMuted, primary, accent, success, warning, danger, info, …. Unknown keys are ignored. */
+  colors?: { readonly [K in ThemeColorToken]?: string };
   /** Border-radius tokens: xs, sm, md, lg, pill, button, input. */
-  radius?: Readonly<Record<string, string>>;
+  radius?: { readonly [K in ThemeRadiusToken]?: string };
   /** Font tokens: family, familyHeading, familyMono, sizeBase, weightBody, …. */
-  font?: Readonly<Record<string, string | readonly string[]>>;
-  /** Spacing scale tokens. */
-  spacing?: Readonly<Record<string, string>>;
-  /** Box-shadow tokens. */
-  shadows?: Readonly<Record<string, string>>;
-  /** Gradient color-stop arrays — referenced as gradient.<name>. */
-  gradients?: Readonly<Record<string, string | readonly string[]>>;
+  font?: { readonly [K in Exclude<ThemeFontToken, "weightBody" | "weightHeading">]?: string } & { readonly [K in "weightBody" | "weightHeading"]?: string | number } & { readonly import?: string | readonly string[] };
+  /** Spacing scale tokens: 3xs, 2xs, xs, s, m, l, xl, 2xl, 3xl (sm / md / lg are the same as s / m / l). */
+  spacing?: { readonly [K in ThemeSpacingToken]?: string };
+  /** Box-shadow tokens: sm, md, lg. */
+  shadows?: { readonly [K in ThemeShadowToken]?: string };
+  /** Gradients referenced as sx `bg: "gradient.<name>"`: an array of at least two colour stops, `{ stops, angle }`, or a linear-/radial-/conic-gradient(…) string. A plain colour is ignored. */
+  gradients?: { readonly [K in ThemeGradientToken]?: ThemeGradient };
   /** Layer tokens (modal, toast, …) → sx.zIndex / --rui-z-*. */
-  zIndex?: Readonly<Record<string, string | number>>;
+  zIndex?: { readonly [K in ThemeZIndexToken]?: number | string };
   /** Motion tokens: { fast, base, slow, ease } → --rui-motion-*. */
-  motion?: Readonly<Record<string, string>>;
-  /** Web-font import: { import: ["Inter:400,700"] }. */
-  fonts?: { readonly import?: readonly string[] };
-  /** Custom inline-SVG icons by name, usable anywhere an icon name is. */
+  motion?: { readonly [K in ThemeMotionToken]?: string };
+  /** Web-font import: { import: ["Inter:400,700"] } (one shorthand string or an array). */
+  fonts?: { readonly import?: string | readonly string[] };
+  /** Custom icons: name (letters, digits, `:` `_` `-`) → inline SVG markup (at most 16 KB). Augment `AktionIconRegistry` to have the names autocomplete. */
   icons?: Readonly<Record<string, string>>;
 }
 /** What `$theme(…)` returns. */
@@ -10261,31 +10617,138 @@ export interface ThemeHandle {
   readonly kind: "Theme";
   readonly tokens: Readonly<Record<string, string>>;
 }
-export interface I18nConfig {
+/** `$i18n` translations: `{ key: { lang: "text {name}" } }`. */
+export type I18nTranslations = Readonly<Record<string, Readonly<Record<string, string>>>>;
+type __I18nLanguages<T> = { [K in keyof T]: keyof T[K] & string }[keyof T];
+export interface I18nConfig<T extends I18nTranslations = I18nTranslations> {
   /** Fallback language when a key is missing for the current language. */
   defaultLanguage?: string;
   /** Active language — drive from a reactive atom for live switching. */
   currentLanguage?: string;
   /** { key: { lang: "text {name}" } }. Supports ICU plural/select. */
-  translations?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  translations?: T;
 }
-/** The bag `$i18n(…)` returns (safe to destructure). */
-export interface I18nInstance {
-  /** Translate a key for the current language; interpolates {name} placeholders + ICU plural/select. */
-  t(key: string, vars?: Readonly<Record<string, unknown>>): string;
+/** The bag `$i18n(…)` returns (safe to destructure). `K` / `L` are the keys and languages of the config's `translations`. */
+export interface I18nInstance<K extends string = string, L extends string = string> {
+  /** Translate a key for the current language; interpolates {name} placeholders + ICU plural/select. An unknown key translates to itself, so any string is accepted; the declared keys (`K`) complete. */
+  t(key: K | (string & {}), vars?: Readonly<Record<string, unknown>>): string;
   /** Switch the active language. */
-  setCurrentLanguage(lang: string): void;
+  setCurrentLanguage(lang: L | (string & {})): void;
   /** Return the active language code. */
   getCurrentLanguage(): string;
 }
 
 /* ---- namespaces */
+/**
+ * An array the list helpers read. A nullish value (data not loaded yet) is
+ * treated as empty; so is any other non-array (a `Set`, a `Map`, an object).
+ */
+export type UtilList<T> = readonly T[] | null | undefined;
+/** A field of the row type, or a dotted path into it (`"owner.name"`). */
+export type UtilFieldPath<T> = (T extends object ? keyof T & string : never) | (string & {});
+/** The comparison operators of `filter` / `find` / `partition`. Any other string matches nothing. */
+export type UtilCompareOp = "==" | "!=" | ">" | "<" | ">=" | "<=" | "contains" | "startsWith" | "endsWith";
+/** The options object of `format` (each key is ignored unless it has the right type). */
+export interface UtilNumberFormatOptions {
+  /** ISO 4217 code for `"currency"` mode (default `"USD"`). */
+  readonly currency?: string;
+  /** BCP 47 locale (default: the host's). */
+  readonly locale?: string;
+  /** Fixed number of fraction digits. */
+  readonly decimals?: number;
+}
+/** A `File` / `Blob`, structurally (what `FileUpload` hands over). */
+export interface UtilBlobLike {
+  readonly size: number;
+  readonly type: string;
+  text(): Promise<string>;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+/** The options object of `readFile`. */
+export interface UtilReadFileOptions {
+  /** `"text"` (default) the UTF-8 text, `"dataUrl"` a `data:` URI, `"base64"` that URI's payload. */
+  readonly as?: "text" | "dataUrl" | "base64";
+  /** Resolve `""` without reading when the file is larger than this many bytes. */
+  readonly maxSize?: number;
+}
+/** A window feature switch: on is `true`, `1`, `"1"`, `"yes"` or `"true"`; anything else is off. */
+export type UtilWindowFlag = boolean | 0 | 1 | "0" | "1" | "yes" | "no" | "true" | "false";
+/** The `window.open` features `openUrl` / `openWindow` pass on. Any other key is dropped. */
+export interface UtilWindowFeatures {
+  readonly width?: number;
+  readonly height?: number;
+  readonly left?: number;
+  readonly top?: number;
+  readonly screenX?: number;
+  readonly screenY?: number;
+  readonly innerWidth?: number;
+  readonly innerHeight?: number;
+  readonly popup?: UtilWindowFlag;
+  readonly menubar?: UtilWindowFlag;
+  readonly toolbar?: UtilWindowFlag;
+  readonly location?: UtilWindowFlag;
+  readonly status?: UtilWindowFlag;
+  readonly resizable?: UtilWindowFlag;
+  readonly scrollbars?: UtilWindowFlag;
+  readonly noopener?: UtilWindowFlag;
+  readonly noreferrer?: UtilWindowFlag;
+}
+/** The options object of `openUrl`. */
+export interface UtilOpenUrlOptions {
+  /** `"_blank"` (default, a new tab) or a window NAME, which reuses one window across calls. */
+  readonly target?: "_blank" | "_self" | "_parent" | "_top" | (string & {});
+  /** A features object, or a `"key=value,…"` string (re-parsed against the same allow-list). */
+  readonly features?: UtilWindowFeatures | string;
+  /** Defaults to on for `_blank` and off for a named target. */
+  readonly noopener?: UtilWindowFlag;
+  readonly noreferrer?: UtilWindowFlag;
+}
+/** The options object of `openWindow`. */
+export interface UtilOpenWindowOptions {
+  /** A window name, which reuses one window across calls (default `"_blank"`). */
+  readonly name?: string;
+  /** The same features `openUrl` takes. */
+  readonly features?: UtilWindowFeatures | string;
+}
+/** The config `webManifest` reads (each key is ignored unless it is a string, or an array for `icons`). */
+export interface UtilWebManifestConfig {
+  readonly name?: string;
+  readonly shortName?: string;
+  readonly startUrl?: string;
+  readonly display?: "fullscreen" | "standalone" | "minimal-ui" | "browser" | (string & {});
+  readonly backgroundColor?: string;
+  readonly themeColor?: string;
+  readonly description?: string;
+  readonly icons?: readonly { readonly src?: string; readonly sizes?: string; readonly type?: string }[];
+}
+/** The sanitised Web App Manifest `webManifest` returns (snake_case, defaults filled in). */
+export interface UtilWebManifest {
+  name: string;
+  short_name: string;
+  start_url: string;
+  display: string;
+  background_color: string;
+  theme_color: string;
+  description?: string;
+  icons?: { src: string; sizes: string; type: string }[];
+}
+/** The theme colour names `gradient` / `alpha` resolve to their CSS variable. */
+export type UtilStyleColorToken =
+  | "primary" | "accent" | "success" | "warning" | "danger" | "info"
+  | "text" | "muted" | "bg" | "surface" | "border";
+/** A theme colour name, or a plain CSS colour (anything unsafe resolves to nothing). */
+export type UtilStyleColor = UtilStyleColorToken | (string & {});
+/** One `cx` argument: falsy values are skipped, arrays recurse, an object contributes its truthy keys. */
+export type UtilStyleClassValue =
+  | string | number | boolean | null | undefined
+  | readonly UtilStyleClassValue[]
+  | { readonly [className: string]: unknown };
 /** The handle `$util.openWindow()` returns — deliberately not a raw `Window`. Printed from `src/runtime/util.ts`. */
 export interface OpenedWindow {
   /** `false` when the browser refused (a popup blocker) or there was no `window` at all. */
   readonly ok: boolean;
   /** Point the context at a URL. Returns `false` for a rejected scheme or a context that is gone. */
-  readonly navigate: (url: unknown) => boolean;
+  readonly navigate: (url: string) => boolean;
   /** Close the context. Safe to call twice, and on a context that was never opened. */
   readonly close: () => void;
   /** Live: `true` once the context has been closed, by this program or by the user. */
@@ -10296,67 +10759,67 @@ export interface DurationNamespace {
   /** A duration string in SECONDS, or null when it is not one. Accepts 250ms/30s/5m/2h/7d and PT30S/P1DT12H; rejects years, months, weeks and unitless numbers. */
   readonly parse: (value: unknown) => number | null;
   /** Seconds (or a duration string) as text. Options: { style: "simple" | "iso" } — "simple" picks the largest whole unit (120 → "2m"), "iso" emits PnDTnHnMnS. Returns "" for a non-duration. */
-  readonly format: (value: unknown, options?: unknown) => string;
+  readonly format: (value: string | number, options?: { readonly style?: "iso" | "simple" | undefined; } | undefined) => string;
   /** Whether the value parses as a duration. */
   readonly isValid: (value: unknown) => boolean;
 }
 /** `$util.style` — printed from `src/runtime/namespaces-extra.ts`. */
 export interface StyleNamespace {
   /** clsx-style class composer — strings, arrays, { name: cond } objects. */
-  readonly cx: (...args: unknown[]) => string;
+  readonly cx: (...args: readonly UtilStyleClassValue[]) => string;
   /** Safe linear-gradient() from color stops + angle. */
-  readonly gradient: (stops: unknown, angle?: unknown) => string;
+  readonly gradient: (stops: readonly UtilStyleColor[], angle?: number | undefined) => string;
   /** color-mix transparency: token or color at 0–1 alpha. */
-  readonly alpha: (color: unknown, amount: unknown) => string;
+  readonly alpha: (color: UtilStyleColor, amount: number) => string;
   /** Responsive clamp(min, preferred, max) size. */
-  readonly clamp: (min: unknown, preferred: unknown, max: unknown) => string;
+  readonly clamp: (min: string | number, preferred: string | number, max: string | number) => string;
   /** Resolve a theme token path to its CSS var: "colors.primary" → var(--rui-color-primary). */
-  readonly token: (path: unknown) => string;
+  readonly token: (path: (string & {}) | `colors.${string}` | `color.${string}` | `spacing.${string}` | `radius.${string}` | `shadows.${string}` | `shadow.${string}` | `gradients.${string}` | `gradient.${string}`) => string;
   /** Serialise a CSS-declarations object to a sanitised style string. */
-  readonly toStyle: (obj: unknown) => string;
+  readonly toStyle: (obj: Readonly<Record<string, string | number | false | null | undefined>>) => string;
 }
 /** `$util.rules` — printed from `src/runtime/namespaces-extra.ts`. */
 export interface RulesNamespace {
   /** Non-empty value. */
-  readonly required: (message?: string) => Validator;
+  readonly required: (message?: string) => Validator<unknown>;
   /** Valid email address. */
-  readonly email: (message?: string) => Validator;
+  readonly email: (message?: string) => Validator<unknown>;
   /** Valid http(s) URL. */
-  readonly url: (message?: string) => Validator;
+  readonly url: (message?: string) => Validator<unknown>;
   /** Number ≥ n. */
-  readonly min: (n: number, message?: string | undefined) => Validator;
+  readonly min: (n: number, message?: string | undefined) => Validator<unknown>;
   /** Number ≤ n. */
-  readonly max: (n: number, message?: string | undefined) => Validator;
+  readonly max: (n: number, message?: string | undefined) => Validator<unknown>;
   /** String length ≥ n. */
-  readonly minLength: (n: number, message?: string | undefined) => Validator;
+  readonly minLength: (n: number, message?: string | undefined) => Validator<unknown>;
   /** String length ≤ n. */
-  readonly maxLength: (n: number, message?: string | undefined) => Validator;
-  /** Match a regular expression. */
-  readonly pattern: (re: unknown, message?: string) => Validator;
+  readonly maxLength: (n: number, message?: string | undefined) => Validator<unknown>;
+  /** Match a regular expression (a RegExp or its source string). A RegExp's flags are ignored: `/x/i` matches case-sensitively. */
+  readonly pattern: (re: string | RegExp, message?: string) => Validator<unknown>;
   /** Value is in the allowed list. */
-  readonly oneOf: (options: unknown[], message?: string) => Validator;
+  readonly oneOf: (options: readonly unknown[], message?: string) => Validator<unknown>;
   /** A whole number — min/max bound the magnitude but not the step. */
-  readonly integer: (message?: string) => Validator;
+  readonly integer: (message?: string) => Validator<unknown>;
   /** Inclusive numeric range — min + max in one rule, so the message names both ends. */
-  readonly range: (lo: number, hi: number, message?: string | undefined) => Validator;
+  readonly range: (lo: number, hi: number, message?: string | undefined) => Validator<unknown>;
   /** A TCP/UDP port: a whole number in 1–65535 (0 excluded — it means "assign me one"). */
-  readonly port: (message?: string) => Validator;
+  readonly port: (message?: string) => Validator<unknown>;
   /** Dotted-quad IPv4 address. */
-  readonly ipv4: (message?: string) => Validator;
+  readonly ipv4: (message?: string) => Validator<unknown>;
   /** IPv6 address, :: shorthand and IPv4-mapped tails included. */
-  readonly ipv6: (message?: string) => Validator;
+  readonly ipv6: (message?: string) => Validator<unknown>;
   /** Either IP family. */
-  readonly ip: (message?: string) => Validator;
+  readonly ip: (message?: string) => Validator<unknown>;
   /** CIDR block — address/prefix, prefix bounded by the family (/0–/32, /0–/128). A bare address is rejected. */
-  readonly cidr: (message?: string) => Validator;
+  readonly cidr: (message?: string) => Validator<unknown>;
   /** A duration (5m, 250ms, PT1H), optionally inside { min, max } given in SECONDS. A string in the bounds position is read as the message. */
-  readonly duration: (bounds?: unknown, message?: string | undefined) => Validator;
+  readonly duration: (bounds?: string | { readonly min?: number | undefined; readonly max?: number | undefined; } | undefined, message?: string | undefined) => Validator<unknown>;
   /** Equals another value (password confirmation). */
-  readonly matches: (other: unknown, message?: string) => Validator;
+  readonly matches: (other: unknown, message?: string) => Validator<unknown>;
   /** Custom sync rule — return true/null (valid), false, or an error string. */
-  readonly custom: (fn: unknown, message?: string) => Validator;
+  readonly custom: <T = unknown>(fn: (value: T) => string | boolean | PromiseLike<string | boolean | null | undefined> | null | undefined, message?: string) => Validator<T>;
   /** Async rule (Promise) — server-side checks; $form awaits it before submitting. */
-  readonly asyncCustom: (fn: unknown, message?: string) => Validator;
+  readonly asyncCustom: <T = unknown>(fn: (value: T) => string | boolean | PromiseLike<string | boolean | null | undefined> | null | undefined, message?: string) => Validator<T>;
   /** Run validators — first error message or null (a Promise when an async rule is hit). */
   readonly validate: (value: unknown, validators: unknown) => string | Promise<string | null> | null;
   /** Validate an object against { field: [validators] } → { field: message }. */
@@ -10365,59 +10828,59 @@ export interface RulesNamespace {
 /** The static `$util` helpers — printed from `typeof Util` (`src/runtime/util.ts`). */
 export interface UtilStatic {
   /** Number of items in an array. */
-  readonly count: (arr: unknown) => number;
+  readonly count: (arr: UtilList<unknown>) => number;
   /** Sum of the numeric values. */
-  readonly sum: (arr: unknown) => number;
+  readonly sum: (arr: UtilList<unknown>) => number;
   /** Arithmetic mean of the values. */
-  readonly avg: (arr: unknown) => number;
+  readonly avg: (arr: UtilList<unknown>) => number;
   /** Smallest numeric value. */
-  readonly min: (arr: unknown) => number;
+  readonly min: (arr: UtilList<unknown>) => number;
   /** Largest numeric value. */
-  readonly max: (arr: unknown) => number;
+  readonly max: (arr: UtilList<unknown>) => number;
   /** First element, or null when empty. */
-  readonly first: (arr: unknown) => unknown;
+  readonly first: <T>(arr: UtilList<T>) => T | null;
   /** Last element, or null when empty. */
-  readonly last: (arr: unknown) => unknown;
+  readonly last: <T>(arr: UtilList<T>) => T | null;
   /** Keep items where field matches. Operators: == != > < >= <= contains startsWith endsWith. */
-  readonly filter: (arr: unknown, field?: string, op?: string, value?: unknown) => unknown[];
+  readonly filter: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>, op?: UtilCompareOp, value?: unknown) => T[];
   /** First item matching the comparator, or null. */
-  readonly find: (arr: unknown, field?: string, op?: string, value?: unknown) => unknown;
+  readonly find: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>, op?: UtilCompareOp, value?: unknown) => T | null;
   /** Sort by field, "asc" (default) or "desc". */
-  readonly sort: (arr: unknown, field?: string, direction?: "asc" | "desc") => unknown[];
+  readonly sort: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>, direction?: "asc" | "desc") => T[];
   /** Group items into an object keyed by the field value. */
-  readonly groupBy: (arr: unknown, field?: string) => Record<string, unknown[]>;
+  readonly groupBy: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>) => Record<string, T[]>;
   /** Subarray between start and end indices. */
-  readonly slice: (arr: unknown, start?: number | undefined, end?: number | undefined) => unknown[];
+  readonly slice: <T>(arr: UtilList<T>, start?: number | undefined, end?: number | undefined) => T[];
   /** De-duplicate an array (optionally by a field). */
-  readonly unique: (arr: unknown, field?: string | undefined) => unknown[];
+  readonly unique: <T>(arr: UtilList<T>, field?: UtilFieldPath<T> | undefined) => T[];
   /** Reversed copy of the array. */
-  readonly reverse: (arr: unknown) => unknown[];
+  readonly reverse: <T>(arr: UtilList<T>) => T[];
   /** Array of numbers from start to end (inclusive). */
   readonly range: (start: number, end: number, step?: number | undefined) => number[];
   /** Array with the value repeated n times. */
   readonly repeat: <T>(value: T, n: number) => T[];
   /** Object containing only the listed keys. */
-  readonly pick: (obj: unknown, keys: unknown) => Record<string, unknown>;
+  readonly pick: <T extends object, K extends keyof T & string>(obj: T, keys: readonly K[]) => Pick<T, K>;
   /** Object without the listed keys. */
-  readonly omit: (obj: unknown, keys: unknown) => Record<string, unknown>;
+  readonly omit: <T extends object, K extends keyof T & string>(obj: T, keys: readonly K[]) => Omit<T, K>;
   /** Split an array into chunks of the given size. */
-  readonly chunk: (arr: unknown, size: number) => unknown[][];
+  readonly chunk: <T>(arr: UtilList<T>, size: number) => T[][];
   /** Flatten nested arrays to the given depth (default 1). */
-  readonly flatten: (arr: unknown, depth?: number) => unknown[];
+  readonly flatten: <A extends readonly unknown[], D extends number = 1>(arr: A | null | undefined, depth?: D) => FlatArray<A, D>[];
   /** Combine arrays element-wise into tuples. */
-  readonly zip: (...arrays: unknown[]) => unknown[][];
+  readonly zip: <L extends readonly (readonly unknown[])[]>(...arrays: L) => { -readonly [K in keyof L]: L[K][number] | null; }[];
   /** Split into [pass, fail] by a comparator. */
-  readonly partition: (arr: unknown, field?: string, op?: string, value?: unknown) => [unknown[], unknown[]];
+  readonly partition: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>, op?: UtilCompareOp, value?: unknown) => [pass: T[], fail: T[]];
   /** Index an array into an object keyed by a field. */
-  readonly keyBy: (arr: unknown, field?: string) => Record<string, unknown>;
+  readonly keyBy: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>) => Record<string, T>;
   /** Deep-clone a value (arrays / objects / dates). */
   readonly cloneDeep: <T>(value: T) => T;
   /** Deep-merge source objects onto a clone of the target. */
   readonly merge: (target: unknown, ...sources: unknown[]) => Record<string, unknown>;
   /** Locale number format: "number" | "currency" | "percent" | "compact". */
-  readonly format: (value: unknown, mode?: string, options?: unknown, fourth?: unknown) => string;
+  readonly format: (value: string | number | null | undefined, mode?: "number" | "currency" | "percent" | "compact", options?: string | UtilNumberFormatOptions | undefined, fourth?: string | undefined) => string;
   /** Format a date — a token pattern (MMM D, YYYY-MM-DD) or "relative"/"date"/"time"/"datetime"/"iso". */
-  readonly formatDate: (value: unknown, format?: string) => string;
+  readonly formatDate: (value: string | number | Date, format?: (string & {}) | "relative" | "date" | "time" | "datetime" | "iso") => string;
   /** Count + correctly pluralised noun: `3 items` / `1 item`. */
   readonly plural: (count: unknown, singular: unknown, plural?: unknown) => string;
   /** Capitalise the first letter. */
@@ -10435,17 +10898,17 @@ export interface UtilStatic {
   /** Start of today as an ISO string. */
   readonly today: () => string;
   /** Date shifted by n days (ISO). */
-  readonly addDays: (date: unknown, days: unknown) => string;
+  readonly addDays: (date: string | number | Date, days: number) => string;
   /** Date shifted by n hours (ISO). */
-  readonly addHours: (date: unknown, hours: unknown) => string;
+  readonly addHours: (date: string | number | Date, hours: number) => string;
   /** Whole days between two dates. */
-  readonly diffDays: (start: unknown, end: unknown) => number;
+  readonly diffDays: (start: string | number | Date, end: string | number | Date) => number;
   /** Start of the week containing the date (ISO). */
-  readonly startOfWeek: (date: unknown) => string;
+  readonly startOfWeek: (date: string | number | Date) => string;
   /** End of the month containing the date (ISO). */
-  readonly endOfMonth: (date: unknown) => string;
+  readonly endOfMonth: (date: string | number | Date) => string;
   /** Join an array into a string with a separator. */
-  readonly join: (arr: unknown, sep?: string) => string;
+  readonly join: (arr: UtilList<unknown>, sep?: string) => string;
   /** Split a string into an array on a separator. */
   readonly split: (text: unknown, sep?: string) => string[];
   /** Trim surrounding whitespace. */
@@ -10460,8 +10923,8 @@ export interface UtilStatic {
   readonly endsWith: (text: unknown, suffix: unknown) => boolean;
   /** True when the text contains the needle. */
   readonly contains: (text: unknown, needle: unknown) => boolean;
-  /** Test the text against a regular-expression pattern. */
-  readonly match: (text: unknown, pattern: unknown) => boolean;
+  /** Test the text against a regular expression given as a SOURCE string (`"^a.+z$"`). A RegExp value stringifies with its slashes and does not match as meant. */
+  readonly match: (text: string | number | null | undefined, pattern: string) => boolean;
   /** Round to n decimal places. */
   readonly round: (value: unknown, decimals?: number) => number;
   /** Round down to an integer. */
@@ -10493,43 +10956,43 @@ export interface UtilStatic {
   /** Human-readable byte size (1536 → "1.5 KB"). */
   readonly bytes: (value: unknown) => string;
   /** "3 minutes ago" / "in 2 days" via Intl. */
-  readonly relativeTime: (value: unknown) => string;
+  readonly relativeTime: (value: string | number | Date) => string;
   /** Copy to the clipboard. Returns a PROMISE that resolves true only when the write succeeds — `await` never suspends in Aktion, so read it with `$util.copy(x).then(ok => …)`. */
-  readonly copy: (text: unknown) => Promise<boolean>;
+  readonly copy: (text: string | number) => Promise<boolean>;
   /** Pause, capped at 60s. Returns a promise — `await` never suspends, so continue in `$util.sleep(ms).then(() => …)`. */
-  readonly sleep: (ms?: unknown) => Promise<void>;
+  readonly sleep: (ms?: number) => Promise<void>;
   /** Random UUID v4 string. */
   readonly uuid: () => string;
   /** Wrap a function so it fires `wait` ms after the LAST call. */
-  readonly debounceFn: (fn: unknown, wait?: unknown) => (...args: unknown[]) => void;
+  readonly debounceFn: <A extends unknown[]>(fn: (...args: A) => unknown, wait?: number) => (...args: A) => void;
   /** Wrap a function to fire at most once per `wait` ms (leading + one trailing). */
-  readonly throttleFn: (fn: unknown, wait?: unknown) => (...args: unknown[]) => void;
+  readonly throttleFn: <A extends unknown[]>(fn: (...args: A) => unknown, wait?: number) => (...args: A) => void;
   /** Haptic pulse (ms or pattern array) on supporting devices. */
-  readonly vibrate: (pattern?: unknown) => boolean;
+  readonly vibrate: (pattern?: number | readonly number[]) => boolean;
   /** Native share sheet (Web Share API) — resolves true on share. */
-  readonly share: (data: unknown) => Promise<boolean>;
+  readonly share: (data: string | { readonly title?: string | undefined; readonly text?: string | undefined; readonly url?: string | undefined; readonly files?: readonly UtilBlobLike[] | undefined; }) => Promise<boolean>;
   /** Read clipboard text (async, permission-gated). */
   readonly readClipboard: () => Promise<string>;
   /** Read a file picked with FileUpload — the only vetted route, since the "safe" policy grants no FileReader. Accepts a File/Blob, a FileList or an array (first readable entry). Options: { as: "text" | "dataUrl" | "base64", maxSize }. NEVER rejects — resolves "" on any failure. */
-  readonly readFile: (file: unknown, options?: unknown) => Promise<string>;
+  readonly readFile: (file: UtilBlobLike | ArrayLike<UtilBlobLike> | null | undefined, options?: UtilReadFileOptions | undefined) => Promise<string>;
   /** Open a URL in a new tab/window. Options: { target, features: {width,height,…}, noopener, noreferrer }. Only http/https/mailto/tel are opened. Popup-blocked unless called inside the click — use openWindow for a URL you have to fetch first. */
-  readonly openUrl: (url: unknown, options?: unknown) => boolean;
+  readonly openUrl: (url: string, options?: UtilOpenUrlOptions | undefined) => boolean;
   /** Open a blank window NOW and navigate it later — the popup-safe way to open a fetched URL (SSO, signed download). Returns { ok, navigate(url), close(), closed }. Options: { name, features }. */
-  readonly openWindow: (options?: unknown) => OpenedWindow;
+  readonly openWindow: (options?: UtilOpenWindowOptions | undefined) => OpenedWindow;
   /** Resolve { lat, lng, accuracy } via the Geolocation API. */
-  readonly geolocate: (options?: unknown) => Promise<{ lat: number; lng: number; accuracy: number; } | null>;
+  readonly geolocate: (options?: { readonly enableHighAccuracy?: boolean | undefined; readonly timeout?: number | undefined; readonly maximumAge?: number | undefined; } | undefined) => Promise<{ readonly lat: number; readonly lng: number; readonly accuracy: number; } | null>;
   /** Current navigator.onLine flag. */
   readonly isOnline: () => boolean;
   /** "mobile" | "tablet" | "desktop" heuristic. */
-  readonly deviceType: () => string;
-  /** Run a closure-free function in a Web Worker; resolves its return value. */
-  readonly worker: (fn: unknown, ...args: unknown[]) => Promise<unknown>;
+  readonly deviceType: () => "mobile" | "tablet" | "desktop";
+  /** Run a closure-free HOST JavaScript function in a Web Worker; resolves its return value. `fn` is serialised with `toString()`, so an Aktion lambda (the runtime's closure) cannot run there — only the no-Worker fallback runs it. */
+  readonly worker: <A extends unknown[], R>(fn: (...args: A) => R, ...args: A) => Promise<Awaited<R>>;
   /** Register a service worker for PWA/offline. */
-  readonly registerServiceWorker: (url: unknown, scope?: unknown) => Promise<boolean>;
+  readonly registerServiceWorker: (url: string, scope?: string | undefined) => Promise<boolean>;
   /** Build a sanitised web-app manifest (name, icons, themeColor…). */
-  readonly webManifest: (config: unknown) => Record<string, unknown>;
+  readonly webManifest: (config: UtilWebManifestConfig) => UtilWebManifest;
   /** Detect the wrapper: capacitor/cordova/tauri/electron/react-native or "web". */
-  readonly nativeShell: () => string;
+  readonly nativeShell: () => "tauri" | "capacitor" | "cordova" | "react-native" | "electron" | "web";
   /** True when running inside a native shell. */
   readonly isNativeApp: () => boolean;
   /** Length-of-time helpers in seconds: .parse / .format / .isValid. Reads both the simple grammar (5m, 250ms, 2h) and ISO-8601 (PT5M, P1DT12H). */
@@ -10537,10 +11000,15 @@ export interface UtilStatic {
 }
 /** Reactive URL snapshot (`$util.url`). */
 export interface UrlSnapshot {
+  /** The current route path. */
   readonly path: string;
+  /** The matched route's path params (`/users/:id` → `{ id }`). */
   readonly params: Readonly<Record<string, string>>;
+  /** The parsed query string. */
   readonly query: Readonly<Record<string, string>>;
+  /** The fragment after `#`, without the `#` — but currently filled in only when the URL also has a `?query` before it (`/p?x=1#s` → `"s"`); otherwise `""` (`/p#s`, and a hash-router URL such as `/#/p?x=1`). */
   readonly hash: string;
+  /** Navigate to a path. */
   navigate(to: string): void;
   /** Write a query param in place (null/"" drops it) — shareable filter/tab state. */
   setQuery(key: string, value: string | number | boolean | null | undefined): void;
@@ -10551,21 +11019,38 @@ export interface UrlSnapshot {
 }
 /** What a `$util.onNavigate` guard receives. */
 export interface NavigationInfo {
+  /** The path being navigated to (normalised). */
   readonly to: string;
+  /** The path being left. */
   readonly from: string;
+}
+/** The request a `$util.onRequest` interceptor receives: mutate it and return nothing, or return a partial to merge over it (headers are shallow-merged). The interceptor runs SYNCHRONOUSLY — a returned Promise is ignored. */
+export interface HttpInterceptedRequest {
+  url: string;
+  method: HttpMethod;
+  headers: Record<string, string>;
+  body?: unknown;
+  /** The config's extra `fetch` options (`credentials`, `mode`, …). */
+  init?: Record<string, unknown>;
+}
+/** The response a `$util.onResponse` interceptor receives — and must return in full: a returned object REPLACES the response (a partial loses `status`, which turns a success into an error). */
+export interface HttpInterceptedResponse {
+  readonly status: number;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: unknown;
 }
 /** `$util`: the static helpers plus the per-program facade (reactive env, URL, interceptors). */
 export interface AktionUtil extends UtilStatic {
   /** Reactive viewport: .width / .height. */
-  readonly viewport: { width: number; height: number; };
+  readonly viewport: { readonly width: number; readonly height: number; };
   /** Reactive breakpoint: .active ("base"|"sm"|"md"|"lg"|"xl") + boolean .sm/.md/.lg/.xl. */
-  readonly breakpoint: { width: number; active: string; sm: boolean; md: boolean; lg: boolean; xl: boolean; };
+  readonly breakpoint: { readonly width: number; readonly active: "base" | "sm" | "md" | "lg" | "xl"; readonly sm: boolean; readonly md: boolean; readonly lg: boolean; readonly xl: boolean; };
   /** Reactive scroll: .x / .y / .progress (0–1) / .direction ("up"|"down"). */
-  readonly scroll: { x: number; y: number; progress: number; direction: string; };
+  readonly scroll: { readonly x: number; readonly y: number; readonly progress: number; readonly direction: "up" | "down"; };
   /** Reactive media flags: .prefersDark / .prefersReducedMotion / .online / .pointer / .portrait. */
-  readonly media: { prefersDark: boolean; prefersReducedMotion: boolean; online: boolean; pointer: string; portrait: boolean; };
+  readonly media: { readonly prefersDark: boolean; readonly prefersReducedMotion: boolean; readonly online: boolean; readonly pointer: "coarse" | "fine"; readonly portrait: boolean; };
   /** Reactive pointer position: .x / .y. */
-  readonly mouse: { x: number; y: number; };
+  readonly mouse: { readonly x: number; readonly y: number; };
   /** Reactive URL snapshot: .path / .params / .query / .hash + .navigate(to). */
   readonly url: UrlSnapshot;
   /** Safe styling helpers: .cx / .gradient / .alpha / .clamp / .token / .toStyle. */
@@ -10575,34 +11060,51 @@ export interface AktionUtil extends UtilStatic {
   /** Computed reactive value — recomputes from the atoms the lambda reads. */
   derived<T>(fn: () => T): T;
   /** Program-level error sink — fires with { error, source } when an action throws. */
-  onError(fn: ((info: { readonly error: unknown; readonly source?: unknown }) => void) | null): void;
+  onError(fn: ((info: { readonly error: unknown; readonly source: string }) => void) | null): void;
   /** Navigation guard: return false to block, a path string to redirect, anything else to allow. */
   onNavigate(fn: ((info: NavigationInfo) => boolean | string | void) | null): void;
-  /** HTTP request interceptor — a partial return merges over every outgoing request. */
-  onRequest(fn: (request: { url: string; method: HttpMethod; headers: Record<string, string>; body?: unknown }) => object | void): void;
-  /** HTTP response interceptor — replace the response, or `return retry()` to re-issue once (the client awaits what you return; `await` inside the body does not suspend). */
-  onResponse(fn: (response: { status: number; headers: Record<string, string>; body: unknown }, retry: () => Promise<unknown>) => unknown): void;
+  /** HTTP request interceptor — a partial return merges over every outgoing request (headers shallow-merged), or mutate the request and return nothing. Runs synchronously: a returned Promise is ignored. */
+  onRequest(fn: (request: HttpInterceptedRequest) => Partial<HttpInterceptedRequest> | void): void;
+  /** HTTP response interceptor — return a full replacement response (it replaces, it does not merge), `return retry()` to re-issue once, or nothing to pass it through (the client awaits what you return; `await` inside the body does not suspend). */
+  onResponse(fn: (response: HttpInterceptedResponse, retry: () => Promise<HttpInterceptedResponse>) => HttpInterceptedResponse | void | Promise<HttpInterceptedResponse | void>): void;
   /** Refetch every cached $query whose key contains one of the substrings. */
   invalidate(keys: string | readonly string[]): void;
 }
+/** Options of `$storage.cookies.set` / `.remove` (the standard cookie attributes). */
 export interface CookieOptions {
   /** Days until expiry, a Date, or a date string. */
   expires?: number | Date | string;
   /** `Max-Age` in seconds (wins over `expires`). */
   maxAge?: number;
+  /** Restrict the cookie to this path (default `/`; an invalid path falls back to `/`). */
   path?: string;
+  /** Restrict the cookie to this domain (dropped unless it is a valid hostname). */
   domain?: string;
+  /** Only send the cookie over HTTPS. */
   secure?: boolean;
+  /** The `SameSite` policy. Always sent: `Lax` when omitted or not one of the three. */
   sameSite?: "Strict" | "Lax" | "None" | "strict" | "lax" | "none";
 }
+/** A web-storage backend (`$storage.local`, `$storage.session`, and `$storage` itself, which is `local`). */
 export interface StorageNamespace {
-  /** localStorage write. */
+  /** Write a value (anything but a string is JSON-encoded). Returns false when the storage is unavailable. */
+  set(key: string, value: unknown): boolean;
+  /** Read a value (JSON-decoded when it parses), or null when the key is missing. `T` is an unchecked assertion about what was stored. */
+  get<T = unknown>(key: string): T | null;
+  /** Delete a key. */
+  remove(key: string): boolean;
+  /** Delete every key of this storage. */
+  clear(): boolean;
+}
+/** `$storage.cookies`: the document's cookies, with cookie options on `set` / `remove`. */
+export interface CookieStorageNamespace extends StorageNamespace {
+  /** Set a cookie. Options: expires, maxAge, path, domain, secure, sameSite. */
   set(key: string, value: unknown, options?: CookieOptions): boolean;
-  /** localStorage read. Returns null when missing. */
-  get(key: string): unknown;
-  /** Delete a key from localstorage. */
+  /** Read a cookie value (JSON-decoded when it parses), or null when it is not set. `T` is an unchecked assertion about what was stored. */
+  get<T = unknown>(key: string): T | null;
+  /** Delete a cookie. Path/domain must match the original set call. */
   remove(key: string, options?: CookieOptions): boolean;
-  /** Wipe every localstorage entry. */
+  /** Clear every cookie on this document. */
   clear(): boolean;
 }
 export interface StorageRoot extends StorageNamespace {
@@ -10611,7 +11113,7 @@ export interface StorageRoot extends StorageNamespace {
   /** sessionStorage backend (per-tab) — set/get/remove/clear. */
   readonly session: StorageNamespace;
   /** Document cookies — set/get/remove/clear (options: expires, maxAge, path, domain, secure, sameSite). */
-  readonly cookies: StorageNamespace;
+  readonly cookies: CookieStorageNamespace;
 }
 export interface ConsoleNamespace {
   /** Log a message at the default level. */
@@ -10625,58 +11127,107 @@ export interface ConsoleNamespace {
   /** Log a verbose debug message. */
   debug(...args: unknown[]): void;
 }
+/** A toast's visual accent: the `Toast` component's tones. */
+export type ToastShowTone = "default" | "primary" | "success" | "warning" | "danger" | "info";
+/** A corner the auto-rendered toast stack can pin to: the `Toasts` component's positions. */
+export type ToastStackPosition = "top-right" | "top-left" | "top-center" | "bottom-right" | "bottom-left" | "bottom-center";
+/** Options of `$toast.show` (the shortcuts take all but `tone`). */
 export interface ToastShowOptions {
-  title?: string;
-  tone?: string;
-  duration?: number;
+  /** Optional bold heading; the message becomes the secondary line. */
+  readonly title?: string | number;
+  /** Visual accent (default `"default"`). */
+  readonly tone?: ToastShowTone;
+  /** Auto-dismiss delay in ms (default 4000); `0` keeps the toast until dismissed. */
+  readonly duration?: number;
 }
+/** Options of `$toast.configure`. */
 export interface ToastConfig {
-  position?: string;
+  /** Viewport corner the auto-rendered stack pins to (default `"top-right"`). Any other value is ignored. */
+  readonly position?: ToastStackPosition;
 }
+/** One live toast in `$toast.items`. */
 export interface ToastItem {
+  /** Pass to `$toast.dismiss(id)`. */
   readonly id: string;
   readonly message: string;
   readonly title?: string;
-  readonly tone: string;
+  /** Visual accent, mapped onto the `Toast` component's `tone`. */
+  readonly tone: ToastShowTone;
+  /** Auto-dismiss delay in ms; `0` keeps the toast until dismissed. */
   readonly duration: number;
+  /** ms-epoch the toast was shown. */
   readonly createdAt: number;
 }
 export interface ToastManager {
   /** Reactive list of live toasts (newest last). Treat as read-only. */
   readonly items: readonly ToastItem[];
   /** Show a toast; returns its id. Options: { title?, tone?, duration? }. */
-  show(message: unknown, options?: ToastShowOptions): string;
+  show(message: string | number, options?: ToastShowOptions): string;
   /** `show` with tone "success". */
-  success(message: unknown, options?: ToastShowOptions): string;
+  success(message: string | number, options?: Omit<ToastShowOptions, "tone">): string;
   /** `show` with tone "danger". */
-  error(message: unknown, options?: ToastShowOptions): string;
+  error(message: string | number, options?: Omit<ToastShowOptions, "tone">): string;
   /** `show` with tone "info". */
-  info(message: unknown, options?: ToastShowOptions): string;
+  info(message: string | number, options?: Omit<ToastShowOptions, "tone">): string;
   /** `show` with tone "warning". */
-  warning(message: unknown, options?: ToastShowOptions): string;
+  warning(message: string | number, options?: Omit<ToastShowOptions, "tone">): string;
   /** Remove a single toast by id. */
   dismiss(id: string): void;
   /** Remove every toast. */
   clear(): void;
   /** Settings for the auto-rendered stack, e.g. { position: "bottom-center" }. Call once at the top level of the program. */
-  configure(options: ToastConfig): void;
+  configure(options?: ToastConfig): void;
 }
 export type DomDisposer = () => void;
+/** What `$dom.measure(node)` returns. */
 export interface DomMeasurement {
+  /** The element's bounding rectangle (`getBoundingClientRect()`). */
   readonly rect: { readonly width: number; readonly height: number; readonly top: number; readonly left: number; readonly right: number; readonly bottom: number };
+  /** Scroll position and scrollable size of the element. */
   readonly scroll: { readonly top: number; readonly left: number; readonly width: number; readonly height: number };
+  /** Current viewport size. */
   readonly viewport: { readonly width: number; readonly height: number };
 }
-/** Element arguments are the nodes `Mount` / `OnMount` hand you — typed `unknown`, since a DSL program has no DOM types. */
+/** A rectangle (`lib.dom`'s `DOMRectReadOnly`, structurally). */
+export interface DomRectLike {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly left: number;
+}
+/** What a `$dom.onIntersect` callback receives (`lib.dom`'s `IntersectionObserverEntry`, structurally). */
+export interface DomIntersectionEntry {
+  readonly isIntersecting: boolean;
+  readonly intersectionRatio: number;
+  readonly target: DomElement;
+  readonly time: number;
+  readonly boundingClientRect: DomRectLike;
+  readonly intersectionRect: DomRectLike;
+  readonly rootBounds: DomRectLike | null;
+}
+/** One of the records a `$dom.onMutation` callback receives (`lib.dom`'s `MutationRecord`, structurally). */
+export interface DomMutationRecord {
+  readonly type: "attributes" | "characterData" | "childList";
+  readonly target: unknown;
+  readonly attributeName: string | null;
+  readonly oldValue: string | null;
+  readonly addedNodes: ArrayLike<unknown>;
+  readonly removedNodes: ArrayLike<unknown>;
+}
+/** Element arguments are the nodes `Mount` / `OnMount` / ref callbacks hand you. A null or non-element node makes the call a no-op: an observer returns a disposer that does nothing, `measure` returns null. */
 export interface DomManager {
   /** Observe element size with a ResizeObserver; callback gets { width, height, entry }. Returns a disposer; auto-disposed on replan. */
-  onResize(node: unknown, callback: (size: { readonly width: number; readonly height: number; readonly entry: unknown }) => void): DomDisposer;
+  onResize(node: DomElement | null | undefined, callback: (size: { readonly width: number; readonly height: number; /** The `ResizeObserverEntry`. */ readonly entry: unknown }) => void): DomDisposer;
   /** Observe viewport intersection with an IntersectionObserver; callback gets the entry. Options: { root?, rootMargin?, threshold? }. */
-  onIntersect(node: unknown, callback: (entry: any) => void, options?: { readonly root?: unknown; readonly rootMargin?: string; readonly threshold?: number | readonly number[] }): DomDisposer;
-  /** Observe DOM mutations with a MutationObserver. Options: { childList?, attributes?, subtree?, characterData? }. */
-  onMutation(node: unknown, callback: (records: any) => void, options?: { readonly childList?: boolean; readonly attributes?: boolean; readonly subtree?: boolean; readonly characterData?: boolean }): DomDisposer;
+  onIntersect(node: DomElement | null | undefined, callback: (entry: DomIntersectionEntry) => void, options?: { readonly root?: DomElement | null; readonly rootMargin?: string; readonly threshold?: number | readonly number[] }): DomDisposer;
+  /** Observe DOM mutations with a MutationObserver; callback gets the records. Options: { childList?, attributes?, subtree?, characterData? } — childList and attributes default to TRUE, subtree and characterData to false. */
+  onMutation(node: DomElement | null | undefined, callback: (records: readonly DomMutationRecord[]) => void, options?: { readonly childList?: boolean; readonly attributes?: boolean; readonly subtree?: boolean; readonly characterData?: boolean }): DomDisposer;
   /** One-shot read → { rect, scroll, viewport } (getBoundingClientRect + scroll offsets + window size). */
-  measure(node: unknown): DomMeasurement | null;
+  measure(node: DomElement | null | undefined): DomMeasurement | null;
 }
 
 /* ================================================================ $-builtins */
@@ -10697,45 +11248,45 @@ export declare function $id(prefix?: string): string;
 export declare function $effect<const D extends readonly unknown[] = []>(body: () => void, deps?: EffectDependencies<D>): void;
 /** Run optimistic writes; auto-rolls back state if the callback throws or rejects. */
 export declare function $optimistic<T>(fn: () => T): T;
-/** Global store: shared state + actions (like Zustand/Pinia). persist: "key" mirrors data to localStorage (persistIn: "session" for sessionStorage); history: true|depth adds undo()/redo()/clearHistory() + reactive canUndo/canRedo. Non-function entries become reactive state, function entries become methods `(s, ...args) => …` whose first parameter is the store handle — typed `any` inside the method, because TypeScript cannot infer a handle from the object literal it is defined in; callers of the returned store ARE fully typed. One store per call site. */
+/** Global store: shared state + actions (like Zustand/Pinia). persist: "key" mirrors data to localStorage (persistIn: "session" for sessionStorage); history: true|depth adds undo()/redo()/clearHistory() + reactive canUndo/canRedo. Non-function entries become reactive state, function entries become methods `(s, ...args) => …` whose first parameter is the store handle — typed `any` inside the method, because TypeScript cannot infer a handle from the object literal it is defined in; callers of the returned store ARE fully typed. To type the handle, annotate it with `Store<Fields>` over an interface of the fields: `interface Cart { items: Item[] }` … `add: (s: Store<Cart>, item: Item) => { s.items = [...s.items, item] }`. One store per call site. */
 export declare function $store<C extends { readonly [key: string]: unknown }>(config: C & StoreOptions & { readonly [key: string]: ((s: any, ...args: any[]) => unknown) | {} | null | undefined }): Store<C>;
 /** Reactive form engine: values/errors/touched/dirty/valid/submitting/validating + field()/validate()/touch()/setField()/submit() (alias handleSubmit())/reset(). Async rules ($util.rules.asyncCustom) are awaited before submit; submitting stays true until an async onSubmit settles. */
 export declare function $form<V extends FormValues = FormValues>(config?: FormConfig<V>): FormHandle<V>;
 /** Reactive HTTP resource bag — { data, loading, error, refetch }. `T` is an unchecked assertion about the response body; `data` is `undefined` until the first successful response. */
 export declare function $http<T = unknown>(config: HttpConfig): HttpResource<T>;
-/** Cached + deduplicated HTTP read. Polling via refetchInterval/refetchOnFocus/refetchOnReconnect; pagination via infinite: { param, limit, mode } (→ .loadMore()/.hasMore/.loadingMore); GraphQL via gql + variables. With `infinite: {…}` the bag accumulates pages (`.loadMore()`, `.hasMore`, `.data` is the flattened items). */
+/** Cached + deduplicated HTTP read. Polling via refetchInterval/refetchOnFocus/refetchOnReconnect; pagination via infinite: { param, limit, mode } (→ .loadMore()/.hasMore/.loadingMore); GraphQL via gql + variables. With `infinite: {…}` the bag accumulates pages (`.loadMore()`, `.hasMore`, `.data` is the flattened items); `Item` is inferred from a typed `infinite.select`. The infinite form ignores `ttl` and the `refetch*` options, so its config does not declare them. */
 export declare function $query<T = unknown>(config: QueryConfig & { readonly infinite?: undefined }): HttpResource<T>;
-export declare function $query<Item = unknown>(config: QueryConfig & { readonly infinite: InfiniteConfig }): InfiniteQueryResource<Item>;
+export declare function $query<Item = unknown>(config: InfiniteQueryConfig<Item>): InfiniteQueryResource<Item>;
 /** Deferred write; fires on .mutate(overrides?). optimistic: (vars) => {…} applies instantly (auto-rollback on failure); invalidates: [keys] refetches matching cached queries; gql for GraphQL. */
 export declare function $mutation<T = unknown>(config: MutationConfig): MutationResource<T>;
 /** Reactive WebSocket — { status: "connecting"|"open"|"closed", connected, last, messages, attempts, send, close }. reconnect: true|n retries with exponential backoff; sends queue while connecting and flush on open; close() stops for good. */
-export declare function $socket<M = unknown>(config: SocketConfig): SocketResource<M>;
+export declare function $socket<M = unknown>(config: SocketConfig<M>): SocketResource<M>;
 /** Reactive Server-Sent Events stream — { status, connected, last, messages, close }. EventSource reconnects natively (status reads "connecting" while it does). */
-export declare function $sse<M = unknown>(config: SseConfig): SseResource<M>;
+export declare function $sse<M = unknown>(config: SseConfig<M>): SseResource<M>;
 /** Load an external UMD/ESM script or stylesheet once → reactive { ready, loading, error, value }. `global` reads window[global] into `value` (e.g. window.Stripe). De-duplicated per src across the app; gate a third-party widget on `.ready`. */
 export declare function $script<V = unknown>(config: ScriptConfig): ScriptResource<V>;
 /** Reactive document head: title, meta description, canonical/alternate links, Open Graph + Twitter cards, JSON-LD, <html> attrs. Per-route calls compose; renderToString emits the resolved <head> so SSR pages are crawlable. Returns null — call it as a statement. */
 export declare function $head(config: HeadConfig): null;
 /** Register the root of the rendered UI tree — every program needs one. The return type is a type-level fiction: `export default $app(App())` gives host code a typed `CompiledProgram` default import. A bare string/number root is a validation error (root-not-renderable). */
 export declare function $app(root: AktionNode | readonly Children[] | null, ...more: Children[]): CompiledProgram;
-/** Outlet-first router: maps path patterns to component trees. Must be called with an object LITERAL: arms are evaluated lazily and only the matching one runs. Returns the matched arm's tree, or null when nothing matches and there is no `default`. */
-export declare function $router(routes: RouteTable): AktionNode | null;
+/** Outlet-first router: maps path patterns to component trees. Must be called with an object LITERAL: arms are evaluated lazily and only the matching one runs. Returns the matched arm's value (a layout arm's `layout`), or null when nothing matches and there is no `default`. Type an arm's `params` with `params as RouteParamsOf<"/users/:id">`. */
+export declare function $router<const R extends RouteTable>(routes: R): RouterResult<R>;
 /** In-script theme override merged on top of the active base theme. Structured groups: colors/radius/font/spacing/shadows/gradients/zIndex/motion/fonts (web-font import)/icons (custom inline SVG), plus name/direction metadata. */
 export declare function $theme(config: ThemeConfig): ThemeHandle;
 /** Dispatch a CustomEvent from the host element. */
 export declare function $emit(name: string, detail?: unknown): void;
 /** Runtime helper + reactive-environment namespace: data helpers ($util.format/.sum/.range/.groupBy…), formatting ($util.slugify/.truncate/.initials/.currency/.percent/.bytes/.relativeTime), misc ($util.copy — async, resolves true on real success —/.sleep/.uuid/.debounceFn/.throttleFn — leading+trailing), styling ($util.style.cx/.gradient/.alpha/.clamp/.token/.toStyle), validators ($util.rules.required/.email/.url/.min/.max/.range/.minLength/.maxLength/.integer/.port/.ipv4/.ipv6/.ip/.cidr/.pattern/.oneOf/.matches/.custom/.asyncCustom + .validate/.validateAll), computed ($util.derived(fn)), hooks ($util.onError/.onNavigate/.onRequest/.onResponse/.invalidate), reactive env ($util.scroll/.viewport/.breakpoint/.media/.mouse/.url incl. .url.setQuery/.removeQuery), device ($util.vibrate/.share/.readClipboard/.readFile/.geolocate/.isOnline/.deviceType/.nativeShell/.isNativeApp), browsing contexts ($util.openUrl(url, opts) — new tab/window, http/https/mailto/tel only; $util.openWindow(opts) — open blank NOW, .navigate(url) when a fetched URL lands, the popup-safe SSO pattern), and platform ($util.worker/.registerServiceWorker/.webManifest). */
 export declare const $util: AktionUtil;
-/** Persistent storage namespace ($storage.local, $storage.session, …). Also callable: `$storage({...})` returns the same namespace. */
-export declare const $storage: StorageRoot & ((config?: object) => StorageRoot);
+/** Persistent storage namespace ($storage.local, $storage.session, …). Also callable: `$storage(…)` returns the same namespace; the argument is evaluated and ignored. */
+export declare const $storage: StorageRoot & ((config?: Readonly<Record<string, never>>) => StorageRoot);
 /** Console namespace ($console.log, $console.warn, …). */
 export declare const $console: ConsoleNamespace;
 /** Imperative toasts: $toast.show/.success/.error/.dismiss; reactive .items. */
 export declare const $toast: ToastManager;
 /** Managed DOM-observer namespace: $dom.onResize(node, cb) / .onIntersect(node, cb, opts?) / .onMutation(node, cb, opts?) (auto-disposed on replan) and .measure(node) → { rect, scroll, viewport }. Pair with Mount/OnMount node refs. */
 export declare const $dom: DomManager;
-/** Translation bundle → { t, setCurrentLanguage, getCurrentLanguage }. */
-export declare function $i18n(config?: I18nConfig): I18nInstance;
+/** Translation bundle → { t, setCurrentLanguage, getCurrentLanguage }. `t` completes the declared keys and `setCurrentLanguage` the declared languages; any other string is still accepted (an unknown key translates to itself). */
+export declare function $i18n<const T extends I18nTranslations = {}>(config?: I18nConfig<T>): I18nInstance<keyof T & string, __I18nLanguages<T>>;
 
 /* ================================================================ injected names */
 // Bound by the runtime without a declaration. Importing one is a compile-time
@@ -10743,14 +11294,14 @@ export declare function $i18n(config?: I18nConfig): I18nInstance;
 
 /** Injected: the reactive router handle (`route.path`, `route.navigate(…)`). */
 export declare const route: RouteHandle;
-/** Injected: path params, bound inside `$router` arms. */
+/** Injected: path params, bound inside `$router` arms. Type them for one pattern with `params as RouteParamsOf<"/users/:id">`. */
 export declare const params: Readonly<Record<string, string>>;
-/** Injected: the matched child route, bound inside a layout arm's `layout`. */
-export declare const outlet: AktionNode | null;
+/** Injected: the matched child route, bound inside a layout arm's `layout`. Whatever the matched child arm evaluates to (a node, an array, a string, a nested layout's result), or null when no child matches. */
+export declare const outlet: Children;
 /** Injected: extra positional arguments, bound inside a user component's body. */
 export declare const children: Children;
-/** Injected: named props that matched no parameter, bound inside a user component's body. */
-export declare const slots: Readonly<Record<string, Children>>;
+/** Injected: named props that matched no parameter, bound inside a user component's body. Values are ANY named prop the caller passed — nodes, callbacks, data — so they are `any`: check one before calling or rendering it. */
+export declare const slots: Readonly<Record<string, any>>;
 /** Injected: registers a teardown, bound inside an `$effect` body. */
 export declare function cleanup(fn: () => void): void;
 /** Injected: tracked timer (cleared when the program is torn down). */

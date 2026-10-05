@@ -65,20 +65,24 @@ describe("unicorn/prefer-switch is off: its fix writes braced case bodies Aktion
   const aktionSource = `${chain}\n$app(status("ok"))\n`;
 
   it("the module compiles before any fix", () => {
-    expect(javascriptFrontend.compile(moduleSource, "/app.aktion.js").program.errors).toEqual([]);
+    const before = javascriptFrontend.compile(moduleSource, "/app.aktion.js");
+    expect([...before.program.errors, ...before.diagnostics]).toEqual([]);
     expect(parse(aktionSource).errors).toEqual([]);
   });
 
   it("aktionTypeScriptConfig: --fix leaves a .aktion.js module that still compiles", () => {
     const fixed = new Linter().verifyAndFix(moduleSource, typescriptConfig(), { filename: "app.aktion.js" });
     expect(fixed.output).not.toContain("switch");
-    expect(javascriptFrontend.compile(fixed.output, "/app.aktion.js").program.errors).toEqual([]);
+    const after = javascriptFrontend.compile(fixed.output, "/app.aktion.js");
+    expect([...after.program.errors, ...after.diagnostics]).toEqual([]);
 
     const control = new Linter().verifyAndFix(moduleSource, typescriptConfig({ "unicorn/prefer-switch": "error" }), {
       filename: "app.aktion.js",
     });
     expect(control.output).toContain('case "ok": {');
-    expect(javascriptFrontend.compile(control.output, "/app.aktion.js").program.errors.length).toBeGreaterThan(0);
+    // The braced case body is a block statement: E113 from the JS-semantics check.
+    const broken = javascriptFrontend.compile(control.output, "/app.aktion.js");
+    expect([...broken.program.errors.map((e) => e.message), ...broken.diagnostics.map((d) => d.code ?? d.message)]).toContain("E113");
   });
 
   it("configs.recommended: --fix leaves a .aktion file that still parses", () => {

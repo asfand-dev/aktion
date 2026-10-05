@@ -60,7 +60,7 @@ Tabular data view. Children must be Col components. `density="compact"` tightens
 Col(header, values, format?, align?, sortable?, filterable?, render?, onClick?, currency?, width?, wrap?, headerTooltip?, locale?, initiallyHidden?, pinned?, resizable?, minWidth?, maxWidth?, headerHidden?)
 ```
 
-Single column inside a Table or DataGrid. Use `align` for per-column text alignment, `format` for cell rendering (`text|number|currency|date`), `currency` for the money code used by `format: "currency"`, `locale` for the BCP-47 tag those formats are rendered in, and `width`/`wrap` to stop one long column from forcing the whole table into horizontal scroll. `values` may be plain values OR an array of component nodes — e.g. `Col("Status", rows.map(r => Badge(r.status)))` or `Col("Actions", rows.map(r => Button("Edit")))` — each component renders directly in its cell. Pass `render: (value, index, row) => …` for the same effect when you prefer to keep `values` as the raw row data (return a component, string, or array). `row` is the whole row (header-keyed) and stays correct even when DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. Pass `onClick: (value, index, row) => …` to make the whole cell clickable (pointer + keyboard). `sortable` and `filterable` only take effect inside `DataGrid` (Table ignores them). For an actions/kebab-menu column that needs no visible header, use `headerHidden: true` — NOT `header: ""`, which loses the accessible name and (in DataGrid) the persistence key derived from `header`.
+Single column inside a Table or DataGrid. Use `align` for per-column text alignment, `format` for cell rendering (`text|number|currency|date`), `currency` for the money code used by `format: "currency"`, `locale` for the BCP-47 tag those formats are rendered in, and `width`/`wrap` to stop one long column from forcing the whole table into horizontal scroll. `values` may be plain values OR an array of component nodes — e.g. `Col("Status", rows.map(r => Badge(r.status)))` or `Col("Actions", rows.map(r => Button("Edit")))` — each component renders directly in its cell. Pass `render: (value, index, row) => …` for the same effect when you prefer to keep `values` as the raw row data (return a component, string, or array). `row` is the whole row (header-keyed) and stays correct even when DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. A column whose header is empty or repeats an earlier column's header is keyed `col-<index>` instead, so two `Col("Price", …)` never overwrite each other. Pass `onClick: (value, index, row) => …` to make the whole cell clickable (pointer + keyboard). `sortable` and `filterable` only take effect inside `DataGrid` (Table ignores them). For an actions/kebab-menu column that needs no visible header, use `headerHidden: true` — NOT `header: ""`, which loses the accessible name and (in DataGrid) the persistence key derived from `header`.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -76,13 +76,13 @@ Single column inside a Table or DataGrid. Use `align` for per-column text alignm
 | `width` | `string` | no | CSS width for the column (`240px`, `30%`). Caps the column instead of letting one long value stretch the table. |
 | `wrap` | `boolean` | no | Let long cell text wrap onto several lines instead of pushing the table into horizontal scroll. |
 | `headerTooltip` | `string` | no | Explanation shown on hover/focus of the header cell — e.g. `MRR = monthly recurring revenue`. |
-| `locale` | `string` | no | BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) used by `format: "number"\|"currency"\|"date"` for separators, digit grouping and date order. Defaults to the Table's `locale`, then the viewer's browser. |
+| `locale` | `string` | no | BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) used by `format: "number"\|"currency"\|"date"` for separators, digit grouping and date order, in a Table and a DataGrid alike. Defaults to the Table's `locale` (a DataGrid has none), then the viewer's browser. |
 | `initiallyHidden` | `boolean` | no | DataGrid: initially hide this column. The user can reveal it from the column settings panel. |
-| `pinned` | `"left"` \| `"right"` | no | DataGrid: pin this column to the left (or right) edge so it stays visible during horizontal scrolling. |
+| `pinned` | `"left"` \| `"none"` | no | DataGrid: `"left"` pins this column to the left edge so it stays visible during horizontal scrolling (pinned columns move to the front of the table); `"none"`, the default, leaves it unpinned. There is no right-edge pinning. |
 | `resizable` | `boolean` | no | DataGrid: per-column override for resizing. Takes precedence over the grid-level `resizable` prop. |
-| `minWidth` | `string` | no | DataGrid: minimum width when the column is resized (`80px`, `5rem`). |
-| `maxWidth` | `string` | no | DataGrid: maximum width when the column is resized (`400px`, `50%`). |
-| `headerHidden` | `boolean` | no | Render the header cell visually empty (an actions/kebab-menu column needs no visible header) while `header` keeps naming the column everywhere else that reads it: the `<th>`'s accessible name, the column-settings panel row, and (DataGrid) the persistence key. Do NOT use `header: ""` for this — that drops the accessible name, blanks the column-settings row, and collides with any other column that also passed an empty header, since the persistence key is the header string. A sortable column keeps working: the sort button's accessible name still comes from the hidden label. |
+| `minWidth` | `string` | no | DataGrid: minimum width when the column is resized (`80px`, `5rem`, or a number of px; default 50px). A `%` is a share of the grid's visible width. |
+| `maxWidth` | `string` | no | DataGrid: maximum width when the column is resized (`400px`, `50%`, or a number of px; default 2000px). A `%` is a share of the grid's visible width. |
+| `headerHidden` | `boolean` | no | Render the header cell visually empty (an actions/kebab-menu column needs no visible header) while `header` keeps naming the column everywhere else that reads it: the `<th>`'s accessible name, the column-settings panel row, and (DataGrid) the persistence key. Do NOT use `header: ""` for this — that drops the accessible name, blanks the column-settings row, and leaves the column keyed by its position (`col-<index>`), so a saved layout follows whichever column lands at that index after columns are added or reordered. A sortable column keeps working: the sort button's accessible name still comes from the hidden label. |
 
 ### DataGrid
 
@@ -114,7 +114,7 @@ Advanced data table with sortable headers, per-column filter chips, row selectio
 | `loading` | `boolean` | no | Show a loading row instead of the empty message while rows are in flight |
 | `error` | `string` | no | Failure message shown instead of the rows (takes precedence over `loading`) |
 | `loadingLabel` | `string` | no | Label for the loading row (default `Loading…`) |
-| `maxHeight` | `string` | no | Scroll-area height cap, e.g. `70vh` / `480px`. Applied when `stickyHeader` is on (default `70vh`) — without it the header has no scrollport to stick to. |
+| `maxHeight` | `string` | no | Scroll-area height cap, e.g. `70vh` / `480px`. Applies whenever `allowOverflow` is off. Defaults to `70vh` while `stickyHeader` is on — without a cap the header has no scrollport to stick to — and to no cap otherwise. |
 | `allowOverflow` | `boolean` | no | Let cell content (menus, popovers) escape the scroll box instead of clipping it. Disables the sticky header. |
 | `onSort` | `callable` | no | Callable fired with (columnKey, direction) when a header is activated — use for server-side sorting |
 | `onSelectionChange` | `callable` | no | Callable fired with the array of selected row ids |
@@ -132,7 +132,7 @@ Advanced data table with sortable headers, per-column filter chips, row selectio
 | `columnMenuOpen` | `boolean` | no | Open state of the column-settings panel — bind a `$variable` for two-way control, so an external button can open it. Leave unset to let the built-in trigger own the state. |
 | `onColumnMenuOpenChange` | `callable` | no | Called with the new boolean whenever the column-settings panel opens or closes — including via Escape, the × button, or an outside click. |
 | `columnMenuButton` | `boolean` | no | Render the built-in column-settings trigger in the header (default true). Set `false` when an external control opens the panel, which keeps the panel and its configuration without the in-header icon. |
-| `columnMenuAnchor` | `string` | no | CSS selector for the element the panel should hang off, e.g. `"#table-settings"`. Defaults to the built-in trigger; required when `columnMenuButton` is `false`, or the panel has nothing to anchor to. |
+| `columnMenuAnchor` | `string` | no | CSS selector for the element the panel should hang off, e.g. `"#table-settings"`. Defaults to the built-in trigger; required when `columnMenuButton` is `false`, or the panel has nothing to anchor to. When `columnMenuButton` is `false`, a press on this element or anything inside it never counts as an outside click, so a toolbar button bound to `columnMenuOpen` can close the panel it opened. |
 | `columnMenuTitle` | `string` | no | Heading of the column-settings panel (default "Table settings"). Pass a translated string in a localised app. |
 | `columnMenuDescription` | `string` | no | Sub-heading under the panel title (default "Manage column visibility and order"). Pass `""` to drop the line. |
 | `columnMenuResetLabel` | `string` | no | Label of the panel's reset action (default "Reset to default"). |
@@ -199,11 +199,11 @@ Single KPI card with label, value, optional delta, optional icon, optional `hint
 Stats(items, layout?, columns?, align?)
 ```
 
-KPI strip or grid. Pass `items` as `{label, value, hint?, tone?, spark?}` objects for strip layout, or as `StatCard(...)` nodes when `layout="grid"`.
+KPI strip or grid. Pass `items` as `{label, value, hint?, tone?, spark?}` objects (strip layout by default) and/or `StatCard(...)` nodes; any StatCard item, or `layout="grid"`, lays them out as a responsive grid.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
-| `items` | `object[] | StatCard[]` | **yes** | Stat objects or StatCard nodes when layout=grid |
+| `items` | `(object | StatCard)[]` | **yes** | Stat objects and/or StatCard nodes (a StatCard switches to grid layout) |
 | `layout` | `"strip"` \| `"grid"` | no | strip = horizontal row; grid = responsive Grid |
 | `columns` | `number` | no | Preferred column count for grid layout (1–6) |
 | `align` | `"start"` \| `"center"` \| `"end"` | no | Strip alignment (layout=strip only) |
@@ -362,10 +362,10 @@ Full-month or week calendar grid for scheduling apps — distinct from the form-
 | `month` | `string` | no | Visible month — ISO date or YYYY-MM. Bind a $variable to follow the prev/next controls (defaults to `value`, else today) |
 | `events` | `object[]` | no | Array of {date, title, tone?, time?, id?} objects |
 | `view` | `"month"` \| `"week"` | no |  |
-| `firstDay` | `number` | no | 0=Sunday, 1=Monday (default 1) |
+| `firstDay` | `number` | no | 0=Sunday, 1=Monday … 6=Saturday (default 1); other numbers are floored and wrapped into that range |
 | `onSelect` | `callable` | no | Callable fired when a day is clicked; receives the ISO date string |
 | `onMonthChange` | `callable` | no | Callable fired when the prev/next/today controls move the grid; receives the new anchor ISO date |
-| `onEventClick` | `callable` | no | Callable fired with (eventId, event) when an event chip is clicked; makes the chips real buttons |
+| `onEventClick` | `callable` | no | Callable fired with (eventId, event) when an event chip is clicked, where `event` is the object you passed in `events` (every field intact) and `eventId` its `id` as a string, or `<date>#<index>` when it has none; makes the chips real buttons |
 | `maxEventsPerDay` | `number` | no | Event chips per day before a `+N more` toggle (default 3) |
 | `min` | `string` | no | Earliest selectable ISO date |
 | `max` | `string` | no | Latest selectable ISO date |
@@ -375,7 +375,7 @@ Full-month or week calendar grid for scheduling apps — distinct from the form-
 ### ComparisonTable
 
 ```
-ComparisonTable(columns, rows, highlightColumn?, featureLabel?, caption?, stickyFirstColumn?)
+ComparisonTable(columns, rows, highlightColumn?, featureLabel?, caption?, stickyFirstColumn?, ariaLabel?)
 ```
 
 Feature/spec comparison table — generic counterpart of `PricingTable`. Pass `columns` (e.g. plan/product names) and `rows` of `{label, values}` where `values` aligns 1-to-1 with `columns`. Each value can be a boolean (✓/—), a string, or a node. Rows sharing a `group` are kept together under one group header.
@@ -386,8 +386,9 @@ Feature/spec comparison table — generic counterpart of `PricingTable`. Pass `c
 | `rows` | `object[]` | **yes** | Array of {label, values, hint?, group?} entries |
 | `highlightColumn` | `number` | no | 0-indexed column to visually emphasise |
 | `featureLabel` | `string` | no | Header of the first (row-label) column — default `Feature` |
-| `caption` | `string` | no | Table caption; also its accessible name |
+| `caption` | `string` | no | Visible table caption; also its accessible name |
 | `stickyFirstColumn` | `boolean` | no | Keep the feature labels visible while the plan columns scroll horizontally |
+| `ariaLabel` | `string` | no | Accessible name for a table whose visible name is already a heading beside it — a `<caption>` there would be a visible duplicate. Ignored when `caption` is set, which already names the table. |
 
 ### InfiniteList
 
@@ -407,7 +408,7 @@ Vertical list that fires `onLoadMore` when the user scrolls near the bottom. Pas
 | `error` | `string` | no | Failure message shown instead of the loader, with a Retry button |
 | `onRetry` | `callable` | no | Callable fired by the Retry button (defaults to `onLoadMore`) |
 | `emptyLabel` | `string` | no | Message shown when there are no items (default `No results`) |
-| `rootMargin` | `string` | no | Prefetch distance for the scroll sentinel (default `200px`) |
+| `rootMargin` | `string` | no | Prefetch distance for the scroll sentinel: one to four `px` / `%` lengths in CSS margin order, or a number of px (default `200px`). Other units are not supported by the browser's IntersectionObserver and fall back to the default. |
 | `threshold` | `number` | no | Fraction of the sentinel that must be visible, 0–1 (default 0) |
 | `retryLabel` | `string` | no | Label for the retry button (default `Retry`) |
 
@@ -493,7 +494,7 @@ A Google Calendar-style month grid with Today/prev/next navigation. `month` (0�
 OrderSummary(items, subtotal?, shipping?, tax?, total?, currency?, discount?, locale?, loading?, note?, empty?)
 ```
 
-An order/cart summary: line items, subtotal, discount, shipping, tax, and a bold total. Pass `items` as {label, amount, qty?} and the named totals. `currency` takes an ISO code ("EUR" — properly localised via `locale`) or a bare symbol prefix. `loading` shows placeholders while an async shipping/tax quote resolves.
+An order/cart summary: line items, subtotal, discount, shipping, tax, and a bold total. Pass `items` as {label, amount, qty?} (`quantity` is accepted for `qty`) and the named totals. `currency` takes an ISO code ("EUR" — properly localised via `locale`) or a bare symbol prefix. `loading` shows placeholders while an async shipping/tax quote resolves.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |

@@ -4456,11 +4456,14 @@ function hasRestParam(decl: ComponentDeclaration): boolean {
  * hands the whole object to `entry`, and `Field("Name", { label, id })` keeps
  * `label = "Name"`. No object literal is read as a named-props bag.
  *
- * The one DSL convention kept is `key:` on an object literal passed BEYOND the
- * declared parameters (`Row(item, { key: item.id })` for `function Row(item)`):
- * JavaScript ignores that argument, so reading its `key` as the instance
- * identity changes no value the component sees. Like any extra argument it
- * still lands in `children`.
+ * The one DSL convention kept is `key:` as the instance identity, read from an
+ * object literal that is either passed BEYOND the declared parameters
+ * (`Row(item, { key: item.id })` for `function Row(item)` — JavaScript ignores
+ * that argument, and like any extra argument it still lands in `children`) or
+ * is the LAST argument and has `key` as its only property (`Item(id, { key: id })`
+ * for `function Item(label: string, _opts?: { readonly key?: Key })`, the form
+ * TypeScript accepts). Either way the argument still binds positionally, so
+ * no value the component sees changes.
  */
 function invokeComponentDeclPositionally(
   decl: ComponentDeclaration,
@@ -4481,8 +4484,10 @@ function invokeComponentDeclPositionally(
     }
     const value = evaluate(arg, ctx);
     positional.push(value);
+    const keyOnly = arg.kind === "Object" && i === args.length - 1 &&
+      arg.properties.length === 1 && !arg.properties[0]!.spread && arg.properties[0]!.key === "key";
     if (
-      arg.kind === "Object" && i >= decl.params.length && !hasRestParam(decl) &&
+      arg.kind === "Object" && (keyOnly || (i >= decl.params.length && !hasRestParam(decl))) &&
       value !== null && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "key")
     ) {
       explicitKey = (value as { key?: unknown }).key;

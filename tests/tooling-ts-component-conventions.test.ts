@@ -6,9 +6,10 @@
  * `Item(label, { key })` and `Shell(title, child)` are TS2554 against
  * `function Item(label: string)`. Two forms type-check AND bind as written:
  *
- *   - a trailing `_opts?: { readonly key?: Key }` parameter — the runtime takes
- *     an object literal with `key` as the named props and `key` as identity,
- *     so the parameter itself stays `undefined`;
+ *   - a trailing `_opts?: { readonly key?: Key }` parameter — a call from a
+ *     `.aktion.ts` module binds as JavaScript does, so the parameter receives
+ *     the `{ key }` object, and a last-argument literal whose only property is
+ *     `key` is ALSO read as the instance identity;
  *   - a declared `children` parameter.
  */
 
@@ -89,9 +90,11 @@ describe("keys and children for a `.aktion.ts` component", () => {
     const screen = renderCompiled(await compileAktionFileAsync(join(dir, "src/app.aktion.ts"), { root: join(dir, "src") }));
     await flush();
     const text = screen.shadowRoot.textContent ?? "";
-    // `key` is taken as identity; `_opts` itself is never bound.
-    expect(text).toContain("item a:no-opts");
-    expect(text).toContain("item b:no-opts");
+    // The literal binds to `_opts` (JavaScript semantics) and `key` is the identity.
+    expect(text).toContain("item a:opts");
+    expect(text).toContain("item b:opts");
+    expect(screen.shadowRoot.querySelector('[data-rui-key="a"]')).not.toBeNull();
+    expect(screen.shadowRoot.querySelector('[data-rui-key="b"]')).not.toBeNull();
     expect(text).toContain("shell S");
     expect(text).toContain("child");
   });

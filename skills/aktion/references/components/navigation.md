@@ -96,7 +96,7 @@ Single link inside a Navbar's main item slot. Renders as an inline anchor / butt
 DropdownMenu(trigger, items, side?, align?, label?, open?, onOpenChange?, disabled?)
 ```
 
-Click-triggered dropdown menu. Click the trigger to toggle, click a MenuItem to run its action and close, click outside or press Escape to close without acting; ArrowUp/ArrowDown/Home/End and typeahead move between items. Items may be MenuItem / MenuSeparator / MenuLabel nodes, nested arrays of them, or plain `{label, onClick, icon?, shortcut?, disabled?, checked?, separator?}` objects. Bind a `$variable` to `open` for two-way control, or watch `onOpenChange(isOpen)`.
+Click-triggered dropdown menu. Click the trigger to toggle, click a MenuItem to run its action and close, click outside or press Escape to close without acting; ArrowUp/ArrowDown/Home/End and typeahead move between items. Items may be MenuItem / MenuSeparator / MenuLabel nodes, nested arrays of them, or plain objects with MenuItem's fields (`{label, onClick, icon?, shortcut?, variant?, disabled?, checked?, role?, keepOpen?}`; `{separator: true}` for a rule). Bind a `$variable` to `open` for two-way control, or watch `onOpenChange(isOpen)`.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -203,7 +203,7 @@ A floating button that smoothly scrolls the page (and the host) back to the top.
 ScrollSpy(sections, title?, offset?, top?, onChange?)
 ```
 
-A sticky in-page nav that highlights the section currently in view. `sections` is an array of {label, id} matching element ids on the page (set via the universal `id` prop). Clicking smooth-scrolls to a section; `offset` clears a sticky header and `top` sets the sticky offset.
+A sticky in-page nav that highlights the section currently in view. `sections` is an array of {label, id} matching element ids on the page (set via the universal `id` prop, which takes a letter followed by letters, digits, `_` or `-`). Clicking smooth-scrolls to a section; `offset` clears a sticky header and `top` sets the sticky offset.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |

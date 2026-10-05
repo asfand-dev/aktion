@@ -379,14 +379,14 @@ Dialog overlay shown when `open` is true. Pass a `$variable` as `open` to contro
 ### Drawer
 
 ```
-Drawer(title, open, children, side?, footer?, onClose?, width?, closeOnBackdrop?)
+Drawer(title?, open, children, side?, footer?, onClose?, width?, closeOnBackdrop?)
 ```
 
 Side drawer overlay shown when `open` is true. Pass a `$variable` as `open` to control it. Choose `side` for slide direction (default right) and `width` for a wide detail drawer. `onClose` fires whenever the drawer is dismissed (× button, Escape, or backdrop click — set `closeOnBackdrop: false` to keep a form safe from stray clicks).
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
-| `title` | `string` | **yes** |  |
+| `title` | `string` | no | Heading that names the dialog — without one it is announced as "Drawer" |
 | `open` | `boolean` | **yes** | Open/closed state — usually a $variable |
 | `children` | `Node[]` | **yes** |  |
 | `side` | `"right"` \| `"left"` \| `"top"` \| `"bottom"` | no |  |
@@ -401,7 +401,7 @@ Side drawer overlay shown when `open` is true. Pass a `$variable` as `open` to c
 Steps(items, orientation?)
 ```
 
-Numbered step-by-step guide. Pass items as `{title, details?, active?, status?}` objects. `active` marks the current step; `status` (`pending|active|complete|error`) additionally distinguishes finished and failed steps. `orientation: "horizontal"` lays the steps across the top of a wizard instead of down the page.
+Numbered step-by-step guide. Pass items as `{title, details?, active?, complete?, status?}` objects (a string is a title-only step, a component node is rendered as-is, and `null`/`false` items are skipped). `active` marks the current step and `complete` a finished one; `status` (`pending|active|complete|error`) wins over both and also marks failed steps. `orientation: "horizontal"` lays the steps across the top of a wizard instead of down the page.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -418,7 +418,7 @@ Container that constrains its child to a fixed aspect ratio (e.g. 16:9 for video
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
-| `ratio` | `string` | **yes** | `width:height` (e.g. `16:9`, `4:3`) or a decimal like `1.78` |
+| `ratio` | `string` | **yes** | `width:height` or `width/height` (e.g. `16:9`, `4/3`) or a decimal like `1.78`; anything else falls back to 16:9 |
 | `children` | `Node[]` | **yes** |  |
 
 ### ScrollArea
