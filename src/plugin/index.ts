@@ -107,6 +107,10 @@ export interface AktionResolveOptions {
    * separately from `@acme/ui`. Each target directory becomes an allowed root,
    * and an aliased import may not climb out of the target it matched — so an
    * alias widens resolution by exactly the directory it names and no further.
+   *
+   * A relative target resolves against the working directory (`path.resolve`)
+   * — for the build and, in the Vite plugin, for the `dts` declarations alike.
+   * An `aktion.config.json` target resolves against the file's own directory.
    */
   alias?: Record<string, string>;
   /**
@@ -243,8 +247,14 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
   let resolution: AktionResolveOptions = options;
   let typescriptFrontend: Promise<ModuleFrontend> | null = null;
 
-  const declarationOptions = (): Omit<AktionDeclarationsOptions, "root" | "write"> =>
-    typeof options.dts === "object" ? options.dts : {};
+  // The resolver's aliases, with absolute targets: the declaration emitter
+  // resolves a relative target against its `root` (the Vite root), the
+  // resolver against the working directory, so passing them as written made
+  // the `dts` mirror and the build disagree whenever the two differ.
+  const declarationOptions = (): Omit<AktionDeclarationsOptions, "root" | "write"> => ({
+    alias: absoluteAliasTargets(resolution.alias),
+    ...(typeof options.dts === "object" ? options.dts : {}),
+  });
 
   // Loaded once per plugin instance: eagerly in `buildStart`, and on demand in
   // `transform` for hosts that never call `buildStart` before transforming.
@@ -322,7 +332,7 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
     async buildStart(this: { warn?: (message: string) => void }) {
       await loadTypeScript();
       if (options.dts) {
-        const result = emitAktionDeclarations({ alias: resolution.alias, ...declarationOptions(), root: projectRoot });
+        const result = emitAktionDeclarations({ ...declarationOptions(), root: projectRoot });
         for (const w of result.warnings) this.warn?.(w);
         for (const d of result.diagnostics) this.warn?.(`${d.path}:${d.line}:${d.column} ${d.message}`);
       }
@@ -358,7 +368,7 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
       if (!options.dts || !server.watcher) return;
       const refresh = (file: string): void => {
         if (/\.aktion$/i.test(file)) {
-          updateAktionDeclaration(file, { alias: resolution.alias, ...declarationOptions(), root: projectRoot });
+          updateAktionDeclaration(file, { ...declarationOptions(), root: projectRoot });
         }
       };
       server.watcher.on("add", refresh);
@@ -702,8 +712,7 @@ export function createNodeResolver(
 ): ModuleResolver {
   const extensions = options.extensions ?? DEFAULT_EXTENSIONS;
   // Longest prefix first, so `@acme/ui/forms` can be aliased apart from `@acme/ui`.
-  const aliases = Object.entries(options.alias ?? {})
-    .map(([prefix, target]) => [prefix, resolvePath(target)] as const)
+  const aliases = Object.entries(absoluteAliasTargets(options.alias) ?? {})
     .sort((a, b) => b[0].length - a[0].length);
 
   const root = options.root === undefined ? process.cwd() : options.root;
@@ -815,6 +824,17 @@ export function createNodeResolver(
       return readFileSync(path, "utf8");
     },
   };
+}
+
+/**
+ * `alias` with every target absolute, resolved the one way {@link createNodeResolver}
+ * resolves it: `path.resolve`, so a relative target is relative to the working
+ * directory. The Vite plugin hands the same map to the declaration emitter,
+ * which would otherwise resolve a relative target against its own `root`.
+ */
+function absoluteAliasTargets(alias: Readonly<Record<string, string>> | undefined): Record<string, string> | undefined {
+  if (!alias) return undefined;
+  return Object.fromEntries(Object.entries(alias).map(([prefix, target]) => [prefix, resolvePath(target)]));
 }
 
 /* -------------------------------------------------------------------------- */
