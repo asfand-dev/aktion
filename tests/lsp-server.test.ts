@@ -515,7 +515,8 @@ describe("aktion-language-server — language features", () => {
   it("returns no edit and warns when formatting would change the program", async () => {
     const riskyUri = "file:///risky.aktion";
     client.notify("textDocument/didOpen", {
-      textDocument: { uri: riskyUri, languageId: "aktion", version: 1, text: "y = (a + b) * c\n" },
+      // Formatting would drop the comment between the properties.
+      textDocument: { uri: riskyUri, languageId: "aktion", version: 1, text: "x = {\n  a: 1,\n  // note\n  b: 2\n}\n" },
     });
     const before = client.notifications.length;
     const res = await client.request("textDocument/formatting", {
@@ -533,7 +534,7 @@ describe("aktion-language-server — language features", () => {
   it("shows the skipped-format warning once per document version, then logs it", async () => {
     const uri = "file:///repeat.aktion";
     client.notify("textDocument/didOpen", {
-      textDocument: { uri, languageId: "aktion", version: 1, text: "y = (a + b) * c\n" },
+      textDocument: { uri, languageId: "aktion", version: 1, text: "x = {\n  a: 1,\n  // note\n  b: 2\n}\n" },
     });
     const before = client.notifications.length;
     const format = () => client.request("textDocument/formatting", {
@@ -548,7 +549,7 @@ describe("aktion-language-server — language features", () => {
 
     client.notify("textDocument/didChange", {
       textDocument: { uri, version: 2 },
-      contentChanges: [{ text: "y = (a + b) * c\n// edited\n" }],
+      contentChanges: [{ text: "x = {\n  a: 1,\n  // note\n  b: 2\n}\n// edited\n" }],
     });
     await format();
     expect(methods()).toEqual(["window/showMessage", "window/logMessage", "window/showMessage"]);
