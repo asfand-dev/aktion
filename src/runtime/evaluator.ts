@@ -49,7 +49,7 @@ import { createHeadManager, type HeadManager } from "./head.js";
 import { createI18n, type I18nConfig } from "./i18n.js";
 import { type ThemeNode } from "./builtins.js";
 import { Util } from "./util.js";
-import { Style, Rules } from "./namespaces-extra.js";
+import { Style, Rules, type Validator } from "./namespaces-extra.js";
 import { registerIcons } from "../icons/index.js";
 import { loadBuiltInThemeFonts, loadFonts } from "../theme/fonts.js";
 import { findThemeByName, THEME_GRADIENT_FUNCTIONS } from "../theme/index.js";
@@ -3198,8 +3198,10 @@ function evaluateFormCall(
   const config = (cfg && typeof cfg === "object" && !Array.isArray(cfg)) ? cfg : {};
   const initialValues = (config.values && typeof config.values === "object" && !Array.isArray(config.values))
     ? { ...config.values as Record<string, unknown> } : {};
+  // `{ field: validator | [validators] }` of `$util.rules.*` validators. Programs
+  // are not type-checked, so `Rules.validate` still skips a non-function entry.
   const rules = (config.rules && typeof config.rules === "object" && !Array.isArray(config.rules))
-    ? config.rules as Record<string, unknown> : {};
+    ? config.rules as Readonly<Record<string, Validator | readonly Validator[]>> : {};
   const onSubmit = typeof config.onSubmit === "function" ? config.onSubmit as (...a: unknown[]) => unknown : null;
 
   const atom = storeCallAtom("form", loc) ?? `__form_anon_${ctx.stores.size}`;
@@ -3259,7 +3261,8 @@ function evaluateFormCall(
   methods.validateField = (name: unknown): string | null | Promise<string | null> => {
     const n = String(name);
     const valueAtCheck = valuesOf()[n];
-    const msg = Rules.validate(valueAtCheck, rules[n]);
+    const fieldRules = rules[n];
+    const msg = fieldRules === undefined ? null : Rules.validate(valueAtCheck, fieldRules);
     if (isThenable(msg)) {
       beginValidation();
       return (msg as Promise<string | null>).then((m) => {

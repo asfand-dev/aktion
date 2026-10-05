@@ -450,13 +450,14 @@ export const Rules = {
    * message, or null when all pass. Stays fully synchronous for sync
    * validators; returns a Promise only when an async validator is hit.
    */
-  validate: (value: unknown, validators: unknown): string | null | Promise<string | null> => {
-    const list = Array.isArray(validators) ? validators : [validators];
+  validate: <T>(value: T, validators: Validator<T> | readonly Validator<T>[]): string | null | Promise<string | null> => {
+    // Programs are not type-checked: an entry that is not a function is skipped.
+    const list: readonly unknown[] = Array.isArray(validators) ? validators : [validators];
     const run = (from: number): string | null | Promise<string | null> => {
       for (let i = from; i < list.length; i += 1) {
         const val = list[i];
         if (typeof val !== "function") continue;
-        const msg = (val as Validator)(value);
+        const msg = (val as Validator<T>)(value);
         if (isThenable(msg)) return msg.then((m) => (m ? m : run(i + 1)));
         if (msg) return msg;
       }
@@ -471,13 +472,17 @@ export const Rules = {
    * (empty object when valid) — or a Promise of it when any validator in the
    * schema is async.
    */
-  validateAll: (values: unknown, schema: unknown): Record<string, string> | Promise<Record<string, string>> => {
-    const out: Record<string, string> = {};
+  validateAll: <V extends object>(
+    values: V,
+    schema: { readonly [K in keyof V]?: Validator<V[K]> | readonly Validator<V[K]>[] },
+  ): Partial<Record<keyof V, string>> | Promise<Partial<Record<keyof V, string>>> => {
+    const out: Partial<Record<keyof V, string>> = {};
     const pending: Array<Promise<void>> = [];
     if (!schema || typeof schema !== "object") return out;
-    const vals = (values && typeof values === "object") ? values as Record<string, unknown> : {};
-    for (const [field, validators] of Object.entries(schema as Record<string, unknown>)) {
-      const msg = Rules.validate(vals[field], validators);
+    const vals: Readonly<Record<string, unknown>> = values && typeof values === "object" ? values : {};
+    for (const [field, validators] of Object.entries(schema) as Array<[keyof V & string, unknown]>) {
+      if (validators === undefined) continue;
+      const msg = Rules.validate(vals[field], validators as Validator | readonly Validator[]);
       if (isThenable(msg)) pending.push(msg.then((m) => { if (m) out[field] = m; }));
       else if (msg) out[field] = msg;
     }

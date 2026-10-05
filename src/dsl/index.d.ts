@@ -10821,9 +10821,9 @@ export interface RulesNamespace {
   /** Async rule (Promise) — server-side checks; $form awaits it before submitting. */
   readonly asyncCustom: <T = unknown>(fn: (value: T) => string | boolean | PromiseLike<string | boolean | null | undefined> | null | undefined, message?: string) => Validator<T>;
   /** Run validators — first error message or null (a Promise when an async rule is hit). */
-  readonly validate: (value: unknown, validators: unknown) => string | Promise<string | null> | null;
+  readonly validate: <T>(value: T, validators: Validator<T> | readonly Validator<T>[]) => string | Promise<string | null> | null;
   /** Validate an object against { field: [validators] } → { field: message }. */
-  readonly validateAll: (values: unknown, schema: unknown) => Record<string, string> | Promise<Record<string, string>>;
+  readonly validateAll: <V extends object>(values: V, schema: { readonly [K in keyof V]?: Validator<V[K]> | readonly Validator<V[K]>[] | undefined; }) => Partial<Record<keyof V, string>> | Promise<Partial<Record<keyof V, string>>>;
 }
 /** The static `$util` helpers — printed from `typeof Util` (`src/runtime/util.ts`). */
 export interface UtilStatic {
