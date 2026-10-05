@@ -8,7 +8,7 @@
 
 import type { ComponentLibrary, ComponentSpec, PropSpec } from "../library/types.js";
 import { defaultLibrary } from "../library/index.js";
-import { UNIVERSAL_PROP_NAMES } from "../library/sx.js";
+import { ALLOWED_ROLES, UNIVERSAL_PROP_NAMES } from "../library/sx.js";
 
 export interface ComponentParam {
   name: string;
@@ -75,28 +75,39 @@ export function getComponentCatalog(library: ComponentLibrary = defaultLibrary):
  * every editor automatically, with a generic entry until someone writes its
  * description here.
  */
-const UNIVERSAL_PROP_DOCS: Record<string, { type: string; description: string }> = {
+const UNIVERSAL_PROP_DOCS: Record<string, { type: string; description: string; enumValues?: readonly string[] }> = {
   sx: {
     type: "object",
     description:
-      "Style channel accepted by EVERY component: layout, colour, typography, spacing, borders, effects. "
-      + "Values may be responsive maps (`{base, sm, md, lg}`), interaction states (`{_hover, _focus, _active}`), "
-      + "or theme-token refs (`\"primary\"`, `\"gradient.brand\"`, `\"space.md\"`).",
+      "Style channel accepted by EVERY component: a bounded set of layout, colour, typography, spacing, border and effect keys "
+      + "(`p`, `gap`, `w`, `bg`, `color`, `radius`, `shadow`, …; unknown keys are ignored). "
+      + "Values are theme tokens (`\"md\"`, `\"primary\"`, `\"gradient.brand\"` on `bg`), sanitised CSS strings, "
+      + "or numbers — pixels on length keys (`p: 8` → `8px`). Most keys also take a breakpoint map (`{ base, sm, md, lg, xl }`). "
+      + "Interaction states: `hover` / `focus` (an effect name such as `\"lift\"`, or a style object) "
+      + "and `states: { active, \"focus-visible\", disabled, … }`.",
   },
   animate: {
     type: "string | object",
     description:
-      "Motion channel accepted by EVERY component. A preset name (`\"fade\"`, `\"slide-up\"`, `\"pulse\"`, `\"none\"`) "
-      + "or an object with `{ preset, duration, delay, easing, repeat }`.",
+      "Motion channel accepted by EVERY component. A preset name (`\"fade\"`, `\"slide-up\"`, `\"pulse\"`, …; `\"none\"` for no animation) "
+      + "or an object `{ preset, duration, delay, repeat }`, with `duration` and `delay` in milliseconds.",
   },
   id: { type: "string", description: "DOM id on the rendered root element." },
   anchor: {
     type: "string",
     description: "Scroll-anchor id — the target for `SkipLink`, `ScrollSpy` and `#hash` links.",
   },
-  className: { type: "string", description: "Extra CSS classes appended to the rendered root element." },
-  class: { type: "string", description: "Alias of `className`." },
-  style: { type: "string | object", description: "Inline CSS. Prefer `sx`, which is token- and breakpoint-aware." },
+  className: {
+    type: "string | string[]",
+    description: "Extra CSS classes (a space-separated string or an array) appended to the rendered root element.",
+  },
+  class: { type: "string | string[]", description: "Alias of `className`." },
+  style: {
+    type: "string",
+    description:
+      "Inline CSS declarations as a STRING (`\"color: red; padding: 4px\"`); build one from an object with "
+      + "`$util.style.toStyle({…})`. Prefer `sx`, which is token- and breakpoint-aware.",
+  },
   aria: {
     type: "object",
     description: "ARIA attributes as a plain object, e.g. `{ label: \"Close\", expanded: false }` → `aria-*`.",
@@ -110,18 +121,21 @@ const UNIVERSAL_PROP_DOCS: Record<string, { type: string; description: string }>
   },
   role: {
     type: "string",
-    description: "Override the rendered ARIA role. An escape valve for accessibility defects; use sparingly.",
+    description:
+      "Override the rendered ARIA role. Allow-listed (landmarks, live regions, common widget roles, `none` / `presentation`): "
+      + "any other role is dropped. An escape valve for accessibility defects; use sparingly.",
+    enumValues: [...ALLOWED_ROLES],
   },
-  tooltip: { type: "string", description: "Native hover tooltip (`title`) on the rendered root element." },
+  tooltip: { type: "string | number", description: "Native hover tooltip (`title`) on the rendered root element." },
   hidden: { type: "boolean", description: "Remove the component from the accessibility tree and hide it visually." },
   testId: {
-    type: "string",
+    type: "string | number",
     description:
       "End-to-end test hook: renders `data-testid` on the component's ROOT element. "
       + "Works on every component, including the six that shadow the `data` channel. "
       + "Prefer role/label queries; reach for this where they are genuinely ambiguous.",
   },
-  testid: { type: "string", description: "Alias of `testId`." },
+  testid: { type: "string | number", description: "Alias of `testId`." },
 };
 
 /**
@@ -137,12 +151,14 @@ const UNIVERSAL_PROP_DOCS: Record<string, { type: string; description: string }>
  */
 export const universalPropCatalog: readonly ComponentParam[] = [...UNIVERSAL_PROP_NAMES].map((name) => {
   const doc = UNIVERSAL_PROP_DOCS[name];
-  return {
+  const param: ComponentParam = {
     name,
     type: doc?.type ?? "any",
     required: false,
     description: doc?.description ?? "Universal prop accepted by every component.",
   };
+  if (doc?.enumValues) param.enumValues = doc.enumValues;
+  return param;
 });
 
 /**

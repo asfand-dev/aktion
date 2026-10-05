@@ -5955,7 +5955,7 @@ function toNumber(v: unknown): number {
  * partial themes safe, but the schema validator surfaces them as
  * advisory warnings (§15) so authors can migrate.
  */
-const STRUCTURED_THEME_GROUPS = new Set([
+export const STRUCTURED_THEME_GROUPS = new Set([
   "colors",
   "radius",
   "font",
@@ -5966,17 +5966,17 @@ const STRUCTURED_THEME_GROUPS = new Set([
   "zIndex",
   "motion",
 ]);
-const THEME_METADATA_KEYS = new Set(["name", "direction"]);
+export const THEME_METADATA_KEYS = new Set(["name", "direction"]);
 
 /** Canonical spacing keys → the flat-token spelling used by ThemeTokens. */
-const SPACING_THEME_KEY_ALIASES: Record<string, string> = {
+export const SPACING_THEME_KEY_ALIASES: Record<string, string> = {
   sm: "s",
   md: "m",
   lg: "l",
 };
 
 /** Group name → flat-token prefix (e.g. `shadows.md` → `shadowMd`). */
-const THEME_GROUP_PREFIX: Record<string, string> = {
+export const THEME_GROUP_PREFIX: Record<string, string> = {
   colors: "color",
   radius: "radius",
   font: "font",

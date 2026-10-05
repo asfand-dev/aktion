@@ -18,6 +18,9 @@
  *     (see `runtime-types.ts`), with the parameter types they mention;
  *   - closed value sets come from the runtime's own tables (`$toast` tones and
  *     corners, the `$head` allow-lists), passed in by `generate.ts`;
+ *   - the universal style channel (`SxProps`, `AnimateValue`, `AriaRole`, …)
+ *     and the `ThemeConfig` groups are printed from the runtime's lookup tables
+ *     (see `style-types.ts`);
  *   - JSDoc comes from the catalogue summaries.
  */
 import type * as TS from "typescript";
@@ -26,6 +29,7 @@ import type { ConfigKey, FactoryResourceEntry, NamespaceEntry, NamespaceMember }
 import type { LibGlobals, PrintedMember, RuntimeTypes } from "./runtime-types.js";
 import { byCodePoint, jsdoc, propKey } from "./components.js";
 import { compileTypeString } from "./typestr.js";
+import { emitStyleTypes, type StyleTypesInput } from "./style-types.js";
 
 export interface BuiltinsInput {
   ts: typeof TS;
@@ -47,6 +51,8 @@ export interface BuiltinsInput {
   toastPositions: readonly string[];
   /** `$head`'s allow-lists (`src/runtime/head.ts`). */
   head: { linkRels: readonly string[]; linkAttributes: readonly string[]; htmlAttributes: readonly string[] };
+  /** The runtime tables the style / theme types are printed from. */
+  style: StyleTypesInput;
 }
 
 export interface BuiltinsOutput {
@@ -206,15 +212,9 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
 
   /* ---------------------------------------------------------------- prelude */
 
+  const style = emitStyleTypes(input.style, typeName);
   const universalDocs = new Map(input.universalProps.map((p) => [p.name, p]));
-  const UNIVERSAL_TYPES: Readonly<Record<string, string>> = {
-    sx: "SxProps",
-    animate: "AnimateValue",
-    style: "string | Readonly<Record<string, string | number>>",
-    aria: "Readonly<Record<string, string | number | boolean | null | undefined>>",
-    data: "Readonly<Record<string, string | number | boolean | null | undefined>>",
-    dataAttrs: "Readonly<Record<string, string | number | boolean | null | undefined>>",
-  };
+  const UNIVERSAL_TYPES = style.universalTypes;
   const universalMembers: Member[] = [...input.universalPropNames].sort(byCodePoint).map((name) => [
     name,
     `${propKey(name)}?: ${UNIVERSAL_TYPES[name] ?? compile(universalDocs.get(name)?.type ?? "any")}`,
@@ -241,16 +241,14 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
       `export type ${typeName("Responsive")}<T> = { ${breakpoints.map((b) => `readonly ${b}?: T`).join("; ")} };`,
     jsdoc("Exactly one spelling (a prop or one of its aliases) of a required prop.") +
       `export type ${typeName("OneOf")}<K extends string, T> = { [P in K]: { [Q in P]: T } & { [Q in Exclude<K, P>]?: never } }[K];`,
-    jsdoc("Token-aware style object (`sx: { p: \"md\", bg: \"surface\" }`). Keys are validated by the runtime, not by these types.") +
-      `export interface ${typeName("SxProps")} {\n  readonly [key: string]: unknown;\n}`,
-    jsdoc("An animation preset name, or a preset with timing overrides.") +
-      `export type ${typeName("AnimateValue")} = string | { readonly preset?: string; readonly name?: string; readonly duration?: number | string; readonly delay?: number | string; readonly easing?: string; readonly repeat?: number | boolean | "infinite" };`,
+    ...style.prelude,
     jsdoc("`{ value, label }` option objects accepted next to `SelectItem` nodes by Select / Radio / Combobox / MultiSelect.") +
       `export interface ${typeName("SelectItemData")} {\n  readonly value: string | number;\n  readonly label?: string;\n  readonly disabled?: boolean;\n  readonly group?: string;\n}`,
     jsdoc("`{ label, message }` objects accepted next to `FollowUpItem` nodes by `FollowUpBlock`.") +
       `export interface ${typeName("FollowUpItemData")} {\n  readonly label: string;\n  readonly message?: string;\n  readonly disabled?: boolean;\n}`,
-    jsdoc("`{ name, src }` objects accepted next to `Avatar` nodes by `AvatarGroup`.") +
-      `export interface ${typeName("AvatarItemData")} {\n  readonly name?: string;\n  readonly src?: string;\n  readonly status?: string;\n  readonly fallback?: string;\n}`,
+    // `status` / `fallback` are forwarded to `Avatar`, so they take its enum aliases.
+    jsdoc("`{ name, src }` objects accepted next to `Avatar` nodes by `AvatarGroup` (the shape of `AvatarGroupItem`).") +
+      `export interface ${typeName("AvatarItemData")} {\n  readonly name?: string | number;\n  readonly src?: string;\n  readonly status?: AvatarStatus;\n  readonly fallback?: AvatarFallback;\n}`,
     iface(
       typeName("BaseProps"),
       [["key", "key?: Key"], ...universalMembers],
@@ -638,21 +636,8 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
       `export type ${typeName("RouteParamsOf")}<P extends string> = P extends "*" | "default" ? {} : { readonly [K in keyof __RouteParams<P>]: string };`,
     iface(typeName("RouteHandle"), routeHandle, docsOf(input.routeMembers), "The reactive `route` handle."),
     `export type ${typeName("BuiltInThemeName")} = ${themeNames.map((n) => JSON.stringify(n)).join(" | ")};`,
-    configInterface("theme", typeName("ThemeConfig"), {
-      overrides: {
-        name: "BuiltInThemeName",
-        colors: "Readonly<Record<string, string>>",
-        radius: "Readonly<Record<string, string>>",
-        font: "Readonly<Record<string, string | readonly string[]>>",
-        spacing: "Readonly<Record<string, string>>",
-        shadows: "Readonly<Record<string, string>>",
-        gradients: "Readonly<Record<string, string | readonly string[]>>",
-        zIndex: "Readonly<Record<string, string | number>>",
-        motion: "Readonly<Record<string, string>>",
-        fonts: "{ readonly import?: readonly string[] }",
-        icons: "Readonly<Record<string, string>>",
-      },
-    }),
+    ...style.themeDeclarations,
+    configInterface("theme", typeName("ThemeConfig"), { overrides: style.themeOverrides, extraDocs: style.themeDocs }),
     iface(typeName("ThemeHandle"), [
       ["kind", `readonly kind: "Theme"`],
       ["tokens", "readonly tokens: Readonly<Record<string, string>>"],

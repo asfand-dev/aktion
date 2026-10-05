@@ -595,16 +595,16 @@ const storeConfigKeys: readonly ConfigKey[] = [
 
 const themeConfigKeys: readonly ConfigKey[] = [
   cfg("name", "string", 'Selects a built-in base theme ("light", "dark", "shadcn"/"-light"/"-dark", "mui"/"-light"/"-dark", "heroui"/"-light"/"-dark", "signal"/"-light"/"-dark", "soft").'),
-  cfg("direction", 'enum: "ltr" | "rtl"', "Reading direction (metadata)."),
-  cfg("colors", "object", "CSS color tokens: bg, surface, border, text, primary, accent, success, warning, danger, info, …."),
+  cfg("direction", 'enum: "ltr" | "rtl"', "Accepted but has no effect (metadata only): set `dir` on <aktion-app> for a right-to-left layout."),
+  cfg("colors", "object", "CSS color tokens, camelCase: bg, bgSubtle, surface, border, text, textMuted, primary, accent, success, warning, danger, info, …. Unknown keys are ignored."),
   cfg("radius", "object", "Border-radius tokens: xs, sm, md, lg, pill, button, input."),
   cfg("font", "object", "Font tokens: family, familyHeading, familyMono, sizeBase, weightBody, …."),
-  cfg("spacing", "object", "Spacing scale tokens."),
-  cfg("shadows", "object", "Box-shadow tokens."),
-  cfg("gradients", "object", "Gradient color-stop arrays — referenced as gradient.<name>."),
+  cfg("spacing", "object", "Spacing scale tokens: 3xs, 2xs, xs, s, m, l, xl, 2xl, 3xl (sm / md / lg are the same as s / m / l)."),
+  cfg("shadows", "object", "Box-shadow tokens: sm, md, lg."),
+  cfg("gradients", "object", "Gradients referenced as sx `bg: \"gradient.<name>\"`: an array of at least two colour stops, `{ stops, angle }`, or a linear-/radial-/conic-gradient(…) string. A plain colour is ignored."),
   cfg("zIndex", "object", "Layer tokens (modal, toast, …) → sx.zIndex / --rui-z-*."),
   cfg("motion", "object", "Motion tokens: { fast, base, slow, ease } → --rui-motion-*."),
-  cfg("fonts", "object", 'Web-font import: { import: ["Inter:400,700"] }.'),
+  cfg("fonts", "object", 'Web-font import: { import: ["Inter:400,700"] } (one shorthand string or an array).'),
   cfg("icons", "object", "Custom inline-SVG icons by name, usable anywhere an icon name is."),
 ];
 

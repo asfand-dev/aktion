@@ -30,7 +30,12 @@ export const FONT_AWESOME_CDN_INTEGRITY = "";
 
 const LINK_MARKER_ATTR = "data-rui-font-awesome";
 
-const SUPPORTED_VARIANTS = new Set(["solid", "regular", "brands"]);
+/**
+ * The Font Awesome styles a `variant:` prefix may name. An unknown prefix falls
+ * back to {@link DEFAULT_VARIANT}. The DSL types print the `${variant}:${name}`
+ * icon-name template from this set.
+ */
+export const SUPPORTED_VARIANTS: ReadonlySet<string> = new Set(["solid", "regular", "brands"]);
 
 const DEFAULT_VARIANT = "solid";
 
