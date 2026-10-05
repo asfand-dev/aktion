@@ -237,7 +237,8 @@ export function sanitiseCssLength(raw: unknown, fallback: string): string {
  * `color: …` declaration. Accepts the full standard colour vocabulary —
  * hex (`#00ff00`), named colours (`tomato`), functional notations
  * (`rgb(...)`, `hsl(...)`, `oklch(...)`, `color-mix(...)`) including the
- * slash-alpha form (`rgb(0 0 0 / 50%)`), and `var(--token, fallback)` — while
+ * slash-alpha form (`rgb(0 0 0 / 50%)`), and `var(--token, fallback)` — custom
+ * property names may contain `_` (`var(--brand_primary)`) — while
  * rejecting anything that could break out of the single declaration:
  * `;`/`{`/`}` (declaration separators), `:`, `!`, quotes/backslash/
  * angle-brackets, a comment (`/*` would swallow the declarations after it),
@@ -250,7 +251,7 @@ export function sanitiseCssLength(raw: unknown, fallback: string): string {
  * (`var(--brand, color-mix(in oklch, var(--accent) 40%, white))`), which the
  * old 64-character cap rejected along with every slash-alpha colour.
  */
-const CSS_COLOR_ALLOWED = /^[a-zA-Z0-9#%.,()\s+\-/]+$/;
+const CSS_COLOR_ALLOWED = /^[a-zA-Z0-9#%.,()\s+\-/_]+$/;
 const CSS_COLOR_MAX_LENGTH = 256;
 export function sanitiseCssColor(raw: unknown): string {
   const trimmed = asString(raw).trim();

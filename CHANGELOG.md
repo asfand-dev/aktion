@@ -201,8 +201,9 @@ Each entry is dated and summarises what was added, changed, or fixed.
 - A `MultiSelect` inside a disabled `InputGroup` can no longer be focused,
   opened or edited, and a disabled `MultiSelect`'s chips can no longer be
   removed.
-- Colours in the slash-alpha form (`rgb(0 0 0 / 50%)`) and longer `var()` /
-  `color-mix()` values render again in chart series, calendar chips and `sx`;
+- Colours in the slash-alpha form (`rgb(0 0 0 / 50%)`), longer `var()` /
+  `color-mix()` values and custom properties with `_` in their name
+  (`var(--brand_primary)`) render in chart series, calendar chips and `sx`;
   values that could break out of their CSS declaration are still rejected.
 - An unknown theme name now logs a one-time console warning before falling
   back to the light theme.

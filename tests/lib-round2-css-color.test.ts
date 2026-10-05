@@ -28,6 +28,9 @@ describe("sanitiseCssColor accepts", () => {
     "oklch(0.7 0.15 200 / .5)",
     "color(display-p3 1 0 0 / 0.5)",
     "color-mix(in srgb, red 30%, blue)",
+    // `_` is legal in a custom property name and cannot end a declaration.
+    "var(--brand_primary)",
+    "var(--brand_primary, #0969da)",
   ])("%s", (value) => {
     expect(sanitiseCssColor(value)).toBe(value);
   });
@@ -53,6 +56,7 @@ describe("sanitiseCssColor still rejects", () => {
     ["url()", "url(/x.png)"],
     ["expression()", "expression(alert(1))"],
     ["an angle bracket", "red</style>"],
+    ["a declaration break after an underscore name", "var(--a_b);position:fixed"],
   ])("%s", (_why, value) => {
     expect(sanitiseCssColor(value)).toBe("");
   });
