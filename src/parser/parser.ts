@@ -1823,11 +1823,9 @@ function rebaseTemplateLocations(root: Expression, line: number, column: number)
  * source — the same arithmetic as {@link rebaseTemplateLocations}.
  */
 function rebaseTemplatePosition(pos: { line: number; column: number }, line: number, column: number): SourceLocation {
+  if (pos.line !== 1) return { line: line + (pos.line - 1), column: pos.column };
   const exprStartColumn = column + "${".length;
-  return {
-    line: line + (pos.line - 1),
-    column: pos.line === 1 ? Math.max(exprStartColumn, exprStartColumn + (pos.column - (TEMPLATE_SUB_PREFIX.length + 1))) : pos.column,
-  };
+  return { line, column: Math.max(exprStartColumn, exprStartColumn + (pos.column - (TEMPLATE_SUB_PREFIX.length + 1))) };
 }
 
 /**
@@ -1851,9 +1849,8 @@ function interpolationError(sub: Program, source: string, line: number, column: 
       : first.message;
     return { message, ...at };
   }
-  const extra = sub.statements[1];
-  if (sub.statements.length !== 1 || sub.statements[0]!.kind !== "Assignment" || extra) {
-    const loc = (extra as { loc?: SourceLocation } | undefined)?.loc;
+  if (sub.statements.length !== 1 || sub.statements[0]!.kind !== "Assignment") {
+    const loc = (sub.statements[1] as { loc?: SourceLocation } | undefined)?.loc;
     const at = loc ? rebaseTemplatePosition(loc, line, column) : { line, column };
     return {
       message: "A `${…}` interpolation holds a single expression — move the other statements out of the template.",

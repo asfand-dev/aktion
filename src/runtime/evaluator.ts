@@ -4720,11 +4720,12 @@ export function evaluateUserComponent(
       // React-style props: `Card({ title: "T", key: "c1" })` makes `key` the
       // instance identity, which turns the object into named props — so the
       // first object pattern that received nothing positionally reads them.
-      // (A `.aktion` body used to see them only as slot bindings named like
-      // the props, which a `.aktion.js` / `.aktion.ts` module renames.)
+      // (A `.aktion` body used to see them only through the slot bindings
+      // named like the props below, which miss the pattern's leaves once W1
+      // has renamed them in a `.aktion.js` / `.aktion.ts` component.)
       if (source === undefined && !propsBagUsed && param.pattern.kind === "object" && unclaimed.length > 0) {
         const bag: Record<string, unknown> = {};
-        for (const key of unclaimed) bag[key] = named[key];
+        for (const key of unclaimed) if (!FORBIDDEN_PROPERTY_NAMES.has(key)) bag[key] = named[key];
         source = bag;
         propsBagUsed = true;
       }
