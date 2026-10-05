@@ -16,6 +16,7 @@ import { withFieldShell, fieldShellExtraProps, bindChangeHandler } from "./forms
 import { setSanitisedHtml, readSanitisedHtml } from "../html-sanitizer.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
 import { closeFloating, openFloating, deferToPaint, type FloatingSide } from "../floating.js";
+import { MenuItem } from "./menu.js";
 
 /* ----------------------------------------------------------------------- *
  * RichTextEditor
@@ -619,7 +620,12 @@ const LONG_PRESS_MS = 500;
 /** How far a touch may drift before it counts as a scroll, not a press. */
 const LONG_PRESS_SLOP = 10;
 
-const CONTEXT_ITEM_ROLES = ["menuitem", "menuitemcheckbox", "menuitemradio"] as const;
+/**
+ * The row roles a ContextMenu item may ask for — MenuItem's `role` enum, read
+ * off its spec so the two menus cannot accept different roles. This was a
+ * hand-copied list of menu.ts's own.
+ */
+const CONTEXT_ITEM_ROLES: readonly string[] = MenuItem.props.find((p) => p.name === "role")?.enum ?? ["menuitem"];
 /** Every row role, for the focus and arrow-key queries. */
 const CONTEXT_ROW = "[role^=menuitem]";
 
@@ -657,7 +663,7 @@ function contextRow(source: {
     disabled: asBoolean(source.disabled),
     separator: false,
     checked: source.checked === undefined || source.checked === null ? null : asBoolean(source.checked),
-    role: (CONTEXT_ITEM_ROLES as readonly string[]).includes(role) ? role : "menuitem",
+    role: CONTEXT_ITEM_ROLES.includes(role) ? role : "menuitem",
     keepOpen: asBoolean(source.keepOpen),
   };
 }

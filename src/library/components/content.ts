@@ -12,7 +12,7 @@ import {
   sanitiseCssLength, sanitiseImageSrc, SPACING_TOKENS, normalizeSpacingToken,
   canonicalSizeToken,
 } from "../utils.js";
-import { ICON_SIZES, hasCustomIcon, resolveIconClasses } from "../../icons/index.js";
+import { ICON_SIZES, SUPPORTED_VARIANTS, hasCustomIcon, resolveIconClasses } from "../../icons/index.js";
 import { highlightLine, isHighlightable } from "../highlight.js";
 import { setSanitisedHtml } from "../html-sanitizer.js";
 import { parseAspectRatio } from "./layout.js";
@@ -31,7 +31,8 @@ function appendHighlightedLine(
   }
 }
 
-const ICON_VARIANTS = ["solid", "regular", "brands"] as const;
+/** Icon's `variant` enum: exactly the styles `resolveIconClasses` honours (`SUPPORTED_VARIANTS`). */
+const ICON_VARIANTS: readonly string[] = [...SUPPORTED_VARIANTS];
 
 const SIZE_ENUM = ["xs", "sm", "md", "lg", "xl"] as const;
 const TONE_ENUM = ["default", "neutral", "primary", "success", "warning", "danger", "info"] as const;
