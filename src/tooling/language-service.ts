@@ -230,29 +230,47 @@ function declarationStart(
  * `function` and `var` (and a `let` below a use is a temporal-dead-zone error),
  * so a bare assignment to any of these is a write to a binding that exists, never
  * a declaration — and adding `let` to it would be a redeclaration SyntaxError.
+ *
+ * `exported` is the subset whose declaration already carries `export`.
+ * A hook is stored without its `$` (`function $useX` is `useX`), so it is
+ * recorded under the `$`-prefixed spelling an assignment to it uses.
  */
-function collectDeclaredTopLevelNames(program: ReturnType<typeof parse>): Set<string> {
+function collectDeclaredTopLevelNames(program: ReturnType<typeof parse>): { declared: Set<string>; exported: Set<string> } {
   const declared = new Set<string>();
+  const exported = new Set<string>();
+  const add = (key: string, isExported: boolean | undefined): void => {
+    declared.add(key);
+    if (isExported === true) exported.add(key);
+  };
   for (const stmt of program.statements) {
     switch (stmt.kind) {
       case "Import":
-        for (const spec of stmt.specifiers) declared.add(bindingKey(spec.local, spec.isState));
+        for (const spec of stmt.specifiers) add(bindingKey(spec.local, spec.isState), false);
         break;
       case "ComponentDeclaration":
       case "ActionDeclaration":
+        add(stmt.name, stmt.exported);
+        break;
       case "HookDeclaration":
-        declared.add(stmt.name);
+        add(`$${stmt.name}`, stmt.exported);
         break;
       case "DestructureStatement":
-        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) declared.add(name);
+        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) add(name, false);
         break;
       case "Assignment":
-        if (stmt.declaration !== undefined) declared.add(bindingKey(stmt.identifier, stmt.isState));
+        if (stmt.declaration !== undefined) add(bindingKey(stmt.identifier, stmt.isState), stmt.exported);
         break;
     }
   }
-  return declared;
+  return { declared, exported };
 }
+
+/**
+ * The legacy root bindings the runtime still accepts as plain assignments
+ * (`aktion = Column(…)`, `theme = $theme(…)`). The host injects both and treats
+ * them as writable, so an assignment to one is a write, not a new declaration.
+ */
+const WRITABLE_LEGACY_ROOTS: ReadonlySet<string> = new Set(["aktion", "theme"]);
 
 /** `$`-prefixed names are a different binding from their bare spelling (`$count` vs `count`). */
 function bindingKey(name: string, isState: boolean | undefined): string {
@@ -261,8 +279,9 @@ function bindingKey(name: string, isState: boolean | undefined): string {
 
 /**
  * Whether anything in the program writes `key` other than the `declaration`
- * statement itself: another assignment, a compound assignment (`n += 1`) or an
- * increment / decrement. Scope-blind on purpose — a same-named local counts too,
+ * statement itself: another assignment, a compound assignment (`n += 1`), an
+ * increment / decrement, or a `for (x of …)` / `for (k in …)` head with no
+ * keyword, which assigns to `x` / `k` on every pass. Scope-blind on purpose — a same-named local counts too,
  * which only ever makes the advice `let`, the keyword that is safe either way.
  */
 function isWrittenElsewhere(program: ReturnType<typeof parse>, declaration: object, key: string): boolean {
@@ -274,6 +293,11 @@ function isWrittenElsewhere(program: ReturnType<typeof parse>, declaration: obje
     const rec = node as Record<string, unknown>;
     if (rec["kind"] === "Assignment" && bindingKey(String(rec["identifier"]), rec["isState"] as boolean) === key) {
       return true;
+    }
+    if ((rec["kind"] === "ForOfStatement" || rec["kind"] === "ForInStatement") && rec["declaration"] === undefined) {
+      const pattern = rec["pattern"] as DestructuringPattern | undefined;
+      const names = pattern ? collectPatternNames(pattern) : [String(rec["item"])];
+      if (names.includes(key)) return true;
     }
     if (rec["kind"] === "BuiltinCall" && WRITE_BUILTINS.has(String(rec["name"]))) {
       const target = (rec["arguments"] as Array<Record<string, unknown>> | undefined)?.[0];
@@ -298,23 +322,30 @@ function isWrittenElsewhere(program: ReturnType<typeof parse>, declaration: obje
  *     declaration (`export let` / `export const` fixes it). An export of a name
  *     that another statement already declares is not: JavaScript has no
  *     `export` on an assignment, and `export let` would redeclare the name, so
- *     the message says to drop the `export` instead;
+ *     the message says to put the `export` on the declaration and drop it here
+ *     (just drop it when the declaration is already exported, or nothing
+ *     imports the name) — dropping it alone would change the module's exports;
  *   - the first bare assignment of a name that no top-level statement declares
  *     and no earlier assignment has bound.
  *
  * A name declared anywhere at top level — before OR after the assignment, since
  * `function` and `var` hoist — is never a first declaration, so
- * `go = 2⏎function go() {}` and `y = 1⏎var y` are not flagged.
+ * `go = 2⏎function go() {}` and `y = 1⏎var y` are not flagged. A hook is
+ * stored without its `$`, so `function $useX` declares `$useX`, not `useX`.
+ * The two writable legacy roots, `aktion = …` and `theme = …`, are not flagged
+ * either: the host injects them, so assigning to one is a write.
  *
  * The suggested keyword is one that survives the program's own later writes:
  * `let` for a `$` atom (a state atom exists to be written; `const` makes that a
- * TypeError in JavaScript) and for any name written again somewhere in the file,
- * `const` only for a name nothing else writes.
+ * TypeError in JavaScript) and for any name written again somewhere in the file
+ * (an assignment, `+=`, `++`, or a keyword-less `for (x of …)` head), `const` only
+ * for a name nothing else writes.
  *
  * Only top-level statements are examined: inside a function body a bare
  * `total = total + 1` may be a write to an outer binding or a new local, and the
- * AST does not say which. A keyword-less `for (item of items)` head is likewise
- * left alone, since it may legitimately write to an existing variable.
+ * AST does not say which. A keyword-less `for (item of items)` head is not itself
+ * flagged, since it may legitimately write to an existing variable, but it counts
+ * as a write when choosing between `let` and `const`.
  *
  * The statement's `loc` sits on the `=`, so the warning is moved back to where the
  * declaration starts (`export` or the name) when the line text confirms it.
@@ -322,7 +353,7 @@ function isWrittenElsewhere(program: ReturnType<typeof parse>, declaration: obje
 function lintBareDeclarations(program: ReturnType<typeof parse>, source: string): Diagnostic[] {
   const warnings: Diagnostic[] = [];
   const lines = source.split(/\r?\n/);
-  const declared = collectDeclaredTopLevelNames(program);
+  const { declared, exported: exportedDeclarations } = collectDeclaredTopLevelNames(program);
   const bound = new Set<string>();
 
   for (const stmt of program.statements) {
@@ -332,16 +363,23 @@ function lintBareDeclarations(program: ReturnType<typeof parse>, source: string)
     bound.add(key);
     if (stmt.declaration !== undefined) continue;
     const exported = stmt.exported === true;
+    if (exported && !alreadyBound) exportedDeclarations.add(key);
     if (alreadyBound && !exported) continue;
+    if (!exported && !stmt.isState && WRITABLE_LEGACY_ROOTS.has(stmt.identifier)) continue;
 
     const { line, column } = declarationStart(lines, stmt.loc, key, exported);
     const prefix = exported ? "export " : "";
     let message: string;
     if (alreadyBound) {
-      message =
-        `\`export ${key}\` writes to \`${key}\`, which another statement already declares. ` +
-        `JavaScript has no \`export\` on an assignment and \`export let\` would redeclare it — ` +
-        `drop the \`export\`, or declare \`${key}\` once with \`export let\`.`;
+      // `export` belongs on the declaration: dropping it here alone would take `key` out of the
+      // module's exports unless the declaration already carries it.
+      message = exportedDeclarations.has(key)
+        ? `\`export ${key}\` writes to \`${key}\`, whose own declaration is already exported. ` +
+          `JavaScript has no \`export\` on an assignment — drop the \`export\` here.`
+        : `\`export ${key}\` writes to \`${key}\`, which another statement already declares. ` +
+          `JavaScript has no \`export\` on an assignment, and \`export let\` here would redeclare it — ` +
+          `put \`export\` on the declaration (\`export let ${key} = …\`, \`export function …\`) and drop it here. ` +
+          `If nothing imports \`${key}\`, dropping it here is enough.`;
     } else {
       const needsLet = stmt.isState || isWrittenElsewhere(program, stmt, key);
       const reason = stmt.isState

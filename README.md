@@ -1786,7 +1786,7 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   warning is `shadowed-i18n` (a parameter or loop variable shadowing a binding
   destructured from `$i18n(...)`, typically `t`). `getLintWarnings(source,
   library?)` returns only the warnings; pass the library to enable the
-  unknown-component pass, omit it to skip it. A third, opt-in warning,
+  unknown-component pass, omit it to skip it. An opt-in warning,
   `bare-declaration`, flags a top-level assignment that declares a binding
   without `let` / `const` (`export B = 1`, `export $s = 4`, or the first `y = 4`
   of a name; a keyword-less `for (item of items)` head is not covered); enable it
@@ -1851,11 +1851,14 @@ Both scripts also report `bare-declaration`, the warning for a top-level
 assignment that declares a binding without a keyword (`export B = 1`,
 `export $s = 4`, a first `y = 4`). The fix is mechanical, and the message says
 which keyword survives the program's own writes: `let` for a `$` atom or a name
-assigned again, `const` for a name nothing else writes (`export let` /
-`export const` for an export), and `formatProgram` keeps it. An `export` of a name
-that is already declared (`let B = 1⏎export B = 2`) is told to drop the `export`
-instead, and an assignment to a name a `function`, `import`, `var`, `let` or
-`const` declares is a write, not a declaration, and is not flagged. It is a
+assigned again, `const` for a name nothing else writes (a `+=`, `++` or a keyword-less
+`for (x of …)` head counts as a write; `export let` / `export const` for an
+export), and `formatProgram` keeps it. An `export` of a name that is already
+declared (`let B = 1⏎export B = 2`) is told to put the `export` on the
+declaration and drop it here, because dropping it alone would take the name out
+of the module's exports. An assignment to a name a `function`, hook, `import`,
+`var`, `let` or `const` declares, or to the writable legacy roots `aktion` and
+`theme`, is a write, not a declaration, and is not flagged. It is a
 warning only, so the exit code does not change; pass `--no-bare-declarations` to
 leave it out of the report. The agent skill and the system prompt still write
 `$x = 0`, so a run over their output is loud until they move to keywords.

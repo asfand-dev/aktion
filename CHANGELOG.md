@@ -15,14 +15,16 @@ Each entry is dated and summarises what was added, changed, or fixed.
   runtime still accepts all of these and behaves exactly as before, but without
   the keyword the file is not plain JavaScript. Later plain assignments to a name
   that already exists (`y = 5`) are ordinary writes and are not flagged, nor are
-  assignments to a name a `function`, `import`, `var`, `let` or `const` declares,
-  nor `let a` with no value. A keyword-less `for (item of items)` head is not
-  covered.
+  assignments to a name a `function`, hook, `import`, `var`, `let` or `const`
+  declares, the writable legacy roots `aktion` and `theme`, or `let a` with no
+  value. A keyword-less `for (item of items)` head is not covered.
 - The message says what to write, and only suggests a keyword that still works:
-  `let` for a `$` atom or a name assigned again, `const` for a name nothing else
-  writes, with `export` in front for an export. An `export` of a name that is
-  already declared is told to drop the `export` instead. Since the formatter
-  keeps declaration keywords, adding them is a mechanical edit.
+  `let` for a `$` atom or a name written again (including `+=`, `++` and a
+  keyword-less `for (x of …)` head), `const` for a name nothing else writes, with
+  `export` in front for an export. An `export` of a name that is already declared
+  is told to put the `export` on the declaration and drop it from the assignment, since
+  dropping it alone would take the name out of the module's exports. Since the
+  formatter keeps declaration keywords, adding them is a mechanical edit.
 - It is a warning, so a validator run still exits 0; `--no-bare-declarations`
   leaves it out of the report.
 - `getLintWarnings` and `getDiagnostics` take the same check as an opt-in:

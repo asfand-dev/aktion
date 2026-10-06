@@ -12,10 +12,7 @@ import { getDiagnostics, getLintWarnings } from "../src/tooling/language-service
 import { defaultLibrary } from "../src/library/index.js";
 import { parse } from "../src/parser/index.js";
 import { formatProgram } from "../src/tooling/formatter.js";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { applyAdvice, moduleProblems, runAsModule } from "./fixtures/bare-advice.js";
 
 const ON = { bareDeclarations: true };
 
@@ -31,40 +28,6 @@ function only(src: string): { line: number; column: number; message: string } {
   return warnings[0]!;
 }
 
-/**
- * Apply the advice a warning gives to `src`, the way an author would: insert the
- * keyword it recommends at the reported position, or drop the `export` when it
- * says so. Returns the edited source.
- */
-function applyAdvice(src: string, warning: { line: number; column: number; message: string }): string {
-  const lines = src.split("\n");
-  const text = lines[warning.line - 1]!;
-  const at = warning.column - 1;
-  const advised = /write `((?:export )?(?:let|const))` before the name/.exec(warning.message);
-  if (advised) {
-    const keyword = advised[1]!;
-    lines[warning.line - 1] = keyword.startsWith("export")
-      ? `${text.slice(0, at)}${keyword} ${text.slice(at).replace(/^export\s+/, "")}`
-      : `${text.slice(0, at)}${keyword} ${text.slice(at)}`;
-  } else {
-    expect(warning.message).toMatch(/drop the `export`/);
-    lines[warning.line - 1] = `${text.slice(0, at)}${text.slice(at).replace(/^export\s+/, "")}`;
-  }
-  return lines.join("\n");
-}
-
-/** Run `source` as an ES module under Node; throws on a SyntaxError, a TypeError, anything. */
-function runAsModule(source: string): void {
-  const dir = mkdtempSync(join(tmpdir(), "aktion-bare-advice-"));
-  try {
-    const file = join(dir, "advice.mjs");
-    writeFileSync(file, source, "utf8");
-    execFileSync(process.execPath, [file], { stdio: "pipe" });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-
 describe("bare-declaration — what is flagged", () => {
   it.each([
     ["an exported bare constant", "export B = 1", ["1:export B"]],
@@ -75,6 +38,8 @@ describe("bare-declaration — what is flagged", () => {
     ["a bare export even after the name was declared", "let B = 1\nexport B = 2", ["2:export B"]],
     ["a bare export of a name a function declares", "export go = 2\nfunction go() {}", ["1:export go"]],
     ["a second bare export of the same name", "export B = 1\nexport B = 2", ["1:export B", "2:export B"]],
+    ["a bare export of a name an exported hook declares", "export function $useX() { return 1 }\nexport $useX = 2", ["2:export $useX"]],
+    ["a plain `useX` is not the hook `$useX`", "function $useX() { return 1 }\nuseX = 2", ["2:useX"]],
     ["a bare declaration after an unrelated declared one", "const a = 1\nb = 2", ["2:b"]],
     ["only the first of repeated bare writes", "y = 4\ny = 5\ny = 6", ["1:y"]],
     ["`$x` separately from `x`", "let x = 1\n$x = 2", ["2:$x"]],
@@ -104,6 +69,12 @@ describe("bare-declaration — what is not flagged", () => {
     ["an assignment BEFORE a hoisted function of that name", "go = 2\nfunction go() {}"],
     ["an assignment BEFORE a component of that name", 'Row = 2\nfunction Row() { return Text("x") }'],
     ["an assignment BEFORE a `var` of that name", "y = 1\nvar y"],
+    ["an assignment to a hook, written with its `$`", "function $useX() { return 1 }\n$useX = 2"],
+    ["an assignment BEFORE a hook of that name", "$useX = 2\nfunction $useX() { return 1 }"],
+    ["the writable legacy root `aktion`", 'aktion = Column([Text("x")])'],
+    ["the writable legacy root `theme`", 'theme = $theme({ colors: {} })'],
+    ["a keyword-less `for (x of …)` head", "const xs = [1]\nfor (x of xs) { }"],
+    ["a keyword-less `for (k in …)` head", "const o = {}\nfor (k in o) { }"],
     ["an assignment BEFORE a `let` of that name", "y = 1\nlet y = 2"],
     ["an assignment BEFORE an import of that name", 'total = 1\nimport { total } from "./m.aktion"'],
     ["an assignment BEFORE a destructuring of that name", "a = 1\nconst { a } = $obj"],
@@ -144,6 +115,11 @@ describe("bare-declaration — reporting", () => {
     ["a name changed by a compound assignment", "y = 4\ny += 1", "`let`"],
     ["a name incremented", "y = 4\ny++", "`let`"],
     ["a name only read", "y = 4\n$app(Text(String(y)))", "`const`"],
+    ["a name a keyword-less `for…of` head assigns", "x = 0\nfor (x of [1, 2]) { }", "`let`"],
+    ["a name a keyword-less `for…in` head assigns", "k = 0\nfor (k in { a: 1 }) { }", "`let`"],
+    ["a name a keyword-less `for…of` head assigns, head first", "for (item of [1]) { }\nitem = 1", "`let`"],
+    ["a name a keyword-less destructuring head assigns", "a = 0\nfor ([a] of [[1]]) { }", "`let`"],
+    ["a name only a KEYWORDED `for…of` head declares", "x = 0\nfor (const x of [1, 2]) { }", "`const`"],
     ["a name whose member is written", "y = {}\ny.k = 1", "`const`"],
     ["a state atom, even if nothing writes it", "$n = 0", "`let`"],
     ["an exported name nothing writes", "export B = 1", "`export const`"],
@@ -163,11 +139,21 @@ describe("bare-declaration — reporting", () => {
     expect(w.message).toMatch(/write `export const` before the name/);
   });
 
-  it("does not offer `export let` for an export of an already declared name", () => {
+  it("leads with putting `export` on the declaration, not with dropping it", () => {
     const { message } = only("let B = 1\nexport B = 2");
     expect(message).toMatch(/`export B` writes to `B`, which another statement already declares/);
-    expect(message).toMatch(/drop the `export`/);
+    expect(message).toMatch(/put `export` on the declaration/);
+    expect(message.indexOf("put `export`")).toBeLessThan(message.indexOf("drop it here"));
+    expect(message).toMatch(/If nothing imports `B`, dropping it here is enough/);
     expect(message).not.toMatch(/write `export/);
+  });
+
+  it("only says to drop the `export` when the declaration already carries one", () => {
+    for (const src of ["export let B = 1\nexport B = 2", "export B = 1\nexport B = 2", "export function $useX() { return 1 }\nexport $useX = 2"]) {
+      const message = getLintWarnings(src, undefined, ON).at(-1)!.message;
+      expect(message, src).toMatch(/already exported/);
+      expect(message, src).not.toMatch(/put `export`/);
+    }
   });
 
   it("is a warning only: the program still parses with no errors", () => {
@@ -177,30 +163,46 @@ describe("bare-declaration — reporting", () => {
 
 /**
  * The advice has to be right, not just plausible: every program below is flagged,
- * and applying exactly what the warning says must give a program that Node runs
- * (no redeclaration SyntaxError, no assignment-to-constant TypeError). Each used to
- * fail that: `export let B` after `let B`, `let go` over a `function go`, and
- * `const $n` followed by a write.
+ * and applying exactly what the warnings say must give a program that parses as an
+ * ES module with no const write or redeclaration (ESLint), that Node runs (no
+ * SyntaxError, no TypeError), and that the lint no longer flags. Each of these
+ * once failed: `export let B` after `let B`, `let go` over a `function go`,
+ * `const $n` followed by a write, `const x` followed by `for (x of …)`, and
+ * `let $useX` over `function $useX`.
+ *
+ * The importer half of the export advice (dropping an `export` must not take a
+ * name out of the module's exports) is in `validate-tools.test.ts`, which links
+ * real modules.
  */
 describe("bare-declaration — following the advice gives valid JavaScript", () => {
   it.each([
     ["a first plain constant", "y = 4\nconsole.log(y)"],
     ["a plain name written again", "y = 4\ny = y + 1"],
     ["a plain name incremented", "y = 4\ny++"],
+    ["a plain name changed by a compound assignment", "y = 4\ny += 1"],
+    ["a plain name a `for…of` head assigns", "x = 0\nfor (x of [1, 2]) { }"],
+    ["a plain name a `for…in` head assigns", "k = 0\nfor (k in { a: 1 }) { }"],
+    ["a plain name a destructuring `for…of` head assigns", "a = 0\nfor ([a] of [[1]]) { }"],
+    ["a plain name only a keyworded loop declares", "x = 0\nfor (const x of [1, 2]) { }\nconsole.log(x)"],
     ["a state atom written again", "$n = 0\n$n = $n + 1"],
     ["a state atom written inside a function", "$n = 0\nfunction bump() { $n = $n + 1 }\nbump()"],
     ["an exported constant", "export B = 1"],
     ["an exported name written again", "export B = 1\nB = 2"],
     ["an exported state atom", "export $s = 4"],
     ["an export of a name `let` already declared", "let B = 1\nexport B = 2"],
+    ["an export of a name an earlier bare assignment declares", "B = 1\nexport B = 2"],
+    ["an export of a name that is already exported", "export let B = 1\nexport B = 2"],
+    ["two bare exports of one name", "export B = 1\nexport B = 2"],
     ["an export of a name a function declares", "export go = 2\nfunction go() {}"],
+    ["an export of a name an exported hook declares", "export function $useX() { return 1 }\nexport $useX = 2"],
+    ["a plain `useX` beside a hook `$useX`", "function $useX() { return 1 }\nuseX = 2"],
   ])("%s", (_name, src) => {
     const warnings = getLintWarnings(src, undefined, ON);
     expect(warnings.length).toBeGreaterThan(0);
-    let fixed = src;
-    for (const warning of [...warnings].reverse()) fixed = applyAdvice(fixed, warning);
+    const fixed = applyAdvice(src, warnings);
+    expect(moduleProblems(fixed), fixed).toEqual([]);
     expect(() => runAsModule(fixed), fixed).not.toThrow();
-    expect(getLintWarnings(fixed, undefined, ON)).toEqual([]);
+    expect(getLintWarnings(fixed, undefined, ON), fixed).toEqual([]);
   });
 });
 

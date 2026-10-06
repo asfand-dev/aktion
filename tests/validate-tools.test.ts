@@ -18,6 +18,8 @@ import { existsSync, mkdtempSync, mkdirSync, readdirSync, renameSync, writeFileS
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getLintWarnings } from "../src/tooling/language-service.js";
+import { applyAdvice } from "./fixtures/bare-advice.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const appTool = join(repoRoot, "tools", "validate-aktion-app.mjs");
@@ -480,6 +482,53 @@ describe("tools/validate-aktion*.mjs — bare declarations", () => {
     const { status, output } = run(appTool, [file("bare-entry.aktion")]);
     expect(output).toMatch(/L4: warning: .*bare-lib\.aktion: `export LIMIT` declares a binding without a keyword/);
     expect(status).toBe(0);
+  });
+});
+
+/**
+ * Advice that touches `export` must not change what a module exports. The first
+ * version of the warning for an `export` of an already declared name said to drop
+ * the `export`, and an importer of that name then failed to link
+ * (`"./mod.aktion" does not export B`). Every program below is linked together
+ * with a module that imports the name: the original must link, and so must the
+ * program the warnings' advice produces.
+ */
+describe("tools/validate-aktion-app.mjs — export advice keeps the module's exports", () => {
+  let dir: string;
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "aktion-validate-export-advice-"));
+  });
+
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it.each([
+    ["an export of a name `let` declares", "let B = 1\nexport B = 2", "B"],
+    ["an export of a name an earlier bare assignment declares", "B = 1\nexport B = 2", "B"],
+    ["an export of a name a function declares", "export go = 2\nfunction go() {}", "go"],
+    ["an export of a name that is already exported", "export let B = 1\nexport B = 2", "B"],
+    ["two bare exports of one name", "export B = 1\nexport B = 2", "B"],
+    ["an exported name written again", "export B = 1\nB = 2", "B"],
+    ["an exported state atom", "export $s = 4", "$s"],
+  ])("%s", (name, source, imported) => {
+    const slug = name.replace(/\W+/g, "-");
+    const module = join(dir, `${slug}-mod.aktion`);
+    const entry = join(dir, `${slug}-entry.aktion`);
+    writeFileSync(entry, `import { ${imported} } from "./${slug}-mod.aktion"\n$app(Text(String(${imported})))\n`, "utf8");
+
+    writeFileSync(module, `${source}\n`, "utf8");
+    const before = run(appTool, [entry]);
+    expect(before.output, `original:\n${source}`).not.toMatch(/: error: /);
+    expect(before.status).toBe(0);
+
+    const warnings = getLintWarnings(source, undefined, { bareDeclarations: true });
+    expect(warnings.length).toBeGreaterThan(0);
+    const fixed = applyAdvice(source, warnings);
+    writeFileSync(module, `${fixed}\n`, "utf8");
+    const after = run(appTool, [entry]);
+    expect(after.output, `advised:\n${fixed}`).not.toMatch(/: error: /);
+    expect(after.output).not.toMatch(/: warning: /);
+    expect(after.status).toBe(0);
   });
 });
 
