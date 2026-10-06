@@ -5,6 +5,21 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-10-06
+
+### ESLint Knows the Names Aktion Injects
+
+- `aktion-runtime/eslint` now exports `globals`: every name the runtime provides
+  to a program without an import (all components, the `$`-builtins, `route`,
+  `params`, `outlet`, `children`, `slots`, `cleanup` and the tracked timers) in
+  the shape ESLint's `languageOptions.globals` expects. `configs.recommended`
+  applies it to `.aktion` files, so `no-undef` works out of the box and you no
+  longer need to keep your own list in step with the runtime. It is also
+  available as `aktionEslint.globals`.
+- The list is built from the same catalogues the editor tooling reads, and a
+  test fails when one of them gains a name `globals` lacks. Host globals such as
+  `document` or `window` are not included; your environment supplies those.
+
 ## 2026-10-05
 
 ### Precise TypeScript Types for Every Component and Built-in
