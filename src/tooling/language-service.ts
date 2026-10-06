@@ -203,15 +203,22 @@ function lintProgram(
 }
 
 /**
- * Where a declaration starts on its line, given the position of the `=` that ends it.
- * `head` is a regex source for its text (`export` plus the name, or just the name); the
- * `=` itself is returned when the line does not confirm it.
+ * Where a declaration of `name` starts on its line, given the position of the `=` that
+ * ends it: at `export` for an exported binding, otherwise at the name. The `=` itself is
+ * returned when the line does not confirm it.
  */
-function declarationStart(lines: readonly string[], loc: Position | undefined, head: string): Position {
+function declarationStart(
+  lines: readonly string[],
+  loc: Position | undefined,
+  name: string,
+  exported: boolean,
+): Position {
   const line = loc?.line ?? 0;
   const column = loc?.column ?? 0;
   const before = (lines[line - 1] ?? "").slice(0, Math.max(column - 1, 0));
-  const match = new RegExp(`(^|[^\\w$])(${head})\\s*$`).exec(before);
+  const escaped = name.replace(/[$()*+.?[\\\]^{|}]/g, String.raw`\$&`);
+  const head = `${exported ? String.raw`export\s+` : ""}${escaped}`;
+  const match = new RegExp(String.raw`(^|[^\w$])(${head})\s*$`).exec(before);
   return match ? { line, column: match.index + match[1]!.length + 1 } : { line, column };
 }
 
@@ -260,7 +267,7 @@ function lintBareDeclarations(program: ReturnType<typeof parse>, source: string)
         bound.add(key);
         if (stmt.declaration !== undefined || (!isFirst && stmt.exported !== true)) break;
         const exported = stmt.exported === true ? "export " : "";
-        const { line, column } = declarationStart(lines, stmt.loc, `${exported ? "export\\s+" : ""}${key.replace("$", "\\$")}`);
+        const { line, column } = declarationStart(lines, stmt.loc, key, stmt.exported === true);
         warnings.push({
           line,
           column,
