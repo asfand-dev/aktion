@@ -488,7 +488,7 @@ import {
 import { getDiagnostics, getCompletions, formatProgram } from "aktion-runtime/language";
 // DOM-free language service for editor integrations — see Tooling below
 
-import aktionEslint, { aktionProcessor, aktionRecommendedRules, globals } from "aktion-runtime/eslint";
+import aktionEslint, { aktionProcessor, aktionRecommendedRules, aktionGlobals } from "aktion-runtime/eslint";
 // ESLint processor + recommended rule overrides + injected globals — see ESLint integration below
 ```
 
@@ -1871,7 +1871,7 @@ import tsParser from "@typescript-eslint/parser";
 
 export default [
   // The two portable blocks this package documents — processor wiring, plus
-  // the names the runtime injects (`globals`) and ten DSL-general rule
+  // the names the runtime injects (`aktionGlobals`) and ten DSL-general rule
   // overrides (grammar incompatibilities and DSL-idiom false positives — see
   // `aktionRecommendedRules` for the full citations).
   ...aktionEslint.configs.recommended,
@@ -1896,7 +1896,7 @@ Prefer to assemble the pieces yourself instead of spreading
 `configs.recommended`? Every piece is exported individually: `aktionProcessor`
 (the `Linter.Processor` object, for `processors: {aktion: aktionProcessor}` +
 `processor: "aktion/aktion"`), `aktionRecommendedRules` (the plain rules
-record to spread into your own `**/*.aktion/*.ts` block), `globals` (the
+record to spread into your own `**/*.aktion/*.ts` block), `aktionGlobals` (the
 plain `{ name: "readonly" | "writable" }` record of every name the runtime
 injects — components, `$`-builtins, `route`, `params`, `outlet`, … — for
 `languageOptions.globals`), plus the pure
@@ -1908,16 +1908,23 @@ own tooling on the same technique.
 
 A `.aktion` file uses `Container`, `$state`, `route`, `params` and the rest
 without importing them, so core `no-undef` reports every one unless ESLint is
-told they exist. `globals` is that list, built from the same component, builtin
-and namespace catalogues the editor tooling reads plus the injected names in
-`src/dsl/manifest.json`; `configs.recommended` applies it to the processor's
-virtual `**/*.aktion/*.ts` block, and it is also `aktionEslint.globals` on the
-plugin object. `tests/eslint-globals.test.ts` fails when a catalogue or the
-manifest gains a name it lacks.
+told they exist. `aktionGlobals` is that list, built from the same component,
+builtin and namespace catalogues the editor tooling reads plus the `injected`
+and `hostGlobals` names in `src/dsl/manifest.json`; `configs.recommended`
+applies it to the processor's virtual `**/*.aktion/*.ts` block, and it is also
+`aktionEslint.globals` on the plugin object. It follows its sources, which
+`tests/dsl-types.test.ts` checks against what the runtime binds, and
+`tests/eslint-globals.test.ts` asks the runtime which names it resolves and
+requires `no-undef` to know every one.
 
-It lists only what Aktion injects. Host globals a program may also reach
-(`document`, `window`, `URL`, `crypto`, `console`, …) depend on your
-environment — add them yourself, for example `globals.browser` from the
+It lists what Aktion provides: components, `$`-builtins, the injected bindings,
+and `atob`, `btoa`, `console` and `structuredClone` (the host names the
+generated `globals.d.ts` also declares). The context-only names `params`,
+`outlet`, `children`, `slots` and `cleanup` are declared program-wide but hold
+a value only inside the construct that binds them; at top level they are
+`null`. Other host globals a program may reach (`document`, `window`, `URL`,
+`crypto`, …) depend on your environment and the global-access policy — add them
+yourself, for example `globals.browser` from the
 [`globals`](https://www.npmjs.com/package/globals) package. A program's own
 keyword-less bindings (`count = 0`) are not declarations to a JavaScript
 linter either; write `let count = 0` / `const …` to have `no-undef` see them.

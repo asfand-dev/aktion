@@ -1,17 +1,26 @@
 /**
- * `aktion-runtime/eslint`'s `globals` is a projection of the catalogues and the
- * DSL manifest that already describe every name the runtime injects. Like the
- * other editor-facing projections (`tests/language-catalogs-sync.test.ts`) it
- * can fall behind its sources, which here means `no-undef` starts reporting a
- * perfectly valid program — so the drift test fails first, and the corpus test
- * proves the object is complete against every real `.aktion` file in the repo.
+ * `aktion-runtime/eslint`'s `aktionGlobals` is a projection of the catalogues
+ * and the DSL manifest. Three layers guard it:
+ *
+ *   1. it contains every name those sources list (the first describe block) —
+ *      this only checks the record against its own inputs;
+ *   2. the sources themselves match what the runtime binds
+ *      (`tests/dsl-types.test.ts` probes every manifest `injected` and
+ *      `hostGlobals` name);
+ *   3. the runtime probe below, which asks the runtime which names it resolves
+ *      and requires `no-undef` to know every one of them, so a name the runtime
+ *      gains but the manifest lacks fails here too.
+ *
+ * The corpus sweep then runs `no-undef` over every real `.aktion` file.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { Linter, type Linter as LinterTypes } from "eslint";
 import tsParser from "@typescript-eslint/parser";
-import aktionEslintPlugin, { globals } from "../src/eslint-api.js";
+import aktionEslintPlugin, { aktionGlobals } from "../src/eslint-api.js";
+import { render, cleanup, flush } from "../src/testing/index.js";
+import { setGlobalAccessPolicy } from "../src/runtime/evaluator.js";
 import { getComponentCatalog } from "../src/language/components.js";
 import { builtinCatalog } from "../src/language/builtins.js";
 import { namespaceCatalog } from "../src/language/namespaces.js";
@@ -20,23 +29,29 @@ import { walk } from "../src/parser/walk.js";
 import type { DestructuringBinding } from "../src/parser/types.js";
 import manifest from "../src/dsl/manifest.json";
 
-describe("globals mirrors the catalogues and the manifest", () => {
+describe("aktionGlobals mirrors the catalogues and the manifest", () => {
   it("declares every library component", () => {
-    const missing = getComponentCatalog().map((c) => c.name).filter((name) => !(name in globals));
+    const missing = getComponentCatalog().map((c) => c.name).filter((name) => !(name in aktionGlobals));
     expect(missing).toEqual([]);
   });
 
   it("declares every `$`-builtin and `$`-namespace with its sigil", () => {
-    const missing = [...builtinCatalog, ...namespaceCatalog].map((e) => e.sigil).filter((name) => !(name in globals));
+    const missing = [...builtinCatalog, ...namespaceCatalog].map((e) => e.sigil).filter((name) => !(name in aktionGlobals));
     expect(missing).toEqual([]);
   });
 
   it("declares every injected name in the DSL manifest", () => {
     // `route`, `params`, `outlet`, `children`, `slots`, `cleanup`, the tracked
     // timers and the legacy `aktion` / `theme` roots.
-    const missing = manifest.injected.filter((name) => !(name in globals));
+    const missing = manifest.injected.filter((name) => !(name in aktionGlobals));
     expect(missing).toEqual([]);
-    expect(globals).toMatchObject({ route: "readonly", params: "readonly", setTimeout: "readonly" });
+    expect(aktionGlobals).toMatchObject({ route: "readonly", params: "readonly", setTimeout: "readonly" });
+  });
+
+  it("declares the host names the generated globals.d.ts declares", () => {
+    expect(manifest.hostGlobals).toEqual(["atob", "btoa", "console", "structuredClone"]);
+    const missing = manifest.hostGlobals.filter((name) => !(name in aktionGlobals));
+    expect(missing).toEqual([]);
   });
 
   it("declares nothing the catalogues and the manifest do not", () => {
@@ -45,21 +60,22 @@ describe("globals mirrors the catalogues and the manifest", () => {
       ...builtinCatalog.map((e) => e.sigil),
       ...namespaceCatalog.map((e) => e.sigil),
       ...manifest.injected,
+      ...manifest.hostGlobals,
     ]);
-    expect(Object.keys(globals).filter((name) => !known.has(name))).toEqual([]);
+    expect(Object.keys(aktionGlobals).filter((name) => !known.has(name))).toEqual([]);
   });
 
   it("only uses access levels ESLint's flat config accepts, writable only for the legacy roots", () => {
-    const writable = Object.entries(globals).filter(([, access]) => access === "writable").map(([name]) => name);
+    const writable = Object.entries(aktionGlobals).filter(([, access]) => access === "writable").map(([name]) => name);
     expect(writable.sort()).toEqual(["aktion", "theme"]);
-    expect(new Set(Object.values(globals))).toEqual(new Set(["readonly", "writable"]));
+    expect(new Set(Object.values(aktionGlobals))).toEqual(new Set(["readonly", "writable"]));
   });
 
   it("is the same record on the plugin object and in configs.recommended", () => {
-    expect(aktionEslintPlugin.globals).toBe(globals);
+    expect(aktionEslintPlugin.globals).toBe(aktionGlobals);
     const block = aktionEslintPlugin.configs?.recommended;
     const virtualBlock = (block as LinterTypes.Config[]).find((c) => c.files?.[0] === "**/*.aktion/*.ts");
-    expect(virtualBlock?.languageOptions?.globals).toEqual(globals);
+    expect(virtualBlock?.languageOptions?.globals).toEqual(aktionGlobals);
   });
 });
 
@@ -77,12 +93,12 @@ function collect(dir: string, out: string[]): void {
 
 describe("no-undef over every .aktion file with the plain recommended config", () => {
   /**
-   * What `no-undef` still reports once `globals` is applied — and nothing else.
-   * These are host globals a program reaches because the global-access policy
-   * defaults to `"all"`; the consumer's environment provides them
-   * (`languageOptions.globals`, e.g. the `globals` package's `browser` set), so
-   * `aktion-runtime` deliberately does not declare them. The ES built-ins
-   * (`Math`, `Promise`, …) come from ESLint's own `ecmaVersion`.
+   * What `no-undef` may still report once `aktionGlobals` is applied — and
+   * nothing else. These are host globals a program reaches through the
+   * global-access policy (`"all"` by default); the consumer's environment
+   * provides them (`languageOptions.globals`, e.g. the `globals` package's
+   * `browser` set), so `aktion-runtime` deliberately does not declare them. The
+   * ES built-ins (`Math`, `Promise`, …) come from ESLint's own `ecmaVersion`.
    */
   const HOST_GLOBALS = ["URL", "crypto", "document", "getComputedStyle", "navigator", "window"];
 
@@ -115,7 +131,7 @@ describe("no-undef over every .aktion file with the plain recommended config", (
   /**
    * The names a program introduces with a keyword-less statement (`count = 0`,
    * `$todos = []`, `for (item of items)`). A JS linter cannot see those as
-   * declarations, so `no-undef` reports them whatever `globals` holds; they are
+   * declarations, so `no-undef` reports them whatever `aktionGlobals` holds; they are
    * the program's own bindings, not names the runtime injects, and the
    * keyword-bearing form (`let` / `const`) never produces them.
    */
@@ -138,7 +154,10 @@ describe("no-undef over every .aktion file with the plain recommended config", (
     for (const message of new Linter().verify(source, cfg, verifyOptions)) {
       if (message.ruleId !== "no-undef") continue;
       const name = /^'(.+)' is not defined/.exec(message.message)?.[1] ?? message.message;
-      if (!own.has(name)) names.add(name);
+      // A program binding keyword-less names equal to an injected one (`aktion`,
+      // `slots`, `$query`, `$form` each occur once in this corpus) must not hide
+      // that name from the report, or a gap in `aktionGlobals` would go unseen.
+      if (!own.has(name) || name in aktionGlobals) names.add(name);
     }
     return names;
   }
@@ -158,10 +177,10 @@ describe("no-undef over every .aktion file with the plain recommended config", (
       }
       for (const name of undeclared(source, config)) names.add(name);
     }
-    // A subset, not an equality: whether ESLint's own environment already knows
-    // a host name such as `URL` varies between runs (it did between a local run
-    // and CI), and that is not what this checks. What must never appear here is
-    // a name the runtime injects.
+    // A subset, not an equality: the first CI run did not report `URL` although
+    // local runs on Node 22.23.3, 24.19.0 and 24.21.0 (CI's version) all did
+    // with the same ESLint 10.12.0, and the cause is unknown. What must never
+    // appear here is a name the runtime injects.
     expect([...names].filter((name) => !HOST_GLOBALS.includes(name))).toEqual([]);
     expect(["document", "window"].filter((name) => !names.has(name))).toEqual([]);
     // A file this repo's own parser rejects is skipped (the validate sweep owns
@@ -178,5 +197,61 @@ describe("no-undef over every .aktion file with the plain recommended config", (
       for (const name of undeclared(source, withoutGlobals)) names.add(name);
     }
     for (const name of ["route", "Container", "$state"]) expect(names, name).toContain(name);
+  });
+});
+
+describe("every name the runtime resolves is known to no-undef", () => {
+  afterEach(() => {
+    cleanup();
+    setGlobalAccessPolicy("all");
+  });
+
+  async function boundNames(candidates: readonly string[], policy: "safe" | readonly string[]): Promise<string[]> {
+    setGlobalAccessPolicy(policy as never);
+    // A name the runtime cannot resolve evaluates to `null`; `== null` is the probe.
+    const screen = render(`$app(Text(JSON.stringify([${candidates.map((name) => `${name} == null`).join(", ")}])))`);
+    await flush();
+    await flush();
+    const root = screen.shadowRoot.cloneNode(true) as ShadowRoot;
+    root.querySelectorAll("style").forEach((s) => s.remove());
+    const unresolved = JSON.parse((root.textContent ?? "").trim()) as boolean[];
+    cleanup();
+    return candidates.filter((_, index) => unresolved[index] === false);
+  }
+
+  const lintConfig: LinterTypes.Config[] = [
+    ...(aktionEslintPlugin.configs!.recommended as LinterTypes.Config[]),
+    {
+      files: ["**/*.aktion/*.ts"],
+      languageOptions: { parser: tsParser, ecmaVersion: 2022, sourceType: "module", parserOptions: { project: false, projectService: false } },
+      rules: { "no-undef": "error" },
+    },
+  ];
+
+  it("no-undef reports none of the globals the runtime binds under an empty host policy", async () => {
+    // With `setGlobalAccessPolicy([])` no host global passes the policy, so what
+    // still resolves is what the runtime itself provides: its curated standard
+    // library names (`Math`, `structuredClone`, …), the library components and
+    // the injected bindings. Candidates are every identifier-shaped name on the
+    // test realm's global object.
+    const candidates = Object.getOwnPropertyNames(globalThis).filter(
+      (name) => /^[A-Za-z_][\w]*$/.test(name) && parse(`$app(Text(String(${name} == null)))`).errors.length === 0,
+    );
+    const bound = await boundNames(candidates, []);
+    expect(bound, "the probe must see the runtime's own names").toEqual(expect.arrayContaining(["Math", "JSON", "structuredClone"]));
+
+    const source = `[${bound.join(", ")}];`;
+    const reported = new Set(
+      new Linter()
+        .verify(source, lintConfig, { filename: "app.aktion", filterCodeBlock: () => true })
+        .filter((message) => message.ruleId === "no-undef")
+        .map((message) => /^'(.+)' is not defined/.exec(message.message)?.[1]),
+    );
+    expect([...reported]).toEqual([]);
+  });
+
+  it("the host names in the manifest are really granted by the safe policy", async () => {
+    const bound = await boundNames(manifest.hostGlobals, "safe");
+    expect(bound).toEqual(manifest.hostGlobals);
   });
 });

@@ -316,8 +316,10 @@ describe("aktion-runtime/dsl — every runtime name is declared", () => {
     const text = read(join(dslDir, "globals.d.ts"));
     const globals = declarationsOf(text);
     const hybrids = [...text.matchAll(/^interface (\w+)Constructor extends __Aktion(\w+)Component \{\}$/gm)].map((m) => m[2]!);
-    const declared = [...globals.values.keys(), ...hybrids].filter((n) => !["atob", "btoa", "structuredClone", "console"].includes(n));
+    const declared = [...globals.values.keys(), ...hybrids].filter((n) => !manifest.hostGlobals.includes(n));
     expect(sorted(declared)).toEqual(sorted(index.values.keys()));
+    // The host extras the ambient flavour adds are exactly the manifest's list.
+    expect(sorted([...globals.values.keys()].filter((n) => manifest.hostGlobals.includes(n)))).toEqual(manifest.hostGlobals);
     expect(hybrids).toEqual(["Map"]);
     // It must stay a global SCRIPT: one top-level import/export would turn every
     // declaration into a module-local one.
@@ -344,7 +346,7 @@ describe("aktion-runtime/dsl — every runtime name is declared", () => {
 
   it("the $-name lists partition builtinCatalog by kind", () => {
     const lists = [manifest.hooks, manifest.factories, manifest.namespaces, manifest.builtins];
-    for (const list of [...lists, manifest.injected]) expect(list).toEqual([...list].sort());
+    for (const list of [...lists, manifest.injected, manifest.hostGlobals]) expect(list).toEqual([...list].sort());
     expect(sorted(lists.flat())).toEqual(sorted(builtinCatalog.map((b) => b.name)));
     expect(lists.flat().length).toBe(builtinCatalog.length);
     expect(manifest.hooks).toEqual(sorted(builtinCatalog.filter((b) => b.category === "hook").map((b) => b.name)));
