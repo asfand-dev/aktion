@@ -101,8 +101,8 @@ export function compileJavaScriptModule(
   options: CompileJavaScriptOptions = {},
 ): FrontendResult {
   // Statement blocks parse as blocks, so E113 reports them once at the `{`;
-  // `this` parses as an identifier, so E103 reports it without dropping the
-  // function around it.
+  // `this` parses as an identifier, so E103 reports it next to the module's
+  // other diagnostics; a parse error would hide them all (see below).
   const parseOptions: ParseOptions = { statementBlocks: true, allowThis: true };
   if (options.softNewlines && options.softNewlines.size > 0) parseOptions.softNewlines = options.softNewlines;
   const parsed = parse(code, parseOptions);

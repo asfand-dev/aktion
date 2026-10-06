@@ -180,9 +180,11 @@ const BATTERY: Row[] = [
   { construct: "`a = b = 1`", source: "a = b = 1\n", outcome: err("Chained assignment (`a = b = 1`) is not supported", 1, 7) },
   { construct: "`if ((m = r.exec(s)))`", source: "if ((m = r.exec(s))) {}\n", outcome: err("Assignment inside an expression is not supported", 1, 8) },
 
-  // --- unchanged errors ----------------------------------------------------------
-  { construct: "`export { a, b }`", source: "export { a, b }\n", outcome: err("`export { … }` lists (and re-export lists) are not supported") },
+  // --- changed: was accepted without an error, or the message changed ---------------
   { construct: "`this.x`", source: "a = this.x\n", outcome: err("`this` is not supported in Aktion", 1, 5) },
+  { construct: "`export { a, b }`", source: "export { a, b }\n", outcome: err("`export { … }` lists (and re-export lists) are not supported") },
+
+  // --- unchanged errors ----------------------------------------------------------
   { construct: "`class A {}`", source: "class A {}\n", outcome: err("`class` is not supported in Aktion") },
   { construct: "`const café = 1`", source: "const café = 1\n", outcome: err("names may only use a-z") },
   { construct: "`o.#x`", source: "x = o.#x\n", outcome: err("private fields") },

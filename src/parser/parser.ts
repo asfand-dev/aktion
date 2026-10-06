@@ -82,8 +82,9 @@ export interface ParseOptions {
    * Parse `this` as an ordinary identifier instead of reporting it. `.aktion`
    * has no `this`, so by default it is a parse error at the word. The
    * `.aktion.js` / `.aktion.ts` frontends set this because their checker
-   * already reports it as E103 — a diagnostic, which keeps the rest of the
-   * enclosing function checked, where a parse error would drop the function.
+   * already reports it as E103. A module with any parse error gets only the
+   * parse errors (the semantic checks need a complete tree), so a parse error
+   * for `this` would also hide every other diagnostic in that module.
    */
   allowThis?: boolean;
 }
@@ -374,22 +375,27 @@ function parseStatementImpl(ctx: ParserContext, _topLevel: boolean): Statement |
   }
   if (head.type === "Punctuation" && head.value === "{") {
     // Without `statementBlocks` a statement-position `{` can only be an object
-    // literal. One that does not parse as such is nearly always a block
-    // (`{ const x = 1 }`, `case 2: { … }`), whose real problem is that Aktion
-    // has none — the object-literal error ("Expected ':' but got …") names an
-    // inner token and says nothing about that.
+    // literal. One that fails inside its own braces with a grammar error
+    // ("Expected ':' but got …") is nearly always a block (`{ const x = 1 }`,
+    // `case 2: { … }`), whose real problem is that Aktion has none — the
+    // object-literal error names an inner token and says nothing about that.
+    // Every other failure keeps its own, more specific message and position.
     const start = ctx.snapshot();
     try {
       return parseExpressionStatement(ctx);
-    } catch {
-      ctx.restore(start);
+    } catch (err) {
+      const failedAt = ctx.snapshot();
       ctx.takePending();
+      const error = err as ParseError & { __definitive?: boolean };
+      const { close, errorDepth } = scanBraces(ctx, start, error);
+      // Depth 1 is directly inside the statement's own braces: an error deeper
+      // in is a real mistake in a nested function, call or array, not a block.
+      if (error.__definitive || close < 0 || errorDepth !== 1 || !BLOCK_LIKE_ERROR.test(error.message)) {
+        ctx.restore(failedAt);
+        throw err;
+      }
       // Step over the whole block so its own closing `}` is not reported again.
-      let depth = 0;
-      do {
-        const tok = ctx.consume();
-        if (tok.type === "Punctuation") depth += tok.value === "{" ? 1 : tok.value === "}" ? -1 : 0;
-      } while (depth > 0 && !ctx.isEnd());
+      ctx.restore(close + 1);
       throw { message: BLOCK_STATEMENT_MESSAGE, line: head.line, column: head.column } satisfies ParseError;
     }
   }
@@ -560,7 +566,7 @@ function parseFunctionDecl(ctx: ParserContext): Statement {
   // Hooks compose per-instance state — their body runs inline in the calling
   // component's hook scope (React's custom-hook model).
   const isHook = ctx.peek().type === "StateIdentifier";
-  const nameTok = isHook ? ctx.consume() : ctx.expect("Identifier");
+  const nameTok = isHook ? ctx.consume() : ctx.expectName();
   const params = parseFunctionParams(ctx);
   const body = parseBlock(ctx);
   skipTerminator(ctx);
@@ -629,6 +635,7 @@ function parseFunctionParamList(ctx: ParserContext): DeclParam[] {
         if (defaultValue) param.defaultValue = defaultValue;
         params.push(param);
       } else if (tok.type === "Identifier" || tok.type === "Keyword") {
+        rejectUnsupportedWord(ctx, tok);
         const nameTok = ctx.consume();
         let defaultValue: Expression | undefined;
         if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
@@ -912,6 +919,7 @@ function parseDeclarator(ctx: ParserContext, keyword: Token, start: Token): Stat
     identifier = ctx.consume().value;
     isState = true;
   } else if (head.type === "Identifier") {
+    rejectUnsupportedWord(ctx, head);
     identifier = ctx.consume().value;
   } else {
     throw {
@@ -1022,7 +1030,7 @@ function parsePatternBody(ctx: ParserContext, patternKind: "array" | "object"): 
         }
         break;
       }
-      const nameTok = ctx.expect("Identifier");
+      const nameTok = ctx.expectName();
       let defaultValue: Expression | undefined;
       if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
         ctx.consume();
@@ -1049,7 +1057,7 @@ function parsePatternBody(ctx: ParserContext, patternKind: "array" | "object"): 
         ctx.consume();
         isRest = true;
       }
-      const keyTok = isRest ? ctx.expect("Identifier") : parsePatternKey(ctx);
+      const keyTok = isRest ? ctx.expectName() : parsePatternKey(ctx);
       const key = keyTok.type === "Number" ? String(numericLiteralValue(keyTok.value)) : keyTok.value;
       let alias = key;
       let sourceKey: string | undefined;
@@ -1063,12 +1071,14 @@ function parsePatternBody(ctx: ParserContext, patternKind: "array" | "object"): 
           sourceKey = key;
           nestedPattern = parseDestructuringPattern(ctx);
         } else {
-          const aliasTok = ctx.expect("Identifier");
+          const aliasTok = ctx.expectName();
           sourceKey = key;
           alias = aliasTok.value;
         }
       } else if (keyTok.type !== "Identifier") {
         throw patternKeyNeedsName(keyTok);
+      } else if (!isRest) {
+        rejectUnsupportedWord(ctx, keyTok);
       }
       let defaultValue: Expression | undefined;
       if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
@@ -1453,6 +1463,13 @@ class ParserContext {
     return this.consume();
   }
 
+  /** `expect("Identifier")` for a name being declared or bound, which may not be `this`, `super` or `debugger`. */
+  expectName(): Token {
+    const tok = this.expect("Identifier");
+    rejectUnsupportedWord(this, tok);
+    return tok;
+  }
+
   recoverToNextLine(): void {
     while (!this.isEnd() && this.peek().type !== "Newline" && this.peek().type !== "Semicolon") this.consume();
     if (this.peek().type === "Newline" || this.peek().type === "Semicolon") this.consume();
@@ -1472,6 +1489,7 @@ function parseAssignment(ctx: ParserContext): Statement | null {
   let identifier = "";
   let isState = false;
   if (head.type === "Identifier") {
+    rejectUnsupportedWord(ctx, head);
     identifier = ctx.consume().value;
   } else if (head.type === "StateIdentifier") {
     identifier = ctx.consume().value;
@@ -1630,6 +1648,45 @@ const UNSUPPORTED_WORD_MESSAGES: ReadonlyMap<string, string> = new Map([
   ],
   ["debugger", "`debugger` is not supported in Aktion — remove it, or log the value with `$console.log(…)`."],
 ]);
+
+/**
+ * Throw the error for `tok` when it is a word Aktion has no use for (`this`,
+ * `super`, `debugger`), wherever a name is read or declared. A property name
+ * (`o.this`, `{ this: 1 }`) never reaches a caller of this.
+ */
+function rejectUnsupportedWord(ctx: ParserContext, tok: Token): void {
+  if (tok.type !== "Identifier" || (ctx.allowThis && tok.value === "this")) return;
+  const message = UNSUPPORTED_WORD_MESSAGES.get(tok.value);
+  if (message) throw { message, line: tok.line, column: tok.column } satisfies ParseError;
+}
+
+/** The grammar errors an object-literal parse gives for text that is really a block. */
+const BLOCK_LIKE_ERROR = /^(Expected |Unexpected token |Labels )/;
+
+/**
+ * Looks at the `{` at token index `open` without consuming anything: `close` is
+ * the index of the `}` that closes it, or -1 when it never is (a stray `{`, or a
+ * streamed prefix that has not reached the `}` yet), and `errorDepth` is how
+ * deeply `error`'s token is nested in brackets inside it (1 is directly inside
+ * the braces; a closing bracket counts at the depth it closes from).
+ */
+function scanBraces(ctx: ParserContext, open: number, error: ParseError): { close: number; errorDepth: number } {
+  let depth = 0;
+  let errorDepth = 0;
+  for (let i = open; ; i += 1) {
+    const tok = ctx.tokenAt(i);
+    if (!tok || tok.type === "EOF") return { close: -1, errorDepth };
+    if (errorDepth === 0 && (tok.line > error.line || (tok.line === error.line && tok.column >= error.column))) {
+      errorDepth = depth;
+    }
+    if (tok.type !== "Punctuation") continue;
+    if (tok.value === "{" || tok.value === "(" || tok.value === "[") depth += 1;
+    else if (tok.value === "}" || tok.value === ")" || tok.value === "]") {
+      depth -= 1;
+      if (depth === 0) return { close: i, errorDepth };
+    }
+  }
+}
 
 const BLOCK_STATEMENT_MESSAGE =
   "Aktion has no block statements or block scoping — a `{` at the start of a statement can only open an " +
@@ -2439,7 +2496,7 @@ function parsePrimary(ctx: ParserContext): Expression {
       if (looksLikeFunctionExpr) {
         const start = tok;
         ctx.consume(); // function
-        const selfName = ctx.peek().type === "Identifier" ? ctx.consume().value : undefined;
+        const selfName = ctx.peek().type === "Identifier" ? ctx.expectName().value : undefined;
         const params = parseFunctionParams(ctx);
         const body = parseBlock(ctx);
         return {
@@ -2577,8 +2634,7 @@ function parsePrimary(ctx: ParserContext): Expression {
     return { kind: "StateRef", name: tok.value };
   }
   if (tok.type === "Identifier") {
-    const unsupported = ctx.allowThis && tok.value === "this" ? undefined : UNSUPPORTED_WORD_MESSAGES.get(tok.value);
-    if (unsupported) throw { message: unsupported, line: tok.line, column: tok.column } satisfies ParseError;
+    rejectUnsupportedWord(ctx, tok);
     ctx.consume();
     // Unparenthesised single-param arrow: `x => expr` or `x => { … }`.
     if (ctx.peek().type === "Operator" && ctx.peek().value === "=>") {
@@ -3018,7 +3074,7 @@ function parseForHead(ctx: ParserContext): ForHead {
   ) {
     pattern = parseDestructuringPattern(ctx);
   } else {
-    item = ctx.expect("Identifier").value;
+    item = ctx.expectName().value;
   }
 
   if (kind === "for-in") {
@@ -3157,7 +3213,7 @@ function parseTryStatement(ctx: ParserContext): Statement {
             column: tok.column,
           } satisfies ParseError;
         }
-        const name = tok.type === "Identifier" ? ctx.consume().value : undefined;
+        const name = tok.type === "Identifier" ? ctx.expectName().value : undefined;
         ctx.expect("Punctuation", ")");
         return name;
       });
@@ -3254,6 +3310,7 @@ function parseLambdaParamList(ctx: ParserContext): LambdaParam[] | null {
         break;
       }
       if (tok.type !== "Identifier") return null;
+      rejectUnsupportedWord(ctx, tok);
       ctx.consume();
       const param: LambdaParam = { name: tok.value };
       if (isRest) param.rest = true;
@@ -3391,6 +3448,7 @@ function parseObjectProps(ctx: ParserContext): ObjectProperty[] {
       after.type === "Punctuation" &&
       (after.value === "," || after.value === "}")
     ) {
+      rejectUnsupportedWord(ctx, keyTok);
       value = { kind: "Identifier", name: key, loc: { line: keyTok.line, column: keyTok.column } };
     } else if (after.type === "Punctuation" && after.value === "(") {
       // Method shorthand: `{ save(item) { … } }` is `{ save: function (item) { … } }`.

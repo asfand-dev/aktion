@@ -33,6 +33,23 @@ describe("`this`, `super` and `debugger` are parse errors that say what to do", 
     { name: "debugger", source: "debugger\n", line: 1, column: 1, message: /^`debugger` is not supported in Aktion.*\$console\.log/ },
     { name: "debugger in a function body", source: lines("function f() {", "  debugger", "}"), line: 2, column: 3, message: /^`debugger` is not supported/ },
     { name: "debugger;", source: "debugger;\n", line: 1, column: 1, message: /^`debugger` is not supported/ },
+    { name: "an assignment to this", source: "this = 1\n", line: 1, column: 1, message: /^`this` is not supported/ },
+    { name: "an assignment to debugger", source: "debugger = 1\n", line: 1, column: 1, message: /^`debugger` is not supported/ },
+    { name: "let this", source: "let this\n", line: 1, column: 5, message: /^`this` is not supported/ },
+    { name: "const debugger", source: "const debugger = 1\n", line: 1, column: 7, message: /^`debugger` is not supported/ },
+    { name: "a function named debugger", source: "function debugger() {}\n", line: 1, column: 10, message: /^`debugger` is not supported/ },
+    { name: "a this parameter", source: "function f(this) {}\n", line: 1, column: 12, message: /^`this` is not supported/ },
+    { name: "a parenthesised arrow parameter", source: "f = (this) => 1\n", line: 1, column: 6, message: /^`this` is not supported/ },
+    { name: "a bare arrow parameter", source: "f = this => 1\n", line: 1, column: 5, message: /^`this` is not supported/ },
+    { name: "a rest parameter", source: "f = (...this) => 1\n", line: 1, column: 9, message: /^`this` is not supported/ },
+    { name: "a for…of binding", source: "for (const this of xs) {}\n", line: 1, column: 12, message: /^`this` is not supported/ },
+    { name: "a catch parameter", source: "try { a() } catch (this) {}\n", line: 1, column: 20, message: /^`this` is not supported/ },
+    { name: "a destructured name", source: "const { debugger } = o\n", line: 1, column: 9, message: /^`debugger` is not supported/ },
+    { name: "a renamed destructuring target", source: "const { a: super } = o\n", line: 1, column: 12, message: /^`super` is not supported/ },
+    { name: "object shorthand this", source: "x = { this }\n", line: 1, column: 7, message: /^`this` is not supported/ },
+    { name: "object shorthand debugger", source: "x = { a, debugger }\n", line: 1, column: 10, message: /^`debugger` is not supported/ },
+    { name: "object shorthand super", source: "x = { super }\n", line: 1, column: 7, message: /^`super` is not supported/ },
+    { name: "a function expression named this", source: "f = function this() {}\n", line: 1, column: 14, message: /^`this` is not supported/ },
   ];
 
   it.each(rows)("$name", ({ source, line, column, message }) => {
@@ -58,13 +75,17 @@ describe("`this`, `super` and `debugger` are parse errors that say what to do", 
     expect(parse(source).errors).toEqual([]);
   });
 
+  it("a quoted or computed key is never the word", () => {
+    expect(parse("o = { 'this': 1, ['super']: 2 }\nconst { 'debugger': d } = o\n").errors).toEqual([]);
+  });
+
   it("`allowThis` parses `this` as an identifier but still rejects `super` and `debugger`", () => {
     expect(parse("a = this.x\nb = `${this.y}`\n", { allowThis: true }).errors).toEqual([]);
     expect(parse("super.foo()\n", { allowThis: true }).errors[0]!.message).toMatch(/^`super`/);
     expect(parse("debugger\n", { allowThis: true }).errors[0]!.message).toMatch(/^`debugger`/);
   });
 
-  it("a `.aktion.js` module still reports `this` as E103, without losing the enclosing function", () => {
+  it("a `.aktion.js` module still reports `this` as E103, next to its other diagnostics", () => {
     const out = javascriptFrontend.compile(
       lines("function f() {", "  var x = 1", "  return this.x", "}"),
       "/src/m.aktion.js",
@@ -102,6 +123,42 @@ describe("a block statement is rejected for what it is", () => {
   it("reports the block once: its own closing brace is not a second error", () => {
     const errors = parse(lines("{", "  const y = 2", "}", "z = 1")).errors;
     expect(errors).toHaveLength(1);
+  });
+
+  describe("a statement that starts with `{` but fails for its own reason keeps that error", () => {
+    const keeps: Array<[string, string, number, number, RegExp]> = [
+      ["destructuring assignment", "{ a, b } = obj\n", 1, 1, /^Destructuring assignment/],
+      ["`this` inside an object literal", "{ a: this.x }\n", 1, 6, /^`this` is not supported/],
+      ["a dynamic import", '{ a: import("x") }\n', 1, 6, /^Dynamic `import\(\)`/],
+      ["an async arrow", "{ a: async () => 1 }\n", 1, 6, /^`async` arrow functions/],
+      ["a typo inside a nested function", "{ a: function () {\n  x = = 1\n} }\n", 2, 7, /^Unexpected token Operator "="/],
+      ["a typo inside a call", "{ a: f(1 2) }\n", 1, 10, /^Expected /],
+    ];
+
+    it.each(keeps)("%s", (_name, source, line, column, message) => {
+      const [first] = parse(source).errors;
+      expect(first).toMatchObject({ line, column });
+      expect(first!.message).toMatch(message);
+      expect(first!.message).not.toMatch(/^Aktion has no block statements/);
+    });
+
+    it("an unclosed `{` does not swallow the statements after it", () => {
+      const program = parse(lines("{ const x = 1", "y = 2", "z = 3", "function f() {", "  return 1", "}"));
+      expect(program.statements.map((s) => s.kind)).toEqual(["Assignment", "Assignment", "ActionDeclaration"]);
+      expect(program.errors[0]!.message).not.toMatch(/^Aktion has no block statements/);
+    });
+
+    it("a streamed partial object literal keeps the lenient error, not the block message", () => {
+      for (const streaming of [true, false]) {
+        const [first] = parse("{ a: 1,", { streaming }).errors;
+        expect(first!.message).not.toMatch(/^Aktion has no block statements/);
+      }
+    });
+
+    it("a `default: { go() }` block, which fails at its own closing brace, is still reported as a block", () => {
+      const [first] = parse(lines("switch (x) {", "  default: { go() }", "}")).errors;
+      expect(first!.message).toMatch(/^Aktion has no block statements/);
+    });
   });
 
   it.each([
