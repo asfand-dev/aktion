@@ -50,6 +50,10 @@ describe("`this`, `super` and `debugger` are parse errors that say what to do", 
     { name: "object shorthand debugger", source: "x = { a, debugger }\n", line: 1, column: 10, message: /^`debugger` is not supported/ },
     { name: "object shorthand super", source: "x = { super }\n", line: 1, column: 7, message: /^`super` is not supported/ },
     { name: "a function expression named this", source: "f = function this() {}\n", line: 1, column: 14, message: /^`this` is not supported/ },
+    { name: "an imported this", source: 'import { this } from "./x"\n', line: 1, column: 10, message: /^`this` is not supported/ },
+    { name: "an imported debugger", source: 'import { a, debugger } from "./x"\n', line: 1, column: 13, message: /^`debugger` is not supported/ },
+    { name: "an import alias this", source: 'import { a as this } from "./x"\n', line: 1, column: 15, message: /^`this` is not supported/ },
+    { name: "an import alias super", source: 'import { a as super } from "./x"\n', line: 1, column: 15, message: /^`super` is not supported/ },
   ];
 
   it.each(rows)("$name", ({ source, line, column, message }) => {
@@ -79,19 +83,28 @@ describe("`this`, `super` and `debugger` are parse errors that say what to do", 
     expect(parse("o = { 'this': 1, ['super']: 2 }\nconst { 'debugger': d } = o\n").errors).toEqual([]);
   });
 
-  it("`allowThis` parses `this` as an identifier but still rejects `super` and `debugger`", () => {
-    expect(parse("a = this.x\nb = `${this.y}`\n", { allowThis: true }).errors).toEqual([]);
-    expect(parse("super.foo()\n", { allowThis: true }).errors[0]!.message).toMatch(/^`super`/);
-    expect(parse("debugger\n", { allowThis: true }).errors[0]!.message).toMatch(/^`debugger`/);
+  it("`allowUnsupportedWords` parses all three words as identifiers", () => {
+    const source = "a = this.x\nb = `${this.y}`\nsuper.foo()\nsuper(1)\ndebugger\n";
+    expect(parse(source, { allowUnsupportedWords: true }).errors).toEqual([]);
   });
 
-  it("a `.aktion.js` module still reports `this` as E103, next to its other diagnostics", () => {
-    const out = javascriptFrontend.compile(
-      lines("function f() {", "  var x = 1", "  return this.x", "}"),
-      "/src/m.aktion.js",
-    );
+  it.each([
+    ["this", lines("function f() {", "  var x = 1", "  return this.x", "}"), ["E104@2:3", "E103@3:10"]],
+    ["this call", lines("function f() {", "  var x = 1", "  this(x)", "}"), ["E104@2:3", "E103@3:3"]],
+    ["super.foo()", lines("function f() {", "  var x = 1", "  super.foo()", "}"), ["E104@2:3", "E103@3:3"]],
+    ["super(1)", lines("function f() {", "  var x = 1", "  super(x)", "}"), ["E104@2:3", "E103@3:3"]],
+    ["debugger", lines("function f() {", "  var x = 1", "  debugger", "}"), ["E104@2:3", "E103@3:3"]],
+  ])("a `.aktion.js` module reports %s as E103, next to its other diagnostics", (_name, source, expected) => {
+    const out = javascriptFrontend.compile(source, "/src/m.aktion.js");
     expect(out.program.errors).toEqual([]);
-    expect(out.diagnostics.map((d) => `${d.code}@${d.line}:${d.column}`)).toEqual(["E104@2:3", "E103@3:10"]);
+    expect(out.diagnostics.map((d) => `${d.code}@${d.line}:${d.column}`)).toEqual(expected);
+  });
+
+  it("the E103 message for each word says what to do", () => {
+    const message = (word: string) =>
+      javascriptFrontend.compile(`function f() {\n  ${word}\n}\n`, "/src/m.aktion.js").diagnostics[0]!.message;
+    expect(message("super")).toMatch(/^`super` is not available in Aktion/);
+    expect(message("debugger")).toMatch(/^`debugger` is not available in Aktion.*\$console\.log/);
   });
 });
 
