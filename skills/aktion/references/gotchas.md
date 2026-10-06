@@ -127,9 +127,11 @@ function app() {
 
 ### Sharing state across modules
 
-Export the atom plus a setter action (`export function toggle() { $open = !$open }`),
-or export a `$store` and write it by property (`ui.open = !ui.open`); every importer
-shares one cell. Writing an imported atom directly also works but is what JS
+Export the atom plus a setter action (`export let $open = false` and
+`export function toggle() { $open = !$open }`), or export a `$store` and write it by
+property (`export const ui = $store({…})`, then `ui.open = !ui.open`); every importer
+shares one cell. Declare the atom with `let` — a bare `export $open = false` becomes
+a `const` under the ESLint processor and the setter is flagged `no-const-assign`. Writing an imported atom directly also works but is what JS
 tooling flags as `no-import-assign`. Never export a function that returns
 `$store({…})` — a store is keyed by its call site, so every caller gets the same
 instance. Import order is link order (the order top-level statements run in), so

@@ -14,7 +14,7 @@
  *
  * `if` / `for` / `switch` / `while` / `try` are **statements only** —
  * they do not produce a value. To collect iterable bodies into an array
- * use `arr.map(x => …)` (every Aktion program is valid JavaScript).
+ * use `arr.map(x => …)` (the same as in JavaScript).
  *
  * Newlines: a statement ends at a newline (or `;`), except where JavaScript
  * could never end one — inside `( … )`, `[ … ]`, an object literal or a

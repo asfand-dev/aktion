@@ -6,7 +6,7 @@ spec — that is `dist/system_prompt.txt` (also at
 runtime and always current. Read this to write; read that when you need a detail
 this page omits.
 
-Aktion's surface syntax is a **strict subset of TypeScript**. If a construct is
+Aktion's surface syntax is **TypeScript's**. If a construct is
 valid JS and is not listed as rejected in [`gotchas.md`](gotchas.md), it works.
 
 ## Statements

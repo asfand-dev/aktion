@@ -36,7 +36,7 @@ const KEYWORDS: Record<string, Set<string>> = {
 
 function langFamily(lang: string): "js" | "py" | "css" | "json" | "html" | "generic" {
   const l = lang.toLowerCase();
-  // Aktion is a strict subset of JavaScript, so the JS tokenizer fits it.
+  // Aktion's syntax is JavaScript's, so the JS tokenizer fits it.
   if (["js", "jsx", "ts", "tsx", "javascript", "typescript", "mjs", "cjs", "aktion"].includes(l)) return "js";
   if (["py", "python"].includes(l)) return "py";
   if (["css", "scss", "less"].includes(l)) return "css";

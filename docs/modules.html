@@ -276,7 +276,7 @@ export function increment() {
       </p>
 <pre><code>// 1. An exported atom plus an exported action that writes it
 // ui.aktion
-export $open = false
+export let $open = false
 export function toggle() { $open = !$open }
 
 // any importer
@@ -285,11 +285,17 @@ Button("Toggle", { onClick: toggle })
 
 // 2. An exported store, written by property
 // ui.aktion
-export ui = $store({ open: false })
+export const ui = $store({ open: false })
 
 // any importer
 import { ui } from "./ui.aktion"
 Button("Toggle", { onClick: () =&gt; { ui.open = !ui.open } })</code></pre>
+      <p>
+        Declare the atom with <code>let</code> (<code>export let $open = false</code>):
+        a bare <code>export $open = false</code> becomes a <code>const</code> under
+        the ESLint processor, and the setter&rsquo;s write is then reported as
+        <code>no-const-assign</code>.
+      </p>
       <p>
         Writing an imported atom directly &mdash;
         <code>() =&gt; { $open = !$open }</code> in a file that only
@@ -438,7 +444,9 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
         file&rsquo;s <code>import</code> statements in the order they are written.
         That is the order ES modules evaluate in, and the merged program&rsquo;s
         top-level statements run in it: the entry comes last, and a dependency
-        always runs before its importer. Importing <code>a</code> then
+        runs before its importer except within an import cycle (entry &rarr;
+        <code>a</code> &rarr; <code>b</code> &rarr; <code>a</code> links
+        <code>b, a, entry</code>, with no diagnostic, as with ES modules). Importing <code>a</code> then
         <code>b</code> links <code>a, b, entry</code>; importing <code>b</code> then
         <code>a</code> links <code>b, a, entry</code>; if <code>a</code> itself imports
         <code>c</code>, the order is <code>c, a, b, entry</code>.

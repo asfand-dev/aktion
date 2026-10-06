@@ -1,7 +1,7 @@
 /**
  * AST types for Aktion.
  *
- * The surface syntax is a strict subset of JavaScript. Identifiers prefixed
+ * The surface syntax is JavaScript's. Identifiers prefixed
  * with `$` denote reactive state; everything else is standard JS:
  *
  *   $count = 0
