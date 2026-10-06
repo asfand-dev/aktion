@@ -11,11 +11,12 @@ import { ESLint, Linter } from 'eslint';
  *
  * ## Why this works
  *
- * `.aktion` files are JS/TS-syntax compatible except for exactly ONE
- * construct: a bare top-level `export IDENTIFIER = …` (or
- * `export $identifier = …`) with no declaration keyword — see `eslint/scan.ts`'s
- * header for the full grammar cross-check against `src/parser/parser.ts`.
- * `preprocess` rewrites every such occurrence into `export const IDENTIFIER =
+ * A `.aktion` file can be written to parse as JS/TS. The one construct this
+ * processor rewrites is a bare top-level `export IDENTIFIER = …` (or
+ * `export $identifier = …`) with no declaration keyword, a syntax error in
+ * JS/TS — see `eslint/scan.ts`'s header for the full grammar cross-check against
+ * `src/parser/parser.ts`; anything else a JS parser rejects is reported by the
+ * consumer's own parser. `preprocess` rewrites every such occurrence into `export const IDENTIFIER =
  * …` (genuinely valid JS/TS) and hands the result to the parser the CONSUMER
  * configures for the processor's virtual `.ts` block; `postprocess` remaps
  * every reported position — and any autofix — back to the original file's

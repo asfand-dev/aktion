@@ -142,7 +142,7 @@ body = Card([
         <tbody>
           <tr><td><code>$name = value</code></td><td><strong>Reactive atom.</strong> A tracked cell &mdash; reading subscribes the surrounding component / effect, writing notifies subscribers and re-renders.</td></tr>
           <tr><td><code>name = value</code></td><td><strong>Plain binding.</strong> A non-reactive alias captured once; reading it never subscribes.</td></tr>
-          <tr><td><code>function name()</code></td><td><strong>Component or action.</strong> A function declaration creates both: invoked in a render position its return value is rendered (a function with no <code>return</code> simply renders nothing); referenced from an event handler its body runs for side effects. First-letter case (<code>Card</code> vs <code>card</code>) is not significant. Reusing a <em>built-in</em> component's name is flagged by the validator &mdash; unless the body calls that same name (the wrapper pattern: inside its own body the name refers to the built-in, so <code>function Badge(l) { return Badge(l, { tone: "success" }) }</code> extends the library Badge instead of recursing).</td></tr>
+          <tr><td><code>function name()</code></td><td><strong>Component or action.</strong> A function declaration creates both: invoked in a render position its return value is rendered (a function with no <code>return</code> simply renders nothing); referenced from an event handler its body runs for side effects. First-letter case (<code>Card</code> vs <code>card</code>) does not decide component versus action; it only decides whether each call gets its own <a href="#set-once">per-instance state</a>. Reusing a <em>built-in</em> component's name is flagged by the validator &mdash; unless the body calls that same name (the wrapper pattern: inside its own body the name refers to the built-in, so <code>function Badge(l) { return Badge(l, { tone: "success" }) }</code> extends the library Badge instead of recursing).</td></tr>
         </tbody>
       </table>
       <p>
@@ -205,15 +205,17 @@ $app(Column([
         and changing <code>$user.age</code> re-runs only <code>ShowAge</code>. Args
         are compared shallowly, so (as in React) a fresh inline-lambda prop each
         render makes the child re-render &mdash; hoist the handler to a stable
-        binding to skip it. First-letter case does not matter: <code>App</code> and
-        <code>app</code> seed state once and re-render identically.
+        binding to skip it. First-letter case does not decide whether state is seeded
+        once (see <a href="#set-once">Set-once</a>), only whether each call gets its
+        own copy of it.
       </p>
 
       <h3 id="set-once">Set-once: <code>$x = &hellip;</code> in a function body</h3>
       <p>
-        A <code>$x = &hellip;</code> written <strong>directly</strong> in a function
-        body &mdash; not nested inside an <code>if</code> or a loop &mdash; means
-        two things, depending on when the function runs:
+        A <code>$x = &hellip;</code> written <strong>directly</strong> in the body of
+        a <code>function</code> declaration (not an arrow or function expression, and
+        not nested inside an <code>if</code> or a loop) means two things, depending
+        on when the function runs:
       </p>
       <ul>
         <li><strong>While the UI is rendering</strong> it is a <em>declaration</em>:
@@ -224,7 +226,7 @@ $app(Column([
 <pre><code>$app(app())
 
 function app() {
-  $n = 5                       // render: declared once, then left alone
+  let $n = 5                   // render: declared once, then left alone
   return Column([
     Text(`n=${$n}`),
     Button("inc", () =&gt; { $n = $n + 1 }),   // n=5 → n=6, and 6 survives the re-render
@@ -236,8 +238,26 @@ function reset() {
   $n = 0                       // run from a handler: an ordinary write → n=0
 }</code></pre>
       <p>
-        The same statement nested one level deeper is <strong>always</strong> an
-        ordinary write, so during render it re-writes the atom on every pass:
+        <code>let $n = 5</code> and the bare <code>$n = 5</code> behave identically
+        here. Three things decide what is shared:
+      </p>
+      <ul>
+        <li>Only a PascalCase component gets its own copy per instance. In a
+        lowercase function every call shares <strong>one</strong> atom: with two
+        calls <code>counter("a")</code> and <code>counter("b")</code>, a click that
+        increments through the first reads <code>a=1</code> and <code>b=1</code>,
+        whereas two <code>Counter</code> instances read <code>a=1</code> and
+        <code>b=0</code>.</li>
+        <li>An existing top-level atom of the same name wins: with
+        <code>let $n = 0</code> at the top level, a <code>$n = 5</code> in
+        <code>app()</code> leaves <code>n=0</code>.</li>
+        <li>Only <code>function</code> declarations qualify. The same statement
+        directly in an arrow body or a function expression body
+        (<code>[1].map(function (i) { $n = 5 &hellip; })</code>) is an ordinary write.</li>
+      </ul>
+      <p>
+        An ordinary write in render position re-writes the atom on every pass. The
+        same applies to the statement nested inside an <code>if</code> or a loop:
       </p>
 <pre><code>function app() {
   if (true) {
@@ -252,8 +272,8 @@ function reset() {
         <code>console.warn</code> (&ldquo;A reactive <code>$state</code> write happened
         during render&hellip;&rdquo;). That warning is the only signal: nothing fails
         and the validator does not flag it. Seed state with a body-level
-        <code>$x = &hellip;</code> or the <code>$state</code> hook, and write it from
-        handlers and effects.
+        <code>$x = &hellip;</code> in a <code>function</code> declaration or the
+        <code>$state</code> hook, and write it from handlers and effects.
       </p>
 
       <h2 id="hooks">Hooks</h2>
