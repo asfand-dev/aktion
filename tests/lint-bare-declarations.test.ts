@@ -12,14 +12,57 @@ import { getDiagnostics, getLintWarnings } from "../src/tooling/language-service
 import { defaultLibrary } from "../src/library/index.js";
 import { parse } from "../src/parser/index.js";
 import { formatProgram } from "../src/tooling/formatter.js";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const ON = { bareDeclarations: true };
 
 /** `line:message-subject` for each bare-declaration warning, e.g. `1:export B`. */
 function bare(src: string): string[] {
-  return getLintWarnings(src, undefined, ON)
-    .filter((d) => d.message.includes("without a keyword"))
-    .map((d) => `${d.line}:${/^`([^`]+)`/.exec(d.message)![1]}`);
+  return getLintWarnings(src, undefined, ON).map((d) => `${d.line}:${/^`([^`]+)`/.exec(d.message)![1]}`);
+}
+
+/** The first (only) warning for `src`, with the bare-declaration lint on. */
+function only(src: string): { line: number; column: number; message: string } {
+  const warnings = getLintWarnings(src, undefined, ON);
+  expect(warnings).toHaveLength(1);
+  return warnings[0]!;
+}
+
+/**
+ * Apply the advice a warning gives to `src`, the way an author would: insert the
+ * keyword it recommends at the reported position, or drop the `export` when it
+ * says so. Returns the edited source.
+ */
+function applyAdvice(src: string, warning: { line: number; column: number; message: string }): string {
+  const lines = src.split("\n");
+  const text = lines[warning.line - 1]!;
+  const at = warning.column - 1;
+  const advised = /write `((?:export )?(?:let|const))` before the name/.exec(warning.message);
+  if (advised) {
+    const keyword = advised[1]!;
+    lines[warning.line - 1] = keyword.startsWith("export")
+      ? `${text.slice(0, at)}${keyword} ${text.slice(at).replace(/^export\s+/, "")}`
+      : `${text.slice(0, at)}${keyword} ${text.slice(at)}`;
+  } else {
+    expect(warning.message).toMatch(/drop the `export`/);
+    lines[warning.line - 1] = `${text.slice(0, at)}${text.slice(at).replace(/^export\s+/, "")}`;
+  }
+  return lines.join("\n");
+}
+
+/** Run `source` as an ES module under Node; throws on a SyntaxError, a TypeError, anything. */
+function runAsModule(source: string): void {
+  const dir = mkdtempSync(join(tmpdir(), "aktion-bare-advice-"));
+  try {
+    const file = join(dir, "advice.mjs");
+    writeFileSync(file, source, "utf8");
+    execFileSync(process.execPath, [file], { stdio: "pipe" });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 describe("bare-declaration — what is flagged", () => {
@@ -30,6 +73,8 @@ describe("bare-declaration — what is flagged", () => {
     ["a first bare top-level state atom", "$count = 0", ["1:$count"]],
     ["each distinct bare name once", "a = 1\nb = 2\nc = 3", ["1:a", "2:b", "3:c"]],
     ["a bare export even after the name was declared", "let B = 1\nexport B = 2", ["2:export B"]],
+    ["a bare export of a name a function declares", "export go = 2\nfunction go() {}", ["1:export go"]],
+    ["a second bare export of the same name", "export B = 1\nexport B = 2", ["1:export B", "2:export B"]],
     ["a bare declaration after an unrelated declared one", "const a = 1\nb = 2", ["2:b"]],
     ["only the first of repeated bare writes", "y = 4\ny = 5\ny = 6", ["1:y"]],
     ["`$x` separately from `x`", "let x = 1\n$x = 2", ["2:$x"]],
@@ -56,6 +101,12 @@ describe("bare-declaration — what is not flagged", () => {
     ["a plain assignment to an imported name", 'import { total } from "./m.aktion"\ntotal = 1'],
     ["a plain assignment to an imported state atom", 'import { $total } from "./m.aktion"\n$total = 1'],
     ["a plain assignment to a function name", "function go() { return 1 }\ngo = 2"],
+    ["an assignment BEFORE a hoisted function of that name", "go = 2\nfunction go() {}"],
+    ["an assignment BEFORE a component of that name", 'Row = 2\nfunction Row() { return Text("x") }'],
+    ["an assignment BEFORE a `var` of that name", "y = 1\nvar y"],
+    ["an assignment BEFORE a `let` of that name", "y = 1\nlet y = 2"],
+    ["an assignment BEFORE an import of that name", 'total = 1\nimport { total } from "./m.aktion"'],
+    ["an assignment BEFORE a destructuring of that name", "a = 1\nconst { a } = $obj"],
     ["a plain assignment to a destructured name", "const { a, b } = $obj\na = 1"],
     ["a compound assignment", "let n = 1\nn += 1"],
     ["a bare assignment inside a function body", "function f() {\n  total = 1\n  return total\n}"],
@@ -71,7 +122,7 @@ describe("bare-declaration — reporting", () => {
     const [w] = getLintWarnings("let a = 1\n\ny = 4\n", undefined, ON);
     expect(w).toMatchObject({ line: 3, column: 1, severity: "warning" });
     expect(w!.message).toMatch(/`y` declares a binding without a keyword/);
-    expect(w!.message).toMatch(/`let` or `const`/);
+    expect(w!.message).toMatch(/write `const` before the name/);
   });
 
   it.each([
@@ -82,18 +133,74 @@ describe("bare-declaration — reporting", () => {
     ["an `export` binding with extra spaces", "export   $s=4", [1, 1]],
     ["a state atom", "let a = 1\n$count = 0", [2, 1]],
   ])("starts the warning at the declaration, not the `=`: %s", (_name, src, [line, column]) => {
-    const warning = getLintWarnings(src, undefined, ON).find((d) => d.message.includes("without a keyword"));
+    const warning = getLintWarnings(src, undefined, ON)[0];
     expect([warning!.line, warning!.column]).toEqual([line, column]);
   });
 
+  it.each([
+    ["a name nothing else writes", "y = 4", "`const`"],
+    ["a name assigned again", "y = 4\ny = 5", "`let`"],
+    ["a name assigned again inside a function", "y = 4\nfunction f() { y = 5 }", "`let`"],
+    ["a name changed by a compound assignment", "y = 4\ny += 1", "`let`"],
+    ["a name incremented", "y = 4\ny++", "`let`"],
+    ["a name only read", "y = 4\n$app(Text(String(y)))", "`const`"],
+    ["a name whose member is written", "y = {}\ny.k = 1", "`const`"],
+    ["a state atom, even if nothing writes it", "$n = 0", "`let`"],
+    ["an exported name nothing writes", "export B = 1", "`export const`"],
+    ["an exported name assigned again", "export B = 1\nB = 2", "`export let`"],
+    ["an exported state atom", "export $s = 4", "`export let`"],
+  ])("recommends only a keyword the program survives: %s", (_name, src, keyword) => {
+    expect(getLintWarnings(src, undefined, ON)[0]!.message).toContain(`write ${keyword} before the name`);
+  });
+
+  it("explains that `const` on a state atom would be a TypeError", () => {
+    expect(only("$n = 0\n$n = $n + 1").message).toMatch(/`const` would make that a TypeError/);
+  });
+
   it("names the `export` forms for an exported binding", () => {
-    const [w] = getLintWarnings("export B = 1", undefined, ON);
-    expect(w!.message).toMatch(/`export B`/);
-    expect(w!.message).toMatch(/`export let` or `export const`/);
+    const w = only("export B = 1");
+    expect(w.message).toMatch(/`export B`/);
+    expect(w.message).toMatch(/write `export const` before the name/);
+  });
+
+  it("does not offer `export let` for an export of an already declared name", () => {
+    const { message } = only("let B = 1\nexport B = 2");
+    expect(message).toMatch(/`export B` writes to `B`, which another statement already declares/);
+    expect(message).toMatch(/drop the `export`/);
+    expect(message).not.toMatch(/write `export/);
   });
 
   it("is a warning only: the program still parses with no errors", () => {
     expect(parse("export B = 1\ny = 4\nexport $s = 4").errors).toEqual([]);
+  });
+});
+
+/**
+ * The advice has to be right, not just plausible: every program below is flagged,
+ * and applying exactly what the warning says must give a program that Node runs
+ * (no redeclaration SyntaxError, no assignment-to-constant TypeError). Each used to
+ * fail that: `export let B` after `let B`, `let go` over a `function go`, and
+ * `const $n` followed by a write.
+ */
+describe("bare-declaration — following the advice gives valid JavaScript", () => {
+  it.each([
+    ["a first plain constant", "y = 4\nconsole.log(y)"],
+    ["a plain name written again", "y = 4\ny = y + 1"],
+    ["a plain name incremented", "y = 4\ny++"],
+    ["a state atom written again", "$n = 0\n$n = $n + 1"],
+    ["a state atom written inside a function", "$n = 0\nfunction bump() { $n = $n + 1 }\nbump()"],
+    ["an exported constant", "export B = 1"],
+    ["an exported name written again", "export B = 1\nB = 2"],
+    ["an exported state atom", "export $s = 4"],
+    ["an export of a name `let` already declared", "let B = 1\nexport B = 2"],
+    ["an export of a name a function declares", "export go = 2\nfunction go() {}"],
+  ])("%s", (_name, src) => {
+    const warnings = getLintWarnings(src, undefined, ON);
+    expect(warnings.length).toBeGreaterThan(0);
+    let fixed = src;
+    for (const warning of [...warnings].reverse()) fixed = applyAdvice(fixed, warning);
+    expect(() => runAsModule(fixed), fixed).not.toThrow();
+    expect(getLintWarnings(fixed, undefined, ON)).toEqual([]);
   });
 });
 

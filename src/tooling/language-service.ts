@@ -149,7 +149,7 @@ export function getDiagnostics(
     // worst silent bugs (#1 scope leak, #2 placeholder stripping, #3 Date
     // compares, #5 unicode escapes) are now fixed in the runtime, so linting
     // them would flag correct code.
-    ...lintProgram(program, library, options, source),
+    ...lintProgram(program, source, library, options),
   ];
 }
 
@@ -177,22 +177,23 @@ export function getDiagnostics(
  *     keyword is optional to the runtime (it changes nothing about reactivity),
  *     but without it the source is not plain JavaScript, and the formatter now
  *     keeps the keyword it finds. Later plain assignments to an existing binding
- *     (`y = 5`) are ordinary writes and are not flagged. Warning only: parsing is
- *     unchanged, so bare `$x = 0` programs keep running.
+ *     (`y = 5`), and assignments to a name a `function`, `import`, `var`, `let` or
+ *     `const` declares, are ordinary writes and are not flagged. Warning only:
+ *     parsing is unchanged, so bare `$x = 0` programs keep running.
  */
 export function getLintWarnings(
   source: string,
   library?: ComponentLibrary,
   options: LintOptions = {},
 ): Diagnostic[] {
-  return lintProgram(parse(source), library, options, source);
+  return lintProgram(parse(source), source, library, options);
 }
 
 function lintProgram(
   program: ReturnType<typeof parse>,
-  library: ComponentLibrary | undefined,
-  options: LintOptions,
   source: string,
+  library: ComponentLibrary | undefined,
+  options: LintOptions = {},
 ): Diagnostic[] {
   return [
     ...(library ? lintUnknownComponents(program, library) : []),
@@ -223,6 +224,69 @@ function declarationStart(
 }
 
 /**
+ * Every name a top-level statement declares WITH a keyword or a declaration form,
+ * wherever it sits in the file: imports, functions / components / actions / hooks,
+ * destructurings and `let` / `const` / `var` assignments. JavaScript hoists
+ * `function` and `var` (and a `let` below a use is a temporal-dead-zone error),
+ * so a bare assignment to any of these is a write to a binding that exists, never
+ * a declaration — and adding `let` to it would be a redeclaration SyntaxError.
+ */
+function collectDeclaredTopLevelNames(program: ReturnType<typeof parse>): Set<string> {
+  const declared = new Set<string>();
+  for (const stmt of program.statements) {
+    switch (stmt.kind) {
+      case "Import":
+        for (const spec of stmt.specifiers) declared.add(bindingKey(spec.local, spec.isState));
+        break;
+      case "ComponentDeclaration":
+      case "ActionDeclaration":
+      case "HookDeclaration":
+        declared.add(stmt.name);
+        break;
+      case "DestructureStatement":
+        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) declared.add(name);
+        break;
+      case "Assignment":
+        if (stmt.declaration !== undefined) declared.add(bindingKey(stmt.identifier, stmt.isState));
+        break;
+    }
+  }
+  return declared;
+}
+
+/** `$`-prefixed names are a different binding from their bare spelling (`$count` vs `count`). */
+function bindingKey(name: string, isState: boolean | undefined): string {
+  return isState === true ? `$${name}` : name;
+}
+
+/**
+ * Whether anything in the program writes `key` other than the `declaration`
+ * statement itself: another assignment, a compound assignment (`n += 1`) or an
+ * increment / decrement. Scope-blind on purpose — a same-named local counts too,
+ * which only ever makes the advice `let`, the keyword that is safe either way.
+ */
+function isWrittenElsewhere(program: ReturnType<typeof parse>, declaration: object, key: string): boolean {
+  const WRITE_BUILTINS = new Set(["__rui_assign__", "__rui_postfix__", "__rui_prefix__"]);
+  const visit = (node: unknown): boolean => {
+    if (!node || typeof node !== "object") return false;
+    if (Array.isArray(node)) return node.some(visit);
+    if (node === declaration) return false;
+    const rec = node as Record<string, unknown>;
+    if (rec["kind"] === "Assignment" && bindingKey(String(rec["identifier"]), rec["isState"] as boolean) === key) {
+      return true;
+    }
+    if (rec["kind"] === "BuiltinCall" && WRITE_BUILTINS.has(String(rec["name"]))) {
+      const target = (rec["arguments"] as Array<Record<string, unknown>> | undefined)?.[0];
+      if (target && (target["kind"] === "Identifier" || target["kind"] === "StateRef")) {
+        if (bindingKey(String(target["name"]), target["kind"] === "StateRef") === key) return true;
+      }
+    }
+    return Object.keys(rec).some((k) => k !== "loc" && visit(rec[k]));
+  };
+  return visit(program.statements);
+}
+
+/**
  * Flag a top-level `Assignment` that declares a binding without `let` / `const`.
  *
  * The parser records the keyword on `Assignment.declaration` and leaves it
@@ -230,14 +294,27 @@ function declarationStart(
  * the name's first appearance) apart from a later write to an existing binding
  * (`B = 2`). Two shapes are flagged:
  *
- *   - any bare `export …` — an export is always a declaration;
- *   - the first bare assignment of a name that no earlier top-level statement
- *     (an import, a function, a destructuring or another assignment) has bound.
+ *   - a bare `export …`. An export of a name nothing else declares is a
+ *     declaration (`export let` / `export const` fixes it). An export of a name
+ *     that another statement already declares is not: JavaScript has no
+ *     `export` on an assignment, and `export let` would redeclare the name, so
+ *     the message says to drop the `export` instead;
+ *   - the first bare assignment of a name that no top-level statement declares
+ *     and no earlier assignment has bound.
+ *
+ * A name declared anywhere at top level — before OR after the assignment, since
+ * `function` and `var` hoist — is never a first declaration, so
+ * `go = 2⏎function go() {}` and `y = 1⏎var y` are not flagged.
+ *
+ * The suggested keyword is one that survives the program's own later writes:
+ * `let` for a `$` atom (a state atom exists to be written; `const` makes that a
+ * TypeError in JavaScript) and for any name written again somewhere in the file,
+ * `const` only for a name nothing else writes.
  *
  * Only top-level statements are examined: inside a function body a bare
  * `total = total + 1` may be a write to an outer binding or a new local, and the
- * AST does not say which. A `$`-prefixed name is a different binding from its
- * bare spelling (`$count` vs `count`).
+ * AST does not say which. A keyword-less `for (item of items)` head is likewise
+ * left alone, since it may legitimately write to an existing variable.
  *
  * The statement's `loc` sits on the `=`, so the warning is moved back to where the
  * declaration starts (`export` or the name) when the line text confirms it.
@@ -245,40 +322,38 @@ function declarationStart(
 function lintBareDeclarations(program: ReturnType<typeof parse>, source: string): Diagnostic[] {
   const warnings: Diagnostic[] = [];
   const lines = source.split(/\r?\n/);
+  const declared = collectDeclaredTopLevelNames(program);
   const bound = new Set<string>();
-  const keyOf = (name: string, isState: boolean | undefined): string => (isState === true ? `$${name}` : name);
 
   for (const stmt of program.statements) {
-    switch (stmt.kind) {
-      case "Import":
-        for (const spec of stmt.specifiers) bound.add(keyOf(spec.local, spec.isState));
-        break;
-      case "ComponentDeclaration":
-      case "ActionDeclaration":
-      case "HookDeclaration":
-        bound.add(stmt.name);
-        break;
-      case "DestructureStatement":
-        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) bound.add(name);
-        break;
-      case "Assignment": {
-        const key = keyOf(stmt.identifier, stmt.isState);
-        const isFirst = !bound.has(key);
-        bound.add(key);
-        if (stmt.declaration !== undefined || (!isFirst && stmt.exported !== true)) break;
-        const exported = stmt.exported === true ? "export " : "";
-        const { line, column } = declarationStart(lines, stmt.loc, key, stmt.exported === true);
-        warnings.push({
-          line,
-          column,
-          severity: "warning",
-          message:
-            `\`${exported}${key}\` declares a binding without a keyword. The runtime accepts it, but it is ` +
-            `not plain JavaScript — write \`${exported}let\` or \`${exported}const\` before the name.`,
-        });
-        break;
-      }
+    if (stmt.kind !== "Assignment") continue;
+    const key = bindingKey(stmt.identifier, stmt.isState);
+    const alreadyBound = declared.has(key) || bound.has(key);
+    bound.add(key);
+    if (stmt.declaration !== undefined) continue;
+    const exported = stmt.exported === true;
+    if (alreadyBound && !exported) continue;
+
+    const { line, column } = declarationStart(lines, stmt.loc, key, exported);
+    const prefix = exported ? "export " : "";
+    let message: string;
+    if (alreadyBound) {
+      message =
+        `\`export ${key}\` writes to \`${key}\`, which another statement already declares. ` +
+        `JavaScript has no \`export\` on an assignment and \`export let\` would redeclare it — ` +
+        `drop the \`export\`, or declare \`${key}\` once with \`export let\`.`;
+    } else {
+      const needsLet = stmt.isState || isWrittenElsewhere(program, stmt, key);
+      const reason = stmt.isState
+        ? "a state atom is written, and `const` would make that a TypeError in JavaScript"
+        : needsLet
+          ? "it is assigned again elsewhere in the file"
+          : "nothing else writes it";
+      message =
+        `\`${prefix}${key}\` declares a binding without a keyword. The runtime accepts it, but it is ` +
+        `not plain JavaScript — write \`${prefix}${needsLet ? "let" : "const"}\` before the name (${reason}).`;
     }
+    warnings.push({ line, column, severity: "warning", message });
   }
   return warnings;
 }

@@ -1787,8 +1787,9 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   destructured from `$i18n(...)`, typically `t`). `getLintWarnings(source,
   library?)` returns only the warnings; pass the library to enable the
   unknown-component pass, omit it to skip it. A third, opt-in warning,
-  `bare-declaration`, flags a top-level binding written without `let` /
-  `const` (`export B = 1`, `export $s = 4`, or the first `y = 4`); enable it
+  `bare-declaration`, flags a top-level assignment that declares a binding
+  without `let` / `const` (`export B = 1`, `export $s = 4`, or the first `y = 4`
+  of a name; a keyword-less `for (item of items)` head is not covered); enable it
   with `getLintWarnings(source, library, { bareDeclarations: true })` (the same
   option works on `getDiagnostics`). It is off by default because the system
   prompt, the agent skill and the bundled demos all teach the keyword-less
@@ -1846,11 +1847,18 @@ They print `FILE: OK` or `FILE: Lnn: message` per problem and exit non-zero on
 any **error**; warnings (including `unknown-component`) are reported but do not
 fail the run.
 
-Both scripts also report `bare-declaration`, the warning for a top-level binding
-written without a keyword (`export B = 1`, `export $s = 4`, a first `y = 4`).
-The fix is mechanical: write `let` / `const` (`export let` / `export const`), and
-`formatProgram` keeps the keyword. It is a warning only, so the exit code does
-not change; pass `--no-bare-declarations` to leave it out of the report.
+Both scripts also report `bare-declaration`, the warning for a top-level
+assignment that declares a binding without a keyword (`export B = 1`,
+`export $s = 4`, a first `y = 4`). The fix is mechanical, and the message says
+which keyword survives the program's own writes: `let` for a `$` atom or a name
+assigned again, `const` for a name nothing else writes (`export let` /
+`export const` for an export), and `formatProgram` keeps it. An `export` of a name
+that is already declared (`let B = 1⏎export B = 2`) is told to drop the `export`
+instead, and an assignment to a name a `function`, `import`, `var`, `let` or
+`const` declares is a write, not a declaration, and is not flagged. It is a
+warning only, so the exit code does not change; pass `--no-bare-declarations` to
+leave it out of the report. The agent skill and the system prompt still write
+`$x = 0`, so a run over their output is loud until they move to keywords.
 
 ---
 
