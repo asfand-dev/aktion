@@ -62,6 +62,21 @@ export interface Diagnostic {
   severity: "error" | "warning";
 }
 
+/**
+ * Switches for the lint pass (`getLintWarnings`, `getDiagnostics`). Every lint
+ * not named here is always on.
+ */
+export interface LintOptions {
+  /**
+   * Also report `bare-declaration`: a top-level binding written without
+   * `let` / `const`. Default `false` — the system prompt, the agent skill and the
+   * bundled demos all teach the keyword-less `$x = 0`, so reporting it by default
+   * would put a warning on every program an LLM is told to write. The
+   * `tools/validate-aktion*.mjs` CLIs turn it on.
+   */
+  bareDeclarations?: boolean;
+}
+
 export interface CompletionItem {
   /** Insertion text (the user types this to accept). */
   label: string;
@@ -111,6 +126,7 @@ const KEYWORDS: ReadonlyArray<{ label: string; detail: string }> = [
 export function getDiagnostics(
   source: string,
   library: ComponentLibrary,
+  options: LintOptions = {},
 ): Diagnostic[] {
   const program = parse(source);
   const schemaErrors = validateProgramSchema(program, library);
@@ -133,7 +149,7 @@ export function getDiagnostics(
     // worst silent bugs (#1 scope leak, #2 placeholder stripping, #3 Date
     // compares, #5 unicode escapes) are now fixed in the runtime, so linting
     // them would flag correct code.
-    ...lintProgram(program, library),
+    ...lintProgram(program, library, options, source),
   ];
 }
 
@@ -156,20 +172,108 @@ export function getDiagnostics(
  *     bodies run synchronously and nothing unwraps the thenable, so the value is
  *     the PROMISE. `const ok = await $util.copy(v)` is therefore always truthy.
  *     A bare `await f()` whose value is discarded is not flagged — only a use.
+ *   - `bare-declaration` (opt-in: `{ bareDeclarations: true }`) — a top-level
+ *     binding written without `let` / `const`: `export B = 1`, `export $s = 4`, or the first `y = 4` of a name. The
+ *     keyword is optional to the runtime (it changes nothing about reactivity),
+ *     but without it the source is not plain JavaScript, and the formatter now
+ *     keeps the keyword it finds. Later plain assignments to an existing binding
+ *     (`y = 5`) are ordinary writes and are not flagged. Warning only: parsing is
+ *     unchanged, so bare `$x = 0` programs keep running.
  */
-export function getLintWarnings(source: string, library?: ComponentLibrary): Diagnostic[] {
-  return lintProgram(parse(source), library);
+export function getLintWarnings(
+  source: string,
+  library?: ComponentLibrary,
+  options: LintOptions = {},
+): Diagnostic[] {
+  return lintProgram(parse(source), library, options, source);
 }
 
 function lintProgram(
   program: ReturnType<typeof parse>,
-  library?: ComponentLibrary,
+  library: ComponentLibrary | undefined,
+  options: LintOptions,
+  source: string,
 ): Diagnostic[] {
   return [
     ...(library ? lintUnknownComponents(program, library) : []),
     ...lintShadowedI18n(program),
     ...lintAwaitedValue(program),
+    ...(options.bareDeclarations === true ? lintBareDeclarations(program, source) : []),
   ];
+}
+
+/**
+ * Where a declaration starts on its line, given the position of the `=` that ends it.
+ * `head` is a regex source for its text (`export` plus the name, or just the name); the
+ * `=` itself is returned when the line does not confirm it.
+ */
+function declarationStart(lines: readonly string[], loc: Position | undefined, head: string): Position {
+  const line = loc?.line ?? 0;
+  const column = loc?.column ?? 0;
+  const before = (lines[line - 1] ?? "").slice(0, Math.max(column - 1, 0));
+  const match = new RegExp(`(^|[^\\w$])(${head})\\s*$`).exec(before);
+  return match ? { line, column: match.index + match[1]!.length + 1 } : { line, column };
+}
+
+/**
+ * Flag a top-level `Assignment` that declares a binding without `let` / `const`.
+ *
+ * The parser records the keyword on `Assignment.declaration` and leaves it
+ * undefined for the bare form, so the AST already tells a declaration (`B = 1`,
+ * the name's first appearance) apart from a later write to an existing binding
+ * (`B = 2`). Two shapes are flagged:
+ *
+ *   - any bare `export …` — an export is always a declaration;
+ *   - the first bare assignment of a name that no earlier top-level statement
+ *     (an import, a function, a destructuring or another assignment) has bound.
+ *
+ * Only top-level statements are examined: inside a function body a bare
+ * `total = total + 1` may be a write to an outer binding or a new local, and the
+ * AST does not say which. A `$`-prefixed name is a different binding from its
+ * bare spelling (`$count` vs `count`).
+ *
+ * The statement's `loc` sits on the `=`, so the warning is moved back to where the
+ * declaration starts (`export` or the name) when the line text confirms it.
+ */
+function lintBareDeclarations(program: ReturnType<typeof parse>, source: string): Diagnostic[] {
+  const warnings: Diagnostic[] = [];
+  const lines = source.split(/\r?\n/);
+  const bound = new Set<string>();
+  const keyOf = (name: string, isState: boolean | undefined): string => (isState === true ? `$${name}` : name);
+
+  for (const stmt of program.statements) {
+    switch (stmt.kind) {
+      case "Import":
+        for (const spec of stmt.specifiers) bound.add(keyOf(spec.local, spec.isState));
+        break;
+      case "ComponentDeclaration":
+      case "ActionDeclaration":
+      case "HookDeclaration":
+        bound.add(stmt.name);
+        break;
+      case "DestructureStatement":
+        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) bound.add(name);
+        break;
+      case "Assignment": {
+        const key = keyOf(stmt.identifier, stmt.isState);
+        const isFirst = !bound.has(key);
+        bound.add(key);
+        if (stmt.declaration !== undefined || (!isFirst && stmt.exported !== true)) break;
+        const exported = stmt.exported === true ? "export " : "";
+        const { line, column } = declarationStart(lines, stmt.loc, `${exported ? "export\\s+" : ""}${key.replace("$", "\\$")}`);
+        warnings.push({
+          line,
+          column,
+          severity: "warning",
+          message:
+            `\`${exported}${key}\` declares a binding without a keyword. The runtime accepts it, but it is ` +
+            `not plain JavaScript — write \`${exported}let\` or \`${exported}const\` before the name.`,
+        });
+        break;
+      }
+    }
+  }
+  return warnings;
 }
 
 /**

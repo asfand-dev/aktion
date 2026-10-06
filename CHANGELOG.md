@@ -5,6 +5,25 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-10-06
+
+### Validators Warn About Declarations Without `let` or `const`
+
+- The validators (`tools/validate-aktion.mjs` and `tools/validate-aktion-app.mjs`)
+  now warn about a top-level binding written without a keyword: `export B = 1`,
+  `export $s = 4`, or the first `y = 4` of a name. The runtime still accepts all
+  of these and behaves exactly as before, but without the keyword the file is
+  not plain JavaScript. Later plain assignments to a name that already exists
+  (`y = 5`) are ordinary writes and are not flagged, nor is `let a` with no value.
+- The message says what to write (`let` / `const`, or `export let` /
+  `export const`). Since the formatter keeps declaration keywords, adding them
+  is a mechanical edit.
+- It is a warning, so a validator run still exits 0; `--no-bare-declarations`
+  leaves it out of the report.
+- `getLintWarnings` and `getDiagnostics` take the same check as an opt-in:
+  `{ bareDeclarations: true }`. It is off by default, because the system prompt,
+  the agent skill and the bundled demos all teach the keyword-less `$x = 0`.
+
 ## 2026-10-05
 
 ### Precise TypeScript Types for Every Component and Built-in

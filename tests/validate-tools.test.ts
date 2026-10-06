@@ -420,6 +420,70 @@ describe("tools/validate-aktion-app.mjs — every module in the graph is linted"
 });
 
 /**
+ * `bare-declaration` reaches the CLIs, as a WARNING: the exit code stays 0, a
+ * program that declares everything stays `OK`, and `--no-bare-declarations`
+ * leaves it out of the report.
+ */
+describe("tools/validate-aktion*.mjs — bare declarations", () => {
+  let dir: string;
+  const file = (name: string): string => join(dir, name);
+  const tools: Array<[string, string]> = [
+    ["validate-aktion.mjs", fileTool],
+    ["validate-aktion-app.mjs", appTool],
+  ];
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "aktion-validate-bare-"));
+    const put = (name: string, lines: string[]): void => writeFileSync(file(name), `${lines.join("\n")}\n`, "utf8");
+    put("bare.aktion", ["export B = 1", "y = 4", "y = 5", "export $s = 4", '$app(Text("x"))']);
+    put("declared.aktion", [
+      "export const B = 1",
+      "let y = 4",
+      "y = 5",
+      "export let $s = 4",
+      "let a",
+      '$app(Text("x"))',
+    ]);
+    put("bare-lib.aktion", ["export function Tag() {", '  return Text("x")', "}", "export LIMIT = 3"]);
+    put("bare-entry.aktion", [
+      'import { Tag, LIMIT } from "./bare-lib.aktion"',
+      "$app(Column([Tag(), Text(String(LIMIT))]))",
+    ]);
+  });
+
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it.each(tools)("%s warns on each bare declaration without failing the run", (_name, tool) => {
+    const { status, output } = run(tool, [file("bare.aktion")]);
+    expect(output).toMatch(/L1: warning: `export B` declares a binding without a keyword/);
+    expect(output).toMatch(/L2: warning: `y` declares a binding without a keyword/);
+    expect(output).toMatch(/L4: warning: `export \$s` declares a binding without a keyword/);
+    expect(output).not.toMatch(/L3:/);
+    expect(output).toMatch(/0 error\(s\), 3 warning\(s\)/);
+    expect(status).toBe(0);
+  });
+
+  it.each(tools)("%s leaves them out with --no-bare-declarations", (_name, tool) => {
+    const { status, output } = run(tool, ["--no-bare-declarations", file("bare.aktion")]);
+    expect(output).toMatch(/OK/);
+    expect(output).not.toMatch(/warning/);
+    expect(status).toBe(0);
+  });
+
+  it.each(tools)("%s passes a program that declares everything", (_name, tool) => {
+    const { status, output } = run(tool, [file("declared.aktion")]);
+    expect(output).toMatch(/OK/);
+    expect(status).toBe(0);
+  });
+
+  it("validate-aktion-app lints the imported modules too and names the file", () => {
+    const { status, output } = run(appTool, [file("bare-entry.aktion")]);
+    expect(output).toMatch(/L4: warning: .*bare-lib\.aktion: `export LIMIT` declares a binding without a keyword/);
+    expect(status).toBe(0);
+  });
+});
+
+/**
  * `.aktion.ts` / `.aktion.js` modules (guide §7.7): both CLIs compile them with
  * the frontends the Vite plugin uses, so erasure errors and the JS-semantics
  * rules are reported at the module's own lines — and the lint pass runs on the

@@ -32,6 +32,7 @@ export {
 export type {
   Position,
   Diagnostic,
+  LintOptions,
   CompletionItem,
   HoverInfo,
 } from "./language-service.js";

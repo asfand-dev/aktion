@@ -1786,7 +1786,13 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   warning is `shadowed-i18n` (a parameter or loop variable shadowing a binding
   destructured from `$i18n(...)`, typically `t`). `getLintWarnings(source,
   library?)` returns only the warnings; pass the library to enable the
-  unknown-component pass, omit it to skip it.
+  unknown-component pass, omit it to skip it. A third, opt-in warning,
+  `bare-declaration`, flags a top-level binding written without `let` /
+  `const` (`export B = 1`, `export $s = 4`, or the first `y = 4`); enable it
+  with `getLintWarnings(source, library, { bareDeclarations: true })` (the same
+  option works on `getDiagnostics`). It is off by default because the system
+  prompt, the agent skill and the bundled demos all teach the keyword-less
+  `$x = 0`.
 - `getDiagnostics`, `getCompletions`, and `getHoverInfo` are the data
   layer a real LSP server wraps — see [Editor support](#editor-support). The
   [playground](https://asfand-dev.github.io/aktion/playground.html)
@@ -1839,6 +1845,12 @@ node tools/validate-aktion-app.mjs src/app.aktion
 They print `FILE: OK` or `FILE: Lnn: message` per problem and exit non-zero on
 any **error**; warnings (including `unknown-component`) are reported but do not
 fail the run.
+
+Both scripts also report `bare-declaration`, the warning for a top-level binding
+written without a keyword (`export B = 1`, `export $s = 4`, a first `y = 4`).
+The fix is mechanical: write `let` / `const` (`export let` / `export const`), and
+`formatProgram` keeps the keyword. It is a warning only, so the exit code does
+not change; pass `--no-bare-declarations` to leave it out of the report.
 
 ---
 
