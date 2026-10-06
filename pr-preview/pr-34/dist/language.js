@@ -37308,13 +37308,13 @@ function getDiagnostics(source, library, options = {}) {
     // worst silent bugs (#1 scope leak, #2 placeholder stripping, #3 Date
     // compares, #5 unicode escapes) are now fixed in the runtime, so linting
     // them would flag correct code.
-    ...lintProgram(program, library, options, source)
+    ...lintProgram(program, source, library, options)
   ];
 }
 function getLintWarnings(source, library, options = {}) {
-  return lintProgram(parse(source), library, options, source);
+  return lintProgram(parse(source), source, library, options);
 }
-function lintProgram(program, library, options, source) {
+function lintProgram(program, source, library, options = {}) {
   return [
     ...library ? lintUnknownComponents(program, library) : [],
     ...lintShadowedI18n(program),
@@ -37331,40 +37331,75 @@ function declarationStart(lines, loc, name, exported) {
   const match = new RegExp(String.raw`(^|[^\w$])(${head})\s*$`).exec(before);
   return match ? { line, column: match.index + match[1].length + 1 } : { line, column };
 }
-function lintBareDeclarations(program, source) {
-  const warnings = [];
-  const lines = source.split(/\r?\n/);
-  const bound = /* @__PURE__ */ new Set();
-  const keyOf = (name, isState) => isState === true ? `$${name}` : name;
+function collectDeclaredTopLevelNames(program) {
+  const declared = /* @__PURE__ */ new Set();
   for (const stmt of program.statements) {
     switch (stmt.kind) {
       case "Import":
-        for (const spec of stmt.specifiers) bound.add(keyOf(spec.local, spec.isState));
+        for (const spec of stmt.specifiers) declared.add(bindingKey(spec.local, spec.isState));
         break;
       case "ComponentDeclaration":
       case "ActionDeclaration":
       case "HookDeclaration":
-        bound.add(stmt.name);
+        declared.add(stmt.name);
         break;
       case "DestructureStatement":
-        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) bound.add(name);
+        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) declared.add(name);
         break;
-      case "Assignment": {
-        const key = keyOf(stmt.identifier, stmt.isState);
-        const isFirst = !bound.has(key);
-        bound.add(key);
-        if (stmt.declaration !== void 0 || !isFirst && stmt.exported !== true) break;
-        const exported = stmt.exported === true ? "export " : "";
-        const { line, column } = declarationStart(lines, stmt.loc, key, stmt.exported === true);
-        warnings.push({
-          line,
-          column,
-          severity: "warning",
-          message: `\`${exported}${key}\` declares a binding without a keyword. The runtime accepts it, but it is not plain JavaScript — write \`${exported}let\` or \`${exported}const\` before the name.`
-        });
+      case "Assignment":
+        if (stmt.declaration !== void 0) declared.add(bindingKey(stmt.identifier, stmt.isState));
         break;
+    }
+  }
+  return declared;
+}
+function bindingKey(name, isState) {
+  return isState === true ? `$${name}` : name;
+}
+function isWrittenElsewhere(program, declaration, key) {
+  const WRITE_BUILTINS = /* @__PURE__ */ new Set(["__rui_assign__", "__rui_postfix__", "__rui_prefix__"]);
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return false;
+    if (Array.isArray(node)) return node.some(visit);
+    if (node === declaration) return false;
+    const rec = node;
+    if (rec["kind"] === "Assignment" && bindingKey(String(rec["identifier"]), rec["isState"]) === key) {
+      return true;
+    }
+    if (rec["kind"] === "BuiltinCall" && WRITE_BUILTINS.has(String(rec["name"]))) {
+      const target = rec["arguments"]?.[0];
+      if (target && (target["kind"] === "Identifier" || target["kind"] === "StateRef")) {
+        if (bindingKey(String(target["name"]), target["kind"] === "StateRef") === key) return true;
       }
     }
+    return Object.keys(rec).some((k) => k !== "loc" && visit(rec[k]));
+  };
+  return visit(program.statements);
+}
+function lintBareDeclarations(program, source) {
+  const warnings = [];
+  const lines = source.split(/\r?\n/);
+  const declared = collectDeclaredTopLevelNames(program);
+  const bound = /* @__PURE__ */ new Set();
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "Assignment") continue;
+    const key = bindingKey(stmt.identifier, stmt.isState);
+    const alreadyBound = declared.has(key) || bound.has(key);
+    bound.add(key);
+    if (stmt.declaration !== void 0) continue;
+    const exported = stmt.exported === true;
+    if (alreadyBound && !exported) continue;
+    const { line, column } = declarationStart(lines, stmt.loc, key, exported);
+    const prefix = exported ? "export " : "";
+    let message;
+    if (alreadyBound) {
+      message = `\`export ${key}\` writes to \`${key}\`, which another statement already declares. JavaScript has no \`export\` on an assignment and \`export let\` would redeclare it — drop the \`export\`, or declare \`${key}\` once with \`export let\`.`;
+    } else {
+      const needsLet = stmt.isState || isWrittenElsewhere(program, stmt, key);
+      const reason = stmt.isState ? "a state atom is written, and `const` would make that a TypeError in JavaScript" : needsLet ? "it is assigned again elsewhere in the file" : "nothing else writes it";
+      message = `\`${prefix}${key}\` declares a binding without a keyword. The runtime accepts it, but it is not plain JavaScript — write \`${prefix}${needsLet ? "let" : "const"}\` before the name (${reason}).`;
+    }
+    warnings.push({ line, column, severity: "warning", message });
   }
   return warnings;
 }

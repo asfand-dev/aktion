@@ -76,8 +76,9 @@ export declare function getDiagnostics(source: string, library: ComponentLibrary
  *     keyword is optional to the runtime (it changes nothing about reactivity),
  *     but without it the source is not plain JavaScript, and the formatter now
  *     keeps the keyword it finds. Later plain assignments to an existing binding
- *     (`y = 5`) are ordinary writes and are not flagged. Warning only: parsing is
- *     unchanged, so bare `$x = 0` programs keep running.
+ *     (`y = 5`), and assignments to a name a `function`, `import`, `var`, `let` or
+ *     `const` declares, are ordinary writes and are not flagged. Warning only:
+ *     parsing is unchanged, so bare `$x = 0` programs keep running.
  */
 export declare function getLintWarnings(source: string, library?: ComponentLibrary, options?: LintOptions): Diagnostic[];
 /**
