@@ -19,6 +19,140 @@ const toNumber = (v: unknown): number => {
 
 const toArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
+/*
+ * Parameter types of the `Util` helpers. They are printed into the
+ * `aktion-runtime/dsl` declarations (scripts/dsl-types/runtime-types.ts), so
+ * each is exported and self-contained: no DOM type, no runtime-local name.
+ * They describe what the helpers READ; every helper still guards its input at
+ * runtime, because an untyped `.aktion` program reaches them too.
+ */
+
+/**
+ * An array the list helpers read. A nullish value (data not loaded yet) is
+ * treated as empty; so is any other non-array (a `Set`, a `Map`, an object).
+ */
+export type UtilList<T> = readonly T[] | null | undefined;
+
+/**
+ * What the helpers whose result does not depend on the element type (`count`,
+ * `sum`, `avg`, `min`, `max`, `join`) read: a {@link UtilList}, or a value
+ * typed `unknown` — an untyped `$query`'s `data` — which they guard at runtime,
+ * reading any non-array as empty. A value of a known non-array type (a string,
+ * a `Set`, an object) is still rejected: it would be read as `[]`.
+ */
+export type UtilAggregateInput<A> = unknown extends A ? A : UtilList<unknown>;
+
+/**
+ * What `pick` returns: the picked keys of `T`. When `T` may be `null` /
+ * `undefined` (data not loaded yet) every key is optional, because a nullish
+ * input gives `{}`.
+ */
+export type UtilPicked<T, K extends PropertyKey> =
+  [T] extends [object] ? Pick<T, K & keyof T> : Partial<Pick<NonNullable<T>, K & keyof NonNullable<T>>>;
+
+/** What `omit` returns: `T` without the omitted keys — every key optional when `T` may be nullish, as for {@link UtilPicked}. */
+export type UtilOmitted<T, K extends PropertyKey> =
+  [T] extends [object] ? Omit<T, K> : Partial<Omit<NonNullable<T>, K>>;
+
+/** A field of the row type, or a dotted path into it (`"owner.name"`). */
+export type UtilFieldPath<T> = (T extends object ? keyof T & string : never) | (string & {});
+
+/** The comparison operators of `filter` / `find` / `partition`. Any other string matches nothing. */
+export type UtilCompareOp = "==" | "!=" | ">" | "<" | ">=" | "<=" | "contains" | "startsWith" | "endsWith";
+
+/** The options object of `format` (each key is ignored unless it has the right type). */
+export interface UtilNumberFormatOptions {
+  /** ISO 4217 code for `"currency"` mode (default `"USD"`). */
+  readonly currency?: string;
+  /** BCP 47 locale (default: the host's). */
+  readonly locale?: string;
+  /** Fixed number of fraction digits. */
+  readonly decimals?: number;
+}
+
+/** A `File` / `Blob`, structurally (what `FileUpload` hands over). */
+export interface UtilBlobLike {
+  readonly size: number;
+  readonly type: string;
+  text(): Promise<string>;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+/** The options object of `readFile`. */
+export interface UtilReadFileOptions {
+  /** `"text"` (default) the UTF-8 text, `"dataUrl"` a `data:` URI, `"base64"` that URI's payload. */
+  readonly as?: "text" | "dataUrl" | "base64";
+  /** Resolve `""` without reading when the file is larger than this many bytes. */
+  readonly maxSize?: number;
+}
+
+/** A window feature switch: on is `true`, `1`, `"1"`, `"yes"` or `"true"`; anything else is off. */
+export type UtilWindowFlag = boolean | 0 | 1 | "0" | "1" | "yes" | "no" | "true" | "false";
+
+/** The `window.open` features `openUrl` / `openWindow` pass on. Any other key is dropped. */
+export interface UtilWindowFeatures {
+  readonly width?: number;
+  readonly height?: number;
+  readonly left?: number;
+  readonly top?: number;
+  readonly screenX?: number;
+  readonly screenY?: number;
+  readonly innerWidth?: number;
+  readonly innerHeight?: number;
+  readonly popup?: UtilWindowFlag;
+  readonly menubar?: UtilWindowFlag;
+  readonly toolbar?: UtilWindowFlag;
+  readonly location?: UtilWindowFlag;
+  readonly status?: UtilWindowFlag;
+  readonly resizable?: UtilWindowFlag;
+  readonly scrollbars?: UtilWindowFlag;
+  readonly noopener?: UtilWindowFlag;
+  readonly noreferrer?: UtilWindowFlag;
+}
+
+/** The options object of `openUrl`. */
+export interface UtilOpenUrlOptions {
+  /** `"_blank"` (default, a new tab) or a window NAME, which reuses one window across calls. */
+  readonly target?: "_blank" | "_self" | "_parent" | "_top" | (string & {});
+  /** A features object, or a `"key=value,…"` string (re-parsed against the same allow-list). */
+  readonly features?: UtilWindowFeatures | string;
+  /** Defaults to on for `_blank` and off for a named target. */
+  readonly noopener?: UtilWindowFlag;
+  readonly noreferrer?: UtilWindowFlag;
+}
+
+/** The options object of `openWindow`. */
+export interface UtilOpenWindowOptions {
+  /** A window name, which reuses one window across calls (default `"_blank"`). */
+  readonly name?: string;
+  /** The same features `openUrl` takes. */
+  readonly features?: UtilWindowFeatures | string;
+}
+
+/** The config `webManifest` reads (each key is ignored unless it is a string, or an array for `icons`). */
+export interface UtilWebManifestConfig {
+  readonly name?: string;
+  readonly shortName?: string;
+  readonly startUrl?: string;
+  readonly display?: "fullscreen" | "standalone" | "minimal-ui" | "browser" | (string & {});
+  readonly backgroundColor?: string;
+  readonly themeColor?: string;
+  readonly description?: string;
+  readonly icons?: readonly { readonly src?: string; readonly sizes?: string; readonly type?: string }[];
+}
+
+/** The sanitised Web App Manifest `webManifest` returns (snake_case, defaults filled in). */
+export interface UtilWebManifest {
+  name: string;
+  short_name: string;
+  start_url: string;
+  display: string;
+  background_color: string;
+  theme_color: string;
+  description?: string;
+  icons?: { src: string; sizes: string; type: string }[];
+}
+
 /**
  * A `Blob`-ish value, structurally. Deliberately NOT `instanceof Blob`: a
  * program may be handed a `File` from a different realm (an `<iframe>`'s picker,
@@ -39,12 +173,14 @@ const isBlobLike = (v: unknown): v is BlobLike =>
 /**
  * The one file out of whatever `FileUpload` handed over.
  *
- * `onSelect` is invoked with the whole pick — a `FileList` in the browser, a
- * plain array after a remove — so the overwhelmingly common call is
- * `$util.readFile(files)` rather than `$util.readFile(files[0])`. Accepting both
- * removes the single most likely mistake at the call site: indexing a `FileList`
- * is fine, but forgetting to is silent, and `readFile(aFileList)` would
- * otherwise resolve `""` as though the file were unreadable.
+ * `onSelect` is invoked with the whole pick — always a `File[]`: the accepted
+ * files, or the remaining ones after a remove — so the overwhelmingly common
+ * call is `$util.readFile(files)` rather than `$util.readFile(files[0])`.
+ * Accepting both removes the single most likely mistake at the call site:
+ * indexing the pick is fine, but forgetting to is silent, and
+ * `readFile(files)` would otherwise resolve `""` as though the file were
+ * unreadable. A `FileList` the caller passes itself (an `<input>`'s `files`) is
+ * read the same way.
  */
 const firstBlob = (input: unknown): BlobLike | null => {
   if (isBlobLike(input)) return input;
@@ -171,9 +307,19 @@ const openableUrl = (raw: unknown): string => {
 const isFeatureOn = (value: unknown): boolean =>
   value === true || value === 1 || value === "1" || value === "yes" || value === "true";
 
-/** Window features that may be set, and how each is serialised. */
-const WINDOW_FEATURE_NUMBERS = new Set(["width", "height", "left", "top", "screenX", "screenY", "innerWidth", "innerHeight"]);
-const WINDOW_FEATURE_FLAGS = new Set(["popup", "menubar", "toolbar", "location", "status", "resizable", "scrollbars", "noopener", "noreferrer"]);
+/** The `UtilWindowFeatures` keys whose value type is `V`. */
+type WindowFeatureKey<V> = {
+  [K in keyof UtilWindowFeatures]-?: NonNullable<UtilWindowFeatures[K]> extends V ? K : never;
+}[keyof UtilWindowFeatures];
+
+/**
+ * Window features that may be set, and how each is serialised. The element
+ * types tie every entry to a `UtilWindowFeatures` key of the matching kind; the
+ * other direction (every interface key is on a list) is pinned by
+ * `tests/dsl-types-builtins.test.ts`.
+ */
+const WINDOW_FEATURE_NUMBERS: ReadonlySet<string> = new Set<WindowFeatureKey<number>>(["width", "height", "left", "top", "screenX", "screenY", "innerWidth", "innerHeight"]);
+const WINDOW_FEATURE_FLAGS: ReadonlySet<string> = new Set<WindowFeatureKey<UtilWindowFlag>>(["popup", "menubar", "toolbar", "location", "status", "resizable", "scrollbars", "noopener", "noreferrer"]);
 
 /**
  * Build the third argument to `window.open` from an options bag, dropping
@@ -234,7 +380,7 @@ export type OpenedWindow = {
   /** `false` when the browser refused (a popup blocker) or there was no `window` at all. */
   ok: boolean;
   /** Point the context at a URL. Returns `false` for a rejected scheme or a context that is gone. */
-  navigate(url: unknown): boolean;
+  navigate(url: string): boolean;
   /** Close the context. Safe to call twice, and on a context that was never opened. */
   close(): void;
   /** Live: `true` once the context has been closed, by this program or by the user. */
@@ -250,7 +396,7 @@ const CLOSED_WINDOW: OpenedWindow = {
   },
 };
 
-const compare = (op: string, a: unknown, b: unknown): boolean => {
+const compare = (op: UtilCompareOp, a: unknown, b: unknown): boolean => {
   switch (op) {
     case "==": return a === b;
     case "!=": return a !== b;
@@ -591,34 +737,34 @@ export function safeRegexTest(pattern: string, subject: string): boolean {
 
 export const Util = {
   // ── Aggregation ───────────────────────────────────────────
-  count: (arr: unknown): number => toArray(arr).length,
-  sum: (arr: unknown): number =>
+  count: <A>(arr: UtilAggregateInput<A>): number => toArray(arr).length,
+  sum: <A>(arr: UtilAggregateInput<A>): number =>
     toArray(arr).reduce<number>((a, v) => a + toNumber(v), 0),
-  avg: (arr: unknown): number => {
+  avg: <A>(arr: UtilAggregateInput<A>): number => {
     const xs = toArray(arr);
     return xs.length === 0 ? 0 : xs.reduce<number>((a, v) => a + toNumber(v), 0) / xs.length;
   },
-  min: (arr: unknown): number => {
+  min: <A>(arr: UtilAggregateInput<A>): number => {
     const xs = toArray(arr).map(toNumber);
     return xs.length === 0 ? 0 : Math.min(...xs);
   },
-  max: (arr: unknown): number => {
+  max: <A>(arr: UtilAggregateInput<A>): number => {
     const xs = toArray(arr).map(toNumber);
     return xs.length === 0 ? 0 : Math.max(...xs);
   },
-  first: (arr: unknown): unknown => toArray(arr)[0] ?? null,
-  last: (arr: unknown): unknown => {
-    const xs = toArray(arr);
-    return xs.length === 0 ? null : xs[xs.length - 1];
+  first: <T>(arr: UtilList<T>): T | null => (toArray(arr) as T[])[0] ?? null,
+  last: <T>(arr: UtilList<T>): T | null => {
+    const xs = toArray(arr) as T[];
+    return xs.length === 0 ? null : xs[xs.length - 1] as T;
   },
 
   // ── Reshaping ─────────────────────────────────────────────
-  filter: (arr: unknown, field = "", op = "==", value?: unknown): unknown[] =>
-    toArray(arr).filter((item) => compare(op, getField(item, String(field)), value)),
-  find: (arr: unknown, field = "", op = "==", value?: unknown): unknown =>
-    toArray(arr).find((item) => compare(op, getField(item, String(field)), value)) ?? null,
-  sort: (arr: unknown, field = "", direction: "asc" | "desc" = "asc"): unknown[] => {
-    const xs = [...toArray(arr)];
+  filter: <T>(arr: UtilList<T>, field: UtilFieldPath<T> = "", op: UtilCompareOp = "==", value?: unknown): T[] =>
+    (toArray(arr) as T[]).filter((item) => compare(op, getField(item, String(field)), value)),
+  find: <T>(arr: UtilList<T>, field: UtilFieldPath<T> = "", op: UtilCompareOp = "==", value?: unknown): T | null =>
+    (toArray(arr) as T[]).find((item) => compare(op, getField(item, String(field)), value)) ?? null,
+  sort: <T>(arr: UtilList<T>, field: UtilFieldPath<T> = "", direction: "asc" | "desc" = "asc"): T[] => {
+    const xs = [...toArray(arr)] as T[];
     const dir = String(direction).toLowerCase() === "desc" ? -1 : 1;
     xs.sort((a, b) => {
       const av = getField(a, String(field));
@@ -628,23 +774,23 @@ export const Util = {
     });
     return xs;
   },
-  groupBy: (arr: unknown, field = ""): Record<string, unknown[]> => {
-    const out: Record<string, unknown[]> = {};
-    for (const item of toArray(arr)) {
+  groupBy: <T>(arr: UtilList<T>, field: UtilFieldPath<T> = ""): Record<string, T[]> => {
+    const out: Record<string, T[]> = {};
+    for (const item of toArray(arr) as T[]) {
       const key = String(getField(item, String(field)) ?? "");
       (out[key] ??= []).push(item);
     }
     return out;
   },
-  slice: (arr: unknown, start?: number, end?: number): unknown[] => {
-    const xs = toArray(arr);
+  slice: <T>(arr: UtilList<T>, start?: number, end?: number): T[] => {
+    const xs = toArray(arr) as T[];
     return xs.slice(start ?? 0, end ?? xs.length);
   },
-  unique: (arr: unknown, field?: string): unknown[] => {
-    const xs = toArray(arr);
+  unique: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>): T[] => {
+    const xs = toArray(arr) as T[];
     if (!field) return Array.from(new Set(xs));
     const seen = new Set<unknown>();
-    const out: unknown[] = [];
+    const out: T[] = [];
     for (const item of xs) {
       const key = getField(item, field);
       if (seen.has(key)) continue;
@@ -653,7 +799,7 @@ export const Util = {
     }
     return out;
   },
-  reverse: (arr: unknown): unknown[] => [...toArray(arr)].reverse(),
+  reverse: <T>(arr: UtilList<T>): T[] => ([...toArray(arr)] as T[]).reverse(),
   range: (start: number, end: number, step?: number): number[] => {
     const a = toNumber(start), b = toNumber(end);
     const s = step === undefined ? (b >= a ? 1 : -1) : toNumber(step);
@@ -679,30 +825,30 @@ export const Util = {
     }
     return Array.from({ length: count }, () => value);
   },
-  pick: (obj: unknown, keys: unknown): Record<string, unknown> => {
-    if (!isObject(obj)) return {};
+  pick: <T extends object | null | undefined, K extends keyof NonNullable<T> & string>(obj: T, keys: readonly K[]): UtilPicked<T, K> => {
+    if (!isObject(obj)) return {} as UtilPicked<T, K>;
     const ks = toArray(keys).map((k) => String(k ?? ""));
     const out: Record<string, unknown> = {};
     for (const k of ks) {
       if (k in obj) out[k] = obj[k];
     }
-    return out;
+    return out as UtilPicked<T, K>;
   },
-  omit: (obj: unknown, keys: unknown): Record<string, unknown> => {
-    if (!isObject(obj)) return {};
+  omit: <T extends object | null | undefined, K extends keyof NonNullable<T> & string>(obj: T, keys: readonly K[]): UtilOmitted<T, K> => {
+    if (!isObject(obj)) return {} as UtilOmitted<T, K>;
     const drop = new Set(toArray(keys).map((k) => String(k ?? "")));
     const out: Record<string, unknown> = {};
     for (const k of Object.keys(obj)) if (!drop.has(k)) out[k] = obj[k];
-    return out;
+    return out as UtilOmitted<T, K>;
   },
-  chunk: (arr: unknown, size: number): unknown[][] => {
-    const xs = toArray(arr);
+  chunk: <T>(arr: UtilList<T>, size: number): T[][] => {
+    const xs = toArray(arr) as T[];
     const n = Math.max(1, Math.floor(toNumber(size)));
-    const out: unknown[][] = [];
+    const out: T[][] = [];
     for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
     return out;
   },
-  flatten: (arr: unknown, depth: number = 1): unknown[] => {
+  flatten: <A extends readonly unknown[], D extends number = 1>(arr: A | null | undefined, depth: D = 1 as D): FlatArray<A, D>[] => {
     const walk = (xs: unknown[], left: number): unknown[] =>
       left <= 0
         ? xs.slice()
@@ -711,26 +857,26 @@ export const Util = {
             else acc.push(v);
             return acc;
           }, []);
-    return walk(toArray(arr), Math.max(0, Math.floor(toNumber(depth))));
+    return walk(toArray(arr), Math.max(0, Math.floor(toNumber(depth)))) as FlatArray<A, D>[];
   },
-  zip: (...arrays: unknown[]): unknown[][] => {
+  zip: <L extends readonly (readonly unknown[])[]>(...arrays: L): { -readonly [K in keyof L]: L[K][number] | null }[] => {
     const lists = arrays.map(toArray);
     const len = lists.reduce((m, l) => Math.max(m, l.length), 0);
     const out: unknown[][] = [];
     for (let i = 0; i < len; i += 1) out.push(lists.map((l) => l[i] ?? null));
-    return out;
+    return out as { -readonly [K in keyof L]: L[K][number] | null }[];
   },
-  partition: (arr: unknown, field = "", op = "==", value?: unknown): [unknown[], unknown[]] => {
-    const pass: unknown[] = [];
-    const fail: unknown[] = [];
-    for (const item of toArray(arr)) {
+  partition: <T>(arr: UtilList<T>, field: UtilFieldPath<T> = "", op: UtilCompareOp = "==", value?: unknown): [pass: T[], fail: T[]] => {
+    const pass: T[] = [];
+    const fail: T[] = [];
+    for (const item of toArray(arr) as T[]) {
       (compare(op, getField(item, String(field)), value) ? pass : fail).push(item);
     }
     return [pass, fail];
   },
-  keyBy: (arr: unknown, field = ""): Record<string, unknown> => {
-    const out: Record<string, unknown> = {};
-    for (const item of toArray(arr)) {
+  keyBy: <T>(arr: UtilList<T>, field: UtilFieldPath<T> = ""): Record<string, T> => {
+    const out: Record<string, T> = {};
+    for (const item of toArray(arr) as T[]) {
       out[String(getField(item, String(field)) ?? "")] = item;
     }
     return out;
@@ -760,7 +906,12 @@ export const Util = {
    * `{ currency?, locale?, decimals? }`. Legacy positional form
    * `Util.format(v, "currency", "USD", "en-US")` is also accepted.
    */
-  format: (value: unknown, mode = "number", options?: unknown, fourth?: unknown): string => {
+  format: (
+    value: number | string | null | undefined,
+    mode: "number" | "currency" | "percent" | "compact" = "number",
+    options?: UtilNumberFormatOptions | string,
+    fourth?: string,
+  ): string => {
     const v = toNumber(value);
     const m = String(mode);
     const opts = normalizeFormatOptions(m, options, fourth);
@@ -791,7 +942,10 @@ export const Util = {
    * (`"MMM D"`, `"YYYY-MM-DD"`) or one of: `"relative"`, `"date"`,
    * `"time"`, `"datetime"`, `"iso"`.
    */
-  formatDate: (value: unknown, format = "MMM D"): string => {
+  formatDate: (
+    value: Date | number | string,
+    format: "relative" | "date" | "time" | "datetime" | "iso" | (string & {}) = "MMM D",
+  ): string => {
     const date = toDate(value);
     const mode = String(format);
     switch (mode) {
@@ -832,28 +986,28 @@ export const Util = {
     d.setHours(0, 0, 0, 0);
     return d.toISOString();
   },
-  addDays: (date: unknown, days: unknown): string => {
+  addDays: (date: Date | number | string, days: number): string => {
     const d = toDate(date);
     const next = new Date(d.getTime());
     next.setDate(next.getDate() + toNumber(days));
     return next.toISOString();
   },
-  addHours: (date: unknown, hours: unknown): string => {
+  addHours: (date: Date | number | string, hours: number): string => {
     const d = toDate(date);
     const next = new Date(d.getTime() + toNumber(hours) * 3_600_000);
     return next.toISOString();
   },
-  diffDays: (start: unknown, end: unknown): number => {
+  diffDays: (start: Date | number | string, end: Date | number | string): number => {
     const a = toDate(start), b = toDate(end);
     return Math.round((b.getTime() - a.getTime()) / 86_400_000);
   },
-  startOfWeek: (date: unknown): string => {
+  startOfWeek: (date: Date | number | string): string => {
     const d = toDate(date);
     const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
     next.setUTCDate(next.getUTCDate() - next.getUTCDay());
     return next.toISOString();
   },
-  endOfMonth: (date: unknown): string => {
+  endOfMonth: (date: Date | number | string): string => {
     const d = toDate(date);
     return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
   },
@@ -887,7 +1041,7 @@ export const Util = {
      * something that is not a duration at all and you get `""` rather than an
      * exception, in keeping with every other member here.
      */
-    format: (value: unknown, options?: unknown): string => {
+    format: (value: number | string, options?: { readonly style?: "simple" | "iso" }): string => {
       const seconds = parseDuration(value);
       if (seconds === null) return "";
       const opts = isObject(options) ? options : {};
@@ -901,7 +1055,7 @@ export const Util = {
   },
 
   // ── String / regex helpers ────────────────────────────────
-  join: (arr: unknown, sep = ","): string =>
+  join: <A>(arr: UtilAggregateInput<A>, sep = ","): string =>
     toArray(arr).map((v) => (v == null ? "" : String(v))).join(String(sep)),
   split: (text: unknown, sep = ","): string[] => String(text ?? "").split(String(sep)),
   trim: (text: unknown): string => String(text ?? "").trim(),
@@ -917,7 +1071,9 @@ export const Util = {
     String(text ?? "").endsWith(String(suffix ?? "")),
   contains: (text: unknown, needle: unknown): boolean =>
     String(text ?? "").includes(String(needle ?? "")),
-  match: (text: unknown, pattern: unknown): boolean => {
+  // `pattern` is a regular-expression SOURCE: a RegExp stringifies with its
+  // slashes (`String(/b/)` is "/b/"), so passing one never matches as meant.
+  match: (text: string | number | null | undefined, pattern: string): boolean => {
     try { return safeRegexTest(String(pattern ?? ""), String(text ?? "")); }
     catch { return false; }
   },
@@ -967,7 +1123,7 @@ export const Util = {
     while (n >= 1024 && i < units.length - 1) { n /= 1024; i += 1; }
     return `${i === 0 ? n : n.toFixed(1)} ${units[i]}`;
   },
-  relativeTime: (value: unknown): string => {
+  relativeTime: (value: Date | number | string): string => {
     const d = toDate(value);
     const diff = d.getTime() - Date.now();
     const abs = Math.abs(diff);
@@ -988,7 +1144,7 @@ export const Util = {
    * API write actually succeeds (permission can deny it), `false` otherwise.
    * `await $util.copy(x)` in an action; plain truthy checks keep working.
    */
-  copy: (text: unknown): Promise<boolean> => {
+  copy: (text: string | number): Promise<boolean> => {
     try {
       const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { clipboard?: { writeText?: (t: string) => Promise<void> } }) : null;
       const write = nav?.clipboard?.writeText?.(String(text ?? ""));
@@ -999,7 +1155,7 @@ export const Util = {
     } catch { return Promise.resolve(false); }
   },
   /** Await a pause: `await $util.sleep(300)`. Capped at 60s. */
-  sleep: (ms: unknown = 0): Promise<void> => {
+  sleep: (ms: number = 0): Promise<void> => {
     const parsed = toNumber(ms);
     const delay = Number.isFinite(parsed) ? Math.max(0, Math.min(60_000, parsed)) : 0;
     return new Promise((resolve) => setTimeout(resolve, delay));
@@ -1016,14 +1172,14 @@ export const Util = {
     });
   },
   /** Wrap a function so it only fires `wait` ms after the last call. */
-  debounceFn: (fn: unknown, wait: unknown = 250): ((...args: unknown[]) => void) => {
+  debounceFn: <A extends unknown[]>(fn: (...args: A) => unknown, wait: number = 250): ((...args: A) => void) => {
     const parsed = toNumber(wait);
     const ms = Number.isFinite(parsed) && parsed > 0 ? parsed : 250;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    return (...args: unknown[]) => {
+    return (...args: A) => {
       if (typeof fn !== "function") return;
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => { (fn as (...a: unknown[]) => unknown)(...args); }, ms);
+      timer = setTimeout(() => { fn(...args); }, ms);
     };
   },
   /**
@@ -1031,18 +1187,18 @@ export const Util = {
    * fires immediately; calls landing inside the window schedule one trailing
    * fire with the latest arguments, so the final value is never dropped.
    */
-  throttleFn: (fn: unknown, wait: unknown = 250): ((...args: unknown[]) => void) => {
+  throttleFn: <A extends unknown[]>(fn: (...args: A) => unknown, wait: number = 250): ((...args: A) => void) => {
     const parsed = toNumber(wait);
     const ms = Number.isFinite(parsed) && parsed > 0 ? parsed : 250;
     let last = 0;
     let trailing: ReturnType<typeof setTimeout> | null = null;
-    let lastArgs: unknown[] = [];
-    return (...args: unknown[]) => {
+    let lastArgs = [] as unknown[] as A;
+    return (...args: A) => {
       if (typeof fn !== "function") return;
       const now = Date.now();
       if (now - last >= ms) {
         last = now;
-        (fn as (...a: unknown[]) => unknown)(...args);
+        fn(...args);
         return;
       }
       lastArgs = args;
@@ -1050,13 +1206,13 @@ export const Util = {
       trailing = setTimeout(() => {
         trailing = null;
         last = Date.now();
-        (fn as (...a: unknown[]) => unknown)(...lastArgs);
+        fn(...lastArgs);
       }, ms - (now - last));
     };
   },
   // ── Device / sensor APIs (suggestions-global XII.3) ──────────────────────
   /** Trigger device haptics. `pattern` is ms or an array of on/off ms. */
-  vibrate: (pattern: unknown = 10): boolean => {
+  vibrate: (pattern: number | readonly number[] = 10): boolean => {
     try {
       const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { vibrate?: (p: number | number[]) => boolean }) : null;
       if (!nav?.vibrate) return false;
@@ -1065,7 +1221,9 @@ export const Util = {
     } catch { return false; }
   },
   /** Native share sheet. `data` = { title?, text?, url? }. Returns a promise. */
-  share: (data: unknown): Promise<boolean> => {
+  share: (
+    data: string | { readonly title?: string; readonly text?: string; readonly url?: string; readonly files?: readonly UtilBlobLike[] },
+  ): Promise<boolean> => {
     try {
       const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { share?: (d: unknown) => Promise<void> }) : null;
       if (!nav?.share) return Promise.resolve(false);
@@ -1101,8 +1259,8 @@ export const Util = {
    *   }
    *
    * `file` may be a single `File`/`Blob`, or the whole pick as `FileUpload`
-   * hands it over (a `FileList` or an array) — in which case the FIRST readable
-   * entry is used. Loop the pick yourself for `multiple`.
+   * hands it over (a `File[]`; a `FileList` works too) — in which case the
+   * FIRST readable entry is used. Loop the pick yourself for `multiple`.
    *
    * `options.as` selects the representation:
    *   `"text"`     (default) the decoded UTF-8 text
@@ -1120,7 +1278,10 @@ export const Util = {
    * string is also the honest answer: the program has no contents to work with.
    * Branch on the result being empty, not on a `.catch`.
    */
-  readFile: (file: unknown, options?: unknown): Promise<string> => {
+  readFile: (
+    file: UtilBlobLike | ArrayLike<UtilBlobLike> | null | undefined,
+    options?: UtilReadFileOptions,
+  ): Promise<string> => {
     try {
       const blob = firstBlob(file);
       if (!blob) return Promise.resolve("");
@@ -1178,7 +1339,7 @@ export const Util = {
    * signed URL, then open it" — is exactly the shape browsers block. That is
    * what {@link openWindow} is for.
    */
-  openUrl: (url: unknown, options?: unknown): boolean => {
+  openUrl: (url: string, options?: UtilOpenUrlOptions): boolean => {
     try {
       const href = openableUrl(url);
       if (!href) return false;
@@ -1236,7 +1397,7 @@ export const Util = {
    * is later navigated to cannot reach back into this one. That is the same
    * protection `noopener` gives, applied in the one order that keeps the handle.
    */
-  openWindow: (options?: unknown): OpenedWindow => {
+  openWindow: (options?: UtilOpenWindowOptions): OpenedWindow => {
     try {
       if (typeof window === "undefined" || typeof window.open !== "function") return CLOSED_WINDOW;
       const opts = isObject(options) ? options : {};
@@ -1255,7 +1416,7 @@ export const Util = {
       }
       return {
         ok: true,
-        navigate(url: unknown): boolean {
+        navigate(url: string): boolean {
           const href = openableUrl(url);
           if (!href) return false;
           try {
@@ -1286,7 +1447,9 @@ export const Util = {
     }
   },
   /** Current geolocation as a promise of { lat, lng, accuracy } (or null). */
-  geolocate: (options?: unknown): Promise<{ lat: number; lng: number; accuracy: number } | null> => {
+  geolocate: (
+    options?: { readonly enableHighAccuracy?: boolean; readonly timeout?: number; readonly maximumAge?: number },
+  ): Promise<{ readonly lat: number; readonly lng: number; readonly accuracy: number } | null> => {
     return new Promise((resolve) => {
       try {
         const nav = typeof navigator !== "undefined" ? (navigator as Navigator) : null;
@@ -1305,7 +1468,7 @@ export const Util = {
     catch { return true; }
   },
   /** Best-effort device class from the user agent: "mobile" | "tablet" | "desktop". */
-  deviceType: (): string => {
+  deviceType: (): "mobile" | "tablet" | "desktop" => {
     try {
       const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
       if (/iPad|Tablet|PlayBook|Silk/.test(ua) || (/Android/.test(ua) && !/Mobile/.test(ua))) return "tablet";
@@ -1320,11 +1483,16 @@ export const Util = {
    * outer variables (pass everything it needs as arguments). Falls back to
    * running inline (still async) when Workers aren't available.
    *   $util.worker((n) => heavyCompute(n), 1000).then(r => $result = r)
+   *
+   * `fn` must be a HOST JavaScript function. An Aktion lambda is the
+   * evaluator's closure, so its `toString()` is the runtime's own wrapper (it
+   * references the evaluation context), not the program's code — only the
+   * no-Worker fallback can run it.
    */
-  worker: (fn: unknown, ...args: unknown[]): Promise<unknown> => {
-    if (typeof fn !== "function") return Promise.resolve(undefined);
-    const fallback = (): Promise<unknown> =>
-      Promise.resolve().then(() => (fn as (...a: unknown[]) => unknown)(...args));
+  worker: <A extends unknown[], R>(fn: (...args: A) => R, ...args: A): Promise<Awaited<R>> => {
+    if (typeof fn !== "function") return Promise.resolve(undefined) as Promise<Awaited<R>>;
+    const fallback = (): Promise<Awaited<R>> =>
+      Promise.resolve().then(() => fn(...args)) as Promise<Awaited<R>>;
     const canWorker =
       typeof Worker !== "undefined" && typeof Blob !== "undefined" &&
       typeof URL !== "undefined" && typeof URL.createObjectURL === "function";
@@ -1342,7 +1510,7 @@ export const Util = {
         w.onmessage = (e: MessageEvent) => {
           URL.revokeObjectURL(url); w.terminate();
           const data = e.data as { ok?: boolean; value?: unknown; error?: string };
-          if (data?.ok) resolve(data.value);
+          if (data?.ok) resolve(data.value as Awaited<R>);
           else reject(new Error(data?.error || "worker error"));
         };
         w.onerror = (err) => { URL.revokeObjectURL(url); w.terminate(); reject(err); };
@@ -1354,7 +1522,7 @@ export const Util = {
   },
   // ── PWA helpers (suggestions-global XII.2) ───────────────────────────────
   /** Register a service worker. Resolves true on success, false otherwise. */
-  registerServiceWorker: (url: unknown, scope?: unknown): Promise<boolean> => {
+  registerServiceWorker: (url: string, scope?: string): Promise<boolean> => {
     try {
       const nav = typeof navigator !== "undefined" ? (navigator as Navigator) : null;
       if (!nav?.serviceWorker || typeof url !== "string" || !url) return Promise.resolve(false);
@@ -1367,9 +1535,9 @@ export const Util = {
    * inline a manifest (`<link rel="manifest" href="data:...">`) or write one at
    * build time. Unknown/unsafe keys are dropped.
    */
-  webManifest: (config: unknown): Record<string, unknown> => {
+  webManifest: (config: UtilWebManifestConfig): UtilWebManifest => {
     const cfg = (config && typeof config === "object" && !Array.isArray(config)) ? config as Record<string, unknown> : {};
-    const out: Record<string, unknown> = {
+    const out: UtilWebManifest = {
       name: typeof cfg.name === "string" ? cfg.name : "App",
       short_name: typeof cfg.shortName === "string" ? cfg.shortName : (typeof cfg.name === "string" ? cfg.name : "App"),
       start_url: typeof cfg.startUrl === "string" ? cfg.startUrl : "/",
@@ -1392,7 +1560,7 @@ export const Util = {
    * browser. Lets a program branch on the host (e.g. hide a download button in
    * a native shell, or call a bridge when present).
    */
-  nativeShell: (): string => {
+  nativeShell: (): "tauri" | "capacitor" | "cordova" | "react-native" | "electron" | "web" => {
     try {
       const w = typeof window !== "undefined" ? (window as unknown as Record<string, unknown>) : {};
       const nav = typeof navigator !== "undefined" ? navigator : ({ userAgent: "" } as Navigator);

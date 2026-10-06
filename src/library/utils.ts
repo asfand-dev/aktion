@@ -212,9 +212,19 @@ export function sanitiseCssUrl(raw: string): string {
  * through an inline `style` attribute. We accept a small alphabet that covers
  * every standard CSS length token; anything outside that — or values that
  * are unreasonably long — falls back to `fallback`.
+ *
+ * A plain NUMBER is pixels (`320` → `320px`, `0` → `0`), the React convention.
+ * Emitting it as written produced `height:320`, a declaration the CSS parser
+ * drops, so a `height: 320` box silently collapsed to its content. A numeric
+ * STRING (`"320"`) is returned as before: callers that hand digits on as an
+ * attribute value or unit-check them themselves depend on that.
  */
 const CSS_LENGTH_ALLOWED = /^[a-zA-Z0-9.%+\-*/\s(),]+$/;
 export function sanitiseCssLength(raw: unknown, fallback: string): string {
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw)) return fallback;
+    return raw === 0 ? "0" : `${raw}px`;
+  }
   const trimmed = (asString(raw) ?? "").trim();
   if (!trimmed) return fallback;
   if (trimmed.length > 64) return fallback;
@@ -226,19 +236,31 @@ export function sanitiseCssLength(raw: unknown, fallback: string): string {
  * Validate an LLM-supplied CSS colour value before it lands on an inline
  * `color: …` declaration. Accepts the full standard colour vocabulary —
  * hex (`#00ff00`), named colours (`tomato`), functional notations
- * (`rgb(...)`, `hsl(...)`, `color-mix(...)`), and `var(--token)` — while
+ * (`rgb(...)`, `hsl(...)`, `oklch(...)`, `color-mix(...)`) including the
+ * slash-alpha form (`rgb(0 0 0 / 50%)`), and `var(--token, fallback)` — custom
+ * property names may contain `_` (`var(--brand_primary)`) — while
  * rejecting anything that could break out of the single declaration:
- * `;`/`{`/`}` (declaration separators), quotes/backslash/angle-brackets,
+ * `;`/`{`/`}` (declaration separators), `:`, `!`, quotes/backslash/
+ * angle-brackets, a comment (`/*` would swallow the declarations after it),
  * and the `url()` / `expression()` / `javascript:` / `@import` attack
  * vectors. Returns an empty string for blank or rejected input so callers
  * can drop the style entirely.
+ *
+ * The length cap only bounds the work: the alphabet alone is what keeps a value
+ * inside its declaration. It is generous enough for a nested fallback chain
+ * (`var(--brand, color-mix(in oklch, var(--accent) 40%, white))`), which the
+ * old 64-character cap rejected along with every slash-alpha colour.
  */
-const CSS_COLOR_ALLOWED = /^[a-zA-Z0-9#%.,()\s+\-]+$/;
+const CSS_COLOR_ALLOWED = /^[a-zA-Z0-9#%.,()\s+\-/_]+$/;
+const CSS_COLOR_MAX_LENGTH = 256;
 export function sanitiseCssColor(raw: unknown): string {
   const trimmed = asString(raw).trim();
   if (!trimmed) return "";
-  if (trimmed.length > 64) return "";
+  if (trimmed.length > CSS_COLOR_MAX_LENGTH) return "";
   if (!CSS_COLOR_ALLOWED.test(trimmed)) return "";
+  // `*` is outside the alphabet, so neither comment delimiter can be spelled
+  // today; this keeps a later widening of the alphabet from allowing one.
+  if (/\/\*|\*\//.test(trimmed)) return "";
   if (/\burl\s*\(|\bexpression\s*\(|javascript\s*:|@import\b/i.test(trimmed)) return "";
   return trimmed;
 }
@@ -378,14 +400,15 @@ export interface TableCellCol {
   /** Cell value formatting hint (`text|number|currency|date`). */
   format?: string;
   /**
-   * Optional `(value, rowIndex) => Component | string | (Component|string)[]`
-   * mapper. Lets a column render arbitrary components — action buttons,
-   * badges, avatars, links — instead of plain text. When omitted, a cell
-   * value that is itself a component node still renders directly.
+   * Optional `(value, rowIndex, row) => Component | string | (Component|string)[]`
+   * mapper, where `row` is the whole row (see `fillTableCell`). Lets a column
+   * render arbitrary components — action buttons, badges, avatars, links —
+   * instead of plain text. When omitted, a cell value that is itself a
+   * component node still renders directly.
    */
   render?: unknown;
   /**
-   * Optional `(value, rowIndex) => void` fired when the cell is clicked or
+   * Optional `(value, rowIndex, row) => void` fired when the cell is clicked or
    * activated via keyboard. Clicks originating on an interactive child
    * (a rendered Button / link / input) are ignored so nested actions keep
    * their own handlers.
@@ -396,7 +419,7 @@ export interface TableCellCol {
 /**
  * Populate a `<td>` for one Table / DataGrid cell. Content resolution order:
  *
- *   1. `col.render(value, rowIndex)` — when provided, its result (a
+ *   1. `col.render(value, rowIndex, row)` — when provided, its result (a
  *      component, string, or array of either) is rendered. This is the
  *      idiomatic way to put buttons / badges / links in a column.
  *   2. a component-node `value` — rendered directly (so authors can also
@@ -404,7 +427,7 @@ export interface TableCellCol {
  *   3. otherwise the value is formatted as text via `formatValue`.
  *
  * When `col.onClick` is a callable the whole cell becomes an accessible
- * button (pointer + Enter/Space), firing `onClick(value, rowIndex)`.
+ * button (pointer + Enter/Space), firing `onClick(value, rowIndex, row)`.
  */
 export function fillTableCell(
   td: HTMLElement,

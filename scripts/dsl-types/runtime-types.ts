@@ -7,6 +7,8 @@
  *     `$util.rules` (`Rules`), `$util.duration`, the reactive env snapshots
  *     (`EnvManager`), the `openWindow()` handle (`OpenedWindow`) and the
  *     `Validator` alias the rules return;
+ *   - the exported parameter types those members mention (`UtilList<T>`,
+ *     `UtilOpenUrlOptions`, …), copied verbatim from the runtime source;
  *   - the global names the TypeScript libs declare, which decide where a DSL
  *     name collides with a JavaScript global (`Map`) or a DOM global (`Text`).
  *
@@ -25,6 +27,13 @@ export interface PrintedMember {
   docs: string;
 }
 
+/** A type declaration copied from a runtime source file. */
+export interface PrintedDeclaration {
+  name: string;
+  /** The declaration as written (`export type …` / `export interface …`), led by its JSDoc. */
+  text: string;
+}
+
 export interface RuntimeTypes {
   /** `typeof Util` members, without `duration` (printed separately). */
   util: PrintedMember[];
@@ -37,7 +46,26 @@ export interface RuntimeTypes {
   openedWindow: PrintedMember[];
   /** The declared type of the `Validator` alias in `namespaces-extra.ts`. */
   validator: string;
+  /** `Validator`'s type-parameter list as written (`"<T = unknown>"`), or `""`. */
+  validatorTypeParameters: string;
+  /** {@link PRINTED_DECLARATIONS}, in that order. */
+  declarations: PrintedDeclaration[];
 }
+
+/**
+ * The exported runtime types the printed members mention, by source file. They
+ * are copied into `aktion-runtime/dsl` as written; generation fails when a
+ * printed member mentions a name that is neither declared here nor by the
+ * generator (`builtins.ts`), so a new parameter type cannot ship undeclared.
+ */
+export const PRINTED_DECLARATIONS: Readonly<Record<string, readonly string[]>> = {
+  "runtime/util.ts": [
+    "UtilList", "UtilAggregateInput", "UtilPicked", "UtilOmitted", "UtilFieldPath", "UtilCompareOp",
+    "UtilNumberFormatOptions", "UtilBlobLike", "UtilReadFileOptions", "UtilWindowFlag", "UtilWindowFeatures",
+    "UtilOpenUrlOptions", "UtilOpenWindowOptions", "UtilWebManifestConfig", "UtilWebManifest",
+  ],
+  "runtime/namespaces-extra.ts": ["UtilStyleColorToken", "UtilStyleColor", "UtilStyleClassValue"],
+};
 
 export interface LibGlobals {
   /** Value names declared by `lib.es2022` (what a DSL program may use without the DOM lib). */
@@ -108,6 +136,25 @@ export function readRuntimeTypes(ts: typeof TS, repoRoot: string): RuntimeTypes 
   );
   if (!validatorDecl) throw new Error("emit-dsl-types: namespaces-extra.ts no longer declares `type Validator`");
 
+  const declarations: PrintedDeclaration[] = [];
+  for (const [relative, names] of Object.entries(PRINTED_DECLARATIONS)) {
+    const sf = sourceFile(file(relative));
+    for (const name of names) {
+      const decl = sf.statements.find(
+        (s): s is TS.TypeAliasDeclaration | TS.InterfaceDeclaration =>
+          (ts.isTypeAliasDeclaration(s) || ts.isInterfaceDeclaration(s)) && s.name.text === name,
+      );
+      const exported = decl && (ts.getModifiers(decl) ?? []).some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+      if (!decl || !exported) throw new Error(`emit-dsl-types: src/${relative} does not export a type or interface named ${name}`);
+      // The JSDoc is the last `/** … */` comment in the declaration's leading trivia.
+      const docs = (ts.getLeadingCommentRanges(sf.text, decl.getFullStart()) ?? [])
+        .map((r) => sf.text.slice(r.pos, r.end))
+        .filter((c) => c.startsWith("/**"));
+      const doc = docs.length > 0 ? `${docs[docs.length - 1]}\n` : "";
+      declarations.push({ name, text: `${doc}${decl.getText(sf)}` });
+    }
+  }
+
   return {
     util: membersOf(utilType, utilSf).filter((m) => m.name !== "duration"),
     duration: membersOf(durationType, utilSf),
@@ -121,6 +168,10 @@ export function readRuntimeTypes(ts: typeof TS, repoRoot: string): RuntimeTypes 
       undefined,
       flags | ts.TypeFormatFlags.InTypeAlias,
     ),
+    validatorTypeParameters: validatorDecl.typeParameters
+      ? `<${validatorDecl.typeParameters.map((p) => p.getText(extraSf)).join(", ")}>`
+      : "",
+    declarations,
   };
 }
 

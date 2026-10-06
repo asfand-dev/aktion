@@ -19,24 +19,39 @@
 
 import type { EvaluationContext } from "./evaluator.js";
 
-const BP_MIN: Array<[string, number]> = [
+const BP_MIN: Array<["xl" | "lg" | "md" | "sm", number]> = [
   ["xl", 1280],
   ["lg", 1024],
   ["md", 768],
   ["sm", 640],
 ];
 
-function breakpointName(width: number): string {
+function breakpointName(width: number): "base" | "sm" | "md" | "lg" | "xl" {
   for (const [name, min] of BP_MIN) if (width >= min) return name;
   return "base";
 }
 
+// Every getter returns a fresh snapshot object, so its fields are read-only:
+// writing one changes nothing.
 export interface EnvManager {
-  readonly viewport: { width: number; height: number };
-  readonly breakpoint: { width: number; active: string; sm: boolean; md: boolean; lg: boolean; xl: boolean };
-  readonly scroll: { x: number; y: number; progress: number; direction: string };
-  readonly media: { prefersDark: boolean; prefersReducedMotion: boolean; online: boolean; pointer: string; portrait: boolean };
-  readonly mouse: { x: number; y: number };
+  readonly viewport: { readonly width: number; readonly height: number };
+  readonly breakpoint: {
+    readonly width: number;
+    readonly active: "base" | "sm" | "md" | "lg" | "xl";
+    readonly sm: boolean;
+    readonly md: boolean;
+    readonly lg: boolean;
+    readonly xl: boolean;
+  };
+  readonly scroll: { readonly x: number; readonly y: number; readonly progress: number; readonly direction: "up" | "down" };
+  readonly media: {
+    readonly prefersDark: boolean;
+    readonly prefersReducedMotion: boolean;
+    readonly online: boolean;
+    readonly pointer: "coarse" | "fine";
+    readonly portrait: boolean;
+  };
+  readonly mouse: { readonly x: number; readonly y: number };
 }
 
 export function createEnvManager(ctx: EvaluationContext): EnvManager {
@@ -55,7 +70,8 @@ export function createEnvManager(ctx: EvaluationContext): EnvManager {
   // ---- snapshots -----------------------------------------------------------
   let vpW = hasWin ? window.innerWidth : 1024;
   let vpH = hasWin ? window.innerHeight : 768;
-  let scX = 0, scY = 0, scProg = 0, scDir = "down";
+  let scX = 0, scY = 0, scProg = 0;
+  let scDir: "up" | "down" = "down";
   let mouseX = 0, mouseY = 0;
 
   // ---- lazy activation flags ----------------------------------------------
@@ -168,7 +184,7 @@ export function createEnvManager(ctx: EvaluationContext): EnvManager {
       activateScroll();
       return { x: Math.round(scX), y: Math.round(scY), progress: scProg, direction: scDir };
     },
-    get media() {
+    get media(): EnvManager["media"] {
       activateMedia();
       return {
         prefersDark: mq("(prefers-color-scheme: dark)"),

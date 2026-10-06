@@ -26,13 +26,13 @@ between similar components, which the prop tables below cannot express.
 Mount(setup, update?, cleanup?, props?, tag?, deps?, onError?)
 ```
 
-First-class host for an imperative / third-party widget that owns its own DOM (chart, map, editor, payment element, captcha, video SDK). Aktion creates the host element; `setup(node, props)` runs once after it attaches and returns an instance handle, `update(instance, props)` runs when `props` change (or when `deps` change, if you pass them), and `cleanup(instance)` runs on unmount. `onError(err, stage)` fires if `setup`/`update` throws, so a failed map / payment element / captcha can show a fallback. The host is preserved across re-renders so the widget is never rebuilt. Apply layout with `sx`.
+First-class host for an imperative / third-party widget that owns its own DOM (chart, map, editor, payment element, captcha, video SDK). Aktion creates the host element; `setup(node, props)` runs once after it attaches and may return an instance handle, `update(instance, props, node)` runs when `props` change (or when `deps` change, if you pass them), and `cleanup(instance)` runs on unmount. `onError(err, stage)` fires if `setup`/`update` throws, so a failed map / payment element / captcha can show a fallback. The host is preserved across re-renders so the widget is never rebuilt. Apply layout with `sx`.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
-| `setup` | `callable` | **yes** | `(node, props) => instance` — runs once after the host attaches; return value is the instance handle passed to `update`/`cleanup`. |
-| `update` | `callable` | no | `(instance, props) => void` — runs when `props` (or `deps`) change. |
-| `cleanup` | `callable` | no | `(instance) => void` — runs when the component leaves the tree (destroy/teardown). |
+| `setup` | `callable` | **yes** | `(node, props) => instance` — runs once after the host attaches; the return value (if any) is the instance handle passed to `update`/`cleanup`. |
+| `update` | `callable` | no | `(instance, props, node) => void` — runs when `props` (or `deps`) change, once `setup` has returned — also when it returned nothing (`instance` is then `undefined`; update the widget through `node`, the live host). Never runs after a `setup` that threw. |
+| `cleanup` | `callable` | no | `(instance) => void` — runs when the component leaves the tree (destroy/teardown). `instance` is `undefined` when `setup` returned nothing, threw, or never ran (the component left before its host attached). |
 | `props` | `object` | no | Reactive prop bag handed to `setup`/`update`. Bind `$state` here to drive the widget. |
 | `tag` | `"div"` \| `"span"` \| `"section"` \| `"article"` \| `"aside"` \| `"figure"` \| `"canvas"` \| `"p"` \| `"pre"` \| `"form"` | no | Host element tag (default "div"). |
 | `deps` | `any[]` | no | Explicit dependency list gating `update`. Use when the `props` bag is rebuilt on every commit, or to force an update after an in-place mutation. |
@@ -50,7 +50,7 @@ Render and hydrate any native custom element / web component with reactive `attr
 | --- | --- | --- | --- |
 | `tag` | `string` | **yes** | Custom-element tag name (must contain a hyphen, e.g. "stripe-pricing-table"). |
 | `attributes` | `object` | no | Reactive attribute map. `$state` values update the element on change; `on*` keys are ignored. |
-| `properties` | `object` | no | JS properties assigned on the element (for components that take rich, non-string props). |
+| `properties` | `object` | no | JS properties assigned on the element (for components that take rich, non-string props). `on*` keys (use `on`), the built-in DOM properties `src`, `href`, `action`, `formAction`, `style`, `id`, `attributes`, `shadowRoot`, `contentEditable`, `innerHTML`, `outerHTML`, `insertAdjacentHTML` and `srcdoc`, and `constructor`, `__proto__` and `prototype` are silently skipped (in any letter case) — pass `src`/`href`/`id`/`style` through `attributes` (URLs are sanitised there), and content through `children`. |
 | `on` | `object` | no | Event map `{ eventName: handler }` bound once to the live element (handlers stay current across re-renders). |
 | `children` | `Node[]` | no | Light-DOM child nodes / text to slot inside the element. |
 

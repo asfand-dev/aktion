@@ -21,6 +21,9 @@
       "aktion-runtime/dsl": ["../../../src/dsl/index.d.ts"]
     }
   },
-  "include": [],
-  "files": ["main.ts", "app.aktion.ts", "surface.aktion.ts", "host-usage.dsl.ts", "negative.dsl.ts"]
+  // Every top-level fixture: main.ts, app.aktion.ts, surface*.aktion.ts,
+  // host-usage.dsl.ts and the negative*.dsl.ts corpora (ambient/ has its own run).
+  // (`exclude` is restated: the repo config's own list excludes tests/.)
+  "include": ["*.ts", "components/**/*.ts"],
+  "exclude": ["ambient"]
 }

@@ -14,12 +14,14 @@
  *     `const Name = (…) => …` becomes a component, as React authors expect.
  *   - **Checks** {@link checkJavaScriptSemantics}: constructs whose Aktion
  *     meaning differs from their JavaScript meaning, and that no rewrite can
- *     fix, become diagnostics with a stable code (E101–E126 errors, W201–W202
+ *     fix, become diagnostics with a stable code (E101–E127 errors, W201–W202
  *     warnings).
  *   - **W1–W3** {@link lowerJavaScriptSemantics}: rewrites that make the
  *     evaluator compute what JavaScript would — every local gets a unique name
  *     (W1), a nested function becomes a `const` lambda in place (W2), and every
- *     function body ends in an explicit `return` (W3).
+ *     function body ends in an explicit `return` (W3); a call that reaches a
+ *     component declared in a JavaScript-shaped module binds its arguments
+ *     positionally (`CallExpr.positional`, `ComponentDeclaration.javascript`).
  *
  * The rules, the measurements behind them and the exact messages are specified
  * in `aktion-in-typescript.md` §6. Rewrites keep every original `loc`, so
@@ -63,6 +65,15 @@ const BUILTIN_HOOKS: ReadonlySet<string> = new Set(manifest.hooks);
 
 /** Factories whose result is a handle whose methods are its API (`$store(…)`, `$http(…)`, …). */
 const HANDLE_FACTORIES: ReadonlySet<string> = new Set(manifest.factories);
+
+/**
+ * The factories whose handle outlives the render that rebuilds its binding:
+ * `$store(…)` / `$form(…)` are cached by their call site and `$query(…)` by
+ * its request, so the initializer hands back the same handle (E107, see
+ * `Analyzer.survivesRebuild`). `$http`, `$mutation`, `$sse`, `$socket`
+ * and `$script` build a new handle on every render.
+ */
+const CACHED_HANDLE_FACTORIES: ReadonlySet<string> = new Set(["store", "form", "query"]);
 
 /** The factories whose handle reads `undefined` when destructured (S39). */
 const STORE_FACTORIES: ReadonlySet<string> = new Set(["store", "form"]);
@@ -165,12 +176,20 @@ const MESSAGES = {
     `Module-level \`${name}\` is changed${fn ? ` in \`${fn}\`` : ""}, but Aktion rebuilds module-level bindings on ` +
     "every render, so the change is lost on the next render. Keep mutable data in a state atom " +
     `(\`let $${name} = …\`) or, inside a component, in \`$ref(…)\`.`,
+  E107init: (name: string) =>
+    `Module-level \`${name}\` is changed in place after it was built, but Aktion rebuilds module-level bindings ` +
+    "from their initializer on every render, so the change is lost. Build the whole value in the initializer " +
+    "(`const xs = [1, 2]`, `Object.fromEntries(items.map((it) => [it.id, it]))`, `new Map([[key, value]])`), " +
+    `or keep data that changes in a state atom (\`let $${name} = …\`).`,
   E108method: (name: string, method: string) =>
     `\`$${name}.${method}(…)\` changes state in place, and Aktion only re-renders when a \`$\` atom is assigned. ` +
     `Assign a new value instead, e.g. \`$${name} = [...$${name}, item]\`.`,
   E108key: (name: string) =>
     `\`$${name}[…]\` is changed in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value ` +
     `instead, e.g. \`$${name} = $${name}.map(…)\` or \`$${name} = { ...$${name}, [key]: value }\`.`,
+  E108assign: (name: string) =>
+    `\`Object.assign($${name}, …)\` changes state in place, and Aktion only re-renders when a \`$\` atom is ` +
+    `assigned. Assign a new value instead, e.g. \`$${name} = { ...$${name}, ...changes }\`.`,
   E108delete: (name: string) =>
     `\`delete $${name}…\` changes state in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a ` +
     `new value instead, e.g. a copy without the key: \`const { [key]: _, ...rest } = $${name}; $${name} = rest\`.`,
@@ -207,6 +226,19 @@ const MESSAGES = {
   E121:
     "Returning a cleanup function from an effect has no effect in Aktion — call `cleanup(() => …)` inside the body " +
     "instead.",
+  E127arms:
+    "`$router(…)` takes its route arms as an object literal written at the call — " +
+    "`$router({ \"/\": Home(), default: NotFound() })`. Aktion reads the arms from the source, so a value built " +
+    "elsewhere is ignored and the router renders nothing.",
+  E127spread:
+    "Spreads in `$router({ … })` are ignored — Aktion reads the route arms from the source. List every arm in the " +
+    "object literal.",
+  E127computed:
+    "Computed route paths in `$router({ … })` are ignored — Aktion reads each arm's path from the source. Write the " +
+    "path as a string key (`\"/users/:id\": …`).",
+  E127routes:
+    "A layout arm's `routes` must be an object literal written in place — Aktion reads it from the source, so a value " +
+    "built elsewhere renders no child route.",
   E124: (name: string, field: string) =>
     "Destructuring a `$store`/`$form` handle reads `undefined` in Aktion — read the fields as " +
     `\`${name}.${field}\`.`,
@@ -247,16 +279,54 @@ function isAppCall(expr: Expression): expr is InvokeExpr {
   return expr.kind === "Invoke" && expr.callee.kind === "StateRef" && expr.callee.name === "app";
 }
 
+/** Line/column ↔ offset over a module's text (1-based positions, as the parser reports them). */
+class SourceText {
+  private readonly lineStarts: number[] = [0];
+
+  constructor(readonly text: string) {
+    for (let i = 0; i < text.length; i += 1) if (text[i] === "\n") this.lineStarts.push(i + 1);
+  }
+
+  offsetOf(loc: SourceLocation): number | null {
+    const start = this.lineStarts[loc.line - 1];
+    return start === undefined ? null : start + loc.column - 1;
+  }
+
+  locationOf(offset: number): SourceLocation {
+    // The last line starting at or before `offset` (binary search).
+    let lo = 0;
+    let hi = this.lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (this.lineStarts[mid]! <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    return { line: lo + 1, column: offset - this.lineStarts[lo]! + 1 };
+  }
+}
+
 /**
  * Where a `$name(…)` call starts. The parser locates an `Invoke` at its `(`
  * (and its `StateRef` callee not at all), but a diagnostic should point at the
- * `$`: step back over `$name` — the overwhelmingly common spelling has nothing
- * between the name and `(`.
+ * `$`. With the module text, step back from the `(` over whitespace — which is
+ * what the TypeScript frontend leaves of the type arguments in
+ * `$state<number>(0)`, and what `$memo (…)` has — then over `$name`. Without
+ * it, assume nothing sits between the name and `(`.
  */
-function invokeStart(expr: InvokeExpr, fallback: SourceLocation): SourceLocation {
+function invokeStart(expr: InvokeExpr, fallback: SourceLocation, source?: SourceText): SourceLocation {
   const loc = expr.loc ?? fallback;
   if (expr.callee.kind !== "StateRef" || !expr.loc) return loc;
-  const column = expr.loc.column - expr.callee.name.length - 1;
+  const name = expr.callee.name;
+  const paren = source?.offsetOf(expr.loc);
+  if (source && paren !== null && paren !== undefined && source.text[paren] === "(") {
+    let end = paren - 1;
+    while (end >= 0 && /\s/.test(source.text[end]!)) end -= 1;
+    const dollar = end - name.length;
+    if (dollar >= 0 && source.text[dollar] === "$" && source.text.slice(dollar + 1, end + 1) === name) {
+      return { ...expr.loc, ...source.locationOf(dollar) };
+    }
+  }
+  const column = expr.loc.column - name.length - 1;
   return column >= 1 ? { ...expr.loc, column } : loc;
 }
 
@@ -483,6 +553,9 @@ function commonPrefix(a: readonly number[], b: readonly number[]): number {
 }
 
 class Analyzer {
+  /** The module text, when the caller has it — positions `$name(…)` diagnostics exactly. */
+  constructor(private readonly source?: SourceText) {}
+
   private index = 0;
   private nextLoop = 0;
   private readonly moduleScope: Scope = newScope(null, null, 0);
@@ -499,6 +572,8 @@ class Analyzer {
   readonly refs: Ref[] = [];
   readonly findings: Finding[] = [];
   readonly importedMutations: ImportedStateMutation[] = [];
+  /** Calls whose arguments bind positionally, as in JavaScript (`CallExpr.positional`). */
+  readonly positionalCalls: CallExpr[] = [];
 
   run(program: Program): this {
     this.hoistModule(program.statements);
@@ -595,8 +670,9 @@ class Analyzer {
     return binding;
   }
 
-  private resolve(name: string, state: boolean): Binding | null {
-    for (let s: Scope | null = this.scope; s !== null; s = s.parent) {
+  /** The binding `name` refers to from `from` (the current scope by default). */
+  private resolve(name: string, state: boolean, from: Scope | null = this.scope): Binding | null {
+    for (let s: Scope | null = from; s !== null; s = s.parent) {
       const found = (state ? s.state : s.plain).get(name);
       if (found) return found;
     }
@@ -836,7 +912,11 @@ class Analyzer {
         }
         break;
       case "ExpressionStatement":
-        if (stmt.expression.kind === "Object") this.report("E113", stmt.loc, MESSAGES.E113);
+        // `{ a }` parses as an object literal; a real block (`{ const x = 1 }`)
+        // as a `Block` — `ParseOptions.statementBlocks`.
+        if (stmt.expression.kind === "Object" || stmt.expression.kind === "Block") {
+          this.report("E113", stmt.loc, MESSAGES.E113);
+        }
         if (context.moduleTop && isAppCall(stmt.expression)) this.appRoots.add(stmt.expression);
         this.expr(stmt.expression, { hooks, value: false });
         break;
@@ -1173,6 +1253,10 @@ class Analyzer {
         if (ARRAY_MUTATORS.has(expr.method) || COLLECTION_MUTATORS.has(expr.method)) {
           this.mutation(expr.object, "method", expr.method, expr.loc);
         }
+        // `Object.assign(target, …)` changes its first argument in place.
+        if (isObjectAssign(expr, (n) => this.resolve(n, false) === null) && expr.arguments[0]) {
+          this.mutation(expr.arguments[0], "target", undefined, expr.loc);
+        }
         this.expr(expr.object, asValue);
         for (const arg of expr.arguments) this.expr(arg, neutral);
         break;
@@ -1216,6 +1300,11 @@ class Analyzer {
     if (binding) {
       this.checkPatternArguments(expr, binding);
       if (this.fn === null || this.fn.hookHost) this.renderCalls.push({ binding, loc });
+      // Whether it binds positionally depends on where the component it
+      // reaches was declared, which the evaluator knows (`CallExpr.positional`).
+      if (this.isUserComponent(binding) && expr.arguments.some((arg) => arg.kind === "Object")) {
+        this.positionalCalls.push(expr);
+      }
     }
     const neutral: ExprContext = { hooks: context.hooks, value: false };
     for (const arg of expr.arguments) this.expr(arg, neutral);
@@ -1225,9 +1314,10 @@ class Analyzer {
     const neutral: ExprContext = { hooks: context.hooks, value: false };
     if (expr.callee.kind === "StateRef") {
       const name = expr.callee.name;
-      const start = invokeStart(expr, this.here());
+      const start = invokeStart(expr, this.here(), this.source);
       if (name === "app" && !this.appRoots.has(expr)) this.report("E118", start, MESSAGES.E118);
       if (!context.hooks && this.isHook(name)) this.report("E110", start, MESSAGES.E110(name));
+      if (name === "router" && this.isRuntimeName("router")) this.checkRouterArms(expr, start);
       this.read(name, true, start);
     } else {
       this.expr(expr.callee, { hooks: context.hooks, value: true });
@@ -1288,6 +1378,15 @@ class Analyzer {
     const savedFn = this.fn;
     this.fn = fn;
     this.pushScope();
+    // A named function expression binds its own name in its body, so a
+    // self-call resolves (and W1 renames it with the references).
+    if (expr.selfName) {
+      const loc = expr.loc ?? this.here();
+      const self = this.declare(expr.selfName, false, "local", { loc, ready: start });
+      this.declaring(self, loc, (symbol) => {
+        expr.selfName = symbol;
+      });
+    }
     for (const p of expr.params) this.param(p, false, start);
     if (expr.body.kind === "Block") this.block(expr.body, fn);
     else this.expr(expr.body, { hooks: false, value: false });
@@ -1301,6 +1400,46 @@ class Analyzer {
     if (!binding) return false;
     if (binding.kind === "function") return binding.decl?.kind === "ComponentDeclaration";
     return this.isUserImport(binding) && isPascalCase(binding.name);
+  }
+
+  /** `$name` is the runtime's own (not shadowed by a user hook or import) — seen from `from`. */
+  private isRuntimeName(name: string, from: Scope | null = this.scope): boolean {
+    const binding = this.resolve(name, true, from);
+    return binding === null || (binding.kind === "import" && binding.importSource === DSL_MODULE_ID);
+  }
+
+  /**
+   * E127 — `$router(…)` reads its arms from the AST, not from a value: the
+   * evaluator matches the properties of the object literal written at the call
+   * (skipping spreads, and comparing each arm's literal key with the path), and
+   * a layout arm's `routes` the same way. Anything else is silently ignored.
+   */
+  private checkRouterArms(expr: InvokeExpr, start: SourceLocation): void {
+    const arms = expr.arguments[0];
+    if (!arms || arms.kind !== "Object") {
+      this.report("E127", arms?.loc ?? start, MESSAGES.E127arms);
+      return;
+    }
+    const visit = (object: Expression & { kind: "Object" }): void => {
+      for (const prop of object.properties) {
+        if (prop.spread) {
+          this.report("E127", prop.value.loc ?? start, MESSAGES.E127spread);
+          continue;
+        }
+        if (prop.computedKey) {
+          this.report("E127", prop.computedKey.loc ?? start, MESSAGES.E127computed);
+          continue;
+        }
+        if (prop.value.kind !== "Object") continue;
+        // A layout arm: `{ layout: Shell(outlet), routes: { … } }`.
+        const layout = prop.value.properties.some((p) => !p.spread && !p.computedKey && p.key === "layout");
+        const routes = prop.value.properties.find((p) => !p.spread && !p.computedKey && p.key === "routes");
+        if (!layout || !routes) continue;
+        if (routes.value.kind === "Object") visit(routes.value);
+        else this.report("E127", routes.value.loc ?? start, MESSAGES.E127routes);
+      }
+    };
+    visit(arms);
   }
 
   /** E117 — `{ ...extra }` in the props bag of a library or host component. */
@@ -1341,12 +1480,13 @@ class Analyzer {
 
   /**
    * An in-place change of what `subject` evaluates to: `obj.k = v`, `list.push(x)`,
-   * `delete o.k`, `a[i]++`. `subject` is the member chain being changed (or the
-   * receiver of a mutating method).
+   * `delete o.k`, `a[i]++`, `Object.assign(o, …)`. `subject` is the member chain
+   * being changed (or the receiver of a mutating method, or the `target` of
+   * `Object.assign`).
    */
   private mutation(
     subject: Expression,
-    kind: "method" | "assign" | "update" | "delete",
+    kind: "method" | "assign" | "update" | "delete" | "target",
     method: string | undefined,
     at: SourceLocation | undefined,
   ): void {
@@ -1360,7 +1500,7 @@ class Analyzer {
     }
     if (node.kind !== "Identifier" && node.kind !== "StateRef") return;
     // `delete x` / `x = …` are not in-place changes of a value.
-    if (kind !== "method" && !path) return;
+    if (kind !== "method" && kind !== "target" && !path) return;
     const state = node.kind === "StateRef";
     const binding = this.resolve(node.name, state);
     if (!binding) return;
@@ -1370,22 +1510,34 @@ class Analyzer {
       if (!(state && this.isUserImport(binding))) return;
     }
     if (!state) {
-      // E107: the change happens inside a function, after the module-level
-      // binding was built — and is lost when the next render rebuilds it.
-      if ((binding.kind === "module" || this.isUserImport(binding)) && this.fn !== null) {
-        this.report("E107", loc, MESSAGES.E107(node.name, this.fnLabel()));
+      // E107: the module-level binding is changed after it was built, and
+      // every render rebuilds the binding from its initializer. When that
+      // builds a fresh value (`[]`, `{}`, `new Map()`, a call) the change is
+      // lost: inside a function on the next render; at module top level
+      // (`xs.push(2)`, `byId[it.id] = it` in a top-level loop) on the first
+      // one, since the imperative top-level statements run once per plan and
+      // the render then re-seeds the binding. An initializer that hands back
+      // the same object every time keeps the change — see survivesRebuild.
+      if ((binding.kind === "module" || this.isUserImport(binding)) && !this.survivesRebuild(binding)) {
+        this.report(
+          "E107",
+          loc,
+          this.fn !== null ? MESSAGES.E107(node.name, this.fnLabel()) : MESSAGES.E107init(node.name),
+        );
       }
       return;
     }
-    if (kind !== "method") this.fn?.stateWrites.push(node.name);
-    const inPlace = kind === "method" || kind === "delete" || dynamicKey;
+    if (kind !== "method" && kind !== "target") this.fn?.stateWrites.push(node.name);
+    const inPlace = kind === "method" || kind === "target" || kind === "delete" || dynamicKey;
     if (!inPlace) return; // `$o.k = v` is a reactive, copy-on-write path write
     const message =
       kind === "method"
         ? MESSAGES.E108method(node.name, method ?? "")
-        : kind === "delete"
-          ? MESSAGES.E108delete(node.name)
-          : MESSAGES.E108key(node.name);
+        : kind === "target"
+          ? MESSAGES.E108assign(node.name)
+          : kind === "delete"
+            ? MESSAGES.E108delete(node.name)
+            : MESSAGES.E108key(node.name);
     if (this.isUserImport(binding)) {
       this.importedMutations.push({
         source: binding.importSource!,
@@ -1399,6 +1551,45 @@ class Analyzer {
       return;
     }
     if (isDataAtom(binding)) this.report("E108", loc, message);
+  }
+
+  /**
+   * A module-level binding whose initializer hands back the SAME object on
+   * every render, so an in-place change of it outlives the rebuild (no E107):
+   *
+   *   - a `$store(…)`, `$form(…)` or `$query(…)` handle
+   *     ({@link CACHED_HANDLE_FACTORIES}) — `cart.items = [item]`,
+   *     `signup.values.name = "Ada"`;
+   *   - a host object read through a global — `const root =
+   *     document.documentElement`, then `root.dataset.theme = "dark"`.
+   *
+   * Measured on the `.aktion` control in tests/compiler-module-mutation.test.ts.
+   * An import is judged by its own module, which this one cannot see, so it
+   * never qualifies.
+   */
+  private survivesRebuild(binding: Binding): boolean {
+    const init = binding.init;
+    if (binding.kind !== "module" || !init) return false;
+    if (init.kind === "Invoke") {
+      return (
+        init.callee.kind === "StateRef" &&
+        CACHED_HANDLE_FACTORIES.has(init.callee.name) &&
+        this.isRuntimeName(init.callee.name, binding.scope)
+      );
+    }
+    // `document`, `document.documentElement`, `window["app"]`: a member chain
+    // with fixed keys, rooted in a name that no binding declares. The names
+    // the runtime injects (`route`, `params`, `theme`, …) are rebuilt with it.
+    let root: Expression = init;
+    while (root.kind === "Member") {
+      if (root.computed && root.computed.kind !== "Literal") return false;
+      root = root.object;
+    }
+    return (
+      root.kind === "Identifier" &&
+      !RESERVED_INJECTED.has(root.name) &&
+      this.resolve(root.name, false, binding.scope) === null
+    );
   }
 
   // ── whole-module rules ──
@@ -1439,7 +1630,14 @@ class Analyzer {
     for (const binding of this.moduleScope.plain.values()) {
       const injected = RESERVED_INJECTED.get(binding.name);
       if (injected) {
-        this.report("E112", binding.loc, MESSAGES.E112(binding.name, injected));
+        // `import { params } from "aktion-runtime/dsl"` names the runtime's own
+        // binding — the linker drops the import, so the name resolves at
+        // runtime — and is what lets `tsc` see it. Anything else that binds the
+        // name is E112; a module that both imports and declares it is E123,
+        // which the linker reports.
+        if (binding.kind !== "import" || binding.importSource !== DSL_MODULE_ID) {
+          this.report("E112", binding.loc, MESSAGES.E112(binding.name, injected));
+        }
         continue;
       }
       if (!LIBRARY_COMPONENTS.has(binding.name)) continue;
@@ -1470,6 +1668,11 @@ class Analyzer {
       if (atom !== undefined) this.report("W202", loc, MESSAGES.W202(binding.name, atom));
     }
   }
+}
+
+/** `Object.assign(…)` on the global `Object` (`isFree("Object")`: not shadowed by a binding). */
+function isObjectAssign(expr: Expression & { kind: "MethodCall" }, isFree: (name: string) => boolean): boolean {
+  return expr.method === "assign" && expr.object.kind === "Identifier" && expr.object.name === "Object" && isFree("Object");
 }
 
 function firstField(bindings: ReadonlyArray<DestructuringBinding>): string {
@@ -1702,6 +1905,20 @@ export function findAsyncModifiers(source: string): SourceLocation[] {
   const out: SourceLocation[] = [];
   for (let i = 0; i < tokens.length; i += 1) {
     const tok = tokens[i]!;
+    // A template literal is one token: look inside each `${…}`, whose own
+    // text starts two columns after the `$` (later lines keep their columns).
+    if (tok.type === "TemplateString") {
+      for (const part of tok.parts ?? []) {
+        if (part.kind !== "expr") continue;
+        for (const loc of findAsyncModifiers(part.source)) {
+          out.push({
+            line: part.line + loc.line - 1,
+            column: loc.line === 1 ? part.column + 2 + (loc.column - 1) : loc.column,
+          });
+        }
+      }
+      continue;
+    }
     if (tok.type !== "Keyword" || tok.value !== "async") continue;
     let prev: (typeof tokens)[number] | undefined;
     for (let j = i - 1; j >= 0; j -= 1) {
@@ -1735,14 +1952,16 @@ export function findAsyncModifiers(source: string): SourceLocation[] {
 export interface CheckJavaScriptOptions {
   /**
    * The module text the program was parsed from. Needed for E102 (`async`
-   * modifiers leave no trace in the AST); without it that rule is skipped.
+   * modifiers leave no trace in the AST); without it that rule is skipped,
+   * and a `$name(…)` diagnostic assumes nothing sits between the name and
+   * its `(`.
    */
   source?: string;
 }
 
 /**
  * Check a `.aktion.js` / `.aktion.ts` module for constructs whose Aktion
- * meaning differs from their JavaScript meaning (E101–E126, W201–W202).
+ * meaning differs from their JavaScript meaning (E101–E127, W201–W202).
  *
  * Run on the program as the author wrote it, after {@link normalizeComponentForms}.
  * Every diagnostic carries `path`, a stable `code` and the author's
@@ -1753,7 +1972,8 @@ export function checkJavaScriptSemantics(
   path: string,
   options: CheckJavaScriptOptions = {},
 ): LinkDiagnostic[] {
-  const findings = [...new Analyzer().run(program).findings];
+  const text = options.source !== undefined ? new SourceText(options.source) : undefined;
+  const findings = [...new Analyzer(text).run(program).findings];
   if (options.source !== undefined) {
     for (const loc of findAsyncModifiers(options.source)) {
       findings.push({ code: "E102", severity: "error", message: MESSAGES.E102, loc });
@@ -1814,6 +2034,18 @@ function toDiagnostics(findings: ReadonlyArray<Finding>, path: string): LinkDiag
  *     bare `return` (without `loc`, so coverage gains no phantom line), so
  *     falling off the end yields `undefined` instead of the last expression
  *     (S24).
+ *   - **Positional calls** — every component this module declares is marked
+ *     `javascript`, and every call it makes to a user component with an
+ *     object-literal argument is marked `positional`. When such a call reaches
+ *     a `javascript` component, its arguments bind as JavaScript binds them,
+ *     so an object literal (`KVRow({ key: "a", value: "1" })`) is the value of
+ *     the parameter at its position instead of a named-props bag that silently
+ *     reroutes or drops it. TypeScript types such a call with the component's
+ *     plain signature, so this is what the caller's types say. The evaluator
+ *     decides by the declaration, not by the import's spelling, so
+ *     `"./cards"` and `"./cards.aktion.js"` bind alike. Calls that reach
+ *     `.aktion` components, and every call written in a `.aktion` module,
+ *     keep the DSL's named props.
  *
  * Mutates and returns `program` (the frontend owns the freshly parsed tree).
  * Run only on a module {@link checkJavaScriptSemantics} accepted.
@@ -1831,6 +2063,9 @@ export function lowerJavaScriptSemantics(program: Program): Program {
     const symbol = ref.binding?.symbol;
     if (symbol !== undefined && ref.rename) ref.rename(symbol);
   }
+  // Positional calls
+  for (const stmt of program.statements) if (stmt.kind === "ComponentDeclaration") stmt.javascript = true;
+  for (const call of analysis.positionalCalls) call.positional = true;
   // W2
   liftNestedFunctions(program);
   // W3
@@ -1842,7 +2077,9 @@ export function lowerJavaScriptSemantics(program: Program): Program {
 function liftNestedFunctions(program: Program): void {
   const lists: Statement[][] = [];
   walk(program, ({ node }) => {
-    if (node.kind === "Block") lists.push(node.body as Statement[]);
+    // `Array.isArray`: only a real block has a statement list — anything else
+    // that reaches here with `kind: "Block"` must not crash the module.
+    if (node.kind === "Block" && Array.isArray(node.body)) lists.push(node.body as Statement[]);
     else if (node.kind === "SwitchStatement") for (const c of node.cases) lists.push(c.body as Statement[]);
   });
   for (const list of lists) {

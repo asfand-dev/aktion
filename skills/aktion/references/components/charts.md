@@ -59,7 +59,7 @@ Line chart. `labels` define the x-axis, each Series is a line. As a shortcut you
 | --- | --- | --- | --- |
 | `labels` | `string[]` | no |  |
 | `series` | `Series[]` | no |  |
-| `data` | `{x: string, [key: string]: number}[]` | no | Row-shaped data — labels and series are auto-derived |
+| `data` | `{x: string | number, label?: string, [key: string]: number | string | null}[]` | no | Row-shaped data — labels and series are auto-derived: `x` (or `label` when `x` is absent) is the row's x-axis label, every other key whose value is a number or numeric string is one line, and text columns are skipped; a null or missing value leaves a gap |
 | `title` | `string` | no |  |
 | `filled` | `boolean` | no | Fill the area beneath each line (area-chart style) |
 | `stacked` | `boolean` | no | Stack series when filled=true |
@@ -71,7 +71,7 @@ Line chart. `labels` define the x-axis, each Series is a line. As a shortcut you
 | `height` | `number` | no | Plot height in px (default 240) |
 | `loading` | `boolean` | no | Render a loading placeholder instead of the plot |
 | `emptyText` | `string` | no | Message shown when there is no data (default "No data") |
-| `onPointClick` | `callable` | no | (label, value, seriesName) => void, fired when a data point is activated |
+| `onPointClick` | `callable` | no | (label, value, seriesName) => void, fired when a data point is activated (a gap has no point, so `value` is always a number) |
 | `ariaLabel` | `string` | no | Accessible name for the graphic, overriding the generated one — the way to name a chart that has no visible `title` |
 | `decorative` | `boolean` | no | Take the graphic out of the accessibility tree. Only for a chart that repeats information already present in the surrounding text |
 
@@ -176,15 +176,15 @@ Frequency distribution from raw numeric values. Pass `values` directly (the comp
 ### Heatmap
 
 ```
-Heatmap(xLabels, yLabels, values, title?, tone?, showValues?, min?, max?, valueFormat?, emptyText?, onCellClick?, ariaLabel?, decorative?)
+Heatmap(xLabels?, yLabels?, values, title?, tone?, showValues?, min?, max?, valueFormat?, emptyText?, onCellClick?, ariaLabel?, decorative?)
 ```
 
 Color-intensity matrix grid (calendar-style or correlation-style). Pass `xLabels`, `yLabels`, and a `values` array of arrays (rows × columns). Cell intensity scales across the data range — pin it with `min`/`max` when two heatmaps must be comparable (or for a -1..1 correlation matrix). Set `showValues: false` for a GitHub-style colour-only grid. Use for activity heatmaps, schedule density, correlation matrices.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
-| `xLabels` | `string[]` | **yes** |  |
-| `yLabels` | `string[]` | **yes** |  |
+| `xLabels` | `string[]` | no | Column labels; a column without one is numbered from 1 |
+| `yLabels` | `string[]` | no | Row labels; a row without one is numbered from 1 |
 | `values` | `number[][]` | **yes** | Matrix indexed by row (y), then column (x) |
 | `title` | `string` | no |  |
 | `tone` | `"primary"` \| `"success"` \| `"warning"` \| `"danger"` \| `"info"` | no |  |
@@ -232,7 +232,7 @@ Named data series for charts. Used inside BarChart, LineChart, PieChart, RadarCh
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `name` | `string` | **yes** |  |
-| `values` | `number[]` | no | One value per x-axis label (ScatterChart also accepts its {x, y} points here) |
-| `color` | `string` | no | Override the palette colour for this series (any CSS colour or var()) |
-| `points` | `{x: number, y: number, label?: string}[]` | no | XY points for ScatterChart — the explicit alternative to passing them as `values` |
+| `values` | `number[] | [number, number, string?][]` | no | One number per x-axis label — or, for ScatterChart, its points as `{x, y, label?}` objects or `[x, y, label?]` tuples |
+| `color` | `string` | no | Override the palette colour for this series (any CSS colour, `var()` or `color-mix()`; a value carrying anything else — a `;`, quotes, `url()`, a comment — falls back to the palette slot) |
+| `points` | `{x: number, y: number, label?: string}[] | [number, number, string?][]` | no | XY points for ScatterChart (`{x, y, label?}` objects or `[x, y, label?]` tuples) — the explicit alternative to passing them as `values` |
 

@@ -90,12 +90,12 @@ Lightweight, dependency-free code editor. Pairs a styled textarea with a synchro
 ContextMenu(target, items, label?, trigger?, disabled?, placement?, offset?, open?, onOpenChange?)
 ```
 
-Right-click (or long-press on touch) menu that attaches to a child node. Wraps `target` and shows the menu at the pointer. Items are `MenuItem(...)` nodes, `MenuSeparator()` entries, or `{label, action, icon?, shortcut?, variant?, disabled?, separator?}` objects. Set `trigger: "click"` for the overflow-menu pattern, `disabled` to suppress it on locked rows, and pass a `$variable` as `open` to observe or drive the open state. Shift+F10 (or the ContextMenu key) opens it from the keyboard, and ArrowUp/ArrowDown/Home/End plus typeahead move between items while Escape closes it and returns focus to the target. Use on table rows, tree nodes, kanban cards, file browser entries.
+Right-click (or long-press on touch) menu that attaches to a child node. Wraps `target` and shows the menu at the pointer. Items are `MenuItem(...)` nodes (including `checked` / `role` / `keepOpen` rows), `MenuSeparator()` entries, or `{label, onClick (or action), icon?, shortcut?, variant (or tone)?, disabled?, checked?, role?, keepOpen?}` / `{separator: true}` objects; anything else is ignored. Set `trigger: "click"` for the overflow-menu pattern, `disabled` to suppress it on locked rows, and pass a `$variable` as `open` to observe or drive the open state. Shift+F10 (or the ContextMenu key) opens it from the keyboard, and ArrowUp/ArrowDown/Home/End plus typeahead move between items while Escape closes it and returns focus to the target. Use on table rows, tree nodes, kanban cards, file browser entries.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `target` | `Node` | **yes** | Child node the menu is bound to |
-| `items` | `any[]` | **yes** | MenuItem nodes or {label, action} objects |
+| `items` | `any[]` | **yes** | MenuItem / MenuSeparator nodes or {label, onClick} objects; other values are ignored |
 | `label` | `string` | no | ARIA label for the menu |
 | `trigger` | `"contextmenu"` \| `"click"` \| `"longpress"` | no | What opens the menu (default `contextmenu`) |
 | `disabled` | `boolean` | no | Never open the menu (locked / read-only rows) |

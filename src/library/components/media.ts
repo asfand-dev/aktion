@@ -129,8 +129,9 @@ export const VideoPlayer: ComponentSpec = {
     "play/pause button (click the video too). `autoplay` only works " +
     "alongside `muted` — browsers block unmuted autoplay. Add `tracks` for " +
     "captions/subtitles (required for prerecorded video, WCAG 1.2.2). " +
-    "`onEnded` fires on completion; a missing, unsafe, or failing source " +
-    "shows `fallback` and calls `onError`. Use for product demos, " +
+    "`onEnded` fires on completion. A missing or unsafe source shows " +
+    "`fallback`; a source that fails to load (with `sources`, once every " +
+    "entry has failed) shows it and calls `onError`. Use for product demos, " +
     "tutorials, and any inline video.",
   props: [
     { name: "src", type: "string", optional: true, description: "Video URL (mp4 / webm / etc.)" },
@@ -145,7 +146,7 @@ export const VideoPlayer: ComponentSpec = {
     { name: "tracks", type: "object[]", optional: true, description: "Caption/subtitle tracks: {src, label?, srclang?, kind?, default?} (kind: subtitles|captions|descriptions|chapters|metadata)" },
     { name: "onEnded", type: "callable", optional: true, aliases: ["onended"], description: "Callable invoked when playback reaches the end" },
     { name: "fallback", type: "string", optional: true, description: "Message shown when the source is missing/unsafe or fails to load" },
-    { name: "onError", type: "callable", optional: true, aliases: ["onerror"], description: "Callable invoked when the video fails to load" },
+    { name: "onError", type: "callable", optional: true, aliases: ["onerror"], description: "Callable invoked when the video fails to load (`src`, or every `sources` entry). A missing or unsafe source only shows `fallback`" },
   ],
   render: (_node, props, helpers) => {
     const root = el("figure", { class: "rui-video-player" });
@@ -174,18 +175,28 @@ export const VideoPlayer: ComponentSpec = {
       video.defaultMuted = true;
     }
     const sources = asArray<unknown>(props.sources);
+    let lastSource: HTMLElement | null = null;
+    // Every URL this render asks the browser to try, in order — the identity a
+    // load failure is remembered under (see `failedSlot` below).
+    const tried: string[] = [];
     if (sources.length > 0) {
       for (const raw of sources) {
         if (!raw || typeof raw !== "object") continue;
         const s = raw as { src?: unknown; type?: unknown };
         const safeSrc = sanitiseMediaSrc(s.src);
         if (!safeSrc) continue;
-        video.append(el("source", { src: safeSrc, type: asString(s.type) || null }));
+        lastSource = el("source", { src: safeSrc, type: asString(s.type) || null });
+        video.append(lastSource);
+        tried.push(safeSrc);
       }
     } else {
       const safeSrc = sanitiseMediaSrc(props.src);
-      if (safeSrc) video.setAttribute("src", safeSrc);
+      if (safeSrc) {
+        video.setAttribute("src", safeSrc);
+        tried.push(safeSrc);
+      }
     }
+    const sourceKey = tried.join("\n");
     for (const raw of asArray<unknown>(props.tracks)) {
       if (!raw || typeof raw !== "object") continue;
       const t = raw as { src?: unknown; label?: unknown; srclang?: unknown; kind?: unknown; default?: unknown };
@@ -214,21 +225,37 @@ export const VideoPlayer: ComponentSpec = {
     );
 
     const fallbackText = asString(props.fallback);
+    const loadFailedText = fallbackText || "This video could not be loaded.";
+    // A load failure is remembered per instance, keyed by the sources that
+    // failed: the fallback appended to the live frame alone was removed by the
+    // next commit (any re-render — a caption change — left a black frame), and
+    // a NEW source still gets its attempt.
+    const failedSlot = helpers.useInstanceState<string>("video-failed-sources", "");
     const hasSource = video.hasAttribute("src") || video.querySelector("source") !== null;
     if (!hasSource) {
       // A blocked scheme, an omitted `src`, or a typo used to render as a bare
       // black rectangle — indistinguishable from "still loading".
       playerWrap.append(renderMediaFallback(fallbackText || "No video source — check `src`."));
     }
-    // `onerror` IS transferable, so this closure stays current across renders.
-    video.onerror = (event) => {
+    // `onerror` IS transferable, so these closures stay current across renders.
+    const reportLoadFailure = (event: Event | string): void => {
+      failedSlot.set(sourceKey);
       const live = ((event as Event).currentTarget ?? (event as Event).target) as Element | null;
       const frame = live?.closest(".rui-video-player-frame");
+      // `useInstanceState.set` schedules no render, so this one paints it now.
       if (frame && !frame.querySelector(".rui-video-player-empty")) {
-        frame.append(renderMediaFallback(fallbackText || "This video could not be loaded."));
+        frame.append(renderMediaFallback(loadFailedText));
       }
       helpers.invoke(props.onError);
     };
+    video.onerror = reportLoadFailure;
+    // With `<source>` children the browser reports each failure on that
+    // `<source>` (the event does not bubble) and never on the `<video>`: in
+    // Chrome 152, two failing sources fired one `error` at each source and none
+    // at the video, whose `networkState` was NETWORK_NO_SOURCE (3) when the last
+    // one failed. Sources are tried in order, so the last one failing means
+    // they all did.
+    if (lastSource) lastSource.onerror = reportLoadFailure;
 
     if (!showControls) {
       // `controls: false` used to leave no way at all to start playback: no
@@ -238,6 +265,8 @@ export const VideoPlayer: ComponentSpec = {
       video.onclick = (event) => toggleMediaPlayback(event, ".rui-video-player-frame");
       playerWrap.append(playBtn);
     }
+    // Last, where `reportLoadFailure` appends it on the live frame.
+    if (hasSource && failedSlot.get() === sourceKey) playerWrap.append(renderMediaFallback(loadFailedText));
 
     root.append(playerWrap);
     const caption = asString(props.caption);
@@ -780,7 +809,7 @@ export const Lightbox: ComponentSpec = {
     { name: "items", type: "any[]" },
     { name: "open", type: "boolean", optional: true, description: "Open/closed; bind a $variable to control externally" },
     { name: "index", type: "number", optional: true, description: "0-indexed current image; typically a $variable" },
-    { name: "onClose", type: "callable", optional: true, aliases: ["onclose"], description: "Callable invoked whenever the viewer closes" },
+    { name: "onClose", type: "callable", optional: true, aliases: ["onclose"], description: "Callable invoked when the viewer closes itself (backdrop, ×, Escape) — not when your program sets a bound `open` to false" },
     { name: "showThumbnail", type: "boolean", optional: true, description: "Render the clickable thumbnail (default: only when `open` is not bound)" },
   ],
   render: (node, props, helpers) => {

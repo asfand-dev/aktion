@@ -11,7 +11,11 @@
  *     plugin's output for `.aktion.ts` ids alone, in build and in dev;
  *   - the dev server's dependency scan reports nothing — it reads `.aktion.ts`
  *     as TypeScript and would choke on the types-only `aktion-runtime/dsl`;
- *   - editing a `.aktion.ts` dependency sends an HMR update.
+ *   - editing a `.aktion.ts` dependency sends an HMR update;
+ *   - a `?raw` import of an Aktion module gives its text, not a program;
+ *   - host code importing a named export of one fails the build (Vite 5–7
+ *     with the plugin's explanation, Vite 8 with Rolldown's own error), and
+ *     the dev server's module carries a stand-in for it.
  *
  * With `AKTION_VITE_MATRIX_CONTROL=1` it also runs each major WITHOUT the
  * plugin's `config()` hook and requires the dependency scan to fail there —
@@ -61,6 +65,10 @@ const PROJECT = {
   ].join("\n"),
   "src/store.aktion.ts": "export let $count: number = 0\nexport function increment(step: number = 1): void {\n  $count = $count + step\n}\n",
   "src/format.aktion.js": 'export function label(n) {\n  return "n=" + n\n}\n',
+  // `?raw` asks Vite for the file's text, not the compiled program.
+  "src/raw.js": 'import text from "./store.aktion.ts?raw";\nexport default text;\n',
+  // Host code gets an Aktion module's default export only.
+  "src/named.js": 'import { increment } from "./store.aktion.ts";\nexport default increment;\n',
 };
 
 function installVite(major) {
@@ -141,6 +149,35 @@ async function check(major, { control = false } = {}) {
       if (!entry.includes(JSON.stringify(file).slice(1, -1))) failures.push(`build: ${file} is not in the linked program`);
     }
 
+    const quiet = { ...logger, warn() {}, warnOnce() {}, error() {} };
+    const buildOf = (input, { expectError = false } = {}) =>
+      vite.build({
+        root,
+        configFile: false,
+        logLevel: "silent",
+        // The failing build logs its own error before rejecting.
+        customLogger: expectError ? quiet : logger,
+        plugins: [aktion()],
+        resolve: { alias },
+        build: { write: false, minify: false, rollupOptions: { input: join(root, input), preserveEntrySignatures: "strict" } },
+      });
+    const codeOf = (out) =>
+      (Array.isArray(out) ? out : [out]).flatMap((o) => o.output ?? []).map((chunk) => chunk.code ?? "").join("\n");
+    const raw = codeOf(await buildOf("src/raw.js"));
+    if (!raw.includes("export let $count: number = 0") || raw.includes("defineCompiledProgram")) {
+      failures.push("build: a `?raw` import of an .aktion.ts module did not give its text");
+    }
+    // Rollup builds (Vite 5–7) explain; Rolldown (Vite 8) keeps its own error.
+    const explained = major !== "8";
+    try {
+      await buildOf("src/named.js", { expectError: true });
+      failures.push("build: a named import of an Aktion module from host code built");
+    } catch (error) {
+      const message = String(error?.message ?? error);
+      const expected = explained ? /gives host code only its compiled program/ : /"increment" is not exported/;
+      if (!expected.test(message)) failures.push(`build: unexpected error for a named host import: ${message.split("\n")[0]}`);
+    }
+
     const server = await vite.createServer({
       root,
       configFile: false,
@@ -162,6 +199,7 @@ async function check(major, { control = false } = {}) {
       if (!transformed?.code.includes("defineCompiledProgram")) failures.push("dev: the entry did not transform");
       await server.transformRequest("/src/store.aktion.ts");
       if (!(seen["store.aktion.ts"] ?? "").startsWith(generated)) failures.push("dev: an .aktion.ts id was re-processed");
+      if (!(seen["store.aktion.ts"] ?? "").includes("as increment")) failures.push("dev: no stand-in for a named export");
       await new Promise((r) => setTimeout(r, 1500)); // let the dependency scan report
       const store = join(root, "src/store.aktion.ts");
       writeFileSync(store, readFileSync(store, "utf8").replace("step: number = 1", "step: number = 3"));

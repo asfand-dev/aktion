@@ -590,8 +590,9 @@ describe("softNewlines", () => {
     expect(program.statements[0]).toMatchObject({
       expression: { expressions: [{ kind: "Call", loc: { line: 1, column: 14 }, arguments: [{ loc: { line: 3, column: 3 } }] }] },
     });
-    // Without the set the interpolation silently loses its argument list.
-    expect(shape(parse(code).statements[0])).toMatchObject({ expression: { expressions: [{ kind: "Identifier", name: "foo" }] } });
+    // Without the set the interpolation splits at the newline into two
+    // statements — reported (it used to lose its argument list silently).
+    expect(parse(code).errors.map((e) => e.message)).toEqual([expect.stringContaining("holds a single expression")]);
   });
 
   it("the newline after a fully erased declaration stays hard", () => {

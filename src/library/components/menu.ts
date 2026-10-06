@@ -325,9 +325,12 @@ function objectMenuItem(raw: unknown): { view: MenuItemView; action: unknown } |
   if (r.separator === true || asString(r.type) === "separator") return "separator";
   const label = asString(r.label ?? r.title ?? r.text);
   if (!label) return null;
+  // MenuItem's own aliases (`tone` → `variant`, `onclick` → `onClick`) hold
+  // here too: `{label, tone: "danger"}` rendered as a default row and
+  // `{label, onclick}` was inert, both without a word.
   return {
-    view: menuItemView({ ...r, label }),
-    action: r.onClick ?? r.action,
+    view: menuItemView({ ...r, label, variant: r.variant ?? r.tone }),
+    action: r.onClick ?? r.action ?? r.onclick,
   };
 }
 
@@ -353,12 +356,21 @@ function wireMenuItem(rendered: Node, ctl: OpenController): void {
   };
 }
 
-/** Flatten nested item arrays (`[MenuLabel(…), $users.map(…)]`). */
-function flattenItems(raw: unknown, depth = 4): unknown[] {
-  const out: unknown[] = [];
+/**
+ * Flatten nested item arrays (`[MenuLabel(…), $users.map(…)]`) to any depth.
+ * A fixed depth left deeper arrays in place, where plain-object items were
+ * dropped and nodes skipped the close wiring. `open` holds the arrays being
+ * walked, so one that contains itself is skipped instead of recursing forever
+ * (the same array listed twice side by side still flattens twice).
+ */
+function flattenItems(raw: unknown, open: Set<unknown> = new Set([raw]), out: unknown[] = []): unknown[] {
   for (const entry of asArray<unknown>(raw)) {
-    if (Array.isArray(entry) && depth > 0) out.push(...flattenItems(entry, depth - 1));
-    else out.push(entry);
+    if (!Array.isArray(entry)) out.push(entry);
+    else if (!open.has(entry)) {
+      open.add(entry);
+      flattenItems(entry, open, out);
+      open.delete(entry);
+    }
   }
   return out;
 }
@@ -372,9 +384,10 @@ export const DropdownMenu: ComponentSpec = {
     "MenuItem to run its action and close, click outside or press Escape to " +
     "close without acting; ArrowUp/ArrowDown/Home/End and typeahead move " +
     "between items. Items may be MenuItem / MenuSeparator / MenuLabel nodes, " +
-    "nested arrays of them, or plain `{label, onClick, icon?, shortcut?, " +
-    "disabled?, checked?, separator?}` objects. Bind a `$variable` to `open` " +
-    "for two-way control, or watch `onOpenChange(isOpen)`.",
+    "nested arrays of them, or plain objects with MenuItem's fields (`{label, " +
+    "onClick, icon?, shortcut?, variant?, disabled?, checked?, role?, " +
+    "keepOpen?}`; `{separator: true}` for a rule). Bind a `$variable` to " +
+    "`open` for two-way control, or watch `onOpenChange(isOpen)`.",
   props: [
     { name: "trigger", type: "Node", description: "Clickable trigger element (typically a Button or Avatar)" },
     { name: "items", type: "(MenuItem | MenuSeparator | MenuLabel)[]" },
@@ -567,11 +580,20 @@ export const DropdownMenu: ComponentSpec = {
         target().append(btn);
         return;
       }
+      const rendered = helpers.renderNode(raw);
+      // One of the program's own components that returns a MenuItem is only
+      // recognisable once rendered. As a custom child it ran its action but
+      // left the menu open; wired here it closes like any other item.
+      if (rendered instanceof HTMLElement && rendered.classList.contains("rui-menu-item")) {
+        wireMenuItem(rendered, ctl);
+        target().append(rendered);
+        return;
+      }
       // Fallback: arbitrary child nodes (Link, Switch, …) so the LLM can nest
       // controls in a menu. Wrapped in `role="none"` so they do not masquerade
       // as menu items in the accessibility tree.
       const custom = el("div", { class: "rui-menu-custom", role: "none", style: "display:contents" });
-      custom.append(helpers.renderNode(raw));
+      custom.append(rendered);
       target().append(custom);
     });
 

@@ -171,13 +171,13 @@ export const AvatarGroup: ComponentSpec = {
   name: "AvatarGroup",
   description:
     "Stack of overlapping avatars with a `+N` chip when the list overflows. " +
-    "Pass either Avatar(...) nodes or plain {name, src, status?, fallback?} " +
-    "objects. Set `total` when the list is only a page of a larger set (5 " +
-    "avatars out of 200 members renders `+195`), and `fallback: \"initials\"` " +
+    "Pass Avatar(...) nodes, plain {name, src, status?, fallback?} objects, " +
+    "or bare name strings. Set `total` when the list is only a page of a " +
+    "larger set (5 avatars out of 200 members renders `+195`), and `fallback: \"initials\"` " +
     "to keep the whole pile offline (the default DiceBear illustration is a " +
     "network request per member).",
   props: [
-    { name: "items", type: "Avatar[]", description: "Avatar(...) nodes or {name, src, status?, fallback?} objects" },
+    { name: "items", type: "Avatar[]", description: "Avatar(...) nodes, {name, src, status?, fallback?} objects, or name strings" },
     { name: "max", type: "number", optional: true, description: "Maximum avatars to show (default 4)" },
     { name: "size", type: "string", optional: true, enum: AVATAR_SIZES },
     { name: "total", type: "number", optional: true, description: "Total member count when `items` is only a page of it — drives the `+N` chip" },
@@ -476,10 +476,11 @@ export const ToggleGroup: ComponentSpec = {
     "for two-way binding; item values keep their original type, so numeric " +
     "items write numbers back. `onChange(value)` fires with the new " +
     "selection. Left/Right arrows move between items; give the group a " +
-    "`label` so screen readers can tell two groups apart.",
+    "`label` so screen readers can tell two groups apart. The item list may " +
+    "also be the only positional argument: `ToggleGroup([\"Day\", \"Week\"])`.",
   props: [
-    { name: "id", type: "string" },
-    { name: "items", type: "any[]" },
+    { name: "id", type: "string", optional: true, description: "DOM id of the group — or the item list itself, when it is the only positional argument" },
+    { name: "items", type: "any[]", optional: true, description: "The items; required unless they are passed in the first slot" },
     { name: "value", type: "any", optional: true },
     { name: "variant", aliases: ["tone"], type: "string", optional: true, enum: TOGGLE_VARIANTS },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
@@ -1902,9 +1903,9 @@ const installPopoverDismiss = (
   });
 };
 
-const TOAST_TONES = ["default", "primary", "success", "warning", "danger", "info"] as const;
+export const TOAST_TONES = ["default", "primary", "success", "warning", "danger", "info"] as const;
 
-const TOASTS_POSITIONS = [
+export const TOASTS_POSITIONS = [
   "top-right", "top-left", "top-center",
   "bottom-right", "bottom-left", "bottom-center",
 ] as const;
@@ -1976,7 +1977,7 @@ export const Toast: ComponentSpec = {
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name (default picked from tone)" },
     { name: "duration", type: "number", optional: true, description: "Auto-dismiss after N milliseconds (e.g. 4000). Omit to keep the toast until the user closes it." },
     { name: "action", type: "Button", optional: true, description: "Optional inline `Button` action shown above the message" },
-    { name: "onClose", type: "callable", optional: true, description: "Callable invoked when the toast is dismissed (× button, auto-dismiss, or programmatic)" },
+    { name: "onClose", type: "callable", optional: true, description: "Callable invoked when the toast dismisses itself (× button or auto-dismiss) — wire it to remove the toast from your list (`$toast.dismiss(t.id)`). Removing the toast yourself does not call it" },
     { name: "position", type: "string", optional: true, enum: TOASTS_POSITIONS, description: "Pin a standalone Toast to a viewport corner without wrapping it in `Stack(...)`" },
     { name: "pauseOnHover", type: "boolean", optional: true, description: "Pause the auto-dismiss countdown while the pointer is over the toast" },
   ],

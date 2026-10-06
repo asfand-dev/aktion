@@ -39,8 +39,40 @@ export interface CompiledProgram {
    * Runnable Aktion text of the program. For a linked project this is the
    * merged program re-emitted by `printProgram` (one self-contained `.aktion`
    * program); for a single file, the file itself. Text-based features read it —
-   * `applyDelta`, DevTools Edit/Apply, generated tests, `renderToString` —
-   * while re-plans (reconnect, reload) reuse `program` directly.
+   * `applyDelta`, DevTools Edit/Apply, generated tests — while re-plans
+   * (reconnect, reload) reuse `program` directly. To server-render a compiled
+   * program, pass the artefact itself to `renderToString` / `renderToTextTree`:
+   * they render `program`.
+   *
+   * Parsed again, the text means what `program` means, including the
+   * JavaScript semantics of `.aktion.ts` / `.aktion.js` modules that only the
+   * AST records. A named function expression prints as one (`selfName`), so it
+   * can still recurse. A call that binds its arguments positionally
+   * (`CallExpr.positional`) prints each object literal spread from a
+   * one-element array — `KVRow(...[{ key: "a", value: "1" }])` — and, where it
+   * reads an instance identity, adds a trailing `{ key: … }`, or is made from
+   * an arrow invoked on the spot that evaluates every argument once. Named
+   * props for a renamed parameter (`DeclParam.publicName`) print under the
+   * parameter's local name.
+   *
+   * What text cannot carry: the evaluator decides at run time which
+   * declaration a call by name reaches, the printer from where the call is
+   * written.
+   *   - Inside the body of a component that shadows a built-in component, a
+   *     call to that name is printed for the built-in (the wrapper pattern).
+   *     A helper the body calls reaches the built-in too, but its call is
+   *     printed for the user component, whose object-literal arguments the
+   *     built-in then reads as positional values; a callback created in the
+   *     body and run later reaches the user component, but is printed for the
+   *     built-in. The built-ins are the generated catalogue's: a component a
+   *     host registers is not known to the printer.
+   *   - A component declared in a block is printed for the calls written in
+   *     that block; while the block runs it also reaches the calls of the
+   *     functions it calls.
+   * Not printed either: `LambdaExpr.name` (coverage and DevTools label a
+   * nested `.aktion.ts` function by it; the runtime ignores it), and a comment
+   * written inside an expression (between object properties or array
+   * elements).
    */
   readonly source: string;
   /** Module id / file path — used for diagnostics and HMR targeting. */

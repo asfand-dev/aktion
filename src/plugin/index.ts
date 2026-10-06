@@ -19,7 +19,7 @@
  */
 
 import { readFileSync, realpathSync, statSync } from "node:fs";
-import { dirname, resolve as resolvePath, sep } from "node:path";
+import { dirname, relative as relativePath, resolve as resolvePath, sep } from "node:path";
 import type { Plugin, UserConfig } from "vite";
 import {
   linkProgram,
@@ -46,6 +46,7 @@ import {
   type TypeScriptFrontendOptions,
 } from "./typescript.js";
 import {
+  aktionExportNames,
   emitAktionDeclarations,
   updateAktionDeclaration,
   type AktionDeclarationsOptions,
@@ -69,6 +70,7 @@ export {
 
 export {
   aktionDeclarationText,
+  aktionExportNames,
   declarationFileName,
   emitAktionDeclarations,
   updateAktionDeclaration,
@@ -105,6 +107,10 @@ export interface AktionResolveOptions {
    * separately from `@acme/ui`. Each target directory becomes an allowed root,
    * and an aliased import may not climb out of the target it matched — so an
    * alias widens resolution by exactly the directory it names and no further.
+   *
+   * A relative target resolves against the working directory (`path.resolve`)
+   * — for the build and, in the Vite plugin, for the `dts` declarations alike.
+   * An `aktion.config.json` target resolves against the file's own directory.
    */
   alias?: Record<string, string>;
   /**
@@ -168,7 +174,8 @@ export interface AktionPluginOptions extends AktionResolveOptions {
    * (see {@link emitAktionDeclarations}). `true` uses the defaults
    * (`src/**\/*.aktion` into `.aktion-types`, which needs
    * `"rootDirs": ["src", ".aktion-types/src"]` and `"allowArbitraryExtensions": true`
-   * in the tsconfig). Default: off.
+   * in the tsconfig). The modules of every {@link AktionResolveOptions.alias}
+   * target are declared too, under `.aktion-types/<prefix>/`. Default: off.
    */
   dts?: boolean | Omit<AktionDeclarationsOptions, "root" | "write">;
 }
@@ -177,8 +184,19 @@ export interface AktionPluginOptions extends AktionResolveOptions {
 const TYPESCRIPT_DISABLED_MESSAGE =
   "`.aktion.ts` modules are disabled by the plugin option `typescript: false`.";
 
-/** Id filter matching every Aktion module (query/hash allowed). */
-const AKTION_ID_FILTER = /\.aktion(?:\.[jt]s)?(?:[?#]|$)/;
+/**
+ * Vite's asset queries: `?raw` (the file's text), `?url`, `?inline`, `?worker`.
+ * Such an import asks for the file itself, not the compiled module, and Vite's
+ * own plugins answer it.
+ */
+const VITE_ASSET_QUERY = /[?&](?:raw|url|inline|no-inline|worker|sharedworker)(?:[=&#]|$)/;
+
+/**
+ * Id filter matching every Aktion module (query/hash allowed), except an asset
+ * import of one. One RegExp rather than `{ include, exclude }`, which Rollup
+ * before 4.38 and Vite before 6.3 do not understand.
+ */
+const AKTION_ID_FILTER = new RegExp(`^(?!.*${VITE_ASSET_QUERY.source}).*\\.aktion(?:\\.[jt]s)?(?:[?#]|$)`);
 
 /** `.aktion.ts` ids, for Vite's own TypeScript transform to skip. */
 const AKTION_TS_ID = /\.aktion\.ts(?:[?#]|$)/;
@@ -229,8 +247,14 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
   let resolution: AktionResolveOptions = options;
   let typescriptFrontend: Promise<ModuleFrontend> | null = null;
 
-  const declarationOptions = (): Omit<AktionDeclarationsOptions, "root" | "write"> =>
-    typeof options.dts === "object" ? options.dts : {};
+  // The resolver's aliases, with absolute targets: the declaration emitter
+  // resolves a relative target against its `root` (the Vite root), the
+  // resolver against the working directory, so passing them as written made
+  // the `dts` mirror and the build disagree whenever the two differ.
+  const declarationOptions = (): Omit<AktionDeclarationsOptions, "root" | "write"> => ({
+    alias: absoluteAliasTargets(resolution.alias),
+    ...(typeof options.dts === "object" ? options.dts : {}),
+  });
 
   // Loaded once per plugin instance: eagerly in `buildStart`, and on demand in
   // `transform` for hosts that never call `buildStart` before transforming.
@@ -245,7 +269,7 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
     // handler; Vite 5's dev server ignores `filter`, so the handler re-checks.
     filter: { id: AKTION_ID_FILTER },
     async handler(this: TransformContext, code: string, id: string) {
-      if (!isAktionId(id)) return null;
+      if (!isAktionId(id) || VITE_ASSET_QUERY.test(id)) return null;
       const cleanId = stripQuery(id);
       const frontends: ModuleFrontends = { ...defaultFrontends, typescript: await loadTypeScript() };
 
@@ -279,7 +303,7 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
 
       const moduleCode =
         emitModule(result, code, cleanId, runtimeModuleId, { sourcesContent: options.devtools !== false }) +
-        (isServe ? HMR_FOOTER : "");
+        (isServe ? hostOnlyExports(result, frontends, displayPath(cleanId, projectRoot)) + HMR_FOOTER : "");
       // `moduleType: "js"`: Vite 8 (Rolldown) otherwise treats an `.aktion.ts`
       // id as TypeScript by its extension even after the oxc transform is
       // excluded. Rollup-based Vite ignores the field.
@@ -309,13 +333,43 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
       await loadTypeScript();
       if (options.dts) {
         const result = emitAktionDeclarations({ ...declarationOptions(), root: projectRoot });
+        for (const w of result.warnings) this.warn?.(w);
         for (const d of result.diagnostics) this.warn?.(`${d.path}:${d.line}:${d.column} ${d.message}`);
+      }
+    },
+    // Host code receives only an Aktion module's default export (the compiled
+    // program): its other exports live inside Aktion programs, which the linker
+    // inlines. A named import from host code would otherwise fail as a bare
+    // "is not exported" — say why instead. Rollup builds only: the dev server
+    // does not call `moduleParsed`, Rolldown (Vite 8) throws "UNSUPPORTED:
+    // ModuleInfo#ast" on reading the AST and keeps its own missing-export
+    // error, and in serve mode the emitted module carries stand-ins that fail
+    // with the same explanation when used.
+    async moduleParsed(this: ModuleParsedContext, info: { id: string; ast?: unknown }) {
+      if (isServe || isAktionId(info.id)) return;
+      let ast: EsProgram | null;
+      try {
+        ast = (info.ast ?? null) as EsProgram | null;
+      } catch {
+        return;
+      }
+      for (const node of ast?.body ?? []) {
+        if (node.type !== "ImportDeclaration" && !(node.type === "ExportNamedDeclaration" && node.source)) continue;
+        const source = node.source?.value;
+        if (typeof source !== "string" || !source.includes(".aktion")) continue;
+        const named = (node.specifiers ?? []).map(specifierName).filter((n): n is string => n !== null);
+        if (named.length === 0) continue;
+        const resolved = await this.resolve(source, info.id);
+        if (!resolved || !isAktionId(resolved.id) || VITE_ASSET_QUERY.test(resolved.id)) continue;
+        this.error(hostImportMessage(named, source, displayPath(info.id, projectRoot)));
       }
     },
     configureServer(server: { watcher?: { on(event: string, listener: (file: string) => void): unknown } }) {
       if (!options.dts || !server.watcher) return;
       const refresh = (file: string): void => {
-        if (/\.aktion$/i.test(file)) updateAktionDeclaration(file, { ...declarationOptions(), root: projectRoot });
+        if (/\.aktion$/i.test(file)) {
+          updateAktionDeclaration(file, { ...declarationOptions(), root: projectRoot });
+        }
       };
       server.watcher.on("add", refresh);
       server.watcher.on("change", refresh);
@@ -324,6 +378,49 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
     transform,
   };
   return plugin as unknown as Plugin;
+}
+
+/** The slice of Rollup's plugin context `moduleParsed` uses. */
+interface ModuleParsedContext {
+  resolve(source: string, importer: string): Promise<{ id: string } | null>;
+  error(message: string): never;
+}
+
+/** The slice of an ESTree `Program` `moduleParsed` reads. */
+interface EsProgram {
+  body?: Array<{ type: string; source?: { value?: unknown } | null; specifiers?: EsSpecifier[] }>;
+}
+
+interface EsSpecifier {
+  type: string;
+  imported?: { name?: string; value?: string };
+  local?: { name?: string; value?: string };
+}
+
+/** The binding an import or re-export specifier takes from its module; `null` for the default or a namespace. */
+function specifierName(spec: EsSpecifier): string | null {
+  if (spec.type === "ImportDefaultSpecifier" || spec.type === "ImportNamespaceSpecifier") return null;
+  // `import { x as y }` takes `imported`; `export { x as y } from` takes `local`.
+  const ref = spec.type === "ImportSpecifier" ? spec.imported : spec.local;
+  const name = ref?.name ?? ref?.value;
+  return name === undefined || name === "default" ? null : name;
+}
+
+/** `id` relative to the project root (`/`-separated) when it is inside it, else as given. */
+function displayPath(id: string, root: string): string {
+  return isInsideRoot(id, root) ? relativePath(root, id).split(sep).join("/") : id;
+}
+
+/**
+ * Why a host module cannot import named bindings from an Aktion module. No
+ * `[aktion]` prefix: Rollup already names the plugin (`[plugin aktion]`).
+ */
+function hostImportMessage(names: readonly string[], source: string, importer: string): string {
+  return (
+    `${importer} imports ${names.map((n) => `\`${n}\``).join(", ")} from "${source}", but an Aktion ` +
+    `module gives host code only its compiled program: \`import app from "${source}"\`. Its other exports ` +
+    "exist inside Aktion programs — exercise them through a program (compileAktionSource from aktion-runtime/vite)."
+  );
 }
 
 /** The slice of Rollup's plugin context `transform` uses. */
@@ -615,8 +712,7 @@ export function createNodeResolver(
 ): ModuleResolver {
   const extensions = options.extensions ?? DEFAULT_EXTENSIONS;
   // Longest prefix first, so `@acme/ui/forms` can be aliased apart from `@acme/ui`.
-  const aliases = Object.entries(options.alias ?? {})
-    .map(([prefix, target]) => [prefix, resolvePath(target)] as const)
+  const aliases = Object.entries(absoluteAliasTargets(options.alias) ?? {})
     .sort((a, b) => b[0].length - a[0].length);
 
   const root = options.root === undefined ? process.cwd() : options.root;
@@ -682,9 +778,23 @@ export function createNodeResolver(
   /** Apply the sibling-variant refusal and the "did you mean" hint to a completed path. */
   const checked = (spec: string, base: string, resolved: string | null): { path: string | null; why?: string } => {
     if (resolved === null) {
-      // `./store.aktion` when only `store.aktion.ts` exists: name the file.
-      for (const ext of [".ts", ".js"]) {
-        if (spec.endsWith(".aktion") && isFile(base + ext)) return { path: null, why: `Did you mean "${spec}${ext}"?` };
+      // `./store.aktion` when only `store.aktion.ts` exists, or the TypeScript
+      // habit `./store.aktion.js` for `store.aktion.ts`: name the file.
+      const lower = spec.toLowerCase();
+      const suffix = AKTION_MODULE_SUFFIXES.find((s) => lower.endsWith(s));
+      if (suffix) {
+        const stem = base.slice(0, base.length - suffix.length);
+        for (const other of AKTION_MODULE_SUFFIXES) {
+          if (other === suffix || !isFile(stem + other)) continue;
+          const hint = `Did you mean "${spec.slice(0, spec.length - suffix.length)}${other}"?`;
+          return {
+            path: null,
+            why:
+              suffix === ".aktion.js" && other === ".aktion.ts"
+                ? `${hint} Aktion imports the file named, without TypeScript's \`.js\` → \`.ts\` mapping.`
+                : hint,
+          };
+        }
       }
       return { path: null };
     }
@@ -714,6 +824,17 @@ export function createNodeResolver(
       return readFileSync(path, "utf8");
     },
   };
+}
+
+/**
+ * `alias` with every target absolute, resolved the one way {@link createNodeResolver}
+ * resolves it: `path.resolve`, so a relative target is relative to the working
+ * directory. The Vite plugin hands the same map to the declaration emitter,
+ * which would otherwise resolve a relative target against its own `root`.
+ */
+function absoluteAliasTargets(alias: Readonly<Record<string, string>> | undefined): Record<string, string> | undefined {
+  if (!alias) return undefined;
+  return Object.fromEntries(Object.entries(alias).map(([prefix, target]) => [prefix, resolvePath(target)]));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -892,6 +1013,65 @@ function emitModule(
     `const source = ${JSON.stringify(runnableSource(result, entrySource))};\n` +
     `export default /*#__PURE__*/ defineCompiledProgram({ ` +
     `__aktionCompiled: ${COMPILED_PROGRAM_VERSION}, program, source, path: ${JSON.stringify(path)}${contents} });\n`
+  );
+}
+
+/** What `Object.prototype.toString` reports for a host-only stand-in: `[object AktionHostOnly]`. */
+const HOST_ONLY_TAG = "AktionHostOnly";
+
+/**
+ * Dev-only stand-ins for the entry module's named exports. The emitted module's
+ * only real export is `default`; without these, host code that imports a helper
+ * (a unit test calling `remaining(todos)`) silently reads `undefined` under
+ * Vitest, or fails to link in the browser with no word on why. Each stand-in
+ * throws an Aktion-specific error on any use — a call, a property read, a
+ * coercion — and nothing at import time, so the default import keeps working.
+ * Builds leave them out: there a named import fails at bundle time (the
+ * plugin's `moduleParsed`).
+ *
+ * The names are those the entry's own frontend exports — the program the
+ * linker built its symbol table from. Re-parsing the entry's `aktionSource`
+ * instead (what this used to do) is not the same for a `.aktion.ts` entry:
+ * that text is the erased JavaScript, which the TypeScript frontend parses
+ * with soft newlines, and without them a declaration spanning an erased
+ * multi-line type (`function make(): {\n  a: number;\n} { … }`) does not
+ * parse, so its export got no stand-in and read `undefined` again.
+ *
+ * One read answers instead of throwing: `Symbol.toStringTag`, which is what
+ * `Object.prototype.toString` — and with it Vitest's automocker, typing each
+ * export of `vi.mock(path)` without a factory — reads. The tag is not
+ * `Function` / `Object` / `Module`, so the automocker keeps a stand-in as it
+ * is, like a primitive export, and still mocks the default export; using the
+ * stand-in afterwards throws as before.
+ *
+ * An export named `then` gets no stand-in: a namespace with a callable `then`
+ * is a thenable, so `await import("./x.aktion")` would call it and reject
+ * instead of yielding the module.
+ *
+ * The text never contains `");` or `] });`, which tests unpacking the program
+ * literal match on.
+ */
+function hostOnlyExports(result: LinkResult, frontends: ModuleFrontends, path: string): string {
+  const entry = result.modules[0];
+  const frontend = entry ? frontends[entry.language] : undefined;
+  if (!entry || !frontend) return "";
+  const names = aktionExportNames(frontend.compile(entry.originalSource, entry.path).program).filter((name) => name !== "then");
+  if (names.length === 0) return "";
+  const message =
+    `"[aktion] \`" + __aktionNames[i] + "\` is not available to host code: the Aktion module " + ` +
+    `${JSON.stringify(JSON.stringify(path))} + " gives host code only its compiled program (\`import app from\`). ` +
+    `Exercise its other exports through a program (compileAktionSource from aktion-runtime/vite)."`;
+  return (
+    `const __aktionNames = ${JSON.stringify(names)};\n` +
+    "function __aktionHostOnly(i) {\n" +
+    `  const message = ${message};\n` +
+    "  const fail = () => { throw new Error(message); };\n" +
+    `  const get = (_target, key) => (key === Symbol.toStringTag ? ${JSON.stringify(HOST_ONLY_TAG)} : fail());\n` +
+    "  return new Proxy(function () {}, { apply: fail, construct: fail, get, set: fail, has: fail, ownKeys: fail, " +
+    "defineProperty: fail, deleteProperty: fail, getOwnPropertyDescriptor: fail, getPrototypeOf: fail, setPrototypeOf: fail });\n" +
+    "}\n" +
+    names.map((_, i) => `const __aktion_${i} = __aktionHostOnly(${i});\n`).join("") +
+    `export { ${names.map((n, i) => `__aktion_${i} as ${n}`).join(", ")} };\n`
   );
 }
 

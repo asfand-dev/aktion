@@ -40,8 +40,8 @@ export type RouteListener = (detail: RouteChangeDetail) => void;
 export interface NavigationInfo {
   /** The path the user is trying to reach (normalised). */
   to: string;
-  /** The path being left (null on the very first navigation). */
-  from: string | null;
+  /** The path being left (the router always has a current path, the default one at first). */
+  from: string;
 }
 
 /**
@@ -86,9 +86,10 @@ export function normalisePath(raw: string | null | undefined): string {
   if (!raw) return "/";
   let value = String(raw);
   if (value.startsWith("#")) value = value.slice(1);
-  // Strip query string and inner fragment.
-  const queryAt = value.indexOf("?");
-  if (queryAt >= 0) value = value.slice(0, queryAt);
+  // Strip the query string and an inner fragment (`#/p#section` in hash
+  // mode, where the location hash holds the route): whichever comes first.
+  const cut = value.search(/[?#]/);
+  if (cut >= 0) value = value.slice(0, cut);
   // Collapse repeated slashes, then strip trailing slash (but keep "/").
   value = value.replace(/\/{2,}/g, "/");
   if (!value || value === "/") return "/";

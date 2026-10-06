@@ -60,7 +60,7 @@ Inline image. `ratio` constrains the box to a fixed aspect ratio (e.g. `16:9`, `
 | `src` | `string` | **yes** |  |
 | `alt` | `string` | no |  |
 | `caption` | `string` | no |  |
-| `ratio` | `string` | no | Aspect ratio shorthand (e.g. `16:9`, `1:1`, `4:3`) |
+| `ratio` | `string` | no | Aspect ratio shorthand (e.g. `16:9`, `1:1`, `4/3`, or a decimal like `1.5`); anything else reserves no ratio |
 | `fit` | `"cover"` \| `"contain"` \| `"fill"` \| `"none"` \| `"scale-down"` | no | object-fit value (default `cover`) |
 | `fallback` | `string` | no | Text label or Font Awesome icon shown when src is missing/unsafe/errored |
 | `placeholder` | `"blur"` \| `"none"` | no | `blur` fades the image in on load |
@@ -128,7 +128,7 @@ Highlighted callout banner with variant, title, description, and leading icon. T
 | `tone` | `"neutral"` \| `"info"` \| `"success"` \| `"warning"` \| `"danger"` \| `"error"` | no |  |
 | `title` | `string` | **yes** |  |
 | `description` | `string` | no | Body text |
-| `icon` | `string` | no | Optional Font Awesome icon name |
+| `icon` | `string | false` | no | Font Awesome icon name (default: the tone's icon); `false` hides it, like `hideIcon` |
 | `compact` | `boolean` | no | Render with the dense, one-line note shape. |
 | `actions` | `Node[]` | no | Optional action row (buttons/links) rendered under the body |
 | `hideIcon` | `boolean` | no | Render without the leading icon medallion |
@@ -372,10 +372,10 @@ Render inline SVG markup safely (paths, shapes, gradients) — for brand illustr
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `content` | `string` | **yes** |  |
-| `viewBox` | `string` | no | e.g. "0 0 24 24" (default) |
+| `viewBox` | `string` | no | Four numbers, space- or comma-separated, e.g. "0 0 24 24" (default) |
 | `width` | `string` | no |  |
 | `height` | `string` | no |  |
-| `fill` | `string` | no | currentColor (default), none, or a token color |
+| `fill` | `string` | no | SVG paint: currentColor (default), none, a hex / rgb() / named colour, or url(#gradientId). Theme tokens are not resolved here; colour the parent and keep currentColor |
 | `stroke` | `string` | no | Stroke colour — for outline icon sets (Lucide, Feather) |
 | `strokeWidth` | `string | number` | no |  |
 | `preserveAspectRatio` | `string` | no | e.g. "none" to stretch to the box |
@@ -429,13 +429,13 @@ A number that animates from 0 to `value` when scrolled into view. `prefix`/`suff
 CountdownTimer(to, endLabel?, onEnd?, units?, showDays?)
 ```
 
-Live countdown to a target date/time (ISO string or timestamp). Ticks every second, then shows `endLabel` and fires `onEnd` (enable checkout, reveal a link, refresh a price). `units` trims the boxes — a 10-minute flash sale should not render two zeroed day/hour cells.
+Live countdown to a target date/time (ISO string or timestamp). Ticks every second, then shows `endLabel` and fires `onEnd` (enable checkout, reveal a link, refresh a price). Changing `to` retargets the running clock, and `onEnd` fires once per target; an empty or null `to` (data still loading) shows `--` cells and fires nothing. `units` trims the boxes — a 10-minute flash sale should not render two zeroed day/hour cells.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `to` | `string | number` | **yes** |  |
 | `endLabel` | `string` | no | Shown when the countdown finishes (default 'Done') |
-| `onEnd` | `callable` | no | Fired once when the countdown reaches zero |
+| `onEnd` | `callable` | no | Fired once per target when the countdown reaches zero |
 | `units` | `"days"` \| `"hours"` \| `"minutes"` \| `"seconds"` | no | Which units to show (default all four) |
 | `showDays` | `boolean` | no | Set false to drop the days cell |
 

@@ -14,7 +14,7 @@
  */
 
 import type { ComponentSpec } from "../types.js";
-import { el, asArray, asString, asNumber, asBoolean } from "../utils.js";
+import { el, asArray, asString, asNumber, asBoolean, sanitiseCssColor } from "../utils.js";
 import {
   AXIS_CAPTION_PX,
   CHART_A11Y_PROPS,
@@ -249,8 +249,8 @@ export const Heatmap: ComponentSpec = {
     "colour-only grid. Use for activity heatmaps, schedule density, " +
     "correlation matrices.",
   props: [
-    { name: "xLabels", type: "string[]" },
-    { name: "yLabels", type: "string[]" },
+    { name: "xLabels", type: "string[]", optional: true, description: "Column labels; a column without one is numbered from 1" },
+    { name: "yLabels", type: "string[]", optional: true, description: "Row labels; a row without one is numbered from 1" },
     { name: "values", type: "number[][]", description: "Matrix indexed by row (y), then column (x)" },
     { name: "title", type: "string", optional: true },
     { name: "tone", aliases: ["variant"], type: "string", optional: true, enum: ["primary", "success", "warning", "danger", "info"] },
@@ -317,10 +317,13 @@ export const Heatmap: ComponentSpec = {
     const headerRow = el("div", { class: "rui-heatmap-row rui-heatmap-row-header", role: "row" });
     headerRow.append(el("div", { class: "rui-heatmap-cell rui-heatmap-corner", role: "columnheader" }));
     for (let c = 0; c < cols; c += 1) {
+      // The same fallback the cells' tooltip and `onCellClick` use, so an
+      // unlabelled column's header says what the click handler will receive
+      // (it used to be blank, while a click reported "1", "2", …).
       headerRow.append(el("div", {
         class: "rui-heatmap-cell rui-heatmap-xlabel",
         role: "columnheader",
-      }, [xLabels[c] ?? ""]));
+      }, [xLabels[c] ?? String(c + 1)]));
     }
     tableWrap.append(headerRow);
     valueRows.forEach((row, rIdx) => {
@@ -568,7 +571,9 @@ function readScatterSeries(raw: unknown[]): { name: string; points: ScatterPoint
   return raw.map((entry, i) => {
     const node = entry as { args?: unknown[] };
     const name = asString(node.args?.[0], `Series ${i + 1}`);
-    const color = asString(node.args?.[2]).trim();
+    // Sanitised here as well as in `seriesColor`, so no reader of this list can
+    // meet an unsanitised colour.
+    const color = sanitiseCssColor(node.args?.[2]);
     // Points arrive either in the explicit `points` slot or — the documented
     // `Series(name, points)` form — positionally in the `values` slot.
     const raw2 = node.args?.[3] ?? node.args?.[1];

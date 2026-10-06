@@ -12,9 +12,17 @@
  *   import { renderToString } from "aktion-runtime";
  *   const { html, state } = renderToString(programSource);
  *   // → embed `html` in the page shell, serialise `state` into a <script>.
+ *
+ * Every entry point also takes a `CompiledProgram` (from the Vite plugin,
+ * `compileAktionFile`, `linkProject` or `compileLite`) and then renders its
+ * AST as is. Pass the artefact rather than its `source`: for a program linked
+ * from `.aktion.ts` / `.aktion.js` modules the AST carries JavaScript semantics
+ * that the printed text can only approximate (see `CompiledProgram.source`).
  */
 
 import { parse } from "../parser/index.js";
+import type { Program } from "../parser/types.js";
+import { isCompiledProgram, type CompiledProgram } from "../compiler/runtime.js";
 import { StateStore } from "./state.js";
 import {
   createContext,
@@ -70,12 +78,26 @@ function hasDom(): boolean {
 }
 
 /**
- * Render an Aktion program to an HTML string + hydration state.
+ * The AST to render: a compiled program's own (shallow-copied with a fresh
+ * `errors` array, as `mountCompiled` does, so rendering never touches the
+ * shared artefact), or the parse of source text.
+ */
+function programOf(input: string | CompiledProgram): Program {
+  if (isCompiledProgram(input)) return { ...input.program, errors: [...input.program.errors] };
+  return parse(input);
+}
+
+/**
+ * Render an Aktion program — source text or a `CompiledProgram` — to an HTML
+ * string + hydration state.
  *
  * Throws when no DOM is available (install `happy-dom`/`jsdom` and register it
  * on `globalThis` in a Node SSR entry).
  */
-export function renderToString(program: string, options: RenderToStringOptions = {}): RenderToStringResult {
+export function renderToString(
+  program: string | CompiledProgram,
+  options: RenderToStringOptions = {},
+): RenderToStringResult {
   if (!hasDom()) {
     throw new Error(
       "[aktion] renderToString requires a DOM. In Node, register happy-dom or jsdom globals before calling it.",
@@ -90,9 +112,9 @@ export function renderToString(program: string, options: RenderToStringOptions =
   const http = new HttpRuntime();
   const ctx = createContext(state, { library, router, http, notify: () => {} });
 
-  let parsed;
+  let parsed: Program;
   try {
-    parsed = parse(program);
+    parsed = programOf(program);
   } catch (err) {
     // A malformed program SSRs to an empty container rather than throwing.
     // eslint-disable-next-line no-console
@@ -147,7 +169,7 @@ export function renderToString(program: string, options: RenderToStringOptions =
  * Like `renderToString` but returns only the markup (no hydration state) —
  * for fully static pages / SSG (suggestions-global XI.1).
  */
-export function renderToStaticMarkup(program: string, options: RenderToStringOptions = {}): string {
+export function renderToStaticMarkup(program: string | CompiledProgram, options: RenderToStringOptions = {}): string {
   return renderToString(program, options).html;
 }
 
@@ -173,8 +195,8 @@ export interface RenderToTextTreeResult {
 }
 
 /**
- * Render an Aktion program to a plain-text component tree **without a DOM**
- * (issue #9). Unlike `renderToString`, this needs no `happy-dom` / `jsdom`,
+ * Render an Aktion program — source text or a `CompiledProgram` — to a
+ * plain-text component tree **without a DOM** (issue #9). Unlike `renderToString`, this needs no `happy-dom` / `jsdom`,
  * so `node` can confirm a program actually *renders* — not just parses —
  * out of the box. It parses, schema-validates, evaluates the UI root, and
  * recursively expands user components, surfacing every diagnostic it hits:
@@ -188,11 +210,14 @@ export interface RenderToTextTreeResult {
  * The text outline is for human/CI inspection (it shows component names and
  * nesting, not pixel-perfect HTML); `errors` / `ok` are the machine signal.
  */
-export function renderToTextTree(program: string, options: RenderToTextTreeOptions = {}): RenderToTextTreeResult {
+export function renderToTextTree(
+  program: string | CompiledProgram,
+  options: RenderToTextTreeOptions = {},
+): RenderToTextTreeResult {
   const library = options.library ?? defaultLibrary;
   const errors: string[] = [];
 
-  const parsed = parse(program);
+  const parsed = programOf(program);
   for (const e of parsed.errors) errors.push(`parse ${e.line}:${e.column}: ${e.message}`);
   for (const e of validateProgramSchema(parsed, library)) errors.push(`schema ${e.line}:${e.column}: ${e.message}`);
 

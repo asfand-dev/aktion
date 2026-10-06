@@ -18,8 +18,7 @@ import {
   autoId,
   el, asArray, asString, asBoolean, asNumber, renderIcon, valueAttr, sanitiseHref,
 } from "../utils.js";
-import { attachOnChange } from "./wrappers.js";
-import { FIELD_SHELL_PROPS, withFieldShell, attachFocusHandlers } from "./forms-shared.js";
+import { FIELD_SHELL_PROPS, withFieldShell, attachFocusHandlers, bindChangeHandler } from "./forms-shared.js";
 import { closeFloating, deferToPaint, openFloating } from "../floating.js";
 
 const PIN_TYPES = ["numeric", "alphanumeric"] as const;
@@ -83,6 +82,8 @@ function padSlots(chars: readonly string[], length: number): string[] {
 
 interface PinOptions {
   id: string;
+  /** Form field name of the hidden input that submits the joined code. */
+  name: string;
   length: number;
   type: string;
   /** One entry per slot, empty string for a gap. */
@@ -95,7 +96,7 @@ interface PinOptions {
 }
 
 function renderPin(opts: PinOptions): HTMLElement {
-  const { id, length, type, chars, disabled, mask, groupLabel, onSlots, onFocusChange } = opts;
+  const { id, name, length, type, chars, disabled, mask, groupLabel, onSlots, onFocusChange } = opts;
   const alphanumeric = type === "alphanumeric";
   const root = el("div", {
     class: "rui-pin-input",
@@ -128,6 +129,16 @@ function renderPin(opts: PinOptions): HTMLElement {
     inputs.push(input);
     root.append(input);
   }
+  // The code a form submits. No slot can carry the `name`: each holds one
+  // character, so named slots would submit `1`, `2`, `3`, `4` for "1234". The
+  // value is the joined string `onChange` reports, so a gap shortens it.
+  root.append(el("input", {
+    type: "hidden",
+    class: "rui-pin-input-value",
+    name,
+    value: chars.join(""),
+    disabled: disabled ? "" : null,
+  }));
   const getLiveSlots = (origin: Element): HTMLInputElement[] => {
     const pinRoot = origin.closest(".rui-pin-input");
     if (!pinRoot) return inputs;
@@ -141,6 +152,17 @@ function renderPin(opts: PinOptions): HTMLElement {
    */
   const collectLive = (origin: Element): string[] =>
     padSlots(getLiveSlots(origin).map((slot) => slot.value), length);
+  /**
+   * Report an edit, keeping the live hidden field in step first. An unbound
+   * PinInput does not re-render while the user types, so the next render's
+   * `value` attribute is not there to do it.
+   */
+  const reportSlots = (origin: Element): void => {
+    const slots = collectLive(origin);
+    const hidden = origin.closest(".rui-pin-input")?.querySelector<HTMLInputElement>("input.rui-pin-input-value");
+    if (hidden) hidden.value = slots.join("");
+    onSlots(slots);
+  };
   inputs.forEach((input, idx) => {
     input.oninput = (event) => {
       const target = (event.currentTarget ?? event.target) as HTMLInputElement;
@@ -161,7 +183,7 @@ function renderPin(opts: PinOptions): HTMLElement {
         target.value = v;
         if (v && idx < length - 1) liveSlots[idx + 1]?.focus();
       }
-      onSlots(collectLive(target));
+      reportSlots(target);
     };
     input.onkeydown = (event) => {
       const e = event as KeyboardEvent;
@@ -174,7 +196,7 @@ function renderPin(opts: PinOptions): HTMLElement {
           prev.value = "";
           prev.focus();
         }
-        onSlots(collectLive(target));
+        reportSlots(target);
       } else if (e.key === "ArrowLeft" && idx > 0) {
         e.preventDefault();
         liveSlots[idx - 1]?.focus();
@@ -248,6 +270,7 @@ export const PinInput: ComponentSpec = {
 
     const root = renderPin({
       id,
+      name: asString(props.name, id),
       length,
       type,
       chars,
@@ -283,7 +306,8 @@ export const PinInput: ComponentSpec = {
       });
     }
 
-    const shell = withFieldShell(root, { ...props, id });
+    // The hidden field carries `name` (see `renderPin`).
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     // `required` is meaningless on the group element and wrong on a single slot.
     forwardFieldAria(root, root, { native: false });
     return shell;
@@ -429,7 +453,7 @@ export const PasswordInput: ComponentSpec = {
       labelRow.append(el("span", { class: "rui-password-input-strength-label" }, [strength.label]));
       root.append(labelRow);
     }
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, input);
     return shell;
   },
@@ -445,7 +469,8 @@ export const TagInput: ComponentSpec = {
     "Tag/chip input — type a value, press Enter (or comma) to commit, " +
     "click × on a chip to remove. Tabbing away commits the pending text " +
     "too. Pass a `$variable` (array of strings) as `value` for two-way " +
-    "binding. Use for keywords, recipients, labels, skills, allowlists. " +
+    "binding; inside a form each tag is submitted as its own `name` entry, " +
+    "as a multiple select does. Use for keywords, recipients, labels, skills, allowlists. " +
     "Pass `suggestions` for autocomplete and `label`/`hint`/`error` for the " +
     "labelled field shell.",
   props: [
@@ -501,7 +526,8 @@ export const TagInput: ComponentSpec = {
       type: "text",
       class: "rui-tag-input-field",
       id,
-      name: id,
+      // No `name`: this field holds the uncommitted draft, not the value — the
+      // tags are submitted by the hidden fields below.
       // Keyed so the morph reconciler parks the live field when a new chip is
       // inserted ahead of it. Without a key the chip landed on the field's
       // index, the tag mismatch replaced the node, and focus was lost after
@@ -553,10 +579,12 @@ export const TagInput: ComponentSpec = {
       const next = commitDraft(liveInput);
       if (props.onBlur != null) helpers.invoke(props.onBlur, next);
     };
+    // The committed tags, like `onBlur` and every other control's focus
+    // callback. The draft this used to pass is nearly always empty on focus,
+    // because leaving the field commits it.
     if (props.onFocus != null) {
-      input.onfocus = (event) => {
-        const liveInput = (event.currentTarget ?? event.target) as HTMLInputElement;
-        helpers.invoke(props.onFocus, liveInput.value);
+      input.onfocus = () => {
+        helpers.invoke(props.onFocus, tags);
       };
     }
     root.append(input);
@@ -565,9 +593,23 @@ export const TagInput: ComponentSpec = {
       for (const value of suggestions) list.append(el("option", { value }));
       root.append(list);
     }
+    // One hidden field per tag, all under the field's `name` (default `id`) —
+    // the shape a native `<select multiple>` submits, so `FormData.getAll(name)`
+    // is the tag list. The text field used to submit its DRAFT under the id —
+    // usually empty, since leaving the field commits it — and the tags not at all.
+    const fieldName = asString(props.name, id);
+    for (const tag of tags) {
+      root.append(el("input", {
+        type: "hidden",
+        class: "rui-tag-input-value",
+        name: fieldName,
+        value: tag,
+        disabled: disabled ? "" : null,
+      }));
+    }
     // The label goes through the field shell so it matches every other field in
     // the form (the old `.rui-tag-input-label` wrapper had no CSS at all).
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, input, { native: false });
     return shell;
   },
@@ -712,7 +754,7 @@ export const MentionInput: ComponentSpec = {
     const textarea = el("textarea", {
       class: "rui-mention-input-field",
       id,
-      name: id,
+      name: asString(props.name, id),
       rows: String(Math.max(2, Math.floor(asNumber(props.rows, 3)))),
       placeholder: asString(props.placeholder, "Type @ to mention someone"),
       disabled: disabled ? "" : null,
@@ -965,7 +1007,7 @@ export const MentionInput: ComponentSpec = {
     // is passed: this tree is still detached, so nothing is promoted here.
     paintSuggestions(suggestions, querySlot.get());
     if (suggestions.getAttribute("data-open") === "true") positionMentionOnMount(root);
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, textarea);
     return shell;
   },
@@ -988,7 +1030,7 @@ export const TimePicker: ComponentSpec = {
     { name: "value", type: "string", optional: true, description: "HH:MM value; typically $variable" },
     { name: "min", type: "string", optional: true },
     { name: "max", type: "string", optional: true },
-    { name: "step", type: "number", optional: true, description: "Seconds between selectable times" },
+    { name: "step", type: "number | string", optional: true, description: "Seconds between selectable times (a positive integer), or `\"any\"` to allow seconds" },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new HH:MM string when the user picks a time" },
     ...FIELD_SHELL_PROPS,
   ],
@@ -1018,13 +1060,10 @@ export const TimePicker: ComponentSpec = {
         getValue: (n) => (n as HTMLInputElement).value,
       });
     }
-    attachOnChange(input, props.onChange, helpers, {
-      event: "change",
-      getValue: (n) => (n as HTMLInputElement).value,
-    });
+    bindChangeHandler(input, props, helpers, { event: "change", getValue: (live) => (live as HTMLInputElement).value });
     attachFocusHandlers(input, props, helpers);
     root.append(input);
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, input);
     return shell;
   },
@@ -1043,7 +1082,7 @@ export const DateTimePicker: ComponentSpec = {
     { name: "value", type: "string", optional: true, description: "ISO date-time value; typically $variable" },
     { name: "min", type: "string", optional: true },
     { name: "max", type: "string", optional: true },
-    { name: "step", type: "number", optional: true, description: "Seconds between selectable times" },
+    { name: "step", type: "number | string", optional: true, description: "Seconds between selectable times (a positive integer), or `\"any\"` to allow seconds" },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new ISO `YYYY-MM-DDTHH:MM` string" },
     ...FIELD_SHELL_PROPS,
   ],
@@ -1071,13 +1110,10 @@ export const DateTimePicker: ComponentSpec = {
         getValue: (n) => (n as HTMLInputElement).value,
       });
     }
-    attachOnChange(input, props.onChange, helpers, {
-      event: "change",
-      getValue: (n) => (n as HTMLInputElement).value,
-    });
+    bindChangeHandler(input, props, helpers, { event: "change", getValue: (live) => (live as HTMLInputElement).value });
     attachFocusHandlers(input, props, helpers);
     root.append(input);
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, input);
     return shell;
   },
@@ -1498,7 +1534,7 @@ export const MultiStepForm: ComponentSpec = {
     { name: "prevLabel", type: "string", optional: true, description: "Default \"Back\"" },
     { name: "nextLabel", type: "string", optional: true, description: "Default \"Continue\"" },
     { name: "submitLabel", type: "string", optional: true, description: "Default \"Submit\" (final step)" },
-    { name: "stepsLayout", type: "string", optional: true, enum: ["column", "row"], aliases: ["layout", "stepsDirection"], description: "Direction of the steps indicator (default \"column\")" },
+    { name: "stepsLayout", type: "string", optional: true, enum: ["column", "row", "vertical", "horizontal"], aliases: ["layout", "stepsDirection"], description: "Direction of the steps indicator: \"column\" (default) or \"row\"; \"vertical\" and \"horizontal\" are accepted synonyms" },
     { name: "nextDisabled", type: "boolean", optional: true, description: "Block Continue/Submit while the active step is incomplete" },
     { name: "submitting", type: "boolean", optional: true, description: "Disable the footer buttons while the submit is in flight" },
     { name: "onStepChange", type: "callable", optional: true, description: "Called with the new 0-indexed step whenever the step changes" },

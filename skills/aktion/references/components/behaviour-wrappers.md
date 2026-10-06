@@ -36,7 +36,7 @@ Make any component clickable. Wraps the child in a transparent span and dispatch
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `child` | `Node` | **yes** | Component (or array of components) to wrap |
-| `onClick` | `callable` | **yes** | Callable invoked on click / tap. Receives the native MouseEvent. |
+| `onClick` | `callable` | **yes** | Callable invoked on click / tap, and on Enter / Space while `keyboard` is on. Receives the native MouseEvent — or the KeyboardEvent for a key activation. |
 | `disabled` | `boolean` | no | Skip firing the handler while truthy (also sets aria-disabled and leaves the tab order) |
 | `stopPropagation` | `boolean` | no | Call event.stopPropagation() after invoking the handler (default false) |
 | `role` | `string` | no | ARIA role for the wrapper (default "button"). Pass "none" when the wrapped element is a list row / table cell whose container owns the semantics. |
@@ -48,7 +48,7 @@ Make any component clickable. Wraps the child in a transparent span and dispatch
 OnMouse(child, enter?, leave?, hover?, move?, down?, up?, click?, doubleClick?, contextMenu?, scroll?, wheel?, pointerDown?, pointerMove?, pointerUp?, drag?, drop?, dragStart?, dragEnd?, dragEnter?, dragLeave?, dragOver?, draggable?, passiveScroll?)
 ```
 
-Attach any combination of mouse / pointer / drag listeners to a component. Pass only the props you need — unused events install no handler so the wrapper is essentially free. Each handler receives the native MouseEvent / PointerEvent / DragEvent / WheelEvent. Use for hover tracking, custom drag-and-drop, context menus, scroll-aware UIs.
+Attach any combination of mouse / pointer / drag listeners to a component. Pass only the props you need — unused events install no handler so the wrapper is essentially free. Each handler receives the native MouseEvent / PointerEvent / DragEvent / WheelEvent (a plain Event for `scroll`). Use for hover tracking, custom drag-and-drop, context menus, scroll-aware UIs.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -100,13 +100,13 @@ Attach keyboard listeners to a component. Pass any combination of `onKeyDown`, `
 OnFocus(child, onFocus?, onBlur?)
 ```
 
-Attach focus / blur listeners to a component. Use to track input focus rings, custom focus indicators, or autosave-on-blur flows. Listens for the bubbling `focusin` / `focusout` events, so focus entering or leaving any descendant is observed.
+Attach focus / blur listeners to a component. Use to track input focus rings, custom focus indicators, or autosave-on-blur flows. The wrapped subtree is treated as one unit: `onFocus` fires when focus enters it from outside and `onBlur` when focus leaves it, while moving focus between two descendants fires neither.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `child` | `Node` | **yes** |  |
-| `onFocus` | `callable` | no | Fired when focus enters the element or any descendant |
-| `onBlur` | `callable` | no | Fired when focus leaves the element and all descendants |
+| `onFocus` | `callable` | no | Fired with the `focusin` FocusEvent when focus enters the element or any descendant from outside it |
+| `onBlur` | `callable` | no | Fired with the `focusout` FocusEvent when focus leaves the element and all its descendants |
 
 ### OnIntersect
 
@@ -114,7 +114,7 @@ Attach focus / blur listeners to a component. Use to track input focus rings, cu
 OnIntersect(child, onEnter?, onLeave?, onChange?, threshold?, rootMargin?, root?, once?, disabled?)
 ```
 
-Observe whether a component is visible in the viewport (or a scroll container passed as `root`) using IntersectionObserver. Fires `onEnter` the first time the wrapped element becomes visible, `onLeave` when it leaves, and `onChange({visible, ratio})` for every transition. Use for lazy-load sentinels, infinite-scroll triggers, impression analytics, and reveal-on-scroll animations. Set `disabled: true` once there is nothing left to load.
+Observe whether a component is visible in the viewport (or a scroll container passed as `root`) using IntersectionObserver. Fires `onEnter` each time the wrapped element becomes visible (only the first time with `once: true`), `onLeave` when it leaves, and `onChange({visible, ratio})` for every transition. Use for lazy-load sentinels, infinite-scroll triggers, impression analytics, and reveal-on-scroll animations. Set `disabled: true` once there is nothing left to load.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |

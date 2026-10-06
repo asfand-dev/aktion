@@ -5,6 +5,224 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-10-05
+
+### Precise TypeScript Types for Every Component and Built-in
+
+- Every component prop in `aktion-runtime/dsl` now has its exact type. Event
+  callbacks are typed with the arguments the component really passes
+  (`Input`'s `onChange` receives the string value, `Button`'s `onClick`
+  receives nothing), return `unknown` so async handlers type-check, and
+  accept `null` (`onClick: $editing ? save : null`). Object props have named
+  shapes such as `DataGridColumn`, and enum props keep their exported
+  literal-union aliases (`ButtonVariant`, …).
+- Components that hand your own data back to you are now generic and infer it
+  from the call: the item type of `VirtualList`, `ActivityLog` or
+  `CalendarView` reaches their callbacks, `Col(values, { render })` sees each
+  value's type, and `Draggable` and `Mount` carry their payload and instance
+  types.
+- New `Dom*` types (`DomEvent`, `DomKeyboardEvent`, `DomMouseEvent`,
+  `DomElement`, `DomFile`, …) describe the DOM values a callback receives.
+  With the DOM lib loaded they are its own `KeyboardEvent`, `HTMLElement`, …;
+  without it they are the subset Aktion guarantees, so the no-DOM flavour
+  keeps working.
+- `sx` is typed key by key from the runtime's own tables: every supported key
+  and its tokens, breakpoint maps where they work, and the `hover` / `focus` /
+  `states` channels. Unknown keys such as `_hover`, and values the runtime
+  drops (for example `shadow: "xl"`), are now type errors.
+- `animate` is typed as a preset name, `"none"`, or `{ preset, duration,
+  delay, repeat }`. `role` takes the allow-listed ARIA roles, `className` /
+  `class` accept an array, `style` is a CSS string, and the new
+  `AktionIconName` type (with an augmentable `AktionIconRegistry`) types icon
+  names.
+- `$theme({...})` is typed per token group, so only real token names are
+  accepted in `colors`, `radius`, `font`, `spacing`, `shadows`, `gradients`,
+  `zIndex` and `motion`.
+- The `$util` helpers are generic (`filter`, `find`, `sort`, `groupBy`,
+  `partition`, `pick`, …) and their option objects are typed; `$util.rules`
+  validators are `Validator<T>`, `$util.rules.validate` / `validateAll` are
+  generic, and `$form({ rules })` checks each field's validators against that
+  field's value.
+- `$toast`, `$head`, `$http` / `$query` / `$mutation` (including `fetch`
+  options and a typed `.error`), `$socket`, `$sse`, `$dom`, `$storage`,
+  `$router`, `$i18n` and the HTTP interceptors now have precise types. The new
+  `RouteParamsOf<"/users/:id">` helper types a route's `params`.
+- Icon props are typed `AktionIconName`, `optional` is `boolean | string` on
+  every form field, `slots` values are `unknown`, and a new
+  `ComponentOptions` type types the `key` option of your own `.aktion.ts`
+  components. An empty list passed to `ActivityLog`, `CalendarView`,
+  `Calendar`, `Gallery` and similar components no longer types the item
+  callback as `never`.
+- Built-in callbacks whose result is ignored (`onDone`, `onMessage`, the
+  `$effect` body, timers, …) may return a Promise, so typescript-eslint's
+  `no-misused-promises` no longer reports `onDone = () => $todos.refetch()`.
+  `$util.count` / `sum` / `avg` / `min` / `max` / `join` accept untyped data,
+  and `$util.pick` / `$util.omit` accept data that may not be loaded yet.
+- The generator now refuses to produce untyped surface: generation fails when
+  a callback prop has no signature, when a curated type mentions a name the
+  declarations do not define (or a DOM type), or when a derived union drifts
+  from the runtime table it comes from. A new test checks every component's
+  callback signature against the arguments its renderer actually passes.
+- **Breaking:** `.aktion.ts` code that type-checked before is now rejected
+  where the runtime ignored or mishandled the value — for example a misspelt
+  `sx` key, `$util.match(text, /re/)`, `$toast.success(msg, { tone })`,
+  `$head({ link: [{ rel: "stylesheet", href }] })` or a callback that expects
+  arguments the component never passes. An infinite `$query` bag no longer
+  declares `onDone`, which the runtime never calls. Runtime behaviour is
+  unchanged.
+
+### TypeScript and JavaScript Modules Behave Like JavaScript
+
+- Fixed `.aktion.js` and `.aktion.ts` modules failing to compile with an
+  internal error whenever they contained a `/* … */` or JSDoc comment.
+- **Breaking:** In `.aktion.js` / `.aktion.ts` modules, a call to a component
+  declared in a `.aktion.js` / `.aktion.ts` module now binds its arguments as
+  JavaScript and TypeScript do: an object literal such as
+  `KVRow({ key: "a", value: "1" })` is the parameter's value instead of being
+  read as named props. `key:` on a trailing `{ key }` object still sets the
+  instance identity. Calls to `.aktion` components, and calls written in
+  `.aktion`, keep named props.
+- Rest parameters on components now work: `function Tags(...labels)` receives
+  every remaining argument as an array, in all three module languages.
+- Destructuring now follows JavaScript: array patterns read any iterable,
+  object patterns read arrays and strings (`const { length } = list`), and a
+  default can use the bindings before it (`{ a, b = a + 1 }`). Patterns can
+  no longer read `constructor`, `__proto__` or `prototype`.
+- Named function expressions (`const f = function fact(n) { … fact(n - 1) }`)
+  can now call themselves.
+- Changing a module-level binding in place at the top level (`xs.push(2)`,
+  `cfg.mode = "dark"`) is now error E107: Aktion rebuilds module-level
+  bindings on every render, so the change was silently lost. `$store`,
+  `$form` and `$query` handles, whose changes do persist, are not reported.
+- New error E127: `$router(…)` route arms must be an object literal written
+  at the call; a variable, a spread or a computed path used to be ignored
+  silently. Block statements, including `case 2: { … }`, now get a single
+  E113 instead of a cascade of parse errors.
+- `.aktion.ts` and `.aktion.js` modules can now import `params`, `route`,
+  `outlet`, `cleanup` and the timer functions from `aktion-runtime/dsl`
+  (this used to be error E112), so TypeScript and Aktion both accept code that
+  uses them.
+- Errors inside template-literal interpolations are now reported at their
+  position instead of rendering an empty string; diagnostics on generic hook
+  calls (`$state<number>(0)`) point at the `$`; and
+  `import { type Todo } from "./types.ts"` gets an error that explains the
+  cause and suggests `import type`.
+
+### Compiled Programs and Server Rendering
+
+- `renderToString`, `renderToStaticMarkup` and `renderToTextTree` accept a
+  compiled program (`renderToString(app)`) and render its AST directly.
+- A compiled program's `source` now means what the program means when parsed
+  again: parentheses, `typeof`, negative numbers, computed keys, template
+  escapes, named function expressions and the JavaScript-style argument
+  binding of `.aktion.ts` / `.aktion.js` components all survive printing.
+  Before, for example, `(a + b) * c` printed as `a + b * c`.
+- `formatProgram` now formats 164 of the 166 example programs it used to
+  skip, and it no longer silently drops a comment written between object
+  properties or array elements — it leaves such a file unformatted and warns.
+
+### Declarations, Templates and the Vite Plugin
+
+- Fixed `import app from "./app.aktion"` being typed `any` under
+  `aktion-runtime/aktion-modules`.
+- Generated `.d.aktion.ts` declarations now carry real types: parameters are
+  typed from their literal defaults, each component gets a typed named-props
+  overload (with `key` and named slots), hooks get arity checks, and atoms
+  are typed from their initializers. They no longer declare a name twice, and
+  they also cover the modules of `alias` targets (including
+  `aktion.config.json`).
+- **Breaking:** TypeScript code that calls into `.aktion` modules is checked
+  more strictly: too many arguments to a hook, or a parameter given a value of
+  a different kind than its literal default, is now a type error.
+- Host code that imports a named export of an Aktion module now gets an
+  explanation instead of `undefined`; only the default export, the compiled
+  program, reaches host code.
+- Importing an Aktion module with `?raw`, `?url`, `?inline` or `?worker` now
+  behaves as it does for any other file, and importing `./x.aktion.js` when
+  only `x.aktion.ts` exists suggests the right file.
+- Vitest can now automock an Aktion module (`vi.mock("./x.aktion")`), the
+  dev server's stand-ins cover exports declared after a multi-line TypeScript
+  type, and the `dts` option resolves a relative `alias` target the same way
+  the build does.
+- The `--lang ts` template's `typecheck` script runs `aktion-dts` first, so it
+  passes on a clean checkout, and the JavaScript template no longer suggests a
+  `checkJs` setting its own modules fail.
+
+### Linting and Editor Support
+
+- Added the `aktion/router-literal` ESLint rule, enabled by
+  `aktionTypeScriptConfig`: a `$router(…)` table and each layout arm's
+  `routes` must be an object literal without spreads or computed paths.
+- `aktion/props-literal` no longer misreports positional arguments in calls
+  that match no overload (common in untyped `.aktion.js` modules), and now
+  also flags an object literal that Aktion reads as the props bag although
+  TypeScript matched it to a positional parameter — including a lone
+  argument such as `JsonTree({ id: 1, name: "x" })`, whose data is lost.
+- Both ESLint presets now turn off `unicorn/prefer-switch`, whose autofix
+  produced `case` bodies Aktion cannot parse, and
+  `unicorn/no-top-level-assignment-in-function`, which reported every action
+  that assigns a module-level atom.
+- Go-to-definition into an imported `.aktion.ts` or `.aktion.js` module now
+  lands on the exported declaration.
+
+### Component Fixes
+
+- Fixed CSS injection through `RichTextEditor` / `CodeEditor` `minHeight` and
+  `maxHeight` and through a chart `Series` `color`: those values now go
+  through the same sanitisers as every other style prop.
+- Fixed the legacy size spellings (`s`, `m`, `l`, `small`, `normal`, `large`)
+  silently rendering the default size on many components (Button, Avatar,
+  Icon, Modal, Heading, Box `radius`, Gauge and more): they now render exactly
+  like `sm` / `md` / `lg`.
+- A plain number given to a CSS length prop (`maxHeight: 400`, `width: 240`,
+  `sx: { p: 8 }`) now means pixels, as in React. It used to be written without
+  a unit, so the browser ignored it.
+- Fixed `optional: false` printing "false" as a field's "(optional)" marker,
+  and the object form of `Input(validations:)`, where `{ required: false }`
+  used to turn `required` on.
+- Fixed `onChange` on `TimePicker`, `DateTimePicker`, `RichTextEditor`,
+  `CodeEditor` and `ColorPicker` going stale after a re-render.
+- Fixed `CountdownTimer` ignoring a changed `to` and firing `onEnd` at once
+  for a target that was still loading, `RelativeTime` reverting a changed
+  `value`, and `DataGrid` drawing one column's data twice when two `Col`s
+  share a header.
+- **Breaking:** `ActivityLog`'s `onItemClick` and `CalendarView`'s
+  `onEventClick` now receive the object you passed in, with every field
+  intact; `ButtonGroup(ariaLabelledBy:)` is now rendered as `aria-labelledby`
+  and takes element ids; `ComparisonTable(ariaLabel:)` no longer shows a
+  caption; `Col(pinned:)` takes `"left"` or `"none"`; `SegmentedControl`
+  writes numeric option values back as numbers; and `TagInput`'s `onFocus`
+  receives the committed tag list.
+- Form fields now submit under their `name` from the real control: a named
+  `PinInput` submits its full code and `MentionInput` its text, and composite
+  fields no longer put a stray `name` on their wrapper. **Breaking:** inside a
+  form, `TagInput` submits one entry per tag under its `name` (read them with
+  `FormData.getAll`) instead of the half-typed draft.
+- A `MultiSelect` inside a disabled `InputGroup` can no longer be focused,
+  opened or edited, and a disabled `MultiSelect`'s chips can no longer be
+  removed.
+- Colours in the slash-alpha form (`rgb(0 0 0 / 50%)`), longer `var()` /
+  `color-mix()` values and custom properties with `_` in their name
+  (`var(--brand_primary)`) render in chart series, calendar chips and `sx`;
+  values that could break out of their CSS declaration are still rejected.
+- An unknown theme name now logs a one-time console warning before falling
+  back to the light theme.
+- A top-level `$save.onDone = …` on a `$mutation` or `$query` atom now runs,
+  including after a dependency change rebuilds the atom; it used to be
+  silently lost.
+- With the default hash router, a route followed by an inner fragment
+  (`#/about#team`) now matches `/about` instead of rendering the fallback, and
+  `$util.url.hash` returns that fragment (in history mode it reads
+  `location.hash`, even without a query string).
+- Many smaller fixes so components do what their docs say — among them
+  `Mount` runs `update` when `setup` returned nothing, `VideoPlayer` reports a
+  failing `sources` list and keeps its fallback across re-renders,
+  `Breadcrumb` calls `onItemClick` for node crumbs before navigating,
+  `SignaturePad`'s form field follows `onChange`, `DataGrid` column widths are
+  right inside zoomed containers, `QueryBuilder` calls `onChange` when `value`
+  is bound, `Steps` and `Tabs` skip `null` items, and `FileUpload`'s
+  `onSelect` always receives an array.
+
 ## [0.9.0](https://github.com/asfand-dev/aktion/compare/v0.8.0...v0.9.0) (2026-10-04)
 
 

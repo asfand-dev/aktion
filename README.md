@@ -710,11 +710,20 @@ $app(pages)
   `(x = 0) => x + 1` (defaults), `(...args) => sum(args)` (rest),
   `({ a, b }) => a + b` / `([x, y]) => x` (destructured params),
   `(args) => { … }` (multi-statement, may `return`). The body can wrap
-  onto the next line (`x =>\n  expr`).
+  onto the next line (`x =>\n  expr`). A named function expression can
+  call itself by its name
+  (`const fact = function f(n) { return n < 2 ? 1 : n * f(n - 1) }`).
+- Rest parameters — a `...rest` parameter on a lambda, a function or a
+  component receives an array of the remaining arguments
+  (`function Tags(...labels)` called as `Tags("a", "b")` gets `["a", "b"]`).
 - Destructured parameters — both `function` declarations and lambdas
   accept array / object patterns (`function Card({ title, tone = "info" })`,
   `function head([first, ...rest])`), with the same defaults / renames /
-  rest support as `let`-destructuring.
+  rest support as `let`-destructuring. Destructuring reads what JavaScript
+  reads: an array pattern takes any iterable (a string, a `Set`, a `Map`), an
+  object pattern reads the properties of any non-null value
+  (`let { length } = "abc"`), and a default can use the names bound before it
+  (`let { a, b = a + 1 } = obj`).
 - JS expression niceties — array / object spread (`[...xs, y]`,
   `{ ...base, k: v }`, `fn(...args)`), array / object destructuring in
   `let` / `const` / `var` (`let [a, b, ...rest] = arr`,
@@ -834,7 +843,8 @@ Highlights:
 
 - One statement per line.
 - Three string flavours: `"double"`, `'single'`, and `` `backtick` `` with
-  `${expression}` interpolation.
+  `${expression}` interpolation. An interpolation that is not one complete
+  expression (`${}`, a typo) is a parse error at its position.
 - Optional chaining (`obj?.prop`) and nullish coalescing (`a ?? b`).
 - Spread in arrays (`[...$pinned, ...$todos]`) and objects
   (`{...$current, status: "done"}`).
@@ -1861,7 +1871,7 @@ import tsParser from "@typescript-eslint/parser";
 
 export default [
   // The two portable blocks this package documents — processor wiring plus
-  // eight DSL-general rule overrides (grammar incompatibilities and DSL-idiom
+  // ten DSL-general rule overrides (grammar incompatibilities and DSL-idiom
   // false positives — see `aktionRecommendedRules` for the full citations).
   ...aktionEslint.configs.recommended,
   {
@@ -1890,10 +1900,10 @@ record to spread into your own `**/*.aktion/*.ts` block), plus the pure
 `rangeOverlapsInsertion` position-remap primitives for anyone building their
 own tooling on the same technique.
 
-### The eight rule overrides — why each one is needed
+### The ten rule overrides — why each one is needed
 
 Every consumer routing `.aktion` files through `aktionProcessor` hits the same
-eight false positives / grammar incompatibilities, because they all stem from
+ten false positives / grammar incompatibilities, because they all stem from
 this repo's own grammar or its own component/reactivity idiom — not from
 anything any one app wrote. Each is cited as either a **GENUINE GRAMMAR
 INCOMPATIBILITY** (the rule's autofix produces a construct this grammar
@@ -1904,23 +1914,43 @@ it flags is this DSL's normal, unavoidable idiom):
 
 | Rule | Why |
 | ---- | --- |
-| `object-shorthand` | GRAMMAR: no ES6 method-shorthand production — `onClick: () => {…}` → `onClick() {…}` doesn't parse. |
+| `object-shorthand` | FORMERLY GRAMMAR, kept off: its fix rewrites a `key: function (…) {…}` handler into method shorthand (`onClick() {…}`), which used to be a parse error and now parses to the same handler. Kept off so an upgrade does not restyle existing `.aktion` files. |
 | `unicorn/prefer-export-from` | GRAMMAR: `export { … } from …` lists have no production at all — an explicit parse error. |
 | `unicorn/prefer-string-raw` | GRAMMAR: no tagged-template-literal production — `` String.raw`…` `` is a parse error ("Tagged template literals are not supported"; it used to silently truncate the value with *no* reported error — see the citation in [`src/eslint/rules.ts`](./src/eslint/rules.ts)). |
 | `unicorn/switch-case-braces` | GRAMMAR: no generic block-statement production — a bare `{` in statement position parses as an object literal, so wrapping a `case N: return X` body in `{ }` breaks parsing. Found by this package's own corpus sweep, not carried over from any downstream pilot. |
+| `unicorn/prefer-switch` | GRAMMAR, same cause: its fix turns an `if … else if …` chain of three or more comparisons into a `switch` and keeps braced case bodies, so a branch that declares a binding becomes `case "ok": { const label = … }` — an object literal to this parser. |
 | `new-cap` | IDIOM: component instantiation (`Container(...)`, `Text(...)`, …) is a capitalized function call — the DSL's normal syntax, not a constructor mistake. |
 | `unicorn/max-nested-calls` | IDIOM: the component tree *is* deeply nested calls — that's the normal shape of a UI declaration. |
 | `unicorn/no-optional-chaining-on-undeclared-variable` | IDIOM: `route` is a runtime-injected screen-scope global (`src/runtime/evaluator.ts`), never declared via `let`/`const`/`import`, so `route.params?.id` reads as "undeclared" to a JS/TS linter. |
 | `unicorn/no-top-level-side-effects` | IDIOM: registering `$effect(...)`/`$store(...)` via a bare call at module top level is how this DSL wires up its reactive system — there is no other call site for it. |
+| `unicorn/no-top-level-assignment-in-function` | IDIOM: an action that assigns a module-level atom (`function addTodo() { $draft = "" }`) is how state changes — assigning a `$` atom is what re-renders. |
 
-`tests/eslint-corpus-sweep.test.ts` re-verifies all eight against this repo's
-own real `.aktion` corpus (every example under `docs/demos/` and
+`tests/eslint-corpus-sweep.test.ts` re-verifies the overrides against this
+repo's own real `.aktion` corpus (every example under `docs/demos/` and
 `create-aktion/template/`) on every test run — walking the full
 preprocess → lint → `--fix` → postprocess pipeline and re-parsing every fixed
 output through this repo's own `parse()`, plus targeted synthetic
-reproductions of the four genuine grammar incompatibilities. Re-run it before
-trusting any specific trigger count — it drifts as example programs are
-added.
+reproductions of the genuine grammar incompatibilities;
+`tests/eslint-preset-idioms.test.ts` reproduces `unicorn/prefer-switch` and
+`unicorn/no-top-level-assignment-in-function`, which the corpus does not
+exercise through `--fix`. Re-run them before trusting any specific trigger
+count — it drifts as example programs are added.
+
+### `.aktion.ts` / `.aktion.js` modules
+
+Modules written in TypeScript or JavaScript need no processor — to ESLint they
+are ordinary `.ts`/`.js` files. Spread `aktionTypeScriptConfig` (also
+`configs.typescript`) after your own rule sets: it applies its own overrides
+for those two extensions (Aktion still parses and evaluates the erased code
+with its own grammar and semantics), and two rules of this package for objects
+Aktion reads by syntax — `aktion/props-literal` (type-aware: a props bag that
+is not an object literal at the call, a spread in one, or an object TypeScript
+matched to an `attributes`-style parameter that Aktion reads as the props
+bag) and `aktion/router-literal` (a `$router` table, or a layout arm's
+`routes`, that is not a spread-free object literal). Because it is spread
+last, it also switches `object-shorthand` (`properties`) and
+`unicorn/switch-case-braces` (`avoid`) on as errors for those files. The full
+setup is in [docs/typescript.html](https://asfand-dev.github.io/aktion/typescript.html#aktion-ts-eslint).
 
 ---
 
@@ -1984,14 +2014,17 @@ export default $app(Column([Text("Typed Aktion"), Counter("Clicks")]));
   coverage and DevTools point at the line and column you wrote.
 - **`aktion-runtime/dsl` types the built-ins** — every component (one overload
   per way a call binds its arguments), hook and namespace — so `tsc` checks
-  component calls and props. The linker drops the import.
+  component calls and props. The types are exact: enum props are literal
+  unions, callbacks receive exactly what the renderer passes, `sx` and
+  `$theme` keys are closed, and components that hand your data back are
+  generic. The linker drops the import.
 - **JavaScript semantics, checked.** Aktion interprets the code under its own
   rules, so `.aktion.ts` / `.aktion.js` modules are rewritten where that is safe
   (each local gets its own name, nested functions become `const` functions in
   place, every function body ends in `return`) and rejected where it is not —
   `await`, `async`, `var`, `this`, a closure reading a variable reassigned after
   it was created, in-place changes of a `$` atom, and more, each with a stable
-  code (`E101`–`E126`, `W201`–`W202`) at the exact line.
+  code (`E101`–`E127`, `W201`–`W202`) at the exact line.
 - **Typed `.aktion` imports.** `aktion({ dts: true })` (or the `aktion-dts` bin)
   writes `name.d.aktion.ts` declarations, so a `.aktion.ts` module can import
   from a `.aktion` one with types.

@@ -106,7 +106,8 @@ describe("the --lang option", () => {
     expect(pkg.devDependencies["ts-blank-space"]).toBe("~0.9.0");
     expect(pkg.devDependencies.typescript).toBe("^5.9.0");
     expect(pkg.devDependencies.vitest).toBeDefined(); // merged from the template layer
-    expect(pkg.scripts.typecheck).toBe("tsc");
+    // `.aktion-types/` is gitignored, so the script generates it before `tsc`.
+    expect(pkg.scripts.typecheck).toBe("aktion-dts --quiet && tsc");
     expect(readFileSync(join(dir, "vite.config.ts"), "utf8")).toContain("aktion({ dts: true })");
     expect(readFileSync(join(dir, ".gitignore"), "utf8")).toContain(".aktion-types");
   });

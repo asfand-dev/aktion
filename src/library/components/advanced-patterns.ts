@@ -481,9 +481,9 @@ export const Tour: ComponentSpec = {
     "CSS selector that renders alongside the step for designers to reference.",
   props: [
     { name: "steps", type: "object[]" },
-    { name: "current", type: "number", description: "0-indexed active step — bind a $variable" },
+    { name: "current", type: "number", optional: true, description: "0-indexed active step (default 0) — bind a $variable to drive it; without a binding the tour advances itself" },
     { name: "open", type: "boolean", optional: true, description: "Whether the tour is visible — bind a $variable to control it" },
-    { name: "onOpenChange", type: "callable", optional: true, aliases: ["onopenchange"], description: "Called with the new boolean open state whenever the component opens or closes." },
+    { name: "onOpenChange", type: "callable", optional: true, aliases: ["onopenchange"], description: "Called with `false` whenever the user closes the tour (Escape, Skip or Finish). Opening is driven by `open`, so it does not fire then." },
     { name: "onComplete", type: "callable", optional: true, description: "Fired when the user reaches Finish" },
     { name: "onSkip", type: "callable", optional: true, description: "Fired when the user bails out via Skip (falls back to `onComplete` when omitted)" },
     { name: "skipLabel", type: "string", optional: true, description: "Default \"Skip\"" },
@@ -518,9 +518,9 @@ export const Tour: ComponentSpec = {
     if (!step) return overlay;
 
     const close = (origin: HTMLElement | null): void => {
-      // Report the transition on every dismissal path (backdrop, close button,
-      // Escape, Skip, Finish) — `onSkip`/`onComplete` only cover two of them, so
-      // a controlled Tour had no way to observe the others.
+      // Report the transition on every dismissal path (Escape, Skip, Finish) —
+      // `onSkip`/`onComplete` only cover two of them, so a controlled Tour had
+      // no way to observe Escape.
       helpers.invoke(props.onOpenChange, false);
       if (openRef) { helpers.setState(openRef, false); return; }
       dismissSlot.set(true);
@@ -1032,7 +1032,7 @@ export const Drawer: ComponentSpec = {
     "backdrop click — set `closeOnBackdrop: false` to keep a form safe from " +
     "stray clicks).",
   props: [
-    { name: "title", type: "string" },
+    { name: "title", type: "string", optional: true, description: "Heading that names the dialog — without one it is announced as \"Drawer\"" },
     { name: "open", type: "boolean", description: "Open/closed state — usually a $variable" },
     { name: "children", aliases: ["child"], type: "Node[]" },
     { name: "side", type: "string", optional: true, enum: ["right", "left", "top", "bottom"] },

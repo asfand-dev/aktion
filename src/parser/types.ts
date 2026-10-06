@@ -70,9 +70,16 @@ export interface LambdaExpr {
    * JS-semantics layer turns a nested `function inc() {}` of a `.aktion.js` /
    * `.aktion.ts` module into `const inc = function () {}` (W2), and keeps the
    * name here so coverage and DevTools still call it `inc`. The parser never
-   * sets it; the runtime ignores it.
+   * sets it; the runtime ignores it, and `printProgram` does not print it.
    */
   name?: string;
+  /**
+   * The name of a named function expression (`function fact(n) { … }` used
+   * as a value). As in JavaScript, the evaluator binds it to the function
+   * itself inside its own body — below the parameters, so a parameter of the
+   * same name wins — which is what lets the expression call itself.
+   */
+  selfName?: string;
   loc?: SourceLocation;
 }
 
@@ -254,6 +261,23 @@ export interface CallExpr {
   kind: "Call";
   callee: string;
   arguments: Expression[];
+  /**
+   * Bind a user component's arguments as JavaScript binds them: every
+   * argument — an object literal included — goes to the parameter at its
+   * position, and none is read as the DSL's named-props bag (`Card({ title })`
+   * for `function Card(title)`). The parser never sets it. The JS-semantics
+   * layer sets it on a call written in a `.aktion.js` / `.aktion.ts` module to
+   * a user component with an object-literal argument, and the evaluator
+   * honours it only when the component it reaches was declared in such a
+   * module (`ComponentDeclaration.javascript`) — however the import spelled
+   * its path (`"./cards"` and `"./cards.aktion.ts"` bind alike). TypeScript
+   * types that call with the component's plain signature; a call that reaches
+   * a `.aktion` component keeps the named-props convention its generated
+   * declaration types. Text cannot carry it (nor `DeclParam.publicName`), so
+   * `printProgram` writes such a call in a form the DSL binds the same way —
+   * see `printPositionalCall` in `src/tooling/formatter.ts`.
+   */
+  positional?: true;
   loc?: SourceLocation;
 }
 
@@ -380,6 +404,14 @@ export interface ComponentDeclaration {
   body: BlockExpr;
   /** True when prefixed with `export` (multi-file modules). */
   exported?: boolean;
+  /**
+   * Declared in a `.aktion.js` / `.aktion.ts` module. A call marked
+   * `CallExpr.positional` binds its arguments as JavaScript does only when it
+   * reaches such a component. The parser never sets it — the JS-semantics
+   * layer does. Text cannot carry it; `printProgram` prints the calls that
+   * reach the component accordingly instead.
+   */
+  javascript?: true;
   loc?: SourceLocation;
   /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
   leadingComments?: ReadonlyArray<AttachedComment>;
@@ -401,7 +433,8 @@ export interface DeclParam {
    * It matters for components, whose calling convention is partly by NAME:
    * named props (`Card({ title: "T" })`, `Card(child, { title: "T" })`) and
    * the named-slot logic match prop keys against `publicName ?? name`, while
-   * the value is still bound to the local `name` inside the body.
+   * the value is still bound to the local `name` inside the body. Text cannot
+   * carry it, so `printProgram` prints such named props under the local name.
    */
   publicName?: string;
   defaultValue?: Expression;

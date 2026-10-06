@@ -6,10 +6,13 @@
 
 import type { ComponentSpec, RenderHelpers } from "../types.js";
 import type { ComponentNode } from "../../runtime/evaluator.js";
-import { el, asArray, asString, asBoolean, asNumber, valueAttr, renderIcon, sanitiseHref } from "../utils.js";
+import { el, asArray, asString, asBoolean, asNumber, valueAttr, renderIcon, sanitiseHref, canonicalSizeToken } from "../utils.js";
 import { closeFloating, deferToPaint, syncFloatingPanel } from "../floating.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
-import { extractComboboxItems, withFieldShell, FIELD_SHELL_PROPS, attachFocusHandlers, fieldShellExtraProps } from "./forms-shared.js";
+import {
+  extractComboboxItems, withFieldShell, FIELD_SHELL_PROPS, attachFocusHandlers, fieldShellExtraProps,
+  optionalMarkText, optionalMarkNode, bindChangeHandler, composeHandler,
+} from "./forms-shared.js";
 
 /**
  * The one button vocabulary. Every button-shaped control (`Button` here,
@@ -32,8 +35,13 @@ const INPUT_TYPES = [
 
 /**
  * Normalise a size token to the canonical `xs|sm|md|lg|xl` vocabulary.
- * `extra-small` / `small` / `large` / `extra-large` are accepted as verbose
- * spellings; anything unrecognised (or empty) falls back to `md`.
+ * Every legacy spelling `canonicalSizeToken` knows (`s`/`m`/`l`,
+ * `small`/`normal`/`large`) plus `extra-small` / `extra-large` is accepted;
+ * anything unrecognised (or empty) falls back to `md`. The renderer already
+ * canonicalises the legacy spellings before a spec renders, but this is also
+ * reached directly (a component rendering a Button-shaped child itself), so it
+ * must not know fewer spellings than the validator accepts — it once lacked `s`
+ * and `l`, which rendered medium.
  *
  * Exported alongside `BUTTON_SIZES` so IconButton resolves sizes by the same
  * rules instead of keeping its own copy. IconButton's copy accepted `small` /
@@ -41,56 +49,12 @@ const INPUT_TYPES = [
  * consolidating must not quietly narrow what either control used to take.
  */
 export function normaliseButtonSize(value: unknown): string {
-  const v = asString(value).trim().toLowerCase();
+  const v = canonicalSizeToken(asString(value).toLowerCase());
   if (v === "xs" || v === "extra-small") return "xs";
-  if (v === "sm" || v === "small") return "sm";
-  if (v === "lg" || v === "large") return "lg";
+  if (v === "sm") return "sm";
+  if (v === "lg") return "lg";
   if (v === "xl" || v === "extra-large") return "xl";
   return "md";
-}
-
-/**
- * Wire an `onChange`-style prop as a DOM **property** handler, composed on top
- * of whatever handler `bindState` already installed for the same event.
- *
- * `attachOnChange` (wrappers.ts) registers with `addEventListener`, and the
- * morph reconciler cannot transfer those onto the node it keeps — so the
- * callback captured by the FIRST render is the only one that ever runs. Inside
- * a `.map` that lambda still holds the departed row's loop variables, so typing
- * in row 2 renames row 1 while the visible value (a property handler, refreshed
- * by morph) stays correct: silent data corruption.
- *
- * The property is assigned unconditionally and the prop is read *inside* the
- * handler, so a callback that only appears on a later render (`onChange:
- * $editing ? save : null`) is picked up as well.
- */
-function bindChangeHandler(
-  element: HTMLElement,
-  props: Record<string, unknown>,
-  helpers: RenderHelpers,
-  options: { event: string; getValue: (node: HTMLElement) => unknown; prop?: string },
-): void {
-  composeHandler(element, `on${options.event}`, (event) => {
-    const handler = props[options.prop ?? "onChange"];
-    if (handler == null) return;
-    const live = (event.currentTarget ?? event.target ?? element) as HTMLElement;
-    helpers.invoke(handler, options.getValue(live));
-  });
-}
-
-/**
- * Chain an extra property handler after whatever is already assigned to
- * `propKey` — `bindState` owns the same keys (`oninput` / `onchange`), and
- * layering a second `addEventListener` instead is exactly what morph cannot
- * carry over.
- */
-function composeHandler(element: HTMLElement, propKey: string, extra: (event: Event) => void): void {
-  const record = element as unknown as Record<string, unknown>;
-  const previous = record[propKey] as ((event: Event) => void) | null | undefined;
-  record[propKey] = (event: Event) => {
-    previous?.call(element, event);
-    extra(event);
-  };
 }
 
 /**
@@ -102,6 +66,12 @@ function composeHandler(element: HTMLElement, propKey: string, extra: (event: Ev
  * (NumberInput's stepper shell, a checkbox's `<label>`) that element is not a
  * form control, so all four are inert: AT reports no invalid state and native
  * validation never blocks submission.
+ *
+ * `name` moves too, for the same reason: the shell writes the author's `name`
+ * onto the element it is handed, and `<div name>` is not submitted with any
+ * form — InputGroup's and NumberInput's `name` were declared and inert. It only
+ * lands on an `<input>` / `<select>` / `<textarea>`; a picker's trigger submits
+ * nothing, so there it is just taken off the wrapper.
  */
 function relocateControlAria(wrapper: HTMLElement, control: HTMLElement): void {
   // `required` is only a real attribute on a form control. On the pickers' own
@@ -116,7 +86,7 @@ function relocateControlAria(wrapper: HTMLElement, control: HTMLElement): void {
   // `div role="combobox"`) gets `aria-disabled`, which is what that trigger
   // already sets for itself.
   const supportsDisabled = supportsRequired || control instanceof HTMLButtonElement;
-  for (const attr of ["disabled", "required", "aria-invalid", "aria-describedby"]) {
+  for (const attr of ["disabled", "required", "aria-invalid", "aria-describedby", "name"]) {
     const value = wrapper.getAttribute(attr);
     if (value === null) continue;
     // Off the wrapper first, unconditionally: `<div disabled>` styles nothing,
@@ -124,16 +94,95 @@ function relocateControlAria(wrapper: HTMLElement, control: HTMLElement): void {
     // disable their own inner controls and style from `data-disabled` — so leaving
     // it behind only invites a consumer selector that will never match again.
     wrapper.removeAttribute(attr);
+    if (attr === "name") {
+      if (supportsRequired) control.setAttribute("name", value);
+      continue;
+    }
     if (attr === "required" && !supportsRequired) {
       control.setAttribute("aria-required", "true");
       continue;
     }
-    if (attr === "disabled" && !supportsDisabled) {
-      control.setAttribute("aria-disabled", "true");
+    if (attr === "disabled") {
+      if (supportsDisabled) control.setAttribute("disabled", value);
+      else control.setAttribute("aria-disabled", "true");
+      lockPicker(control);
       continue;
     }
     control.setAttribute(attr, value);
   }
+}
+
+/**
+ * Make a custom picker really disabled, not only announced as disabled.
+ *
+ * An enclosing `InputGroup(…, { disabled: true })` reaches the picker through
+ * the DOM it rendered — the picker's own `disabled` prop was never set, so its
+ * handlers still ran. A `<button>` trigger takes the native attribute, but
+ * MultiSelect's is a `div role="combobox"`, where `aria-disabled` alone left a
+ * tab stop that still opened the list: assistive tech announced a disabled
+ * control that worked. Every button inside the picker (MultiSelect's chip
+ * remove, Combobox's clear, the options) is disabled with it — a greyed-out
+ * field that still deletes its value is worse than none, and MultiSelect's own
+ * `disabled` had left its chips removable too. The fresh tree is what the morph
+ * reconciler applies, so a handler cleared here is cleared on the live node,
+ * and a later render without `disabled` brings every one of them back.
+ */
+function lockPicker(trigger: HTMLElement): void {
+  if (!trigger.matches(PICKER_TRIGGER_SELECTOR)) return;
+  const picker = trigger.closest<HTMLElement>(".rui-combobox, .rui-multiselect") ?? trigger;
+  picker.setAttribute("data-disabled", "true");
+  if (!(trigger instanceof HTMLButtonElement)) {
+    trigger.removeAttribute("tabindex");
+    trigger.onclick = null;
+    trigger.onkeydown = null;
+  }
+  for (const button of picker.querySelectorAll<HTMLButtonElement>("button")) {
+    button.setAttribute("disabled", "");
+    button.onclick = null;
+  }
+}
+
+/** The focusable trigger of the two custom pickers — the element AT lands on. */
+const PICKER_TRIGGER_SELECTOR = ".rui-combobox-trigger, .rui-multiselect-trigger";
+
+/**
+ * The form control inside a wrapped field (InputGroup's `field`, FormControl's
+ * `field`): the first one in document order.
+ *
+ * Combobox and MultiSelect also render a native `<input>` — the filter box
+ * inside their (closed) panel — so anything inside a picker's panel is
+ * skipped; the trigger before it is the control. Document order, not "a picker
+ * first": a FormControl around `InputGroup(Input(…), { action: Combobox(…) })`
+ * labels the Input, not the currency picker beside it.
+ *
+ * `querySelectorAll`, not `querySelector` with the same list: happy-dom 15
+ * resolves `querySelector(list)` selector by selector (it returned the filter
+ * for `"input, .rui-combobox-trigger"` with the trigger earlier in the tree),
+ * while its `querySelectorAll` returns tree order, as the DOM specifies for
+ * both.
+ */
+function findFieldControl(scope: Element): HTMLElement | null {
+  for (const node of scope.querySelectorAll<HTMLElement>(`input, select, textarea, ${PICKER_TRIGGER_SELECTOR}`)) {
+    // The panel consts are declared further down; this runs at render time.
+    if (!node.closest(`${COMBOBOX_PANEL}, ${MULTISELECT_PANEL}`)) return node;
+  }
+  return null;
+}
+
+/**
+ * What `onBlur` / `onFocus` report for a control found by `findFieldControl`.
+ *
+ * A native control's `.value`. A picker's trigger has none — the Combobox
+ * trigger is a `<button>`, whose `.value` is `""`, and the MultiSelect's is a
+ * `<div>` — so the selection is read from what the render put on the live
+ * trigger: the Combobox's `data-value`, the MultiSelect's chips.
+ */
+function fieldControlValue(node: HTMLElement): unknown {
+  if (node.classList.contains("rui-combobox-trigger")) return node.getAttribute("data-value") ?? "";
+  if (node.classList.contains("rui-multiselect-trigger")) {
+    return [...node.querySelectorAll(".rui-multiselect-chip[data-value]")].map((chip) => chip.getAttribute("data-value") ?? "");
+  }
+  return (node as HTMLInputElement).value;
 }
 
 /**
@@ -148,6 +197,17 @@ function relocateControlAria(wrapper: HTMLElement, control: HTMLElement): void {
 function fallbackFieldId(prefix: string, label: string): string {
   const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return slug ? `${prefix}-${slug}` : "";
+}
+
+/**
+ * Append the field's "optional" marker to a label a control renders itself
+ * (Checkbox, Slider, DatePicker, DateRangePicker). Those hand the field shell
+ * `label: null`, and the shell only prints the marker inside its own label, so
+ * without this `optional` forced the shell's wrapper and showed nothing.
+ */
+function appendOptionalMark(label: HTMLElement, props: Record<string, unknown>): void {
+  const text = optionalMarkText(props);
+  if (text && (label.textContent ?? "") !== "") label.append(optionalMarkNode(text));
 }
 
 /**
@@ -473,7 +533,11 @@ export const ButtonGroup: ComponentSpec = {
     { name: "items", type: "Button[]", positional: true },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"], description: "Size token applied to every button in the group" },
     { name: "fullWidth", type: "boolean", optional: true, aliases: ["full"], description: "Stretch the group to fill its container, dividing width evenly" },
-    { name: "ariaLabel", type: "string", optional: true, aliases: ["ariaLabelledBy", "label"], description: "Accessible name for the group (e.g. \"Time range\") — the group role is anonymous without it" },
+    { name: "ariaLabel", type: "string", optional: true, aliases: ["label"], description: "Accessible name for the group (e.g. \"Time range\") — the group role is anonymous without it" },
+    // Its own slot, not an alias of `ariaLabel`: as an alias the id an author
+    // passed was rendered as the name TEXT (`aria-label="range-heading"`), so a
+    // group labelled by a visible heading was announced as "range-heading".
+    { name: "ariaLabelledBy", type: "string", optional: true, description: "Space-separated id(s) of the element(s) that name the group (a visible heading) — rendered as `aria-labelledby`, which takes precedence over `ariaLabel`" },
   ],
   render: (_node, props, helpers) => {
     const size = asString(props.size);
@@ -483,6 +547,7 @@ export const ButtonGroup: ComponentSpec = {
       "data-full-width": asBoolean(props.fullWidth) ? "true" : null,
       role: "group",
       "aria-label": asString(props.ariaLabel) || null,
+      "aria-labelledby": asString(props.ariaLabelledBy).trim() || null,
     });
     const items = asArray(props.items);
     items.forEach((child, i) => {
@@ -587,13 +652,13 @@ export const InputGroup: ComponentSpec = {
     }
     // Resolve the wrapped control: `disabled`, the validation aria and the
     // focus callbacks all have to land on a real form element, not on the shell.
-    const control = root.querySelector<HTMLElement>(
-      ".rui-input-group-field input, .rui-input-group-field select, " +
-      ".rui-input-group-field textarea, .rui-input-group-field .rui-combobox-trigger",
-    );
+    const fieldSlot = root.querySelector(".rui-input-group-field");
+    const control = fieldSlot ? findFieldControl(fieldSlot) : null;
     if (control) {
-      if (disabled) control.setAttribute("disabled", "");
-      attachFocusHandlers(control, props, helpers);
+      // `disabled` itself reaches the control through `relocateControlAria`
+      // below, which gives a MultiSelect's `div` trigger `aria-disabled`
+      // instead of an attribute a `div` does not take.
+      attachFocusHandlers(control, props, helpers, fieldControlValue);
       const controlId = control.getAttribute("id");
       // Gives `withFieldShell` a stem for the error/hint id it wires up below.
       if (controlId) root.setAttribute("id", `${controlId}-group`);
@@ -618,7 +683,7 @@ export const Input: ComponentSpec = {
     { name: "id", type: "string", description: "Input identifier" },
     { name: "placeholder", type: "string", optional: true },
     { name: "type", type: "string", optional: true, enum: INPUT_TYPES },
-    { name: "validations", type: "any", optional: true, description: "Array or object of validation hints (`required`, `minLength:n`, `maxLength:n`, `pattern:re`, `email`)" },
+    { name: "validations", type: "any", optional: true, description: "Validation hints: an array (`[\"required\", \"minLength:3\", \"email\"]`) or an object (`{ required: true, minLength: 3, email: true }`). Hints are `required`, `email`, `minLength`, `maxLength`, `pattern`, `min`, `max`; in the object form a flag is on when `true` and a `false`/`null` entry is ignored" },
     { name: "value", type: "any", optional: true, description: "Bound value (typically $variable)" },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the current value on every keystroke" },
     ...FIELD_SHELL_PROPS,
@@ -758,7 +823,7 @@ export const Select: ComponentSpec = {
     { name: "required", type: "boolean", optional: true, description: "Mark the field required" },
     { name: "disabled", type: "boolean", optional: true, description: "Disable the control (non-editable, skipped by tab order)" },
     { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves the control (validate-on-blur)" },
-    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
+    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called with the current value when the control gains focus" },
     { name: "loading", type: "boolean", optional: true, description: "Options are still being fetched — disables the control and shows a loading option instead of an empty list" },
     { name: "onSearch", type: "callable", optional: true, description: "Called with the query ~200ms after typing stops, for server-side search (implies `searchable`; supply the matches as `items`)" },
     { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
@@ -930,6 +995,7 @@ export const Checkbox: ComponentSpec = {
         ? "rui-checkbox-label rui-visually-hidden"
         : "rui-checkbox-label",
     }, [asString(props.label)]);
+    appendOptionalMark(labelSpan, props);
     if (description) {
       // Same classes CheckBoxItem uses, so the existing two-line styling applies.
       const stack = el("span", { class: "rui-checkbox-item-text" });
@@ -965,7 +1031,7 @@ export const CheckBoxItem: ComponentSpec = {
     { name: "description", type: "string", optional: true },
     { name: "defaultChecked", type: "boolean", optional: true, aliases: ["checked"] },
     { name: "disabled", type: "boolean", optional: true, description: "Lock this option (greyed out, not togglable)" },
-    { name: "value", type: "string", optional: true, description: "Submitted value for this option (defaults to `name`) — use when the group maps to an array of ids" },
+    { name: "value", type: "string", optional: true, description: "The native checkbox's submitted `value` for a native form post (defaults to `name`). The group's own `value` / `onChange` stay keyed by `name` either way" },
   ],
   render: (_node, props) => {
     const itemName = asString(props.name);
@@ -1291,13 +1357,8 @@ export const FormControl: ComponentSpec = {
     const description = descriptionNode ? "" : asString(props.description);
     const required = asBoolean(props.required);
     const invalid = asBoolean(props.invalid) || Boolean(error);
-    // Same rule as the field shell: `required` wins, `true` means the built-in
-    // English word, a string says it another way.
-    const optionalText = required
-      ? ""
-      : props.optional === true
-        ? "(optional)"
-        : asString(props.optional);
+    // Same rule as the field shell, from the same function.
+    const optionalText = optionalMarkText(props);
     const root = el("div", {
       class: "rui-form-control",
       "data-invalid": invalid ? "true" : null,
@@ -1308,14 +1369,12 @@ export const FormControl: ComponentSpec = {
     // "edit text, blank" in VoiceOver, and clicking the label does nothing.
     const fieldEl = helpers.renderNode(props.field);
     const control = fieldEl instanceof HTMLElement
-      ? (fieldEl.matches("input, select, textarea")
-          ? fieldEl
-          : fieldEl.querySelector<HTMLElement>("input, select, textarea, .rui-combobox-trigger, .rui-multiselect-trigger"))
+      ? (fieldEl.matches("input, select, textarea") ? fieldEl : findFieldControl(fieldEl))
       : null;
     const controlId = asString(props.for) || control?.getAttribute("id") || "";
     const labelEl = el("label", { class: "rui-form-label", for: controlId || null }, [labelText]);
     if (required) labelEl.append(el("span", { class: "rui-field-required", "aria-hidden": "true" }, ["*"]));
-    else if (optionalText) labelEl.append(el("span", { class: "rui-field-optional" }, [optionalText]));
+    else if (optionalText) labelEl.append(optionalMarkNode(optionalText));
     root.append(labelEl);
     // Guidance between the label and the field, so the reader has it before the
     // control rather than after — the order the field shell uses too.
@@ -1599,7 +1658,11 @@ export const Slider: ComponentSpec = {
     const showValue = asBoolean(props.showValue);
     if (label || showValue) {
       const head = el("div", { class: "rui-slider-head" });
-      if (label) head.append(el("label", { class: "rui-slider-label", for: id || null }, [label]));
+      if (label) {
+        const labelEl = el("label", { class: "rui-slider-label", for: id || null }, [label]);
+        appendOptionalMark(labelEl, props);
+        head.append(labelEl);
+      }
       if (showValue) head.append(el("span", { class: "rui-slider-value" }, [display(value)]));
       root.append(head);
     }
@@ -2021,7 +2084,7 @@ export const DatePicker: ComponentSpec = {
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the control (marks it invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark the field required" },
     { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves the control (validate-on-blur)" },
-    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
+    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called with the current value when the control gains focus" },
     { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) the selected date is echoed in beneath the field, and the language the value is announced in. Same `locale` channel as `Table`/`Col`, so a filter and the report it filters read alike. Bound values stay ISO `YYYY-MM-DD`." },
     ...fieldShellExtraProps(),
   ],
@@ -2034,7 +2097,11 @@ export const DatePicker: ComponentSpec = {
     const id = explicitId || fallbackFieldId("rui-date", label || placeholder);
     const locale = localeTag(props.locale);
     const root = el("div", { class: "rui-date-picker" });
-    if (label) root.append(el("label", { class: "rui-date-picker-label", for: id || null }, [label]));
+    if (label) {
+      const labelEl = el("label", { class: "rui-date-picker-label", for: id || null }, [label]);
+      appendOptionalMark(labelEl, props);
+      root.append(labelEl);
+    }
     const input = el("input", {
       type: "date",
       class: "rui-date-picker-input",
@@ -2098,7 +2165,7 @@ export const FileUpload: ComponentSpec = {
     { name: "hint", type: "string", optional: true, description: "Secondary helper text" },
     { name: "accept", type: "string", optional: true, description: "Comma-separated MIME types or extensions" },
     { name: "multiple", type: "boolean", optional: true },
-    { name: "onSelect", type: "callable", optional: true, aliases: ["action", "onChange"], description: "Callable fired with the accepted files when files are picked" },
+    { name: "onSelect", type: "callable", optional: true, aliases: ["action", "onChange"], description: "Called with the selected files as an array of `File`s — when files are picked or dropped (only the ones `maxSize` accepted), and again with the remaining files after the user removes one from the preview" },
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon (default \"cloud-arrow-up\")" },
     { name: "disabled", type: "boolean", optional: true },
     { name: "maxSize", type: "number", optional: true, description: "Maximum accepted file size in bytes — larger files are rejected client-side and never reach `onSelect`" },
@@ -2255,7 +2322,9 @@ export const FileUpload: ComponentSpec = {
           const remaining = Array.from(liveInput?.files ?? list).filter((f) => f !== file);
           writeFiles(liveInput, remaining);
           helpers.invoke(props.onRemove, file);
-          helpers.invoke(props.onSelect, liveInput?.files ?? remaining);
+          // `remaining`, not the input's `files`: the same array shape a pick
+          // reports, and still right where `writeFiles` cannot replace them.
+          helpers.invoke(props.onSelect, remaining);
           if (liveRoot) showPreview(liveRoot, remaining);
         };
         row.append(removeBtn);
@@ -2277,7 +2346,10 @@ export const FileUpload: ComponentSpec = {
       // Never let a rejected file reach the caller — client-side size rejection
       // is the whole point of `maxSize`.
       if (rejected.length > 0) writeFiles(liveInput, accepted);
-      helpers.invoke(props.onSelect, rejected.length > 0 ? accepted : files);
+      // Always an array. Handing over the input's live `FileList` when nothing
+      // was rejected and a `File[]` when something was meant `files.map(...)`
+      // worked only after a `maxSize` rejection.
+      helpers.invoke(props.onSelect, accepted);
       if (uploadRoot) showPreview(uploadRoot, accepted, rejected);
     };
 
@@ -2441,10 +2513,10 @@ export const Combobox: ComponentSpec = {
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the control (marks it invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*` and the `required` attribute)" },
     { name: "loading", type: "boolean", optional: true, description: "Matches are being fetched — shows \"Loading…\" instead of the (lying) empty label" },
-    { name: "onSearch", type: "callable", optional: true, description: "Called with the query on every keystroke for server-side search; disables local filtering" },
+    { name: "onSearch", type: "callable", optional: true, description: "Called with the query ~200ms after typing stops, for server-side search; disables local filtering" },
     { name: "clearable", type: "boolean", optional: true, description: "Show a clear (×) control so the selection can be reset to the placeholder" },
     { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the selected value when focus leaves the control (validate-on-blur)" },
-    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
+    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called with the selected value when the control gains focus" },
     { name: "creatable", type: "boolean", optional: true, description: "Offer the typed text itself as an option when it matches nothing (\"Create «acme-corp»\") so a value outside `items` can be selected" },
     { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
     ...fieldShellExtraProps(),
@@ -2492,6 +2564,10 @@ export const Combobox: ComponentSpec = {
       "aria-expanded": isOpen ? "true" : "false",
       "aria-controls": panelId,
       disabled: disabled ? "" : null,
+      // The selected value, readable off the LIVE trigger: a `<button>`'s own
+      // `.value` is `""`, so a wrapper that reports the control's value on
+      // blur (InputGroup's `onBlur`) has nothing else to read.
+      "data-value": currentValue,
     });
     triggerBtn.append(el("span", {
       class: "rui-combobox-value",
@@ -3290,8 +3366,8 @@ export const DateRangePicker: ComponentSpec = {
     { name: "hint", type: "string", optional: true, description: "Helper text rendered below the pair" },
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the pair (marks it invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark both endpoints required" },
-    { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves an endpoint (validate-on-blur)" },
-    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when an endpoint gains focus" },
+    { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with that endpoint's current value (an ISO date) when focus leaves it (validate-on-blur)" },
+    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called with that endpoint's current value (an ISO date) when an endpoint gains focus" },
     { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`) the chosen period is echoed in beneath the pair, and the language both endpoints are announced in. Same `locale` channel as `Table`/`Col`. Bound values stay ISO `YYYY-MM-DD`." },
     ...fieldShellExtraProps(),
   ],
@@ -3315,11 +3391,13 @@ export const DateRangePicker: ComponentSpec = {
       "aria-label": label || null,
     });
     if (label) {
-      root.append(el("label", {
+      const labelEl = el("label", {
         class: "rui-date-range-picker-label",
         id: `${id}-label`,
         for: fromId,
-      }, [label]));
+      }, [label]);
+      appendOptionalMark(labelEl, props);
+      root.append(labelEl);
       root.setAttribute("aria-labelledby", `${id}-label`);
       root.removeAttribute("aria-label");
     }
@@ -3474,6 +3552,15 @@ function renderSearchableSelect(
       // Same class of bug as the five above: a label the author had hidden
       // reappeared the moment the Select became searchable.
       labelHidden: props.labelHidden,
+      // …and again for the five later field-shell props, which Select declares
+      // through `fieldShellExtraProps()`: the warning, description and
+      // "(optional)" marker vanished and the trigger lost `aria-invalid` and the
+      // author's `aria-describedby` as soon as `searchable: true` was added.
+      warning: props.warning,
+      description: props.description,
+      optional: props.optional,
+      invalid: props.invalid,
+      describedBy: props.describedBy,
     },
     helpers,
   ) as HTMLElement;
@@ -3511,6 +3598,27 @@ function bindToStateAtArg(
 }
 
 /**
+ * The object form of `validations` in the array form's spelling.
+ *
+ * `true` is the bare flag (`{ required: true }` → `"required"`); `false`,
+ * `null` and `undefined` turn the entry off; any other value is the hint's
+ * argument (`{ min: 0 }` → `"min:0"`). The previous mapping (truthy value →
+ * `key:value`, anything else → the bare key) had it inside out:
+ * `{ required: true }` became the unknown hint `"required:true"` and was
+ * dropped with a warning, `{ required: false }` became `"required"` and
+ * SWITCHED IT ON, and a falsy argument (`min: 0`, `max: 0`) lost its value and
+ * was dropped as the bare `"min"`.
+ */
+function objectValidationHints(rules: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  for (const [key, value] of Object.entries(rules)) {
+    if (value === false || value === null || value === undefined) continue;
+    out.push(value === true ? key : `${key}:${String(value)}`);
+  }
+  return out;
+}
+
+/**
  * Apply `validations` hints to a live input.
  *
  * Two rules earned by bug reports:
@@ -3534,7 +3642,7 @@ function applyValidations(
   const list = Array.isArray(validations)
     ? validations.map((v) => String(v))
     : typeof validations === "object"
-      ? Object.entries(validations as Record<string, unknown>).map(([k, v]) => (v ? `${k}:${v}` : k))
+      ? objectValidationHints(validations as Record<string, unknown>)
       : [];
   const positiveInt = (raw: string, hint: string): number | null => {
     const n = Number(raw);

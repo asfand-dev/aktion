@@ -23,6 +23,7 @@ export {
   moduleLocalSymbol,
   moduleLocalBaseName,
   nativeImportMessage,
+  typeOnlyNativeImportMessage,
   type LinkResult,
   type LinkDiagnostic,
   type LinkOptions,

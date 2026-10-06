@@ -117,7 +117,10 @@ export default defineConfig({
         <strong>four</strong> fields, not two: <code>html</code>,
         <code>state</code>, <code>head</code>, and <code>headAttrs</code> &mdash; so
         one call gives you crawlable markup, a hydration snapshot, and everything
-        the page shell&rsquo;s <code>&lt;head&gt;</code> needs.
+        the page shell&rsquo;s <code>&lt;head&gt;</code> needs. <code>program</code>
+        is either the compiled program a module entry&rsquo;s default import gives
+        you, rendered from its AST (see
+        <a href="typescript.html#ssr-tooling">TypeScript</a>), or plain Aktion text.
       </p>
 <pre><code>import { renderToString } from "aktion-runtime";
 

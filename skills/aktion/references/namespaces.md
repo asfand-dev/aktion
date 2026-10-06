@@ -73,7 +73,7 @@ Runtime helper + reactive-environment namespace.
 | `startsWith` | method | `startsWith(text, prefix)` | True when the text starts with the prefix. |
 | `endsWith` | method | `endsWith(text, suffix)` | True when the text ends with the suffix. |
 | `contains` | method | `contains(text, needle)` | True when the text contains the needle. |
-| `match` | method | `match(text, pattern)` | Test the text against a regular-expression pattern. |
+| `match` | method | `match(text, pattern)` | Test the text against a regular expression given as a SOURCE string (`"^a.+z$"`). A RegExp value stringifies with its slashes and does not match as meant. |
 | `round` | method | `round(value, decimals?)` | Round to n decimal places. |
 | `floor` | method | `floor(value)` | Round down to an integer. |
 | `ceil` | method | `ceil(value)` | Round up to an integer. |
@@ -98,8 +98,8 @@ Runtime helper + reactive-environment namespace.
 | `derived` | method | `derived(fn)` | Computed reactive value — recomputes from the atoms the lambda reads. |
 | `onError` | method | `onError(fn)` | Program-level error sink — fires with { error, source } when an action throws. |
 | `onNavigate` | method | `onNavigate(fn)` | Navigation guard: return false to block, a path string to redirect, anything else to allow. |
-| `onRequest` | method | `onRequest(fn)` | HTTP request interceptor — a partial return merges over every outgoing request. |
-| `onResponse` | method | `onResponse(fn)` | HTTP response interceptor — replace the response, or `return retry()` to re-issue once (the client awaits what you return; `await` inside the body does not suspend). |
+| `onRequest` | method | `onRequest(fn)` | HTTP request interceptor — a partial return merges over every outgoing request (headers shallow-merged), or mutate the request and return nothing. Runs synchronously: a returned Promise is ignored. |
+| `onResponse` | method | `onResponse(fn)` | HTTP response interceptor — return a full replacement response (it replaces, it does not merge), `return retry()` to re-issue once, or nothing to pass it through (the client awaits what you return; `await` inside the body does not suspend). |
 | `invalidate` | method | `invalidate(keys)` | Refetch every cached $query whose key contains one of the substrings. |
 | `scroll` | property | `scroll` | Reactive scroll: .x / .y / .progress (0–1) / .direction ("up"\|"down"). |
 | `viewport` | property | `viewport` | Reactive viewport: .width / .height. |
@@ -128,7 +128,7 @@ Runtime helper + reactive-environment namespace.
 | `rules.max` | method | `rules.max(n, message?)` | Number ≤ n. |
 | `rules.minLength` | method | `rules.minLength(n, message?)` | String length ≥ n. |
 | `rules.maxLength` | method | `rules.maxLength(n, message?)` | String length ≤ n. |
-| `rules.pattern` | method | `rules.pattern(re, message?)` | Match a regular expression. |
+| `rules.pattern` | method | `rules.pattern(re, message?)` | Match a regular expression (a RegExp or its source string). A RegExp's flags are ignored: `/x/i` matches case-sensitively. |
 | `rules.oneOf` | method | `rules.oneOf(options, message?)` | Value is in the allowed list. |
 | `rules.integer` | method | `rules.integer(message?)` | A whole number — min/max bound the magnitude but not the step. |
 | `rules.range` | method | `rules.range(lo, hi, message?)` | Inclusive numeric range — min + max in one rule, so the message names both ends. |
@@ -152,7 +152,7 @@ Runtime helper + reactive-environment namespace.
 | `geolocate` | method | `geolocate(options?)` | Resolve { lat, lng, accuracy } via the Geolocation API. |
 | `isOnline` | method | `isOnline()` | Current navigator.onLine flag. |
 | `deviceType` | method | `deviceType()` | "mobile" \| "tablet" \| "desktop" heuristic. |
-| `worker` | method | `worker(fn, ...args)` | Run a closure-free function in a Web Worker; resolves its return value. |
+| `worker` | method | `worker(fn, ...args)` | Run a closure-free HOST JavaScript function in a Web Worker; resolves its return value. `fn` is serialised with `toString()`, so an Aktion lambda (the runtime's closure) cannot run there — only the no-Worker fallback runs it. |
 | `registerServiceWorker` | method | `registerServiceWorker(url, scope?)` | Register a service worker for PWA/offline. |
 | `webManifest` | method | `webManifest(config)` | Build a sanitised web-app manifest (name, icons, themeColor…). |
 | `nativeShell` | method | `nativeShell()` | Detect the wrapper: capacitor/cordova/tauri/electron/react-native or "web". |
@@ -228,7 +228,7 @@ Managed DOM-observer namespace (resize / intersection / mutation / measure).
 | --- | --- | --- | --- |
 | `onResize` | method | `onResize(node, callback)` | Observe element size with a ResizeObserver; callback gets { width, height, entry }. Returns a disposer; auto-disposed on replan. |
 | `onIntersect` | method | `onIntersect(node, callback, options?)` | Observe viewport intersection with an IntersectionObserver; callback gets the entry. Options: { root?, rootMargin?, threshold? }. |
-| `onMutation` | method | `onMutation(node, callback, options?)` | Observe DOM mutations with a MutationObserver. Options: { childList?, attributes?, subtree?, characterData? }. |
+| `onMutation` | method | `onMutation(node, callback, options?)` | Observe DOM mutations with a MutationObserver; callback gets the records. Options: { childList?, attributes?, subtree?, characterData? } — childList and attributes default to TRUE, subtree and characterData to false. |
 | `measure` | method | `measure(node)` | One-shot read → { rect, scroll, viewport } (getBoundingClientRect + scroll offsets + window size). |
 
 ## Reactive resource bags
@@ -269,7 +269,7 @@ Cached query bag (HTTP + pagination).
 | `lastUpdated` | property | `lastUpdated` | Epoch-ms of the last successful response. |
 | `refetch` | method | `refetch()` | Re-issue the original request. |
 | `cancel` | method | `cancel()` | Abort the in-flight request. |
-| `onDone` | property | `onDone` | Settable callback fired each time the request settles (success or error). |
+| `onDone` | property | `onDone` | Settable callback fired each time the request settles (success or error). Never fired in infinite mode — chain `.loadMore().then(…)` instead. |
 | `loadMore` | method | `loadMore()` | Fetch the next page (infinite mode). |
 | `hasMore` | property | `hasMore` | `true` while more pages are available (infinite mode). |
 | `loadingMore` | property | `loadingMore` | `true` while a `loadMore()` page is in flight. |
@@ -301,7 +301,7 @@ Reactive WebSocket bag.
 | `last` | property | `last` | Most recent message (JSON auto-parsed), or null. |
 | `messages` | property | `messages` | Buffered messages, newest last (capped to bufferSize). |
 | `attempts` | property | `attempts` | Reconnect attempts in the current streak (resets on success). |
-| `error` | property | `error` | Last socket error event, if any. |
+| `error` | property | `error` | The last error: the socket `error` event, the error a bad URL threw, or `{ message }` when WebSocket is unavailable; `undefined` once open. |
 | `send` | method | `send(data)` | Send a message (objects JSON-stringified). Queues while connecting; flushes on open. |
 | `close` | method | `close()` | Close for good — disables auto-reconnect. |
 
@@ -315,7 +315,7 @@ Reactive Server-Sent Events bag.
 | `connected` | property | `connected` | `true` while the stream is open. |
 | `last` | property | `last` | Most recent event payload (JSON auto-parsed). |
 | `messages` | property | `messages` | Buffered events, newest last (capped to bufferSize). |
-| `error` | property | `error` | Last stream error, if any. |
+| `error` | property | `error` | The last error: the EventSource `error` event, the error a bad URL threw, or `{ message }` when EventSource is unavailable; `undefined` once open. |
 | `close` | method | `close()` | Close the stream. |
 
 ### `$script({ … })` →
@@ -348,7 +348,7 @@ Managed form engine bag.
 | `setValues` | method | `setValues(values)` | Merge several field values at once. |
 | `validate` | method | `validate()` | Validate every field → boolean (a Promise when async rules exist). |
 | `validateField` | method | `validateField(name)` | Validate one field → message \| null (Promise for async rules). |
-| `submit` | method | `submit()` | Touch all → validate → onSubmit(values) when valid. Alias: handleSubmit(). |
+| `submit` | method | `submit()` | Touch every field that has rules → validate → onSubmit(values) when valid. Returns false when invalid, true after a synchronous onSubmit, and a Promise when a rule or onSubmit is async. Alias: handleSubmit(). |
 | `handleSubmit` | method | `handleSubmit()` | Alias of submit(). |
 | `reset` | method | `reset()` | Restore initial values; clears errors/touched/dirty. |
 

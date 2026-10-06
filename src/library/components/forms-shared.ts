@@ -22,11 +22,17 @@ import { asArray, asString, asBoolean, el } from "../utils.js";
  * same slot, and a field that is simultaneously wrong and merely unusual has
  * nothing to gain from saying both. All of them join `aria-describedby`
  * (description first), so the control is described by everything it shows.
+ *
+ * `ownsName` is for a composite that hands the shell its WRAPPER and names its
+ * own form control from `props.name` — an inner `<input>` / `<textarea>`, or a
+ * hidden field carrying a value no visible control holds (a PIN, a tag list, a
+ * drawing). The shell then leaves `name` alone: on the wrapper it was inert,
+ * because a `<div name>` is submitted with no form.
  */
 export function withFieldShell(
   control: HTMLElement,
   props: Record<string, unknown>,
-  options: { idKey?: string } = {},
+  options: { idKey?: string; ownsName?: boolean } = {},
 ): HTMLElement {
   // `disabled` and `name` are applied before the early return below, because a
   // field with no label/hint/error still has to honour them — otherwise a bare
@@ -37,7 +43,7 @@ export function withFieldShell(
   // it declared-but-dead on TextArea, Select, NumberInput and the rest. The
   // controls default `name` to `id`, so this only overrides when supplied.
   const fieldName = asString(props.name);
-  if (fieldName) control.setAttribute("name", fieldName);
+  if (fieldName && !options.ownsName) control.setAttribute("name", fieldName);
 
   const label = asString(props.label);
   const hint = asString(props.hint);
@@ -45,15 +51,7 @@ export function withFieldShell(
   const warning = asString(props.warning);
   const description = asString(props.description);
   const required = asBoolean(props.required);
-  // `optional` is `true` for the built-in word or a string to say it another way
-  // — the built-in is English, and a field shell cannot translate. Anything else
-  // (false, absent) renders no marker. `required` wins: a field cannot be both,
-  // and the attribute-backed state is the one assistive tech already announces.
-  const optionalText = required
-    ? ""
-    : props.optional === true
-      ? "(optional)"
-      : asString(props.optional);
+  const optionalText = optionalMarkText(props);
 
   // `aria-invalid` and an author-supplied `aria-describedby` are applied BEFORE
   // the early return below, for the same reason `disabled` is: they are contracts
@@ -115,12 +113,7 @@ export function withFieldShell(
   });
   const requiredMark = (): HTMLElement =>
     el("span", { class: "rui-field-required", "aria-hidden": "true" }, ["*"]);
-  // NOT `aria-hidden`, unlike the required star. `required` is announced by the
-  // attribute of the same name, so its star is decoration; HTML has no `optional`
-  // attribute, which makes this text the only thing that carries the state — and
-  // WCAG 3.3.2 wants it carried.
-  const optionalMark = (): HTMLElement =>
-    el("span", { class: "rui-field-optional" }, [optionalText]);
+  const optionalMark = (): HTMLElement => optionalMarkNode(optionalText);
 
   // `labelHidden` hides the label VISUALLY while keeping it in the accessibility
   // tree — the correct treatment for a field whose purpose is obvious from
@@ -194,6 +187,37 @@ export function withFieldShell(
 }
 
 /**
+ * The text of a field's "optional" marker, or `""` for none.
+ *
+ * `optional` is `true` for the built-in word or a string to say it another way —
+ * the built-in is English, and a field shell cannot translate. Anything else
+ * (`false`, a number, absent) renders no marker: `asString(false)` used to print
+ * the word "false" as the marker. `required` wins: a field cannot be both, and
+ * the attribute-backed state is the one assistive tech already announces.
+ *
+ * Shared by the field shell, `FormControl` and the controls that render their
+ * own label (Checkbox, Slider, DatePicker, DateRangePicker), so the rule cannot
+ * drift between them again.
+ */
+export function optionalMarkText(props: Record<string, unknown>): string {
+  if (asBoolean(props.required)) return "";
+  if (props.optional === true) return "(optional)";
+  return typeof props.optional === "string" ? props.optional : "";
+}
+
+/**
+ * The marker element for {@link optionalMarkText}.
+ *
+ * NOT `aria-hidden`, unlike the required star. `required` is announced by the
+ * attribute of the same name, so its star is decoration; HTML has no `optional`
+ * attribute, which makes this text the only thing that carries the state — and
+ * WCAG 3.3.2 wants it carried.
+ */
+export function optionalMarkNode(text: string): HTMLElement {
+  return el("span", { class: "rui-field-optional" }, [text]);
+}
+
+/**
  * Add ids to a control's `aria-describedby` without dropping what is there.
  *
  * MERGE, do not overwrite. Several controls already point `aria-describedby` at
@@ -220,7 +244,7 @@ export const FIELD_SHELL_PROPS = [
   { name: "invalid", type: "boolean", optional: true, aliases: ["ariaInvalid"], description: "Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary" },
   { name: "describedBy", type: "string", optional: true, aliases: ["ariaDescribedBy"], description: "Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message" },
   { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves the control (validate-on-blur, `form.touch`)" },
-  { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
+  { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called with the current value (the same value `onBlur` receives) when the control gains focus" },
   { name: "name", type: "string", optional: true, description: "Form field name submitted to the server (defaults to `id`)" },
   { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context" },
 ] as const;
@@ -247,6 +271,53 @@ export function fieldShellExtraProps(exclude: readonly string[] = []) {
 }
 
 interface FocusHelpers { invoke: (handler: unknown, ...args: unknown[]) => void }
+
+/**
+ * Wire an `onChange`-style prop as a DOM **property** handler, composed on top
+ * of whatever handler `bindState` (or the component itself) already installed
+ * for the same event.
+ *
+ * Not `addEventListener`: the morph reconciler cannot transfer a listener onto
+ * the node it keeps, so the callback captured by the FIRST render is the only
+ * one that ever runs. Inside a `.map` that lambda still holds the departed
+ * row's loop variables, so typing in row 2 renames row 1 while the visible
+ * value (a property handler, refreshed by morph) stays correct: silent data
+ * corruption. A handler supplied only on a later render never fired, and one
+ * withdrawn later kept firing.
+ *
+ * The property is assigned unconditionally and the prop is read *inside* the
+ * handler, so a callback that only appears on a later render (`onChange:
+ * $editing ? save : null`) is picked up as well. The value is read off the
+ * LIVE node the event fired on, not the render-time element.
+ */
+export function bindChangeHandler(
+  element: HTMLElement,
+  props: Record<string, unknown>,
+  helpers: FocusHelpers,
+  options: { event: string; getValue: (node: HTMLElement) => unknown; prop?: string },
+): void {
+  composeHandler(element, `on${options.event}`, (event) => {
+    const handler = props[options.prop ?? "onChange"];
+    if (handler == null) return;
+    const live = (event.currentTarget ?? event.target ?? element) as HTMLElement;
+    helpers.invoke(handler, options.getValue(live));
+  });
+}
+
+/**
+ * Chain an extra property handler after whatever is already assigned to
+ * `propKey` — `bindState` owns the same keys (`oninput` / `onchange`), and
+ * layering a second `addEventListener` instead is exactly what morph cannot
+ * carry over.
+ */
+export function composeHandler(element: HTMLElement, propKey: string, extra: (event: Event) => void): void {
+  const record = element as unknown as Record<string, unknown>;
+  const previous = record[propKey] as ((event: Event) => void) | null | undefined;
+  record[propKey] = (event: Event) => {
+    previous?.call(element, event);
+    extra(event);
+  };
+}
 
 /**
  * Wire `onBlur`/`onFocus` props as DOM property handlers (morph contract —

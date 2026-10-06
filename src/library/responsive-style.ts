@@ -13,7 +13,12 @@
  * base value inline.
  */
 
-/** Breakpoint → min-width (px). `base` is the 0-width default (no media query). */
+import { RESPONSIVE_BREAKPOINTS } from "./utils.js";
+
+/**
+ * Breakpoint → min-width (px). `base` is the 0-width default (no media query).
+ * Keyed by {@link RESPONSIVE_BREAKPOINTS}, which also orders the rules.
+ */
 export const BREAKPOINT_MIN: Record<string, number> = {
   base: 0,
   sm: 640,
@@ -22,7 +27,7 @@ export const BREAKPOINT_MIN: Record<string, number> = {
   xl: 1280,
 };
 
-const BP_ORDER: Record<string, number> = { base: 0, sm: 1, md: 2, lg: 3, xl: 4 };
+const bpOrder = (bp: string): number => Math.max(0, (RESPONSIVE_BREAKPOINTS as readonly string[]).indexOf(bp));
 
 let dynSheet: CSSStyleSheet | null | undefined;
 const ruleCache = new Map<string, string>();
@@ -70,7 +75,7 @@ export function responsiveClassFor(groups: ResponsiveGroup[]): string | null {
   if (!sheet) return null;
   const ordered = [...groups]
     .filter((g) => g.decls.length > 0)
-    .sort((a, b) => (BP_ORDER[a.bp] ?? 0) - (BP_ORDER[b.bp] ?? 0));
+    .sort((a, b) => bpOrder(a.bp) - bpOrder(b.bp));
   if (ordered.length === 0) return null;
 
   const cacheKey = ordered
@@ -113,11 +118,11 @@ export function responsiveClassFor(groups: ResponsiveGroup[]): string | null {
 export function isResponsiveMap(v: unknown): v is Record<string, unknown> {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
   const map = v as Record<string, unknown>;
-  return "base" in map || "sm" in map || "md" in map || "lg" in map || "xl" in map;
+  return RESPONSIVE_BREAKPOINTS.some((bp) => bp in map);
 }
 
 /** One CSS state pseudo-selector → its `:selector` suffix. */
-const STATE_SELECTOR: Record<string, string> = {
+const STATE_SELECTOR: Readonly<Record<string, string>> = {
   hover: ":hover",
   focus: ":focus",
   "focus-visible": ":focus-visible",
@@ -127,6 +132,13 @@ const STATE_SELECTOR: Record<string, string> = {
   checked: ":checked, &[aria-checked='true']",
   "group-hover": "", // handled specially below
 };
+
+/**
+ * The interaction states `sx.states` accepts — exactly the states this module
+ * can write a selector for. `sx.ts` filters on it and the DSL types print
+ * `SxInteractionState` from it.
+ */
+export const INTERACTION_STATES: readonly string[] = Object.keys(STATE_SELECTOR);
 
 export interface StateRuleGroup {
   /** State key (`hover` | `focus` | `active` | `disabled` | …). */
@@ -146,7 +158,7 @@ export interface StateRuleGroup {
 export function stateClassFor(groups: StateRuleGroup[]): string | null {
   const sheet = getResponsiveSheet();
   if (!sheet) return null;
-  const valid = groups.filter((g) => g.decls.length > 0 && (g.state in STATE_SELECTOR));
+  const valid = groups.filter((g) => g.decls.length > 0 && INTERACTION_STATES.includes(g.state));
   if (valid.length === 0) return null;
 
   const cacheKey = "S|" + valid

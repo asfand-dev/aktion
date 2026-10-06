@@ -11,7 +11,7 @@ import type { ComponentSpec, RenderHelpers } from "../types.js";
 import { mapPositionalArgs } from "../types.js";
 import {
   el, asArray, asString, asBoolean, asNumber, renderIcon, sanitiseImageSrc, sanitiseHref,
-  normalizeSpacingToken, sanitiseCssLength, canonicalSizeToken,
+  normalizeSpacingToken, sanitiseCssLength, canonicalSizeToken, isComponentNode,
 } from "../utils.js";
 import { deferToPaint } from "../floating.js";
 import { installDismissListeners, disposeDismissListeners } from "./_internal.js";
@@ -205,7 +205,11 @@ export const OverlayItem: ComponentSpec = {
       "data-anchor": asString(props.anchor, "top-right"),
       // Validated as a CSS length: a raw value could otherwise close the custom
       // property with `;` and append arbitrary declarations to this element.
-      style: props.offset ? `--ak-ov-off:${sanitiseCssLength(props.offset, "8px")}` : null,
+      // A numeric 0 is a real offset, not "unset": only a missing or empty
+      // value leaves the stylesheet's 8px default in place.
+      style: props.offset != null && props.offset !== ""
+        ? `--ak-ov-off:${sanitiseCssLength(props.offset, "8px")}`
+        : null,
     });
     if (props.child != null) wrap.append(helpers.renderNode(props.child));
     return wrap;
@@ -732,6 +736,9 @@ function windowBar(
  */
 function extractCodeString(codeNode: unknown): string {
   if (typeof codeNode === "string") return codeNode;
+  // Coerced like every other string slot (`asString`), so `CodeWindow(12345)`
+  // shows the number instead of an empty pane.
+  if (typeof codeNode === "number" || typeof codeNode === "boolean") return String(codeNode);
   if (codeNode == null || typeof codeNode !== "object") return "";
   const node = codeNode as { __kind?: unknown; name?: unknown; args?: unknown[] };
   if (node.__kind !== "Component" || !Array.isArray(node.args)) return "";
@@ -1241,8 +1248,9 @@ export const ThemeToggle: ComponentSpec = {
   name: "ThemeToggle",
   description:
     "A sun/moon button that toggles the host between light and dark themes — " +
-    "no host glue required. It flips the <aktion-app> `theme` attribute and " +
-    "dispatches a `theme-change` event the host can listen for.",
+    "no host glue required. It flips the <aktion-app> `theme` attribute " +
+    "between `light` and `dark` (any theme names) and dispatches a " +
+    "`theme-change` event the host can listen for.",
   props: [
     { name: "light", type: "string", optional: true, description: "Theme name when toggled to light (default 'light')" },
     { name: "dark", type: "string", optional: true, description: "Theme name when toggled to dark (default 'dark')" },
@@ -1250,6 +1258,18 @@ export const ThemeToggle: ComponentSpec = {
   render: (_node, props, helpers) => {
     const lightName = asString(props.light, "light");
     const darkName = asString(props.dark, "dark");
+    /**
+     * Whether `theme` is this toggle's dark side. Its own two names decide
+     * first: guessing from the word "dark" alone meant a dark theme named
+     * anything else (`dark: "midnight"`) could never be toggled back. The guess
+     * remains only for a theme the toggle did not set (the host's initial one).
+     */
+    const isDarkTheme = (theme: string): boolean => {
+      const key = theme.trim().toLowerCase();
+      if (key === darkName.trim().toLowerCase()) return true;
+      if (key === lightName.trim().toLowerCase()) return false;
+      return key.includes("dark");
+    };
     // The active theme is mirrored into instance state so the RENDER can emit
     // the right icon/label. Patching the DOM after commit is not enough: the
     // fresh tree always won the next morph pass and put the moon back while the
@@ -1283,7 +1303,7 @@ export const ThemeToggle: ComponentSpec = {
     deferToPaint(() => {
       if (!btn.isConnected) return;
       const host = hostFrom(btn);
-      const dark = (host?.getAttribute("theme") || "").toLowerCase().includes("dark");
+      const dark = isDarkTheme(host?.getAttribute("theme") || lightName);
       if (dark === darkSlot.get()) return;
       darkSlot.set(dark);
       paint(btn, dark);
@@ -1292,11 +1312,11 @@ export const ThemeToggle: ComponentSpec = {
       const target = (event.currentTarget ?? event.target) as HTMLElement | null;
       const host = hostFrom(target);
       if (!host) return;
-      const cur = (host.getAttribute("theme") || lightName).toLowerCase();
-      const next = cur.includes("dark") ? lightName : darkName;
+      const toLight = isDarkTheme(host.getAttribute("theme") || lightName);
+      const next = toLight ? lightName : darkName;
       host.setAttribute("theme", next);
       host.dispatchEvent(new CustomEvent("theme-change", { detail: { theme: next }, bubbles: true, composed: true }));
-      const dark = next.toLowerCase().includes("dark");
+      const dark = !toLight;
       darkSlot.set(dark);
       if (target) paint(target, dark);
     };
@@ -1355,6 +1375,17 @@ export const Swatch: ComponentSpec = {
  * Utility components (Part VIII.8)
  * ----------------------------------------------------------------------- */
 
+/**
+ * `iconOnly` also answers to `variant`, where authors write a Button style
+ * (`variant: "ghost"`). Any non-empty string is truthy, so that used to switch
+ * the label off; through the string form only an icon word means icon-only.
+ */
+function copyButtonIconOnly(raw: unknown): boolean {
+  if (typeof raw !== "string") return asBoolean(raw);
+  const word = raw.trim().toLowerCase();
+  return word === "true" || word === "icon" || word === "icon-only" || word === "icononly";
+}
+
 export const CopyButton: ComponentSpec = {
   name: "CopyButton",
   description:
@@ -1372,7 +1403,7 @@ export const CopyButton: ComponentSpec = {
   render: (_node, props, helpers) => {
     const label = asString(props.label, "Copy");
     const copiedLabel = asString(props.copiedLabel, "Copied!");
-    const iconOnly = asBoolean(props.iconOnly);
+    const iconOnly = copyButtonIconOnly(props.iconOnly);
     // The confirmation is part of the RENDER, not a post-commit DOM patch: any
     // unrelated commit inside the 2s window used to morph the base label and
     // icon back over the "Copied!" state.
@@ -1455,11 +1486,16 @@ export const SegmentedControl: ComponentSpec = {
   description:
     "A compact segmented toggle (iOS-style). `options` is an array of strings " +
     "or {label, value, icon?, disabled?}. Bind `value` to a $variable; " +
-    "`onChange(value)` fires on select. Left/Right arrows move between " +
+    "`onChange(value)` fires on select. Option values keep their type, so " +
+    "numeric options write numbers back. Left/Right arrows move between " +
     "segments; `size` sets the height and `disabled` locks the whole control.",
   props: [
     { name: "options", type: "any[]", positional: true, required: true, aliases: ["items"] },
-    { name: "value", type: "string", optional: true },
+    // `string | number`: option values keep their type (see the description), so
+    // a numeric option's `value` is a number. No `object` in the hint, so
+    // `propExpectsObject` stays false and a trailing `{…}` is still read as the
+    // named props, never as `value` (`chooseNamedBagIndex`).
+    { name: "value", type: "string | number", optional: true, description: "The selected option's value (compared as text, so `2` and `\"2\"` select the same option)" },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"] },
     { name: "disabled", type: "boolean", optional: true, description: "Lock every segment" },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
@@ -1483,9 +1519,11 @@ export const SegmentedControl: ComponentSpec = {
       const opt = (raw && typeof raw === "object")
         ? raw as { label?: unknown; value?: unknown; icon?: unknown; disabled?: unknown }
         : { label: raw, value: raw, icon: undefined, disabled: undefined };
-      const value = asString(opt.value ?? opt.label);
+      // Compared as text (the bound value may be either), but emitted with its
+      // own type: stringifying it turned a number-typed $variable into "2".
+      const value = opt.value ?? opt.label ?? "";
       const label = asString(opt.label ?? opt.value);
-      const active = value === current;
+      const active = asString(value) === current;
       const disabled = groupDisabled || asBoolean(opt.disabled);
       const btn = el("button", {
         class: "rui-segmented-control-option",
@@ -1623,6 +1661,9 @@ function relativeTimeLabel(date: Date): string {
   return "just now";
 }
 
+/** Live RelativeTime elements → the instant their refresh timer counts from. */
+const RELATIVE_TIME_RUNNING = new WeakMap<HTMLElement, number>();
+
 export const RelativeTime: ComponentSpec = {
   name: "RelativeTime",
   description:
@@ -1635,7 +1676,8 @@ export const RelativeTime: ComponentSpec = {
   ],
   render: (_node, props, helpers) => {
     const raw = props.value;
-    const date = typeof raw === "number" ? new Date(raw) : new Date(asString(raw));
+    // A Date is read directly: through its string form it lost the milliseconds.
+    const date = typeof raw === "number" || raw instanceof Date ? new Date(raw) : new Date(asString(raw));
     if (Number.isNaN(date.getTime())) {
       return el("span", { class: "rui-relative-time" }, [asString(raw)]);
     }
@@ -1650,25 +1692,36 @@ export const RelativeTime: ComponentSpec = {
     const labelEl = el("span", { class: "rui-relative-time-label" }, [relativeTimeLabel(date)]);
     root.append(labelEl, el("span", { class: "rui-visually-hidden" }, [` (${absolute})`]));
 
-    // Refresh from the LIVE element only: a fresh tree the morph discarded must
-    // not start a second timer (nor register the keyed disposer, which would
-    // clear the live one).
+    // Refresh the LIVE element only. On a re-render morph keeps the element an
+    // earlier render committed and discards this tree, so the timer is (re)started
+    // on that element whenever the instant changes — a timer left counting from
+    // the first render's date painted over a changed `value` within a second.
+    const at = date.getTime();
+    const liveSlot = helpers.useInstanceState<HTMLElement | null>("rui-relativetime-live", null);
     const cancel = deferToPaint(() => {
-      if (!root.isConnected) return;
+      const live = root.isConnected ? root : liveSlot.get();
+      if (!live?.isConnected || RELATIVE_TIME_RUNNING.get(live) === at) return;
+      liveSlot.set(live);
+      RELATIVE_TIME_RUNNING.set(live, at);
       let timer: ReturnType<typeof setTimeout>;
+      const stop = (): void => {
+        clearTimeout(timer);
+        if (RELATIVE_TIME_RUNNING.get(live) === at) RELATIVE_TIME_RUNNING.delete(live);
+      };
       const run = (): void => {
-        const live = root.querySelector(".rui-relative-time-label");
-        if (!root.isConnected || !live) { clearTimeout(timer); return; }
-        live.textContent = relativeTimeLabel(date);
+        const label = live.querySelector(".rui-relative-time-label");
+        if (!live.isConnected || !label) { stop(); return; }
+        label.textContent = relativeTimeLabel(date);
         schedule();
       };
       // Coarse: every second while the delta is under a minute, then every 30s.
       const schedule = (): void => {
-        const delay = Math.abs(date.getTime() - Date.now()) < 6e4 ? 1000 : 30000;
+        const delay = Math.abs(at - Date.now()) < 6e4 ? 1000 : 30000;
         timer = setTimeout(run, delay);
       };
       schedule();
-      helpers.registerDisposer(() => clearTimeout(timer), "rui-relativetime");
+      // Keyed, so restarting for a new instant clears the previous timer first.
+      helpers.registerDisposer(stop, "rui-relativetime");
     });
     helpers.registerDisposer(() => { if (!root.isConnected) cancel(); }, "rui-relativetime-defer");
     return root;
@@ -1840,16 +1893,17 @@ export const ProductCard: ComponentSpec = {
   name: "ProductCard",
   description:
     "An e-commerce product card: image, title, optional rating, a PriceTag, " +
-    "and an add-to-cart action. Pass `price`/`compareAt` directly or a custom " +
-    "`price` node. Give it `href` or `onClick` to make the whole card open the " +
-    "product (the card's hover lift promises it), `rating` + `reviewCount` for " +
+    "and an add-to-cart action. Pass `price`/`compareAt` (formatted by a " +
+    "PriceTag), or a custom `price` node rendered as-is. Give it `href` or " +
+    "`onClick` to make the whole card open the product (the card's hover " +
+    "lift promises it), `rating` + `reviewCount` for " +
     "credible stars, and `soldOut` to dim it and stop the add button firing.",
   props: [
     { name: "title", type: "string", positional: true, required: true },
     { name: "image", type: "string", optional: true, aliases: ["src"] },
-    { name: "price", type: "string | number", optional: true },
-    { name: "compareAt", type: "string | number", optional: true },
-    { name: "currency", type: "string", optional: true },
+    { name: "price", type: "string | number | Node", optional: true, description: "Price for the built-in PriceTag, or your own node (e.g. a PriceTag with a `period`)" },
+    { name: "compareAt", type: "string | number", optional: true, description: "Struck-through original price (ignored when `price` is a node)" },
+    { name: "currency", type: "string", optional: true, description: "Currency symbol (ignored when `price` is a node)" },
     { name: "rating", type: "number", optional: true, description: "0–5 stars" },
     { name: "badge", type: "string", optional: true, description: "Corner ribbon label (e.g. 'Sale')" },
     { name: "action", type: "Node", optional: true, description: "Add-to-cart Button; omit it and pass `onAdd` for the built-in icon button" },
@@ -1907,7 +1961,11 @@ export const ProductCard: ComponentSpec = {
       body.append(stars);
     }
     const row = el("div", { class: "rui-product-foot" });
-    if (props.price != null) {
+    if (isComponentNode(props.price)) {
+      // The author's own price markup. Handing a node to PriceTag stringified
+      // it into "$[object Object]".
+      row.append(helpers.renderNode(props.price));
+    } else if (props.price != null) {
       row.append(PriceTag.render(
         { __kind: "Component", name: "PriceTag", args: [], argMeta: [] },
         { price: props.price, compareAt: props.compareAt, currency: props.currency },
@@ -2028,25 +2086,60 @@ const COUNTDOWN_LABELS: Record<string, string> = {
   days: "days", hours: "hrs", minutes: "min", seconds: "sec",
 };
 
-/** Live countdown roots that already own a ticking interval. */
-const COUNTDOWN_RUNNING = new WeakSet<HTMLElement>();
+/** Live countdown roots → the interval ticking them. */
+const COUNTDOWN_RUNNING = new WeakMap<HTMLElement, ReturnType<typeof setInterval>>();
+
+/** Placeholder a unit cell shows while `to` is empty or unparseable. */
+const COUNTDOWN_PENDING = "--";
+
+/** What one CountdownTimer render asked for — read by the interval on every tick. */
+interface CountdownConfig {
+  /** Target instant in ms; `NaN` while `to` is empty or unparseable. */
+  target: number;
+  endLabel: string;
+  units: string[];
+  onEnd: unknown;
+}
+
+/** `pending`: no usable target yet; `running`: counting down; `done`: reached zero. */
+type CountdownPhase = "pending" | "running" | "done";
+
+function countdownTarget(raw: unknown): number {
+  if (typeof raw === "number") return raw;
+  if (raw instanceof Date) return raw.getTime();
+  const text = asString(raw).trim();
+  return text ? new Date(text).getTime() : Number.NaN;
+}
+
+/**
+ * Stop the interval ticking `live`. Pass the id a caller started so a stale
+ * cleanup cannot cancel the interval that has since replaced it (a keyed
+ * disposer runs the previous cleanup the moment a new one is registered).
+ */
+function stopCountdown(live: HTMLElement, id = COUNTDOWN_RUNNING.get(live)): void {
+  if (id === undefined) return;
+  clearInterval(id);
+  if (COUNTDOWN_RUNNING.get(live) === id) COUNTDOWN_RUNNING.delete(live);
+}
 
 export const CountdownTimer: ComponentSpec = {
   name: "CountdownTimer",
   description:
     "Live countdown to a target date/time (ISO string or timestamp). Ticks " +
     "every second, then shows `endLabel` and fires `onEnd` (enable checkout, " +
-    "reveal a link, refresh a price). `units` trims the boxes — a 10-minute " +
-    "flash sale should not render two zeroed day/hour cells.",
+    "reveal a link, refresh a price). Changing `to` retargets the running " +
+    "clock, and `onEnd` fires once per target; an empty or null `to` (data " +
+    "still loading) shows `--` cells and fires nothing. `units` trims the " +
+    "boxes — a 10-minute flash sale should not render two zeroed day/hour cells.",
   props: [
     { name: "to", type: "string | number", positional: true, required: true, aliases: ["target", "date"] },
     { name: "endLabel", type: "string", optional: true, description: "Shown when the countdown finishes (default 'Done')" },
-    { name: "onEnd", type: "callable", optional: true, aliases: ["onFinish", "onComplete"], description: "Fired once when the countdown reaches zero" },
+    { name: "onEnd", type: "callable", optional: true, aliases: ["onFinish", "onComplete"], description: "Fired once per target when the countdown reaches zero" },
     { name: "units", type: "string[]", optional: true, enum: COUNTDOWN_UNITS, description: "Which units to show (default all four)" },
     { name: "showDays", type: "boolean", optional: true, description: "Set false to drop the days cell" },
   ],
   render: (_node, props, helpers) => {
-    const target = typeof props.to === "number" ? props.to : new Date(asString(props.to)).getTime();
+    const target = countdownTarget(props.to);
     const endLabel = asString(props.endLabel, "Done");
     const requested = asArray<unknown>(props.units).map((u) => asString(u));
     let units: string[] = requested.filter((u) => (COUNTDOWN_UNITS as readonly string[]).includes(u));
@@ -2060,7 +2153,7 @@ export const CountdownTimer: ComponentSpec = {
     for (const unit of units) {
       const u = el("div", { class: "rui-countdown-unit", "data-unit": unit });
       u.append(
-        el("div", { class: "rui-countdown-value" }, ["00"]),
+        el("div", { class: "rui-countdown-value" }, [COUNTDOWN_PENDING]),
         el("div", { class: "rui-countdown-label" }, [COUNTDOWN_LABELS[unit] ?? unit]),
       );
       root.append(u);
@@ -2068,24 +2161,35 @@ export const CountdownTimer: ComponentSpec = {
     const summary = el("span", { class: "rui-countdown-summary rui-visually-hidden", role: "status", "aria-live": "polite" });
     root.append(summary);
 
-    const endedSlot = helpers.useInstanceState<boolean>("rui-countdown-ended", false);
-    const fireEnd = (): void => {
-      if (endedSlot.get()) return;
-      endedSlot.set(true);
-      helpers.invoke(props.onEnd);
-    };
+    // Every render overwrites the settings the interval reads. The interval is
+    // started by the first render that finds the live element and outlives the
+    // renders after it (morph keeps the live node and discards their trees), so
+    // a closure over this render's `target` kept painting the first target.
+    const config: CountdownConfig = { target, endLabel, units, onEnd: props.onEnd };
+    const configSlot = helpers.useInstanceState<CountdownConfig>("rui-countdown-config", config);
+    configSlot.set(config);
+    // The target `onEnd` last fired for, so a re-render of a finished countdown
+    // stays quiet while a NEW target that runs out fires again.
+    const endedFor = helpers.useInstanceState<number | null>("rui-countdown-ended", null);
+    const liveSlot = helpers.useInstanceState<HTMLElement | null>("rui-countdown-live", null);
     const pad = (n: number) => String(Math.max(0, n)).padStart(2, "0");
     /**
      * Write into whatever element is passed — the caller resolves it, so the
      * interval always drives the LIVE node instead of the value spans captured
      * by the render that started it (which morph discards, freezing the clock).
      */
-    const paint = (host: HTMLElement): boolean => {
-      const diff = target - Date.now();
-      if (!Number.isFinite(target) || diff <= 0) {
-        host.replaceChildren(el("div", { class: "rui-countdown-done" }, [endLabel]));
+    const paint = (host: HTMLElement, cfg: CountdownConfig): CountdownPhase => {
+      // An empty `to` is usually a target that has not loaded yet. Reading it as
+      // "already over" fired `onEnd` before the real target ever arrived.
+      if (!Number.isFinite(cfg.target)) {
+        for (const cell of host.querySelectorAll(".rui-countdown-value")) cell.textContent = COUNTDOWN_PENDING;
+        return "pending";
+      }
+      const diff = cfg.target - Date.now();
+      if (diff <= 0) {
+        host.replaceChildren(el("div", { class: "rui-countdown-done" }, [cfg.endLabel]));
         host.setAttribute("data-done", "true");
-        return false;
+        return "done";
       }
       const sec = Math.floor(diff / 1000);
       const values: Record<string, number> = {
@@ -2094,13 +2198,13 @@ export const CountdownTimer: ComponentSpec = {
         minutes: Math.floor((sec % 3600) / 60),
         seconds: sec % 60,
       };
-      for (const unit of units) {
+      for (const unit of cfg.units) {
         const cell = host.querySelector(`.rui-countdown-unit[data-unit="${unit}"] .rui-countdown-value`);
         if (cell) cell.textContent = pad(values[unit] ?? 0);
       }
       const live = host.querySelector(".rui-countdown-summary");
       if (live) {
-        const spoken = units
+        const spoken = cfg.units
           .filter((u) => u !== "seconds" || sec < 60)
           .map((u) => `${values[u] ?? 0} ${u}`)
           .join(", ");
@@ -2108,21 +2212,36 @@ export const CountdownTimer: ComponentSpec = {
         // Only on a minute boundary, so the polite queue is not flooded.
         if (live.textContent !== next && (sec % 60 === 0 || live.textContent === "")) live.textContent = next;
       }
-      return true;
+      return "running";
     };
-    paint(root);
+    paint(root, config);
+
+    /** Paint the live element from the newest settings, firing `onEnd` once per target. */
+    const step = (live: HTMLElement): CountdownPhase => {
+      const cfg = configSlot.get();
+      const phase = paint(live, cfg);
+      if (phase === "done" && endedFor.get() !== cfg.target) {
+        endedFor.set(cfg.target);
+        helpers.invoke(cfg.onEnd);
+      }
+      return phase;
+    };
 
     const cancel = deferToPaint(() => {
-      // Only the committed element ticks; a discarded fresh tree must not
-      // register the keyed disposer (that is what killed the live interval).
-      if (!root.isConnected || COUNTDOWN_RUNNING.has(root)) return;
-      if (!paint(root)) { fireEnd(); return; }
-      COUNTDOWN_RUNNING.add(root);
+      // On a re-render this tree was discarded, so tick the element committed
+      // earlier — it is the only one on the page.
+      const live = root.isConnected ? root : liveSlot.get();
+      if (!live?.isConnected) return;
+      liveSlot.set(live);
+      // Stops a clock whose target was cleared or already ran out, and restarts
+      // one that was idle (pending, or finished) once a future target arrives.
+      if (step(live) !== "running") { stopCountdown(live); return; }
+      if (COUNTDOWN_RUNNING.has(live)) return;
       const id = setInterval(() => {
-        if (!root.isConnected) { clearInterval(id); COUNTDOWN_RUNNING.delete(root); return; }
-        if (!paint(root)) { clearInterval(id); COUNTDOWN_RUNNING.delete(root); fireEnd(); }
+        if (!live.isConnected || step(live) !== "running") stopCountdown(live, id);
       }, 1000);
-      helpers.registerDisposer(() => { clearInterval(id); COUNTDOWN_RUNNING.delete(root); }, "countdown");
+      COUNTDOWN_RUNNING.set(live, id);
+      helpers.registerDisposer(() => stopCountdown(live, id), "countdown");
     });
     helpers.registerDisposer(() => { if (!root.isConnected) cancel(); }, "countdown-defer");
     return root;

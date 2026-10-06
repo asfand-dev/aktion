@@ -137,7 +137,7 @@ Reactive form engine: values/errors/touched/dirty/valid/submitting/validating + 
 | key | type | notes |
 | --- | --- | --- |
 | `values` | `object` | Initial field values — the clean snapshot. |
-| `rules` | `object` | Per-field validator arrays: { field: [$util.rules.required(), …] }. |
+| `rules` | `object` | Per-field validator arrays: { field: [$util.rules.required(), …] }. Each field's validators receive that field's value. |
 | `onSubmit` | `(values) => void` | Called with the values once validation passes. |
 
 ## data
@@ -189,7 +189,7 @@ Cached + deduplicated HTTP read. Polling via refetchInterval/refetchOnFocus/refe
 | `cache` | `enum: "default" \| "no-store" \| "reload" \| "no-cache" \| "force-cache"` | Fetch cache mode. |
 | `gql` | `string` | GraphQL query — POSTs { query, variables }; `.data` is the unwrapped GraphQL data. |
 | `variables` | `object` | GraphQL variables paired with `gql`. |
-| `key` | `string` | Cache key — identical keys share one in-flight request + cached bag. |
+| `key` | `string \| number` | Cache key — identical keys share one in-flight request + cached bag. |
 | `ttl` | `number` | Milliseconds before cached data is considered stale and auto-refetched. |
 | `refetchInterval` | `number` | Poll interval in ms (live dashboards). |
 | `refetchOnFocus` | `boolean` | Refetch when the tab regains focus. |
@@ -213,7 +213,10 @@ Deferred write; fires on .mutate(overrides?). optimistic: (vars) => {…} applie
 | `body` | `object` | Default body; shallow-merged with `.mutate(overrides)`. |
 | `headers` | `object` | Request headers as a plain object. |
 | `query` | `object` | Object serialised into the URL querystring. |
-| `optimistic` | `(vars) => void` | Runs synchronously before the request; auto-rolled-back on failure. |
+| `credentials` | `enum: "omit" \| "same-origin" \| "include"` | Fetch credentials mode (e.g. "include" for cookie-authenticated writes). |
+| `mode` | `enum: "cors" \| "no-cors" \| "same-origin"` | Fetch request mode. |
+| `cache` | `enum: "default" \| "no-store" \| "reload" \| "no-cache" \| "force-cache"` | Fetch cache mode. |
+| `optimistic` | `(vars) => void` | Runs synchronously before the request with the object passed to `.mutate(overrides)` (or `{}`); state it changes is rolled back on failure. Its return value is ignored and a throw is swallowed. |
 | `invalidates` | `string[]` | Refetch every cached $query whose key contains a listed substring on success. |
 | `gql` | `string` | GraphQL mutation document. |
 | `variables` | `object` | GraphQL variables paired with `gql`. |
@@ -233,7 +236,7 @@ Reactive WebSocket — { status: "connecting"|"open"|"closed", connected, last, 
 | `url` | `string` | WebSocket URL (ws:// or wss://). |
 | `protocols` | `string \| string[]` | Optional sub-protocol(s). |
 | `bufferSize` | `number` | Max buffered messages kept in `.messages`. |
-| `onMessage` | `(msg) => void` | Callback fired for each received message. |
+| `onMessage` | `(msg) => void` | Callback fired for each received message — JSON-parsed when it parses, else the raw string (the same value `.last` holds). A throw is swallowed. |
 | `reconnect` | `boolean \| number` | Retry dropped connections (true, or a max-attempt count) with backoff. |
 
 ### `$sse`
@@ -252,7 +255,7 @@ Reactive Server-Sent Events stream — { status, connected, last, messages, clos
 | `event` | `string` | Named event to listen for (defaults to message). |
 | `withCredentials` | `boolean` | Send credentials with the EventSource request. |
 | `bufferSize` | `number` | Max buffered events kept in `.messages`. |
-| `onMessage` | `(msg) => void` | Callback fired for each received event payload (JSON auto-parsed). |
+| `onMessage` | `(msg) => void` | Callback fired for each received event payload — JSON-parsed when it parses, else the raw string (the same value `.last` holds). A throw is swallowed. |
 
 ### `$script`
 
@@ -269,7 +272,7 @@ Load an external UMD/ESM script or stylesheet once → reactive { ready, loading
 | `src` | `string` | URL of the script (or stylesheet) to load. De-duplicated per src. |
 | `global` | `string` | Name of the window global the script defines — read into `.value` once ready (e.g. "Stripe"). |
 | `type` | `string` | Script type attribute (e.g. "module" for ESM). |
-| `as` | `enum: "script" \| "style"` | Force the resource kind. Inferred from a `.css` src otherwise. |
+| `as` | `enum: "script" \| "style" \| "stylesheet" \| "css"` | Force the resource kind (the last three all mean a stylesheet). Inferred from a `.css` src otherwise. |
 | `attributes` | `object` | Extra attributes to set on the injected <script>/<link> (e.g. crossorigin, integrity). |
 
 ### `$i18n`
@@ -309,9 +312,9 @@ Reactive document head: title, meta description, canonical/alternate links, Open
 | `meta` | `object` | Named meta tags: { description, "theme-color", keywords, … } → <meta name content>. |
 | `og` | `object` | Open Graph tags: { title, image, type, … } → <meta property="og:KEY">. |
 | `twitter` | `object` | Twitter card tags: { card, site, … } → <meta name="twitter:KEY">. |
-| `link` | `object[]` | Array of <link> descriptors, e.g. [{ rel: "canonical", href }]. |
+| `link` | `object \| object[]` | A <link> descriptor or an array of them, e.g. [{ rel: "canonical", href }]. Only metadata / resource-hint rels are kept (no "stylesheet" or "preload"), and a link without a safe href is dropped. |
 | `jsonLd` | `object \| object[]` | JSON-LD structured data → <script type="application/ld+json">. @context defaults to schema.org. |
-| `base` | `string \| object` | <base href> for the document. |
+| `base` | `string \| object` | <base href> for the document (a string, or { href }): a same-origin relative path only — an absolute or protocol-relative one is dropped. |
 | `htmlAttrs` | `object` | Attributes for the <html> element, e.g. { lang: "en", dir: "ltr" }. |
 
 ### `$app`
@@ -351,16 +354,16 @@ In-script theme override merged on top of the active base theme. Structured grou
 | key | type | notes |
 | --- | --- | --- |
 | `name` | `string` | Selects a built-in base theme ("light", "dark", "shadcn"/"-light"/"-dark", "mui"/"-light"/"-dark", "heroui"/"-light"/"-dark", "signal"/"-light"/"-dark", "soft"). |
-| `direction` | `enum: "ltr" \| "rtl"` | Reading direction (metadata). |
-| `colors` | `object` | CSS color tokens: bg, surface, border, text, primary, accent, success, warning, danger, info, …. |
+| `direction` | `enum: "ltr" \| "rtl"` | Accepted but has no effect (metadata only): set `dir` on <aktion-app> for a right-to-left layout. |
+| `colors` | `object` | CSS color tokens, camelCase: bg, bgSubtle, surface, border, text, textMuted, primary, accent, success, warning, danger, info, …. Unknown keys are ignored. |
 | `radius` | `object` | Border-radius tokens: xs, sm, md, lg, pill, button, input. |
 | `font` | `object` | Font tokens: family, familyHeading, familyMono, sizeBase, weightBody, …. |
-| `spacing` | `object` | Spacing scale tokens. |
-| `shadows` | `object` | Box-shadow tokens. |
-| `gradients` | `object` | Gradient color-stop arrays — referenced as gradient.<name>. |
+| `spacing` | `object` | Spacing scale tokens: 3xs, 2xs, xs, s, m, l, xl, 2xl, 3xl (sm / md / lg are the same as s / m / l). |
+| `shadows` | `object` | Box-shadow tokens: sm, md, lg. |
+| `gradients` | `object` | Gradients referenced as sx `bg: "gradient.<name>"`: an array of at least two colour stops, `{ stops, angle }`, or a linear-/radial-/conic-gradient(…) string. A plain colour is ignored. |
 | `zIndex` | `object` | Layer tokens (modal, toast, …) → sx.zIndex / --rui-z-*. |
 | `motion` | `object` | Motion tokens: { fast, base, slow, ease } → --rui-motion-*. |
-| `fonts` | `object` | Web-font import: { import: ["Inter:400,700"] }. |
+| `fonts` | `object` | Web-font import: { import: ["Inter:400,700"] } (one shorthand string or an array). |
 | `icons` | `object` | Custom inline-SVG icons by name, usable anywhere an icon name is. |
 
 ## event

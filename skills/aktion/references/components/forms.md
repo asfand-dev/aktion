@@ -160,7 +160,7 @@ Text input field. Pass a $variable as `value` for two-way binding. `onChange(val
 | `id` | `string` | **yes** | Input identifier |
 | `placeholder` | `string` | no |  |
 | `type` | `"text"` \| `"email"` \| `"password"` \| `"number"` \| `"tel"` \| `"url"` \| `"date"` \| `"time"` \| `"datetime-local"` | no |  |
-| `validations` | `any` | no | Array or object of validation hints (`required`, `minLength:n`, `maxLength:n`, `pattern:re`, `email`) |
+| `validations` | `any` | no | Validation hints: an array (`["required", "minLength:3", "email"]`) or an object (`{ required: true, minLength: 3, email: true }`). Hints are `required`, `email`, `minLength`, `maxLength`, `pattern`, `min`, `max`; in the object form a flag is on when `true` and a `false`/`null` entry is ignored |
 | `value` | `any` | no | Bound value (typically $variable) |
 | `onChange` | `callable` | no | Called with the current value on every keystroke |
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
@@ -174,7 +174,7 @@ Text input field. Pass a $variable as `value` for two-way binding. `onChange(val
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 | `readOnly` | `boolean` | no | Value is visible and selectable but not editable (unlike `disabled`, it stays in tab order and is submitted) |
@@ -207,7 +207,7 @@ Multi-line text input. `onChange(value)` fires on every keystroke with the curre
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 | `maxLength` | `number` | no | Maximum number of characters accepted |
@@ -241,7 +241,7 @@ Password input with a show/hide toggle and an optional strength meter. Pass a `$
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 
@@ -273,7 +273,7 @@ Text input with an inline mask — `9` matches a digit, `A` matches a letter, `*
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 
@@ -308,7 +308,7 @@ Multi-line input with inline @-mention suggestions. Typing `@` opens a popover l
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 
@@ -318,7 +318,7 @@ Multi-line input with inline @-mention suggestions. Typing `@` opens a popover l
 TagInput(id, value?, placeholder?, max?, suggestions?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?)
 ```
 
-Tag/chip input — type a value, press Enter (or comma) to commit, click × on a chip to remove. Tabbing away commits the pending text too. Pass a `$variable` (array of strings) as `value` for two-way binding. Use for keywords, recipients, labels, skills, allowlists. Pass `suggestions` for autocomplete and `label`/`hint`/`error` for the labelled field shell.
+Tag/chip input — type a value, press Enter (or comma) to commit, click × on a chip to remove. Tabbing away commits the pending text too. Pass a `$variable` (array of strings) as `value` for two-way binding; inside a form each tag is submitted as its own `name` entry, as a multiple select does. Use for keywords, recipients, labels, skills, allowlists. Pass `suggestions` for autocomplete and `label`/`hint`/`error` for the labelled field shell.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -339,7 +339,7 @@ Tag/chip input — type a value, press Enter (or comma) to commit, click × on a
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 
@@ -365,7 +365,7 @@ Dropdown select. Pass a `$variable` as `value` for two-way binding. Set `searcha
 | `required` | `boolean` | no | Mark the field required |
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value when the control gains focus |
 | `loading` | `boolean` | no | Options are still being fetched — disables the control and shows a loading option instead of an empty list |
 | `onSearch` | `callable` | no | Called with the query ~200ms after typing stops, for server-side search (implies `searchable`; supply the matches as `items`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
@@ -415,10 +415,10 @@ Searchable single-select dropdown — type to filter, click an option to choose.
 | `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
 | `required` | `boolean` | no | Mark the field required (adds a `*` and the `required` attribute) |
 | `loading` | `boolean` | no | Matches are being fetched — shows "Loading…" instead of the (lying) empty label |
-| `onSearch` | `callable` | no | Called with the query on every keystroke for server-side search; disables local filtering |
+| `onSearch` | `callable` | no | Called with the query ~200ms after typing stops, for server-side search; disables local filtering |
 | `clearable` | `boolean` | no | Show a clear (×) control so the selection can be reset to the placeholder |
 | `onBlur` | `callable` | no | Called with the selected value when focus leaves the control (validate-on-blur) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the selected value when the control gains focus |
 | `creatable` | `boolean` | no | Offer the typed text itself as an option when it matches nothing ("Create «acme-corp»") so a value outside `items` can be selected |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label) |
 | `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
@@ -529,7 +529,7 @@ Single option inside a CheckBoxGroup. `disabled` locks one option (a scope the c
 | `description` | `string` | no |  |
 | `defaultChecked` | `boolean` | no |  |
 | `disabled` | `boolean` | no | Lock this option (greyed out, not togglable) |
-| `value` | `string` | no | Submitted value for this option (defaults to `name`) — use when the group maps to an array of ids |
+| `value` | `string` | no | The native checkbox's submitted `value` for a native form post (defaults to `name`). The group's own `value` / `onChange` stay keyed by `name` either way |
 
 ### Radio
 
@@ -580,15 +580,15 @@ Compact on/off toggle. Pass a `$variable` as `value` for two-way binding — pre
 ### ToggleGroup
 
 ```
-ToggleGroup(id, items, value?, variant?, size?, onChange?, multiple?, type?, disabled?, label?)
+ToggleGroup(id?, items?, value?, variant?, size?, onChange?, multiple?, type?, disabled?, label?)
 ```
 
-Group of Toggle-style buttons. Items are `[value, label]` arrays, `{value, label, icon?, disabled?}` objects, or plain strings (used for both value and label). Single-select by default — pass `multiple: true` for an independently toggleable set (a bold/italic/underline toolbar), which reads and writes an ARRAY of values. Pass a `$variable` as `value` for two-way binding; item values keep their original type, so numeric items write numbers back. `onChange(value)` fires with the new selection. Left/Right arrows move between items; give the group a `label` so screen readers can tell two groups apart.
+Group of Toggle-style buttons. Items are `[value, label]` arrays, `{value, label, icon?, disabled?}` objects, or plain strings (used for both value and label). Single-select by default — pass `multiple: true` for an independently toggleable set (a bold/italic/underline toolbar), which reads and writes an ARRAY of values. Pass a `$variable` as `value` for two-way binding; item values keep their original type, so numeric items write numbers back. `onChange(value)` fires with the new selection. Left/Right arrows move between items; give the group a `label` so screen readers can tell two groups apart. The item list may also be the only positional argument: `ToggleGroup(["Day", "Week"])`.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
-| `id` | `string` | **yes** |  |
-| `items` | `any[]` | **yes** |  |
+| `id` | `string` | no | DOM id of the group — or the item list itself, when it is the only positional argument |
+| `items` | `any[]` | no | The items; required unless they are passed in the first slot |
 | `value` | `any` | no |  |
 | `variant` | `"default"` \| `"outline"` \| `"ghost"` | no |  |
 | `size` | `"sm"` \| `"md"` \| `"lg"` | no |  |
@@ -637,7 +637,7 @@ Group of buttons laid out horizontally or vertically.
 ### ButtonGroup
 
 ```
-ButtonGroup(items, size?, fullWidth?, ariaLabel?)
+ButtonGroup(items, size?, fullWidth?, ariaLabel?, ariaLabelledBy?)
 ```
 
 Row of buttons joined edge-to-edge into a single continuous control — only the outer corners are rounded and adjoining borders are shared. Use for related actions that form one unit (segmented actions, split/paired buttons, view switchers with real actions). For a single-select pill track use `SegmentedControl`; for spaced-out independent actions use `Buttons`.
@@ -648,6 +648,7 @@ Row of buttons joined edge-to-edge into a single continuous control — only the
 | `size` | `"sm"` \| `"md"` \| `"lg"` | no | Size token applied to every button in the group |
 | `fullWidth` | `boolean` | no | Stretch the group to fill its container, dividing width evenly |
 | `ariaLabel` | `string` | no | Accessible name for the group (e.g. "Time range") — the group role is anonymous without it |
+| `ariaLabelledBy` | `string` | no | Space-separated id(s) of the element(s) that name the group (a visible heading) — rendered as `aria-labelledby`, which takes precedence over `ariaLabel` |
 
 ### InputGroup
 
@@ -675,7 +676,7 @@ Single field wrapped in a shared bordered shell with an optional leading adornme
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 
@@ -760,7 +761,7 @@ Numeric input with paired increment/decrement buttons. Use for quantity steppers
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 | `prefix` | `string` | no | Inline text before the number (e.g. "€") |
@@ -782,7 +783,7 @@ Hex / RGB / HSL color form control with preset swatches. Pairs a native `<input 
 | `id` | `string` | **yes** |  |
 | `value` | `string` | no | Bound color value (typically $variable) |
 | `label` | `string` | no |  |
-| `swatches` | `string[]` | no | Preset colors (default to a 12-color palette) |
+| `swatches` | `string[]` | no | Preset colors as hex, rgb() or hsl() strings (default: a 12-color palette); other values, such as named colors, are skipped |
 | `disabled` | `boolean` | no |  |
 | `onChange` | `callable` | no | Called with the newly-selected color string |
 | `format` | `"hex"` \| `"rgb"` \| `"hsl"` | no | Notation written back to state / onChange (default `hex`) |
@@ -821,7 +822,7 @@ Date picker that wraps the native `<input type="date">` with consistent styling.
 | `error` | `string` | no | Validation error rendered below the control (marks it invalid) |
 | `required` | `boolean` | no | Mark the field required |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value when the control gains focus |
 | `locale` | `string` | no | BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) the selected date is echoed in beneath the field, and the language the value is announced in. Same `locale` channel as `Table`/`Col`, so a filter and the report it filters read alike. Bound values stay ISO `YYYY-MM-DD`. |
 | `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
 | `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
@@ -850,8 +851,8 @@ Paired date inputs with a single label, sharing the same min/max range. Pass `$v
 | `hint` | `string` | no | Helper text rendered below the pair |
 | `error` | `string` | no | Validation error rendered below the pair (marks it invalid) |
 | `required` | `boolean` | no | Mark both endpoints required |
-| `onBlur` | `callable` | no | Called with the current value when focus leaves an endpoint (validate-on-blur) |
-| `onFocus` | `callable` | no | Called when an endpoint gains focus |
+| `onBlur` | `callable` | no | Called with that endpoint's current value (an ISO date) when focus leaves it (validate-on-blur) |
+| `onFocus` | `callable` | no | Called with that endpoint's current value (an ISO date) when an endpoint gains focus |
 | `locale` | `string` | no | BCP-47 tag (`de-DE`, `en-GB`) the chosen period is echoed in beneath the pair, and the language both endpoints are announced in. Same `locale` channel as `Table`/`Col`. Bound values stay ISO `YYYY-MM-DD`. |
 | `warning` | `string` | no | Cautionary note below the control for a value that is accepted but probably not what was meant. Announced politely and does NOT mark the field invalid; takes the message slot ahead of `hint` |
 | `description` | `string` | no | Guidance rendered BETWEEN the label and the control — what to put in the field, as opposed to `hint`, which is a note about the value below it |
@@ -873,7 +874,7 @@ Time-of-day picker that wraps `<input type="time">`. Pass a `$variable` as `valu
 | `value` | `string` | no | HH:MM value; typically $variable |
 | `min` | `string` | no |  |
 | `max` | `string` | no |  |
-| `step` | `number` | no | Seconds between selectable times |
+| `step` | `number | string` | no | Seconds between selectable times (a positive integer), or `"any"` to allow seconds |
 | `onChange` | `callable` | no | Called with the new HH:MM string when the user picks a time |
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
@@ -886,7 +887,7 @@ Time-of-day picker that wraps `<input type="time">`. Pass a `$variable` as `valu
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 
@@ -904,7 +905,7 @@ Combined date + time picker — wraps `<input type="datetime-local">`. Pass a `$
 | `value` | `string` | no | ISO date-time value; typically $variable |
 | `min` | `string` | no |  |
 | `max` | `string` | no |  |
-| `step` | `number` | no | Seconds between selectable times |
+| `step` | `number | string` | no | Seconds between selectable times (a positive integer), or `"any"` to allow seconds |
 | `onChange` | `callable` | no | Called with the new ISO `YYYY-MM-DDTHH:MM` string |
 | `disabled` | `boolean` | no | Disable the control (non-editable, skipped by tab order) |
 | `label` | `string` | no | Field label rendered above the control |
@@ -917,7 +918,7 @@ Combined date + time picker — wraps `<input type="datetime-local">`. Pass a `$
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 
@@ -936,7 +937,7 @@ Styled file picker. Renders a click/drop area with a leading icon, label, and he
 | `hint` | `string` | no | Secondary helper text |
 | `accept` | `string` | no | Comma-separated MIME types or extensions |
 | `multiple` | `boolean` | no |  |
-| `onSelect` | `callable` | no | Callable fired with the accepted files when files are picked |
+| `onSelect` | `callable` | no | Called with the selected files as an array of `File`s — when files are picked or dropped (only the ones `maxSize` accepted), and again with the remaining files after the user removes one from the preview |
 | `icon` | `string` | no | Font Awesome icon (default "cloud-arrow-up") |
 | `disabled` | `boolean` | no |  |
 | `maxSize` | `number` | no | Maximum accepted file size in bytes — larger files are rejected client-side and never reach `onSelect` |
@@ -973,7 +974,7 @@ Per-digit PIN entry. Auto-advances focus as the user types and supports pasting 
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 
@@ -993,7 +994,7 @@ Multi-step / wizard form composite. Renders a `Steps` indicator, the active step
 | `prevLabel` | `string` | no | Default "Back" |
 | `nextLabel` | `string` | no | Default "Continue" |
 | `submitLabel` | `string` | no | Default "Submit" (final step) |
-| `stepsLayout` | `"column"` \| `"row"` | no | Direction of the steps indicator (default "column") |
+| `stepsLayout` | `"column"` \| `"row"` \| `"vertical"` \| `"horizontal"` | no | Direction of the steps indicator: "column" (default) or "row"; "vertical" and "horizontal" are accepted synonyms |
 | `nextDisabled` | `boolean` | no | Block Continue/Submit while the active step is incomplete |
 | `submitting` | `boolean` | no | Disable the footer buttons while the submit is in flight |
 | `onStepChange` | `callable` | no | Called with the new 0-indexed step whenever the step changes |
@@ -1009,12 +1010,12 @@ Multi-step / wizard form composite. Renders a `Steps` indicator, the active step
 SegmentedControl(options, value?, onChange?, disabled?, size?, label?)
 ```
 
-A compact segmented toggle (iOS-style). `options` is an array of strings or {label, value, icon?, disabled?}. Bind `value` to a $variable; `onChange(value)` fires on select. Left/Right arrows move between segments; `size` sets the height and `disabled` locks the whole control.
+A compact segmented toggle (iOS-style). `options` is an array of strings or {label, value, icon?, disabled?}. Bind `value` to a $variable; `onChange(value)` fires on select. Option values keep their type, so numeric options write numbers back. Left/Right arrows move between segments; `size` sets the height and `disabled` locks the whole control.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
 | `options` | `any[]` | **yes** |  |
-| `value` | `string` | no |  |
+| `value` | `string | number` | no | The selected option's value (compared as text, so `2` and `"2"` select the same option) |
 | `onChange` | `callable` | no |  |
 | `disabled` | `boolean` | no | Lock every segment |
 | `size` | `"sm"` \| `"md"` \| `"lg"` | no |  |
@@ -1105,7 +1106,7 @@ A freehand drawing surface (pointer / touch / stylus). `onChange(count)` fires w
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 | `ariaLabel` | `string` | no | Accessible name for the surface (defaults to `label`) |
@@ -1116,7 +1117,7 @@ A freehand drawing surface (pointer / touch / stylus). `onChange(count)` fires w
 SignaturePad(width?, height?, color?, lineWidth?, background?, clearable?, value?, onChange?, disabled?, label?, hint?, error?, warning?, description?, required?, optional?, invalid?, describedBy?, onBlur?, onFocus?, name?, labelHidden?, ariaLabel?)
 ```
 
-A signature capture pad — a DrawingCanvas tuned for signing, with a baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires when the signature changes (empty string when cleared, and also when the pad only received taps — so a stray tap cannot pass a truthiness check). Pass the URL back as `value` to restore a signature after a re-render, and `disabled` to lock the pad once it is submitted. `label`/`error`/`required` render the usual field shell. Use in contracts, delivery confirmation, and consent flows.
+A signature capture pad — a DrawingCanvas tuned for signing, with a baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires when the signature changes (empty string when cleared, and also when the pad only received taps — so a stray tap cannot pass a truthiness check); `onBlur` / `onFocus` receive that same value, and a `name`d pad submits it. Pass the URL back as `value` to restore a signature after a re-render, and `disabled` to lock the pad once it is submitted. `label`/`error`/`required` render the usual field shell. Use in contracts, delivery confirmation, and consent flows.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -1139,7 +1140,7 @@ A signature capture pad — a DrawingCanvas tuned for signing, with a baseline a
 | `invalid` | `boolean` | no | Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary |
 | `describedBy` | `string` | no | Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message |
 | `onBlur` | `callable` | no | Called with the current value when focus leaves the control (validate-on-blur, `form.touch`) |
-| `onFocus` | `callable` | no | Called when the control gains focus |
+| `onFocus` | `callable` | no | Called with the current value (the same value `onBlur` receives) when the control gains focus |
 | `name` | `string` | no | Form field name submitted to the server (defaults to `id`) |
 | `labelHidden` | `boolean` | no | Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context |
 | `ariaLabel` | `string` | no | Accessible name for the pad (defaults to `label`) |

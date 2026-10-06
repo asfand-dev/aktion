@@ -35,8 +35,9 @@ import {
 import { closeFloating, deferToPaint, isFloating, openFloating, updateFloating } from "../floating.js";
 // One formatter for both grids. It lived here as a second copy, and the copies
 // drifted the moment `Col(currency:)` arrived — the same column rendered EUR in
-// a `Table` and USD in a `DataGrid`.
-import { formatCell, currencyCode } from "./data.js";
+// a `Table` and USD in a `DataGrid`. The bound per-column formatter is shared
+// too: building it here from `currency` alone left `Col(locale:)` Table-only.
+import { colFormatter, columnKeys } from "./data.js";
 
 const COL_ALIGN = ["left", "center", "right"] as const;
 
@@ -55,17 +56,18 @@ interface ColDef {
   align: string;
   sortable: boolean;
   filterable: boolean;
-  /** `(value, index) => Component|string|array` per-cell renderer. */
+  /** `(value, index, row) => Component|string|array` per-cell renderer. */
   render: unknown;
-  /** `(value, index) => void` per-cell click handler. */
+  /** `(value, index, row) => void` per-cell click handler. */
   onClick: unknown;
+  /** Unique column key (see `columnKeys`): the header, or `col-<index>`. */
   key: string;
   /** CSS width cap, already sanitised. */
   width: string;
   /** `"true"`/`"false"` when the column said something, `null` when it did not. */
   wrap: string | null;
   headerTooltip: string;
-  /** This column's formatter, bound to its own `currency`. */
+  /** This column's formatter, bound to its own `currency` and `locale`. */
   fmt: (value: unknown, format: string) => string;
   /** Col-level initially-hidden flag. */
   initiallyHidden: boolean;
@@ -73,9 +75,9 @@ interface ColDef {
   pinned: string;
   /** Col-level resize override (true/false/undefined for grid default). */
   resizable: boolean | undefined;
-  /** CSS min-width for resize, already sanitised. */
+  /** CSS min-width for resize, already sanitised; resolved to px at drag time (`lengthToPx`). */
   minWidth: string;
-  /** CSS max-width for resize, already sanitised. */
+  /** CSS max-width for resize, already sanitised; resolved to px at drag time (`lengthToPx`). */
   maxWidth: string;
   /** Render the header cell's label visually-hidden (`.rui-visually-hidden`).
    * `header`/`key` are unaffected — this only changes what `buildColTh` draws. */
@@ -83,10 +85,11 @@ interface ColDef {
 }
 
 function readDataGridCols(raw: unknown): ColDef[] {
-  return asColumnNodes<{ args?: unknown[] }>(raw).map((node, idx) => {
+  const nodes = asColumnNodes<{ args?: unknown[] }>(raw);
+  const keys = columnKeys(nodes.map((node) => asString(node.args?.[0])));
+  return nodes.map((node, idx) => {
     const args = node.args ?? [];
     const header = asString(args[0]);
-    const currency = currencyCode(args[8]);
     const rawWrap = args[10];
     const rawResizable = args[15];
     return {
@@ -98,13 +101,13 @@ function readDataGridCols(raw: unknown): ColDef[] {
       filterable: asBoolean(args[5]),
       render: args[6],
       onClick: args[7],
-      key: header || `col-${idx}`,
+      key: keys[idx]!,
       width: sanitiseCssLength(args[9], ""),
       wrap: rawWrap === undefined || rawWrap === null ? null : asBoolean(rawWrap) ? "true" : "false",
       headerTooltip: asString(args[11]),
       // Filtering, sorting and the CSV export all read through this, so a money
       // column exports and sorts on exactly the string the user can see.
-      fmt: (value: unknown, format: string): string => formatCell(value, format, currency),
+      fmt: colFormatter(args),
       initiallyHidden: asBoolean(args[13]),
       pinned: asString(args[14]) === "left" ? "left" : "",
       resizable: rawResizable === undefined || rawResizable === null ? undefined : asBoolean(rawResizable),
@@ -261,7 +264,9 @@ function initColumnConfig(
   if (!persisted) return config;
   if (persisted.order) {
     const colKeys = new Set(defaultOrder);
-    const validOrder = persisted.order.filter((k) => colKeys.has(k));
+    // De-duplicated first: before repeated headers got `col-<index>` keys, two
+    // `Col("Price")` both saved as "Price", and keeping both drew that column twice.
+    const validOrder = [...new Set(persisted.order)].filter((k) => colKeys.has(k));
     const missing = defaultOrder.filter((k) => !validOrder.includes(k));
     config.order = [...validOrder, ...missing];
   }
@@ -315,7 +320,8 @@ function normalizeOrder(order: string[], pinned: Set<string>): string[] {
 function reconcileColumnConfig(cols: ColDef[], config: ColumnConfig): ColumnConfig {
   const keys = cols.map((c) => c.key);
   const known = new Set(keys);
-  const kept = config.order.filter((k) => known.has(k));
+  // A repeated key shortens `kept`, so the length check below rebuilds the order.
+  const kept = [...new Set(config.order)].filter((k) => known.has(k));
   const added = keys.filter((k) => !kept.includes(k));
   if (added.length === 0 && kept.length === config.order.length) return config;
   const prune = (set: Set<string>): Set<string> => new Set([...set].filter((k) => known.has(k)));
@@ -459,7 +465,7 @@ export const DataGrid: ComponentSpec = {
     { name: "loading", type: "boolean", optional: true, description: "Show a loading row instead of the empty message while rows are in flight" },
     { name: "error", type: "string", optional: true, description: "Failure message shown instead of the rows (takes precedence over `loading`)" },
     { name: "loadingLabel", type: "string", optional: true, description: "Label for the loading row (default `Loading…`)" },
-    { name: "maxHeight", type: "string", optional: true, description: "Scroll-area height cap, e.g. `70vh` / `480px`. Applied when `stickyHeader` is on (default `70vh`) — without it the header has no scrollport to stick to." },
+    { name: "maxHeight", type: "string", optional: true, description: "Scroll-area height cap, e.g. `70vh` / `480px`. Applies whenever `allowOverflow` is off. Defaults to `70vh` while `stickyHeader` is on — without a cap the header has no scrollport to stick to — and to no cap otherwise." },
     { name: "allowOverflow", type: "boolean", optional: true, description: "Let cell content (menus, popovers) escape the scroll box instead of clipping it. Disables the sticky header." },
     { name: "onSort", type: "callable", optional: true, description: "Callable fired with (columnKey, direction) when a header is activated — use for server-side sorting" },
     { name: "onSelectionChange", type: "callable", optional: true, description: "Callable fired with the array of selected row ids" },
@@ -878,8 +884,18 @@ export const DataGrid: ComponentSpec = {
       }
       if (isColResizable(col)) {
         const colKey = col.key;
-        const minW = parsePx(col.minWidth) || 50;
-        const maxW = parsePx(col.maxWidth) || 2000;
+        /**
+         * The resize bounds in px. Resolved per gesture against the LIVE grid,
+         * not once at render: a `rem` / `%` bound needs layout, and a `%` one
+         * follows the grid's current width.
+         */
+        const bounds = (handleEl: Element): { min: number; max: number } => {
+          const view = handleEl.closest(".rui-data-grid-viewport") ?? liveScope(handleEl);
+          return {
+            min: lengthToPx(col.minWidth, view) || 50,
+            max: lengthToPx(col.maxWidth, view) || 2000,
+          };
+        };
         const handle = el("div", {
           class: "rui-data-grid-resize-handle",
           "data-resize-col": colKey,
@@ -897,10 +913,13 @@ export const DataGrid: ComponentSpec = {
         const currentWidth = (handleEl: Element): number => {
           freezeColumnWidths(liveScope(handleEl));
           const liveTh = handleEl.parentElement as HTMLElement | null;
-          return liveTh ? liveTh.getBoundingClientRect().width : minW;
+          return liveTh ? liveTh.getBoundingClientRect().width : bounds(handleEl).min;
         };
-        const setWidth = (handleEl: Element, next: number): string => {
-          const px = `${Math.round(Math.max(minW, Math.min(maxW, next)))}px`;
+        // A drag resolves its bounds once, at pointerdown: measuring a `rem` / `%`
+        // bound forces layout, which is not something to do on every pointermove.
+        const setWidth = (handleEl: Element, next: number, limits = bounds(handleEl)): string => {
+          const { min, max } = limits;
+          const px = `${Math.round(Math.max(min, Math.min(max, next)))}px`;
           const colEl = liveColEl(liveScope(handleEl), colKey);
           if (colEl) colEl.style.width = px;
           return px;
@@ -934,12 +953,13 @@ export const DataGrid: ComponentSpec = {
           const liveHandle = event.currentTarget as HTMLElement;
           const startX = event.clientX;
           const startW = currentWidth(liveHandle);
+          const limits = bounds(liveHandle);
           const pointerId = event.pointerId;
           liveHandle.classList.add("rui-data-grid-resize-active");
           try { liveHandle.setPointerCapture(pointerId); } catch { /* not capturable */ }
           let last = `${Math.round(startW)}px`;
           const onMove = (ev: PointerEvent): void => {
-            last = setWidth(liveHandle, startW + (ev.clientX - startX));
+            last = setWidth(liveHandle, startW + (ev.clientX - startX), limits);
           };
           const onUp = (): void => {
             liveHandle.classList.remove("rui-data-grid-resize-active");
@@ -2538,13 +2558,44 @@ export const DataGrid: ComponentSpec = {
 };
 
 /* ----------------------------------------------------------------------- *
- * DataGrid helpers — pixel parsing
+ * DataGrid helpers — resolving a CSS length to pixels
  * ----------------------------------------------------------------------- */
 
-function parsePx(value: string): number {
-  if (!value) return 0;
-  const match = /^(\d+(?:\.\d+)?)px$/i.exec(value.trim());
-  return match ? Number(match[1]) : 0;
+const LENGTH_PROBE =
+  "position:absolute;visibility:hidden;pointer-events:none;height:0;margin:0;padding:0;border:0";
+
+/**
+ * A sanitised CSS length in px, or 0 when it is empty or does not resolve.
+ *
+ * `Col(minWidth:/maxWidth:)` used to be read with a px-only regex, so the
+ * `5rem` and `50%` their own descriptions suggest silently fell back to the
+ * 50px / 2000px defaults. `px` and a bare number (px) are read directly;
+ * anything else (`rem`, `%`, `vw`, `calc()`) needs layout, so it is measured
+ * with a hidden probe placed in `context`. The caller passes the grid's
+ * viewport, whose `position: relative` makes it the probe's containing block
+ * — so a `%` is a share of the grid's visible width.
+ *
+ * Measured with `offsetWidth`, the LAYOUT width, because the result is written
+ * back as a CSS px width. `getBoundingClientRect()` reports the transformed
+ * size: inside a `transform: scale(0.5)` container, Chromium gives a `5rem`
+ * probe a rect 40px wide and an `offsetWidth` of 80 (and a `50%` one of a
+ * 600px box 150 vs 300), so the bound came out at half the size it named.
+ */
+function lengthToPx(length: string, context: Element | null): number {
+  const trimmed = length.trim();
+  if (!trimmed) return 0;
+  const direct = /^(\d+(?:\.\d+)?)(?:px)?$/i.exec(trimmed);
+  if (direct) return Number(direct[1]);
+  if (!context || typeof document === "undefined") return 0;
+  const probe = document.createElement("div");
+  probe.style.cssText = LENGTH_PROBE;
+  probe.style.width = trimmed;
+  // The browser drops a value it cannot parse as a width: nothing to measure.
+  if (!probe.style.width) return 0;
+  context.append(probe);
+  const measured = probe.offsetWidth;
+  probe.remove();
+  return Number.isFinite(measured) && measured > 0 ? measured : 0;
 }
 
 /* ----------------------------------------------------------------------- *
@@ -2557,6 +2608,8 @@ interface CalendarEvent {
   title: string;
   tone?: string;
   time?: string;
+  /** The author's own event object, handed back by `onEventClick` untouched. */
+  source: unknown;
 }
 
 function readCalendarEvents(raw: unknown): CalendarEvent[] {
@@ -2574,6 +2627,7 @@ function readCalendarEvents(raw: unknown): CalendarEvent[] {
       title: asString(e.title),
       tone: asString(e.tone, "primary"),
       time: asString(e.time),
+      source: entry,
     });
   });
   return out;
@@ -2642,10 +2696,10 @@ export const CalendarView: ComponentSpec = {
     { name: "month", type: "string", optional: true, description: "Visible month — ISO date or YYYY-MM. Bind a $variable to follow the prev/next controls (defaults to `value`, else today)" },
     { name: "events", type: "object[]", optional: true, description: "Array of {date, title, tone?, time?, id?} objects" },
     { name: "view", type: "string", optional: true, enum: ["month", "week"] },
-    { name: "firstDay", type: "number", optional: true, description: "0=Sunday, 1=Monday (default 1)" },
+    { name: "firstDay", type: "number", optional: true, description: "0=Sunday, 1=Monday … 6=Saturday (default 1); other numbers are floored and wrapped into that range" },
     { name: "onSelect", type: "callable", optional: true, description: "Callable fired when a day is clicked; receives the ISO date string" },
     { name: "onMonthChange", type: "callable", optional: true, aliases: ["onNavigate"], description: "Callable fired when the prev/next/today controls move the grid; receives the new anchor ISO date" },
-    { name: "onEventClick", type: "callable", optional: true, description: "Callable fired with (eventId, event) when an event chip is clicked; makes the chips real buttons" },
+    { name: "onEventClick", type: "callable", optional: true, description: "Callable fired with (eventId, event) when an event chip is clicked, where `event` is the object you passed in `events` (every field intact) and `eventId` its `id` as a string, or `<date>#<index>` when it has none; makes the chips real buttons" },
     { name: "maxEventsPerDay", type: "number", optional: true, description: "Event chips per day before a `+N more` toggle (default 3)" },
     { name: "min", type: "string", optional: true, description: "Earliest selectable ISO date" },
     { name: "max", type: "string", optional: true, description: "Latest selectable ISO date" },
@@ -2657,7 +2711,9 @@ export const CalendarView: ComponentSpec = {
     const events = readCalendarEvents(props.events);
     const today = new Date();
     const todayIso = formatIsoDate(today);
-    const weekStartsOn = ((asNumber(props.firstDay, 1) % 7) + 7) % 7;
+    // Floored: a computed `1.5` used to index the weekday labels with a
+    // fraction (a blank header row) and shift the week by a fractional day.
+    const weekStartsOn = ((Math.floor(asNumber(props.firstDay, 1)) % 7) + 7) % 7;
     const maxEvents = Math.max(1, Math.floor(asNumber(props.maxEventsPerDay, 3)));
 
     const valueStateName = node.argMeta?.[0]?.stateRef;
@@ -2813,9 +2869,10 @@ export const CalendarView: ComponentSpec = {
           // The chip sits inside the day cell, whose own handler would
           // otherwise swallow the click and just select the day.
           event.stopPropagation();
-          helpers.invoke(props.onEventClick, evt.id, {
-            id: evt.id, date: evt.date, title: evt.title, time: evt.time, tone: evt.tone,
-          });
+          // The author's own object, not a rebuilt copy: a copy of five coerced
+          // fields dropped everything else on the event (location, url,
+          // attendees), so a handler had to look the original up by id.
+          helpers.invoke(props.onEventClick, evt.id, evt.source);
         };
         container.append(chip);
       }
@@ -2987,12 +3044,16 @@ interface FeedEntry {
   icon: string;
   tone: string;
   meta: string;
+  /** Position in the author's `items` array (holes included). */
+  index: number;
+  /** The author's own entry, handed back by `onItemClick` untouched. */
+  source: unknown;
 }
 
 function readFeedEntries(raw: unknown): FeedEntry[] {
   const out: FeedEntry[] = [];
-  for (const entry of asArray<unknown>(raw)) {
-    if (!entry || typeof entry !== "object") continue;
+  asArray<unknown>(raw).forEach((entry, index) => {
+    if (!entry || typeof entry !== "object") return;
     const e = entry as Record<string, unknown>;
     out.push({
       title: asString(e.title),
@@ -3004,8 +3065,10 @@ function readFeedEntries(raw: unknown): FeedEntry[] {
       icon: asString(e.icon),
       tone: asString(e.tone, "default"),
       meta: asString(e.meta),
+      index,
+      source: entry,
     });
-  }
+  });
   return out;
 }
 
@@ -3024,7 +3087,7 @@ const FEED_TITLE_BUTTON =
 function renderFeed(klass: string, items: FeedEntry[], opts: FeedOptions): HTMLElement {
   const root = el("ol", { class: klass, "data-variant": opts.variant });
   const clickable = typeof opts.onItemClick === "function";
-  items.forEach((entry, idx) => {
+  items.forEach((entry) => {
     const li = el("li", {
       class: `${klass}-item`,
       "data-tone": entry.tone,
@@ -3058,7 +3121,10 @@ function renderFeed(klass: string, items: FeedEntry[], opts: FeedOptions): HTMLE
         class: `${klass}-title`,
         style: FEED_TITLE_BUTTON,
       }, [entry.title]);
-      btn.onclick = () => opts.helpers.invoke(opts.onItemClick, idx, entry);
+      // The author's index and object, not the normalised copy: the copy had
+      // every field coerced to a string and anything extra (the `id` a handler
+      // acts on) dropped, and its index skipped the entries that were not objects.
+      btn.onclick = () => opts.helpers.invoke(opts.onItemClick, entry.index, entry.source);
       head.append(btn);
     } else {
       head.append(el("span", { class: `${klass}-title` }, [entry.title]));
@@ -3093,17 +3159,18 @@ export const ActivityLog: ComponentSpec = {
     "Purpose-built feed of user/system activity. Each entry has `actor`, " +
     "`title`, `description?`, `time?`, `icon?`, `avatarSrc?`, `tone?`, " +
     "`href?`, and optional `meta` (IP, browser, request id). An entry's " +
-    "`href` renders its title as a link; `onItemClick` makes every title a " +
-    "button. Use `variant=\"audit\"` to render `meta` in monospace for " +
-    "security/admin trails. Pass items as `{actor, title, description, time, " +
-    "icon, tone, avatarSrc, href, meta}` objects.",
+    "`href` renders its title as a link, and `onItemClick` makes every other " +
+    "title a button (a link never fires it). Use `variant=\"audit\"` to " +
+    "render `meta` in monospace for security/admin trails. Pass items as " +
+    "`{actor, title, description, time, icon, tone, avatarSrc, href, meta}` " +
+    "objects.",
   props: [
     { name: "items", type: "object[]" },
     // Kept to what the stylesheet actually does: it used to promise a whole
     // "monospace voice with meta column" and delivered a monospace meta chip.
     { name: "variant", aliases: ["tone"], type: "string", optional: true, enum: ["default", "audit"], description: "audit = monospace `meta` styling for security/admin trails" },
     { name: "emptyLabel", type: "string", optional: true, description: "Message shown when `items` is empty (default `No activity yet`)" },
-    { name: "onItemClick", type: "callable", optional: true, description: "Callable fired with (index, item) when an entry title is activated" },
+    { name: "onItemClick", type: "callable", optional: true, description: "Callable fired with (index, item) when the title of an entry without an `href` is activated. `item` is the object you passed in `items`, every field intact (e.g. its `id`), and `index` its position in that array" },
     { name: "loading", type: "boolean", optional: true, description: "Append a loading row while older activity is being fetched" },
     { name: "loaderLabel", type: "string", optional: true, description: "Label for the loading row (default `Loading activity…`)" },
   ],
@@ -3140,8 +3207,12 @@ export const ComparisonTable: ComponentSpec = {
     { name: "rows", type: "object[]", description: "Array of {label, values, hint?, group?} entries" },
     { name: "highlightColumn", type: "number", optional: true, description: "0-indexed column to visually emphasise" },
     { name: "featureLabel", type: "string", optional: true, description: "Header of the first (row-label) column — default `Feature`" },
-    { name: "caption", type: "string", optional: true, aliases: ["ariaLabel"], description: "Table caption; also its accessible name" },
+    { name: "caption", type: "string", optional: true, description: "Visible table caption; also its accessible name" },
     { name: "stickyFirstColumn", type: "boolean", optional: true, description: "Keep the feature labels visible while the plan columns scroll horizontally" },
+    // Appended, never inserted: positional args bind by slot index. It used to
+    // be an ALIAS of `caption`, so `ariaLabel` rendered a visible `<caption>` —
+    // the one thing a prop with that name exists to avoid.
+    { name: "ariaLabel", type: "string", optional: true, aliases: ["arialabel"], description: "Accessible name for a table whose visible name is already a heading beside it — a `<caption>` there would be a visible duplicate. Ignored when `caption` is set, which already names the table." },
   ],
   render: (_node, props, helpers) => {
     const columns = asArray<unknown>(props.columns).map((c) => asString(c));
@@ -3166,6 +3237,10 @@ export const ComparisonTable: ComponentSpec = {
     root.style.overflowX = "auto";
     const table = el("table");
     const caption = asString(props.caption);
+    // Table's and DataGrid's rule: a `<caption>` already names the table, and an
+    // `aria-label` would shadow it.
+    const ariaLabel = asString(props.ariaLabel);
+    if (!caption && ariaLabel) table.setAttribute("aria-label", ariaLabel);
     if (caption) table.append(el("caption", { class: "rui-comparison-table-caption" }, [caption]));
     const thead = el("thead");
     const headRow = el("tr");
@@ -3243,6 +3318,35 @@ export const ComparisonTable: ComponentSpec = {
  * InfiniteList — scroll-to-load list
  * ----------------------------------------------------------------------- */
 
+// The CSS number grammar: a sign, `12` / `12.5` / `.5`, an exponent. Chromium's
+// observer accepts `.5px`, `+10px` and `1e3px` and throws for a trailing `.`
+// (`1.px`), so a decimal point must be followed by a digit.
+const ROOT_MARGIN_LENGTH = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?(?:px|%)$/i;
+const ROOT_MARGIN_NUMBER = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?$/i;
+
+/**
+ * `rootMargin` for the sentinel observer: one to four px / % lengths, where a
+ * bare number means px.
+ *
+ * IntersectionObserver accepts nothing else — `10vh`, `2rem`, `calc(…)` and a
+ * unitless `200` or `0` all make its constructor throw a SyntaxError. The
+ * generic `sanitiseCssLength` let every one of those through, and the throw,
+ * inside the deferred paint callback, silently switched auto-loading off. An
+ * unusable value now falls back to the default instead.
+ */
+function observerRootMargin(raw: unknown, fallback: string): string {
+  if (typeof raw === "number") return Number.isFinite(raw) ? `${raw}px` : fallback;
+  const parts = asString(raw).trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0 || parts.length > 4) return fallback;
+  const out: string[] = [];
+  for (const part of parts) {
+    if (ROOT_MARGIN_LENGTH.test(part)) out.push(part);
+    else if (ROOT_MARGIN_NUMBER.test(part)) out.push(`${part}px`);
+    else return fallback;
+  }
+  return out.join(" ");
+}
+
 /** What the live sentinel observer is currently watching. */
 interface SentinelWatch {
   node: HTMLElement | null;
@@ -3269,7 +3373,7 @@ export const InfiniteList: ComponentSpec = {
     { name: "error", type: "string", optional: true, description: "Failure message shown instead of the loader, with a Retry button" },
     { name: "onRetry", type: "callable", optional: true, description: "Callable fired by the Retry button (defaults to `onLoadMore`)" },
     { name: "emptyLabel", type: "string", optional: true, description: "Message shown when there are no items (default `No results`)" },
-    { name: "rootMargin", type: "string", optional: true, description: "Prefetch distance for the scroll sentinel (default `200px`)" },
+    { name: "rootMargin", type: "string", optional: true, description: "Prefetch distance for the scroll sentinel: one to four `px` / `%` lengths in CSS margin order, or a number of px (default `200px`). Other units are not supported by the browser's IntersectionObserver and fall back to the default." },
     { name: "threshold", type: "number", optional: true, description: "Fraction of the sentinel that must be visible, 0–1 (default 0)" },
     { name: "retryLabel", type: "string", optional: true, description: "Label for the retry button (default `Retry`)" },
   ],
@@ -3289,7 +3393,7 @@ export const InfiniteList: ComponentSpec = {
       root.append(el("div", { class: "rui-infinite-list-empty" }, [asString(props.emptyLabel, "No results")]));
     }
 
-    const rootMargin = sanitiseCssLength(props.rootMargin, "200px");
+    const rootMargin = observerRootMargin(props.rootMargin, "200px");
     const threshold = Math.min(1, Math.max(0, asNumber(props.threshold, 0)));
     const watchSlot = helpers.useInstanceState<SentinelWatch>("sentinel-watch", {
       node: null, observer: null, key: "",
@@ -3369,14 +3473,23 @@ export const InfiniteList: ComponentSpec = {
         }
         if (watch.observer && watch.node === live && watch.key === key) return;
         watch.observer?.disconnect();
-        const observer = new IntersectionObserver((entries) => {
-          for (const entry of entries) {
-            if (entry.isIntersecting) {
-              helpers.invoke(callback);
-              break;
+        let observer: IntersectionObserver;
+        try {
+          observer = new IntersectionObserver((entries) => {
+            for (const entry of entries) {
+              if (entry.isIntersecting) {
+                helpers.invoke(callback);
+                break;
+              }
             }
-          }
-        }, { rootMargin, threshold });
+          }, { rootMargin, threshold });
+        } catch {
+          // Belt and braces: `observerRootMargin` only lets through values the
+          // constructor accepts, but a throw here would escape the paint
+          // callback uncaught. The "Load more" button keeps working without it.
+          watchSlot.set({ node: live, observer: null, key: "" });
+          return;
+        }
         observer.observe(live);
         watchSlot.set({ node: live, observer, key });
         helpers.registerDisposer(() => observer.disconnect(), "infinite-observer");

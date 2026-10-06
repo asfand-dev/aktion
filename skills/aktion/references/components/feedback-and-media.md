@@ -48,11 +48,11 @@ User avatar. Shows the image at `src`. When `src` is missing, falls back to a de
 AvatarGroup(items, max?, size?, total?, fallback?)
 ```
 
-Stack of overlapping avatars with a `+N` chip when the list overflows. Pass either Avatar(...) nodes or plain {name, src, status?, fallback?} objects. Set `total` when the list is only a page of a larger set (5 avatars out of 200 members renders `+195`), and `fallback: "initials"` to keep the whole pile offline (the default DiceBear illustration is a network request per member).
+Stack of overlapping avatars with a `+N` chip when the list overflows. Pass Avatar(...) nodes, plain {name, src, status?, fallback?} objects, or bare name strings. Set `total` when the list is only a page of a larger set (5 avatars out of 200 members renders `+195`), and `fallback: "initials"` to keep the whole pile offline (the default DiceBear illustration is a network request per member).
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
-| `items` | `Avatar[]` | **yes** | Avatar(...) nodes or {name, src, status?, fallback?} objects |
+| `items` | `Avatar[]` | **yes** | Avatar(...) nodes, {name, src, status?, fallback?} objects, or name strings |
 | `max` | `number` | no | Maximum avatars to show (default 4) |
 | `size` | `"xs"` \| `"sm"` \| `"md"` \| `"lg"` \| `"xl"` | no |  |
 | `total` | `number` | no | Total member count when `items` is only a page of it — drives the `+N` chip |
@@ -174,7 +174,7 @@ Single transient notification card. Always shows a close (×) button that remove
 | `icon` | `string` | no | Font Awesome icon name (default picked from tone) |
 | `duration` | `number` | no | Auto-dismiss after N milliseconds (e.g. 4000). Omit to keep the toast until the user closes it. |
 | `action` | `Button` | no | Optional inline `Button` action shown above the message |
-| `onClose` | `callable` | no | Callable invoked when the toast is dismissed (× button, auto-dismiss, or programmatic) |
+| `onClose` | `callable` | no | Callable invoked when the toast dismisses itself (× button or auto-dismiss) — wire it to remove the toast from your list (`$toast.dismiss(t.id)`). Removing the toast yourself does not call it |
 | `position` | `"top-right"` \| `"top-left"` \| `"top-center"` \| `"bottom-right"` \| `"bottom-left"` \| `"bottom-center"` | no | Pin a standalone Toast to a viewport corner without wrapping it in `Stack(...)` |
 | `pauseOnHover` | `boolean` | no | Pause the auto-dismiss countdown while the pointer is over the toast |
 
@@ -198,7 +198,7 @@ Stacked container for transient `Toast` notifications, pinned to a viewport corn
 VideoPlayer(src?, sources?, poster?, caption?, controls?, autoplay?, loop?, muted?, ratio?, tracks?, onEnded?, fallback?, onError?)
 ```
 
-Themed native `<video>` wrapper. Pass a `src` URL (or `sources` array for multi-codec fallback) and optional `poster`. Standard controls are visible by default; `controls=false` swaps them for a single play/pause button (click the video too). `autoplay` only works alongside `muted` — browsers block unmuted autoplay. Add `tracks` for captions/subtitles (required for prerecorded video, WCAG 1.2.2). `onEnded` fires on completion; a missing, unsafe, or failing source shows `fallback` and calls `onError`. Use for product demos, tutorials, and any inline video.
+Themed native `<video>` wrapper. Pass a `src` URL (or `sources` array for multi-codec fallback) and optional `poster`. Standard controls are visible by default; `controls=false` swaps them for a single play/pause button (click the video too). `autoplay` only works alongside `muted` — browsers block unmuted autoplay. Add `tracks` for captions/subtitles (required for prerecorded video, WCAG 1.2.2). `onEnded` fires on completion. A missing or unsafe source shows `fallback`; a source that fails to load (with `sources`, once every entry has failed) shows it and calls `onError`. Use for product demos, tutorials, and any inline video.
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
@@ -214,7 +214,7 @@ Themed native `<video>` wrapper. Pass a `src` URL (or `sources` array for multi-
 | `tracks` | `object[]` | no | Caption/subtitle tracks: {src, label?, srclang?, kind?, default?} (kind: subtitles\|captions\|descriptions\|chapters\|metadata) |
 | `onEnded` | `callable` | no | Callable invoked when playback reaches the end |
 | `fallback` | `string` | no | Message shown when the source is missing/unsafe or fails to load |
-| `onError` | `callable` | no | Callable invoked when the video fails to load |
+| `onError` | `callable` | no | Callable invoked when the video fails to load (`src`, or every `sources` entry). A missing or unsafe source only shows `fallback` |
 
 ### AudioPlayer
 
@@ -291,7 +291,7 @@ Image overlay. Pass `items` (string URLs or `{src, alt, caption?}` objects). `op
 | `items` | `any[]` | **yes** |  |
 | `open` | `boolean` | no | Open/closed; bind a $variable to control externally |
 | `index` | `number` | no | 0-indexed current image; typically a $variable |
-| `onClose` | `callable` | no | Callable invoked whenever the viewer closes |
+| `onClose` | `callable` | no | Callable invoked when the viewer closes itself (backdrop, ×, Escape) — not when your program sets a bound `open` to false |
 | `showThumbnail` | `boolean` | no | Render the clickable thumbnail (default: only when `open` is not bound) |
 
 ### Map
