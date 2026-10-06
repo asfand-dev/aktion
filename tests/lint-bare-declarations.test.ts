@@ -40,6 +40,9 @@ describe("bare-declaration — what is flagged", () => {
     ["a second bare export of the same name", "export B = 1\nexport B = 2", ["1:export B", "2:export B"]],
     ["a bare export of a name an exported hook declares", "export function $useX() { return 1 }\nexport $useX = 2", ["2:export $useX"]],
     ["a plain `useX` is not the hook `$useX`", "function $useX() { return 1 }\nuseX = 2", ["2:useX"]],
+    ["a bare export of a destructured name", "const o = { B: 1 }\nconst { B } = o\nexport B = 2", ["3:export B"]],
+    ["a bare export of an imported name", 'import { B } from "./other.aktion"\nexport B = 2', ["2:export B"]],
+    ["a bare export of a `const` name", "const B = 1\nexport B = 2", ["2:export B"]],
     ["a bare declaration after an unrelated declared one", "const a = 1\nb = 2", ["2:b"]],
     ["only the first of repeated bare writes", "y = 4\ny = 5\ny = 6", ["1:y"]],
     ["`$x` separately from `x`", "let x = 1\n$x = 2", ["2:$x"]],
@@ -148,6 +151,37 @@ describe("bare-declaration — reporting", () => {
     expect(message).not.toMatch(/write `export/);
   });
 
+  it.each([
+    [
+      "a destructured name: `export` cannot go on a destructuring",
+      "const o = { B: 1 }\nconst { B } = o\nexport B = 2",
+      [/a destructuring declares/, /not supported on a destructuring/, /Take `B` out of the pattern/, /`export let B = …`/],
+      [/put `export` on the declaration/i],
+    ],
+    [
+      "an imported name: it can be neither exported nor assigned",
+      'import { B } from "./other.aktion"\nexport B = 2',
+      [/which this file imports/, /neither assigned nor re-exported/, /import it under another local name/, /`export let B = …` here/],
+      [/put `export` on the declaration/i, /drop the `export` here/],
+    ],
+    [
+      "a `const` name: the declaration has to become `let`",
+      "const B = 1\nexport B = 2",
+      [/another statement declares with `const`/, /change its `const` to `let`/, /`export let B = …`/],
+      [],
+    ],
+    [
+      "an exported `const` name: only the `const` is wrong",
+      "export const B = 1\nexport B = 2",
+      [/exported declaration declares with `const`/, /Change that `const` to `let`/, /drop the `export` here/],
+      [/put `export`/i],
+    ],
+  ])("gives accurate advice for %s", (_name, src, present, absent) => {
+    const { message } = only(src);
+    for (const pattern of present) expect(message).toMatch(pattern);
+    for (const pattern of absent) expect(message).not.toMatch(pattern);
+  });
+
   it("only says to drop the `export` when the declaration already carries one", () => {
     for (const src of ["export let B = 1\nexport B = 2", "export B = 1\nexport B = 2", "export function $useX() { return 1 }\nexport $useX = 2"]) {
       const message = getLintWarnings(src, undefined, ON).at(-1)!.message;
@@ -202,6 +236,30 @@ describe("bare-declaration — following the advice gives valid JavaScript", () 
     const fixed = applyAdvice(src, warnings);
     expect(moduleProblems(fixed), fixed).toEqual([]);
     expect(() => runAsModule(fixed), fixed).not.toThrow();
+    expect(getLintWarnings(fixed, undefined, ON), fixed).toEqual([]);
+  });
+});
+
+/**
+ * The `export` of a name that an import, a destructuring or a `const` declares has
+ * advice of its own: `export` cannot go on an import or inside a destructuring, and
+ * a `const` cannot be assigned. The advised program must be valid and clear the
+ * lint. The imported-from module does not exist here, so that row is parsed and
+ * linted but not run; `validate-tools.test.ts` links the real pairs.
+ */
+describe("bare-declaration — advice for an export of an import, destructuring or const", () => {
+  it.each([
+    ["a destructured name", "const o = { B: 1 }\nconst { B } = o\nexport B = 2", true],
+    ["one name of a larger destructuring", "const o = { A: 1, B: 2 }\nconst { A, B } = o\nexport B = 2", true],
+    ["an imported name", 'import { B } from "./other.mjs"\nexport B = 2', false],
+    ["a `const` name", "const B = 1\nexport B = 2", true],
+    ["an exported `const` name", "export const B = 1\nexport B = 2", true],
+  ])("%s", (_name, src, runnable) => {
+    const warnings = getLintWarnings(src, undefined, ON);
+    expect(warnings.length).toBeGreaterThan(0);
+    const fixed = applyAdvice(src, warnings);
+    expect(moduleProblems(fixed), fixed).toEqual([]);
+    if (runnable) expect(() => runAsModule(fixed), fixed).not.toThrow();
     expect(getLintWarnings(fixed, undefined, ON), fixed).toEqual([]);
   });
 });

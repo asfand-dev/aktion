@@ -21,16 +21,28 @@ const escapeRegExp = (name: string): string => name.replace(/[$()*+.?[\\\]^{|}]/
 /**
  * Apply every warning's advice to `source`: insert the keyword it recommends at the
  * reported position; for an `export` of an already declared name, drop the `export`
- * there and, when the message says to, put `export` on the declaration instead.
+ * there and do what else the message says: put `export` on the declaration, change
+ * its `const` to `let`, take the name out of a destructuring and declare it on its
+ * own, or import it under another local name. The destructuring edit understands
+ * `const { A, B } = source` with plain (not renamed or nested) names.
  */
 export function applyAdvice(source: string, warnings: readonly AdviceWarning[]): string {
   const lines = source.split("\n");
   const exportOn: string[] = [];
+  const constToLet: string[] = [];
+  const outOfPattern: string[] = [];
+  const renameImport: string[] = [];
 
   // Bottom-up, so an edit never moves a position another warning still needs.
   for (const warning of [...warnings].sort((a, b) => b.line - a.line)) {
     const text = lines[warning.line - 1]!;
     const at = warning.column - 1;
+    const name = /^`export ([^`]+)`/.exec(warning.message)?.[1];
+    if (name && /import it under another local name/.test(warning.message)) {
+      lines[warning.line - 1] = `${text.slice(0, at)}export let ${text.slice(at).replace(/^export\s+/, "")}`;
+      renameImport.push(name);
+      continue;
+    }
     const advised = /write `((?:export )?(?:let|const))` before the name/.exec(warning.message);
     if (advised) {
       const keyword = advised[1]!;
@@ -40,9 +52,35 @@ export function applyAdvice(source: string, warnings: readonly AdviceWarning[]):
     }
     if (!/drop the `export` here|and drop it here/.test(warning.message)) throw new Error(`no advice found in: ${warning.message}`);
     lines[warning.line - 1] = `${text.slice(0, at)}${text.slice(at).replace(/^export\s+/, "")}`;
-    if (warning.message.includes("put `export` on the declaration")) {
-      exportOn.push(/^`export ([^`]+)`/.exec(warning.message)![1]!);
-    }
+    if (/put `export` on the declaration/i.test(warning.message)) exportOn.push(name!);
+    if (/`const` to `let`/.test(warning.message)) constToLet.push(name!);
+    if (/out of the pattern/.test(warning.message)) outOfPattern.push(name!);
+  }
+
+  for (const name of renameImport) {
+    const index = lines.findIndex((line) => /^\s*import\b/.test(line) && new RegExp(String.raw`(?<![\w$])${escapeRegExp(name)}(?![\w$])`).test(line));
+    if (index === -1) throw new Error(`no import of ${name}:\n${lines.join("\n")}`);
+    lines[index] = lines[index]!.replace(new RegExp(String.raw`(?<![\w$])${escapeRegExp(name)}(?![\w$])`), `${name} as ${name}_`);
+  }
+
+  for (const name of outOfPattern) {
+    const pattern = new RegExp(String.raw`^(\s*(?:const|let|var)\s*)\{([^}]*)\}(\s*=\s*)(.+)$`);
+    const index = lines.findIndex((line) => {
+      const m = pattern.exec(line);
+      return m !== null && m[2]!.split(",").some((part) => part.trim() === name);
+    });
+    if (index === -1) throw new Error(`no destructuring of ${name}:\n${lines.join("\n")}`);
+    const [, head, names, eq, source] = pattern.exec(lines[index]!)!;
+    const rest = names!.split(",").map((part) => part.trim()).filter((part) => part !== name && part !== "");
+    lines[index] = `${head}{ ${rest.join(", ")} }${eq}${source}`;
+    lines.splice(index + 1, 0, `export let ${name} = ${source}.${name}`);
+  }
+
+  for (const name of constToLet) {
+    const declaration = new RegExp(String.raw`^(\s*(?:export\s+)?)const(\s+${escapeRegExp(name)}\b)`);
+    const index = lines.findIndex((line) => declaration.test(line));
+    if (index === -1) throw new Error(`no const ${name} to change:\n${lines.join("\n")}`);
+    lines[index] = lines[index]!.replace(declaration, "$1let$2");
   }
 
   for (const name of exportOn) {

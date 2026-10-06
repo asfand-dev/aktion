@@ -498,6 +498,7 @@ describe("tools/validate-aktion-app.mjs — export advice keeps the module's exp
 
   beforeAll(() => {
     dir = mkdtempSync(join(tmpdir(), "aktion-validate-export-advice-"));
+    writeFileSync(join(dir, "other.aktion"), "export let B = 0\n", "utf8");
   });
 
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -510,6 +511,11 @@ describe("tools/validate-aktion-app.mjs — export advice keeps the module's exp
     ["two bare exports of one name", "export B = 1\nexport B = 2", "B"],
     ["an exported name written again", "export B = 1\nB = 2", "B"],
     ["an exported state atom", "export $s = 4", "$s"],
+    ["an export of a name a destructuring declares", "const o = { B: 1 }\nconst { B } = o\nexport B = 2", "B"],
+    ["an export of one name of a larger destructuring", "const o = { A: 1, B: 2 }\nconst { A, B } = o\nexport B = 2", "B"],
+    ["an export of an imported name", 'import { B } from "./other.aktion"\nexport B = 2', "B"],
+    ["an export of a name `const` declares", "const B = 1\nexport B = 2", "B"],
+    ["an export of a name an exported `const` declares", "export const B = 1\nexport B = 2", "B"],
   ])("%s", (name, source, imported) => {
     const slug = name.replace(/\W+/g, "-");
     const module = join(dir, `${slug}-mod.aktion`);
