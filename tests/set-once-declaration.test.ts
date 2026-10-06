@@ -19,7 +19,7 @@ describe("body-level `$x = …`", () => {
   it("seeds once during render, survives a re-render, and is an ordinary write from a handler", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const screen = render(`
-aktion = app()
+$app(app())
 
 function app() {
   $n = 5
@@ -47,9 +47,9 @@ function reset() {
 
   it("is an ordinary write when the function runs from a handler, nested or not", async () => {
     const screen = render(`
-$n = 1
-$m = 1
-aktion = Column([Text(\`n=\${$n}\`), Text(\`m=\${$m}\`), Button("flat", flat), Button("nested", nested)])
+let $n = 1
+let $m = 1
+$app(Column([Text(\`n=\${$n}\`), Text(\`m=\${$m}\`), Button("flat", flat), Button("nested", nested)]))
 
 function flat() {
   $n = 9
@@ -76,7 +76,7 @@ describe.each([
   it("is an ordinary write in render position: it clobbers the handler's value and warns", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const screen = render(`
-aktion = app()
+$app(app())
 
 function app() {
   ${nested}

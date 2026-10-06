@@ -53,7 +53,7 @@ const SHAPES: Array<[string, Record<string, string>]> = [
   [
     "an exported atom and an exported setter action",
     {
-      "/ui.aktion": "export $open = false\nexport function toggle() { $open = !$open }",
+      "/ui.aktion": "export let $open = false\nexport function toggle() { $open = !$open }",
       "/app.aktion": app('import { $open, toggle } from "./ui.aktion"', "toggle", "$open"),
       "/panel.aktion": panel('import { $open, toggle } from "./ui.aktion"', "toggle", "$open"),
     },
@@ -61,7 +61,7 @@ const SHAPES: Array<[string, Record<string, string>]> = [
   [
     "an exported $store written by property",
     {
-      "/ui.aktion": "export ui = $store({ open: false })",
+      "/ui.aktion": "export const ui = $store({ open: false })",
       "/app.aktion": app('import { ui } from "./ui.aktion"', "() => { ui.open = !ui.open }", "ui.open"),
       "/panel.aktion": panel('import { ui } from "./ui.aktion"', "() => { ui.open = !ui.open }", "ui.open"),
     },
@@ -69,7 +69,7 @@ const SHAPES: Array<[string, Record<string, string>]> = [
   [
     "a direct write to an imported atom (flagged by no-import-assign)",
     {
-      "/ui.aktion": "export $open = false",
+      "/ui.aktion": "export let $open = false",
       "/app.aktion": app('import { $open } from "./ui.aktion"', "() => { $open = !$open }", "$open"),
       "/panel.aktion": panel('import { $open } from "./ui.aktion"', "() => { $open = !$open }", "$open"),
     },
@@ -99,8 +99,8 @@ describe("a $store factory", () => {
       "/f.aktion": "export function make() { return $store({ n: 0 }) }",
       "/app.aktion": [
         'import { make } from "./f.aktion"',
-        "a = make()",
-        "b = make()",
+        "const a = make()",
+        "const b = make()",
         '$app(Column([Text(`a=${a.n}`), Text(`b=${b.n}`), Button("incA", () => { a.n = a.n + 1 })]))',
       ].join("\n"),
     });

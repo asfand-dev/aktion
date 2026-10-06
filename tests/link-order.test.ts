@@ -30,9 +30,9 @@ function resolver(files: Record<string, string>): ModuleResolver {
 
 const link = (files: Record<string, string>) => linkProgram(files["/app.aktion"]!, "/app.aktion", resolver(files));
 
-const A = 'console.log("a")\nexport $a = 1';
-const B = 'console.log("b")\nexport $b = 2';
-const C = 'console.log("c")\nexport $c = 3';
+const A = 'console.log("a")\nexport let $a = 1';
+const B = 'console.log("b")\nexport let $b = 2';
+const C = 'console.log("c")\nexport let $c = 3';
 const entry = (...imports: string[]) =>
   [...imports, 'console.log("entry")', '$app(Text("x"))'].join("\n");
 const importA = 'import { $a } from "./a.aktion"';
@@ -61,6 +61,17 @@ describe("link order", () => {
 
     expect(result.diagnostics).toEqual([]);
     expect(result.dependencies).toEqual(["/c.aktion", "/a.aktion", "/b.aktion"]);
+  });
+
+  it("breaks an import cycle where the walk meets it, as ES modules do", () => {
+    const result = link({
+      "/app.aktion": entry(importA),
+      "/a.aktion": `import { $b } from "./b.aktion"\n${A}`,
+      "/b.aktion": `import { $a } from "./a.aktion"\n${B}`,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.dependencies).toEqual(["/b.aktion", "/a.aktion"]);
   });
 
   it("merges the statements in link order, so top-level code runs in it", async () => {
