@@ -5,6 +5,17 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-10-06
+
+### Documentation: What Is and Is Not Valid JavaScript, Link Order, Set-Once State
+
+- Corrected the claim that every Aktion program is valid JavaScript. A plain `.aktion` file parses as JavaScript once every top-level binding is declared, but Aktion also accepts a duplicate `let`, a top-level `return`, `await` outside `async`, a stray `break`, `a?.b = 1` and a bare `export NAME = …`, which JavaScript rejects. `.aktion.js` and `.aktion.ts` modules are real JavaScript and TypeScript, checked against JavaScript semantics. The README's ESLint section no longer says `.aktion` differs from JavaScript in exactly one construct.
+- Documented link order: modules link depth-first in the order their `import` statements are written, the same order ES modules evaluate in, so a tool that reorders imports changes the order top-level statements run in. A new test pins it.
+- Documented that a `$x = …` directly in a function body is set-once while the UI renders and an ordinary write from a handler, while the same statement nested in an `if` or loop is always an ordinary write (with a single `console.warn` as the only signal), with measured examples.
+- Documented the two supported ways to write shared state from several modules (an exported setter action, and an exported `$store` written by property), and that writing an imported `$` atom directly works but is flagged by `no-import-assign`.
+
+---
+
 ## 2026-10-05
 
 ### Precise TypeScript Types for Every Component and Built-in

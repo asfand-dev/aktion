@@ -108,6 +108,33 @@ A `$name = value` declared inside a component body is private to that instance �
 two call sites get two independent atoms. A `$name` at the top level is shared by
 everything that reads it.
 
+### A body-level `$x = …` is set-once only while rendering
+
+A `$x = …` written directly in a function body is a **declaration** while the UI
+renders (the initializer runs once and later renders keep the handler's value) and
+an ordinary **write** when a handler or effect runs the function. Nested in an
+`if` or a loop it is always an ordinary write, so in render position it overwrites
+the handler's value on every pass. The runtime applies it without a re-render and
+logs one `console.warn` — nothing else reports it.
+
+```js
+function app() {
+  $n = 5                    // set-once during render
+  if (ready) { $m = 5 }     // ✗ re-written on every render
+  return Column([Text(`n=${$n}`), Button("inc", () => { $n = $n + 1 })])
+}
+```
+
+### Sharing state across modules
+
+Export the atom plus a setter action (`export function toggle() { $open = !$open }`),
+or export a `$store` and write it by property (`ui.open = !ui.open`); every importer
+shares one cell. Writing an imported atom directly also works but is what JS
+tooling flags as `no-import-assign`. Never export a function that returns
+`$store({…})` — a store is keyed by its call site, so every caller gets the same
+instance. Import order is link order (the order top-level statements run in), so
+do not let a tool re-sort a module's imports.
+
 ---
 
 ## Components

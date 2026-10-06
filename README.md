@@ -72,8 +72,15 @@ Everything you need at runtime ships in a single bundle:
   `for...of`, `if/else`, `switch/case`, template literals with
   `${expression}` interpolation, arrow functions, default parameters,
   destructuring, spread, optional chaining (`a?.b`), nullish coalescing
-  (`a ?? b`), and object-literal named arguments. Every Aktion program
-  is valid JavaScript.
+  (`a ?? b`), and object-literal named arguments. A plain `.aktion` file
+  parses as JavaScript when every top-level binding is declared
+  (`export const NAME = …`, `let $count = 0`), but Aktion also accepts
+  programs JavaScript rejects (a duplicate `let`, a top-level `return`,
+  `await` outside `async`, a stray `break`, `a?.b = 1`, a bare
+  `export NAME = …`), so it is not guaranteed to be valid JavaScript.
+  `.aktion.js` / `.aktion.ts` modules are real JavaScript / TypeScript
+  checked against JavaScript semantics (see *TypeScript and JavaScript
+  modules*).
 - **One reactive atom kind.** Declare any reactive state with
   `$name = value` and read or write it with `$name`. The `$` prefix is
   the only thing that makes a binding reactive — `let` / `const` /
@@ -1844,14 +1851,20 @@ fail the run.
 
 ## ESLint integration
 
-`.aktion` files are JS/TS-syntax compatible except for exactly ONE construct: a
-bare top-level `export IDENTIFIER = …` (or `export $identifier = …`) with no
-declaration keyword — see
+A plain `.aktion` file is JS/TS-parseable once every top-level binding is
+declared (`export const NAME = …`, `let $count = 0`); the formatter keeps those
+declaration keywords. It is not guaranteed to be valid JavaScript, though:
+Aktion also accepts a duplicate `let`, a top-level `return`, `await` outside
+`async`, a stray `break` and `a?.b = 1`, which a JS parser rejects. The
+construct the processor below exists for is the legacy bare top-level
+`export IDENTIFIER = …` (or `export $identifier = …`) with no declaration
+keyword, which is a syntax error in JavaScript — see
 [`src/eslint/scan.ts`](./src/eslint/scan.ts)'s header for the full grammar
 cross-check against [`src/parser/parser.ts`](./src/parser/parser.ts). The
 `aktion-runtime/eslint` entry ([`src/eslint-api.ts`](./src/eslint-api.ts)) is
 an ESLint **processor** that rewrites every such occurrence into
-`export const IDENTIFIER = …` (genuinely valid JS/TS), hands the result to
+`export const IDENTIFIER = …` (genuinely valid JS/TS; a file that already
+declares its bindings is passed through as it is), hands the result to
 whatever parser and rule set YOU already have installed, and remaps every
 reported position — and any autofix — back to the original file's
 coordinates. This means a real ESLint (your own installation, your own
@@ -1988,6 +2001,22 @@ names canonical (the `aktion` binding + the `$state` names that `serializeState`
 / `applyDelta` target). Specifier lists may span multiple lines and carry a
 trailing comma, and a syntax error in an **imported** module is reported as a
 link diagnostic rather than silently dropping that module's statements.
+
+**Link order is import order.** The linker walks the graph depth-first and
+merges a module after the modules it imports, taking `import` statements in the
+order they are written — the same order ES modules evaluate in. Importing `a`
+then `b` links `a, b, entry`; swapped, `b, a, entry`. The merged program's
+top-level statements run in that order, so a tool that sorts or reorders a
+file's imports changes behaviour exactly as it would for JavaScript modules
+with side effects.
+
+**Writing shared state from another file.** Two shapes are shared by every
+importer: an exported `$` atom with an exported setter action
+(`export function toggle() { $open = !$open }`), and an exported `$store` written
+by property (`ui.open = !ui.open`). Writing an imported atom directly
+(`$open = !$open` in a file that only imports `$open`) also works at runtime,
+but it is the shape JavaScript tooling flags as `no-import-assign`, so prefer
+the first two. See [docs/modules.html](./docs/modules.html#shared-state-writes).
 
 ### TypeScript and JavaScript modules
 

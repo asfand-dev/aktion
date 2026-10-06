@@ -70,11 +70,24 @@
         <h1>Language.</h1>
         <p class="lead">
           Aktion is a <strong>strict subset of JavaScript</strong> with reactive
-          semantics layered on top. Every program is valid JS &mdash; functions,
+          semantics layered on top. Its syntax is JavaScript &mdash; functions,
           arrows, template literals, spread, optional chaining &mdash; and the
           runtime adds two things: it makes <code>$state</code> reactive and it
           renders the component tree you pass to <code>$app(&hellip;)</code>. If you
           know JavaScript, you already know almost all of this page.
+        </p>
+        <p>
+          &ldquo;Subset&rdquo; describes the syntax Aktion reads, not a guarantee that
+          every <code>.aktion</code> file is valid JavaScript. A plain
+          <code>.aktion</code> file parses as JavaScript when every top-level binding
+          is declared (<code>export const NAME = &hellip;</code>,
+          <code>let $count = 0</code>), but Aktion also accepts programs a JavaScript
+          parser rejects: a bare <code>export NAME = &hellip;</code>, a duplicate
+          <code>let</code>, a top-level <code>return</code>, <code>await</code> outside
+          an <code>async</code> function, a stray <code>break</code>, or
+          <code>a?.b = 1</code>. A module named <code>.aktion.js</code> or
+          <code>.aktion.ts</code> is real JavaScript or TypeScript and is
+          <a href="typescript.html#aktion-ts">checked against JavaScript semantics</a>.
         </p>
       </header>
 
@@ -190,6 +203,53 @@ $app(Column([
         render makes the child re-render &mdash; hoist the handler to a stable
         binding to skip it. First-letter case does not matter: <code>App</code> and
         <code>app</code> seed state once and re-render identically.
+      </p>
+
+      <h3 id="set-once">Set-once: <code>$x = &hellip;</code> in a function body</h3>
+      <p>
+        A <code>$x = &hellip;</code> written <strong>directly</strong> in a function
+        body &mdash; not nested inside an <code>if</code> or a loop &mdash; means
+        two things, depending on when the function runs:
+      </p>
+      <ul>
+        <li><strong>While the UI is rendering</strong> it is a <em>declaration</em>:
+        the initializer runs once, and every later render keeps whatever value a
+        handler has written since.</li>
+        <li><strong>From a handler or an effect</strong> it is an ordinary write.</li>
+      </ul>
+<pre><code>aktion = app()
+
+function app() {
+  $n = 5                       // render: declared once, then left alone
+  return Column([
+    Text(`n=${$n}`),
+    Button("inc", () =&gt; { $n = $n + 1 }),   // n=5 → n=6, and 6 survives the re-render
+    Button("reset", reset)
+  ])
+}
+
+function reset() {
+  $n = 0                       // run from a handler: an ordinary write → n=0
+}</code></pre>
+      <p>
+        The same statement nested one level deeper is <strong>always</strong> an
+        ordinary write, so during render it re-writes the atom on every pass:
+      </p>
+<pre><code>function app() {
+  if (true) {
+    $n = 5                     // a write in render position, not a declaration
+  }
+  return Column([Text(`n=${$n}`), Button("inc", () =&gt; { $n = $n + 1 })])
+}
+// "inc" shows n=5 again: the render wrote 5 back over the 6.</code></pre>
+      <p>
+        The runtime applies a write made during render but does not schedule a
+        re-render for it (that would loop), and logs a single
+        <code>console.warn</code> (&ldquo;A reactive <code>$state</code> write happened
+        during render&hellip;&rdquo;). That warning is the only signal: nothing fails
+        and the validator does not flag it. Seed state with a body-level
+        <code>$x = &hellip;</code> or the <code>$state</code> hook, and write it from
+        handlers and effects.
       </p>
 
       <h2 id="hooks">Hooks</h2>
