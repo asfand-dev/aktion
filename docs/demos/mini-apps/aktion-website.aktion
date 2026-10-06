@@ -218,7 +218,7 @@ lessCode = Section([
 // =============================================================================
 features = Section([
   Bento([
-    BentoCell(feature("feather", "Looks like JavaScript — because it is", "Aktion uses the JavaScript syntax you already know: function, for…of, template literals, arrow functions, destructuring, optional chaining. Nothing new to memorize, no JSX.", ["JS syntax", "no JSX", "no build"]), { span: "3x1" }),
+    BentoCell(feature("feather", "Looks like JavaScript — because it mostly is", "Aktion uses the JavaScript syntax you already know: function, for…of, template literals, arrow functions, destructuring, optional chaining. Nothing new to memorize, no JSX.", ["JS syntax", "no JSX", "no build"]), { span: "3x1" }),
     BentoCell(feature("bolt", "One reactive sigil — $state", "Declare state with $name = value, read it in your tree, write it in a function. The runtime tracks dependencies automatically at path granularity — no hooks rules, no useMemo dance.", ["$count = 0", "auto-tracked", "fine-grained"]), { span: "3x1" }),
     BentoCell(feature("cubes", "270+ components", "Layout, forms, charts, tables, calendars, gestures, drawing canvases, marketing sections — included, not installed.", null), { span: "2x1" }),
     BentoCell(feature("palette", "9 themes + design tokens", "Switch palettes with one attribute, or brand the whole UI in-script with $theme({…}) over 80+ tokens.", null), { span: "2x1" }),

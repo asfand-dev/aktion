@@ -6,7 +6,8 @@ license: MIT
 
 # Building applications in Aktion
 
-Aktion is a declarative DSL whose surface syntax is **TypeScript's**. A program is a list of statements that a single web component
+Aktion is a declarative DSL whose surface syntax is **JavaScript's** (TypeScript syntax is accepted only in
+`.aktion.ts` modules). A program is a list of statements that a single web component
 (`<aktion-app>`) streams into a live UI. You write the program; the runtime owns
 rendering, reactivity, and styling.
 

@@ -6,8 +6,11 @@ spec — that is `dist/system_prompt.txt` (also at
 runtime and always current. Read this to write; read that when you need a detail
 this page omits.
 
-Aktion's surface syntax is **TypeScript's**. If a construct is
-valid JS and is not listed as rejected in [`gotchas.md`](gotchas.md), it works.
+Aktion's surface syntax is **JavaScript's**. TypeScript syntax (type annotations,
+`type`, `interface`, `as`) is a parse error in a plain `.aktion` file and is accepted
+only in `.aktion.ts` modules. Not every JavaScript construct works either: `class`,
+`async` arrow functions, tagged templates and `{ … }` block statements are parse
+errors, and [`gotchas.md`](gotchas.md) lists more, so validate what you write.
 
 ## Statements
 

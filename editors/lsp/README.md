@@ -148,8 +148,8 @@ in-process and does **not** need this server.
 
 This server provides **semantic** tokens, not lexical ones. For comments,
 strings, and numbers, point your editor at a TextMate/Tree-sitter grammar too.
-Aktion is a strict subset of TypeScript, so the pragmatic option in most editors
-is to treat `.aktion` as TypeScript for lexical purposes. Generated grammars
+Aktion's syntax is close enough to TypeScript's that the pragmatic option in most
+editors is to treat `.aktion` as TypeScript for lexical purposes. Generated grammars
 live in [`editors/vscode/syntaxes`](../vscode/syntaxes) (overlay on `source.ts`)
 and, for hosts without a TypeScript grammar, in the self-contained bundle that
 `editors/jetbrains/scripts/sync-assets.mjs` generates.

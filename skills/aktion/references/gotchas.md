@@ -110,16 +110,18 @@ everything that reads it.
 
 ### A body-level `$x = …` is set-once only while rendering
 
-A `$x = …` written directly in a function body is a **declaration** while the UI
-renders (the initializer runs once and later renders keep the handler's value) and
-an ordinary **write** when a handler or effect runs the function. Nested in an
-`if` or a loop it is always an ordinary write, so in render position it overwrites
-the handler's value on every pass. The runtime applies it without a re-render and
-logs one `console.warn` — nothing else reports it.
+A `$name = …` written directly in the body of a `function` declaration (not an
+arrow or function expression) is a set-once declaration while rendering; only a
+PascalCase component gets its own copy per instance, while in a lowercase function
+every call shares one atom, and an existing top-level atom of that name wins. When
+a handler or effect runs the function it is an ordinary write. Nested in an `if` or
+a loop, or directly in an arrow or function-expression body, it is always an
+ordinary write: in render position it overwrites the handler's value on every pass,
+the runtime applies it without a re-render, and one `console.warn` is the only signal.
 
 ```js
 function app() {
-  $n = 5                    // set-once during render
+  let $n = 5                // set-once during render
   if (ready) { $m = 5 }     // ✗ re-written on every render
   return Column([Text(`n=${$n}`), Button("inc", () => { $n = $n + 1 })])
 }

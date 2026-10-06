@@ -9,10 +9,23 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ### Documentation: What Is and Is Not Valid JavaScript, Link Order, Set-Once State
 
-- Corrected the claim that every Aktion program is valid JavaScript, and the description of Aktion as a strict subset of JavaScript. A plain `.aktion` file can be written to parse as JavaScript — declare every top-level binding and avoid what Aktion accepts but JavaScript rejects, such as a bare `export NAME = …`, a duplicate `let` or `const`, a reserved word as a name, a top-level `return`, `await` inside a non-async function, a stray `break` or `continue`, or `a?.b = 1` — but nothing enforces it. `.aktion.js` and `.aktion.ts` modules are real JavaScript and TypeScript, checked against JavaScript semantics. The README's ESLint section no longer says `.aktion` differs from JavaScript in exactly one construct.
-- Documented link order: modules link depth-first in the order their `import` statements are written, the same order ES modules evaluate in, so a tool that reorders imports changes the order top-level statements run in.
-- Documented that a `$x = …` directly in a function body is set-once while the UI renders and an ordinary write from a handler, while the same statement nested in an `if` or loop is always an ordinary write (with a single `console.warn` as the only signal), with measured examples.
-- Documented the two supported ways to write shared state from several modules (an exported `let` atom with an exported setter action, and an exported `$store` written by property), and that writing an imported `$` atom directly works but is flagged by `no-import-assign`.
+- Corrected the claim that every Aktion program is valid JavaScript, and the
+  description of Aktion as a strict subset of JavaScript. A plain `.aktion` file
+  can be written to parse as JavaScript, but nothing enforces it; `.aktion.js`
+  and `.aktion.ts` modules are real JavaScript and TypeScript.
+- Documented link order: modules link depth-first in the order their `import`
+  statements are written, the same order ES modules evaluate in, so a tool that
+  reorders imports changes the order top-level statements run in.
+- Documented that a `$x = …` directly in a `function` declaration's body is
+  set-once while the UI renders and an ordinary write from a handler. Nested in
+  an `if` or loop, or directly in an arrow or function expression, it is always
+  an ordinary write, with a single `console.warn` as the only signal. Only a
+  PascalCase component gets its own copy per instance, and an existing top-level
+  atom of that name wins.
+- Documented the two supported ways to write shared state from several modules
+  (an exported `let` atom with an exported setter action, and an exported
+  `$store` written by property), and that writing an imported `$` atom directly
+  works but is flagged by `no-import-assign`.
 
 ## 2026-10-05
 
