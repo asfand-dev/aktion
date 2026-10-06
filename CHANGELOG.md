@@ -14,11 +14,12 @@ Each entry is dated and summarises what was added, changed, or fixed.
   call the function directly, log with `$console.log`). They used to parse
   silently: `this.x` read `null`, `super.foo()` called nothing and `debugger`
   did nothing. This covers reading the word and declaring it as a name
-  (`this = 1`, `let this`, a parameter, a destructured name, the object
-  shorthand `{ this }`). Property names are unaffected (`o.this`, `{ this: 1 }`).
-  A `.aktion.js` / `.aktion.ts` module still reports `this` as E103, next to its
-  other diagnostics.
-- **Breaking:** a block statement in a `.aktion` file (`{ … }` at the start of a
+  (`this = 1`, `let this`, a parameter, a destructured name, an import
+  specifier, the object shorthand `{ this }`). Property names are unaffected
+  (`o.this`, `{ this: 1 }`). A `.aktion.js` / `.aktion.ts` module reports a read
+  of any of the three as E103 (new messages for `super` and `debugger`), next to
+  its other diagnostics.
+- A block statement in a `.aktion` file (`{ … }` at the start of a
   statement that is not an object literal, such as the `case X: { … }` form
   ESLint's `no-case-declarations` asks for) now reports "Aktion has no block
   statements or block scoping" at the `{`, followed by what to do (hoist the
@@ -26,8 +27,7 @@ Each entry is dated and summarises what was added, changed, or fixed.
   `Expected Punctuation ":" but got Identifier "y"` at some token inside,
   followed by a cascade of `Unexpected token "}"` errors. Block scoping is still
   not supported; only the message and the position changed. A statement that
-  starts with `{` and fails for another reason keeps its own error, and an
-  unclosed `{` no longer swallows the rest of the file.
+  starts with `{` and fails for another reason keeps its own error.
 - The error for `export { … }` and `export { … } from …` no longer suggests the
   bare `export $count = 0`. It says re-export lists are not supported and shows
   the declared forms: `export let $count = 0`, `export const NAME = …`,
