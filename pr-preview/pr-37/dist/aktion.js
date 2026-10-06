@@ -62873,7 +62873,7 @@ class uo extends HTMLElement {
   }
   warnStateWriteDuringRender() {
     this.warnedStateWriteDuringRender || (this.warnedStateWriteDuringRender = !0, console.warn(
-      "[aktion] A reactive `$state` write happened during render and was applied WITHOUT scheduling a re-render, to prevent an infinite render loop. This usually means a write that is not a set-once declaration is running in render position — e.g. `$n = 5` nested inside an `if` or a loop in a function that builds the UI, or `$n++` / `$n += 1` there — so it re-writes the atom on every render. A `$name = …` written directly in a function body is a set-once declaration while rendering, whatever the function's name or case; seed state that way or with the `$state` hook, and only write state from event handlers / effects."
+      "[aktion] A reactive `$state` write happened during render and was applied WITHOUT scheduling a re-render, to prevent an infinite render loop. This usually means a write that is not a set-once declaration is running in render position — e.g. `$n = 5` nested inside an `if` or a loop, or directly in an arrow or function-expression body, or `$n++` / `$n += 1` — so it re-writes the atom on every render. A `$name = …` written directly in the body of a `function` declaration (not an arrow or function expression) is a set-once declaration while rendering; only a PascalCase component gets its own copy per instance, while in a lowercase function every call shares one atom, and an existing top-level atom of that name wins. Seed state that way or with the `$state` hook, and only write state from event handlers / effects."
     ));
   }
   /**
