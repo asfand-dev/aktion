@@ -1784,7 +1784,10 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   warning, not an error — the runtime renders an unknown component as nothing,
   and a stale editor library must never turn a working file red. The other
   warning is `shadowed-i18n` (a parameter or loop variable shadowing a binding
-  destructured from `$i18n(...)`, typically `t`). `getLintWarnings(source,
+  destructured from `$i18n(...)`, typically `t`). `invalid-regexp` flags a
+  `/…/flags` literal or `new RegExp("…", "…")` whose literal pattern or flags the
+  engine rejects (e.g. `/[(]/v`) — the runtime would otherwise swallow the error
+  and evaluate the expression to `null`. `getLintWarnings(source,
   library?)` returns only the warnings; pass the library to enable the
   unknown-component pass, omit it to skip it.
 - `getDiagnostics`, `getCompletions`, and `getHoverInfo` are the data

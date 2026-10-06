@@ -156,6 +156,13 @@ export function getDiagnostics(
  *     bodies run synchronously and nothing unwraps the thenable, so the value is
  *     the PROMISE. `const ok = await $util.copy(v)` is therefore always truthy.
  *     A bare `await f()` whose value is discarded is not flagged — only a use.
+ *   - `invalid-regexp` — a regular expression whose pattern or flags the engine
+ *     rejects: a `/…/flags` literal, `new RegExp("…", "…")` or `RegExp("…", "…")`
+ *     with string-literal arguments. The runtime swallows the `SyntaxError` and
+ *     the expression becomes `null`, so a broken validator reads as "no match".
+ *     The check constructs the RegExp with the host engine, so it knows exactly
+ *     which flags (`v`, `d`, …) the linting JavaScript runtime supports. A
+ *     non-literal argument (`new RegExp(pattern)`) is skipped.
  */
 export function getLintWarnings(source: string, library?: ComponentLibrary): Diagnostic[] {
   return lintProgram(parse(source), library);
@@ -169,7 +176,87 @@ function lintProgram(
     ...(library ? lintUnknownComponents(program, library) : []),
     ...lintShadowedI18n(program),
     ...lintAwaitedValue(program),
+    ...lintInvalidRegExp(program),
   ];
+}
+
+/**
+ * Flag a regular expression the JavaScript engine refuses to construct.
+ *
+ * A `/pattern/flags` literal is desugared by the parser to
+ * `new RegExp("pattern", "flags")`, so one walk covers the literal, the
+ * `new RegExp(…)` form and the plain `RegExp(…)` call. At run time the
+ * evaluator catches the `SyntaxError` the constructor throws, logs it with
+ * `console.error` and evaluates the expression to `null` — so
+ *
+ * ```js
+ * const isCode = (s) => /^[(]+$/v.test(s)   // `[(]` is invalid under the v flag
+ * ```
+ *
+ * quietly never matches (`null.test` is `null`, a falsy "no match"). Nothing else
+ * in the toolchain looks at the pattern.
+ *
+ * Only calls whose pattern (and flags, when given) are string literals are
+ * checked; a computed argument cannot be judged statically and is skipped. The
+ * engine's own message is reported verbatim, since it names the offending
+ * construct. Engines do not report an offset into the pattern, so the warning is
+ * positioned on the regular expression itself.
+ */
+function lintInvalidRegExp(program: ReturnType<typeof parse>): Diagnostic[] {
+  const warnings: Diagnostic[] = [];
+
+  const stringLiteral = (node: unknown): string | undefined => {
+    if (!node || typeof node !== "object") return undefined;
+    const rec = node as Record<string, unknown>;
+    return rec["kind"] === "Literal" && typeof rec["value"] === "string" ? rec["value"] : undefined;
+  };
+
+  const check = (node: Record<string, unknown>): void => {
+    // `New` carries the callee as an Identifier node; a plain `Call` as a name.
+    const callee = node["callee"] as Record<string, unknown> | string | undefined;
+    const calleeName =
+      typeof callee === "string" ? callee : callee?.["kind"] === "Identifier" ? callee["name"] : undefined;
+    if (calleeName !== "RegExp") return;
+    const args = node["arguments"];
+    if (!Array.isArray(args) || args.length === 0 || args.length > 2) return;
+    const pattern = stringLiteral(args[0]);
+    if (pattern === undefined) return;
+    let flags: string | undefined;
+    if (args.length === 2) {
+      flags = stringLiteral(args[1]);
+      if (flags === undefined) return;
+    }
+    try {
+      new RegExp(pattern, flags);
+    } catch (err) {
+      const loc = node["loc"] as Position | undefined;
+      const detail = err instanceof Error ? err.message : String(err);
+      warnings.push({
+        line: loc?.line ?? 0,
+        column: loc?.column ?? 0,
+        severity: "warning",
+        message:
+          `Invalid regular expression — ${detail}. The runtime swallows this error and the ` +
+          "expression evaluates to null, so a match against it silently reads as \"no match\".",
+      });
+    }
+  };
+
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    const rec = node as Record<string, unknown>;
+    if (rec["kind"] === "New" || rec["kind"] === "Call") check(rec);
+    for (const key of Object.keys(rec)) {
+      if (key !== "loc") visit(rec[key]);
+    }
+  };
+
+  visit(program.statements);
+  return warnings;
 }
 
 /**
