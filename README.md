@@ -1783,11 +1783,11 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   is flagged with a `suggestComponent`-derived *"Did you mean …?"* hint. It is a
   warning, not an error — the runtime renders an unknown component as nothing,
   and a stale editor library must never turn a working file red. The other
-  warning is `shadowed-i18n` (a parameter or loop variable shadowing a binding
+  warnings are `shadowed-i18n` (a parameter or loop variable shadowing a binding
   destructured from `$i18n(...)`, typically `t`), and a line that starts with
-  `(` or `[` right after an unterminated statement (JavaScript continues the
-  previous expression there, so `f⏎(1)` is `f(1)`; Aktion ends the statement at
-  the line break and parses two). `getLintWarnings(source,
+  `(`, `[` or a template literal right after an unterminated statement
+  (JavaScript continues the previous expression there, so `f⏎(1)` is `f(1)`;
+  Aktion ends the statement at the line break and parses two). `getLintWarnings(source,
   library?)` returns only the warnings; pass the library to enable the
   unknown-component pass, omit it to skip it.
 - `getDiagnostics`, `getCompletions`, and `getHoverInfo` are the data
@@ -1921,7 +1921,7 @@ it flags is this DSL's normal, unavoidable idiom):
 | `unicorn/prefer-export-from` | GRAMMAR: `export { … } from …` lists have no production at all — an explicit parse error. |
 | `unicorn/prefer-string-raw` | GRAMMAR: no tagged-template-literal production — `` String.raw`…` `` is a parse error ("Tagged template literals are not supported"; it used to silently truncate the value with *no* reported error — see the citation in [`src/eslint/rules.ts`](./src/eslint/rules.ts)). |
 | `unicorn/switch-case-braces` | GRAMMAR: no generic block-statement production — a bare `{` in statement position can only be an object literal, so wrapping a `case N: return X` body in `{ }` is a parse error ("Aktion has no block statements or block scoping"). Found by this package's own corpus sweep, not carried over from any downstream pilot. |
-| `unicorn/prefer-switch` | GRAMMAR, same cause: its fix turns an `if … else if …` chain of three or more comparisons into a `switch` and keeps braced case bodies, so a branch that declares a binding becomes `case "ok": { const label = … }` — an object literal to this parser. |
+| `unicorn/prefer-switch` | GRAMMAR, same cause: its fix turns an `if … else if …` chain of three or more comparisons into a `switch` and keeps braced case bodies, so a branch that declares a binding becomes `case "ok": { const label = … }` — a block statement, which is a parse error ("Aktion has no block statements or block scoping"). |
 | `new-cap` | IDIOM: component instantiation (`Container(...)`, `Text(...)`, …) is a capitalized function call — the DSL's normal syntax, not a constructor mistake. |
 | `unicorn/max-nested-calls` | IDIOM: the component tree *is* deeply nested calls — that's the normal shape of a UI declaration. |
 | `unicorn/no-optional-chaining-on-undeclared-variable` | IDIOM: `route` is a runtime-injected screen-scope global (`src/runtime/evaluator.ts`), never declared via `let`/`const`/`import`, so `route.params?.id` reads as "undeclared" to a JS/TS linter. |
