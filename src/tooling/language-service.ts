@@ -157,9 +157,10 @@ export function getDiagnostics(
  *     bodies run synchronously and nothing unwraps the thenable, so the value is
  *     the PROMISE. `const ok = await $util.copy(v)` is therefore always truthy.
  *     A bare `await f()` whose value is discarded is not flagged — only a use.
- *   - a line that starts with `(` or `[` right after an unterminated statement.
- *     JavaScript continues the previous expression (`f⏎(1)` is `f(1)`); Aktion
- *     ends the statement at the line break, so it is two statements.
+ *   - a line that starts with `(`, `[` or a template literal right after an
+ *     unterminated statement. JavaScript continues the previous expression
+ *     (`f⏎(1)` is `f(1)`); Aktion ends the statement at the line break, so it is
+ *     two statements.
  */
 export function getLintWarnings(source: string, library?: ComponentLibrary): Diagnostic[] {
   return lintProgram(parse(source), source, library);
@@ -178,11 +179,38 @@ function lintProgram(
   ];
 }
 
-/** Statement kinds that end in an expression and take no terminator of their own. */
+/**
+ * Statement kinds that can end in an expression with no terminator of their own,
+ * so that a following `(`, `[` or template literal continues them in JavaScript.
+ * Block-terminated statements (`function`, `switch`, `try`, `import`, …) and
+ * `do … while (c)`, which JavaScript always terminates, are left out.
+ */
 const UNTERMINATED_STATEMENT_KINDS: ReadonlySet<string> = new Set([
   "ExpressionStatement",
   "Assignment",
   "DestructureStatement",
+  "EffectDeclaration",
+  "Return",
+  "ThrowStatement",
+  "Await",
+  "IfStatement",
+  "WhileStatement",
+  "ForOfStatement",
+  "ForInStatement",
+  "ForClassicStatement",
+]);
+
+/**
+ * The kinds above whose body can be a single statement with no braces
+ * (`if (c) x⏎(y)` is `x(y)`). A `}` before the line break closes a block there,
+ * which JavaScript terminates, so only a name, literal or `)` / `]` counts.
+ */
+const BODY_STATEMENT_KINDS: ReadonlySet<string> = new Set([
+  "IfStatement",
+  "WhileStatement",
+  "ForOfStatement",
+  "ForInStatement",
+  "ForClassicStatement",
 ]);
 
 /** Token types that can end an expression, so that a `(` or `[` on the next line could continue it. */
@@ -198,49 +226,79 @@ const EXPRESSION_END_TOKENS: ReadonlySet<Token["type"]> = new Set<Token["type"]>
 ]);
 
 /**
- * Flag a line that starts with `(` or `[` right after a statement that has no
- * terminator. JavaScript continues the previous expression there, so `f⏎(1)` is
- * the call `f(1)` and `a⏎[1].forEach(g)` indexes `a`. Aktion ends a statement at
- * the line break, so the same text is two statements and the call or the index
+ * Flag a line that starts with `(`, `[` or a template literal right after a
+ * statement that has no terminator. JavaScript continues the previous
+ * expression there, so `f⏎(1)` is the call `f(1)`, `a⏎[1].forEach(g)` indexes
+ * `a` and `` f⏎`x` `` is a tagged template. Aktion ends a statement at the line
+ * break, so the same text is two statements and the call, the index or the tag
  * is silently not made. Neither parse fails, so only a warning can say so.
  *
  * Fires only between two sibling statements, so `if (c)⏎(f)()` (a body on the
  * next line) is not flagged, and only when the token before the line break can
- * end an expression. A `;` there ends the statement in both languages. A `}` is
- * skipped because it is ambiguous (`const f = () => {}⏎(g)` is two statements in
- * JavaScript as well).
+ * end an expression. A `;` there ends the statement in both languages. A `}`
+ * counts when it closes an object literal or a `function` expression
+ * (`x = function () {}⏎(g)` is an immediately invoked function in JavaScript),
+ * and not when it closes an arrow function's body (`const f = () => {}⏎(g)` is
+ * two statements in JavaScript as well).
  *
- * In a `.aktion.ts` module a call whose multi-line type arguments were erased
- * reads as this shape (`foo<⏎T⏎>(x)` becomes `foo` and `(x)`), because this
- * pass sees the erased text without the frontend's soft newlines.
+ * In a `.aktion.ts` module two erasures leave this shape behind, because this
+ * pass sees the erased text without the frontend's soft newlines: a call whose
+ * multi-line type arguments were erased (`foo<⏎T⏎>(x)` becomes `foo` and `(x)`)
+ * and a function overload signature (`function g(a: number): number⏎(x)`).
  */
 function lintContinuationLine(program: ReturnType<typeof parse>, source: string): Diagnostic[] {
   const warnings: Diagnostic[] = [];
   let tokens: Token[] | undefined;
+  let indexAt: Map<string, number> | undefined;
+
+  /** True when the `}` at `close` ends an arrow function's body. */
+  const closesArrowBody = (close: number): boolean => {
+    let depth = 0;
+    for (let i = close; i >= 0; i -= 1) {
+      const tok = tokens![i]!;
+      if (tok.type !== "Punctuation") continue;
+      if (tok.value === "}") depth += 1;
+      else if (tok.value === "{" && --depth === 0) {
+        const before = tokens![i - 1];
+        return before?.type === "Operator" && before.value === "=>";
+      }
+    }
+    return false;
+  };
 
   const check = (previous: Record<string, unknown>, node: Record<string, unknown>): void => {
     if (node["kind"] !== "ExpressionStatement" || !UNTERMINATED_STATEMENT_KINDS.has(String(previous["kind"]))) return;
     const at = node["loc"] as Position | undefined;
     if (!at) return;
-    tokens ??= tokenize(source);
-    const index = tokens.findIndex((t) => t.line === at.line && t.column === at.column);
+    if (!tokens) {
+      tokens = tokenize(source);
+      indexAt = new Map(tokens.map((t, i) => [`${t.line}:${t.column}`, i] as const));
+    }
+    const index = indexAt!.get(`${at.line}:${at.column}`) ?? -1;
     const head = tokens[index];
-    if (head?.type !== "Punctuation" || (head.value !== "(" && head.value !== "[")) return;
+    if (!head) return;
+    const startsTemplate = head.type === "TemplateString" || (head.type === "String" && head.template === true);
+    const startsBracket = head.type === "Punctuation" && (head.value === "(" || head.value === "[");
+    if (!startsTemplate && !startsBracket) return;
     let before = index - 1;
     while (before >= 0 && tokens[before]!.type === "Newline") before -= 1;
     const last = tokens[before];
-    if (!last || last.line === head.line) return;
+    if (!last) return;
     const closesExpression = last.type === "Punctuation" && (last.value === ")" || last.value === "]");
-    if (!closesExpression && !EXPRESSION_END_TOKENS.has(last.type)) return;
-    const example = head.value === "(" ? "f⏎(1)` is `f(1)" : "f⏎[1]` is `f[1]";
+    const closesLiteral = last.type === "Punctuation" && last.value === "}" &&
+      !BODY_STATEMENT_KINDS.has(String(previous["kind"])) && !closesArrowBody(before);
+    if (!closesExpression && !closesLiteral && !EXPRESSION_END_TOKENS.has(last.type)) return;
+    const what = startsTemplate
+      ? "a template literal, so JavaScript would read the previous line as its tag (`` f⏎`x` `` is `` f`x` ``)"
+      : `\`${head.value}\`, so JavaScript would continue the previous line (\`${
+        head.value === "(" ? "f⏎(1)` is `f(1)" : "f⏎[1]` is `f[1]"}\`)`;
     warnings.push({
       line: at.line,
       column: at.column,
       severity: "warning",
       message:
-        `This line starts with \`${head.value}\`, so JavaScript would continue the previous line ` +
-        `(\`${example}\`). Aktion ends a statement at the line break and reads this as a new one, ` +
-        "so the call or index is not made. End the previous statement with `;` to say so, " +
+        `This line starts with ${what}. Aktion ends a statement at the line break and reads this as a new one, ` +
+        "so the call, index or tag is not made. End the previous statement with `;` to say so, " +
         "or put both on one line to continue it.",
     });
   };
@@ -344,6 +402,7 @@ function lintAwaitedValue(program: ReturnType<typeof parse>): Diagnostic[] {
   visit(program.statements, null);
   return warnings;
 }
+
 
 function lintShadowedI18n(program: ReturnType<typeof parse>): Diagnostic[] {
   const protectedNames = collectI18nBindingNames(program);
