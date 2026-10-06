@@ -17,6 +17,19 @@ describe("generatePrompt", () => {
     expect(text).toContain("a declarative language in JavaScript syntax");
     expect(text).not.toContain("every program is valid JS");
     expect(text).not.toContain("strict subset");
+    expect(text).toContain(
+      "a declarative language in JavaScript syntax (no classes, block statements, async arrow functions or tagged templates)",
+    );
+  });
+
+  it("does not say that function name case is not significant", () => {
+    for (const mode of ["full", "chat"] as const) {
+      const text = generatePrompt(defaultLibrary, { mode });
+      expect(text).not.toContain("First-letter case is NOT significant");
+      expect(text).not.toContain("Name case is not significant");
+    }
+    const full = generatePrompt(defaultLibrary);
+    expect(full).toContain("only a PascalCase component gets per-instance state and memoized re-rendering");
   });
 
   it("does not call the chat prompt a strict subset of JavaScript", () => {

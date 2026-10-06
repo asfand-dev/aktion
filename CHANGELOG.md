@@ -15,6 +15,9 @@ Each entry is dated and summarises what was added, changed, or fixed.
   now say it is a declarative language in JavaScript syntax, and the full prompt
   lists four constructs that are errors: classes, block statements, async arrow
   functions and tagged templates.
+- The full prompt also no longer says that function name case is not
+  significant: case does not decide whether a function renders, but only a
+  PascalCase component gets per-instance state and memoized re-rendering.
 
 ## 2026-10-05
 
