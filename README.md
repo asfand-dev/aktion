@@ -1782,12 +1782,12 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   call that is neither a library component nor declared / imported in the file
   is flagged with a `suggestComponent`-derived *"Did you mean …?"* hint. It is a
   warning, not an error — the runtime renders an unknown component as nothing,
-  and a stale editor library must never turn a working file red. The other
-  warnings are `shadowed-i18n` (a parameter or loop variable shadowing a binding
-  destructured from `$i18n(...)`, typically `t`), and a line that starts with
-  `(`, `[` or a template literal right after an unterminated statement
-  (JavaScript continues the previous expression there, so `f⏎(1)` is `f(1)`;
-  Aktion ends the statement at the line break and parses two). `getLintWarnings(source,
+  and a stale editor library must never turn a working file red. Others
+  include `shadowed-i18n` (a parameter or loop variable shadowing a binding
+  destructured from `$i18n(...)`, typically `t`) and `continuation-line` (a line
+  that starts with `(`, `[` or a template literal right after an unterminated
+  statement: JavaScript continues the previous expression there, so `f⏎(1)` is
+  `f(1)`, while Aktion ends the statement at the line break and parses two). `getLintWarnings(source,
   library?)` returns only the warnings; pass the library to enable the
   unknown-component pass, omit it to skip it.
 - `getDiagnostics`, `getCompletions`, and `getHoverInfo` are the data

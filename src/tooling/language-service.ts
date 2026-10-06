@@ -157,10 +157,10 @@ export function getDiagnostics(
  *     bodies run synchronously and nothing unwraps the thenable, so the value is
  *     the PROMISE. `const ok = await $util.copy(v)` is therefore always truthy.
  *     A bare `await f()` whose value is discarded is not flagged — only a use.
- *   - a line that starts with `(`, `[` or a template literal right after an
- *     unterminated statement. JavaScript continues the previous expression
- *     (`f⏎(1)` is `f(1)`); Aktion ends the statement at the line break, so it is
- *     two statements.
+ *   - `continuation-line` — a line that starts with `(`, `[` or a template
+ *     literal right after an unterminated statement. JavaScript continues the
+ *     previous expression (`f⏎(1)` is `f(1)`); Aktion ends the statement at the
+ *     line break, so it is two statements.
  */
 export function getLintWarnings(source: string, library?: ComponentLibrary): Diagnostic[] {
   return lintProgram(parse(source), source, library);
@@ -226,8 +226,8 @@ const EXPRESSION_END_TOKENS: ReadonlySet<Token["type"]> = new Set<Token["type"]>
 ]);
 
 /**
- * Flag a line that starts with `(`, `[` or a template literal right after a
- * statement that has no terminator. JavaScript continues the previous
+ * `continuation-line`: flag a line that starts with `(`, `[` or a template
+ * literal right after a statement that has no terminator. JavaScript continues the previous
  * expression there, so `f⏎(1)` is the call `f(1)`, `a⏎[1].forEach(g)` indexes
  * `a` and `` f⏎`x` `` is a tagged template. Aktion ends a statement at the line
  * break, so the same text is two statements and the call, the index or the tag
@@ -239,7 +239,9 @@ const EXPRESSION_END_TOKENS: ReadonlySet<Token["type"]> = new Set<Token["type"]>
  * counts when it closes an object literal or a `function` expression
  * (`x = function () {}⏎(g)` is an immediately invoked function in JavaScript),
  * and not when it closes an arrow function's body (`const f = () => {}⏎(g)` is
- * two statements in JavaScript as well).
+ * two statements in JavaScript as well). One rare miss: a statement that itself
+ * starts with an object literal (`{ a: 1 }⏎(f)()`) is a block in JavaScript, so
+ * the line is not a continuation there, yet it is flagged.
  *
  * In a `.aktion.ts` module two erasures leave this shape behind, because this
  * pass sees the erased text without the frontend's soft newlines: a call whose
@@ -402,7 +404,6 @@ function lintAwaitedValue(program: ReturnType<typeof parse>): Diagnostic[] {
   visit(program.statements, null);
   return warnings;
 }
-
 
 function lintShadowedI18n(program: ReturnType<typeof parse>): Diagnostic[] {
   const protectedNames = collectI18nBindingNames(program);

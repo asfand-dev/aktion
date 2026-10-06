@@ -10,7 +10,7 @@ import { defaultLibrary } from "../src/library/index.js";
 import { parse } from "../src/parser/index.js";
 import { getDiagnostics, getLintWarnings } from "../src/tooling/index.js";
 
-describe("a line that starts with `(`, `[` or a template literal after an unterminated statement is a warning", () => {
+describe("continuation-line: a line that starts with `(`, `[` or a template literal after an unterminated statement is a warning", () => {
   const warn = (source: string) => getLintWarnings(source).filter((w) => w.message.startsWith("This line starts with"));
 
   const flagged: Array<[string, string, number, number]> = [
