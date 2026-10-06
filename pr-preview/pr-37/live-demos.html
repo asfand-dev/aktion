@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live demos · Aktion</title>
+  <meta name="description" content="The Aktion demo gallery — 111 real .aktion programs in four folders, each booted live by the real runtime. How to read a demo's source, deep-link one, and run the whole gallery locally." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .callout {
+      border: 1px solid var(--doc-border);
+      border-left: 4px solid var(--doc-accent, #6366f1);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 18px 0;
+      background: var(--doc-surface-elev);
+    }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout h4 { margin: 0 0 6px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
+    .demo-section {
+      margin-top: 16px;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      background: var(--doc-surface);
+      overflow: hidden;
+    }
+    .demo-section-toggle {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 16px 18px;
+      margin: 0;
+      border: 0;
+      background: transparent;
+      color: var(--doc-text);
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: background var(--doc-transition);
+    }
+    .demo-section-toggle:hover { background: var(--doc-bg-soft); }
+    .demo-section-toggle:focus-visible { outline: 2px solid var(--doc-primary); outline-offset: -2px; }
+    .demo-section-chevron {
+      flex: none;
+      width: 16px;
+      height: 16px;
+      color: var(--doc-text-muted);
+      transition: transform var(--doc-transition);
+    }
+    .demo-section[data-open="true"] .demo-section-chevron { transform: rotate(90deg); }
+    .demo-section-title {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .demo-section-count {
+      font-size: 13px;
+      color: var(--doc-text-muted);
+      margin-left: auto;
+    }
+    .demo-section-body {
+      padding: 0 18px 18px;
+      border-top: 1px solid var(--doc-border-subtle);
+    }
+    .demo-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 18px;
+      padding-top: 18px;
+    }
+    .demo-preview-card {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--doc-border);
+      border-radius: var(--doc-radius-md);
+      background: var(--doc-surface);
+      overflow: hidden;
+      text-decoration: none;
+      transition: border-color var(--doc-transition), box-shadow var(--doc-transition), transform var(--doc-transition);
+    }
+    .demo-preview-card:hover {
+      border-color: var(--doc-primary);
+      box-shadow: var(--doc-shadow);
+      transform: translateY(-2px);
+    }
+    .demo-preview-frame {
+      position: relative;
+      aspect-ratio: 16 / 10;
+      background: var(--doc-bg-soft);
+      overflow: hidden;
+      border-bottom: 1px solid var(--doc-border-subtle);
+    }
+    /* Zoomed-out live preview: render the full page at 4x size, scale to 25%. */
+    .demo-preview-frame iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 400%;
+      height: 400%;
+      border: 0;
+      transform: scale(0.25);
+      transform-origin: top left;
+      pointer-events: none;
+      background: #fff;
+    }
+    .demo-preview-frame .demo-preview-loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12.5px;
+      color: var(--doc-text-subtle);
+    }
+    .demo-preview-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 15px;
+    }
+    .demo-preview-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--doc-text);
+    }
+    .demo-preview-open {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--doc-primary);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body data-page="live-demos">
+  <div class="layout" data-wide="true">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Showcase</span>
+        <h1>Live demos.</h1>
+        <p class="lead">
+          Every demo shipped with these docs is a plain <code>.aktion</code>
+          program &mdash; <strong>111</strong> of them, in four folders under
+          <code>docs/demos/</code>. Each tile in the gallery boots the real
+          runtime in an iframe, so you are looking at the program running, not
+          a screenshot. Click one to open it full&#8209;page, with a theme
+          switcher and a <strong>View .aktion source</strong> button that hands
+          the program straight to the playground.
+        </p>
+      </header>
+
+      <h2 id="all">Every demo</h2>
+      <p>
+        All 111 programs, grouped by folder &mdash; open a section to mount its
+        previews. The per&#8209;section counts are read from
+        <code>demos/manifest.json</code>, so this list is whatever is on disk.
+        Everything below the gallery explains how the demos are built and how to
+        run them yourself.
+      </p>
+
+      <div id="demo-sections"></div>
+
+      <h2 id="what">What these demos are</h2>
+      <p>
+        One demo is one file. There is no build step, no JavaScript glue and no
+        per&#8209;demo HTML page:
+        <code>docs/demos/&lt;folder&gt;/&lt;name&gt;.aktion</code> is the whole
+        program, and a single runner shell renders whichever one its
+        <code>?app=</code> parameter names.
+      </p>
+      <p>
+        That is what makes them useful as examples. Nothing in a demo is a
+        documentation&#8209;only shortcut, so the text you read here is the text
+        that runs &mdash; paste it into the <a href="playground.html">playground</a>
+        or drop the file into your own <code>src/</code> and it behaves the same.
+      </p>
+<pre><code>$app(Column([
+  PageHeader("Invoices", { subtitle: "Everything billed this quarter" }),
+  Card([
+    Table([
+      Col("Invoice", ["INV-001", "INV-002"]),
+      Col("Amount", ["$1,200", "$840"])
+    ])
+  ])
+], { gap: "lg" }))</code></pre>
+      <p>
+        Programs read like that the whole way down: one <code>$app(&hellip;)</code>
+        call composing components, with the data and helpers it references
+        declared around it. The median demo is <strong>91</strong> lines &mdash;
+        the smallest is 41, the largest 457.
+      </p>
+
+      <h2 id="start">Start here</h2>
+      <p>
+        Four programs cover most of what you will want to see first. Each link
+        opens the full&#8209;page runner in a new tab, so the gallery stays
+        where it is.
+      </p>
+      <div class="demo-grid">
+        <a class="demo-card" href="demos/index.html?app=mini-apps/todo-list.aktion" target="_blank" rel="noopener">
+          <span class="demo-tag">Mini-app</span>
+          <h3>To-do List</h3>
+          <p>A <code>$store</code> with <code>persist</code> and undo history, drag&#8209;to&#8209;reorder rows, filters and an empty state.</p>
+          <span class="demo-arrow">Open the demo &rarr;</span>
+        </a>
+        <a class="demo-card" href="demos/index.html?app=mini-apps/weather-dashboard.aktion" target="_blank" rel="noopener">
+          <span class="demo-tag">Data</span>
+          <h3>Weather Dashboard</h3>
+          <p><code>$query</code> against a public API &mdash; cached, polled, and refetched when the tab regains focus.</p>
+          <span class="demo-arrow">Open the demo &rarr;</span>
+        </a>
+        <a class="demo-card" href="demos/index.html?app=mini-apps/admin-dashboard.aktion" target="_blank" rel="noopener">
+          <span class="demo-tag">Routing</span>
+          <h3>Admin Dashboard</h3>
+          <p><code>AppShell</code> + <code>Sidebar</code> + <code>$router</code>: four router&#8209;driven pages behind one shell.</p>
+          <span class="demo-arrow">Open the demo &rarr;</span>
+        </a>
+        <a class="demo-card" href="demos/index.html?app=blocks/login-card.aktion" target="_blank" rel="noopener">
+          <span class="demo-tag">Block</span>
+          <h3>Login Card</h3>
+          <p>One drop&#8209;in section: live validation, show&#8209;password, social providers, and a submit that toggles a loading state.</p>
+          <span class="demo-arrow">Open the demo &rarr;</span>
+        </a>
+      </div>
+      <p>
+        Arrived from a guide and want the demo that exercises the primitive you
+        just read about? This is the index:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Guide</th><th>Demos that show it</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><a href="http.html#basics">HTTP</a></td>
+            <td>Dictionary, Pokedex, Aktion Website (<code>$http</code>); Weather Dashboard, GitHub Explorer, Crypto Watchlist, News Reader, Show Finder, Cocktail Explorer, Currency Converter (<code>$query</code>) &mdash; ten mini&#8209;apps in all.</td>
+          </tr>
+          <tr>
+            <td><a href="stores.html#persist">Stores</a></td>
+            <td>To-do List, Kanban Board, Budget Tracker, Invoice Builder &mdash; and 32 more. 36 of the 57 mini&#8209;apps keep their data in a <code>$store</code>.</td>
+          </tr>
+          <tr>
+            <td><a href="routing.html#router">Routing</a></td>
+            <td>Admin Dashboard and Storefront &mdash; the only two demos that route between pages.</td>
+          </tr>
+          <tr>
+            <td><a href="hooks.html#state">Hooks</a></td>
+            <td><code>components/forms</code>, <code>inputs</code>, <code>selection</code>, <code>utility</code> &mdash; each holds per&#8209;instance state with the <code>$state</code> hook.</td>
+          </tr>
+          <tr>
+            <td><a href="layout.html#mental-model">Layout</a> &middot; <a href="sx.html#mental-model">sx</a></td>
+            <td><code>components/layout</code> for the primitives, any <code>industry-specific/</code> surface for dense <code>Grid</code> work.</td>
+          </tr>
+          <tr>
+            <td><a href="themes.html#built-in">Themes</a></td>
+            <td>Any demo &mdash; switch theme in the runner toolbar. Aktion Website and Saas Landing also call <code>$theme(&hellip;)</code> themselves.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <h4>No bundled demo writes to a REST API</h4>
+        <p>
+          <strong>The <code>$http</code> demos are all reads.</strong> To-do
+          List looks like a CRUD app but persists through
+          <code>$store({ persist })</code> to <code>localStorage</code>. For
+          create / update / delete over HTTP, scaffold the
+          <code>todos-app</code> template instead &mdash;
+          <code>npm create aktion@latest my-app -- --template todos-app</code>
+          &mdash; which wires <code>$http</code> create, toggle, edit and
+          delete against a REST endpoint.
+        </p>
+      </div>
+
+      <h2 id="categories">The four categories</h2>
+      <p>
+        The folder a demo lives in tells you how much of an app it is. That is
+        the entire taxonomy: a program lives in exactly one folder, and the
+        folder name is the section heading you see in the gallery.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Folder</th><th>Programs</th><th>What it demonstrates</th><th>Guides it illustrates</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>mini-apps/</code></td>
+            <td>57</td>
+            <td>Whole applications &mdash; trackers, dashboards, storefronts, API browsers, marketing pages. 36 keep data in a <code>$store</code> (34 of those persist it, 8 keep undo history), 10 fetch over the network, 10 build forms with <code>$form</code>, 2 route.</td>
+            <td><a href="stores.html#persist">Stores</a>, <a href="http.html#basics">HTTP</a>, <a href="routing.html#router">Routing</a></td>
+          </tr>
+          <tr>
+            <td><code>blocks/</code></td>
+            <td>25</td>
+            <td>One drop&#8209;in section per file &mdash; login card, pricing plans, checkout form, data table, command palette. No stores and no network, just local atoms, which makes them the smallest complete things to read. 8 raise a <code>$toast</code>.</td>
+            <td><a href="components.html">Components</a>, <a href="layout.html#mental-model">Layout</a></td>
+          </tr>
+          <tr>
+            <td><code>components/</code></td>
+            <td>14</td>
+            <td>Copy&#8209;out <code>function</code> components grouped by kind &mdash; buttons, inputs, cards, charts, overlays, navigation, &hellip; Each file collects nine to twelve of them; 8 of the 14 use the <code>$state</code> hook.</td>
+            <td><a href="components.html">Components</a>, <a href="hooks.html#state">Hooks</a></td>
+          </tr>
+          <tr>
+            <td><code>industry-specific/</code></td>
+            <td>15</td>
+            <td>One vertical surface per file &mdash; finance, healthcare, SaaS, e&#8209;commerce, AI, real estate, travel, &hellip; Each is a dense dashboard assembled from reusable blocks; 10 include charts and all 15 raise a <code>$toast</code>.</td>
+            <td><a href="layout.html#grid">Layout</a>, <a href="components.html">Components</a></td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        <code>mini-apps/</code> is listed first everywhere because
+        <code>scripts/build-docs.mjs</code> sorts it there; the other folders
+        follow alphabetically and files inside a folder are sorted by name.
+        The counts above come from <code>demos/manifest.json</code>, which that
+        script regenerates from disk on every docs build.
+      </p>
+
+      <h2 id="reading">Reading a demo</h2>
+      <p>
+        The demos are meant to be read, not just run. Three things make that
+        quick: the source layout is the same in every file, the runner hands you
+        the program in an editor, and the URLs are guessable.
+      </p>
+
+      <h3 id="source">The source layout</h3>
+      <p>
+        Read the first line before anything else. Every program calls
+        <code>$app(&hellip;)</code> near the top and declares everything that
+        call references below it &mdash; declarations hoist, so the head of the
+        file is the page shape and the rest is detail.
+      </p>
+<pre><code>$app(Center([Container([Column([header, addRow, list], { gap: "md" })], { size: "sm" })], { minHeight: "85vh" }))
+
+todos = $store({
+  persist: "todo.items",
+  history: 50,
+  items: [{ id: "t1", title: "Read the Aktion docs", done: false }],
+  add:    (s, title) =&gt; { s.items = [...s.items, { id: $util.uuid(), title, done: false }] },
+  toggle: (s, id) =&gt; { s.items = s.items.map(t =&gt; t.id == id ? { ...t, done: !t.done } : t) }
+})
+
+$draft = ""
+
+header = PageHeader("To-do List", { subtitle: `${todos.items.length} tasks` })
+
+addRow = Row([
+  StackItem(Input("draft", { placeholder: "What needs doing?", value: $draft }), { grow: 1 }),
+  Button("Add", { variant: "primary", onClick: () =&gt; { todos.add($draft); $draft = "" } })
+], { gap: "sm", align: "end" })
+
+list = Card([Column(todos.items.map(t =&gt; Row([
+  Checkbox(`done-${t.id}`, { value: t.done, onChange: () =&gt; todos.toggle(t.id) }),
+  Text(t.title)
+], { gap: "sm", align: "center", key: t.id })), { gap: "sm" })])</code></pre>
+      <p>
+        That is <code>mini-apps/todo-list.aktion</code> cut down to its
+        skeleton: <code>header</code>, <code>addRow</code> and
+        <code>list</code> are used on line 1 and defined further down. 110 of
+        the 111 programs put <code>$app(&hellip;)</code> in their first eight
+        lines; <code>mini-apps/aktion-website.aktion</code> is the one that
+        calls it lower, at line 33.
+      </p>
+      <p>
+        Most files also open with a comment header saying what the program is
+        and what it is a starting point for &mdash; 110 of 111 carry one, and 55
+        add a <code>// Uses:</code> line naming the primitives. Because the
+        demos are plain text, <code>grep</code> is a perfectly good index:
+      </p>
+<pre><code># Which demos fetch over the network?
+grep -l '$query(' docs/demos/*/*.aktion
+
+# Which demos route between pages?
+grep -l '$router(' docs/demos/*/*.aktion</code></pre>
+      <p>
+        Eight programs answer the first question and two the second; count the
+        four <code>$http</code> demos as well and ten of the 57 mini&#8209;apps
+        talk to a network, which is the figure
+        <a href="#categories">The four categories</a> reports.
+      </p>
+
+      <h3 id="runner">The runner shell</h3>
+      <p>
+        One page, <code>demos/index.html</code>, renders every demo. It adds a
+        thin toolbar above the program and nothing else:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Control</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><strong>App</strong></td><td>Switches program without leaving the page, grouped by folder. It rewrites <code>?app=</code> in the address bar as you go, so the URL stays shareable.</td></tr>
+          <tr><td><strong>Theme</strong></td><td>Re&#8209;renders the program under any built&#8209;in theme &mdash; <code>light</code>, <code>dark</code>, <code>shadcn</code>, <code>shadcn-dark</code>, <code>mui</code>, <code>mui-dark</code>, <code>heroui</code>, <code>heroui-dark</code>, <code>signal</code>, <code>signal-dark</code>, <code>soft</code>. The program itself never changes.</td></tr>
+          <tr><td><strong>View .aktion source</strong></td><td>Opens the program in the <a href="playground.html">playground</a> as a <code>#code=</code> share link, ready to edit and re&#8209;run. Nothing is uploaded &mdash; the source is gzipped into the URL fragment.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Errors are not swallowed. The runner listens for the element&rsquo;s
+        <code>error</code> event and prints parse and runtime messages in a red
+        box above the program, so a demo you break while editing tells you
+        where.
+      </p>
+
+      <h3 id="urls">Deep&#8209;linking a demo</h3>
+      <p>
+        Both URL shapes the gallery uses are ones you can write by hand &mdash;
+        useful when a guide, an issue, or your own notes should point at one
+        exact program:
+      </p>
+<pre><code>demos/index.html?app=mini-apps/todo-list.aktion            // full page, with the toolbar
+demos/index.html?app=blocks/login-card.aktion&amp;embed=1      // chrome-less: the program only</code></pre>
+      <p>
+        A missing or unrecognised <code>app</code> falls back to
+        <code>mini-apps/aktion-website.aktion</code>. <code>embed</code> only
+        has to be present &mdash; any value hides the toolbar, which is exactly
+        what the preview tiles load.
+      </p>
+
+      <h2 id="previews">How the preview tiles work</h2>
+      <p>
+        The tiles under <a href="#all">Every demo</a> are not images. Each one
+        mounts an iframe pointing at the embedded runner, which is why the
+        gallery is careful about how many programs it boots at once.
+      </p>
+      <ul>
+        <li><strong>One section at a time.</strong> Folders are accordions: opening one collapses the others, and <em>Mini Apps</em> is open on arrival.</li>
+        <li><strong>Only what is near the viewport runs.</strong> An <code>IntersectionObserver</code> with a 150&nbsp;px margin mounts a tile&rsquo;s iframe as it approaches and removes it again once it scrolls away.</li>
+        <li><strong>Tiles are zoomed out, not cropped.</strong> The iframe renders at 400% of the tile and is scaled to 25%, so a whole page fits a 16:10 thumbnail.</li>
+        <li><strong>Hover to auto&#8209;scroll.</strong> Point at a tile and its preview scrolls itself at about 55&nbsp;content pixels per second, reverses at the bottom, and snaps back to the top when the pointer leaves.</li>
+      </ul>
+      <div class="callout">
+        <h4>Previews are look&#8209;only</h4>
+        <p>
+          <strong>Pointer events are disabled inside a tile.</strong> Clicking
+          opens the interactive full&#8209;page demo in a new tab rather than
+          pressing whatever control sits under the cursor. Hover
+          auto&#8209;scroll is the only way to see the rest of a long page from
+          the gallery.
+        </p>
+      </div>
+
+      <h2 id="local">Running them locally</h2>
+      <p>
+        The gallery itself is static, but the runner imports the runtime from
+        <code>dist/</code>, so a fresh checkout has to be built once before any
+        demo renders. Two routes work.
+      </p>
+
+      <h3 id="local-repo">From a clone, with Vite</h3>
+<pre><code>git clone https://github.com/asfand-dev/aktion.git
+cd aktion
+npm install
+npm run dev     # = npm run build &amp;&amp; vite — builds dist/, then serves the repo root</code></pre>
+      <p>
+        Open the URL Vite prints (<code>http://localhost:5173</code> unless the
+        port is taken) and append <code>/docs/live-demos.html</code>. Editing a
+        <code>.aktion</code> file and reloading is enough: the runner fetches
+        each program with a cache&#8209;busting <code>?ts=</code> query, so you
+        never get a stale copy.
+      </p>
+
+      <h3 id="local-site">As the deployable site</h3>
+<pre><code>npm run build:docs              # rescans docs/demos/, then assembles ./site/
+npx http-server site -p 4321    # or: npx serve site</code></pre>
+      <p>
+        Then open <code>http://localhost:4321/live-demos.html</code>. Because
+        <code>build:docs</code> regenerates
+        <code>docs/demos/manifest.json</code> before it copies anything, a
+        program you drop into one of the four folders shows up in the gallery
+        without editing the manifest by hand.
+      </p>
+      <div class="callout warn">
+        <h4>Opening the file directly will not work</h4>
+        <p>
+          <strong>Serve the folder over HTTP.</strong> The gallery and the
+          runner both <code>fetch("demos/manifest.json")</code>, and browsers
+          block that over <code>file://</code>. An empty gallery with no
+          visible error is almost always this.
+        </p>
+      </div>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="playground.html">
+          <span class="demo-tag">Try it</span>
+          <h3>Playground</h3>
+          <p>Paste a demo into the editor, change it live, and share the result as a URL.</p>
+          <span class="demo-arrow">Open the playground &rarr;</span>
+        </a>
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Components</h3>
+          <p>All 282 built-in components with a live preview and full prop reference for each.</p>
+          <span class="demo-arrow">Browse components &rarr;</span>
+        </a>
+        <a class="demo-card" href="get-started.html">
+          <span class="demo-tag">Start here</span>
+          <h3>Get started</h3>
+          <p>Scaffold a project, then keep a demo by copying its file into your <code>src/</code>.</p>
+          <span class="demo-arrow">Get started &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+  <script type="module">
+    const root = document.getElementById("demo-sections");
+
+    // Folder and file slugs are kebab-case. Words that are acronyms in prose
+    // stay acronyms in the label, so `ai-apps` reads "AI Apps" rather than
+    // "Ai Apps" — the same map the runner shell uses.
+    const ACRONYMS = {
+      ai: "AI", api: "API", bmi: "BMI", crm: "CRM", cta: "CTA", devops: "DevOps",
+      faq: "FAQ", github: "GitHub", iot: "IoT", json: "JSON", qr: "QR",
+      saas: "SaaS", seo: "SEO", ui: "UI", ux: "UX",
+    };
+    const titleCase = (slug) =>
+      slug.split("-").map((w) => ACRONYMS[w] ?? w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    const programName = (file) => titleCase(file.replace(/\.aktion$/, ""));
+
+    // The gallery is now the first thing on the page, so a failed manifest
+    // fetch has to say so. Opening the file over `file://` is the usual cause
+    // and it fails silently otherwise — an empty page with no explanation.
+    let manifest;
+    try {
+      const response = await fetch("demos/manifest.json");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      manifest = await response.json();
+    } catch (err) {
+      root.innerHTML = `
+        <div class="callout warn">
+          <h4>The demo list could not be loaded</h4>
+          <p>
+            <code>demos/manifest.json</code> did not load (<code>${String(err.message || err)}</code>).
+            Browsers block that fetch over <code>file://</code> &mdash; serve the
+            folder over HTTP instead. See
+            <a href="#local">Running them locally</a>.
+          </p>
+        </div>`;
+      throw err;
+    }
+
+    // Slow auto-scroll of a hovered preview. The embedded runner scrolls its
+    // own `.runner-stage`; we ping-pong through it so the whole program is
+    // revealed, and reset to the top when the pointer leaves.
+    const HOVER_SCROLL_SPEED = 55; // content px per second
+    let scrollRaf = 0;
+    let scrollTarget = null;
+
+    function stopHoverScroll(resetTo = 0) {
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      scrollRaf = 0;
+      if (scrollTarget) {
+        try { scrollTarget.scrollTop = resetTo; } catch (_) {}
+      }
+      scrollTarget = null;
+    }
+
+    function getScroller(iframe) {
+      try {
+        const doc = iframe.contentDocument;
+        return doc ? doc.querySelector(".runner-stage") : null;
+      } catch (_) {
+        return null; // not loaded yet (or cross-origin, which shouldn't happen)
+      }
+    }
+
+    function startHoverScroll(iframe) {
+      const scroller = getScroller(iframe);
+      if (!scroller) return;
+      stopHoverScroll();
+      scrollTarget = scroller;
+      let last = performance.now();
+      let dir = 1;
+      const step = (now) => {
+        const dt = (now - last) / 1000;
+        last = now;
+        const max = scroller.scrollHeight - scroller.clientHeight;
+        if (max > 1) {
+          let next = scroller.scrollTop + dir * HOVER_SCROLL_SPEED * dt;
+          if (next >= max) { next = max; dir = -1; }
+          else if (next <= 0) { next = 0; dir = 1; }
+          scroller.scrollTop = next;
+        }
+        scrollRaf = requestAnimationFrame(step);
+      };
+      scrollRaf = requestAnimationFrame(step);
+    }
+
+    // Mounts a live preview iframe inside a card and tears it down again, so
+    // only the cards near the viewport ever boot the Aktion runtime.
+    function mountFrame(card) {
+      if (card._frame) return;
+      const slot = card.querySelector(".demo-preview-frame");
+      const frame = document.createElement("iframe");
+      frame.src = card.dataset.src;
+      frame.title = `${card.dataset.name} preview`;
+      frame.setAttribute("tabindex", "-1");
+      frame.setAttribute("aria-hidden", "true");
+      frame.addEventListener("load", () => {
+        slot.querySelector(".demo-preview-loading")?.remove();
+        if (card._hovering) startHoverScroll(frame);
+      }, { once: true });
+      slot.appendChild(frame);
+      card._frame = frame;
+    }
+
+    function unmountFrame(card) {
+      if (!card._frame) return;
+      if (scrollTarget && card._hovering) stopHoverScroll();
+      card._frame.remove();
+      card._frame = null;
+      const slot = card.querySelector(".demo-preview-frame");
+      if (!slot.querySelector(".demo-preview-loading")) {
+        const loading = document.createElement("span");
+        loading.className = "demo-preview-loading";
+        loading.textContent = "Loading preview…";
+        slot.appendChild(loading);
+      }
+    }
+
+    function buildCard(folder, file) {
+      const app = `${folder}/${file}`;
+      const card = document.createElement("a");
+      card.className = "demo-preview-card";
+      card.href = `demos/index.html?app=${encodeURIComponent(app)}`;
+      card.target = "_blank";
+      card.rel = "noopener";
+      card.dataset.src = `demos/index.html?app=${encodeURIComponent(app)}&embed=1`;
+      card.dataset.name = programName(file);
+      card.innerHTML = `
+        <span class="demo-preview-frame">
+          <span class="demo-preview-loading">Loading preview…</span>
+        </span>
+        <span class="demo-preview-meta">
+          <span class="demo-preview-name">${programName(file)}</span>
+          <span class="demo-preview-open">Open demo &rarr;</span>
+        </span>
+      `;
+      card.addEventListener("mouseenter", () => {
+        card._hovering = true;
+        if (card._frame) startHoverScroll(card._frame);
+      });
+      card.addEventListener("mouseleave", () => {
+        card._hovering = false;
+        stopHoverScroll();
+      });
+      return card;
+    }
+
+    const CHEVRON =
+      '<svg class="demo-section-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+    const sections = [];
+
+    for (const [folder, files] of Object.entries(manifest)) {
+      const section = document.createElement("section");
+      section.className = "demo-section";
+      section.dataset.open = "false";
+      const count = `${files.length} program${files.length === 1 ? "" : "s"}`;
+      section.innerHTML = `
+        <button type="button" class="demo-section-toggle" aria-expanded="false">
+          ${CHEVRON}
+          <span class="demo-section-title">${titleCase(folder)}</span>
+          <span class="demo-section-count">${count}</span>
+        </button>
+      `;
+      const toggle = section.querySelector(".demo-section-toggle");
+      const ctx = { folder, files, section, toggle, body: null, observer: null };
+
+      // Mount/unmount iframes as cards enter or leave the viewport so the
+      // browser only ever runs the visible programs of the open section.
+      function makeObserver() {
+        return new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) mountFrame(entry.target);
+            else unmountFrame(entry.target);
+          }
+        }, { rootMargin: "150px 0px" });
+      }
+
+      function expand() {
+        if (ctx.section.dataset.open === "true") return;
+        for (const other of sections) if (other !== ctx) other.collapse();
+        ctx.section.dataset.open = "true";
+        toggle.setAttribute("aria-expanded", "true");
+        const body = document.createElement("div");
+        body.className = "demo-section-body";
+        const grid = document.createElement("div");
+        grid.className = "demo-card-grid";
+        ctx.observer = makeObserver();
+        for (const file of files) {
+          const card = buildCard(folder, file);
+          grid.appendChild(card);
+          ctx.observer.observe(card);
+        }
+        body.appendChild(grid);
+        ctx.section.appendChild(body);
+        ctx.body = body;
+      }
+
+      function collapse() {
+        if (ctx.section.dataset.open !== "true") return;
+        ctx.section.dataset.open = "false";
+        toggle.setAttribute("aria-expanded", "false");
+        if (ctx.observer) { ctx.observer.disconnect(); ctx.observer = null; }
+        stopHoverScroll();
+        if (ctx.body) { ctx.body.remove(); ctx.body = null; }
+      }
+
+      ctx.expand = expand;
+      ctx.collapse = collapse;
+      toggle.addEventListener("click", () => {
+        if (ctx.section.dataset.open === "true") collapse();
+        else expand();
+      });
+
+      sections.push(ctx);
+      root.appendChild(section);
+    }
+
+    // Open the first group by default.
+    sections[0]?.expand();
+  </script>
+</body>
+</html>

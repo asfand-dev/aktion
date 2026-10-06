@@ -1,0 +1,76 @@
+// Shopping Cart — line items with quantity steppers and remove, a promo-code
+// field with real discount logic, a live order summary and an empty state.
+$app(Container([Column([header, body], { gap: "lg" })], { size: "lg" }))
+
+$items = [
+  { id: 1, name: "Aurora Hoodie", price: 78, qty: 1, img: "https://picsum.photos/seed/c1/120" },
+  { id: 2, name: "Voyager Mug", price: 24, qty: 2, img: "https://picsum.photos/seed/c2/120" },
+  { id: 3, name: "Pulse Headphones", price: 149, qty: 1, img: "https://picsum.photos/seed/c3/120" }
+]
+$code = ""
+$applied = null
+
+codes = { SAVE10: 0.10, WELCOME20: 0.20, FREESHIP: 0 }
+money = n => $util.format(n, "currency", "USD")
+
+function setQty(id, delta) {
+  $items = $items.map(i => i.id == id ? { ...i, qty: Math.max(1, i.qty + delta) } : i)
+}
+function removeItem(id) { $items = $items.filter(i => i.id != id) }
+function applyCode() {
+  const key = $code.toUpperCase()
+  if (codes[key] != null) { $applied = key; $toast.success(`Code ${key} applied`) }
+  else { $toast.error("Invalid promo code") }
+}
+function removeCode() { $applied = null; $code = "" }
+
+subtotal = $util.sum($items.map(i => i.price * i.qty))
+discountPct = $applied ? codes[$applied] : 0
+discount = Math.round(subtotal * discountPct)
+freeShip = $applied == "FREESHIP" || subtotal - discount >= 150
+shipping = freeShip ? 0 : 12
+tax = Math.round((subtotal - discount) * 0.08)
+total = subtotal - discount + shipping + tax
+
+header = PageHeader("Your cart", { subtitle: `${$util.sum($items.map(i => i.qty))} ${$util.plural($util.sum($items.map(i => i.qty)), "item")}`, breadcrumbs: false })
+
+function line(i) {
+  return Card([Row([
+    StackItem(Image(i.img, { alt: i.name, ratio: "1:1", fit: "cover" }), { basis: "72px" }),
+    StackItem(Column([Text(i.name, { variant: "body-heavy" }), Text(money(i.price), { variant: "small", tone: "muted" })], { gap: "xs" }), { grow: 1 }),
+    Row([
+      IconButton("minus", { label: "Decrease", variant: "secondary", size: "sm", disabled: i.qty <= 1, onClick: () => setQty(i.id, -1) }),
+      Box([Text(String(i.qty), { variant: "body-heavy" })], { padding: "xs" }),
+      IconButton("plus", { label: "Increase", variant: "secondary", size: "sm", onClick: () => setQty(i.id, 1) })
+    ], { gap: "xs", align: "center" }),
+    Text(money(i.price * i.qty), { variant: "large-heavy" }),
+    IconButton("trash", { label: "Remove", variant: "ghost", size: "sm", onClick: () => removeItem(i.id) })
+  ], { gap: "md", align: "center" })])
+}
+
+list = Column($items.map(i => line(i)), { gap: "sm" })
+
+promo = $applied
+  ? Row([Badge(`${$applied} applied`, { tone: "success", icon: "tag" }), Spacer(), Button("Remove", { variant: "ghost", size: "sm", onClick: removeCode })], { align: "center" })
+  : Row([StackItem(Input("code", { placeholder: "Promo code", value: $code }), { grow: 1 }), Button("Apply", { variant: "secondary", disabled: !$code, onClick: applyCode })], { gap: "sm", align: "end" })
+
+summary = Card([Column([
+  SectionHeader("Order summary"),
+  Row([Text("Subtotal", { tone: "muted" }), Spacer(), Text(money(subtotal))], { align: "center" }),
+  discount > 0 ? Row([Text("Discount", { tone: "muted" }), Spacer(), Text(`-${money(discount)}`, { tone: "success" })], { align: "center" }) : null,
+  Row([Text("Shipping", { tone: "muted" }), Spacer(), Text(shipping == 0 ? "Free" : money(shipping))], { align: "center" }),
+  Row([Text("Tax (8%)", { tone: "muted" }), Spacer(), Text(money(tax))], { align: "center" }),
+  Separator("horizontal"),
+  promo,
+  Separator("horizontal"),
+  Row([Text("Total", { variant: "body-heavy" }), Spacer(), Text(money(total), { variant: "title", tone: "primary" })], { align: "center" }),
+  !freeShip ? Callout("Almost there", { description: `Add ${money(150 - (subtotal - discount))} more for free shipping.`, icon: "truck", variant: "info", compact: true }) : null,
+  Button("Checkout", { variant: "primary", icon: "lock", fullWidth: true }),
+  Center([Link("Continue shopping", { href: "#" })])
+], { gap: "sm" })])
+
+filled = Grid([GridItem(list, { span: "2/3" }), GridItem(summary, { span: "1/3" })], { gap: "lg", alignItems: "start" })
+
+empty = Card([EmptyState("Your cart is empty", { description: "Browse the shop and add a few things.", icon: "cart-shopping", action: Button("Start shopping", { variant: "primary", icon: "store" }) })])
+
+body = Show($items.length > 0, { fallback: empty, children: filled })
