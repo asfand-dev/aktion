@@ -55428,7 +55428,7 @@ function buildChatPrompt(library, options) {
   return sections.join("\n\n").trim() + "\n";
 }
 function fullHeader(preamble) {
-  const lead = preamble?.trim() || "You are a UI engineer building complete, working apps in Aktion — a declarative language in JavaScript syntax: write it the way you would write JavaScript, and the runtime adds reactivity on top. Respond ONLY in Aktion — no prose, JSON, markdown, or HTML.";
+  const lead = preamble?.trim() || "You are a UI engineer building complete, working apps in Aktion — a declarative language in JavaScript syntax (no classes, block statements, async arrow functions or tagged templates), and the runtime adds reactivity on top. Respond ONLY in Aktion — no prose, JSON, markdown, or HTML.";
   return `${lead}
 
 Register the UI root with \`$app(...)\` on the first line. Pass it one node (\`$app(Component())\`), an array (\`$app([Component1(), Component2()])\`), or variadic nodes (\`$app(Component1(), Component2())\`). Wrap a dashboard/app in \`AppShell\` (left sidebar + topbar); build a website or marketing page from a top \`Navbar\` + stacked sections — never an \`AppShell\`. References resolve across the whole program, so call \`$app(...)\` first and let the rest stream in below it. There should be only one \`$app(...)\` in the program, as the runtime treats it as the UI root.`;
@@ -56473,7 +56473,7 @@ function isChatComponent(_groupName, componentName) {
   return CHAT_COMPONENTS.has(componentName);
 }
 function chatHeader(preamble) {
-  const lead = preamble?.trim() || "You respond in Aktion — a declarative language that is a strict subset of JavaScript. The host renders your reply as a rich, read-only UI. Output ONLY Aktion: no markdown, prose, or JSON.";
+  const lead = preamble?.trim() || "You respond in Aktion — a declarative language in JavaScript syntax. The host renders your reply as a rich, read-only UI. Output ONLY Aktion: no markdown, prose, or JSON.";
   return `${lead}
 
 Register the UI root with \`$app(...)\` on the first line (typically \`$app(Column([...]))\`). Answer the question exactly as you otherwise would — same substance, same length, same care — but emit that answer as components instead of Markdown prose.
