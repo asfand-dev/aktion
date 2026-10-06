@@ -1,0 +1,116 @@
+// Job Application Tracker — a hiring pipeline with stage funnel, sortable grid and CSV export.
+// Starting point for: any pipeline/CRM-style tracker (sales leads, grant applications, admissions).
+// Uses: DataGrid (sort + filter + CSV export), $store({ persist }), $form, $util.url.setQuery, RelativeTime.
+$app(Column([header, kpis, funnel, gridCard, addModal], { gap: "lg", padding: "md" }))
+
+stages = ["Applied", "Screen", "Interview", "Offer", "Rejected"]
+stageTone = s => s == "Offer" ? "success" : s == "Rejected" ? "danger" : s == "Interview" ? "warning" : s == "Screen" ? "info" : "neutral"
+
+jobs = $store({
+  persist: "jobs.pipeline",
+  apps: [
+    { id: "j1", company: "Linear",   role: "Frontend Engineer",  stage: "Interview", salary: 145, applied: 1749000000000 },
+    { id: "j2", company: "Vercel",   role: "Design Engineer",    stage: "Screen",    salary: 150, applied: 1749100000000 },
+    { id: "j3", company: "Stripe",   role: "Product Engineer",   stage: "Applied",   salary: 165, applied: 1749200000000 },
+    { id: "j4", company: "Notion",   role: "Full-stack Eng",     stage: "Offer",     salary: 155, applied: 1748700000000 },
+    { id: "j5", company: "Figma",    role: "UI Engineer",        stage: "Rejected",  salary: 140, applied: 1748500000000 },
+    { id: "j6", company: "Supabase", role: "DevRel Engineer",    stage: "Applied",   salary: 130, applied: 1749300000000 }
+  ],
+  advance: (s, id) => {
+    s.apps = s.apps.map(a => {
+      if (a.id != id) return a
+      const i = stages.indexOf(a.stage)
+      return i >= 0 && i < 3 ? { ...a, stage: stages[i + 1] } : a
+    })
+  },
+  reject: (s, id) => { s.apps = s.apps.map(a => a.id == id ? { ...a, stage: "Rejected" } : a) },
+  remove: (s, id) => { s.apps = s.apps.filter(a => a.id != id) },
+  add:    (s, a) => { s.apps = [a, ...s.apps] }
+})
+
+$addOpen = false
+
+// stage filter lives in the URL (?stage=Interview) so a filtered view is shareable
+activeStage = $util.url.query.stage ?? "all"
+function setStage(s) {
+  $util.url.setQuery("stage", s == "all" ? null : s)
+}
+
+addForm = $form({
+  values: { company: "", role: "", salary: 120 },
+  rules: {
+    company: [$util.rules.required("Which company?")],
+    role:    [$util.rules.required("Which role?")]
+  },
+  onSubmit: (v) => {
+    jobs.add({ id: $util.uuid(), company: v.company, role: v.role, stage: "Applied", salary: Number(v.salary) || 0, applied: $util.now() })
+    $addOpen = false
+    addForm.reset()
+  }
+})
+
+visible = jobs.apps.filter(a => activeStage == "all" || a.stage == activeStage)
+active = jobs.apps.filter(a => a.stage != "Rejected")
+countIn = s => jobs.apps.filter(a => a.stage == s).length
+
+header = PageHeader("Job Tracker", {
+  subtitle: `${active.length} active applications · saved locally`,
+  badge: Badge(`${countIn("Offer")} offer${countIn("Offer") == 1 ? "" : "s"}`, { tone: countIn("Offer") > 0 ? "success" : "neutral", icon: "briefcase" }),
+  actions: [Button("Log application", { variant: "primary", icon: "plus", onClick: () => { addForm.reset(); $addOpen = true } })]
+})
+
+kpis = Stats([
+  StatCard("In pipeline", { value: String(active.length), icon: "list-check", tone: "primary" }),
+  StatCard("Interviews", { value: String(countIn("Interview")), icon: "comments", tone: "warning" }),
+  StatCard("Offers", { value: String(countIn("Offer")), icon: "trophy", tone: "success" }),
+  StatCard("Median target", { value: `$${$util.median(jobs.apps.map(a => a.salary))}k`, icon: "money-check-dollar" })
+])
+
+funnel = Card([
+  SectionHeader("Pipeline", { eyebrow: "FUNNEL", subtitle: "Click a stage to filter the table — the filter lives in the URL" }),
+  Row([
+    Button(`All (${jobs.apps.length})`, { variant: activeStage == "all" ? "primary" : "secondary", size: "sm", onClick: () => setStage("all") }),
+    ...stages.map(s => Button(`${s} (${countIn(s)})`, { variant: activeStage == s ? "primary" : "secondary", size: "sm", onClick: () => setStage(s) }))
+  ], { gap: "sm", wrap: true })
+])
+
+gridCard = Card([
+  SectionHeader(activeStage == "all" ? "All applications" : `${activeStage} stage`, { eyebrow: "APPLICATIONS" }),
+  Show(visible.length > 0, {
+    fallback: EmptyState("Nothing in this stage", { icon: "inbox", description: "Move an application here or log a new one." }),
+    children: DataGrid({
+      columns: [
+        Col("Company", { values: visible.map(a => Text(a.company, { variant: "body-heavy" })), sortable: true }),
+        Col("Role", { values: visible.map(a => a.role), sortable: true }),
+        Col("Stage", { values: visible.map(a => Badge(a.stage, { tone: stageTone(a.stage), size: "sm" })) }),
+        Col("Target", { align: "right", values: visible.map(a => `$${a.salary}k`), sortable: true }),
+        Col("Applied", { values: visible.map(a => RelativeTime(a.applied)) }),
+        Col("", { align: "right", values: visible.map(a => Row([
+          IconButton("forward-step", { label: "Advance stage", variant: "ghost", size: "sm", disabled: a.stage == "Offer" || a.stage == "Rejected", onClick: () => jobs.advance(a.id) }),
+          IconButton("ban", { label: "Mark rejected", variant: "ghost", size: "sm", disabled: a.stage == "Rejected", onClick: () => jobs.reject(a.id) }),
+          IconButton("trash", { label: "Delete", variant: "ghost", size: "sm", onClick: () => jobs.remove(a.id) })
+        ], { gap: "xs" })) })
+      ],
+      rowIds: visible.map(a => a.id),
+      striped: true,
+      perPage: 8,
+      exportable: true,
+      exportFilename: "job-applications.csv"
+    })
+  })
+])
+
+addModal = Modal("Log an application", {
+  open: $addOpen,
+  closeOnBackdrop: true,
+  onClose: () => { $addOpen = false },
+  children: [Column([
+    FormControl("Company", { field: Input("company", { placeholder: "e.g. Linear", value: addForm.values.company, error: addForm.errors.company, onBlur: () => addForm.touch("company") }) }),
+    FormControl("Role", { field: Input("role", { placeholder: "e.g. Frontend Engineer", value: addForm.values.role, error: addForm.errors.role, onBlur: () => addForm.touch("role") }) }),
+    FormControl("Target salary ($k)", { field: NumberInput("salary", { value: addForm.values.salary, min: 0, step: 5 }) })
+  ], { gap: "md" })],
+  footer: [
+    Button("Cancel", { variant: "ghost", onClick: () => { $addOpen = false } }),
+    Button("Add to pipeline", { variant: "primary", icon: "check", onClick: () => addForm.submit(), disabled: !addForm.values.company || !addForm.values.role })
+  ]
+})

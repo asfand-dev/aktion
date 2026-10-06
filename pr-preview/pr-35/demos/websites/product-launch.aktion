@@ -1,0 +1,297 @@
+// Product Launch — the Northbeam Slate 10 e-ink tablet, sold from a single configurable page.
+// Finish and storage drive the photo, the price, the stock pip, the spec sheet and the pre-order
+// summary at once, so nothing on the page can ever disagree with anything else on it.
+// Starting point for: hardware launches, pre-order pages, single-product marketing sites.
+// Uses: $theme, NavBar, Split hero, VariantSelector + QuantityStepper + PriceTag + StatusDot, Drawer +
+//        OrderSummary + SuccessState, MetricStrip, Reveal, Tabs, ComparisonTable, Rating, $form, Footer.
+$app(Column([nav, hero, trust, design, software, spec, compare, reviews, faq, waitlist, pageFooter, orderDrawer], { gap: "none" }))
+
+$theme({ colors: { primary: "#2f6f5e", accent: "#c9743a" }, radius: "lg", fonts: { import: ["Inter:400,600,800"] } })
+
+$colour = "Graphite"
+$capacity = "64 GB"
+$qty = 1
+$drawerOpen = false
+$orderRef = ""
+$specTab = "specs"
+$helpful = []
+$waitlisted = false
+
+colours = [
+  { label: "Graphite", value: "Graphite", color: "#3d4045", seed: "northbeam-slate-graphite", stock: "In stock — ships 6 October", tone: "success" },
+  { label: "Bone", value: "Bone", color: "#e8e1d3", seed: "northbeam-slate-bone", stock: "Low stock — 180 units left", tone: "warning" },
+  { label: "Moss", value: "Moss", color: "#4f6152", seed: "northbeam-slate-moss", stock: "Third run — ships 3 November", tone: "info" }
+]
+capacities = [
+  { label: "32 GB", value: "32 GB", extra: 0, pages: "roughly 12,000 scanned pages" },
+  { label: "64 GB", value: "64 GB", extra: 60, pages: "roughly 26,000 scanned pages" },
+  { label: "128 GB", value: "128 GB", extra: 140, pages: "roughly 55,000 scanned pages" }
+]
+
+money = n => $util.currency(n, "USD")
+colourOf = v => colours.find(c => c.value == v)
+capacityOf = v => capacities.find(c => c.value == v)
+unitPrice = () => 429 + capacityOf($capacity).extra
+subtotal = () => unitPrice() * $qty
+tax = () => Math.round(subtotal() * 0.0825 * 100) / 100
+total = () => subtotal() + tax()
+shotOf = (seed, size) => `https://picsum.photos/seed/${seed}/${size}/${size}`
+heroShot = () => shotOf(colourOf($colour).seed, 900)
+
+function openOrder() { $drawerOpen = true }
+
+function confirmOrder() {
+  const ref = `NB-${$util.uppercase($util.substring($util.uuid(), 0, 6))}`
+  $orderRef = ref
+  $toast.success(`Pre-order ${ref} reserved — nothing charged yet`)
+}
+
+function resetOrder() {
+  $orderRef = ""
+  $drawerOpen = false
+}
+
+function toggleHelpful(id) {
+  $helpful = $helpful.includes(id) ? $helpful.filter(x => x != id) : [...$helpful, id]
+}
+
+nav = NavBar({
+  brand: Brand("Northbeam"),
+  links: [Link("Design", { href: "#design" }), Link("Specs", { href: "#spec" }), Link("Compare", { href: "#compare" }), Link("Reviews", { href: "#reviews" })],
+  actions: [ThemeToggle(), Button(`Pre-order · ${money(unitPrice())}`, { variant: "primary", size: "sm", icon: "bolt", onClick: openOrder })],
+  sticky: true, blur: true
+})
+
+configurator = Card([
+  Row([Badge("Pre-order open", { tone: "primary", icon: "bolt", size: "sm" }), StatusDot(colourOf($colour).stock, { tone: colourOf($colour).tone, pulse: true })], { gap: "sm", wrap: true }),
+  Row([PriceTag(unitPrice(), { compareAt: unitPrice() + 70, size: "lg" }), Text("Ink Pen 2 and folio included", { variant: "small", tone: "muted" })], { gap: "sm", wrap: true, align: "end" }),
+  VariantSelector(colours.map(c => ({ label: c.label, value: c.value, color: c.color })), { kind: "swatch", label: "Finish", value: $colour, onChange: v => { $colour = v } }),
+  VariantSelector(capacities.map(c => ({ label: c.label, value: c.value })), { kind: "pill", label: "Storage", value: $capacity, onChange: v => { $capacity = v } }),
+  Text(`${$capacity} holds ${capacityOf($capacity).pages} before you ever need to prune a notebook.`, { variant: "small", tone: "muted" }),
+  Row([QuantityStepper($qty, { min: 1, max: 5, label: "Slate 10 units", onChange: n => { $qty = n } }), Spacer(), Text(money(subtotal()), { variant: "large-heavy" })], { gap: "md", align: "center" }),
+  Button("Reserve your unit", { variant: "primary", size: "lg", icon: "lock", fullWidth: true, onClick: openOrder }),
+  Row([Icon("truck-fast", { size: "sm" }), Text("Free carbon-neutral delivery · 60-day returns · no charge until it ships", { variant: "small", tone: "muted" })], { gap: "xs", align: "center" })
+], { padding: "lg" })
+
+gallery = Column([
+  Image(heroShot(), { alt: `Northbeam Slate 10 in ${$colour}, the Ink Pen 2 clipped to its magnetic edge`, ratio: "1:1", fit: "cover", placeholder: "blur", loading: "eager" }),
+  Grid(colours.map(c => Image(shotOf(`${c.seed}-detail`, 320), { alt: `Slate 10 in the ${c.label} finish`, ratio: "1:1", fit: "cover", onClick: () => { $colour = c.value } })), { columns: 3, gap: "sm" })
+], { gap: "sm" })
+
+heroCopy = Column([
+  Eyebrow("SECOND RUN — SHIPPING FROM 6 OCTOBER 2026"),
+  Display(["Paper that ", GradientText("never runs out", { gradient: "brand" })], { size: "lg", balance: true }),
+  Text("Slate 10 is a 10.3-inch e-ink tablet for people who think by writing. No feed, no notifications — just a sheet that remembers everything and lasts eighteen days between charges.", { variant: "large", tone: "muted" }),
+  configurator
+], { gap: "md" })
+
+hero = Section([Split(gallery, { right: heroCopy, ratio: "1/1", gap: "xl", stackAt: "lg", align: "start" })], { background: "base", width: "xl", padding: "lg", id: "top" })
+
+trust = Section([
+  Reveal(MetricStrip([
+    Metric("18 days", { label: "Battery, two hours of writing a day" }), Metric("300 ppi", { label: "Carta 1300 glass display" }),
+    Metric("4,096", { label: "Pen pressure levels" }), Metric("229 g", { label: "Lighter than a paperback" })
+  ], { columns: 4 }), { animation: "zoom" })
+], { background: "brand", padding: "md", align: "center" })
+
+function FeatureBand(c) {
+  const copy = Column([
+    Eyebrow(c.eyebrow),
+    Heading(c.title, { size: "section" }),
+    Text(c.body, { variant: "large", tone: "muted" }),
+    List(c.points.map(p => ListItem(p.title, { description: p.description, icon: p.icon })), { gap: "sm", divided: true })
+  ], { gap: "md" })
+  const media = Image(shotOf(c.seed, 880), { alt: c.alt, ratio: "4:3", fit: "cover", placeholder: "blur" })
+  const pane = Split(c.flip ? media : copy, { right: c.flip ? copy : media, ratio: "1/1", gap: "xl", stackAt: "md", reverseOnStack: !c.flip, align: "center" })
+  return Section([Reveal(pane, { animation: "fade-up" })], { background: c.background, width: "lg", padding: "lg", id: c.id })
+}
+
+design = FeatureBand({
+  id: "design", eyebrow: "THE SURFACE", flip: false, background: "soft",
+  title: "Machined to feel like a good notebook",
+  body: "A single block of recycled aluminium, a textured glass sheet with the drag of 90 gsm paper, and an asymmetric bezel wide enough to rest a thumb on for an hour.",
+  seed: "northbeam-slate-hand",
+  alt: "A hand writing on the Slate 10 with the Ink Pen 2, notebook pages visible on the display",
+  points: [
+    { title: "Textured glass, replaceable", description: "Swap the writing sheet yourself in about four minutes — no adhesive, no service centre.", icon: "hand-sparkles" },
+    { title: "Amber front light", description: "24 LEDs blend warm and cool so a 6 am page looks like a 6 pm page.", icon: "lightbulb" },
+    { title: "Repairable by design", description: "Battery, sheet and port are all user-serviceable. Schematics are published on day one.", icon: "screwdriver-wrench" }
+  ]
+})
+
+software = FeatureBand({
+  id: "software", eyebrow: "THE SOFTWARE", flip: true, background: "base",
+  title: "Handwriting your laptop can actually read",
+  body: "Every stroke is indexed on the device. Search a phrase you scrawled in a meeting six months ago and the page opens in under a second — no account, no upload.",
+  seed: "northbeam-slate-desk",
+  alt: "The Slate 10 on a wooden desk beside a laptop showing indexed handwritten notes",
+  points: [
+    { title: "On-device search", description: "Ten scripts, eleven languages, zero round-trips to a server.", icon: "magnifying-glass" },
+    { title: "Folders that sync where you want", description: "WebDAV, a local folder over USB-C, or nothing at all. Your call.", icon: "folder-tree" },
+    { title: "Exports that survive", description: "PDF with a real text layer, plus flat PNG per page for archives.", icon: "file-export" }
+  ]
+})
+
+specSheet = DescriptionList([
+  DescriptionItem("Display", { value: "10.3-inch Carta 1300, 300 ppi, 16-level greyscale", icon: "display" }), DescriptionItem("Front light", { value: "24 LEDs, warmth adjustable 0–100%", icon: "lightbulb" }),
+  DescriptionItem("Storage", { value: `${$capacity} — ${capacityOf($capacity).pages}`, icon: "hard-drive" }),
+  DescriptionItem("Finish", { value: Badge($colour, { tone: "primary", size: "sm", icon: "palette" }), icon: "palette" }),
+  DescriptionItem("Processor", { value: "Quad-core 2.0 GHz, 4 GB RAM", icon: "microchip" }), DescriptionItem("Battery", { value: "4,200 mAh — 18 days mixed use, 6 weeks standby", icon: "battery-full" }),
+  DescriptionItem("Pen", { value: "Ink Pen 2, 4,096 pressure levels, tilt aware, no battery", icon: "pen-nib" }),
+  DescriptionItem("Weight", { value: "229 g tablet · 312 g with the folio", icon: "weight-hanging" }), DescriptionItem("Connectivity", { value: "Wi-Fi 6, Bluetooth 5.2, USB-C 3.2", icon: "wifi" }),
+  DescriptionItem("Ships from", { value: "Utrecht, plastic-free packaging", icon: "box" })
+], { columns: 2 })
+
+inTheBox = Grid([
+  Tile("Slate 10 tablet", { icon: "tablet-screen-button", description: `${$colour} finish · ${$capacity}`, tone: "primary" }), Tile("Ink Pen 2", { icon: "pen-nib", description: "Twelve spare nibs in the barrel cap" }),
+  Tile("Folio cover", { icon: "book", description: "Recycled wool felt, magnetic clasp" }), Tile("USB-C cable", { icon: "plug", description: "1.2 m braided — no charger, on purpose" })
+], { columns: { base: 1, sm: 2, lg: 4 }, gap: "md" })
+
+warrantyPane = Column([
+  Callout("success", { title: "Two-year limited warranty, extendable to five", description: "Covers the display, battery and pen digitiser. Accidental cracks are a flat €89 sheet swap, whether or not you are in warranty.", icon: "shield-halved" }),
+  DescriptionList([
+    DescriptionItem("Returns", { value: "60 days, any reason, we pay the postage", icon: "rotate-left" }), DescriptionItem("Battery service", { value: "€49 including labour, at any point in the device's life", icon: "battery-half" }),
+    DescriptionItem("Software updates", { value: "Guaranteed until at least October 2033", icon: "arrows-rotate" }), DescriptionItem("Spare parts", { value: "Sold individually for seven years after the last unit ships", icon: "boxes-stacked" })
+  ], { columns: 2 })
+], { gap: "md" })
+
+spec = Section([
+  Tabs([
+    TabItem("specs", { label: "Specifications", icon: "list-check", children: [specSheet] }),
+    TabItem("box", { label: "In the box", icon: "box-open", badge: "4", children: [inTheBox] }),
+    TabItem("warranty", { label: "Warranty & care", icon: "shield-halved", children: [warrantyPane] })
+  ], { value: $specTab, fitted: true, onChange: v => { $specTab = v } })
+], { eyebrow: "THE FULL SHEET", title: "Every specification, nothing buried", subtitle: "The finish and storage you picked above are reflected here.", align: "center", width: "lg", padding: "lg", background: "soft", id: "spec" })
+
+compareRows = [
+  { label: "Display", values: ["10.3-inch, 300 ppi", "11-inch, 227 ppi", "10.3-inch, 226 ppi"], group: "Hardware" },
+  { label: "Front light", values: [true, true, false], group: "Hardware" }, { label: "Weight", values: ["229 g", "398 g", "403 g"], group: "Hardware" },
+  { label: "Battery, mixed use", values: ["18 days", "9 days", "12 days"], group: "Hardware" },
+  { label: "On-device handwriting search", values: [true, false, false], group: "Software", hint: "No account and no upload required" },
+  { label: "Works without an account", values: [true, false, true], group: "Software" }, { label: "PDF export with a text layer", values: [true, true, false], group: "Software" },
+  { label: "User-replaceable battery", values: [true, false, false], group: "Ownership" }, { label: "Published schematics", values: [true, false, false], group: "Ownership" },
+  { label: "Price as configured", values: [money(unitPrice()), "$549", "$499"], group: "Ownership" }
+]
+
+compareTable = ComparisonTable({ columns: ["Slate 10", "Vellum Pro 11", "Quill Studio E2"], rows: compareRows, highlightColumn: 0, featureLabel: "Specification", caption: "Slate 10 against the two tablets buyers ask us about most", stickyFirstColumn: true })
+compare = Section([Reveal(compareTable, { animation: "fade-up" })], { eyebrow: "HOW IT COMPARES", title: "Against the two you are also considering", align: "center", width: "lg", padding: "lg", id: "compare" })
+
+totalReviews = 1164
+distribution = [{ stars: 5, count: 812 }, { stars: 4, count: 246 }, { stars: 3, count: 71 }, { stars: 2, count: 22 }, { stars: 1, count: 13 }]
+reviewList = [
+  { id: "rv1", author: "Priya Raghunathan", role: "Architect · Rotterdam", rating: 5, date: "2026-07-24", helpful: 142, title: "It replaced three notebooks and a scanner", body: "Six weeks of site notes, every one searchable. The sheet swap took me four minutes with the pull-tab and I have never once thought about the battery." },
+  { id: "rv2", author: "Tomás Ferreira", role: "PhD candidate · Coimbra", rating: 4, date: "2026-07-11", helpful: 88, title: "Superb for reading, good for margins", body: "Annotating papers is the best I have used. Docking a star because the folio squeaks against the aluminium in the cold — Northbeam say a revised clasp ships with this run." },
+  { id: "rv3", author: "Hannah Vogt", role: "Product lead · Berlin", rating: 5, date: "2026-06-29", helpful: 203, title: "The absence of notifications is the feature", body: "I take it into every meeting instead of a laptop and leave with notes I can actually find again. Handwriting search turned up a sketch from January in about half a second." },
+  { id: "rv4", author: "Ade Balogun", role: "Illustrator · Lagos", rating: 4, date: "2026-06-15", helpful: 61, title: "Pen feel is genuinely paper-like", body: "Tilt shading works better than I expected on e-ink and the flat PNG export is clean. I would like a heavier nib option; the team says one is in testing." }
+]
+
+function RatingBar(row) {
+  const pct = Math.round(row.count / totalReviews * 100)
+  const tone = row.stars >= 4 ? "success" : row.stars == 3 ? "warning" : "danger"
+  const head = [Text(`${row.stars}`, { variant: "small-heavy" }), Icon("star", { size: "sm", label: `${row.stars} star reviews` })]
+  return Row([...head, StackItem(Progress(pct, { max: 100, tone }), { grow: 1 }), Text(`${pct}%`, { variant: "small", tone: "muted" })], { gap: "sm", align: "center" })
+}
+
+helpfulButton = (r, voted) => Button(`Helpful · ${r.helpful + (voted ? 1 : 0)}`, { variant: voted ? "secondary" : "ghost", size: "sm", icon: "thumbs-up", onClick: () => toggleHelpful(r.id) })
+
+function ReviewCard(r) {
+  const voted = $helpful.includes(r.id)
+  return Card([
+    Row([PersonChip(r.author, { role: r.role, size: "sm" }), Spacer(), Rating(r.rating, { readonly: true, size: "sm" })], { gap: "sm", align: "center" }),
+    Text(r.title, { variant: "body-heavy" }),
+    Text(r.body, { variant: "body", tone: "muted" }),
+    Row([Pill("Verified pre-order", { tone: "success", icon: "circle-check" }), RelativeTime(r.date), Spacer(), helpfulButton(r, voted)], { gap: "sm", align: "center", wrap: true })
+  ])
+}
+
+scoreCard = Card([
+  SectionHeader("How the score breaks down", { eyebrow: "RATINGS", status: Badge("Verified buyers only", { tone: "success", size: "sm" }) }),
+  Row([Text("4.7", { variant: "title" }), Column([Rating(4.7, { readonly: true, count: totalReviews }), Text("94% would recommend it to a colleague", { variant: "small", tone: "muted" })], { gap: "2xs" })], { gap: "md", align: "center" }),
+  Column(distribution.map(d => RatingBar(d)), { gap: "xs" }),
+  Text("Reviews are collected 30 days after delivery, from people who paid for the device.", { variant: "small", tone: "muted" })
+])
+
+reviews = Section([Grid([scoreCard, Column(reviewList.map(r => ReviewCard(r)), { gap: "md" })], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })], { eyebrow: "OWNERS", title: `What the first ${$util.format(totalReviews, "number")} buyers say`, align: "center", width: "xl", padding: "lg", background: "soft", id: "reviews" })
+
+faqs = [
+  { q: "When exactly will my unit ship?", tag: "Shipping", icon: "truck-fast", a: "Graphite units leave Utrecht on 6 October 2026 and arrive within three working days across the EU and UK, five to the US. Bone follows on 13 October, Moss with the third run on 3 November." },
+  { q: "When am I charged?", tag: "Payment", icon: "credit-card", a: "Not today. A pre-order places a $1 hold to verify the card; the full amount is taken the morning your unit is packed, and you can cancel free of charge until then." },
+  { q: "Can I change the finish or storage after ordering?", tag: "Orders", icon: "pen-to-square", a: "Yes, up to 48 hours before your batch is packed. Reply to your confirmation email with the reference number and we re-pick the unit and adjust the amount held." },
+  { q: "What if I do not get on with it?", tag: "Returns", icon: "rotate-left", a: "Send it back within 60 days for a full refund including the pen and folio. We pay the return postage, and the device is refurbished and resold rather than scrapped." },
+  { q: "Do I need an account or a subscription?", tag: "Privacy", icon: "user-shield", a: "No. The device works fully offline forever. Optional WebDAV sync points at any server you control, and no feature at any tier sits behind a subscription." }
+]
+
+faqList = Accordion(faqs.map(f => AccordionItem(f.q, { children: [Column([Text(f.a, { tone: "muted" }), Row([Pill(f.tag, { tone: "neutral", icon: f.icon })], { gap: "xs" })], { gap: "sm" })] })), { showArrow: true, type: "single" })
+faq = Section([faqList], { eyebrow: "BEFORE YOU COMMIT", title: "Shipping, charges and change-of-mind", align: "center", width: "md", padding: "lg", id: "faq" })
+
+waitlistForm = $form({
+  values: { email: "" },
+  rules: { email: [$util.rules.required("Add an email so we can tell you when stock lands"), $util.rules.email("That address is missing an @ or a domain")] },
+  onSubmit: v => {
+    $waitlisted = true
+    $toast.success(`We'll email ${v.email} the moment the third run opens`)
+  }
+})
+
+waitlistField = Input("waitlist-email", {
+  type: "email", label: "Email address", placeholder: "you@studio.com", autocomplete: "email",
+  value: waitlistForm.values.email, error: waitlistForm.errors.email,
+  onChange: v => waitlistForm.setField("email", v), onBlur: () => waitlistForm.touch("email")
+})
+
+waitlistPanel = Card([
+  Show($waitlisted, {
+    children: SuccessState("You are on the list", { description: "One email when the third run opens on 3 November — nothing else, ever.", icon: "envelope-circle-check", actions: [Button("Add another address", { variant: "secondary", icon: "plus", onClick: () => { $waitlisted = false } })] }),
+    fallback: Column([
+      Row([StackItem(waitlistField, { grow: 1, minWidth: "220px" }), Button("Join the waitlist", { variant: "primary", icon: "paper-plane", onClick: () => waitlistForm.submit(), loading: waitlistForm.submitting })], { gap: "sm", align: "end", wrap: true }),
+      Text("One message when stock lands. No newsletter, and we never pass the address on.", { variant: "small", tone: "muted" })
+    ], { gap: "sm" })
+  })
+])
+
+waitlist = Section([
+  Reveal(Column([
+    Banner("The second run is 82% spoken for", { message: "Reserve now to keep your place, or join the waitlist for the 3 November run.", tone: "primary", icon: "envelope-open-text", action: Button("Reserve a unit", { variant: "primary", icon: "bolt", onClick: openOrder }) }),
+    waitlistPanel
+  ], { gap: "md" }), { animation: "fade-up" })
+], { width: "md", padding: "lg", id: "waitlist" })
+
+orderLines = () => [{ label: `Slate 10 · ${$colour} · ${$capacity}`, amount: unitPrice() * $qty, qty: $qty }, { label: "Ink Pen 2", amount: 0 }, { label: "Wool felt folio", amount: 0 }]
+
+orderBlurb = Column([
+  Text(`Slate 10 · ${$colour}`, { variant: "body-heavy" }),
+  StatusDot(colourOf($colour).stock, { tone: colourOf($colour).tone }),
+  Text(`${$capacity} · ${capacityOf($capacity).pages}`, { variant: "small", tone: "muted" })
+], { gap: "2xs" })
+
+orderReview = Column([
+  Row([StackItem(Image(heroShot(), { alt: `Slate 10 in ${$colour}`, ratio: "1:1", fit: "cover" }), { basis: "88px", shrink: 0 }), orderBlurb], { gap: "md", align: "center" }),
+  Separator("horizontal"),
+  OrderSummary(orderLines(), { subtotal: subtotal(), shipping: "Free", tax: tax(), total: total(), currency: "USD", note: "Charged the morning your unit is packed — cancel free until then." }),
+  Callout("info", { title: "Nothing is charged today", description: "We place a $1 verification hold and release it within two working days.", icon: "circle-info", compact: true })
+], { gap: "md" })
+
+orderConfirmed = SuccessState("Pre-order reserved", {
+  description: `Reference ${$orderRef} — your ${$colour} Slate 10 with ${$capacity} is held for you (${colourOf($colour).stock}). The card is charged only when it leaves the workshop.`,
+  icon: "box-open",
+  actions: [Button("Email me the receipt", { variant: "secondary", icon: "envelope", onClick: () => $toast.info(`Receipt for ${$orderRef} is on its way`) }), Button("Start another order", { variant: "ghost", icon: "rotate-left", onClick: resetOrder })]
+})
+
+function orderActions() {
+  if ($orderRef != "") return [Button("Done", { variant: "primary", icon: "check", onClick: resetOrder })]
+  const back = Button("Keep configuring", { variant: "ghost", onClick: () => { $drawerOpen = false } })
+  return [back, Button(`Confirm · ${money(total())}`, { variant: "primary", icon: "check", onClick: confirmOrder })]
+}
+
+orderDrawer = Drawer("Review your pre-order", { open: $drawerOpen, side: "right", width: "460px", children: [$orderRef == "" ? orderReview : orderConfirmed], footer: orderActions() })
+
+pageFooter = Footer({
+  brand: Brand("Northbeam"),
+  tagline: "Quiet tools for people who think on paper.",
+  columns: [
+    FooterColumn("Slate 10", { links: [Link("Configure", { href: "#top" }), Link("Specifications", { href: "#spec" }), Link("Compare", { href: "#compare" }), Link("Reviews", { href: "#reviews" })] }),
+    FooterColumn("Support", { links: [Link("Shipping", { href: "#faq" }), Link("Warranty", { href: "#spec" }), Link("Spare parts", { href: "#faq" })] }),
+    FooterColumn("Company", { links: [Link("The workshop", { href: "#" }), Link("Repairability", { href: "#" }), Link("Press kit", { href: "#" })] })
+  ],
+  legal: "© 2026 Northbeam Instruments BV — demo product launch page"
+})
