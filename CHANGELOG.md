@@ -5,6 +5,12 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-10-06
+
+### The "State Write During Render" Warning Describes the Real Cause
+
+- The warning printed when a reactive write runs while the UI renders said the cause was a `$name = …` at the top of a lowercase function and that a PascalCase component was needed for set-once state. That was wrong: a `$name = …` written directly in a function body is a set-once declaration while rendering, whatever the function's name or case. The warning, and the matching Troubleshooting, Error handling and Reactivity pages, now name the real triggers: the same write nested in an `if` or a loop, or a compound write such as `$name++`.
+
 ## 2026-10-05
 
 ### Precise TypeScript Types for Every Component and Built-in

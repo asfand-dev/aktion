@@ -571,14 +571,16 @@ $app(Column([
 
       <div class="faq">
         <h3 id="declare">I got a &ldquo;reactive write during render&rdquo; warning</h3>
-        <p><strong>Cause.</strong> A <code>$name = &hellip;</code> assignment ran in
-          render position (commonly a <code>$x = &hellip;</code> at the top of a
-          lowercase function that is invoked to build UI). The runtime applies the
-          write without scheduling a re-render to avoid an infinite loop, and warns.</p>
-        <p class="fix"><strong>Fix.</strong> Seed component-local state with a
-          <em>PascalCase</em> component (so <code>$x = &hellip;</code> becomes a
-          set-once per-instance declaration) or the <code>$state</code> hook, and
-          only write state from event handlers / effects. See
+        <p><strong>Cause.</strong> A write that is not a set-once declaration ran in
+          render position &mdash; a <code>$x = &hellip;</code> nested inside an
+          <code>if</code> or a loop in a function that builds UI, or a compound
+          write such as <code>$x++</code>. The runtime applies the write without
+          scheduling a re-render to avoid an infinite loop, and warns.</p>
+        <p class="fix"><strong>Fix.</strong> Write <code>$x = &hellip;</code>
+          directly in the function body &mdash; while rendering, that is a set-once
+          declaration, whatever the function&rsquo;s name or case &mdash; or use the
+          <code>$state</code> hook, and only write state from event handlers /
+          effects. See
           <a href="reactivity.html">Reactivity &amp; rendering</a>.</p>
       </div>
 

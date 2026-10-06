@@ -263,8 +263,10 @@ $user.name = "Grace"</code></pre>
           write that runs in render position is applied without scheduling a
           re-render (to prevent infinite loops) and logs a warning. If you see
           that warning, you are assigning state during render &mdash; move the
-          write into an event handler or an effect, or seed it with a PascalCase
-          component / the <code>$state</code> hook instead.</p>
+          write into an event handler or an effect, or seed it with a
+          <code>$name = &hellip;</code> written directly in the function body (a
+          set-once declaration while rendering) / the <code>$state</code> hook
+          instead.</p>
       </div>
 
       <h2 id="derived">Derived values with <code>$util.derived</code></h2>
